@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Static parity gate for the freeze/determinism contracts (no sim, plain python).
 
-Three checks, all machine-readable, all fail under --strict:
+Six checks, all machine-readable, all fail under --strict:
 
 1. teacher-vs-family DR wiring: extracts every ``self.<manager>.<term>`` wiring
    line from the family and teacher cfg files and reports the symmetric
@@ -13,23 +13,47 @@ Three checks, all machine-readable, all fail under --strict:
    design (the harness stays robot-agnostic); this check makes drift loud.
 3. PLAY wiring coverage: every ``*_PLAY`` cfg class must call
    ``apply_play_wiring`` -- the block that hand-copies drifted twice historically.
+4. robot block parity: the ``ArticulationCfg(...)`` literal in the family and
+   teacher cfg files (spawn props, init_state, limits) is a hand-copied freeze
+   that check 1 does not see; symmetric line diff, reviewed diffs go to
+   ROBOT_BLOCK_ALLOWLIST.
+5. asset contract: the text USD (lizard.usda) must still provide every prim
+   path and name the cfgs hardcode -- Geometry scope + base_link (scanner
+   ``Robot/Geometry/base_link``), every ``joint_order`` entry as ``<name>_joint``,
+   and every body-name pattern in the dev AND frozen version yamls matching at
+   least one link. Catches asset regeneration that renames/drops prims.
+6. asset lock: ``versions/vN/asset_lock.json`` pins sha256 of lizard.urdf +
+   lizard.usda at freeze time. Frozen yamls pin the usd PATH, not its CONTENT,
+   so an in-place asset regeneration silently breaks working-tree reproduction
+   of every resident teacher task id; this check makes that a reviewed commit
+   (refresh locks with --update-locks in the same change that retires assets).
 
 Usage: python lizard_exp\\tools\\verify\\check_dr_parity.py [--strict]
+       python lizard_exp\\tools\\verify\\check_dr_parity.py --update-locks
 """
 import argparse
+import hashlib
+import json
 import pathlib
 import re
 import sys
 
 _REPO = pathlib.Path(__file__).resolve().parents[3]
-_TASKS = _REPO / "lizard_exp" / "tasks"
+_EXP = _REPO / "lizard_exp"
+_TASKS = _EXP / "tasks"
 _FAMILY = _TASKS / "lizard_env_cfg.py"
 _TEACHER = _TASKS / "teacher_env_cfg.py"
 _PLAY_UTILS = _TASKS / "play_utils.py"
 _DR_CONTROLLER = _REPO / "ablation_harness" / "components" / "dr_controller.py"
+_VERSIONS = _EXP / "versions"
+# asset artifacts pinned by versions/vN/asset_lock.json (paths relative to lizard_exp)
+_LOCK_FILES = ("lizard.urdf", "assets/lizard/lizard.usda")
 
 # wiring lines that only exist on one side BY DESIGN (reviewed divergences)
 ALLOWLIST: set[str] = set()
+
+# ArticulationCfg block lines that only exist on one side BY DESIGN
+ROBOT_BLOCK_ALLOWLIST: set[str] = set()
 
 # PLAY classes that legitimately skip apply_play_wiring (reviewed exceptions)
 PLAY_WIRING_ALLOWLIST: set[str] = set()
@@ -97,15 +121,151 @@ def check_play_wiring_coverage() -> list[str]:
     return problems
 
 
+def _articulation_block(path: pathlib.Path) -> list[str]:
+    """Extract the ArticulationCfg(...) literal as normalized code lines."""
+    text = path.read_text(encoding="utf-8")
+    start = text.find("ArticulationCfg(")
+    if start < 0:
+        raise RuntimeError(f"no ArticulationCfg(...) literal in {path}")
+    depth = 0
+    end = len(text)
+    for i in range(start, len(text)):
+        if text[i] == "(":
+            depth += 1
+        elif text[i] == ")":
+            depth -= 1
+            if depth == 0:
+                end = i + 1
+                break
+    lines = []
+    for line in text[start:end].splitlines():
+        code = line.split("#", 1)[0].strip()
+        if code:
+            lines.append(re.sub(r"\s+", " ", code))
+    return lines
+
+
+def check_robot_block_parity() -> list[str]:
+    fam = [l for l in _articulation_block(_FAMILY) if l not in ROBOT_BLOCK_ALLOWLIST]
+    tea = [l for l in _articulation_block(_TEACHER) if l not in ROBOT_BLOCK_ALLOWLIST]
+    fam_set, tea_set = set(fam), set(tea)
+    problems = []
+    for line in sorted(fam_set - tea_set):
+        problems.append(f"family-only robot line: {line}")
+    for line in sorted(tea_set - fam_set):
+        problems.append(f"teacher-only robot line: {line}")
+    print(f"  family robot block: {len(fam_set)} lines | teacher: {len(tea_set)} lines")
+    return problems
+
+
+def _yaml_scalar(text: str, key: str) -> str:
+    match = re.search(rf"^[ \t]*{key}: (.+)$", text, re.M)
+    return match.group(1).strip() if match else ""
+
+
+def _yaml_block_list(text: str, key: str) -> list[str]:
+    match = re.search(rf"^{key}:\n((?:[ \t]+- .+\n?)+)", text, re.M)
+    if match is None:
+        return []
+    return [item.strip().strip("\"'") for item in re.findall(r"[ \t]+- (.+)", match.group(1))]
+
+
+def _version_yamls() -> dict[str, pathlib.Path]:
+    yamls = {"dev": _EXP / "lizard_params.yaml"}
+    for vdir in sorted(_VERSIONS.glob("v*")):
+        cfg = vdir / "lizard_params.yaml"
+        if cfg.exists():
+            yamls[vdir.name] = cfg
+    return yamls
+
+
+def check_asset_contract() -> list[str]:
+    problems = []
+    for tag, path in _version_yamls().items():
+        text = path.read_text(encoding="utf-8")
+        usda_path = _EXP / _yaml_scalar(text, "usd_path")
+        if not usda_path.exists():
+            problems.append(f"{tag}: usd_path missing on disk: {usda_path}")
+            continue
+        usda = usda_path.read_text(encoding="utf-8", errors="ignore")
+        joints = set(re.findall(r'def \w+Joint "([^"]+)"', usda))
+        links = set(re.findall(r'def Xform "([^"]+)"', usda))
+        if 'def Scope "Geometry"' not in usda:
+            problems.append(f"{tag}: no Geometry scope in {usda_path.name} "
+                            f"(cfgs hardcode prim path Robot/Geometry/base_link)")
+        if _yaml_scalar(text, "base_body_name") not in links:
+            problems.append(f"{tag}: base_body_name not a link in usda")
+        order = _yaml_block_list(text, "joint_order")
+        for name in order:
+            if f"{name}_joint" not in joints:
+                problems.append(f"{tag}: joint_order entry missing in usda: {name}_joint")
+        if len(joints) != len(order):
+            problems.append(f"{tag}: usda has {len(joints)} joints, yaml joint_order has {len(order)}")
+        for key in ("foot_body_names", "limb_body_names", "undesired_contact_body_names"):
+            for pattern in _yaml_block_list(text, key):
+                if not any(re.search(pattern, link) for link in links):
+                    problems.append(f"{tag}: body pattern matches no link: {key}={pattern}")
+    print(f"  yamls checked: {len(_version_yamls())}")
+    return problems
+
+
+def _asset_hashes() -> dict[str, str]:
+    return {rel: hashlib.sha256((_EXP / rel).read_bytes()).hexdigest() for rel in _LOCK_FILES}
+
+
+def update_asset_locks() -> None:
+    current = _asset_hashes()
+    for vdir in sorted(_VERSIONS.glob("v*")):
+        if not (vdir / "lizard_params.yaml").exists():
+            continue
+        payload = {
+            "note": "asset sha256 pinned at freeze; refresh with --update-locks only in a "
+                    "commit that intentionally retires assets (see check_dr_parity.py)",
+            "files": current,
+        }
+        (vdir / "asset_lock.json").write_text(
+            json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        print(f"  locked {vdir.name}")
+
+
+def check_asset_locks() -> list[str]:
+    problems = []
+    current = _asset_hashes()
+    for vdir in sorted(_VERSIONS.glob("v*")):
+        if not (vdir / "lizard_params.yaml").exists():
+            continue
+        lock = vdir / "asset_lock.json"
+        if not lock.exists():
+            problems.append(f"{vdir.name}: no asset_lock.json (run --update-locks once)")
+            continue
+        recorded = json.loads(lock.read_text(encoding="utf-8"))["files"]
+        for rel, sha in current.items():
+            if recorded.get(rel) != sha:
+                problems.append(f"{vdir.name}: asset changed since freeze: {rel} "
+                                f"{recorded.get(rel, '?')[:8]} -> {sha[:8]}")
+    print(f"  versions locked: {len(list(_VERSIONS.glob('v*')))}")
+    return problems
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--strict", action="store_true")
+    parser.add_argument("--update-locks", action="store_true",
+                        help="write versions/vN/asset_lock.json from current assets and exit")
     args = parser.parse_args()
+
+    if args.update_locks:
+        update_asset_locks()
+        print("LOCKS_UPDATED")
+        return 0
 
     checks = {
         "wiring parity (family vs teacher)": check_wiring_parity,
         "DR event list sync (play_utils vs dr_controller)": check_dr_list_sync,
         "PLAY wiring coverage (apply_play_wiring)": check_play_wiring_coverage,
+        "robot ArticulationCfg parity (family vs teacher)": check_robot_block_parity,
+        "asset contract (usda prims/joints vs yamls + hardcoded paths)": check_asset_contract,
+        "asset lock (frozen versions vs current assets)": check_asset_locks,
     }
     all_problems = []
     for title, fn in checks.items():

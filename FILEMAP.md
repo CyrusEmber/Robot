@@ -48,6 +48,7 @@
 | `v2\` | **当前活跃**：v1 参数 + 特权 obs 论文对齐补全（266→308）。NOTES.md 含验收线与判死刑信号 |
 | `vN\NOTES.md` | 版本文档：目的/参数 diff/训练命令/结果回填 |
 | `vN\tb_scalars.csv` | 训练后经 dump_tb.py 导出的逐迭代曲线 |
+| `vN\asset_lock.json` | 冻结时资产 sha256（`lizard.urdf` + `lizard.usda`）。冻结 yaml 只钉路径不钉内容，此锁补这个洞：资产原地换代 → 常驻任务 id 复现被破坏 → 闸门⑥报警。有意换代在同一 commit 里 `--update-locks` |
 
 ### 资产与管线（Blender → URDF → USD，工具在 `tools\` 下按类分目录）
 
@@ -78,7 +79,7 @@
 | `tools\verify\pose_check.py` | 静态几何打印：各 body 相对 base 坐标（头/四脚/尾） |
 | `tools\verify\view_lizard.py` | Isaac Sim GUI 里看机器人（零动作持默认位姿） |
 | `tools\verify\joint_check.py` | reset 后打印关节角（验证默认位姿加载） |
-| `tools\verify\check_dr_parity.py` | **契约漂移闸门（--strict 即 CI）**：① teacher vs 家族 DR wiring 行静态对比；② `play_utils.DR_EVENT_NAMES` 与 `dr_controller._DR_EVENT_NAMES` 两份列表同步；③ 全部 `*_PLAY` 类必须调 `apply_play_wiring` |
+| `tools\verify\check_dr_parity.py` | **契约漂移闸门（--strict 即 CI）**：① teacher vs 家族 DR wiring 行静态对比；② `play_utils.DR_EVENT_NAMES` 与 `dr_controller._DR_EVENT_NAMES` 两份列表同步；③ 全部 `*_PLAY` 类必须调 `apply_play_wiring`；④ 两侧 `ArticulationCfg` 字面块行比对；⑤ 资产结构契约（usda 文本 vs 各 yaml：joint_order/Geometry scope/base_link/body 模式，资产换代改名即报警）；⑥ 资产锁比对（见 `asset_lock.json`）。`--update-locks` 仅在有意换代资产的同一 commit 里跑 |
 | `tools\verify\framework_pin_check.py` | **框架 pin 检查**：grep IsaacLab 源码树里我们依赖的内部符号（cfg.func 替换 / RayCaster.meshes / live PD 增益 / warp kernel 等）+ 比对已验证 commit `28a37ce`（perf-2026-06-24）；升级 IsaacLab 后第一件事 |
 | `tools\verify\test_recovery_parity.py` | recovery 向量化 vs 朴素参考实现等价性（纯 torch，随机+6 组边界） |
 | `tools\verify\test_staged_curriculum.py` | 课程组件离线单测（mock managers，不起仿真） |

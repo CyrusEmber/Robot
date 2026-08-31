@@ -1,0 +1,7 @@
+{
+  "files": {
+    "assets/lizard/lizard.usda": "5755f68f124d56db659e49d726deac75a940e75683597c28c7b35a94ff97d4b5",
+    "lizard.urdf": "09a1e171ac8750bcd87d4109079f8bf1cf6f41dcdd614685d522789a7aefe26a"
+  },
+  "note": "asset sha256 pinned at freeze; refresh with --update-locks only in a commit that intentionally retires assets (see check_dr_parity.py)"
+}

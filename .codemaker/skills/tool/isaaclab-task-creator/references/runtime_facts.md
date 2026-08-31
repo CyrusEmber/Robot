@@ -46,8 +46,8 @@
 
 ## 曲线导出
 
-各 exp 目录的 `dump_tb.py`：TB 事件 → csv（iteration, tag, value 长表）。
-`python <robot>_exp\dump_tb.py --log_dir <run目录> --out <csv>`；
+`tools\trainlog\dump_tb.py`：TB 事件 → csv（iteration, tag, value 长表）。
+`python <robot>_exp\tools\trainlog\dump_tb.py --log_dir <run目录> --out <csv>`；
 `--list_tags` 先看可用 tag，`--tag_filter` 过滤。
 （lizard 实测：旧 run 39237 点 / 29 tags，`Curriculum/terrain_levels` 终值与历史记录吻合）
 
@@ -61,25 +61,28 @@
 - `staged_curriculum.py` 的 `_dependency_met` 假设 curriculum manager 把
   `cfg.func` 换成 term 实例（赌 `stage_idx` 属性存在）
 
-配套纪律：IsaacLab fork 版本升级 = 单独一次提交，先跑
-`lizard_exp\tools\verify\check_dr_parity.py` + 全部冒烟脚本再继续。
+配套纪律：IsaacLab fork 版本升级 = 单独一次提交。先跑
+`tools\verify\framework_pin_check.py`（把上面三条 + 其余内部依赖做成机器检查：
+grep 源码树符号 + 比对已验证 commit `28a37ce`），再跑 `run_offline_checks.bat`
+全套闸门 + 全部冒烟脚本，全绿才继续。
 
 ## 环境验证脚本速查（改完 env / 资产 / 参数后跑哪个）
 
-以下为 lizard 实例脚本（别的机器人照此模式建自己的），命令在
-`<robot>_exp\` 下执行，全部支持 `--headless`。**判读标准是脚本存在的理由**——
+以下为 lizard 实例脚本（别的机器人照此模式建自己的），已按类归档在
+`<robot>_exp\tools\{verify,diagnose,trainlog}\`，命令从 IsaacLab 根目录执行，
+全部支持 `--headless`。**判读标准是脚本存在的理由**——
 输出对了才算环境健康，跑通不报错≠验证通过。
 
 | 时机 | 脚本 | 预期输出（判读） |
 |---|---|---|
-| teacher env 改动后 | `teacher_smoke.py` | `OBS_SHAPE (2, 266)`；`ACTION_DIM 26`；`MASS_SUM ≈ 总质量`（特权质量 obs 对）；`FOOT_CONTACT` 四布尔合理；`OBS_FINITE True` |
-| 家族 env 改动后 | `smoke_test.py` | `OBS_DIM` 匹配布局；`STEPPED_OK True` |
-| 资产/站姿/初始高度改动后 | `position_check.py`（`--rough` 切粗糙地形） | `JOINT_COUNT 26`；base z 轨迹沉降稳定不穿地不悬空；四脚 `force_z` 合计 ≈ 总重×9.8（全重落脚=站姿自洽）；`nan_free True` |
-| 几何/命名疑虑 | `pose_check.py` | 各 body 相对 base 坐标符合设计（头在前、四脚对称、尾在后） |
-| 想肉眼确认 | `view_lizard.py` | GUI 持默认位姿不塌 |
-| 关节加载疑虑 | `joint_check.py` / `debug_pose.py` | 关节角=默认位姿 / 轴心世界坐标符合 URDF |
-| obs 出 NaN | `diagnose_nan.py` | 定位哪个 term 产生 NaN |
-| 版本记录 | `dump_tb.py`（上节） | csv 行数与迭代数同量级 |
+| teacher env 改动后 | `tools\verify\teacher_smoke.py` | `OBS_SHAPE (2, 308)`（v2；v1 为 266）；`LAYOUT` 行按 term 名给出切片（与 FAMILY.md 布局表对账）；`ACTION_DIM 26`；`MASS_SUM ≈ 总质量`；`FOOT_FORCES_Z` 合计≈全重；`OBS_FINITE True` |
+| 家族 env 改动后 | `tools\verify\smoke_test.py` | `OBS_DIM` 匹配布局；`STEPPED_OK True` |
+| 资产/站姿/初始高度改动后 | `tools\verify\position_check.py`（`--rough` 切粗糙地形） | `JOINT_COUNT 26`；base z 轨迹沉降稳定不穿地不悬空；四脚 `force_z` 合计 ≈ 总重×9.8（全重落脚=站姿自洽）；`nan_free True` |
+| 几何/命名疑虑 | `tools\verify\pose_check.py` | 各 body 相对 base 坐标符合设计（头在前、四脚对称、尾在后） |
+| 想肉眼确认 | `tools\verify\view_lizard.py` | GUI 持默认位姿不塌 |
+| 关节加载疑虑 | `tools\verify\joint_check.py` / `tools\diagnose\debug_pose.py` | 关节角=默认位姿 / 轴心世界坐标符合 URDF |
+| obs 出 NaN | `tools\diagnose\diagnose_nan.py` | 定位哪个 term 产生 NaN |
+| 版本记录 | `tools\trainlog\dump_tb.py`（上节） | csv 行数与迭代数同量级 |
 
 要点：
 - 动作维度**永远写 `env.unwrapped.action_manager.total_action_dim`**，

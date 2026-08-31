@@ -10,7 +10,7 @@ cd /d %~dp0..\..\..
 echo [1/4] framework pin check (IsaacLab internals + pinned SHA)
 python lizard_exp\tools\verify\framework_pin_check.py || goto :fail
 
-echo [2/4] DR / wiring parity (family vs teacher, DR lists, PLAY coverage)
+echo [2/4] freeze contracts (DR/wiring + robot block parity, DR lists, PLAY coverage, asset contract + locks)
 python lizard_exp\tools\verify\check_dr_parity.py --strict || goto :fail
 
 echo [3/4] recovery vectorization parity

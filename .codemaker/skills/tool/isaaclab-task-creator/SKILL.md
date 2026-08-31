@@ -30,7 +30,7 @@ description: >
 | `PLAN.md` | 训练计划 SSOT（决策/挂账/验收） |
 | `versions\vN\` | 冻结参数副本 + NOTES.md + tb_scalars.csv |
 | `tasks\` | **完整任务包**（自有代码 100% 自包含）：`__init__.py`（gym 注册表）、env cfg 家族、`agents\`（runner cfg）、`staged_curriculum.py`（课程组件） |
-| `convert_urdf.py` / `blender\` / 验证脚本 | 资产管线（见 isaaclab-asset-pipeline skill） |
+| `tools\`（pipeline/verify/diagnose/trainlog/archive）/ `blender\` | 工具与验证脚本（见 isaaclab-asset-pipeline skill） |
 
 **任务注册机制（自包含包模式）**：任务包住 `<robot>_exp\tasks\`，gym.register 的
 entry_point 用 `lizard_exp.tasks.<模块>:<类>` 字符串。fork 源码树只留一个 shim
@@ -46,7 +46,7 @@ entry_point 用 `lizard_exp.tasks.<模块>:<类>` 字符串。fork 源码树只�
 
 | 路径 | 作用 |
 |---|---|
-| `E:\IsaacLab\env_isaaclab\Scripts\python.exe` | venv Python，py_compile/mock 测试用它 |
+| venv Python（名字自备，见仓 README；lizard 机为 `E:\IsaacLab\env_isaaclab`） | py_compile/mock 测试用它；离线检查走 `run_offline_checks.bat` |
 | `source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/` | 速度跟踪任务包 |
 | `.../velocity/velocity_env_cfg.py` | 基类 `LocomotionVelocityRoughEnvCfg`（勿改） |
 | `.../velocity/config/<robot>/__init__.py` | fork 内唯一占用：10 行注册 shim |
@@ -93,8 +93,9 @@ entry_point 用 `lizard_exp.tasks.<模块>:<类>` 字符串。fork 源码树只�
    `scale=0` → PD 锁 rest pose，物理上仍 attached，无动力学突变。
 7. **跨课程依赖**：`env.curriculum_manager.cfg` 是公开对象，
    `getattr(cfg, "<term>").func.stage_idx` 读另一课程阶段号；格式 `"<term>>=<idx>"`。
-8. **PLAY 变体**：`num_envs=50`、关 corruption、课程全置 None、命令范围设最终阶段值、
-   所有 DR 事件置 None、地形网格缩到 5×5 且 `terrain_generator.curriculum=False`。
+8. **PLAY 变体**：`__post_init__` 末尾一行 `apply_play_wiring(self)`（`tasks\play_utils.py`：
+   num_envs=50、5×5 地形、关课程、关 corruption、DR 事件全关）。**禁止手抄接线清单**——
+   手抄清单历史上漂过两次，`check_dr_parity.py --strict` 现在机器拦截漏调的 PLAY 类。
 9. **替换 terrain_generator 会丢 curriculum 标志**：基类 `__post_init__` 末尾才置
    `curriculum=True`，super() **之后**替换生成器会回落默认 False（行序不按难度）——
    替换后显式重设。
@@ -170,16 +171,16 @@ StagedCurriculumTermCfg(func=StagedCurriculumTerm, stages=[...],
 
 ### 第三步：验证
 
-1. venv python `py_compile` 全过
-2. mock 测试：仿照既有 exp 目录的 staged curriculum 测试脚本（lizard:
-   `test_staged_curriculum.py`），假 env 驱动新 stages，断言 stage 0 首步应用 /
-   sustain 后进阶 / 掉线清零 / 依赖不满足不进阶 / 非法 requires 抛错。
-   mock 依赖项必须真继承 `StagedCurriculumTerm`
-3. 冒烟：小脚本建 env 跑几步，验 obs 维度/有限性（注意裸 gym `env.step` 是 5 元组，
-   见 references/runtime_facts.md；各 exp 目录有现成冒烟脚本，读 FAMILY.md 找）
-4. **环境验证脚本速查**（改 env/资产/参数后跑哪个、输出怎么判读）：
-   references/runtime_facts.md 文末速查表
-5. 给用户训练命令：`python scripts\reinforcement_learning\rsl_rl\train.py --task <新任务id>`
+1. 离线闸门一键（秒级，不起仿真）：`lizard_exp\tools\verify\run_offline_checks.bat`
+   = 框架 pin + DR/接线 parity + recovery 等价 + 课程单测；**红的不算过、不 commit**。
+   新改文件另跑 venv python `py_compile`
+2. 新写课程 mock 测试时仿照 `tools\verify\test_staged_curriculum.py`：假 env 驱动新
+   stages，断言 stage 0 首步应用 / sustain 后进阶 / 掉线清零 / 依赖不满足不进阶 /
+   非法 requires 抛错；mock 依赖项必须真继承 `StagedCurriculumTerm`
+3. 冒烟（起仿真，验 obs 维度/有限性/判读）：跑哪个脚本、输出怎么判读，看
+   references/runtime_facts.md 文末速查表 + 该机器人 FAMILY.md（注意裸 gym
+   `env.step` 是 5 元组）
+4. 给用户训练命令：`python scripts\reinforcement_learning\rsl_rl\train.py --task <新任务id>`
 
 ## 已知坑（任务创建域；资产坑见 asset-pipeline skill）
 

@@ -171,7 +171,7 @@ python lizard_exp\tools\verify\teacher_smoke.py --headless            :: teacher
 | 5 | 三噪声模型 C++→Python 移植 | 🟡 Phase 2 |
 | 6 | 延迟注入 DR（EP 技巧） | 🟡 UE 部署前 |
 | 7 | 奖励修复重应用（若 §4.6 对照坐实逃生舱假设） | 🟡 条件触发 |
-| 8 | 资产换代时同步 teacher 快照文件 | 🟡 维护债 |
+| 8 | 资产换代时同步 teacher 快照文件（2026-08-31 起机器化报警：check_dr_parity ④robot 块比对/⑤usda 结构契约/⑥versions asset_lock 哈希锁；同步本身仍是人工，但漏同步会在离线闸门炸出 DRIFT） | 🟢 有闸门 |
 | 9 | staged 课程 metric 接线 bug（Curriculum/*/metric 恒 0） | 🟢 低 |
 | 10 | yaml obs_layout 更新（感知版 +扫描差异） | 🟢 文档债 |
 | 11 | DR 放宽策略 / resume 二阶段 | 🟢 走稳后 |
