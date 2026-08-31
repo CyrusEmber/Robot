@@ -40,6 +40,8 @@ E:\IsaacLab\ablation_harness\
 │                         # 新机器人 = 新 suite 文件（照抄锁三件套：curriculum=True 等比例
 │                         # 列分配 / 单值难度 / seed）+ 注册进 eval.py 的 _SUITE_REGISTRY
 ├─ components\             # command_player / dr_controller / recovery（纯函数，通用）
+│                          # 注：dr_controller 的 DR 事件清单与 lizard_exp\tasks\play_utils.py
+│                          # 互为同步镜像（PLAY 变体用同一份）——加 DR 事件两边都要改
 ├─ metrics.py              # 指标纯函数库（按时间线分段自动切窗，通用）
 ├─ specs\example_baseline.yaml         # 消融 spec 示例
 └─ results\<protocol>\<run_id>\eval.json + summary.csv
@@ -69,11 +71,19 @@ harness 与机器人无关；**机器人相关只有 suites\ 一个文件 + 协�
 | recovery time | 冲击后 \|v−v_cmd\| < 0.25 m/s 持续 0.5s 的时刻 | 只算冲击时仍在第一局的 env；报 mean/median/p90 + spike + 冲击后 fall rate + measured_envs |
 | 停车超调 | stop 段残余速度 | 命令服从性 |
 
+**数值纪律（energy 教训）**：协议口径 → 实现 → 输出数值要三级对表。energy 实现曾漏乘
+dt（功率当能耗裸累加，虚高 ~50×，`energy_per_m_j=196155` 这种量级荒谬值没人拦）。
+跑分出来先做量级 sanity check（物理上合理吗），修口径后历史数据必须标失效
+（FILEMAP 历史包袱节记录了 2026-08-28 两行无效 energy）。
+
 ## 使用方案
+
+**task 必须传 TRAIN id（非 `-Play`）**：harness 自己控 DR（nominal 关 / robust 固定
+seed 保住），`-Play` 的 DR 预先全关，robust 会静默退化成 nominal——eval.py 已硬拦。
 
 ```bat
 :: 单点评估（nominal / robust）
-python ablation_harness\eval.py --task Lizard-Rough-v0 --checkpoint <model.pt> ^
+python ablation_harness\eval.py --task Lizard-Rough-v2 --checkpoint <model.pt> ^
   --protocol locomotion_eval_v1 --mode nominal --seed 123
 
 :: 消融调度（spec yaml：N 个 run 顺序 train+eval，断点续跑）+ 汇总表
