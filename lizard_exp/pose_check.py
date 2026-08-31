@@ -23,9 +23,9 @@ robot = env.unwrapped.scene['robot']
 names = robot.body_names
 import torch
 from isaaclab.utils.math import quat_apply, quat_conjugate
-base_pos = robot.data.body_pos_w[0, names.index('base')]
-base_quat = robot.data.body_quat_w[0, names.index('base')]
-for want in ('base', 'head_link', 'lf_FOOT', 'rf_FOOT', 'lh_FOOT', 'rh_FOOT', 'tail1_link', 'tail2_link'):
+base_pos = robot.data.body_pos_w[0, names.index('base_link')]
+base_quat = robot.data.body_quat_w[0, names.index('base_link')]
+for want in ('neck3_pitch', 'lf_foot', 'rf_foot', 'rl_foot', 'rr_foot', 'rear_yaw', 'tail_pitch'):
 	idx = names.index(want)
 	rel = quat_apply(quat_conjugate(base_quat), robot.data.body_pos_w[0, idx] - base_pos)
 	print('REL %s (%.3f, %.3f, %.3f)' % (want, rel[0], rel[1], rel[2]))

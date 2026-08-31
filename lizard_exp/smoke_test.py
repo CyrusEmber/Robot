@@ -24,7 +24,7 @@ policy_obs = obs['policy'] if isinstance(obs, dict) else obs
 print('OBS_DIM', tuple(policy_obs.shape))
 for i in range(10):
 	with torch.inference_mode():
-		step_out = env.step(torch.zeros(2, 16))
+		step_out = env.step(torch.zeros(2, env.unwrapped.action_manager.total_action_dim))
 dones = step_out[2]
 print('STEPPED_OK', bool(dones.any()))
 env.close()

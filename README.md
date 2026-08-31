@@ -3,6 +3,8 @@
 26 关节蜥蜴机器人（72 kg，16 腿关节 + 10 脊柱关节）Isaac Lab 强化学习
 训练 + 评测 + 版本管理包。内容：
 
+> **文件逐个说明见 [FILEMAP.md](FILEMAP.md)（新协作者/下一个 AI 必读）**
+
 - `lizard_exp/` — 任务包（gym 注册、env cfg、参数版本 versions/vN、
   Blender 资产管线、工具脚本）。入口文档：
   - `lizard_exp/FAMILY.md` — 家族总文档（任务表 / 版本历史 / 代码地图）
