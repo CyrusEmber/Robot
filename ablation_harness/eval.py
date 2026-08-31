@@ -23,6 +23,7 @@ import datetime
 import json
 import math
 import pathlib
+import subprocess
 
 from isaaclab.app import AppLauncher
 
@@ -65,15 +66,36 @@ from components.dr_controller import apply_eval_mode  # noqa: E402
 from components import recovery as recovery_mod  # noqa: E402
 
 _HARNESS_DIR = pathlib.Path(__file__).resolve().parent
+# provenance roots: the lizard git repo (junction-resolved) vs the IsaacLab
+# root (invocation path, junction NOT resolved). They differ only on the
+# original-machine layout; on a fresh tree the harness is copied into the
+# IsaacLab root and there is no separate lizard repo to point at.
+_REPO_ROOT = _HARNESS_DIR.parent
+_ISAAC_ROOT = pathlib.Path(__file__).absolute().parents[1]
+if _REPO_ROOT == _ISAAC_ROOT or not (_REPO_ROOT / "lizard_exp").is_dir():
+    _REPO_ROOT = None
 _SUITE_REGISTRY = {
     "lizard_suite_v1": (suites.LIZARD_SUITE_V1_NAMES, suites.lizard_suite_v1),
 }
 # summary.csv columns (protocol-wide, machine-readable single line per run)
 _SUMMARY_COLUMNS = [
-    "run_id", "protocol", "task", "tag", "mode", "seed", "timestamp",
+    "run_id", "protocol", "task", "tag", "mode", "seed",
+    "git_rev_lizard", "git_rev_isaaclab", "timestamp",
     "success_rate", "fall_rate", "lin_mae_mps", "ang_mae_radps",
     "energy_per_m_j", "stop_overshoot_mps", "recovery_mean_s", "never_recovered",
 ]
+
+
+def _git_rev(repo: pathlib.Path) -> str:
+    """Short commit id of the git repo at ``repo`` ('unknown' if not a repo)."""
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(repo), "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, timeout=10, check=False,
+        )
+        return out.stdout.strip() if out.returncode == 0 else "unknown"
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
 
 
 def _load_protocol(name: str) -> dict:
@@ -269,6 +291,10 @@ def main():
         "seed": args_cli.seed,
         "num_envs": num_envs,
         "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
+        # code provenance: which lizard repo state and which IsaacLab fork
+        # state produced these numbers (results without it are unattributable)
+        "git_rev_lizard": _git_rev(_REPO_ROOT) if _REPO_ROOT else "unknown",
+        "git_rev_isaaclab": _git_rev(_ISAAC_ROOT),
         "global": {
             "success_rate": metrics.summarize_segment(succ.float(), valid),
             "fall_rate": falls.float().mean().item(),
@@ -312,6 +338,7 @@ def main():
     row.update({
         "run_id": run_id, "protocol": protocol["name"], "task": args_cli.task, "tag": tag,
         "mode": args_cli.mode, "seed": args_cli.seed, "timestamp": result["timestamp"],
+        "git_rev_lizard": result["git_rev_lizard"], "git_rev_isaaclab": result["git_rev_isaaclab"],
         "success_rate": _round(result["global"]["success_rate"]),
         "fall_rate": _round(result["global"]["fall_rate"]),
         "lin_mae_mps": _round(result["global"]["lin_mae_mps"]),

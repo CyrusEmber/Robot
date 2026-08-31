@@ -76,6 +76,11 @@ dt（功率当能耗裸累加，虚高 ~50×，`energy_per_m_j=196155` 这种量
 跑分出来先做量级 sanity check（物理上合理吗），修口径后历史数据必须标失效
 （FILEMAP 历史包袱节记录了 2026-08-28 两行无效 energy）。
 
+**Provenance 纪律**：eval.json/summary.csv 每行自带 `git_rev_lizard` +
+`git_rev_isaaclab`（eval.py 自动采集，junction 布局下两仓分别定位；新机树内
+lizard rev 记 unknown）。引用数字先看 rev——**无 rev 或 rev 对不上的数字不引用**；
+比较跨 rev 的行必须声明代码已变。
+
 ## 使用方案
 
 **task 必须传 TRAIN id（非 `-Play`）**：harness 自己控 DR（nominal 关 / robust 固定

@@ -1,0 +1,46 @@
+diff --git a/scripts/reinforcement_learning/rsl_rl/play.py b/scripts/reinforcement_learning/rsl_rl/play.py
+index a033e2d7b..e2b0282bd 100644
+--- a/scripts/reinforcement_learning/rsl_rl/play.py
++++ b/scripts/reinforcement_learning/rsl_rl/play.py
+@@ -146,6 +146,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
+ 
+         # create isaac environment
+         env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
++        base_env = env
+ 
+         # convert to single-agent instance if required by the RL algorithm
+         if isinstance(env.unwrapped.cfg, DirectMARLEnvCfg):
+@@ -212,6 +213,13 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
+             export_policy_as_jit(policy_nn, normalizer=normalizer, path=export_model_dir, filename="policy.pt")
+             export_policy_as_onnx(policy_nn, normalizer=normalizer, path=export_model_dir, filename="policy.onnx")
+ 
++        keyboard = None
++        visualizer = getattr(args_cli, "visualizer", [])
++        if "kit" in visualizer:
++            from isaaclab.devices.keyboard import Se2Keyboard, Se2KeyboardCfg
++
++            keyboard = Se2Keyboard(Se2KeyboardCfg())
++
+         dt = env.unwrapped.step_dt
+ 
+         # reset environment
+@@ -223,6 +231,19 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
+                 start_time = time.time()
+                 # run everything in inference mode
+                 with torch.inference_mode():
++                    if keyboard is not None:
++                        command = keyboard.advance()
++                        if hasattr(base_env.unwrapped, "set_command"):
++                            base_env.unwrapped.set_command(command)
++                        else:
++                            # fallback: write the command straight into the
++                            # velocity command term (ManagerBasedRLEnv has no
++                            # set_command in this fork)
++                            term = base_env.unwrapped.command_manager.get_term("base_velocity")
++                            cmd = command.to(term.vel_command_b.device)
++                            if cmd.dim() == 1:
++                                cmd = cmd.unsqueeze(0)
++                            term.vel_command_b[:] = cmd
+                     # agent stepping
+                     actions = policy(obs)
+                     # env stepping

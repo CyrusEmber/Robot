@@ -28,7 +28,8 @@ xcopy <ROOT>\lizard_migration\ablation_harness <ROOT>\ablation_harness\ /E /I
 ```
 
 **1. venv .pth**（`import lizard_exp` 全局可达；在 `<ROOT>` 下执行，
-文件内容 = `<ROOT>` 绝对路径一行）：
+文件内容 = `<ROOT>` 绝对路径一行；`env_isaaclab` 只是本仓示例名，
+venv 名自定，路径跟着改即可）：
 
 ```bat
 echo %CD%> <ROOT>\env_isaaclab\Lib\site-packages\lizard_exp.pth
@@ -42,19 +43,11 @@ copy <ROOT>\lizard_exp\fork_patches\config_lizard___init__.py ^
   <ROOT>\source\isaaclab_tasks\isaaclab_tasks\manager_based\locomotion\velocity\config\lizard\__init__.py
 ```
 
-**3. play.py 键盘遥控补丁**（可选，仅遥控回放需要）：
-`<ROOT>\scripts\reinforcement_learning\rsl_rl\play.py` 中把
-`base_env.unwrapped.set_command(command)` 替换为：
+**3. play.py 键盘遥控补丁**（可选，仅遥控回放需要；含键盘接线 + 命令直写
+回退，`fork_patches\play_keyboard.patch` 即完整差异，手工版本见补丁内容）：
 
-```python
-if hasattr(base_env.unwrapped, "set_command"):
-    base_env.unwrapped.set_command(command)
-else:
-    term = base_env.unwrapped.command_manager.get_term("base_velocity")
-    cmd = command.to(term.vel_command_b.device)
-    if cmd.dim() == 1:
-        cmd = cmd.unsqueeze(0)
-    term.vel_command_b[:] = cmd
+```bat
+git -C <ROOT> apply <ROOT>\lizard_exp\fork_patches\play_keyboard.patch
 ```
 
 **4. 验证链**（全部通过 = 摆位成功）：

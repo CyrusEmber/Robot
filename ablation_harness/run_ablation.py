@@ -11,9 +11,13 @@ skipped when its eval.json already exists -- so an interrupted sweep simply
 re-runs and continues. Nothing here ever edits task source code: component
 variants enter via registered task ids or hydra override strings.
 
-Usage (from E:\\IsaacLab):
+Usage (from the IsaacLab root, with the VENV python):
     python ablation_harness\\run_ablation.py --spec ablation_harness\\specs\\<name>.yaml
     python ablation_harness\\run_ablation.py --summarize --protocol locomotion_eval_v1
+
+The train/eval subprocesses inherit this interpreter by default; point
+``--python`` at the venv executable if you launch the scheduler with another
+interpreter.
 """
 
 from __future__ import annotations
@@ -24,9 +28,12 @@ import pathlib
 import subprocess
 import sys
 
-_HARNESS_DIR = pathlib.Path(__file__).resolve().parent
+_HARNESS_DIR = pathlib.Path(__file__).absolute().parent
+# deliberately NOT resolve(): on the original machine the harness is reached
+# through E:\IsaacLab\ablation_harness (a junction into the git repo) and the
+# IsaacLab root is the parent of THAT path -- resolve() would follow the
+# junction and land inside the repo instead
 _ISAAC_ROOT = _HARNESS_DIR.parent
-_PYTHON = _ISAAC_ROOT / "env_isaaclab" / "Scripts" / "python.exe"
 
 
 def _log_dir_for_tag(tag: str) -> pathlib.Path | None:
@@ -49,7 +56,7 @@ def _run_train(run: dict, args_cli) -> pathlib.Path | None:
     tag = run["tag"]
     iters = int(run["max_iterations"])
     cmd = [
-        str(_PYTHON), "scripts/reinforcement_learning/rsl_rl/train.py",
+        args_cli.python, "scripts/reinforcement_learning/rsl_rl/train.py",
         "--task", task, "--seed", str(run["seed"]),
         "--max_iterations", str(iters), "--run_name", tag, "--headless",
     ] + [str(o) for o in run.get("overrides", [])]
@@ -79,7 +86,7 @@ def _run_eval(run: dict, checkpoint: pathlib.Path, iteration: int, mode: str, ar
         print(f"[ABLATION] eval exists, skip: {run_id}", flush=True)
         return True
     cmd = [
-        str(_PYTHON), "ablation_harness/eval.py",
+        args_cli.python, "ablation_harness/eval.py",
         "--task", task, "--checkpoint", str(checkpoint),
         "--protocol", protocol, "--mode", mode,
         "--seed", str(run.get("eval_seed", 123)), "--tag", eval_tag, "--headless",
@@ -144,6 +151,10 @@ def main():
     parser.add_argument("--summarize", action="store_true", help="Print the protocol summary table.")
     parser.add_argument("--protocol", type=str, default="locomotion_eval_v1")
     parser.add_argument("--device", type=str, default=None)
+    parser.add_argument(
+        "--python", type=str, default=sys.executable,
+        help="Python executable for train/eval subprocesses (default: this interpreter).",
+    )
     args_cli = parser.parse_args()
     if args_cli.summarize:
         _summarize(args_cli)

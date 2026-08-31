@@ -1,3 +1,0 @@
-run_id,protocol,task,tag,mode,seed,timestamp,success_rate,fall_rate,lin_mae_mps,ang_mae_radps,energy_per_m_j,stop_overshoot_mps,recovery_mean_s,never_recovered
-Lizard-Rough_random_robust_seed123,Locomotion-Eval-v1,Lizard-Rough-v0,random,robust,123,2026-08-28T16:27:51,0.2481,0.0833,0.8719,0.2048,196155.2656,0.0637,13.1472,0.0
-Lizard-Rough_random_nominal_seed123,Locomotion-Eval-v1,Lizard-Rough-v0,random,nominal,123,2026-08-28T18:34:00,0.2643,0.0,0.8354,0.1715,57326.957,0.0016,,
