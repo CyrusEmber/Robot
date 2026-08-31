@@ -9,6 +9,7 @@
 |---|---|
 | `lizard_exp\` | 参数 SSOT（lizard_params.yaml）/ versions 冻结版 / 任务包 tasks\ / 资产（URDF+meshes+USD）/ Blender 管线（含 `blender\lizard_stance.blend` 站姿 SSOT）/ 工具脚本 / FAMILY.md / PLAN.md / fork_patches\ |
 | `ablation_harness\` | 消融评测系统：eval.py / run_ablation.py / 协议 / 地形套件 / 组件 / 指标库 |
+| `.codemaker\skills\tool\` | 4 份 AI 辅助开发 skill（task-creator / asset-pipeline / eval-harness / lizard-git），方法论与本项目约定 |
 
 ## 目标环境前提
 
@@ -75,8 +76,17 @@ python lizard_exp\teacher_smoke.py --headless
 python lizard_exp\position_check.py --headless --rough
 
 :: 预期: 跑分输出 + eval.json 落盘
-python ablation_harness\eval.py --task Lizard-Rough-v0 --mode nominal --seed 123 --headless
+python ablation_harness\eval.py --task Lizard-Rough-Play-v1 --mode nominal --seed 123 --headless
 ```
+
+**6. skill 接线（可选，AI 辅助开发环境）**
+
+```bat
+:: codemaker 工作区在 fork 根时，把仓内 skill 目录接/拷到工作区技能目录
+mklink /J <ROOT>\.codemaker\skills\tool\lizard-git <仓>\.codemaker\skills\tool\lizard-git
+```
+
+（其余三份 isaaclab-* skill 同法；或直接 copy。不接不影响训练与评测。）
 
 ## 关键机制（为什么必须做步骤 2/3）
 
@@ -84,7 +94,7 @@ python ablation_harness\eval.py --task Lizard-Rough-v0 --mode nominal --seed 123
   ——import 需要 fork 根在 sys.path（.pth 常驻 + shim 内置插入，双保险）
 - shim 触发链：`import isaaclab_tasks` → `config\lizard\__init__.py` →
   `import lizard_exp.tasks` → 注册全部 10 个任务 id
-- `versions\v0\` 是 **teacher 运行时依赖**（`TEACHER_PARAMS_VERSION="v0"` 读冻结副本），
+- `versions\v1\` 是 **teacher 运行时依赖**（`TEACHER_PARAMS_VERSION="v1"` 读冻结副本），
   不是备份文档——漏拷 teacher 起不来
 
 ## 不在包里（按需另拷）
@@ -92,7 +102,6 @@ python ablation_harness\eval.py --task Lizard-Rough-v0 --mode nominal --seed 123
 | 项 | 何时需要 |
 |---|---|
 | `logs\rsl_rl\` | resume 训练 / 评估已训 checkpoint / TB 曲线历史 |
-| `.codemaker\skills\tool\`（三份 skill） | AI 辅助开发环境（isaaclab-task-creator / asset-pipeline / 可执行 | 改站姿重出 URDF 时 |
 
 ## 常见坑
 
