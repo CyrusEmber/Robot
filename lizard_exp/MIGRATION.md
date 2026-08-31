@@ -9,7 +9,7 @@
 |---|---|
 | `lizard_exp\` | 参数 SSOT（lizard_params.yaml）/ versions 冻结版 / 任务包 tasks\ / 资产（URDF+meshes+USD）/ Blender 管线（含 `blender\lizard_stance.blend` 站姿 SSOT）/ 工具脚本 / FAMILY.md / PLAN.md / fork_patches\ |
 | `ablation_harness\` | 消融评测系统：eval.py / run_ablation.py / 协议 / 地形套件 / 组件 / 指标库 |
-| `.codemaker\skills\tool\` | 4 份 AI 辅助开发 skill（task-creator / asset-pipeline / eval-harness / lizard-git），方法论与本项目约定 |
+| `.codemaker\skills\tool\` | 4 份 AI 辅助开发 skill（task-creator / asset-pipeline / eval-harness / git-auto-sync），方法论与项目约定 |
 
 ## 目标环境前提
 
@@ -83,7 +83,7 @@ python ablation_harness\eval.py --task Lizard-Rough-Play-v1 --mode nominal --see
 
 ```bat
 :: codemaker 工作区在 fork 根时，把仓内 skill 目录接/拷到工作区技能目录
-mklink /J <ROOT>\.codemaker\skills\tool\lizard-git <仓>\.codemaker\skills\tool\lizard-git
+mklink /J <ROOT>\.codemaker\skills\tool\git-auto-sync <仓>\.codemaker\skills\tool\git-auto-sync
 ```
 
 （其余三份 isaaclab-* skill 同法；或直接 copy。不接不影响训练与评测。）
