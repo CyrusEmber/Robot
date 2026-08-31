@@ -20,8 +20,11 @@
 | Lizard-Velocity-Flat-v0 | `LizardFlatEnvCfg` | 开发态 | 家族平地基座（活实验） |
 | Lizard-Velocity-Flat-Play-v0 | `LizardFlatEnvCfg_PLAY` | 开发态 | 同上，回放 |
 | Lizard-Velocity-Curriculum-Flat-v0 | `LizardCurriculumFlatEnvCfg` | 开发态 | 三课程平地变体 |
+| Lizard-Velocity-Curriculum-Flat-Play-v0 | `LizardCurriculumFlatEnvCfg_PLAY` | 开发态 | 同上，回放 |
 | Lizard-Velocity-Rough-v0 | `LizardRoughEnvCfg` | 开发态 | 家族粗糙地形（活实验） |
+| Lizard-Velocity-Rough-Play-v0 | `LizardRoughEnvCfg_PLAY` | 开发态 | 同上，回放 |
 | Lizard-Velocity-Curriculum-Rough-v0 | `LizardCurriculumRoughEnvCfg` | 开发态 | 三课程粗糙变体 |
+| Lizard-Velocity-Curriculum-Rough-Play-v0 | `LizardCurriculumRoughEnvCfg_PLAY` | 开发态 | 同上，回放 |
 | **Lizard-Rough-v2** | `LizardRoughTeacherEnvCfg` | **versions/v2（冻结）** | teacher Phase 1（特权 actor，最新） |
 | Lizard-Rough-Play-v2 | `LizardRoughTeacherEnvCfg_PLAY` | **versions/v2（冻结）** | teacher 回放 |
 | Lizard-Rough-v1 | `LizardRoughTeacherEnvCfg_V1` | versions/v1（冻结） | v1 配方复现入口（obs 266） |
@@ -75,7 +78,9 @@ wrench 6 | thigh_shank 8 | friction 4 | normals 12 | forces 12 | mass 27 | air 4
 ```
 lizard_exp\
 ├─ tasks\                            任务包（2026-08-28 从 fork 源码树收编）
-│  ├─ __init__.py                    gym 注册表（全部 10 个任务 id）
+│  ├─ __init__.py                    gym 注册表（全部 12 个任务 id）
+│  ├─ play_utils.py                  PLAY 公共接线（DR 事件名清单 + apply_play_wiring，
+│  │                                 单一真源，check_dr_parity 机器看守）
 │  ├─ lizard_env_cfg.py              家族平地基座（_load_params 支持版本参数）
 │  │  ├─ rough_env_cfg.py            家族粗糙地形（LIZARD_ROUGH_TERRAINS_CFG）
 │  │  │  └─ curriculum_rough_env_cfg.py  三课程粗糙变体
@@ -91,6 +96,8 @@ lizard_exp\
 │  ├─ pipeline\                      convert_urdf / convert_stl_to_obj / flatten_usd / export_ue
 │  ├─ verify\                        teacher_smoke / smoke_test / position_check / pose_check
 │  │                                 / joint_check / view_lizard / test_staged_curriculum
+│  │                                 / check_dr_parity / framework_pin_check
+│  │                                 / test_recovery_parity / run_offline_checks.bat
 │  ├─ diagnose\                      debug_pose / diagnose_nan / inspect_blend / inspect_glb / dump_all_parts
 │  ├─ trainlog\                      dump_tb / read_curriculum
 │  └─ archive\                       patch_kfe_axis / patch_stance（仅考古）
@@ -106,6 +113,10 @@ lizard_exp\
 | `scripts\...\rsl_rl\play.py` | 键盘遥控回退补丁（6 行） |
 
 **import 可达性**：venv site-packages 有 `lizard_exp.pth`（指向 E:\IsaacLab）→ `import lizard_exp` 全局可达。新机器摆位步骤见仓根 `README.md`。
+
+**离线闸门**：`tools\verify\run_offline_checks.bat`（框架 pin / DR parity / recovery 等价 /
+课程单测，秒级不起仿真）。改 `tasks\*.py` 或 harness 后、commit 前必跑；升级 IsaacLab
+后先跑 `framework_pin_check.py`。已验证 IsaacLab commit：`28a37ce`（perf-2026-06-24）。
 
 ## 记录体系（四层）
 

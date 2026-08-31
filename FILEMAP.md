@@ -28,7 +28,7 @@
 
 | 文件 | 作用 |
 |---|---|
-| `__init__.py` | 全部 10 个 gym 注册（含 teacher `Lizard-Rough-v1`） |
+| `__init__.py` | 全部 12 个 gym 注册（家族 8 + teacher v1/v2 各 train/play） |
 | `lizard_env_cfg.py` | 家族平地基座：机器人装配 + DR 接线 + `_load_params`（版本参数机制） |
 | `rough_env_cfg.py` | 家族粗糙地形（蜥蜴尺度化地形 + 高度扫描 obs） |
 | `curriculum_env_cfg.py` | 三课程平地变体（骨骼/速度/转向，spine 可被课程锁放） |
@@ -78,8 +78,11 @@
 | `tools\verify\pose_check.py` | 静态几何打印：各 body 相对 base 坐标（头/四脚/尾） |
 | `tools\verify\view_lizard.py` | Isaac Sim GUI 里看机器人（零动作持默认位姿） |
 | `tools\verify\joint_check.py` | reset 后打印关节角（验证默认位姿加载） |
-| `tools\verify\check_dr_parity.py` | **快照漂移检查**：teacher 与家族 cfg 的 DR wiring 行静态对比（快照复制纪律的防漂移闸门，改动任一 cfg 后跑） |
+| `tools\verify\check_dr_parity.py` | **契约漂移闸门（--strict 即 CI）**：① teacher vs 家族 DR wiring 行静态对比；② `play_utils.DR_EVENT_NAMES` 与 `dr_controller._DR_EVENT_NAMES` 两份列表同步；③ 全部 `*_PLAY` 类必须调 `apply_play_wiring` |
+| `tools\verify\framework_pin_check.py` | **框架 pin 检查**：grep IsaacLab 源码树里我们依赖的内部符号（cfg.func 替换 / RayCaster.meshes / live PD 增益 / warp kernel 等）+ 比对已验证 commit `28a37ce`（perf-2026-06-24）；升级 IsaacLab 后第一件事 |
+| `tools\verify\test_recovery_parity.py` | recovery 向量化 vs 朴素参考实现等价性（纯 torch，随机+6 组边界） |
 | `tools\verify\test_staged_curriculum.py` | 课程组件离线单测（mock managers，不起仿真） |
+| `tools\verify\run_offline_checks.bat` | **离线全套一键**（pin/parity/recovery/curriculum，秒级不起仿真）；改 tasks 或 harness 后、commit 前必跑 |
 | `tools\diagnose\debug_pose.py` | reset 后立即 dump 全部腿关节轴心世界坐标 |
 | `tools\diagnose\diagnose_nan.py` | Flat 任务 NaN obs 诊断（历史问题排查用） |
 
