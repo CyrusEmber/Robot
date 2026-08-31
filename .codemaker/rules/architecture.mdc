@@ -1,0 +1,15 @@
+---
+description: 架构评审/重构提案的增量规则（与 ponytail 互补，不重复其条款）
+globs: *
+alwaysApply: false
+---
+
+# Architecture Review（增量规则）
+
+仅适用于：架构评审、重构提案、引入新 pattern/抽象/framework 的讨论。日常 bug 修复与功能开发不加载本规则（由 ponytail 规则覆盖）。
+
+1. **Change vectors first.** 提出任何结构调整前，先指出该系统实际的变化向量（最近/未来最可能改动的方向，以 git 历史、需求趋势为据，非猜测）。不为理论纯洁性优化架构；结构围绕变化向量设计，接受局部"丑但稳定"的存在。
+
+2. **Triage before treating.** 每个被提出的问题先分类：local code problem（就地修，禁止借机重构结构）或 architecture problem（现有结构确实无法满足已声明的需求时才允许结构调整）。判据是"需求能否被现有结构表达"，不是长度/类数/嵌套深度等表现代理指标。
+
+3. **Proposal format.** 架构建议必须给出 ≥2 个可行方案，每个绑定明确约束（性能、团队规模、部署、演进、兼容性）并写明 trade-off；默认推荐最小、可逆、渐进的那一步。
