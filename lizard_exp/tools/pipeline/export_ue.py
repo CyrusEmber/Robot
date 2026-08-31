@@ -6,7 +6,7 @@ Output: lizard_exp/ue/lizard_ue.json
   - control params + obs layout for the UE inference loop
 
 Plain python, no Isaac Sim needed:
-    python lizard_exp/export_ue.py
+    python lizard_exp/tools/pipeline/export_ue.py
 
 UE is left-handed Z-up, URDF/Isaac is right-handed Z-up. This file keeps
 right-handed values; ue/build_lizard_ue.py does the handedness conversion.
@@ -20,7 +20,8 @@ import xml.etree.ElementTree as ET
 import numpy as np
 import yaml
 
-EXP_DIR = pathlib.Path(__file__).resolve().parent
+# file lives at lizard_exp/tools/pipeline/ -> exp root is parents[2]
+EXP_DIR = pathlib.Path(__file__).resolve().parents[2]
 URDF_PATH = EXP_DIR / "lizard.urdf"
 PARAMS_PATH = EXP_DIR / "lizard_params.yaml"
 OUTPUT_DIR = EXP_DIR / "ue"
@@ -237,7 +238,10 @@ def main():
         "joints": joints,
         "joint_order": params["joint_order"],
         "control": {
-            "action_scale": params["action"]["scale"],
+            # legs carry the policy's main action scale; spine is locked in
+            # the teacher and scaled separately in the family variants
+            "action_scale": params["action"]["legs_scale"],
+            "action_scale_spine": params["action"]["spine_scale"],
             "use_default_offset": params["action"]["use_default_offset"],
             "dt": params["sim"]["dt"],
             "decimation": params["sim"]["decimation"],

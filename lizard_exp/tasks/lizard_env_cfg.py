@@ -30,6 +30,8 @@ import isaaclab_tasks.manager_based.locomotion.velocity.mdp as mdp
 from isaaclab_tasks.manager_based.locomotion.velocity.velocity_env_cfg import LocomotionVelocityRoughEnvCfg
 from isaaclab_tasks.utils import preset
 
+from lizard_exp.tasks.play_utils import disable_dr_events
+
 # this file lives at lizard_exp/tasks/lizard_env_cfg.py -> exp root is parents[1]
 _LIZARD_EXP_DIR = pathlib.Path(__file__).resolve().parents[1]
 
@@ -141,10 +143,6 @@ class LizardFlatEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.terminations.base_contact.params["sensor_cfg"] = SceneEntityCfg(
             "contact_forces", body_names=[base_name]
         )
-        # the base task assumes the anymal base body is called "base" (termination term)
-        self.terminations.base_contact.params["sensor_cfg"] = SceneEntityCfg(
-            "contact_forces", body_names=[base_name]
-        )
 
         # command ranges from SSOT
         self.commands.base_velocity.ranges.lin_vel_x = tuple(params["commands"]["lin_vel_x"])
@@ -243,13 +241,5 @@ class LizardFlatEnvCfg_PLAY(LizardFlatEnvCfg):
         self.scene.num_envs = 50
         self.scene.env_spacing = 2.5
         self.observations.policy.enable_corruption = False
-        # disable every randomization event for deterministic evaluation
-        self.events.base_external_force_torque = None
-        self.events.push_robot = None
-        self.events.randomize_inertia = None
-        self.events.randomize_actuator_gains = None
-        self.events.randomize_joint_params = None
-        self.events.randomize_limb_mass = None
-        self.events.add_base_mass = None
-        self.events.base_com = None
-        self.events.physics_material = None
+        # deterministic evaluation: every DR event off (shared list, single source)
+        disable_dr_events(self.events)

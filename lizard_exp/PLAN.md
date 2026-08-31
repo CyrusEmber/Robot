@@ -153,11 +153,11 @@ python scripts\reinforcement_learning\rsl_rl\train.py --task Lizard-Rough-v0 --m
 python scripts\reinforcement_learning\rsl_rl\play.py --task Lizard-Rough-Play-v0 --num_envs 50 --checkpoint <model.pt>
 
 :: 验证工具（E:\IsaacLab 根目录）
-python lizard_exp\position_check.py --headless --rough   :: 站立/受力
-python lizard_exp\debug_pose.py --headless               :: 腿对称性
-python lizard_exp\view_lizard.py --viz kit               :: GUI 观察（注意此脚本挂 Flat-Play 任务）
-python lizard_exp\read_curriculum.py                     :: 课程终态（旧训练）
-python lizard_exp\teacher_smoke.py --headless            :: teacher env 冒烟（obs 维度/有限性）
+python lizard_exp\tools\verify\position_check.py --headless --rough   :: 站立/受力
+python lizard_exp\tools\diagnose\debug_pose.py --headless             :: 腿对称性
+python lizard_exp\tools\verify\view_lizard.py --viz kit               :: GUI 观察（注意此脚本挂 Flat-Play 任务）
+python lizard_exp\tools\trainlog\read_curriculum.py                   :: 课程终态（旧训练）
+python lizard_exp\tools\verify\teacher_smoke.py --headless            :: teacher env 冒烟（obs 维度/有限性）
 ```
 
 ## 7. 挂账清单

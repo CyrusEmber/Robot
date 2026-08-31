@@ -3,7 +3,7 @@ import bmesh
 import os
 import shutil
 import struct
-from mathutils import Vector, Matrix
+from mathutils import Vector
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 _BLEND_IN = os.path.join(_SCRIPT_DIR, "lizard_stance.blend")

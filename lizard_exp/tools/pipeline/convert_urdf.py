@@ -4,7 +4,7 @@ Reads joint drive gains from lizard_params.yaml so the USD drive matches
 the actuator config used in training. Output lands in {lizard_exp}/assets/,
 matching robot.usd_path in lizard_params.yaml.
 
-Usage:
+Usage (from {lizard_exp}/tools/pipeline):
     E:\\IsaacLab\\env_isaaclab\\Scripts\\python.exe convert_urdf.py --headless
 """
 
@@ -24,7 +24,8 @@ import yaml
 
 from isaaclab.sim.converters import UrdfConverter, UrdfConverterCfg
 
-EXP_DIR = pathlib.Path(__file__).resolve().parent
+# file lives at lizard_exp/tools/pipeline/ -> exp root is parents[2]
+EXP_DIR = pathlib.Path(__file__).resolve().parents[2]
 
 
 def main():

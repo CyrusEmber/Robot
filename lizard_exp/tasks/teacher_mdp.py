@@ -141,11 +141,19 @@ class FootContactNormalsTerm(ManagerTermBase):
         device = self.robot.device
         mesh_path = cfg.params.get("mesh_prim_path", "/World/ground")
         # the height scanner must have registered the terrain mesh already
+        # (scene sensors initialize before observation-manager terms)
         if (mesh_path, device) in RayCaster.meshes:
             mesh = RayCaster.meshes[(mesh_path, device)]
         else:
+            matches = [m for key, m in RayCaster.meshes.items() if key[0] == mesh_path]
+            if not matches:
+                raise RuntimeError(
+                    f"FootContactNormalsTerm: terrain mesh '{mesh_path}' is not registered"
+                    " in RayCaster.meshes. The scene needs a height scanner over the same"
+                    " mesh, and scene sensors must initialize before observation terms."
+                )
             # device-string formatting mismatch fallback (same prim, any device key)
-            mesh = next(m for key, m in RayCaster.meshes.items() if key[0] == mesh_path)
+            mesh = matches[0]
         self._mesh_id = mesh.id
         self._num_envs = env.scene.num_envs
         self._num_feet = len(self.foot_ids)

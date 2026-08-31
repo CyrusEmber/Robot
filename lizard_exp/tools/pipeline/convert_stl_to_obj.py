@@ -11,7 +11,8 @@ import re
 import struct
 import sys
 
-EXP_DIR = pathlib.Path(__file__).resolve().parent
+# file lives at lizard_exp/tools/pipeline/ -> exp root is parents[2]
+EXP_DIR = pathlib.Path(__file__).resolve().parents[2]
 MESH_DIR = EXP_DIR / "meshes"
 URDF_PATH = EXP_DIR / "lizard.urdf"
 

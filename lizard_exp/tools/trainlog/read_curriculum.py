@@ -2,7 +2,6 @@
 """Read final curriculum stage values from the training tfevents log."""
 
 import glob
-import pathlib
 
 from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 

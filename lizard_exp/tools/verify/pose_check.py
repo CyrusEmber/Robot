@@ -21,7 +21,6 @@ env = gym.make('Lizard-Velocity-Flat-v0', cfg=cfg)
 env.reset()
 robot = env.unwrapped.scene['robot']
 names = robot.body_names
-import torch
 from isaaclab.utils.math import quat_apply, quat_conjugate
 base_pos = robot.data.body_pos_w[0, names.index('base_link')]
 base_quat = robot.data.body_quat_w[0, names.index('base_link')]

@@ -36,5 +36,5 @@
   FOOT_FRICTION 4 值在 [0.5,1.5]（PLAY 无随机化=默认材质）；
   BASE_WRENCH=0（PLAY 关外力事件）
 - eval 结果: （训练后回填）ablation_harness results/locomotion_eval_v1/，tag=v2
-- 逐迭代曲线: （训练后导出）`python lizard_exp\dump_tb.py --log_dir <run目录> --out lizard_exp\versions\v2\tb_scalars.csv`
+- 逐迭代曲线: （训练后导出）`python lizard_exp\tools\trainlog\dump_tb.py --log_dir <run目录> --out lizard_exp\versions\v2\tb_scalars.csv`
 - 结论/下一步: （训练后回填）

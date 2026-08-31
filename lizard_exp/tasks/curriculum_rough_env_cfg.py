@@ -17,6 +17,7 @@ from lizard_exp.tasks.curriculum_env_cfg import (
     LizardCurriculumActionsCfg,
     _make_stages,
 )
+from lizard_exp.tasks.play_utils import disable_dr_events
 from lizard_exp.tasks.rough_env_cfg import LizardRoughEnvCfg
 
 
@@ -27,7 +28,7 @@ class LizardCurriculumRoughEnvCfg(LizardRoughEnvCfg):
     def __post_init__(self):
         super().__post_init__()
 
-        params = _load_params()
+        params = _load_params(self.params_version)
         action_params = params["action"]
 
         # split the single joint action term (keeps the tree-order action layout)
@@ -51,7 +52,7 @@ class LizardCurriculumRoughEnvCfg_PLAY(LizardCurriculumRoughEnvCfg):
 
     def __post_init__(self):
         super().__post_init__()
-        params = _load_params()
+        params = _load_params(self.params_version)
 
         # smaller scene + fixed terrain grid (matches the rough PLAY setup)
         self.scene.num_envs = 50
@@ -62,14 +63,9 @@ class LizardCurriculumRoughEnvCfg_PLAY(LizardCurriculumRoughEnvCfg):
             self.scene.terrain.terrain_generator.num_cols = 5
             self.scene.terrain.terrain_generator.curriculum = False
         self.observations.policy.enable_corruption = False
-        self.events.base_external_force_torque = None
-        self.events.push_robot = None
-        self.events.randomize_inertia = None
-        self.events.randomize_actuator_gains = None
-        self.events.randomize_joint_params = None
-        self.events.add_base_mass = None
-        self.events.base_com = None
-        self.events.physics_material = None
+        # deterministic evaluation: every DR event off (shared list, single
+        # source -- this PLAY previously missed randomize_limb_mass)
+        disable_dr_events(self.events)
 
         # curricula off: final stage everywhere (spine live, full ranges)
         self.curriculum.terrain_levels = None

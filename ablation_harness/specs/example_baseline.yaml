@@ -4,7 +4,7 @@
 
 runs:
   - tag: baseline
-    task: Lizard-Rough-v0
+    task: Lizard-Rough-v2
     seed: 42
     max_iterations: 4000
     eval_checkpoints: [1000, 2000, 4000]

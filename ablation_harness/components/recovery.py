@@ -62,16 +62,16 @@ def recovery_times(
     spikes = torch.zeros(num_envs)
     below = (lin_error < threshold_mps) & valid_mask
 
-    for env_id in range(num_envs):
-        err = lin_error[push_step:, env_id]
-        if err.numel() == 0:
-            continue
-        spikes[env_id] = err.max()
-        ok = below[push_step:, env_id]
-        for i in range(ok.numel() - sustain_steps + 1):
-            if bool(ok[i : i + sustain_steps].all()):
-                times[env_id] = i * step_dt
-                break
+    post = below[push_step:]
+    if post.shape[0] > 0:
+        spikes = lin_error[push_step:].max(dim=0).values
+    if post.shape[0] >= sustain_steps:
+        # first index (after the push) whose sustain_steps window is all True,
+        # vectorized with the same unfold as metrics.sustained_any
+        windows = post.unfold(0, sustain_steps, 1).all(dim=-1)  # (T-s+1, N)
+        recovered = windows.any(dim=0)
+        first_hit = windows.long().argmax(dim=0)  # first True where recovered
+        times = torch.where(recovered, first_hit.float() * step_dt, times)
 
     recovered = ~torch.isnan(times)
     if bool(recovered.any()):

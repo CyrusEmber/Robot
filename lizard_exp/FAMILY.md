@@ -87,8 +87,15 @@ lizard_exp\
 │  ├─ staged_curriculum.py           通用课程组件（原 velocity/mdp/ 收编）
 │  └─ agents\rsl_rl_ppo_cfg.py       runner cfg（experiment_name 按任务族隔离）
 ├─ versions\vN\                      冻结参数副本 + NOTES.md + tb_scalars.csv
-├─ blender\ / convert_urdf.py        资产管线
-└─ 验证/工具脚本（teacher_smoke / position_check / dump_tb / ...）
+├─ tools\                            工具脚本（2026-08-31 分类归档）
+│  ├─ pipeline\                      convert_urdf / convert_stl_to_obj / flatten_usd / export_ue
+│  ├─ verify\                        teacher_smoke / smoke_test / position_check / pose_check
+│  │                                 / joint_check / view_lizard / test_staged_curriculum
+│  ├─ diagnose\                      debug_pose / diagnose_nan / inspect_blend / inspect_glb / dump_all_parts
+│  ├─ trainlog\                      dump_tb / read_curriculum
+│  └─ archive\                       patch_kfe_axis / patch_stance（仅考古）
+├─ blender\                          站姿 SSOT + 骨骼修复 + URDF 生成
+└─ ue\ / fork_patches\               UE Actor 组装 + 任务注册 shim
 ```
 
 **fork 源码树仅剩两处占用**：

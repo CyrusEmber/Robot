@@ -51,6 +51,19 @@
 `--list_tags` 先看可用 tag，`--tag_filter` 过滤。
 （lizard 实测：旧 run 39237 点 / 29 tags，`Curriculum/terrain_levels` 终值与历史记录吻合）
 
+## 私有成员依赖清单（fork 版本升级即碎，改前先验证）
+
+以下三处赌了 IsaacLab 内部实现（均有注释标注），**升级 IsaacLab fork 前必须逐条验证**：
+
+- `staged_curriculum.py` 写 `action_term._scale`（公开 API 只有 cfg.scale）
+- `teacher_mdp.py` 用 `asset._physics_sim_view`（框架 events.py 同款 workaround，
+  有先例但仍是私有）
+- `staged_curriculum.py` 的 `_dependency_met` 假设 curriculum manager 把
+  `cfg.func` 换成 term 实例（赌 `stage_idx` 属性存在）
+
+配套纪律：IsaacLab fork 版本升级 = 单独一次提交，先跑
+`lizard_exp\tools\verify\check_dr_parity.py` + 全部冒烟脚本再继续。
+
 ## 环境验证脚本速查（改完 env / 资产 / 参数后跑哪个）
 
 以下为 lizard 实例脚本（别的机器人照此模式建自己的），命令在

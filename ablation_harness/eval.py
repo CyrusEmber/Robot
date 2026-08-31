@@ -11,7 +11,7 @@ per-segment / per-terrain metrics to results/<protocol>/<run_id>/eval.json
 plus one row into the protocol's summary.csv.
 
 Usage (from E:\\IsaacLab):
-    python ablation_harness\\eval.py --task Lizard-Rough-v0 --checkpoint <model.pt> ^
+    python ablation_harness\\eval.py --task Lizard-Rough-v2 --checkpoint <model.pt> ^
         --protocol locomotion_eval_v1 --mode nominal --seed 123
 """
 
@@ -37,6 +37,15 @@ parser.add_argument("--envs_per_terrain", type=int, default=None,
 parser.add_argument("--tag", type=str, default=None, help="Run label; defaults to checkpoint/random.")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
+# a -Play cfg arrives with every DR event already nulled, which silently turns
+# robust mode into nominal (dr_controller can only keep or remove events that
+# still exist) -- refuse loudly instead of publishing wrong numbers
+if args_cli.task.endswith("-Play"):
+    raise SystemExit(
+        f"Task '{args_cli.task}' is a PLAY variant. Pass the TRAIN task id instead: "
+        "the harness controls domain randomization itself (nominal disables it, "
+        "robust keeps it at a pinned seed), so it needs a cfg with DR intact."
+    )
 simulation_app = AppLauncher(args_cli).app
 
 import gymnasium as gym  # noqa: E402
@@ -213,7 +222,10 @@ def main():
     falls = metrics.fall_flags(tilt_cos, clearance, tilt_cos_min, clearance_min, sustain_steps, valid)
 
     travelled = torch.linalg.norm(end_pos[:, :2] - start_pos[:, :2], dim=-1)
-    energy_total = (energy * valid_f).sum(dim=0)
+    # energy series is per-step POWER [W] (metrics.step_energy); integrating
+    # over valid steps requires the step duration -- pre-fix runs omitted it
+    # and reported numbers inflated by 1/step_dt (see summary.csv 2026-08-28)
+    energy_total = (energy * valid_f).sum(dim=0) * step_dt
     energy_per_m = (energy_total / travelled.clamp(min=0.1)).mean().item()
 
     step_axis = torch.arange(num_steps, device=device).unsqueeze(1) * step_dt

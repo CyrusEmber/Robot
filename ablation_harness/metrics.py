@@ -43,13 +43,16 @@ def step_energy(
     joint_pos: torch.Tensor,
     joint_vel: torch.Tensor,
 ) -> torch.Tensor:
-    """Mechanical joint energy of one step: sum |tau * qdot| [J].
+    """Mechanical joint power of one step: sum |tau * qdot| [W].
 
     Implicit PD drives are solved inside PhysX with no torque readback path we
     can rely on, so the torque is reconstructed exactly:
     ``tau = K (q* - q) - D qdot`` using the LIVE per-joint K/D (post
     actuator-gain randomization) and the position target written by the action
     manager.
+
+    This is POWER, not energy: the caller integrates over time by multiplying
+    the per-step sum with the step duration (protocol: sum|tau*w|*dt).
 
     Args:
         stiffness: (N, num_joints) live joint stiffness.
@@ -59,7 +62,7 @@ def step_energy(
         joint_vel: (N, num_joints) measured joint velocities.
 
     Returns:
-        Per-env energy of the step [J], shape (N,).
+        Per-env power of the step [W], shape (N,).
     """
     torque = stiffness * (joint_pos_target - joint_pos) - damping * joint_vel
     return (torque * joint_vel).abs().sum(dim=-1)
@@ -145,7 +148,7 @@ def stop_overshoot(lin_vel_b: torch.Tensor, valid_mask: torch.Tensor) -> torch.T
 
 def summarize_segment(values: torch.Tensor, mask: torch.Tensor) -> float:
     """Mean of ``values`` over valid steps, NaN-safe (all-invalid -> NaN)."""
-    total = (values * mask.float()).sum()
-    count = mask.float().sum().clamp(min=1.0)
-    value = (total / count).item()
-    return value if value == value else float("nan")
+    count = mask.float().sum()
+    if int(count) == 0:
+        return float("nan")
+    return ((values * mask.float()).sum() / count).item()

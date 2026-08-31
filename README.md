@@ -62,11 +62,12 @@ else:
 ```bat
 cd /d <ROOT>
 :: 预期: OBS_SHAPE (2, 308) / ACTION_DIM 26 / MASS_SUM ≈ 72
-python lizard_exp\teacher_smoke.py --headless
+python lizard_exp\tools\verify\teacher_smoke.py --headless
 :: 预期: JOINT_COUNT 26 / 四脚 force_z 合计 ≈ 700N
-python lizard_exp\position_check.py --headless --rough
-:: 预期: 跑分输出 + eval.json 落盘
-python ablation_harness\eval.py --task Lizard-Rough-Play-v2 --mode nominal --seed 123 --headless
+python lizard_exp\tools\verify\position_check.py --headless --rough
+:: 预期: 跑分输出 + eval.json 落盘（注意 TRAIN id，不是 -Play：
+:: harness 自己控制 DR，Play 变体会让 robust 静默退化成 nominal）
+python ablation_harness\eval.py --task Lizard-Rough-v2 --mode nominal --seed 123 --headless
 ```
 
 注意：`versions\v2\` 是 teacher 运行时依赖（冻结参数），不是备份文档——

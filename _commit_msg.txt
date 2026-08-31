@@ -1,0 +1,53 @@
+Cleanup pass: harness correctness, PLAY determinism, dead code (review fixes)
+
+Reorganize tool scripts into tools/{verify,diagnose,pipeline,trainlog,archive}
+(FILEMAP/README/FAMILY paths updated to match).
+
+High-priority fixes (all verified against code before fixing):
+
+- energy metric was missing dt: metrics.step_energy returns per-step POWER
+  [W] but eval.py accumulated it without * step_dt, so energy_per_m_j was
+  inflated ~50x against the protocol's sum|tau*w|*dt contract. eval.py now
+  multiplies by step_dt; step_energy docstring corrected to [W]. The two
+  2026-08-28 rows in results/locomotion_eval_v1/summary.csv carry invalid
+  energy columns (other columns unaffected); flagged in FILEMAP.
+- PLAY determinism: curriculum-rough PLAY was missing randomize_limb_mass
+  and curriculum-flat PLAY was missing the whole deterministic-eval block
+  (40, observation noise on, full DR). All six PLAY variants now
+  disable DR through the new shared play_utils.disable_dr_events() -- the
+  event list lives exactly once and mirrors dr_controller._DR_EVENT_NAMES.
+- eval.py now refuses -Play task ids loudly: robust mode on a PLAY cfg
+  silently degrades to nominal (DR events already nulled, nothing to keep).
+  README verify chain updated to the TRAIN id with the reason inline.
+- stale task ids: eval.py usage docstring and specs/example_baseline.yaml
+  referenced deregistered Lizard-Rough-v0; now Lizard-Rough-v2.
+- export_ue.py read params["action"]["scale"] which no longer exists
+  (split into legs_scale/spine_scale) -- the UE export was a guaranteed
+  KeyError. Now exports action_scale (legs) + action_scale_spine.
+
+Medium fixes:
+
+- metrics.summarize_segment now returns NaN for all-invalid segments as its
+  docstring promised; clamp(min=1) used to silently report 0.0.
+- recovery_times vectorized with unfold + argmax (no per-env python loops,
+  no per-step bool() GPU sync); offline equivalence test against the original
+  implementation passed (4 seeds x 5 push/sustain edge cases incl. dead envs).
+- lizard_env_cfg: duplicated terminations.base_contact wiring block removed.
+- curriculum cfgs call _load_params(self.params_version) instead of a bare
+  call, matching the base-class version mechanism.
+- FootContactNormalsTerm raises a clear RuntimeError (was StopIteration via
+  next()) when the terrain mesh is not yet registered in RayCaster.meshes.
+- new tools/verify/check_dr_parity.py: static parity gate for the teacher
+  snapshot's copied DR wiring (family vs teacher, 21/21 lines match today);
+  run it whenever either cfg changes.
+- dead imports removed: run_ablation (datetime), debug_pose/pose_check
+  (torch), read_curriculum (pathlib), blender/generate_urdf (mathutils.Matrix).
+
+Docs / skills:
+
+- README: TRAIN task id in the verify chain + why.
+- task-creator skill runtime_facts: private-member dependency list
+  (action_term._scale, asset._physics_sim_view, cfg.func-as-instance) and
+  the upgrade discipline that gates IsaacLab fork bumps on parity + smokes.
+- FILEMAP: play_utils / check_dr_parity entries, invalid-energy note for the
+  2026-08-28 rows.

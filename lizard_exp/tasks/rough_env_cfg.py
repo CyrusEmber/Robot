@@ -23,6 +23,7 @@ from isaaclab.utils.noise import UniformNoiseCfg as Unoise
 
 import isaaclab_tasks.manager_based.locomotion.velocity.mdp as mdp
 from lizard_exp.tasks.lizard_env_cfg import LizardFlatEnvCfg
+from lizard_exp.tasks.play_utils import disable_dr_events
 
 # stock rough terrains are sized for ~0.5 m robots (8x8 m tiles, 0.05-0.23 m
 # steps); the lizard is 3.6 m long with 1.4 m leg reach -> scale obstacles ~2x
@@ -118,13 +119,5 @@ class LizardRoughEnvCfg_PLAY(LizardRoughEnvCfg):
             self.scene.terrain.terrain_generator.num_cols = 5
             self.scene.terrain.terrain_generator.curriculum = False
         self.observations.policy.enable_corruption = False
-        # disable every randomization event for deterministic evaluation
-        self.events.base_external_force_torque = None
-        self.events.push_robot = None
-        self.events.randomize_inertia = None
-        self.events.randomize_actuator_gains = None
-        self.events.randomize_joint_params = None
-        self.events.randomize_limb_mass = None
-        self.events.add_base_mass = None
-        self.events.base_com = None
-        self.events.physics_material = None
+        # deterministic evaluation: every DR event off (shared list, single source)
+        disable_dr_events(self.events)

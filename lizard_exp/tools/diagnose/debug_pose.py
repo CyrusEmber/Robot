@@ -11,7 +11,6 @@ args_cli = parser.parse_args()
 simulation_app = AppLauncher(args_cli).app
 
 import gymnasium as gym
-import torch
 
 import isaaclab_tasks  # noqa: F401
 from lizard_exp.tasks.lizard_env_cfg import LizardFlatEnvCfg_PLAY

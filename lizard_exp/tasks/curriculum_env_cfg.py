@@ -33,6 +33,7 @@ from lizard_exp.tasks.staged_curriculum import (
     StageCfg,
 )
 from isaaclab_tasks.manager_based.locomotion.velocity.velocity_env_cfg import ActionsCfg
+from lizard_exp.tasks.play_utils import disable_dr_events
 
 
 @configclass
@@ -86,7 +87,7 @@ class LizardCurriculumFlatEnvCfg(LizardFlatEnvCfg):
     def __post_init__(self):
         super().__post_init__()
 
-        params = _load_params()
+        params = _load_params(self.params_version)
         action_params = params["action"]
 
         # split the single joint action term (keeps the tree-order action layout)
@@ -110,8 +111,16 @@ class LizardCurriculumFlatEnvCfg_PLAY(LizardCurriculumFlatEnvCfg):
 
     def __post_init__(self):
         super().__post_init__()
-        params = _load_params()
+        params = _load_params(self.params_version)
 
+        # deterministic-eval scene settings (this PLAY previously skipped the
+        # whole block: 4096 envs, noise on, full DR -- a silent bug)
+        self.scene.num_envs = 50
+        self.scene.env_spacing = 2.5
+        self.observations.policy.enable_corruption = False
+        disable_dr_events(self.events)
+
+        # curricula off: final stage everywhere (spine live, full ranges)
         self.curriculum.bone_curriculum = None
         self.curriculum.speed_curriculum = None
         self.curriculum.turn_curriculum = None
