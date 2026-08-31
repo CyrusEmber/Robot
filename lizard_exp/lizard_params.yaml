@@ -1,0 +1,171 @@
+# lizard_params.yaml — SSOT: control parameters for the 26-joint lizard
+# (16 leg joints: HAA/HFE/KFE/FOOT x4, 10 spine joints: rear/tail/neck yaw+pitch).
+# Geometry/joints/mass/inertia/limits live in lizard.urdf (Blender-generated).
+# Isaac Lab env cfg (config/lizard/) and UE exporter (export_ue.py) both read this file.
+# Change params here ONLY. Never hand-edit the exported artifacts.
+
+robot:
+  name: lizard
+  # produced by convert_urdf.py: {lizard_exp}/assets/lizard/lizard.usda
+  usd_path: assets/lizard/lizard.usda
+  base_body_name: base_link
+  # zero pose = natural stance (posed in Blender, baked into geometry):
+  # thigh sprawled, shank vertical, blade flat. Blade bottom ~1.1 m below base.
+  base_init_height: 1.1
+
+# ground-truth joint order (URDF tree order: spine chain first, then legs lf/rf/rl/rr)
+joint_order:
+  - rear_yaw
+  - rear_pitch
+  - tail_yaw
+  - tail_pitch
+  - neck1_yaw
+  - neck1_pitch
+  - neck2_yaw
+  - neck2_pitch
+  - neck3_yaw
+  - neck3_pitch
+  - lf_haa
+  - lf_hfe
+  - lf_kfe
+  - lf_foot
+  - rf_haa
+  - rf_hfe
+  - rf_kfe
+  - rf_foot
+  - rl_haa
+  - rl_hfe
+  - rl_kfe
+  - rl_foot
+  - rr_haa
+  - rr_hfe
+  - rr_kfe
+  - rr_foot
+
+# regex pattern -> default angle (rad), fed to ArticulationCfg.InitialStateCfg
+# NOTE: Isaac Lab 3.0 importer appends a "_joint" suffix to joint names.
+# Zero pose IS the natural stance (baked into URDF joint origin rpy):
+# thigh sprawled out-down, shank vertical, blade flat. All defaults stay 0.
+default_joint_pos:
+  ".*_haa_joint": 0.0
+  ".*_hfe_joint": 0.0
+  ".*_kfe_joint": 0.0
+  ".*_foot_joint": 0.0
+  "rear_.*": 0.0
+  "tail_.*": 0.0
+  "neck.*_.*": 0.0
+
+# ImplicitActuatorCfg groups (PD runs inside the physics solver at 200 Hz;
+# sampled 50 Hz explicit torque PD is unstable for the low-inertia spine joints).
+# Starting values for the 72 kg robot — tune via training.
+actuators:
+  legs:
+    joint_patterns:
+      - ".*_haa_joint"
+      - ".*_hfe_joint"
+      - ".*_kfe_joint"
+    stiffness: 800.0
+    damping: 40.0
+    effort_limit: 180.0
+    velocity_limit: 10.0
+    armature: 0.0
+  feet:
+    joint_patterns:
+      - ".*_foot_joint"
+    stiffness: 200.0
+    damping: 12.0
+    effort_limit: 70.0
+    velocity_limit: 6.0
+    armature: 0.0
+  spine:
+    joint_patterns:
+      - "rear_.*"
+      - "tail_.*"
+      - "neck.*_yaw_joint"
+      - "neck.*_pitch_joint"
+    stiffness: 150.0
+    damping: 10.0
+    effort_limit: 80.0
+    velocity_limit: 4.0
+    armature: 0.0
+
+action:
+  legs_scale: 0.5
+  spine_scale: 0.25
+  use_default_offset: true
+
+sim:
+  dt: 0.005
+  decimation: 4
+  episode_length_s: 20.0
+
+# body name patterns for reward/termination terms
+names:
+  # foot blades are the only desired contacts
+  foot_body_names:
+    - ".*_foot"
+  undesired_contact_body_names:
+    - "base_link"
+    - ".*_haa"
+    - ".*_hfe"
+    - ".*_kfe"
+    - ".*_yaw"
+    - ".*_pitch"
+
+# policy observation layout (manager-based flat env, height_scan removed)
+# UE side must assemble obs in exactly this order, same units (SI, rad, m/s)
+obs_layout:
+  - name: base_lin_vel
+    dim: 3
+  - name: base_ang_vel
+    dim: 3
+  - name: projected_gravity
+    dim: 3
+  - name: velocity_commands
+    dim: 3
+  - name: joint_pos_rel
+    dim: 26
+  - name: joint_vel_rel
+    dim: 26
+  - name: last_action
+    dim: 26
+
+commands:
+  lin_vel_x: [-1.0, 3.0]
+  lin_vel_y: [-0.5, 0.5]
+  ang_vel_z: [-1.0, 1.0]
+
+# domain / physics randomization: keep the policy from memorizing one dynamics
+domain_randomization:
+  friction_static: [0.4, 1.2]
+  friction_dynamic: [0.3, 1.0]
+  friction_restitution: [0.0, 0.0]
+  friction_num_buckets: 64
+  # log-uniform mass scale, geometric mean 1.0 (scale-invariant across robots)
+  mass_scale: [0.87, 1.15]
+  # per-limb mass randomization (all non-base bodies), wide relative range
+  mass_scale_limbs: [0.7, 1.43]
+  limb_body_names:
+    - ".*_haa"
+    - ".*_hfe"
+    - ".*_kfe"
+    - ".*_foot"
+    - ".*_yaw"
+    - ".*_pitch"
+  com_range:
+    x: [-0.05, 0.05]
+    y: [-0.05, 0.05]
+    z: [-0.02, 0.02]
+  inertia_scale: [0.9, 1.1]
+  stiffness_scale: [0.8, 1.2]
+  damping_scale: [0.8, 1.2]
+  joint_friction_add: [0.0, 0.05]
+  joint_armature_add: [0.0, 0.02]
+  external_force_range: [-40.0, 40.0]
+  external_torque_range: [-5.0, 5.0]
+  # spawn height jitter [m] around base_init_height, relative to the default pose
+  reset_height_range: [-0.05, 0.05]
+  push_velocity_range:
+    x: [-1.5, 1.5]
+    y: [-1.5, 1.5]
+    z: [-0.3, 0.3]

@@ -1,0 +1,54 @@
+# Locomotion-Eval-v1 -- frozen evaluation protocol contract.
+# 落库即冻结,只读。语义改动(时间线/阈值/地形/DR/指标口径) = 新建 locomotion_eval_vN.yaml。
+# 详见 skill: E:\IsaacLab\.codemaker\skills\tool\isaaclab-eval-harness\SKILL.md
+
+name: Locomotion-Eval-v1
+version: 1
+
+# episode 与命令时间线(命令脚本与指标切窗同源,永不分家)
+episode_length_s: 30.0
+command_timeline:
+  - {t: 0.0,  vx: 0.5, vy: 0.0, wz: 0.0}
+  - {t: 5.0,  vx: 1.0, vy: 0.0, wz: 0.0}
+  - {t: 10.0, vx: 1.5, vy: 0.0, wz: 0.0}
+  - {t: 15.0, vx: 1.0, vy: 0.0, wz: 0.5}
+  - {t: 20.0, vx: 1.0, vy: 0.0, wz: -0.5}
+  - {t: 25.0, vx: 0.0, vy: 0.0, wz: 0.0}   # stop 段 -> 停车超调指标
+
+modes: [nominal, robust]
+
+# robust: 固定 seed 的 DR(复用任务自带 DR cfg,跨 run 同一组实现值) + recovery push
+robust:
+  dr: fixed_seed
+  recovery_push:
+    t: 12.0          # 冲击时刻 [s]
+    kick_mps: 4.0    # 水平冲击幅值 [m/s], 72kg 蜥蜴尺度
+    direction: fixed_per_env   # 每 env 固定方向(eval seed 决定)
+
+# 指标口径(冻结)
+metrics:
+  # 速度跟踪成功: 单步 |v_xy - cmd_xy| < 0.5 m/s 且 |wz - cmd_wz| < 0.4 rad/s
+  tracking_lin_threshold_mps: 0.5
+  tracking_ang_threshold_radps: 0.4
+  # fall: 几何定义,与终止项解耦(趴窝事故教训)
+  fall:
+    tilt_deg: 40.0              # 倾角超过此值
+    base_height_ratio: 0.6      # 或 base 距地形高度 < 初始站高 x 此比例
+    sustain_s: 0.5              # 持续超阈值才算 fall(滤瞬时颠簸)
+  # recovery (robust): 冲击后 |v - cmd| 回到阈值内并持续
+  recovery:
+    threshold_mps: 0.25
+    sustain_s: 0.5
+  # energy: 隐式 PD 反解 tau = K(q*-q) - D*qdot, sum|tau*w|*dt, 除以位移
+  energy:
+    normalize: per_meter
+
+# 地形套件(suites.py 提供构造;列序 == LIZARD_SUITE_V1_NAMES)
+suite: lizard_suite_v1
+suite_layout:
+  num_rows: 1
+  num_cols: 9
+  envs_per_terrain: 8
+
+# latency 注入尚未实现(PLAN.md 挂账 #6): robust 模式下 latency 指标记 N/A
+latency: not_available

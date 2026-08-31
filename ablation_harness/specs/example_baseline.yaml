@@ -1,0 +1,13 @@
+# 示例消融 spec: teacher 基线单 run。
+# CPG / obs-ablation 变体 = 复制一份, 改 tag + task(或加 overrides), 其余不动。
+# 家族代码永远不改 -- 组件变体走新注册任务 id 或 hydra override。
+
+runs:
+  - tag: baseline
+    task: Lizard-Rough-v0
+    seed: 42
+    max_iterations: 4000
+    eval_checkpoints: [1000, 2000, 4000]
+    eval_modes: [nominal, robust]
+    eval_seed: 123
+    overrides: []
