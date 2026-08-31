@@ -118,7 +118,9 @@ def foot_friction_truth(env, asset_cfg: SceneEntityCfg) -> torch.Tensor:
         start_idx = sum(num_shapes_per_body[:body_id])
         end_idx = start_idx + num_shapes_per_body[body_id]
         cols.append(materials[:, start_idx:end_idx, 0].mean(dim=1))
-    cached = torch.stack(cols, dim=1)
+    # the physx view readback lands on CPU; observations concatenate on the
+    # simulation device, so the cache must move there once
+    cached = torch.stack(cols, dim=1).to(asset.device)
     env._lizard_foot_friction = cached
     return cached
 
@@ -173,7 +175,16 @@ class FootContactNormalsTerm(ManagerTermBase):
         self._normals_w = wp.from_torch(self._normals_t).view(wp.vec3f)
         self._env_mask = wp.full((self._num_envs,), True, dtype=wp.bool, device=device)
 
-    def __call__(self, env, **kwargs) -> torch.Tensor:
+    def __call__(
+        self,
+        env,
+        mesh_prim_path: str = "/World/ground",
+        max_distance: float = 2.0,
+        start_offset: float = 0.5,
+    ) -> torch.Tensor:
+        # buffers and mesh handle are built once in __init__ from the same cfg
+        # params; the manager passes them here again per call and they must
+        # stay in the signature for the term-cfg parameter validation
         foot_pos = self.robot.data.body_pos_w.torch[:, self.foot_ids, :]
         self._starts_t.copy_(foot_pos)
         self._starts_t[:, :, 2] += self._start_offset

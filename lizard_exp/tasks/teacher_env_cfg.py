@@ -44,7 +44,7 @@ from isaaclab_tasks.manager_based.locomotion.velocity.velocity_env_cfg import (
 from isaaclab_tasks.utils import preset
 
 from lizard_exp.tasks import teacher_mdp
-from lizard_exp.tasks.play_utils import disable_dr_events
+from lizard_exp.tasks.play_utils import apply_play_wiring
 
 # this file lives at lizard_exp/tasks/teacher_env_cfg.py -> exp root is parents[1]
 _LIZARD_EXP_DIR = pathlib.Path(__file__).resolve().parents[1]
@@ -424,18 +424,10 @@ class LizardRoughTeacherEnvCfg_PLAY(LizardRoughTeacherEnvCfg):
     def __post_init__(self):
         super().__post_init__()
 
-        self.scene.num_envs = 50
-        self.scene.env_spacing = 2.5
-        self.scene.terrain.max_init_terrain_level = None
-        if self.scene.terrain.terrain_generator is not None:
-            self.scene.terrain.terrain_generator.num_rows = 5
-            self.scene.terrain.terrain_generator.num_cols = 5
-            self.scene.terrain.terrain_generator.curriculum = False
-        self.observations.policy.enable_corruption = False
-        # deterministic evaluation: every DR event off (shared list, single
-        # source; play_utils is deliberately dependency-free so the teacher
-        # snapshot keeps its zero-family-import discipline)
-        disable_dr_events(self.events)
+        # deterministic evaluation: shared PLAY wiring (single source, see play_utils;
+        # play_utils is deliberately dependency-free so the teacher snapshot keeps
+        # its zero-family-import discipline)
+        apply_play_wiring(self)
 
 
 @configclass
@@ -457,13 +449,5 @@ class LizardRoughTeacherEnvCfg_V1_PLAY(LizardRoughTeacherEnvCfg_V1):
     def __post_init__(self):
         super().__post_init__()
 
-        self.scene.num_envs = 50
-        self.scene.env_spacing = 2.5
-        self.scene.terrain.max_init_terrain_level = None
-        if self.scene.terrain.terrain_generator is not None:
-            self.scene.terrain.terrain_generator.num_rows = 5
-            self.scene.terrain.terrain_generator.num_cols = 5
-            self.scene.terrain.terrain_generator.curriculum = False
-        self.observations.policy.enable_corruption = False
-        # deterministic evaluation: every DR event off (shared list, single source)
-        disable_dr_events(self.events)
+        # deterministic evaluation: shared PLAY wiring (single source, see play_utils)
+        apply_play_wiring(self)

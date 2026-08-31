@@ -23,6 +23,7 @@ import datetime
 import json
 import math
 import pathlib
+import re
 import subprocess
 
 from isaaclab.app import AppLauncher
@@ -110,19 +111,17 @@ def _round(value, digits=4):
     return value
 
 
-def main():
-    protocol = _load_protocol(args_cli.protocol)
-    terrain_names, suite_factory = _SUITE_REGISTRY[protocol["suite"]]
-    num_cols = int(protocol["suite_layout"]["num_cols"])
-    if args_cli.envs_per_terrain is None:
-        args_cli.envs_per_terrain = int(protocol["suite_layout"]["envs_per_terrain"])
-
-    # -- env cfg from the gym registry (no hydra, works for any registered task) --
+def _prepare_env(protocol: dict) -> tuple[object, object]:
+    """Env cfg from the gym registry (no hydra), suite swap, protocol timing, eval mode."""
     spec = gym.spec(args_cli.task)
     env_cfg = string_to_callable(spec.kwargs["env_cfg_entry_point"])()
     agent_cfg = string_to_callable(spec.kwargs["rsl_rl_cfg_entry_point"])()
 
-    # -- suite swap + protocol timing + mode transform --
+    suite_factory = _SUITE_REGISTRY[protocol["suite"]][1]
+    num_cols = int(protocol["suite_layout"]["num_cols"])
+    if args_cli.envs_per_terrain is None:
+        args_cli.envs_per_terrain = int(protocol["suite_layout"]["envs_per_terrain"])
+
     env_cfg.scene.terrain = suite_factory()
     env_cfg.scene.num_envs = args_cli.envs_per_terrain * num_cols
     env_cfg.episode_length_s = float(protocol["episode_length_s"])
@@ -131,62 +130,32 @@ def main():
     if args_cli.device is not None:
         env_cfg.sim.device = args_cli.device
     apply_eval_mode(env_cfg, args_cli.mode)
+    return env_cfg, agent_cfg
 
-    gym_env = gym.make(args_cli.task, cfg=env_cfg)
-    mbenv = gym_env.unwrapped
-    wrapper = RslRlVecEnvWrapper(gym_env, clip_actions=agent_cfg.clip_actions)
-    robot = mbenv.scene["robot"]
-    device = mbenv.device
-    num_envs = mbenv.num_envs
-    step_dt = mbenv.step_dt
-    num_steps = int(round(float(protocol["episode_length_s"]) / step_dt))
 
-    # -- policy: trained checkpoint or zero-action smoke --
+def _make_policy(wrapper, mbenv, agent_cfg, device) -> tuple[object, str]:
+    """Trained checkpoint policy or zero-action smoke policy."""
     if args_cli.checkpoint is not None:
         agent_cfg.seed = args_cli.seed
         runner = OnPolicyRunner(wrapper, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
         runner.load(args_cli.checkpoint)
-        policy = runner.get_inference_policy(device=device)
-        policy_label = args_cli.checkpoint
-    else:
-        action_dim = mbenv.action_manager.total_action_dim
+        return runner.get_inference_policy(device=device), args_cli.checkpoint
+    action_dim = mbenv.action_manager.total_action_dim
 
-        def policy(obs, _action_dim=action_dim):
-            return torch.zeros(obs.shape[0], _action_dim, device=obs.device)
+    def policy(obs, _action_dim=action_dim):
+        return torch.zeros(obs.shape[0], _action_dim, device=obs.device)
 
-        policy_label = "zero_action"
+    return policy, "zero_action"
 
-    # -- protocol wiring --
-    player = CommandPlayer(protocol["command_timeline"], num_envs, device)
-    cmd_term = mbenv.command_manager.get_term("base_velocity")
-    m_cfg = protocol["metrics"]
-    fall_cfg = m_cfg["fall"]
-    tilt_cos_min = math.cos(math.radians(float(fall_cfg["tilt_deg"])))
-    init_height = float(env_cfg.scene.robot.init_state.pos[2])
-    clearance_min = float(fall_cfg["base_height_ratio"]) * init_height
 
-    scanner = mbenv.scene.sensors.get("height_scanner", None)
-    if scanner is not None:
-        # center ray of the grid pattern (odd x odd grid -> exact middle)
-        num_rays = int(scanner.data.ray_hits_w.torch.shape[1])
-        if num_rays % 2 == 0:
-            raise ValueError(f"Suite fall metric needs an odd-ray grid pattern, got {num_rays} rays.")
-        center_ray = num_rays // 2
-
-    push_step = None
-    kick_dirs = None
-    if args_cli.mode == "robust" and "recovery_push" in protocol.get("robust", {}):
-        push_cfg = protocol["robust"]["recovery_push"]
-        push_step = int(round(float(push_cfg["t"]) / step_dt))
-        kick_dirs = recovery_mod.make_kick_directions(num_envs, args_cli.seed, device)
-        kick_mps = float(push_cfg["kick_mps"])
-
-    # -- rollout: one protocol episode per env, data frozen after first done --
+def _rollout(wrapper, mbenv, robot, policy, player, cmd_term, scanner, center_ray,
+             push, num_steps: int, step_dt: float, device: str) -> dict:
+    """One protocol episode per env; data frozen after each env's first done."""
     series = {
         "lin_vel_b": [], "ang_vel_b": [], "cmd": [], "tilt_cos": [],
         "clearance": [], "energy": [],
     }
-    first_done = torch.full((num_envs,), num_steps, dtype=torch.long, device=device)
+    first_done = torch.full((mbenv.num_envs,), num_steps, dtype=torch.long, device=device)
     start_pos = robot.data.root_pos_w.torch.clone()
     end_pos = robot.data.root_pos_w.torch.clone()
     obs = wrapper.get_observations()
@@ -194,8 +163,8 @@ def main():
     for step in range(num_steps):
         cmd = player.command_at(step * step_dt)
         cmd_term.vel_command_b[:] = cmd
-        if push_step is not None and step == push_step:
-            recovery_mod.apply_kick(robot, kick_mps, kick_dirs)
+        if push is not None and step == push[0]:
+            recovery_mod.apply_kick(robot, push[1], push[2])
         with torch.inference_mode():
             actions = policy(obs)
         obs, _, _, _ = wrapper.step(actions)
@@ -222,10 +191,42 @@ def main():
             end_pos[env_ids] = data.root_pos_w.torch[env_ids].clone()
 
     # capture before close(): scene tensors are freed on close
-    terrain_types = mbenv.scene.terrain.terrain_types.clone()
-    gym_env.close()
+    return {
+        "series": series,
+        "first_done": first_done,
+        "start_pos": start_pos,
+        "end_pos": end_pos,
+        "terrain_types": mbenv.scene.terrain.terrain_types.clone(),
+    }
 
-    # -- metrics --
+
+def _segment_stats(seg: dict, lin_err, ang_err, succ, lin_vel_b, valid, step_axis) -> dict | None:
+    t0, t1 = float(seg["start_s"]), float(seg["end_s"])
+    sel = ((step_axis >= t0) & (step_axis < t1)).squeeze(1)
+    if bool(sel.sum()) == 0:
+        return None
+    m = valid[sel]
+    stats = {
+        "name": seg["name"],
+        "lin_mae_mps": metrics.summarize_segment(lin_err[sel], m),
+        "ang_mae_radps": metrics.summarize_segment(ang_err[sel], m),
+        "success_rate": metrics.summarize_segment(succ[sel].float(), m),
+    }
+    if all(v == 0.0 for v in seg["cmd"][:2]):
+        stats["stop_overshoot_mps"] = metrics.stop_overshoot(lin_vel_b[sel], m).mean().item()
+    return stats
+
+
+def _analyze(rollout: dict, protocol: dict, tilt_cos_min: float, clearance_min: float,
+             player, terrain_names, policy_label: str, num_steps: int, step_dt: float,
+             device: str, push) -> tuple[dict, list, dict | None]:
+    """Frozen protocol metrics from the rollout -> (result, segments, recovery)."""
+    m_cfg = protocol["metrics"]
+    fall_cfg = m_cfg["fall"]
+    series = rollout["series"]
+    first_done = rollout["first_done"]
+    start_pos, end_pos = rollout["start_pos"], rollout["end_pos"]
+
     lin_vel_b = torch.stack(series["lin_vel_b"])
     ang_vel_b = torch.stack(series["ang_vel_b"])
     cmd = torch.stack(series["cmd"])
@@ -251,28 +252,16 @@ def main():
     energy_per_m = (energy_total / travelled.clamp(min=0.1)).mean().item()
 
     step_axis = torch.arange(num_steps, device=device).unsqueeze(1) * step_dt
-
-    def segment_stats(seg):
-        t0, t1 = float(seg["start_s"]), float(seg["end_s"])
-        sel = ((step_axis >= t0) & (step_axis < t1)).squeeze(1)
-        if bool(sel.sum()) == 0:
-            return None
-        m = valid[sel]
-        stats = {
-            "name": seg["name"],
-            "lin_mae_mps": metrics.summarize_segment(lin_err[sel], m),
-            "ang_mae_radps": metrics.summarize_segment(ang_err[sel], m),
-            "success_rate": metrics.summarize_segment(succ[sel].float(), m),
-        }
-        if all(v == 0.0 for v in seg["cmd"][:2]):
-            stats["stop_overshoot_mps"] = metrics.stop_overshoot(lin_vel_b[sel], m).mean().item()
-        return stats
-
-    segments = [s for s in (segment_stats(seg) for seg in player.segments(num_steps * step_dt, step_dt)) if s]
+    segments = [
+        s for s in (
+            _segment_stats(seg, lin_err, ang_err, succ, lin_vel_b, valid, step_axis)
+            for seg in player.segments(num_steps * step_dt, step_dt)
+        ) if s
+    ]
 
     terrains = {}
     for col, tname in enumerate(terrain_names):
-        env_ids = (terrain_types == col).nonzero(as_tuple=False).squeeze(-1)
+        env_ids = (rollout["terrain_types"] == col).nonzero(as_tuple=False).squeeze(-1)
         if env_ids.numel() == 0:
             continue
         terrains[tname] = {
@@ -289,9 +278,9 @@ def main():
         "task": args_cli.task,
         "checkpoint": policy_label,
         "seed": args_cli.seed,
-        "num_envs": num_envs,
+        "num_envs": len(first_done),
         "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
-        # code provenance: which lizard repo state and which IsaacLab fork
+        # code provenance: which lizard git state and which IsaacLab fork
         # state produced these numbers (results without it are unattributable)
         "git_rev_lizard": _git_rev(_REPO_ROOT) if _REPO_ROOT else "unknown",
         "git_rev_isaaclab": _git_rev(_ISAAC_ROOT),
@@ -308,7 +297,8 @@ def main():
     }
 
     recovery = None
-    if push_step is not None:
+    if push is not None:
+        push_step = push[0]
         r_cfg = m_cfg["recovery"]
         # recovery is measured on envs still inside their FIRST episode at the
         # kick: envs that already terminated were auto-respawned (new episode,
@@ -325,9 +315,11 @@ def main():
         recovery["measured_envs"] = int(surviving.numel())
         result["recovery"] = recovery
 
-    # -- persist: eval.json + one summary.csv row (same run_id overwritten) --
-    tag = args_cli.tag or ("ckpt" if args_cli.checkpoint else "random")
-    run_id = f"{args_cli.task.replace('-v0', '')}_{tag}_{args_cli.mode}_seed{args_cli.seed}"
+    return result, segments, recovery
+
+
+def _persist(result: dict, segments: list, recovery: dict | None, run_id: str, tag: str):
+    """eval.json + one summary.csv row (same run_id overwritten)."""
     # directory keyed by the protocol FILE stem (stable); the display name stays in the JSON
     out_dir = _HARNESS_DIR / "results" / args_cli.protocol / run_id
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -336,7 +328,7 @@ def main():
 
     row = {c: "" for c in _SUMMARY_COLUMNS}
     row.update({
-        "run_id": run_id, "protocol": protocol["name"], "task": args_cli.task, "tag": tag,
+        "run_id": run_id, "protocol": result["protocol"], "task": args_cli.task, "tag": tag,
         "mode": args_cli.mode, "seed": args_cli.seed, "timestamp": result["timestamp"],
         "git_rev_lizard": result["git_rev_lizard"], "git_rev_isaaclab": result["git_rev_isaaclab"],
         "success_rate": _round(result["global"]["success_rate"]),
@@ -362,13 +354,68 @@ def main():
         writer.writerows(existing)
         writer.writerow(row)
 
+
+def main():
+    protocol = _load_protocol(args_cli.protocol)
+    terrain_names = _SUITE_REGISTRY[protocol["suite"]][0]
+
+    env_cfg, agent_cfg = _prepare_env(protocol)
+    gym_env = gym.make(args_cli.task, cfg=env_cfg)
+    mbenv = gym_env.unwrapped
+    wrapper = RslRlVecEnvWrapper(gym_env, clip_actions=agent_cfg.clip_actions)
+    robot = mbenv.scene["robot"]
+    device = mbenv.device
+    step_dt = mbenv.step_dt
+    num_steps = int(round(float(protocol["episode_length_s"]) / step_dt))
+
+    policy, policy_label = _make_policy(wrapper, mbenv, agent_cfg, device)
+
+    player = CommandPlayer(protocol["command_timeline"], mbenv.num_envs, device)
+    cmd_term = mbenv.command_manager.get_term("base_velocity")
+    fall_cfg = protocol["metrics"]["fall"]
+    tilt_cos_min = math.cos(math.radians(float(fall_cfg["tilt_deg"])))
+    clearance_min = float(fall_cfg["base_height_ratio"]) * float(env_cfg.scene.robot.init_state.pos[2])
+
+    scanner = mbenv.scene.sensors.get("height_scanner", None)
+    center_ray = None
+    if scanner is not None:
+        # center ray of the grid pattern (odd x odd grid -> exact middle)
+        num_rays = int(scanner.data.ray_hits_w.torch.shape[1])
+        if num_rays % 2 == 0:
+            raise ValueError(f"Suite fall metric needs an odd-ray grid pattern, got {num_rays} rays.")
+        center_ray = num_rays // 2
+
+    push = None
+    if args_cli.mode == "robust" and "recovery_push" in protocol.get("robust", {}):
+        push_cfg = protocol["robust"]["recovery_push"]
+        push = (
+            int(round(float(push_cfg["t"]) / step_dt)),
+            float(push_cfg["kick_mps"]),
+            recovery_mod.make_kick_directions(mbenv.num_envs, args_cli.seed, device),
+        )
+
+    rollout = _rollout(wrapper, mbenv, robot, policy, player, cmd_term, scanner,
+                       center_ray, push, num_steps, step_dt, device)
+    gym_env.close()
+
+    result, segments, recovery = _analyze(
+        rollout, protocol, tilt_cos_min, clearance_min, player, terrain_names,
+        policy_label, num_steps, step_dt, device, push,
+    )
+
+    tag = args_cli.tag or ("ckpt" if args_cli.checkpoint else "random")
+    # strip only the gym API suffix of family ids ("-v0" at the very end);
+    # teacher recipe versions ("-v1"/"-v2") are part of the run identity
+    run_id = f"{re.sub(r'-v0$', '', args_cli.task)}_{tag}_{args_cli.mode}_seed{args_cli.seed}"
+    _persist(result, segments, recovery, run_id, tag)
+
     print(f"[EVAL] protocol={result['protocol']} mode={result['mode']} run_id={run_id}")
     print(f"[EVAL] success={result['global']['success_rate']:.3f} fall={result['global']['fall_rate']:.3f} "
           f"lin_mae={result['global']['lin_mae_mps']:.3f} energy_per_m={result['global']['energy_per_m_j']:.1f}")
     if recovery is not None:
         print(f"[EVAL] recovery_mean={recovery['recovery_time_mean_s']:.2f}s "
               f"never_recovered={recovery['never_recovered_frac']:.2f}")
-    print(f"[EVAL] wrote {out_dir / 'eval.json'}")
+    print(f"[EVAL] wrote results/{args_cli.protocol}/{run_id}/eval.json")
 
 
 if __name__ == "__main__":

@@ -21,6 +21,11 @@
 与 Python venv（`isaaclab` / `isaaclab_tasks` / `rsl_rl` / `gymnasium` 等），
 然后把本仓两个目录放进 IsaacLab 根（`<ROOT>`）下同名同层级：
 
+> **已验证的 IsaacLab 版本：`28a37ce`（tag `perf-2026-06-24`，2026-08-31 全链
+> 验证）。** 本栈依赖多处 IsaacLab 内部件（`cfg.func` 实例替换、
+> `RayCaster.meshes` 注册表、live PD 增益读回等），换版本先跑
+> `lizard_exp\tools\verify\framework_pin_check.py`。
+
 ```bat
 git clone <本仓> <ROOT>\lizard_migration
 xcopy <ROOT>\lizard_migration\lizard_exp      <ROOT>\lizard_exp\ /E /I
@@ -54,6 +59,8 @@ git -C <ROOT> apply <ROOT>\lizard_exp\fork_patches\play_keyboard.patch
 
 ```bat
 cd /d <ROOT>
+:: 离线闸门（秒级，不起仿真）：框架 pin / DR parity / recovery 等价 / 课程单测
+lizard_exp\tools\verify\run_offline_checks.bat
 :: 预期: OBS_SHAPE (2, 308) / ACTION_DIM 26 / MASS_SUM ≈ 72
 python lizard_exp\tools\verify\teacher_smoke.py --headless
 :: 预期: JOINT_COUNT 26 / 四脚 force_z 合计 ≈ 700N

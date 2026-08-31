@@ -93,6 +93,10 @@ class LizardRoughEnvCfg(LizardFlatEnvCfg):
             debug_vis=False,
             mesh_prim_paths=["/World/ground"],
         )
+        # the base class set update_period on the STOCK scanner object; this
+        # replacement lost it -> re-apply policy-rate cadence (50 Hz, matches
+        # the teacher snapshot; update_period 0 would raycast at 200 Hz sim rate)
+        self.scene.height_scanner.update_period = self.decimation * self.sim.dt
         self.observations.policy.height_scan = ObsTerm(
             func=mdp.height_scan,
             params={"sensor_cfg": SceneEntityCfg("height_scanner")},
@@ -111,13 +115,5 @@ class LizardRoughEnvCfg_PLAY(LizardRoughEnvCfg):
     def __post_init__(self):
         super().__post_init__()
 
-        self.scene.num_envs = 50
-        self.scene.env_spacing = 2.5
-        self.scene.terrain.max_init_terrain_level = None
-        if self.scene.terrain.terrain_generator is not None:
-            self.scene.terrain.terrain_generator.num_rows = 5
-            self.scene.terrain.terrain_generator.num_cols = 5
-            self.scene.terrain.terrain_generator.curriculum = False
-        self.observations.policy.enable_corruption = False
-        # deterministic evaluation: every DR event off (shared list, single source)
-        disable_dr_events(self.events)
+        # deterministic evaluation: shared PLAY wiring (single source, see play_utils)
+        apply_play_wiring(self)

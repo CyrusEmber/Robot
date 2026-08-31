@@ -58,8 +58,8 @@ def recovery_times(
         spike amplitude [m/s] and per-env times (None -> NaN in list).
     """
     num_steps, num_envs = lin_error.shape
-    times = torch.full((num_envs,), float("nan"))
-    spikes = torch.zeros(num_envs)
+    times = torch.full((num_envs,), float("nan"), device=lin_error.device)
+    spikes = torch.zeros(num_envs, device=lin_error.device)
     below = (lin_error < threshold_mps) & valid_mask
 
     post = below[push_step:]

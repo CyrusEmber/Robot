@@ -17,7 +17,7 @@ from lizard_exp.tasks.curriculum_env_cfg import (
     LizardCurriculumActionsCfg,
     _make_stages,
 )
-from lizard_exp.tasks.play_utils import disable_dr_events
+from lizard_exp.tasks.play_utils import apply_play_wiring
 from lizard_exp.tasks.rough_env_cfg import LizardRoughEnvCfg
 
 
@@ -54,18 +54,9 @@ class LizardCurriculumRoughEnvCfg_PLAY(LizardCurriculumRoughEnvCfg):
         super().__post_init__()
         params = _load_params(self.params_version)
 
-        # smaller scene + fixed terrain grid (matches the rough PLAY setup)
-        self.scene.num_envs = 50
-        self.scene.env_spacing = 2.5
-        self.scene.terrain.max_init_terrain_level = None
-        if self.scene.terrain.terrain_generator is not None:
-            self.scene.terrain.terrain_generator.num_rows = 5
-            self.scene.terrain.terrain_generator.num_cols = 5
-            self.scene.terrain.terrain_generator.curriculum = False
-        self.observations.policy.enable_corruption = False
-        # deterministic evaluation: every DR event off (shared list, single
-        # source -- this PLAY previously missed randomize_limb_mass)
-        disable_dr_events(self.events)
+        # deterministic evaluation: shared PLAY wiring (single source, see play_utils;
+        # this PLAY variant once drifted by missing randomize_limb_mass)
+        apply_play_wiring(self)
 
         # curricula off: final stage everywhere (spine live, full ranges)
         self.curriculum.terrain_levels = None

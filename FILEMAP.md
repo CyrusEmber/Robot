@@ -72,7 +72,7 @@
 
 | 文件 | 作用 |
 |---|---|
-| `tools\verify\teacher_smoke.py` | teacher 冒烟：obs 308 维 + 全特权段判读（MASS_SUM≈72 / 力矢量 / 法线 / 摩擦 / wrench=0） |
+| `tools\verify\teacher_smoke.py` | teacher 冒烟：obs 308 维 + 全特权段判读（MASS_SUM≈72 / 力矢量 / 法线 / 摩擦 / wrench=0）；per-term 布局从 observation_manager 现场推导，无魔数切片 |
 | `tools\verify\smoke_test.py` | 家族平地冒烟：建环境 + obs 维度 + 10 步 |
 | `tools\verify\position_check.py` | 落地检查：base 高度轨迹 + 四脚接触力（≈700N=全重）+ NaN 扫描，`--rough` 切粗糙 |
 | `tools\verify\pose_check.py` | 静态几何打印：各 body 相对 base 坐标（头/四脚/尾） |

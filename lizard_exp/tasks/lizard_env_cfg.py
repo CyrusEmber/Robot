@@ -30,7 +30,7 @@ import isaaclab_tasks.manager_based.locomotion.velocity.mdp as mdp
 from isaaclab_tasks.manager_based.locomotion.velocity.velocity_env_cfg import LocomotionVelocityRoughEnvCfg
 from isaaclab_tasks.utils import preset
 
-from lizard_exp.tasks.play_utils import disable_dr_events
+from lizard_exp.tasks.play_utils import apply_play_wiring
 
 # this file lives at lizard_exp/tasks/lizard_env_cfg.py -> exp root is parents[1]
 _LIZARD_EXP_DIR = pathlib.Path(__file__).resolve().parents[1]
@@ -238,8 +238,5 @@ class LizardFlatEnvCfg_PLAY(LizardFlatEnvCfg):
 
     def __post_init__(self):
         super().__post_init__()
-        self.scene.num_envs = 50
-        self.scene.env_spacing = 2.5
-        self.observations.policy.enable_corruption = False
-        # deterministic evaluation: every DR event off (shared list, single source)
-        disable_dr_events(self.events)
+        # deterministic evaluation: shared PLAY wiring (single source, see play_utils)
+        apply_play_wiring(self)
