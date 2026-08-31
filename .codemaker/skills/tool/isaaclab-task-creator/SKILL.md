@@ -177,7 +177,9 @@ StagedCurriculumTermCfg(func=StagedCurriculumTerm, stages=[...],
    mock 依赖项必须真继承 `StagedCurriculumTerm`
 3. 冒烟：小脚本建 env 跑几步，验 obs 维度/有限性（注意裸 gym `env.step` 是 5 元组，
    见 references/runtime_facts.md；各 exp 目录有现成冒烟脚本，读 FAMILY.md 找）
-4. 给用户训练命令：`python scripts\reinforcement_learning\rsl_rl\train.py --task <新任务id>`
+4. **环境验证脚本速查**（改 env/资产/参数后跑哪个、输出怎么判读）：
+   references/runtime_facts.md 文末速查表
+5. 给用户训练命令：`python scripts\reinforcement_learning\rsl_rl\train.py --task <新任务id>`
 
 ## 已知坑（任务创建域；资产坑见 asset-pipeline skill）
 
