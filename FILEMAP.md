@@ -1,9 +1,8 @@
 # FILEMAP —— 全仓文件地图（给下一个 AI / 新协作者）
 
-> 读图顺序：`README.md`（仓定位）→ 本文件（每个文件干啥）→
+> 读图顺序：`README.md`（仓定位 + 新机器摆位）→ 本文件（每个文件干啥）→
 > `lizard_exp\PLAN.md`（训练计划与挂账，当前进度）→
-> `lizard_exp\FAMILY.md`（任务注册表/版本历史/记录体系）→
-> `lizard_exp\MIGRATION.md`（新机器移植步骤）。
+> `lizard_exp\FAMILY.md`（任务注册表/版本历史/obs 布局/记录体系）。
 > AI 开发守则见 `AGENTS.md`（IsaacLab 上游）+ `.codemaker\skills\tool\`（本项目 4 份 skill）。
 
 ## 仓根
@@ -23,8 +22,7 @@
 | `lizard_params.yaml` | **参数 SSOT（开发态）**：执行器 PD/动作缩放/命令范围/DR 范围。冻结版在 `versions\vN\`，跑冻结版永远不读这份 |
 | `lizard.urdf` | 机器人几何 SSOT（Blender 生成）：26 关节、质量、限位 |
 | `PLAN.md` | 训练计划 + 挂账清单（#3 teacher 训练是当前关键路径） |
-| `FAMILY.md` | 家族总文档：任务注册表 / 版本历史 / 代码地图 / 四层记录体系 |
-| `MIGRATION.md` | 移植清单：包内容 / 5 步摆位 / 验证链 / 常见坑 |
+| `FAMILY.md` | 家族总文档：任务注册表 / 版本历史 / teacher obs 布局 SSOT / 代码地图 / 四层记录体系 |
 
 ### tasks\ —— gym 任务包（训练代码本体）
 
@@ -35,8 +33,8 @@
 | `rough_env_cfg.py` | 家族粗糙地形（蜥蜴尺度化地形 + 高度扫描 obs） |
 | `curriculum_env_cfg.py` | 三课程平地变体（骨骼/速度/转向，spine 可被课程锁放） |
 | `curriculum_rough_env_cfg.py` | 三课程粗糙变体 |
-| `teacher_env_cfg.py` | **teacher 独立快照**（只继承框架基类，零家族 import；`TEACHER_PARAMS_VERSION="v1"`；spine 10 关节 scale=0 锁定） |
-| `teacher_mdp.py` | 特权 obs term：真值速度/接触/air time/逐 body 质量 |
+| `teacher_env_cfg.py` | **teacher 独立快照**（只继承框架基类，零家族 import；`params_version` 类属性 + `TEACHER_PRIVILEGED_SPEC` 版本差异表，v1/v2 子类常驻可复现；spine 10 关节 scale=0 锁定） |
+| `teacher_mdp.py` | 特权 obs term：真值速度/接触布尔/**力矢量/接触法线（warp 射线）/每脚摩擦/大小腿接触/持续外力**/air time/逐 body 质量（只增不改纪律） |
 | `staged_curriculum.py` | 通用阶段课程组件（度量阈值+持续时长+依赖门控） |
 | `agents\rsl_rl_ppo_cfg.py` | PPO runner 配置（experiment_name 按任务族隔离：`lizard_rough_teacher` 等） |
 
@@ -44,8 +42,9 @@
 
 | 目录 | 作用 |
 |---|---|
-| `v0\` | 全量 DR 原始配方。**未训练即被 v1 取代**，存档作对照基准 |
-| `v1\` | **当前活跃**：v0 仅 DR 段收窄（teacher 首跑配方）。NOTES.md 含验收线与判死刑信号 |
+| `v0\` | 全量 DR 原始配方。**未训练即被 v1 取代**，存档作对照基准（复现走 git 历史） |
+| `v1\` | v0 仅 DR 段收窄。未训练即被 v2 取代，但任务 id `Lizard-Rough-v1` 常驻注册可复现（obs 266） |
+| `v2\` | **当前活跃**：v1 参数 + 特权 obs 论文对齐补全（266→308）。NOTES.md 含验收线与判死刑信号 |
 | `vN\NOTES.md` | 版本文档：目的/参数 diff/训练命令/结果回填 |
 | `vN\tb_scalars.csv` | 训练后经 dump_tb.py 导出的逐迭代曲线 |
 
@@ -71,7 +70,7 @@
 
 | 文件 | 作用 |
 |---|---|
-| `teacher_smoke.py` | teacher 冒烟：obs 266 维 + 特权数据（MASS_SUM≈72）验证 |
+| `teacher_smoke.py` | teacher 冒烟：obs 308 维 + 全特权段判读（MASS_SUM≈72 / 力矢量 / 法线 / 摩擦 / wrench=0） |
 | `smoke_test.py` | 家族平地冒烟：建环境 + obs 维度 + 10 步 |
 | `position_check.py` | 落地检查：base 高度轨迹 + 四脚接触力（≈700N=全重）+ NaN 扫描，`--rough` 切粗糙 |
 | `pose_check.py` | 静态几何打印：各 body 相对 base 坐标（头/四脚/尾） |

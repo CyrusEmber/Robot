@@ -14,8 +14,7 @@
   push_velocity ±1.5/±1.5/±0.3 → ±0.5/±0.5/±0.1。
   不变：inertia_scale、reset_height_range、friction_num_buckets、
   奖励/动作/命令/仿真参数（命令仍为论文值 [-1,1]/[-0.5,0.5]/[-1,1]）
-- 相对上版: v0 仅 DR 段收窄，其余零改动（纯参数变更，任务 id 不变，
-  `TEACHER_PARAMS_VERSION` 指 v1）
+- 相对上版: v0 仅 DR 段收窄，其余零改动（纯参数变更）
 - 训练命令:
   ```bat
   python scripts\reinforcement_learning\rsl_rl\train.py --task Lizard-Rough-v1 --max_iterations 4000 --seed 42
@@ -26,4 +25,7 @@
   1000 iters reward 仍平 + feet_air_time≈0 = 判死刑信号（配方问题，非迭代数）
 - eval 结果: （训练后回填）ablation_harness results/locomotion_eval_v1/，tag=v1
 - 逐迭代曲线: （训练后导出）`python lizard_exp\dump_tb.py --log_dir <run目录> --out lizard_exp\versions\v1\tb_scalars.csv`
-- 结论/下一步: （训练后回填）
+- 结论/下一步: 未训练即被 v2 取代（2026-08-31，v2 = 本版参数 + 特权 obs
+  论文对齐补全）。**复现：任务 id `Lizard-Rough-v1` 常驻注册**
+  （`LizardRoughTeacherEnvCfg_V1`，obs 266，spec 剥离 v2 增量 term），
+  或 `git checkout v1` 整树快照

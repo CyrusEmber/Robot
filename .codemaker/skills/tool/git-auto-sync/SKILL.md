@@ -83,6 +83,8 @@ git add -A && git commit -m "Freeze vN: <摘要>" && git tag vN && git push --ta
 - 真身只在仓内；宿主树内同名目录 = junction
 - 宿主树自若是 git 仓，junction 目录进 `.git\info\exclude`（本地排除，
   防误 add 穿透链接）
+- 新机器消费：clone 仓 → 按仓根 `README.md` 的摆位步骤走（装 Isaac Lab、
+  venv、.pth、fork shim），不需要重建 junction（那是原机布局）
 - **删 junction 只准 `rmdir`**（只摘链接）；递归 del 会穿透删真身
 - 报错里出现真身路径与链接路径混用 = 正常，同一文件
 

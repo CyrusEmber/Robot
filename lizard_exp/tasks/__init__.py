@@ -98,7 +98,7 @@ gym.register(
 )
 
 gym.register(
-    id="Lizard-Rough-v1",
+    id="Lizard-Rough-v2",
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     disable_env_checker=True,
     kwargs={
@@ -108,11 +108,31 @@ gym.register(
 )
 
 gym.register(
-    id="Lizard-Rough-Play-v1",
+    id="Lizard-Rough-Play-v2",
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     disable_env_checker=True,
     kwargs={
         "env_cfg_entry_point": "lizard_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_PLAY",
+        "rsl_rl_cfg_entry_point": "lizard_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherPPORunnerCfg",
+    },
+)
+
+gym.register(
+    id="Lizard-Rough-v1",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": "lizard_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V1",
+        "rsl_rl_cfg_entry_point": "lizard_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherPPORunnerCfg",
+    },
+)
+
+gym.register(
+    id="Lizard-Rough-Play-v1",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": "lizard_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V1_PLAY",
         "rsl_rl_cfg_entry_point": "lizard_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherPPORunnerCfg",
     },
 )

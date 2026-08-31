@@ -48,10 +48,6 @@ from lizard_exp.tasks import teacher_mdp
 # this file lives at lizard_exp/tasks/teacher_env_cfg.py -> exp root is parents[1]
 _LIZARD_EXP_DIR = pathlib.Path(__file__).resolve().parents[1]
 
-# param generation this teacher recipe is frozen against: running v1 must only
-# ever read versions/v1/lizard_params.yaml, dev-yaml edits must not drift it
-# (v1 = v0 with the domain-randomization ranges narrowed for the first walk)
-TEACHER_PARAMS_VERSION = "v1"
 
 
 def _load_params(version: str) -> dict:
@@ -135,13 +131,50 @@ class TeacherActionsCfg(ActionsCfg):
     )
 
 
+# Per-version privileged-term spec: the SINGLE source of truth for what
+# separates two teacher recipes at code level. Baseline privileged terms
+# (contact flags, air time, per-body mass, true velocities) belong to every
+# version and are wired unconditionally; only the incremental terms live
+# here. DISCIPLINE: a term's implementation is frozen once shipped -- newer
+# versions may only ADD terms, and old recipes strip the additions again.
+TEACHER_PRIVILEGED_SPEC: dict[str, set[str]] = {
+    "v1": set(),
+    "v2": {
+        "foot_contact_forces",
+        "foot_contact_normals",
+        "foot_friction",
+        "thigh_shank_contacts",
+        "base_external_wrench",
+    },
+}
+
+
 @configclass
 class LizardRoughTeacherEnvCfg(LocomotionVelocityRoughEnvCfg):
-    """Teacher: perceptive + privileged actor, baseline rewards (Lizard-Rough-v1)."""
+    """Teacher: perceptive + privileged actor, baseline rewards (Lizard-Rough-v2).
+
+    Privileged obs per Miki et al. 2022 table + two legacy extras (true base
+    velocity, per-body mass); full layout table in FAMILY.md. Obs dim 308.
+
+    ``params_version`` is a plain class attribute (NOT a configclass field, so
+    it is never deep-copied): the latest recipe lives here, and per-version
+    subclasses below override it for working-tree reproducibility -- running
+    an old task id must always rebuild the old recipe, never silently pick
+    up code drift from newer versions. Which incremental terms a version
+    includes is governed by ``TEACHER_PRIVILEGED_SPEC`` above.
+    """
+
+    # v2 = latest (paper-aligned privileged obs); see versions/v2/NOTES.md
+    params_version = "v2"
 
     def __post_init__(self):
         super().__post_init__()
-        params = _load_params(TEACHER_PARAMS_VERSION)
+        if self.params_version not in TEACHER_PRIVILEGED_SPEC:
+            raise ValueError(
+                f"Unknown teacher params_version '{self.params_version}';"
+                f" known: {sorted(TEACHER_PRIVILEGED_SPEC)}"
+            )
+        params = _load_params(self.params_version)
         robot_params = params["robot"]
         actuator_params = params["actuators"]
         action_params = params["action"]
@@ -349,11 +382,82 @@ class LizardRoughTeacherEnvCfg(LocomotionVelocityRoughEnvCfg):
             func=teacher_mdp.body_mass_truth,
             params={"asset_cfg": SceneEntityCfg("robot", body_names=".*")},
         )
+        # privilege 4 (v2, Miki et al. 2022 table completion): contact force
+        # vectors, contact normals, per-foot friction, thigh/shank contact
+        # flags, persistent external wrench -- see FAMILY.md obs layout table
+        self.observations.policy.foot_contact_forces = ObsTerm(
+            func=teacher_mdp.foot_contact_forces,
+            params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot")},
+        )
+        self.observations.policy.foot_contact_normals = ObsTerm(
+            func=teacher_mdp.FootContactNormalsTerm,
+            params={"mesh_prim_path": "/World/ground", "max_distance": 2.0, "start_offset": 0.5},
+        )
+        self.observations.policy.foot_friction = ObsTerm(
+            func=teacher_mdp.foot_friction_truth,
+            params={"asset_cfg": SceneEntityCfg("robot", body_names=".*_foot")},
+        )
+        self.observations.policy.thigh_shank_contacts = ObsTerm(
+            func=teacher_mdp.thigh_shank_contacts,
+            params={
+                "sensor_cfg": SceneEntityCfg("contact_forces", body_names=[".*_hfe", ".*_kfe"]),
+                "threshold": 1.0,
+            },
+        )
+        self.observations.policy.base_external_wrench = ObsTerm(
+            func=teacher_mdp.base_external_wrench,
+            params={"asset_cfg": SceneEntityCfg("robot", body_names=[base_name])},
+        )
+        # strip the incremental terms this recipe's version does not include
+        # (TEACHER_PRIVILEGED_SPEC governs; keeps old recipes reproducible)
+        allowed = TEACHER_PRIVILEGED_SPEC[self.params_version]
+        every = set().union(*TEACHER_PRIVILEGED_SPEC.values())
+        for term_name in sorted(every - allowed):
+            setattr(self.observations.policy, term_name, None)
 
 
 @configclass
 class LizardRoughTeacherEnvCfg_PLAY(LizardRoughTeacherEnvCfg):
     """Play variant: smaller terrain grid, curriculum off, randomization off."""
+
+    def __post_init__(self):
+        super().__post_init__()
+
+        self.scene.num_envs = 50
+        self.scene.env_spacing = 2.5
+        self.scene.terrain.max_init_terrain_level = None
+        if self.scene.terrain.terrain_generator is not None:
+            self.scene.terrain.terrain_generator.num_rows = 5
+            self.scene.terrain.terrain_generator.num_cols = 5
+            self.scene.terrain.terrain_generator.curriculum = False
+        self.observations.policy.enable_corruption = False
+        # disable every randomization event for deterministic evaluation
+        self.events.base_external_force_torque = None
+        self.events.push_robot = None
+        self.events.randomize_inertia = None
+        self.events.randomize_actuator_gains = None
+        self.events.randomize_joint_params = None
+        self.events.randomize_limb_mass = None
+        self.events.add_base_mass = None
+        self.events.base_com = None
+        self.events.physics_material = None
+
+
+@configclass
+class LizardRoughTeacherEnvCfg_V1(LizardRoughTeacherEnvCfg):
+    """v1 recipe, reproducible from the working tree (obs 266).
+
+    The one-line override is the whole point of the spec structure:
+    TEACHER_PRIVILEGED_SPEC["v1"] = set() makes the base class strip every
+    incremental term, so this class needs no hand-maintained stripping list.
+    """
+
+    params_version = "v1"
+
+
+@configclass
+class LizardRoughTeacherEnvCfg_V1_PLAY(LizardRoughTeacherEnvCfg_V1):
+    """v1 play variant: obs 266, no randomization, curriculum off."""
 
     def __post_init__(self):
         super().__post_init__()

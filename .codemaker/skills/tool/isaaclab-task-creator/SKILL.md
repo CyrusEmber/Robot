@@ -187,6 +187,14 @@ StagedCurriculumTermCfg(func=StagedCurriculumTerm, stages=[...],
   （`LocomotionVelocityRoughEnvCfg`），机器人/地形/扫描器/DR 抄入冻结（模块级常量快照），
   **不从活实验家族中间层继承**——家族演化会污染冻结配方（lizard 实测两起事故）。
   tasks/ 下访问 exp 目录：`pathlib.Path(__file__).resolve().parents[1]`。
+- **版本化复现用"声明式 spec + 一行子类"结构，不要每版本复制 mdp 模块**：
+  版本目录只冻 yaml，代码是共享可变的——直接改共享 term 会让旧版本静默漂移。
+  正确结构：① 模块级 spec 表 `{版本: {增量 term 名集合}}`；② 基类
+  `params_version` 类属性（**非 configclass 字段**，不被 deepcopy）指向最新；
+  基类 wire 全部 term 后按 spec 剥离本版本不含的；③ 每旧版本一行子类
+  （override `params_version`）+ 任务 id 常驻注册。**纪律：已发布 term
+  实现永不改语义，新版本只加 term**；git tag 作整树快照兜底。
+  （lizard 实例：`teacher_env_cfg.py` 的 `TEACHER_PRIVILEGED_SPEC`）
 - **runner experiment_name 按任务族隔离**：共用名字 → log 目录/checkpoint 互相污染
   （`get_checkpoint_path` 取最新 run 可能取错族）。同一 py 文件重复类名静默遮蔽，py_compile
   不报——建 runner cfg 后读一遍文件确认无重名。
