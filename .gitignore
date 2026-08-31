@@ -7,4 +7,4 @@ Thumbs.db
 .DS_Store
 
 # ponytail upstream clone (update source only, installed artifacts are committed)
-ponytail/
+/ponytail/
