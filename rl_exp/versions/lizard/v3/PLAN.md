@@ -3,7 +3,7 @@
 > 状态：**提案，待确认**——D0 决策门拍板前不动代码。
 > 生成：2026-09-01。来源：全仓 code review + Miki et al. 2022（arXiv:2201.08117,
 > Sci. Robotics）全文核实（正文 + 补充材料 S1–S9）。
-> 修订：v3.1（2026-09-01）——二轮 review 修复，明细见 §10 修订记录。
+> 修订：v3.1.3（2026-09-01）——二轮 review 修复 + 闸门自定位（G3 部分），明细见 §10 修订记录。
 > 关联：`PLAN.md`（训练计划/挂账）、`FAMILY.md`（obs 布局 SSOT）。v3 定稿训练后
 > 本文件并入 PLAN.md，FILEMAP 登记随 Phase F 补。
 
@@ -147,7 +147,7 @@ obs 按**三个组**交付 `[proprio 90 | extero 208 | priv 83]`（组名对齐 
 | G0 | 包名 `lizard_exp`→`rl_exp`（git mv + 82 py/44 md 机械替换 + 2 处 `_VERSION_FAMILY` 常量 + check_dr_parity `*/v*` 家族无关 glob）；versions 家族分层 `versions/lizard/vN`；本计划文件 → `versions/lizard/v3/PLAN.md` | ✅ 已执行（闸门 PARITY_OK） |
 | G1 | venv 新增 `rl_exp.pth`（内容 = git 仓 `E:\lizard_migration`）；删旧 `lizard_exp.pth` | ✅ 已执行 |
 | G2 | 删 `E:\IsaacLab\lizard_exp` junction（已悬空）；**`ablation_harness` junction 暂留**（等 G3） | ✅ 部分 |
-| G3 | harness `_ISAAC_ROOT` 参数化：`eval.py:69-77`（"故意不 resolve"hack）、`run_ablation.py:36`、`_log_dir_for_tag` glob——改读 env var `RL_ISAAC_ROOT`（缺省向上探测 `source/isaaclab`+`logs`）；落地后即可删 `ablation_harness` junction | ⏳ 待做 |
+| G3 | harness `_ISAAC_ROOT` 参数化：`eval.py:69-77`（"故意不 resolve"hack）、`run_ablation.py:36`、`_log_dir_for_tag` glob——改读 env var `RL_ISAAC_ROOT`（缺省向上探测 `source/isaaclab`+`logs`）；落地后即可删 `ablation_harness` junction | ⏳ 部分：闸门侧已落 `RL_ISAAC_ROOT`（run_offline_checks.bat 自定位 venv python + 根缺省 E:\IsaacLab，framework_pin_check 改读同名变量，2026-09-01，闸门 4/4 绿）；harness eval.py / run_ablation / _log_dir_for_tag 仍待做 |
 | G4 | README 部署节重写（git 仓唯一代码家、.pth 指 `<REPO>`、1 shim、junction 过渡说明）；shim 简化为 1 行 import（删 sys.path hack） | ✅ 已执行 |
 
 ✅ 已验证：`import rl_exp.tasks` → gym 注册 12 个 Lizard 任务；`check_dr_parity.py`
@@ -200,3 +200,4 @@ fall_rate 因 DR reset 化 + tilt 终止语义差异跨版本不可比，只做 
 | 2026-09-01 | v3.1 | 二轮 review 修复（论文 S1–S9 复核 + 代码验证 + 用户拍板）：① D1 tilt 符号修正 `projected_gravity_b[2] > -0.6`（原稿 `< 0.6` upright 恒真 → 起步全灭；证据 eval.py:176）② D2 r_fc 语义修正：论文罚"抬太高"（max(H_sample)<-0.2），原稿方向反了且不可"照抄论文"；改标有意偏差（防拖脚）+ 补 swing 判定（接触态代理）与地形基准（每脚垂直射线，环无中心射线）③ D3 c_k 定案：c_0=0.2（yaml 消融变量 0.05/0.2/0.5）、env 步数计数推导机制（零 runner 改动、不挂 CurriculumTerm）、接触罚豁免 c_k（论文靠 body 碰撞终止兜底、我们砍了）、乘子收敛为 4 现存项 ④ D4 DR range 动态缩放机制补（自定义 event func 读 c_k buffer）⑤ 新增 §6.5 v3 奖励定案总表（原稿 term 集未定）⑥ E3 超参补全 S1 全 8 项 + lr decay 0.9999（subclass runner 衰减）+ batch 8300 尺寸→个数换算 ⑦ B4/B5 补 f_π 输入段序恒等（[proprio 90 \| l_e 96 \| l_priv 24]）+ normalizer 迁移 + L_re 目标偏差注记 ⑧ C2 字段名修正 attach_yaw_only ⑨ 验收口径矛盾修正（v2/v3 仅 nominal 可比）+ §6 验证行 fall_rate 口径同步 ⑩ F3 偏差声明清单扩充 ⑪ 风险表补 c_k 弱惩罚期与单 seed 两行 ⑫ §8 奖励/PPO 行数值补正 |
 | 2026-09-01 | v3.1.1 | v3.1 修复合入 G0 迁移后的本文件（路径/G 状态保留迁移版）；旧路径副本 lizard_exp/PLAN_V3.md 删除 |
 | 2026-09-01 | v3.1.2 | 用户勘误："不用cfg"实为"不用CPG"（笔误）。D2 swing 判定保持接触态代理并补"用户拍板"标记（文档本就未用 CPG）；撤回 v3.1 的"不设消融档"（系对该笔误的误读），c_0 恢复 yaml 消融变量（0.05/0.2/0.5） |
+| 2026-09-01 | v3.1.3 | 闸门自定位修复（G3 部分）：junction 布局随 G2 删除后 framework_pin_check 自动探测失效——run_offline_checks.bat 自解析 `RL_ISAAC_ROOT`（缺省 E:\IsaacLab）+ venv python（缺省 `<root>\env_isaaclab\Scripts\python.exe`，回退 PATH python）；framework_pin_check 环境变量 ISAACLAB_ROOT→RL_ISAAC_ROOT 与 G3 命名统一。全新 shell 零环境变量闸门 4/4 绿 |
