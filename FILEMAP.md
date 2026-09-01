@@ -1,8 +1,8 @@
 # FILEMAP —— 全仓文件地图（给下一个 AI / 新协作者）
 
 > 读图顺序：`README.md`（仓定位 + 新机器摆位）→ 本文件（每个文件干啥）→
-> `lizard_exp\PLAN.md`（训练计划与挂账，当前进度）→
-> `lizard_exp\FAMILY.md`（任务注册表/版本历史/obs 布局/记录体系）。
+> `rl_exp\PLAN.md`（训练计划与挂账，当前进度）→
+> `rl_exp\FAMILY.md`（任务注册表/版本历史/obs 布局/记录体系）。
 > AI 开发守则见 `AGENTS.md`（IsaacLab 上游）+ `.codemaker\skills\tool\`（本项目 4 份 skill）。
 
 ## 仓根
@@ -13,13 +13,13 @@
 | `AGENTS.md` | IsaacLab 官方 AI agent 开发守则（API 命名/工具链/commit 规范） |
 | `FILEMAP.md` | 本文件 |
 
-## lizard_exp\ —— 任务包（自包含核心）
+## rl_exp\ —— 任务包（自包含核心）
 
 ### 文档与参数 SSOT
 
 | 文件 | 作用 |
 |---|---|
-| `lizard_params.yaml` | **参数 SSOT（开发态）**：执行器 PD/动作缩放/命令范围/DR 范围。冻结版在 `versions\vN\`，跑冻结版永远不读这份 |
+| `lizard_params.yaml` | **参数 SSOT（开发态）**：执行器 PD/动作缩放/命令范围/DR 范围。冻结版在 `versions\lizard\vN\`，跑冻结版永远不读这份 |
 | `lizard.urdf` | 机器人几何 SSOT（Blender 生成）：26 关节、质量、限位 |
 | `PLAN.md` | 训练计划 + 挂账清单（#3 teacher 训练是当前关键路径） |
 | `FAMILY.md` | 家族总文档：任务注册表 / 版本历史 / teacher obs 布局 SSOT / 代码地图 / 四层记录体系 |
@@ -39,13 +39,14 @@
 | `staged_curriculum.py` | 通用阶段课程组件（度量阈值+持续时长+依赖门控） |
 | `agents\rsl_rl_ppo_cfg.py` | PPO runner 配置（experiment_name 按任务族隔离：`lizard_rough_teacher` 等） |
 
-### versions\ —— 参数版本冻结
+### versions\ —— 参数版本冻结（**家族分层：`versions\<family>\vN\`，当前家族 = `lizard`**）
 
 | 目录 | 作用 |
 |---|---|
-| `v0\` | 全量 DR 原始配方。**未训练即被 v1 取代**，存档作对照基准（复现走 git 历史） |
-| `v1\` | v0 仅 DR 段收窄。未训练即被 v2 取代，但任务 id `Lizard-Rough-v1` 常驻注册可复现（obs 266） |
-| `v2\` | **当前活跃**：v1 参数 + 特权 obs 论文对齐补全（266→308）。NOTES.md 含验收线与判死刑信号 |
+| `lizard\v0\` | 全量 DR 原始配方。**未训练即被 v1 取代**，存档作对照基准（复现走 git 历史） |
+| `lizard\v1\` | v0 仅 DR 段收窄。未训练即被 v2 取代，但任务 id `Lizard-Rough-v1` 常驻注册可复现（obs 266） |
+| `lizard\v2\` | **当前活跃**：v1 参数 + 特权 obs 论文对齐补全（266→308）。NOTES.md 含验收线与判死刑信号 |
+| `lizard\v3\` | **提案中**（2026-09-01）：三编码器+脚环+r_fc+c_k+tilt。`PLAN.md` = 版本级实施计划（新约定：**计划归版本目录**，根级 `rl_exp\PLAN.md` 只管跨版本路线）；定稿冻结时补 yaml/NOTES/lock |
 | `vN\NOTES.md` | 版本文档：目的/参数 diff/训练命令/结果回填 |
 | `vN\tb_scalars.csv` | 训练后经 dump_tb.py 导出的逐迭代曲线 |
 | `vN\asset_lock.json` | 冻结时资产 sha256（`lizard.urdf` + `lizard.usda`）。冻结 yaml 只钉路径不钉内容，此锁补这个洞：资产原地换代 → 常驻任务 id 复现被破坏 → 闸门⑥报警。有意换代在同一 commit 里 `--update-locks` |
@@ -91,11 +92,11 @@
 
 | 文件 | 作用 |
 |---|---|
-| `tools\trainlog\dump_tb.py` | TB 事件文件 → CSV（版本记录用：`--log_dir <run目录> --out versions\vN\tb_scalars.csv`） |
+| `tools\trainlog\dump_tb.py` | TB 事件文件 → CSV（版本记录用：`--log_dir <run目录> --out versions\lizard\vN\tb_scalars.csv`） |
 | `tools\trainlog\read_curriculum.py` | 从 tfevents 读课程终值（terrain level 等） |
 | `ue\build_lizard_ue.py` | UE 编辑器脚本：按 `ue\lizard_ue.json` 组装蜥蜴物理 Actor |
 | `fork_patches\config_lizard___init__.py` | fork shim 现成副本（装到 IsaacLab 树注册任务用） |
-| `__init__.py` | 包声明（`import lizard_exp` 入口，经 venv .pth 可达） |
+| `__init__.py` | 包声明（`import rl_exp` 入口，经 venv .pth 可达） |
 
 ## ablation_harness\ —— 评测系统（Locomotion-Eval-v1）
 

@@ -73,7 +73,7 @@ _HARNESS_DIR = pathlib.Path(__file__).resolve().parent
 # IsaacLab root and there is no separate lizard repo to point at.
 _REPO_ROOT = _HARNESS_DIR.parent
 _ISAAC_ROOT = pathlib.Path(__file__).absolute().parents[1]
-if _REPO_ROOT == _ISAAC_ROOT or not (_REPO_ROOT / "lizard_exp").is_dir():
+if _REPO_ROOT == _ISAAC_ROOT or not (_REPO_ROOT / "rl_exp").is_dir():
     _REPO_ROOT = None
 _SUITE_REGISTRY = {
     "lizard_suite_v1": (suites.LIZARD_SUITE_V1_NAMES, suites.lizard_suite_v1),

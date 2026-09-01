@@ -28,19 +28,19 @@ description: >
 | `<robot>_params.yaml` | 参数 SSOT（开发态）：关节序/PD/action scale/命令范围/DR 段 |
 | `FAMILY.md` | **家族总文档 = 实例事实唯一真源**：任务注册表（任务 id→参数版本）、版本历史、代码地图、验证脚本清单 |
 | `PLAN.md` | 训练计划 SSOT（决策/挂账/验收） |
-| `versions\vN\` | 冻结参数副本 + NOTES.md + tb_scalars.csv |
+| `versions\lizard\vN\` | 冻结参数副本 + NOTES.md + tb_scalars.csv |
 | `tasks\` | **完整任务包**（自有代码 100% 自包含）：`__init__.py`（gym 注册表）、env cfg 家族、`agents\`（runner cfg）、`staged_curriculum.py`（课程组件） |
 | `tools\`（pipeline/verify/diagnose/trainlog/archive）/ `blender\` | 工具与验证脚本（见 isaaclab-asset-pipeline skill） |
 
 **任务注册机制（自包含包模式）**：任务包住 `<robot>_exp\tasks\`，gym.register 的
-entry_point 用 `lizard_exp.tasks.<模块>:<类>` 字符串。fork 源码树只留一个 shim
+entry_point 用 `rl_exp.tasks.<模块>:<类>` 字符串。fork 源码树只留一个 shim
 （`config\<robot>\__init__.py`：sys.path 插 IsaacLab 根 + `import <robot>_exp.tasks`），
 `import isaaclab_tasks` 时自动触发注册。**import 可达性靠 venv site-packages 的
 `<robot>_exp.pth`**（一行：IsaacLab 根路径）——新环境/新机器要重建。
 脚本里 import 任务 cfg 用 `<robot>_exp.tasks.xxx`（包内互引可用相对 import）。
 
 **动手前先读目标机器人的 FAMILY.md**——任务注册表、参数版本、验证脚本都在那里。
-本项目实例：lizard → `E:\IsaacLab\lizard_exp\`。
+本项目实例：lizard → `E:\IsaacLab\rl_exp\`。
 
 框架侧路径（与机器人无关）：
 
@@ -61,7 +61,7 @@ entry_point 用 `lizard_exp.tasks.<模块>:<类>` 字符串。fork 源码树只�
 
 ## 参数版本机制（实例见各 FAMILY.md）
 
-一个版本 = 一代训练配方；**跑 vN 只准读 `versions/vN/<robot>_params.yaml`**。
+一个版本 = 一代训练配方；**跑 vN 只准读 `versions/lizard/vN/<robot>_params.yaml`**。
 
 - `_load_params(version)`：None 读开发态 yaml；`"v0"` 读冻结副本
 - 家族基座挂 `params_version = None` 类属性（无注解 → 纯类属性，非 configclass 字段）；
@@ -171,7 +171,7 @@ StagedCurriculumTermCfg(func=StagedCurriculumTerm, stages=[...],
 
 ### 第三步：验证
 
-1. 离线闸门一键（秒级，不起仿真）：`lizard_exp\tools\verify\run_offline_checks.bat`
+1. 离线闸门一键（秒级，不起仿真）：`rl_exp\tools\verify\run_offline_checks.bat`
    = 框架 pin + DR/接线 parity + recovery 等价 + 课程单测；**红的不算过、不 commit**。
    新改文件另跑 venv python `py_compile`
 2. 新写课程 mock 测试时仿照 `tools\verify\test_staged_curriculum.py`：假 env 驱动新

@@ -17,7 +17,7 @@ from __future__ import annotations
 # event names that constitute domain randomization / disturbance (mode="startup"
 # physics randomization + interval disturbances). Tasks without a name are
 # skipped, so this works for any env cfg built on the velocity task family.
-# KEEP IN SYNC with lizard_exp/tasks/play_utils.py -- every PLAY cfg disables
+# KEEP IN SYNC with rl_exp/tasks/play_utils.py -- every PLAY cfg disables
 # the same list; adding a DR event without updating both silently breaks
 # deterministic evaluation.
 _DR_EVENT_NAMES = [

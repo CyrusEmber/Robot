@@ -40,7 +40,7 @@ E:\IsaacLab\ablation_harness\
 │                         # 新机器人 = 新 suite 函数+名字表（照抄锁三件套：curriculum=True
 │                         # 等比例列分配 / 单值难度 / seed）+ 注册进 eval.py 的 _SUITE_REGISTRY
 ├─ components\             # command_player / dr_controller / recovery（纯函数，通用）
-│                          # 注：dr_controller 的 DR 事件清单与 lizard_exp\tasks\play_utils.py
+│                          # 注：dr_controller 的 DR 事件清单与 rl_exp\tasks\play_utils.py
 │                          # 互为同步镜像（PLAY 变体用同一份）——改一边即红：
 │                          # check_dr_parity.py --strict 机器看守，别靠人记
 ├─ metrics.py              # 指标纯函数库（按时间线分段自动切窗，通用）
@@ -157,4 +157,4 @@ eval_checkpoints/eval_modes/eval_seed/overrides。**tag 不可互为后缀**（�
   训练失败杀 sweep）+ 3 ⚠️（协议默认单一真源 / recovery 子集 / 死参数）；
   configclass 单例疑点源码验证排除；dump_tb 实测 39237 点与历史吻合
 - 待首个真实 checkpoint（teacher 训练完成后）跑基线数据
-- 相关 SSOT：`lizard_exp\PLAN.md`（训练计划/挂账）、`lizard_exp\FAMILY.md`（家族版本管理）
+- 相关 SSOT：`rl_exp\PLAN.md`（训练计划/挂账）、`rl_exp\FAMILY.md`（家族版本管理）

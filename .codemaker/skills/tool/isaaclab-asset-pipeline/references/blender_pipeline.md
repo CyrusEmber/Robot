@@ -9,7 +9,7 @@
 **不要手算关节 rpy/镜像符号**——左右手性推导极易翻车（实测：手算版两条腿折向天上）。
 零位 = 站姿（joint rpy 全 0，姿态烘进几何），env 默认姿态就是自然站立。
 
-## 管线脚本（`E:\IsaacLab\lizard_exp\blender\`）
+## 管线脚本（`E:\IsaacLab\rl_exp\blender\`）
 
 Steam Blender 运行：
 `E:\SteamLibrary\steamapps\common\Blender\blender.exe --background --python <脚本>`
@@ -24,8 +24,8 @@ Steam Blender 运行：
 
 1. Blender 打开 `blender\lizard_stance.blend`，object/pose 模式摆腿位（大腿外展、小腿垂直、blade 平放）
 2. `fix_bones.py` 对齐骨骼 → 另存（原位覆盖 lizard_stance.blend）
-3. `generate_urdf.py` 重出 URDF+STL 到 `lizard_exp\lizard_urdf\`
-4. 从 `lizard_urdf\` 拷 `lizard.urdf` + `meshes\` 到 `lizard_exp\`，跑
+3. `generate_urdf.py` 重出 URDF+STL 到 `rl_exp\lizard_urdf\`
+4. 从 `lizard_urdf\` 拷 `lizard.urdf` + `meshes\` 到 `rl_exp\`，跑
    `tools\pipeline\convert_stl_to_obj.py`（STL→OBJ 双保险 + URDF 引用改写 .obj）
 5. 路径修正：URDF 里 `../meshes/` → `meshes/`（**必须**，mesh 路径坑见 SKILL.md）
 6. 删 `assets\lizard\` + `.asset_hash` + `config.yaml` →
