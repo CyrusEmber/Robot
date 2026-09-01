@@ -24,8 +24,10 @@ def reference(lin_error, push_step, threshold, sustain, step_dt, valid_mask):
     num_steps, num_envs = lin_error.shape
     times, spikes = [], []
     for n in range(num_envs):
-        post = lin_error[push_step:, n]
-        spike = float(post.max()) if post.numel() > 0 else 0.0
+        # spike over valid post-push steps only (mirrors the masked implementation;
+        # error >= 0, empty -> 0.0 like masked_fill)
+        vals = [float(lin_error[j, n]) for j in range(push_step, num_steps) if bool(valid_mask[j, n])]
+        spike = max(vals) if vals else 0.0
         ok = [bool(valid_mask[j, n]) and float(lin_error[j, n]) < threshold
               for j in range(push_step, num_steps)]
         t = float("nan")

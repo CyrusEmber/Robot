@@ -164,9 +164,13 @@ def _yaml_scalar(text: str, key: str) -> str:
 
 
 def _yaml_block_list(text: str, key: str) -> list[str]:
-    match = re.search(rf"^{key}:\n((?:[ \t]+- .+\n?)+)", text, re.M)
+    """Items of a block-style list under ``key:`` at ANY indent (lists like
+    foot_body_names nest under ``names:`` -- a col-0 anchor made the body
+    pattern check silently run zero times). A missing key is a hard error:
+    silent empty == the bug this helper used to have."""
+    match = re.search(rf"^[ \t]*{key}:\n((?:[ \t]+- .+\n?)+)", text, re.M)
     if match is None:
-        return []
+        raise RuntimeError(f"yaml block list '{key}:' not found (yaml restructured?)")
     return [item.strip().strip("\"'") for item in re.findall(r"[ \t]+- (.+)", match.group(1))]
 
 

@@ -64,7 +64,12 @@ def recovery_times(
 
     post = below[push_step:]
     if post.shape[0] > 0:
-        spikes = lin_error[push_step:].max(dim=0).values
+        # spike over VALID steps only (same mask as `below`): after a fallen
+        # env's done, the series holds its auto-respawned new episode, which
+        # would otherwise contaminate the spike amplitude (error >= 0, so
+        # masking with 0 is safe; surviving envs always have >=1 valid step)
+        err_post = lin_error[push_step:].masked_fill(~valid_mask[push_step:], 0.0)
+        spikes = err_post.max(dim=0).values
     if post.shape[0] >= sustain_steps:
         # first index (after the push) whose sustain_steps window is all True,
         # vectorized with the same unfold as metrics.sustained_any
