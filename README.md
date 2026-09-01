@@ -7,7 +7,7 @@
 
 - `rl_exp/` — 任务包（gym 注册、env cfg、参数版本 versions/lizard/vN、
   Blender 资产管线、工具脚本）。入口文档：
-  - `rl_exp/FAMILY.md` — 家族总文档（任务表 / 版本历史 / obs 布局 / 代码地图）
+  - `rl_exp/FAMILY.md` — 家族总文档（任务表 / 版本历史 / obs 布局）
   - `rl_exp/PLAN.md` — 训练计划与挂账
 - `ablation_harness/` — 评测系统（固定地形套件、nominal/robust 双模式、
   版本化协议 Locomotion-Eval-v1、消融调度器）

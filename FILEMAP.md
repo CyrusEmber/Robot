@@ -22,7 +22,7 @@
 | `lizard_params.yaml` | **参数 SSOT（开发态）**：执行器 PD/动作缩放/命令范围/DR 范围。冻结版在 `versions\lizard\vN\`，跑冻结版永远不读这份 |
 | `lizard.urdf` | 机器人几何 SSOT（Blender 生成）：26 关节、质量、限位 |
 | `PLAN.md` | 训练计划 + 挂账清单（#3 teacher 训练是当前关键路径） |
-| `FAMILY.md` | 家族总文档：任务注册表 / 版本历史 / teacher obs 布局 SSOT / 代码地图 / 四层记录体系 |
+| `FAMILY.md` | 家族总文档：任务注册表 / 版本历史 / teacher obs 布局 SSOT / 四层记录体系（代码地图归本文件，开新版本流程归 `.codemaker/rules/versioning.mdc` §A） |
 
 ### tasks\ —— gym 任务包（训练代码本体）
 
