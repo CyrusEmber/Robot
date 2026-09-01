@@ -27,7 +27,10 @@ alwaysApply: false
 
 **流程（家族无关，通用五步）**：
 
-1. `copy versions/<family>/vN versions/<family>/vN+1`（含 yaml），改新目录参数
+1. `copy versions/<family>/vN versions/<family>/vN+1`（含 yaml），改新目录参数；
+   runner cfg 逐版本化：`experiment_name = <family>_<场景>_vN`（一版本一日志目录，
+   禁共用；存量历史目录不迁移，旧版本重跑续写原目录，如 lizard v1 = 裸名
+   `lizard_rough_teacher`）
 2. 写 `versions/<family>/vN+1/NOTES.md`，**必含骨架**：目的 / 假设 / 相对上版 diff / 训练命令 / 结果回填 / 结论
 3. 代码级结构变更（新 term）走版本差异机制 + 新任务 id 常驻注册——机制家族各异，lizard 实例 = `TEACHER_PRIVILEGED_SPEC` 剥离结构（FAMILY.md「版本差异结构」段），**禁止修改任何已发布 term 的实现**（破坏所有旧版本复现）；纯参数变更（yaml-only）不需要新任务 id
 4. 训练 → 曲线导出（`tools/trainlog/dump_tb.py`）→ eval（`ablation_harness/eval.py`）→ 结果回填 NOTES.md

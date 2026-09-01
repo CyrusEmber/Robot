@@ -103,7 +103,7 @@ gym.register(
     disable_env_checker=True,
     kwargs={
         "env_cfg_entry_point": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg",
-        "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherPPORunnerCfg",
+        "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV2PPORunnerCfg",
     },
 )
 
@@ -113,7 +113,7 @@ gym.register(
     disable_env_checker=True,
     kwargs={
         "env_cfg_entry_point": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_PLAY",
-        "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherPPORunnerCfg",
+        "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV2PPORunnerCfg",
     },
 )
 

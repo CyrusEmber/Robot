@@ -60,6 +60,18 @@ class LizardTeacherPPORunnerCfg(LizardFlatPPORunnerCfg):
 
 
 @configclass
+class LizardTeacherV2PPORunnerCfg(LizardTeacherPPORunnerCfg):
+    """Runner cfg for `Lizard-Rough-v2` (per-version log dir).
+
+    Convention (versioning.mdc §A): experiment_name carries the recipe version
+    -- one log dir per version. The bare ``lizard_rough_teacher`` dir stays
+    with v1's published runs; v1 re-runs continue into it.
+    """
+
+    experiment_name = "lizard_rough_teacher_v2"
+
+
+@configclass
 class LizardCurriculumFlatPPORunnerCfg(LizardFlatPPORunnerCfg):
     """Runner cfg for `Lizard-Velocity-Curriculum-Flat-v0` (separate log dir)."""
 
