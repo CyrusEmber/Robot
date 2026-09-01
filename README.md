@@ -1,4 +1,4 @@
-# lizard_migration
+# robot
 
 26 关节蜥蜴机器人（72 kg，16 腿关节 + 10 脊柱关节）Isaac Lab 强化学习
 训练 + 评测 + 版本管理包。内容：
@@ -6,9 +6,9 @@
 > **文件逐个说明见 [FILEMAP.md](FILEMAP.md)（新协作者/下一个 AI 必读）**
 
 - `rl_exp/` — 任务包（gym 注册、env cfg、参数版本 versions/lizard/vN、
-  Blender 资产管线、工具脚本）。入口文档：
-  - `rl_exp/FAMILY.md` — 家族总文档（任务表 / 版本历史 / obs 布局）
-  - `rl_exp/PLAN.md` — 训练计划与挂账
+  Blender 资产管线、工具脚本）。入口文档（家族之家 `rl_exp/versions/lizard/`）：
+  - `rl_exp/versions/lizard/FAMILY.md` — 家族总文档（任务表 / 版本历史 / obs 布局）
+  - `rl_exp/versions/lizard/PLAN.md` — 训练计划与挂账
 - `ablation_harness/` — 评测系统（固定地形套件、nominal/robust 双模式、
   版本化协议 Locomotion-Eval-v1、消融调度器）
 - `.codemaker/skills/tool/` — 4 份 AI 辅助开发 skill（isaaclab-task-creator /
@@ -30,7 +30,7 @@
 > `rl_exp\tools\verify\framework_pin_check.py`。
 
 ```bat
-git clone <本仓> <REPO>        :: 例 E:\lizard_migration
+git clone <本仓> <REPO>        :: 例 E:\robot
 ```
 
 **1. venv .pth**（`import rl_exp` 全局可达；文件内容 = **git 仓目录 `<REPO>`**
@@ -97,13 +97,14 @@ python scripts\reinforcement_learning\rsl_rl\train.py --task Lizard-Rough-v2 --m
 codemaker 工作区在 `<ROOT>` 时，把仓内 skill 目录接到工作区技能目录：
 
 ```bat
-mklink /J <ROOT>\.codemaker\skills\tool\git-auto-sync <ROOT>\lizard_migration\.codemaker\skills\tool\git-auto-sync
+mklink /J <ROOT>\.codemaker\skills\tool\git-auto-sync <REPO>\.codemaker\skills\tool\git-auto-sync
 :: 其余三份 isaaclab-* skill 同法；或直接 copy。不接不影响训练与评测
 ```
 
 ## 原机布局说明
 
-原开发机上本包真身位于 `E:\lizard_migration`（本仓），Isaac Lab 树内
-`E:\IsaacLab\rl_exp`、`E:\IsaacLab\ablation_harness` 是指向本仓的
-目录 junction——venv 的 `.pth`、fork shim 全部经由 junction 工作，
-路径不变。新机器无需 junction，按上文步骤摆位即可。
+原开发机上本仓真身位于 `E:\robot`（2026-09-01 由 `lizard_migration` 更名），
+venv `.pth` 直指该目录（Phase G1，rl_exp junction 已删）；仅
+`E:\IsaacLab\ablation_harness` 仍是仓内 junction 的过渡摆位
+（G3 `_ISAAC_ROOT` 参数化落地后取消，见步骤 4）。新机器无需任何
+rl_exp junction，按上文步骤摆位即可。
