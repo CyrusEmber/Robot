@@ -11,7 +11,7 @@ lizard-family intermediate class -- so the Phase 2 distillation keeps a stable
 teacher recipe while the lizard family keeps evolving as the live experiment
 bed (plan §4.1). Robot, terrain scaling, height scanner and the
 domain-randomization wiring are copied in here (frozen); numeric values still
-come from rl_exp/lizard_params.yaml (single source of truth).
+come from rl_exp/versions/lizard/<version>/lizard_params.yaml (frozen per version).
 
 The teacher ACTOR receives privileged simulation ground truth (Miki et al.
 2022): clean height scan, true base velocities, foot contact flags, swing

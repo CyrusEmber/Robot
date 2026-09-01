@@ -6,9 +6,9 @@
 """Lizard (26-joint) flat-ground velocity tracking.
 
 Built directly on :class:`LocomotionVelocityRoughEnvCfg` (no intermediate robot
-base class). Robot geometry comes from rl_exp/lizard.urdf (SSOT, Blender
+base class). Robot geometry comes from rl_exp/versions/lizard/lizard.urdf (SSOT, Blender
 generated: 16 leg joints HAA/HFE/KFE/FOOT x4 + 10 spine joints), control
-parameters from rl_exp/lizard_params.yaml (SSOT).
+parameters from rl_exp/versions/lizard/lizard_params.yaml (SSOT).
 
 Domain randomization (mass/CoM/inertia/friction/actuator gains/joint
 parameters/external forces/pushes) is configured in the SSOT yaml and wired
@@ -47,11 +47,11 @@ def _load_params(version: str | None = None) -> dict:
     Args:
         version: Version name (e.g. "v0") to read the FROZEN copy under
             ``rl_exp/versions/<family>/<version>/lizard_params.yaml``, or None to
-            read the live dev yaml. Versioned runs must always pass their own
+            read the live dev yaml (``versions/<family>/lizard_params.yaml``). Versioned runs must always pass their own
             version so dev-yaml edits can never drift a frozen recipe.
     """
     if version is None:
-        path = _RL_EXP_DIR / "lizard_params.yaml"
+        path = _RL_EXP_DIR / "versions" / _VERSION_FAMILY / "lizard_params.yaml"
     else:
         path = _RL_EXP_DIR / "versions" / _VERSION_FAMILY / version / "lizard_params.yaml"
     with open(path, encoding="utf-8") as f:

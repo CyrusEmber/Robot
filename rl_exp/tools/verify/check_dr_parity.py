@@ -22,7 +22,7 @@ Six checks, all machine-readable, all fail under --strict:
    ``Robot/Geometry/base_link``), every ``joint_order`` entry as ``<name>_joint``,
    and every body-name pattern in the dev AND frozen version yamls matching at
    least one link. Catches asset regeneration that renames/drops prims.
-6. asset lock: ``versions/lizard/vN/asset_lock.json`` pins sha256 of lizard.urdf,
+6. asset lock: ``versions/lizard/vN/asset_lock.json`` pins sha256 of versions/lizard/lizard.urdf,
    the compiled usda, every mesh under ``meshes/**``, and the version's OWN
    frozen yaml. Frozen yamls pin the usd PATH, not its CONTENT, so an in-place
    asset regeneration silently breaks working-tree reproduction of every
@@ -191,7 +191,7 @@ def _yaml_block_list(text: str, key: str) -> list[str]:
 
 
 def _version_yamls() -> dict[str, pathlib.Path]:
-    yamls = {"dev": _EXP / "lizard_params.yaml"}
+    yamls = {"dev": _VERSIONS / "lizard" / "lizard_params.yaml"}
     for vdir in sorted(_VERSIONS.glob("*/v*")):
         cfg = vdir / "lizard_params.yaml"
         if cfg.exists():
@@ -235,7 +235,7 @@ def _lock_files() -> list[str]:
     """urdf + compiled usda + every source mesh under meshes/** (meshes are the
     regeneration upstream of both; usda embeds copies but a mesh-only rebuild
     must still go loud)."""
-    files = ["lizard.urdf", "assets/lizard/lizard.usda"]
+    files = ["versions/lizard/lizard.urdf", "assets/lizard/lizard.usda"]
     files += sorted(
         str(p.relative_to(_EXP)).replace("\\", "/")
         for p in (_EXP / "meshes").rglob("*") if p.is_file()

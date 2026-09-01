@@ -29,10 +29,10 @@ EXP_DIR = pathlib.Path(__file__).resolve().parents[2]
 
 
 def main():
-    with open(EXP_DIR / "lizard_params.yaml", encoding="utf-8") as f:
+    with open(EXP_DIR / "versions" / "lizard" / "lizard_params.yaml", encoding="utf-8") as f:
         params = yaml.safe_load(f)
 
-    urdf_path = str(EXP_DIR / "lizard.urdf")
+    urdf_path = str(EXP_DIR / "versions" / "lizard" / "lizard.urdf")
     dest_path = str(EXP_DIR / "assets")
     legs_params = params["actuators"]["legs"]
 

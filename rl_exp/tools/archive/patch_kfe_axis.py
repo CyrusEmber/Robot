@@ -5,7 +5,7 @@ import pathlib
 import re
 
 # file lives at rl_exp/tools/archive/ -> exp root is parents[2]
-URDF = pathlib.Path(__file__).resolve().parents[2] / "lizard.urdf"
+URDF = pathlib.Path(__file__).resolve().parents[2] / "versions" / "lizard" / "lizard.urdf"
 src = URDF.read_text(encoding="utf-8")
 
 changed = 0

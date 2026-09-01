@@ -22,8 +22,8 @@ import yaml
 
 # file lives at rl_exp/tools/pipeline/ -> exp root is parents[2]
 EXP_DIR = pathlib.Path(__file__).resolve().parents[2]
-URDF_PATH = EXP_DIR / "lizard.urdf"
-PARAMS_PATH = EXP_DIR / "lizard_params.yaml"
+URDF_PATH = EXP_DIR / "versions" / "lizard" / "lizard.urdf"
+PARAMS_PATH = EXP_DIR / "versions" / "lizard" / "lizard_params.yaml"
 OUTPUT_DIR = EXP_DIR / "ue"
 
 

@@ -1,7 +1,6 @@
 {
   "files": {
     "assets/lizard/lizard.usda": "5755f68f124d56db659e49d726deac75a940e75683597c28c7b35a94ff97d4b5",
-    "lizard.urdf": "09a1e171ac8750bcd87d4109079f8bf1cf6f41dcdd614685d522789a7aefe26a",
     "meshes/collision/base_link_collision.obj": "3bef30c24788a6a3a6b0db97f66cb1f01f9e2c16d39ef3c085e512b4ef43cc71",
     "meshes/collision/base_link_collision.stl": "9259f206aa02512e9d6b6bdcdc1e49064dab693415336d358b53b6244a057268",
     "meshes/collision/lf_foot_collision.obj": "3c58c433a87f2ac257fb2bf0a7fc17c98df1c46528a63d1c186a0a475b6d3c31",
@@ -82,6 +81,7 @@
     "meshes/visual/rr_kfe_visual.stl": "8468675bf6cb36aac8501324c79dbd6477bad8085c6813a5007bb33760302f8b",
     "meshes/visual/tail_pitch_visual.obj": "2ce8286d85645f857002e33f7e9cf4ce4ba8ea07517b0cdf7ee180e0af80e14a",
     "meshes/visual/tail_pitch_visual.stl": "c763cf08fa833c97c00507fc30ede54c9157e5c9eafacd7d97cb47e005aa112e",
+    "versions/lizard/lizard.urdf": "09a1e171ac8750bcd87d4109079f8bf1cf6f41dcdd614685d522789a7aefe26a",
     "versions/lizard/v0/lizard_params.yaml": "8a65c4ab94dae45b11df7f79ea73d06965fbbfa2786333b6c8fb59c2eca00880"
   },
   "note": "asset sha256 pinned at freeze; refresh with --update-locks only in a commit that intentionally retires assets (see check_dr_parity.py)"

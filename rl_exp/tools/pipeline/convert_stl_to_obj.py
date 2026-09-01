@@ -14,7 +14,7 @@ import sys
 # file lives at rl_exp/tools/pipeline/ -> exp root is parents[2]
 EXP_DIR = pathlib.Path(__file__).resolve().parents[2]
 MESH_DIR = EXP_DIR / "meshes"
-URDF_PATH = EXP_DIR / "lizard.urdf"
+URDF_PATH = EXP_DIR / "versions" / "lizard" / "lizard.urdf"
 
 
 def parse_stl(path):
