@@ -1,0 +1,105 @@
+{
+  "protocol": "Locomotion-Eval-v1",
+  "mode": "nominal",
+  "task": "Lizard-Rough-v1",
+  "checkpoint": "E:\\IsaacLab\\logs\\rsl_rl\\lizard_rough_teacher\\2026-08-31_11-12-20\\model_13999.pt",
+  "seed": 123,
+  "num_envs": 72,
+  "timestamp": "2026-09-01T15:32:52",
+  "git_rev_lizard": "edba705",
+  "git_rev_isaaclab": "28a37cecd",
+  "global": {
+    "success_rate": 0.6346431970596313,
+    "fall_rate": 0.3333333432674408,
+    "lin_mae_mps": 2.1773767471313477,
+    "ang_mae_radps": 0.295196533203125,
+    "energy_per_m_j": 1590.7257080078125,
+    "terrain_completion_mean": 0.5970412037438817
+  },
+  "segments": [
+    {
+      "name": "0-5s vx=0.5 wz=0",
+      "lin_mae_mps": 0.10438798367977142,
+      "ang_mae_radps": 0.11234214901924133,
+      "success_rate": 0.9680555462837219
+    },
+    {
+      "name": "5-10s vx=1 wz=0",
+      "lin_mae_mps": 0.26511409878730774,
+      "ang_mae_radps": 0.14166033267974854,
+      "success_rate": 0.7896666526794434
+    },
+    {
+      "name": "10-15s vx=1.5 wz=0",
+      "lin_mae_mps": 0.4435134828090668,
+      "ang_mae_radps": 0.16743676364421844,
+      "success_rate": 0.6997777819633484
+    },
+    {
+      "name": "15-20s vx=1 wz=0.5",
+      "lin_mae_mps": 0.9867620468139648,
+      "ang_mae_radps": 0.44260311126708984,
+      "success_rate": 0.29595035314559937
+    },
+    {
+      "name": "20-25s vx=1 wz=-0.5",
+      "lin_mae_mps": 3.760481119155884,
+      "ang_mae_radps": 0.6177471876144409,
+      "success_rate": 0.2620511054992676
+    },
+    {
+      "name": "25-30s vx=0 wz=0",
+      "lin_mae_mps": 8.593905448913574,
+      "ang_mae_radps": 0.3588646352291107,
+      "success_rate": 0.7202622890472412,
+      "stop_overshoot_mps": 7.280948162078857
+    }
+  ],
+  "terrains": {
+    "flat": {
+      "completion": 0.6416881680488586,
+      "fall_rate": 0.5,
+      "success_rate": 0.6637450456619263
+    },
+    "slope_5deg": {
+      "completion": 0.6894205212593079,
+      "fall_rate": 0.5,
+      "success_rate": 0.7040833234786987
+    },
+    "slope_10deg": {
+      "completion": 0.73288494348526,
+      "fall_rate": 0.125,
+      "success_rate": 0.809158980846405
+    },
+    "stairs_10cm": {
+      "completion": 0.6708433628082275,
+      "fall_rate": 0.375,
+      "success_rate": 0.644879162311554
+    },
+    "stairs_20cm": {
+      "completion": 0.5529809594154358,
+      "fall_rate": 0.375,
+      "success_rate": 0.597252607345581
+    },
+    "rough_a": {
+      "completion": 0.7076758146286011,
+      "fall_rate": 0.5,
+      "success_rate": 0.6475235223770142
+    },
+    "rough_b": {
+      "completion": 0.7650421857833862,
+      "fall_rate": 0.25,
+      "success_rate": 0.7646780014038086
+    },
+    "gap_20cm": {
+      "completion": 0.5168203115463257,
+      "fall_rate": 0.375,
+      "success_rate": 0.5658439993858337
+    },
+    "gap_40cm": {
+      "completion": 0.09601456671953201,
+      "fall_rate": 0.0,
+      "success_rate": 0.3370000123977661
+    }
+  }
+}

@@ -44,7 +44,7 @@
 | 目录 | 作用 |
 |---|---|
 | `lizard\v0\` | 全量 DR 原始配方。**未训练即被 v1 取代**，存档作对照基准（复现走 git 历史） |
-| `lizard\v1\` | v0 仅 DR 段收窄。未训练即被 v2 取代，但任务 id `Lizard-Rough-v1` 常驻注册可复现（obs 266） |
+| `lizard\v1\` | v0 仅 DR 段收窄。**已训练 14000 iters 并出评测分**（2026-09-01，NOTES 回填）；任务 id `Lizard-Rough-v1` 常驻注册可复现（obs 266） |
 | `lizard\v2\` | **当前活跃**：v1 参数 + 特权 obs 论文对齐补全（266→308）。NOTES.md 含验收线与判死刑信号 |
 | `lizard\v3\` | **提案中**（2026-09-01）：三编码器+脚环+r_fc+c_k+tilt。`PLAN.md` = 版本级实施计划（新约定：**计划归版本目录**，根级 `rl_exp\PLAN.md` 只管跨版本路线）；定稿冻结时补 yaml/NOTES/lock |
 | `vN\NOTES.md` | 版本文档：目的/参数 diff/训练命令/结果回填 |

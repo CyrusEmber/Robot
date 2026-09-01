@@ -169,7 +169,7 @@ python rl_exp\tools\verify\teacher_smoke.py --headless            :: teacher env
 |---|---|---|
 | 1 | ✅ teacher env 独立快照重写（去掉 lizard 中间层继承） | 完成 2026-08-28 |
 | 2 | ✅ teacher_smoke 解包 bug（gym 5 元组）+ 冒烟通过 | 完成 2026-08-28 |
-| 3 | teacher 训练 + §4.6 验收（特权 vs 趴窝对照） | 🔴 当前 |
+| 3 | ✅ teacher v1 训练 14000 iters + §4.6 验收：对照判出**特权救活趴窝**（零动作 success 0.254 → v1 0.635）；遗留 fall 随迭代上升（0.03→0.33）、gap_40cm 不跳 → `versions\lizard\v1\NOTES.md` | 完成 2026-09-01 |
 | 4 | 摩擦/外力真值 obs term（event 缓存） | 🟡 Phase 2 前 |
 | 5 | 三噪声模型 C++→Python 移植 | 🟡 Phase 2 |
 | 6 | 延迟注入 DR（EP 技巧） | 🟡 UE 部署前 |
