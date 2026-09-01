@@ -59,6 +59,8 @@ git add -A && git commit -m "Freeze vN: <摘要>" && git tag vN && git push --ta
 ## 安全纪律（推送 = 共享状态操作）
 
 - **绝不** `--force` / `--force-with-lease` / 改写已推历史 / amend 已推提交
+- 仓自带离线验证闸门（如 `run_offline_checks.bat`）时 **commit 前必跑**；闸门红 =
+  不提交不推送，先修
 - 推送前扫一眼 diff：密钥、token、绝对路径泄漏、意外大文件（资产/数据集/模型权重）
 - 无远端 → 一次性问用户要 URL；push 报错（网络/权限/非快进）→ 报告，
   不 retry 循环，更不强推

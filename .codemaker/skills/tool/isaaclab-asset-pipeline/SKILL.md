@@ -23,7 +23,7 @@ meshes\ / 验证脚本都在里面，实例清单读该机器人的 FAMILY.md）
 ## convert_urdf 运行
 
 ```
-E:\IsaacLab\env_isaaclab\Scripts\python.exe E:\IsaacLab\<robot>_exp\convert_urdf.py --headless
+<venv python> E:\IsaacLab\<robot>_exp\tools\pipeline\convert_urdf.py --headless
 ```
 
 `UrdfConverterCfg` 要点（都有踩坑理由，新机器人照抄，别乱改）：
@@ -47,7 +47,7 @@ E:\IsaacLab\env_isaaclab\Scripts\python.exe E:\IsaacLab\<robot>_exp\convert_urdf
 | 位置/受力 | exp 目录的 position_check 类脚本（z 轨迹 + 接触力 + NaN） |
 | 关节对表 | exp 目录的 joint_check 类脚本（reset 后关节名/角度 vs joint_order） |
 | 站姿对称 | exp 目录的 debug_pose 类脚本（每腿 pivot 世界坐标） |
-| 肉眼终验 | GUI 观察脚本（lizard: `view_lizard.py --viz kit`）——开 Isaac Sim 窗口看站立/穿模 |
+| 肉眼终验 | GUI 观察脚本（lizard: `tools\verify\view_lizard.py --viz kit`）——开 Isaac Sim 窗口看站立/穿模 |
 
 具体脚本名读该机器人 FAMILY.md。标准顺序：convert → 关节数 → position_check（数据）
 → view_lizard（肉眼）。

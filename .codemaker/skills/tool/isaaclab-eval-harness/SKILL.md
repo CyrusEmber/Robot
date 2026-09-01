@@ -36,28 +36,26 @@ E:\IsaacLab\ablation_harness\
 ├─ eval.py                 # runner: task + checkpoint + protocol + mode → 跑分
 ├─ run_ablation.py         # spec yaml → train+eval 调度, 断点续跑, 汇总表
 ├─ protocols\locomotion_eval_v1.yaml   # 协议契约（冻结只读，改动 = 新建 vN）
-├─ suites\                # 地形套件（机器人尺度相关）：lizard_suite_v1.py；
-│                         # 新机器人 = 新 suite 文件（照抄锁三件套：curriculum=True 等比例
-│                         # 列分配 / 单值难度 / seed）+ 注册进 eval.py 的 _SUITE_REGISTRY
+├─ suites.py              # 地形套件（机器人尺度相关，单文件）：lizard_suite_v1()；
+│                         # 新机器人 = 新 suite 函数+名字表（照抄锁三件套：curriculum=True
+│                         # 等比例列分配 / 单值难度 / seed）+ 注册进 eval.py 的 _SUITE_REGISTRY
 ├─ components\             # command_player / dr_controller / recovery（纯函数，通用）
 │                          # 注：dr_controller 的 DR 事件清单与 lizard_exp\tasks\play_utils.py
-│                          # 互为同步镜像（PLAY 变体用同一份）——加 DR 事件两边都要改
+│                          # 互为同步镜像（PLAY 变体用同一份）——改一边即红：
+│                          # check_dr_parity.py --strict 机器看守，别靠人记
 ├─ metrics.py              # 指标纯函数库（按时间线分段自动切窗，通用）
 ├─ specs\example_baseline.yaml         # 消融 spec 示例
 └─ results\<protocol>\<run_id>\eval.json + summary.csv
 ```
 
-harness 与机器人无关；**机器人相关只有 suites\ 一个文件 + 协议里的 suite 引用**。
+harness 与机器人无关；**机器人相关只有 suites.py 一个文件 + 协议里的 suite 引用**。
 
-## 协议 v1 要点（全文见 protocols\locomotion_eval_v1.yaml；**v1 是 lizard 尺度实例**，
-新机器人可另起协议或在同协议下换 suite——语义变了就要 vN）
+## 协议 v1 要点
 
-- **命令时间线**（30s，6 段）：0-5s vx=0.5 → 5-10s vx=1.0 → 10-15s vx=1.5 →
-  15-20s vx=1.0 wz=+0.5 → 20-25s vx=1.0 wz=-0.5 → 25-30s stop（停车超调段）
-- **robust**：固定 seed DR + recovery push（t=12s，kick 4 m/s，方向 per-env 由 seed 定）
-- **suite**：lizard_suite_v1，9 地形（flat / 坡5°/10° / 台阶10/20cm / 粗糙A/B / 沟20/40cm），
-  1 行 × 9 列，每列一种地形，envs_per_terrain 8
-- **latency**：v1 不支持（延迟注入未实现），rob N/A
+**本 skill 不复制协议数值——复制处即漂移处**（曾有文档抄 266 维 obs 被 v2 打脸）。
+全文即契约，30 秒读完：`protocols\locomotion_eval_v1.yaml`（命令时间线、robust push、
+suite 布局、指标口径全在里面）。**v1 是 lizard 尺度实例**，新机器人可另起协议或在
+同协议下换 suite——语义变了就要 vN。latency 注入未实现（PLAN 挂账），rob 记 N/A。
 
 ## 指标定义（口径冻结在协议里，改口径 = 协议升版）
 
@@ -155,7 +153,7 @@ eval_checkpoints/eval_modes/eval_seed/overrides。**tag 不可互为后缀**（�
 - **实现完成并验证**：全链路冒烟通过（零动作策略 nominal+robust 双模式，指标自洽：
   stop 段 success=1.0、MAE 段段≈命令速度、kick 后 fall 检测生效）；**确定性实证**：
   同 seed 多次运行数值逐位一致（success 0.248 / fall 0.083 / recovery 13.15s）
-- **代码审查完成**（review_report_isaac_session.html）：修复 2 🚨（glob 前缀 bug /
+- **代码审查完成**（三轮修复归档于 git 历史：b6098c9 / f22f43f）：修复 2 🚨（glob 前缀 bug /
   训练失败杀 sweep）+ 3 ⚠️（协议默认单一真源 / recovery 子集 / 死参数）；
   configclass 单例疑点源码验证排除；dump_tb 实测 39237 点与历史吻合
 - 待首个真实 checkpoint（teacher 训练完成后）跑基线数据

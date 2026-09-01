@@ -25,12 +25,13 @@ Steam Blender 运行：
 1. Blender 打开 `blender\lizard_stance.blend`，object/pose 模式摆腿位（大腿外展、小腿垂直、blade 平放）
 2. `fix_bones.py` 对齐骨骼 → 另存（原位覆盖 lizard_stance.blend）
 3. `generate_urdf.py` 重出 URDF+STL 到 `lizard_exp\lizard_urdf\`
-4. 从 `lizard_urdf\` 拷 `lizard.urdf` + `meshes\` 到 `lizard_exp\`，跑 `convert_stl_to_obj.py`
-   （STL→OBJ 双保险 + URDF 引用改写 .obj）
+4. 从 `lizard_urdf\` 拷 `lizard.urdf` + `meshes\` 到 `lizard_exp\`，跑
+   `tools\pipeline\convert_stl_to_obj.py`（STL→OBJ 双保险 + URDF 引用改写 .obj）
 5. 路径修正：URDF 里 `../meshes/` → `meshes/`（**必须**，mesh 路径坑见 SKILL.md）
-6. 删 `assets\lizard\` + `.asset_hash` + `config.yaml` → `convert_urdf.py --headless`
-7. 验证链：`debug_pose`（四腿 pivot 对称）→ `position_check`（受力/z 稳定）→
-   `view_lizard` 肉眼终验
+6. 删 `assets\lizard\` + `.asset_hash` + `config.yaml` →
+   `tools\pipeline\convert_urdf.py --headless`
+7. 验证链：`tools\diagnose\debug_pose`（四腿 pivot 对称）→
+   `tools\verify\position_check`（受力/z 稳定）→ `tools\verify\view_lizard` 肉眼终验
 
 ## 站姿判定标准（position_check / debug_pose）
 
