@@ -116,6 +116,64 @@ TEACHER_TERRAINS_CFG = TerrainGeneratorCfg(
 )
 
 
+# v3.4 terrain (versions/lizard/v3/PLAN.md §6.6): Miki-aligned for the untrained
+# v3 recipe only -- v1/v2 keep TEACHER_TERRAINS_CFG frozen above. Stair top
+# raised 0.35 -> 0.55 m (~40% leg reach; paper demonstrates 30.5 cm ~= 75%
+# ANYmal knee, training curriculum cap not given exactly -> estimate);
+# stepping stones approximate the paper's open/ledged stair family (option b,
+# user decision 2026-09-01): holes_depth gives true step-void geometry.
+TEACHER_TERRAINS_CFG_V3 = TerrainGeneratorCfg(
+    size=(16.0, 16.0),
+    border_width=25.0,
+    num_rows=10,
+    num_cols=20,
+    horizontal_scale=0.1,
+    vertical_scale=0.005,
+    slope_threshold=0.75,
+    use_cache=False,
+    curriculum=True,
+    sub_terrains={
+        "pyramid_stairs": terrain_gen.MeshPyramidStairsTerrainCfg(
+            proportion=0.2,
+            step_height_range=(0.08, 0.55),
+            step_width=0.7,
+            platform_width=6.0,
+            border_width=1.5,
+            holes=False,
+        ),
+        "pyramid_stairs_inv": terrain_gen.MeshInvertedPyramidStairsTerrainCfg(
+            proportion=0.2,
+            step_height_range=(0.08, 0.55),
+            step_width=0.7,
+            platform_width=6.0,
+            border_width=1.5,
+            holes=False,
+        ),
+        "stepping_stones": terrain_gen.HfSteppingStonesTerrainCfg(
+            proportion=0.1,
+            stone_width_range=(0.5, 0.9),
+            stone_distance_range=(0.3, 0.7),
+            stone_height_max=0.3,
+            holes_depth=-1.0,
+            platform_width=4.0,
+            border_width=0.5,
+        ),
+        "boxes": terrain_gen.MeshRandomGridTerrainCfg(
+            proportion=0.1, grid_width=0.9, grid_height_range=(0.08, 0.3), platform_width=4.0
+        ),
+        "random_rough": terrain_gen.HfRandomUniformTerrainCfg(
+            proportion=0.2, noise_range=(0.04, 0.2), noise_step=0.04, border_width=0.5
+        ),
+        "hf_pyramid_slope": terrain_gen.HfPyramidSlopedTerrainCfg(
+            proportion=0.1, slope_range=(0.0, 0.4), platform_width=4.0, border_width=0.5
+        ),
+        "hf_pyramid_slope_inv": terrain_gen.HfInvertedPyramidSlopedTerrainCfg(
+            proportion=0.1, slope_range=(0.0, 0.4), platform_width=4.0, border_width=0.5
+        ),
+    },
+)
+
+
 @configclass
 class TeacherActionsCfg(ActionsCfg):
     """Joint actions split into legs + spine; spine locked at its rest pose.
@@ -171,7 +229,11 @@ TEACHER_PRIVILEGED_SPEC: dict[str, set[str]] = {
 
 @configclass
 class LizardRoughTeacherEnvCfg(LocomotionVelocityRoughEnvCfg):
-    """Teacher: perceptive + privileged actor, baseline rewards (Lizard-Rough-v2).
+    """Teacher: perceptive + privileged actor, baseline rewards (latest recipe).
+
+    Frozen task ids use the per-version subclasses (_V1/_V2/_V3), never this
+    class, so bumping ``params_version`` here cannot retroactively change an
+    old recipe.
 
     Privileged obs per Miki et al. 2022 table + two legacy extras (true base
     velocity, per-body mass); full layout table in FAMILY.md. Obs dim 308.
@@ -450,6 +512,29 @@ class LizardRoughTeacherEnvCfg_PLAY(LizardRoughTeacherEnvCfg):
 
 
 @configclass
+class LizardRoughTeacherEnvCfg_V2(LizardRoughTeacherEnvCfg):
+    """v2 recipe, reproducible from the working tree (obs 308).
+
+    Same pinning discipline as v1/v3: the task id must rebuild the v2 recipe
+    even after the base class moves on to a newer params_version (the base is
+    the "latest" pointer, not a frozen entry).
+    """
+
+    params_version = "v2"
+
+
+@configclass
+class LizardRoughTeacherEnvCfg_V2_PLAY(LizardRoughTeacherEnvCfg_V2):
+    """v2 play variant: obs 308, no randomization, curriculum off."""
+
+    def __post_init__(self):
+        super().__post_init__()
+
+        # deterministic evaluation: shared PLAY wiring (single source, see play_utils)
+        apply_play_wiring(self)
+
+
+@configclass
 class LizardRoughTeacherEnvCfg_V1(LizardRoughTeacherEnvCfg):
     """v1 recipe, reproducible from the working tree (obs 266).
 
@@ -533,12 +618,18 @@ class LizardRoughTeacherEnvCfg_V3(LizardRoughTeacherEnvCfg):
       D3 c_k penalty curriculum; D4 reset-mode c_k-scaled DR (mass/com/inertia/
       gains/joint params -- friction stays startup so the foot_friction_truth
       obs cache keeps its startup-only semantics, F3 deviation note)
+    * v3.4 terrain: Miki-aligned (stairs to 0.55 m + stepping stones), teacher
+      snapshot only -- family and v1/v2 generators untouched
     """
 
     params_version = "v3"
 
     def __post_init__(self):
         super().__post_init__()
+        # v3.4: swap in the Miki-aligned terrain (base __init__ wired the v1/v2
+        # frozen generator; swapping after super() is the same late-replace the
+        # base itself does -- curriculum=True already set on the new cfg)
+        self.scene.terrain.terrain_generator = TEACHER_TERRAINS_CFG_V3
         params = _load_params(self.params_version)
         v3 = params["v3"]
         ring = v3["foot_ring"]
