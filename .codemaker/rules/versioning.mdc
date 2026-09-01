@@ -31,7 +31,7 @@ alwaysApply: false
 2. 写 `versions/<family>/vN+1/NOTES.md`，**必含骨架**：目的 / 假设 / 相对上版 diff / 训练命令 / 结果回填 / 结论
 3. 代码级结构变更（新 term）走版本差异机制 + 新任务 id 常驻注册——机制家族各异，lizard 实例 = `TEACHER_PRIVILEGED_SPEC` 剥离结构（FAMILY.md「版本差异结构」段），**禁止修改任何已发布 term 的实现**（破坏所有旧版本复现）；纯参数变更（yaml-only）不需要新任务 id
 4. 训练 → 曲线导出（`tools/trainlog/dump_tb.py`）→ eval（`ablation_harness/eval.py`）→ 结果回填 NOTES.md
-5. 家族文档版本历史表加一行；git 侧 commit + tag vN+1 + push（tag = 整树快照兜底）
+5. 家族文档版本历史表加一行；git 侧 commit + tag `<family>-vN+1` + push（tag = 整树快照兜底；**带家族前缀防多家族撞名**——历史裸 tag `v1`/`v2` 不迁移，新家族从 `<family>-v1` 起）
 
 **红线**：已发布 term 的实现永不改语义（新版本只允许加 term）；冻结目录只读。
 
@@ -52,6 +52,7 @@ alwaysApply: false
 3. 决策来源分级标记：`用户拍板：<日期>`（用户明示）与 `review 定案`（AI 推断获默认通过）不可混写。
 4. **单一真身守卫**：动笔前确认目标文件是唯一权威副本（git status 无同名未跟踪分叉、无旧路径残留）；发现分叉先合并再删副本，禁止在陈旧副本上继续修订。
 5. 修订闭环 = commit（git-auto-sync 纪律）：新建文档必须 git add，杜绝未提交孤儿。
+6. **修订号 ↔ commit 绑定**：修订闭环 commit 的 message 必以版本号开头（初稿 `vN: ...`，修订 `vN.M.K: ...`），双向查询 = `git log --grep`；hash 不写进文档（落地时未知名，避免回填流程）。历史欠账不 amend 已推提交，`git log --follow` 考古兜底。
 
 **当前计划同步——状态跃迁才做，内容修订不做**：根 `PLAN.md` 头部更新行、`FAMILY.md` 当前状态、`FILEMAP.md` versions 行记的是**状态**（活跃版本/提案中/训练中），不是方案内容。方案细节修订（vN.M.K）不动这三处；只在状态跃迁时同步：
 
