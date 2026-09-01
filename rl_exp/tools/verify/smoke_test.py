@@ -14,7 +14,7 @@ import gymnasium as gym
 import torch
 
 import isaaclab_tasks  # noqa: F401
-from lizard_exp.tasks.lizard_env_cfg import LizardFlatEnvCfg
+from rl_exp.tasks.lizard_env_cfg import LizardFlatEnvCfg
 
 cfg = LizardFlatEnvCfg()
 cfg.scene.num_envs = 2

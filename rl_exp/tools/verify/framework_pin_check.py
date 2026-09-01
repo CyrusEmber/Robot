@@ -9,7 +9,7 @@ the whole stack was last verified against.
 
 Pinned IsaacLab: 28a37cecdd433c22d9eabd6a5954add9f13a8951 (tag perf-2026-06-24)
 
-Usage: python lizard_exp\\tools\\verify\\framework_pin_check.py [--isaac-root PATH] [--strict]
+Usage: python rl_exp\\tools\\verify\\framework_pin_check.py [--isaac-root PATH] [--strict]
   --strict also fails on SHA mismatch (default: symbol checks fail, SHA warns)
 """
 import argparse
@@ -56,7 +56,7 @@ def detect_root(cli: str | None) -> pathlib.Path | None:
         candidates.append(pathlib.Path(cli))
     if root := __import__("os").environ.get("ISAACLAB_ROOT"):
         candidates.append(pathlib.Path(root))
-    # absolute() on purpose: keeps a junction path (E:\IsaacLab\lizard_exp\...)
+    # absolute() on purpose: keeps a junction path (E:\IsaacLab\rl_exp\...)
     # instead of resolving to the real repo, so parents[3] is the IsaacLab root
     here = pathlib.Path(__file__).absolute()
     candidates.append(here.parents[3] if len(here.parents) > 3 else None)

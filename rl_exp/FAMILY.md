@@ -1,7 +1,7 @@
 # Lizard 训练家族总文档
 
 > 一个版本 = 一代训练配方（参数冻结副本 + 版本文档 + 训练记录）。代码共享继承，
-> 参数严格按版本隔离：跑 v1 只读 `versions/v1/lizard_params.yaml`，v2 读 v2 的，
+> 参数严格按版本隔离：跑 v1 只读 `versions/lizard/v1/lizard_params.yaml`，v2 读 v2 的，
 > 开发态 `lizard_params.yaml` 的修改永远不影响已冻结版本。
 > 训练计划/挂账见 [PLAN.md](PLAN.md)；评测协议见 ablation_harness 与
 > skill `isaaclab-eval-harness`。
@@ -10,8 +10,12 @@
 
 - 活跃冻结版本: **v2**（2026-08-31，特权 obs 论文对齐补全，266 → 308 维；
   yaml 与 v1 逐字相同，纯代码级变更。v0/v1 均未训练，v0 = 全量 DR 对照存档）
+- **v3: 提案中**（`versions/lizard/v3/PLAN.md`，2026-09-01：三编码器 + 脚环
+  扫描 + r_fc/c_k/tilt 趴窝修复包；D0 部分决策待拍板，未冻结）
 - teacher 训练: 待启动（PLAN 挂账 #3，v2）
 - 开发态 yaml: `lizard_params.yaml`（家族活实验用，改动不追溯）
+- 布局（2026-09-01 迁移）: 包名 `rl_exp`（家族无关），冻结配方按家族分层
+  `versions/lizard/vN/`；代码只在 git 仓，IsaacLab 根常驻 1 行注册 shim
 
 ## 任务注册表
 
@@ -25,10 +29,10 @@
 | Lizard-Velocity-Rough-Play-v0 | `LizardRoughEnvCfg_PLAY` | 开发态 | 同上，回放 |
 | Lizard-Velocity-Curriculum-Rough-v0 | `LizardCurriculumRoughEnvCfg` | 开发态 | 三课程粗糙变体 |
 | Lizard-Velocity-Curriculum-Rough-Play-v0 | `LizardCurriculumRoughEnvCfg_PLAY` | 开发态 | 同上，回放 |
-| **Lizard-Rough-v2** | `LizardRoughTeacherEnvCfg` | **versions/v2（冻结）** | teacher Phase 1（特权 actor，最新） |
-| Lizard-Rough-Play-v2 | `LizardRoughTeacherEnvCfg_PLAY` | **versions/v2（冻结）** | teacher 回放 |
-| Lizard-Rough-v1 | `LizardRoughTeacherEnvCfg_V1` | versions/v1（冻结） | v1 配方复现入口（obs 266） |
-| Lizard-Rough-Play-v1 | `LizardRoughTeacherEnvCfg_V1_PLAY` | versions/v1（冻结） | v1 配方回放 |
+| **Lizard-Rough-v2** | `LizardRoughTeacherEnvCfg` | **versions/lizard/v2（冻结）** | teacher Phase 1（特权 actor，最新） |
+| Lizard-Rough-Play-v2 | `LizardRoughTeacherEnvCfg_PLAY` | **versions/lizard/v2（冻结）** | teacher 回放 |
+| Lizard-Rough-v1 | `LizardRoughTeacherEnvCfg_V1` | versions/lizard/v1（冻结） | v1 配方复现入口（obs 266） |
+| Lizard-Rough-Play-v1 | `LizardRoughTeacherEnvCfg_V1_PLAY` | versions/lizard/v1（冻结） | v1 配方回放 |
 
 注：teacher 任务 id 与配方版本同步，且**全部常驻注册**——旧版本不会因代码
 演进而失复现（机制见下节"版本差异结构"）。`Lizard-Rough-v0` 无任务 id
@@ -69,14 +73,14 @@ wrench 6 | thigh_shank 8 | friction 4 | normals 12 | forces 12 | mass 27 | air 4
 
 | 版本 | 日期 | 摘要 | 文档 |
 |---|---|---|---|
-| v0 | 2026-08-28 | 首版冻结：72kg、DR 全套、基线奖励（回滚态）、teacher 特权 obs。未训练即被 v1 取代，存档作全量 DR 对照 | [versions/v0/NOTES.md](versions/v0/NOTES.md) |
-| v1 | 2026-08-31 | teacher 首跑：v0 仅 DR 段全部收窄（无一归零），验证"特权+锁脊柱+轻扰动"能否出步态。未训练即被 v2 取代，任务 id 常驻可复现 | [versions/v1/NOTES.md](versions/v1/NOTES.md) |
-| v2 | 2026-08-31 | 特权 obs 论文对齐补全（+forces/normals/friction/thigh-shank/wrench 共 42 维，266→308）；yaml 与 v1 相同 | [versions/v2/NOTES.md](versions/v2/NOTES.md) |
+| v0 | 2026-08-28 | 首版冻结：72kg、DR 全套、基线奖励（回滚态）、teacher 特权 obs。未训练即被 v1 取代，存档作全量 DR 对照 | [versions/lizard/v0/NOTES.md](versions/lizard/v0/NOTES.md) |
+| v1 | 2026-08-31 | teacher 首跑：v0 仅 DR 段全部收窄（无一归零），验证"特权+锁脊柱+轻扰动"能否出步态。未训练即被 v2 取代，任务 id 常驻可复现 | [versions/lizard/v1/NOTES.md](versions/lizard/v1/NOTES.md) |
+| v2 | 2026-08-31 | 特权 obs 论文对齐补全（+forces/normals/friction/thigh-shank/wrench 共 42 维，266→308）；yaml 与 v1 相同 | [versions/lizard/v2/NOTES.md](versions/lizard/v2/NOTES.md) |
 
-## 代码地图（lizard_exp\tasks\，自有代码 100% 自包含）
+## 代码地图（rl_exp\tasks\，自有代码 100% 自包含）
 
 ```
-lizard_exp\
+rl_exp\
 ├─ tasks\                            任务包（2026-08-28 从 fork 源码树收编）
 │  ├─ __init__.py                    gym 注册表（全部 12 个任务 id）
 │  ├─ play_utils.py                  PLAY 公共接线（DR 事件名清单 + apply_play_wiring，
@@ -91,7 +95,7 @@ lizard_exp\
 │  ├─ teacher_mdp.py                 特权 obs term（接触/力/法线/摩擦/外力/air time/质量）
 │  ├─ staged_curriculum.py           通用课程组件（原 velocity/mdp/ 收编）
 │  └─ agents\rsl_rl_ppo_cfg.py       runner cfg（experiment_name 按任务族隔离）
-├─ versions\vN\                      冻结参数副本 + NOTES.md + tb_scalars.csv
+├─ versions\lizard\vN\                      冻结参数副本 + NOTES.md + tb_scalars.csv
 ├─ tools\                            工具脚本（2026-08-31 分类归档）
 │  ├─ pipeline\                      convert_urdf / convert_stl_to_obj / flatten_usd / export_ue
 │  ├─ verify\                        teacher_smoke / smoke_test / position_check / pose_check
@@ -109,10 +113,10 @@ lizard_exp\
 
 | 位置 | 内容 |
 |---|---|
-| `config\lizard\__init__.py` | 10 行 shim：sys.path 插入 IsaacLab 根 + `import lizard_exp.tasks`（`import isaaclab_tasks` 时自动触发注册） |
+| `config\lizard\__init__.py` | 10 行 shim：sys.path 插入 IsaacLab 根 + `import rl_exp.tasks`（`import isaaclab_tasks` 时自动触发注册） |
 | `scripts\...\rsl_rl\play.py` | 键盘遥控回退补丁（6 行） |
 
-**import 可达性**：venv site-packages 有 `lizard_exp.pth`（指向 E:\IsaacLab）→ `import lizard_exp` 全局可达。新机器摆位步骤见仓根 `README.md`。
+**import 可达性**：venv site-packages 有 `rl_exp.pth`（指向 E:\IsaacLab）→ `import rl_exp` 全局可达。新机器摆位步骤见仓根 `README.md`。
 
 **离线闸门**：`tools\verify\run_offline_checks.bat`（框架 pin / DR parity / recovery 等价 /
 课程单测，秒级不起仿真）。改 `tasks\*.py` 或 harness 后、commit 前必跑；升级 IsaacLab
@@ -124,13 +128,13 @@ lizard_exp\
 |---|---|---|
 | 每迭代 | success_rate / reward / curriculum 曲线 | log 目录 TB 事件文件 → `dump_tb.py` 导 csv |
 | 每次 eval | 协议跑分（nominal/robust/逐地形） | `ablation_harness/results/locomotion_eval_v1/` |
-| 每版本 | 目的/改动/命令/结果/结论 | `versions/vN/NOTES.md` |
+| 每版本 | 目的/改动/命令/结果/结论 | `versions/lizard/vN/NOTES.md` |
 | 家族层 | 版本历史 / 任务表 / 代码地图 | 本文档 |
 
 ## 开新版本流程（vN → vN+1）
 
-1. `copy versions\vN versions\vN+1`（含 yaml），改 `versions/vN+1/lizard_params.yaml` 参数
-2. 写 `versions/vN+1/NOTES.md`（目的/假设/相对上版 diff）
+1. `copy versions\lizard\vN versions\lizard\vN+1`（含 yaml），改 `versions/lizard/vN+1/lizard_params.yaml` 参数
+2. 写 `versions/lizard/vN+1/NOTES.md`（目的/假设/相对上版 diff）
 3. 代码级结构变更（新 obs/reward/action term）走 **spec 结构**：
    - 基类 wire 新 term，`TEACHER_PRIVILEGED_SPEC` 加 `"vN+1": {...vN 集合, "新term名"}`；
      **禁止修改任何已发布 term 的实现**（会破坏旧版本复现）

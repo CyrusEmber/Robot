@@ -22,8 +22,8 @@ from isaaclab.utils.configclass import configclass
 from isaaclab.utils.noise import UniformNoiseCfg as Unoise
 
 import isaaclab_tasks.manager_based.locomotion.velocity.mdp as mdp
-from lizard_exp.tasks.lizard_env_cfg import LizardFlatEnvCfg
-from lizard_exp.tasks.play_utils import apply_play_wiring
+from rl_exp.tasks.lizard_env_cfg import LizardFlatEnvCfg
+from rl_exp.tasks.play_utils import apply_play_wiring
 
 # stock rough terrains are sized for ~0.5 m robots (8x8 m tiles, 0.05-0.23 m
 # steps); the lizard is 3.6 m long with 1.4 m leg reach -> scale obstacles ~2x

@@ -7,7 +7,7 @@ make this script silently read the wrong columns. The printed LAYOUT line is
 the machine view of the obs layout; FAMILY.md's table is the human view --
 compare them when either changes.
 
-Expected total dim is pinned per recipe version (versions/vN/NOTES.md).
+Expected total dim is pinned per recipe version (versions/lizard/vN/NOTES.md).
 """
 
 import argparse
@@ -23,11 +23,11 @@ import gymnasium as gym
 import torch
 
 import isaaclab_tasks  # noqa: F401
-from lizard_exp.tasks.teacher_env_cfg import (
+from rl_exp.tasks.teacher_env_cfg import (
     LizardRoughTeacherEnvCfg_PLAY,
 )
 
-EXPECTED_POLICY_DIM = 308  # v2 recipe, see versions/v2/NOTES.md
+EXPECTED_POLICY_DIM = 308  # v2 recipe, see versions/lizard/v2/NOTES.md
 
 cfg = LizardRoughTeacherEnvCfg_PLAY()
 cfg.scene.num_envs = 2

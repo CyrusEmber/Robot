@@ -1,7 +1,10 @@
 # Lizard 26 关节四足机器人训练计划
 
-> SSOT: `E:\IsaacLab\lizard_exp\`（参数 `lizard_params.yaml`，几何 `lizard.urdf`，管线脚本 `blender\`）
-> 更新: 2026-08-28 v2.1（teacher 快照落地 + 冒烟通过）
+> SSOT: rl_exp git 仓（例 `E:\lizard_migration\rl_exp\`；参数 `lizard_params.yaml`，
+> 几何 `lizard.urdf`，管线脚本 `blender\`；版本冻结 `versions\lizard\vN\`，
+> 版本级计划归各自目录）。代码不复制进 IsaacLab 根，部署见仓根 README。
+> 更新: 2026-09-01（v3 提案 `versions\lizard\v3\PLAN.md`；包名 lizard_exp→rl_exp；
+> versions 家族分层；上一版 2026-08-28 v2.1 teacher 快照落地 + 冒烟通过）
 
 ## 1. 目标
 
@@ -62,7 +65,7 @@ Phase 3  部署: student → ONNX → UE
 
 决策记录:
 
-- **参数版本化**（2026-08-28，用户拍板）: `lizard_exp/versions/vN/` 冻结参数副本 +
+- **参数版本化**（2026-08-28，用户拍板）: `rl_exp/versions/lizard/vN/` 冻结参数副本 +
   NOTES.md + tb_scalars.csv；跑 vN 只读 vN 的副本（teacher v0 已钉死 `TEACHER_PARAMS_VERSION="v0"`）。
   家族总文档 `FAMILY.md`（任务注册表/版本历史/开新版本流程）。配方变更才升版，换 seed 不升。
 - **teacher actor 吃特权**（Miki 式 A 方案，用户拍板），蒸馏成本（belief encoder 全套）接受。
@@ -153,11 +156,11 @@ python scripts\reinforcement_learning\rsl_rl\train.py --task Lizard-Rough-v0 --m
 python scripts\reinforcement_learning\rsl_rl\play.py --task Lizard-Rough-Play-v0 --num_envs 50 --checkpoint <model.pt>
 
 :: 验证工具（E:\IsaacLab 根目录）
-python lizard_exp\tools\verify\position_check.py --headless --rough   :: 站立/受力
-python lizard_exp\tools\diagnose\debug_pose.py --headless             :: 腿对称性
-python lizard_exp\tools\verify\view_lizard.py --viz kit               :: GUI 观察（注意此脚本挂 Flat-Play 任务）
-python lizard_exp\tools\trainlog\read_curriculum.py                   :: 课程终态（旧训练）
-python lizard_exp\tools\verify\teacher_smoke.py --headless            :: teacher env 冒烟（obs 维度/有限性）
+python rl_exp\tools\verify\position_check.py --headless --rough   :: 站立/受力
+python rl_exp\tools\diagnose\debug_pose.py --headless             :: 腿对称性
+python rl_exp\tools\verify\view_lizard.py --viz kit               :: GUI 观察（注意此脚本挂 Flat-Play 任务）
+python rl_exp\tools\trainlog\read_curriculum.py                   :: 课程终态（旧训练）
+python rl_exp\tools\verify\teacher_smoke.py --headless            :: teacher env 冒烟（obs 维度/有限性）
 ```
 
 ## 7. 挂账清单

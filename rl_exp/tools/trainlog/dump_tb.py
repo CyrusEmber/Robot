@@ -10,9 +10,9 @@ into any notebook/sheet, or keep it in versions/<v>/ as the frozen record of
 "what happened per iteration" (success_rate, rewards, curriculum levels...).
 
 Usage (from E:\\IsaacLab):
-    python lizard_exp\\dump_tb.py --log_dir logs/rsl_rl/lizard_rough_teacher/<run> ^
-        --out lizard_exp\\versions\\v0\\tb_scalars.csv
-    python lizard_exp\\dump_tb.py --log_dir <run> --list_tags   # inspect first
+    python rl_exp\\dump_tb.py --log_dir logs/rsl_rl/lizard_rough_teacher/<run> ^
+        --out rl_exp\\versions\\v0\\tb_scalars.csv
+    python rl_exp\\dump_tb.py --log_dir <run> --list_tags   # inspect first
 """
 
 from __future__ import annotations

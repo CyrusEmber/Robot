@@ -24,8 +24,8 @@ import gymnasium as gym
 import torch
 
 import isaaclab_tasks  # noqa: F401
-from lizard_exp.tasks.lizard_env_cfg import LizardFlatEnvCfg_PLAY
-from lizard_exp.tasks.curriculum_rough_env_cfg import (
+from rl_exp.tasks.lizard_env_cfg import LizardFlatEnvCfg_PLAY
+from rl_exp.tasks.curriculum_rough_env_cfg import (
     LizardCurriculumRoughEnvCfg_PLAY,
 )
 

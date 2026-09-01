@@ -22,14 +22,14 @@ Six checks, all machine-readable, all fail under --strict:
    ``Robot/Geometry/base_link``), every ``joint_order`` entry as ``<name>_joint``,
    and every body-name pattern in the dev AND frozen version yamls matching at
    least one link. Catches asset regeneration that renames/drops prims.
-6. asset lock: ``versions/vN/asset_lock.json`` pins sha256 of lizard.urdf +
+6. asset lock: ``versions/lizard/vN/asset_lock.json`` pins sha256 of lizard.urdf +
    lizard.usda at freeze time. Frozen yamls pin the usd PATH, not its CONTENT,
    so an in-place asset regeneration silently breaks working-tree reproduction
    of every resident teacher task id; this check makes that a reviewed commit
    (refresh locks with --update-locks in the same change that retires assets).
 
-Usage: python lizard_exp\\tools\\verify\\check_dr_parity.py [--strict]
-       python lizard_exp\\tools\\verify\\check_dr_parity.py --update-locks
+Usage: python rl_exp\\tools\\verify\\check_dr_parity.py [--strict]
+       python rl_exp\\tools\\verify\\check_dr_parity.py --update-locks
 """
 import argparse
 import hashlib
@@ -39,14 +39,14 @@ import re
 import sys
 
 _REPO = pathlib.Path(__file__).resolve().parents[3]
-_EXP = _REPO / "lizard_exp"
+_EXP = _REPO / "rl_exp"
 _TASKS = _EXP / "tasks"
 _FAMILY = _TASKS / "lizard_env_cfg.py"
 _TEACHER = _TASKS / "teacher_env_cfg.py"
 _PLAY_UTILS = _TASKS / "play_utils.py"
 _DR_CONTROLLER = _REPO / "ablation_harness" / "components" / "dr_controller.py"
 _VERSIONS = _EXP / "versions"
-# asset artifacts pinned by versions/vN/asset_lock.json (paths relative to lizard_exp)
+# asset artifacts pinned by versions/lizard/vN/asset_lock.json (paths relative to rl_exp)
 _LOCK_FILES = ("lizard.urdf", "assets/lizard/lizard.usda")
 
 # wiring lines that only exist on one side BY DESIGN (reviewed divergences)
@@ -176,10 +176,10 @@ def _yaml_block_list(text: str, key: str) -> list[str]:
 
 def _version_yamls() -> dict[str, pathlib.Path]:
     yamls = {"dev": _EXP / "lizard_params.yaml"}
-    for vdir in sorted(_VERSIONS.glob("v*")):
+    for vdir in sorted(_VERSIONS.glob("*/v*")):
         cfg = vdir / "lizard_params.yaml"
         if cfg.exists():
-            yamls[vdir.name] = cfg
+            yamls[str(vdir.relative_to(_VERSIONS))] = cfg
     return yamls
 
 
@@ -219,7 +219,7 @@ def _asset_hashes() -> dict[str, str]:
 
 def update_asset_locks() -> None:
     current = _asset_hashes()
-    for vdir in sorted(_VERSIONS.glob("v*")):
+    for vdir in sorted(_VERSIONS.glob("*/v*")):
         if not (vdir / "lizard_params.yaml").exists():
             continue
         payload = {
@@ -229,25 +229,26 @@ def update_asset_locks() -> None:
         }
         (vdir / "asset_lock.json").write_text(
             json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        print(f"  locked {vdir.name}")
+        print(f"  locked {vdir.relative_to(_VERSIONS)}")
 
 
 def check_asset_locks() -> list[str]:
     problems = []
     current = _asset_hashes()
-    for vdir in sorted(_VERSIONS.glob("v*")):
+    for vdir in sorted(_VERSIONS.glob("*/v*")):
         if not (vdir / "lizard_params.yaml").exists():
             continue
+        vtag = str(vdir.relative_to(_VERSIONS))
         lock = vdir / "asset_lock.json"
         if not lock.exists():
-            problems.append(f"{vdir.name}: no asset_lock.json (run --update-locks once)")
+            problems.append(f"{vtag}: no asset_lock.json (run --update-locks once)")
             continue
         recorded = json.loads(lock.read_text(encoding="utf-8"))["files"]
         for rel, sha in current.items():
             if recorded.get(rel) != sha:
-                problems.append(f"{vdir.name}: asset changed since freeze: {rel} "
+                problems.append(f"{vtag}: asset changed since freeze: {rel} "
                                 f"{recorded.get(rel, '?')[:8]} -> {sha[:8]}")
-    print(f"  versions locked: {len(list(_VERSIONS.glob('v*')))}")
+    print(f"  versions locked: {len(list(_VERSIONS.glob('*/v*')))}")
     return problems
 
 
@@ -255,7 +256,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--strict", action="store_true")
     parser.add_argument("--update-locks", action="store_true",
-                        help="write versions/vN/asset_lock.json from current assets and exit")
+                        help="write versions/lizard/vN/asset_lock.json from current assets and exit")
     args = parser.parse_args()
 
     if args.update_locks:

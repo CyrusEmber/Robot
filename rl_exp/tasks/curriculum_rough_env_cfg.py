@@ -12,13 +12,13 @@ curriculum from the rough base stays active alongside bone/speed/turning.
 
 from isaaclab.utils.configclass import configclass
 
-from lizard_exp.tasks.lizard_env_cfg import _load_params
-from lizard_exp.tasks.curriculum_env_cfg import (
+from rl_exp.tasks.lizard_env_cfg import _load_params
+from rl_exp.tasks.curriculum_env_cfg import (
     LizardCurriculumActionsCfg,
     _make_stages,
 )
-from lizard_exp.tasks.play_utils import apply_play_wiring
-from lizard_exp.tasks.rough_env_cfg import LizardRoughEnvCfg
+from rl_exp.tasks.play_utils import apply_play_wiring
+from rl_exp.tasks.rough_env_cfg import LizardRoughEnvCfg
 
 
 @configclass

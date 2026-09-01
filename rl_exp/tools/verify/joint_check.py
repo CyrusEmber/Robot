@@ -13,7 +13,7 @@ simulation_app = app_launcher.app
 import gymnasium as gym
 
 import isaaclab_tasks  # noqa: F401
-from lizard_exp.tasks.lizard_env_cfg import LizardFlatEnvCfg_PLAY
+from rl_exp.tasks.lizard_env_cfg import LizardFlatEnvCfg_PLAY
 
 cfg = LizardFlatEnvCfg_PLAY()
 cfg.scene.num_envs = 1

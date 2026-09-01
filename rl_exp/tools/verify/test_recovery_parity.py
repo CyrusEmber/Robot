@@ -7,7 +7,7 @@ loop on random series and on edge cases. The cleanup commit that vectorized
 it claimed a parity pass but never committed the test -- this is that missing
 artifact.
 
-Usage: python lizard_exp\\tools\\verify\\test_recovery_parity.py
+Usage: python rl_exp\\tools\\verify\\test_recovery_parity.py
 """
 import pathlib
 import sys

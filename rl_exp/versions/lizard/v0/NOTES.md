@@ -14,4 +14,4 @@
 - 逐迭代曲线: 无（未训练）
 - 结论/下一步: 已被 v1 取代（2026-08-31）。全量 DR 保留作对照基准，
   teacher 走稳后按 v2 逐档加回。任务 id `Lizard-Rough-v0` 已注销，
-  现行 teacher 任务为 `Lizard-Rough-v1`（读 versions/v1）
+  现行 teacher 任务为 `Lizard-Rough-v1`（读 versions/lizard/v1）

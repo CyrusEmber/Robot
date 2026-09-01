@@ -11,7 +11,7 @@ lizard-family intermediate class -- so the Phase 2 distillation keeps a stable
 teacher recipe while the lizard family keeps evolving as the live experiment
 bed (plan §4.1). Robot, terrain scaling, height scanner and the
 domain-randomization wiring are copied in here (frozen); numeric values still
-come from lizard_exp/lizard_params.yaml (single source of truth).
+come from rl_exp/lizard_params.yaml (single source of truth).
 
 The teacher ACTOR receives privileged simulation ground truth (Miki et al.
 2022): clean height scan, true base velocities, foot contact flags, swing
@@ -43,17 +43,20 @@ from isaaclab_tasks.manager_based.locomotion.velocity.velocity_env_cfg import (
 )
 from isaaclab_tasks.utils import preset
 
-from lizard_exp.tasks import teacher_mdp
-from lizard_exp.tasks.play_utils import apply_play_wiring
+from rl_exp.tasks import teacher_mdp
+from rl_exp.tasks.play_utils import apply_play_wiring
 
-# this file lives at lizard_exp/tasks/teacher_env_cfg.py -> exp root is parents[1]
-_LIZARD_EXP_DIR = pathlib.Path(__file__).resolve().parents[1]
+# this file lives at rl_exp/tasks/teacher_env_cfg.py -> exp root is parents[1]
+_RL_EXP_DIR = pathlib.Path(__file__).resolve().parents[1]
 
+# family layer constant -- own copy by the zero-family-import discipline (drift
+# fails loudly: wrong path raises at cfg construction)
+_VERSION_FAMILY = "lizard"
 
 
 def _load_params(version: str) -> dict:
     """Load the frozen lizard_params.yaml copy of ``version`` (never the dev yaml)."""
-    path = _LIZARD_EXP_DIR / "versions" / version / "lizard_params.yaml"
+    path = _RL_EXP_DIR / "versions" / _VERSION_FAMILY / version / "lizard_params.yaml"
     with open(path, encoding="utf-8") as f:
         return yaml.safe_load(f)
 
@@ -165,7 +168,7 @@ class LizardRoughTeacherEnvCfg(LocomotionVelocityRoughEnvCfg):
     includes is governed by ``TEACHER_PRIVILEGED_SPEC`` above.
     """
 
-    # v2 = latest (paper-aligned privileged obs); see versions/v2/NOTES.md
+    # v2 = latest (paper-aligned privileged obs); see versions/lizard/v2/NOTES.md
     params_version = "v2"
 
     def __post_init__(self):
@@ -202,7 +205,7 @@ class LizardRoughTeacherEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.scene.robot = ArticulationCfg(
             prim_path="{ENV_REGEX_NS}/Robot",
             spawn=sim_utils.UsdFileCfg(
-                usd_path=str(_LIZARD_EXP_DIR / robot_params["usd_path"]),
+                usd_path=str(_RL_EXP_DIR / robot_params["usd_path"]),
                 activate_contact_sensors=True,
                 rigid_props=sim_utils.RigidBodyPropertiesCfg(
                     disable_gravity=False,

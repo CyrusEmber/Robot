@@ -6,7 +6,7 @@
 
 robot:
   name: lizard
-  # produced by convert_urdf.py: {lizard_exp}/assets/lizard/lizard.usda
+  # produced by convert_urdf.py: {rl_exp}/assets/lizard/lizard.usda
   usd_path: assets/lizard/lizard.usda
   base_body_name: base_link
   # zero pose = natural stance (posed in Blender, baked into geometry):

@@ -3,4 +3,4 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""lizard_exp: self-contained lizard training project (params, tasks, tools, docs)."""
+"""rl_exp: self-contained lizard training project (params, tasks, tools, docs)."""

@@ -13,7 +13,7 @@ whole block), so the wiring lives here exactly once: PLAY classes call
 
 This list is duplicated in ``ablation_harness/components/dr_controller.py``
 (``_DR_EVENT_NAMES``, eval modes) -- the two must stay in sync. The sync is
-machine-enforced: ``lizard_exp/tools/verify/check_dr_parity.py`` diffs the
+machine-enforced: ``rl_exp/tools/verify/check_dr_parity.py`` diffs the
 two lists and fails if any ``*_PLAY`` class lacks the wiring call.
 
 Deliberately dependency-free (no cfg semantics, no family imports) so the

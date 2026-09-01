@@ -7,7 +7,7 @@
 
 import torch
 
-from lizard_exp.tasks.staged_curriculum import (
+from rl_exp.tasks.staged_curriculum import (
     StagedCurriculumTerm,
     StagedCurriculumTermCfg,
     StageCfg,

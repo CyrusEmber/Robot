@@ -3,19 +3,12 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""Shim: lizard task registration lives in lizard_exp (self-contained project).
+"""Shim: lizard task registration lives in rl_exp (self-contained project).
 
 This file must stay inside isaaclab_tasks so that ``import isaaclab_tasks``
 triggers registration; everything else (env cfgs, agents, curriculum
-component, registrations) lives in ``E:\\IsaacLab\\lizard_exp\\tasks``.
+component, registrations) lives in the rl_exp git repo, made importable by the
+venv .pth file (repo README, deployment step 1).
 """
 
-import pathlib
-import sys
-
-# config/<robot>/__init__.py -> IsaacLab root is parents[8]
-_ISAAC_ROOT = str(pathlib.Path(__file__).resolve().parents[8])
-if _ISAAC_ROOT not in sys.path:
-    sys.path.insert(0, _ISAAC_ROOT)
-
-import lizard_exp.tasks  # noqa: E402,F401  (registers all lizard gym tasks)
+import rl_exp.tasks  # noqa: F401  (registers all lizard gym tasks)

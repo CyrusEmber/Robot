@@ -23,17 +23,17 @@ concatenated action layout matches the articulation tree order.
 from isaaclab.utils.configclass import configclass
 
 import isaaclab_tasks.manager_based.locomotion.velocity.mdp as mdp
-from lizard_exp.tasks.lizard_env_cfg import (
+from rl_exp.tasks.lizard_env_cfg import (
     LizardFlatEnvCfg,
     _load_params,
 )
-from lizard_exp.tasks.staged_curriculum import (
+from rl_exp.tasks.staged_curriculum import (
     StagedCurriculumTerm,
     StagedCurriculumTermCfg,
     StageCfg,
 )
 from isaaclab_tasks.manager_based.locomotion.velocity.velocity_env_cfg import ActionsCfg
-from lizard_exp.tasks.play_utils import apply_play_wiring
+from rl_exp.tasks.play_utils import apply_play_wiring
 
 
 @configclass

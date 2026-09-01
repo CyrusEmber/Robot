@@ -1,5 +1,5 @@
-asset_path: E:\IsaacLab\lizard_exp\lizard.urdf
-usd_dir: E:\IsaacLab\lizard_exp\assets
+asset_path: E:\IsaacLab\rl_exp\lizard.urdf
+usd_dir: E:\IsaacLab\rl_exp\assets
 usd_file_name: lizard\lizard.usda
 force_usd_conversion: true
 make_instanceable: true

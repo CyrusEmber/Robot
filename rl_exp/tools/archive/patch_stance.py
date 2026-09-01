@@ -19,7 +19,7 @@ import math
 import pathlib
 import re
 
-# file lives at lizard_exp/tools/archive/ -> exp root is parents[2]
+# file lives at rl_exp/tools/archive/ -> exp root is parents[2]
 URDF = pathlib.Path(__file__).resolve().parents[2] / "lizard.urdf"
 THETA = 0.35
 FOLD = math.pi / 2 - THETA

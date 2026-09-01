@@ -6,9 +6,9 @@
 """Lizard (26-joint) flat-ground velocity tracking.
 
 Built directly on :class:`LocomotionVelocityRoughEnvCfg` (no intermediate robot
-base class). Robot geometry comes from lizard_exp/lizard.urdf (SSOT, Blender
+base class). Robot geometry comes from rl_exp/lizard.urdf (SSOT, Blender
 generated: 16 leg joints HAA/HFE/KFE/FOOT x4 + 10 spine joints), control
-parameters from lizard_exp/lizard_params.yaml (SSOT).
+parameters from rl_exp/lizard_params.yaml (SSOT).
 
 Domain randomization (mass/CoM/inertia/friction/actuator gains/joint
 parameters/external forces/pushes) is configured in the SSOT yaml and wired
@@ -30,10 +30,15 @@ import isaaclab_tasks.manager_based.locomotion.velocity.mdp as mdp
 from isaaclab_tasks.manager_based.locomotion.velocity.velocity_env_cfg import LocomotionVelocityRoughEnvCfg
 from isaaclab_tasks.utils import preset
 
-from lizard_exp.tasks.play_utils import apply_play_wiring
+from rl_exp.tasks.play_utils import apply_play_wiring
 
-# this file lives at lizard_exp/tasks/lizard_env_cfg.py -> exp root is parents[1]
-_LIZARD_EXP_DIR = pathlib.Path(__file__).resolve().parents[1]
+# this file lives at rl_exp/tasks/lizard_env_cfg.py -> exp root is parents[1]
+_RL_EXP_DIR = pathlib.Path(__file__).resolve().parents[1]
+
+# family namespace layer: frozen recipes live under versions/<family>/<version>/
+# (teacher_env_cfg.py keeps its own copy of this constant -- loud failure on
+# drift: a wrong path raises at cfg construction, never silently trains stale)
+_VERSION_FAMILY = "lizard"
 
 
 def _load_params(version: str | None = None) -> dict:
@@ -41,14 +46,14 @@ def _load_params(version: str | None = None) -> dict:
 
     Args:
         version: Version name (e.g. "v0") to read the FROZEN copy under
-            ``lizard_exp/versions/<version>/lizard_params.yaml``, or None to
+            ``rl_exp/versions/<family>/<version>/lizard_params.yaml``, or None to
             read the live dev yaml. Versioned runs must always pass their own
             version so dev-yaml edits can never drift a frozen recipe.
     """
     if version is None:
-        path = _LIZARD_EXP_DIR / "lizard_params.yaml"
+        path = _RL_EXP_DIR / "lizard_params.yaml"
     else:
-        path = _LIZARD_EXP_DIR / "versions" / version / "lizard_params.yaml"
+        path = _RL_EXP_DIR / "versions" / _VERSION_FAMILY / version / "lizard_params.yaml"
     with open(path, encoding="utf-8") as f:
         return yaml.safe_load(f)
 
@@ -58,7 +63,7 @@ class LizardFlatEnvCfg(LocomotionVelocityRoughEnvCfg):
     """26-joint lizard on flat ground, full domain randomization."""
 
     # param generation: None = live dev yaml (family experiments);
-    # a frozen version ("v0", "v1", ...) reads versions/<version>/lizard_params.yaml
+    # a frozen version ("v0", "v1", ...) reads versions/<family>/<version>/lizard_params.yaml
     params_version = None
 
     def __post_init__(self):
@@ -90,7 +95,7 @@ class LizardFlatEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.scene.robot = ArticulationCfg(
             prim_path="{ENV_REGEX_NS}/Robot",
             spawn=sim_utils.UsdFileCfg(
-                usd_path=str(_LIZARD_EXP_DIR / robot_params["usd_path"]),
+                usd_path=str(_RL_EXP_DIR / robot_params["usd_path"]),
                 activate_contact_sensors=True,
                 rigid_props=sim_utils.RigidBodyPropertiesCfg(
                     disable_gravity=False,
