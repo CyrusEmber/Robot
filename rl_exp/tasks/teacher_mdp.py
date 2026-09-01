@@ -21,8 +21,15 @@ import warp as wp
 
 from isaaclab.envs import mdp
 from isaaclab.managers import ManagerTermBase, ObservationTermCfg, SceneEntityCfg
-from isaaclab.sensors.ray_caster import RayCaster
 from isaaclab.utils.warp.kernels import raycast_mesh_masked_kernel
+
+# ponytail: RayCaster is deliberately NOT imported at module top. This module is
+# imported by env cfgs during hydra compose (pre-AppLauncher); a top-level
+# `from isaaclab.sensors.ray_caster import RayCaster` drags in
+# isaaclab.sim.simulation_context -> isaacsim -> pip usd-core pxr, which poisons
+# sys.modules["pxr"] before Kit starts and breaks omni.kit.usd.mdl
+# ("extension class wrapper for base class TfNotice has not been created yet").
+# Import it lazily at runtime instead (FootContactNormalsTerm.__init__).
 
 if __name__ == "__main__":
     raise RuntimeError("This module is not meant to be executed directly.")
@@ -144,6 +151,8 @@ class FootContactNormalsTerm(ManagerTermBase):
 
     def __init__(self, cfg: ObservationTermCfg, env):
         super().__init__(cfg, env)
+        from isaaclab.sensors.ray_caster import RayCaster  # lazy: see module-top note
+
         self.robot = env.scene["robot"]
         self.foot_ids, _ = self.robot.find_bodies(".*_foot")
         device = self.robot.device
