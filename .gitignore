@@ -5,6 +5,7 @@ __pycache__/
 # local junk
 Thumbs.db
 .DS_Store
+_tmp_*
 
 # ponytail upstream clone (update source only, installed artifacts are committed)
 /ponytail/
