@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import csv
 import datetime
+import importlib.metadata
 import json
 import math
 import pathlib
@@ -55,7 +56,7 @@ import torch  # noqa: E402
 import yaml  # noqa: E402
 from rsl_rl.runners import OnPolicyRunner  # noqa: E402
 
-from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper  # noqa: E402
+from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper, handle_deprecated_rsl_rl_cfg  # noqa: E402
 from isaaclab.utils.string import string_to_callable  # noqa: E402
 
 import isaaclab_tasks  # noqa: F401, E402  (registers the gym tasks)
@@ -116,6 +117,9 @@ def _prepare_env(protocol: dict) -> tuple[object, object]:
     spec = gym.spec(args_cli.task)
     env_cfg = string_to_callable(spec.kwargs["env_cfg_entry_point"])()
     agent_cfg = string_to_callable(spec.kwargs["rsl_rl_cfg_entry_point"])()
+    # same legacy-cfg migration train.py does: rsl-rl >= 5 rejects the old
+    # `stochastic`/`init_noise_std` policy fields that the repo cfgs still carry
+    agent_cfg = handle_deprecated_rsl_rl_cfg(agent_cfg, importlib.metadata.version("rsl-rl-lib"))
 
     suite_factory = _SUITE_REGISTRY[protocol["suite"]][1]
     num_cols = int(protocol["suite_layout"]["num_cols"])

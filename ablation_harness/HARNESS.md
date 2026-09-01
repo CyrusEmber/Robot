@@ -10,7 +10,7 @@
 ## 当前状态
 
 - 协议版本：**locomotion_eval_v1**（`protocols/locomotion_eval_v1.yaml` 冻结；`results/` 按协议目录组织）
-- 代码基线：v1（= 本文档建立时的树态：Phase A 修复已落，commit 5725396；更早历史 git 考古）
+- 代码基线：v1.1（v1 + rsl-rl 5.x agent cfg 迁移修复，首个真实 checkpoint 评测跑通）
 - 部署形态：仓根独立目录 + `E:\IsaacLab\ablation_harness` junction（挂账 1 完成后删）
 
 ## 版本历史
@@ -18,6 +18,7 @@
 | 版本 | 日期 | 摘要 | 依据 |
 |---|---|---|---|
 | v1 | 2026-09-01 | 建档基线：协议 locomotion_eval_v1 冻结（早于本文档，git 考古）+ Phase A 修复（eval 快照 / DR 锁面 / smoke 断言，commit 5725396） | — |
+| v1.1 | 2026-09-01 | `eval.py::_prepare_env` 补 `handle_deprecated_rsl_rl_cfg(agent_cfg, rsl-rl 版本)`——train.py 有、harness 无，rsl-rl 5.4.2 的 `MLPModel` 拒收 legacy `stochastic` 字段，带 `--checkpoint` 直接 `TypeError`（v1 之前只跑过零动作冒烟，该路径从未 exercised） | teacher v1 首跑评测 |
 
 ## 挂账
 
@@ -42,3 +43,4 @@ harness 代码高频变更 / 多机器人共用 / 评测协议 v2 出现时 → 
 | 日期 | 版本 | 变更 |
 |---|---|---|
 | 2026-09-01 | v1 建档 | 版本文档从 lizard v3 计划 §7.5 与仓根 PLAN.md 挂账 #12 剥离至此（用户拍板：仓库不拆、只拆版本文档） |
+| 2026-09-01 | v1.1 | agent cfg 迁移修复落地 + teacher v1 六行评测分入 `results/locomotion_eval_v1/`（离线闸门全绿后跑） |
