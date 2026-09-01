@@ -152,6 +152,17 @@ def test_contract_enforcement() -> None:
         pass
 
 
+def test_decaying_lr_ppo_rejects_adaptive_schedule() -> None:
+    from rl_exp.tasks.teacher_networks import DecayingLrPPO
+
+    try:
+        DecayingLrPPO(lr_decay=0.9999, schedule="adaptive")
+        raise AssertionError("adaptive schedule should raise")
+    except ValueError:
+        pass
+    # guard fires before super().__init__, so no PPO args are needed to test it
+
+
 def main() -> int:
     tests = [
         test_actor_forward_and_gradient,
@@ -160,6 +171,7 @@ def main() -> int:
         test_named_submodule_extraction,
         test_export_wrappers,
         test_contract_enforcement,
+        test_decaying_lr_ppo_rejects_adaptive_schedule,
     ]
     for t in tests:
         t()

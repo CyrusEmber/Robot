@@ -195,6 +195,9 @@ v3:
   # r_fc which penalizes swing feet flying TOO HIGH; see PLAN v3.1 D2 note).
   # Penalize hinge: swing foot clearance below `clearance` over its own
   # vertical-ray terrain height. Weight is an estimate -> ablation knob.
+  # SCOPE: max_distance/start_offset govern ONLY the reward's raycast. The priv
+  # obs term foot_contact_normals keeps its frozen v2 geometry (2.0/0.5) by
+  # design -- an obs contract must not move when a reward knob is tuned.
   r_fc:
     clearance: 0.2
     weight: 0.003

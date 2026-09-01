@@ -20,7 +20,10 @@
     权重 0.003；**有意反向偏差**——论文罚"抬太高"）；feet_air_time 特权 obs 保留
   - **D3** c_k 课程：c_k = 0.2^(0.98^iter)，纯函数读 `common_step_counter`，
     乘子挂 q̈/torque/ω_xy 三项（feet_slide 非本仓奖励项——计划笔误，不新增）；
-    接触罚豁免 c_k 恒 -1.0；不挂 CurriculumTerm（规避挂账 #9）
+    接触罚豁免 c_k 恒 -1.0；不挂 CurriculumTerm（规避挂账 #9）；
+    **断点续训注意**：`common_step_counter` 归零 → c_k 回热 0.2 重新爬坡
+    （~140 iters 热身段重走）——已知非 bug，续训 = 从头热身，resume 时在
+    tb 曲线上会看到惩罚项幅值先塌后恢复
   - **D4** DR reset 化 + 锚点缩放（mass/com/inertia/gains/joint 五项
     range 向恒等锚点收拢 × c_k；friction 保持 startup——`foot_friction_truth`
     读回缓存只在 startup 语义有效，F3 偏差声明）

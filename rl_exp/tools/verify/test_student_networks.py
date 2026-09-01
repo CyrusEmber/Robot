@@ -96,13 +96,26 @@ def test_segment_mismatch_raises() -> None:
         obs_normalization=True,
         distribution_cfg={"class_name": "GaussianDistribution", "init_std": 1.0},
     )
-    # student with a different trunk input layout (points/foot shrunk -> latent mismatch)
+    # constructor-reachable mismatch: any segment change also shifts the f_pi
+    # input total, so the total-dim guard fires first
     student = StudentPolicy(proprio_dim=91)
     try:
         student.load_from_teacher(teacher)
         raise AssertionError("segment mismatch should raise")
     except ValueError:
         pass
+    # white-box: poke one bookkeeping attribute at a time so EACH segment
+    # guard is reachable with the f_pi total still matching (constructor params
+    # always shift the total too -- without these cases the finer guards are
+    # dead code)
+    for attr, value in (("proprio_dim", 91), ("extero_latent_dim", 48), ("priv_slot_dim", 20)):
+        student = StudentPolicy()
+        setattr(student, attr, value)
+        try:
+            student.load_from_teacher(teacher)
+            raise AssertionError(f"{attr} mismatch should raise")
+        except ValueError:
+            pass
 
 
 def main() -> int:

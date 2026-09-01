@@ -256,7 +256,17 @@ class DecayingLrPPO(PPO):
 
         Args:
             lr_decay: Multiplicative lr factor applied after each update().
+
+        Raises:
+            ValueError: If ``schedule`` is not ``"fixed"`` -- the adaptive KL
+                scheduler re-derives the lr inside every ``update()`` and
+                silently fights the multiplicative decay.
         """
+        if kwargs.get("schedule") != "fixed":
+            raise ValueError(
+                "DecayingLrPPO requires schedule='fixed': the adaptive KL scheduler "
+                "overwrites the lr every update() and fights the per-iteration decay."
+            )
         super().__init__(*args, **kwargs)
         self._lr_decay = float(lr_decay)
 
