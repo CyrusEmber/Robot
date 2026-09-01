@@ -15,6 +15,8 @@ alwaysApply: false
 
 分层原则：**规则管行为（何时升版、怎么记录、升版流程），FAMILY.md 管事实（任务表/版本史/家族特有机制）**——会随版本增长的数据一律留在文档侧。
 
+**范围边界**：家族外自有子系统（`ablation_harness/` 评测台）的工作不进家族配方计划与家族文档——基础设施待办挂仓根 `PLAN.md` 挂账清单，协议变更走冻结 yaml（`protocols/locomotion_eval_v1.yaml` 模式）；该子系统代码高频变更、多机器人共用或评测协议 v2 出现时，才升 `versions/harness/vN/` 管理（升级触发写在挂账行，防"永远不升"）。
+
 **家族文档路径约定**：每家族一份 `FAMILY.md`，新家族放 `versions/<family>/FAMILY.md`（`versions/**` glob 自动覆盖，本规则无需改）。历史例外：lizard 在 `rl_exp/FAMILY.md`，引用已稳定，不迁移。
 
 ## A. 新建配方版本（vN → vN+1，家族内）

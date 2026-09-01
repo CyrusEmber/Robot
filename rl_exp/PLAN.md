@@ -178,3 +178,4 @@ python rl_exp\tools\verify\teacher_smoke.py --headless            :: teacher env
 | 9 | staged 课程 metric 接线 bug（Curriculum/*/metric 恒 0） | 🟢 低 |
 | 10 | yaml obs_layout 更新（感知版 +扫描差异） | 🟢 文档债 |
 | 11 | DR 放宽策略 / resume 二阶段 | 🟢 走稳后 |
+| 12 | ablation_harness 脱离 IsaacLab 树（G3 剩余，自 v3 计划 §7.5 移入——harness 是共享测量仪器，不属 lizard 配方版本管理）：`eval.py:69-77`（"故意不 resolve" junction hack）/ `run_ablation.py:36` / `_log_dir_for_tag` glob 改读 `RL_ISAAC_ROOT`（缺省向上探测 `source/isaaclab` + `logs`）→ 删 `E:\IsaacLab\ablation_harness` junction。升级触发：harness 代码高频变更 / 多机器人共用 / 评测协议 v2 出现时，升 `versions/harness/vN/` 管理 | 🟡 G3 收尾 |

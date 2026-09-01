@@ -3,7 +3,7 @@
 > 状态：**提案，待确认**——D0 决策门拍板前不动代码。
 > 生成：2026-09-01。来源：全仓 code review + Miki et al. 2022（arXiv:2201.08117,
 > Sci. Robotics）全文核实（正文 + 补充材料 S1–S9）。
-> 修订：v3.1.3（2026-09-01）——二轮 review 修复 + 闸门自定位（G3 部分），明细见 §10 修订记录。
+> 修订：v3.1.4（2026-09-01）——二轮 review 修复 + 闸门自定位 + G3 剩余移仓根挂账，明细见 §10 修订记录。
 > 关联：`PLAN.md`（训练计划/挂账）、`FAMILY.md`（obs 布局 SSOT）。v3 定稿训练后
 > 本文件并入 PLAN.md，FILEMAP 登记随 Phase F 补。
 
@@ -147,7 +147,7 @@ obs 按**三个组**交付 `[proprio 90 | extero 208 | priv 83]`（组名对齐 
 | G0 | 包名 `lizard_exp`→`rl_exp`（git mv + 82 py/44 md 机械替换 + 2 处 `_VERSION_FAMILY` 常量 + check_dr_parity `*/v*` 家族无关 glob）；versions 家族分层 `versions/lizard/vN`；本计划文件 → `versions/lizard/v3/PLAN.md` | ✅ 已执行（闸门 PARITY_OK） |
 | G1 | venv 新增 `rl_exp.pth`（内容 = git 仓 `E:\lizard_migration`）；删旧 `lizard_exp.pth` | ✅ 已执行 |
 | G2 | 删 `E:\IsaacLab\lizard_exp` junction（已悬空）；**`ablation_harness` junction 暂留**（等 G3） | ✅ 部分 |
-| G3 | harness `_ISAAC_ROOT` 参数化：`eval.py:69-77`（"故意不 resolve"hack）、`run_ablation.py:36`、`_log_dir_for_tag` glob——改读 env var `RL_ISAAC_ROOT`（缺省向上探测 `source/isaaclab`+`logs`）；落地后即可删 `ablation_harness` junction | ⏳ 部分：闸门侧已落 `RL_ISAAC_ROOT`（run_offline_checks.bat 自定位 venv python + 根缺省 E:\IsaacLab，framework_pin_check 改读同名变量，2026-09-01，闸门 4/4 绿）；harness eval.py / run_ablation / _log_dir_for_tag 仍待做 |
+| G3 | harness `_ISAAC_ROOT` 参数化：`eval.py:69-77`（"故意不 resolve"hack）、`run_ablation.py:36`、`_log_dir_for_tag` glob——改读 env var `RL_ISAAC_ROOT`（缺省向上探测 `source/isaaclab`+`logs`）；落地后即可删 `ablation_harness` junction | → 移仓根 `PLAN.md` 挂账 #12（harness 侧工作不属 lizard 配方版本管理，2026-09-01）；闸门侧 RL_ISAAC_ROOT 已落（v3.1.3） |
 | G4 | README 部署节重写（git 仓唯一代码家、.pth 指 `<REPO>`、1 shim、junction 过渡说明）；shim 简化为 1 行 import（删 sys.path hack） | ✅ 已执行 |
 
 ✅ 已验证：`import rl_exp.tasks` → gym 注册 12 个 Lizard 任务；`check_dr_parity.py`
@@ -201,3 +201,4 @@ fall_rate 因 DR reset 化 + tilt 终止语义差异跨版本不可比，只做 
 | 2026-09-01 | v3.1.1 | v3.1 修复合入 G0 迁移后的本文件（路径/G 状态保留迁移版）；旧路径副本 lizard_exp/PLAN_V3.md 删除 |
 | 2026-09-01 | v3.1.2 | 用户勘误："不用cfg"实为"不用CPG"（笔误）。D2 swing 判定保持接触态代理并补"用户拍板"标记（文档本就未用 CPG）；撤回 v3.1 的"不设消融档"（系对该笔误的误读），c_0 恢复 yaml 消融变量（0.05/0.2/0.5） |
 | 2026-09-01 | v3.1.3 | 闸门自定位修复（G3 部分）：junction 布局随 G2 删除后 framework_pin_check 自动探测失效——run_offline_checks.bat 自解析 `RL_ISAAC_ROOT`（缺省 E:\IsaacLab）+ venv python（缺省 `<root>\env_isaaclab\Scripts\python.exe`，回退 PATH python）；framework_pin_check 环境变量 ISAACLAB_ROOT→RL_ISAAC_ROOT 与 G3 命名统一。全新 shell 零环境变量闸门 4/4 绿 |
+| 2026-09-01 | v3.1.4 | G3 剩余（harness 侧 _ISAAC_ROOT 参数化）移仓根 PLAN.md 挂账 #12——harness 是共享测量仪器（换家族后仍在），其工作不属 lizard 配方版本管理；升级触发（高频变更/多机器人/协议 v2 → versions/harness/vN）写入挂账行。versioning.mdc 分层原则补范围边界 |
