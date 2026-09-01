@@ -11,7 +11,7 @@
 - 活跃冻结版本: **v2**（2026-08-31，特权 obs 论文对齐补全，266 → 308 维；
   yaml 与 v1 逐字相同，纯代码级变更。v0/v1 均未训练，v0 = 全量 DR 对照存档）
 - **v3: 提案中**（`versions/lizard/v3/PLAN.md`，2026-09-01：三编码器 + 脚环
-  扫描 + r_fc/c_k/tilt 趴窝修复包；D0 部分决策待拍板，未冻结）
+  扫描 + r_fc/c_k/tilt 趴窝修复包；方案细节以版本 PLAN 为 SSOT，本行只记状态）
 - teacher 训练: 待启动（PLAN 挂账 #3，v2）
 - 开发态 yaml: `lizard_params.yaml`（家族活实验用，改动不追溯）
 - 布局（2026-09-01 迁移）: 包名 `rl_exp`（家族无关），冻结配方按家族分层
@@ -77,50 +77,11 @@ wrench 6 | thigh_shank 8 | friction 4 | normals 12 | forces 12 | mass 27 | air 4
 | v1 | 2026-08-31 | teacher 首跑：v0 仅 DR 段全部收窄（无一归零），验证"特权+锁脊柱+轻扰动"能否出步态。未训练即被 v2 取代，任务 id 常驻可复现 | [versions/lizard/v1/NOTES.md](versions/lizard/v1/NOTES.md) |
 | v2 | 2026-08-31 | 特权 obs 论文对齐补全（+forces/normals/friction/thigh-shank/wrench 共 42 维，266→308）；yaml 与 v1 相同 | [versions/lizard/v2/NOTES.md](versions/lizard/v2/NOTES.md) |
 
-## 代码地图（rl_exp\tasks\，自有代码 100% 自包含）
+## 代码地图
 
-```
-rl_exp\
-├─ tasks\                            任务包（2026-08-28 从 fork 源码树收编）
-│  ├─ __init__.py                    gym 注册表（全部 12 个任务 id）
-│  ├─ play_utils.py                  PLAY 公共接线（DR 事件名清单 + apply_play_wiring，
-│  │                                 单一真源，check_dr_parity 机器看守）
-│  ├─ lizard_env_cfg.py              家族平地基座（_load_params 支持版本参数）
-│  │  ├─ rough_env_cfg.py            家族粗糙地形（LIZARD_ROUGH_TERRAINS_CFG）
-│  │  │  └─ curriculum_rough_env_cfg.py  三课程粗糙变体
-│  │  └─ curriculum_env_cfg.py       三课程平地变体 + LizardCurriculumActionsCfg
-│  ├─ teacher_env_cfg.py             teacher 独立快照（params_version 类属性 +
-│  │                                 TEACHER_PRIVILEGED_SPEC 版本差异表 + V1 子类，
-│  │                                 零家族 import；obs 布局见上节）
-│  ├─ teacher_mdp.py                 特权 obs term（接触/力/法线/摩擦/外力/air time/质量）
-│  ├─ staged_curriculum.py           通用课程组件（原 velocity/mdp/ 收编）
-│  └─ agents\rsl_rl_ppo_cfg.py       runner cfg（experiment_name 按任务族隔离）
-├─ versions\lizard\vN\                      冻结参数副本 + NOTES.md + tb_scalars.csv
-├─ tools\                            工具脚本（2026-08-31 分类归档）
-│  ├─ pipeline\                      convert_urdf / convert_stl_to_obj / flatten_usd / export_ue
-│  ├─ verify\                        teacher_smoke / smoke_test / position_check / pose_check
-│  │                                 / joint_check / view_lizard / test_staged_curriculum
-│  │                                 / check_dr_parity / framework_pin_check
-│  │                                 / test_recovery_parity / run_offline_checks.bat
-│  ├─ diagnose\                      debug_pose / diagnose_nan / inspect_blend / inspect_glb / dump_all_parts
-│  ├─ trainlog\                      dump_tb / read_curriculum
-│  └─ archive\                       patch_kfe_axis / patch_stance（仅考古）
-├─ blender\                          站姿 SSOT + 骨骼修复 + URDF 生成
-└─ ue\ / fork_patches\               UE Actor 组装 + 任务注册 shim
-```
-
-**fork 源码树仅剩两处占用**：
-
-| 位置 | 内容 |
-|---|---|
-| `config\lizard\__init__.py` | 10 行 shim：sys.path 插入 IsaacLab 根 + `import rl_exp.tasks`（`import isaaclab_tasks` 时自动触发注册） |
-| `scripts\...\rsl_rl\play.py` | 键盘遥控回退补丁（6 行） |
-
-**import 可达性**：venv site-packages 有 `rl_exp.pth`（指向 E:\IsaacLab）→ `import rl_exp` 全局可达。新机器摆位步骤见仓根 `README.md`。
-
-**离线闸门**：`tools\verify\run_offline_checks.bat`（框架 pin / DR parity / recovery 等价 /
-课程单测，秒级不起仿真）。改 `tasks\*.py` 或 harness 后、commit 前必跑；升级 IsaacLab
-后先跑 `framework_pin_check.py`。已验证 IsaacLab commit：`28a37ce`（perf-2026-06-24）。
+不在此维护：全仓逐文件说明见仓根 `FILEMAP.md`；部署 / import 可达性 /
+离线闸门（`tools\verify\run_offline_checks.bat`，改 `tasks` 后 commit 前必跑）
+见 `README.md`。
 
 ## 记录体系（四层）
 
@@ -129,19 +90,11 @@ rl_exp\
 | 每迭代 | success_rate / reward / curriculum 曲线 | log 目录 TB 事件文件 → `dump_tb.py` 导 csv |
 | 每次 eval | 协议跑分（nominal/robust/逐地形） | `ablation_harness/results/locomotion_eval_v1/` |
 | 每版本 | 目的/改动/命令/结果/结论 | `versions/lizard/vN/NOTES.md` |
-| 家族层 | 版本历史 / 任务表 / 代码地图 | 本文档 |
+| 家族层 | 版本历史 / 任务表 / 家族特有机制 | 本文档 |
 
-## 开新版本流程（vN → vN+1）
+## 开新版本流程
 
-1. `copy versions\lizard\vN versions\lizard\vN+1`（含 yaml），改 `versions/lizard/vN+1/lizard_params.yaml` 参数
-2. 写 `versions/lizard/vN+1/NOTES.md`（目的/假设/相对上版 diff）
-3. 代码级结构变更（新 obs/reward/action term）走 **spec 结构**：
-   - 基类 wire 新 term，`TEACHER_PRIVILEGED_SPEC` 加 `"vN+1": {...vN 集合, "新term名"}`；
-     **禁止修改任何已发布 term 的实现**（会破坏旧版本复现）
-   - `params_version` 类属性指到 vN+1，2 行子类 + `__init__.py` 注册 `Lizard-Rough-vN+1`/`-Play-vN+1`
-   - 纯参数变更（yaml-only）不需要新任务 id：spec 里 vN+1 集合 = vN 集合即可
-4. 训练 → `dump_tb.py` 导曲线 → `run_ablation.py` 跑 eval → 结果回填 NOTES.md
-5. 版本历史表加一行；git 侧 commit + `tag vN+1` + push（tag = 整树快照兜底）
-
-**纪律**：冻结目录只读（改 = 开新版本）；同配方换 seed 重跑不建新版本
-（NOTES 记 seed 即可）；已发布 term 实现永不改语义。
+通用五步（copy 目录 → NOTES 骨架 → 结构变更注册 → 训练回填 → 历史行 + tag）
+已提取至 `.codemaker/rules/versioning.mdc` §A，含 NOTES 必含骨架与红线。
+本家族特有机制 = 「Teacher 特权 obs 布局」节「版本差异结构」段的
+`TEACHER_PRIVILEGED_SPEC` 剥离纪律（已发布 term 实现永不改语义）。
