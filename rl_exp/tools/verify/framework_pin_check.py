@@ -11,6 +11,8 @@ Pinned IsaacLab: 28a37cecdd433c22d9eabd6a5954add9f13a8951 (tag perf-2026-06-24)
 
 Usage: python rl_exp\\tools\\verify\\framework_pin_check.py [--isaac-root PATH] [--strict]
   --strict also fails on SHA mismatch (default: symbol checks fail, SHA warns)
+  Root resolution order: --isaac-root > env RL_ISAAC_ROOT > repo location
+  > venv python location (run_offline_checks.bat sets both env var and venv).
 """
 import argparse
 import pathlib
@@ -54,7 +56,7 @@ def detect_root(cli: str | None) -> pathlib.Path | None:
     candidates = []
     if cli:
         candidates.append(pathlib.Path(cli))
-    if root := __import__("os").environ.get("ISAACLAB_ROOT"):
+    if root := __import__("os").environ.get("RL_ISAAC_ROOT"):
         candidates.append(pathlib.Path(root))
     # absolute() on purpose: keeps a junction path (E:\IsaacLab\rl_exp\...)
     # instead of resolving to the real repo, so parents[3] is the IsaacLab root
