@@ -32,8 +32,8 @@
 | Lizard-Velocity-Rough-Play-v0 | `LizardRoughEnvCfg_PLAY` | 开发态 | 同上，回放 |
 | Lizard-Velocity-Curriculum-Rough-v0 | `LizardCurriculumRoughEnvCfg` | 开发态 | 三课程粗糙变体 |
 | Lizard-Velocity-Curriculum-Rough-Play-v0 | `LizardCurriculumRoughEnvCfg_PLAY` | 开发态 | 同上，回放 |
-| **Lizard-Rough-v2** | `LizardRoughTeacherEnvCfg` | **versions/lizard/v2（冻结）** | teacher Phase 1（特权 actor） |
-| Lizard-Rough-Play-v2 | `LizardRoughTeacherEnvCfg_PLAY` | **versions/lizard/v2（冻结）** | teacher 回放 |
+| **Lizard-Rough-v2** | `LizardRoughTeacherEnvCfg_V2` | **versions/lizard/v2（冻结）** | teacher Phase 1（特权 actor） |
+| Lizard-Rough-Play-v2 | `LizardRoughTeacherEnvCfg_V2_PLAY` | **versions/lizard/v2（冻结）** | teacher 回放 |
 | Lizard-Rough-v1 | `LizardRoughTeacherEnvCfg_V1` | versions/lizard/v1（冻结） | v1 配方复现入口（obs 266） |
 | Lizard-Rough-Play-v1 | `LizardRoughTeacherEnvCfg_V1_PLAY` | versions/lizard/v1（冻结） | v1 配方回放 |
 | **Lizard-Rough-v3** | `LizardRoughTeacherEnvCfg_V3` | **versions/lizard/v3（冻结）** | teacher 论文对齐版（obs 三组 90/208/83，装配完成待训练） |
@@ -104,6 +104,27 @@ v3 的组结构差异（三组拆分/脚环/奖励/DR）全部封装在 `LizardR
 | v1 | 2026-08-31 | teacher 首跑：v0 仅 DR 段全部收窄（无一归零），验证"特权+锁脊柱+轻扰动"能否出步态。已训练 14000 iters 并出评测分（09-01 回填），任务 id 常驻可复现 | [PLAN](v1/PLAN.md) · [NOTES](v1/NOTES.md) |
 | v2 | 2026-08-31 | 特权 obs 论文对齐补全（+forces/normals/friction/thigh-shank/wrench 共 42 维，266→308）；yaml 与 v1 相同 | [PLAN](v2/PLAN.md) · [NOTES](v2/NOTES.md) |
 | v3 | 2026-09-01 | teacher 论文对齐版（obs 三组 90/208/83=381：脚环 extero + SplitEncoderModel 三编码器；tilt 终止 + 防拖 r_fc + c_k 课程 + DR reset 化）。**代码装配完成，训练待启动** | [PLAN](v3/PLAN.md) · [NOTES](v3/NOTES.md) |
+
+## 机体几何备忘（生物比例对账，2026-09-01）
+
+URDF 实测（估 SVL ≈2.0m，尾基在 base 后 1.26m；长轴 = Y）。sprawled 姿态几何本身
+正确：髋侧向 0.32m、股骨近水平外伸 0.42m、胫骨近垂直——high-crouch 教科书构型。
+
+| 段 | 实测 | 相对量 | 生物参照（巨蜥科） | 判定 |
+|---|---|---|---|---|
+| 股骨 | 0.50 m | 25% SVL | 20–25%（科莫多档上限） | ✅ 压着上限 |
+| 胫骨 | 0.382 m | 股:胫 1.3:1 | ≈1:1 | ⚠️ 偏短 |
+| 脚（blade） | 0.131 m | 胫:脚 2.9:1 | 脚 > 胫 | ❌ 严重短（平板简化，已知） |
+| 站高（base z） | 0.94 m | 47% SVL | 50–55% | ⚠️ 略矮（胫/脚短的连带） |
+| 肢质量 | ≈5.5 kg/条 | 7.6% 体重/肢 | 5–8% | ✅ |
+
+- **一句话**：科莫多的股骨 + 截短的下腿。后果①提脚包络满屈 ≈0.52m（v3.4 的
+  0.55m 台阶靠 hfe 摆量补够，边缘值）；后果②步幅靠超长股骨补偿锁死的 spine
+  侧弯与短下腿，收支勉强平。
+- **纪律**：改骨长 = 机体换代 = **换家族**（§A 越级条款），不是任何 vN+1。
+  二代机体方向（若立项）：胫骨 +0.1m、脚掌 +0.1m 换回生物比例，站高与提脚
+  包络同时受益。正常运动蜥蜴肚皮不贴地（postural inflation，随速抬高），
+  肚皮接触力 = 病态信号，v3.7 候选惩罚项的生物学依据在此。
 
 ## 代码地图
 
