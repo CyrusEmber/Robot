@@ -38,6 +38,9 @@ parser.add_argument("--seed", type=int, default=123, help="Eval seed (pins DR re
 parser.add_argument("--envs_per_terrain", type=int, default=None,
                     help="Env columns per suite terrain; default from protocol suite_layout.")
 parser.add_argument("--tag", type=str, default=None, help="Run label; defaults to checkpoint/random.")
+parser.add_argument("--group", type=str, default=None,
+                    help="Optional campaign folder under results/<protocol>/ (e.g. v1); its "
+                         "runs and summary.csv stay inside that folder instead of the protocol root.")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 # a -Play cfg arrives with every DR event already nulled, which silently turns
@@ -337,8 +340,9 @@ def _analyze(rollout: dict, protocol: dict, tilt_cos_min: float, clearance_min: 
 
 def _persist(result: dict, segments: list, recovery: dict | None, run_id: str, tag: str):
     """eval.json + one summary.csv row (same run_id overwritten)."""
-    # directory keyed by the protocol FILE stem (stable); the display name stays in the JSON
-    out_dir = _HARNESS_DIR / "results" / args_cli.protocol / run_id
+    # directory keyed by the protocol FILE stem (stable); the display name stays in the JSON.
+    # --group adds a campaign folder that owns both the run dirs and its summary.csv
+    out_dir = _HARNESS_DIR / "results" / args_cli.protocol / (args_cli.group or "") / run_id
     out_dir.mkdir(parents=True, exist_ok=True)
     with open(out_dir / "eval.json", "w", encoding="utf-8") as f:
         json.dump(result, f, indent=2, ensure_ascii=False)
@@ -360,7 +364,7 @@ def _persist(result: dict, segments: list, recovery: dict | None, run_id: str, t
         row["recovery_mean_s"] = _round(recovery["recovery_time_mean_s"])
         row["never_recovered"] = _round(recovery["never_recovered_frac"])
 
-    summary_path = _HARNESS_DIR / "results" / args_cli.protocol / "summary.csv"
+    summary_path = out_dir.parent / "summary.csv"
     existing = []
     if summary_path.exists():
         with open(summary_path, encoding="utf-8") as f:
@@ -432,7 +436,7 @@ def main():
     if recovery is not None:
         print(f"[EVAL] recovery_mean={recovery['recovery_time_mean_s']:.2f}s "
               f"never_recovered={recovery['never_recovered_frac']:.2f}")
-    print(f"[EVAL] wrote results/{args_cli.protocol}/{run_id}/eval.json")
+    print(f"[EVAL] wrote results/{args_cli.protocol}/{args_cli.group + '/' if args_cli.group else ''}{run_id}/eval.json")
 
 
 if __name__ == "__main__":

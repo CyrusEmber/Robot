@@ -46,6 +46,8 @@ E:\IsaacLab\ablation_harness\
 ├─ metrics.py              # 指标纯函数库（按时间线分段自动切窗，通用）
 ├─ specs\example_baseline.yaml         # 消融 spec 示例
 └─ results\<protocol>\<run_id>\eval.json + summary.csv
+                           # 一次 campaign 可用 --group 单独成目录：
+                           # results\<protocol>\<group>\<run_id>\ + 组内 summary.csv
 ```
 
 harness 与机器人无关；**机器人相关只有 suites.py 一个文件 + 协议里的 suite 引用**。
@@ -85,13 +87,14 @@ lizard rev 记 unknown）。引用数字先看 rev——**无 rev 或 rev 对不
 seed 保住），`-Play` 的 DR 预先全关，robust 会静默退化成 nominal——eval.py 已硬拦。
 
 ```bat
-:: 单点评估（nominal / robust）
+:: 单点评估（nominal / robust）；--group 让一次 campaign 单独成目录 + 专属 summary.csv
 python ablation_harness\eval.py --task Lizard-Rough-v2 --checkpoint <model.pt> ^
-  --protocol locomotion_eval_v1 --mode nominal --seed 123
+  --protocol locomotion_eval_v1 --mode nominal --seed 123 --group v1
 
-:: 消融调度（spec yaml：N 个 run 顺序 train+eval，断点续跑）+ 汇总表
+:: 消融调度（spec yaml：N 个 run 顺序 train+eval，断点续跑；spec 顶层 group: 透传 --group）+ 汇总表
 python ablation_harness\run_ablation.py --spec ablation_harness\specs\<name>.yaml
 python ablation_harness\run_ablation.py --summarize
+python ablation_harness\run_ablation.py --summarize --group v1
 ```
 
 ## 组件热插拔（spec 的组织方式，**永远不动家族代码**）
@@ -131,7 +134,8 @@ eval_checkpoints/eval_modes/eval_seed/overrides。**tag 不可互为后缀**（�
   随机模式（curriculum=False）逐格采样会漏类型——suite 绝不能用。再叠
   `difficulty_range=(1.0,1.0)` + 单值参数范围（`slope_range=(θ,θ)` 等）双锁，seed 钉死实现
 - **目录键用协议文件名**（`results/locomotion_eval_v1/`）；协议显示名只在 JSON/CSV
-  元数据里。summarize 读 `results/<protocol>/summary.csv`（协议级单文件）
+  元数据里。`--group <name>` 再套一层 campaign 目录，**行只落该组的 `summary.csv`**
+  （协议根表不混装）；summarize 缺省汇总"协议根 + 各组"，`--summarize --group v1` 只看一组
 - 命令注入：直写 `term.vel_command_b`（play.py 键盘回退同款），并关 `heading_command`/
   resample（`resampling_time_range=(1e9,1e9)`），否则命令不精确
 - robust DR：直接复用任务自带 DR event cfg（本来就是"固定 distribution"），eval seed
@@ -145,7 +149,8 @@ eval_checkpoints/eval_modes/eval_seed/overrides。**tag 不可互为后缀**（�
   env**（`first_done > push_step` 子集），`measured_envs` 记样本量
 - **log 目录命名 `{timestamp}_{run_name}`**（train.py）——调度器后缀匹配取最新；
   中断重跑会从头训（--resume 未透传，已知限制）；train.py 自动 dump params/env.yaml
-- 断点续跑：eval.json 存在即跳过；训练以最终 checkpoint 存在性判定
+- 断点续跑：由 `run_ablation.py` 判（eval.json 存在即跳过该 eval；训练以最终 checkpoint
+  存在性判定）——单独手跑 `eval.py` 不查旧结果，重跑即覆盖
 
 ## 状态
 
@@ -156,5 +161,7 @@ eval_checkpoints/eval_modes/eval_seed/overrides。**tag 不可互为后缀**（�
 - **代码审查完成**（三轮修复归档于 git 历史：b6098c9 / f22f43f）：修复 2 🚨（glob 前缀 bug /
   训练失败杀 sweep）+ 3 ⚠️（协议默认单一真源 / recovery 子集 / 死参数）；
   configclass 单例疑点源码验证排除；dump_tb 实测 39237 点与历史吻合
-- 待首个真实 checkpoint（teacher 训练完成后）跑基线数据
+- 待首个真实 checkpoint（teacher 训练完成后）跑基线数据 → **已了结 2026-09-01**：
+  teacher v1 六行基线（3 ckpt × 双模式）在 `results/locomotion_eval_v1/v1/`，
+  判读见 `rl_exp\versions\lizard\v1\NOTES.md`
 - 相关 SSOT：`rl_exp\PLAN.md`（训练计划/挂账）、`rl_exp\FAMILY.md`（家族版本管理）

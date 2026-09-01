@@ -31,7 +31,8 @@
   关键读数（iteration: value）: mean_reward -2.47→1.53(1k)→4.73(4k)→7.49(8k)→8.09(12k)→7.12(14k)；
   track_lin_vel_xy_exp 0.63(4k)→0.72(14k)；terrain_levels 0.32→0.63（仅训练诊断）
 - eval 结果（2026-09-01，协议 Locomotion-Eval-v1，seed 123，task `Lizard-Rough-v1`，
-  3 ckpt × 双模式，落盘 `ablation_harness\results\locomotion_eval_v1\`）:
+  3 ckpt × 双模式，评测台 campaign 文件夹 `ablation_harness\results\locomotion_eval_v1\v1\`
+  ——6 个 run 目录 + 专属 `v1\summary.csv`，看单 `run_ablation.py --summarize --group v1`）:
 
   | tag | mode | success | fall | lin_mae | ang_mae | energy J/m | stop超调 | recovery mean | never_rec |
   |---|---|---|---|---|---|---|---|---|---|

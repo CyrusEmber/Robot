@@ -111,7 +111,7 @@
 | `components\recovery.py` | recovery push：冲击注入 + 恢复计时（只统计冲击时仍在第一局的 env） |
 | `protocols\locomotion_eval_v1.yaml` | **评测协议契约（冻结）**：6 段命令时间线 / kick 规格 / 阈值。改动 = 新建 v2 |
 | `specs\example_baseline.yaml` | 消融 spec 示例 |
-| `results\locomotion_eval_v1\` | 跑分落盘（记录即数据，随仓提交） |
+| `results\locomotion_eval_v1\` | 跑分落盘（记录即数据，随仓提交）。campaign 分组：`--group v1` → `locomotion_eval_v1\v1\<run_id>\` + 组内专属 `summary.csv`；`--summarize [--group v1]` 看单组或汇总 |
 
 ## .codemaker\skills\tool\ —— AI 开发技能（方法论）
 

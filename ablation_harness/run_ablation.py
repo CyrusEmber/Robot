@@ -79,9 +79,10 @@ def _run_eval(run: dict, checkpoint: pathlib.Path, iteration: int, mode: str, ar
     task = run["task"]
     tag = run["tag"]
     protocol = run.get("protocol", args_cli.protocol)
+    group = run.get("group")
     eval_tag = f"{tag}_it{iteration}"
     run_id = f"{task.replace('-v0', '')}_{eval_tag}_{mode}_seed{run.get('eval_seed', 123)}"
-    out_json = _HARNESS_DIR / "results" / protocol / run_id / "eval.json"
+    out_json = _HARNESS_DIR / "results" / protocol / (group or "") / run_id / "eval.json"
     if out_json.exists():
         print(f"[ABLATION] eval exists, skip: {run_id}", flush=True)
         return True
@@ -90,7 +91,8 @@ def _run_eval(run: dict, checkpoint: pathlib.Path, iteration: int, mode: str, ar
         "--task", task, "--checkpoint", str(checkpoint),
         "--protocol", protocol, "--mode", mode,
         "--seed", str(run.get("eval_seed", 123)), "--tag", eval_tag, "--headless",
-    ] + (["--device", args_cli.device] if args_cli.device else [])
+    ] + (["--group", group] if group else []) + (
+        ["--device", args_cli.device] if args_cli.device else [])
     print(f"[ABLATION] eval: {run_id}", flush=True)
     result = subprocess.run(cmd, cwd=str(_ISAAC_ROOT), check=False)
     return result.returncode == 0
@@ -103,6 +105,7 @@ def _sweep(args_cli) -> int:
         spec = yaml.safe_load(f)
     failures = 0
     for run in spec["runs"]:
+        run.setdefault("group", spec.get("group"))
         tag = run["tag"]
         iters = int(run["max_iterations"])
         log_dir = _log_dir_for_tag(tag)
@@ -124,16 +127,22 @@ def _sweep(args_cli) -> int:
     return failures
 
 
+def _summary_paths(protocol_dir: pathlib.Path, group: str | None) -> list[pathlib.Path]:
+    """Group filter narrows to one campaign; otherwise the protocol rollup = root + groups."""
+    if group:
+        return [protocol_dir / group / "summary.csv"]
+    return [protocol_dir / "summary.csv", *sorted(protocol_dir.glob("*/summary.csv"))]
+
+
 def _summarize(args_cli) -> None:
-    protocol = args_cli.protocol
-    summary_path = _HARNESS_DIR / "results" / protocol / "summary.csv"
-    if not summary_path.exists():
-        print(f"[ABLATION] no results under results/{protocol}/")
-        return
-    with open(summary_path, encoding="utf-8") as f:
-        rows = list(csv.DictReader(f))
+    protocol_dir = _HARNESS_DIR / "results" / args_cli.protocol
+    rows: list[dict] = []
+    for path in _summary_paths(protocol_dir, args_cli.group):
+        if path.exists():
+            with open(path, encoding="utf-8") as f:
+                rows += list(csv.DictReader(f))
     if not rows:
-        print(f"[ABLATION] results/{protocol}/summary.csv is empty")
+        print(f"[ABLATION] no results under {protocol_dir}")
         return
     columns = [c for c in rows[0].keys() if c != "timestamp"]
     widths = {c: max(len(c), *(len(r.get(c, "")) for r in rows)) for c in columns}
@@ -150,6 +159,8 @@ def main():
     parser.add_argument("--spec", type=str, default=None, help="Sweep spec yaml (runs: [...]).")
     parser.add_argument("--summarize", action="store_true", help="Print the protocol summary table.")
     parser.add_argument("--protocol", type=str, default="locomotion_eval_v1")
+    parser.add_argument("--group", type=str, default=None,
+                        help="Restrict --summarize to one campaign folder under the protocol.")
     parser.add_argument("--device", type=str, default=None)
     parser.add_argument(
         "--python", type=str, default=sys.executable,
