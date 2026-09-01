@@ -4,7 +4,7 @@
 > 离线闸门 8/8 绿 + teacher_smoke_v3 + 4096 env 计时通过；实施偏差见 §10 v3.3 行）。
 > 生成：2026-09-01。来源：全仓 code review + Miki et al. 2022（arXiv:2201.08117,
 > Sci. Robotics）全文核实（正文 + 补充材料 S1–S9）。
-> 修订：v3.4（2026-09-01）——地形 Miki 对齐（§6.6：台阶顶 0.55m + stepping stones 镂空近似），明细见 §10 修订记录。
+> 修订：v3.4.1（2026-09-01）——地形 Miki 对齐（§6.6）+ 运动学核算补记，明细见 §10 修订记录。
 > 关联：`../PLAN.md`（家族滚动计划/挂账）、`../FAMILY.md`（obs 布局 SSOT）。v3 定稿
 > 训练后本文件并入 ../PLAN.md，FILEMAP 登记随 Phase F 补。
 
@@ -139,6 +139,14 @@ obs 按**三个组**交付 `[proprio 90 | extero 208 | priv 83]`（组名对齐 
 **实现**：`TEACHER_TERRAINS_CFG_V3`（teacher_env_cfg.py），`V3.__post_init__` 换
 引用——v1/v2 冻结生成器与 family 地形零改动（D0-5 保持）。
 
+**0.55m 运动学核算（v3.4.1 补）**：URDF 腿链 thigh 0.50 + shank 0.382 + foot 0.131m，
+kfe ±1.6rad 满屈提脚上限 ≈0.52m（+hfe ±1.2rad 摆量后 0.6~0.9m）——**抬脚够，
+躯干勉强**（站高 z≈0.94m，0.55 立面 = 腹下 59%，sprawled 低趴 + spine 锁定无弯腰
+借势，顶排大概率不可爬）。不致命：curriculum rows easy→hard，爬不上只是
+terrain_levels 停排。判据：训练曲线长期卡 row≈0.4m 对应档 → 降 0.45–0.5
+（`review 定案`）。比例列非论文口径——Miki 无子地形比例表（粒子滤波自适应课程），
+此表比例为 stock 惯例 + 本地设计。
+
 **偏差声明（三条）**：
 1. open/ledged 楼梯未按原形态实现（论文动机 = 治 RaiSim 高度场边缘不垂直的
    仿真空子，Isaac mesh 路径无此病）；stones+深洞近似"可踏空面"族，镂空阶梯
@@ -240,3 +248,4 @@ fall_rate 因 DR reset 化 + tilt 终止语义差异跨版本不可比，只做 
 | 2026-09-01 | v3.3 | A–F 全量实施落地（D0-1 方案 A / D0-2 reset 化用户拍板后），实施偏差四项记录：① C2 字段名实况——pinned 树（28a37ce）`RayCasterCfg` 用 `ray_alignment="yaw"`（v3.1 注记的 `attach_yaw_only` 在此版本不存在，语义一致：起点随 yaw 旋转、方向世界系固定），已按实况实现 ② D3 乘子实挂 3 项（q̈/torque/ω_xy）——计划的 feet_slide 非本仓 stock 奖励项（计划笔误），按"不新增缺失论文项"纪律不补 ③ D4 friction 保持 startup 模式（F3 偏差：foot_friction_truth 特权 obs 的材质读回缓存只在 startup 语义下有效，reset 化会让特权 obs 陈旧；DR 课程覆盖 mass/com/inertia/gains/joint 五项）④ D3 c_k 机制落地为纯函数推导（`ck_value(env)` 直读 `common_step_counter` + `init_ck` startup 事件存参数）——无 reward/event 更新时序依赖（rewards 先于 interval events 计算），PLAY/eval 不接 init_ck 时退化恒 1.0。另：B2 dict 透传经源码级确认（vecenv_wrapper.py 原生 TensorDict 包装，无需 fallback）；C3 计时实测 4096 env v3 121.8 vs v2 105.8 ms/step（+15%，预算内，无需 40 点降配）；E3 num_mini_batches=11 静态值（4096×24/8300 换算，换 env 数需同步改） |
 | 2026-09-01 | v3.3.1 | 家族之家 consolidation：FAMILY.md / PLAN.md / lizard.urdf / 开发态 lizard_params.yaml 移入 versions/lizard/（rl_exp 根只剩代码；对齐规则路径约定，lizard 历史例外解除）；9 个代码消费点改路径（family cfg dev-yaml / pipeline ×3 / parity dev-yaml 契约 / archive ×2）；asset_lock 四版重生成（v3 首次上锁）；闸门 8/8 绿 |
 | 2026-09-01 | v3.4 | 地形 Miki 对齐（新增 §6.6）：`TEACHER_TERRAINS_CFG_V3`——台阶顶 0.35→0.55m（review 定案，估计值）、+stepping_stones .1（open/ledged 近似，`用户拍板：选项 b 2026-09-01`，holes_depth −1.0）、boxes .2→.1；V3.__post_init__ 换引用，v1/v2 冻结生成器与 family 零改动（D0-5 保持）；粒子滤波课程不做；归因声明：训练地形变难、eval 套件不动，v3 对 v1 nominal success 可能不升反降，跨版本对账以逐地形 completion 为准。纪律边界：本修订合法仅因 v3 未训练——已训版本改地形一律 vN+1 |
+| 2026-09-01 | v3.4.1 | §6.6 补记（不改方案实质）：0.55m 运动学核算（提脚够/躯干勉强/顶排或不可爬 + 降档判据）；澄清子地形比例为本地设计非论文口径（论文无比例表） |
