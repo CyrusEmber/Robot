@@ -165,30 +165,43 @@ def _rollout(wrapper, mbenv, robot, policy, player, cmd_term, scanner, center_ra
         cmd_term.vel_command_b[:] = cmd
         if push is not None and step == push[0]:
             recovery_mod.apply_kick(robot, push[1], push[2])
+
+        # Snapshot BEFORE wrapper.step(): IsaacLab resets terminated envs inside
+        # step(), so any post-step read of scene tensors returns respawn values,
+        # not terminal ones (H1: end_pos and the done-step series entries were
+        # spawn garbage). ponytail: pre-step snapshot is off by one step_dt from
+        # the true terminal state; the post-physics pre-reset state is not
+        # observable through the public step() API.
+        data = robot.data
+        snap = {
+            "lin_vel_b": data.root_lin_vel_b.torch.clone(),
+            "ang_vel_b": data.root_ang_vel_b.torch.clone(),
+            "tilt_cos": -data.projected_gravity_b.torch[:, 2].clone(),
+            "root_pos_w": data.root_pos_w.torch.clone(),
+        }
+        if scanner is not None:
+            terrain_z = scanner.data.ray_hits_w.torch[:, center_ray, 2]
+            snap["clearance"] = data.root_pos_w.torch[:, 2] - terrain_z
+        snap["energy"] = metrics.step_energy(
+            data.joint_stiffness.torch, data.joint_damping.torch,
+            data.joint_pos_target.torch, data.joint_pos.torch, data.joint_vel.torch,
+        )
+
         with torch.inference_mode():
             actions = policy(obs)
         obs, _, _, _ = wrapper.step(actions)
 
-        data = robot.data
-        series["lin_vel_b"].append(data.root_lin_vel_b.torch.clone())
-        series["ang_vel_b"].append(data.root_ang_vel_b.torch.clone())
+        for key in ("lin_vel_b", "ang_vel_b", "tilt_cos", "clearance", "energy"):
+            if key in snap:
+                series[key].append(snap[key])
         series["cmd"].append(cmd.clone())
-        series["tilt_cos"].append(-data.projected_gravity_b.torch[:, 2].clone())
-        if scanner is not None:
-            terrain_z = scanner.data.ray_hits_w.torch[:, center_ray, 2]
-            series["clearance"].append(data.root_pos_w.torch[:, 2] - terrain_z)
-        series["energy"].append(
-            metrics.step_energy(
-                data.joint_stiffness.torch, data.joint_damping.torch,
-                data.joint_pos_target.torch, data.joint_pos.torch, data.joint_vel.torch,
-            )
-        )
+
         done_now = mbenv.termination_manager.dones
         newly_done = done_now & (first_done == num_steps)
         if bool(newly_done.any()):
             env_ids = newly_done.nonzero(as_tuple=False).squeeze(-1)
             first_done[env_ids] = step
-            end_pos[env_ids] = data.root_pos_w.torch[env_ids].clone()
+            end_pos[env_ids] = snap["root_pos_w"][env_ids]
 
     # capture before close(): scene tensors are freed on close
     return {

@@ -22,11 +22,13 @@ Six checks, all machine-readable, all fail under --strict:
    ``Robot/Geometry/base_link``), every ``joint_order`` entry as ``<name>_joint``,
    and every body-name pattern in the dev AND frozen version yamls matching at
    least one link. Catches asset regeneration that renames/drops prims.
-6. asset lock: ``versions/lizard/vN/asset_lock.json`` pins sha256 of lizard.urdf +
-   lizard.usda at freeze time. Frozen yamls pin the usd PATH, not its CONTENT,
-   so an in-place asset regeneration silently breaks working-tree reproduction
-   of every resident teacher task id; this check makes that a reviewed commit
-   (refresh locks with --update-locks in the same change that retires assets).
+6. asset lock: ``versions/lizard/vN/asset_lock.json`` pins sha256 of lizard.urdf,
+   the compiled usda, every mesh under ``meshes/**``, and the version's OWN
+   frozen yaml. Frozen yamls pin the usd PATH, not its CONTENT, so an in-place
+   asset regeneration silently breaks working-tree reproduction of every
+   resident teacher task id; this check makes that a reviewed commit
+   (refresh locks with --update-locks in the same change that retires assets;
+   --update-locks only rewrites versions whose lock actually changed).
 
 Usage: python rl_exp\\tools\\verify\\check_dr_parity.py [--strict]
        python rl_exp\\tools\\verify\\check_dr_parity.py --update-locks
@@ -46,8 +48,6 @@ _TEACHER = _TASKS / "teacher_env_cfg.py"
 _PLAY_UTILS = _TASKS / "play_utils.py"
 _DR_CONTROLLER = _REPO / "ablation_harness" / "components" / "dr_controller.py"
 _VERSIONS = _EXP / "versions"
-# asset artifacts pinned by versions/lizard/vN/asset_lock.json (paths relative to rl_exp)
-_LOCK_FILES = ("lizard.urdf", "assets/lizard/lizard.usda")
 
 # wiring lines that only exist on one side BY DESIGN (reviewed divergences)
 ALLOWLIST: set[str] = set()
@@ -95,6 +95,15 @@ def check_dr_list_sync() -> list[str]:
     harness = _extract_name_list(_DR_CONTROLLER, "_DR_EVENT_NAMES")
     print(f"  play_utils: {len(play)} events | dr_controller: {len(harness)} events")
     problems = []
+    # count assert: a silent-empty extraction (regex broke, list emptied) or a
+    # duplicated entry passes the symmetric-difference check vacuously
+    if not play:
+        problems.append("play_utils.DR_EVENT_NAMES extracted EMPTY (regex broke or list emptied)")
+    if not harness:
+        problems.append("dr_controller._DR_EVENT_NAMES extracted EMPTY (regex broke or list emptied)")
+    if len(play) != len(harness):
+        problems.append(f"DR event list length drift: play_utils {len(play)} vs "
+                        f"dr_controller {len(harness)} (duplicate entry?)")
     for name in sorted(set(play) - set(harness)):
         problems.append(f"in play_utils.DR_EVENT_NAMES but not dr_controller._DR_EVENT_NAMES: {name}")
     for name in sorted(set(harness) - set(play)):
@@ -213,15 +222,42 @@ def check_asset_contract() -> list[str]:
     return problems
 
 
-def _asset_hashes() -> dict[str, str]:
-    return {rel: hashlib.sha256((_EXP / rel).read_bytes()).hexdigest() for rel in _LOCK_FILES}
+# global asset artifacts pinned by versions/lizard/vN/asset_lock.json (paths
+# relative to rl_exp); each version's lock additionally pins its OWN frozen yaml
+def _lock_files() -> list[str]:
+    """urdf + compiled usda + every source mesh under meshes/** (meshes are the
+    regeneration upstream of both; usda embeds copies but a mesh-only rebuild
+    must still go loud)."""
+    files = ["lizard.urdf", "assets/lizard/lizard.usda"]
+    files += sorted(
+        str(p.relative_to(_EXP)).replace("\\", "/")
+        for p in (_EXP / "meshes").rglob("*") if p.is_file()
+    )
+    return files
+
+
+def _asset_hashes(vdir: pathlib.Path) -> dict[str, str]:
+    """Global assets + that version's own lizard_params.yaml (post-freeze yaml
+    edits are contract breaks, not tweaks)."""
+    files = _lock_files()
+    files.append(str((vdir / "lizard_params.yaml").relative_to(_EXP)).replace("\\", "/"))
+    return {rel: hashlib.sha256((_EXP / rel).read_bytes()).hexdigest() for rel in files}
 
 
 def update_asset_locks() -> None:
-    current = _asset_hashes()
     for vdir in sorted(_VERSIONS.glob("*/v*")):
         if not (vdir / "lizard_params.yaml").exists():
             continue
+        current = _asset_hashes(vdir)
+        lock = vdir / "asset_lock.json"
+        if lock.exists():
+            try:
+                recorded = json.loads(lock.read_text(encoding="utf-8"))["files"]
+            except (json.JSONDecodeError, KeyError):
+                recorded = None
+            if recorded == current:
+                print(f"  unchanged {vdir.relative_to(_VERSIONS)}")
+                continue
         payload = {
             "note": "asset sha256 pinned at freeze; refresh with --update-locks only in a "
                     "commit that intentionally retires assets (see check_dr_parity.py)",
@@ -234,7 +270,6 @@ def update_asset_locks() -> None:
 
 def check_asset_locks() -> list[str]:
     problems = []
-    current = _asset_hashes()
     for vdir in sorted(_VERSIONS.glob("*/v*")):
         if not (vdir / "lizard_params.yaml").exists():
             continue
@@ -243,6 +278,7 @@ def check_asset_locks() -> list[str]:
         if not lock.exists():
             problems.append(f"{vtag}: no asset_lock.json (run --update-locks once)")
             continue
+        current = _asset_hashes(vdir)
         recorded = json.loads(lock.read_text(encoding="utf-8"))["files"]
         for rel, sha in current.items():
             if recorded.get(rel) != sha:
