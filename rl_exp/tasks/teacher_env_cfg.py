@@ -644,6 +644,15 @@ class LizardRoughTeacherEnvCfg_V3(LizardRoughTeacherEnvCfg):
         # holds if training starts from level 0 (v1/v2 snapshots keep 5: frozen)
         self.scene.terrain.max_init_terrain_level = 0
 
+        # --- v3.6.1: PhysX contact buffer headroom ---
+        # belly contact is now persistent by design (base_contact termination
+        # removed; a flat-belly robot is not tilted, so tilt does not fire
+        # either) and the v3 terrain adds stepping-stone contact pairs. The
+        # stock 2**26 collision stack overflows at 4096 envs and PhysX drops
+        # contacts silently -> nondeterministic physics. 2**28 gives 4x
+        # headroom; v1/v2 frozen cfgs keep the stock value.
+        self.sim.physics.default.gpu_collision_stack_size = 2**28
+
         # --- v3.6: staged speed curriculum replaces the (-1, 1) paper override ---
         # v1 replay showed foot-pad creeping is the optimum at a 1 m/s command
         # cap; widen -1..2 -> 5 gated by success_rate >= 0.8 sustained 120 s,
