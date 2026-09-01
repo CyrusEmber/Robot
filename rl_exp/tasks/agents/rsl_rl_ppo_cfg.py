@@ -90,11 +90,12 @@ class LizardTeacherV3PPORunnerCfg(RslRlOnPolicyRunnerCfg):
     """Runner cfg for `Lizard-Rough-v3` (paper-aligned teacher, obs 381).
 
     Paper S1 hyperparams: lr 5e-4 with 0.9999/iter decay (schedule fixed),
-    gamma 0.996, 2 epochs, clip 0.2, entropy 0.005, GAE 0.95, minibatch size
-    8300 -> num_mini_batches = max(1, floor(num_envs * num_steps_per_env /
-    8300)) = 11 at the stock 4096 envs x 24 steps. Actor/critic are the
-    three-encoder ``SplitEncoderModel`` (per-stream normalization ON), fed by
-    the env's proprio/extero/priv obs groups.
+    gamma 0.996, 2 epochs, clip 0.2, entropy 0.005, GAE 0.95. num_mini_batches
+    = 11 ~ 4096 envs x 24 steps / 8300 (paper reference size; soft, not a
+    constraint -- user 2026-09-01: no need to force the 8300 equivalence when
+    env count changes). Actor/critic are the three-encoder
+    ``SplitEncoderModel`` (per-stream normalization ON), fed by the env's
+    proprio/extero/priv obs groups.
     """
 
     num_steps_per_env = 24
@@ -120,7 +121,7 @@ class LizardTeacherV3PPORunnerCfg(RslRlOnPolicyRunnerCfg):
     )
     algorithm = LizardV3PpoAlgorithmCfg(
         num_learning_epochs=2,
-        # 4096 envs x 24 steps / 8300 (paper minibatch size) ~= 11 batches
+        # 11 batches ~ 4096 x 24 / 8300 (paper reference; soft constraint)
         num_mini_batches=11,
         learning_rate=5.0e-4,
         schedule="fixed",
