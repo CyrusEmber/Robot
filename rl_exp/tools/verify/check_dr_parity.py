@@ -50,7 +50,14 @@ _DR_CONTROLLER = _REPO / "ablation_harness" / "components" / "dr_controller.py"
 _VERSIONS = _EXP / "versions"
 
 # wiring lines that only exist on one side BY DESIGN (reviewed divergences)
-ALLOWLIST: set[str] = set()
+ALLOWLIST: set[str] = {
+    # v3 recipe (versions/lizard/v3/PLAN.md): teacher-only terms absent from
+    # the family baseline by design -- the v3 anti-collapse package
+    "self.events.init_ck = EventTerm(",  # D3 c_k schedule stash (startup)
+    "self.rewards.feet_air_time = None",  # D2: replaced by foot_clearance
+    "self.rewards.foot_clearance = RewTerm(",  # D2 anti-drag r_fc
+    "self.terminations.tilt = DoneTerm(",  # D1 tilt termination
+}
 
 # ArticulationCfg block lines that only exist on one side BY DESIGN
 ROBOT_BLOCK_ALLOWLIST: set[str] = set()

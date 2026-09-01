@@ -58,5 +58,9 @@ def apply_play_wiring(env_cfg, num_envs: int = 50, grid: int = 5) -> None:
         env_cfg.scene.terrain.terrain_generator.num_rows = grid
         env_cfg.scene.terrain.terrain_generator.num_cols = grid
         env_cfg.scene.terrain.terrain_generator.curriculum = False
-    env_cfg.observations.policy.enable_corruption = False
+    # disable corruption on every present obs group (v1/v2: single "policy"
+    # group; v3: proprio/extero/priv -- the retired policy group is None)
+    for group in vars(env_cfg.observations).values():
+        if group is not None:
+            group.enable_corruption = False
     disable_dr_events(env_cfg.events)

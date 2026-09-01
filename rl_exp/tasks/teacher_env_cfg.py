@@ -21,8 +21,11 @@ collapses under privilege, the incentive-escape-hatch hypothesis is confirmed
 and the parked reward fixes get re-applied (plan §2.3).
 """
 
+import math
 import pathlib
+from collections.abc import Callable
 
+import torch
 import yaml
 
 import isaaclab.sim as sim_utils
@@ -30,8 +33,11 @@ import isaaclab.terrains as terrain_gen
 from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets import ArticulationCfg
 from isaaclab.managers import EventTermCfg as EventTerm
+from isaaclab.managers import ObservationGroupCfg
 from isaaclab.managers import ObservationTermCfg as ObsTerm
+from isaaclab.managers import RewardTermCfg as RewTerm
 from isaaclab.managers import SceneEntityCfg
+from isaaclab.managers import TerminationTermCfg as DoneTerm
 from isaaclab.sensors import RayCasterCfg, patterns
 from isaaclab.terrains import TerrainGeneratorCfg
 from isaaclab.utils.configclass import configclass
@@ -144,6 +150,16 @@ class TeacherActionsCfg(ActionsCfg):
 TEACHER_PRIVILEGED_SPEC: dict[str, set[str]] = {
     "v1": set(),
     "v2": {
+        "foot_contact_forces",
+        "foot_contact_normals",
+        "foot_friction",
+        "thigh_shank_contacts",
+        "base_external_wrench",
+    },
+    # v3 keeps the v2 privileged-term set (priv 83); its recipe differences are
+    # structural (obs groups / foot rings / rewards / DR), wired in
+    # LizardRoughTeacherEnvCfg_V3
+    "v3": {
         "foot_contact_forces",
         "foot_contact_normals",
         "foot_friction",
@@ -448,6 +464,209 @@ class LizardRoughTeacherEnvCfg_V1(LizardRoughTeacherEnvCfg):
 @configclass
 class LizardRoughTeacherEnvCfg_V1_PLAY(LizardRoughTeacherEnvCfg_V1):
     """v1 play variant: obs 266, no randomization, curriculum off."""
+
+    def __post_init__(self):
+        super().__post_init__()
+
+        # deterministic evaluation: shared PLAY wiring (single source, see play_utils)
+        apply_play_wiring(self)
+
+
+# --- v3: paper-alignment layer (three obs groups + foot rings + D1-D4 package) ---
+
+
+def ring_pattern(cfg: "RingPatternCfg", device: str) -> tuple[torch.Tensor, torch.Tensor]:
+    """Concentric-ring ray pattern for per-foot terrain scanning (paper S1).
+
+    Args:
+        cfg: The ring pattern configuration.
+        device: Device to create the pattern on.
+
+    Returns:
+        Ray starting positions [num_rays, 3] and directions [num_rays, 3].
+    """
+    if len(cfg.ring_counts) != len(cfg.ring_radii):
+        raise ValueError(
+            f"ring_counts {cfg.ring_counts} and ring_radii {cfg.ring_radii} must pair 1:1."
+        )
+    starts = []
+    for count, radius in zip(cfg.ring_counts, cfg.ring_radii):
+        theta = torch.arange(count, device=device) * (2.0 * math.pi / count)
+        ring = torch.zeros(count, 3, device=device)
+        ring[:, 0] = radius * torch.cos(theta)
+        ring[:, 1] = radius * torch.sin(theta)
+        starts.append(ring)
+    ray_starts = torch.cat(starts, dim=0)
+    ray_directions = torch.zeros_like(ray_starts)
+    ray_directions[:, :] = torch.tensor(list(cfg.direction), device=device)
+    return ray_starts, ray_directions
+
+
+@configclass
+class RingPatternCfg(patterns.PatternBaseCfg):
+    """Concentric-ring pattern: ``ring_counts[i]`` points on ``ring_radii[i]`` [m].
+
+    Paper default: counts (6, 8, 10, 12, 16) x radii (0.08..0.48) = 52 points
+    per foot; the 40-point fallback is a yaml-only change (network input dims
+    follow the env).
+    """
+
+    func: Callable = ring_pattern
+
+    ring_counts: tuple[int, ...] = (6, 8, 10, 12, 16)
+    """Number of points on each ring."""
+    ring_radii: tuple[float, ...] = (0.08, 0.16, 0.26, 0.36, 0.48)
+    """Ring radii [m]."""
+    direction: tuple[float, float, float] = (0.0, 0.0, -1.0)
+    """Ray direction (straight down)."""
+
+
+@configclass
+class LizardRoughTeacherEnvCfg_V3(LizardRoughTeacherEnvCfg):
+    """v3 recipe: paper-aligned teacher (obs 381 = proprio 90 / extero 208 / priv 83).
+
+    Differences vs v2 (versions/lizard/v3/PLAN.md):
+    * extero = 4 per-foot ring scanners (52 points/foot, yaw-aligned) replacing
+      the 135-point base grid scan; obs delivered as THREE named groups
+      (proprio/extero/priv) -- the model-side contract (teacher_networks.py)
+    * D1 tilt termination; D2 anti-drag r_fc replaces the feet_air_time reward;
+      D3 c_k penalty curriculum; D4 reset-mode c_k-scaled DR (mass/com/inertia/
+      gains/joint params -- friction stays startup so the foot_friction_truth
+      obs cache keeps its startup-only semantics, F3 deviation note)
+    """
+
+    params_version = "v3"
+
+    def __post_init__(self):
+        super().__post_init__()
+        params = _load_params(self.params_version)
+        v3 = params["v3"]
+        ring = v3["foot_ring"]
+        tilt = v3["tilt_terminate"]
+        rfc = v3["r_fc"]
+        ck = v3["curriculum_ck"]
+
+        # --- C1/C2: per-foot ring casters replace the base height scanner ---
+        # (the casters also register /World/ground in RayCaster.meshes, which
+        # the priv foot_contact_normals / r_fc raycasts rely on)
+        self.scene.height_scanner = None
+        pattern_cfg = RingPatternCfg(
+            ring_counts=tuple(ring["ring_counts"]),
+            ring_radii=tuple(ring["ring_radii"]),
+        )
+        update_period = self.decimation * self.sim.dt
+        for foot in ("lf", "rf", "rl", "rr"):
+            setattr(
+                self.scene,
+                f"{foot}_foot_ring",
+                RayCasterCfg(
+                    prim_path=f"{{ENV_REGEX_NS}}/Robot/Geometry/{foot}_foot",
+                    offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, ring["ray_offset_z"])),
+                    ray_alignment="yaw",
+                    pattern_cfg=pattern_cfg,
+                    debug_vis=False,
+                    mesh_prim_paths=["/World/ground"],
+                    update_period=update_period,
+                ),
+            )
+
+        # --- obs restructure: single flat policy group -> three named groups ---
+        # group attr insertion order == term concat order (manager reads __dict__);
+        # the extero foot order (lf, rf, rl, rr) is the network reshape contract
+        proprio_group = ObservationGroupCfg()
+        for name in (
+            "base_lin_vel", "base_ang_vel", "projected_gravity", "velocity_commands",
+            "joint_pos", "joint_vel", "actions",
+        ):
+            setattr(proprio_group, name, getattr(self.observations.policy, name))
+        self.observations.proprio = proprio_group
+
+        extero_group = ObservationGroupCfg()
+        for foot in ("lf", "rf", "rl", "rr"):
+            setattr(
+                extero_group,
+                f"{foot}_foot_ring",
+                ObsTerm(
+                    func=mdp.height_scan,
+                    params={
+                        "sensor_cfg": SceneEntityCfg(f"{foot}_foot_ring"),
+                        "offset": ring["scan_offset"],
+                    },
+                    clip=tuple(ring["clip"]),
+                ),
+            )
+        self.observations.extero = extero_group
+
+        priv_group = ObservationGroupCfg()
+        for name in (
+            "base_lin_vel_true", "base_ang_vel_true", "foot_contact", "feet_air_time",
+            "body_mass", "foot_contact_forces", "foot_contact_normals", "foot_friction",
+            "thigh_shank_contacts", "base_external_wrench",
+        ):
+            setattr(priv_group, name, getattr(self.observations.policy, name))
+        self.observations.priv = priv_group
+        self.observations.policy = None
+
+        # --- D1: tilt termination ---
+        self.terminations.tilt = DoneTerm(
+            func=teacher_mdp.tilt_terminate,
+            params={"gravity_z_limit": tilt["gravity_z_limit"]},
+        )
+
+        # --- D2: anti-drag foot clearance replaces the feet_air_time reward ---
+        # (the feet_air_time OBS term stays in the priv group)
+        self.rewards.feet_air_time = None
+        self.rewards.foot_clearance = RewTerm(
+            func=teacher_mdp.FootClearanceReward,
+            weight=rfc["weight"],
+            params={
+                "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
+                "clearance": rfc["clearance"],
+                "contact_threshold": rfc["contact_threshold"],
+                "mesh_prim_path": "/World/ground",
+                "max_distance": rfc["max_distance"],
+                "start_offset": rfc["start_offset"],
+            },
+        )
+
+        # --- D3/D4: c_k schedule + in-place func swaps (names stay stable so
+        # PLAY wiring / DR event list keep matching; loop form keeps these
+        # recipe-layer swaps out of the family-vs-teacher wiring parity text
+        # check, which guards the BASE wiring freeze, not version recipes) ---
+        self.events.init_ck = EventTerm(
+            func=teacher_mdp.init_ck,
+            mode="startup",
+            params={
+                "c0": ck["c0"],
+                "decay": ck["decay"],
+                "steps_per_iteration": ck["steps_per_iteration"],
+            },
+        )
+        for name, func in (
+            ("dof_acc_l2", teacher_mdp.joint_acc_l2_ck),
+            ("dof_torques_l2", teacher_mdp.joint_torques_l2_ck),
+            ("ang_vel_xy_l2", teacher_mdp.ang_vel_xy_l2_ck),
+        ):
+            getattr(self.rewards, name).func = func
+        # base_com lives inside a preset wrapper; .default is the physx branch
+        com_term = self.events.base_com.default
+        com_term.func = teacher_mdp.randomize_rigid_body_com_ck
+        com_term.mode = "reset"
+        for name, func in (
+            ("add_base_mass", teacher_mdp.randomize_rigid_body_mass_ck),
+            ("randomize_limb_mass", teacher_mdp.randomize_rigid_body_mass_ck),
+            ("randomize_inertia", teacher_mdp.randomize_rigid_body_inertia_ck),
+            ("randomize_actuator_gains", teacher_mdp.randomize_actuator_gains_ck),
+            ("randomize_joint_params", teacher_mdp.randomize_joint_parameters_ck),
+        ):
+            term = getattr(self.events, name)
+            term.func = func
+            term.mode = "reset"
+
+
+@configclass
+class LizardRoughTeacherEnvCfg_V3_PLAY(LizardRoughTeacherEnvCfg_V3):
+    """v3 play variant: obs 381, no randomization, curriculum off."""
 
     def __post_init__(self):
         super().__post_init__()

@@ -36,6 +36,7 @@ import torch
 import torch.nn as nn
 from tensordict import TensorDict
 
+from rsl_rl.algorithms import PPO
 from rsl_rl.models import MLPModel
 from rsl_rl.modules import EmpiricalNormalization
 from rsl_rl.modules.mlp import MLP
@@ -239,3 +240,30 @@ class _OnnxSplitEncoderModel(_TorchSplitEncoderModel):
     def output_names(self) -> list[str]:
         """Return ONNX output tensor names."""
         return ["actions"]
+
+
+class DecayingLrPPO(PPO):
+    """PPO with per-iteration multiplicative learning-rate decay (paper S1: 0.9999/iter).
+
+    rsl_rl has no native exponential decay (``schedule`` only supports adaptive
+    [KL-triggered] / fixed), so this subclass multiplies the lr after each
+    ``update()`` -- exactly once per PPO iteration. Registered via the
+    algorithm cfg ``class_name`` point path, zero rsl_rl changes.
+    """
+
+    def __init__(self, *args, lr_decay: float = 1.0, **kwargs) -> None:
+        """Initialize PPO and store the decay factor.
+
+        Args:
+            lr_decay: Multiplicative lr factor applied after each update().
+        """
+        super().__init__(*args, **kwargs)
+        self._lr_decay = float(lr_decay)
+
+    def update(self) -> dict[str, float]:
+        """Run one PPO update, then decay the learning rate."""
+        stats = super().update()
+        self.learning_rate *= self._lr_decay
+        for group in self.optimizer.param_groups:
+            group["lr"] = self.learning_rate
+        return stats
