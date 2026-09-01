@@ -1,6 +1,6 @@
 ---
 description: 版本纪律——配方版本（vN）新建/冻结与计划文档修订（vN.M.K）的触发条件、权限与记录规范。当用户提到"开新版本"、"新建版本"、"升版本"、"冻结版本"、"修订"、"勘误"、"修订记录"、"记录修改"、"换家族"、"新机器人"时，或操作涉及 versions/ 目录、PLAN.md、FAMILY.md、NOTES.md 时使用。
-globs: rl_exp/versions/**, rl_exp/PLAN.md, rl_exp/FAMILY.md
+globs: rl_exp/versions/**
 alwaysApply: false
 ---
 
@@ -15,9 +15,7 @@ alwaysApply: false
 
 分层原则：**规则管行为（何时升版、怎么记录、升版流程），FAMILY.md 管事实（任务表/版本史/家族特有机制）**——会随版本增长的数据一律留在文档侧。
 
-**范围边界**：家族外自有子系统（`ablation_harness/` 评测台）的工作不进家族配方计划与家族文档——基础设施待办挂仓根 `PLAN.md` 挂账清单，协议变更走冻结 yaml（`protocols/locomotion_eval_v1.yaml` 模式）；该子系统代码高频变更、多机器人共用或评测协议 v2 出现时，才升 `versions/harness/vN/` 管理（升级触发写在挂账行，防"永远不升"）。
-
-**家族文档路径约定**：每家族一份 `FAMILY.md`，新家族放 `versions/<family>/FAMILY.md`（`versions/**` glob 自动覆盖，本规则无需改）。历史例外：lizard 在 `rl_exp/FAMILY.md`，引用已稳定，不迁移。
+**家族文档路径约定**：每家族一份 `FAMILY.md`，新家族放 `versions/<family>/FAMILY.md`（`versions/**` glob 自动覆盖，本规则无需改）。lizard 于 2026-09-01 迁入，历史例外解除。
 
 **范围边界**：家族外自有子系统（`ablation_harness/` 评测台）不进家族配方计划与家族文档——待办与版本记录挂 `ablation_harness/HARNESS.md`（自有版本文档 SSOT，修订沿用本规则 B 节纪律、编号独立于家族配方版本；仓根 `PLAN.md` 挂账只留指针），协议变更走冻结 yaml（`protocols/locomotion_eval_v1.yaml` 模式）；该子系统高频变更、多机器人共用或评测协议 v2 出现时，再议升 `versions/harness/vN/` 目录化（升级触发写在 HARNESS.md，防"永远不升"）。
 
@@ -56,11 +54,11 @@ alwaysApply: false
 5. 修订闭环 = commit（git-auto-sync 纪律）：新建文档必须 git add，杜绝未提交孤儿。
 6. **修订号 ↔ commit 绑定**：修订闭环 commit 的 message 必以版本号开头（初稿 `vN: ...`，修订 `vN.M.K: ...`），双向查询 = `git log --grep`；hash 不写进文档（落地时未知名，避免回填流程）。历史欠账不 amend 已推提交，`git log --follow` 考古兜底。
 
-**当前计划同步——状态跃迁才做，内容修订不做**：根 `PLAN.md` 头部更新行、`FAMILY.md` 当前状态、`FILEMAP.md` versions 行记的是**状态**（活跃版本/提案中/训练中），不是方案内容。方案细节修订（vN.M.K）不动这三处；只在状态跃迁时同步：
+**当前计划同步——状态跃迁才做，内容修订不做**：`versions/<family>/PLAN.md` 头部更新行、`FAMILY.md` 当前状态、`FILEMAP.md` versions 行记的是**状态**（活跃版本/提案中/训练中），不是方案内容。方案细节修订（vN.M.K）不动这三处；只在状态跃迁时同步：
 
 | 事件 | 同步三处 |
 |---|---|
 | vN 初稿建立 / 冻结 / 训练启动 / 结果回填 | ✅ |
 | vN.M / vN.M.K 修订 | ❌（状态行失真时顺手修，如"部分待拍板"已不真） |
 
-`FAMILY.md` 当前状态**保持粗粒度**：一句摘要 + 指向版本目录 PLAN.md，方案细节永不进 FAMILY——SSOT 唯一 = 版本目录内文档，索引失真可容忍，方案失真不可。
+`FAMILY.md` 当前状态**保持粗粒度**：一句摘要 + 指向 `versions/<family>/PLAN.md`，方案细节永不进 FAMILY——SSOT 唯一 = 版本目录内文档，索引失真可容忍，方案失真不可。

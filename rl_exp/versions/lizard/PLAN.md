@@ -1,8 +1,10 @@
 # Lizard 26 关节四足机器人训练计划
 
-> SSOT: rl_exp git 仓（例 `E:\lizard_migration\rl_exp\`；参数 `lizard_params.yaml`，
-> 几何 `lizard.urdf`，管线脚本 `blender\`；版本冻结 `versions\lizard\vN\`，
-> 版本级计划归各自目录）。代码不复制进 IsaacLab 根，部署见仓根 README。
+> SSOT: rl_exp git 仓（例 `E:\lizard_migration\rl_exp\`）。本目录 = lizard 家族之家：
+> 家族文档 `FAMILY.md`、滚动计划 `PLAN.md`、开发态参数 `lizard_params.yaml`（改动
+> 不追溯，与冻结副本同目录共存——改前认准目录层级）、几何 `lizard.urdf`、管线
+> 脚本 `blender\`；冻结配方在 `vN\`，版本级计划归各自目录。代码不复制进
+> IsaacLab 根，部署见仓根 README。
 > 更新: 2026-09-01（v3 提案 `versions\lizard\v3\PLAN.md`；包名 lizard_exp→rl_exp；
 > versions 家族分层；上一版 2026-08-28 v2.1 teacher 快照落地 + 冒烟通过）
 
@@ -46,6 +48,12 @@
 **决策（做法 2）**: 奖励修复方案（躯干终止/姿态惩罚/接触×5/抬脚×4/降难度）整体**回滚挂账**，
 所有环境保持 变量隔离——先验证"特权 obs 能否单独救趴窝"（对照实验），
 再决定是否动激励。修复方案细节保留在下表，随时可重新应用：
+
+**2026-09-01 重定向**：v1 对照实验已出结论（特权救活趴窝但 fall 上升，v1 NOTES），
+反趴窝杠杆已按论文口径在 **v3** 落地（`versions/lizard/v3/PLAN.md` D1–D4：tilt 终止 +
+防拖 r_fc 替换 feet_air_time + c_k 惩罚课程 + DR reset 化；接触终止按 D0-6 拍板明确
+不做）。下表候选仅作 v3 失效时的备选升级路径（对应 v3 PLAN §9 风险表"belly-down
+趴窝敞口"行：① 接触惩罚 -1→-5 即本表第 3 行）；挂账 #7 的"奖励修复重应用"以此为准。
 
 | 项 | 候选修改（已回滚） |
 |---|---|
@@ -173,7 +181,7 @@ python rl_exp\tools\verify\teacher_smoke.py --headless            :: teacher env
 | 4 | 摩擦/外力真值 obs term（event 缓存） | 🟡 Phase 2 前 |
 | 5 | 三噪声模型 C++→Python 移植 | 🟡 Phase 2 |
 | 6 | 延迟注入 DR（EP 技巧） | 🟡 UE 部署前 |
-| 7 | 奖励修复重应用（若 §4.6 对照坐实逃生舱假设） | 🟡 条件触发 |
+| 7 | 奖励修复重应用（若 §4.6 对照坐实逃生舱假设） | 🔄 已重定向：v1 对照已出结论，杠杆改走 v3 论文口径（tilt/r_fc/c_k/DR-reset，见 §2.3 重定向注）；本行余下仅剩"v3 失效时的备选升级路径"（§2.3 表 + v3 PLAN §9） |
 | 8 | 资产换代时同步 teacher 快照文件（2026-08-31 起机器化报警：check_dr_parity ④robot 块比对/⑤usda 结构契约/⑥versions asset_lock 哈希锁；同步本身仍是人工，但漏同步会在离线闸门炸出 DRIFT） | 🟢 有闸门 |
 | 9 | staged 课程 metric 接线 bug（Curriculum/*/metric 恒 0） | 🟢 低 |
 | 10 | yaml obs_layout 更新（感知版 +扫描差异） | 🟢 文档债 |

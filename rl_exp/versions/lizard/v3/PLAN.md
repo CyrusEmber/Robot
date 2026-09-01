@@ -1,11 +1,12 @@
 # Lizard-Rough-v3 实施计划（teacher Phase 1 论文对齐增强版）
 
-> 状态：**提案，待确认**——D0 决策门拍板前不动代码。
+> 状态：**代码已装配，训练待启动**（2026-09-01：D0-1/D0-2 用户拍板后 A–F 全部落地，
+> 离线闸门 8/8 绿 + teacher_smoke_v3 + 4096 env 计时通过；实施偏差见 §10 v3.3 行）。
 > 生成：2026-09-01。来源：全仓 code review + Miki et al. 2022（arXiv:2201.08117,
 > Sci. Robotics）全文核实（正文 + 补充材料 S1–S9）。
-> 修订：v3.2.1（2026-09-01）——G3 剩余与 harness 版本记录移 ablation_harness/HARNESS.md（仓不拆、只拆版本文档），明细见 §10 修订记录。
-> 关联：`PLAN.md`（训练计划/挂账）、`FAMILY.md`（obs 布局 SSOT）。v3 定稿训练后
-> 本文件并入 PLAN.md，FILEMAP 登记随 Phase F 补。
+> 修订：v3.3.1（2026-09-01）——家族之家 consolidation（四件套移入 versions/lizard/，rl_exp 根只剩代码），明细见 §10 修订记录。
+> 关联：`../PLAN.md`（家族滚动计划/挂账）、`../FAMILY.md`（obs 布局 SSOT）。v3 定稿
+> 训练后本文件并入 ../PLAN.md，FILEMAP 登记随 Phase F 补。
 
 ## 0. 背景与动机
 
@@ -206,3 +207,5 @@ fall_rate 因 DR reset 化 + tilt 终止语义差异跨版本不可比，只做 
 | 2026-09-01 | v3.1.4 | G3 剩余（harness 侧 _ISAAC_ROOT 参数化）移仓根 PLAN.md 挂账 #12——harness 是共享测量仪器（换家族后仍在），其工作不属 lizard 配方版本管理；升级触发（高频变更/多机器人/协议 v2 → versions/harness/vN）写入挂账行。versioning.mdc 分层原则补范围边界 |
 | 2026-09-01 | v3.2 | 用户拍板砍中途达标门：500 iters 策略未成形（站都玄乎），趴窝率 / c_k 达标判据无判读意义——改起步 sanity（~100 iters 内无 NaN / 非零 reward / 终止计数正常）+ 直训 4000 iters，验收一律以训完 harness eval 为准，中途趋势观察仅诊断用；§9 风险表与依赖链"冒烟"措辞同步（C3 实现冒烟不动） |
 | 2026-09-01 | v3.2.1 | G3 剩余与 harness 版本记录移 `ablation_harness/HARNESS.md`（自有版本文档，编号独立于家族配方版本；用户拍板：仓库不拆、只拆版本文档）——PLAN.md #12 留指针、G3 行改指。versioning.mdc 范围边界同步 |
+| 2026-09-01 | v3.3 | A–F 全量实施落地（D0-1 方案 A / D0-2 reset 化用户拍板后），实施偏差四项记录：① C2 字段名实况——pinned 树（28a37ce）`RayCasterCfg` 用 `ray_alignment="yaw"`（v3.1 注记的 `attach_yaw_only` 在此版本不存在，语义一致：起点随 yaw 旋转、方向世界系固定），已按实况实现 ② D3 乘子实挂 3 项（q̈/torque/ω_xy）——计划的 feet_slide 非本仓 stock 奖励项（计划笔误），按"不新增缺失论文项"纪律不补 ③ D4 friction 保持 startup 模式（F3 偏差：foot_friction_truth 特权 obs 的材质读回缓存只在 startup 语义下有效，reset 化会让特权 obs 陈旧；DR 课程覆盖 mass/com/inertia/gains/joint 五项）④ D3 c_k 机制落地为纯函数推导（`ck_value(env)` 直读 `common_step_counter` + `init_ck` startup 事件存参数）——无 reward/event 更新时序依赖（rewards 先于 interval events 计算），PLAY/eval 不接 init_ck 时退化恒 1.0。另：B2 dict 透传经源码级确认（vecenv_wrapper.py 原生 TensorDict 包装，无需 fallback）；C3 计时实测 4096 env v3 121.8 vs v2 105.8 ms/step（+15%，预算内，无需 40 点降配）；E3 num_mini_batches=11 静态值（4096×24/8300 换算，换 env 数需同步改） |
+| 2026-09-01 | v3.3.1 | 家族之家 consolidation：FAMILY.md / PLAN.md / lizard.urdf / 开发态 lizard_params.yaml 移入 versions/lizard/（rl_exp 根只剩代码；对齐规则路径约定，lizard 历史例外解除）；9 个代码消费点改路径（family cfg dev-yaml / pipeline ×3 / parity dev-yaml 契约 / archive ×2）；asset_lock 四版重生成（v3 首次上锁）；闸门 8/8 绿 |
