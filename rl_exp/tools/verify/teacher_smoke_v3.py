@@ -59,6 +59,9 @@ with torch.inference_mode():
 assert torch.isfinite(rew).all(), f"non-finite reward: {rew}"
 for group, tensor in obs.items():
     assert torch.isfinite(tensor).all(), f"non-finite obs in group '{group}'"
-print("STEP_FINITE %s" % bool(torch.isfinite(rew).all()))
+# anti-regression: the ring channels must actually vary (a dead caster reads
+# back a constant row and every downstream encoder silently learns nothing)
+assert obs["extero"].std() > 1.0e-3, f"extero group is near-constant (std {obs['extero'].std():.2e})"
+print("STEP_FINITE %s EXTERO_STD %.4f" % (bool(torch.isfinite(rew).all()), float(obs["extero"].std())))
 print("=== DONE ===")
 env.close()

@@ -183,7 +183,7 @@ python rl_exp\tools\verify\teacher_smoke.py --headless            :: teacher env
 | 6 | 延迟注入 DR（EP 技巧） | 🟡 UE 部署前 |
 | 7 | 奖励修复重应用（若 §4.6 对照坐实逃生舱假设） | 🔄 已重定向：v1 对照已出结论，杠杆改走 v3 论文口径（tilt/r_fc/c_k/DR-reset，见 §2.3 重定向注）；本行余下仅剩"v3 失效时的备选升级路径"（§2.3 表 + v3 PLAN §9） |
 | 8 | 资产换代时同步 teacher 快照文件（2026-08-31 起机器化报警：check_dr_parity ④robot 块比对/⑤usda 结构契约/⑥versions asset_lock 哈希锁；同步本身仍是人工，但漏同步会在离线闸门炸出 DRIFT） | 🟢 有闸门 |
-| 9 | staged 课程 metric 接线 bug（Curriculum/*/metric 恒 0） | 🟢 低 |
-| 10 | yaml obs_layout 更新（感知版 +扫描差异） | 🟢 文档债 |
+| 9 | staged 课程 metric 接线 bug（Curriculum/*/metric 恒 0） | 🟢 低（v3 的 c_k 课程因此刻意不走 CurriculumTerm——纯函数推导 + 自定义 reward/event 读取，见 v3 PLAN D3；本 bug 修复仍挂账，只影响家族 staged 课程） |
+| 10 | yaml obs_layout 更新（感知版 +扫描差异） | ✅ v3 装配时同步（v3 yaml obs_layout 注记三组；组级 SSOT = FAMILY.md v3 节） |
 | 11 | DR 放宽策略 / resume 二阶段 | 🟢 走稳后 |
 | 12 | ablation_harness 版本与待办 → `ablation_harness/HARNESS.md`（自有版本文档 SSOT，2026-09-01 拍板：仓不拆、只拆版本文档）。当前挂账：G3 剩余 `_ISAAC_ROOT` 参数化三处 → 删 `E:\IsaacLab\ablation_harness` junction | 🟡 G3 收尾 |

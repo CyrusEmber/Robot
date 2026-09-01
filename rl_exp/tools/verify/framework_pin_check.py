@@ -49,6 +49,36 @@ NEEDLES = [
     ("source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/velocity_env_cfg.py",
      r"height_scanner\.update_period = self\.decimation \* self\.sim\.dt",
      "family/teacher scanner cadence contract (50 Hz policy rate)"),
+    # v3: obs groups reach the model through the wrapper untouched
+    ("source/isaaclab_rl/isaaclab_rl/rsl_rl/vecenv_wrapper.py",
+     r"return TensorDict\(obs_dict, batch_size=\[self\.num_envs\]\)",
+     "SplitEncoderModel (obs dict -> TensorDict group passthrough)"),
+]
+
+# same but inside the rsl_rl package the venv installs under <root>: the
+# class_name point-path registration is the whole v3 architecture's foundation
+RSL_RL_NEEDLES = [
+    ("env_isaaclab/Lib/site-packages/rsl_rl/utils/utils.py",
+     r'if ":" in callable_or_name:',
+     "teacher_networks class_name point path (module:Class resolution)"),
+    ("env_isaaclab/Lib/site-packages/rsl_rl/utils/utils.py",
+     r"def resolve_obs_groups",
+     "obs_groups cfg validation (actor/critic sets -> env group names)"),
+    ("env_isaaclab/Lib/site-packages/rsl_rl/algorithms/ppo.py",
+     r'resolve_callable\(cfg\["actor"\]\.pop\("class_name"\)\)',
+     "v3 runner actor class_name injection (SplitEncoderModel)"),
+    ("env_isaaclab/Lib/site-packages/rsl_rl/algorithms/ppo.py",
+     r'resolve_callable\(cfg\["critic"\]\.pop\("class_name"\)\)',
+     "v3 runner critic class_name injection"),
+    ("env_isaaclab/Lib/site-packages/rsl_rl/algorithms/distillation.py",
+     r'resolve_callable\(cfg\["student"\]\.pop\("class_name"\)\)',
+     "Phase 2 student class_name injection (student_networks)"),
+    ("env_isaaclab/Lib/site-packages/rsl_rl/algorithms/distillation.py",
+     r'resolve_callable\(cfg\["teacher"\]\.pop\("class_name"\)\)',
+     "Phase 2 teacher class_name injection"),
+    ("env_isaaclab/Lib/site-packages/rsl_rl/models/mlp_model.py",
+     r"def get_latent",
+     "SplitEncoderModel base-class forward protocol"),
 ]
 
 
@@ -85,13 +115,23 @@ def main() -> int:
     print(f"IsaacLab root: {root}")
 
     failures = []
-    for rel, pattern, user in NEEDLES:
+    for rel, pattern, user in NEEDLES + RSL_RL_NEEDLES:
         path = root / rel
         if not path.is_file():
             failures.append(f"{rel}: file gone ({user})")
             continue
         if not re.search(pattern, path.read_text(encoding="utf-8", errors="replace"), re.M):
             failures.append(f"{rel}: pattern '{pattern}' no longer present ({user})")
+
+    # dirty-tree WARN: a locally modified pinned tree invalidates every needle
+    try:
+        dirty = subprocess.run(["git", "-C", str(root), "status", "--porcelain"],
+                               capture_output=True, text=True, timeout=15, check=False).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        dirty = ""
+    if dirty:
+        print(f"WARN: IsaacLab tree has uncommitted changes ({len(dirty.splitlines())} entries) -- "
+              "needle checks read the working tree, not the pinned SHA")
 
     try:
         sha = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"],

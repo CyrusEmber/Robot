@@ -1,8 +1,8 @@
 # FILEMAP —— 全仓文件地图（给下一个 AI / 新协作者）
 
 > 读图顺序：`README.md`（仓定位 + 新机器摆位）→ 本文件（每个文件干啥）→
-> `rl_exp\PLAN.md`（训练计划与挂账，当前进度）→
-> `rl_exp\FAMILY.md`（任务注册表/版本历史/obs 布局/记录体系）。
+> `rl_exp\versions\lizard\PLAN.md`（训练计划与挂账，当前进度）→
+> `rl_exp\versions\lizard\FAMILY.md`（任务注册表/版本历史/obs 布局/记录体系）。
 > AI 开发守则见 `AGENTS.md`（IsaacLab 上游）+ `.codemaker\skills\tool\`（本项目 4 份 skill）。
 
 ## 仓根
@@ -15,29 +15,31 @@
 
 ## rl_exp\ —— 任务包（自包含核心）
 
-### 文档与参数 SSOT
+### 文档与参数 SSOT（2026-09-01 迁移：家族级文件入 `versions\lizard\`）
 
 | 文件 | 作用 |
 |---|---|
-| `lizard_params.yaml` | **参数 SSOT（开发态）**：执行器 PD/动作缩放/命令范围/DR 范围。冻结版在 `versions\lizard\vN\`，跑冻结版永远不读这份 |
-| `lizard.urdf` | 机器人几何 SSOT（Blender 生成）：26 关节、质量、限位 |
-| `PLAN.md` | 训练计划 + 挂账清单（#3 teacher 训练是当前关键路径） |
-| `FAMILY.md` | 家族总文档：任务注册表 / 版本历史 / teacher obs 布局 SSOT / 四层记录体系（代码地图归本文件，开新版本流程归 `.codemaker/rules/versioning.mdc` §A） |
+| `versions\lizard\lizard_params.yaml` | **参数 SSOT（开发态）**：执行器 PD/动作缩放/命令范围/DR 范围。冻结版在 `versions\lizard\vN\`，跑冻结版永远不读这份 |
+| `versions\lizard\lizard.urdf` | 机器人几何 SSOT（Blender 生成）：26 关节、质量、限位 |
+| `versions\lizard\PLAN.md` | 家族训练计划 + 挂账清单（#3 teacher 训练是当前关键路径；跨版本路线，方案细节归各 vN\PLAN.md） |
+| `versions\lizard\FAMILY.md` | 家族总文档：任务注册表 / 版本历史 / teacher obs 布局 SSOT / 四层记录体系（代码地图归本文件，开新版本流程归 `.codemaker/rules/versioning.mdc` §A） |
 
 ### tasks\ —— gym 任务包（训练代码本体）
 
 | 文件 | 作用 |
 |---|---|
-| `__init__.py` | 全部 12 个 gym 注册（家族 8 + teacher v1/v2 各 train/play） |
+| `__init__.py` | 全部 14 个 gym 注册（家族 8 + teacher v1/v2/v3 各 train/play） |
 | `lizard_env_cfg.py` | 家族平地基座：机器人装配 + DR 接线 + `_load_params`（版本参数机制） |
 | `rough_env_cfg.py` | 家族粗糙地形（蜥蜴尺度化地形 + 高度扫描 obs） |
 | `curriculum_env_cfg.py` | 三课程平地变体（骨骼/速度/转向，spine 可被课程锁放） |
 | `curriculum_rough_env_cfg.py` | 三课程粗糙变体 |
-| `teacher_env_cfg.py` | **teacher 独立快照**（只继承框架基类，零家族 import；`params_version` 类属性 + `TEACHER_PRIVILEGED_SPEC` 版本差异表，v1/v2 子类常驻可复现；spine 10 关节 scale=0 锁定） |
-| `teacher_mdp.py` | 特权 obs term：真值速度/接触布尔/**力矢量/接触法线（warp 射线）/每脚摩擦/大小腿接触/持续外力**/air time/逐 body 质量（只增不改纪律） |
-| `play_utils.py` | **PLAY 共享工具**：`DR_EVENT_NAMES` + `disable_dr_events()`——全部 6 个 PLAY 变体的 DR 置空单一真源（与 harness 的 dr_controller 同步清单互指） |
+| `teacher_env_cfg.py` | **teacher 独立快照**（只继承框架基类，零家族 import；`params_version` 类属性 + `TEACHER_PRIVILEGED_SPEC` 版本差异表，v1/v2/v3 子类常驻可复现；v3 = 三组 obs + 4×脚环 RayCaster + D 包接线，`RingPatternCfg` 环形 pattern 在此；spine 10 关节 scale=0 锁定） |
+| `teacher_networks.py` | **v3 teacher 网络**：`SplitEncoderModel`（MLPModel 子类：g_e 每脚共享 {80,60}→24 / g_p {64,32}→24 / f_π {256,160,128}，三流各自 EmpiricalNormalization，f_π 段序冻结 [proprio\|l_e\|l_priv]）+ `DecayingLrPPO`（lr 0.9999/iter）；经 `class_name` 点路径注册，零 rsl_rl 改动 |
+| `student_networks.py` | **Phase 2 接口锁**：`BeliefEncoder` GRU 2×50（b'=100）、`AttentionGate`/`BeliefMapper` {64,64}、`StudentPolicy`（f_π 输入 210 与 teacher 恒等）、`BeliefDecoder`（208+24）、`load_from_teacher`（g_e/f_π 权重 + o_p 归一化统计迁移 + 段序恒等断言） |
+| `teacher_mdp.py` | 特权 obs term：真值速度/接触布尔/**力矢量/接触法线（warp 射线）/每脚摩擦/大小腿接触/持续外力**/air time/逐 body 质量（只增不改纪律）；v3 段 = D 包（c_k 纯函数课程 + tilt 终止 + `FootClearanceReward` 防拖脚 + reset 化 c_k 锚点缩放 DR 包装） |
+| `play_utils.py` | **PLAY 共享工具**：`DR_EVENT_NAMES` + `disable_dr_events()`——全部 PLAY 变体的 DR 置空单一真源（与 harness 的 dr_controller 同步清单互指）；corruption 关闭遍历全部现存 obs 组（v3 无 policy 组） |
 | `staged_curriculum.py` | 通用阶段课程组件（度量阈值+持续时长+依赖门控） |
-| `agents\rsl_rl_ppo_cfg.py` | PPO runner 配置（experiment_name 按任务族隔离：`lizard_rough_teacher` 等） |
+| `agents\rsl_rl_ppo_cfg.py` | PPO runner 配置（experiment_name 按任务族隔离；`LizardTeacherV3PPORunnerCfg` = S1 超参 + obs_groups 三组 + SplitEncoderModel + DecayingLrPPO） |
 
 ### versions\ —— 参数版本冻结（**家族分层：`versions\<family>\vN\`，当前家族 = `lizard`**）
 
@@ -45,8 +47,8 @@
 |---|---|
 | `lizard\v0\` | 全量 DR 原始配方。**未训练即被 v1 取代**，存档作对照基准（复现走 git 历史） |
 | `lizard\v1\` | v0 仅 DR 段收窄。**已训练 14000 iters 并出评测分**（2026-09-01，NOTES 回填）；任务 id `Lizard-Rough-v1` 常驻注册可复现（obs 266） |
-| `lizard\v2\` | **当前活跃**：v1 参数 + 特权 obs 论文对齐补全（266→308）。NOTES.md 含验收线与判死刑信号 |
-| `lizard\v3\` | **提案中**（2026-09-01）：三编码器+脚环+r_fc+c_k+tilt。`PLAN.md` = 版本级实施计划（新约定：**计划归版本目录**，根级 `rl_exp\PLAN.md` 只管跨版本路线）；定稿冻结时补 yaml/NOTES/lock |
+| `lizard\v2\` | v1 参数 + 特权 obs 论文对齐补全（266→308）。NOTES.md 含验收线与判死刑信号 |
+| `lizard\v3\` | **代码已装配，训练待启动**（2026-09-01）：三编码器 + 脚环 extero 208 + tilt/r_fc/c_k/DR-reset 趴窝修复包。`PLAN.md` v3.3（含实施偏差四项）+ `NOTES.md`（含训练命令与装配验证记录）+ yaml（v2 全量 + `v3:` 段）+ asset_lock 齐备 |
 | `vN\PLAN.md` | 版本级计划存档（目的/假设/决策点/验收线/结论一句话；v3 原生，v0–v2 为 2026-09-01 追溯补录；结果回填仍走 NOTES） |
 | `vN\NOTES.md` | 版本文档：目的/参数 diff/训练命令/结果回填 |
 | `vN\tb_scalars.csv` | 训练后经 dump_tb.py 导出的逐迭代曲线 |
@@ -75,7 +77,13 @@
 
 | 文件 | 作用 |
 |---|---|
-| `tools\verify\teacher_smoke.py` | teacher 冒烟：obs 308 维 + 全特权段判读（MASS_SUM≈72 / 力矢量 / 法线 / 摩擦 / wrench=0）；per-term 布局从 observation_manager 现场推导，无魔数切片 |
+| `tools\verify\teacher_smoke.py` | teacher 冒烟（v2）：obs 308 维 + 全特权段判读（MASS_SUM≈72 / 力矢量 / 法线 / 摩擦 / wrench=0）；per-term 布局从 observation_manager 现场推导，无魔数切片 |
+| `tools\verify\teacher_smoke_v3.py` | teacher 冒烟（v3）：三组 90/208/83 + extero 顺序 lf/rf/rl/rr + tilt/r_fc 活性 + 有限性 + extero std>ε（防死通道回归） |
+| `tools\verify\check_obs_layout.py` | **obs 布局静态门**（离线）：v1/v2/v3 组名 + 组内 term 顺序 + extero 脚序 + 环形总点数 + c_k steps_per_iteration 与 runner num_steps_per_env 一致性（静默错位在 env 加载前炸出） |
+| `tools\verify\test_teacher_networks.py` | SplitEncoderModel 离线单测：前向 shape / 梯度 / 三组归一化更新 / 命名子模块摘取 / JIT-ONNX 导出 / 契约违约 |
+| `tools\verify\test_student_networks.py` | student belief 栈离线单测：GRU 步进 / α∈[0,1] / 门控槽对齐 / 解码器维数 / load_from_teacher 等价 + 段序失配 raise |
+| `tools\verify\test_v3_curriculum.py` | v3 课程/几何离线单测：c_k 方向与热身长度 / 无参退化 1.0 / DR 锚点缩放 / tilt 判据 / 环形 pattern 几何（52 点逐环） |
+| `tools\verify\time_foot_rings.py` | C3 性能风险项：v3 脚环 vs v2 网格在目标 env 数下的 ms/step + 显存（实测 4096 env +15%，预算内） |
 | `tools\verify\smoke_test.py` | 家族平地冒烟：建环境 + obs 维度 + 10 步 |
 | `tools\verify\position_check.py` | 落地检查：base 高度轨迹 + 四脚接触力（≈700N=全重）+ NaN 扫描，`--rough` 切粗糙 |
 | `tools\verify\pose_check.py` | 静态几何打印：各 body 相对 base 坐标（头/四脚/尾） |
@@ -85,7 +93,7 @@
 | `tools\verify\framework_pin_check.py` | **框架 pin 检查**：grep IsaacLab 源码树里我们依赖的内部符号（cfg.func 替换 / RayCaster.meshes / live PD 增益 / warp kernel 等）+ 比对已验证 commit `28a37ce`（perf-2026-06-24）；升级 IsaacLab 后第一件事 |
 | `tools\verify\test_recovery_parity.py` | recovery 向量化 vs 朴素参考实现等价性（纯 torch，随机+6 组边界） |
 | `tools\verify\test_staged_curriculum.py` | 课程组件离线单测（mock managers，不起仿真） |
-| `tools\verify\run_offline_checks.bat` | **离线全套一键**（pin/parity/recovery/curriculum，秒级不起仿真）；改 tasks 或 harness 后、commit 前必跑 |
+| `tools\verify\run_offline_checks.bat` | **离线全套一键**（8 项：pin/parity/recovery/curriculum/teacher 网络/student 网络/v3 课程/obs 布局，秒级不起仿真）；改 tasks 或 harness 后、commit 前必跑 |
 | `tools\diagnose\debug_pose.py` | reset 后立即 dump 全部腿关节轴心世界坐标 |
 | `tools\diagnose\diagnose_nan.py` | Flat 任务 NaN obs 诊断（历史问题排查用） |
 
