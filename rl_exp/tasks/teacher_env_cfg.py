@@ -630,6 +630,11 @@ class LizardRoughTeacherEnvCfg_V3(LizardRoughTeacherEnvCfg):
         # frozen generator; swapping after super() is the same late-replace the
         # base itself does -- curriculum=True already set on the new cfg)
         self.scene.terrain.terrain_generator = TEACHER_TERRAINS_CFG_V3
+        # v3.5: paper curriculum prerequisite -- spawn at the EASIEST row and
+        # let stock terrain_levels_vel (per-robot success-driven row promotion)
+        # climb; the discrete stand-in for the particle-filter curriculum only
+        # holds if training starts from level 0 (v1/v2 snapshots keep 5: frozen)
+        self.scene.terrain.max_init_terrain_level = 0
         params = _load_params(self.params_version)
         v3 = params["v3"]
         ring = v3["foot_ring"]

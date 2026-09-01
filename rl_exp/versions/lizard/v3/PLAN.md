@@ -4,7 +4,7 @@
 > 离线闸门 8/8 绿 + teacher_smoke_v3 + 4096 env 计时通过；实施偏差见 §10 v3.3 行）。
 > 生成：2026-09-01。来源：全仓 code review + Miki et al. 2022（arXiv:2201.08117,
 > Sci. Robotics）全文核实（正文 + 补充材料 S1–S9）。
-> 修订：v3.4.1（2026-09-01）——地形 Miki 对齐（§6.6）+ 运动学核算补记，明细见 §10 修订记录。
+> 修订：v3.5（2026-09-01）——地形课程护城河：`max_init_terrain_level 5→0`（用户 review），明细见 §10 修订记录。
 > 关联：`../PLAN.md`（家族滚动计划/挂账）、`../FAMILY.md`（obs 布局 SSOT）。v3 定稿
 > 训练后本文件并入 ../PLAN.md，FILEMAP 登记随 Phase F 补。
 
@@ -151,8 +151,12 @@ terrain_levels 停排。判据：训练曲线长期卡 row≈0.4m 对应档 → 
 1. open/ledged 楼梯未按原形态实现（论文动机 = 治 RaiSim 高度场边缘不垂直的
    仿真空子，Isaac mesh 路径无此病）；stones+深洞近似"可踏空面"族，镂空阶梯
    序列缺失，影响未验证。
-2. 粒子滤波自适应地形课程**不做**（stock `terrain_levels_vel` + c_k 已覆盖课程
-   需求）。
+2. 粒子滤波自适应地形课程**不做**，以离散等价替代：`terrain_levels_vel`（逐机
+   成功率升降排）+ **v3.5 硬前提 `max_init_terrain_level=5→0`**（从最易排起步，
+   论文"难而可解"的第一条；v1/v2 快照保持 5 不动——已训版本冻结）。此前
+   init=5 是历史遗留（v0 修复表候选项），叠加 v3.4 难度抬升 = 开局即中难地形，
+   正是论文避免的收敛陷阱。与 c_k 联动：弱惩罚期（前 ~100 iter）策略只在
+   最易排活动，风险进一步压缩。
 3. **归因声明**：训练地形变难、eval 套件（测量仪器）不动 → v3 对 v1 的 nominal
    success 可能不升反降，属地形难度差非机制倒退；跨版本对账以逐地形
    completion 为准。
@@ -249,3 +253,4 @@ fall_rate 因 DR reset 化 + tilt 终止语义差异跨版本不可比，只做 
 | 2026-09-01 | v3.3.1 | 家族之家 consolidation：FAMILY.md / PLAN.md / lizard.urdf / 开发态 lizard_params.yaml 移入 versions/lizard/（rl_exp 根只剩代码；对齐规则路径约定，lizard 历史例外解除）；9 个代码消费点改路径（family cfg dev-yaml / pipeline ×3 / parity dev-yaml 契约 / archive ×2）；asset_lock 四版重生成（v3 首次上锁）；闸门 8/8 绿 |
 | 2026-09-01 | v3.4 | 地形 Miki 对齐（新增 §6.6）：`TEACHER_TERRAINS_CFG_V3`——台阶顶 0.35→0.55m（review 定案，估计值）、+stepping_stones .1（open/ledged 近似，`用户拍板：选项 b 2026-09-01`，holes_depth −1.0）、boxes .2→.1；V3.__post_init__ 换引用，v1/v2 冻结生成器与 family 零改动（D0-5 保持）；粒子滤波课程不做；归因声明：训练地形变难、eval 套件不动，v3 对 v1 nominal success 可能不升反降，跨版本对账以逐地形 completion 为准。纪律边界：本修订合法仅因 v3 未训练——已训版本改地形一律 vN+1 |
 | 2026-09-01 | v3.4.1 | §6.6 补记（不改方案实质）：0.55m 运动学核算（提脚够/躯干勉强/顶排或不可爬 + 降档判据）；澄清子地形比例为本地设计非论文口径（论文无比例表） |
+| 2026-09-01 | v3.5 | 用户 review 指出收敛风险成立：v3.4 抄了论文难度、没抄课程护城河。修正 = V3 快照 `max_init_terrain_level 5→0`（从最易排起步，stock 行课程为粒子滤波的离散等价，init=0 是等价成立前提），偏差声明②同步；v1/v2 冻结快照不动。教训入 §6.6：地形难度与课程起点必须成对评审，只抬难度不改起点 = 反论文 |
