@@ -1,3 +1,0 @@
-| v0 | 2026-08-28 | 首版冻结：72kg、DR 全套、基线奖励（回滚态）、teacher 特权 obs。未训练即被 v1 取代，存档作全量 DR 对照 | [PLAN](versions/lizard/v0/PLAN.md) · [NOTES](versions/lizard/v0/NOTES.md) |
-| v1 | 2026-08-31 | teacher 首跑：v0 仅 DR 段全部收窄（无一归零），验证"特权+锁脊柱+轻扰动"能否出步态。已训练 14000 iters 并出评测分（09-01 回填），任务 id 常驻可复现 | [PLAN](versions/lizard/v1/PLAN.md) · [NOTES](versions/lizard/v1/NOTES.md) |
-| v2 | 2026-08-31 | 特权 obs 论文对齐补全（+forces/normals/friction/thigh-shank/wrench 共 42 维，266→308）；yaml 与 v1 相同 | [PLAN](versions/lizard/v2/PLAN.md) · [NOTES](versions/lizard/v2/NOTES.md) |
