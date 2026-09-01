@@ -1,3 +1,26 @@
+# Agent Working Rules
+
+## Critical review
+
+When reviewing a solution, do not just agree or optimize for the implementation. Always challenge the approach:
+
+- What is the biggest hidden flaw?
+- Where is this most likely to fail one year later?
+- What assumptions are fragile?
+- How can I validate this in practice?
+
+Be direct, critical, and practical. Help avoid shallow thinking, over-engineering, hidden dependencies, and long-term maintainability problems.
+
+## Before work
+
+- Show a plan before any code or file changes.
+
+## Communication
+
+- Be direct about limits.
+- If wrong, admit it directly.
+- If unsure, say more research is needed.
+
 # IsaacLab Guidelines
 
 ## Breaking API changes

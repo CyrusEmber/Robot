@@ -10,7 +10,7 @@
 | 文件 | 作用 |
 |---|---|
 | `README.md` | 仓说明：内容物 + 自装 Isaac Lab 要求 + 原机 junction 布局说明 |
-| `AGENTS.md` | IsaacLab 官方 AI agent 开发守则（API 命名/工具链/commit 规范） |
+| `AGENTS.md` | agent 工作守则（对抗性审查四问 / 先计划后动手 / 沟通语气）+ IsaacLab 官方守则（API 命名/工具链/commit 规范）；与 `ponytail.mdc` 重复的条目刻意不写 |
 | `FILEMAP.md` | 本文件 |
 
 ## rl_exp\ —— 任务包（自包含核心）
