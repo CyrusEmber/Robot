@@ -3,7 +3,7 @@
 > 状态：**提案，待确认**——D0 决策门拍板前不动代码。
 > 生成：2026-09-01。来源：全仓 code review + Miki et al. 2022（arXiv:2201.08117,
 > Sci. Robotics）全文核实（正文 + 补充材料 S1–S9）。
-> 修订：v3.1.4（2026-09-01）——二轮 review 修复 + 闸门自定位 + G3 剩余移仓根挂账，明细见 §10 修订记录。
+> 修订：v3.2（2026-09-01）——用户拍板砍 500 iters 中途达标门（判据无判读意义），改起步 sanity + 直训 4000，明细见 §10 修订记录。
 > 关联：`PLAN.md`（训练计划/挂账）、`FAMILY.md`（obs 布局 SSOT）。v3 定稿训练后
 > 本文件并入 PLAN.md，FILEMAP 登记随 Phase F 补。
 
@@ -175,21 +175,23 @@ PARITY_OK（4 yaml、锁 4 版、接线 21/21）；`compileall` 全绿。
 
 **验收**：v3 vs v2 同 eval seed 对照**仅 nominal 模式**（v3.1 修口径矛盾：robust /
 fall_rate 因 DR reset 化 + tilt 终止语义差异跨版本不可比，只做 v3 内部基线，与风险表
-一致）；500 iters 冒烟（趴窝率 / c_k 曲线达标）再上 4000 iters。
+一致）；**不设中途达标门**（v3.2 用户拍板：500 iters 级别站都玄乎，趴窝率 / c_k 达标
+判据无判读意义）——起步 sanity（~100 iters 内：无 NaN、非零 reward、终止计数正常）
+后直接 4000 iters，验收一律以训完 harness eval 为准；中途趋势观察仅诊断用，不作门。
 
 | 风险 | 缓解 |
 |---|---|
 | rsl_rl class_name 注入点上游重构 | pin check 补符号；升级 IsaacLab 必跑 |
 | 4×52 射线开销 > 135 | C3 冒烟计时；超预算降 40 点/脚并记录偏差 |
 | DR reset 化 → v2/v3 不可直接比 | 版本隔离即目的；对照只在 v3 内部做 |
-| tilt 0.6 是估计值 | 进 yaml 当消融变量；冒烟盯 harness fall_rate + 终止计数 |
-| **belly-down 趴窝敞口**（无接触终止；tilt 抓不到水平趴卧，§2.3 根因①敞口保留） | 冒烟盯 undesired_contacts 惩罚能否压住趴窝；复现则按序升级：① 接触惩罚 -1→-5（§2.3 候选，纯奖励杠杆）② tilt 收紧 ③ 最后才重议躯干终止（挪 v4，可逆） |
-| 脚环挂动脚，obs 非平稳性变化 | 冒烟观察 extero 分布；必要时改名义脚位固定偏移 |
+| tilt 0.6 是估计值 | 进 yaml 当消融变量；训练早期盯 harness fall_rate + 终止计数 |
+| **belly-down 趴窝敞口**（无接触终止；tilt 抓不到水平趴卧，§2.3 根因①敞口保留） | 训练早期盯 undesired_contacts 惩罚能否压住趴窝；复现则按序升级：① 接触惩罚 -1→-5（§2.3 候选，纯奖励杠杆）② tilt 收紧 ③ 最后才重议躯干终止（挪 v4，可逆） |
+| 脚环挂动脚，obs 非平稳性变化 | 训练早期观察 extero 分布；必要时改名义脚位固定偏移 |
 | B2 obs dict 透传未端到端验证 | 实现日 30 分钟确认；不通即退回单向量+偏移切片（F1 升级为偏移强断言），B 其余项不受影响 |
 | c_k 弱惩罚期（前 ~100 iter）趴窝复发 | 接触罚豁免 c_k 已兜一层；复发先抬 c_0（0.2→0.5）再谈终止（D3） |
 | 单 seed 趴窝复发误判 | 复发结论需第二 seed 复现再动激励（换 seed 不升版本，NOTES 记 seed） |
 
-**依赖链**：D0 → A ∥ G → B ∥ C → D → E → F → 冒烟 → 训练。
+**依赖链**：D0 → A ∥ G → B ∥ C → D → E → F → 起步 sanity → 训练。
 
 ## 10. 修订记录
 
@@ -202,3 +204,4 @@ fall_rate 因 DR reset 化 + tilt 终止语义差异跨版本不可比，只做 
 | 2026-09-01 | v3.1.2 | 用户勘误："不用cfg"实为"不用CPG"（笔误）。D2 swing 判定保持接触态代理并补"用户拍板"标记（文档本就未用 CPG）；撤回 v3.1 的"不设消融档"（系对该笔误的误读），c_0 恢复 yaml 消融变量（0.05/0.2/0.5） |
 | 2026-09-01 | v3.1.3 | 闸门自定位修复（G3 部分）：junction 布局随 G2 删除后 framework_pin_check 自动探测失效——run_offline_checks.bat 自解析 `RL_ISAAC_ROOT`（缺省 E:\IsaacLab）+ venv python（缺省 `<root>\env_isaaclab\Scripts\python.exe`，回退 PATH python）；framework_pin_check 环境变量 ISAACLAB_ROOT→RL_ISAAC_ROOT 与 G3 命名统一。全新 shell 零环境变量闸门 4/4 绿 |
 | 2026-09-01 | v3.1.4 | G3 剩余（harness 侧 _ISAAC_ROOT 参数化）移仓根 PLAN.md 挂账 #12——harness 是共享测量仪器（换家族后仍在），其工作不属 lizard 配方版本管理；升级触发（高频变更/多机器人/协议 v2 → versions/harness/vN）写入挂账行。versioning.mdc 分层原则补范围边界 |
+| 2026-09-01 | v3.2 | 用户拍板砍中途达标门：500 iters 策略未成形（站都玄乎），趴窝率 / c_k 达标判据无判读意义——改起步 sanity（~100 iters 内无 NaN / 非零 reward / 终止计数正常）+ 直训 4000 iters，验收一律以训完 harness eval 为准，中途趋势观察仅诊断用；§9 风险表与依赖链"冒烟"措辞同步（C3 实现冒烟不动） |
