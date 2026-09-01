@@ -57,6 +57,7 @@ ALLOWLIST: set[str] = {
     "self.rewards.feet_air_time = None",  # D2: replaced by foot_clearance
     "self.rewards.foot_clearance = RewTerm(",  # D2 anti-drag r_fc
     "self.terminations.tilt = DoneTerm(",  # D1 tilt termination
+    "self.terminations.base_contact = None",  # v3.6: belly contact penalty-only (D0-6)
 }
 
 # ArticulationCfg block lines that only exist on one side BY DESIGN

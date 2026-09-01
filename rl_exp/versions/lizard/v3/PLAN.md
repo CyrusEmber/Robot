@@ -4,7 +4,9 @@
 > 离线闸门 8/8 绿 + teacher_smoke_v3 + 4096 env 计时通过；实施偏差见 §10 v3.3 行）。
 > 生成：2026-09-01。来源：全仓 code review + Miki et al. 2022（arXiv:2201.08117,
 > Sci. Robotics）全文核实（正文 + 补充材料 S1–S9）。
-> 修订：v3.5（2026-09-01）——地形课程护城河：`max_init_terrain_level 5→0`（用户 review），明细见 §10 修订记录。
+> 修订：v3.6（2026-09-01）——回放诊断三修：速度课程接入（-1..2→5，`用户拍板`）、
+> base_contact 终止删除（D0-6 执行落地）、碎石粗化（downsampled_scale 0.3m），明细见 §10 修订记录。
+> 此前 v3.5（2026-09-01）：地形课程护城河 `max_init_terrain_level 5→0`。
 > 关联：`../PLAN.md`（家族滚动计划/挂账）、`../FAMILY.md`（obs 布局 SSOT）。v3 定稿
 > 训练后本文件并入 ../PLAN.md，FILEMAP 登记随 Phase F 补。
 
@@ -22,7 +24,9 @@ teacher 与论文仍有结构性差异，按对 Phase 2 蒸馏的影响排序：
 4. **奖励/终止面 = stock ANYmal 校准**，与论文 S7 语义不同源——**趴窝的论文防线
    在终止三件套 + c_k 惩罚课程，不在接触惩罚权重**（PLAN §2.3 回滚表调的是论文
    没调的杠杆，若重启应改方向）。v3 采 tilt 终止 + c_k 课程两项；接触终止因
-   sprawled 低趴误杀风险**明确不做**（D0-6 声明偏差，敞口与升级路径见 §9）。
+   sprawled 低趴误杀风险**明确不做**（D0-6 声明偏差，敞口与升级路径见 §9）；
+   v3.6 起代码落地执行（`terminations.base_contact = None`，肚皮接触只罚不终止，
+   `用户拍板：2026-09-01`）。
 
 ## 1. D0 决策门（拍板后开工）
 
@@ -133,7 +137,7 @@ obs 按**三个组**交付 `[proprio 90 | extero 208 | priv 83]`（组名对齐 
 | pyramid_stairs / inv | .2 / .2 | step_height **(0.08, 0.55)**（原 0.35 顶） | 论文上限未给精确数，0.55 ≈ 腿展 40%，`review 定案`（估计值，可随曲线调） |
 | stepping_stones | .1 | stone_width (0.5,0.9)、distance (0.3,0.7)、height_max 0.3、**holes_depth −1.0** | open/ledged 楼梯近似，`用户拍板：2026-09-01`（选项 b） |
 | boxes | .1（原 .2） | 不变 | 比例让位 stones，`review 定案` |
-| random_rough | .2 | 不变 | — |
+| random_rough | .2 | **downsampled_scale 0.3m、noise (0.06, 0.2)**（v3.6） | stock 0.1m 采样间距 = 10cm 细碎石，0.13m 平脚掌整面踩平（v1 回放实证"啪就能站上去"）；0.3m ≈ 2.3×脚掌，逼包络贴合，`用户拍板：2026-09-01` |
 | hf_pyramid_slope / inv | .1 / .1 | 不变 | — |
 
 **实现**：`TEACHER_TERRAINS_CFG_V3`（teacher_env_cfg.py），`V3.__post_init__` 换
@@ -254,3 +258,4 @@ fall_rate 因 DR reset 化 + tilt 终止语义差异跨版本不可比，只做 
 | 2026-09-01 | v3.4 | 地形 Miki 对齐（新增 §6.6）：`TEACHER_TERRAINS_CFG_V3`——台阶顶 0.35→0.55m（review 定案，估计值）、+stepping_stones .1（open/ledged 近似，`用户拍板：选项 b 2026-09-01`，holes_depth −1.0）、boxes .2→.1；V3.__post_init__ 换引用，v1/v2 冻结生成器与 family 零改动（D0-5 保持）；粒子滤波课程不做；归因声明：训练地形变难、eval 套件不动，v3 对 v1 nominal success 可能不升反降，跨版本对账以逐地形 completion 为准。纪律边界：本修订合法仅因 v3 未训练——已训版本改地形一律 vN+1 |
 | 2026-09-01 | v3.4.1 | §6.6 补记（不改方案实质）：0.55m 运动学核算（提脚够/躯干勉强/顶排或不可爬 + 降档判据）；澄清子地形比例为本地设计非论文口径（论文无比例表） |
 | 2026-09-01 | v3.5 | 用户 review 指出收敛风险成立：v3.4 抄了论文难度、没抄课程护城河。修正 = V3 快照 `max_init_terrain_level 5→0`（从最易排起步，stock 行课程为粒子滤波的离散等价，init=0 是等价成立前提），偏差声明②同步；v1/v2 冻结快照不动。教训入 §6.6：地形难度与课程起点必须成对评审，只抬难度不改起点 = 反论文 |
+| 2026-09-01 | v3.6 | 回放诊断三修（v1 checkpoint 蠕动根因 = 指令上限 1 m/s 下蠕动即最优，`用户拍板：2026-09-01`）：① 速度课程接入——V3 挂 `speed_curriculum`（StagedCurriculumTerm 复用，档位 (-1,2)→(-1,3)→(-1,4)→(-1,5)，门 = success_rate≥0.8 持续 120s，够不着的档永不到达；初始指令范围同步 (-1,2)；V3_PLAY 掐课程定固定 (-1,5)）；② base_contact 终止删除——执行 D0-6 拍板（肚皮接触只罚不终止，undesired_contacts -0.2 奖励仍在；实况：已训机体不翻倒，sprawled 低趴误杀敞口大于收益）；③ 碎石粗化——random_rough downsampled_scale 0.3m + noise (0.06,0.2)，§6.6 表同步。边界：v1/v2 冻结快照零改动；旧 v1 checkpoint 回放行为不变（蠕动是训练产物，非 env 可救） |

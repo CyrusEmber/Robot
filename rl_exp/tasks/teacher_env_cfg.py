@@ -51,6 +51,7 @@ from isaaclab_tasks.utils import preset
 
 from rl_exp.tasks import teacher_mdp
 from rl_exp.tasks.play_utils import apply_play_wiring
+from rl_exp.tasks.staged_curriculum import StageCfg, StagedCurriculumTerm, StagedCurriculumTermCfg
 
 # this file lives at rl_exp/tasks/teacher_env_cfg.py -> exp root is parents[1]
 _RL_EXP_DIR = pathlib.Path(__file__).resolve().parents[1]
@@ -162,7 +163,14 @@ TEACHER_TERRAINS_CFG_V3 = TerrainGeneratorCfg(
             proportion=0.1, grid_width=0.9, grid_height_range=(0.08, 0.3), platform_width=4.0
         ),
         "random_rough": terrain_gen.HfRandomUniformTerrainCfg(
-            proportion=0.2, noise_range=(0.04, 0.2), noise_step=0.04, border_width=0.5
+            # v3.6: downsampled_scale 0.3 m (~2.3x the 0.13 m foot blade) -- the
+            # stock 0.1 m pitch let flat foot pads perch on the rubble; noise
+            # 0.06-0.2 m makes bumps the feet must wrap over
+            proportion=0.2,
+            noise_range=(0.06, 0.2),
+            noise_step=0.04,
+            border_width=0.5,
+            downsampled_scale=0.3,
         ),
         "hf_pyramid_slope": terrain_gen.HfPyramidSlopedTerrainCfg(
             proportion=0.1, slope_range=(0.0, 0.4), platform_width=4.0, border_width=0.5
@@ -635,6 +643,30 @@ class LizardRoughTeacherEnvCfg_V3(LizardRoughTeacherEnvCfg):
         # climb; the discrete stand-in for the particle-filter curriculum only
         # holds if training starts from level 0 (v1/v2 snapshots keep 5: frozen)
         self.scene.terrain.max_init_terrain_level = 0
+
+        # --- v3.6: staged speed curriculum replaces the (-1, 1) paper override ---
+        # v1 replay showed foot-pad creeping is the optimum at a 1 m/s command
+        # cap; widen -1..2 -> 5 gated by success_rate >= 0.8 sustained 120 s,
+        # so stages the robot cannot track are never applied (user decision
+        # 2026-09-01). Stage 0 also seeds the cfg range so the first resamples
+        # already match the curriculum.
+        self.commands.base_velocity.ranges.lin_vel_x = (-1.0, 2.0)
+        self.curriculum.speed_curriculum = StagedCurriculumTermCfg(
+            func=StagedCurriculumTerm,
+            stages=[
+                StageCfg(command_ranges={"lin_vel_x": (-1.0, 2.0)}, metric_threshold=0.8, sustain_s=120.0),
+                StageCfg(command_ranges={"lin_vel_x": (-1.0, 3.0)}, metric_threshold=0.8, sustain_s=120.0),
+                StageCfg(command_ranges={"lin_vel_x": (-1.0, 4.0)}, metric_threshold=0.8, sustain_s=120.0),
+                StageCfg(command_ranges={"lin_vel_x": (-1.0, 5.0)}),
+            ],
+        )
+
+        # --- v3.6: belly-contact termination removed (executes D0-6) ---
+        # the sprawled body sits low, so base contact is a crouch signal, not a
+        # fall -- and the trained robot never flips. Contact stays penalized
+        # by rewards.undesired_contacts (user decision 2026-09-01: penalty only).
+        self.terminations.base_contact = None
+
         params = _load_params(self.params_version)
         v3 = params["v3"]
         ring = v3["foot_ring"]
@@ -769,3 +801,9 @@ class LizardRoughTeacherEnvCfg_V3_PLAY(LizardRoughTeacherEnvCfg_V3):
 
         # deterministic evaluation: shared PLAY wiring (single source, see play_utils)
         apply_play_wiring(self)
+
+        # v3.6: eval determinism -- the staged speed curriculum would widen
+        # command ranges mid-eval on a good policy; fix the full ambition range
+        # instead and drop the curriculum term
+        self.curriculum.speed_curriculum = None
+        self.commands.base_velocity.ranges.lin_vel_x = (-1.0, 5.0)
