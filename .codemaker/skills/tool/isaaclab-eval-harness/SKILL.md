@@ -44,10 +44,12 @@ E:\IsaacLab\ablation_harness\
 │                          # 互为同步镜像（PLAY 变体用同一份）——改一边即红：
 │                          # check_dr_parity.py --strict 机器看守，别靠人记
 ├─ metrics.py              # 指标纯函数库（按时间线分段自动切窗，通用）
+├─ plot_eval.py            # 评测可视化（读 eval.json → 趋势图 + 逐地形热力图，不起仿真）
 ├─ specs\example_baseline.yaml         # 消融 spec 示例
 └─ results\<protocol>\<run_id>\eval.json + summary.csv
                            # 一次 campaign 可用 --group 单独成目录：
                            # results\<protocol>\<group>\<run_id>\ + 组内 summary.csv
+                           # + terrains.csv（--by-terrain 反向生成：run × terrain 长表）
 ```
 
 harness 与机器人无关；**机器人相关只有 suites.py 一个文件 + 协议里的 suite 引用**。
@@ -95,6 +97,11 @@ python ablation_harness\eval.py --task Lizard-Rough-v2 --checkpoint <model.pt> ^
 python ablation_harness\run_ablation.py --spec ablation_harness\specs\<name>.yaml
 python ablation_harness\run_ablation.py --summarize
 python ablation_harness\run_ablation.py --summarize --group v1
+:: 逐地形：组内 terrains.csv（长表）+ 三张「地形 × ckpt」pivot
+python ablation_harness\run_ablation.py --by-terrain --group v1
+:: 出图（纯读盘，不起仿真）；训练侧曲线用 rl_exp\tools\trainlog\plot_tb.py
+python ablation_harness\plot_eval.py --protocol locomotion_eval_v1 --group v1 ^
+  --out_dir rl_exp\versions\lizard\v1\plots --prefix v1_eval_
 ```
 
 ## 组件热插拔（spec 的组织方式，**永远不动家族代码**）
@@ -120,7 +127,9 @@ eval_checkpoints/eval_modes/eval_seed/overrides。**tag 不可互为后缀**（�
 
 ## 实验设计纪律
 
-- **多 checkpoint 比较**（如 1k/2k/4k）：固定单点比较会误杀慢收敛方案（CPG 典型起步慢）
+- **多 checkpoint 比较**（如 1k/2k/4k）：固定单点比较会误杀慢收敛方案（CPG 典型起步慢）。
+  **趋势判断要 ≥5 点**：teacher v1 实证——3 点（4k/8k/14k）读出"fall 随迭代上升"，补到
+  6 点（2k~14k）发现是 .15~.33 的抖动带，结论撤回（`versions\lizard\v1\NOTES.md` A2）
 - **seed 策略**：筛查 1 seed，结论性对照 ≥3 seed（locomotion 跨 seed 方差 ±0.1 常见）
 - nominal 保留 reset 扰动（关节 0.5-1.5 缩放 + 出生位置/速度随机）——spawn 条件是
   reset 协议一部分，两种模式一致（协议 yaml 注释声明）

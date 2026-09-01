@@ -103,6 +103,7 @@
 |---|---|
 | `tools\trainlog\dump_tb.py` | TB 事件文件 → CSV（版本记录用：`--log_dir <run目录> --out versions\lizard\vN\tb_scalars.csv`） |
 | `tools\trainlog\read_curriculum.py` | 从 tfevents 读课程终值（terrain level 等） |
+| `tools\trainlog\plot_tb.py` | tb_scalars.csv → 训练曲线 PNG（reward/终止/局长/课程四张，`--mark` 标已评测 ckpt） |
 | `ue\build_lizard_ue.py` | UE 编辑器脚本：按 `ue\lizard_ue.json` 组装蜥蜴物理 Actor |
 | `fork_patches\config_lizard___init__.py` | fork shim 现成副本（装到 IsaacLab 树注册任务用） |
 | `__init__.py` | 包声明（`import rl_exp` 入口，经 venv .pth 可达） |
@@ -112,7 +113,8 @@
 | 文件 | 作用 |
 |---|---|
 | `eval.py` | 统一评测 runner：task + checkpoint + 协议 + 模式 → eval.json |
-| `run_ablation.py` | 消融调度器：spec yaml → 串行 train+eval → 汇总表，断点续跑 |
+| `run_ablation.py` | 消融调度器：spec yaml → 串行 train+eval → 汇总表，断点续跑；`--by-terrain` 出逐地形长表+pivot |
+| `plot_eval.py` | 评测结果可视化：读组目录 eval.json → 趋势图（success/fall/recovery vs ckpt）+ 逐地形热力图（不起仿真） |
 | `metrics.py` | 指标库：tracking/success/energy（PD 反解 τ）/fall 几何判定/completion |
 | `suites.py` | 固定地形套件（9 地形确定性三锁：curriculum+等比例+单值难度+seed） |
 | `components\command_player.py` | 命令时间线播放器（协议 yaml 是唯一真源） |
@@ -120,7 +122,7 @@
 | `components\recovery.py` | recovery push：冲击注入 + 恢复计时（只统计冲击时仍在第一局的 env） |
 | `protocols\locomotion_eval_v1.yaml` | **评测协议契约（冻结）**：6 段命令时间线 / kick 规格 / 阈值。改动 = 新建 v2 |
 | `specs\example_baseline.yaml` | 消融 spec 示例 |
-| `results\locomotion_eval_v1\` | 跑分落盘（记录即数据，随仓提交）。campaign 分组：`--group v1` → `locomotion_eval_v1\v1\<run_id>\` + 组内专属 `summary.csv`；`--summarize [--group v1]` 看单组或汇总 |
+| `results\locomotion_eval_v1\` | 跑分落盘（记录即数据，随仓提交）。campaign 分组：`--group v1` → `locomotion_eval_v1\v1\<run_id>\` + 组内专属 `summary.csv`（全局指标）+ `terrains.csv`（逐地形长表，`--by-terrain` 生成）；`--summarize [--group v1]` 看单组或汇总 |
 
 ## .codemaker\skills\tool\ —— AI 开发技能（方法论）
 

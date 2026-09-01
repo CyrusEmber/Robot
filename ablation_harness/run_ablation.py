@@ -14,6 +14,7 @@ variants enter via registered task ids or hydra override strings.
 Usage (from the IsaacLab root, with the VENV python):
     python ablation_harness\\run_ablation.py --spec ablation_harness\\specs\\<name>.yaml
     python ablation_harness\\run_ablation.py --summarize --protocol locomotion_eval_v1
+    python ablation_harness\\run_ablation.py --by-terrain --group v1
 
 The train/eval subprocesses inherit this interpreter by default; point
 ``--python`` at the venv executable if you launch the scheduler with another
@@ -24,7 +25,9 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import pathlib
+import re
 import subprocess
 import sys
 
@@ -154,13 +157,73 @@ def _summarize(args_cli) -> None:
         print(" | ".join(str(r.get(c, "")).ljust(widths[c]) for c in columns))
 
 
+_TERRAIN_COLUMNS = ["run_id", "protocol", "task", "mode", "seed", "iteration",
+                    "terrain", "completion", "fall_rate", "success_rate"]
+
+
+def _collect_terrain_rows(protocol_dir: pathlib.Path, group: str | None) -> list[dict]:
+    """Per-terrain rows read back from eval.json (the stored truth), for one group or all."""
+    dirs = [protocol_dir / group] if group else [
+        protocol_dir, *sorted(p for p in protocol_dir.iterdir() if p.is_dir())
+    ]
+    rows: list[dict] = []
+    for folder in dirs:
+        for json_path in sorted(folder.glob("*/eval.json")):
+            with open(json_path, encoding="utf-8") as f:
+                j = json.load(f)
+            match = re.search(r"model_(\d+)\.pt", str(j.get("checkpoint", "")))
+            for name, terrain in j.get("terrains", {}).items():
+                rows.append({
+                    "run_id": json_path.parent.name, "protocol": j["protocol"], "task": j["task"],
+                    "mode": j["mode"], "seed": j["seed"],
+                    "iteration": int(match.group(1)) if match else -1, "terrain": name,
+                    "completion": terrain["completion"], "fall_rate": terrain["fall_rate"],
+                    "success_rate": terrain["success_rate"],
+                })
+    return rows
+
+
+def _terrain_pivot(rows: list[dict], metric: str) -> None:
+    """terrain x run table; run columns ordered by checkpoint iteration then mode."""
+    runs = sorted({(r["iteration"], r["mode"]) for r in rows})
+    cells = {(r["iteration"], r["mode"], r["terrain"]): r[metric] for r in rows}
+    labels = [("smoke" if it < 0 else str(it)) + "/" + mode for it, mode in runs]
+    width = max(11, *(len(x) for x in labels)) + 1
+    print(f"\n[terrain x run] {metric}")
+    print("terrain".ljust(13) + "".join(x.rjust(width) for x in labels))
+    for terrain in dict.fromkeys(r["terrain"] for r in rows):
+        print(terrain.ljust(13) + "".join(
+            f"{cells[(it, mode, terrain)]:.2f}".rjust(width) if (it, mode, terrain) in cells
+            else "-".rjust(width)
+            for it, mode in runs))
+
+
+def _by_terrain(args_cli) -> None:
+    protocol_dir = _HARNESS_DIR / "results" / args_cli.protocol
+    scope = protocol_dir / args_cli.group if args_cli.group else protocol_dir
+    rows = _collect_terrain_rows(protocol_dir, args_cli.group)
+    if not rows:
+        print(f"[ABLATION] no eval.json under {scope}")
+        return
+    out_csv = scope / "terrains.csv"
+    with open(out_csv, "w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=_TERRAIN_COLUMNS)
+        writer.writeheader()
+        writer.writerows(rows)
+    print(f"[ABLATION] wrote {out_csv} ({len(rows)} rows)")
+    for metric in ("completion", "fall_rate", "success_rate"):
+        _terrain_pivot(rows, metric)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Locomotion ablation scheduler.")
     parser.add_argument("--spec", type=str, default=None, help="Sweep spec yaml (runs: [...]).")
     parser.add_argument("--summarize", action="store_true", help="Print the protocol summary table.")
+    parser.add_argument("--by-terrain", action="store_true",
+                        help="Write terrains.csv (run x terrain, long) and print terrain x run pivots.")
     parser.add_argument("--protocol", type=str, default="locomotion_eval_v1")
     parser.add_argument("--group", type=str, default=None,
-                        help="Restrict --summarize to one campaign folder under the protocol.")
+                        help="Restrict --summarize/--by-terrain to one campaign folder under the protocol.")
     parser.add_argument("--device", type=str, default=None)
     parser.add_argument(
         "--python", type=str, default=sys.executable,
@@ -170,8 +233,11 @@ def main():
     if args_cli.summarize:
         _summarize(args_cli)
         return
+    if args_cli.by_terrain:
+        _by_terrain(args_cli)
+        return
     if args_cli.spec is None:
-        parser.error("--spec or --summarize is required")
+        parser.error("--spec, --summarize or --by-terrain is required")
     failures = _sweep(args_cli)
     _summarize(args_cli)
     sys.exit(1 if failures else 0)
