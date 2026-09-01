@@ -19,8 +19,8 @@ _EXP = _REPO / "rl_exp"
 sys.path.insert(0, str(_REPO))
 
 from rl_exp.tasks.teacher_env_cfg import (  # noqa: E402
-    LizardRoughTeacherEnvCfg,
     LizardRoughTeacherEnvCfg_V1,
+    LizardRoughTeacherEnvCfg_V2,
     LizardRoughTeacherEnvCfg_V3,
 )
 from rl_exp.tasks.agents.rsl_rl_ppo_cfg import LizardTeacherV3PPORunnerCfg  # noqa: E402
@@ -64,7 +64,7 @@ def main() -> int:
 
     # v1/v2: single policy group with the frozen flat order
     for cls, tag, expected in (
-        (LizardRoughTeacherEnvCfg, "v2", V2_POLICY_ORDER),
+        (LizardRoughTeacherEnvCfg_V2, "v2", V2_POLICY_ORDER),
         (LizardRoughTeacherEnvCfg_V1, "v1", V1_POLICY_ORDER),
     ):
         groups = _groups(cls().observations)

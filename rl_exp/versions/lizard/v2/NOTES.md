@@ -8,6 +8,8 @@
   （v1 = 空集，v2 = 五个新 term）是版本差异唯一真源；基类 wire 全部 term
   后按 spec 剥离。v1 任务 id 常驻注册（`LizardRoughTeacherEnvCfg_V1`，
   obs 266）保证旧版本从工作树可复现。**纪律：term 实现只增不改**。
+  （2026-09-01 v3.3 review 修复：v2 也补了显式 `_V2/_V2_PLAY` 子类并改注册——
+  基类只是 latest 指针，任何版本改基类 `params_version` 都不会追溯性改变 v2 配方。）
   新增 5 个特权 term（论文表项）：
   | term | 维度 | 实现 |
   |---|---|---|
