@@ -39,9 +39,14 @@ commit 内容要向用户汇报；推送失败报告原因，绝不强推。
 ## 提交粒度与信息规范
 
 - **一次迭代一组提交**：代码改动 / 文档更新 / 版本冻结分开 commit，
-  不混成一坨；纯格式噪音（编辑器重排）单独或并入相关改动
-- **message 格式**：一行摘要，说清"改了什么 + 为什么"，
-  命令式语气（`Add X`, `Fix Y`, `Freeze vN: ...`），中英随仓库惯例
+不混成一坨；纯格式噪音（编辑器重排）单独或并入相关改动
+- **message 格式**：subject 与 body 空行分隔；subject 命令式语气、~50 字符、
+无句尾句号（`Add X`, `Fix Y`, `Freeze vN: ...`），body 72 字符换行、讲 what/why
+不讲 how（diff 自己会讲 how）；中英随仓库惯例
+- **版本族提交前缀** `<family>-vN[.minor]:`——多版本家族并存时裸 `vN` 有歧义；非版本提交用普通 conventional subject
+- **分支纪律**：开发走 `<username>/feature-desc` 特性分支，不直提 main；
+PR 迭代反馈优先加新 commit 不 amend（免 force push，reviewer 可逐条核对）
+- **禁 AI 署名**：commit 不带 Co-Authored-By 等 AI 归属行
 - **空提交禁令**：status 干净就报告"无改动"，不造空 commit
 
 ## 版本冻结 = commit + tag（锚点纪律）
@@ -59,11 +64,16 @@ git add -A && git commit -m "Freeze vN: <摘要>" && git tag vN && git push --ta
 ## 安全纪律（推送 = 共享状态操作）
 
 - **绝不** `--force` / `--force-with-lease` / 改写已推历史 / amend 已推提交
-- 仓自带离线验证闸门（如 `run_offline_checks.bat`）时 **commit 前必跑**；闸门红 =
-  不提交不推送，先修
+- 仓自带验证闸门 / pre-commit 钩子 **commit 前必跑**（各仓闸门入口见其 README/项目文档）；钩子改了文件 → review + `git add` + 重跑，全绿才
+  commit，推前再核一遍——先 commit 后跑 = 逼 amend，先推后跑 = 推坏代码，都禁止。
+  code review 时也顺带跑闸门
 - 推送前扫一眼 diff：密钥、token、绝对路径泄漏、意外大文件（资产/数据集/模型权重）
 - 无远端 → 一次性问用户要 URL；push 报错（网络/权限/非快进）→ 报告，
   不 retry 循环，更不强推
+- push 被沙箱拦（网络封锁）→ 用 `dangerouslyDisableSandbox: true` 让用户拿审批
+  弹窗，别叫用户手动跑
+- **绝不推公共上游 origin**——推自己 fork 或 PR 所属
+  远端；不明确就先问用户
 - 敏感实验代码默认建议私有仓
 
 ## 进仓 / 不进仓（通用判据）

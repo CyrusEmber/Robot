@@ -154,6 +154,8 @@ URDF 实测（估 SVL ≈2.0m，尾基在 base 后 1.26m；长轴 = Y）。spraw
 ## 开新版本流程
 
 通用五步（copy 目录 → NOTES 骨架 → 结构变更注册 → 训练回填 → 历史行 + tag）
-已提取至 `.codemaker/rules/versioning.mdc` §A，含 NOTES 必含骨架与红线。
+已提取至 `.codemaker/rules/versioning.mdc` §A，含 NOTES 必含骨架与红线；全新
+算法（无上游）按 §A 分线条款开支线（`versions/lizard/<line>/v1/` 独立计数），
+存量 v0–v4 = 创始主线，裸编号不迁移。
 本家族特有机制 = 「Teacher 特权 obs 布局」节「版本差异结构」段的
 `TEACHER_PRIVILEGED_SPEC` 剥离纪律（已发布 term 实现永不改语义）。

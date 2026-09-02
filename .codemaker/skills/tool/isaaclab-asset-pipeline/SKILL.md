@@ -47,7 +47,7 @@ meshes\ / 验证脚本都在里面，实例清单读该机器人的 FAMILY.md）
 | 位置/受力 | exp 目录的 position_check 类脚本（z 轨迹 + 接触力 + NaN） |
 | 关节对表 | exp 目录的 joint_check 类脚本（reset 后关节名/角度 vs joint_order） |
 | 站姿对称 | exp 目录的 debug_pose 类脚本（每腿 pivot 世界坐标） |
-| 肉眼终验 | GUI 观察脚本（lizard: `tools\verify\view_terrain.py --viz kit --task <任意 PLAY 任务>`）——开 Isaac Sim 窗口看站立/穿模/地形（改名自 view_lizard，已支持选地形） |
+| 肉眼终验 | GUI 观察脚本（如 `tools\verify\view_terrain.py --viz kit --task <任意 PLAY 任务>`）——开 Isaac Sim 窗口看站立/穿模/地形 |
 
 具体脚本名读该机器人 FAMILY.md。标准顺序：convert → 关节数 → position_check（数据）
 → view_terrain（肉眼）。
@@ -58,7 +58,7 @@ meshes\ / 验证脚本都在里面，实例清单读该机器人的 FAMILY.md）
 |---|---|
 | 机器人穿地坠落、usda 只有 ~60KB、`faceVertexIndices`=0 | **mesh 相对路径坑（静默丢几何）**：importer 按 URDF 所在目录解析相对路径，路径错不报错只丢几何。URDF 里写 `meshes/...`（不是 `../meshes/...`） |
 | 关节正则失配 `Not all regular expressions are matched!` | **3.0 importer 给关节名加 `_joint` 后缀**（body 名不加）。所有关节正则带后缀、body 正则不带 |
-| 接触抖振（脚力 ±kN 交替） | 关自碰撞：`enabled_self_collisions=False` + `solver_position_iteration_count=8`（lizard 实测 ±3kN → 数百 N） |
+| 接触抖振（脚力 ±kN 交替） | 关自碰撞：`enabled_self_collisions=False` + `solver_position_iteration_count=8`（实测 ±kN 级 → 数百 N） |
 | 资产改了没生效 | 忘重跑 convert，或没删旧 assets 目录（被挤到 `_1/`） |
 | 训练直接塌倒 | `run_asset_transformer` 被开了（单刚体），或 `merge_fixed_joints=True` |
 | 站姿左右不对称/腿折向天上 | 手算镜像 rpy 必翻车——走 Blender 管线（见 references/blender_pipeline.md） |

@@ -1,5 +1,5 @@
 ---
-description: 版本纪律——配方版本（vN）新建/冻结与计划文档修订（vN.M.K）的触发条件、权限与记录规范。当用户提到"开新版本"、"新建版本"、"升版本"、"冻结版本"、"修订"、"勘误"、"修订记录"、"记录修改"、"换家族"、"新机器人"时，或操作涉及 versions/ 目录、PLAN.md、FAMILY.md、NOTES.md 时使用。
+description: 版本纪律——配方版本（vN）新建/冻结与计划文档修订（vN.M.K）的触发条件、权限与记录规范。当用户提到"开新版本"、"新建版本"、"升版本"、"冻结版本"、"修订"、"勘误"、"修订记录"、"记录修改"、"开新支线"、"换家族"、"新机器人"时，或操作涉及 versions/ 目录、PLAN.md、FAMILY.md、NOTES.md 时使用。
 globs: rl_exp/versions/**
 alwaysApply: false
 ---
@@ -15,26 +15,27 @@ alwaysApply: false
 
 分层原则：**规则管行为（何时升版、怎么记录、升版流程），FAMILY.md 管事实（任务表/版本史/家族特有机制）**——会随版本增长的数据一律留在文档侧。
 
-**家族文档路径约定**：每家族一份 `FAMILY.md`，新家族放 `versions/<family>/FAMILY.md`（`versions/**` glob 自动覆盖，本规则无需改）。lizard 于 2026-09-01 迁入，历史例外解除。
+**家族文档路径约定**：每家族一份 `FAMILY.md`，新家族放 `versions/<family>/FAMILY.md`（`versions/**` glob 自动覆盖，本规则无需改）。
 
-**范围边界**：家族外自有子系统（`ablation_harness/` 评测台）不进家族配方计划与家族文档——待办与版本记录挂 `ablation_harness/HARNESS.md`（自有版本文档 SSOT，修订沿用本规则 B 节纪律、编号独立于家族配方版本；仓根 `PLAN.md` 挂账只留指针），协议变更走冻结 yaml（`protocols/locomotion_eval_v1.yaml` 模式）；该子系统高频变更、多机器人共用或评测协议 v2 出现时，再议升 `versions/harness/vN/` 目录化（升级触发写在 HARNESS.md，防"永远不升"）。
+**范围边界**：家族外子系统不进本规则与家族文档——各自 SSOT 文档自治（评测台 = `ablation_harness/HARNESS.md`，含升 `versions/` 目录化的触发条件）。
 
 ## A. 新建配方版本（vN → vN+1，家族内）
 
 **触发（满足其一）**：obs / reward / action / 终止的 term 结构变更；DR 范围或超参变更（yaml 数值也算）；**地形资产变更**（terrain 生成器、障碍参数、缩放）。换 seed **不触发**（NOTES 记 seed 即可）。纯参数变更开 vN+1 但 spec 集合不变时，不新增任务 id。
 
-**越级（不走本节）**：机器人本体/构型变更 = **换家族**——机器人即家族身份，新开 `versions/<new_family>/v1/` + 新 FAMILY.md（只写家族事实，升版流程从本规则继承，不复制）+ 全套注册，不是 lizard vN+1。同构型的资产换代仍是家族内事务（asset_lock 哈希看守 + 有意换代同 commit `--update-locks`，见家族文档挂账），影响配方行为时走本节升版。
+**越级（不走本节）**：机器人本体/构型变更 = **换家族**——机器人即家族身份，新开 `versions/<new_family>/v1/` + 新 FAMILY.md（只写家族事实，升版流程从本规则继承，不复制）+ 全套注册。同构型的资产换代仍是家族内事务（asset_lock 哈希看守 + 有意换代同 commit `--update-locks`，见家族文档挂账），影响配方行为时走本节升版。
+
+**分线（新计数器）**：配方无上游的全新算法不开 vN+1，开 `versions/<family>/<line>/v1/` 独立计数。支线/主线 = 算法区别：机器人/assets/eval 全家族共用，除独立版本链外一切照本节规则。判据：依赖在 = 线内 vN+1（哪怕 diff 巨大）；无上游 = 新支线（v1 PLAN 全量式）。
 
 **流程（家族无关，通用五步）**：
 
 1. `copy versions/<family>/vN versions/<family>/vN+1`（含 yaml），改新目录参数；
    runner cfg 逐版本化：`experiment_name = <family>_<场景>_vN`（一版本一日志目录，
-   禁共用；存量历史目录不迁移，旧版本重跑续写原目录，如 lizard v1 = 裸名
-   `lizard_rough_teacher`）
+   禁共用；存量目录不迁移）
 2. 写 `versions/<family>/vN+1/NOTES.md`，**必含骨架**：目的 / 假设 / 相对上版 diff / 训练命令 / 结果回填 / 结论
-3. 代码级结构变更（新 term）走版本差异机制 + 新任务 id 常驻注册——机制家族各异，lizard 实例 = `TEACHER_PRIVILEGED_SPEC` 剥离结构（FAMILY.md「版本差异结构」段），**禁止修改任何已发布 term 的实现**（破坏所有旧版本复现）；纯参数变更（yaml-only）不需要新任务 id
+3. 代码级结构变更（新 term）走版本差异机制 + 新任务 id 常驻注册（机制各家族自定义，见其 FAMILY.md）；纯参数变更（yaml-only）不需要新任务 id
 4. 训练 → 曲线导出（`tools/trainlog/dump_tb.py`）→ eval（`ablation_harness/eval.py`）→ 结果回填 NOTES.md
-5. 家族文档版本历史表加一行；git 侧 commit + tag `<family>-vN+1` + push（tag = 整树快照兜底；**带家族前缀防多家族撞名**——历史裸 tag `v1`/`v2` 不迁移，新家族从 `<family>-v1` 起）
+5. 家族文档版本历史表加一行；git 侧 commit + tag `<family>-vN+1`（tag = 整树快照；commit/push 细节走 git-auto-sync skill）
 
 **红线**：已发布 term 的实现永不改语义（新版本只允许加 term）；冻结目录只读。
 
@@ -54,8 +55,7 @@ alwaysApply: false
 2. 文档头部"修订："行同步最新版本号。
 3. 决策来源分级标记：`用户拍板：<日期>`（用户明示）与 `review 定案`（AI 推断获默认通过）不可混写。
 4. **单一真身守卫**：动笔前确认目标文件是唯一权威副本（git status 无同名未跟踪分叉、无旧路径残留）；发现分叉先合并再删副本，禁止在陈旧副本上继续修订。
-5. 修订闭环 = commit（git-auto-sync 纪律）：新建文档必须 git add，杜绝未提交孤儿。
-6. **修订号 ↔ commit 绑定**：修订闭环 commit 的 message 必以版本号开头（初稿 `vN: ...`，修订 `vN.M.K: ...`），双向查询 = `git log --grep`；hash 不写进文档（落地时未知名，避免回填流程）。历史欠账不 amend 已推提交，`git log --follow` 考古兜底。
+5. **修订号 ↔ commit 绑定**：commit message 以版本号开头（初稿 `vN:`，修订 `vN.M.K:`）；commit 闭环/孤儿/amend 纪律走 git-auto-sync skill。
 
 **当前计划同步——状态跃迁才做，内容修订不做**：`versions/<family>/PLAN.md` 头部更新行、`FAMILY.md` 当前状态、`FILEMAP.md` versions 行记的是**状态**（活跃版本/提案中/训练中），不是方案内容。方案细节修订（vN.M.K）不动这三处；只在状态跃迁时同步：
 

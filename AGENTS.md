@@ -85,31 +85,6 @@ We use a wrapped python call within `./isaaclab.sh`.
 ./isaaclab.sh -p -m pytest PATH_TO_TEST::METHOD
 ```
 
-### Pre-commit (lint/format hooks)
-
-**CRITICAL: Always run pre-commit hooks BEFORE committing and BEFORE pushing.**
-
-Proper workflow:
-1. Make your code changes
-2. Run `./isaaclab.sh -f` to check ALL files
-3. If pre-commit modifies any files (e.g., formatting), review the changes
-4. Stage the modified files with `git add`
-5. Run `./isaaclab.sh -f` again to ensure all checks pass
-6. Only then create your commit with `git commit`
-7. Verify pre-commit still passes before pushing — never push commits that haven't been checked
-
-```bash
-# Run pre-commit checks on all files
-./isaaclab.sh -f
-```
-
-**Common mistakes to avoid:**
-- Don't commit first and then run pre-commit (requires amending commits)
-- Don't push before running pre-commit (pushes broken code to the remote)
-- Do run pre-commit before committing and before pushing (clean workflow)
-
-**When reviewing code** (e.g. via a code-reviewer agent), always run `./isaaclab.sh -f` as part of the review to catch formatting or lint issues early.
-
 ## Changelog
 
 - **Do not edit `CHANGELOG.rst` or `config/extension.toml` directly.** Each PR adds a fragment file under `source/<package>/changelog.d/`; the changelog and version are compiled by the nightly CI workflow.
@@ -151,25 +126,9 @@ Key formatting rules:
 
 See `tools/changelog/test/integration/` for worked examples that double as integration-test fixtures.
 
-## Commit and Pull Request Guidelines
+## Git
 
-Follow conventional commit message practices.
-
-- **Use feature branches**: All development work should be on branches named `<username>/feature-desc` (e.g., `jdoe/docs-versioning`). Do not commit directly to `main`.
-- Keep commits focused and atomic—one logical change per commit.
-- Reference related issues in commit messages when applicable.
-- **When iterating on PR feedback**, prefer adding new commits over amending existing ones. This avoids force-pushing and lets the reviewer easily verify each change request was addressed.
-- **Do not include AI attribution or co-authorship lines** (e.g., "Co-Authored-By: Claude...") in commit messages. Commits should represent human contributions without explicit AI attribution.
-- **Commit message format**:
-  - Separate subject from body with a blank line
-  - Subject: imperative mood, capitalized, ~50 chars, no trailing period
-    - Write as a command: "Fix bug" not "Fixed bug" or "Fixes bug"
-    - Test: "If applied, this commit will _[your subject]_"
-  - Body: wrap at 72 chars, explain _what_ and _why_ (not _how_—the diff shows that)
-  - **Version-family commits are prefixed `<family>-vN[.minor]:`**
-    (e.g. `lizard-v4.1:`, `harness-v1.3:`); bare `vN` is ambiguous once the
-    repo hosts more than one version family. Non-version commits use plain
-    conventional subjects.
+Commit/push/branch/PR discipline lives in the `git-auto-sync` skill (`.codemaker/skills/tool/git-auto-sync/SKILL.md`) — run it at iteration close, before any commit or push.
 
 ## File headers and copyright
 
@@ -181,11 +140,6 @@ Follow conventional commit message practices.
   # SPDX-License-Identifier: BSD-3-Clause
   ```
 - Do not change the year in existing file headers.
-
-## Sandbox & Networking
-
-- Network access (e.g., `git push`) is blocked by the sandbox. Use `dangerouslyDisableSandbox: true` so the user gets an approval prompt — don't ask them to run it manually.
-- **Never push to `origin` (`isaac-sim/IsaacLab`).** The `origin` remote is the public upstream repository. Push to your own fork remote (e.g., `antoine`, `alex`) or to the remote of the PR you are working on. If the correct remote is unclear, ask the user before pushing.
 
 ## GitHub Actions and CI/CD
 
