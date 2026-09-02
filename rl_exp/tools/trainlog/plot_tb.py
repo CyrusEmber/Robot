@@ -7,7 +7,8 @@
 
 Keeps the per-version record readable without a tensorboard session: one png per
 question the recipe review asks -- did reward rise, did it die by falling, did
-episodes get longer, is the terrain curriculum moving. Training-side fall counts
+episodes get longer, is the terrain curriculum moving, how much wall clock did the
+iterations eat (``Train/wall_time_h``, derived from the ``/time`` tag's step axis). Training-side fall counts
 are the TERMINATION term (base_contact only, blind to lying-down); the harness
 geometric fall rate is a different measurement, so never read one as the other.
 
@@ -43,7 +44,21 @@ FIGURES = [
      [("Curriculum/terrain_levels", "terrain_levels"),
       ("Metrics/success_rate", "train success_rate"),
       ("Metrics/base_velocity/error_vel_xy", "error_vel_xy")]),
+    ("walltime", "Wall time vs iteration (bend = slowdown)",
+     [("Train/wall_time_h", "elapsed hours")]),
 ]
+
+
+def _derive(series: dict[str, tuple[list[int], list[float]]]) -> None:
+    """Add Train/wall_time_h (iteration -> elapsed hours) from the ``/time`` tag.
+
+    rsl_rl logs ``Train/mean_reward/time`` with the wall clock (seconds) as its
+    step, so the engine's own timing is the source -- no cumsum of Perf/* to guess.
+    """
+    rew, rew_t = series.get("Train/mean_reward"), series.get("Train/mean_reward/time")
+    if not rew or not rew_t or len(rew[0]) != len(rew_t[0]):
+        return  # ponytail: needs both tags on the same grid; silently skipped otherwise
+    series["Train/wall_time_h"] = (rew[0], [s / 3600.0 for s in rew_t[0]])
 
 
 def _load(csv_path: pathlib.Path) -> dict[str, tuple[list[int], list[float]]]:
@@ -56,6 +71,7 @@ def _load(csv_path: pathlib.Path) -> dict[str, tuple[list[int], list[float]]]:
         order = sorted(range(len(xs)), key=lambda i: xs[i])
         xs[:] = [xs[i] for i in order]
         ys[:] = [ys[i] for i in order]
+    _derive(series)
     return series
 
 
