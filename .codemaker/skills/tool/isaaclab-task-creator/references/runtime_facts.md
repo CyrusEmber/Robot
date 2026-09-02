@@ -79,7 +79,7 @@ grep 源码树符号 + 比对已验证 commit `28a37ce`），再跑 `run_offline
 | 家族 env 改动后 | `tools\verify\smoke_test.py` | `OBS_DIM` 匹配布局；`STEPPED_OK True` |
 | 资产/站姿/初始高度改动后 | `tools\verify\position_check.py`（`--rough` 切粗糙地形） | `JOINT_COUNT 26`；base z 轨迹沉降稳定不穿地不悬空；四脚 `force_z` 合计 ≈ 总重×9.8（全重落脚=站姿自洽）；`nan_free True` |
 | 几何/命名疑虑 | `tools\verify\pose_check.py` | 各 body 相对 base 坐标符合设计（头在前、四脚对称、尾在后） |
-| 想肉眼确认 | `tools\verify\view_lizard.py` | GUI 持默认位姿不塌 |
+| 想肉眼确认 | `tools\verify\view_terrain.py`（默认平地；`--task Lizard-Rough-Play-vN` 看版本地形） | GUI 持默认位姿不塌 |
 | 关节加载疑虑 | `tools\verify\joint_check.py` / `tools\diagnose\debug_pose.py` | 关节角=默认位姿 / 轴心世界坐标符合 URDF |
 | obs 出 NaN | `tools\diagnose\diagnose_nan.py` | 定位哪个 term 产生 NaN |
 | 版本记录 | `tools\trainlog\dump_tb.py`（上节） | csv 行数与迭代数同量级 |

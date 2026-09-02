@@ -47,10 +47,10 @@ meshes\ / 验证脚本都在里面，实例清单读该机器人的 FAMILY.md）
 | 位置/受力 | exp 目录的 position_check 类脚本（z 轨迹 + 接触力 + NaN） |
 | 关节对表 | exp 目录的 joint_check 类脚本（reset 后关节名/角度 vs joint_order） |
 | 站姿对称 | exp 目录的 debug_pose 类脚本（每腿 pivot 世界坐标） |
-| 肉眼终验 | GUI 观察脚本（lizard: `tools\verify\view_lizard.py --viz kit`）——开 Isaac Sim 窗口看站立/穿模 |
+| 肉眼终验 | GUI 观察脚本（lizard: `tools\verify\view_terrain.py --viz kit --task <任意 PLAY 任务>`）——开 Isaac Sim 窗口看站立/穿模/地形（改名自 view_lizard，已支持选地形） |
 
 具体脚本名读该机器人 FAMILY.md。标准顺序：convert → 关节数 → position_check（数据）
-→ view_lizard（肉眼）。
+→ view_terrain（肉眼）。
 
 ## 核心坑（症状 → 根因）
 

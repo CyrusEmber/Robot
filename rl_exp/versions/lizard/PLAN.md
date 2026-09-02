@@ -166,7 +166,7 @@ python scripts\reinforcement_learning\rsl_rl\play.py --task Lizard-Rough-Play-v0
 :: 验证工具（E:\IsaacLab 根目录）
 python rl_exp\tools\verify\position_check.py --headless --rough   :: 站立/受力
 python rl_exp\tools\diagnose\debug_pose.py --headless             :: 腿对称性
-python rl_exp\tools\verify\view_lizard.py --viz kit               :: GUI 观察（注意此脚本挂 Flat-Play 任务）
+python rl_exp\tools\verify\view_terrain.py --viz kit --task Lizard-Rough-Play-v4   :: GUI 看地形（任意注册任务；原 view_lizard 只挂 Flat-Play，已改名重写）
 python rl_exp\tools\trainlog\read_curriculum.py                   :: 课程终态（旧训练）
 python rl_exp\tools\verify\teacher_smoke.py --headless            :: teacher env 冒烟（obs 维度/有限性）
 ```

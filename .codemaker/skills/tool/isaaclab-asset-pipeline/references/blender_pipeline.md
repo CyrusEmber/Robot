@@ -31,7 +31,7 @@ Steam Blender 运行：
 6. 删 `assets\lizard\` + `.asset_hash` + `config.yaml` →
    `tools\pipeline\convert_urdf.py --headless`
 7. 验证链：`tools\diagnose\debug_pose`（四腿 pivot 对称）→
-   `tools\verify\position_check`（受力/z 稳定）→ `tools\verify\view_lizard` 肉眼终验
+   `tools\verify\position_check`（受力/z 稳定）→ `tools\verify\view_terrain` 肉眼终验
 
 ## 站姿判定标准（position_check / debug_pose）
 

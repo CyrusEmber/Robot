@@ -20,7 +20,9 @@
 - log 目录: logs/rsl_rl/lizard_rough_teacher_v4/
 - **启动前警示（用户拍板 2026-09-02，三步缺一不可）**:
   1. **先看地形再启动**——可视化确认碎石粗糙度（粗块 ≥ 脚掌 0.46 m、高差
-     可见）后才许开训/开测；
+     可见）后才许开训/开测。工具（skill `isaaclab-pretrain-check`，v4.2）：
+     `terrain_preflight.py --version v4`（离线统计+渲染图，秒级）→
+     `view_terrain.py --viz kit --task Lizard-Rough-Play-v4`（GUI 目视）；
   2. gpu_collision_stack_size 已回 stock 2**26：若 PhysX 接触溢出复发
      （静默丢接触→非确定性物理），根因 = 接触密度（平脚板 × 密
      heightfield），修法 = 粗化脚碰撞体/地形，**禁止再加 headroom**；
