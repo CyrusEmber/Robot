@@ -203,8 +203,8 @@ StagedCurriculumTermCfg(func=StagedCurriculumTerm, stages=[...],
   dict/configclass 两种 cfg 都支持（读依赖时兼容，见 `_dependency_met`）。
 - **yaml joint_order 是 URDF 树序的最好猜测**，USD 导入后实际顺序首跑才见分晓；对不上按
   运行时 warning 的实际序改 yaml。
-- **3.0 importer 关节名加 `_joint` 后缀**（body 名不加）：关节正则带后缀、body 正则不带。
-  失配报 `Not all regular expressions are matched!`，报错里列出可用名字。
+- **关节正则失配**（`Not all regular expressions are matched!`）：3.0 importer 给关节名加
+  `_joint` 后缀、body 名不加——细则见 asset-pipeline skill 核心坑表。
 - **startup 事件只随机一次**（env 创建时）：质量/CoM/PD/摩擦按 startup 是标准做法，
   每 reset 要重摇的量用 interval 或挂 reset。
 - **换阶掉点是预期**：阶段切换 = 分布突变，value function 暂掉不是 bug；看

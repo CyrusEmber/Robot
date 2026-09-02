@@ -60,8 +60,3 @@ metadata:
 - preflight 与 view_terrain 都要在仓根下运行（脚本自定位）。
 - 卡排风险判据（地形太难导致 terrain_levels 停排）不在本 skill：见对应版本 PLAN。
 - 定标数据必须实测（历史教训：误把骨长当掌宽 → 碎石间距小于真实掌宽 → 大平脚横跨碎块等效踩平）。换机体/改骨长 = 换家族，定标要重测。
-
-## 资源说明
-
-- `<robot>_exp/tools/verify/terrain_preflight.py`：离线统计 + PNG 渲染（numpy + matplotlib，无 sim）。
-- `<robot>_exp/tools/verify/view_terrain.py`：GUI/无头查看机器人站上版本地形。
