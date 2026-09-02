@@ -16,10 +16,11 @@
   tilt/r_fc/c_k/DR-reset 趴窝修复包 + v3.6 回放诊断三修。首跑受 v3.6.2 gate bug
   影响全程等效 stage 0（速度档未上探），修复后下一跑生效；方案细节以版本 PLAN
   为 SSOT，本行只记状态）
-- **v4: 已批准开工（未训练）**（2026-09-02）：碎石地重定标——实测脚掌
+- **v4: 提案（已批准开工，未训练未冻结）**（2026-09-02）：碎石地重定标——实测脚掌
   0.46×0.51 m（v3.6 误用 kfe→foot 骨长 0.131 定标），random_rough 间距
   0.3→0.5 m（≥掌宽）+ 噪声 (0.10,0.35)/step 0.02；v3.6.1 collision stack
-  2**28 补丁删除回 stock。**启动前警示：先看地形**（三步见 v4/NOTES.md）
+  2**28 补丁删除回 stock。**启动前警示：先看地形**（三步见 v4/NOTES.md）。
+  启动前可 v4.M 修订；**训练启动时冻结 + 打 tag `lizard-v4`**
 - teacher 训练: 待启动（PLAN 挂账 #3，v2）
 - 开发态 yaml: `lizard_params.yaml`（家族活实验用，改动不追溯）
 - 布局（2026-09-01 迁移）: 包名 `rl_exp`（家族无关），冻结配方按家族分层
@@ -43,8 +44,8 @@
 | Lizard-Rough-Play-v1 | `LizardRoughTeacherEnvCfg_V1_PLAY` | versions/lizard/v1（冻结） | v1 配方回放 |
 | **Lizard-Rough-v3** | `LizardRoughTeacherEnvCfg_V3` | **versions/lizard/v3（冻结）** | teacher 论文对齐版（obs 三组 90/208/83，装配完成待训练） |
 | Lizard-Rough-Play-v3 | `LizardRoughTeacherEnvCfg_V3_PLAY` | **versions/lizard/v3（冻结）** | v3 回放 |
-| **Lizard-Rough-v4** | `LizardRoughTeacherEnvCfg_V4` | **versions/lizard/v4（冻结）** | 碎石地重定标（obs 同 v3 三组 90/208/83；纯地形+物理缓冲区变更，spec 不变） |
-| Lizard-Rough-Play-v4 | `LizardRoughTeacherEnvCfg_V4_PLAY` | **versions/lizard/v4（冻结）** | v4 回放 |
+| **Lizard-Rough-v4** | `LizardRoughTeacherEnvCfg_V4` | versions/lizard/v4（**提案，未冻结**——训练启动时冻结） | 碎石地重定标（obs 同 v3 三组 90/208/83；纯地形+物理缓冲区变更，spec 不变） |
+| Lizard-Rough-Play-v4 | `LizardRoughTeacherEnvCfg_V4_PLAY` | versions/lizard/v4（**提案，未冻结**——训练启动时冻结） | v4 回放 |
 
 注：teacher 任务 id 与配方版本同步，且**全部常驻注册**——旧版本不会因代码
 演进而失复现（机制见下节"版本差异结构"）。`Lizard-Rough-v0` 无任务 id
