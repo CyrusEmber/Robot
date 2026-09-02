@@ -36,23 +36,17 @@ E:\IsaacLab\ablation_harness\
 ├─ eval.py                 # runner: task + checkpoint + protocol + mode → 跑分
 ├─ run_ablation.py         # spec yaml → train+eval 调度, 断点续跑, 汇总表
 ├─ protocols\locomotion_eval_v1.yaml   # 协议契约（冻结只读，改动 = 新建 vN）
-├─ suites.py              # 地形套件（机器人尺度相关，单文件）：`<robot>_suite_vN()；`
-│                         # 新机器人 = 新 suite 函数+名字表（照抄锁三件套：curriculum=True
-│                         # 等比例列分配 / 单值难度 / seed）+ 注册进 eval.py 的 _SUITE_REGISTRY
+├─ suites.py              # 地形套件（机器人尺度相关，单文件）：新机器人 = 新 suite 函数
+│                         # + 注册 eval.py 的 _SUITE_REGISTRY（三锁纪律见实现要点）
 ├─ components\             # command_player / dr_controller / recovery（纯函数，通用）
-│                          # 注：dr_controller 的 DR 事件清单与 <robot>_exp\tasks\play_utils.py
-│                          # 互为同步镜像（PLAY 变体用同一份）——改一边即红：
-│                          # check_dr_parity.py --strict 机器看守，别靠人记
+│                          # dr_controller 的 DR 事件清单与 <robot>_exp\tasks\play_utils.py
+│                          # 互为同步镜像——check_dr_parity.py --strict 机器看守
 ├─ metrics.py              # 指标纯函数库（按时间线分段自动切窗，通用）
-├─ plot_eval.py            # 评测可视化（读 eval.json；--report 出单文件 HTML 汇总报告【默认】，
-│                          # --out_dir 出散图 PNG【只需贴图进工单时】；两者都不入库。共用
-│                          # <robot>_exp\tools\trainlog\plot_tb.py 的 figure/series_to_figs），
-│                          # 全程不起仿真
+├─ plot_eval.py            # 评测可视化（读 eval.json，全程不起仿真；用法见"使用方案"）
 ├─ specs\example_baseline.yaml         # 消融 spec 示例
 └─ results\<protocol>\<run_id>\eval.json + summary.csv
-                           # 一次 campaign 可用 --group 单独成目录：
-                           # results\<protocol>\<group>\<run_id>\ + 组内 summary.csv
-                           # + terrains.csv（--by-terrain 反向生成：run × terrain 长表）
+                           # --group 可再加一层 campaign 目录 + 组内 summary.csv
+                           # + terrains.csv（--by-terrain：run × terrain 长表）
 ```
 
 harness 与机器人无关；**机器人相关只有 suites.py 一个文件 + 协议里的 suite 引用**。
@@ -68,18 +62,17 @@ suite 布局、指标口径全在里面）。**v1 为首个机器人尺度实例
 
 | 指标 | 口径 | 注意 |
 |---|---|---|
-| success_rate | **协议自算**：单步 \|v−cmd\|<0.5 m/s 且 \|wz−cmd_wz\|<0.4 rad/s（阈值在协议 metrics 段） | 不是命令 term 的 metrics——那是训练侧口径，阈值语义不同 |
-| fall rate | **几何定义**：tilt > 40° 或 base 距地形高度 < 初始站高 60%，持续 0.5s | **绝不用终止项**——趴窝事故证明终止项有盲区（base_contact 只查 base_link） |
+| success_rate | **协议自算**（阈值在协议 metrics 段） | 不是命令 term 的 metrics——那是训练侧口径，阈值语义不同 |
+| fall rate | **几何定义**（tilt / 贴地双判据 + 持续时间，阈值在协议） | **绝不用终止项**——趴窝事故证明终止项有盲区（base_contact 只查 base_link） |
 | velocity tracking | 逐段 \|v−v_cmd\| MAE（按时间线自动切窗） | 每段独立报，难度天然分层 |
-| energy | 隐式 PD 精确反解 τ=K(q*−q)−D·q̇，Σ\|τ·ω\|dt / 位移 | **不含 effort limit 饱和**：饱和期间高估；同口径跨 run 对比有效，绝对值注意。不动机器人时该值无意义（位移 clamp 0.1m → 爆炸） |
+| energy | 隐式 PD 精确反解 τ=K(q*−q)−D·q̇，Σ\|τ·ω\|dt / 位移 | **不含 effort limit 饱和**：饱和期间高估；同口径跨 run 对比有效，绝对值注意。不动机器人时该值无意义（位移 clamp 下限 → 爆炸） |
 | terrain completion | 每地形：位移/(命令速度×时长)，clip [0,1] + fall 标志 | 梯度值，不用二值——二值藏住部分能力 |
-| recovery time | 冲击后 \|v−v_cmd\| < 0.25 m/s 持续 0.5s 的时刻 | 只算冲击时仍在第一局的 env；报 mean/median/p90 + spike + 冲击后 fall rate + measured_envs |
+| recovery time | 冲击后恢复达标时刻（阈值在协议） | 只算冲击时仍在第一局的 env；报 mean/median/p90 + spike + 冲击后 fall rate + measured_envs |
 | 停车超调 | stop 段残余速度 | 命令服从性 |
 
-**数值纪律（energy 教训）**：协议口径 → 实现 → 输出数值要三级对表。energy 实现曾漏乘
-dt（功率当能耗裸累加，虚高 ~50×，`energy_per_m_j=196155` 这种量级荒谬值没人拦）。
-跑分出来先做量级 sanity check（物理上合理吗），修口径后历史数据必须标失效
-（FILEMAP 历史包袱节记录了 2026-08-28 两行无效 energy）。
+**数值纪律（energy 教训）**：协议口径 → 实现 → 输出数值要三级对表（energy 曾漏乘
+dt，虚高 ~50× 的荒谬量级没人拦）。跑分出来先做量级 sanity check（物理上合理吗），
+修口径后历史数据必须标失效（失效行记录见 FILEMAP 历史包袱节）。
 
 **Provenance 纪律**：eval.json/summary.csv 每行自带 `git_rev_lizard` +
 `git_rev_isaaclab`（eval.py 自动采集，junction 布局下两仓分别定位；新机树内
@@ -102,24 +95,17 @@ python ablation_harness\run_ablation.py --summarize
 python ablation_harness\run_ablation.py --summarize --group v1
 :: 逐地形：组内 terrains.csv（长表）+ 三张「地形 × ckpt」pivot
 python ablation_harness\run_ablation.py --by-terrain --group v1
-:: ── 可视化：产物一律**不入库**（gitignore 已挡 plots/ 与 report.html）──
-:: 记录只有数据（eval.json / summary.csv / terrains.csv / tb_scalars.csv，已在库）；
-:: 图和 HTML 都是秒级可再生的视图（纯读盘，不起仿真），要哪个看场景：
-::
-:: A. 单文件汇总报告（默认选这个）：训练曲线 + 评测图 + summary 表 + git rev 溯源，
-::    内联 SVG 无限放大、离线可开、单文件可发人。训练曲线读版本目录的 tb_scalars.csv
-::    （先跑 dump_tb.py），竖线 = 已评测 ckpt（迭代号自动从 eval.json 推，免手传 --mark）；
-::    含 iteration↔墙上时间一张（从 /time tag 的 step 轴派生）——排消融预算先看它，
-::    单迭代耗时中位数与停顿尖峰都在曲线上，别假设"迭代等长"
+:: ── 可视化：产物一律不入库（gitignore 已挡 plots/ 与 report.html）；记录只有数据
+:: （eval.json / summary.csv / terrains.csv / tb_scalars.csv），图和 HTML 秒级可再生 ──
+:: A. 单文件 HTML 汇总报告（默认）：训练曲线（竖线自动标已评测 ckpt）+ 评测图 +
+::    summary 表 + rev 溯源 + iteration↔墙上时间（排消融预算先看，迭代耗时不等长）
 python ablation_harness\plot_eval.py --protocol locomotion_eval_v1 --group v1 ^
   --report <robot>_exp\versions\<family>\<vN>
-::
-:: B. 散图 PNG：只有要往工单 / POPO / PPT / 词条里**贴图**时才需要（那些地方不收 HTML）。
-::    默认 200 DPI（--dpi 可覆盖）；训练侧曲线单独出图用
-::    <robot>_exp\tools\trainlog\plot_tb.py（--mark 手传 ckpt 迭代号）
+:: B. 散图 PNG：只有贴图进工单 / POPO / PPT 时才需要（那些地方不收 HTML）；训练侧
+::    曲线单独出图用 <robot>_exp\tools\trainlog\plot_tb.py
 python ablation_harness\plot_eval.py --protocol locomotion_eval_v1 --group v1 ^
   --out_dir <robot>_exp\versions\<family>\<vN>\plots --prefix <vN>_eval_
-:: 地形预检图不在此列（那是地形渲染，report 无对应物，见 isaaclab-pretrain-check）
+:: 地形预检图不在此列（见 isaaclab-pretrain-check）
 ```
 
 ## 组件热插拔（spec 的组织方式，**永远不动家族代码**）
@@ -181,13 +167,4 @@ eval_checkpoints/eval_modes/eval_seed/overrides。**tag 不可互为后缀**（�
 
 ## 状态
 
-- 设计定稿 2026-08-28（四轮收敛：suite → 双模式 → recovery push → 协议版本化）
-- **实现完成并验证**：全链路冒烟通过（零动作策略 nominal+robust 双模式，指标自洽：
-  stop 段 success=1.0、MAE 段段≈命令速度、kick 后 fall 检测生效）；**确定性实证**：
-  同 seed 多次运行数值逐位一致（success 0.248 / fall 0.083 / recovery 13.15s）
-- **代码审查完成**（三轮修复归档于 git 历史：b6098c9 / f22f43f）：修复 2 🚨（glob 前缀 bug /
-  训练失败杀 sweep）+ 3 ⚠️（协议默认单一真源 / recovery 子集 / 死参数）；
-  configclass 单例疑点源码验证排除；dump_tb 实测 39237 点与历史吻合
-- **已了结 2026-09-01**：首个 teacher 六行基线（3 ckpt × 双模式）在
-  `results/locomotion_eval_v1/v1/`，判读见该家族版本 NOTES
-- 相关 SSOT：各家族 PLAN.md（训练计划/挂账）/ FAMILY.md（家族版本管理）
+设计定稿 / 实现验证 / 代码审查史、版本历史与挂账 → `ablation_harness\HARNESS.md`（本子系统 SSOT）；训练计划 / 家族版本 → 各家族 PLAN.md / FAMILY.md。

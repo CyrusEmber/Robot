@@ -17,6 +17,7 @@
 
 | 版本 | 日期 | 摘要 | 依据 |
 |---|---|---|---|
+| v0（史前） | 2026-08-28 | 设计定稿（四轮收敛：suite → 双模式 → recovery push → 协议版本化）+ 全链路实现验证（零动作策略双模式冒烟自洽：stop 段 success=1.0、MAE 段≈命令速度、kick 后 fall 检测生效；同 seed 多次运行数值逐位一致）+ 三轮代码审查（b6098c9 / f22f43f：修 2 🚨 glob 前缀 bug / 训练失败杀 sweep + 3 ⚠️ 协议默认单一真源 / recovery 子集 / 死参数，configclass 单例疑点源码排除）——均发生在 09-01 建档前 | 自 eval-harness SKILL.md 状态节并入 |
 | v1 | 2026-09-01 | 建档基线：协议 locomotion_eval_v1 冻结（早于本文档，git 考古）+ Phase A 修复（eval 快照 / DR 锁面 / smoke 断言，commit 5725396） | — |
 | v1.1 | 2026-09-01 | `eval.py::_prepare_env` 补 `handle_deprecated_rsl_rl_cfg(agent_cfg, rsl-rl 版本)`——train.py 有、harness 无，rsl-rl 5.4.2 的 `MLPModel` 拒收 legacy `stochastic` 字段，带 `--checkpoint` 直接 `TypeError`（v1 之前只跑过零动作冒烟，该路径从未 exercised） | teacher v1 首跑评测 |
 | v1.2 | 2026-09-01 | 结果按 **campaign 分组**：`eval.py --group v1` → `results/<protocol>/v1/<run_id>/` + 组内 `summary.csv`（行只落一处，协议根 summary 不再混装）；`run_ablation.py` 透传 spec 的 `group`，`--summarize` 缺省汇总"协议根 + 各组"，`--summarize --group v1` 只看一组。已有 6 行 v1 结果 git mv 入组 | 用户要求 v1 评测单独成目录 |
@@ -52,3 +53,4 @@ harness 代码高频变更 / 多机器人共用 / 评测协议 v2 出现时 → 
 | 2026-09-01 | v1.3 | `--by-terrain`（组内 `terrains.csv` + 地形×ckpt pivot）与 `plot_eval.py` 落地；v1 campaign 扩到 12 行（6 ckpt × 双模式），图 6 张入 `versions/lizard/v1/plots/` |
 | 2026-09-02 | v1.4 | `plot_eval.py --report` 单文件 HTML 汇总报告落地（训练曲线 + 评测图 + summary 表 + rev 溯源），首份产物 `versions/lizard/v1/report.html`（12 run / 6 图 / 1.1 MB）；PNG 默认 DPI 提到 200；`plots/` 与 `report.html` 加入 `.gitignore`，v1 六张 PNG 移出索引（磁盘保留，可再生） |
 | 2026-09-02 | v1.4.1 | 训练侧第 5 图：iteration ↔ 墙上时间（`Train/wall_time_h`，从 `/time` tag 的 step 轴派生）；报告升到 7 图，v1 = 25.735 h / 14k 迭代，其中 it=11438 单次停顿 7.2 h |
+| 2026-09-02 | v1.4.2 | eval-harness SKILL.md 瘦身（记录性合入）：状态节史实并入本档（新增 v0 史前行）；指标表去协议数值（协议 yaml 为唯一真源）；可视化注释压缩——skill 只留方法与契约 |
