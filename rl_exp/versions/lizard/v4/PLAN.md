@@ -4,8 +4,8 @@
 > （versioning.mdc §B）；**训练启动时冻结 + 打 tag `lizard-v4`**。
 > 生成：2026-09-02。来源：用户反馈"v3.6 碎石地太平整" + 资产实测（脚掌
 > 碰撞网格 bbox）+ IsaacLab 3.0 源码核实（random_uniform_terrain 语义）。
-> 修订：v4.2（2026-09-02）——v4 初稿 + 记录性勘误（tag 回收，见 §10）+ 记录性
-> 工具链（启动前警示落地为可执行检查，见 §10）。
+> 修订：v4.3（2026-09-02）——v4 初稿 + 记录性勘误（tag 回收）+ 记录性工具链
+> ×2（启动前警示检查化、接触点探针），见 §10。
 > 关联：`../v3/PLAN.md`（v3 全案 + §6.6 地形表）、`../FAMILY.md`（obs 布局
 > SSOT + 机体几何备忘——blade 行已同步勘误）。
 
@@ -66,3 +66,4 @@ v3.6.1 将 `gpu_collision_stack_size` 2**26→2**28（4× headroom，4096 env
 | 2026-09-02 | v4 | 初稿：碎石重定标（掌宽实测 0.46×0.51 m，间距 0.5 ≥ 掌宽，`用户拍板：2026-09-02`）+ collision stack 回 stock（疑掩盖接触密度根因，`用户拍板：2026-09-02`）+ 启动前警示入档 |
 | 2026-09-02 | v4.1 | 记录性勘误：撤回过早打的 lizard-v4 tag（本地+远端）、任务表"冻结"标注改"提案未冻结"——tag = 冻结锚点，未训练不冻结，训练启动时再打（`用户拍板：2026-09-02`）。方案零改动 |
 | 2026-09-02 | v4.2 | 记录性工具链（方案零改动）：启动前警示第 1 条落地为可执行检查——`terrain_preflight.py`（离线统计+PNG）+ `view_terrain.py`（改名重写自 view_lizard，GUI 看版本地形）+ skill `isaaclab-pretrain-check`；NOTES 警示补工具指针（`用户拍板：2026-09-02`） |
+| 2026-09-02 | v4.3 | 记录性工具链补强（方案零改动）：view_terrain 挂 robot-vs-terrain 接触点探针（`track_contact_points` + filter `/terrain/mesh`，上同 test_contact_sensor.py:666-670 口径），逐步报告接触点/env vs 栈预算——警示第 2 条（stock 2**26 重验）量化化；家族 PLAN.md 头部状态行补 v4 跃迁（v4.2 漏项，`用户拍板：2026-09-02`） |

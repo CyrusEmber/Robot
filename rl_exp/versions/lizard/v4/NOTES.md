@@ -25,7 +25,10 @@
      `view_terrain.py --viz kit --task Lizard-Rough-Play-v4`（GUI 目视）；
   2. gpu_collision_stack_size 已回 stock 2**26：若 PhysX 接触溢出复发
      （静默丢接触→非确定性物理），根因 = 接触密度（平脚板 × 密
-     heightfield），修法 = 粗化脚碰撞体/地形，**禁止再加 headroom**；
+     heightfield），修法 = 粗化脚碰撞体/地形，**禁止再加 headroom**。
+     量化监控（v4.3）：`view_terrain.py` 的 `[contact check]` 行输出
+     robot-terrain 接触点/env（mean/max），外推训练 env 数对照 v3.6.1
+     标定（4096 env 溢出需 67,137,584 B）；
   3. 判据沿用 v3.4.1：terrain_levels 长期卡排 → 降 0.35 顶或缩 0.5 间距。
 - 验收: 沿用 v3.2 口径——不设中途达标门，起步 sanity（~100 iters 无 NaN /
   非零 reward / 终止计数正常）后直训，训完以 harness eval 为准（v4 vs v3

@@ -45,7 +45,7 @@ E:\IsaacLab\env_isaaclab\Scripts\python.exe rl_exp\tools\verify\view_terrain.py 
 ```
 
 - 机器人零动作站在**真实训练地形**上（PLAY 变体：无随机化）。
-- 看三件事：①脚掌与碎块的尺度关系（一块碎石 ≥ 脚掌，还是脚掌能横跨踩平）②高差肉眼可见 ③机器人默认站姿下肚皮/大腿离地间隙。
+- 看四件事：①脚掌与碎块的尺度关系（一块碎石 ≥ 脚掌，还是脚掌能横跨踩平）②高差肉眼可见 ③机器人默认站姿下肚皮/大腿离地间隙 ④`[contact check]` 输出的 robot-terrain 接触点/env（mean/max）——v4 起 stock 2**26 栈重验的量化依据，外推训练 env 数对照 v3.6.1 标定（4096 env 溢出需 67,137,584 B）。
 - `--num-envs` 调大可同屏看更多子地形；Ctrl+C 退出。
 - headless 冒烟（不开窗验证 env 构建通过）：加 `--headless --steps 10`。
 

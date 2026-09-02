@@ -88,7 +88,7 @@
 | `tools\verify\smoke_test.py` | 家族平地冒烟：建环境 + obs 维度 + 10 步 |
 | `tools\verify\position_check.py` | 落地检查：base 高度轨迹 + 四脚接触力（≈700N=全重）+ NaN 扫描，`--rough` 切粗糙 |
 | `tools\verify\pose_check.py` | 静态几何打印：各 body 相对 base 坐标（头/四脚/尾） |
-| `tools\verify\view_terrain.py` | Isaac Sim GUI 看机器人站**指定版本真实地形**（改名重写自 view_lizard：--task 任意注册任务、零动作保持、--steps 支持 headless 冒烟） |
+| `tools\verify\view_terrain.py` | Isaac Sim GUI 看机器人站**指定版本真实地形**（改名重写自 view_lizard：--task 任意注册任务、零动作保持、--steps headless 冒烟）；挂 robot-vs-terrain 接触点探针，逐步打印接触点数 vs 碰撞栈预算（v4 stock 2**26 重验） |
 | `tools\verify\terrain_preflight.py` | **开训前地形预检**（skill `isaaclab-pretrain-check`）：离线生成全部子地形 + 粗糙度统计（foot-plate relief 核心指标）+ PNG 渲染到 `_tmp_terrain_previews\` |
 | `tools\verify\joint_check.py` | reset 后打印关节角（验证默认位姿加载） |
 | `tools\verify\check_dr_parity.py` | **契约漂移闸门（--strict 即 CI）**：① teacher vs 家族 DR wiring 行静态对比；② `play_utils.DR_EVENT_NAMES` 与 `dr_controller._DR_EVENT_NAMES` 两份列表同步；③ 全部 `*_PLAY` 类必须调 `apply_play_wiring`；④ 两侧 `ArticulationCfg` 字面块行比对；⑤ 资产结构契约（usda 文本 vs 各 yaml：joint_order/Geometry scope/base_link/body 模式，资产换代改名即报警）；⑥ 资产锁比对（见 `asset_lock.json`）。`--update-locks` 仅在有意换代资产的同一 commit 里跑 |

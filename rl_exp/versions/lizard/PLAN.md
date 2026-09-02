@@ -5,8 +5,11 @@
 > 不追溯，与冻结副本同目录共存——改前认准目录层级）、几何 `lizard.urdf`、管线
 > 脚本 `blender\`；冻结配方在 `vN\`，版本级计划归各自目录。代码不复制进
 > IsaacLab 根，部署见仓根 README。
-> 更新: 2026-09-01（v3 提案 `versions\lizard\v3\PLAN.md`；包名 lizard_exp→rl_exp；
-> versions 家族分层；上一版 2026-08-28 v2.1 teacher 快照落地 + 冒烟通过）
+> 更新: 2026-09-02（v4 提案 `versions\lizard\v4\PLAN.md`：碎石地重定标——脚掌实测
+> 0.46×0.51 m，random_rough 间距 0.5 m + 噪声 14 档；v3.6.1 collision stack 补丁
+> 回 stock；启动前警示三步见 v4\NOTES.md，工具 = skill `isaaclab-pretrain-check`；
+> 上一版 2026-09-01（v3 提案；包名 lizard_exp→rl_exp；versions 家族分层）。方案
+> 细节以各 vN\PLAN.md 为 SSOT，本文件只管滚动计划/挂账，不记版本内容）
 
 ## 1. 目标
 
