@@ -146,3 +146,14 @@ class LizardTeacherV3PPORunnerCfg(RslRlOnPolicyRunnerCfg):
         use_clipped_value_loss=True,
         clip_param=0.2,
     )
+
+
+@configclass
+class LizardTeacherV4PPORunnerCfg(LizardTeacherV3PPORunnerCfg):
+    """Runner cfg for `Lizard-Rough-v4` (terrain-only re-tune of v3, obs 381).
+
+    Everything inherits from v3 (paper S1 hyperparams, three-encoder model);
+    only the log dir changes -- one version, one dir (versioning.mdc §A).
+    """
+
+    experiment_name = "lizard_rough_teacher_v4"

@@ -182,6 +182,79 @@ TEACHER_TERRAINS_CFG_V3 = TerrainGeneratorCfg(
 )
 
 
+# v4 terrain (versions/lizard/v4/PLAN.md): rubble re-scaled for the REAL sole.
+# Measured from the asset (rl_foot collision mesh bbox, USD scale 1): each foot
+# is a 0.46 m x 0.51 m flat plate (the "blade 0.131 m" in the FAMILY geometry
+# memo is the kfe->foot bone length, not the sole), stand height ~0.94 m.
+# v3.6's 0.3 m rubble pitch was SMALLER than the sole, so the plate bridged
+# ~1.5x1.7 rubble cells and rode the envelope flat. IsaacLab 3.0
+# random_uniform_terrain: each downsampled cell picks a height from the
+# discrete set noise_range[0]..noise_range[1] stepped by noise_step (v3.6 =
+# only 5 levels), then cells are spline-interpolated to the 0.1 m grid --
+# further smoothing. v4: pitch >= sole width (one bump per foot, no perching
+# across cells), taller spread, finer level set. Max local slope
+# (0.36 - 0.10) / 0.5 = 0.52 m/m < slope_threshold 0.75: no wall correction.
+TEACHER_TERRAINS_CFG_V4 = TerrainGeneratorCfg(
+    size=(16.0, 16.0),
+    border_width=25.0,
+    num_rows=10,
+    num_cols=20,
+    horizontal_scale=0.1,
+    vertical_scale=0.005,
+    slope_threshold=0.75,
+    use_cache=False,
+    curriculum=True,
+    sub_terrains={
+        "pyramid_stairs": terrain_gen.MeshPyramidStairsTerrainCfg(
+            proportion=0.2,
+            step_height_range=(0.08, 0.55),
+            step_width=0.7,
+            platform_width=6.0,
+            border_width=1.5,
+            holes=False,
+        ),
+        "pyramid_stairs_inv": terrain_gen.MeshInvertedPyramidStairsTerrainCfg(
+            proportion=0.2,
+            step_height_range=(0.08, 0.55),
+            step_width=0.7,
+            platform_width=6.0,
+            border_width=1.5,
+            holes=False,
+        ),
+        "stepping_stones": terrain_gen.HfSteppingStonesTerrainCfg(
+            proportion=0.1,
+            stone_width_range=(0.5, 0.9),
+            stone_distance_range=(0.3, 0.7),
+            stone_height_max=0.3,
+            holes_depth=-1.0,
+            platform_width=4.0,
+            border_width=0.5,
+        ),
+        "boxes": terrain_gen.MeshRandomGridTerrainCfg(
+            proportion=0.1, grid_width=0.9, grid_height_range=(0.08, 0.3), platform_width=4.0
+        ),
+        "random_rough": terrain_gen.HfRandomUniformTerrainCfg(
+            # v4: downsampled_scale 0.5 m >= sole width 0.46 m -- one bump per
+            # foot, the plate must wrap instead of bridging flat; heights
+            # (0.10, 0.35) step 0.02 = 14 levels (v3.6: 5 levels 0.06..0.22);
+            # top 0.35 m ~= 37% of the 0.94 m stand height, between stones
+            # (0.3) and stairs (0.55) -- `用户拍板：2026-09-02`
+            proportion=0.2,
+            noise_range=(0.10, 0.35),
+            noise_step=0.02,
+            border_width=0.5,
+            downsampled_scale=0.5,
+        ),
+        "hf_pyramid_slope": terrain_gen.HfPyramidSlopedTerrainCfg(
+            proportion=0.1, slope_range=(0.0, 0.4), platform_width=4.0, border_width=0.5
+        ),
+        "hf_pyramid_slope_inv": terrain_gen.HfInvertedPyramidSlopedTerrainCfg(
+            proportion=0.1, slope_range=(0.0, 0.4), platform_width=4.0, border_width=0.5
+        ),
+    },
+)
+
+
 @configclass
 class TeacherActionsCfg(ActionsCfg):
     """Joint actions split into legs + spine; spine locked at its rest pose.
@@ -226,6 +299,17 @@ TEACHER_PRIVILEGED_SPEC: dict[str, set[str]] = {
     # structural (obs groups / foot rings / rewards / DR), wired in
     # LizardRoughTeacherEnvCfg_V3
     "v3": {
+        "foot_contact_forces",
+        "foot_contact_normals",
+        "foot_friction",
+        "thigh_shank_contacts",
+        "base_external_wrench",
+    },
+    # v4 also keeps the v2/v3 privileged-term set (priv 83); its recipe
+    # differences are terrain-only (rubble re-scaled for the real sole size)
+    # plus the v3.6.1 collision-stack headroom removal, both wired in
+    # LizardRoughTeacherEnvCfg_V4
+    "v4": {
         "foot_contact_forces",
         "foot_contact_normals",
         "foot_friction",
@@ -804,6 +888,53 @@ class LizardRoughTeacherEnvCfg_V3(LizardRoughTeacherEnvCfg):
 @configclass
 class LizardRoughTeacherEnvCfg_V3_PLAY(LizardRoughTeacherEnvCfg_V3):
     """v3 play variant: obs 381, no randomization, curriculum off."""
+
+    def __post_init__(self):
+        super().__post_init__()
+
+        # deterministic evaluation: shared PLAY wiring (single source, see play_utils)
+        apply_play_wiring(self)
+
+        # v3.6: eval determinism -- the staged speed curriculum would widen
+        # command ranges mid-eval on a good policy; fix the full ambition range
+        # instead and drop the curriculum term
+        self.curriculum.speed_curriculum = None
+        self.commands.base_velocity.ranges.lin_vel_x = (-1.0, 5.0)
+
+
+@configclass
+class LizardRoughTeacherEnvCfg_V4(LizardRoughTeacherEnvCfg_V3):
+    """v4 recipe: v3 with the rubble re-scaled for the real 0.46 x 0.51 m soles.
+
+    Differences vs v3 (versions/lizard/v4/PLAN.md):
+    * random_rough: pitch 0.3 -> 0.5 m (>= sole width 0.46 m: one bump per
+      foot, no bridging), heights (0.06, 0.2)/step 0.04 -> (0.10, 0.35)/step
+      0.02 (5 -> 14 levels; top 0.35 m ~ 37% stand height)
+    * v3.6.1 collision-stack headroom removed: the 2**28 override may have
+      masked the real cause of the v3.6.1 contact overflow (flat soles lying
+      flush on a fine heightfield = maximal contact-pair count). v4 re-tests
+      the stock 2**26 with the coarser terrain
+    """
+
+    params_version = "v4"
+
+    def __post_init__(self):
+        super().__post_init__()
+        # v4: rubble coarse enough for the real soles (TEACHER_TERRAINS_CFG_V4)
+        self.scene.terrain.terrain_generator = TEACHER_TERRAINS_CFG_V4
+        # v4: drop the v3.6.1 PhysX headroom -- re-test the stock 2**26 with
+        # the coarser terrain. WARNING (user decision 2026-09-02): INSPECT THE
+        # TERRAIN BEFORE LAUNCHING TRAINING/TESTS. If the overflow comes back
+        # (PhysX drops contacts silently -> nondeterministic physics), the
+        # root cause is contact density (flat soles on a fine heightfield),
+        # NOT buffer size -- do NOT re-raise the stack; simplify the contact
+        # geometry (coarser sole collision / terrain) instead.
+        self.sim.physics.default.gpu_collision_stack_size = 2**26
+
+
+@configclass
+class LizardRoughTeacherEnvCfg_V4_PLAY(LizardRoughTeacherEnvCfg_V4):
+    """v4 play variant: obs 381, no randomization, curriculum off."""
 
     def __post_init__(self):
         super().__post_init__()

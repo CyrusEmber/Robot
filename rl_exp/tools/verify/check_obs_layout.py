@@ -22,8 +22,12 @@ from rl_exp.tasks.teacher_env_cfg import (  # noqa: E402
     LizardRoughTeacherEnvCfg_V1,
     LizardRoughTeacherEnvCfg_V2,
     LizardRoughTeacherEnvCfg_V3,
+    LizardRoughTeacherEnvCfg_V4,
 )
-from rl_exp.tasks.agents.rsl_rl_ppo_cfg import LizardTeacherV3PPORunnerCfg  # noqa: E402
+from rl_exp.tasks.agents.rsl_rl_ppo_cfg import (  # noqa: E402
+    LizardTeacherV3PPORunnerCfg,
+    LizardTeacherV4PPORunnerCfg,
+)
 
 V3_EXTERO_ORDER = ["lf_foot_ring", "rf_foot_ring", "rl_foot_ring", "rr_foot_ring"]
 V3_PROPRIO_ORDER = [
@@ -116,7 +120,45 @@ def main() -> int:
         if getattr(v3.scene, f"{foot}_foot_ring", None) is None:
             problems.append(f"v3: missing {foot}_foot_ring RayCasterCfg")
 
-    print(f"  teacher versions checked: v1/v2/v3")
+    # v4: same three-group contract as v3 (terrain-only re-tune), own yaml copy
+    v4 = LizardRoughTeacherEnvCfg_V4()
+    groups = _groups(v4.observations)
+    if set(groups) != {"proprio", "extero", "priv"}:
+        problems.append(f"v4: expected proprio/extero/priv groups, got {sorted(groups)}")
+    else:
+        if groups["proprio"] != V3_PROPRIO_ORDER:
+            problems.append(f"v4: proprio order {groups['proprio']} != contract")
+        if groups["extero"] != V3_EXTERO_ORDER:
+            problems.append(f"v4: extero order {groups['extero']} != {V3_EXTERO_ORDER}")
+        if groups["priv"] != V3_PRIV_ORDER:
+            problems.append(f"v4: priv order {groups['priv']} != contract")
+    if getattr(v4.scene, "height_scanner", "missing") is not None:
+        problems.append("v4: base height_scanner should be retired (foot rings own extero)")
+    for foot in ("lf", "rf", "rl", "rr"):
+        if getattr(v4.scene, f"{foot}_foot_ring", None) is None:
+            problems.append(f"v4: missing {foot}_foot_ring RayCasterCfg")
+
+    # yaml: v4 is a verbatim copy of v3's (terrain lives in code, not yaml) --
+    # guard the copy's own ring totals and c_k step consistency
+    with open(_EXP / "versions" / "lizard" / "v4" / "lizard_params.yaml", encoding="utf-8") as f:
+        params = yaml.safe_load(f)
+    v4y = params["v3"]
+    counts = v4y["foot_ring"]["ring_counts"]
+    radii = v4y["foot_ring"]["ring_radii"]
+    if len(counts) != len(radii):
+        problems.append(f"v4 yaml: ring_counts/radii length mismatch {counts} vs {radii}")
+    total = sum(counts)
+    if total * 4 != 208:
+        problems.append(f"v4 yaml: ring total {total} x 4 feet != 208 extero dims")
+    ck_steps = v4y["curriculum_ck"]["steps_per_iteration"]
+    runner_steps = LizardTeacherV4PPORunnerCfg().num_steps_per_env
+    if ck_steps != runner_steps:
+        problems.append(
+            f"v4: yaml curriculum_ck.steps_per_iteration {ck_steps} != runner "
+            f"num_steps_per_env {runner_steps} (c_k iteration length would lie)"
+        )
+
+    print(f"  teacher versions checked: v1/v2/v3/v4")
     for p in problems:
         print(f"  DRIFT: {p}")
     if problems:

@@ -16,6 +16,10 @@
   tilt/r_fc/c_k/DR-reset 趴窝修复包 + v3.6 回放诊断三修。首跑受 v3.6.2 gate bug
   影响全程等效 stage 0（速度档未上探），修复后下一跑生效；方案细节以版本 PLAN
   为 SSOT，本行只记状态）
+- **v4: 已批准开工（未训练）**（2026-09-02）：碎石地重定标——实测脚掌
+  0.46×0.51 m（v3.6 误用 kfe→foot 骨长 0.131 定标），random_rough 间距
+  0.3→0.5 m（≥掌宽）+ 噪声 (0.10,0.35)/step 0.02；v3.6.1 collision stack
+  2**28 补丁删除回 stock。**启动前警示：先看地形**（三步见 v4/NOTES.md）
 - teacher 训练: 待启动（PLAN 挂账 #3，v2）
 - 开发态 yaml: `lizard_params.yaml`（家族活实验用，改动不追溯）
 - 布局（2026-09-01 迁移）: 包名 `rl_exp`（家族无关），冻结配方按家族分层
@@ -39,6 +43,8 @@
 | Lizard-Rough-Play-v1 | `LizardRoughTeacherEnvCfg_V1_PLAY` | versions/lizard/v1（冻结） | v1 配方回放 |
 | **Lizard-Rough-v3** | `LizardRoughTeacherEnvCfg_V3` | **versions/lizard/v3（冻结）** | teacher 论文对齐版（obs 三组 90/208/83，装配完成待训练） |
 | Lizard-Rough-Play-v3 | `LizardRoughTeacherEnvCfg_V3_PLAY` | **versions/lizard/v3（冻结）** | v3 回放 |
+| **Lizard-Rough-v4** | `LizardRoughTeacherEnvCfg_V4` | **versions/lizard/v4（冻结）** | 碎石地重定标（obs 同 v3 三组 90/208/83；纯地形+物理缓冲区变更，spec 不变） |
+| Lizard-Rough-Play-v4 | `LizardRoughTeacherEnvCfg_V4_PLAY` | **versions/lizard/v4（冻结）** | v4 回放 |
 
 注：teacher 任务 id 与配方版本同步，且**全部常驻注册**——旧版本不会因代码
 演进而失复现（机制见下节"版本差异结构"）。`Lizard-Rough-v0` 无任务 id
@@ -105,6 +111,7 @@ v3 的组结构差异（三组拆分/脚环/奖励/DR）全部封装在 `LizardR
 | v1 | 2026-08-31 | teacher 首跑：v0 仅 DR 段全部收窄（无一归零），验证"特权+锁脊柱+轻扰动"能否出步态。已训练 14000 iters 并出评测分（09-01 回填），任务 id 常驻可复现 | [PLAN](v1/PLAN.md) · [NOTES](v1/NOTES.md) |
 | v2 | 2026-08-31 | 特权 obs 论文对齐补全（+forces/normals/friction/thigh-shank/wrench 共 42 维，266→308）；yaml 与 v1 相同 | [PLAN](v2/PLAN.md) · [NOTES](v2/NOTES.md) |
 | v3 | 2026-09-01 | teacher 论文对齐版（obs 三组 90/208/83=381：脚环 extero + SplitEncoderModel 三编码器；tilt 终止 + 防拖 r_fc + c_k 课程 + DR reset 化）。**首跑完成（2048 env × 4999 iter，全程等效 stage 0），结果待回填** | [PLAN](v3/PLAN.md) · [NOTES](v3/NOTES.md) |
+| v4 | 2026-09-02 | 碎石地重定标：脚掌实测 0.46×0.51 m（v3.6 误用骨长 0.131），random_rough 间距 0.5 m ≥ 掌宽 + 噪声 (0.10,0.35) step 0.02；v3.6.1 collision stack 补丁回 stock 2**26。**待训练（启动前先看地形）** | [PLAN](v4/PLAN.md) · [NOTES](v4/NOTES.md) |
 
 ## 机体几何备忘（生物比例对账，2026-09-01）
 
@@ -115,7 +122,7 @@ URDF 实测（估 SVL ≈2.0m，尾基在 base 后 1.26m；长轴 = Y）。spraw
 |---|---|---|---|---|
 | 股骨 | 0.50 m | 25% SVL | 20–25%（科莫多档上限） | ✅ 压着上限 |
 | 胫骨 | 0.382 m | 股:胫 1.3:1 | ≈1:1 | ⚠️ 偏短 |
-| 脚（blade） | 0.131 m | 胫:脚 2.9:1 | 脚 > 胫 | ❌ 严重短（平板简化，已知） |
+| 脚（掌板） | **0.51 m 长 × 0.46 m 宽**（碰撞网格 bbox；kfe→foot 骨长 0.131，勘误 2026-09-02，v3.6 曾误当掌宽定标） | 胫:脚 ≈0.75:1 | 脚 > 胫 | ✅ 达标（旧记 0.131 时的"严重短"判定作废） |
 | 站高（base z） | 0.94 m | 47% SVL | 50–55% | ⚠️ 略矮（胫/脚短的连带） |
 | 肢质量 | ≈5.5 kg/条 | 7.6% 体重/肢 | 5–8% | ✅ |
 
@@ -123,9 +130,10 @@ URDF 实测（估 SVL ≈2.0m，尾基在 base 后 1.26m；长轴 = Y）。spraw
   0.55m 台阶靠 hfe 摆量补够，边缘值）；后果②步幅靠超长股骨补偿锁死的 spine
   侧弯与短下腿，收支勉强平。
 - **纪律**：改骨长 = 机体换代 = **换家族**（§A 越级条款），不是任何 vN+1。
-  二代机体方向（若立项）：胫骨 +0.1m、脚掌 +0.1m 换回生物比例，站高与提脚
-  包络同时受益。正常运动蜥蜴肚皮不贴地（postural inflation，随速抬高），
-  肚皮接触力 = 病态信号，v3.7 候选惩罚项的生物学依据在此。
+  二代机体方向（若立项）：胫骨 +0.1m 换回生物比例（脚掌实测已达标，旧"脚掌
+  +0.1m"建议随 0.131 勘误作废）。正常运动蜥蜴肚皮不贴地（postural
+  inflation，随速抬高），肚皮接触力 = 病态信号，v3.7 候选惩罚项的生物学依据
+  在此。
 
 ## 代码地图
 
