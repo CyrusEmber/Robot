@@ -36,15 +36,18 @@ E:\IsaacLab\ablation_harness\
 ├─ eval.py                 # runner: task + checkpoint + protocol + mode → 跑分
 ├─ run_ablation.py         # spec yaml → train+eval 调度, 断点续跑, 汇总表
 ├─ protocols\locomotion_eval_v1.yaml   # 协议契约（冻结只读，改动 = 新建 vN）
-├─ suites.py              # 地形套件（机器人尺度相关，单文件）：lizard_suite_v1()；
+├─ suites.py              # 地形套件（机器人尺度相关，单文件）：`<robot>_suite_vN()；`
 │                         # 新机器人 = 新 suite 函数+名字表（照抄锁三件套：curriculum=True
 │                         # 等比例列分配 / 单值难度 / seed）+ 注册进 eval.py 的 _SUITE_REGISTRY
 ├─ components\             # command_player / dr_controller / recovery（纯函数，通用）
-│                          # 注：dr_controller 的 DR 事件清单与 rl_exp\tasks\play_utils.py
+│                          # 注：dr_controller 的 DR 事件清单与 <robot>_exp\tasks\play_utils.py
 │                          # 互为同步镜像（PLAY 变体用同一份）——改一边即红：
 │                          # check_dr_parity.py --strict 机器看守，别靠人记
 ├─ metrics.py              # 指标纯函数库（按时间线分段自动切窗，通用）
-├─ plot_eval.py            # 评测可视化（读 eval.json → 趋势图 + 逐地形热力图，不起仿真）
+├─ plot_eval.py            # 评测可视化（读 eval.json；--report 出单文件 HTML 汇总报告【默认】，
+│                          # --out_dir 出散图 PNG【只需贴图进工单时】；两者都不入库。共用
+│                          # <robot>_exp\tools\trainlog\plot_tb.py 的 figure/series_to_figs），
+│                          # 全程不起仿真
 ├─ specs\example_baseline.yaml         # 消融 spec 示例
 └─ results\<protocol>\<run_id>\eval.json + summary.csv
                            # 一次 campaign 可用 --group 单独成目录：
@@ -58,7 +61,7 @@ harness 与机器人无关；**机器人相关只有 suites.py 一个文件 + �
 
 **本 skill 不复制协议数值——复制处即漂移处**（曾有文档抄 266 维 obs 被 v2 打脸）。
 全文即契约，30 秒读完：`protocols\locomotion_eval_v1.yaml`（命令时间线、robust push、
-suite 布局、指标口径全在里面）。**v1 是 lizard 尺度实例**，新机器人可另起协议或在
+suite 布局、指标口径全在里面）。**v1 为首个机器人尺度实例**，新机器人可另起协议或在
 同协议下换 suite——语义变了就要 vN。latency 注入未实现（PLAN 挂账），rob 记 N/A。
 
 ## 指标定义（口径冻结在协议里，改口径 = 协议升版）
@@ -80,7 +83,7 @@ dt（功率当能耗裸累加，虚高 ~50×，`energy_per_m_j=196155` 这种量
 
 **Provenance 纪律**：eval.json/summary.csv 每行自带 `git_rev_lizard` +
 `git_rev_isaaclab`（eval.py 自动采集，junction 布局下两仓分别定位；新机树内
-lizard rev 记 unknown）。引用数字先看 rev——**无 rev 或 rev 对不上的数字不引用**；
+`git_rev_lizard` 记 unknown）。引用数字先看 rev——**无 rev 或 rev 对不上的数字不引用**；
 比较跨 rev 的行必须声明代码已变。
 
 ## 使用方案
@@ -90,7 +93,7 @@ seed 保住），`-Play` 的 DR 预先全关，robust 会静默退化成 nominal
 
 ```bat
 :: 单点评估（nominal / robust）；--group 让一次 campaign 单独成目录 + 专属 summary.csv
-python ablation_harness\eval.py --task Lizard-Rough-v2 --checkpoint <model.pt> ^
+python ablation_harness\eval.py --task <Robot>-<Task>-vN --checkpoint <model.pt> ^
   --protocol locomotion_eval_v1 --mode nominal --seed 123 --group v1
 
 :: 消融调度（spec yaml：N 个 run 顺序 train+eval，断点续跑；spec 顶层 group: 透传 --group）+ 汇总表
@@ -99,9 +102,22 @@ python ablation_harness\run_ablation.py --summarize
 python ablation_harness\run_ablation.py --summarize --group v1
 :: 逐地形：组内 terrains.csv（长表）+ 三张「地形 × ckpt」pivot
 python ablation_harness\run_ablation.py --by-terrain --group v1
-:: 出图（纯读盘，不起仿真）；训练侧曲线用 rl_exp\tools\trainlog\plot_tb.py
+:: ── 可视化：产物一律**不入库**（gitignore 已挡 plots/ 与 report.html）──
+:: 记录只有数据（eval.json / summary.csv / terrains.csv / tb_scalars.csv，已在库）；
+:: 图和 HTML 都是秒级可再生的视图（纯读盘，不起仿真），要哪个看场景：
+::
+:: A. 单文件汇总报告（默认选这个）：训练曲线 + 评测图 + summary 表 + git rev 溯源，
+::    内联 SVG 无限放大、离线可开、单文件可发人。训练曲线读版本目录的 tb_scalars.csv
+::    （先跑 dump_tb.py），竖线 = 已评测 ckpt（迭代号自动从 eval.json 推，免手传 --mark）
 python ablation_harness\plot_eval.py --protocol locomotion_eval_v1 --group v1 ^
-  --out_dir rl_exp\versions\lizard\v1\plots --prefix v1_eval_
+  --report <robot>_exp\versions\<family>\<vN>
+::
+:: B. 散图 PNG：只有要往工单 / POPO / PPT / 词条里**贴图**时才需要（那些地方不收 HTML）。
+::    默认 200 DPI（--dpi 可覆盖）；训练侧曲线单独出图用
+::    <robot>_exp\tools\trainlog\plot_tb.py（--mark 手传 ckpt 迭代号）
+python ablation_harness\plot_eval.py --protocol locomotion_eval_v1 --group v1 ^
+  --out_dir <robot>_exp\versions\<family>\<vN>\plots --prefix <vN>_eval_
+:: 地形预检图不在此列（那是地形渲染，report 无对应物，见 isaaclab-pretrain-check）
 ```
 
 ## 组件热插拔（spec 的组织方式，**永远不动家族代码**）
@@ -128,8 +144,8 @@ eval_checkpoints/eval_modes/eval_seed/overrides。**tag 不可互为后缀**（�
 ## 实验设计纪律
 
 - **多 checkpoint 比较**（如 1k/2k/4k）：固定单点比较会误杀慢收敛方案（CPG 典型起步慢）。
-  **趋势判断要 ≥5 点**：teacher v1 实证——3 点（4k/8k/14k）读出"fall 随迭代上升"，补到
-  6 点（2k~14k）发现是 .15~.33 的抖动带，结论撤回（`versions\lizard\v1\NOTES.md` A2）
+  **趋势判断要 ≥5 点**：实证教训——3 点读出“fall 随迭代上升”，补到 6 点发现是抖动带，
+  结论撤回（案例见该家族版本 NOTES）
 - **seed 策略**：筛查 1 seed，结论性对照 ≥3 seed（locomotion 跨 seed 方差 ±0.1 常见）
 - nominal 保留 reset 扰动（关节 0.5-1.5 缩放 + 出生位置/速度随机）——spawn 条件是
   reset 协议一部分，两种模式一致（协议 yaml 注释声明）
@@ -170,7 +186,6 @@ eval_checkpoints/eval_modes/eval_seed/overrides。**tag 不可互为后缀**（�
 - **代码审查完成**（三轮修复归档于 git 历史：b6098c9 / f22f43f）：修复 2 🚨（glob 前缀 bug /
   训练失败杀 sweep）+ 3 ⚠️（协议默认单一真源 / recovery 子集 / 死参数）；
   configclass 单例疑点源码验证排除；dump_tb 实测 39237 点与历史吻合
-- 待首个真实 checkpoint（teacher 训练完成后）跑基线数据 → **已了结 2026-09-01**：
-  teacher v1 六行基线（3 ckpt × 双模式）在 `results/locomotion_eval_v1/v1/`，
-  判读见 `rl_exp\versions\lizard\v1\NOTES.md`
-- 相关 SSOT：`rl_exp\PLAN.md`（训练计划/挂账）、`rl_exp\FAMILY.md`（家族版本管理）
+- **已了结 2026-09-01**：首个 teacher 六行基线（3 ckpt × 双模式）在
+  `results/locomotion_eval_v1/v1/`，判读见该家族版本 NOTES
+- 相关 SSOT：各家族 PLAN.md（训练计划/挂账）/ FAMILY.md（家族版本管理）

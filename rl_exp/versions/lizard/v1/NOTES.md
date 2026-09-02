@@ -53,11 +53,12 @@
   - 不动的是**平地/斜坡**：`flat` .61~.65、`slope_10deg` .73 上下（命令速度协议钉死，
     速度没变快，变的是"能不能过去"）
   - `gap_40cm` 六档全线 .08~.21、nominal fall 恒 0 → 见分析 A8（预期内）
-- 图（`plots\`，训练侧由 `rl_exp\tools\trainlog\plot_tb.py` 出，评测侧由
-  `ablation_harness\plot_eval.py` 出，均可重跑再生）:
-  `v1_reward.png` `v1_termination.png` `v1_episode_length.png` `v1_progress.png`
-  ｜ `v1_eval_trend.png`（success/fall/recovery vs ckpt，nominal+robust）
-  ｜ `v1_eval_terrains.png`（completion×fall 热力，地形 × ckpt）
+- 图（**视图不入库**，`plots\` 与 `report.html` 已在 `.gitignore`；记录只有数据，图随时可再生）:
+  一条命令出单文件汇总报告（训练 4 图 + 评测 2 图 + summary 表 + rev 溯源，矢量可放大）：
+  `python ablation_harness\plot_eval.py --protocol locomotion_eval_v1 --group v1 --report rl_exp\versions\lizard\v1`
+  → `rl_exp\versions\lizard\v1\report.html`。只有要贴图进工单/PPT 时才用 `--out_dir` 出散 PNG
+  （训练侧 `v1_reward/termination/episode_length/progress`，评测侧 `v1_eval_trend`（success/fall/recovery
+  vs ckpt，nominal+robust）｜`v1_eval_terrains`（completion×fall 热力，地形 × ckpt））
 - 分析（编号 A，每条挂证据；数据 = 上面表 + `terrains.csv`，图 = `plots\`）:
   - **A1 特权救活趴窝成立**（§4.6 对照判出）：零动作 success 0.254 → v1 nominal 0.51~0.64，
     2k 就 0.511。激励逃生舱（家族 PLAN 挂账 #7）不再是 Phase 1 阻塞项。
@@ -102,8 +103,11 @@
     --mode nominal|robust --seed 123 --tag v1_<it> --group v1 --headless
   :: 逐地形长表 + pivot
   python ablation_harness\run_ablation.py --by-terrain --group v1
-  :: 训练侧 4 图 + 评测侧 2 图
+  :: 曲线数据导出（入库）+ 汇总报告（不入库，可再生）
   python rl_exp\tools\trainlog\dump_tb.py --log_dir <run> --out rl_exp\versions\lizard\v1\tb_scalars.csv
+  python ablation_harness\plot_eval.py --protocol locomotion_eval_v1 --group v1 ^
+    --report rl_exp\versions\lizard\v1
+  :: 仅当需要贴图（工单/PPT）时再出散 PNG（ckpt 迭代号需手传 --mark）
   python rl_exp\tools\trainlog\plot_tb.py --csv rl_exp\versions\lizard\v1\tb_scalars.csv ^
     --out_dir rl_exp\versions\lizard\v1\plots --prefix v1_ --mark 2000,4000,6000,8000,10000,13999
   python ablation_harness\plot_eval.py --protocol locomotion_eval_v1 --group v1 ^

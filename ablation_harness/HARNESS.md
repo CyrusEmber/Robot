@@ -10,7 +10,7 @@
 ## 当前状态
 
 - 协议版本：**locomotion_eval_v1**（`protocols/locomotion_eval_v1.yaml` 冻结；`results/` 按协议目录组织）
-- 代码基线：v1.3（v1.2 + 逐地形产物 `--by-terrain`/`terrains.csv` + 评测可视化 `plot_eval.py`）
+- 代码基线：v1.4（v1.3 + `plot_eval.py --report` 单文件 HTML 汇总报告；可视化产物**不入库**，PNG 默认 200 DPI）
 - 部署形态：仓根独立目录 + `E:\IsaacLab\ablation_harness` junction（挂账 1 完成后删）
 
 ## 版本历史
@@ -21,6 +21,7 @@
 | v1.1 | 2026-09-01 | `eval.py::_prepare_env` 补 `handle_deprecated_rsl_rl_cfg(agent_cfg, rsl-rl 版本)`——train.py 有、harness 无，rsl-rl 5.4.2 的 `MLPModel` 拒收 legacy `stochastic` 字段，带 `--checkpoint` 直接 `TypeError`（v1 之前只跑过零动作冒烟，该路径从未 exercised） | teacher v1 首跑评测 |
 | v1.2 | 2026-09-01 | 结果按 **campaign 分组**：`eval.py --group v1` → `results/<protocol>/v1/<run_id>/` + 组内 `summary.csv`（行只落一处，协议根 summary 不再混装）；`run_ablation.py` 透传 spec 的 `group`，`--summarize` 缺省汇总"协议根 + 各组"，`--summarize --group v1` 只看一组。已有 6 行 v1 结果 git mv 入组 | 用户要求 v1 评测单独成目录 |
 | v1.3 | 2026-09-01 | 逐地形与可视化：`run_ablation.py --by-terrain [--group v1]` 从 eval.json 反向生成组内 `terrains.csv`（run × terrain 长表，108 行/12 run）+ 三张「地形 × ckpt」pivot；新增 `plot_eval.py`（趋势图 + 逐地形热力图，纯读盘不起仿真）；家族侧新增 `tools\trainlog\plot_tb.py`（tb_scalars.csv → 4 张训练曲线）。teacher v1 补测到 6 ckpt（2k/6k/10k 新增，共 12 行） | 用户要求逐地形数据 + 可视化 |
+| v1.4 | 2026-09-02 | 汇总报告 + 可读性：`plot_eval.py --report <版本目录>` 产出**单个自包含 HTML**（内联 SVG，无 JS/CDN、离线可开、放大不糊）——训练曲线（读该目录 `tb_scalars.csv`，竖线 = 已评测 ckpt，自动从 eval.json 推迭代号，免手传 `--mark`）+ 两张评测图 + `summary.csv` 表格 + git rev 溯源（混 rev 自动黄条警告）。训练曲线图构建函数抽入 `plot_tb.figure/series_to_figs` 供两侧共用（防"哪些 tag 回答哪个配方问题"漂移）。PNG 默认 DPI 120→200（840×480→1400×800），可 `--dpi` 覆盖；`--out_dir` 改为可选，与 `--report` 可单用/并用。**可视化产物退出仓库记录**：`plots/` 与 `report.html` 进 `.gitignore`，v1 已提交的 6 张 PNG `git rm --cached`（磁盘文件保留）——记录只有数据（eval.json / summary.csv / terrains.csv / tb_scalars.csv），图和 HTML 是秒级可再生的视图（纯读盘，不起仿真）；要贴图进工单/POPO/PPT 时才用 `--out_dir` 出 PNG | 用户要求训练结果也在 eval 侧汇总、图能放大看，且确认派生产物不必入库 |
 
 ## 挂账
 
@@ -48,3 +49,4 @@ harness 代码高频变更 / 多机器人共用 / 评测协议 v2 出现时 → 
 | 2026-09-01 | v1.1 | agent cfg 迁移修复落地 + teacher v1 六行评测分入 `results/locomotion_eval_v1/`（离线闸门全绿后跑） |
 | 2026-09-01 | v1.2 | 分组落盘落地（`--group`），teacher v1 六行迁入 `results/locomotion_eval_v1/v1/` 并独立成表；协议根 summary 只留未分组的零动作冒烟两行 |
 | 2026-09-01 | v1.3 | `--by-terrain`（组内 `terrains.csv` + 地形×ckpt pivot）与 `plot_eval.py` 落地；v1 campaign 扩到 12 行（6 ckpt × 双模式），图 6 张入 `versions/lizard/v1/plots/` |
+| 2026-09-02 | v1.4 | `plot_eval.py --report` 单文件 HTML 汇总报告落地（训练曲线 + 评测图 + summary 表 + rev 溯源），首份产物 `versions/lizard/v1/report.html`（12 run / 6 图 / 1.1 MB）；PNG 默认 DPI 提到 200；`plots/` 与 `report.html` 加入 `.gitignore`，v1 六张 PNG 移出索引（磁盘保留，可再生） |

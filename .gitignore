@@ -9,3 +9,8 @@ _tmp_*
 
 # ponytail upstream clone (update source only, installed artifacts are committed)
 /ponytail/
+
+# derived viz -- rebuildable in seconds from committed data (tb_scalars.csv +
+# eval.json + summary.csv) via plot_tb.py / plot_eval.py, so never a record
+rl_exp/versions/**/plots/
+**/report.html

@@ -105,7 +105,7 @@
 |---|---|
 | `tools\trainlog\dump_tb.py` | TB 事件文件 → CSV（版本记录用：`--log_dir <run目录> --out versions\lizard\vN\tb_scalars.csv`） |
 | `tools\trainlog\read_curriculum.py` | 从 tfevents 读课程终值（terrain level 等） |
-| `tools\trainlog\plot_tb.py` | tb_scalars.csv → 训练曲线 PNG（reward/终止/局长/课程四张，`--mark` 标已评测 ckpt） |
+| `tools\trainlog\plot_tb.py` | tb_scalars.csv → 训练曲线 PNG（reward/终止/局长/课程四张，`--mark` 标已评测 ckpt，默认 200 DPI）；`figure`/`series_to_figs` 供 `ablation_harness\plot_eval.py` 的 HTML 报告共用。**产物不入库**（可再生） |
 | `ue\build_lizard_ue.py` | UE 编辑器脚本：按 `ue\lizard_ue.json` 组装蜥蜴物理 Actor |
 | `fork_patches\config_lizard___init__.py` | fork shim 现成副本（装到 IsaacLab 树注册任务用） |
 | `__init__.py` | 包声明（`import rl_exp` 入口，经 venv .pth 可达） |
@@ -116,7 +116,7 @@
 |---|---|
 | `eval.py` | 统一评测 runner：task + checkpoint + 协议 + 模式 → eval.json |
 | `run_ablation.py` | 消融调度器：spec yaml → 串行 train+eval → 汇总表，断点续跑；`--by-terrain` 出逐地形长表+pivot |
-| `plot_eval.py` | 评测结果可视化：读组目录 eval.json → 趋势图（success/fall/recovery vs ckpt）+ 逐地形热力图（不起仿真） |
+| `plot_eval.py` | 评测可视化（读组目录 eval.json，不起仿真）：`--report <版本目录>` → 单文件 HTML 汇总报告（训练曲线+评测图+summary 表+rev 溯源，**默认选它**）；`--out_dir` → 散图 PNG（只需贴图进工单时用）。两者均不入库 |
 | `metrics.py` | 指标库：tracking/success/energy（PD 反解 τ）/fall 几何判定/completion |
 | `suites.py` | 固定地形套件（9 地形确定性三锁：curriculum+等比例+单值难度+seed） |
 | `components\command_player.py` | 命令时间线播放器（协议 yaml 是唯一真源） |
