@@ -1,11 +1,16 @@
 # Lizard-Rough-v3 实施计划（teacher Phase 1 论文对齐增强版）
 
-> 状态：**代码已装配，训练待启动**（2026-09-01：D0-1/D0-2 用户拍板后 A–F 全部落地，
-> 离线闸门 8/8 绿 + teacher_smoke_v3 + 4096 env 计时通过；实施偏差见 §10 v3.3 行）。
+> 状态：**首跑完成，结果待回填**（2026-09-01 启动，2048 env，4999 iter 记档，
+> mean_reward -15.7→-4.9 仍在涨、time_out 0.999；因 v3.6.2 gate bug 本跑全程等效
+> stage 0，速度档未上探。装配/实施偏差记录见 §10 v3.3 行）。
 > 生成：2026-09-01。来源：全仓 code review + Miki et al. 2022（arXiv:2201.08117,
 > Sci. Robotics）全文核实（正文 + 补充材料 S1–S9）。
-> 修订：v3.6（2026-09-01）——回放诊断三修：速度课程接入（-1..2→5，`用户拍板`）、
-> base_contact 终止删除（D0-6 执行落地）、碎石粗化（downsampled_scale 0.3m），明细见 §10 修订记录。
+> 修订：v3.6.2（2026-09-02）——两条勘误（均不改配方实质）：v3.6.1 PhysX collision
+> stack 2**28（4096 env 溢出实证）；v3.6.2 速度课程 gate 恒读 0 修复（command metrics
+> buffer 记完即清 + 课程 compute 先于 command reset，首跑 stage 恒 0；pitfalls P002），
+> 明细见 §10 修订记录。
+> 此前 v3.6（2026-09-01）：回放诊断三修——速度课程接入（-1..2→5，`用户拍板`）、
+> base_contact 终止删除（D0-6 执行落地）、碎石粗化（downsampled_scale 0.3m）。
 > 此前 v3.5（2026-09-01）：地形课程护城河 `max_init_terrain_level 5→0`。
 > 关联：`../PLAN.md`（家族滚动计划/挂账）、`../FAMILY.md`（obs 布局 SSOT）。v3 定稿
 > 训练后本文件并入 ../PLAN.md，FILEMAP 登记随 Phase F 补。

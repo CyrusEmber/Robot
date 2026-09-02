@@ -11,10 +11,11 @@
 - 活跃冻结版本: **v2**（2026-08-31，特权 obs 论文对齐补全，266 → 308 维；
   yaml 与 v1 逐字相同，纯代码级变更。v0 未训练 = 全量 DR 对照存档；
   v1 已训练 14000 iters 并出评测分，2026-09-01 回填）
-- **v3: 代码已装配，训练待启动**（`versions/lizard/v3/PLAN.md` v3.3，2026-09-01：
-  三编码器 + 脚环扫描（208 维 extero）+ tilt/r_fc/c_k/DR-reset 趴窝修复包全部落地，
-  离线闸门 8/8 绿、teacher_smoke_v3 与 4096 env 计时通过；方案细节以版本 PLAN 为 SSOT，
-  本行只记状态）
+- **v3: 首跑完成，结果待回填**（2026-09-01 启动，2048 env × 4999 iter；
+  `versions/lizard/v3/PLAN.md` v3.6.2：三编码器 + 脚环扫描（208 维 extero）+
+  tilt/r_fc/c_k/DR-reset 趴窝修复包 + v3.6 回放诊断三修。首跑受 v3.6.2 gate bug
+  影响全程等效 stage 0（速度档未上探），修复后下一跑生效；方案细节以版本 PLAN
+  为 SSOT，本行只记状态）
 - teacher 训练: 待启动（PLAN 挂账 #3，v2）
 - 开发态 yaml: `lizard_params.yaml`（家族活实验用，改动不追溯）
 - 布局（2026-09-01 迁移）: 包名 `rl_exp`（家族无关），冻结配方按家族分层
@@ -103,7 +104,7 @@ v3 的组结构差异（三组拆分/脚环/奖励/DR）全部封装在 `LizardR
 | v0 | 2026-08-28 | 首版冻结：72kg、DR 全套、基线奖励（回滚态）、teacher 特权 obs。未训练即被 v1 取代，存档作全量 DR 对照 | [PLAN](v0/PLAN.md) · [NOTES](v0/NOTES.md) |
 | v1 | 2026-08-31 | teacher 首跑：v0 仅 DR 段全部收窄（无一归零），验证"特权+锁脊柱+轻扰动"能否出步态。已训练 14000 iters 并出评测分（09-01 回填），任务 id 常驻可复现 | [PLAN](v1/PLAN.md) · [NOTES](v1/NOTES.md) |
 | v2 | 2026-08-31 | 特权 obs 论文对齐补全（+forces/normals/friction/thigh-shank/wrench 共 42 维，266→308）；yaml 与 v1 相同 | [PLAN](v2/PLAN.md) · [NOTES](v2/NOTES.md) |
-| v3 | 2026-09-01 | teacher 论文对齐版（obs 三组 90/208/83=381：脚环 extero + SplitEncoderModel 三编码器；tilt 终止 + 防拖 r_fc + c_k 课程 + DR reset 化）。**代码装配完成，训练待启动** | [PLAN](v3/PLAN.md) · [NOTES](v3/NOTES.md) |
+| v3 | 2026-09-01 | teacher 论文对齐版（obs 三组 90/208/83=381：脚环 extero + SplitEncoderModel 三编码器；tilt 终止 + 防拖 r_fc + c_k 课程 + DR reset 化）。**首跑完成（2048 env × 4999 iter，全程等效 stage 0），结果待回填** | [PLAN](v3/PLAN.md) · [NOTES](v3/NOTES.md) |
 
 ## 机体几何备忘（生物比例对账，2026-09-01）
 
