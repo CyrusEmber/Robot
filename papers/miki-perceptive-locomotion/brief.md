@@ -51,6 +51,6 @@
 - teacher-student 特权蒸馏至今仍是 perceptive locomotion 主干范式，但本方法的三条边界均已被后继推进：
   1. **多技能+导航**：ANYmal Parkour（Hoeller et al., Science Robotics 2024, arXiv:2306.14874）分层导航 + walking/jumping/climbing/crouching 统一策略，地形能力（跳跃/攀爬/钻行）超出本方法"只会走路"的局限
   2. **去特权化**：SLR（CoRL 2024, arXiv:2406.04835）完全移除特权信息、纯 proprio 自学习 latent，在 4 个 benchmark 上超 Miki 2022 基线——直接挑战"必须特权蒸馏"假设
-  3. **感知表示升级**：MGDP（2025）depth+height 对比学习解耦感知与动力学；2023–2024 起还有直接 depth→action 的 parkour 线（Robot Parkour Learning / Extreme Parkour，待核实具体引用），绕过 2.5D 高程图丢纹理问题
+  3. **感知表示升级**：MGDP（2025）depth+height 对比学习解耦感知与动力学；2023–2024 起还有直接 depth→action 的 parkour 线：Robot Parkour Learning（Zhuang et al., CoRL 2023, arXiv:2309.05665）与 Extreme Parkour（Cheng et al., ICRA 2024, arXiv:2309.14341，已入库 papers/extreme-parkour/），绕过 2.5D 高程图丢纹理问题
 - 论文自述的两个未来方向（显式不确定性估计、端到端感知）已被后续部分兑现；"门控融合双模态 + 从历史估不可观测状态"的结构思想仍是当前工作的对照基线与常用组件
 - 对比结论：本方法的价值已从"性能 SOTA"转为"范式基线"——结构可复用，指标已被超越
