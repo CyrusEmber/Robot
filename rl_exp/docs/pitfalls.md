@@ -57,3 +57,45 @@ python -c "import sys; import rl_exp.tasks.teacher_env_cfg; print('PXR LEAKED' i
 ```
 
 干净时输出 `CLEAN`。任何 env cfg / mdp 模块改动后跑一次。
+
+## P002 课程 gate 恒读 0（metrics buffer 记完即清）
+
+**日期**: 2026-09-02
+**影响**: v3.6 速度课程全程 stage 0，首跑 5000 iter 档位从未推进。
+
+### 症状
+
+TB `Curriculum/speed_curriculum/metric` 恒 0.000、`stage` 恒 0，而
+`Metrics/success_rate` 已到 0.36——gate 与日志读数脱节。
+
+### 根因
+
+`ManagerBasedRLEnv._reset_idx` 的顺序：
+
+```
+curriculum_manager.compute()      # gate 在这里读 command.metrics → 全 0
+...
+command_manager.reset()           # term.reset: 先写 episode 终值 → 记日志 → 立刻清零 buffer
+```
+
+`CommandTerm.reset`（command_manager.py:132-136）对 reset 的 env **记完即清零**
+`self.metrics`。课程 term 读 `command.metrics["success_rate"].mean()` 时 buffer
+永远是零（mid-episode env 是 0，刚 reset 的又被清）。单测用假 command 的常驻
+buffer 喂值，测不出这个时序。
+
+### 修复
+
+`StagedCurriculumTerm._gate_metric` 改读 `env.extras["log"]["Metrics/<term>/<metric>"]`
+（或统一路径 `Metrics/<metric>`）——command term 在 reset 里写日志的标量，
+是跨步持久的真值；配 EMA（`metric_ema_alpha`，默认 0.05）平滑单批次噪声。
+
+### 通用规则
+
+**读别的 manager 的瞬时 buffer 前，先查 step 内调用顺序和清零时机**；
+日志 extras 通常比内部 buffer 更可靠。课程/统计类 term 优先消费
+`env.extras["log"]`。
+
+### 检测方法
+
+训练 TB 里 `Curriculum/<term>/metric` 与 `Metrics/<metric>` 长期背离
+（一个恒 0、一个在涨）即同类 bug。

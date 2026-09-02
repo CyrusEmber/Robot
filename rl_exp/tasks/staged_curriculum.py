@@ -29,8 +29,6 @@ from isaaclab.utils.configclass import configclass
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedEnv
 
-    from isaaclab.envs.mdp.commands import UniformVelocityCommand
-
 
 @configclass
 class StageCfg:
@@ -62,6 +60,10 @@ class StagedCurriculumTermCfg(CurriculumTermCfg):
     """Name of the velocity command term whose metrics drive the gate."""
     metric_name: str = "success_rate"
     """Command metric used as gate (episode-mean success flags, updated at resets)."""
+    metric_ema_alpha: float = 0.05
+    """EMA weight for the gate metric. Each logged value only covers the
+    environments that reset in one batch, so it is noisy; 1.0 disables
+    smoothing (latest batch only)."""
     stages: list[StageCfg] = MISSING
     """Stage list; index 0 is applied when the curriculum first computes."""
 
@@ -69,11 +71,17 @@ class StagedCurriculumTermCfg(CurriculumTermCfg):
 class StagedCurriculumTerm(ManagerTermBase):
     """Curriculum term that advances through a list of stages.
 
-    The gate metric is read from a command term's ``metrics`` buffer (per-environment
-    episode statistics finalized at episode resets). The mean over all environments
-    must exceed the stage threshold continuously for ``sustain_s`` seconds before the
-    term advances. Advancing applies the next stage's payload; the returned dictionary
-    is logged by the curriculum manager as ``Curriculum/<term_name>/*``.
+    The gate metric is an EMA of the value the command term logged at the last
+    episode reset (``env.extras["log"]["Metrics/..."]``). The command's raw
+    ``metrics`` buffer cannot be read here: ``_reset_idx`` runs
+    ``curriculum_manager.compute()`` BEFORE ``command_manager.reset()``, and
+    ``CommandTerm.reset`` zeroes the buffer for the resetting envs -- by the
+    next curriculum call the buffer is all zeros again (the bug that pinned
+    every stage-0 gate at metric=0 for the whole of the first v3 run).
+    The EMA must exceed the stage threshold continuously for ``sustain_s``
+    seconds before the term advances. Advancing applies the next stage's
+    payload; the returned dictionary is logged by the curriculum manager as
+    ``Curriculum/<term_name>/*``.
     """
 
     cfg: StagedCurriculumTermCfg
@@ -91,6 +99,7 @@ class StagedCurriculumTerm(ManagerTermBase):
         self.stage_idx = 0
         self._counter_steps = 0
         self._applied = False
+        self._metric_ema: float | None = None
 
     """
     Operations.
@@ -133,9 +142,24 @@ class StagedCurriculumTerm(ManagerTermBase):
     """
 
     def _gate_metric(self) -> float:
-        """Mean of the configured command metric over all environments."""
-        command: UniformVelocityCommand = self._env.command_manager.get_term(self.cfg.command_name)
-        return float(command.metrics[self.cfg.metric_name].mean())
+        """EMA of the command term's last logged episode metric.
+
+        Reads ``env.extras["log"]``: the manager-level key
+        ``Metrics/<command_name>/<metric_name>`` first, then the unified
+        ``Metrics/<metric_name>`` path that ``UniformVelocityCommand`` routes
+        ``success_rate`` to. Returns 0.0 until the first logged batch.
+        """
+        log = self._env.extras.get("log") or {}
+        value = log.get(f"Metrics/{self.cfg.command_name}/{self.cfg.metric_name}")
+        if value is None:
+            value = log.get(f"Metrics/{self.cfg.metric_name}")
+        if value is not None:
+            alpha = min(max(self.cfg.metric_ema_alpha, 0.0), 1.0)
+            if self._metric_ema is None or alpha >= 1.0:
+                self._metric_ema = float(value)
+            else:
+                self._metric_ema = (1.0 - alpha) * self._metric_ema + alpha * float(value)
+        return 0.0 if self._metric_ema is None else self._metric_ema
 
     def _apply_stage(self, stage: StageCfg):
         """Apply the stage payload (command ranges and action scales)."""

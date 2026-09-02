@@ -3,9 +3,13 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""Offline smoke test for StagedCurriculumTerm (no simulation, mock managers)."""
+"""Offline smoke test for StagedCurriculumTerm (no simulation, mock managers).
 
-import torch
+The gate metric is driven through ``env.extras["log"]["Metrics/success_rate"]``
+-- the same channel the real command term writes at episode reset (the term's
+raw ``metrics`` buffer is zeroed before the curriculum ever reads it, which is
+the bug pinned by the first v3 run).
+"""
 
 from rl_exp.tasks.staged_curriculum import (
     StagedCurriculumTerm,
@@ -24,7 +28,6 @@ class MockCommand:
     def __init__(self):
         self.cfg = type("C", (), {})()
         self.cfg.ranges = MockRanges()
-        self.metrics = {"success_rate": torch.zeros(4)}
 
 
 class MockAction:
@@ -66,6 +69,7 @@ class MockEnv:
         self.action_manager = MockActionManager(actions)
         self.curriculum_manager = MockCurriculumManager(curr_cfg)
         self.step_dt = 0.02
+        self.extras = {"log": {}}
 
 
 def main():
@@ -74,6 +78,7 @@ def main():
 
     cfg = StagedCurriculumTermCfg(
         func=StagedCurriculumTerm,
+        metric_ema_alpha=1.0,
         stages=[
             StageCfg(action_scales={"joint_pos_tail": 0.0}, metric_threshold=0.8, sustain_s=1.0),
             StageCfg(action_scales={"joint_pos_tail": 0.5}),
@@ -88,7 +93,7 @@ def main():
     assert env.action_manager.get_term("joint_pos_tail").cfg.scale == 0.0
 
     # 50 steps at 0.02 s = 1.0 s above threshold -> advance
-    env.command_manager._term.metrics["success_rate"] = torch.ones(4)
+    env.extras["log"]["Metrics/success_rate"] = 1.0
     for _ in range(49):
         state = term(env, None)
     assert state["stage"] == 0, "advanced too early"
@@ -97,20 +102,21 @@ def main():
     assert env.action_manager.get_term("joint_pos_tail")._scale == 0.5
 
     # dip below threshold resets counter (terminal stage now, but verify no crash)
-    env.command_manager._term.metrics["success_rate"] = torch.zeros(4)
+    env.extras["log"]["Metrics/success_rate"] = 0.0
     state = term(env, None)
     assert state == {"stage": 1}
 
     # dependency gating: turn term must not advance while speed_curriculum < 2
     turn_cfg = StagedCurriculumTermCfg(
         func=StagedCurriculumTerm,
+        metric_ema_alpha=1.0,
         stages=[
             StageCfg(command_ranges={"ang_vel_z": (-0.5, 0.5)}, metric_threshold=0.8, sustain_s=1.0),
             StageCfg(command_ranges={"ang_vel_z": (-2.0, 2.0)}, requires="speed_curriculum>=2"),
         ],
     )
     turn = StagedCurriculumTerm(turn_cfg, env)
-    env.command_manager._term.metrics["success_rate"] = torch.ones(4)
+    env.extras["log"]["Metrics/success_rate"] = 1.0
     for _ in range(60):
         state = turn(env, None)
     assert state["stage"] == 0, "advanced despite unmet dependency"
