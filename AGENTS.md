@@ -166,6 +166,10 @@ Follow conventional commit message practices.
     - Write as a command: "Fix bug" not "Fixed bug" or "Fixes bug"
     - Test: "If applied, this commit will _[your subject]_"
   - Body: wrap at 72 chars, explain _what_ and _why_ (not _how_—the diff shows that)
+  - **Version-family commits are prefixed `<family>-vN[.minor]:`**
+    (e.g. `lizard-v4.1:`, `harness-v1.3:`); bare `vN` is ambiguous once the
+    repo hosts more than one version family. Non-version commits use plain
+    conventional subjects.
 
 ## File headers and copyright
 
