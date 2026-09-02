@@ -54,7 +54,8 @@
     速度没变快，变的是"能不能过去"）
   - `gap_40cm` 六档全线 .08~.21、nominal fall 恒 0 → 见分析 A8（预期内）
 - 图（**视图不入库**，`plots\` 与 `report.html` 已在 `.gitignore`；记录只有数据，图随时可再生）:
-  一条命令出单文件汇总报告（训练 4 图 + 评测 2 图 + summary 表 + rev 溯源，矢量可放大）：
+  一条命令出单文件汇总报告（训练 5 图（含 iteration↔墙上时间，本 run 14k 迭代 = 25.7 h）
+  + 评测 2 图 + summary 表 + rev 溯源，矢量可放大）：
   `python ablation_harness\plot_eval.py --protocol locomotion_eval_v1 --group v1 --report rl_exp\versions\lizard\v1`
   → `rl_exp\versions\lizard\v1\report.html`。只有要贴图进工单/PPT 时才用 `--out_dir` 出散 PNG
   （训练侧 `v1_reward/termination/episode_length/progress`，评测侧 `v1_eval_trend`（success/fall/recovery

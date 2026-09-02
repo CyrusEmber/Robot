@@ -108,7 +108,9 @@ python ablation_harness\run_ablation.py --by-terrain --group v1
 ::
 :: A. 单文件汇总报告（默认选这个）：训练曲线 + 评测图 + summary 表 + git rev 溯源，
 ::    内联 SVG 无限放大、离线可开、单文件可发人。训练曲线读版本目录的 tb_scalars.csv
-::    （先跑 dump_tb.py），竖线 = 已评测 ckpt（迭代号自动从 eval.json 推，免手传 --mark）
+::    （先跑 dump_tb.py），竖线 = 已评测 ckpt（迭代号自动从 eval.json 推，免手传 --mark）；
+::    含 iteration↔墙上时间一张（从 /time tag 的 step 轴派生）——排消融预算先看它，
+::    单迭代耗时中位数与停顿尖峰都在曲线上，别假设"迭代等长"
 python ablation_harness\plot_eval.py --protocol locomotion_eval_v1 --group v1 ^
   --report <robot>_exp\versions\<family>\<vN>
 ::
