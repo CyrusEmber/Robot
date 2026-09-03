@@ -18,12 +18,16 @@ _REPO = pathlib.Path(__file__).resolve().parents[3]
 _EXP = _REPO / "rl_exp"
 sys.path.insert(0, str(_REPO))
 
+from rl_exp.tasks import teacher_mdp  # noqa: E402
 from rl_exp.tasks.teacher_env_cfg import (  # noqa: E402
     LizardRoughTeacherEnvCfg_V1,
     LizardRoughTeacherEnvCfg_V2,
     LizardRoughTeacherEnvCfg_V3,
     LizardRoughTeacherEnvCfg_V4,
     LizardRoughTeacherEnvCfg_V5,
+    LizardRoughTeacherEnvCfg_V5_PLAY,
+    TEACHER_TERRAINS_CFG_V4,
+    TEACHER_TERRAINS_CFG_V5,
 )
 from rl_exp.tasks.agents.rsl_rl_ppo_cfg import (  # noqa: E402
     LizardTeacherV3PPORunnerCfg,
@@ -214,6 +218,50 @@ def main() -> int:
         problems.append("v5 yaml: r_fc.weight must be negative (sign fix)")
     if params["v5"]["commands"]["lin_vel_x"] != [0.0, 3.0]:
         problems.append("v5 yaml: v5.commands.lin_vel_x != [0.0, 3.0]")
+
+    # v5.3: SIR particle terrain curriculum wiring (plan versions/lizard/v5/PLAN.md)
+    term = v5.curriculum.terrain_levels
+    if not isinstance(term, teacher_mdp.SIRTerrainCurriculumCfg):
+        problems.append("v5: curriculum.terrain_levels must be the SIR term (SIRTerrainCurriculumCfg)")
+    else:
+        if term.func is not teacher_mdp.SpawnWeightSIRTerrainCurriculum:
+            problems.append("v5: SIR term func is not SpawnWeightSIRTerrainCurriculum")
+        sir_y = params["v5"]["terrain_curriculum"]
+        for field, expected in (
+            ("band", tuple(sir_y["band"])),
+            ("eval_every", sir_y["eval_every"]),
+            ("n_traj_min", sir_y["n_traj_min"]),
+            ("p_transition", sir_y["p_transition"]),
+            ("p_replay", sir_y["p_replay"]),
+            ("success_ratio", sir_y["success_ratio"]),
+            ("soft_edge", sir_y["soft_edge"]),
+        ):
+            actual = getattr(term, field)
+            if isinstance(expected, tuple):
+                actual = tuple(actual)
+            if actual != expected:
+                problems.append(f"v5: SIR {field} {actual} != yaml {expected}")
+        if term.steps_per_iteration != runner_steps:
+            problems.append(
+                f"v5: SIR steps_per_iteration {term.steps_per_iteration} != runner "
+                f"num_steps_per_env {runner_steps} (block-eval length would lie)"
+            )
+    # v5.3 terrain: v4 grid verbatim + flat appended, structure pinned (10x20)
+    v5_gen = v5.scene.terrain.terrain_generator
+    if v5_gen is None or "flat" not in v5_gen.sub_terrains:
+        problems.append("v5: scene terrain must swap in TEACHER_TERRAINS_CFG_V5 (v4 types + flat)")
+    else:
+        v4_keys = list(TEACHER_TERRAINS_CFG_V4.sub_terrains.keys())
+        if list(v5_gen.sub_terrains.keys())[: len(v4_keys)] != v4_keys:
+            problems.append("v5 terrain: first sub-terrains must stay the v4 types verbatim (flat appended last)")
+    if TEACHER_TERRAINS_CFG_V5.num_rows != 10 or TEACHER_TERRAINS_CFG_V5.num_cols != 20:
+        problems.append("v5 terrain: grid must stay 10 rows x 20 cols (SIR particle structure)")
+    if not TEACHER_TERRAINS_CFG_V5.curriculum:
+        problems.append("v5 terrain: generator curriculum flag must stay True (rows = ordered difficulty)")
+    if v5.scene.terrain.max_init_terrain_level is not None:
+        problems.append("v5: max_init_terrain_level must be None (uniform initial rows; v3.5 spawn-at-0 retired)")
+    if LizardRoughTeacherEnvCfg_V5_PLAY().curriculum.terrain_levels is not None:
+        problems.append("v5 PLAY: SIR terrain curriculum must be dropped (deterministic eval, no roaming)")
 
     print(f"  teacher versions checked: v1/v2/v3/v4/v5")
     for p in problems:

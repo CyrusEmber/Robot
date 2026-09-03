@@ -264,3 +264,26 @@ v5:
   belly_contact_force:
     weight: -0.5
     force_scale: 706.0
+  # v5.3: SIR terrain curriculum (Lee et al. 2020 Algorithm S1 discrete
+  # adaptation; plan versions/lizard/v5/PLAN.md). Particle = (terrain type,
+  # difficulty row) on the fixed 8-type x 10-row x 20-col grid (v4 types +
+  # flat bootstrap column). Numbers are paper Table S3 verbatim except
+  # success_ratio (terminal-episode stand-in for the paper's per-state Tr)
+  # and steps_per_iteration (runner plumbing, gated by check_obs_layout.py).
+  terrain_curriculum:
+    # target success-rate band: rows inside keep sampling weight
+    band: [0.5, 0.9]
+    # policy iterations between SIR resamples (paper N_evaluate)
+    eval_every: 10
+    # min episodes per particle row to update its weight (paper N_traj)
+    n_traj_min: 6
+    # random-walk probability to an adjacent difficulty row
+    p_transition: 0.8
+    # replay-memory redraw probability
+    p_replay: 0.05
+    # success = survived to timeout AND displacement >= ratio x commanded distance
+    success_ratio: 0.5
+    # band-edge softening width (keeps a gradient for resampling)
+    soft_edge: 0.05
+    # must equal the runner num_steps_per_env (gated by check_obs_layout.py)
+    steps_per_iteration: 24

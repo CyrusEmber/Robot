@@ -41,6 +41,7 @@ from rl_exp.tasks.teacher_env_cfg import (  # noqa: E402
     TEACHER_TERRAINS_CFG,
     TEACHER_TERRAINS_CFG_V3,
     TEACHER_TERRAINS_CFG_V4,
+    TEACHER_TERRAINS_CFG_V5,
 )
 from isaaclab.terrains.height_field import HfTerrainBaseCfg  # noqa: E402
 
@@ -49,8 +50,8 @@ _CFG_BY_VERSION = {
     "v2": TEACHER_TERRAINS_CFG,
     "v3": TEACHER_TERRAINS_CFG_V3,
     "v4": TEACHER_TERRAINS_CFG_V4,
-    # v5 recipe keeps the v4 terrain verbatim (reward-side package only)
-    "v5": TEACHER_TERRAINS_CFG_V4,
+    # v5.3: v4 grid + flat bootstrap column (SIR terrain curriculum)
+    "v5": TEACHER_TERRAINS_CFG_V5,
 }
 _FOOT_CELL = 0.5  # m, ~= sole width (0.46) -- relief under one foot plate
 

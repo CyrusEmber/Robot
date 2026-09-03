@@ -255,6 +255,76 @@ TEACHER_TERRAINS_CFG_V4 = TerrainGeneratorCfg(
 )
 
 
+# v5.3 terrain (plan versions/lizard/v5/PLAN.md, SIR curriculum): the v4 grid
+# VERBATIM + one flat type appended. Terrain structure is pinned (7 v4 types
+# + flat, 10 rows x 20 cols): the SIR curriculum redistributes spawn traffic
+# over the FIXED grid (rows = difficulty particles through curriculum=True
+# generation, columns = interchangeable instances) instead of regenerating
+# terrains per particle draw -- the single user-approved deviation from Lee
+# et al. 2020 Algorithm S1. Flat = bootstrap compensation the paper never
+# needed (their gentlest Hills amplitude ~3 mm; our easiest rubble row is
+# already 0.10 m, ~30x rougher): proportion 0.125 = an equal eighth type
+# (~2 of 20 columns, ~9% of envs). It retires through the band semantics
+# like any mastered type; its fixed column share persists afterwards, same
+# as a fully-mastered paper terrain type keeps its trajectory share. The
+# v4 proportions are kept verbatim (the generator normalizes the sum).
+TEACHER_TERRAINS_CFG_V5 = TerrainGeneratorCfg(
+    size=(16.0, 16.0),
+    border_width=25.0,
+    num_rows=10,
+    num_cols=20,
+    horizontal_scale=0.1,
+    vertical_scale=0.005,
+    slope_threshold=0.75,
+    use_cache=False,
+    curriculum=True,
+    sub_terrains={
+        "pyramid_stairs": terrain_gen.MeshPyramidStairsTerrainCfg(
+            proportion=0.2,
+            step_height_range=(0.08, 0.55),
+            step_width=0.7,
+            platform_width=6.0,
+            border_width=1.5,
+            holes=False,
+        ),
+        "pyramid_stairs_inv": terrain_gen.MeshInvertedPyramidStairsTerrainCfg(
+            proportion=0.2,
+            step_height_range=(0.08, 0.55),
+            step_width=0.7,
+            platform_width=6.0,
+            border_width=1.5,
+            holes=False,
+        ),
+        "stepping_stones": terrain_gen.HfSteppingStonesTerrainCfg(
+            proportion=0.1,
+            stone_width_range=(0.5, 0.9),
+            stone_distance_range=(0.3, 0.7),
+            stone_height_max=0.3,
+            holes_depth=-1.0,
+            platform_width=4.0,
+            border_width=0.5,
+        ),
+        "boxes": terrain_gen.MeshRandomGridTerrainCfg(
+            proportion=0.1, grid_width=0.9, grid_height_range=(0.08, 0.3), platform_width=4.0
+        ),
+        "random_rough": terrain_gen.HfRandomUniformTerrainCfg(
+            proportion=0.2,
+            noise_range=(0.10, 0.35),
+            noise_step=0.02,
+            border_width=0.5,
+            downsampled_scale=0.5,
+        ),
+        "hf_pyramid_slope": terrain_gen.HfPyramidSlopedTerrainCfg(
+            proportion=0.1, slope_range=(0.0, 0.4), platform_width=4.0, border_width=0.5
+        ),
+        "hf_pyramid_slope_inv": terrain_gen.HfInvertedPyramidSlopedTerrainCfg(
+            proportion=0.1, slope_range=(0.0, 0.4), platform_width=4.0, border_width=0.5
+        ),
+        "flat": terrain_gen.MeshPlaneTerrainCfg(proportion=0.125),
+    },
+)
+
+
 @configclass
 class TeacherActionsCfg(ActionsCfg):
     """Joint actions split into legs + spine; spine locked at its rest pose.
@@ -961,7 +1031,7 @@ class LizardRoughTeacherEnvCfg_V4_PLAY(LizardRoughTeacherEnvCfg_V4):
 
 @configclass
 class LizardRoughTeacherEnvCfg_V5(LizardRoughTeacherEnvCfg_V4):
-    """v5 recipe: reward-side anti-collapse package on the v4 terrain.
+    """v5 recipe: reward-side anti-collapse package + SIR terrain curriculum.
 
     v3/v4 trained to a foot-pad creeping optimum (15555 iters, success_rate
     pinned at the standstill freeload baseline, terrain levels frozen at 1.27,
@@ -982,6 +1052,9 @@ class LizardRoughTeacherEnvCfg_V5(LizardRoughTeacherEnvCfg_V4):
       the command distribution
     * commands forward-only lin_vel_x (0, 3) with the staged speed curriculum
       removed (it was pinned at stage 0 by the freeloaded success_rate anyway)
+    * v5.3: SIR terrain curriculum (Lee et al. 2020 Alg. S1) replaces stock
+      terrain_levels_vel -- spawn traffic redistributed per measured success
+      band on the fixed 8-type grid (v4 types + flat bootstrap column)
     Obs/network contract unchanged: three groups 90/208/83 = 381.
     """
 
@@ -998,6 +1071,28 @@ class LizardRoughTeacherEnvCfg_V5(LizardRoughTeacherEnvCfg_V4):
         # the exp kernel; the linear kernel below needs no range gating)
         self.commands.base_velocity.ranges.lin_vel_x = tuple(v5["commands"]["lin_vel_x"])
         self.curriculum.speed_curriculum = None
+
+        # --- v5.3: SIR particle terrain curriculum (Lee et al. 2020 Alg. S1,
+        # discrete adaptation; plan versions/lizard/v5/PLAN.md) ---
+        # grid = v4 + one flat type; rows = difficulty particles, envs respawn
+        # per reset on the type's particle set. The v3.5 "spawn at easiest
+        # row" prerequisite dies here: SIR samples uniformly at start (paper
+        # line 1), so initial terrain levels are uniform too.
+        self.scene.terrain.terrain_generator = TEACHER_TERRAINS_CFG_V5
+        self.scene.terrain.max_init_terrain_level = None
+        sir = v5["terrain_curriculum"]
+        self.curriculum.terrain_levels = teacher_mdp.SIRTerrainCurriculumCfg(
+            func=teacher_mdp.SpawnWeightSIRTerrainCurriculum,
+            command_name="base_velocity",
+            band=tuple(sir["band"]),
+            eval_every=int(sir["eval_every"]),
+            n_traj_min=int(sir["n_traj_min"]),
+            p_transition=float(sir["p_transition"]),
+            p_replay=float(sir["p_replay"]),
+            success_ratio=float(sir["success_ratio"]),
+            soft_edge=float(sir["soft_edge"]),
+            steps_per_iteration=int(sir["steps_per_iteration"]),
+        )
 
         # linear velocity tracking: EP-style normalized kernel replaces the exp
         self.rewards.track_lin_vel_xy_exp = None
@@ -1046,7 +1141,9 @@ class LizardRoughTeacherEnvCfg_V5_PLAY(LizardRoughTeacherEnvCfg_V5):
     """v5 play variant: obs 381, no randomization, no curriculum.
 
     The speed curriculum is already absent in v5 and the command range is the
-    fixed (0, 3) ambition window, so PLAY needs only the shared wiring.
+    fixed (0, 3) ambition window, so PLAY needs only the shared wiring. The
+    SIR terrain curriculum is dropped too: replay keeps its initial terrain
+    assignment (fixed grid, no traffic redistribution mid-eval).
     """
 
     def __post_init__(self):
@@ -1054,3 +1151,7 @@ class LizardRoughTeacherEnvCfg_V5_PLAY(LizardRoughTeacherEnvCfg_V5):
 
         # deterministic evaluation: shared PLAY wiring (single source, see play_utils)
         apply_play_wiring(self)
+
+        # v5.3: SIR would reassign spawn origins per episode based on replay
+        # outcomes -- deterministic eval must not roam
+        self.curriculum.terrain_levels = None

@@ -23,7 +23,8 @@ import torch
 import warp as wp
 
 from isaaclab.envs import mdp
-from isaaclab.managers import ManagerTermBase, ObservationTermCfg, SceneEntityCfg
+from isaaclab.managers import CurriculumTermCfg, ManagerTermBase, ObservationTermCfg, SceneEntityCfg
+from isaaclab.utils.configclass import configclass
 from isaaclab.utils.math import quat_apply_inverse, yaw_quat
 from isaaclab.utils.warp.kernels import raycast_mesh_masked_kernel
 
@@ -493,3 +494,199 @@ def belly_contact_force(env, sensor_cfg: SceneEntityCfg, force_scale: float) -> 
     sensor = env.scene.sensors[sensor_cfg.name]
     forces = sensor.data.net_forces_w.torch[:, sensor_cfg.body_ids, :]
     return torch.linalg.norm(forces, dim=-1).sum(dim=-1) / force_scale
+
+
+# --- v5.3: SIR terrain curriculum (plan versions/lizard/v5/PLAN.md) ---
+# Lee et al. 2020 (Miki's teacher paper, Algorithm S1 + Table S3), discrete
+# adaptation on the pre-generated terrain grid. Particle = (terrain type,
+# difficulty row); the grid is FROZEN (rows = difficulty particles via
+# curriculum=True generation, columns = interchangeable instances) and the
+# sampler only redistributes spawn traffic -- the single user-approved
+# deviation from the paper, which regenerates terrain per particle draw.
+
+
+@configclass
+class SIRTerrainCurriculumCfg(CurriculumTermCfg):
+    """Configuration for :class:`SpawnWeightSIRTerrainCurriculum`.
+
+    Field values come from the version yaml ``v5.terrain_curriculum``
+    section (SSOT); ``check_obs_layout.py`` asserts the wiring matches the
+    yaml and that ``steps_per_iteration`` equals the runner's
+    ``num_steps_per_env``.
+    """
+
+    command_name: str = "base_velocity"
+    """Velocity command term providing each episode's commanded distance."""
+    band: tuple[float, float] = (0.5, 0.9)
+    """Target success-rate band: rows inside it keep sampling weight (Eq. 7)."""
+    eval_every: int = 10
+    """Policy iterations between SIR resamples (paper N_evaluate)."""
+    n_traj_min: int = 6
+    """Min episodes per particle row to update its weight (paper N_traj);
+    rows with less traffic keep their previous weight."""
+    p_transition: float = 0.8
+    """Random-walk probability: the particle moves to an adjacent row."""
+    p_replay: float = 0.05
+    """Replay probability: the particle is redrawn from the history pool."""
+    success_ratio: float = 0.5
+    """Episode success = survived to timeout AND walked >= ratio x the
+    distance commanded over a full episode (terminal-episode stand-in for
+    the paper's per-state-transition Tr)."""
+    soft_edge: float = 0.05
+    """Band-edge softening width [success-rate units]; keeps a gradient."""
+    steps_per_iteration: int = 24
+    """Policy steps per PPO iteration; must equal runner num_steps_per_env."""
+
+
+class SpawnWeightSIRTerrainCurriculum(ManagerTermBase):
+    """Sequential-importance-resampling terrain curriculum on a fixed grid.
+
+    Each sub-terrain type keeps ``num_rows`` particles (one per difficulty
+    row). Envs belong to ONE type -- fixed by the importer's initial column
+    assignment, so per-type env traffic follows the generator's column
+    proportions, like the paper's fixed per-type trajectory share. On every
+    env reset the env respawns on a row drawn uniformly from its type's
+    particle set (column = random instance of the type). Every
+    ``eval_every`` policy iterations the per-row success rates measured
+    since the last block set the weights (1 inside the band, 0 outside,
+    linear across the soft edges), particles are resampled proportionally,
+    random-walked to adjacent rows and partly redrawn from a replay pool.
+    """
+
+    cfg: SIRTerrainCurriculumCfg
+
+    def __init__(self, cfg: SIRTerrainCurriculumCfg, env):
+        super().__init__(cfg, env)
+        terrain = env.scene.terrain
+        gen_cfg = terrain.cfg.terrain_generator
+        if gen_cfg is None or terrain.terrain_origins is None:
+            raise ValueError("SpawnWeightSIRTerrainCurriculum needs terrain_type 'generator' with terrain origins.")
+        origins = terrain.terrain_origins
+        self._num_rows = int(origins.shape[0])
+        num_cols = int(origins.shape[1])
+        # column -> sub-terrain type, replicating TerrainGenerator's
+        # curriculum split verbatim (normalized-proportion cumsum with the
+        # +0.001 boundary epsilon, terrain_generator.py:243-247)
+        proportions = [float(sub.proportion) for sub in gen_cfg.sub_terrains.values()]
+        total = sum(proportions)
+        cum = []
+        acc = 0.0
+        for p in proportions:
+            acc += p / total
+            cum.append(acc)
+        sub_index = []
+        for col in range(num_cols):
+            frac = col / num_cols + 0.001
+            sub_index.append(next(i for i, c in enumerate(cum) if frac < c))
+        self._num_types = len(proportions)
+        device = origins.device
+        self._type_cols = [
+            torch.tensor([c for c in range(num_cols) if sub_index[c] == t], dtype=torch.long, device=device)
+            for t in range(self._num_types)
+        ]
+        col_type = torch.tensor(sub_index, dtype=torch.long, device=device)
+        self._env_type = col_type[terrain.terrain_types.long()]
+        # SIR state per type: particle rows (a multiset after resampling),
+        # weights over rows, episode/success counters, replay history pool
+        rows = torch.arange(self._num_rows, dtype=torch.long, device=device)
+        self._particles = [rows.clone() for _ in range(self._num_types)]
+        self._weights = [
+            torch.full((self._num_rows,), 1.0 / self._num_rows, device=device) for _ in range(self._num_types)
+        ]
+        self._episodes = [torch.zeros(self._num_rows, device=device) for _ in range(self._num_types)]
+        self._successes = [torch.zeros(self._num_rows, device=device) for _ in range(self._num_types)]
+        # history starts at the uniform initial sample (paper line 1)
+        self._history = [rows.clone() for _ in range(self._num_types)]
+        self._next_eval_step = self.cfg.eval_every * self.cfg.steps_per_iteration
+
+    def __call__(self, env, env_ids) -> torch.Tensor:
+        """Book-keep ended episodes, resample on block boundaries, respawn.
+
+        Runs from ``ManagerBasedRLEnv._reset_idx`` BEFORE ``scene.reset``
+        (manager_based_rl_env.py:369 vs :371), so the final episode states
+        (position, timeout flag, spawn origin) are still readable. The
+        return value stays the scalar mean terrain level: the stock
+        ``terrain_levels_vel`` logged the same key, and the train-probe
+        reads ``Curriculum/terrain_levels``.
+        """
+        terrain = env.scene.terrain
+        # 1) measure the episodes that just ended (episode_length_buf > 0
+        #    skips the initial full reset, where no episode ran)
+        real = env.episode_length_buf[env_ids] > 0
+        if bool(real.any()):
+            ids = env_ids[real]
+            rows = terrain.terrain_levels[ids].long()
+            types = self._env_type[ids]
+            walked = torch.linalg.norm(
+                env.scene["robot"].data.root_pos_w.torch[ids, :2] - terrain.env_origins[ids, :2], dim=1
+            )
+            commanded = torch.linalg.norm(
+                env.command_manager.get_command(self.cfg.command_name)[ids, :2], dim=1
+            ) * env.max_episode_length_s
+            succeeded = env.reset_time_outs[ids] & (walked >= self.cfg.success_ratio * commanded)
+            for t in torch.unique(types):
+                t = int(t)
+                mask = types == t
+                self._episodes[t].index_add_(0, rows[mask], torch.ones(int(mask.sum()), device=rows.device))
+                self._successes[t].index_add_(0, rows[mask], succeeded[mask].float())
+        # 2) block evaluation: every eval_every policy iterations
+        if env.common_step_counter >= self._next_eval_step:
+            self._resample()
+            block = self.cfg.eval_every * self.cfg.steps_per_iteration
+            self._next_eval_step = (env.common_step_counter // block + 1) * block
+        # 3) respawn the resetting envs on their type's particle set
+        types = self._env_type[env_ids]
+        for t in torch.unique(types):
+            t = int(t)
+            ids = env_ids[types == t]
+            particles = self._particles[t]
+            rows = particles[torch.randint(particles.numel(), (ids.numel(),), device=particles.device)]
+            cols = self._type_cols[t][torch.randint(self._type_cols[t].numel(), (ids.numel(),), device=particles.device)]
+            terrain.terrain_levels[ids] = rows
+            terrain.terrain_types[ids] = cols
+            terrain.env_origins[ids] = terrain.terrain_origins[rows, cols]
+        return terrain.terrain_levels.float().mean()
+
+    def _measurement_prob(self, p_hat: torch.Tensor) -> torch.Tensor:
+        """Band indicator with soft edges: 1 inside [lo, hi], 0 outside
+        [lo - soft_edge, hi + soft_edge], linear in between."""
+        lo, hi = self.cfg.band
+        eps = self.cfg.soft_edge
+        up = ((p_hat - (lo - eps)) / eps).clamp(0.0, 1.0)
+        down = (((hi + eps) - p_hat) / eps).clamp(0.0, 1.0)
+        return torch.minimum(up, down)
+
+    def _resample(self) -> None:
+        """One SIR block: weights from the band, resample, random walk, replay."""
+        n = self._num_rows
+        for t in range(self._num_types):
+            episodes = self._episodes[t]
+            successes = self._successes[t]
+            p_hat = successes / episodes.clamp(min=1.0)
+            measured = self._measurement_prob(p_hat)
+            # rows with insufficient traffic keep their previous weight
+            weights = torch.where(episodes >= self.cfg.n_traj_min, measured, self._weights[t])
+            total = float(weights.sum())
+            if total > 0.0:
+                weights = weights / total
+            else:
+                # whole type outside the band (e.g. flat once mastered):
+                # re-explore uniformly, paper-style fallback
+                weights = torch.full_like(weights, 1.0 / n)
+            self._weights[t] = weights
+            # resample n particles (with replacement) proportional to weight
+            rows = torch.multinomial(weights, n, replacement=True)
+            # transition model: random walk to an adjacent row, clamped
+            move = torch.rand(n, device=rows.device) < self.cfg.p_transition
+            direction = torch.randint(0, 2, (n,), device=rows.device) * 2 - 1
+            rows = (rows + move * direction).clamp(0, n - 1)
+            # replay memory: redraw a fraction uniformly from the history pool
+            pool = self._history[t]
+            replay = torch.rand(n, device=rows.device) < self.cfg.p_replay
+            if bool(replay.any()):
+                pick = torch.randint(pool.numel(), (int(replay.sum()),), device=rows.device)
+                rows[replay] = pool[pick]
+            self._particles[t] = rows
+            self._history[t] = torch.cat([pool, rows])
+            episodes.zero_()
+            successes.zero_()

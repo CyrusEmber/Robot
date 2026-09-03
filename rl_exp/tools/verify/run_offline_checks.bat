@@ -15,32 +15,35 @@ echo WARN: venv python not found at %PY% - falling back to PATH python
 set "PY=python"
 :pyok
 
-echo [1/8] framework pin check (IsaacLab internals + pinned SHA)
+echo [1/10] framework pin check (IsaacLab internals + pinned SHA)
 "%PY%" rl_exp\tools\verify\framework_pin_check.py || goto :fail
 
-echo [2/8] freeze contracts (DR/wiring + robot block parity, DR lists, PLAY coverage, asset contract + locks)
+echo [2/10] freeze contracts (DR/wiring + robot block parity, DR lists, PLAY coverage, asset contract + locks)
 "%PY%" rl_exp\tools\verify\check_dr_parity.py --strict || goto :fail
 
-echo [3/8] recovery vectorization parity
+echo [3/10] recovery vectorization parity
 "%PY%" rl_exp\tools\verify\test_recovery_parity.py || goto :fail
 
-echo [4/8] staged curriculum offline test
+echo [4/10] staged curriculum offline test
 "%PY%" rl_exp\tools\verify\test_staged_curriculum.py || goto :fail
 
-echo [5/8] teacher split-encoder networks (forward/gradient/export/transfer)
+echo [5/10] teacher split-encoder networks (forward/gradient/export/transfer)
 "%PY%" rl_exp\tools\verify\test_teacher_networks.py || goto :fail
 
-echo [6/8] student belief networks (GRU/gate/decoder/load_from_teacher)
+echo [6/10] student belief networks (GRU/gate/decoder/load_from_teacher)
 "%PY%" rl_exp\tools\verify\test_student_networks.py || goto :fail
 
-echo [7/8] v3 curriculum + ring pattern (c_k math, tilt predicate, geometry)
+echo [7/10] v3 curriculum + ring pattern (c_k math, tilt predicate, geometry)
 "%PY%" rl_exp\tools\verify\test_v3_curriculum.py || goto :fail
 
-echo [8/9] obs layout gate (group names, term order, c_k step consistency)
+echo [8/10] obs layout gate (group names, term order, c_k step consistency)
 "%PY%" rl_exp\tools\verify\check_obs_layout.py || goto :fail
 
-echo [9/9] v5 anti-collapse rewards (linear tracking / slip / belly / c_k scaling)
+echo [9/10] v5 anti-collapse rewards (linear tracking / slip / belly / c_k scaling)
 "%PY%" rl_exp\tools\verify\test_v5_rewards.py || goto :fail
+
+echo [10/10] v5.3 SIR terrain curriculum (band / resample / walk clamp / replay / throttle)
+"%PY%" rl_exp\tools\verify\test_v5_terrain_sir.py || goto :fail
 
 echo ALL_OFFLINE_CHECKS_PASSED
 exit /b 0
