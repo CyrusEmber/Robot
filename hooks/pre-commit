@@ -1,0 +1,37 @@
+#!/bin/sh
+# Static freeze-contract gate: repo-portable subset of run_offline_checks.bat.
+# Full suite (pin/networks/curriculum) still needs the IsaacLab venv — run
+# rl_exp\tools\verify\run_offline_checks.bat before structural changes.
+# Enable once per clone: git config core.hooksPath hooks
+set -u
+
+REPO=$(git rev-parse --show-toplevel) || exit 1
+cd "$REPO" || exit 1
+
+# Only gate commits that touch recipe-relevant files; docs-only commits pass.
+STAGED=$(git diff --cached --name-only --diff-filter=ACMR)
+echo "$STAGED" | grep -qE '^(rl_exp|ablation_harness)/.*\.(py|yaml|yml|json|urdf|usda|usd)$' || exit 0
+
+# Python: prefer the IsaacLab venv (obs-layout gate imports isaaclab), else PATH.
+PY="${RL_ISAAC_ROOT:-E:/IsaacLab}/env_isaaclab/Scripts/python.exe"
+HAVE_VENV=1
+[ -f "$PY" ] || { PY=python; HAVE_VENV=0; }
+
+echo "[pre-commit] check_dr_parity --strict"
+"$PY" rl_exp/tools/verify/check_dr_parity.py --strict || {
+  echo "[pre-commit] FAIL: freeze contracts (see above). Reviewed divergence -> ALLOWLIST in check_dr_parity.py; intentional asset retirement -> --update-locks in the same commit."
+  exit 1
+}
+
+if [ "$HAVE_VENV" = 1 ]; then
+  echo "[pre-commit] check_obs_layout"
+  "$PY" rl_exp/tools/verify/check_obs_layout.py || {
+    echo "[pre-commit] FAIL: obs layout gate (group names / term order / c_k consistency)."
+    exit 1
+  }
+else
+  echo "[pre-commit] WARN: IsaacLab venv not found, skipping check_obs_layout (parity gate above still ran)"
+fi
+
+echo "[pre-commit] static gates passed"
+exit 0
