@@ -182,7 +182,7 @@ v3:
   # C1/C2: per-foot ring scanners (4 x RayCaster on {lf,rf,rl,rr}_foot).
   # 52 points = ring_counts x ring_radii (paper S1); cast downward, yaw-aligned,
   # extero obs = height_scan (foot-relative terrain elevation, clip kept).
-  # v5 RADIUS RESCALE (2026-09-03): paper radii [0.08..0.48] are absolute
+  # v5.1 RADIUS RESCALE (2026-09-03): paper radii [0.08..0.48] are absolute
   # meters tuned for the ~0.1 m ANYmal sole -- on our 0.46x0.51 m sole three
   # of five rings scan UNDER the foot. Rescaled x5 to restore the paper's
   # sole-relative ratios (0.8x-5x sole width); outer ring sees ~1 body length
@@ -244,7 +244,7 @@ v5:
     weight: 1.5
     min_speed: 0.1
   # paper S7 r_slip: penalize contact-foot sliding speed, c_k-scaled.
-  # v5 uses the paper's exact |v_f|^2 form (weight 0.003 = paper value).
+  # v5.1 uses the paper's exact |v_f|^2 form (weight 0.003 = paper value).
   # Note: at typical paddle speeds (0.2-0.8 m/s) the squared form + 0.003
   # is a weak signal vs tracking 1.5 -- watch Episode_Reward/feet_slide in
   # the first probe; bump 10-30x if it never leaves the noise floor.
