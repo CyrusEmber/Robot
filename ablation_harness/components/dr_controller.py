@@ -44,13 +44,20 @@ def apply_eval_mode(env_cfg, mode: str) -> None:
         for name in _DR_EVENT_NAMES:
             if getattr(env_cfg.events, name, None) is not None:
                 setattr(env_cfg.events, name, None)
-        env_cfg.observations.policy.enable_corruption = False
     elif mode == "robust":
         # keep the task's own DR cfg (fixed distribution) and noise; the eval
         # seed pinned by the caller makes the realizations identical across runs
-        env_cfg.observations.policy.enable_corruption = True
+        pass
     else:
         raise ValueError(f"Unknown eval mode: {mode!r} (expected 'nominal' or 'robust')")
+
+    # corruption on every present obs group (v1/v2: single "policy" group;
+    # v3: proprio/extero/priv -- the retired policy group is None), same
+    # iteration discipline as play_utils.apply_play_wiring
+    corruption = mode == "robust"
+    for group in vars(env_cfg.observations).values():
+        if group is not None:
+            group.enable_corruption = corruption
 
     # deterministic command injection: the player overwrites the command every
     # step, so disable every autonomous mutation of the velocity command term

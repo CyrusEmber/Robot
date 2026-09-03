@@ -11,9 +11,9 @@
   - `rl_exp/versions/lizard/PLAN.md` — 训练计划与挂账
 - `ablation_harness/` — 评测系统（固定地形套件、nominal/robust 双模式、
   版本化协议 Locomotion-Eval-v1、消融调度器）
-- `.codemaker/skills/tool/` — 4 份 AI 辅助开发 skill（isaaclab-task-creator /
-  isaaclab-asset-pipeline / isaaclab-eval-harness / git-auto-sync），
-  方法论与项目约定；新机器接线方式见下文"AI 开发环境"节
+- `.codemaker/skills/tool/` — 5 份 AI 辅助开发 skill（isaaclab-task-creator /
+  isaaclab-asset-pipeline / isaaclab-eval-harness / isaaclab-train-probe /
+  git-auto-sync），方法论与项目约定；新机器接线方式见下文"AI 开发环境"节
 
 ## 环境要求（自备）
 
