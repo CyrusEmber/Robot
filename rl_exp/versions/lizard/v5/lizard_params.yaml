@@ -244,18 +244,23 @@ v5:
     weight: 1.5
     min_speed: 0.1
   # paper S7 r_slip: penalize contact-foot sliding speed, c_k-scaled.
-  # v5.1 uses the paper's exact |v_f|^2 form (weight 0.003 = paper value).
+  # v5.2 SIGN FIX: repo convention carries the penalty sign in the WEIGHT
+  # (stock style: negative weight x positive function value); v5.0/v5.1
+  # shipped +0.003 which REWARDED sliding -- same bug class as the v3 r_fc
+  # sign flip. Paper form: r_slip = -c_k * sum(|v_f|^2) over contact feet.
   # Note: at typical paddle speeds (0.2-0.8 m/s) the squared form + 0.003
   # is a weak signal vs tracking 1.5 -- watch Episode_Reward/feet_slide in
   # the first probe; bump 10-30x if it never leaves the noise floor.
   r_slip:
-    weight: 0.003
+    weight: -0.003
   # Continuous belly-contact penalty proportional to net contact force.
+  # v5.2 SIGN FIX: weight must be NEGATIVE (repo convention: sign in the
+  # weight); v5.0/v5.1 shipped +0.5 which REWARDED belly contact.
   # force_scale = nominal body weight 72 kg x 9.81 ~ 706 N (DR mass scale
   # +-5% shifts the normalization by the same amount; acceptable). Flat-belly
-  # resting -> ~1.0 per step at weight 1.0; normal stance -> 0. Deliberately
+  # resting -> ~-0.5 per step; normal stance -> 0. Deliberately
   # NOT c_k-scaled: lying flat must never become free as the curriculum
   # anneals. Weight is an estimate -> ablation knob.
   belly_contact_force:
-    weight: 0.5
+    weight: -0.5
     force_scale: 706.0

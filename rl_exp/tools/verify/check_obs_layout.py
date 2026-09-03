@@ -180,11 +180,14 @@ def main() -> int:
     for required in ("track_lin_vel_xy_lin", "feet_slide", "belly_contact_force", "foot_clearance"):
         if rewards.get(required) is None:
             problems.append(f"v5: reward term '{required}' missing")
-    if rewards.get("foot_clearance") is not None and not (float(rewards["foot_clearance"].weight) < 0.0):
-        problems.append(
-            f"v5: foot_clearance.weight {rewards['foot_clearance'].weight} must be negative "
-            "(v3/v4 shipped the anti-drag hinge with a REWARD sign)"
-        )
+    # penalty-sign gate: repo convention carries the sign in the WEIGHT
+    # (negative weight x positive function value). v3 shipped r_fc with a
+    # positive weight and v5.0/v5.1 shipped feet_slide AND belly_contact_force
+    # positive -- all three REWARDED the behavior they were named against.
+    for penalty in ("foot_clearance", "feet_slide", "belly_contact_force"):
+        term = rewards.get(penalty)
+        if term is not None and not (float(term.weight) < 0.0):
+            problems.append(f"v5: penalty '{penalty}'.weight {term.weight} must be negative")
     if v5.curriculum.speed_curriculum is not None:
         problems.append("v5: staged speed curriculum should be removed")
     if tuple(v5.commands.base_velocity.ranges.lin_vel_x) != (0.0, 3.0):

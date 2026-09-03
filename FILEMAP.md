@@ -23,6 +23,7 @@
 | `versions\lizard\lizard.urdf` | 机器人几何 SSOT（Blender 生成）：26 关节、质量、限位 |
 | `versions\lizard\PLAN.md` | 家族训练计划 + 挂账清单（#3 teacher 训练是当前关键路径；跨版本路线，方案细节归各 vN\PLAN.md） |
 | `versions\lizard\FAMILY.md` | 家族总文档：任务注册表 / 版本历史 / teacher obs 布局 SSOT / 四层记录体系（代码地图归本文件，开新版本流程归 `.codemaker/rules/versioning.mdc` §A） |
+| `versions\lizard\REWARDS.md` | **奖励用途总表（家族级）**：每 term 买什么行为/收什么税、公式+权重镜像、c_k 课程归属、v3 划脚事故的奖励经济学读法、版本差异摘要（数值真源仍是代码+各 vN yaml） |
 
 ### tasks\ —— gym 任务包（训练代码本体）
 

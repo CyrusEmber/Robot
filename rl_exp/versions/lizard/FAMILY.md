@@ -3,7 +3,8 @@
 > 一个版本 = 一代训练配方（参数冻结副本 + 版本文档 + 训练记录）。代码共享继承，
 > 参数严格按版本隔离：跑 v1 只读 `versions/lizard/v1/lizard_params.yaml`，v2 读 v2 的，
 > 开发态 `lizard_params.yaml` 的修改永远不影响已冻结版本。
-> 训练计划/挂账见 [PLAN.md](PLAN.md)；评测协议见 ablation_harness 与
+> 训练计划/挂账见 [PLAN.md](PLAN.md)；**奖励用途总表见 [REWARDS.md](REWARDS.md)**
+> （每 term 的行为动机/权重镜像/c_k 归属/版本差异）；评测协议见 ablation_harness 与
 > skill `isaaclab-eval-harness`。
 
 ## 当前状态
