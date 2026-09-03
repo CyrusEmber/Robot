@@ -35,6 +35,8 @@
 
 harness 代码高频变更 / 多机器人共用 / 评测协议 v2 出现时 → 目录化 `versions/harness/vN/`（协议 yaml + NOTES 进版本目录，与家族配方同款冻结纪律）。
 
+**协议 v2 落地时（预立规则，防跨协议对比静默断）**：老跑分留在 `results/locomotion_eval_v1/` 原地不迁移；**跨协议禁止直接对比**（任何表格/图表不得混 v1/v2 行）；新协议新起 campaign 目录，`--report`/`--summarize` 按协议目录天然隔离。
+
 ## 与 rl_exp 的契约（单向消费，改动必跑闸门）
 
 - 任务 id：suites 引用 rl_exp 注册的 gym 任务（`import isaaclab_tasks` 触发注册链）
@@ -54,3 +56,4 @@ harness 代码高频变更 / 多机器人共用 / 评测协议 v2 出现时 → 
 | 2026-09-02 | v1.4 | `plot_eval.py --report` 单文件 HTML 汇总报告落地（训练曲线 + 评测图 + summary 表 + rev 溯源），首份产物 `versions/lizard/v1/report.html`（12 run / 6 图 / 1.1 MB）；PNG 默认 DPI 提到 200；`plots/` 与 `report.html` 加入 `.gitignore`，v1 六张 PNG 移出索引（磁盘保留，可再生） |
 | 2026-09-02 | v1.4.1 | 训练侧第 5 图：iteration ↔ 墙上时间（`Train/wall_time_h`，从 `/time` tag 的 step 轴派生）；报告升到 7 图，v1 = 25.735 h / 14k 迭代，其中 it=11438 单次停顿 7.2 h |
 | 2026-09-02 | v1.4.2 | eval-harness SKILL.md 瘦身（记录性合入）：状态节史实并入本档（新增 v0 史前行）；指标表去协议数值（协议 yaml 为唯一真源）；可视化注释压缩——skill 只留方法与契约 |
+| 2026-09-03 | v1.5 | 预立协议 v2 迁移规则：老跑分不迁移、跨协议禁止直接对比、新协议新起 campaign 目录 | 用户拍板：2026-09-03（规范整改临时 plan #8） |
