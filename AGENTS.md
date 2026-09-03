@@ -14,6 +14,7 @@ Be direct, critical, and practical. Help avoid shallow thinking, over-engineerin
 ## Before work
 
 - Show a plan before any code or file changes.
+- Trivial changes (single file, no API change, explainable in one sentence) are exempt: act directly, then self-check. When in doubt, show the plan.
 
 ## Communication
 
