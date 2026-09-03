@@ -49,6 +49,8 @@ _CFG_BY_VERSION = {
     "v2": TEACHER_TERRAINS_CFG,
     "v3": TEACHER_TERRAINS_CFG_V3,
     "v4": TEACHER_TERRAINS_CFG_V4,
+    # v5 recipe keeps the v4 terrain verbatim (reward-side package only)
+    "v5": TEACHER_TERRAINS_CFG_V4,
 }
 _FOOT_CELL = 0.5  # m, ~= sole width (0.46) -- relief under one foot plate
 
