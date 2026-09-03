@@ -190,3 +190,4 @@ python rl_exp\tools\verify\teacher_smoke.py --headless            :: teacher env
 | 10 | yaml obs_layout 更新（感知版 +扫描差异） | ✅ v3 装配时同步（v3 yaml obs_layout 注记三组；组级 SSOT = FAMILY.md v3 节） |
 | 11 | DR 放宽策略 / resume 二阶段 | 🟢 走稳后 |
 | 12 | ablation_harness 版本与待办 → `ablation_harness/HARNESS.md`（自有版本文档 SSOT，2026-09-01 拍板：仓不拆、只拆版本文档）。当前挂账：G3 剩余 `_ISAAC_ROOT` 参数化三处 → 删 `E:\IsaacLab\ablation_harness` junction | 🟡 G3 收尾 |
+| 13 | v5 开训前 GUI 目视判读"碎石堆无粗糙度"，与 preflight difficulty=1.0 数字矛盾（random_rough relief p95 0.325 m @ 满档）。归因假设：PLAY 非课程模式难度 U(0,1) 随机采样，所视 tile 大概率低难度（难度 d 振幅 ≈ 0.10+0.25d m，d=0.2 时 ≈0.15 m，视觉为平缓土堆）；训练侧 curriculum=True 按行爬坡 + 出生 level 0，前期平缓是设计内。**观察项**：训练中盯 `Curriculum/terrain_levels`，长期卡低位行 → 复核碎石参数（v4 NOTES 判据 3）；二次目视可用 `_tmp_terrain_previews\v5_*.png`（difficulty=1.0 渲染） | 🟡 v5 训练期观察 |

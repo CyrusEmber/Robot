@@ -35,8 +35,15 @@
   python scripts\reinforcement_learning\rsl_rl\train.py --task Lizard-Rough-v5 --max_iterations 15000 --seed 42
   ```
 - log 目录: logs/rsl_rl/lizard_rough_teacher_v5/
-- 启动前警示: 地形与 v4 逐字相同——v4 若已过预检则免；未过先看地形
-  （v4\NOTES.md 启动前警示全文适用，skill `isaaclab-pretrain-check`）。
+- 启动前警示: 地形与 v4 逐字相同。执行记录（2026-09-03）：
+  ① preflight 数字过（random_rough relief p95 0.325 m < 掌宽 0.46——脚板必须
+  贴合碎石，符合 v4 批准设计；difficulty=1.0 满档口径）；
+  ② GUI 目视完成（view_terrain --task Lizard-Rough-Play-v5，用户判读）：
+  **碎石堆无可见粗糙度**——与 ① 数字矛盾，**挂账 #13**（家族 PLAN §7）。
+  归因假设：PLAY 非课程模式难度 U(0,1) 随机采样，所视 tile 大概率低难度
+  （难度 d 振幅 ≈ 0.10+0.25d m）；训练侧 curriculum=True 按行爬坡 + 出生
+  level 0，前期平缓是设计内。训练中盯 terrain_levels，卡低位行则复核碎石
+  参数；二次目视看 `_tmp_terrain_previews\v5_*.png`（满档渲染）。
 - 装配验证（2026-09-03）: 单测 `test_v5_rewards.py` 4/4（线性核 8 case /
   滑移 ×c_k / 肚皮不退火 / 接触罚 ×c_k）；`check_obs_layout.py` v5 段
   （三组契约 + 奖励集合 + r_fc 负号 + (0,3) 范围 + c_k steps 一致）；离线闸门 9/9。
