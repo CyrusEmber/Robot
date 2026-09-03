@@ -58,6 +58,13 @@ ALLOWLIST: set[str] = {
     "self.rewards.foot_clearance = RewTerm(",  # D2 anti-drag r_fc
     "self.terminations.tilt = DoneTerm(",  # D1 tilt termination
     "self.terminations.base_contact = None",  # v3.6: belly contact penalty-only (D0-6)
+    # v5 recipe (versions/lizard/v5/PLAN.md): reward anti-collapse package on
+    # the teacher line only -- the family baseline keeps the stock reward set
+    "self.rewards.track_lin_vel_xy_exp = None",  # v5: exp kernel replaced (freeloads at standstill)
+    "self.rewards.track_lin_vel_xy_lin = RewTerm(",  # v5: EP-style normalized linear tracking
+    "self.rewards.feet_slide = RewTerm(",  # v5: r_slip, contact-foot sliding penalty (x c_k)
+    "self.rewards.undesired_contacts.func = teacher_mdp.undesired_contacts_ck",  # v5: r_co x c_k
+    "self.rewards.belly_contact_force = RewTerm(",  # v5: continuous belly-contact force penalty
 }
 
 # ArticulationCfg block lines that only exist on one side BY DESIGN

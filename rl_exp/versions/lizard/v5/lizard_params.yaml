@@ -1,0 +1,252 @@
+# lizard_params.yaml — SSOT: control parameters for the 26-joint lizard
+# (16 leg joints: HAA/HFE/KFE/FOOT x4, 10 spine joints: rear/tail/neck yaw+pitch).
+# Geometry/joints/mass/inertia/limits live in lizard.urdf (Blender-generated).
+# Isaac Lab env cfg (config/lizard/) and UE exporter (export_ue.py) both read this file.
+# Change params here ONLY. Never hand-edit the exported artifacts.
+# v3 = v2 params verbatim + the "v3" section (foot rings / r_fc / tilt / c_k).
+# v5 = v4 params + reward anti-collapse deltas: r_fc sign fix, legs-only
+# r_co body list, and the "v5" section (commands / track_goal_vel / r_slip /
+# belly_contact_force). Base sections are shared shape; recipe deltas live
+# ONLY in the v3/v5 sections.
+
+robot:
+  name: lizard
+  # produced by convert_urdf.py: {rl_exp}/assets/lizard/lizard.usda
+  usd_path: assets/lizard/lizard.usda
+  base_body_name: base_link
+  # zero pose = natural stance (posed in Blender, baked into geometry):
+  # thigh sprawled, shank vertical, blade flat. Blade bottom ~1.1 m below base.
+  base_init_height: 1.1
+
+# ground-truth joint order (URDF tree order: spine chain first, then legs lf/rf/rl/rr)
+joint_order:
+  - rear_yaw
+  - rear_pitch
+  - tail_yaw
+  - tail_pitch
+  - neck1_yaw
+  - neck1_pitch
+  - neck2_yaw
+  - neck2_pitch
+  - neck3_yaw
+  - neck3_pitch
+  - lf_haa
+  - lf_hfe
+  - lf_kfe
+  - lf_foot
+  - rf_haa
+  - rf_hfe
+  - rf_kfe
+  - rf_foot
+  - rl_haa
+  - rl_hfe
+  - rl_kfe
+  - rl_foot
+  - rr_haa
+  - rr_hfe
+  - rr_kfe
+  - rr_foot
+
+# regex pattern -> default angle (rad), fed to ArticulationCfg.InitialStateCfg
+# NOTE: Isaac Lab 3.0 importer appends a "_joint" suffix to joint names.
+# Zero pose IS the natural stance (baked into URDF joint origin rpy):
+# thigh sprawled out-down, shank vertical, blade flat. All defaults stay 0.
+default_joint_pos:
+  ".*_haa_joint": 0.0
+  ".*_hfe_joint": 0.0
+  ".*_kfe_joint": 0.0
+  ".*_foot_joint": 0.0
+  "rear_.*": 0.0
+  "tail_.*": 0.0
+  "neck.*_.*": 0.0
+
+# ImplicitActuatorCfg groups (PD runs inside the physics solver at 200 Hz;
+# sampled 50 Hz explicit torque PD is unstable for the low-inertia spine joints).
+# Starting values for the 72 kg robot — tune via training.
+actuators:
+  legs:
+    joint_patterns:
+      - ".*_haa_joint"
+      - ".*_hfe_joint"
+      - ".*_kfe_joint"
+    stiffness: 800.0
+    damping: 40.0
+    effort_limit: 180.0
+    velocity_limit: 10.0
+    armature: 0.0
+  feet:
+    joint_patterns:
+      - ".*_foot_joint"
+    stiffness: 200.0
+    damping: 12.0
+    effort_limit: 70.0
+    velocity_limit: 6.0
+    armature: 0.0
+  spine:
+    joint_patterns:
+      - "rear_.*"
+      - "tail_.*"
+      - "neck.*_yaw_joint"
+      - "neck.*_pitch_joint"
+    stiffness: 150.0
+    damping: 10.0
+    effort_limit: 80.0
+    velocity_limit: 4.0
+    armature: 0.0
+
+action:
+  legs_scale: 0.5
+  spine_scale: 0.25
+  use_default_offset: true
+
+sim:
+  dt: 0.005
+  decimation: 4
+  episode_length_s: 20.0
+
+# body name patterns for reward/termination terms
+names:
+  # foot blades are the only desired contacts
+  foot_body_names:
+    - ".*_foot"
+  # v5: r_co narrowed to thigh/shank (paper r_co penalizes exactly these).
+  # The base body moved to the dedicated continuous belly_contact_force
+  # penalty (see v5 section); HAA and spine links are exempt by user
+  # decision 2026-09-03. Frozen v1-v4 recipes keep their own yaml copies.
+  undesired_contact_body_names:
+    - ".*_hfe"
+    - ".*_kfe"
+
+# policy observation layout (v3: three groups, delivered by name — see
+# teacher_networks.py OBS_GROUP_CONTRACT and FAMILY.md v3 row)
+# UE side must assemble obs groups with these names/dims, same units (SI, rad, m/s)
+obs_layout:
+  - name: base_lin_vel
+    dim: 3
+  - name: base_ang_vel
+    dim: 3
+  - name: projected_gravity
+    dim: 3
+  - name: velocity_commands
+    dim: 3
+  - name: joint_pos_rel
+    dim: 26
+  - name: joint_vel_rel
+    dim: 26
+  - name: last_action
+    dim: 26
+
+commands:
+  lin_vel_x: [-1.0, 3.0]
+  lin_vel_y: [-0.5, 0.5]
+  ang_vel_z: [-1.0, 1.0]
+
+# v1: DR uniformly NARROWED (never disabled) to lower the first-walk bar
+# for the teacher diagnostic run; v0 keeps the original full ranges.
+domain_randomization:
+  friction_static: [0.7, 1.0]
+  friction_dynamic: [0.6, 0.9]
+  friction_restitution: [0.0, 0.0]
+  friction_num_buckets: 64
+  # log-uniform mass scale, geometric mean 1.0 (scale-invariant across robots)
+  mass_scale: [0.95, 1.05]
+  # per-limb mass randomization (all non-base bodies)
+  mass_scale_limbs: [0.9, 1.11]
+  limb_body_names:
+    - ".*_haa"
+    - ".*_hfe"
+    - ".*_kfe"
+    - ".*_foot"
+    - ".*_yaw"
+    - ".*_pitch"
+  com_range:
+    x: [-0.02, 0.02]
+    y: [-0.02, 0.02]
+    z: [-0.01, 0.01]
+  inertia_scale: [0.9, 1.1]
+  stiffness_scale: [0.9, 1.1]
+  damping_scale: [0.9, 1.1]
+  joint_friction_add: [0.0, 0.01]
+  joint_armature_add: [0.0, 0.005]
+  external_force_range: [-15.0, 15.0]
+  external_torque_range: [-2.0, 2.0]
+  # spawn height jitter [m] around base_init_height, relative to the default pose
+  reset_height_range: [-0.05, 0.05]
+  push_velocity_range:
+    x: [-0.5, 0.5]
+    y: [-0.5, 0.5]
+    z: [-0.1, 0.1]
+
+# --- v3 recipe deltas (teacher paper-alignment, versions/lizard/v3/PLAN.md) ---
+v3:
+  # C1/C2: per-foot ring scanners (4 x RayCaster on {lf,rf,rl,rr}_foot).
+  # 52 points = ring_counts x ring_radii (paper S1); cast downward, yaw-aligned,
+  # extero obs = height_scan (foot-relative terrain elevation, clip kept).
+  foot_ring:
+    ring_counts: [6, 8, 10, 12, 16]
+    ring_radii: [0.08, 0.16, 0.26, 0.36, 0.48]
+    ray_offset_z: 20.0
+    # height_scan offset param: 0.0 keeps the ring obs foot-relative and centered
+    # (the v2 -0.5 default centers the BASE scan, not the foot scan)
+    scan_offset: 0.0
+    clip: [-1.0, 1.0]
+  # D1: tilt termination, repo convention upright -> projected_gravity_b z = -1.
+  # gravity_z_limit = -0.6 (~53 deg); estimate -> ablation knob, not paper-pinned.
+  tilt_terminate:
+    gravity_z_limit: -0.6
+  # D2: anti-drag foot clearance reward (deliberate inversion of the paper's
+  # r_fc which penalizes swing feet flying TOO HIGH; see PLAN v3.1 D2 note).
+  # Penalize hinge: swing foot clearance below `clearance` over its own
+  # vertical-ray terrain height.
+  # v5 SIGN FIX (2026-09-03): the v3/v4 copies shipped weight +0.003 on a
+  # positive hinge -- a REWARD for low-hanging swing feet, the opposite of
+  # the documented intent. Negative here; the frozen v3/v4 recipes keep the
+  # original values.
+  # SCOPE: max_distance/start_offset govern ONLY the reward's raycast. The priv
+  # obs term foot_contact_normals keeps its frozen v2 geometry (2.0/0.5) by
+  # design -- an obs contract must not move when a reward knob is tuned.
+  r_fc:
+    clearance: 0.2
+    weight: -0.003
+    contact_threshold: 1.0
+    max_distance: 2.0
+    start_offset: 0.5
+  # D3: c_k penalty/DR curriculum. c_k = c0 ** (decay ** iteration),
+  # iteration = common_step_counter // steps_per_iteration (policy steps;
+  # steps_per_iteration MUST equal the runner's num_steps_per_env — asserted
+  # by tools/verify/check_obs_layout.py). Restart-from-scratch reheats the
+  # warm-up; resume is not reconstructed.
+  curriculum_ck:
+    c0: 0.2
+    decay: 0.98
+    steps_per_iteration: 24
+
+# --- v5 recipe deltas (reward anti-collapse, versions/lizard/v5/PLAN.md) ---
+# Closes the four holes that let v3/v4 converge to foot-pad creeping:
+# no reward pays for swinging, the exp kernel freeloads at standstill,
+# belly contact is free, and r_fc shipped sign-inverted.
+v5:
+  # forward-only ambition range; lin_vel_y / ang_vel_z keep the base override
+  # (-0.5, 0.5) / (-1, 1). The staged speed curriculum is REMOVED in v5 (it
+  # was pinned at stage 0 by the freeloaded success_rate anyway).
+  commands:
+    lin_vel_x: [0.0, 3.0]
+  # Cheng et al. 2023 Eq. 2 form: r = min(<v_cmd_hat, v_yaw>, |v_cmd|) /
+  # max(|v_cmd|, min_speed) -- standing = 0, reversal < 0, tracking = 1.
+  track_goal_vel:
+    weight: 1.5
+    min_speed: 0.1
+  # paper S7 r_slip: penalize contact-foot sliding speed, c_k-scaled.
+  # Weight is the paper's 0.003 (their v_f^2 form; our norm form is sharper
+  # at small slips) -> ablation knob.
+  r_slip:
+    weight: 0.003
+  # Continuous belly-contact penalty proportional to net contact force.
+  # force_scale = nominal body weight 72 kg x 9.81 ~ 706 N (DR mass scale
+  # +-5% shifts the normalization by the same amount; acceptable). Flat-belly
+  # resting -> ~1.0 per step at weight 1.0; normal stance -> 0. Deliberately
+  # NOT c_k-scaled: lying flat must never become free as the curriculum
+  # anneals. Weight is an estimate -> ablation knob.
+  belly_contact_force:
+    weight: 0.5
+    force_scale: 706.0

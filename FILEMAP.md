@@ -3,7 +3,7 @@
 > 读图顺序：`README.md`（仓定位 + 新机器摆位）→ 本文件（每个文件干啥）→
 > `rl_exp\versions\lizard\PLAN.md`（训练计划与挂账，当前进度）→
 > `rl_exp\versions\lizard\FAMILY.md`（任务注册表/版本历史/obs 布局/记录体系）。
-> AI 开发守则见 `AGENTS.md`（IsaacLab 上游）+ `.codemaker\skills\tool\`（本项目 4 份 skill）。
+> AI 开发守则见 `AGENTS.md`（IsaacLab 上游）+ `.codemaker\skills\tool\`（本项目 5 份 skill）。
 
 ## 仓根
 
@@ -50,6 +50,7 @@
 | `lizard\v2\` | v1 参数 + 特权 obs 论文对齐补全（266→308）。NOTES.md 含验收线与判死刑信号 |
 | `lizard\v3\` | **首跑完成，结果待回填**（2026-09-01 启动，2048 env × 4999 iter）：三编码器 + 脚环 extero 208 + tilt/r_fc/c_k/DR-reset 趴窝修复包 + **Miki 地形 v3.4**（`TEACHER_TERRAINS_CFG_V3`：台阶顶 0.55m + stepping stones，仅 v3 换用）+ v3.6 回放诊断三修。`PLAN.md` v3.6.2 + `NOTES.md`（含训练命令与装配验证记录）+ yaml（v2 全量 + `v3:` 段）+ asset_lock 齐备 |
 | `lizard\v4\` | **已批准开工，未训练**（2026-09-02）：碎石地重定标——实测脚掌 0.46×0.51 m（v3.6 误用 kfe→foot 骨长 0.131），`TEACHER_TERRAINS_CFG_V4` random_rough 间距 0.3→0.5 m + 噪声 (0.10,0.35)/step 0.02；v3.6.1 collision stack 补丁回 stock。**启动前警示（先看地形）见 v4\NOTES.md**。yaml 与 v3 逐字相同 |
+| `lizard\v5\` | **装配完成待训练**（2026-09-03）：反趴窝奖励包——r_fc 符号修正（+0.003→-0.003，v3 首跑收敛到 foot-pad creeping 的根因之一）、r_slip（`feet_slide_ck` 接触脚滑速 ×c_k）、肚皮受力罚（`belly_contact_force` 连续 ‖F‖/706 恒权）、EP 线性跟踪（`track_lin_vel_xy_lin` 站立 0 分/倒退负分）替换 exp 核、命令 (0,3) 纯前进无速度课程。地形/obs/网络与 v4 相同。PLAN.md 含四根因证据链与 F3 偏差声明 |
 | `vN\PLAN.md` | 版本级计划存档（目的/假设/决策点/验收线/结论一句话；v3 原生，v0–v2 为 2026-09-01 追溯补录；结果回填仍走 NOTES） |
 | `vN\NOTES.md` | 版本文档：目的/参数 diff/训练命令/结果回填 |
 | `vN\tb_scalars.csv` | 训练后经 dump_tb.py 导出的逐迭代曲线 |
@@ -80,6 +81,8 @@
 |---|---|
 | `tools\verify\teacher_smoke.py` | teacher 冒烟（v2）：obs 308 维 + 全特权段判读（MASS_SUM≈72 / 力矢量 / 法线 / 摩擦 / wrench=0）；per-term 布局从 observation_manager 现场推导，无魔数切片 |
 | `tools\verify\teacher_smoke_v3.py` | teacher 冒烟（v3）：三组 90/208/83 + extero 顺序 lf/rf/rl/rr + tilt/r_fc 活性 + 有限性 + extero std>ε（防死通道回归） |
+| `tools\verify\teacher_smoke_v5.py` | teacher 冒烟（v5）：三组 90/208/83 + v5 奖励集合活性（线性跟踪/滑移/肚皮/exp 已退役）+ 无速度课程 + 前进命令断言 + 有限性 |
+| `tools\verify\test_v5_rewards.py` | v5 奖励离线单测（mock env）：线性核 8 case（站立 0/倒退负/超速封顶/min_speed clamp）/ feet_slide ×c_k / 肚皮罚不随 c_k 退火 / undesired_contacts ×c_k |
 | `tools\verify\check_obs_layout.py` | **obs 布局静态门**（离线）：v1/v2/v3 组名 + 组内 term 顺序 + extero 脚序 + 环形总点数 + c_k steps_per_iteration 与 runner num_steps_per_env 一致性（静默错位在 env 加载前炸出） |
 | `tools\verify\test_teacher_networks.py` | SplitEncoderModel 离线单测：前向 shape / 梯度 / 三组归一化更新 / 命名子模块摘取 / JIT-ONNX 导出 / 契约违约 |
 | `tools\verify\test_student_networks.py` | student belief 栈离线单测：GRU 步进 / α∈[0,1] / 门控槽对齐 / 解码器维数 / load_from_teacher 等价 + 段序失配 raise |
@@ -104,7 +107,7 @@
 | 文件 | 作用 |
 |---|---|
 | `tools\trainlog\dump_tb.py` | TB 事件文件 → CSV（版本记录用：`--log_dir <run目录> --out versions\lizard\vN\tb_scalars.csv`） |
-| `tools\trainlog\read_curriculum.py` | 从 tfevents 读课程终值（terrain level 等） |
+| `tools\trainlog\probe_run.py` | **训练中巡检探针**（skill `isaaclab-train-probe`，取代 read_curriculum）：`--exp v4`/`--run <目录>`/默认最活跃 run，只读 tfevents 出健康快照——进度+ETA（max_iterations 读 params/agent.yaml）、各 tag last/窗口均值/Δ% 趋势、终止计数、课程值、NaN/骤降/事件停更/ckpt 落后告警；秒级不起仿真 |
 | `tools\trainlog\plot_tb.py` | tb_scalars.csv → 训练曲线 PNG（reward/终止/局长/课程/墙上时间五张，`--mark` 标已评测 ckpt，默认 200 DPI）；墙上时间由 `Train/mean_reward/time` 的 step 轴（引擎自记秒数）派生，不靠累加估计；`figure`/`series_to_figs` 供 `ablation_harness\plot_eval.py` 的 HTML 报告共用。**产物不入库**（可再生） |
 | `ue\build_lizard_ue.py` | UE 编辑器脚本：按 `ue\lizard_ue.json` 组装蜥蜴物理 Actor |
 | `fork_patches\config_lizard___init__.py` | fork shim 现成副本（装到 IsaacLab 树注册任务用） |
@@ -133,6 +136,7 @@
 | `isaaclab-task-creator` | Isaac Lab 任务创建方法论 + 运行时事实（log 命名/五元组/configclass 单例/ProxyArray） |
 | `isaaclab-asset-pipeline` | 资产管线方法论（URDF→USD 坑/验证链/症状表） |
 | `isaaclab-eval-harness` | 评测协议要点 + 指标口径 + 调度用法 |
+| `isaaclab-train-probe` | 训练中巡检方法论（probe_run 用法 + 对照版本 NOTES 判读 + 汇报纪律） |
 | `git-auto-sync` | 迭代完成自动 commit+push 云端（本项目 git 纪律） |
 
 ## 历史包袱提示（下一个 AI 注意）

@@ -157,3 +157,14 @@ class LizardTeacherV4PPORunnerCfg(LizardTeacherV3PPORunnerCfg):
     """
 
     experiment_name = "lizard_rough_teacher_v4"
+
+
+@configclass
+class LizardTeacherV5PPORunnerCfg(LizardTeacherV4PPORunnerCfg):
+    """Runner cfg for `Lizard-Rough-v5` (reward anti-collapse package, obs 381).
+
+    Everything inherits from v3/v4 (paper S1 hyperparams, three-encoder
+    model); only the log dir changes -- one version, one dir (versioning.mdc §A).
+    """
+
+    experiment_name = "lizard_rough_teacher_v5"

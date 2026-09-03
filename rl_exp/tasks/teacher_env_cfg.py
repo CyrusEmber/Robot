@@ -316,6 +316,16 @@ TEACHER_PRIVILEGED_SPEC: dict[str, set[str]] = {
         "thigh_shank_contacts",
         "base_external_wrench",
     },
+    # v5 also keeps the v2 privileged-term set (priv 83); its recipe
+    # differences are reward-side only (anti-collapse package wired in
+    # LizardRoughTeacherEnvCfg_V5 on top of the v4 terrain)
+    "v5": {
+        "foot_contact_forces",
+        "foot_contact_normals",
+        "foot_friction",
+        "thigh_shank_contacts",
+        "base_external_wrench",
+    },
 }
 
 
@@ -947,3 +957,100 @@ class LizardRoughTeacherEnvCfg_V4_PLAY(LizardRoughTeacherEnvCfg_V4):
         # instead and drop the curriculum term
         self.curriculum.speed_curriculum = None
         self.commands.base_velocity.ranges.lin_vel_x = (-1.0, 5.0)
+
+
+@configclass
+class LizardRoughTeacherEnvCfg_V5(LizardRoughTeacherEnvCfg_V4):
+    """v5 recipe: reward-side anti-collapse package on the v4 terrain.
+
+    v3/v4 trained to a foot-pad creeping optimum (15555 iters, success_rate
+    pinned at the standstill freeload baseline, terrain levels frozen at 1.27,
+    foot_clearance reward never above 5e-5). Root causes closed here
+    (versions/lizard/v5/PLAN.md, user decision 2026-09-03):
+    * r_fc weight sign flipped positive->negative (it shipped as a REWARD for
+      low-hanging swing feet; the v5 yaml copy carries the fix, so the frozen
+      v3/v4 recipes keep their original behavior)
+    * r_slip (feet_slide_ck): contact-foot sliding penalty, c_k-scaled -- the
+      paper's only direct anti-creeping term, dropped from v3 by an erratum
+    * r_co narrowed to thigh/shank (HFE/KFE links), c_k-scaled; the base body
+      moves to a dedicated continuous belly-force penalty (constant weight:
+      lying flat must never become free as c_k anneals), HAA/spine exempt
+      (user decision)
+    * linear tracking track_lin_vel_xy_lin (Cheng et al. 2023 Eq. 2 form)
+      replaces track_lin_vel_xy_yaw_frame_exp: standing scores 0, reversal
+      scores negative -- the exp kernel let |v_cmd| < 0.5 stand still for half
+      the command distribution
+    * commands forward-only lin_vel_x (0, 3) with the staged speed curriculum
+      removed (it was pinned at stage 0 by the freeloaded success_rate anyway)
+    Obs/network contract unchanged: three groups 90/208/83 = 381.
+    """
+
+    params_version = "v5"
+
+    def __post_init__(self):
+        super().__post_init__()
+        params = _load_params(self.params_version)
+        v5 = params["v5"]
+        base_name = params["robot"]["base_body_name"]
+
+        # commands: forward-only ambition range, no staged speed curriculum
+        # (stage 0's (-1, 2) window kept a 50% standstill-freeload band under
+        # the exp kernel; the linear kernel below needs no range gating)
+        self.commands.base_velocity.ranges.lin_vel_x = tuple(v5["commands"]["lin_vel_x"])
+        self.curriculum.speed_curriculum = None
+
+        # linear velocity tracking: EP-style normalized kernel replaces the exp
+        self.rewards.track_lin_vel_xy_exp = None
+        self.rewards.track_lin_vel_xy_lin = RewTerm(
+            func=teacher_mdp.track_lin_vel_xy_lin,
+            weight=v5["track_goal_vel"]["weight"],
+            params={
+                "command_name": "base_velocity",
+                "min_speed": v5["track_goal_vel"]["min_speed"],
+            },
+        )
+
+        # r_slip: contact-foot sliding penalty, c_k-scaled (paper S7). Both cfgs
+        # must be explicit params so the manager resolves body_ids (a defaulted
+        # SceneEntityCfg stays unresolved and indexes with body_ids=None).
+        self.rewards.feet_slide = RewTerm(
+            func=teacher_mdp.feet_slide_ck,
+            weight=v5["r_slip"]["weight"],
+            params={
+                "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
+                "asset_cfg": SceneEntityCfg("robot", body_names=".*_foot"),
+            },
+        )
+
+        # r_co: legs-only + c_k (paper r_co penalizes thigh/shank). The body
+        # list itself comes from the v5 yaml names section (base_class wiring).
+        self.rewards.undesired_contacts.func = teacher_mdp.undesired_contacts_ck
+
+        # belly: continuous force-proportional penalty, constant weight
+        self.rewards.belly_contact_force = RewTerm(
+            func=teacher_mdp.belly_contact_force,
+            weight=v5["belly_contact_force"]["weight"],
+            params={
+                "sensor_cfg": SceneEntityCfg("contact_forces", body_names=[base_name]),
+                "force_scale": v5["belly_contact_force"]["force_scale"],
+            },
+        )
+
+        # r_fc sign fix rides the V3 wiring: foot_clearance.weight is read from
+        # THIS version's yaml at V3.__post_init__ time (params_version="v5"),
+        # and the v5 yaml copy carries weight: -0.003.
+
+
+@configclass
+class LizardRoughTeacherEnvCfg_V5_PLAY(LizardRoughTeacherEnvCfg_V5):
+    """v5 play variant: obs 381, no randomization, no curriculum.
+
+    The speed curriculum is already absent in v5 and the command range is the
+    fixed (0, 3) ambition window, so PLAY needs only the shared wiring.
+    """
+
+    def __post_init__(self):
+        super().__post_init__()
+
+        # deterministic evaluation: shared PLAY wiring (single source, see play_utils)
+        apply_play_wiring(self)

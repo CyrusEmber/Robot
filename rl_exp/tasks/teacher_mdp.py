@@ -11,7 +11,10 @@ student never sees them; they define what the belief encoder must infer.
 The v3 section at the bottom carries the anti-collapse package (plan
 versions/lizard/v3/PLAN.md): c_k curriculum state + readers, c_k-scaled
 penalty and DR wrappers, tilt termination, and the anti-drag foot-clearance
-reward.
+reward. The v5 section below it adds the reward-side anti-collapse package
+(plan versions/lizard/v5/PLAN.md): EP-style linear velocity tracking,
+c_k-scaled foot-slide (r_slip) and undesired-contact (r_co) penalties, and
+the constant-weight belly-contact force penalty.
 """
 
 from __future__ import annotations
@@ -21,6 +24,7 @@ import warp as wp
 
 from isaaclab.envs import mdp
 from isaaclab.managers import ManagerTermBase, ObservationTermCfg, SceneEntityCfg
+from isaaclab.utils.math import quat_apply_inverse, yaw_quat
 from isaaclab.utils.warp.kernels import raycast_mesh_masked_kernel
 
 # ponytail: RayCaster is deliberately NOT imported at module top. This module is
@@ -423,3 +427,68 @@ class randomize_joint_parameters_ck(mdp.randomize_joint_parameters):
             env, env_ids, asset_cfg, scaled_f, scaled_a,
             lower_limit_distribution_params, upper_limit_distribution_params, operation, distribution,
         )
+
+
+# --- v5: reward-side anti-collapse package (plan versions/lizard/v5/PLAN.md) ---
+# v3/v4 converged to a foot-pad creeping optimum: no reward pays for swinging,
+# the exp tracking kernel lets |v_cmd| < 0.5 commands freeload at a standstill,
+# belly contact is free, and r_fc shipped with an inverted sign. v5 closes the
+# four holes at once (user decision 2026-09-03).
+
+
+def track_lin_vel_xy_lin(env, command_name: str,
+                         asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+                         min_speed: float = 0.1) -> torch.Tensor:
+    """Normalized linear velocity tracking (Cheng et al. 2023, Eq. 2 form).
+
+    r = min(<v_cmd_hat, v_yaw>, |v_cmd|) / max(|v_cmd|, min_speed) per env:
+    standing = 0, reversal < 0, tracking = 1, overspeed capped at 1. The inner
+    product is taken in the yaw-aligned gravity frame (same metric as the exp
+    kernel it replaces -- roll/pitch must not inflate the projection).
+    Shape: (num_envs,).
+    """
+    asset = env.scene[asset_cfg.name]
+    vel_yaw = quat_apply_inverse(yaw_quat(asset.data.root_quat_w.torch), asset.data.root_lin_vel_w.torch)[:, :2]
+    cmd = env.command_manager.get_command(command_name)[:, :2]
+    speed = torch.linalg.norm(cmd, dim=-1)
+    speed_c = torch.clamp(speed, min=min_speed)
+    proj = (cmd * vel_yaw).sum(dim=-1) / speed_c
+    return torch.clamp(proj, max=speed_c) / speed_c
+
+
+def feet_slide_ck(env, sensor_cfg: SceneEntityCfg,
+                  asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+    """r_slip (paper S7): penalize contact-foot sliding speed, scaled by c_k.
+
+    Local copy of the stock velocity-mdp ``feet_slide`` (contact = net force
+    norm > 1 N over the history window; penalty = tangential speed norm per
+    contact foot, summed): importing ``isaaclab_tasks.velocity.mdp`` from this
+    module would risk the P001 pxr-poisoning import chain.
+    Shape: (num_envs,).
+    """
+    sensor = env.scene.sensors[sensor_cfg.name]
+    contacts = (
+        sensor.data.net_forces_w_history.torch[:, :, sensor_cfg.body_ids, :].norm(dim=-1).max(dim=1)[0] > 1.0
+    )
+    asset = env.scene[asset_cfg.name]
+    body_vel = asset.data.body_lin_vel_w.torch[:, asset_cfg.body_ids, :2]
+    return torch.sum(body_vel.norm(dim=-1) * contacts, dim=1) * ck_value(env)
+
+
+def undesired_contacts_ck(env, threshold: float, sensor_cfg: SceneEntityCfg) -> torch.Tensor:
+    """``undesired_contacts`` penalty scaled by c_k (paper r_co semantics)."""
+    return mdp.undesired_contacts(env, threshold, sensor_cfg) * ck_value(env)
+
+
+def belly_contact_force(env, sensor_cfg: SceneEntityCfg, force_scale: float) -> torch.Tensor:
+    """Continuous belly-contact penalty proportional to the net contact force.
+
+    A flat-belly robot carries ~body weight through the base (72 kg x 9.81 ~
+    706 N) -> penalty ~1.0 per step at weight 1.0 and ``force_scale`` = 706;
+    a normal stance keeps the base off the ground -> 0. Deliberately NOT
+    c_k-scaled: lying flat must never become free as the curriculum anneals.
+    Shape: (num_envs,).
+    """
+    sensor = env.scene.sensors[sensor_cfg.name]
+    forces = sensor.data.net_forces_w.torch[:, sensor_cfg.body_ids, :]
+    return torch.linalg.norm(forces, dim=-1).sum(dim=-1) / force_scale

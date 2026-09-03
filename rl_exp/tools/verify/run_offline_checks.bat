@@ -36,8 +36,11 @@ echo [6/8] student belief networks (GRU/gate/decoder/load_from_teacher)
 echo [7/8] v3 curriculum + ring pattern (c_k math, tilt predicate, geometry)
 "%PY%" rl_exp\tools\verify\test_v3_curriculum.py || goto :fail
 
-echo [8/8] obs layout gate (group names, term order, c_k step consistency)
+echo [8/9] obs layout gate (group names, term order, c_k step consistency)
 "%PY%" rl_exp\tools\verify\check_obs_layout.py || goto :fail
+
+echo [9/9] v5 anti-collapse rewards (linear tracking / slip / belly / c_k scaling)
+"%PY%" rl_exp\tools\verify\test_v5_rewards.py || goto :fail
 
 echo ALL_OFFLINE_CHECKS_PASSED
 exit /b 0

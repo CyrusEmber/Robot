@@ -23,10 +23,12 @@ from rl_exp.tasks.teacher_env_cfg import (  # noqa: E402
     LizardRoughTeacherEnvCfg_V2,
     LizardRoughTeacherEnvCfg_V3,
     LizardRoughTeacherEnvCfg_V4,
+    LizardRoughTeacherEnvCfg_V5,
 )
 from rl_exp.tasks.agents.rsl_rl_ppo_cfg import (  # noqa: E402
     LizardTeacherV3PPORunnerCfg,
     LizardTeacherV4PPORunnerCfg,
+    LizardTeacherV5PPORunnerCfg,
 )
 
 V3_EXTERO_ORDER = ["lf_foot_ring", "rf_foot_ring", "rl_foot_ring", "rr_foot_ring"]
@@ -158,7 +160,59 @@ def main() -> int:
             f"num_steps_per_env {runner_steps} (c_k iteration length would lie)"
         )
 
-    print(f"  teacher versions checked: v1/v2/v3/v4")
+    # v5: same three-group obs contract (reward-side package only), own yaml
+    v5 = LizardRoughTeacherEnvCfg_V5()
+    groups = _groups(v5.observations)
+    if set(groups) != {"proprio", "extero", "priv"}:
+        problems.append(f"v5: expected proprio/extero/priv groups, got {sorted(groups)}")
+    else:
+        if groups["proprio"] != V3_PROPRIO_ORDER:
+            problems.append(f"v5: proprio order {groups['proprio']} != contract")
+        if groups["extero"] != V3_EXTERO_ORDER:
+            problems.append(f"v5: extero order {groups['extero']} != {V3_EXTERO_ORDER}")
+        if groups["priv"] != V3_PRIV_ORDER:
+            problems.append(f"v5: priv order {groups['priv']} != contract")
+
+    # v5 recipe wiring: anti-collapse reward package must be complete
+    rewards = vars(v5.rewards)
+    if "track_lin_vel_xy_exp" in rewards and rewards["track_lin_vel_xy_exp"] is not None:
+        problems.append("v5: track_lin_vel_xy_exp should be replaced by track_lin_vel_xy_lin")
+    for required in ("track_lin_vel_xy_lin", "feet_slide", "belly_contact_force", "foot_clearance"):
+        if rewards.get(required) is None:
+            problems.append(f"v5: reward term '{required}' missing")
+    if rewards.get("foot_clearance") is not None and not (float(rewards["foot_clearance"].weight) < 0.0):
+        problems.append(
+            f"v5: foot_clearance.weight {rewards['foot_clearance'].weight} must be negative "
+            "(v3/v4 shipped the anti-drag hinge with a REWARD sign)"
+        )
+    if v5.curriculum.speed_curriculum is not None:
+        problems.append("v5: staged speed curriculum should be removed")
+    if tuple(v5.commands.base_velocity.ranges.lin_vel_x) != (0.0, 3.0):
+        problems.append(f"v5: lin_vel_x range {v5.commands.base_velocity.ranges.lin_vel_x} != (0.0, 3.0)")
+
+    # v5 yaml: ring totals, c_k step consistency, r_fc sign
+    with open(_EXP / "versions" / "lizard" / "v5" / "lizard_params.yaml", encoding="utf-8") as f:
+        params = yaml.safe_load(f)
+    v5y_v3 = params["v3"]
+    counts = v5y_v3["foot_ring"]["ring_counts"]
+    radii = v5y_v3["foot_ring"]["ring_radii"]
+    if len(counts) != len(radii):
+        problems.append(f"v5 yaml: ring_counts/radii length mismatch {counts} vs {radii}")
+    if sum(counts) * 4 != 208:
+        problems.append(f"v5 yaml: ring total {sum(counts)} x 4 feet != 208 extero dims")
+    ck_steps = v5y_v3["curriculum_ck"]["steps_per_iteration"]
+    runner_steps = LizardTeacherV5PPORunnerCfg().num_steps_per_env
+    if ck_steps != runner_steps:
+        problems.append(
+            f"v5: yaml curriculum_ck.steps_per_iteration {ck_steps} != runner "
+            f"num_steps_per_env {runner_steps} (c_k iteration length would lie)"
+        )
+    if not (float(v5y_v3["r_fc"]["weight"]) < 0.0):
+        problems.append("v5 yaml: r_fc.weight must be negative (sign fix)")
+    if params["v5"]["commands"]["lin_vel_x"] != [0.0, 3.0]:
+        problems.append("v5 yaml: v5.commands.lin_vel_x != [0.0, 3.0]")
+
+    print(f"  teacher versions checked: v1/v2/v3/v4/v5")
     for p in problems:
         print(f"  DRIFT: {p}")
     if problems:
