@@ -3,14 +3,15 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""Offline unit test for the v5.3 SIR terrain curriculum (no sim, plain torch).
+"""Offline unit test for the v5.3/v5.4 SIR terrain curriculum (no sim, torch).
 
 Checks, against a fully mocked env/terrain: the TerrainGenerator column ->
 type split replication, the initial full reset (no stats pollution, origins
-re-pointed consistently), the terminal-episode success predicate (survival +
-displacement >= ratio x commanded distance), the soft band edges, band-driven
-resampling, insufficient-traffic weight retention, random-walk clamping,
-replay-memory redraws and the block-evaluation throttle.
+re-pointed consistently), the survival-weighted progress score (timeout walk
+/ standstill / tumble-slide / partial credit), the two-segment measurement
+curve (linear below the band, soft edge above), band-driven resampling,
+insufficient-traffic weight retention, random-walk clamping, replay-memory
+redraws and the block-evaluation throttle.
 """
 
 import pathlib
@@ -70,6 +71,7 @@ def _env(terrain, *, counter=0, pos=None, cmd=None, timeouts=None, lengths=None)
         episode_length_buf=lengths,
         common_step_counter=counter,
         max_episode_length_s=20.0,
+        max_episode_length=1000,
     )
 
 
@@ -104,7 +106,7 @@ def test_initial_spawn_reassigns_all_envs() -> None:
     # initial full reset must not pollute the episode stats
     for t in range(3):
         assert float(term._episodes[t].sum()) == 0.0
-        assert float(term._successes[t].sum()) == 0.0
+        assert float(term._scores[t].sum()) == 0.0
     # origins consistently re-pointed into the env's type columns
     for i in range(NUM_ENVS):
         lvl = terrain.terrain_levels[i].item()
@@ -114,33 +116,38 @@ def test_initial_spawn_reassigns_all_envs() -> None:
         assert torch.equal(terrain.env_origins[i], terrain.terrain_origins[lvl, col])
 
 
-def test_success_predicate() -> None:
+def test_progress_score() -> None:
+    """v5.4 survival-weighted progress: command 1 m/s -> 0.5x full distance
+    = 10 m; max_episode_length 1000 steps -> survival = length/1000."""
     terrain = _terrain()
     terrain.terrain_levels[:] = 3
     pos = torch.zeros(NUM_ENVS, 3)
-    pos[0, 0] = 10.0  # env 0: survived + walked 10 m >= 0.5 * (1 m/s * 20 s)
-    pos[1, 0] = 1.0   # env 1: survived but only 1 m
-    pos[2, 0] = 10.0  # env 2: walked far but terminated early
+    pos[0, 0] = 10.0  # env 0: full timeout, full credit distance -> ~1.0
+    pos[1, 0] = 1.0   # env 1: full timeout, 1 m -> ~0.1
+    pos[2, 0] = 10.0  # env 2: tumbled 10 m but died at 20% of the episode
+    # env 3: full timeout, stood still -> 0 (the v3 creeping optimum)
     cmd = torch.zeros(NUM_ENVS, 3)
     cmd[:, 0] = 1.0
     timeouts = torch.zeros(NUM_ENVS, dtype=torch.bool)
-    timeouts[0] = True
-    timeouts[1] = True
-    lengths = torch.full((NUM_ENVS,), 400, dtype=torch.long)
+    timeouts[[0, 1, 3]] = True
+    lengths = torch.full((NUM_ENVS,), 999, dtype=torch.long)
+    lengths[2] = 200
     env = _env(terrain, pos=pos, cmd=cmd, timeouts=timeouts, lengths=lengths, counter=1)
     term = _term(env)
-    term(env, torch.tensor([0, 1, 2]))
-    # envs 0,1 are type 0 (columns 0, 2); env 2 is type 1 (column 5)
+    term(env, torch.tensor([0, 1, 2, 3]))
+    # envs 0,1 are type 0 (columns 0, 2); envs 2,3 are type 1 (columns 5, 7)
     assert float(term._episodes[0][3]) == 2.0
-    assert float(term._successes[0][3]) == 1.0
-    assert float(term._episodes[1][3]) == 1.0
-    assert float(term._successes[1][3]) == 0.0
+    assert torch.allclose(term._scores[0][3], torch.tensor(1.0 * 0.999 + 0.1 * 0.999), atol=1e-6)
+    assert float(term._episodes[1][3]) == 2.0
+    assert torch.allclose(term._scores[1][3], torch.tensor(1.0 * 0.2 + 0.0), atol=1e-6), \
+        "tumble slide must lose 80% credit, standstill scores 0"
 
 
-def test_band_soft_edges() -> None:
+def test_band_curve() -> None:
+    """Below-band: linear in the score; in-band: 1; above-band: soft edge."""
     term = _term(_env(_terrain()))
-    p = torch.tensor([0.0, 0.45, 0.47, 0.5, 0.7, 0.9, 0.92, 0.95, 1.0])
-    expected = torch.tensor([0.0, 0.0, 0.4, 1.0, 1.0, 1.0, 0.6, 0.0, 0.0])
+    p = torch.tensor([0.0, 0.1, 0.25, 0.5, 0.7, 0.9, 0.925, 0.95, 1.0])
+    expected = torch.tensor([0.0, 0.2, 0.5, 1.0, 1.0, 1.0, 0.5, 0.0, 0.0])
     out = term._measurement_prob(p)
     assert torch.allclose(out, expected, atol=1e-6), f"got {out}"
 
@@ -149,12 +156,13 @@ def _stats_one_hot(term, t, row: int) -> None:
     """Give every row of type ``t`` full traffic; only ``row`` lands in-band.
 
     Rows below n_traj_min keep their previous weight (uniform), so a one-hot
-    weight vector needs episodes on ALL rows.
+    weight vector needs episodes on ALL rows. Full-traffic failures score
+    exactly 0 -> zero weight even under the linear-below curve.
     """
     term._episodes[t][:] = 10.0
-    term._successes[t][:] = 1.0  # p = 0.1, below the band
+    term._scores[t][:] = 0.0
     term._episodes[t][row] = 10.0
-    term._successes[t][row] = 7.0  # p = 0.7, inside the band
+    term._scores[t][row] = 7.0  # mean score 0.7, inside the band
 
 
 def test_resample_selects_in_band_rows() -> None:
@@ -163,7 +171,7 @@ def test_resample_selects_in_band_rows() -> None:
     term._resample()
     assert term._particles[0].tolist() == [3] * NUM_ROWS
     assert float(term._episodes[0].sum()) == 0.0  # accumulators reset
-    assert float(term._successes[0].sum()) == 0.0
+    assert float(term._scores[0].sum()) == 0.0
 
 
 def test_insufficient_traffic_keeps_weights() -> None:
@@ -189,9 +197,26 @@ def test_replay_draws_from_history() -> None:
     term = _term(_env(_terrain()), p_transition=0.0, p_replay=1.0)
     term._history[0] = torch.full((NUM_ROWS,), 7, dtype=torch.long)
     term._episodes[0][2] = 10.0  # one-hot weight at row 2 -> resample all 2s
-    term._successes[0][2] = 7.0
+    term._scores[0][2] = 7.0
     term._resample()
     assert (term._particles[0] == 7).all()  # replay overwrote every particle
+
+
+def test_cold_start_gradient() -> None:
+    """The user-caught hole (2026-09-03): a from-scratch policy fails
+    EVERYWHERE. With the paper's hard zero below the band every weight would
+    be zero (uniform fallback, no signal); the linear-below curve must keep
+    differentiating 'less bad' rows -- flat scoring 0.05 vs rubble 0.01."""
+    term = _term(_env(_terrain()), p_transition=0.0, p_replay=0.0)
+    term._episodes[0][:] = 10.0
+    term._scores[0][0] = 0.5   # easiest row, mean score 0.05
+    term._scores[0][9] = 0.1   # hardest row, mean score 0.01
+    term._resample()
+    # weights 5:1 toward row 0 -> 10 draws are overwhelmingly (not
+    # necessarily exclusively) row 0
+    zeros = sum(1 for r in term._particles[0].tolist() if r == 0)
+    nines = sum(1 for r in term._particles[0].tolist() if r == 9)
+    assert zeros > nines, f"cold start lost its gradient: {term._particles[0].tolist()}"
 
 
 def test_block_eval_throttle() -> None:
@@ -212,12 +237,13 @@ def main() -> int:
     tests = [
         test_column_type_mapping,
         test_initial_spawn_reassigns_all_envs,
-        test_success_predicate,
-        test_band_soft_edges,
+        test_progress_score,
+        test_band_curve,
         test_resample_selects_in_band_rows,
         test_insufficient_traffic_keeps_weights,
         test_random_walk_clamps,
         test_replay_draws_from_history,
+        test_cold_start_gradient,
         test_block_eval_throttle,
     ]
     failed = 0

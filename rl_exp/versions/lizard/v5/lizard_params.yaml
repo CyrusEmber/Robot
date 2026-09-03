@@ -281,9 +281,16 @@ v5:
     p_transition: 0.8
     # replay-memory redraw probability
     p_replay: 0.05
-    # success = survived to timeout AND displacement >= ratio x commanded distance
+    # episode progress score = (displacement / (ratio x commanded full-episode
+    # distance), clamped [0, 1]) x survival-time fraction; the band acts on
+    # the per-row MEAN score. The survival factor cancels tumble slides
+    # (rolling downhill is displacement without locomotion); the linear
+    # displacement credit keeps early-fall partial progress.
     success_ratio: 0.5
-    # band-edge softening width (keeps a gradient for resampling)
+    # ABOVE-band edge softening width (mastered rows fade out smoothly);
+    # below the band the weight is LINEAR in the score -- a from-scratch
+    # policy scores ~0 everywhere and a hard indicator would flatten the
+    # whole cold start to uniform sampling (no difficulty gradient)
     soft_edge: 0.05
     # must equal the runner num_steps_per_env (gated by check_obs_layout.py)
     steps_per_iteration: 24
