@@ -10,8 +10,11 @@
   后抬脚-推进成为唯一正收益路径。方案细节见本目录 PLAN.md。
 - 相对 v4 的变更（obs 381 不变，任务 id `Lizard-Rough-v5`）:
   - **r_fc**: `weight 0.003 → -0.003`（符号修正，v5 yaml 副本）
-  - **r_slip**: `feet_slide_ck`（接触脚切向滑速 × c_k，weight 0.003，stock 6 行
-    本地复制避 P001 import 链）
+  - **r_slip**: `feet_slide_ck`（接触脚切向滑速**平方** |v_f|² × c_k，
+    weight 0.003，论文原式；stock 6 行本地复制避 P001 import 链）
+  - **脚环半径重定标**: `ring_radii [0.08..0.48] → [0.4, 0.8, 1.3, 1.8, 2.4]`
+    （×5 掌宽比例换算——论文绝对米数隐含 0.1 m ANYmal 掌，我们的 0.46×0.51 m
+    掌让 3/5 圈扫在脚底下；点数不变 obs 208 不动）
   - **r_co**: body 列表缩至 `.*_hfe`+`.*_kfe`（thigh/shank）+ `undesired_contacts_ck`
     （× c_k）；base/haa/脊柱移出（base 归肚皮专项，用户拍板 2026-09-03）
   - **belly_contact_force**: `-0.5·‖F_net‖/706` 连续受力罚，恒权不乘 c_k
@@ -35,8 +38,9 @@
 - 验收: 起步 sanity 后直训；反划脚 KPI（feet_slide 非零负 / success_rate
   脱离 0.47 / terrain_levels >2 上行 / foot_clearance 负值激活 / GUI 肉眼
   身体前进）见 PLAN.md。
-- 修订记录: 2026-09-03 冻结（tag v5）→ 同日撤 tag 解冻：v3 回放观察修正
-  症状画像（不趴窝、只有脚动，"肚皮免费"从主因降为防御项），v5 待改后
-  重新冻结重打 tag。
+- 修订记录: 2026-09-03 冻结（tag v5）→ 同日撤 tag 解冻：① v3 回放观察修正
+  症状画像（不趴窝、只有脚动，"肚皮免费"从主因降为防御项）；② r_slip 改
+  论文平方 |v_f|² 原式；③ 脚环半径 ×5 重定标 [0.4, 0.8, 1.3, 1.8, 2.4]
+  （用户拍板）。改完重新冻结重打 tag。
 - 结果回填: （训练后补：reward 曲线读数 / 反划脚 KPI 读数 / eval 跑分表 / 结论）
 - 结论: （一句话，训练后补）

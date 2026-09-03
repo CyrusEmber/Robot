@@ -99,8 +99,8 @@ def test_feet_slide_ck() -> None:
     asset_cfg = SimpleNamespace(name="robot", body_ids=[0, 1])
     out = feet_slide_ck(env, sensor_cfg, asset_cfg)
     assert out.shape == (1,)
-    # unscaled value 0.3; c_k = 0.5 -> 0.15
-    assert torch.allclose(out, torch.tensor([0.15]), atol=1e-6), f"got {out}"
+    # paper form |v_f|^2: unscaled 0.09; c_k = 0.5 -> 0.045
+    assert torch.allclose(out, torch.tensor([0.045]), atol=1e-6), f"got {out}"
     # zero contact forces -> no penalty regardless of speed
     env_zero = _env_with_feet(torch.zeros_like(forces), vel)
     assert torch.allclose(feet_slide_ck(env_zero, sensor_cfg, asset_cfg), torch.zeros(1))

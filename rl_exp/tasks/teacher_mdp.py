@@ -460,9 +460,10 @@ def feet_slide_ck(env, sensor_cfg: SceneEntityCfg,
                   asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     """r_slip (paper S7): penalize contact-foot sliding speed, scaled by c_k.
 
-    Local copy of the stock velocity-mdp ``feet_slide`` (contact = net force
-    norm > 1 N over the history window; penalty = tangential speed norm per
-    contact foot, summed): importing ``isaaclab_tasks.velocity.mdp`` from this
+    Paper form: -c_k * sum over contact feet of |v_f|^2. Contact = net force
+    norm > 1 N over the history window; v_f = tangential (xy) foot velocity.
+    Local copy of the stock velocity-mdp ``feet_slide`` (which uses the
+    unsquared norm): importing ``isaaclab_tasks.velocity.mdp`` from this
     module would risk the P001 pxr-poisoning import chain.
     Shape: (num_envs,).
     """
@@ -472,7 +473,7 @@ def feet_slide_ck(env, sensor_cfg: SceneEntityCfg,
     )
     asset = env.scene[asset_cfg.name]
     body_vel = asset.data.body_lin_vel_w.torch[:, asset_cfg.body_ids, :2]
-    return torch.sum(body_vel.norm(dim=-1) * contacts, dim=1) * ck_value(env)
+    return torch.sum(body_vel.square().sum(dim=-1) * contacts, dim=1) * ck_value(env)
 
 
 def undesired_contacts_ck(env, threshold: float, sensor_cfg: SceneEntityCfg) -> torch.Tensor:

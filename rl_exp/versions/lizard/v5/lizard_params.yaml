@@ -182,9 +182,16 @@ v3:
   # C1/C2: per-foot ring scanners (4 x RayCaster on {lf,rf,rl,rr}_foot).
   # 52 points = ring_counts x ring_radii (paper S1); cast downward, yaw-aligned,
   # extero obs = height_scan (foot-relative terrain elevation, clip kept).
+  # v5 RADIUS RESCALE (2026-09-03): paper radii [0.08..0.48] are absolute
+  # meters tuned for the ~0.1 m ANYmal sole -- on our 0.46x0.51 m sole three
+  # of five rings scan UNDER the foot. Rescaled x5 to restore the paper's
+  # sole-relative ratios (0.8x-5x sole width); outer ring sees ~1 body length
+  # ahead on the v4 rubble (0.5 m spacing). Point counts unchanged: obs
+  # contract 52/foot x 4 = 208 stays. Frozen v1-v4 recipes keep the paper
+  # absolute values.
   foot_ring:
     ring_counts: [6, 8, 10, 12, 16]
-    ring_radii: [0.08, 0.16, 0.26, 0.36, 0.48]
+    ring_radii: [0.4, 0.8, 1.3, 1.8, 2.4]
     ray_offset_z: 20.0
     # height_scan offset param: 0.0 keeps the ring obs foot-relative and centered
     # (the v2 -0.5 default centers the BASE scan, not the foot scan)
@@ -237,8 +244,10 @@ v5:
     weight: 1.5
     min_speed: 0.1
   # paper S7 r_slip: penalize contact-foot sliding speed, c_k-scaled.
-  # Weight is the paper's 0.003 (their v_f^2 form; our norm form is sharper
-  # at small slips) -> ablation knob.
+  # v5 uses the paper's exact |v_f|^2 form (weight 0.003 = paper value).
+  # Note: at typical paddle speeds (0.2-0.8 m/s) the squared form + 0.003
+  # is a weak signal vs tracking 1.5 -- watch Episode_Reward/feet_slide in
+  # the first probe; bump 10-30x if it never leaves the noise floor.
   r_slip:
     weight: 0.003
   # Continuous belly-contact penalty proportional to net contact force.
