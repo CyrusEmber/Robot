@@ -1,8 +1,9 @@
-# v5 —— 反划脚奖励包（r_fc 符号 + r_slip + 肚皮受力罚 + EP 线性跟踪）
+# v5 —— 反划脚奖励包 + SIR 地形课程
 
-> **状态：解冻修改中（当前修订级 v5.1）**——2026-09-03 冻结（tag v5 当日撤）→
-> 解冻修订 v5.1（r_slip 平方化 + 脚环 ×5 重定标）；症状画像随 v3 回放观察
-> 同步修正，见下。
+> **状态：解冻修改中（当前修订级 v5.3）**——2026-09-03 冻结（tag v5 当日撤）→
+> v5.1（r_slip 平方化 + 脚环 ×5）→ v5.2（两处权重符号修复）→ v5.3
+> （SIR 地形课程 + flat 启动列，tag v5 已二次撤、改毕重打）；症状画像
+> 随 v3 回放观察同步修正，见下。
 
 ## 修订历史
 
@@ -11,6 +12,7 @@
 | v5.0 | 2026-09-03 | 初版冻结（tag v5 当日撤）：反划脚奖励包——r_fc 负号 / r_slip 一次范数 / 肚皮受力罚 / EP 线性跟踪 / 命令 (0,3) 无速度课程 / 脚环用论文绝对米数。复现走 git `e08636b` |
 | v5.1 | 2026-09-03 | ① r_slip 改论文平方 \|v_f\|² 原式；② 脚环半径 ×5 掌宽换算 [0.4, 0.8, 1.3, 1.8, 2.4]；③ 症状画像修正（v3 回放：不趴窝、只有脚动——"肚皮免费"从主因降为防御项）（用户拍板） |
 | v5.2 | 2026-09-03 | **符号修复**（写 REWARDS.md 总表时逐项核对抓出）：r_slip 与 belly_contact_force 的 yaml 权重原为 **+0.003 / +0.5**（正权重 × 正函数值 = **奖励**打滑和肚皮贴地），改 **−0.003 / −0.5**。与 v3 r_fc 符号反同 bug 类；`check_obs_layout.py` 补罚项负号闸门（三罚项权重必须 <0）机器拦截 |
+| v5.3 | 2026-09-03 | **SIR 地形课程**（Lee et al. 2020 Alg. S1 离散化，用户拍板"地形结构钉死 7 类型×10 行×20 列"）：stock `terrain_levels_vel` → `SpawnWeightSIRTerrainCurriculum`（粒子=(类型,行)，带内权重重采样+随机游走+replay，每 10 迭代一块）；地形 +flat 第 8 类型（比例 0.125≈2 列，启动补偿）；v3.5"出生 level 0"废除（初始均匀）；V5_PLAY 掐课程项。数值全 Table S3 直译（带 [0.5,0.9] / N_eval 10 / 游走 0.8 / replay 0.05 / N_traj 6），见 §v5.3 机制。撤 tag 修订（B 节先例） |
 
 ## 目的/假设
 
@@ -60,7 +62,46 @@ v3 首跑（15555 iters，2026-09-02_11-33-11）收敛到 **原地划脚局部�
   0.46×0.51 m 掌让 5 圈里 3 圈扫在脚掌底下；×5 恢复论文的掌宽相对比例
   （0.8×–5×），外圈前视约一个身位（v4 碎石 0.5 m 间距的落点规划）。
   点数不变：obs 契约 52/脚 × 4 = 208 不动
-- 地形/collision stack/DR/c_k（其余项）/obs/网络：与 v4 逐字相同
+- 地形/collision stack/DR/c_k（其余项）/obs/网络：与 v4 相同——例外：v5.3 起
+  地形加 flat 第 8 类型 + SIR 课程接管地形行分配（见 §v5.3），7 个 v4 类型
+  参数逐字不动
+
+## v5.3 SIR 地形课程（Lee et al. 2020 原味离散化，固定网格）
+
+论文 → 实现映射（唯一例外：不实时生成地形）：
+
+| Lee et al. 2020（Alg. S1 + Table S3） | 我们的实现 | 备注 |
+|---|---|---|
+| 粒子 = 地形参数向量 c_T（连续可插值） | 粒子 = (子地形类型, 行)——10 行难度 × 8 类型 | 例外①：网格预生成固定；行号 = 难度替身 |
+| N_particle = 10 per type | 每类型 10 行（num_rows=10 正好） | 结构同构 |
+| N_traj = 6 per particle | 每粒子行 ≥6 局才更新权重（流量不足保持旧权） | 流量按 reset 自然积累 |
+| 测量概率 = Pr(Tr ∈ [0.5, 0.9]) | p̂ = 成功局/总局；P = 软边带指示（ε=0.05） | 例外②：Tr 终局代理 |
+| 每 N_evaluate = 10 迭代更新 | 每 10 PPO 迭代（240 步）一次块重采样 | 精确对齐 |
+| 重采样概率 ∝ 归一权重 | 每类型重抽 10 粒子 ∝ w | 同 |
+| 转移 = 随机游走 p=0.8 | 每粒子 0.8 概率行 ±1（clamp 0..9） | 参数→行号 |
+| Replay memory p=0.05 | 均匀抽全历史粒子池 | 同 |
+| 权重重置 w = P/ΣP | 同（ΣP=0 → 均匀重探索，如 flat 被掌握后） | fallback 声明 |
+| 地形动态重生成（line 6） | 不做——预生成网格上重指 origin | 例外③（用户批准） |
+
+机制（`teacher_mdp.py::SpawnWeightSIRTerrainCurriculum`，参数在
+`lizard_params.yaml` `v5.terrain_curriculum`）：
+
+- **env→类型固定**（按初始列分配，类型流量 ∝ 列比例 = 论文每类型固定
+  轨迹份额）；每次 reset 从本类型粒子集均匀抽行、类型列内随机抽实例，
+  直写 `terrain_levels/terrain_types/env_origins`（`_reset_idx` 时序：
+  curriculum compute 先于 scene.reset，终局状态可读）。
+- **成功判定**：20s 存活（time_out）+ 位移 ≥ 0.5 × 命令距离（S2 评测
+  口径量级）；初始全量 reset（episode_length_buf=0）跳过统计。
+- **块评估**（`common_step_counter` ≥ 240 触发，量化推进防漂移流量不足行保持旧权）→ 归一 → 重采样 → 随机游走
+  → replay → 累计器清零、历史池追加。
+- **flat 列**（第 8 类型，`MeshPlaneTerrainCfg` 比例 0.125 ≈ 2/20 列 ≈ 9%
+  env）：lizard 从未走路的启动补偿（论文最缓 Hills ~3mm vs 我们最易碎石
+  行 0.10m，糙 30×）；带语义下自动退休（p̂>0.9 → 权重归零 → 均匀
+  重探索），**固定列流量保留**——与论文"已掌握类型保留轨迹份额"同构。
+- **v3.5"出生 level 0"废除**：SIR 初始粒子 = 行 0..9 均匀（论文 line 1），
+  `max_init_terrain_level=None`。
+- 返回值 = mean terrain level（标量，`Curriculum/terrain_levels` 探针键
+  兼容 stock）。
 
 ## F3 偏差声明（有意偏离 paper）
 
@@ -74,7 +115,16 @@ v3 首跑（15555 iters，2026-09-02_11-33-11）收敛到 **原地划脚局部�
 4. **命令范围 (0,3) vs paper 速度范围**：Miki 未给训练范围；EP [0,1.5]。3 m/s 上段
    对 72kg 蜥蜴可能不可达——线性核不会炸（超速封顶），代价是高段样本稀释；
 5. HAA/脊柱接触豁免（r_co 只罚 hfe/kfe）——paper 只罚 thigh/shank 的直译，
-   脖子尾巴拖地暂不罚（观察首跑再定）。
+   脖子尾巴拖地暂不罚（观察首跑再定）；
+6. **固定网格不重生成**（v5.3，用户批准的唯一 SIR 例外）：行号 = 难度粒子
+   替身；列 = 同参数不同实例（论文同参数随机重生成，我们固定 20 实例）；
+7. **Tr 终局代理**（v5.3）：论文 Tr 逐状态转移定义；我们"20s 存活 + 位移
+   ≥ 0.5·命令距离"（S2 评测口径量级）；
+8. **flat 列**（v5.3）：论文 teacher 无平地；lizard 启动补偿（比例 0.125
+   ≈ 9% 流量），带语义自动退休后**固定流量保留**（论文已掌握类型同构）；
+9. **数值直译声明**（v5.3）：带 [0.5,0.9] / N_eval 10 / 游走 0.8 / replay
+   0.05 / N_traj 6 全部 Table S3 一字不差；success_ratio 0.5 与 soft_edge
+   0.05 为我们的代理量纲（无论文对应）。
 
 ## 训练命令
 
@@ -92,7 +142,9 @@ python scripts\reinforcement_learning\rsl_rl\train.py --task Lizard-Rough-v5 --m
 - **反划脚判据（新增，v5 核心 KPI）**：
   1. `Episode_Reward/feet_slide` 非零且为负（滑划被罚）；
   2. `Metrics/success_rate` 脱离 0.47 白嫖基线并持续上行（>0.7 才算真推进）；
-  3. `Curriculum/terrain_levels` 不再冻结（>2 并上行）；
+  3. `Curriculum/terrain_levels` 不再冻结——**判读语义随 v5.3 反转**：粒子
+     行集中到带内后覆盖变窄是论文设计内行为（分布随能力上移），**爬升 =
+     课程在起作用**；长期贴地不动才需复核（挂账 #13 判读口径同步）；
   4. `Episode_Reward/foot_clearance` 非零（负值——r_fc 修号后真在罚低悬脚，
      说明脚开始真抬）；
   5. `Episode_Reward/belly_contact_force` 保持 ~0（防御项，正常应恒 0）；
@@ -100,8 +152,11 @@ python scripts\reinforcement_learning\rsl_rl\train.py --task Lizard-Rough-v5 --m
 - 训完以 harness eval 为准：v5 vs v4 仅 nominal 可比（奖励变更不改 DR 语义，
   但策略分布不同，robust 模式跨版本参考价值有限）。
 
-## 启动前警示（继承 v4 三步 + v5 无地形变更）
+## 启动前警示（v5.3 起 terrain ≠ v4 逐字：+flat 列）
 
-地形与 v4 逐字相同（`TEACHER_TERRAINS_CFG_V4`）：若 v4 预检（terrain_preflight /
-view_terrain GUI 目视）已做过且通过，v5 无需重做；若未做，先看地形再开训
-（v4 NOTES 启动前警示 1-3 步全文适用）。
+地形 = v4 七类型参数逐字不动 + flat 第 8 类型（v5.3）。执行记录
+（2026-09-03）：`terrain_preflight --version v5` 数字过——8 类型齐、
+flat 全零（预期）、random_rough relief p95 0.330 m 与 v4 口径一致
+（seed 噪声级差异）；满档渲染 `_tmp_terrain_previews\v5_*.png`。
+v4 NOTES 启动前警示其余步骤全文适用（GUI 目视一次 flat 列在场即可，
+挂账 #13 观察项改由 SIR 课程流量数据直接回答）。
