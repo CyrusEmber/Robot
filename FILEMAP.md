@@ -21,8 +21,9 @@
 |---|---|
 | `versions\lizard\lizard_params.yaml` | **参数 SSOT（开发态）**：执行器 PD/动作缩放/命令范围/DR 范围。冻结版在 `versions\lizard\vN\`，跑冻结版永远不读这份 |
 | `versions\lizard\lizard.urdf` | 机器人几何 SSOT（Blender 生成）：26 关节、质量、限位 |
-| `versions\lizard\PLAN.md` | 家族训练计划 + 挂账清单（#3 teacher 训练是当前关键路径；跨版本路线，方案细节归各 vN\PLAN.md） |
-| `versions\lizard\FAMILY.md` | 家族总文档：任务注册表 / 版本历史 / teacher obs 布局 SSOT / 四层记录体系（代码地图归本文件，开新版本流程归 `.codemaker/rules/versioning.mdc` §A） |
+| `versions\lizard\PLAN.md` | **纯意图文档（路线/备选路径/挂账清单）**：跨版本路线 + 决策记录 + 反趴窝备选升级表；时态纪律见 versioning.mdc（已成立事实归 FAMILY，方案细节归各 vN\PLAN.md） |
+| `versions\lizard\FAMILY.md` | 家族事实总文档（现在时）：任务注册表 / 版本历史（含教训列）/ 当前状态 / 机体几何 / 四层记录体系（代码地图归本文件，开新版本流程归 `.codemaker/rules/versioning.mdc` §A） |
+| `versions\lizard\OBS.md` | **obs 契约 SSOT（家族级）**：v1–v5 布局演进、论文对应、偏差声明（决策 B/v3 有意偏差）、`TEACHER_PRIVILEGED_SPEC` 版本差异机制（数值真源仍是代码 + check_obs_layout.py） |
 | `versions\lizard\REWARDS.md` | **奖励用途总表（家族级）**：每 term 买什么行为/收什么税、公式+权重镜像、c_k 课程归属、v3 划脚事故的奖励经济学读法、版本差异摘要（数值真源仍是代码+各 vN yaml） |
 
 ### tasks\ —— gym 任务包（训练代码本体）
