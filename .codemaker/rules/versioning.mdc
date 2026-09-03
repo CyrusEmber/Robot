@@ -1,6 +1,6 @@
 ---
-description: 版本纪律——配方版本（vN）新建/冻结与计划文档修订（vN.M.K）的触发条件、权限与记录规范。当用户提到"开新版本"、"新建版本"、"升版本"、"冻结版本"、"修订"、"勘误"、"修订记录"、"记录修改"、"开新支线"、"换家族"、"新机器人"时，或操作涉及 versions/ 目录、PLAN.md、FAMILY.md、NOTES.md 时使用。
-globs: rl_exp/versions/**
+description: 版本纪律——配方版本（vN）新建/冻结与计划文档修订（vN.M.K）的触发条件、权限与记录规范。当用户提到"开新版本"、"新建版本"、"升版本"、"冻结版本"、"修订"、"勘误"、"修订记录"、"记录修改"、"开新支线"、"换家族"、"新机器人"时，或操作涉及 versions/ 目录、PLAN.md、FAMILY.md、NOTES.md 时使用。改 reward/obs/action/终止 term、DR 范围、地形参数（多在 rl_exp/tasks/）同样适用——先过 A 节升版触发条件。
+globs: rl_exp/versions/**, rl_exp/tasks/**, rl_exp/tools/pipeline/**
 alwaysApply: false
 ---
 
@@ -53,6 +53,8 @@ alwaysApply: false
 5. 家族文档版本历史表加一行；git 侧 commit + tag `<family>-vN+1`（tag = 整树快照；commit/push 细节走 git-auto-sync skill）
 
 **红线**：已发布 term 的实现永不改语义（新版本只允许加 term）；冻结目录只读。
+
+**退役（任务 id 摘除，防注册表无限增长）**：满足"末次评测 > 2 月 且 无活跃引用（消融 specs、NOTES 挂账、进行中 PLAN 均无该任务 id）"的版本，可把任务 id 从 `__init__.py` 注册表与各 verify 脚本的版本遍历表中摘除——复现降级为 git tag `<family>-vN`（整树快照，信息不丢，冻结目录与 NOTES 不动）。FAMILY.md 版本历史表该行加"已退役"标注。常驻注册的义务 = 服役期内可复现，不是永久占用。
 
 ## B. 修订既有版本（文档级 vN.M.K）
 
