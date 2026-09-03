@@ -41,6 +41,13 @@
 - env_class 17：特定 parkour 地形类（gap/step 一族，具体索引→地形名映射待核实）——姿态正则只对该类启用（见 reward）
 - student 时 scandots 132 维被 depth 编码器输出（512 维 GRU 隐态管线）替换
 
+### 命令速度（config 核实，`legged_robot_config.py` 基类，`A1ParkourCfg` 未覆盖即生效值）
+
+- **v_cmd ∈ [0.0, 1.5] m/s 均匀采样——纯前进标量，无后退**；方向不由速度命令给出，由 waypoint 世界系方向 \(\hat{d}_w\) 决定（`waypoint_delta` 0.7m）
+- `lin_vel_y = [0,0]`、`ang_vel_yaw = [0,0]`：无横移/转向速度命令，转向完全由 waypoint 驱动；obs 命令通道 `[0, 0, v_cmd]` 前两路恒零
+- `max_ranges`（速度课程上限 [0.3, 0.8] m/s + 增量 0.1）**未启用**：`commands.curriculum = False`
+- `resampling_time` 6s
+
 ### 深度相机配置（config 核实）
 
 - 原始 106×60 → resize 87×58；horizontal FOV 87°；near/far clip 0–2m；buffer 2 帧
