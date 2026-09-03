@@ -256,18 +256,20 @@ TEACHER_TERRAINS_CFG_V4 = TerrainGeneratorCfg(
 
 
 # v5.3 terrain (plan versions/lizard/v5/PLAN.md, SIR curriculum): the v4 grid
-# VERBATIM + one flat type appended. Terrain structure is pinned (7 v4 types
-# + flat, 10 rows x 20 cols): the SIR curriculum redistributes spawn traffic
-# over the FIXED grid (rows = difficulty particles through curriculum=True
-# generation, columns = interchangeable instances) instead of regenerating
-# terrains per particle draw -- the single user-approved deviation from Lee
-# et al. 2020 Algorithm S1. Flat = bootstrap compensation the paper never
-# needed (their gentlest Hills amplitude ~3 mm; our easiest rubble row is
-# already 0.10 m, ~30x rougher): proportion 0.125 = an equal eighth type
-# (~2 of 20 columns, ~9% of envs). It retires through the band semantics
-# like any mastered type; its fixed column share persists afterwards, same
-# as a fully-mastered paper terrain type keeps its trajectory share. The
-# v4 proportions are kept verbatim (the generator normalizes the sum).
+# + one flat type and a slightly steeper slope cap (v5.5, user decision
+# 2026-09-03: 0.4 -> 0.45 rad ~ 25.8 deg). Terrain structure is pinned
+# (7 v4 types + flat, 10 rows x 20 cols): the SIR curriculum redistributes
+# spawn traffic over the FIXED grid (rows = difficulty particles through
+# curriculum=True generation, columns = interchangeable instances) instead
+# of regenerating terrains per particle draw -- the single user-approved
+# deviation from Lee et al. 2020 Algorithm S1. Flat = bootstrap compensation
+# the paper never needed (their gentlest Hills amplitude ~3 mm; our easiest
+# rubble row is already 0.10 m, ~30x rougher): proportion 0.125 = an equal
+# eighth type (~2 of 20 columns, ~9% of envs). It retires through the band
+# semantics like any mastered type; its fixed column share persists
+# afterwards, same as a fully-mastered paper terrain type keeps its
+# trajectory share. The v4 proportions are kept (the generator normalizes
+# the sum).
 TEACHER_TERRAINS_CFG_V5 = TerrainGeneratorCfg(
     size=(16.0, 16.0),
     border_width=25.0,
@@ -315,10 +317,10 @@ TEACHER_TERRAINS_CFG_V5 = TerrainGeneratorCfg(
             downsampled_scale=0.5,
         ),
         "hf_pyramid_slope": terrain_gen.HfPyramidSlopedTerrainCfg(
-            proportion=0.1, slope_range=(0.0, 0.4), platform_width=4.0, border_width=0.5
+            proportion=0.1, slope_range=(0.0, 0.45), platform_width=4.0, border_width=0.5
         ),
         "hf_pyramid_slope_inv": terrain_gen.HfInvertedPyramidSlopedTerrainCfg(
-            proportion=0.1, slope_range=(0.0, 0.4), platform_width=4.0, border_width=0.5
+            proportion=0.1, slope_range=(0.0, 0.45), platform_width=4.0, border_width=0.5
         ),
         "flat": terrain_gen.MeshPlaneTerrainCfg(proportion=0.125),
     },

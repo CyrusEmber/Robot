@@ -529,12 +529,11 @@ class SIRTerrainCurriculumCfg(CurriculumTermCfg):
     p_replay: float = 0.05
     """Replay probability: the particle is redrawn from the history pool."""
     success_ratio: float = 0.5
-    """Episode progress score = clamp(displacement / (ratio x commanded
-    full-episode distance), 0, 1) x survival-time fraction; the band acts
-    on the per-row MEAN score (stand-in for the paper's per-transition Tr)."""
+    """Episode success = survived to timeout AND walked >= ratio x the
+    distance commanded over a full episode (terminal-episode stand-in for
+    the paper's per-state-transition Tr)."""
     soft_edge: float = 0.05
-    """Above-band edge softening width [score units]; the below-band weight
-    is linear in the score (cold-start gradient), so no soft edge there."""
+    """Band-edge softening width [success-rate units]; keeps a gradient."""
     steps_per_iteration: int = 24
     """Policy steps per PPO iteration; must equal runner num_steps_per_env."""
 
@@ -548,11 +547,10 @@ class SpawnWeightSIRTerrainCurriculum(ManagerTermBase):
     proportions, like the paper's fixed per-type trajectory share. On every
     env reset the env respawns on a row drawn uniformly from its type's
     particle set (column = random instance of the type). Every
-    ``eval_every`` policy iterations the per-row mean progress scores
-    measured since the last block set the weights (1 inside the band,
-    soft edge above it, linear in the score below it -- the cold-start
-    gradient), particles are resampled proportionally, random-walked to
-    adjacent rows and partly redrawn from a replay pool.
+    ``eval_every`` policy iterations the per-row success rates measured
+    since the last block set the weights (1 inside the band, 0 outside,
+    linear across the soft edges), particles are resampled proportionally,
+    random-walked to adjacent rows and partly redrawn from a replay pool.
     """
 
     cfg: SIRTerrainCurriculumCfg
@@ -589,14 +587,14 @@ class SpawnWeightSIRTerrainCurriculum(ManagerTermBase):
         col_type = torch.tensor(sub_index, dtype=torch.long, device=device)
         self._env_type = col_type[terrain.terrain_types.long()]
         # SIR state per type: particle rows (a multiset after resampling),
-        # weights over rows, episode/score accumulators, replay history pool
+        # weights over rows, episode/success counters, replay history pool
         rows = torch.arange(self._num_rows, dtype=torch.long, device=device)
         self._particles = [rows.clone() for _ in range(self._num_types)]
         self._weights = [
             torch.full((self._num_rows,), 1.0 / self._num_rows, device=device) for _ in range(self._num_types)
         ]
         self._episodes = [torch.zeros(self._num_rows, device=device) for _ in range(self._num_types)]
-        self._scores = [torch.zeros(self._num_rows, device=device) for _ in range(self._num_types)]
+        self._successes = [torch.zeros(self._num_rows, device=device) for _ in range(self._num_types)]
         # history starts at the uniform initial sample (paper line 1)
         self._history = [rows.clone() for _ in range(self._num_types)]
         self._next_eval_step = self.cfg.eval_every * self.cfg.steps_per_iteration
@@ -625,23 +623,12 @@ class SpawnWeightSIRTerrainCurriculum(ManagerTermBase):
             commanded = torch.linalg.norm(
                 env.command_manager.get_command(self.cfg.command_name)[ids, :2], dim=1
             ) * env.max_episode_length_s
-            # v5.4 per-episode progress score in [0, 1]: displacement credit
-            # (full at success_ratio x the commanded distance, linear below),
-            # survival-time weighted. The survival factor cancels tumble
-            # slides (rolling 3 m down the inverted stairs is displacement
-            # without locomotion); the linear-below credit keeps early-fall
-            # partial progress -- from-scratch policies fail everywhere and
-            # a binary predicate would zero every weight, flattening the
-            # cold start to uniform sampling with no difficulty gradient
-            # (closer to the paper's per-transition Tr expectation, F3-7).
-            progress = (walked / (self.cfg.success_ratio * commanded).clamp(min=1.0)).clamp(max=1.0)
-            survival = (env.episode_length_buf[ids] / env.max_episode_length).clamp(max=1.0)
-            score = progress * survival
+            succeeded = env.reset_time_outs[ids] & (walked >= self.cfg.success_ratio * commanded)
             for t in torch.unique(types):
                 t = int(t)
                 mask = types == t
                 self._episodes[t].index_add_(0, rows[mask], torch.ones(int(mask.sum()), device=rows.device))
-                self._scores[t].index_add_(0, rows[mask], score[mask])
+                self._successes[t].index_add_(0, rows[mask], succeeded[mask].float())
         # 2) block evaluation: every eval_every policy iterations
         if env.common_step_counter >= self._next_eval_step:
             self._resample()
@@ -661,28 +648,21 @@ class SpawnWeightSIRTerrainCurriculum(ManagerTermBase):
         return terrain.terrain_levels.float().mean()
 
     def _measurement_prob(self, p_hat: torch.Tensor) -> torch.Tensor:
-        """Measurement weight from the per-row mean progress score.
-
-        Inside the band: 1. Above the band: soft edge to 0 (mastered rows
-        fade out, paper semantics). BELOW the band: linear in the score
-        instead of the paper's hard 0 -- a from-scratch policy scores near
-        zero on every row, so the hard indicator would zero every weight
-        and drop the whole cold start to the uniform fallback (no difficulty
-        gradient). Linear-below keeps "less failed" rows (= easier terrain)
-        measurably heavier, bootstrapping the band from underneath.
-        """
+        """Band indicator with soft edges: 1 inside [lo, hi], 0 outside
+        [lo - soft_edge, hi + soft_edge], linear in between."""
         lo, hi = self.cfg.band
         eps = self.cfg.soft_edge
-        low = (p_hat / lo).clamp(0.0, 1.0)
-        up = ((hi + eps - p_hat) / eps).clamp(0.0, 1.0)
-        return torch.minimum(low, up)
+        up = ((p_hat - (lo - eps)) / eps).clamp(0.0, 1.0)
+        down = (((hi + eps) - p_hat) / eps).clamp(0.0, 1.0)
+        return torch.minimum(up, down)
 
     def _resample(self) -> None:
         """One SIR block: weights from the band, resample, random walk, replay."""
         n = self._num_rows
         for t in range(self._num_types):
             episodes = self._episodes[t]
-            p_hat = self._scores[t] / episodes.clamp(min=1.0)
+            successes = self._successes[t]
+            p_hat = successes / episodes.clamp(min=1.0)
             measured = self._measurement_prob(p_hat)
             # rows with insufficient traffic keep their previous weight
             weights = torch.where(episodes >= self.cfg.n_traj_min, measured, self._weights[t])
@@ -709,4 +689,4 @@ class SpawnWeightSIRTerrainCurriculum(ManagerTermBase):
             self._particles[t] = rows
             self._history[t] = torch.cat([pool, rows])
             episodes.zero_()
-            self._scores[t].zero_()
+            successes.zero_()
