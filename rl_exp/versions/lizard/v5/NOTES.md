@@ -1,9 +1,13 @@
-# v5 —— 反趴窝奖励包（r_fc 符号 + r_slip + 肚皮受力罚 + EP 线性跟踪）
+# v5 —— 反划脚奖励包（r_fc 符号 + r_slip + 肚皮受力罚 + EP 线性跟踪）
 
-- 目的/假设: v3 首跑收敛到 foot-pad creeping 局部最优（success_rate 0.47 白嫖基线、
-  terrain_levels 冻结 1.27、foot_clearance ≤ 5e-5）。四个奖励洞：r_fc 符号反
-  （+0.003 奖励低悬脚）、无 r_slip、肚皮免费、exp 跟踪核低速白嫖。假设堵洞后
-  摆腿成为唯一正收益路径。方案细节见本目录 PLAN.md。
+> **状态：解冻修改中**（2026-09-03 撤 tag v5；v5 未训练，待改）。
+
+- 目的/假设: v3 首跑收敛到原地划脚局部最优（**不趴窝**——肚皮离地，
+  腿脚在动但身体不前进，用户 GUI 回放观察 2026-09-03；success_rate 0.47
+  白嫖基线、terrain_levels 冻结 1.27、foot_clearance ≤ 5e-5）。三个主因：
+  r_fc 符号反（+0.003 奖励低悬脚）、无 r_slip（接触脚滑划零成本）、exp
+  跟踪核低速白嫖；肚皮罚为防御项（v3 症状不含肚皮贴地）。假设三管齐下
+  后抬脚-推进成为唯一正收益路径。方案细节见本目录 PLAN.md。
 - 相对 v4 的变更（obs 381 不变，任务 id `Lizard-Rough-v5`）:
   - **r_fc**: `weight 0.003 → -0.003`（符号修正，v5 yaml 副本）
   - **r_slip**: `feet_slide_ck`（接触脚切向滑速 × c_k，weight 0.003，stock 6 行
@@ -28,7 +32,11 @@
   滑移 ×c_k / 肚皮不退火 / 接触罚 ×c_k）；`check_obs_layout.py` v5 段
   （三组契约 + 奖励集合 + r_fc 负号 + (0,3) 范围 + c_k steps 一致）；离线闸门 9/9。
   冒烟 `teacher_smoke_v5.py`（三组 90/208/83 + 前进命令 + term 活性 + 有限性）。
-- 验收: 起步 sanity 后直训；反趴窝 KPI（feet_slide 非零 / belly→0 /
-  success_rate 脱离 0.47 / terrain_levels >2 上行 / GUI 肉眼迈腿）见 PLAN.md。
-- 结果回填: （训练后补：reward 曲线读数 / 反趴窝 KPI 读数 / eval 跑分表 / 结论）
+- 验收: 起步 sanity 后直训；反划脚 KPI（feet_slide 非零负 / success_rate
+  脱离 0.47 / terrain_levels >2 上行 / foot_clearance 负值激活 / GUI 肉眼
+  身体前进）见 PLAN.md。
+- 修订记录: 2026-09-03 冻结（tag v5）→ 同日撤 tag 解冻：v3 回放观察修正
+  症状画像（不趴窝、只有脚动，"肚皮免费"从主因降为防御项），v5 待改后
+  重新冻结重打 tag。
+- 结果回填: （训练后补：reward 曲线读数 / 反划脚 KPI 读数 / eval 跑分表 / 结论）
 - 结论: （一句话，训练后补）

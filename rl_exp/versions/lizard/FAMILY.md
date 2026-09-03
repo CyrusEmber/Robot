@@ -46,8 +46,8 @@
 | Lizard-Rough-Play-v3 | `LizardRoughTeacherEnvCfg_V3_PLAY` | **versions/lizard/v3（冻结）** | v3 回放 |
 | **Lizard-Rough-v4** | `LizardRoughTeacherEnvCfg_V4` | versions/lizard/v4（**提案，未冻结**——训练启动时冻结） | 碎石地重定标（obs 同 v3 三组 90/208/83；纯地形+物理缓冲区变更，spec 不变） |
 | Lizard-Rough-Play-v4 | `LizardRoughTeacherEnvCfg_V4_PLAY` | versions/lizard/v4（**提案，未冻结**——训练启动时冻结） | v4 回放 |
-| **Lizard-Rough-v5** | `LizardRoughTeacherEnvCfg_V5` | versions/lizard/v5（**冻结**，asset_lock 齐） | 反趴窝奖励包（r_fc 符号 + r_slip + 肚皮受力罚 + EP 线性跟踪；命令 (0,3) 无速度课程；obs 同 v3 三组 90/208/83，spec 不变） |
-| Lizard-Rough-Play-v5 | `LizardRoughTeacherEnvCfg_V5_PLAY` | versions/lizard/v5（**冻结**，asset_lock 齐） | v5 回放 |
+| **Lizard-Rough-v5** | `LizardRoughTeacherEnvCfg_V5` | versions/lizard/v5（**解冻修改中**——2026-09-03 撤 tag，v3 回放观察修正症状后待改） | 反划脚奖励包（r_fc 符号 + r_slip + 肚皮受力罚 + EP 线性跟踪；命令 (0,3) 无速度课程；obs 同 v3 三组 90/208/83，spec 不变） |
+| Lizard-Rough-Play-v5 | `LizardRoughTeacherEnvCfg_V5_PLAY` | versions/lizard/v5（**解冻修改中**） | v5 回放 |
 
 注：teacher 任务 id 与配方版本同步，且**全部常驻注册**——旧版本不会因代码
 演进而失复现（机制见下节"版本差异结构"）。`Lizard-Rough-v0` 无任务 id

@@ -1,29 +1,34 @@
-# v5 —— 反趴窝奖励包（r_fc 符号 + r_slip + 肚皮受力罚 + EP 线性跟踪）
+# v5 —— 反划脚奖励包（r_fc 符号 + r_slip + 肚皮受力罚 + EP 线性跟踪）
+
+> **状态：解冻修改中**（2026-09-03 用户撤 tag v5，v5 待改；症状画像随
+> v3 回放观察同步修正——见下）。
 
 ## 目的/假设
 
-v3 首跑（15555 iters，2026-09-02_11-33-11）收敛到 **foot-pad creeping 局部最优**：
-success_rate 钉在站桩白嫖基线 0.47、terrain_levels 冻结 1.27、foot_clearance 奖励
-全程 ≤ 5e-5（脚从未摆动）。证据链（tfevents，n=10606）：
+v3 首跑（15555 iters，2026-09-02_11-33-11）收敛到 **原地划脚局部最优**
+（用户 GUI 回放观察 2026-09-03）：**不趴窝**（肚皮离地，区别于家族旧
+趴窝 run 2026-08-28），腿/脚在动，但身体不前进——foot-pad creeping。
+证据链（tfevents，n=10606）：
 
 - `Episode_Reward/foot_clearance` max 4.9e-5——防拖脚奖励从未触发；
 - `Metrics/success_rate` 0.47 ≈ 站立白嫖基线（命令 x~U(-1,2) 的 |v_cmd|<0.5 区
   占 50%，exp 跟踪核站立也有残值）；
-- tilt≈0 / time_out 99.9%——趴着 20s 苟满，训练"健康"地收敛到不动。
+- tilt≈0 / time_out 99.9%——稳稳苟满 20s，训练"健康"地收敛到不前进。
 
-根因 = 四洞齐开（论文对照见 `papers/miki-perceptive-locomotion/detail.md` S7 与
-`papers/extreme-parkour/detail.md` 奖励表）：
+根因（论文对照见 `papers/miki-perceptive-locomotion/detail.md` S7 与
+`papers/extreme-parkour/detail.md` 奖励表）——症状是"脚动身不动"：
 
-| # | 洞 | v3/v4 状态 | paper 对照 |
-|---|---|---|---|
-| 1 | r_fc 符号反 | weight +0.003 × 正 hinge = **奖励**低悬脚 | v3 有意反向（防拖脚）但权重忘了取负 |
-| 2 | 无 r_slip | F3 定为"计划笔误，不新增" | paper S7: −c_k·Σ_{接触脚} v_f²，唯一直接罚爬行 |
-| 3 | 肚皮免费 | base_contact 终止删除（v3.6）、base 在 r_co 里只罚二值 | paper 有躯干触地终止；EP 碰撞罚 −10 |
-| 4 | exp 跟踪白嫖 | +1.0·exp(−\|Δv\|²/0.25)，低速命令站立有残值 | EP 线性核 min(⟨d̂,v⟩,v_cmd)/v_cmd，站立 = 0 分 |
+| # | 洞 | v3/v4 状态 | paper 对照 | 对本症状 |
+|---|---|---|---|---|
+| 1 | r_fc 符号反 | weight +0.003 × 正 hinge = **奖励**低悬脚 | v3 有意反向（防拖脚）但权重忘了取负 | 主因：划脚可低悬免费 |
+| 2 | 无 r_slip | F3 定为"计划笔误，不新增" | paper S7: −c_k·Σ_{接触脚} v_f² | **主因：接触脚滑划零成本** |
+| 3 | exp 跟踪白嫖 | +1.0·exp(−\|Δv\|²/0.25)，低速命令站立有残值 | EP 线性核 min(⟨d̂,v⟩,v_cmd)/v_cmd，站立 = 0 分 | **主因：划脚不亏钱** |
+| 4 | 肚皮接触免费 | base_contact 终止删除（v3.6）、base 在 r_co 里只罚二值 | paper 有躯干触地终止 | **防御项**（v3 症状不含肚皮贴地；留作未来局部最优保险，F3-2） |
 
 另：速度课程 stage 0 (-1,2) 保持 50% 白嫖区且被白嫖 success_rate 钉死在 0 档。
 
-假设：堵住四个洞后，摆腿/抬脚成为唯一正收益路径，策略逃出趴窝局部最优。
+假设：符号修正 + 滑移罚 + 线性跟踪三管齐下后，抬脚-摆动-推进成为唯一
+正收益路径，策略逃出原地划脚局部最优。
 
 ## 相对 v4 的变更（obs 381 不变，任务 id `Lizard-Rough-v5`）
 
@@ -63,16 +68,18 @@ python scripts\reinforcement_learning\rsl_rl\train.py --task Lizard-Rough-v5 --m
 - log 目录: logs/rsl_rl/lizard_rough_teacher_v5/
 - v3 实测 461 iters/h @ 4096 env → 15000 iters ≈ 33h
 
-## 验收（沿 v3.2 口径 + 反趴窝专属判据）
+## 验收（沿 v3.2 口径 + 反划脚专属判据）
 
 - 起步 sanity（~100 iters）：无 NaN、非零 reward、终止计数正常（tilt 可能升——
   学走路初期摔倒是预期）
-- **反趴窝判据（新增，v5 核心 KPI）**：
-  1. `Episode_Reward/feet_slide` 非零且为负（爬行被罚）；
-  2. `Episode_Reward/belly_contact_force` 趋 0（肚皮离地）；
-  3. `Metrics/success_rate` 脱离 0.47 白嫖基线并持续上行（>0.7 才算真动起来）；
-  4. `Curriculum/terrain_levels` 不再冻结（>2 并上行）；
-  5. GUI 回放（`--viz kit`）肉眼确认迈腿。
+- **反划脚判据（新增，v5 核心 KPI）**：
+  1. `Episode_Reward/feet_slide` 非零且为负（滑划被罚）；
+  2. `Metrics/success_rate` 脱离 0.47 白嫖基线并持续上行（>0.7 才算真推进）；
+  3. `Curriculum/terrain_levels` 不再冻结（>2 并上行）；
+  4. `Episode_Reward/foot_clearance` 非零（负值——r_fc 修号后真在罚低悬脚，
+     说明脚开始真抬）；
+  5. `Episode_Reward/belly_contact_force` 保持 ~0（防御项，正常应恒 0）；
+  6. GUI 回放（`--viz kit`）肉眼确认身体前进。
 - 训完以 harness eval 为准：v5 vs v4 仅 nominal 可比（奖励变更不改 DR 语义，
   但策略分布不同，robust 模式跨版本参考价值有限）。
 
