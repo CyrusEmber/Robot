@@ -6,6 +6,7 @@
 > `rl_exp/tasks/teacher_env_cfg.py`；数值 = `versions/lizard/vN/lizard_params.yaml`。
 > 论文对应：Miki et al. 2022 S7（`papers/miki-perceptive-locomotion/detail.md`）、
 > Cheng et al. 2023 Eq.2（`papers/extreme-parkour/detail.md`）。
+> 姊妹契约：obs 布局见 [OBS.md](OBS.md)（同款约定——语义镜像，数值真源在代码）。
 
 ## 一、总表（v5 当前生效集）
 
