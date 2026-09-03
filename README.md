@@ -28,6 +28,12 @@
 > `RayCaster.meshes` 注册表、live PD 增益读回、rsl_rl `resolve_callable`
 > 点路径注册等），换版本先跑
 > `rl_exp\tools\verify\framework_pin_check.py`。
+>
+> **升级触发**（满足其一才动 pin，"当前版本停止维护"本身不构成阻塞）：
+> 安全公告影响本栈 / 需要上游新特性 / 上游内部件重构导致 pin_check 报警。
+> **升级流程首步固定**：跑 `framework_pin_check.py` 记录断裂清单 → 逐项适配
+> （本仓 fork shim 与 `fork_patches\` 只认已验证 SHA，随升级同步）→ 全链验证
+> → 更新本行的 SHA 与日期。
 
 ```bat
 git clone <本仓> <REPO>        :: 例 E:\robot
@@ -79,6 +85,12 @@ python rl_exp\tools\verify\position_check.py --headless --rough
 :: harness 自己控制 DR，Play 变体会让 robust 静默退化成 nominal）
 python ablation_harness\eval.py --task Lizard-Rough-v2 --mode nominal --seed 123 --headless
 ```
+
+**pre-commit 静态闸门**：`hooks\pre-commit` 随仓携带（staged 命中
+`rl_exp\`/`ablation_harness\` 代码时自动跑 `check_dr_parity --strict` +
+`check_obs_layout`，文档 commit 豁免）。首次 clone 后执行一次
+`git config core.hooksPath hooks` 接线（本地配置不随仓走）；全套离线闸门
+仍走 `run_offline_checks.bat`，hook 只是最后防线不是替代。
 
 注意：`versions\lizard\v2\` 是 teacher 运行时依赖（冻结参数），不是备份文档——
 漏拷 teacher 起不来。目录层级是硬约束（cfg 内 `parents[1]` 路径计算依赖）。
