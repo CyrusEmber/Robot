@@ -41,6 +41,11 @@ Phase 3  部署: student → ONNX → UE
 当前训练入口：`--task Lizard-Rough-v5`（回放 `Lizard-Rough-Play-v5`）；
 验证链与摆位见仓根 README。
 
+**并行支线**：parkour 支线（Parkour in the Wild 范式：跑/爬/跳多专家 → DAgger
+蒸馏 → RL 微调）已开 v1（2026-09-04，分支 `paper/parkour-in-the-wild`），路线与
+决策见 [parkour/PLAN.md](parkour/PLAN.md) + [parkour/v1/PLAN.md](parkour/v1/PLAN.md)；
+与主线 Phase 2（belief 蒸馏）互不阻塞，感知路线终裁挂 H1。
+
 决策记录:
 
 - **参数版本化**（2026-08-28，用户拍板）: `rl_exp/versions/lizard/vN/` 冻结参数副本 +

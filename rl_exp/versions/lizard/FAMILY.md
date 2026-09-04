@@ -19,6 +19,9 @@
 - 开发态 yaml: `lizard_params.yaml`（家族活实验用，改动不追溯）
 - 布局（2026-09-01 迁移）: 包名 `rl_exp`（家族无关），冻结配方按家族分层
   `versions/lizard/vN/`；代码只在 git 仓，IsaacLab 根常驻 1 行注册 shim
+- 支线：**parkour v1 初稿已开**（2026-09-04，分支 `paper/parkour-in-the-wild`，
+  训练未启动）——跑/爬/跳多专家蒸馏+RL 微调线，方案见 `parkour/v1/PLAN.md`，
+  路线与决策记录见 `parkour/PLAN.md`；主线 v0–v5 为主创始线，编号互不影响
 
 ## 任务注册表
 

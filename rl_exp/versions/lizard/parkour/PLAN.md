@@ -9,6 +9,12 @@
 > 分支规划：`paper/parkour-in-the-wild`（off main，与 v5 主线隔离）。
 >
 > 修订：v1 初稿 2026-09-04（讨论稿；§6 三项决策未拍板）
+> 修订：v1.1 2026-09-04（§6-2 补 UE 深度部署机制核查：SceneCapture2D attach 机器人
+> socket + readback 或 LineTrace 网格两方案，均非零成本；"UE 深度现成"论点撤回，
+> RayCaster 推荐理由改为论文忠实度/涌现复现/真机兼容）
+> 修订：v1.2 2026-09-04（用户拍板 Q1 切片 / Q3 位置任务 / Q4 技能三件套 跑·爬·跳
+> + 跳跃 probe gate；§6 决策记录更新，v1 开支线（`parkour\v1\` 全量式 PLAN），
+> 本文降级为路线层）
 
 ## 1. 论文核心（为什么值得做这条线）
 
@@ -66,10 +72,26 @@ critic 预训练 + 蒸馏期 action noise 保微调稳定。
 | 6 | v5 主线在飞（SIR 判据裁决挂账 #15） | 分支隔离不动主线文件；teacher 已发布`teacher_mdp` 若需改动先过红线审查 |
 | 7 | RayCasterCamera pattern/接口与论文 48×32 pinhole 对齐方式未验证 | M1 冒烟含单图形状/视场验证 |
 
-## 6. 未决问题（下次讨论锚点，拍板后更新本文并开 v1）
+## 6. 决策记录（v1.2 拍板；详细方案移入 `parkour/v1/PLAN.md`）
 
-1. **范围**：垂直切片（Walk/Climb/Jump[+Stepping stones]，约 5 重跑）先行，还是全量技能集（lizard 裁剪版 9 技能，11+ 重跑）一步到位。倾向：切片先行。
-2. **学生感知路线**：RayCaster 深度图（论文忠实，本线灵魂）vs 高度扫描+belief（复用 Miki Phase 2 已有规格，`student_networks.py` 现成）。倾向：RayCaster 深度——但意味着两条学生线并行，Phase 2 挂账 #4/#5 不被本线消化。
-3. **命令空间**：位置任务 (r\*,ψ\*,t\*)（论文核心，跳/爬必须点到点）vs 速度命令（复用现有，但跳/爬技能退化）。倾向：位置任务，M1 新基建。
-4. **技能集裁剪**：Tables/crouch 是否保留（蜥蜴低趴构型）；Beams 无 stock 地形需自定义 pattern（M6 后置）。
-5. **专家数与地形映射**：Jump = gap（box 地形）、Climb = pyramid_stairs、Climb down 是否独立专家（论文独立）。
+1. **范围**：✅ 用户拍板 2026-09-04——垂直切片先行（3 专家 → 蒸馏 → 微调）。
+2. **学生感知路线**：**待终裁（M3 末）**。倾向 RayCaster 深度（理由：论文忠实度 /
+   active perception 涌现复现 / 真机兼容）。专家阶段（M1–M3）不依赖此决策，
+   全部用 height_scanner 特权。
+   - UE 部署侧核查（v1.1，挂账部署阶段）：深度图非"现成调用"——方案 A =
+     `SceneCaptureComponent2D` attach 机器人头部 socket（SceneDepth 源，
+     48×32 RT，异步 readback + 容忍 1 帧延迟）；方案 B = C++ LineTrace
+     48×32 网格（1536×4 traces@15Hz，与训练侧 RayCaster 机制对齐，部署
+     一致性更好）。两方案均需工程量；高程图路线 UE 侧同样要重建扫描
+     逻辑。raycast→UE scene depth 同为几何深度（差 clip/半透明/LOD），
+     真机 stereo 差距才是大头（论文 5 步噪声模型标的）。
+3. **命令空间**：✅ 用户拍板 2026-09-04——按论文位置任务 (r\*, ψ\*, t\*)。
+   防趴窝三件套（Don't wait + t\* 截断 + termination 大罚）成对进 M1。
+4. **技能集**：✅ 用户拍板 2026-09-04——三件套 **跑 / 爬 / 跳**：
+   - 跑 = 平地+坡道（random_rough v4 定标 + slope，坡度 M1 定标+地形预检）
+   - 爬 = 上楼梯（v3.4 已定 0.55m 台阶顶）+ **下楼梯折叠进同一专家**
+     （review 定案：lizard 低重心下行风险低，不单独开；M3 下行学崩再独立）
+   - 跳 = gap 跑跳（review 定案：助跑过沟，非站跳；probe 双口径测，跑跳过 gate 即可）；
+     **probe 不过 → 跳专家不进蒸馏**，管线以跑+爬双专家继续（用户拍板）
+5. **地形定标**：✅ 隐含拍板——全部从 v3.4/v4 已验证尺度出发（0.55m 台阶 /
+   random_rough v4 间距 0.5m）；slope 与 gap 宽度为 M1 新定标项，先看地形再开训。
