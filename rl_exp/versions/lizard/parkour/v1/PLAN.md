@@ -7,6 +7,9 @@
 > 实现永不改语义。
 >
 > 修订：v1 初稿 2026-09-04
+> 修订：v1.1 2026-09-04（用户拍板：撤回预加 belly 罚（paper 字面无此项，
+> teacher 无补丁先跑家训）；reward 表修正——Table 2 是微调期表，专家期
+> gate="none"、M5 切回论文字面（挂账 H5/H6））
 
 ## 1. 目的与范围
 
@@ -32,17 +35,20 @@
 
 | 项 | 口径 | 权重 |
 |---|---|---|
-| Track position | 1_{t\*<1}(1−0.5‖r_xy−r\*_xy‖) | 10 |
-| Track heading | 1_{t\*<1}(1−0.5‖ψ−ψ\*‖) | 5 |
+| Track position | 1_{t\*≥1→none}(1−0.5‖r_xy−r\*_xy‖) | 10 |
+| Track heading | 同上门控 | 5 |
 | Joint velocity / Torque / 越限 / Base acc / Feet acc / Action rate / Feet force / Collision | 论文值（见 papers detail.md Table） | 论文值 |
 | Don't wait | 1(‖v_b‖<0.2) | −1 |
 | Stand at target | S_L‖q−q_d‖ | −0.5 |
 | Termination | 倾角>135° 等 | −2e3 |
 
-- **防趴窝三件套成对进**（用户拍板）：Don't wait + t\* 截断 + termination 大罚，
-  缺一不开训（lizard v0 教训）。
-- 正则项数值以论文为初值，v5 反划脚包经验（r_slip/肚皮受力罚）按需叠加——
-  叠加项单独列 diff，不混入论文表。
+- **Table 2 是微调期 reward 表**：goal-oriented 行为来自蒸馏继承，`1_{t*<1}`
+  末秒门控在微调语境合理。专家从零训练无蒸馏来源 → 专家期必须 `gate="none"`
+  （必要偏差，M5 微调切回论文字面）。用户拍板 2026-09-04（纠正预加 belly 罚）。
+- **无 belly 罚项（paper 字面）**：四层自带防线（Don't wait 罚慢蠕 / t\* 逼时效 /
+  0.25m 到达半径逼精度 / 0.55m 台阶物理过滤拖行）。belly_contact_force（v5 形态）
+  挂账 H5 待命，仅凭 M2 证据启用——家训先例：teacher 基线先跑无补丁。
+- 正则项数值以论文为初值；v5 反划脚包经验仅按需叠加，单独列 diff 不混入论文表。
 
 ### 地形（M1 定标 + 预检，"先看地形再开训"）
 
@@ -108,3 +114,7 @@
 - H2：UE 深度部署方案（SceneCapture vs LineTrace，部署阶段，见路线 PLAN §6-2）
 - H3：下楼梯独立专家分支决策（M3，下行学崩才开）
 - H4：gap 难度轴真实起点（probe 标定"桥跨"上限）
+- H5：belly_contact_force 补丁待命（−1.0，v5 形态）——仅凭 M2 Run 专家
+  快速滑行最优解证据启用，不预防性上（用户拍板 2026-09-04）
+- H6：Track gate 两段式——专家期 "none"（必要偏差）/ M5 微调期切论文字面
+  "t_star_lt_1"（Table 2 是微调表，行为来自蒸馏）
