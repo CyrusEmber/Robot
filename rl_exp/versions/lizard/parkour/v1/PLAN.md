@@ -15,6 +15,14 @@
 > per-skill 定制入方案；③对称增广（Mittal 2024）入方案——lizard 仅左右对称；
 > ④高程图训练期加扰（M1 全剥是错的）。专家 = Hoeller 2023 配方 + Rudin 2022a
 > 位置任务 + Mittal 2024 对称增广，论文 2.1 原文结构。）
+> 修订：v1.3 2026-09-04（**Rudin 2022a + Mittal 2024 原文核实**（用户纠偏"这俩
+> 你也没用啊"），papers/ 两篇 brief 入库。修正：①任务/reward 谱系——Rudin 原始
+> 形式 = (1/T_r)·1/(1+‖d‖²) 末段 T_r=1s 激活，S2 是线性化演化，本线随 S2；
+> ②direction 项谱系差异——Rudin/Mittal 随训练退火移除，S2 恒定 ×1，本线随 S2
+> （退火版挂 H9）；③**Rudin 稳定性三件套入方案**（episode 20s→6s、batch 加倍
+> 48 steps/env、去 value bootstrapping）——M1 的 20s/24 steps/bootstrap-on 是
+> 时间稀疏 reward 的不稳定配方（P8）；④Mittal 机制确认：log-prob 复用规则
+> （Eq. 6）+ 小初始化前提 + aug>loss + phase C 朝向随机化课程（入 M2）。）
 
 ## 1. 目的与范围
 
@@ -34,6 +42,17 @@
 
 - 指令 (r\*, ψ\*, t\*)；t\* = 剩余时间预算 = 重采样计时器；到达 S_L 即换点。
 - S_L = 1(‖r_xy−r\*_xy‖ < 0.25 m)·1(‖ψ−ψ\*‖ < 0.5 rad)。
+- **谱系（v1.3 核实）**：Rudin 原始 = 3D 目标 + 剩余时间（无 ψ\*，ANYmal 加）；
+  任务 reward = (1/T_r)·1/(1+‖d‖²) 仅末段 T_r=1s 激活（episode 6s）；成功半径
+  0.5m。S2 演化 = 线性 1−0.5‖d‖ + ψ\* + 0.25m。**本线随 S2**（parkour 论文
+  "closely follow Hoeller"）。
+- **目标采样谱系**：Rudin = 极坐标 1–5m、z=+0.5m、无效目标（坑/障碍）重采样；
+  M1 实现 = 2–8m、z=0、地形格夹紧。z+0.5 与无效重采样暂记偏差（H11 一并评估）。
+- **direction 项谱系**：Rudin r_bias = cos⟨v_b, x\*−x⟩ 且**自动退火**（任务 reward
+  达 50% 后移除，不约束最终解；Mittal climb 实验同款 phase A/B）；S2 恒定 ×1。
+  本线随 S2 恒定，退火版挂 H9。
+- **stalling 谱系**：Rudin = 距离门控（v<0.1 且距目标>0.5m）；S2 Don't wait =
+  无门控 v<0.2。本线随 S2 ✓（已实现）。
 
 ### 专家 Reward（Table S2 全量；与微调表 Table 2 的差异已标出）
 
@@ -68,11 +87,21 @@ proprio（v_b, ω_b, g_b, q, q̇, prev action）+ (r\*, t\*, ψ\*) + h 高程图
 
 ### 对称增广（Mittal 2024 = arXiv:2403.04359，实现参考 leggedrobotics/rsl_rl）
 
-- 机制：每条 transition 生成镜像变体（obs/动作按对称轴变换），**原动作的
-  log-prob 复制到镜像变体**（解决镜像态 off-policy 收敛问题，ANYmal S3）。
-- ANYmal 用前后+左右 4 变体；**lizard 只有左右对称**（neck 6 关节 vs rear+tail
-  4 关节，前后不对称）→ 2× 增广。
-- 实现：PPO minibatch 级（关节置换表 + obs 列置换：Δr_y/Δψ 取反、高程图镜像列）。
+- **机制（v1.3 按 Eq. 6 核实）**：minibatch 级生成镜像变体 (L_g[s], K_g[a])，
+  PPO 概率比的分母**复用原样本 log-prob** π_θk(a|s)——用镜像样本自身概率会
+  对非对称策略任意小 → 训练崩。直观：强化高回报动作时等效动作同步强化。
+- **前提**：策略需近似对称 = **小初始化权重 + 有界更新**；大初始化下增广失效
+  （Mittal Fig. 5）——接入时检查 rsl_rl 初始化（M2 冒烟项）。
+- **aug > mirror loss**（四任务实证）：loss 梯度与 RL 目标竞争；叠加无增益——
+  本线只做增广。
+- ANYmal 用 4 变体（reflect-x/y + 180°）；**lizard 仅矢状面镜像 1 个非平凡变换**
+  （neck 6 关节 vs rear+tail 4 关节前后不对称）→ 2× 增广。
+- obs 镜像表（26 关节 + 187 点高程 + 指令）：lf↔rf、rl↔rr 置换，HAA 目标与
+  spine yaw 取反，Δr_y/Δψ/ω_x/ω_z 取反，高程图镜像列。置换表单测进 offline
+  checks（P6）。
+- **Phase C 朝向课程**（Mittal climb 先例）：先固定朝向训练，成功后初始 yaw
+  随机化 [−π, π]——**从头随机朝向会收敛到劣质侧向运动**；增广使 phase 切换后
+  几乎立即恢复。入 M2 专家训练流程（与 Rudin 单方向 artifact 对症）。
 
 ## 3. 跳跃 probe gate（M1.5，先证后用）
 
@@ -84,6 +113,12 @@ proprio（v_b, ω_b, g_b, q, q̇, prev action）+ (r\*, t\*, ψ\*) + h 高程图
 ## 4. 专家训练（M2–M3）
 
 - 每专家 = 单地形配比 env cfg（快照纪律不变）+ 上节 S2 配方。
+- **Rudin 稳定性三件套（v1.3，M2 实施）**：episode 20s→**6–10s**（目标距离
+  范围相应缩至 1–5m 档）、num_steps_per_env 24→**48**、**去 value
+  bootstrapping**（任务时限已知且是 obs，有限视界；rsl_rl fork 的
+  time-out bootstrap 开关核实后接线，H10）。时间稀疏 reward + 20s episode +
+  bootstrap-on = Rudin 明示的不稳定配方。
+- 训练流程含 phase C 朝向随机化（对称增广一节）。
 - 网络 = 单 obs 组 MLP（M1 已建）。
 - 任务 id：`Lizard-Parkour-Run-v1` / `-Climb-v1` / `-Jump-v1`（+Play 对）。
 - 训练顺序：Climb（M2，范式验证）→ Run → Jump（probe 过才开）。
@@ -120,6 +155,8 @@ proprio（v_b, ω_b, g_b, q, q̇, prev action）+ (r\*, t\*, ψ\*) + h 高程图
 | P5 | box 爬地形 lizard 定标未知（ANYmal 膝钩行为 lizard 无对应——blade 脚掌） | M2 地形预检 gate；stairs 版本作为 fallback（v3.4 已验证） |
 | P6 | 对称增广的 obs 列置换表错位（26 关节 + 187 点高程镜像） | 置换表单测进 offline checks（仿 test_staged_curriculum） |
 | P7 | 专家版终止罚含 base collision——lizard sprawled 爬箱必触肚皮 | paper 先例：climb up 降碰撞罚权重；M2 按技能调（挂 H8） |
+| P8 | M1 episode 20s + 24 steps + bootstrap-on：Rudin 明示的时间稀疏 reward 不稳定配方（换 seed 即崩风险） | v1.3 稳定性三件套（短 episode/48 steps/去 bootstrap）M2 实施；H10 核 rsl_rl 开关 |
+| P9 | 对称增广前提破坏：初始化权重过大 / rsl_rl 初始化非对称 | M2 冒烟检查初始化尺度（Mittal Fig. 5 结论） |
 
 ## 8. 挂账
 
@@ -132,3 +169,8 @@ proprio（v_b, ω_b, g_b, q, q̇, prev action）+ (r\*, t\*, ψ\*) + h 高程图
   approach 激励 = direction 项，专家/微调两表差异在 direction/stumble/终止罚
 - H7：高程图全图平移扰动实现（M2 评估，自定义 noise model vs 偏差声明）
 - H8：per-skill 碰撞罚权重表（paper climb up 先例，lizard sprawled 需重定）
+- H9：direction 项退火版（Rudin/Mittal phase A→B）vs S2 恒定 ×1——本线随 S2，
+  训练若被 direction 项锁死最优解再切退火
+- H10：rsl_rl fork 的 time-out bootstrapping 开关核实（Rudin 去 bootstrap 要求）
+- H11：目标采样细化——Rudin 的 z=+0.5m 与无效目标重采样 vs M1 的 z=0 地形格
+  夹紧；episode 缩短后目标距离范围同步重定（1–5m 档）
