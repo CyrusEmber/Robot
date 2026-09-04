@@ -1,0 +1,170 @@
+# parkour_params.yaml — SSOT: parkour line control parameters (line dev state).
+#
+# Parkour in the Wild line (versions/lizard/parkour/): position-task experts.
+# Robot/actuator/sim/names/DR sections start as a copy of the family dev
+# lizard_params.yaml (2026-09-04); they are FROZEN as a self-contained copy at
+# each version freeze, so later family yaml edits never leak into a frozen
+# parkour recipe (same freeze semantics as the teacher line).
+# Parkour-specific sections: commands / rewards / terrain / terminations.
+
+robot:
+  name: lizard
+  usd_path: assets/lizard/lizard.usda
+  base_body_name: base_link
+  base_init_height: 1.1
+
+default_joint_pos:
+  ".*_haa_joint": 0.0
+  ".*_hfe_joint": 0.0
+  ".*_kfe_joint": 0.0
+  ".*_foot_joint": 0.0
+  "rear_.*": 0.0
+  "tail_.*": 0.0
+  "neck.*_.*": 0.0
+
+actuators:
+  legs:
+    joint_patterns:
+      - ".*_haa_joint"
+      - ".*_hfe_joint"
+      - ".*_kfe_joint"
+    stiffness: 800.0
+    damping: 40.0
+    effort_limit: 180.0
+    velocity_limit: 10.0
+    armature: 0.0
+  feet:
+    joint_patterns:
+      - ".*_foot_joint"
+    stiffness: 200.0
+    damping: 12.0
+    effort_limit: 70.0
+    velocity_limit: 6.0
+    armature: 0.0
+  spine:
+    joint_patterns:
+      - "rear_.*"
+      - "tail_.*"
+      - "neck.*_yaw_joint"
+      - "neck.*_pitch_joint"
+    stiffness: 150.0
+    damping: 10.0
+    effort_limit: 80.0
+    velocity_limit: 4.0
+    armature: 0.0
+
+action:
+  legs_scale: 0.5
+  spine_scale: 0.0   # parkour v1: spine locked (paper ANYmal has no spine)
+  use_default_offset: true
+
+sim:
+  dt: 0.005
+  decimation: 4
+  episode_length_s: 20.0
+
+names:
+  foot_body_names:
+    - ".*_foot"
+  # paper Collision term = knee/shank; lizard analog = thigh (hfe) + shank (kfe)
+  collision_body_names:
+    - ".*_hfe"
+    - ".*_kfe"
+
+# expert policy observation layout (single policy group, paper Table 3 expert
+# column minus the coarse map + lidar scan -- declared deviation, parkour/v1
+# PLAN section 2 "expert perception")
+obs_layout:
+  - name: base_lin_vel
+    dim: 3
+  - name: base_ang_vel
+    dim: 3
+  - name: projected_gravity
+    dim: 3
+  - name: joint_pos_rel
+    dim: 26
+  - name: joint_vel_rel
+    dim: 26
+  - name: actions
+    dim: 26
+  - name: height_scan
+    dim: 187   # grid 1.6 x 1.0 m @ 0.1 m = 17 x 11 (paper fine Em, lizard scale)
+  - name: position_command
+    dim: 4     # [delta_r_base_x, delta_r_base_y, delta_heading, t_star]
+
+# position task (paper section 2.1, Rudin et al. 2022a task description)
+commands:
+  target_distance_range: [2.0, 8.0]     # m, from current base pose
+  heading_span: 0.785                   # rad, sampling cone around base yaw (+-45 deg)
+  heading_jitter: 0.5                   # rad, target heading jitter around travel dir
+  speed_range: [0.5, 2.0]               # m/s, budget = distance / speed
+  budget_range: [2.0, 18.0]             # s, clamped time budget (episode 20 s)
+  pos_threshold: 0.25                   # m, S_L radius (paper)
+  heading_threshold: 0.5                # rad, S_L heading (paper)
+  tile_half_margin: 1.5                 # m, keep targets inside the terrain tile
+
+# paper Table 2 weights (fine-tuning table; experts use the same task terms,
+# regularization per parkour/v1 PLAN section 2)
+rewards:
+  track_position: 10.0
+  track_heading: 5.0
+  joint_vel_l2: -1.0e-3
+  joint_torques_l2: -1.0e-5
+  joint_vel_exceed: -1.0     # per-group term (legs / feet)
+  torque_exceed: -0.2        # per-group term (legs / feet)
+  base_acc_l2: -1.0e-3
+  feet_acc_l1: -2.0e-3
+  action_rate_l2: -1.0e-2    # stock term operates on actions; legs scale 0.5
+  feet_excess_force: -1.0e-5
+  don_t_wait: -1.0
+  stand_at_target: -0.5
+  undesired_contacts: -1.0
+  termination_penalty: -2000.0
+  # paper Table 2 literal gate. "none" (ungated) is REQUIRED for expert
+  # training (from-scratch policies need approach-phase incentive; Table 2 is
+  # a FINE-TUNING table whose goal-directedness comes from distillation).
+  # Flip to "t_star_lt_1" at M5 RL fine-tuning.
+  track_gate: "none"
+  # PARKED escape hatch (NOT wired): belly_contact_force -1.0 (v5 form,
+  # teacher_mdp) if M2 shows fast belly-slither as the Run-expert optimum.
+  # House precedent: teacher baseline runs WITHOUT incentive patches first.
+
+terminations:
+  # paper alpha > 135 deg (angle base-z vs gravity) == projected_gravity_b
+  # z > 0.707 (45 deg tilt); family teacher uses -0.6 (~53 deg)
+  tilt_gravity_z_limit: 0.707
+
+feet:
+  force_threshold: 700.0     # N (paper; ~= lizard body weight 706 N)
+  don_t_wait_speed: 0.2      # m/s (paper)
+
+domain_randomization:
+  friction_static: [0.4, 1.2]
+  friction_dynamic: [0.3, 1.0]
+  friction_restitution: [0.0, 0.0]
+  friction_num_buckets: 64
+  mass_scale: [0.87, 1.15]
+  mass_scale_limbs: [0.7, 1.43]
+  limb_body_names:
+    - ".*_haa"
+    - ".*_hfe"
+    - ".*_kfe"
+    - ".*_foot"
+    - ".*_yaw"
+    - ".*_pitch"
+  com_range:
+    x: [-0.05, 0.05]
+    y: [-0.05, 0.05]
+    z: [-0.02, 0.02]
+  inertia_scale: [0.9, 1.1]
+  stiffness_scale: [0.8, 1.2]
+  damping_scale: [0.8, 1.2]
+  joint_friction_add: [0.0, 0.05]
+  joint_armature_add: [0.0, 0.02]
+  external_force_range: [-40.0, 40.0]
+  external_torque_range: [-5.0, 5.0]
+  reset_height_range: [-0.05, 0.05]
+  push_velocity_range:
+    x: [-1.5, 1.5]
+    y: [-1.5, 1.5]
+    z: [-0.3, 0.3]

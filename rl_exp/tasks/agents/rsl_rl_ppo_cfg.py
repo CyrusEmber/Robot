@@ -168,3 +168,43 @@ class LizardTeacherV5PPORunnerCfg(LizardTeacherV4PPORunnerCfg):
     """
 
     experiment_name = "lizard_rough_teacher_v5"
+
+
+@configclass
+class LizardParkourClimbPPORunnerCfg(LizardFlatPPORunnerCfg):
+    """Runner cfg for `Lizard-Parkour-Climb-v1` (position-task stairs expert).
+
+    Parkour line (parkour/v1/PLAN.md): single policy obs group (278:
+    proprio + clean height scan + position command), plain MLP -- no
+    three-encoder model, no obs_groups. PPO hyperparams reuse the paper-S1
+    recipe (lr decay, gamma 0.996); separate log dir per the family
+    convention (one task family, one dir).
+    """
+
+    experiment_name = "lizard_parkour_climb_v1"
+    max_iterations = 4000
+    actor = RslRlMLPModelCfg(
+        hidden_dims=[256, 160, 128],
+        activation="lrelu",
+        obs_normalization=True,
+        distribution_cfg=RslRlMLPModelCfg.GaussianDistributionCfg(init_std=1.0),
+    )
+    critic = RslRlMLPModelCfg(
+        hidden_dims=[256, 160, 128],
+        activation="lrelu",
+        obs_normalization=True,
+    )
+    algorithm = LizardV3PpoAlgorithmCfg(
+        num_learning_epochs=2,
+        num_mini_batches=11,
+        learning_rate=5.0e-4,
+        schedule="fixed",
+        gamma=0.996,
+        lam=0.95,
+        entropy_coef=0.005,
+        desired_kl=0.01,
+        max_grad_norm=1.0,
+        value_loss_coef=1.0,
+        use_clipped_value_loss=True,
+        clip_param=0.2,
+    )

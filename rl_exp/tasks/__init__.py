@@ -196,3 +196,29 @@ gym.register(
         "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherPPORunnerCfg",
     },
 )
+
+##
+# Parkour line (versions/lizard/parkour/, Parkour in the Wild position-task
+# experts).
+##
+
+
+gym.register(
+    id="Lizard-Parkour-Climb-v1",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": "rl_exp.tasks.parkour_env_cfg:ParkourClimbEnvCfg",
+        "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardParkourClimbPPORunnerCfg",
+    },
+)
+
+gym.register(
+    id="Lizard-Parkour-Climb-Play-v1",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": "rl_exp.tasks.parkour_env_cfg:ParkourClimbEnvCfg_PLAY",
+        "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardParkourClimbPPORunnerCfg",
+    },
+)
