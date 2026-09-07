@@ -88,8 +88,12 @@ actuators:
       - "tail_.*"
       - "neck.*_yaw_joint"
       - "neck.*_pitch_joint"
-    stiffness: 150.0
-    damping: 10.0
+    # v6.2 (user decision 2026-09-07): 150/10 left 0.2-0.45 rad gravity sag on
+    # the 2 m neck/tail levers; 400/20 keeps the family ratio (c = k/20) and
+    # shrinks the sag to ~0.08-0.17 rad. Effort limit stays 80 N.m (measured
+    # gravity torque 30-67 N.m) -- transients clip, implicit drive clips mildly.
+    stiffness: 400.0
+    damping: 20.0
     effort_limit: 80.0
     velocity_limit: 4.0
     armature: 0.0
