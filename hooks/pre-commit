@@ -12,10 +12,16 @@ cd "$REPO" || exit 1
 STAGED=$(git diff --cached --name-only --diff-filter=ACMR)
 echo "$STAGED" | grep -qE '^(rl_exp|ablation_harness)/.*\.(py|yaml|yml|json|urdf|usda|usd)$' || exit 0
 
-# Python: prefer the IsaacLab venv (obs-layout gate imports isaaclab), else PATH.
-PY="${RL_ISAAC_ROOT:-E:/IsaacLab}/env_isaaclab/Scripts/python.exe"
+# Python: the venv is recorded in paths.yaml (or RL_PYTHON) and reported by
+# host_paths.py -- a stdlib-only query, so whatever python is on PATH can ask
+# it. The obs-layout gate below needs isaaclab, so it is skipped when the
+# answer is missing and only the plain-python parity gate runs.
+PY=""
+if command -v python >/dev/null 2>&1; then
+  PY=$(python ablation_harness/host_paths.py --python 2>/dev/null)
+fi
 HAVE_VENV=1
-[ -f "$PY" ] || { PY=python; HAVE_VENV=0; }
+{ [ -n "$PY" ] && [ -f "$PY" ]; } || { PY=python; HAVE_VENV=0; }
 
 echo "[pre-commit] check_dr_parity --strict"
 "$PY" rl_exp/tools/verify/check_dr_parity.py --strict || {

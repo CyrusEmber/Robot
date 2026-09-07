@@ -1,17 +1,22 @@
 @echo off
 REM Offline verification suite: no Isaac Sim app needed, seconds to run.
-REM Self-locating (the junction layout that auto-detection relied on died
-REM with G2): resolves the IsaacLab root and its venv python on its own.
-REM RL_ISAAC_ROOT env var overrides the default machine layout (G3 harness
-REM parameterization reuses the same variable name).
+REM Host paths (IsaacLab tree + venv python) are recorded in paths.yaml at the
+REM repo root; ablation_harness\host_paths.py is the single reader and is
+REM stdlib-only, so the PATH python can ask it. RL_PYTHON / RL_ISAAC_ROOT
+REM override for one shell; without them the old env_isaaclab convention under
+REM RL_ISAAC_ROOT is the fallback.
 REM   from repo root: rl_exp\tools\verify\run_offline_checks.bat
-setlocal
+setlocal enabledelayedexpansion
 cd /d %~dp0..\..\..
 
-if not defined RL_ISAAC_ROOT set "RL_ISAAC_ROOT=E:\IsaacLab"
-set "PY=%RL_ISAAC_ROOT%\env_isaaclab\Scripts\python.exe"
+set "PY=%RL_PYTHON%"
+if not defined PY for /f "delims=" %%p in ('python ablation_harness\host_paths.py --python 2^>nul') do set "PY=%%p"
+if not defined PY (
+  if not defined RL_ISAAC_ROOT set "RL_ISAAC_ROOT=E:\IsaacLab"
+  set "PY=!RL_ISAAC_ROOT!\env_isaaclab\Scripts\python.exe"
+)
 if exist "%PY%" goto pyok
-echo WARN: venv python not found at %PY% - falling back to PATH python
+echo WARN: paths.yaml gave no python and %PY% is absent - falling back to PATH python
 set "PY=python"
 :pyok
 

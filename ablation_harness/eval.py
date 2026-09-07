@@ -23,7 +23,6 @@ import datetime
 import importlib.metadata
 import json
 import math
-import os
 import pathlib
 import re
 import subprocess
@@ -65,6 +64,7 @@ from isaaclab.utils.string import string_to_callable  # noqa: E402
 
 import isaaclab_tasks  # noqa: F401, E402  (registers the gym tasks)
 
+import host_paths  # noqa: E402  (machine-local IsaacLab root, see paths.example.yaml)
 import metrics  # noqa: E402
 import suites  # noqa: E402
 from components.command_player import CommandPlayer  # noqa: E402
@@ -89,22 +89,17 @@ def _git_root(path: pathlib.Path | None) -> pathlib.Path | None:
 
 
 def _find_isaac_root() -> pathlib.Path | None:
-    """IsaacLab root: ``RL_ISAAC_ROOT``, else the invocation dir or one of its
-    parents holding ``source/isaaclab``. None when undiscoverable."""
-    cwd = pathlib.Path.cwd()
-    env = os.environ.get("RL_ISAAC_ROOT")
-    for cand in ([pathlib.Path(env)] if env else []) + [cwd, *cwd.parents]:
-        if (cand / "source" / "isaaclab").is_dir():
-            return cand
-    return None
+    """IsaacLab root from ``paths.yaml`` / ``RL_ISAAC_ROOT`` / an upward probe."""
+    return host_paths.isaac_root()
 
 
 # Provenance roots. Path arithmetic cannot name them: the harness used to be
 # reached through an E:\IsaacLab junction (so "harness parent" meant IsaacLab)
 # and now lives in the lizard repo and is invoked by absolute path, where the
 # same arithmetic returns the lizard repo and labels its rev as the IsaacLab
-# one. So: git owns the lizard side, RL_ISAAC_ROOT/the tree owns the IsaacLab
-# side, and an undiscoverable root reports 'unknown' instead of a wrong rev.
+# one. So: git owns the lizard side, host_paths (paths.yaml / RL_ISAAC_ROOT)
+# owns the IsaacLab side, and an undiscoverable root reports 'unknown' instead
+# of a wrong rev.
 _LIZARD_ROOT = _git_root(_HARNESS_DIR)
 _ISAAC_ROOT = _find_isaac_root()
 _ISAAC_GIT_ROOT = _git_root(_ISAAC_ROOT)

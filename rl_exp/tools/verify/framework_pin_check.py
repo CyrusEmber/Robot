@@ -11,14 +11,18 @@ Pinned IsaacLab: 28a37cecdd433c22d9eabd6a5954add9f13a8951 (tag perf-2026-06-24)
 
 Usage: python rl_exp\\tools\\verify\\framework_pin_check.py [--isaac-root PATH] [--strict]
   --strict also fails on SHA mismatch (default: symbol checks fail, SHA warns)
-  Root resolution order: --isaac-root > env RL_ISAAC_ROOT > repo location
-  > venv python location (run_offline_checks.bat sets both env var and venv).
+  Root resolution order: --isaac-root > paths.yaml / env RL_ISAAC_ROOT (read by
+  ablation_harness/host_paths.py) > venv python location.
 """
 import argparse
 import pathlib
 import re
 import subprocess
 import sys
+
+# the one reader of machine-local host paths, shared with the eval harness
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3] / "ablation_harness"))
+import host_paths  # noqa: E402
 
 PINNED_SHA = "28a37cecdd433c22d9eabd6a5954add9f13a8951"
 PINNED_DESC = "perf-2026-06-24 (tested 2026-08-31)"
@@ -83,21 +87,16 @@ RSL_RL_NEEDLES = [
 
 
 def detect_root(cli: str | None) -> pathlib.Path | None:
-    candidates = []
-    if cli:
-        candidates.append(pathlib.Path(cli))
-    if root := __import__("os").environ.get("RL_ISAAC_ROOT"):
-        candidates.append(pathlib.Path(root))
-    # absolute() on purpose: keeps a junction path (E:\IsaacLab\rl_exp\...)
-    # instead of resolving to the real repo, so parents[3] is the IsaacLab root
-    here = pathlib.Path(__file__).absolute()
-    candidates.append(here.parents[3] if len(here.parents) > 3 else None)
-    # venv sibling of the IsaacLab root: <ROOT>/env_isaaclab/Scripts/python.exe
+    """IsaacLab tree: explicit flag, then host_paths, then the venv's own tree."""
+    root = host_paths.isaac_root(override=cli)
+    if root is not None:
+        return root
+    # a venv installed under <ROOT> (<ROOT>/env_isaaclab/Scripts/python.exe) still
+    # names the tree through its own interpreter, so ask that before giving up
     exe = pathlib.Path(sys.executable)
-    candidates.append(exe.parents[2] if len(exe.parents) > 2 else None)
-    for cand in candidates:
-        if cand is not None and (cand / "source" / "isaaclab").is_dir():
-            return cand
+    cand = exe.parents[2] if len(exe.parents) > 2 else None
+    if cand is not None and (cand / "source" / "isaaclab").is_dir():
+        return cand
     return None
 
 
@@ -109,8 +108,8 @@ def main() -> int:
 
     root = detect_root(args.isaac_root)
     if root is None:
-        print("FAIL: IsaacLab root not found (pass --isaac-root; auto-detect only "
-              "works via the IsaacLab junction layout)")
+        print("FAIL: IsaacLab root not found (pass --isaac-root, or record it in "
+              "paths.yaml / RL_ISAAC_ROOT -- see paths.example.yaml)")
         return 1
     print(f"IsaacLab root: {root}")
 

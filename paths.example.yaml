@@ -1,0 +1,15 @@
+# Machine-local host paths for the training + eval stack. Copy to paths.yaml
+# (kept out of git) and fill in this machine, or export RL_ISAAC_ROOT /
+# RL_PYTHON for a single shell. ablation_harness/host_paths.py is the only
+# reader: eval.py, run_ablation.py, hooks/pre-commit and
+# rl_exp/tools/verify/run_offline_checks.bat all ask it instead of hardcoding.
+#
+# isaac_root: the IsaacLab SOURCE tree -- it owns scripts/ (train.py, play.py)
+#             and logs/rsl_rl/ (checkpoints, tfevents) and must contain
+#             source/isaaclab. This is NOT the git repo holding this project.
+# python:     the interpreter that has isaaclab / isaaclab_tasks / rsl_rl
+#             installed, i.e. the IsaacLab venv. Training, eval and the offline
+#             gates all run under it; there is deliberately no PATH fallback.
+
+isaac_root: E:/IsaacLab
+python: E:/IsaacLab/env_isaaclab/Scripts/python.exe

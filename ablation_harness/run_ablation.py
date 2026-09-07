@@ -11,14 +11,15 @@ skipped when its eval.json already exists -- so an interrupted sweep simply
 re-runs and continues. Nothing here ever edits task source code: component
 variants enter via registered task ids or hydra override strings.
 
-Usage (from the IsaacLab root, with the VENV python):
+Usage (from the project repo root; the only machine fact left to name is the
+IsaacLab tree -- ``paths.yaml`` or ``RL_ISAAC_ROOT``, see paths.example.yaml):
     python ablation_harness\\run_ablation.py --spec ablation_harness\\specs\\<name>.yaml
     python ablation_harness\\run_ablation.py --summarize --protocol locomotion_eval_v1
     python ablation_harness\\run_ablation.py --by-terrain --group v1
 
-The train/eval subprocesses inherit this interpreter by default; point
-``--python`` at the venv executable if you launch the scheduler with another
-interpreter.
+Train/eval subprocesses run under the interpreter recorded in ``paths.yaml``
+(``python:``); ``--python`` overrides it, and with no paths.yaml they inherit
+this interpreter as before.
 """
 
 from __future__ import annotations
@@ -31,12 +32,30 @@ import re
 import subprocess
 import sys
 
+import host_paths
+
 _HARNESS_DIR = pathlib.Path(__file__).absolute().parent
-# deliberately NOT resolve(): on the original machine the harness is reached
-# through E:\IsaacLab\ablation_harness (a junction into the git repo) and the
-# IsaacLab root is the parent of THAT path -- resolve() would follow the
-# junction and land inside the repo instead
-_ISAAC_ROOT = _HARNESS_DIR.parent
+# The IsaacLab tree used to be "_HARNESS_DIR.parent", which only held while the
+# harness was reached through the E:\IsaacLab junction; invoked by absolute path
+# from the project repo it returns the repo itself, and train/eval would be
+# launched with the wrong cwd against an empty logs glob. host_paths owns the
+# question now (paths.yaml / RL_ISAAC_ROOT / upward probe).
+_ISAAC_ROOT = host_paths.isaac_root()
+
+
+def _isaac_root() -> pathlib.Path:
+    """IsaacLab tree, or a hard stop -- the scheduler has no usable fallback.
+
+    ``--summarize``/``--by-terrain`` never call this: they read results, which
+    live next to the harness, and stay answerable on a machine with no IsaacLab
+    install at all.
+    """
+    if _ISAAC_ROOT is None:
+        raise SystemExit(
+            "IsaacLab tree not found: copy paths.example.yaml to paths.yaml (or set "
+            "RL_ISAAC_ROOT) so training and eval get a cwd with scripts/ and logs/."
+        )
+    return _ISAAC_ROOT
 
 
 def _log_dir_for_tag(tag: str) -> pathlib.Path | None:
@@ -46,7 +65,7 @@ def _log_dir_for_tag(tag: str) -> pathlib.Path | None:
     suffix match cannot distinguish them.
     """
     candidates = [
-        p for p in _ISAAC_ROOT.glob("logs/rsl_rl/*/*")
+        p for p in _isaac_root().glob("logs/rsl_rl/*/*")
         if p.is_dir() and p.name.endswith(f"_{tag}")
     ]
     if not candidates:
@@ -226,10 +245,12 @@ def main():
                         help="Restrict --summarize/--by-terrain to one campaign folder under the protocol.")
     parser.add_argument("--device", type=str, default=None)
     parser.add_argument(
-        "--python", type=str, default=sys.executable,
-        help="Python executable for train/eval subprocesses (default: this interpreter).",
+        "--python", type=str, default=None,
+        help="Python executable for train/eval subprocesses (default: paths.yaml "
+             "'python:', else this interpreter).",
     )
     args_cli = parser.parse_args()
+    args_cli.python = args_cli.python or host_paths.venv_python(_ISAAC_ROOT) or sys.executable
     if args_cli.summarize:
         _summarize(args_cli)
         return

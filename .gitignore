@@ -10,6 +10,10 @@ _tmp_*
 # ponytail upstream clone (update source only, installed artifacts are committed)
 /ponytail/
 
+# machine-local host paths (isaac_root + venv python); paths.example.yaml is the
+# committed template, read by ablation_harness/host_paths.py
+/paths.yaml
+
 # derived viz -- rebuildable in seconds from committed data (tb_scalars.csv +
 # eval.json + summary.csv) via plot_tb.py / plot_eval.py, so never a record
 rl_exp/versions/**/plots/
