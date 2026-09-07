@@ -64,6 +64,11 @@ cmd = env.unwrapped.command_manager.get_term("base_velocity").vel_command_b
 assert (cmd[:, 0] >= -1.0e-6).all(), f"forward-only commands violated: {cmd[:, 0]}"
 print("COMMANDS forward-only OK (sample vx: %s)" % (cmd[:, 0].tolist(),))
 
+# v6.1: the whole spine term (rear + neck + tail) unlocks at the yaml spine_scale
+spine_scale = float(env.unwrapped.action_manager.get_term("joint_pos_spine")._scale)
+assert spine_scale == 0.25, f"v6 spine action scale {spine_scale} != yaml 0.25"
+print("SPINE_UNLOCKED scale=%.2f OK" % spine_scale)
+
 with torch.inference_mode():
     for _ in range(10):
         obs, rew, term, trunc, info = env.step(torch.zeros(2, env.unwrapped.action_manager.total_action_dim))

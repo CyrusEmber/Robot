@@ -1171,7 +1171,7 @@ class LizardRoughTeacherEnvCfg_V5_PLAY(LizardRoughTeacherEnvCfg_V5):
 
 @configclass
 class LizardRoughTeacherEnvCfg_V6(LizardRoughTeacherEnvCfg_V5):
-    """v6 recipe: asset axis correction -- head +Y -> +X, reward/obs unchanged.
+    """v6 recipe: asset axis correction + spine/tail unlock, reward/obs unchanged.
 
     The v5 first run walked sideways (crab-walk): the lizard URDF's long axis
     was Y (neck at +y, legs sprawling along x) while the velocity task pays
@@ -1180,11 +1180,24 @@ class LizardRoughTeacherEnvCfg_V6(LizardRoughTeacherEnvCfg_V5):
     v6 regenerates the shared asset with the body rigidly rotated -90 deg
     about Z (blend SSOT via blender/rotate_rig.py; generate_urdf AXIS_MAP
     rotated with it; locks refreshed tree-wide in the same commit). The
-    version yaml is byte-identical to v5: pure asset retirement, no task-spec
-    change (versioning.mdc §A -- trained v5 is immutable, asset fix opens v6).
+    version yaml stays byte-identical to v5 (versioning.mdc §A -- trained v5
+    is immutable, asset fix opens v6).
+
+    v6.1 action-space change (user decision 2026-09-07): the whole spine term
+    (rear + neck + tail, 10 joints) unlocks at the yaml ``spine_scale`` --
+    v1-v5 hardcoded 0.0 left the spine/tail policy-frozen and passively
+    wobbling under PD 150/10. Obs groups (90/208/83) and the 26-dim action
+    layout are unchanged; only the spine channels become live.
     """
 
     params_version = "v6"
+
+    def __post_init__(self):
+        super().__post_init__()
+        # spine_scale comes from THIS version's yaml (0.25), so v1-v5 keep the
+        # class-default 0.0 and their recipes rebuild unchanged
+        params = _load_params(self.params_version)
+        self.actions.joint_pos_spine.scale = params["action"]["spine_scale"]
 
 
 @configclass
