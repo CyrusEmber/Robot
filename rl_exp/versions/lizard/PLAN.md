@@ -33,12 +33,12 @@
 ## 2. 总路线（Miki 两阶段 + EP 工程）
 
 ```
-Phase 1  Teacher: 特权 actor PPO（当前 = v5 解冻修改中；版本态速览见 FAMILY 当前状态）
+Phase 1  Teacher: 特权 actor PPO（当前 = v6 提案待训——资产前向轴转正；版本态速览见 FAMILY 当前状态）
 Phase 2  Student: 蒸馏（belief encoder + 加噪扫描 + 重建损失）
 Phase 3  部署: student → ONNX → UE
 ```
 
-当前训练入口：`--task Lizard-Rough-v5`（回放 `Lizard-Rough-Play-v5`）；
+当前训练入口：`--task Lizard-Rough-v6`（回放 `Lizard-Rough-Play-v6`）；
 验证链与摆位见仓根 README。
 
 **并行支线**：parkour 支线（Parkour in the Wild 范式：跑/爬/跳多专家 → DAgger

@@ -398,6 +398,16 @@ TEACHER_PRIVILEGED_SPEC: dict[str, set[str]] = {
         "thigh_shank_contacts",
         "base_external_wrench",
     },
+    # v6 keeps the v2/v5 privileged-term set (priv 83); its only recipe
+    # difference is the shared asset's axis correction (head +Y -> +X,
+    # wired outside the code: blend/URDF/USD regeneration), spec unchanged
+    "v6": {
+        "foot_contact_forces",
+        "foot_contact_normals",
+        "foot_friction",
+        "thigh_shank_contacts",
+        "base_external_wrench",
+    },
 }
 
 
@@ -1156,4 +1166,36 @@ class LizardRoughTeacherEnvCfg_V5_PLAY(LizardRoughTeacherEnvCfg_V5):
 
         # v5.3: SIR would reassign spawn origins per episode based on replay
         # outcomes -- deterministic eval must not roam
+        self.curriculum.terrain_levels = None
+
+
+@configclass
+class LizardRoughTeacherEnvCfg_V6(LizardRoughTeacherEnvCfg_V5):
+    """v6 recipe: asset axis correction -- head +Y -> +X, reward/obs unchanged.
+
+    The v5 first run walked sideways (crab-walk): the lizard URDF's long axis
+    was Y (neck at +y, legs sprawling along x) while the velocity task pays
+    for motion along base +X -- so the policy strafed along its own right
+    side, exactly as rewarded (trainLinVelXY tracked it as healthy progress).
+    v6 regenerates the shared asset with the body rigidly rotated -90 deg
+    about Z (blend SSOT via blender/rotate_rig.py; generate_urdf AXIS_MAP
+    rotated with it; locks refreshed tree-wide in the same commit). The
+    version yaml is byte-identical to v5: pure asset retirement, no task-spec
+    change (versioning.mdc §A -- trained v5 is immutable, asset fix opens v6).
+    """
+
+    params_version = "v6"
+
+
+@configclass
+class LizardRoughTeacherEnvCfg_V6_PLAY(LizardRoughTeacherEnvCfg_V6):
+    """v6 play variant: same as v5 PLAY (no randomization, no curriculum)."""
+
+    def __post_init__(self):
+        super().__post_init__()
+
+        # deterministic evaluation: shared PLAY wiring (single source, see play_utils)
+        apply_play_wiring(self)
+
+        # SIR reassigns spawn origins per episode -- deterministic eval must not roam
         self.curriculum.terrain_levels = None

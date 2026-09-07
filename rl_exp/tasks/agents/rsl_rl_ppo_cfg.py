@@ -171,6 +171,17 @@ class LizardTeacherV5PPORunnerCfg(LizardTeacherV4PPORunnerCfg):
 
 
 @configclass
+class LizardTeacherV6PPORunnerCfg(LizardTeacherV5PPORunnerCfg):
+    """Runner cfg for `Lizard-Rough-v6` (asset axis fix, obs 381).
+
+    Same recipe as v5 (paper S1 hyperparams, three-encoder model); only the
+    log dir changes -- one version, one dir (versioning.mdc §A).
+    """
+
+    experiment_name = "lizard_rough_teacher_v6"
+
+
+@configclass
 class LizardParkourClimbPPORunnerCfg(LizardFlatPPORunnerCfg):
     """Runner cfg for `Lizard-Parkour-Climb-v1` (position-task stairs expert).
 
