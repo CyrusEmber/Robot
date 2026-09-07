@@ -78,6 +78,20 @@
 - 验收: 起步 sanity 后直训；反划脚 KPI（feet_slide 非零负 / success_rate
   脱离 0.47 / terrain_levels >2 上行 / foot_clearance 负值激活 / GUI 肉眼
   身体前进）见 PLAN.md。
+- **问题所在（2026-09-07 定位，横行根因）**：资产坐标系错配，非奖励/训练问题。
+  - 旧 URDF 长轴 = **Y**：neck1_yaw_joint origin `y=+1.0696`（头 +y）、
+    tail_yaw_joint `y=-1.2613`（尾 -y）、四腿 hip 左右沿 **x** 分布
+    （lf x=-0.32 / rf x=+0.34）。而任务全链按 IsaacLab 惯例给 **base +X** 付钱：
+    `track_lin_vel_xy_lin` 是 yaw 对齐系（≈base 系）速度投影
+    （`teacher_mdp.py:452-456`），命令 `lin_vel_x (0,3)` 也在 base-x。
+    → policy 被付钱沿自身**右侧**横移 0–3 m/s，且按 spec 这就是最优解——
+    训练曲线全程"健康"（跟踪核爬升），横行不是症状而是 spec 的忠实执行。
+  - **波及面**：v1 的 0.635 同样是横行成绩（base+x = 旧资产的侧面；度量
+    从不引用视觉朝向，数字本身真实有效）；v3 划脚诊断不受影响（r_fc/r_slip/
+    exp 核的归因全部 frame 无关，且 v5 同轴下位移确被教会 = 反证有效）。
+  - **后果**：v1/v3/v5 旧任务 id 原地复现已退役（工作树已是新资产，跑旧 id
+    = 静默错配，闸门不报警）；复现走 `git checkout <tag>` 整树。旧 checkpoint
+    只在旧资产上有意义。转正重训走 v6。
 - 结果回填: 首跑（~2000+ iters，seed 42，2026-09-07）：**GUI 回放横行**
   （crab-walk）→ 判废。根因**不在本奖励包**：资产 URDF 长轴 = Y
   （neck +y/tail -y/腿沿 x）而任务给 base +X 付钱——policy 按最优解沿自身

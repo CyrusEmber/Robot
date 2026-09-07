@@ -68,12 +68,19 @@ v4/v5 spec 不变。
 | 版本 | 日期 | 摘要 | 教训 | 文档 |
 |---|---|---|---|---|
 | v0 | 2026-08-28 | 首版冻结：72kg、DR 全套、基线奖励（回滚态）、teacher 特权 obs。未训练即被 v1 取代，存档作全量 DR 对照 | 未训即被取代也要存档——v1 收窄后"有得比"全靠这份对照 | [PLAN](v0/PLAN.md) · [NOTES](v0/NOTES.md) |
-| v1 | 2026-08-31 | teacher 首跑：v0 仅 DR 段全部收窄（无一归零）。已训练 14000 iters 并出评测分，任务 id 常驻可复现 | 一次只动一个变量：特权 obs 单独救活趴窝（0.254→0.635），激励逃生舱假设被对照否定 | [PLAN](v1/PLAN.md) · [NOTES](v1/NOTES.md) |
+| v1 | 2026-08-31 | teacher 首跑：v0 仅 DR 段全部收窄（无一归零）。已训练 14000 iters 并出评测分（0.635 = base+x 位移达标率——Y 轴资产上即**横行成绩**，见 v5\NOTES 问题所在）。**原地复现已退役**（v6 资产换代后跑 `Lizard-Rough-v1` = 新资产静默错配，复现走 git checkout tag；见本节末退休注记） | 一次只动一个变量：特权 obs 单独救活趴窝（0.254→0.635），激励逃生舱假设被对照否定 | [PLAN](v1/PLAN.md) · [NOTES](v1/NOTES.md) |
 | v2 | 2026-08-31 | 特权 obs 论文对齐补全（+forces/normals/friction/thigh-shank/wrench 共 42 维，266→308）；yaml 与 v1 相同 | 纯代码级 obs 变更可不升 yaml——契约差异写在代码 spec 里足够 | [PLAN](v2/PLAN.md) · [NOTES](v2/NOTES.md) |
-| v3 | 2026-09-01 | teacher 论文对齐版（obs 三组 90/208/83=381：脚环 extero + 三编码器；tilt 终止 + 防拖 r_fc + c_k 课程 + DR reset 化）。首跑完成 2026-09-01（2048 env × 4999 iter，全程等效 stage 0），结果回填见 NOTES | 结构重排先过装配 gate：gate bug 让首跑全程等效 stage 0，代价一整跑 | [PLAN](v3/PLAN.md) · [NOTES](v3/NOTES.md) |
+| v3 | 2026-09-01 | teacher 论文对齐版（obs 三组 90/208/83=381：脚环 extero + 三编码器；tilt 终止 + 防拖 r_fc + c_k 课程 + DR reset 化）。首跑完成 2026-09-01（2048 env × 4999 iter，全程等效 stage 0），结果回填见 NOTES。**原地复现已退役**（同 v1；划脚诊断本身 frame 无关，结论存活） | 结构重排先过装配 gate：gate bug 让首跑全程等效 stage 0，代价一整跑 | [PLAN](v3/PLAN.md) · [NOTES](v3/NOTES.md) |
 | v4 | 2026-09-02 | 碎石地重定标：脚掌实测 0.46×0.51 m（v3.6 误用骨长 0.131），random_rough 间距 0.5 m ≥ 掌宽 + 噪声 (0.10,0.35) step 0.02；v3.6.1 collision stack 补丁回 stock 2**26。待训练（启动前先看地形） | 定标用实测碰撞 bbox 不用骨长（0.131 勘误）——数字必须可溯源到测量 | [PLAN](v4/PLAN.md) · [NOTES](v4/NOTES.md) |
-| v5 | 2026-09-03 | 反划脚奖励包：r_fc 符号 + r_slip + 肚皮受力罚 + EP 线性跟踪；命令 (0,3) 无速度课程；obs 同 v3。首跑（~2000+ iters，2026-09-07）**横行判废**：资产长轴 Y vs 任务 +X 前向错配——奖励包本身教会了位移，方向沿身体右侧 | **资产坐标系列进任务前先对表**：URDF 长轴方向必须在开训前对上命令系 +X（几何备忘写了"长轴 = Y"没人连到任务约定）；位移首次有收益的版本才会暴露轴错配 | [PLAN](v5/PLAN.md) · [NOTES](v5/NOTES.md) |
+| v5 | 2026-09-03 | 反划脚奖励包：r_fc 符号 + r_slip + 肚皮受力罚 + EP 线性跟踪；命令 (0,3) 无速度课程；obs 同 v3。首跑（~2000+ iters，2026-09-07）**横行判废**：资产长轴 Y vs 任务 +X 前向错配——奖励包本身教会了位移，方向沿身体右侧。**原地复现已退役**（同 v1） | **资产坐标系列进任务前先对表**：URDF 长轴方向必须在开训前对上命令系 +X（几何备忘写了"长轴 = Y"没人连到任务约定）；位移首次有收益的版本才会暴露轴错配 | [PLAN](v5/PLAN.md) · [NOTES](v5/NOTES.md) |
 | v6 | 2026-09-07 | 资产前向轴转正（blend R_z(-90°) 头 +Y→+X + AXIS_MAP 轴同步）；yaml/reward/obs 逐字同 v5，纯资产换代（全版本锁同 commit 刷新）。提案待训 | 已训版本资产换代 = 开 vN+1 不走 vN.M 修订（versioning §A）；烘焙改对象变换——transform_apply 过 bone-roll 有浮点漂移 | [PLAN](v6/PLAN.md) · [NOTES](v6/NOTES.md) |
+
+> **退休注记（2026-09-07，资产换代后果）**：v1/v3/v5 的**原地复现已退役**——
+> v6 资产换代后，工作树跑旧任务 id（`Lizard-Rough-v1/v3/v5`）加载的是**新资产**
+> （yaml 只钉 usd 路径不钉内容），旧 checkpoint 的 obs 语义错配 90°，闸门不报警
+> （锁已同 commit 刷新为现资产 hash）。旧数据复现**必须** `git checkout <tag>`
+> 整树（资产 + 配方 + 锁自洽）；历史数据本身有效（度量从不引用视觉朝向），
+> 旧 checkpoint 只在旧资产上有意义。
 
 ## 机体几何备忘（生物比例对账，2026-09-01）
 
