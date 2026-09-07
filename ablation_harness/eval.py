@@ -23,6 +23,7 @@ import datetime
 import importlib.metadata
 import json
 import math
+import os
 import pathlib
 import re
 import subprocess
@@ -71,14 +72,42 @@ from components.dr_controller import apply_eval_mode  # noqa: E402
 from components import recovery as recovery_mod  # noqa: E402
 
 _HARNESS_DIR = pathlib.Path(__file__).resolve().parent
-# provenance roots: the lizard git repo (junction-resolved) vs the IsaacLab
-# root (invocation path, junction NOT resolved). They differ only on the
-# original-machine layout; on a fresh tree the harness is copied into the
-# IsaacLab root and there is no separate lizard repo to point at.
-_REPO_ROOT = _HARNESS_DIR.parent
-_ISAAC_ROOT = pathlib.Path(__file__).absolute().parents[1]
-if _REPO_ROOT == _ISAAC_ROOT or not (_REPO_ROOT / "rl_exp").is_dir():
-    _REPO_ROOT = None
+
+
+def _git_root(path: pathlib.Path | None) -> pathlib.Path | None:
+    """Top level of the git repo containing ``path`` (None if absent/not a repo)."""
+    if path is None:
+        return None
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(path), "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True, timeout=10, check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return pathlib.Path(out.stdout.strip()) if out.returncode == 0 else None
+
+
+def _find_isaac_root() -> pathlib.Path | None:
+    """IsaacLab root: ``RL_ISAAC_ROOT``, else the invocation dir or one of its
+    parents holding ``source/isaaclab``. None when undiscoverable."""
+    cwd = pathlib.Path.cwd()
+    env = os.environ.get("RL_ISAAC_ROOT")
+    for cand in ([pathlib.Path(env)] if env else []) + [cwd, *cwd.parents]:
+        if (cand / "source" / "isaaclab").is_dir():
+            return cand
+    return None
+
+
+# Provenance roots. Path arithmetic cannot name them: the harness used to be
+# reached through an E:\IsaacLab junction (so "harness parent" meant IsaacLab)
+# and now lives in the lizard repo and is invoked by absolute path, where the
+# same arithmetic returns the lizard repo and labels its rev as the IsaacLab
+# one. So: git owns the lizard side, RL_ISAAC_ROOT/the tree owns the IsaacLab
+# side, and an undiscoverable root reports 'unknown' instead of a wrong rev.
+_LIZARD_ROOT = _git_root(_HARNESS_DIR)
+_ISAAC_ROOT = _find_isaac_root()
+_ISAAC_GIT_ROOT = _git_root(_ISAAC_ROOT)
 _SUITE_REGISTRY = {
     "lizard_suite_v1": (suites.LIZARD_SUITE_V1_NAMES, suites.lizard_suite_v1),
 }
@@ -91,8 +120,10 @@ _SUMMARY_COLUMNS = [
 ]
 
 
-def _git_rev(repo: pathlib.Path) -> str:
+def _git_rev(repo: pathlib.Path | None) -> str:
     """Short commit id of the git repo at ``repo`` ('unknown' if not a repo)."""
+    if repo is None:
+        return "unknown"
     try:
         out = subprocess.run(
             ["git", "-C", str(repo), "rev-parse", "--short", "HEAD"],
@@ -302,7 +333,7 @@ def _analyze(rollout: dict, protocol: dict, tilt_cos_min: float, clearance_min: 
         "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
         # code provenance: which lizard git state and which IsaacLab fork
         # state produced these numbers (results without it are unattributable)
-        "git_rev_lizard": _git_rev(_REPO_ROOT) if _REPO_ROOT else "unknown",
+        "git_rev_lizard": _git_rev(_LIZARD_ROOT) if _LIZARD_ROOT != _ISAAC_GIT_ROOT else "unknown",
         "git_rev_isaaclab": _git_rev(_ISAAC_ROOT),
         "global": {
             "success_rate": metrics.summarize_segment(succ.float(), valid),
