@@ -12,13 +12,15 @@ TOTAL_MASS = 72.0
 MICRO_MASS = 0.05
 SHELL_FACTOR = 1.4
 
+# world-frame functional axes, valid AFTER the v5.6 -90deg Z rig rotation
+# (head +y -> +x): old axis -> R_z(-90) @ old axis
 AXIS_MAP = {
     "yaw": ("0 0 1", -0.6, 0.6, 80, 4),
-    "pitch": ("1 0 0", -0.5, 0.5, 80, 4),
-    "haa": ("0 1 0", -0.6, 0.6, 120, 8),
+    "pitch": ("0 -1 0", -0.5, 0.5, 80, 4),
+    "haa": ("1 0 0", -0.6, 0.6, 120, 8),
     "hfe": ("0 0 1", -1.2, 1.2, 150, 8),
-    "kfe": ("0 1 0", -1.6, 1.6, 150, 8),
-    "foot": ("1 0 0", -0.5, 0.5, 30, 6),
+    "kfe": ("1 0 0", -1.6, 1.6, 150, 8),
+    "foot": ("0 -1 0", -0.5, 0.5, 30, 6),
 }
 
 BALL_MESHES = {
@@ -33,7 +35,9 @@ depsgraph = bpy.context.evaluated_depsgraph_get()
 scene = bpy.context.scene
 
 arm = next(o for o in scene.objects if o.type == "ARMATURE")
-bones = {b.name: {"head": b.head_local.copy(), "parent": b.parent.name if b.parent else None} for b in arm.data.bones}
+# head in WORLD space (armature may carry the v5.6 rotation as object
+# transform; meshes are already read via matrix_world -- keep one frame)
+bones = {b.name: {"head": (arm.matrix_world @ b.head_local).copy(), "parent": b.parent.name if b.parent else None} for b in arm.data.bones}
 
 link_meshes = {}
 for obj in scene.objects:

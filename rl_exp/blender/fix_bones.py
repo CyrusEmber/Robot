@@ -22,6 +22,7 @@ meshes = {o.name: o for o in scene.objects if o.type == "MESH"}
 world_cache = {o.name: o.matrix_world.copy() for o in scene.objects if o.type == "MESH"}
 
 arm = next(o for o in scene.objects if o.type == "ARMATURE")
+inv_arm = arm.matrix_world.inverted()  # v5.6: armature carries a -90deg Z object rotation
 bpy.context.view_layer.objects.active = arm
 bpy.ops.object.mode_set(mode="EDIT")
 eb = arm.data.edit_bones
@@ -30,14 +31,15 @@ moved = 0
 for leg, joints in LEG_MAP.items():
     for joint, (head_mesh, tail_mesh) in joints.items():
         bone = eb["%s_%s" % (leg, joint)]
-        head = mathutils.Vector(meshes[head_mesh].matrix_world.translation)
+        head_w = mathutils.Vector(meshes[head_mesh].matrix_world.translation)
         if tail_mesh is not None:
-            tail = mathutils.Vector(meshes[tail_mesh].matrix_world.translation)
+            tail_w = mathutils.Vector(meshes[tail_mesh].matrix_world.translation)
         else:
-            outward = 0.1 if head.x > 0 else -0.1
-            tail = head + mathutils.Vector((outward, 0.0, 0.0))
-        bone.head = head
-        bone.tail = tail
+            # legs sprawl along world Y after the v5.6 rotation (was X)
+            outward = 0.1 if head_w.y > 0 else -0.1
+            tail_w = head_w + mathutils.Vector((0.0, outward, 0.0))
+        bone.head = inv_arm @ head_w
+        bone.tail = inv_arm @ tail_w
         moved += 1
 
 bpy.ops.object.mode_set(mode="OBJECT")
