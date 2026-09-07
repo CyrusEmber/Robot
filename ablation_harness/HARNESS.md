@@ -10,8 +10,8 @@
 ## 当前状态
 
 - 协议版本：**locomotion_eval_v1**（`protocols/locomotion_eval_v1.yaml` 冻结；`results/` 按协议目录组织）
-- 代码基线：v1.4.1（v1.4 报告 + 训练侧新增 iteration↔墙上时间曲线；可视化产物**不入库**，PNG 默认 200 DPI）
-- 部署形态：仓根独立目录 + `E:\IsaacLab\ablation_harness` junction（挂账 1 完成后删）
+- 代码基线：v1.5.1（v1.4 报告 + 训练侧 iteration↔墙上时间曲线 + v1.5 协议 v2 迁移规则；可视化产物**不入库**，PNG 默认 200 DPI）
+- 部署形态：仓根独立目录，全部自定位。机器本地事实（IsaacLab 树 + venv 解释器）登记在仓根 `paths.yaml`（模板 `paths.example.yaml`），唯一读者 `host_paths.py`；`E:\IsaacLab\ablation_harness` junction 已废，原机可 `rmdir` 摘链接
 
 ## 版本历史
 
@@ -29,7 +29,7 @@
 
 | # | 事项 | 优先级 |
 |---|---|---|
-| 1 | G3 剩余：`eval.py:69-77`（"故意不 resolve" junction hack）/ `run_ablation.py:36` / `_log_dir_for_tag` glob 改读 `RL_ISAAC_ROOT`（缺省向上探测 `source/isaaclab` + `logs`）→ 删 `E:\IsaacLab\ablation_harness` junction，评测台完全脱离 IsaacLab 树 | 🟡 闸门依赖已解，纯收尾 |
+| 1 | 暂无。原 #1（`eval.py`/`run_ablation.py`/`_log_dir_for_tag` 的 junction hack 参数化 → 评测台完全脱离 IsaacLab 树）已由 v1.5.1 落地：机器本地路径改由仓根 `paths.yaml` 登记、`host_paths.py` 单点读取 | — |
 
 ## 升级触发（防"永远不升"）
 
@@ -57,3 +57,4 @@ harness 代码高频变更 / 多机器人共用 / 评测协议 v2 出现时 → 
 | 2026-09-02 | v1.4.1 | 训练侧第 5 图：iteration ↔ 墙上时间（`Train/wall_time_h`，从 `/time` tag 的 step 轴派生）；报告升到 7 图，v1 = 25.735 h / 14k 迭代，其中 it=11438 单次停顿 7.2 h |
 | 2026-09-02 | v1.4.2 | eval-harness SKILL.md 瘦身（记录性合入）：状态节史实并入本档（新增 v0 史前行）；指标表去协议数值（协议 yaml 为唯一真源）；可视化注释压缩——skill 只留方法与契约 |
 | 2026-09-03 | v1.5 | 预立协议 v2 迁移规则：老跑分不迁移、跨协议禁止直接对比、新协议新起 campaign 目录 | 用户拍板：2026-09-03（规范整改临时 plan #8） |
+| 2026-09-07 | v1.5.1 | **主机路径参数化（挂账 #1 收账）**：新增仓根 `paths.yaml`（模板 `paths.example.yaml`，机器本地不入库）+ `host_paths.py`（纯 stdlib、不 import `rl_exp`、**无 PATH 兜底**，宁缺不猜）。六处改问同一解析器：`eval.py` IsaacLab 根、`run_ablation.py` 的 `_ISAAC_ROOT`（连带 `_log_dir_for_tag` 的 `logs/rsl_rl` glob 与 train/eval 的 cwd；找不到直接 SystemExit，`--summarize`/`--by-terrain` 不依赖故仍可裸跑）、`--python` 缺省、`run_offline_checks.bat` 引导、`hooks\pre-commit` 的 `PY`、`framework_pin_check.detect_root`。**provenance 同批修**：lizard 根改问 `git rev-parse --show-toplevel`，IsaacLab 根改问登记路径——旧代码把"调用路径的爹"当配置，junction 布局一死就把自己仓的 rev 记成 IsaacLab 的（表现为 `git_rev_lizard=unknown` + `git_rev_isaaclab` 串位），v5 campaign 各行已按新逻辑重跑纠正 | 用户："不同环境会找不到，要注册 isaac lab 与 env 的位置"；v5 评测实测踩到 rev 串位与 `_ISAAC_ROOT` 落错树 |

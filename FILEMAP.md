@@ -9,9 +9,10 @@
 
 | 文件 | 作用 |
 |---|---|
-| `README.md` | 仓说明：内容物 + 自装 Isaac Lab 要求 + 原机 junction 布局说明 |
+| `README.md` | 仓说明：内容物 + 自装 Isaac Lab 要求 + 新机器摆位五步（含 `paths.yaml` 主机路径登记） |
 | `AGENTS.md` | agent 工作守则（对抗性审查四问 / 先计划后动手 / 沟通语气）+ IsaacLab 官方守则（API 命名/工具链/commit 规范）；与 `ponytail.mdc` 重复的条目刻意不写 |
 | `FILEMAP.md` | 本文件 |
+| `paths.example.yaml` | **主机路径模板**：`isaac_root`（IsaacLab 源码树，持 `scripts/` 与 `logs/`）+ `python`（装了 isaaclab/rsl_rl 的 venv 解释器）。每台机器 copy 成 `paths.yaml`（已进 `.gitignore`，机器本地事实不入库），由 `ablation_harness\host_paths.py` 单点读取。优先级：命令行 > `RL_ISAAC_ROOT`/`RL_PYTHON` > `paths.yaml` > 向上探测 |
 
 ## rl_exp\ —— 任务包（自包含核心）
 
@@ -123,6 +124,7 @@
 
 | 文件 | 作用 |
 |---|---|
+| `host_paths.py` | **机器本地路径的唯一读者**：解析 `isaac_root` / `python`，供 `eval.py`、`run_ablation.py`、`run_offline_checks.bat`、`hooks\pre-commit`、`framework_pin_check.py` 共用（此前五处各自硬推，junction 布局一死就全错位）。纯 stdlib、不 import `rl_exp`——被裸解释器调问"venv 在哪"时也得能答；**无 PATH 兜底**，宁缺不猜。`--root/--python/--check` 给 shell 用，取不到 exit 1 |
 | `eval.py` | 统一评测 runner：task + checkpoint + 协议 + 模式 → eval.json |
 | `run_ablation.py` | 消融调度器：spec yaml → 串行 train+eval → 汇总表，断点续跑；`--by-terrain` 出逐地形长表+pivot |
 | `plot_eval.py` | 评测可视化（读组目录 eval.json，不起仿真）：`--report <版本目录>` → 单文件 HTML 汇总报告（训练曲线+评测图+summary 表+rev 溯源，**默认选它**）；`--out_dir` → 散图 PNG（只需贴图进工单时用）。两者均不入库 |

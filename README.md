@@ -61,20 +61,27 @@ copy <REPO>\rl_exp\fork_patches\config_lizard___init__.py ^
 git -C <ROOT> apply <REPO>\rl_exp\fork_patches\play_keyboard.patch
 ```
 
-**4. harness 摆位（过渡期）**：`ablation_harness` 的 `_ISAAC_ROOT` 仍按
-"从 `<ROOT>` 调用"推导——原机保留 junction：
+**4. 主机路径登记**（`<ROOT>` 与 venv python 的唯一真源。评测台
+`eval.py`/`run_ablation.py`、离线闸门 `run_offline_checks.bat`、`hooks\pre-commit`
+都只问 `ablation_harness\host_paths.py`，不再各自从调用路径猜——旧的
+`<ROOT>\ablation_harness` junction 摆位因此作废）：
 
 ```bat
-mklink /J <ROOT>\ablation_harness <REPO>\ablation_harness
+copy <REPO>\paths.example.yaml <REPO>\paths.yaml
+:: 编辑 paths.yaml：isaac_root = <ROOT>，python = <ROOT> 的 venv 解释器
 ```
 
-（Phase G3 `_ISAAC_ROOT` 参数化落地后此步取消，见
-`rl_exp\versions\lizard\v3\PLAN.md` §7.5。）
+`paths.yaml` 是机器本地文件，不入库。解析优先级：命令行 > 环境变量
+`RL_ISAAC_ROOT`/`RL_PYTHON` > `paths.yaml` > 向上探测 `source/isaaclab`。原机若还
+挂着 junction，`rmdir <ROOT>\ablation_harness` 摘链接即可（**只准 rmdir**，递归
+del 会穿透删真身）。
 
 **5. 验证链**（全部通过 = 摆位成功）：
 
 ```bat
-cd /d <ROOT>
+cd /d <REPO>
+:: 主机路径是否登记成功（打印 isaac_root / python / 配置来源）
+python ablation_harness\host_paths.py --check
 :: 离线闸门（秒级，不起仿真）：框架 pin / DR parity / recovery 等价 / 课程单测
 rl_exp\tools\verify\run_offline_checks.bat
 :: 预期: OBS_SHAPE (2, 308) / ACTION_DIM 26 / MASS_SUM ≈ 72

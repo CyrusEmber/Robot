@@ -1,7 +1,7 @@
 ---
 name: isaaclab-eval-harness
 description: >
-  在 E:\IsaacLab 中做 locomotion 消融实验与统一评测（ablation harness）。
+  在机器人仓（<REPO>，本机 E:\Robot）的 ablation_harness 中做 locomotion 消融实验与统一评测。
   当用户提到"ablation/消融"、"对比实验"、"统一 eval"、"评测/评估/跑分 policy"、
   "eval protocol/评测协议"、"Locomotion-Eval"、"固定 seed 评估"、"checkpoint 评估"、
   "success rate / fall rate / velocity tracking / energy / terrain completion"、
@@ -14,7 +14,7 @@ description: >
 
 # IsaacLab Eval Harness（消融与统一评测）
 
-评测/消融代码在 `E:\IsaacLab\ablation_harness\`。本 skill 是设计契约与使用手册；
+评测/消融代码在 `<REPO>\ablation_harness\`（真身就在本仓，IsaacLab 树内不放副本也不挂 junction）。机器本地路径——IsaacLab 源码树与 venv 解释器——登记在仓根 `paths.yaml`（模板 `paths.example.yaml`），唯一读者 `ablation_harness\host_paths.py`；换机器只改这一个文件，自检 `python ablation_harness\host_paths.py --check`。本 skill 是设计契约与使用手册；
 **协议唯一真源是 `ablation_harness\protocols\locomotion_eval_v1.yaml`，本 skill 只述要点
 不复制全文（防漂移）**。改协议/指标口径前先读"版本纪律"节。
 
@@ -32,7 +32,10 @@ description: >
 ## 目录结构
 
 ```
-E:\IsaacLab\ablation_harness\
+<REPO>\ablation_harness\
+├─ host_paths.py           # 机器本地路径唯一读者：isaac_root + venv python（<REPO>\paths.yaml，
+│                          # 模板 paths.example.yaml）；eval/run_ablation/离线闸门/pre-commit/
+│                          # framework_pin_check 五处共用，CLI 参数 > 环境变量 > yaml > 向上探测
 ├─ eval.py                 # runner: task + checkpoint + protocol + mode → 跑分
 ├─ run_ablation.py         # spec yaml → train+eval 调度, 断点续跑, 汇总表
 ├─ protocols\locomotion_eval_v1.yaml   # 协议契约（冻结只读，改动 = 新建 vN）
