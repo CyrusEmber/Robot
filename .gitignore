@@ -13,4 +13,4 @@ _tmp_*
 # derived viz -- rebuildable in seconds from committed data (tb_scalars.csv +
 # eval.json + summary.csv) via plot_tb.py / plot_eval.py, so never a record
 rl_exp/versions/**/plots/
-**/report.html
+**/report*.html
