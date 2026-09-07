@@ -14,6 +14,12 @@ SHELL_FACTOR = 1.4
 
 # world-frame functional axes, valid AFTER the v5.6 -90deg Z rig rotation
 # (head +y -> +x): old axis -> R_z(-90) @ old axis
+#
+# The effort/velocity numbers here are DOCUMENTATIONAL ONLY: the IsaacLab
+# URDF importer keeps them as custom float attrs (urdf:limit:*), PhysX does
+# not enforce them. Runtime limits come from lizard_params.yaml actuators
+# (ImplicitActuator writes drive maxForce / maxJointVelocity at spawn) --
+# known divergences: legs 120/150 here vs 180 there, foot 30 vs 70.
 AXIS_MAP = {
     "yaw": ("0 0 1", -0.6, 0.6, 80, 4),
     "pitch": ("0 -1 0", -0.5, 0.5, 80, 4),
