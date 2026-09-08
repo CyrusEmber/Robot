@@ -18,3 +18,13 @@ _tmp_*
 # eval.json + summary.csv) via plot_tb.py / plot_eval.py, so never a record
 rl_exp/versions/**/plots/
 **/report*.html
+
+# blender autosave backups
+*.blend1
+
+# asset pipeline intermediates: generate_urdf output dir (transient; the
+# working copies land in rl_exp/meshes + versions/lizard/lizard.urdf) and the
+# converter-input mesh copy next to the URDF (importer 3.0 resolves mesh paths
+# relative to the URDF's own directory; regenerable from rl_exp/meshes)
+rl_exp/lizard_urdf/
+rl_exp/versions/lizard/meshes/

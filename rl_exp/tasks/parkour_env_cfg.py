@@ -106,7 +106,9 @@ PARKOUR_TERRAINS_CLIMB = TerrainGeneratorCfg(
 
 _LEG_JOINTS = [".*_haa_joint", ".*_hfe_joint", ".*_kfe_joint"]
 _FOOT_JOINTS = [".*_foot_joint"]
-_SPINE_JOINTS = ["rear_.*", "tail_.*", "neck.*_yaw_joint", "neck.*_pitch_joint"]
+# v8 anatomy rename (rear/tail/neck1-3 -> chest/neck/tail1-3) -- kept in sync
+# with teacher_env_cfg.TeacherActionsCfg (snapshot, not import)
+_SPINE_JOINTS = ["chest_.*", "neck_.*", "tail[0-9]_.*"]
 
 
 @configclass

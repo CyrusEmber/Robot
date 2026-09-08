@@ -54,7 +54,9 @@
 | `lizard\v3\` | **首跑完成，结果待回填**（2026-09-01 启动，2048 env × 4999 iter）：三编码器 + 脚环 extero 208 + tilt/r_fc/c_k/DR-reset 趴窝修复包 + **Miki 地形 v3.4**（`TEACHER_TERRAINS_CFG_V3`：台阶顶 0.55m + stepping stones，仅 v3 换用）+ v3.6 回放诊断三修。`PLAN.md` v3.6.2 + `NOTES.md`（含训练命令与装配验证记录）+ yaml（v2 全量 + `v3:` 段）+ asset_lock 齐备 |
 | `lizard\v4\` | **已批准开工，未训练**（2026-09-02）：碎石地重定标——实测脚掌 0.46×0.51 m（v3.6 误用 kfe→foot 骨长 0.131），`TEACHER_TERRAINS_CFG_V4` random_rough 间距 0.3→0.5 m + 噪声 (0.10,0.35)/step 0.02；v3.6.1 collision stack 补丁回 stock。**启动前警示（先看地形）见 v4\NOTES.md**。yaml 与 v3 逐字相同 |
 | `lizard\v5\` | **已训首跑判废**（2026-09-07 横行——资产长轴 Y vs 任务 +X 前向错配；奖励包本身有效，证据与判废归因见 `v6\NOTES.md`）：反划脚奖励包——r_fc 符号修正（+0.003→-0.003，v3 首跑收敛到"只有脚动身不动"划脚最优的根因之一）、r_slip（`feet_slide_ck` 接触脚滑速 ×c_k）、肚皮受力罚（防御项，`belly_contact_force` 连续 ‖F‖/706 恒权）、EP 线性跟踪（`track_lin_vel_xy_lin` 站立 0 分/倒退负分）替换 exp 核、命令 (0,3) 纯前进无速度课程。地形/obs/网络与 v4 相同。PLAN.md 含根因证据链与 F3 偏差声明 |
-| `lizard\v6\` | **提案待训**（2026-09-07）：资产前向轴转正（blend R_z(-90°) 头 +Y→+X、AXIS_MAP 轴同步、锁全版本刷新）+ v6.1 脊柱/尾动作解锁（`joint_pos_spine` 0.0→0.25）；yaml/reward/obs 逐字同 v5，动作 26 维布局不变——v5 横行根因、关节专项（`check_joints_v6.py`/`check_skeleton_equivalence.py`）与装配验证记录见 `v6\NOTES.md` |
+| `lizard\v6\` | **已训判废**（2026-09-08 停训 8950/15000：**倒走**——rig 骨命名与解剖学 180° 装反，"+Y→+X"转的是命名头=解剖学尾；探针/归因见 `v6\NOTES.md`）：资产前向轴转正（blend R_z(-90°)、AXIS_MAP 轴同步、锁全版本刷新）+ v6.1 脊柱/尾动作解锁（`joint_pos_spine` 0.0→0.25）；yaml/reward/obs 逐字同 v5，动作 26 维布局不变——关节专项（`check_joints_v6.py`/`check_skeleton_equivalence.py`）与装配验证记录见 `v6\NOTES.md` |
+| `lizard\v8\` | **提案待训**（2026-09-08，v6 判废根因根治）：资产**解剖学**转正（blend 再转 R_z(+180°)，对 pre-v6 净 +90°，**球头**→+X、天线尾→−X）+ 全关节重命名（rear→chest、tail→neck（球头颈）、neck1-3→tail1-3（天线尾）、腿 rl↔rf/lf↔rr 换正）+ 全版本 yaml 机械迁移；reward/obs/动作布局逐字同 v6.2。布局硬闸（球头必 +X）入 `check_joints_v8.py`。SSOT = `v8\NOTES.md` |
+| `lizard\v7\` | **提案（代码未实施，2026-09-08）**：ghost 断腿鲁棒性——截肢近似 DR（p=0.3，整腿 stiffness→0 + link 质量 ×0.001，拓扑/obs-joint/action 26 维契约不变）+ `damage_flags` 4 维 one-hot 进 actor obs（90→94，UE 游戏逻辑断腿事件直填）+ 断腿 hfe/kfe 接触罚豁免 + **v8** ckpt 微调（前提已随 v6 判废修正，PITW"加地形→继续微调"配方）；limp 档/损伤分级/多腿同断/mid-episode 拍板不做。方案 SSOT = `v7\PLAN.md` |
 | `lizard\parkour\` | **支线 v1 初稿已开**（2026-09-04，分支 `paper/parkour-in-the-wild`，训练未启动）：Parkour in the Wild（跑/爬/跳多专家蒸馏+RL 微调）。`PLAN.md` = 路线层（组件映射/偏差声明/决策记录）；`v1\PLAN.md` = 版本方案 SSOT（位置任务/probe gate/专家表/蒸馏微调方案），`v1\NOTES.md` = 结果回填 |
 | `vN\PLAN.md` | 版本级计划存档（目的/假设/决策点/验收线/结论一句话；v3 原生，v0–v2 为 2026-09-01 追溯补录；结果回填仍走 NOTES） |
 | `vN\NOTES.md` | 版本文档：目的/参数 diff/训练命令/结果回填 |
@@ -68,11 +70,13 @@
 | `blender\lizard_stance.blend` | **站姿 SSOT**（232KB）：自然站姿摆好、骨位已 fix |
 | `blender\fix_bones.py` | Blender：把骨骼 head/tail 对齐到关节球网格（v6 起世界↔臂架显式转换 + foot 桩外展轴 Y） |
 | `blender\rotate_rig.py` | Blender（v6，一次性）：整体刚体旋转 R_z(-90°) 头 +Y→+X（27 骨 + 36 锚点 1e-6 自检；不烘焙——transform_apply 过 bone-roll 有浮点漂移，旋转保留为臂架对象变换） |
-| `blender\generate_urdf.py` | Blender：从站姿 blend 导出 URDF + STL（限位/力矩在 AXIS_MAP 硬编码；v6 起骨位读世界系 + AXIS_MAP 为转正后世界功能轴） |
+| `blender\rename_flip_v8.py` | Blender（v8，一次性）：**再转 R_z(+180°)（净 +90°，球头→+X）+ 26 骨解剖学重命名**（rear→chest、tail→neck、neck1-3→tail1-3、腿 rl↔rf/lf↔rr 两阶段防撞名）+ mesh parent_bone 显式重挂 + 末态布局断言（球头 +X/天线 −X/腿序）——v6 倒走判废的根因修复 |
+| `blender\generate_urdf.py` | Blender：从站姿 blend 导出 URDF + STL（限位/力矩在 AXIS_MAP 硬编码；v6 起骨位读世界系，v8 起 AXIS_MAP 为净 +90° 转正后的世界功能轴——X/Y 分量对 v6 取反） |
 | `blender\build_rig.py` | 历史一次性绑骨实验（硬编码桌面输出路径），已被上面两脚本取代 |
 | `tools\pipeline\convert_urdf.py` | URDF → USD（Isaac Lab 训练用资产，输出 `assets\lizard\lizard.usda`） |
 | `tools\pipeline\flatten_usd.py` | 压平 URDF-importer-3.0 层级（IsaacLab issue #5126 workaround） |
 | `tools\pipeline\convert_stl_to_obj.py` | STL → OBJ 转换并重写 URDF 引用 |
+| `tools\pipeline\migrate_joint_names_v8.py` | 一次性：v8 关节重命名对全部版本 yaml 的机械迁移（joint_order 改名 + 脊柱正则 `rear_.*`→`chest_.*`、`tail_.*`→`tail[0-9]_.*`；root/v8 yaml 的 joint_order 置为新 URDF 实际序，满足 export_ue 序列断言）——冻结目录改动的可审计出处 |
 | `tools\pipeline\export_ue.py` | SSOT → UE 工件（关节映射/参数打包，盲部署前置） |
 | `tools\archive\patch_kfe_axis.py` | URDF 手术：kfe 轴 Z→Y + 对称限位（旧版一次性脚本，仅考古） |
 | `tools\archive\patch_stance.py` | URDF 手术：把自然站姿烘进零位（旧版一次性脚本，仅考古） |
@@ -88,6 +92,8 @@
 | `tools\verify\teacher_smoke.py` | teacher 冒烟（v2）：obs 308 维 + 全特权段判读（MASS_SUM≈72 / 力矢量 / 法线 / 摩擦 / wrench=0）；per-term 布局从 observation_manager 现场推导，无魔数切片 |
 | `tools\verify\teacher_smoke_v3.py` | teacher 冒烟（v3）：三组 90/208/83 + extero 顺序 lf/rf/rl/rr + tilt/r_fc 活性 + 有限性 + extero std>ε（防死通道回归） |
 | `tools\verify\teacher_smoke_v5.py` | teacher 冒烟（v5 双环境）：PLAY（三组 90/208/83 + v5 奖励集合活性 + 无速度课程 + 无 SIR）+ TRAIN 2env（SIR 在真 TerrainImporter 上实例化、origin 重指落格内、Curriculum/terrain_levels 有限） |
+| `tools\verify\teacher_smoke_v8.py` | teacher 冒烟（v8 = v6 契约在解剖学资产上）：三组 90/208/83 + spine scale 0.25 + SIR TRAIN 落格（同 v6 冒烟结构，V8 引用） |
+| `tools\verify\check_joints_v8.py` | 关节功能检查（v8 解剖学资产）：**布局硬闸**（neck_pitch 球头必 +X、tail3_pitch 天线必 −X、前腿在前/左右各就位——v6"信骨名不信造型"教训条目化）+ 单关节注入驱动读数（头侧 pitch 关节欠阻尼读数注意事项在档） |
 | `tools\verify\test_v5_rewards.py` | v5 奖励离线单测（mock env）：线性核 8 case（站立 0/倒退负/超速封顶/min_speed clamp）/ feet_slide ×c_k / 肚皮罚不随 c_k 退火 / undesired_contacts ×c_k |
 | `tools\verify\test_v5_terrain_sir.py` | v5.3 SIR 地形课程离线单测（mock env）：TerrainGenerator 列→类型映射复刻 / 初始 reset 跳过 + origin 重指一致 / 成功三态判定（存活×位移×命令距离）/ 双侧软边带 / 带内重采样 / 流量不足保权 / 游走 clamp / replay 全历史池 / 块评估节流（240 步量化推进）。（v5.4 进度分制版 10/10 随弃案保全于 git `3ef2aa0`，复活见家族挂账 #15） |
 | `tools\verify\check_obs_layout.py` | **obs 布局静态门**（离线）：v1/v2/v3 组名 + 组内 term 顺序 + extero 脚序 + 环形总点数 + c_k steps_per_iteration 与 runner num_steps_per_env 一致性（静默错位在 env 加载前炸出） |
@@ -108,6 +114,8 @@
 | `tools\verify\run_offline_checks.bat` | **离线全套一键**（8 项：pin/parity/recovery/curriculum/teacher 网络/student 网络/v3 课程/obs 布局，秒级不起仿真）；改 tasks 或 harness 后、commit 前必跑 |
 | `tools\diagnose\debug_pose.py` | reset 后立即 dump 全部腿关节轴心世界坐标 |
 | `tools\diagnose\diagnose_nan.py` | Flat 任务 NaN obs 诊断（历史问题排查用） |
+| `tools\diagnose\direction_probe.py` | **方向探针**（v6 倒走归因工具，默认指 v8 最新 run）：强制前进窗口下量 disp_head——世界位移在头方向投影，负值+正命令=真倒走；训后验收复用 |
+| `tools\diagnose\play_fast_task.py` | 注册 `Lizard-Rough-Play-v8-fast`（前进窗口钉 1–3 m/s）——play.py `--external_callback` 挂钩，GUI 目视用 |
 
 ### 训练工具与 UE 导出
 

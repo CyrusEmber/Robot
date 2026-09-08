@@ -206,12 +206,14 @@ def main():
     default_angles = resolve_default_angles(joints, params["default_joint_pos"])
     forward_kinematics(links, joints, default_angles)
 
-    # cross-check SSOT joint order against URDF revolute joints
+    # cross-check SSOT joint order against URDF revolute joints (yaml stores
+    # bare link names; URDF joints carry the importer's "_joint" suffix)
     urdf_joint_names = [j["name"] for j in joints if j["type"] == "revolute"]
-    if urdf_joint_names != params["joint_order"]:
+    urdf_bare = [n[: -len("_joint")] if n.endswith("_joint") else n for n in urdf_joint_names]
+    if urdf_bare != params["joint_order"]:
         raise ValueError(
             f"joint_order in lizard_params.yaml does not match URDF order.\n"
-            f"  yaml: {params['joint_order']}\n  urdf: {urdf_joint_names}"
+            f"  yaml: {params['joint_order']}\n  urdf: {urdf_bare}"
         )
 
     for joint in joints:

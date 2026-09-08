@@ -182,6 +182,18 @@ class LizardTeacherV6PPORunnerCfg(LizardTeacherV5PPORunnerCfg):
 
 
 @configclass
+class LizardTeacherV8PPORunnerCfg(LizardTeacherV6PPORunnerCfg):
+    """Runner cfg for `Lizard-Rough-v8` (anatomy-correct asset, obs 381).
+
+    Same recipe as v6.2 (paper S1 hyperparams, three-encoder model, spine
+    unlocked at yaml spine_scale); only the log dir changes -- one version,
+    one dir (versioning.mdc §A).
+    """
+
+    experiment_name = "lizard_rough_teacher_v8"
+
+
+@configclass
 class LizardParkourClimbPPORunnerCfg(LizardFlatPPORunnerCfg):
     """Runner cfg for `Lizard-Parkour-Climb-v1` (position-task stairs expert).
 

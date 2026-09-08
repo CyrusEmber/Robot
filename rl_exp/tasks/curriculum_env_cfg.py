@@ -50,7 +50,9 @@ class LizardCurriculumActionsCfg(ActionsCfg):
     )
     joint_pos_spine = mdp.JointPositionActionCfg(
         asset_name="robot",
-        joint_names=["rear_.*", "tail_.*", "neck.*_yaw_joint", "neck.*_pitch_joint"],
+        # v8 anatomy rename (rear/tail/neck1-3 -> chest/neck/tail1-3) -- kept in
+        # sync with teacher_env_cfg.TeacherActionsCfg (snapshot, not import)
+        joint_names=["chest_.*", "neck_.*", "tail[0-9]_.*"],
         scale=0.0,
         use_default_offset=True,
     )

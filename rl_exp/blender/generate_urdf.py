@@ -12,8 +12,9 @@ TOTAL_MASS = 72.0
 MICRO_MASS = 0.05
 SHELL_FACTOR = 1.4
 
-# world-frame functional axes, valid AFTER the v5.6 -90deg Z rig rotation
-# (head +y -> +x): old axis -> R_z(-90) @ old axis
+# world-frame functional axes, valid AFTER the v8 rename_flip (+180 deg Z on
+# top of v5.6's -90, net +90 from the pre-v6 blend: sphere head -y -> +x,
+# antenna tail -> -x): old axis -> R_z(180) @ old axis (X,Y negate, Z keeps)
 #
 # The effort/velocity numbers here are DOCUMENTATIONAL ONLY: the IsaacLab
 # URDF importer keeps them as custom float attrs (urdf:limit:*), PhysX does
@@ -22,11 +23,11 @@ SHELL_FACTOR = 1.4
 # known divergences: legs 120/150 here vs 180 there, foot 30 vs 70.
 AXIS_MAP = {
     "yaw": ("0 0 1", -0.6, 0.6, 80, 4),
-    "pitch": ("0 -1 0", -0.5, 0.5, 80, 4),
-    "haa": ("1 0 0", -0.6, 0.6, 120, 8),
+    "pitch": ("0 1 0", -0.5, 0.5, 80, 4),
+    "haa": ("-1 0 0", -0.6, 0.6, 120, 8),
     "hfe": ("0 0 1", -1.2, 1.2, 150, 8),
-    "kfe": ("1 0 0", -1.6, 1.6, 150, 8),
-    "foot": ("0 -1 0", -0.5, 0.5, 30, 6),
+    "kfe": ("-1 0 0", -1.6, 1.6, 150, 8),
+    "foot": ("0 1 0", -0.5, 0.5, 30, 6),
 }
 
 BALL_MESHES = {

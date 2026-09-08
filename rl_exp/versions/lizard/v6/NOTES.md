@@ -60,5 +60,23 @@
 - log 目录: logs/rsl_rl/lizard_rough_teacher_v6/
 - 验收: 同 v5 全部判据（反划脚 KPI），**新增第 0 条**：GUI 回放肉眼确认前进
   方向 = 头朝向（横行消失）。
-- 结果回填: （训练后补：reward 曲线读数 / 反划脚 KPI 读数 / eval 跑分表 / 结论）
-- 结论: （一句话，训练后补）
+- 结果回填（2026-09-08 判废，用户停训）: 训至 **8950/15000 iters**（run
+  `2026-09-07_16-31-36`，371 it/h）。巡检读数：`track_lin_vel_xy_lin` 0.51/1.5
+  （win 0.465，趋势 +）、`error_vel_xy` 0.84 m/s、success_rate **0.04**、
+  **tilt 终止 76%**、mean_reward 2.32、terrain_levels 3.75。判废依据：GUI 回放
+  **倒着走**（解剖学尾朝前）。`tools/diagnose/direction_probe.py`（model_8950，
+  强制前进窗口 1–3 m/s）：cmd_vx +2.06 下 disp_head(100) 稳定 **+1.2~+1.6 m**
+  ——物理上坚定沿 base +X 位移 = 完全按奖励走；与 GUI 倒走并存 ⇒ **+X 端不是
+  解剖学的头**。
+- 判废根因（v8 修复）: rig 骨命名与解剖学整体 **180° 装反**（v0 build_rig 起）：
+  "neck1–3" 链是**尾**（build_rig.py 终点变量 `antenna_tip`，末端细杆收窄
+  0.68→0.20m 锥形）；"tail_yaw/tail_pitch" 链末端挂 **球状头**（`sphere_tip`，
+  Roundcube+Sphere 0.81×0.82×0.83m + 4-DOF 云台颈）；前后/左右腿名亦全反
+  （旧 rl = 解剖学右前）。v6 把"命名头"转到任务 +X = 把解剖学尾转到 +X，
+  策略按 spec 最优尾朝前走——与 v5 横行同构（标签 vs 几何错配），教训入
+  FAMILY：**"头"的判定必须锚定造型证据（球头/锥尾），禁止只信骨名**——v6
+  全部装配验证（pivot 对齐/joint_check/skeleton equivalence/smoke）都信骨名，
+  名字错则全链绿灯。
+- 结论: 判废。v5 奖励包两连判：教会位移（v5 横行）+ 教会方向服从（v6 倒走
+  却 tracking 为正）——奖励侧无罪，两次都是资产语义错配。8950 ckpt 判废
+  保留（倒走证据）。修复 = v8（转正 180° + 全关节解剖学重命名）。

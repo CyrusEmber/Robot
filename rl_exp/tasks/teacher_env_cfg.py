@@ -346,7 +346,10 @@ class TeacherActionsCfg(ActionsCfg):
     )
     joint_pos_spine = mdp.JointPositionActionCfg(
         asset_name="robot",
-        joint_names=["rear_.*", "tail_.*", "neck.*_yaw_joint", "neck.*_pitch_joint"],
+        # v8 anatomy rename (rear/tail/neck1-3 -> chest/neck/tail1-3): patterns
+        # follow the CURRENT shared asset -- old task ids load it too, so the
+        # base class must match the new names or every version fails to spawn
+        joint_names=["chest_.*", "neck_.*", "tail[0-9]_.*"],
         scale=0.0,
         use_default_offset=True,
     )
@@ -402,6 +405,17 @@ TEACHER_PRIVILEGED_SPEC: dict[str, set[str]] = {
     # difference is the shared asset's axis correction (head +Y -> +X,
     # wired outside the code: blend/URDF/USD regeneration), spec unchanged
     "v6": {
+        "foot_contact_forces",
+        "foot_contact_normals",
+        "foot_friction",
+        "thigh_shank_contacts",
+        "base_external_wrench",
+    },
+    # v8 keeps the v2-v6 privileged-term set (priv 83); its only recipe
+    # difference is the shared asset's anatomy correction (+180 deg flip and
+    # joint rename, wired outside the code: blend/URDF/USD regeneration),
+    # spec unchanged
+    "v8": {
         "foot_contact_forces",
         "foot_contact_normals",
         "foot_friction",
@@ -1203,6 +1217,44 @@ class LizardRoughTeacherEnvCfg_V6(LizardRoughTeacherEnvCfg_V5):
 @configclass
 class LizardRoughTeacherEnvCfg_V6_PLAY(LizardRoughTeacherEnvCfg_V6):
     """v6 play variant: same as v5 PLAY (no randomization, no curriculum)."""
+
+    def __post_init__(self):
+        super().__post_init__()
+
+        # deterministic evaluation: shared PLAY wiring (single source, see play_utils)
+        apply_play_wiring(self)
+
+        # SIR reassigns spawn origins per episode -- deterministic eval must not roam
+        self.curriculum.terrain_levels = None
+
+
+@configclass
+class LizardRoughTeacherEnvCfg_V8(LizardRoughTeacherEnvCfg_V6):
+    """v8 recipe: anatomy-correct asset (flip + rename), reward/obs unchanged.
+
+    The v6 first run walked tail-first (probe: displacement solidly along base
+    +X under forward commands, yet the GUI showed the head trailing): the rig's
+    bone names were 180 deg off the model's anatomy -- the "neck1-3" chain is
+    the tail (build_rig.py ``antenna_tip``), the "tail_yaw/tail_pitch" chain
+    carries the sphere HEAD (``sphere_tip``), and the leg names were
+    front/rear + left/right swapped. v6 rotated the NAME-head onto task +X,
+    which is anatomically the tail, so the policy walked exactly as paid --
+    tail-first. v8 regenerates the shared asset with a further +180 deg Z
+    rotation (net +90 from the pre-v6 blend: sphere head -y -> +x, antenna
+    tail -> -x) and renames all 26 joints to anatomy
+    (blender/rename_flip_v8.py; generate_urdf AXIS_MAP flipped with it;
+    every version yaml migrated in the same commit). Reward/obs/action
+    structure stays byte-identical to v6.2 -- only joint NAMES and the asset
+    orientation change, so the 90/208/83 obs groups and the 26-dim action
+    layout are unchanged.
+    """
+
+    params_version = "v8"
+
+
+@configclass
+class LizardRoughTeacherEnvCfg_V8_PLAY(LizardRoughTeacherEnvCfg_V8):
+    """v8 play variant: same as v6 PLAY (no randomization, no curriculum)."""
 
     def __post_init__(self):
         super().__post_init__()

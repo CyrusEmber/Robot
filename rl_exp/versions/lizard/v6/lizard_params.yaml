@@ -18,34 +18,34 @@ robot:
   # thigh sprawled, shank vertical, blade flat. Blade bottom ~1.1 m below base.
   base_init_height: 1.1
 
-# ground-truth joint order (URDF tree order: spine chain first, then legs lf/rf/rl/rr)
+# ground-truth joint order (URDF tree order after the v8 anatomy rename)
 joint_order:
-  - rear_yaw
-  - rear_pitch
-  - tail_yaw
-  - tail_pitch
-  - neck1_yaw
-  - neck1_pitch
-  - neck2_yaw
-  - neck2_pitch
-  - neck3_yaw
-  - neck3_pitch
-  - lf_haa
-  - lf_hfe
-  - lf_kfe
-  - lf_foot
-  - rf_haa
-  - rf_hfe
-  - rf_kfe
-  - rf_foot
-  - rl_haa
-  - rl_hfe
-  - rl_kfe
-  - rl_foot
+  - chest_yaw
+  - chest_pitch
+  - neck_yaw
+  - neck_pitch
+  - tail1_yaw
+  - tail1_pitch
+  - tail2_yaw
+  - tail2_pitch
+  - tail3_yaw
+  - tail3_pitch
   - rr_haa
   - rr_hfe
   - rr_kfe
   - rr_foot
+  - rl_haa
+  - rl_hfe
+  - rl_kfe
+  - rl_foot
+  - rf_haa
+  - rf_hfe
+  - rf_kfe
+  - rf_foot
+  - lf_haa
+  - lf_hfe
+  - lf_kfe
+  - lf_foot
 
 # regex pattern -> default angle (rad), fed to ArticulationCfg.InitialStateCfg
 # NOTE: Isaac Lab 3.0 importer appends a "_joint" suffix to joint names.
@@ -56,8 +56,8 @@ default_joint_pos:
   ".*_hfe_joint": 0.0
   ".*_kfe_joint": 0.0
   ".*_foot_joint": 0.0
-  "rear_.*": 0.0
-  "tail_.*": 0.0
+  "chest_.*": 0.0
+  "tail[0-9]_.*": 0.0
   "neck.*_.*": 0.0
 
 # ImplicitActuatorCfg groups (PD runs inside the physics solver at 200 Hz;
@@ -84,8 +84,8 @@ actuators:
     armature: 0.0
   spine:
     joint_patterns:
-      - "rear_.*"
-      - "tail_.*"
+      - "chest_.*"
+      - "tail[0-9]_.*"
       - "neck.*_yaw_joint"
       - "neck.*_pitch_joint"
     # v6.2 (user decision 2026-09-07): 150/10 left 0.2-0.45 rad gravity sag on
