@@ -71,7 +71,8 @@
 - 判废根因（v8 修复）: rig 骨命名与解剖学整体 **180° 装反**（v0 build_rig 起）：
   "neck1–3" 链是**尾**（build_rig.py 终点变量 `antenna_tip`，末端细杆收窄
   0.68→0.20m 锥形）；"tail_yaw/tail_pitch" 链末端挂 **球状头**（`sphere_tip`，
-  Roundcube+Sphere 0.81×0.82×0.83m + 4-DOF 云台颈）；前后/左右腿名亦全反
+  Roundcube+Sphere——mesh 实测 0.83m 钝块 / 6982 顶点 / 11.06kg 颅骨——架在
+  4-DOF 云台颈上，也是 chest_pitch 关节重力负载的主项）；前后/左右腿名亦全反
   （旧 rl = 解剖学右前）。v6 把"命名头"转到任务 +X = 把解剖学尾转到 +X，
   策略按 spec 最优尾朝前走——与 v5 横行同构（标签 vs 几何错配），教训入
   FAMILY：**"头"的判定必须锚定造型证据（球头/锥尾），禁止只信骨名**——v6
