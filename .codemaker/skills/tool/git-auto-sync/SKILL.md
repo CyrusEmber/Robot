@@ -44,8 +44,11 @@ commit 内容要向用户汇报；推送失败报告原因，绝不强推。
 无句尾句号（`Add X`, `Fix Y`, `Freeze vN: ...`），body 72 字符换行、讲 what/why
 不讲 how（diff 自己会讲 how）；中英随仓库惯例
 - **版本族提交前缀** `<family>-vN[.minor]:`——多版本家族并存时裸 `vN` 有歧义；非版本提交用普通 conventional subject
-- **分支纪律**：开发走 `<username>/feature-desc` 特性分支，不直提 main；
-PR 迭代反馈优先加新 commit 不 amend（免 force push，reviewer 可逐条核对）
+- **分支纪律**：**默认单分支开发（直提 main），非必要不开新分支**——
+  分支只在真并行隔离或用户明示时开；开了就要收：合回即删（本地+远端），
+  不留死分支（main 落后活跃分支 = 分叉未回卷，发现即合）。真走了
+  PR/分支流程时，迭代反馈优先加新 commit 不 amend（免 force push，
+  reviewer 可逐条核对）
 - **禁 AI 署名**：commit 不带 Co-Authored-By 等 AI 归属行
 - **空提交禁令**：status 干净就报告"无改动"，不造空 commit
 
