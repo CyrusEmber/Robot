@@ -41,8 +41,8 @@
     `check_joints_v8.py`（**布局硬闸**：neck_pitch(球头) 必在 +X、tail3_pitch
     (天线) 必在 −X、前腿在前/左右各就位——v6 教训条目化）
 - 版本纪律: v6 已训（8950 iters 判废）→ 训练启动锚不可逆，资产+命名换代影响
-  配方行为 → 开 v8（versioning.mdc §A）。v7（ghost 断腿鲁棒性提案）保持占位，
-  其"v6 ckpt 微调"前提失效，微调基座改指 v8。
+  配方行为 → 开 v8（versioning.mdc §A）。v7 提案归档（未启动，前提失效），
+  ghost 断腿线 = v9（重基 v8，提案态，见 `..\v9\PLAN.md`）。
 - 训练命令:
   ```bat
   python scripts\reinforcement_learning\rsl_rl\train.py --task Lizard-Rough-v8 --max_iterations 15000 --seed 42
