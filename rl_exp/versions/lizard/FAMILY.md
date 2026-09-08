@@ -18,9 +18,10 @@
   v5 已训首跑（2026-09-07 判废：**横行**——资产长轴 Y vs 任务 +X 前向错配，
   判废归因与证据见 `v6\NOTES.md`）· v6 已训判废（2026-09-08 停训 8950/15000：
   **倒走**——rig 骨命名与解剖学 180° 装反（"neck"链=天线尾、"tail"链=球头），
-  v6 把命名头转到 +X 即解剖学尾；探针/归因见 `v6\NOTES.md`）· **v8 提案待训**
-  （资产解剖学转正 +180° + 全关节重命名 chest/neck/tail1-3 + 腿名换正，
-  reward/obs 逐字同 v6.2，方案见 `v8\PLAN.md`）· **v7 提案**（ghost 断腿
+  v6 把命名头转到 +X 即解剖学尾；探针/归因见 `v6\NOTES.md`）· **v8 已冻结待训**
+  （tag `lizard-v8.1`：资产解剖学转正 +180° + 全关节重命名，reward/obs 逐字
+  同 v6.2，v8.1 r_slip −0.003→−0.03——预注册升级，v6 数据触发；方案见
+  `v8\PLAN.md`）· **v7 提案**（ghost 断腿
   鲁棒性：截肢近似 DR + damage flag obs + v8 ckpt 微调——前提已随 v8 修正，
   方案见 `v7\PLAN.md`）
 - 开发态 yaml: `lizard_params.yaml`（家族活实验用，改动不追溯）
@@ -52,8 +53,10 @@
 | Lizard-Rough-Play-v4 | `LizardRoughTeacherEnvCfg_V4_PLAY` | versions/lizard/v4（**提案，未冻结**——训练启动时冻结） | v4 回放 |
 | **Lizard-Rough-v5** | `LizardRoughTeacherEnvCfg_V5` | versions/lizard/v5（**已训首跑判废**——资产轴错配横行，见 v6） | 反划脚奖励包（r_fc 符号 + r_slip + 肚皮受力罚 + EP 线性跟踪；命令 (0,3) 无速度课程；obs 同 v3 三组 90/208/83，spec 不变） |
 | Lizard-Rough-Play-v5 | `LizardRoughTeacherEnvCfg_V5_PLAY` | versions/lizard/v5（已训判废） | v5 回放 |
-| **Lizard-Rough-v6** | `LizardRoughTeacherEnvCfg_V6` | versions/lizard/v6（**提案待训**） | 资产前向轴转正（头 +Y→+X）；reward/obs/地形逐字同 v5，yaml 逐字相同——纯资产换代 |
-| Lizard-Rough-Play-v6 | `LizardRoughTeacherEnvCfg_V6_PLAY` | versions/lizard/v6（**提案待训**） | v6 回放 |
+| **Lizard-Rough-v6** | `LizardRoughTeacherEnvCfg_V6` | versions/lizard/v6（**已训判废**——倒走，骨命名装反，见 v6 NOTES） | 资产前向轴转正 + v6.1 脊柱解锁 + v6.2 脊柱 PD 400/20；其余逐字同 v5 |
+| Lizard-Rough-Play-v6 | `LizardRoughTeacherEnvCfg_V6_PLAY` | versions/lizard/v6（已训判废） | v6 回放 |
+| **Lizard-Rough-v8** | `LizardRoughTeacherEnvCfg_V8` | versions/lizard/v8（**已冻结待训**，tag `lizard-v8.1`） | 资产解剖学转正 + 全关节重命名；reward/obs 逐字同 v6.2，v8.1 r_slip ×10 |
+| Lizard-Rough-Play-v8 | `LizardRoughTeacherEnvCfg_V8_PLAY` | versions/lizard/v8（已冻结待训） | v8 回放 |
 
 注：teacher 任务 id 与配方版本同步，且**全部常驻注册**——旧版本不会因代码
 演进而失复现（机制见 [OBS.md](OBS.md)「版本差异结构」节）。`Lizard-Rough-v0` 无任务 id
