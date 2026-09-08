@@ -82,7 +82,7 @@
     "meshes/visual/tail3_pitch_visual.obj": "53cb89a35b2f23b5641fc689e6abec7e13f7adb009c254e49c967742ba686ffd",
     "meshes/visual/tail3_pitch_visual.stl": "41ab3ebd51d21067f2b3b9b6f37d27b265ab01a06dc7609d0f6196f91addc783",
     "versions/lizard/lizard.urdf": "536605825b250fc4c8ea4b9278130289de6849e311b7e2f88e9fe3360b44e474",
-    "versions/lizard/v8/lizard_params.yaml": "bc681e3906bcef6e6f1842891fe726b2d9002f98c8f7f0f78b8cc18fec8646d8"
+    "versions/lizard/v8/lizard_params.yaml": "2ea34f8967ed02b3fe487b60c606c01349fc15ce1add38181f67099f708b3757"
   },
   "note": "asset sha256 pinned at freeze; refresh with --update-locks only in a commit that intentionally retires assets (see check_dr_parity.py)"
 }

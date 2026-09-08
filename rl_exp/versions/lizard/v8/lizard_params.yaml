@@ -253,11 +253,17 @@ v5:
   # (stock style: negative weight x positive function value); v5.0/v5.1
   # shipped +0.003 which REWARDED sliding -- same bug class as the v3 r_fc
   # sign flip. Paper form: r_slip = -c_k * sum(|v_f|^2) over contact feet.
-  # Note: at typical paddle speeds (0.2-0.8 m/s) the squared form + 0.003
-  # is a weak signal vs tracking 1.5 -- watch Episode_Reward/feet_slide in
-  # the first probe; bump 10-30x if it never leaves the noise floor.
+  # v8.1 ESCALATION (pre-registered above, triggered by the v6 run):
+  # Episode_Reward/feet_slide sat at -0.0028 through 8950 iters = noise
+  # floor, yet back-solving gives sum(|v_f|^2) ~ 0.93 per step -- the
+  # low-speed "paddle-creep" gait (v3划脚 attractor, GUI-confirmed) slides
+  # contact feet at ~0.7-1 m/s while earning tracking 0.5/step at 1/180
+  # the price. weight -0.003 -> -0.03 (x10): same gait now pays ~0.028/step,
+  # same ledger level as action_rate/dof_acc; clean stances (~zero slip)
+  # stay free. x30 (-0.09) is the next step if the first probe still shows
+  # a flat feet_slide.
   r_slip:
-    weight: -0.003
+    weight: -0.03
   # Continuous belly-contact penalty proportional to net contact force.
   # v5.2 SIGN FIX: weight must be NEGATIVE (repo convention: sign in the
   # weight); v5.0/v5.1 shipped +0.5 which REWARDED belly contact.
