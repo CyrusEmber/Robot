@@ -11,9 +11,11 @@
 > 命令与摆位 → 仓根 README。时态判据见 `.codemaker/rules/versioning.mdc`
 > 分层原则（FAMILY=已成立事实，PLAN=靠行动兑现的意图）。
 >
-> 更新: 2026-09-03（重构为纯意图文档：现状快照/Phase 1 详情/命令速查移除
+> 更新: 2026-09-08（v7 提案挂账 #16：ghost 断腿鲁棒性——DR+damage flag+v6 ckpt
+> 微调，方案 SSOT = `v7\PLAN.md`）。上一版 2026-09-03（重构为纯意图文档：现状
+> 快照/Phase 1 详情/命令速查移除
 > ——事实归 FAMILY，obs 契约归 OBS.md（v1 266 布局迁入），方案细节归 vN\PLAN，
-> 命令归 README；备选奖励修复表保留为 §3。上一版 2026-09-02（v4 提案：碎石地
+> 命令归 README；备选奖励修复表保留为 §3。再上一版 2026-09-02（v4 提案：碎石地
 > 重定标，详见 v4\PLAN）；再上一版 2026-09-01（v3 提案；包名 lizard_exp→rl_exp；
 > versions 家族分层）。方案细节以各 vN\PLAN.md 为 SSOT，本文件只管路线/挂账）
 
@@ -116,3 +118,4 @@ success_rate 0.31，课程全卡 stage 0，地形等级 0.1/9。
 | 13 | v5 开训前 GUI 目视判读"碎石堆无粗糙度"，与 preflight difficulty=1.0 数字矛盾（random_rough relief p95 0.325 m @ 满档）。归因假设：PLAY 非课程模式难度 U(0,1) 随机采样，所视 tile 大概率低难度（难度 d 振幅 ≈ 0.10+0.25d m，d=0.2 时 ≈0.15 m，视觉为平缓土堆）；训练侧 curriculum=True 按行爬坡 + 出生 level 0，前期平缓是设计内。**v5.3 起由 SIR 地形课程直接回应**（用户拍板 2026-09-03）：训练流量按真实成败在固定网格上再分配（带 [0.5,0.9] 重采样），不再依赖目视——`Curriculum/terrain_levels` 判读语义反转：带内集中/爬升 = 课程在起作用（分布随能力上移是设计内），**长期贴地不动**才需复核碎石参数；二次目视用 `_tmp_terrain_previews\v5_*.png`（difficulty=1.0 渲染） | 🟡 v5 训练期观察 |
 | 14 | 版本表达架构未定案：任务注册表与 teacher V 子类只增不减（现 14 注册 + V1..V5 常驻），退役条款曾写入 versioning 后撤回（commit d642ce9）。候选方向：a) 退役降级 git tag 复现 b) 组件库（地形/reward/obs spec 表化，参数级 diff 写 spec 行而非新子类）c) 维持现状。约束：teacher 零家族 import 是冻结纪律，组件化不得破坏"改组件≠改历史版本语义"。触发再议：连续两个纯参数级新版本，或第二家族立项 | 🟢 未定案（用户拍板挂账 2026-09-03） |
 | 15 | SIR 课程判据 v6 候选（v5.4 弃案存档）：v5 冷启动若长期停滞——flat 集中后课程不动、rough 各行 p̂ 全带下、`Curriculum/terrain_levels` 长期钉低位（诊断信号）——则 v6 升测量判据。候选优先级：a) **逐步 Tr**（逐状态转移期望，贴论文原文，带信号从第一块就有）b) **v5.4 进度分制**（位移线性 × 存活占比 + 带下线性权重，代码保全 git `3ef2aa0`，含单测 10/10 + 冷启动梯度回归，可直接复活）。约束：v5 训练期不动判据（归因隔离，用户拍板 2026-09-03），诊断数据记入 v5 NOTES 结果回填 | 🟡 v5 训练后裁决 |
+| 16 | v7 实施（ghost 断腿鲁棒性，方案 SSOT = `v7\PLAN.md`，用户拍板开 v7 2026-09-08）：V7 env cfg + 任务注册 `Lizard-Rough-v7` + broken_leg DR 事件（p=0.3，整腿 stiffness→0/damping→1.0/质量 ×0.001）+ `damage_flags` 4 维进 actor obs（90→94）+ 断腿 hfe/kfe 接触罚豁免（V7 子类，不改旧类）+ ablation_harness broken-leg eval suite + v6 ckpt 微调入口。前置依赖：v6 已训 | 🟡 提案 |
