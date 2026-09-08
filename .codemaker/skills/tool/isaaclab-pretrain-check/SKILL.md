@@ -7,7 +7,7 @@ description: >
   "pretrain check"、"terrain preflight"等需求时使用此 skill。
   对应版本 NOTES（v4 起）启动前警示第 1 条：先看地形再开训。
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
 ---
 
 # IsaacLab 训练启动前预检（地形）
@@ -45,7 +45,7 @@ metadata:
 ```
 
 - 机器人零动作站在**真实训练地形**上（PLAY 变体：无随机化）。
-- 看四件事：①脚掌与碎块的尺度关系（一块碎石 ≥ 脚掌，还是脚掌能横跨踩平）②高差肉眼可见 ③机器人默认站姿下肚皮/大腿离地间隙 ④`[contact check]` 输出的 robot-terrain 接触点/env（mean/max）——接触栈容量重验的量化依据，外推训练 env 数对照历史标定。
+- 看五件事：①脚掌与碎块的尺度关系（一块碎石 ≥ 脚掌，还是脚掌能横跨踩平）②高差肉眼可见 ③机器人默认站姿下肚皮/大腿离地间隙 ④每 env 悬浮红色头向箭头（沿 base +X，跨 reset 追踪）——目视头与身体朝向是否一致 ⑤`[contact check]` 输出的 robot-terrain 接触点/env（mean/max）——接触栈容量重验的量化依据，外推训练 env 数对照历史标定。
 - `--num-envs` 调大可同屏看更多子地形；Ctrl+C 退出。
 - headless 冒烟（不开窗验证 env 构建通过）：加 `--headless --steps 10`。
 
