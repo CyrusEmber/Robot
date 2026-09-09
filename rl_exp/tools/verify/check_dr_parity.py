@@ -65,6 +65,9 @@ ALLOWLIST: set[str] = {
     "self.rewards.feet_slide = RewTerm(",  # v5: r_slip, contact-foot sliding penalty (x c_k)
     "self.rewards.undesired_contacts.func = teacher_mdp.undesired_contacts_ck",  # v5: r_co x c_k
     "self.rewards.belly_contact_force = RewTerm(",  # v5: continuous belly-contact force penalty
+    # v10 recipe (versions/lizard/v10/NOTES.md): the tilt termination is
+    # deleted on the teacher line only -- the family baseline never had it
+    "self.terminations.tilt = None",  # v10: D1 removal (fall -> reward ledger, no term)
 }
 
 # ArticulationCfg block lines that only exist on one side BY DESIGN

@@ -422,6 +422,17 @@ TEACHER_PRIVILEGED_SPEC: dict[str, set[str]] = {
         "thigh_shank_contacts",
         "base_external_wrench",
     },
+    # v10 keeps the v2-v8 privileged-term set (priv 83); its only recipe
+    # difference is the tilt termination removal (wired in
+    # LizardRoughTeacherEnvCfg_V10), spec unchanged. v9 is reserved for the
+    # leg-break protocol line and does not exist yet.
+    "v10": {
+        "foot_contact_forces",
+        "foot_contact_normals",
+        "foot_friction",
+        "thigh_shank_contacts",
+        "base_external_wrench",
+    },
 }
 
 
@@ -1255,6 +1266,48 @@ class LizardRoughTeacherEnvCfg_V8(LizardRoughTeacherEnvCfg_V6):
 @configclass
 class LizardRoughTeacherEnvCfg_V8_PLAY(LizardRoughTeacherEnvCfg_V8):
     """v8 play variant: same as v6 PLAY (no randomization, no curriculum)."""
+
+    def __post_init__(self):
+        super().__post_init__()
+
+        # deterministic evaluation: shared PLAY wiring (single source, see play_utils)
+        apply_play_wiring(self)
+
+        # SIR reassigns spawn origins per episode -- deterministic eval must not roam
+        self.curriculum.terrain_levels = None
+
+
+@configclass
+class LizardRoughTeacherEnvCfg_V10(LizardRoughTeacherEnvCfg_V8):
+    """v10 recipe: tilt termination removed (single-variable fix).
+
+    Diagnosis (2026-09-09; v8.1 killed at iter 7700): ``Episode_Termination/
+    tilt`` sat at 0.60 (v8.1) / 0.76 (v6) -- the v3 ``tilt_terminate`` pg_z
+    limit (instantaneous total tilt > 53 deg, no dwell window) killed
+    legitimate pitch (terrain slopes <= 26 deg, vaulting, spine articulation)
+    as "falls". Most episodes truncated early, SIR success_rate pinned at
+    0.019 (success requires surviving to timeout), terrain curriculum and
+    velocity learning starved. v10 deletes the term entirely so fallen states
+    stay in the rollout data: the belly_contact_force penalty (-0.5/step)
+    plus zero tracking supplies the get-up gradient, and the 2 m tail +
+    sprawled legs carry the ground righting apparatus (lizards self-right in
+    seconds). Only time_out terminates. Everything else is byte-identical to
+    v8.1. Pre-registered counter-hack (v10 yaml): sustained belly contact
+    with high tracking -> raise the belly_contact_force weight.
+    """
+
+    params_version = "v10"
+
+    def __post_init__(self):
+        super().__post_init__()
+        # D1 removal, yaml-driven (v10.tilt_terminate: null -> no tilt term)
+        if _load_params(self.params_version)["v10"]["tilt_terminate"] is None:
+            self.terminations.tilt = None
+
+
+@configclass
+class LizardRoughTeacherEnvCfg_V10_PLAY(LizardRoughTeacherEnvCfg_V10):
+    """v10 play variant: same as v8 PLAY (no randomization, no curriculum)."""
 
     def __post_init__(self):
         super().__post_init__()

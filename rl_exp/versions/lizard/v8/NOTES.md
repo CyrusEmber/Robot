@@ -53,3 +53,7 @@
   disp_head>0 复验。
 - 结果回填: （训练后补：reward 曲线读数 / 反划脚 KPI 读数 / eval 跑分表 / 结论）
 - 结论: （一句话，训练后补）
+- **2026-09-09 v8.1 判废终止**：用户手动 kill @ iter 7700/15000（ckpt 7700
+  留档）。诊断：`Episode_Termination/tilt` 0.60——v3 tilt 判据假阳截断
+  （详见 `..\v10\NOTES.md`），天花板被钉死；r_slip ×10 升级本身有效
+  （feet_slide −0.027 ≈ 理论 −0.028，"在说话"）。后续：v10 删 tilt 终止。

@@ -194,6 +194,17 @@ class LizardTeacherV8PPORunnerCfg(LizardTeacherV6PPORunnerCfg):
 
 
 @configclass
+class LizardTeacherV10PPORunnerCfg(LizardTeacherV8PPORunnerCfg):
+    """Runner cfg for `Lizard-Rough-v10` (tilt termination removed, obs 381).
+
+    Same recipe as v8.1 (paper S1 hyperparams, three-encoder model); only the
+    log dir changes -- one version, one dir (versioning.mdc §A).
+    """
+
+    experiment_name = "lizard_rough_teacher_v10"
+
+
+@configclass
 class LizardParkourClimbPPORunnerCfg(LizardFlatPPORunnerCfg):
     """Runner cfg for `Lizard-Parkour-Climb-v1` (position-task stairs expert).
 
