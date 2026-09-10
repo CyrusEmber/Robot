@@ -11,7 +11,9 @@
 > 命令与摆位 → 仓根 README。时态判据见 `.codemaker/rules/versioning.mdc`
 > 分层原则（FAMILY=已成立事实，PLAN=靠行动兑现的意图）。
 >
-> 更新: 2026-09-08（v6 已训判废——倒走，骨命名与解剖学 180° 装反；开 v8
+> 更新: 2026-09-10（v10 在训——tilt 删除单变量版，判决门 = `v10\NOTES.md` 验收
+> 1–5；v11 联合粒子地形课程实施完成待开训——挂账 #15 候选 a 落地，v11.1 审查
+> 四修见 `v11\PLAN.md` 修订记录；断腿线占位 v9 重基 v8）。上一版 2026-09-08（v6 已训判废——倒走，骨命名与解剖学 180° 装反；开 v8
 > 资产解剖学转正+全关节重命名，v8.1 r_slip ×10，已冻结待训；v7 提案挂账 #16
 > 前提改指 v8 ckpt，方案 SSOT = `v7\PLAN.md`）。上一版 2026-09-03（重构为纯意图文档：现状
 > 快照/Phase 1 详情/命令速查移除
@@ -36,12 +38,13 @@
 ## 2. 总路线（Miki 两阶段 + EP 工程）
 
 ```
-Phase 1  Teacher: 特权 actor PPO（当前 = v8 已冻结待训——资产解剖学转正+全关节重命名；版本态速览见 FAMILY 当前状态）
+Phase 1  Teacher: 特权 actor PPO（当前 = v10 在训——tilt 删除单变量版，判决门见
+         v10\NOTES.md 验收 1–5；v11 联合粒子地形课程已实施待开训，版本态速览见 FAMILY）
 Phase 2  Student: 蒸馏（belief encoder + 加噪扫描 + 重建损失）
 Phase 3  部署: student → ONNX → UE
 ```
 
-当前训练入口：`--task Lizard-Rough-v8`（回放 `Lizard-Rough-Play-v8`）；
+当前训练入口：`--task Lizard-Rough-v10`（回放 `Lizard-Rough-Play-v10`）；
 验证链与摆位见仓根 README。
 
 **并行支线**：parkour 支线（Parkour in the Wild 范式：跑/爬/跳多专家 → DAgger
@@ -118,5 +121,5 @@ success_rate 0.31，课程全卡 stage 0，地形等级 0.1/9。
 | 12 | ablation_harness 版本与待办 → `ablation_harness/HARNESS.md`（自有版本文档 SSOT，2026-09-01 拍板：仓不拆、只拆版本文档）。当前挂账：G3 剩余 `_ISAAC_ROOT` 参数化三处 → 删 `E:\IsaacLab\ablation_harness` junction | 🟡 G3 收尾 |
 | 13 | v5 开训前 GUI 目视判读"碎石堆无粗糙度"，与 preflight difficulty=1.0 数字矛盾（random_rough relief p95 0.325 m @ 满档）。归因假设：PLAY 非课程模式难度 U(0,1) 随机采样，所视 tile 大概率低难度（难度 d 振幅 ≈ 0.10+0.25d m，d=0.2 时 ≈0.15 m，视觉为平缓土堆）；训练侧 curriculum=True 按行爬坡 + 出生 level 0，前期平缓是设计内。**v5.3 起由 SIR 地形课程直接回应**（用户拍板 2026-09-03）：训练流量按真实成败在固定网格上再分配（带 [0.5,0.9] 重采样），不再依赖目视——`Curriculum/terrain_levels` 判读语义反转：带内集中/爬升 = 课程在起作用（分布随能力上移是设计内），**长期贴地不动**才需复核碎石参数；二次目视用 `_tmp_terrain_previews\v5_*.png`（difficulty=1.0 渲染） | 🟡 v5 训练期观察 |
 | 14 | 版本表达架构未定案：任务注册表与 teacher V 子类只增不减（现 14 注册 + V1..V5 常驻），退役条款曾写入 versioning 后撤回（commit d642ce9）。候选方向：a) 退役降级 git tag 复现 b) 组件库（地形/reward/obs spec 表化，参数级 diff 写 spec 行而非新子类）c) 维持现状。约束：teacher 零家族 import 是冻结纪律，组件化不得破坏"改组件≠改历史版本语义"。触发再议：连续两个纯参数级新版本，或第二家族立项 | 🟢 未定案（用户拍板挂账 2026-09-03） |
-| 15 | SIR 课程判据 v6 候选（v5.4 弃案存档）：v5 冷启动若长期停滞——flat 集中后课程不动、rough 各行 p̂ 全带下、`Curriculum/terrain_levels` 长期钉低位（诊断信号）——则 v6 升测量判据。候选优先级：a) **逐步 Tr**（逐状态转移期望，贴论文原文，带信号从第一块就有）b) **v5.4 进度分制**（位移线性 × 存活占比 + 带下线性权重，代码保全 git `3ef2aa0`，含单测 10/10 + 冷启动梯度回归，可直接复活）。约束：v5 训练期不动判据（归因隔离，用户拍板 2026-09-03），诊断数据记入 v5 NOTES 结果回填 | 🟡 v5 训练后裁决 |
+| 15 | SIR 课程判据 v6 候选（v5.4 弃案存档）：v5 冷启动若长期停滞——flat 集中后课程不动、rough 各行 p̂ 全带下、`Curriculum/terrain_levels` 长期钉低位（诊断信号）——则 v6 升测量判据。候选优先级：a) **逐步 Tr**（逐状态转移期望，贴论文原文，带信号从第一块就有）b) **v5.4 进度分制**（位移线性 × 存活占比 + 带下线性权重，代码保全 git `3ef2aa0`，含单测 10/10 + 冷启动梯度回归，可直接复活）。约束：v5 训练期不动判据（归因隔离，用户拍板 2026-09-03），诊断数据记入 v5 NOTES 结果回填。**✅ 候选 a 由 v11 落地（2026-09-10）**：联合粒子 SIR 逐步 Tr（Eq.2/3/7，口径反转记录见 `v11\PLAN.md` §3/§9）；v5 旧二值代理类冻结不改 | ✅ 结案 |
 | 16 | v7 实施（ghost 断腿鲁棒性，方案 SSOT = `v7\PLAN.md`，用户拍板开 v7 2026-09-08）：V7 env cfg + 任务注册 `Lizard-Rough-v7` + broken_leg DR 事件（p=0.3，整腿 stiffness→0/damping→1.0/质量 ×0.001）+ `damage_flags` 4 维进 actor obs（90→94）+ 断腿 hfe/kfe 接触罚豁免（V7 子类，不改旧类）+ ablation_harness broken-leg eval suite + v8 ckpt 微调入口。前置依赖：v8 已训 | 🟡 提案 |

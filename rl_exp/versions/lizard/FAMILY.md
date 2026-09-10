@@ -85,6 +85,8 @@ v4/v5 spec 不变。
 | v7 | 2026-09-08 | ghost 断腿鲁棒性（提案，代码未实施）：截肢近似 DR（p=0.3 整腿 stiffness→0 + 质量 ×0.001，契约维度不变）+ `damage_flags` 4 维进 actor obs（90→94，UE 断腿事件直填）+ v8 ckpt 微调（PITW 配方）。**v7.1 同日归档**：未启动即迁 v9 重基 v8（用户拍板"按顺序开 v9"），实施见 `v9\PLAN.md` | 提案未启动前提失效（v6 判废）→ 编号顺序 < 语义正确：占位号让位，血缘号接管 |
 | v8 | 2026-09-08 | 资产解剖学转正 + 全关节重命名（v6 判废根因修复）：blend 再转 R_z(+180°)（球头→+X）+ 26 关节按解剖学改名 + 全版本 yaml 迁移 + 注册 `Lizard-Rough-v8`；reward/obs 逐字同 v6.2，v8.1 r_slip ×10（预注册升级，v6 数据触发）。布局硬闸入 `check_joints_v8.py` | （训练后补） |
 | v9 | 2026-09-08 | ghost 断腿鲁棒性（提案，代码未实施，自 v7 迁入重基 v8）：截肢近似 DR（p=0.3 整腿 stiffness→0 + 质量 ×0.001，契约维度不变）+ `damage_flags` 4 维进 actor obs（90→94，UE 断腿事件直填）+ v8 ckpt 微调（PITW 配方，weight surgery 90→94）。limp/分级/多腿/mid-episode 不做 | （训练后补） |
+| v10 | 2026-09-09 | 单变量删除 tilt 终止（v8.1 之上唯一差异，yaml `tilt_terminate: null`）：翻倒数据留在 rollout 里自供翻身梯度（肚皮接触只罚不终 + 2 m 尾地面翻正），只有 time_out 收局。**在训**（2026-09-09 启动，4096 env，experiment `lizard_rough_teacher_v10`）；判决门 = `v10\NOTES.md` 验收 1–5（time_out→1.0、success_rate 离开 0.019、terrain_levels 爬升、belly≈0、track_lin_vel 回升 vs 0.79 基线） | （训练后补） |
+| v11 | 2026-09-10 | 联合粒子地形课程（Lee 2020 Alg S1 + 联合扩展）：粒子 = (参数格 combo, 速度桶)，`param_grid_terrain.py` 参数组合网格（治对角线问题）+ 逐步 Tr 测量（挂账 #15 候选 a 落地）+ `ParticleVelocityCommand` 桶命令接线 + 带空方向分流兜底。实施完成（件 1–5，离线闸门 11/11 绿；smoke TRAIN 段留开训前补跑）；开训门 = v10 判决。v11.1 审查四修见 `v11\PLAN.md` 修订记录（stairs 顶档 0.45、SIR 结算式清零、joint_sir 常量化、PLAN 勘误） | （训练后补） |
 
 > **退休注记（2026-09-07，资产换代后果）**：v1/v3/v5 的**原地复现已退役**——
 > v6 资产换代后，工作树跑旧任务 id（`Lizard-Rough-v1/v3/v5`）加载的是**新资产**
