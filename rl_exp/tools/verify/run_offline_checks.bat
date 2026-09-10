@@ -50,6 +50,9 @@ echo [9/10] v5 anti-collapse rewards (linear tracking / slip / belly / c_k scali
 echo [10/10] v5.3 SIR terrain curriculum (band / resample / walk clamp / replay / throttle)
 "%PY%" rl_exp\tools\verify\test_v5_terrain_sir.py || goto :fail
 
+echo [11/11] v11 joint SIR terrain curriculum (param grid / Eq.2-3-7 / fallback / walk / command)
+"%PY%" rl_exp\tools\verify\test_joint_sir.py || goto :fail
+
 echo ALL_OFFLINE_CHECKS_PASSED
 exit /b 0
 

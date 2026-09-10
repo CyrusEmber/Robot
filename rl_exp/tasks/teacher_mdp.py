@@ -14,15 +14,20 @@ penalty and DR wrappers, tilt termination, and the anti-drag foot-clearance
 reward. The v5 section below it adds the reward-side anti-collapse package
 (plan versions/lizard/v5/PLAN.md): EP-style linear velocity tracking,
 c_k-scaled foot-slide (r_slip) and undesired-contact (r_co) penalties, and
-the constant-weight belly-contact force penalty.
+the constant-weight belly-contact force penalty. The v11 section adds the
+joint particle terrain curriculum (plan versions/lizard/v11/PLAN.md):
+ParticleVelocityCommand + JointSIRTerrainCurriculum.
 """
 
 from __future__ import annotations
+
+import math
 
 import torch
 import warp as wp
 
 from isaaclab.envs import mdp
+from isaaclab.envs.mdp.commands import UniformVelocityCommand, UniformVelocityCommandCfg
 from isaaclab.managers import CurriculumTermCfg, ManagerTermBase, ObservationTermCfg, SceneEntityCfg
 from isaaclab.utils.configclass import configclass
 from isaaclab.utils.math import quat_apply_inverse, yaw_quat
@@ -690,3 +695,466 @@ class SpawnWeightSIRTerrainCurriculum(ManagerTermBase):
             self._history[t] = torch.cat([pool, rows])
             episodes.zero_()
             successes.zero_()
+
+
+# --- v11: joint particle terrain curriculum (plan versions/lizard/v11/PLAN.md) ---
+# Lee et al. 2020 (arXiv:2010.11251) Alg. S1 generalized to a JOINT particle
+# (terrain param combo, velocity bucket) over a frozen param-sampled grid
+# (param_grid_terrain.py builds the grid; sub-terrain names encode the combo).
+# Measurement returns to the paper's per-state-transition Tr (Eq. 2/3/7),
+# replacing the v5.5 binary terminal proxy (family PLAN ledger #15, option a).
+# Extensions beyond the paper (attribution, v11 PLAN section 9): velocity in
+# the particle (the paper samples commands randomly and keeps them out), the
+# frozen param grid, the band-empty directional fallback (cold start = all
+# particles on the easiest combo with velocity buckets cycled -- no near-flat
+# or low-speed bias; v11.1 PLAN erratum). The v5 SpawnWeightSIRTerrainCurriculum
+# above stays FROZEN for v5-v10 reproducibility; this section is add-only.
+
+JOINT_SIR_TERM = "joint_sir"
+"""Curriculum term name for the joint SIR (v11.1).
+
+``ParticleVelocityCommand._resample_command`` looks the term up by this
+name, and the V11 env cfg wiring + ``check_obs_layout.py`` reference the
+same constant, so a rename cannot silently decouple the particle velocity
+from the curriculum (a stale name silently falls back to uniform commands).
+"""
+
+
+class ParticleVelocityCommand(UniformVelocityCommand):
+    """Velocity command whose lin_vel_x comes from the joint SIR particle.
+
+    The joint curriculum term sets :attr:`desired_vel` for the resetting envs
+    at ITS compute hook -- ``ManagerBasedRLEnv._reset_idx`` calls the
+    curriculum manager (:369) BEFORE the command manager reset (:394), so this
+    term's :meth:`_resample_command` reads the fresh particle values; the
+    ordering is load-bearing (v11 PLAN section 4.2). Where no curriculum term
+    exists (PLAY variants) or the buffer is unset (-1), lin_vel_x falls back
+    to the stock uniform range sample.
+
+    Also accumulates the paper's per-step traversability label (Eq. 2):
+    ``nu = 1`` iff the base velocity projected on the commanded direction
+    exceeds ``v_pr_threshold`` [m/s] (signed projection -- reversal drift
+    scores 0; overspeed is not penalized). The curriculum term reads
+    ``_nu_sum``/``_step_count`` for the ended episodes at its hook, before
+    :meth:`reset` zeroes them. Mid-episode resampling must stay disabled
+    (``resampling_time_range=(1e9, 1e9)`` in the V11 wiring) so a whole
+    episode keeps one particle pairing.
+    """
+
+    cfg: ParticleVelocityCommandCfg
+
+    def __init__(self, cfg: ParticleVelocityCommandCfg, env):
+        super().__init__(cfg, env)
+        self._nu_sum = torch.zeros(self.num_envs, device=self.device)
+
+    def _update_metrics(self):
+        super()._update_metrics()
+        cmd_xy = self.vel_command_b[:, :2]
+        cmd_norm = torch.linalg.norm(cmd_xy, dim=-1)
+        v_pr = (self.robot.data.root_lin_vel_b.torch[:, :2] * cmd_xy).sum(-1) / cmd_norm.clamp_min(1e-6)
+        nu = (v_pr > self.cfg.v_pr_threshold) & (cmd_norm > 1e-6)
+        self._nu_sum += nu.float()
+
+    def reset(self, env_ids=None):
+        extras = super().reset(env_ids)
+        if env_ids is None:
+            env_ids = slice(None)
+        self._nu_sum[env_ids] = 0.0
+        return extras
+
+    def _resample_command(self, env_ids):
+        super()._resample_command(env_ids)
+        sir_cfg = getattr(self._env.curriculum_manager.cfg, JOINT_SIR_TERM, None)
+        if sir_cfg is None:
+            return
+        desired = sir_cfg.func.desired_vel[env_ids]
+        jitter = (torch.rand_like(desired) * 2.0 - 1.0) * self.cfg.command_jitter
+        # sentinel is desired_vel's -1 init; 0.0 is a legal bucket (v11.1 --
+        # the old ``> 0.0`` test would have swallowed a 0.0 bucket into the
+        # uniform fallback)
+        self.vel_command_b[env_ids, 0] = torch.where(
+            desired >= 0.0, (desired + jitter).clamp_min(0.0), self.vel_command_b[env_ids, 0]
+        )
+
+
+@configclass
+class ParticleVelocityCommandCfg(UniformVelocityCommandCfg):
+    """Configuration for :class:`ParticleVelocityCommand`.
+
+    Field values come from the version yaml ``v11.velocity_command`` section
+    (SSOT).
+    """
+
+    class_type: type = ParticleVelocityCommand
+    v_pr_threshold: float = 0.2
+    """Per-step traversability label threshold [m/s] (paper Eq. 2)."""
+    command_jitter: float = 0.1
+    """Uniform jitter [m/s] around the particle's bucket value."""
+
+
+@configclass
+class JointSIRTerrainCurriculumCfg(CurriculumTermCfg):
+    """Configuration for :class:`JointSIRTerrainCurriculum`.
+
+    Field values come from the version yaml ``v11.terrain_curriculum``
+    section (SSOT); ``check_obs_layout.py`` asserts the wiring matches the
+    yaml and that ``steps_per_iteration`` equals the runner's
+    ``num_steps_per_env``.
+    """
+
+    command_name: str = "base_velocity"
+    """Velocity command term providing the Eq. 2 label sums."""
+    band: tuple[float, float] = (0.5, 0.9)
+    """Per-trajectory Tr band (paper Eq. 4/5)."""
+    velocity_buckets: tuple[float, ...] = (0.5, 1.0, 1.5, 2.0, 2.5, 3.0)
+    """lin_vel_x bucket values [m/s] -- the joint particle's velocity axis."""
+    particles_per_type: int = 16
+    """Particles per terrain type (paper: 10; raised for the joint space)."""
+    eval_every: int = 10
+    """Policy iterations between SIR resamples (paper N_evaluate)."""
+    n_traj_min: int = 6
+    """Min trajectories per (combo, bucket) pair to update its weight."""
+    p_transition: float = 0.8
+    """Single-axis random-walk probability (one param axis or velocity)."""
+    p_replay: float = 0.05
+    """Replay-memory redraw probability."""
+    maintain_mass: float = 0.1
+    """Band-empty fallback share kept on learned pairs (v11 PLAN 4.1)."""
+    steps_per_iteration: int = 24
+    """Policy steps per PPO iteration; must equal runner num_steps_per_env."""
+
+
+class JointSIRTerrainCurriculum(ManagerTermBase):
+    """Joint SIR terrain curriculum over (param combo, velocity bucket) pairs.
+
+    Grid wiring: ``param_grid_terrain.build_param_grid_terrain_cfg`` expands
+    every parameter combination into one sub-terrain named
+    ``<type>|<lvl>_<lvl>...`` (0-based levels, yaml axis order; ``flat`` has
+    no axes). This term re-parses those names, replicates the
+    TerrainGenerator column split (terrain_generator.py:243-247) at combo
+    granularity, and owns, per terrain type: particles (pair indices),
+    weights, episode / in-band / Tr counters and a replay history pool.
+
+    Per reset: book-keep ended episodes (per-trajectory Tr = the command
+    term's Eq. 2 label sum / step count), then respawn the resetting envs on
+    a particle of their type -- terrain slot from the particle's combo,
+    lin_vel_x from its velocity bucket (written to :attr:`desired_vel`,
+    consumed by :class:`ParticleVelocityCommand`).
+
+    Every ``eval_every`` policy iterations: weight = fraction of the pair's
+    trajectories with per-trajectory Tr inside the band (paper Eq. 7),
+    particles resampled proportionally, random-walked one axis (params or
+    velocity), partly redrawn from the replay pool. Band-empty fallback
+    routes by direction (v11 PLAN 4.1): mixed learned/unlearned concentrates
+    on the frontier with a small maintenance share on learned pairs;
+    all-learned and all-failed (cold start) stay uniform (paper semantics,
+    and the v5.4 withdrawal precedent for cold start).
+
+    The returned dict is logged per key as ``Curriculum/joint_sir/<key>``:
+    ``frontier_max_v`` (mean over types of the fastest bucket on the current
+    particles -- the progress metric replacing ``terrain_levels``), 
+    ``particle_entropy`` (distribution health, 0 = collapse onto one pair),
+    ``tr_mean`` (mean per-trajectory Tr over the last block).
+    """
+
+    cfg: JointSIRTerrainCurriculumCfg
+
+    def __init__(self, cfg: JointSIRTerrainCurriculumCfg, env):
+        super().__init__(cfg, env)
+        terrain = env.scene.terrain
+        gen_cfg = terrain.cfg.terrain_generator
+        if gen_cfg is None or terrain.terrain_origins is None:
+            raise ValueError("JointSIRTerrainCurriculum needs terrain_type 'generator' with terrain origins.")
+        origins = terrain.terrain_origins
+        self._num_rows = int(origins.shape[0])
+        num_cols = int(origins.shape[1])
+        device = origins.device
+        # parse combo names -> (type, levels); column -> sub-terrain index,
+        # replicating TerrainGenerator's curriculum split verbatim
+        # (terrain_generator.py:243-247)
+        names = list(gen_cfg.sub_terrains.keys())
+        proportions = [float(sub.proportion) for sub in gen_cfg.sub_terrains.values()]
+        total = sum(proportions)
+        cum = []
+        acc = 0.0
+        for p in proportions:
+            acc += p / total
+            cum.append(acc)
+        col_sub = []
+        for col in range(num_cols):
+            frac = col / num_cols + 0.001
+            col_sub.append(next(i for i, c in enumerate(cum) if frac < c))
+        col_sub = torch.tensor(col_sub, dtype=torch.long, device=device)
+        # types in first-appearance order; per type: combo level tuples
+        self._types: list[str] = []
+        type_combos: dict[str, list[tuple[int, ...]]] = {}
+        for name in names:
+            type_name, _, lvl_str = name.partition("|")
+            levels = tuple(int(x) for x in lvl_str.split("_")) if lvl_str else ()
+            type_combos.setdefault(type_name, []).append(levels)
+            if type_name not in self._types:
+                self._types.append(type_name)
+        self._velocity = torch.tensor(cfg.velocity_buckets, dtype=torch.float, device=device)
+        n_v = len(cfg.velocity_buckets)
+        self._n_v = n_v
+        # per-type state: level counts, pair count, column slots, SIR state
+        self._n_levels: list[list[int]] = []
+        self._n_pairs: list[int] = []
+        self._combo_cols: list[list[torch.Tensor]] = []
+        self._particles: list[torch.Tensor] = []
+        self._weights: list[torch.Tensor] = []
+        self._episodes: list[torch.Tensor] = []
+        self._in_band: list[torch.Tensor] = []
+        self._tr_sum: list[torch.Tensor] = []
+        self._history: list[torch.Tensor] = []
+        n_part = cfg.particles_per_type
+        for type_name in self._types:
+            combos = type_combos[type_name]
+            n_axes = len(combos[0])
+            n_levels = [max(lv[a] for lv in combos) + 1 for a in range(n_axes)]
+            if math.prod(n_levels) != len(combos):
+                raise ValueError(
+                    f"terrain type {type_name!r}: combos are not the full parameter "
+                    "product (param_grid_terrain.py must enumerate itertools.product)"
+                )
+            combo_cols = []
+            for i, name in enumerate(names):
+                if name.partition("|")[0] != type_name:
+                    continue
+                cols = (col_sub == i).nonzero().flatten()
+                if cols.numel() == 0:
+                    raise ValueError(f"combo {name!r} owns no column; raise terrain_grid.num_cols")
+                combo_cols.append(cols)
+            n_pairs = len(combos) * n_v
+            self._n_levels.append(n_levels)
+            self._n_pairs.append(n_pairs)
+            self._combo_cols.append(combo_cols)
+            # cold start: all particles on the easiest combo (levels all 0),
+            # velocity buckets cycled
+            pairs = torch.arange(n_part, device=device) % n_v
+            self._particles.append(pairs)
+            self._weights.append(torch.full((n_pairs,), 1.0 / n_pairs, device=device))
+            self._episodes.append(torch.zeros(n_pairs, device=device))
+            self._in_band.append(torch.zeros(n_pairs, device=device))
+            self._tr_sum.append(torch.zeros(n_pairs, device=device))
+            self._history.append(pairs.clone())
+        # env -> type follows the importer's initial column assignment, so
+        # per-type env traffic follows the generator's type proportions (the
+        # paper's fixed per-type trajectory share)
+        col_type = torch.empty(num_cols, dtype=torch.long, device=device)
+        for col in range(num_cols):
+            col_type[col] = self._types.index(names[int(col_sub[col])].partition("|")[0])
+        self._env_type = col_type[terrain.terrain_types.long()]
+        self._env_pair = torch.full((env.num_envs,), -1, dtype=torch.long, device=device)
+        self.desired_vel = torch.full((env.num_envs,), -1.0, device=device)
+        self._next_eval_step = self.cfg.eval_every * self.cfg.steps_per_iteration
+        self._tr_block_sum = 0.0
+        self._tr_block_count = 0
+        self._last_tr_mean = 0.0
+        self._cmd_term = None
+
+    def __call__(self, env, env_ids) -> dict[str, float]:
+        """Book-keep ended episodes, resample on block boundaries, respawn."""
+        terrain = env.scene.terrain
+        # 1) measure the episodes that just ended (episode_length_buf > 0
+        # skips the initial full reset, where no episode ran)
+        real = env.episode_length_buf[env_ids] > 0
+        if bool(real.any()):
+            cmd = self._command_term(env)
+            ids = env_ids[real]
+            tr = cmd._nu_sum[ids] / cmd._step_count[ids].clamp_min(1.0)
+            pairs = self._env_pair[ids]
+            types = self._env_type[ids]
+            lo, hi = self.cfg.band
+            in_band = (tr >= lo) & (tr <= hi)
+            self._tr_block_sum += float(tr.sum())
+            self._tr_block_count += int(tr.numel())
+            for t in torch.unique(types):
+                t = int(t)
+                mask = types == t
+                ones = torch.ones(int(mask.sum()), device=tr.device)
+                self._episodes[t].index_add_(0, pairs[mask], ones)
+                self._in_band[t].index_add_(0, pairs[mask], in_band[mask].float())
+                self._tr_sum[t].index_add_(0, pairs[mask], tr[mask])
+        # 2) block evaluation: every eval_every policy iterations
+        if env.common_step_counter >= self._next_eval_step:
+            self._resample_all()
+            block = self.cfg.eval_every * self.cfg.steps_per_iteration
+            self._next_eval_step = (env.common_step_counter // block + 1) * block
+            self._tr_block_sum = 0.0
+            self._tr_block_count = 0
+        # 3) respawn the resetting envs on their type's particle set
+        types = self._env_type[env_ids]
+        for t in torch.unique(types):
+            ti = int(t)
+            ids = env_ids[types == t]
+            particles = self._particles[ti]
+            pick = particles[torch.randint(particles.numel(), (ids.numel(),), device=particles.device)]
+            combos = pick // self._n_v
+            for c in torch.unique(combos):
+                sel = ids[combos == c]
+                cols = self._combo_cols[ti][int(c)]
+                col = cols[torch.randint(cols.numel(), (sel.numel(),), device=cols.device)]
+                row = torch.randint(self._num_rows, (sel.numel(),), device=cols.device)
+                terrain.terrain_levels[sel] = row
+                terrain.terrain_types[sel] = col
+                terrain.env_origins[sel] = terrain.terrain_origins[row, col]
+            self._env_pair[ids] = pick
+            self.desired_vel[ids] = self._velocity[pick % self._n_v]
+        return self._metrics()
+
+    def _command_term(self, env):
+        if self._cmd_term is None:
+            term = env.command_manager.get_term(self.cfg.command_name)
+            if not hasattr(term, "_nu_sum"):
+                raise ValueError(
+                    f"command term '{self.cfg.command_name}' has no Eq. 2 label sums; "
+                    "JointSIRTerrainCurriculum needs ParticleVelocityCommand"
+                )
+            self._cmd_term = term
+        return self._cmd_term
+
+    def _resample_all(self) -> None:
+        """One SIR block per type: Eq. 7 weights, resample, walk, replay.
+
+        Pairs below n_traj_min keep their previous weight AND their counters,
+        accumulating evidence across blocks until they settle (v11.1: the
+        unconditional counter reset starved low-traffic pairs -- .1-proportion
+        types average ~6.1 episodes/particle/block at the 4096-env run size,
+        so their sparse pairs would otherwise sit at the uniform prior
+        forever and the SIR would degrade to a random walk for them).
+        """
+        n_part = self.cfg.particles_per_type
+        for ti in range(len(self._types)):
+            episodes = self._episodes[ti]
+            in_band = self._in_band[ti]
+            tr_sum = self._tr_sum[ti]
+            settled = episodes >= self.cfg.n_traj_min
+            measured = in_band / episodes.clamp_min(1.0)
+            # unsettled pairs keep their previous weight (and their counters)
+            weights = torch.where(settled, measured, self._weights[ti])
+            total = float(weights.sum())
+            if total <= 0.0:
+                weights = self._fallback_weights(ti, episodes, tr_sum)
+                total = float(weights.sum())
+            weights = weights / total
+            self._weights[ti] = weights
+            particles = torch.multinomial(weights, n_part, replacement=True)
+            particles = self._walk(ti, particles)
+            pool = self._history[ti]
+            replay = torch.rand(n_part, device=particles.device) < self.cfg.p_replay
+            if bool(replay.any()):
+                pick = torch.randint(pool.numel(), (int(replay.sum()),), device=particles.device)
+                particles[replay] = pool[pick]
+            self._particles[ti] = particles
+            self._history[ti] = torch.cat([pool, particles])
+            episodes[settled] = 0
+            in_band[settled] = 0
+            tr_sum[settled] = 0
+
+    def _fallback_weights(self, ti: int, episodes: torch.Tensor, tr_sum: torch.Tensor) -> torch.Tensor:
+        """Band-empty routing by direction (v11 PLAN 4.1).
+
+        Mixed learned/unlearned: concentrate the mass on the frontier (unlearned
+        pairs one axis-step from learned ones) with a small maintenance share
+        on the learned pairs. All-learned and all-failed (cold start) stay
+        uniform -- the paper's semantics, and the v5.4 withdrawal precedent
+        (no home-made cold-start criterion).
+        """
+        n_pairs = self._n_pairs[ti]
+        uniform = torch.full((n_pairs,), 1.0 / n_pairs, device=episodes.device)
+        measured = episodes >= self.cfg.n_traj_min
+        if not bool(measured.any()):
+            return uniform
+        _, hi = self.cfg.band
+        learned = measured & (tr_sum / episodes.clamp_min(1.0) >= hi)
+        if bool(learned.all()) or not bool(learned.any()):
+            return uniform
+        frontier = torch.zeros_like(learned)
+        for pair in learned.nonzero().flatten().tolist():
+            for nb in self._neighbors(ti, pair):
+                frontier[nb] = True
+        frontier &= ~learned
+        if not bool(frontier.any()):
+            frontier = ~learned
+        weights = torch.zeros(n_pairs, device=episodes.device)
+        weights[learned] = self.cfg.maintain_mass / int(learned.sum())
+        weights[frontier] += (1.0 - self.cfg.maintain_mass) / int(frontier.sum())
+        return weights
+
+    def _neighbors(self, ti: int, pair: int) -> list[int]:
+        """Pair indices one axis-step away (single param axis or velocity)."""
+        n_v = self._n_v
+        n_levels = self._n_levels[ti]
+        c, v = divmod(pair, n_v)
+        levels = self._decode_levels(ti, c)
+        out = []
+        for a, lvl in enumerate(levels):
+            for d in (-1, 1):
+                nl = list(levels)
+                nl[a] = max(0, min(n_levels[a] - 1, lvl + d))
+                if nl != list(levels):
+                    out.append(self._encode_combo(ti, nl) * n_v + v)
+        if v > 0:
+            out.append(c * n_v + v - 1)
+        if v < n_v - 1:
+            out.append(c * n_v + v + 1)
+        return out
+
+    def _walk(self, ti: int, particles: torch.Tensor) -> torch.Tensor:
+        """Random walk: one axis (params or velocity) +-1 level, clamped."""
+        n_levels = self._n_levels[ti]
+        n_axes = len(n_levels)
+        n_v = self._n_v
+        n = particles.numel()
+        move = torch.rand(n, device=particles.device) < self.cfg.p_transition
+        axis = torch.randint(0, n_axes + 1, (n,), device=particles.device)
+        direction = torch.randint(0, 2, (n,), device=particles.device) * 2 - 1
+        out = particles.clone()
+        for i in range(n):
+            if not bool(move[i]):
+                continue
+            c, v = divmod(int(particles[i]), n_v)
+            if int(axis[i]) == n_axes:
+                v = max(0, min(n_v - 1, v + int(direction[i])))
+            else:
+                levels = self._decode_levels(ti, c)
+                a = int(axis[i])
+                levels[a] = max(0, min(n_levels[a] - 1, levels[a] + int(direction[i])))
+                c = self._encode_combo(ti, levels)
+            out[i] = c * n_v + v
+        return out
+
+    def _decode_levels(self, ti: int, combo: int) -> list[int]:
+        """Combo index -> axis levels (mixed radix, last axis fastest)."""
+        levels = []
+        for n in reversed(self._n_levels[ti]):
+            levels.append(combo % n)
+            combo //= n
+        return list(reversed(levels))
+
+    def _encode_combo(self, ti: int, levels: list[int]) -> int:
+        """Axis levels -> combo index (mixed radix, last axis fastest)."""
+        combo = 0
+        for lvl, n in zip(levels, self._n_levels[ti]):
+            combo = combo * n + lvl
+        return combo
+
+    def _metrics(self) -> dict[str, float]:
+        n_part = self.cfg.particles_per_type
+        fmv = []
+        ent = []
+        for ti in range(len(self._types)):
+            vs = self._velocity[self._particles[ti] % self._n_v]
+            fmv.append(float(vs.max()) if vs.numel() else 0.0)
+            hist = torch.bincount(self._particles[ti], minlength=self._n_pairs[ti]).float()
+            p = hist / hist.sum().clamp_min(1.0)
+            nz = p[p > 0]
+            ent.append(float(-(nz * nz.log()).sum()) / max(math.log(n_part), 1e-9))
+        if self._tr_block_count > 0:
+            self._last_tr_mean = self._tr_block_sum / self._tr_block_count
+        return {
+            "frontier_max_v": sum(fmv) / len(fmv),
+            "particle_entropy": sum(ent) / len(ent),
+            "tr_mean": self._last_tr_mean,
+        }

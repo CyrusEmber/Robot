@@ -205,6 +205,17 @@ class LizardTeacherV10PPORunnerCfg(LizardTeacherV8PPORunnerCfg):
 
 
 @configclass
+class LizardTeacherV11PPORunnerCfg(LizardTeacherV10PPORunnerCfg):
+    """Runner cfg for `Lizard-Rough-v11` (joint particle terrain curriculum).
+
+    Same recipe as v10 (paper S1 hyperparams, three-encoder model); only the
+    log dir changes -- one version, one dir (versioning.mdc §A).
+    """
+
+    experiment_name = "lizard_rough_teacher_v11"
+
+
+@configclass
 class LizardParkourClimbPPORunnerCfg(LizardFlatPPORunnerCfg):
     """Runner cfg for `Lizard-Parkour-Climb-v1` (position-task stairs expert).
 

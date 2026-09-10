@@ -26,6 +26,8 @@ from rl_exp.tasks.teacher_env_cfg import (  # noqa: E402
     LizardRoughTeacherEnvCfg_V4,
     LizardRoughTeacherEnvCfg_V5,
     LizardRoughTeacherEnvCfg_V5_PLAY,
+    LizardRoughTeacherEnvCfg_V11,
+    LizardRoughTeacherEnvCfg_V11_PLAY,
     TEACHER_TERRAINS_CFG_V4,
     TEACHER_TERRAINS_CFG_V5,
 )
@@ -33,6 +35,7 @@ from rl_exp.tasks.agents.rsl_rl_ppo_cfg import (  # noqa: E402
     LizardTeacherV3PPORunnerCfg,
     LizardTeacherV4PPORunnerCfg,
     LizardTeacherV5PPORunnerCfg,
+    LizardTeacherV11PPORunnerCfg,
 )
 
 V3_EXTERO_ORDER = ["lf_foot_ring", "rf_foot_ring", "rl_foot_ring", "rr_foot_ring"]
@@ -263,7 +266,85 @@ def main() -> int:
     if LizardRoughTeacherEnvCfg_V5_PLAY().curriculum.terrain_levels is not None:
         problems.append("v5 PLAY: SIR terrain curriculum must be dropped (deterministic eval, no roaming)")
 
-    print(f"  teacher versions checked: v1/v2/v3/v4/v5")
+    # v11: joint particle terrain curriculum wiring (plan versions/lizard/v11/PLAN.md)
+    v11 = LizardRoughTeacherEnvCfg_V11()
+    with open(_EXP / "versions" / "lizard" / "v11" / "lizard_params.yaml", encoding="utf-8") as f:
+        v11y = yaml.safe_load(f)["v11"]
+    v11_runner_steps = LizardTeacherV11PPORunnerCfg().num_steps_per_env
+    if v11.curriculum.terrain_levels is not None:
+        problems.append("v11: the frozen v5 row SIR must be dropped (terrain_levels = None)")
+    # term name via the module constant: the command term looks the curriculum
+    # up by the same name, so a rename that misses it would silently fall back
+    # to uniform commands (v11.1)
+    jt = getattr(v11.curriculum, teacher_mdp.JOINT_SIR_TERM, None)
+    if not isinstance(jt, teacher_mdp.JointSIRTerrainCurriculumCfg):
+        problems.append("v11: curriculum.joint_sir must be the JointSIRTerrainCurriculumCfg term")
+    else:
+        if jt.func is not teacher_mdp.JointSIRTerrainCurriculum:
+            problems.append("v11: joint SIR term func is not JointSIRTerrainCurriculum")
+        sir_y = v11y["terrain_curriculum"]
+        for field, expected in (
+            ("band", tuple(sir_y["band"])),
+            ("velocity_buckets", tuple(v11y["velocity_buckets"])),
+            ("particles_per_type", sir_y["particles_per_type"]),
+            ("eval_every", sir_y["eval_every"]),
+            ("n_traj_min", sir_y["n_traj_min"]),
+            ("p_transition", sir_y["p_transition"]),
+            ("p_replay", sir_y["p_replay"]),
+            ("maintain_mass", sir_y["maintain_mass"]),
+        ):
+            actual = getattr(jt, field)
+            if isinstance(expected, tuple):
+                actual = tuple(actual)
+            if actual != expected:
+                problems.append(f"v11: joint SIR {field} {actual} != yaml {expected}")
+        if jt.steps_per_iteration != v11_runner_steps:
+            problems.append(
+                f"v11: joint SIR steps_per_iteration {jt.steps_per_iteration} != runner "
+                f"num_steps_per_env {v11_runner_steps} (block-eval length would lie)"
+            )
+    # param-grid terrain: combos expanded from the yaml table, flag + shape pinned
+    v11_gen = v11.scene.terrain.terrain_generator
+    if v11_gen is None or not v11_gen.curriculum:
+        problems.append("v11: param-grid generator missing, or curriculum flag lost (generator-swap pit)")
+    else:
+        names = list(v11_gen.sub_terrains)
+        if "flat" not in names or not any("|" in n for n in names):
+            problems.append("v11 terrain: expected combo names <type>|<lvl> plus a flat entry")
+        for type_name, spec in v11y["terrain_grid"].items():
+            if type_name in ("num_rows", "num_cols"):
+                continue
+            n_combos = 1
+            for levels in (v for k, v in spec.items() if k != "proportion"):
+                n_combos *= len(levels)
+            got = sum(1 for n in names if n.partition("|")[0] == type_name)
+            if got != n_combos:
+                problems.append(f"v11 terrain: type {type_name} has {got} combos != yaml {n_combos}")
+        if (v11_gen.num_rows, v11_gen.num_cols) != (
+            v11y["terrain_grid"]["num_rows"],
+            v11y["terrain_grid"]["num_cols"],
+        ):
+            problems.append("v11 terrain: grid shape != yaml terrain_grid")
+    if v11.scene.terrain.max_init_terrain_level is not None:
+        problems.append("v11: max_init_terrain_level must be None")
+    # command term: particle sourcing + Eq. 2 label config from yaml
+    v11_cmd = v11.commands.base_velocity
+    if not isinstance(v11_cmd, teacher_mdp.ParticleVelocityCommandCfg):
+        problems.append("v11: commands.base_velocity must be ParticleVelocityCommandCfg")
+    else:
+        vc_y = v11y["velocity_command"]
+        if v11_cmd.v_pr_threshold != vc_y["v_pr_threshold"] or v11_cmd.command_jitter != vc_y["command_jitter"]:
+            problems.append("v11: command term v_pr_threshold/command_jitter != yaml")
+        if tuple(v11_cmd.resampling_time_range) != (1.0e9, 1.0e9):
+            problems.append("v11: command resampling must stay disabled (one episode, one pairing)")
+        if tuple(v11_cmd.ranges.lin_vel_x) != (0.0, 3.0):
+            problems.append("v11: lin_vel_x fallback range != (0.0, 3.0)")
+    if getattr(
+        LizardRoughTeacherEnvCfg_V11_PLAY().curriculum, teacher_mdp.JOINT_SIR_TERM, "missing"
+    ) is not None:
+        problems.append("v11 PLAY: joint SIR must be dropped (deterministic eval, no roaming)")
+
+    print(f"  teacher versions checked: v1/v2/v3/v4/v5/v11")
     for p in problems:
         print(f"  DRIFT: {p}")
     if problems:

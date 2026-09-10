@@ -50,6 +50,7 @@ from isaaclab_tasks.manager_based.locomotion.velocity.velocity_env_cfg import (
 from isaaclab_tasks.utils import preset
 
 from rl_exp.tasks import teacher_mdp
+from rl_exp.tasks.param_grid_terrain import build_param_grid_terrain_cfg
 from rl_exp.tasks.play_utils import apply_play_wiring
 from rl_exp.tasks.staged_curriculum import StageCfg, StagedCurriculumTerm, StagedCurriculumTermCfg
 
@@ -427,6 +428,16 @@ TEACHER_PRIVILEGED_SPEC: dict[str, set[str]] = {
     # LizardRoughTeacherEnvCfg_V10), spec unchanged. v9 is reserved for the
     # leg-break protocol line and does not exist yet.
     "v10": {
+        "foot_contact_forces",
+        "foot_contact_normals",
+        "foot_friction",
+        "thigh_shank_contacts",
+        "base_external_wrench",
+    },
+    # v11 keeps the v10 privileged-term set (priv 83, obs 381): the joint
+    # particle terrain curriculum touches terrain/curriculum/commands only,
+    # never the obs contract.
+    "v11": {
         "foot_contact_forces",
         "foot_contact_normals",
         "foot_friction",
@@ -1317,3 +1328,98 @@ class LizardRoughTeacherEnvCfg_V10_PLAY(LizardRoughTeacherEnvCfg_V10):
 
         # SIR reassigns spawn origins per episode -- deterministic eval must not roam
         self.curriculum.terrain_levels = None
+
+
+@configclass
+class LizardRoughTeacherEnvCfg_V11(LizardRoughTeacherEnvCfg_V10):
+    """v11 recipe: joint particle terrain curriculum (plan versions/lizard/v11/PLAN.md).
+
+    Replaces the v5 scalar-row SIR with the joint (terrain param combo,
+    velocity bucket) particle filter over a frozen param-sampled grid
+    (param_grid_terrain.py; every combination becomes one sub-terrain with
+    single-value ranges, so the stock difficulty interpolation is a no-op --
+    the fix for the diagonal problem). Measurement returns to the paper's
+    per-state-transition Tr (Lee et al. 2020 Eq. 2/3/7) -- family PLAN
+    ledger #15 option a; velocity enters the particle (repo extension: the
+    paper samples commands randomly and keeps them out). lin_vel_x now
+    comes from the particle via ParticleVelocityCommand, with mid-episode
+    resampling disabled so a whole episode keeps one pairing (reset order:
+    curriculum compute at :369 precedes command resample at :394). All
+    difficulty levels and curriculum knobs live in the v11 yaml section
+    (SSOT). The v5 SpawnWeightSIRTerrainCurriculum stays frozen for v1-v10
+    reproducibility.
+    """
+
+    params_version = "v11"
+
+    def __post_init__(self):
+        super().__post_init__()
+        params = _load_params(self.params_version)
+        v11 = params["v11"]
+
+        # v11 terrain: param-sampled grid. The builder sets curriculum=True
+        # itself (pit: replacing the generator after super() otherwise drops
+        # the flag and the column split stops being deterministic).
+        self.scene.terrain.terrain_generator = build_param_grid_terrain_cfg(v11["terrain_grid"])
+        self.scene.terrain.max_init_terrain_level = None
+
+        # v11 curriculum: joint SIR replaces the v5 row SIR (setattr via the
+        # module constant -- the command term and check_obs_layout look the
+        # term up by the same name; v11.1)
+        self.curriculum.terrain_levels = None
+        sir = v11["terrain_curriculum"]
+        setattr(
+            self.curriculum,
+            teacher_mdp.JOINT_SIR_TERM,
+            teacher_mdp.JointSIRTerrainCurriculumCfg(
+                func=teacher_mdp.JointSIRTerrainCurriculum,
+                command_name="base_velocity",
+                band=tuple(sir["band"]),
+                velocity_buckets=tuple(v11["velocity_buckets"]),
+                particles_per_type=int(sir["particles_per_type"]),
+                eval_every=int(sir["eval_every"]),
+                n_traj_min=int(sir["n_traj_min"]),
+                p_transition=float(sir["p_transition"]),
+                p_replay=float(sir["p_replay"]),
+                maintain_mass=float(sir["maintain_mass"]),
+                steps_per_iteration=int(sir["steps_per_iteration"]),
+            ),
+        )
+
+        # v11 command: particle-sourced lin_vel_x + the Eq. 2 label
+        # accumulator. Field-by-field copy from the v5-wired term (its ranges
+        # object already carries the v5 (0, 3) narrowing).
+        vc = v11["velocity_command"]
+        base_cmd = self.commands.base_velocity
+        new_cmd = teacher_mdp.ParticleVelocityCommandCfg()
+        new_cmd.asset_name = base_cmd.asset_name
+        new_cmd.resampling_time_range = (1.0e9, 1.0e9)
+        new_cmd.heading_command = base_cmd.heading_command
+        new_cmd.heading_control_stiffness = base_cmd.heading_control_stiffness
+        new_cmd.rel_heading_envs = base_cmd.rel_heading_envs
+        new_cmd.rel_standing_envs = base_cmd.rel_standing_envs
+        new_cmd.ranges = base_cmd.ranges
+        new_cmd.v_pr_threshold = float(vc["v_pr_threshold"])
+        new_cmd.command_jitter = float(vc["command_jitter"])
+        self.commands.base_velocity = new_cmd
+
+
+@configclass
+class LizardRoughTeacherEnvCfg_V11_PLAY(LizardRoughTeacherEnvCfg_V11):
+    """v11 play variant: no randomization, no curriculum.
+
+    The ParticleVelocityCommand term stays (obs/command contract unchanged):
+    with the joint SIR dropped its lin_vel_x falls back to the (0, 3)
+    uniform range sample, matching the v10 PLAY behavior.
+    """
+
+    def __post_init__(self):
+        super().__post_init__()
+
+        # deterministic evaluation: shared PLAY wiring (single source, see play_utils)
+        apply_play_wiring(self)
+
+        # the joint SIR reassigns spawn origins + velocities per episode --
+        # deterministic eval must not roam (the command term then takes its
+        # range fallback)
+        setattr(self.curriculum, teacher_mdp.JOINT_SIR_TERM, None)
