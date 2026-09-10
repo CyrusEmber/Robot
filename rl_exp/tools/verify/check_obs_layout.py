@@ -19,6 +19,7 @@ _EXP = _REPO / "rl_exp"
 sys.path.insert(0, str(_REPO))
 
 from rl_exp.tasks import teacher_mdp  # noqa: E402
+from isaaclab.envs.mdp.events import reset_joints_by_offset  # noqa: E402
 from rl_exp.tasks.teacher_env_cfg import (  # noqa: E402
     LizardRoughTeacherEnvCfg_V1,
     LizardRoughTeacherEnvCfg_V2,
@@ -28,6 +29,8 @@ from rl_exp.tasks.teacher_env_cfg import (  # noqa: E402
     LizardRoughTeacherEnvCfg_V5_PLAY,
     LizardRoughTeacherEnvCfg_V11,
     LizardRoughTeacherEnvCfg_V11_PLAY,
+    LizardRoughTeacherEnvCfg_V12,
+    LizardRoughTeacherEnvCfg_V12_PLAY,
     TEACHER_TERRAINS_CFG_V4,
     TEACHER_TERRAINS_CFG_V5,
 )
@@ -36,6 +39,7 @@ from rl_exp.tasks.agents.rsl_rl_ppo_cfg import (  # noqa: E402
     LizardTeacherV4PPORunnerCfg,
     LizardTeacherV5PPORunnerCfg,
     LizardTeacherV11PPORunnerCfg,
+    LizardTeacherV12PPORunnerCfg,
 )
 
 V3_EXTERO_ORDER = ["lf_foot_ring", "rf_foot_ring", "rl_foot_ring", "rr_foot_ring"]
@@ -344,7 +348,111 @@ def main() -> int:
     ) is not None:
         problems.append("v11 PLAY: joint SIR must be dropped (deterministic eval, no roaming)")
 
-    print(f"  teacher versions checked: v1/v2/v3/v4/v5/v11")
+    # v12: Miki S8 robustness package (plan versions/lizard/v12/PLAN.md)
+    v12 = LizardRoughTeacherEnvCfg_V12()
+    with open(_EXP / "versions" / "lizard" / "v12" / "lizard_params.yaml", encoding="utf-8") as f:
+        v12_params = yaml.safe_load(f)
+    v12y = v12_params["v12"]
+    v12_runner_steps = LizardTeacherV12PPORunnerCfg().num_steps_per_env
+    # obs contract unchanged: same three groups, same orders -- only the
+    # extero funcs swap to the noisy wrappers
+    groups = _groups(v12.observations)
+    if set(groups) != {"proprio", "extero", "priv"}:
+        problems.append(f"v12: expected proprio/extero/priv groups, got {sorted(groups)}")
+    else:
+        if groups["proprio"] != V3_PROPRIO_ORDER:
+            problems.append(f"v12: proprio order {groups['proprio']} != contract")
+        if groups["extero"] != V3_EXTERO_ORDER:
+            problems.append(f"v12: extero order {groups['extero']} != {V3_EXTERO_ORDER}")
+        if groups["priv"] != V3_PRIV_ORDER:
+            problems.append(f"v12: priv order {groups['priv']} != contract")
+        hn_y = v12y["height_noise"]
+        for i, foot in enumerate(("lf", "rf", "rl", "rr")):
+            term = getattr(v12.observations.extero, f"{foot}_foot_ring")
+            if term.func is not teacher_mdp.NoisyFootRing:
+                problems.append(f"v12: extero term {foot}_foot_ring func is not NoisyFootRing")
+                continue
+            for field, expected in (
+                ("foot_index", i),
+                ("sigma_w", hn_y["sigma_w"]),
+                ("sigma_f", hn_y["sigma_f"]),
+                ("sigma_p", hn_y["sigma_p"]),
+                ("outlier_prob", hn_y["outlier_prob"]),
+                ("outlier_range", tuple(hn_y["outlier_range"])),
+            ):
+                actual = term.params[field]
+                if isinstance(expected, tuple):
+                    actual = tuple(actual)
+                if actual != expected:
+                    problems.append(f"v12: {foot}_foot_ring {field} {actual} != yaml {expected}")
+    # reset randomization: joint offsets replace the no-op scale term
+    if v12.events.reset_robot_joints is not None:
+        problems.append("v12: stock reset_robot_joints (no-op scale type) must be replaced")
+    rr_y = v12y["reset_randomization"]
+    for name, key in (
+        ("reset_joints_legs", "legs"),
+        ("reset_joints_feet", "feet"),
+        ("reset_joints_spine", "spine"),
+    ):
+        term = getattr(v12.events, name)
+        if term is None or term.func is not reset_joints_by_offset:
+            problems.append(f"v12: {name} must be wired with reset_joints_by_offset")
+            continue
+        if tuple(term.params["position_range"]) != tuple(rr_y["joints"][key]):
+            problems.append(f"v12: {name} position_range != yaml joints.{key}")
+        if tuple(term.params["velocity_range"]) != tuple(rr_y["joint_velocity"]):
+            problems.append(f"v12: {name} velocity_range != yaml joint_velocity")
+        if term.mode != "reset":
+            problems.append(f"v12: {name} must be reset-mode")
+    for field, expected in (
+        ("pose_range", "base_pose_range"),
+        ("velocity_range", "base_velocity_range"),
+    ):
+        actual = {a: tuple(r) for a, r in v12.events.reset_base.params[field].items()}
+        want = {a: tuple(r) for a, r in rr_y[expected].items()}
+        if actual != want:
+            problems.append(f"v12: reset_base {field} != yaml {expected}")
+    # friction dip + ring-noise events match the yaml
+    dip = v12.events.foot_friction_dip
+    if dip is None or dip.func is not teacher_mdp.FootFrictionDipTerm:
+        problems.append("v12: foot_friction_dip must be the FootFrictionDipTerm event")
+    else:
+        for field, expected in (
+            ("static_friction_range", tuple(rr_y["friction_dip"]["static"])),
+            ("dynamic_ratio_range", tuple(rr_y["friction_dip"]["dynamic_ratio"])),
+            ("p_dip", rr_y["friction_dip"]["p_dip"]),
+        ):
+            actual = dip.params[field]
+            if isinstance(expected, tuple):
+                actual = tuple(actual)
+            if actual != expected:
+                problems.append(f"v12: foot_friction_dip {field} {actual} != yaml {expected}")
+    noise_event = v12.events.sample_ring_noise
+    if noise_event is None or noise_event.func is not teacher_mdp.sample_ring_noise:
+        problems.append("v12: sample_ring_noise event missing")
+    elif tuple(noise_event.params["ratios"]) != tuple(v12y["height_noise"]["ratios"]):
+        problems.append("v12: sample_ring_noise ratios != yaml height_noise.ratios")
+    # r_slip back-off rides the v5-section copy
+    if float(v12_params["v5"]["r_slip"]["weight"]) != -0.003:
+        problems.append("v12 yaml: v5.r_slip.weight must be -0.003 (user decision 2026-09-10)")
+    if float(v12.rewards.feet_slide.weight) != -0.003:
+        problems.append("v12: rewards.feet_slide.weight must be -0.003 (yaml copy)")
+    # c_k iteration length still consistent for the noise amplitude schedule
+    ck_steps = v12_params["v3"]["curriculum_ck"]["steps_per_iteration"]
+    if ck_steps != v12_runner_steps:
+        problems.append(
+            f"v12: yaml curriculum_ck.steps_per_iteration {ck_steps} != runner "
+            f"num_steps_per_env {v12_runner_steps} (noise amplitude would lie)"
+        )
+    # PLAY: noise state + dips off (NoisyFootRing returns clean scans)
+    v12_play = LizardRoughTeacherEnvCfg_V12_PLAY()
+    for name in ("sample_ring_noise", "foot_friction_dip"):
+        if getattr(v12_play.events, name, None) is not None:
+            problems.append(f"v12 PLAY: {name} must be dropped (clean deterministic eval)")
+    if getattr(v12_play.curriculum, teacher_mdp.JOINT_SIR_TERM, "missing") is not None:
+        problems.append("v12 PLAY: joint SIR must be dropped (deterministic eval, no roaming)")
+
+    print(f"  teacher versions checked: v1/v2/v3/v4/v5/v11/v12")
     for p in problems:
         print(f"  DRIFT: {p}")
     if problems:

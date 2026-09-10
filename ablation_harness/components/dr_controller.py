@@ -30,6 +30,11 @@ _DR_EVENT_NAMES = [
     "randomize_joint_params",
     "base_external_force_torque",
     "push_robot",
+    # v12 (versions/lizard/v12/PLAN.md): nominal eval must also come without
+    # friction dips and with clean height rings (NoisyFootRing returns
+    # uncorrupted scans once the state event is gone)
+    "foot_friction_dip",
+    "sample_ring_noise",
 ]
 
 

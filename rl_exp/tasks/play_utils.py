@@ -34,6 +34,11 @@ DR_EVENT_NAMES = [
     "randomize_joint_params",
     "base_external_force_torque",
     "push_robot",
+    # v12 (versions/lizard/v12/PLAN.md): occasional foot-friction dips and the
+    # height-ring noise state -- disabling the events leaves the obs terms
+    # CLEAN (NoisyFootRing returns uncorrupted scans without the state)
+    "foot_friction_dip",
+    "sample_ring_noise",
 ]
 
 

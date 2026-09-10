@@ -16,7 +16,10 @@ reward. The v5 section below it adds the reward-side anti-collapse package
 c_k-scaled foot-slide (r_slip) and undesired-contact (r_co) penalties, and
 the constant-weight belly-contact force penalty. The v11 section adds the
 joint particle terrain curriculum (plan versions/lizard/v11/PLAN.md):
-ParticleVelocityCommand + JointSIRTerrainCurriculum.
+ParticleVelocityCommand + JointSIRTerrainCurriculum. The v12 section adds the
+Miki et al. 2022 S8 reset/observation robustness package (plan
+versions/lizard/v12/PLAN.md): occasional foot-friction dips and the three-level
+height-ring noise model on the actor exteroception.
 """
 
 from __future__ import annotations
@@ -1158,3 +1161,225 @@ class JointSIRTerrainCurriculum(ManagerTermBase):
             "particle_entropy": sum(ent) / len(ent),
             "tr_mean": self._last_tr_mean,
         }
+
+
+# --- v12: Miki et al. 2022 S8 reset/observation robustness package (plan ---
+# --- versions/lizard/v12/PLAN.md). Deviations from the paper, by design:  ---
+# the noise rides the TEACHER actor (no student distillation -- user
+# decision 2026-09-10), the amplitudes reuse the repo c_k schedule (paper
+# c_sk is the student's linear ramp; c_k anneals exponentially, same
+# direction), the per-point sample-position jitter (x_p, y_p) is NOT
+# modeled (static ray pattern), and one sigma set serves all feet (paper z
+# is per leg). All knobs live in the version yaml ``v12`` section.
+
+
+RING_NOISE_STATE = "_lizard_ring_noise"
+"""Env attribute holding the per-episode ring-noise state dict.
+
+Written by the reset event :func:`sample_ring_noise`; read (and midpoint
+redrawn) by :class:`NoisyFootRing`. Absent when the event is disabled (PLAY
+variants, nominal eval) -- the obs term then returns clean scans.
+"""
+
+
+def _draw_ring_conditions(env, ids: torch.Tensor, state: dict) -> None:
+    """Redraw the corruption condition and per-foot biases for ``ids``.
+
+    Args:
+        env: The environment instance (unused; signature mirrors term helpers).
+        ids: Environment indices to redraw.
+        state: The :data:`RING_NOISE_STATE` dict, mutated in place.
+    """
+    ratios = torch.tensor(state["ratios"], device=state["cond"].device)
+    state["cond"][ids] = torch.multinomial(ratios, ids.numel(), replacement=True)
+    state["w"][ids] = torch.randn(ids.numel(), state["w"].shape[1], device=state["w"].device)
+
+
+def sample_ring_noise(env, env_ids, ratios: tuple[float, float, float]) -> None:
+    """Reset event: draw the per-episode extero corruption state (paper S8).
+
+    Conditions are drawn per episode at 60/30/10 (nominal / offset / noisy);
+    the per-foot unit-normal biases ``w`` are stored UNSCALED -- the obs term
+    scales amplitudes by the live c_k so mid-training annealing applies to
+    already-sampled biases too. The midway redraw (paper: start AND midway)
+    is handled by :class:`NoisyFootRing` via ``mid_fired``.
+
+    Args:
+        env: The environment instance.
+        env_ids: Resetting environment indices.
+        ratios: Nominal / offset / noisy sampling probabilities, summing to 1.
+    """
+    state = getattr(env, RING_NOISE_STATE, None)
+    if state is None:
+        device = env.device
+        n = env.num_envs
+        state = {
+            "cond": torch.zeros(n, dtype=torch.long, device=device),
+            "w": torch.zeros(n, 4, device=device),
+            "mid_fired": torch.zeros(n, dtype=torch.bool, device=device),
+            "ratios": tuple(float(r) for r in ratios),
+        }
+        setattr(env, RING_NOISE_STATE, state)
+    if env_ids is None:
+        ids = torch.arange(env.num_envs, device=state["cond"].device)
+    else:
+        ids = env_ids
+    _draw_ring_conditions(env, ids, state)
+    state["mid_fired"][ids] = False
+
+
+class NoisyFootRing(ManagerTermBase):
+    """Per-foot ring height scan under the Miki et al. 2022 S8 noise model.
+
+    Wraps :func:`isaaclab.envs.mdp.height_scan` (same ``sensor_cfg`` /
+    ``offset`` params; the term cfg ``clip`` applies to the corrupted values).
+    Paper noise structure on the returned samples:
+
+    * ``w``: per-foot, per-episode constant bias (offset condition; pose
+      drift / deformable terrain), amplitude ``sigma_w`` [m]
+    * ``eps_f``: per-foot, per-step noise (noisy condition), ``sigma_f`` [m]
+    * ``eps_p``: per-point, per-step noise (noisy condition), ``sigma_p`` [m]
+    * intermittent outliers: per-point, per-step replacement with a uniform
+      wrong value in ``outlier_range`` [m] (noisy condition)
+
+    All amplitudes scale linearly with c_k (``ck_value``; full at c_k = 1).
+    Without the reset event (PLAY / nominal eval) the scan stays clean.
+
+    Shape: (num_envs, num_pattern_points).
+    """
+
+    def __call__(
+        self,
+        env,
+        sensor_cfg: SceneEntityCfg,
+        offset: float = 0.0,
+        foot_index: int = 0,
+        sigma_w: float = 0.15,
+        sigma_f: float = 0.05,
+        sigma_p: float = 0.02,
+        outlier_prob: float = 0.02,
+        outlier_range: tuple[float, float] = (-1.0, 1.0),
+    ) -> torch.Tensor:
+        """Compute the corrupted height scan for one foot.
+
+        Args:
+            env: The environment instance.
+            sensor_cfg: The per-foot ring RayCaster sensor.
+            offset: Height scan offset [m] (see ``mdp.height_scan``).
+            foot_index: This term's foot column in the shared noise state (0-3).
+            sigma_w: Per-episode per-foot bias std [m].
+            sigma_f: Per-step per-foot noise std [m].
+            sigma_p: Per-step per-point noise std [m].
+            outlier_prob: Per-point outlier probability [dimensionless].
+            outlier_range: Outlier replacement value range [m].
+        """
+        values = mdp.height_scan(env, sensor_cfg, offset)
+        state = getattr(env, RING_NOISE_STATE, None)
+        if state is None:
+            return values
+        # midway redraw: paper S8 draws the condition at the trajectory start
+        # AND midway; the flag re-arms every reset (sample_ring_noise)
+        fire = (env.episode_length_buf * 2 >= env.max_episode_length) & ~state["mid_fired"]
+        if bool(fire.any()):
+            ids = fire.nonzero(as_tuple=False).flatten()
+            _draw_ring_conditions(env, ids, state)
+            state["mid_fired"] |= fire
+        offset_cond = state["cond"] == 1
+        noisy = state["cond"] == 2
+        corrupt = offset_cond | noisy
+        if not bool(corrupt.any()):
+            return values
+        ck = ck_value(env)
+        noise = corrupt[:, None] * (state["w"][:, foot_index : foot_index + 1] * (ck * sigma_w))
+        eps_f = torch.randn(values.shape[0], 1, device=values.device) * (ck * sigma_f)
+        eps_p = torch.randn_like(values) * (ck * sigma_p)
+        noise = noise + noisy[:, None] * (eps_f + eps_p)
+        out = values + noise
+        outliers = (torch.rand_like(values) < outlier_prob) & noisy[:, None]
+        if bool(outliers.any()):
+            wrong = torch.empty_like(out).uniform_(outlier_range[0], outlier_range[1])
+            out = torch.where(outliers, wrong, out)
+        return out
+
+
+class FootFrictionDipTerm(ManagerTermBase):
+    """Occasionally redraw the FOOT materials into a low-friction band.
+
+    Paper S8 physical randomization: foot friction "occasionally lowered"
+    (slipping). The startup ``physics_material`` event keeps its bucketed
+    [0.7, 1.0] draw; this reset-mode term re-rolls, for a ``p_dip`` share of
+    resetting envs, the static friction of every FOOT body shape into
+    ``static_friction_range`` with the dynamic friction at
+    ``dynamic_ratio_range`` x static.
+
+    The privileged ``foot_friction`` obs cache is updated in the same call
+    (same body-name resolution order, ``".*_foot"``), so the teacher keeps
+    reading the true post-dip coefficients.
+
+    ponytail: CPU get/modify/set per dip step (the stock PhysX material path
+    -- same cost class as ``randomize_rigid_body_material`` in reset mode).
+    With 4096 envs ~4 resets/step and p_dip 0.1 a dip fires most steps;
+    upgrade path = GPU-side material writes if profiling ever shows it.
+    """
+
+    def __init__(self, cfg, env):
+        super().__init__(cfg, env)
+        self.asset = env.scene[cfg.params["asset_cfg"].name]
+        # per-body shape counts: framework workaround (same as
+        # foot_friction_truth / mdp.events material randomization)
+        self._num_shapes_per_body = []
+        for link_path in self.asset.root_view.link_paths[0]:
+            link_view = self.asset._physics_sim_view.create_rigid_body_view(link_path)
+            self._num_shapes_per_body.append(link_view.max_shapes)
+        self._slices = []
+        for body_id in cfg.params["asset_cfg"].body_ids:
+            start = sum(self._num_shapes_per_body[:body_id])
+            self._slices.append((start, start + self._num_shapes_per_body[body_id]))
+
+    def __call__(
+        self,
+        env,
+        env_ids,
+        asset_cfg: SceneEntityCfg,
+        static_friction_range: tuple[float, float],
+        dynamic_ratio_range: tuple[float, float],
+        p_dip: float = 0.1,
+    ) -> None:
+        """Redraw foot friction for the dipped share of resetting envs.
+
+        Args:
+            env: The environment instance.
+            env_ids: Resetting environment indices.
+            asset_cfg: The FOOT bodies whose materials are re-rolled.
+            static_friction_range: Dip static friction band [dimensionless].
+            dynamic_ratio_range: Dynamic = ratio x static [dimensionless].
+            p_dip: Probability a resetting env dips [dimensionless].
+        """
+        if env_ids is None or len(env_ids) == 0:
+            return
+        env_ids = env_ids.cpu()
+        draw = torch.rand(len(env_ids)) < float(p_dip)
+        dip = env_ids[draw]
+        if not bool(dip.any()):
+            return
+        n = int(dip.numel())
+        mu_s = static_friction_range[0] + (
+            static_friction_range[1] - static_friction_range[0]
+        ) * torch.rand(n, len(self._slices))
+        ratio = dynamic_ratio_range[0] + (
+            dynamic_ratio_range[1] - dynamic_ratio_range[0]
+        ) * torch.rand(n, len(self._slices))
+        mu_d = mu_s * ratio
+        props = wp.to_torch(self.asset.root_view.get_material_properties())
+        for k, (start, end) in enumerate(self._slices):
+            props[dip, start:end, 0] = mu_s[:, k].unsqueeze(1)
+            props[dip, start:end, 1] = mu_d[:, k].unsqueeze(1)
+        self.asset.root_view.set_material_properties(
+            wp.from_torch(props, dtype=wp.float32), wp.from_torch(dip.to(torch.int32), dtype=wp.int32)
+        )
+        # keep the privileged obs truthful: same foot order as
+        # foot_friction_truth (both resolve ".*_foot")
+        cached = getattr(env, "_lizard_foot_friction", None)
+        if cached is not None:
+            cached[dip] = mu_s.to(cached.device)
+

@@ -216,6 +216,17 @@ class LizardTeacherV11PPORunnerCfg(LizardTeacherV10PPORunnerCfg):
 
 
 @configclass
+class LizardTeacherV12PPORunnerCfg(LizardTeacherV11PPORunnerCfg):
+    """Runner cfg for `Lizard-Rough-v12` (Miki S8 reset/obs robustness package).
+
+    Same recipe as v11 (paper S1 hyperparams, three-encoder model); only the
+    log dir changes -- one version, one dir (versioning.mdc §A).
+    """
+
+    experiment_name = "lizard_rough_teacher_v12"
+
+
+@configclass
 class LizardParkourClimbPPORunnerCfg(LizardFlatPPORunnerCfg):
     """Runner cfg for `Lizard-Parkour-Climb-v1` (position-task stairs expert).
 

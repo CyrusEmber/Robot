@@ -23,7 +23,9 @@
   同 v6.2，v8.1 r_slip −0.003→−0.03——预注册升级，v6 数据触发；方案见
   `v8\PLAN.md`）· **v9 提案**（ghost 断腿
   鲁棒性：截肢近似 DR + damage flag obs + v8 ckpt 微调——自 v7 迁入重基 v8，
-  方案见 `v9\PLAN.md`）
+  方案见 `v9\PLAN.md`）· **v12 提案**（Miki S8 鲁棒性包：关节/基座复位
+  随机 + 摩擦偶发调低 + teacher 侧高度环噪声（无蒸馏，用户拍板）+
+  r_slip 回 −0.003；方案见 `v12\PLAN.md`）
 - 开发态 yaml: `lizard_params.yaml`（家族活实验用，改动不追溯）
 - 布局（2026-09-01 迁移）: 包名 `rl_exp`（家族无关），冻结配方按家族分层
   `versions/lizard/vN/`；代码只在 git 仓，IsaacLab 根常驻 1 行注册 shim
@@ -57,6 +59,12 @@
 | Lizard-Rough-Play-v6 | `LizardRoughTeacherEnvCfg_V6_PLAY` | versions/lizard/v6（已训判废） | v6 回放 |
 | **Lizard-Rough-v8** | `LizardRoughTeacherEnvCfg_V8` | versions/lizard/v8（**已冻结待训**，tag `lizard-v8.1`） | 资产解剖学转正 + 全关节重命名；reward/obs 逐字同 v6.2，v8.1 r_slip ×10 |
 | Lizard-Rough-Play-v8 | `LizardRoughTeacherEnvCfg_V8_PLAY` | versions/lizard/v8（已冻结待训） | v8 回放 |
+| **Lizard-Rough-v10** | `LizardRoughTeacherEnvCfg_V10` | versions/lizard/v10（**在训**） | v8.1 之上单变量删除 tilt 终止（翻倒数据留 rollout 自供翻身梯度） |
+| Lizard-Rough-Play-v10 | `LizardRoughTeacherEnvCfg_V10_PLAY` | versions/lizard/v10（在训） | v10 回放 |
+| **Lizard-Rough-v11** | `LizardRoughTeacherEnvCfg_V11` | versions/lizard/v11（**实施完成待训**，开训门 = v10 判决） | 联合粒子地形课程（参数格 combo × 速度桶，逐 Tr 测量） |
+| Lizard-Rough-Play-v11 | `LizardRoughTeacherEnvCfg_V11_PLAY` | versions/lizard/v11（实施完成待训） | v11 回放 |
+| **Lizard-Rough-v12** | `LizardRoughTeacherEnvCfg_V12` | versions/lizard/v12（**提案，未冻结**——训练启动时冻结） | Miki S8 鲁棒性包（关节/基座复位随机 + 摩擦偶发调低 + teacher 侧高度环噪声）+ r_slip 回 −0.003；obs 同 v11 三组 90/208/83 |
+| Lizard-Rough-Play-v12 | `LizardRoughTeacherEnvCfg_V12_PLAY` | versions/lizard/v12（**提案，未冻结**——训练启动时冻结） | v12 回放（环干净、无 dip） |
 
 注：teacher 任务 id 与配方版本同步，且**全部常驻注册**——旧版本不会因代码
 演进而失复现（机制见 [OBS.md](OBS.md)「版本差异结构」节）。`Lizard-Rough-v0` 无任务 id
@@ -87,6 +95,7 @@ v4/v5 spec 不变。
 | v9 | 2026-09-08 | ghost 断腿鲁棒性（提案，代码未实施，自 v7 迁入重基 v8）：截肢近似 DR（p=0.3 整腿 stiffness→0 + 质量 ×0.001，契约维度不变）+ `damage_flags` 4 维进 actor obs（90→94，UE 断腿事件直填）+ v8 ckpt 微调（PITW 配方，weight surgery 90→94）。limp/分级/多腿/mid-episode 不做 | （训练后补） |
 | v10 | 2026-09-09 | 单变量删除 tilt 终止（v8.1 之上唯一差异，yaml `tilt_terminate: null`）：翻倒数据留在 rollout 里自供翻身梯度（肚皮接触只罚不终 + 2 m 尾地面翻正），只有 time_out 收局。**在训**（2026-09-09 启动，4096 env，experiment `lizard_rough_teacher_v10`）；判决门 = `v10\NOTES.md` 验收 1–5（time_out→1.0、success_rate 离开 0.019、terrain_levels 爬升、belly≈0、track_lin_vel 回升 vs 0.79 基线） | （训练后补） |
 | v11 | 2026-09-10 | 联合粒子地形课程（Lee 2020 Alg S1 + 联合扩展）：粒子 = (参数格 combo, 速度桶)，`param_grid_terrain.py` 参数组合网格（治对角线问题）+ 逐步 Tr 测量（挂账 #15 候选 a 落地）+ `ParticleVelocityCommand` 桶命令接线 + 带空方向分流兜底。实施完成（件 1–5，离线闸门 11/11 绿；smoke TRAIN 段留开训前补跑）；开训门 = v10 判决。v11.1 审查四修见 `v11\PLAN.md` 修订记录（stairs 顶档 0.45、SIR 结算式清零、joint_sir 常量化、PLAN 勘误） | （训练后补） |
+| v12 | 2026-09-10 | Miki S8 鲁棒性包（提案，代码实施同日）：关节初值/速度 reset 随机（offset 型三组，替换 stock 对全零默认 no-op 的 scale 型）+ 基座姿态/速度范围 yaml 化（stock 值原样暴露）+ 足底摩擦偶发调低（p_dip 0.1 → [0.05,0.3]，特权 obs 缓存同调用更新）+ teacher 侧高度环噪声（工况 60/30/10 + w/ε_f/ε_p 三层 + outlier，幅度 × c_k，中途重抽；无学生蒸馏，用户拍板）+ r_slip 回 −0.003。obs 契约不变（90/208/83）。方案见 `v12\PLAN.md` | （训练后补） |
 
 > **退休注记（2026-09-07，资产换代后果）**：v1/v3/v5 的**原地复现已退役**——
 > v6 资产换代后，工作树跑旧任务 id（`Lizard-Rough-v1/v3/v5`）加载的是**新资产**

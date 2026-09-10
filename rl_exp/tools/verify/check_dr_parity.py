@@ -68,6 +68,15 @@ ALLOWLIST: set[str] = {
     # v10 recipe (versions/lizard/v10/NOTES.md): the tilt termination is
     # deleted on the teacher line only -- the family baseline never had it
     "self.terminations.tilt = None",  # v10: D1 removal (fall -> reward ledger, no term)
+    # v12 recipe (versions/lizard/v12/PLAN.md): Miki S8 reset/observation
+    # robustness package, teacher line only. The three reset_joints_* terms
+    # are wired via a setattr loop (V3 convention), so only these lines
+    # appear; the reset-base dict lines replace the stock zero-range dict.
+    "self.events.reset_robot_joints = None",  # v12: scale term is a no-op on zero defaults
+    'self.events.reset_base.params["pose_range"] = {a: tuple(r) for a, r in rr["base_pose_range"].items()}',
+    'self.events.reset_base.params["velocity_range"] = {a: tuple(r) for a, r in rr["base_velocity_range"].items()}',
+    "self.events.foot_friction_dip = EventTerm(",  # v12: occasional low-friction feet
+    "self.events.sample_ring_noise = EventTerm(",  # v12: per-episode extero corruption state
 }
 
 # ArticulationCfg block lines that only exist on one side BY DESIGN

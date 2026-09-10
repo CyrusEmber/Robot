@@ -444,6 +444,16 @@ TEACHER_PRIVILEGED_SPEC: dict[str, set[str]] = {
         "thigh_shank_contacts",
         "base_external_wrench",
     },
+    # v12 keeps the v10/v11 privileged-term set (priv 83, obs 381): the Miki
+    # S8 robustness package (reset randomization, friction dips, height-ring
+    # noise on the ACTOR extero group) never touches the priv obs contract.
+    "v12": {
+        "foot_contact_forces",
+        "foot_contact_normals",
+        "foot_friction",
+        "thigh_shank_contacts",
+        "base_external_wrench",
+    },
 }
 
 
@@ -1411,6 +1421,134 @@ class LizardRoughTeacherEnvCfg_V11_PLAY(LizardRoughTeacherEnvCfg_V11):
     The ParticleVelocityCommand term stays (obs/command contract unchanged):
     with the joint SIR dropped its lin_vel_x falls back to the (0, 3)
     uniform range sample, matching the v10 PLAY behavior.
+    """
+
+    def __post_init__(self):
+        super().__post_init__()
+
+        # deterministic evaluation: shared PLAY wiring (single source, see play_utils)
+        apply_play_wiring(self)
+
+        # the joint SIR reassigns spawn origins + velocities per episode --
+        # deterministic eval must not roam (the command term then takes its
+        # range fallback)
+        setattr(self.curriculum, teacher_mdp.JOINT_SIR_TERM, None)
+
+
+@configclass
+class LizardRoughTeacherEnvCfg_V12(LizardRoughTeacherEnvCfg_V11):
+    """v12 recipe: Miki et al. 2022 S8 reset/observation robustness package.
+
+    The audit against the paper's S8 randomization list (user request
+    2026-09-10, versions/lizard/v12/PLAN.md) found three gaps on top of v11;
+    all knobs live in the v12 yaml section:
+
+    * joint initial position AND velocity randomization at reset -- the stock
+      ``reset_robot_joints`` scales the default pose, which is all-zero for
+      this sprawled rig, so it has been a silent no-op; replaced by three
+      ``reset_joints_by_offset`` terms (legs / feet / spine, soft-limit
+      clamped)
+    * base pose/velocity reset ranges moved to the yaml (the values are the
+      stock base-cfg ones the teacher line already inherited -- pose x/y
+      +-0.5 m, yaw +-3.14 rad, 6-axis velocity +-0.5 -- now tunable)
+    * occasional foot-friction dips (``FootFrictionDipTerm``, p_dip 0.1 ->
+      static [0.05, 0.3]); the privileged ``foot_friction`` obs cache is
+      updated in the same call
+    * height-ring noise model on the actor exteroception
+      (``sample_ring_noise`` + ``NoisyFootRing``): conditions nominal/offset/
+      noisy at 60/30/10 per episode (redrawn midway), per-foot per-episode
+      bias w, per-foot per-step eps_f, per-point per-step eps_p, intermittent
+      outliers, amplitudes x c_k
+
+    Deliberate deviations (user decision 2026-09-10: no student
+    distillation): the noise rides the TEACHER actor -- the paper corrupts
+    only the student's height samples; the priv group stays clean. The
+    r_slip weight returns to -0.003 (v8.1's -0.03 was never probed at this
+    recipe). Obs groups / dims unchanged: 90/208/83 = 381.
+
+    p_dip / joint offsets / sigmas are estimates -> ablation knobs (paper
+    gives no numbers for the reset offsets; its z noise vector is per-leg
+    and not printed in full -- one sigma set serves all feet here).
+    """
+
+    params_version = "v12"
+
+    def __post_init__(self):
+        super().__post_init__()
+        params = _load_params(self.params_version)
+        v12 = params["v12"]
+        rr = v12["reset_randomization"]
+        hn = v12["height_noise"]
+
+        # --- joint initial state randomization (paper S8) ---
+        # the stock scale-type term is a no-op on the all-zero default pose
+        self.events.reset_robot_joints = None
+        for name, patterns, key in (
+            ("reset_joints_legs", [".*_haa_joint", ".*_hfe_joint", ".*_kfe_joint"], "legs"),
+            ("reset_joints_feet", [".*_foot_joint"], "feet"),
+            ("reset_joints_spine", ["chest_.*", "neck_.*", "tail[0-9]_.*"], "spine"),
+        ):
+            setattr(
+                self.events,
+                name,
+                EventTerm(
+                    func=mdp.reset_joints_by_offset,
+                    mode="reset",
+                    params={
+                        "asset_cfg": SceneEntityCfg("robot", joint_names=patterns),
+                        "position_range": tuple(rr["joints"][key]),
+                        "velocity_range": tuple(rr["joint_velocity"]),
+                    },
+                ),
+            )
+
+        # --- base pose/velocity reset ranges from the yaml ---
+        # (stock values inherited until now; exposed for tuning)
+        self.events.reset_base.params["pose_range"] = {a: tuple(r) for a, r in rr["base_pose_range"].items()}
+        self.events.reset_base.params["velocity_range"] = {a: tuple(r) for a, r in rr["base_velocity_range"].items()}
+
+        # --- occasional foot-friction dips (paper S8) ---
+        self.events.foot_friction_dip = EventTerm(
+            func=teacher_mdp.FootFrictionDipTerm,
+            mode="reset",
+            params={
+                "asset_cfg": SceneEntityCfg("robot", body_names=".*_foot"),
+                "static_friction_range": tuple(rr["friction_dip"]["static"]),
+                "dynamic_ratio_range": tuple(rr["friction_dip"]["dynamic_ratio"]),
+                "p_dip": float(rr["friction_dip"]["p_dip"]),
+            },
+        )
+
+        # --- height-ring noise (paper S8) on the actor extero group ---
+        # reset event owns the per-episode state; the four extero terms swap
+        # their func in place -- names, order and dims (208) stay the contract
+        self.events.sample_ring_noise = EventTerm(
+            func=teacher_mdp.sample_ring_noise,
+            mode="reset",
+            params={"ratios": tuple(hn["ratios"])},
+        )
+        for i, foot in enumerate(("lf", "rf", "rl", "rr")):
+            term = getattr(self.observations.extero, f"{foot}_foot_ring")
+            term.func = teacher_mdp.NoisyFootRing
+            term.params = {
+                **term.params,
+                "foot_index": i,
+                "sigma_w": float(hn["sigma_w"]),
+                "sigma_f": float(hn["sigma_f"]),
+                "sigma_p": float(hn["sigma_p"]),
+                "outlier_prob": float(hn["outlier_prob"]),
+                "outlier_range": tuple(hn["outlier_range"]),
+            }
+
+
+@configclass
+class LizardRoughTeacherEnvCfg_V12_PLAY(LizardRoughTeacherEnvCfg_V12):
+    """v12 play variant: no randomization, no curriculum, clean extero.
+
+    ``apply_play_wiring`` nulls ``sample_ring_noise`` and ``foot_friction_dip``
+    (shared DR list) -- ``NoisyFootRing`` then returns clean scans. The joint
+    offset terms and the base pose/velocity ranges stay, matching the stock
+    ``reset_base`` handling: PLAY randomization is seeded, not zeroed.
     """
 
     def __post_init__(self):

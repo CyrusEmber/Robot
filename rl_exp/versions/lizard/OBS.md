@@ -14,7 +14,10 @@
 | v1 | 单向量 | 266 | 基线：proprio 90 + 干净网格扫描 135 + 特权段 41（布局见下） |
 | v2 | 单向量 | 308 | 论文对齐补全 +42（forces/normals/friction/thigh-shank/wrench）；yaml 与 v1 逐字相同，纯代码级变更 |
 | v3 | 三命名组 | 90+208+83 = 381 | 脚环 extero 208 替代网格扫描；三编码器输入契约（`teacher_networks.py` `OBS_GROUP_CONTRACT`） |
-| v4 | 同 v3 | 同 v3 | spec 不变（纯地形 + 物理3 | 同 v3 | spec 不变（反划脚奖励包变更） |
+| v4 | 同 v3 | 同 v3 | spec 不变（纯地形 + 物理缓冲区变更） |
+| v5 | 同 v3 | 同 v3 | spec 不变（反划脚奖励包变更） |
+| v6–v11 | 同 v3 | 同 v3 | 布局不变（v8 资产换代重命名关节不改契约；v10 删 tilt 终止、v11 命令换 ParticleVelocityCommand，均非 obs 布局） |
+| v12 | 同 v3 | 同 v3 | **布局/维度不变**；extero 值级噪声：`NoisyFootRing` 工况 60/30/10 + w/ε_f/ε_p 三层 + outlier，幅度 × c_k（teacher 侧，无蒸馏——有意偏差，见 v12 PLAN §3） |
 
 ## v1 布局（266，单向量，actor 全可见 critic 同源）
 

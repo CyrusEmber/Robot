@@ -31,15 +31,15 @@
 
 | 文件 | 作用 |
 |---|---|
-| `__init__.py` | 全部 gym 注册（家族 8 + teacher v1–v11 各 train/play，空号版本不注册） |
+| `__init__.py` | 全部 gym 注册（家族 8 + teacher v1–v12 各 train/play，空号版本不注册） |
 | `lizard_env_cfg.py` | 家族平地基座：机器人装配 + DR 接线 + `_load_params`（版本参数机制） |
 | `rough_env_cfg.py` | 家族粗糙地形（蜥蜴尺度化地形 + 高度扫描 obs） |
 | `curriculum_env_cfg.py` | 三课程平地变体（骨骼/速度/转向，spine 可被课程锁放） |
 | `curriculum_rough_env_cfg.py` | 三课程粗糙变体 |
-| `teacher_env_cfg.py` | **teacher 独立快照**（只继承框架基类，零家族 import；`params_version` 类属性 + `TEACHER_PRIVILEGED_SPEC` 版本差异表，v1–v11 子类常驻可复现；v3 = 三组 obs + 4×脚环 RayCaster + D 包接线，`RingPatternCfg` 环形 pattern 在此；spine scale 由 yaml `spine_scale` 控制——v6.1 起解锁 0.25；v11 = param-grid 地形 + `JointSIRTerrainCurriculum` 接线，term 名走 `teacher_mdp.JOINT_SIR_TERM` 常量） |
+| `teacher_env_cfg.py` | **teacher 独立快照**（只继承框架基类，零家族 import；`params_version` 类属性 + `TEACHER_PRIVILEGED_SPEC` 版本差异表，v1–v12 子类常驻可复现；v3 = 三组 obs + 4×脚环 RayCaster + D 包接线，`RingPatternCfg` 环形 pattern 在此；spine scale 由 yaml `spine_scale` 控制——v6.1 起解锁 0.25；v11 = param-grid 地形 + `JointSIRTerrainCurriculum` 接线，term 名走 `teacher_mdp.JOINT_SIR_TERM` 常量；v12 = Miki S8 鲁棒性包——关节 offset 型复位三件 + 基座范围 yaml 化 + 摩擦 dip + 4 个环 term 换 `NoisyFootRing` func） |
 | `teacher_networks.py` | **v3 teacher 网络**：`SplitEncoderModel`（MLPModel 子类：g_e 每脚共享 {80,60}→24 / g_p {64,32}→24 / f_π {256,160,128}，三流各自 EmpiricalNormalization，f_π 段序冻结 [proprio\|l_e\|l_priv]）+ `DecayingLrPPO`（lr 0.9999/iter）；经 `class_name` 点路径注册，零 rsl_rl 改动 |
 | `student_networks.py` | **Phase 2 接口锁**：`BeliefEncoder` GRU 2×50（b'=100）、`AttentionGate`/`BeliefMapper` {64,64}、`StudentPolicy`（f_π 输入 210 与 teacher 恒等）、`BeliefDecoder`（208+24）、`load_from_teacher`（g_e/f_π 权重 + o_p 归一化统计迁移 + 段序恒等断言） |
-| `teacher_mdp.py` | 特权 obs term：真值速度/接触布尔/**力矢量/接触法线（warp 射线）/每脚摩擦/大小腿接触/持续外力**/air time/逐 body 质量（只增不改纪律）；v3 段 = D 包（c_k 纯函数课程 + tilt 终止 + `FootClearanceReward` 防拖脚 + reset 化 c_k 锚点缩放 DR 包装）；v5 段 = `SpawnWeightSIRTerrainCurriculum` 行 SIR（v5–v10 冻结）；v11 段 = `ParticleVelocityCommand`（Eq.2 标签 + 桶命令）+ `JointSIRTerrainCurriculum`（联合粒子 SIR，逐步 Tr，跨块累积结算），模块常量 `JOINT_SIR_TERM` |
+| `teacher_mdp.py` | 特权 obs term：真值速度/接触布尔/**力矢量/接触法线（warp 射线）/每脚摩擦/大小腿接触/持续外力**/air time/逐 body 质量（只增不改纪律）；v3 段 = D 包（c_k 纯函数课程 + tilt 终止 + `FootClearanceReward` 防拖脚 + reset 化 c_k 锚点缩放 DR 包装）；v5 段 = `SpawnWeightSIRTerrainCurriculum` 行 SIR（v5–v10 冻结）；v11 段 = `ParticleVelocityCommand`（Eq.2 标签 + 桶命令）+ `JointSIRTerrainCurriculum`（联合粒子 SIR，逐步 Tr，跨块累积结算），模块常量 `JOINT_SIR_TERM`；v12 段 = `sample_ring_noise`（工况 60/30/10 抽样）+ `NoisyFootRing`（w/ε_f/ε_p 三层 + outlier + 中途重抽 + c_k 缩放）+ `FootFrictionDipTerm`（p_dip 摩擦重抽 + 特权 obs 缓存直写） |
 | `param_grid_terrain.py` | v11 参数组合地形网格构建器：yaml 难度等级表 → 每 combo 一个 sub-terrain（单值 range，插值 no-op），名称编码 `<type>\|<lvl>_<lvl>...`；列饥饿守卫 |
 | `play_utils.py` | **PLAY 共享工具**：`DR_EVENT_NAMES` + `disable_dr_events()`——全部 PLAY 变体的 DR 置空单一真源（与 harness 的 dr_controller 同步清单互指）；corruption 关闭遍历全部现存 obs 组（v3 无 policy 组） |
 | `staged_curriculum.py` | 通用阶段课程组件（度量阈值+持续时长+依赖门控） |
@@ -61,6 +61,7 @@
 | `lizard\v9\` | **提案（代码未实施）**：ghost 断腿鲁棒性（自 v7 迁入重基 v8，用户拍板按顺序开 v9）——同 v7 方案，前置 = v8 已训。方案 SSOT = `v9\PLAN.md` |
 | `lizard\v10\` | **在训**（2026-09-09 启动，4096 env）：tilt 终止删除单变量版（`v10\NOTES.md` 判决门验收 1–5）；PLAN/NOTES/yaml/asset_lock 齐 |
 | `lizard\v11\` | **实施完成待开训**（开训门 = v10 判决）：联合粒子地形课程——`param_grid_terrain.py` 参数组合网格 + `JointSIRTerrainCurriculum`（Lee 2020 逐步 Tr，挂账 #15 候选 a）+ `ParticleVelocityCommand` 桶命令 + PLAY 变体 + `test_joint_sir.py`；v11.1 审查四修（stairs 顶档 0.45 / SIR 结算式清零 / joint_sir 常量化 / PLAN 勘误）见 `v11\PLAN.md` 修订记录 |
+| `lizard\v12\` | **提案**（2026-09-10 代码实施同日，未冻结）：Miki S8 鲁棒性包——关节 offset 复位随机 + 基座范围 yaml 化 + 摩擦偶发调低 + teacher 侧高度环噪声（`test_v12_noise.py`）+ r_slip 回 −0.003；方案见 `v12\PLAN.md` |
 | `lizard\parkour\` | **支线 v1 初稿已开**（2026-09-04，分支 `paper/parkour-in-the-wild`，训练未启动）：Parkour in the Wild（跑/爬/跳多专家蒸馏+RL 微调）。`PLAN.md` = 路线层（组件映射/偏差声明/决策记录）；`v1\PLAN.md` = 版本方案 SSOT（位置任务/probe gate/专家表/蒸馏微调方案），`v1\NOTES.md` = 结果回填 |
 | `vN\PLAN.md` | 版本级计划存档（目的/假设/决策点/验收线/结论一句话；v3 原生，v0–v2 为 2026-09-01 追溯补录；结果回填仍走 NOTES） |
 | `vN\NOTES.md` | 版本文档：目的/参数 diff/训练命令/结果回填 |
@@ -102,6 +103,7 @@
 | `tools\verify\test_v5_rewards.py` | v5 奖励离线单测（mock env）：线性核 8 case（站立 0/倒退负/超速封顶/min_speed clamp）/ feet_slide ×c_k / 肚皮罚不随 c_k 退火 / undesired_contacts ×c_k |
 | `tools\verify\test_v5_terrain_sir.py` | v5.3 SIR 地形课程离线单测（mock env）：TerrainGenerator 列→类型映射复刻 / 初始 reset 跳过 + origin 重指一致 / 成功三态判定（存活×位移×命令距离）/ 双侧软边带 / 带内重采样 / 流量不足保权 / 游走 clamp / replay 全历史池 / 块评估节流（240 步量化推进）。（v5.4 进度分制版 10/10 随弃案保全于 git `3ef2aa0`，复活见家族挂账 #15） |
 | `tools\verify\test_joint_sir.py` | v11 联合 SIR 离线单测（mock env，10 项）：param-grid combo 展开 / Eq.2 标签 / 桶命令（含 0.0 桶 + 回落 + 抖动带）/ 兜底三分支 / 初始 spawn / Eq.7 权重 + 保旧权 / **跨块累积**（v11.1：未结算 pair 计数器跨块保留，旧代码必红）/ radix 编解码 / replay / 单轴游走 clamp |
+| `tools\verify\test_v12_noise.py` | v12 高度环噪声离线单测（mock env）：工况比率 60/30/10 / offset 恒偏置 + foot_index 列选 / σ_p·c_k 幅度缩放 / outlier 全替换带 clamp / **中途重抽**（过半触发一次，reset 重臂）/ 无事件干净回退（PLAY/nominal 语义） |
 | `tools\verify\check_obs_layout.py` | **obs 布局静态门**（离线）：v1/v2/v3 组名 + 组内 term 顺序 + extero 脚序 + 环形总点数 + c_k steps_per_iteration 与 runner num_steps_per_env 一致性（静默错位在 env 加载前炸出） |
 | `tools\verify\test_teacher_networks.py` | SplitEncoderModel 离线单测：前向 shape / 梯度 / 三组归一化更新 / 命名子模块摘取 / JIT-ONNX 导出 / 契约违约 |
 | `tools\verify\test_student_networks.py` | student belief 栈离线单测：GRU 步进 / α∈[0,1] / 门控槽对齐 / 解码器维数 / load_from_teacher 等价 + 段序失配 raise |
@@ -117,7 +119,7 @@
 | `tools\verify\framework_pin_check.py` | **框架 pin 检查**：grep IsaacLab 源码树里我们依赖的内部符号（cfg.func 替换 / RayCaster.meshes / live PD 增益 / warp kernel 等）+ 比对已验证 commit `28a37ce`（perf-2026-06-24）；升级 IsaacLab 后第一件事 |
 | `tools\verify\test_recovery_parity.py` | recovery 向量化 vs 朴素参考实现等价性（纯 torch，随机+6 组边界） |
 | `tools\verify\test_staged_curriculum.py` | 课程组件离线单测（mock managers，不起仿真） |
-| `tools\verify\run_offline_checks.bat` | **离线全套一键**（12 项：pin/parity/recovery/staged 课程/teacher 网络/student 网络/v3 课程+环形/obs 布局/v5 奖励/v5 SIR/v11 联合 SIR/版本文档，秒级不起仿真）；改 tasks 或 harness 后、commit 前必跑 |
+| `tools\verify\run_offline_checks.bat` | **离线全套一键**（13 项：pin/parity/recovery/staged 课程/teacher 网络/student 网络/v3 课程+环形/obs 布局/v5 奖励/v5 SIR/v11 联合 SIR/版本文档/v12 噪声模型，秒级不起仿真）；改 tasks 或 harness 后、commit 前必跑 |
 | `tools\verify\check_version_docs.py` | **版本文档完备闸**（stdlib，pre-commit 也跑）：每版本目录四件套（PLAN/NOTES/yaml/asset_lock 锁自身）+ FAMILY 版本史行 + FILEMAP 行，缺即红——v10/v11 记录欠两版的根因（纯约定无闸门）的机器对策；tag 缺失仅 WARN（遗留前缀不一） |
 | `tools\diagnose\debug_pose.py` | reset 后立即 dump 全部腿关节轴心世界坐标 |
 | `tools\diagnose\diagnose_nan.py` | Flat 任务 NaN obs 诊断（历史问题排查用） |

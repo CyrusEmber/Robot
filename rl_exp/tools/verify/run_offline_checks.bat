@@ -56,6 +56,9 @@ echo [11/11] v11 joint SIR terrain curriculum (param grid / Eq.2-3-7 / fallback 
 echo [12/12] version-record completeness (four-piece set / FAMILY row / FILEMAP row)
 "%PY%" rl_exp\tools\verify\check_version_docs.py || goto :fail
 
+echo [13/13] v12 height-ring noise model (conditions / scopes / outliers / c_k / mid redraw)
+"%PY%" rl_exp\tools\verify\test_v12_noise.py || goto :fail
+
 echo ALL_OFFLINE_CHECKS_PASSED
 exit /b 0
 
