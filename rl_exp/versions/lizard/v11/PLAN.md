@@ -7,6 +7,8 @@
 > 论文依据：Lee et al. 2020（arXiv:2010.11251，Science Robotics）公式 2–10 +
 > Algorithm S1，HTML 全文逐式核对（2026-09-10）。归因声明见 §9。
 > 本文件为 v11 设计 SSOT；实施 kickoff 时冻结 yaml 副本 + 建 NOTES.md。
+> 修订：v11.2（2026-09-10 记录性勘误：§2.2 预算按归一化比例重算、§5 草图删
+> 未实现键、§11 两行对齐实现——见修订记录）。
 
 ## 1. 目的与假设
 
@@ -67,12 +69,13 @@ v11.1 勘误后本表逐值镜像冻结 yaml（此前 rough/slope/downsampled_sc
 20 s × 50 Hz = **1000 步**（v10 删 tilt 后仅 time_out → 满长）→ 每块每 env
 0.24 次 reset。
 
-| 比例 | 类型 | eps/块 | ÷16 粒子/块 |
+| 比例（归一化后，∑=1.125） | 类型 | eps/块 | ÷16 粒子/块 |
 |---|---|---|---|
-| .2 | stairs / stairs_inv / rough | ≈197 | **12.3** ✓ |
-| .1 | stones / boxes / slope / slope_inv | ≈98 | **6.15** 贴线 |
+| .2→.178 | stairs / stairs_inv / rough | ≈175 | **10.9** ✓ |
+| .1→.089 | stones / boxes / slope / slope_inv | ≈87 | **5.5 低于线** |
 
-.1 类贴 n_traj_min=6 饥饿线（Poisson 下每块 ~40% 单粒子 pair 被审查）——
+.1 类**低于** n_traj_min=6（Poisson λ≈5.5 → 每块 ~60% 单粒子 pair 被审查；
+v11.2 勘误：v11.1 行误按未归一化比例算，高估 12.5%）——
 **v11.1 修复**：`_resample_all` 只清零已结算 pair（episodes ≥ n_traj_min），
 未结算 pair **跨块累积**证据直到过线再结算（原实现每块无条件清零 + 保旧权
 只冻结旧权不攒证据，低流量 pair 永远走 previous 分支 = 权重永久均匀，SIR
@@ -142,7 +145,6 @@ v11:
     random_rough: {noise_amp: [...]}
     slopes:   {slope: [...]}
     proportions: {stairs: 0.2, ...}      # 类型比例
-    flat_start_cols: 2                   # 冷启动平地列
   velocity_buckets: [0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
   terrain_curriculum:         # 升级旋钮
     band: [0.5, 0.9]
@@ -247,12 +249,12 @@ probe（`probe_run.py` CURRICULUM 组自动读新键）+ `plot_tb.py:44` 键表�
 
 | 风险 | 对策 |
 |---|---|
-| (cell,v) 对测量稀疏（低比例类型） | v11.1：未结算 pair 跨块累积到 n_traj_min 再结算（.1 类 6.15 eps/粒子/块贴线）；粒子集中 |
+| (cell,v) 对测量稀疏（低比例类型） | v11.1：未结算 pair 跨块累积到 n_traj_min 再结算（.1 类 ≈5.5 eps/粒子/块，低于线——v11.2 按归一化比例重算）；粒子集中 |
 | 起步 policy 弱（v10 翻身若未成） | 冷启动全最易 combo + 全桶轮转；带绝对下限 0.2 m/s 不设相对阈值 |
 | 命令写入时序（resample vs 课程） | smoke 必验项；后写者胜，必要时挂 reset 后钩子 |
 | 参数档位断崖（相邻档 Tr 落差 > 带宽） | 档位表 yaml 可调——调档 = 参数级变更，升 v11.M 不必 v12 |
 | v10 判废 | §10 重基 |
-| 旧测试回归 | test_joint_sir 同文件跑 v5 SIR 旧断言（同基线防漂移） |
+| 旧测试回归 | v5 SIR 旧断言由 `test_v5_terrain_sir.py` 承担（离线闸门 [10/11]，同基线防漂移）；同文件重复断言取消（v11.2 勘误：原计划"同文件跑"未实施，两套断言并存反而漂移） |
 
 ## 12. 待办（实施 kickoff 清单）
 
@@ -283,3 +285,4 @@ probe（`probe_run.py` CURRICULUM 组自动读新键）+ `plot_tb.py:44` 键表�
 | 日期 | 版本 | 内容 |
 |---|---|---|
 | 2026-09-10 | v11.1 | 审查四修（用户拍板"顶档降 0.45，别的也修"；离线闸门 11/11 绿）：① **stairs 顶档 0.55→0.45**（等距重切 [0.08,0.17,0.27,0.36,0.45]，yaml+PLAN 同步）——动力学演算：腿关节力矩/功率全过（最坏 ~106 N·m vs 180 限），卡在躯干几何（0.55 = 站高 0.94 的 59%，腹面借越无余量）且 0.42/0.55 从未被任何 run 实证（terrain_levels 贴地、eval 套件止于 0.20）；v3.4.1 卡排判据预判在先。注意：0.36/0.45 仍超实证范围，preflight 重点目视。② **P0 课程静默死缺陷**：`_resample_all` 原每块无条件 `episodes.zero_()`，keep-previous 只冻结旧权不攒证据 → 低流量 pair（.1 类 6.15 eps/粒子/块，Poisson 下 ~40%/块被审查）权重永久均匀；改为结算式清零（只清 episodes≥n_traj_min 的 pair，未结算跨块累积）。v5 同构代码不动（冻结纪律；它靠 tilt 短 episode 养活）。回归测试 `test_sparse_pair_accumulates_across_blocks`（旧代码下必红）。③ **`JOINT_SIR_TERM` 常量化**（teacher_mdp 定义 + env cfg setattr + check_obs_layout getattr 三处同源，防部分改名静默回退均匀命令）+ `desired > 0.0` 哨兵改 `>= 0.0`（0.0 速度桶不再被吞；桶值域非负，-1 哨兵仍排除）。④ **PLAN 勘误**：§2.1 档位表对齐 yaml 实值（rough [0.10..0.35]、slope [0..0.45 rad]、downsampled_scale 0.5 v4 定案）；§2.2 预算按 4096 env 实测回填（原误按 2048）；§3 终止步无特判记为已知偏差（原"含终止记 0"未实现，v10 后仅 time_out 影响≈0）；§4/§9/§11 冷启动声明改实际实现（全最易 combo + 全桶轮转，"近平地/低速偏置"未实现且 `cold_start_bias` 键从未进冻结 yaml）。同步：家族 PLAN 挂账 #15 结案 + FAMILY/FILEMAP 补 v10/v11 行。 |
+| 2026-09-10 | v11.2 | 记录性勘误（外部 review 发现，用户拍板"修复一下"；不改方案实质）：① §2.2 预算按**归一化比例**重算——v11.1 行误用未归一化值（∑=1.125），高估 12.5%：.2 类 197→175、.1 类 98→87，÷16 = 12.3→10.9、6.15→**5.5 低于 n_traj_min=6**，Poisson 审查率 ~40%→~60%；跨块累积由保险升格为必需（①行原数字保留不改，以本行为准）。② §5 yaml 草图删 `flat_start_cols`（冻结 yaml 无此键、代码不读；与 cold_start_bias 同类漂移）。③ §11"旧测试回归"行措辞对齐实现：v5 断言在 `test_v5_terrain_sir.py`（闸门 [10/11]），非同文件。④ `run_offline_checks.bat` 标签分母 /10→/11（观感）。 |
