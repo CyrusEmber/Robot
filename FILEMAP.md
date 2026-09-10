@@ -120,7 +120,7 @@
 | `tools\verify\test_recovery_parity.py` | recovery 向量化 vs 朴素参考实现等价性（纯 torch，随机+6 组边界） |
 | `tools\verify\test_staged_curriculum.py` | 课程组件离线单测（mock managers，不起仿真） |
 | `tools\verify\run_offline_checks.bat` | **离线全套一键**（13 项：pin/parity/recovery/staged 课程/teacher 网络/student 网络/v3 课程+环形/obs 布局/v5 奖励/v5 SIR/v11 联合 SIR/版本文档/v12 噪声模型，秒级不起仿真）；改 tasks 或 harness 后、commit 前必跑 |
-| `tools\verify\check_version_docs.py` | **版本文档完备闸**（stdlib，pre-commit 也跑）：每版本目录四件套（PLAN/NOTES/yaml/asset_lock 锁自身）+ FAMILY 版本史行 + FILEMAP 行，缺即红——v10/v11 记录欠两版的根因（纯约定无闸门）的机器对策；tag 缺失仅 WARN（遗留前缀不一） |
+| `tools\verify\check_version_docs.py` | **版本文档完备闸 + 血统闸**（stdlib，pre-commit 也跑）：每版本目录四件套（PLAN/NOTES/yaml/asset_lock 锁自身）+ `base.json` 血统边合法（母本存在且自身有 base.json；`--tree` 打血缘树）+ FAMILY 版本史行 + FILEMAP 行，缺即红——v10/v11 记录欠两版的根因（纯约定无闸门）的机器对策；tag 缺失仅 WARN（遗留前缀不一） |
 | `tools\diagnose\debug_pose.py` | reset 后立即 dump 全部腿关节轴心世界坐标 |
 | `tools\diagnose\diagnose_nan.py` | Flat 任务 NaN obs 诊断（历史问题排查用） |
 | `tools\diagnose\direction_probe.py` | **方向探针**（v6 倒走归因工具，默认指 v8 最新 run）：强制前进窗口下量 disp_head——世界位移在头方向投影，负值+正命令=真倒走；训后验收复用 |

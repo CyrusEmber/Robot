@@ -17,12 +17,20 @@ Known ceiling (warn, not fail): git tags. Legacy versions predate the tag
 discipline and prefix styles differ (v1/v2/v5 vs lizard-vN), so a missing
 tag only warns; per versioning.mdc A, a training run started without a tag
 means "treat as frozen" and the tag must be added immediately.
+
+Lineage gate: every version dir carries base.json naming its single
+ancestry parent (the one frozen snapshot this recipe was modified from;
+decision references to other versions stay in PLAN.md prose). The lineage
+numbers in FAMILY.md are handles, not an ordering contract -- the DAG in
+base.json files is the SSOT, so v7<-v6 vs v9<-v8 rebases never break
+neighbors' records.
 """
 
 import json
 import pathlib
 import re
 import subprocess
+import sys
 
 _REPO = pathlib.Path(__file__).resolve().parents[3]
 _VERSIONS = _REPO / "rl_exp" / "versions"
@@ -38,7 +46,7 @@ def _git_tags() -> set[str]:
         return set()
 
 
-def main() -> int:
+def main(show_tree: bool = "--tree" in sys.argv) -> int:
     problems: list[str] = []
     warnings: list[str] = []
     tags = _git_tags()
@@ -54,6 +62,8 @@ def main() -> int:
         else:
             family_text = family_md.read_text(encoding="utf-8")
 
+        versions = sorted(p.name for p in family_dir.glob("v[0-9]*") if p.is_dir())
+        parent: dict[str, str | None] = {}
         for vdir in sorted(p for p in family_dir.glob("v[0-9]*") if p.is_dir()):
             name = vdir.name
             for piece in ("PLAN.md", "NOTES.md", "lizard_params.yaml", "asset_lock.json"):
@@ -88,6 +98,55 @@ def main() -> int:
                     f"{family}/{name}: no git tag ({name} or {family}-{name}[.minor]) --"
                     " fine for proposals; must exist once training starts"
                 )
+            base_path = vdir / "base.json"
+            if not base_path.is_file():
+                problems.append(
+                    f"{family}/{name}: base.json missing (lineage edge -- versioning.mdc A-2)"
+                )
+                continue
+            try:
+                data = json.loads(base_path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError) as err:
+                problems.append(f"{family}/{name}: base.json unreadable ({err})")
+                continue
+            if "base" not in data:
+                problems.append(f"{family}/{name}: base.json has no 'base' field (root uses null)")
+            else:
+                parent[name] = data["base"]
+
+        # pass 2: validate edges now that every base.json is collected
+        for name, base in parent.items():
+            if base is None:
+                continue  # lineage root
+            if base not in versions:
+                problems.append(f"{family}/{name}: base '{base}' is not a known version")
+            elif base not in parent:
+                problems.append(f"{family}/{name}: base '{base}' has no base.json itself")
+
+        # cycle guard over the lineage edges collected above
+        for start in parent:
+            seen = {start}
+            node: str | None = parent[start]
+            while node is not None:
+                if node in seen:
+                    problems.append(f"{family}/{start}: lineage cycle through {node}")
+                    break
+                seen.add(node)
+                node = parent.get(node)
+
+        if show_tree and versions:
+            children: dict[str | None, list[str]] = {}
+            for v in versions:
+                children.setdefault(parent.get(v), []).append(v)
+
+            def _walk(node: str, indent: int) -> None:
+                print(f"  {'  ' * indent}{node}")
+                for child in sorted(children.get(node, []), key=lambda s: int(s[1:])):
+                    _walk(child, indent + 1)
+
+            print(f"  lineage tree ({family}):")
+            for root in sorted(children.get(None, []), key=lambda s: int(s[1:])):
+                _walk(root, 0)
 
     print(f"  families checked: {len(families)} ({', '.join(p.name for p in families)})")
     for warn in warnings:
