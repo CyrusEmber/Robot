@@ -8,9 +8,11 @@ set -u
 REPO=$(git rev-parse --show-toplevel) || exit 1
 cd "$REPO" || exit 1
 
-# Only gate commits that touch recipe-relevant files; docs-only commits pass.
+# Only gate commits that touch recipe-relevant files; pure prose commits
+# pass. Version-record markdown counts as recipe-relevant: the doc gate must
+# run on the commits that could break it.
 STAGED=$(git diff --cached --name-only --diff-filter=ACMR)
-echo "$STAGED" | grep -qE '^(rl_exp|ablation_harness)/.*\.(py|yaml|yml|json|urdf|usda|usd)$' || exit 0
+echo "$STAGED" | grep -qE '^(rl_exp|ablation_harness)/.*\.(py|yaml|yml|json|urdf|usda|usd)$|^rl_exp/versions/' || exit 0
 
 # Python: the venv is recorded in paths.yaml (or RL_PYTHON) and reported by
 # host_paths.py -- a stdlib-only query, so whatever python is on PATH can ask
@@ -26,6 +28,14 @@ HAVE_VENV=1
 echo "[pre-commit] check_dr_parity --strict"
 "$PY" rl_exp/tools/verify/check_dr_parity.py --strict || {
   echo "[pre-commit] FAIL: freeze contracts (see above). Reviewed divergence -> ALLOWLIST in check_dr_parity.py; intentional asset retirement -> --update-locks in the same commit."
+  exit 1
+}
+
+# stdlib-only, runs with any python: version-record completeness (PLAN/NOTES/
+# yaml/asset-lock set + FAMILY row + FILEMAP row per version dir).
+echo "[pre-commit] check_version_docs"
+"$PY" rl_exp/tools/verify/check_version_docs.py || {
+  echo "[pre-commit] FAIL: version records (versioning.mdc A-2/A-5): four-piece set, FAMILY row, FILEMAP row."
   exit 1
 }
 
