@@ -1,0 +1,57 @@
+diff --git a/scripts/reinforcement_learning/rsl_rl/train.py b/scripts/reinforcement_learning/rsl_rl/train.py
+index 3ea4449f3..cce70b815 100644
+--- a/scripts/reinforcement_learning/rsl_rl/train.py
++++ b/scripts/reinforcement_learning/rsl_rl/train.py
+@@ -75,6 +75,14 @@ parser.add_argument(
+ )
+ parser.add_argument("--seed", type=int, default=None, help="Seed used for the environment")
+ parser.add_argument("--max_iterations", type=int, default=None, help="RL Policy training iterations.")
++parser.add_argument(
++    "--weights_only",
++    action="store_true",
++    default=False,
++    help="With --resume: restore weights/optimizer only and drop the checkpoint's curriculum state"
++    " (c_k re-heats, joint SIR cold-starts). Without it a joint-SIR task refuses to resume from a"
++    " checkpoint that carries no curriculum state.",
++)
+ parser.add_argument(
+     "--distributed", action="store_true", default=False, help="Run training with multiple GPUs or nodes."
+ )
+@@ -201,6 +209,22 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
+         if agent_cfg.resume or agent_cfg.algorithm.class_name == "Distillation":
+             resume_path = get_checkpoint_path(log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint)
+ 
++        # Restore the curriculum state (lizard joint SIR particles + the c_k clock) BEFORE the wrapper:
++        # RslRlVecEnvWrapper.__init__ runs the first full reset, and that reset is what makes the joint
++        # SIR term respawn the envs -- on the restored particles, when the state is already in place.
++        # Without this the policy resumes but the curriculum re-heats from c0 (v3/NOTES incident).
++        # ImportError (no rl_exp package in the tree) degrades to a loud warning, not a crash.
++        if agent_cfg.resume or agent_cfg.algorithm.class_name == "Distillation":
++            try:
++                from rl_exp.tasks.curriculum_state import apply_resume_state
++            except ImportError as exc:
++                print(
++                    f"[WARN] curriculum-state resume unavailable ({exc}); a joint-SIR task would resume"
++                    " WITHOUT its curriculum state (c_k re-heats, SIR cold-starts)"
++                )
++            else:
++                apply_resume_state(env.unwrapped, resume_path, weights_only=args_cli.weights_only)
++
+         # wrap for video recording
+         if args_cli.video:
+             video_kwargs = {
+@@ -225,6 +249,14 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
+             runner = DistillationRunner(env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device)
+         else:
+             raise ValueError(f"Unsupported runner class: {agent_cfg.class_name}")
++        # Every checkpoint carries the curriculum state in its infos slot, so model and curriculum state
++        # live in ONE file and cannot drift apart (no sidecar). No-op for tasks without the joint SIR.
++        try:
++            from rl_exp.tasks.curriculum_state import hook_runner_save
++        except ImportError:
++            pass  # already reported above
++        else:
++            hook_runner_save(runner, env)
+         # configure_seed must be called after runner construction so that PyTorch deterministic settings
+         # do not interfere with the runner's internal initialization.
+         if args_cli.deterministic:

@@ -21,9 +21,12 @@
   - **D3** c_k 课程：c_k = 0.2^(0.98^iter)，纯函数读 `common_step_counter`，
     乘子挂 q̈/torque/ω_xy 三项（feet_slide 非本仓奖励项——计划笔误，不新增）；
     接触罚豁免 c_k 恒 -1.0；不挂 CurriculumTerm（规避挂账 #9）；
-    **断点续训注意**：`common_step_counter` 归零 → c_k 回热 0.2 重新爬坡
-    （~140 iters 热身段重走）——已知非 bug，续训 = 从头热身，resume 时在
-    tb 曲线上会看到惩罚项幅值先塌后恢复
+    **断点续训**（2026-09-11）：带 joint SIR 的 v11/v12 已有真续训——课程状态 +
+    `common_step_counter` 随 checkpoint 存取（`rl_exp/tasks/curriculum_state.py`，
+    见 v12 NOTES「续训」），`--resume` 不再回热、c_k 曲线连续。**本版及 v4–v10
+    （无 joint SIR）仍是旧行为**：`common_step_counter` 归零 → c_k 回热 0.2 重新
+    爬坡（~140 iters 热身段重走），已知非 bug，resume 时 tb 上惩罚项幅值先塌后恢复；
+    要让这条线也连续，需把状态层从 joint SIR 解耦到 c_k 时钟（未做，家族挂账 #11）
   - **D4** DR reset 化 + 锚点缩放（mass/com/inertia/gains/joint 五项
     range 向恒等锚点收拢 × c_k；friction 保持 startup——`foot_friction_truth`
     读回缓存只在 startup 语义有效，F3 偏差声明）

@@ -57,6 +57,14 @@ NEEDLES = [
     ("source/isaaclab_rl/isaaclab_rl/rsl_rl/vecenv_wrapper.py",
      r"return TensorDict\(obs_dict, batch_size=\[self\.num_envs\]\)",
      "SplitEncoderModel (obs dict -> TensorDict group passthrough)"),
+    # resume timing: the c_k clock lives here, and curriculum compute must stay
+    # ahead of the command reset that reads the joint SIR's desired_vel
+    ("source/isaaclab/isaaclab/envs/manager_based_rl_env.py",
+     r"self\.common_step_counter = 0",
+     "curriculum_state.collect (the c_k clock is captured/restored here)"),
+    ("source/isaaclab/isaaclab/envs/manager_based_rl_env.py",
+     r"self\.curriculum_manager\.compute\(env_ids=env_ids\)",
+     "curriculum_state.apply_resume_state (restore-before-first-reset timing)"),
 ]
 
 # same but inside the rsl_rl package the venv installs under <root>: the
@@ -83,6 +91,13 @@ RSL_RL_NEEDLES = [
     ("env_isaaclab/Lib/site-packages/rsl_rl/models/mlp_model.py",
      r"def get_latent",
      "SplitEncoderModel base-class forward protocol"),
+    # resume: the curriculum state rides the checkpoint's infos slot
+    ("env_isaaclab/Lib/site-packages/rsl_rl/runners/on_policy_runner.py",
+     r"def save\(self, path: str, infos: dict \| None = None\)",
+     "curriculum_state.hook_runner_save (infos parameter still exists)"),
+    ("env_isaaclab/Lib/site-packages/rsl_rl/runners/on_policy_runner.py",
+     r'saved_dict\["infos"\] = infos',
+     "curriculum_state.hook_runner_save (infos still lands in the checkpoint)"),
 ]
 
 
