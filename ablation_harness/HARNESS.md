@@ -10,7 +10,7 @@
 ## 当前状态
 
 - 协议版本：**locomotion_eval_v1**（`protocols/locomotion_eval_v1.yaml` 冻结；`results/` 按协议目录组织）
-- 代码基线：v1.5.1（v1.4 报告 + 训练侧 iteration↔墙上时间曲线 + v1.5 协议 v2 迁移规则；可视化产物**不入库**，PNG 默认 200 DPI）
+- 代码基线：v1.5.2（v1.4 报告 + 训练侧 iteration↔墙上时间曲线 + v1.5 协议 v2 迁移规则；可视化产物**不入库**，PNG 默认 200 DPI；版本记录 `tb_scalars.csv` 为 `--max_points 150` 抽样，全量本机留档）
 - 部署形态：仓根独立目录，全部自定位。机器本地事实（IsaacLab 树 + venv 解释器）登记在仓根 `paths.yaml`（模板 `paths.example.yaml`），唯一读者 `host_paths.py`；`E:\IsaacLab\ablation_harness` junction 已废，原机可 `rmdir` 摘链接
 
 ## 版本历史
@@ -58,3 +58,4 @@ harness 代码高频变更 / 多机器人共用 / 评测协议 v2 出现时 → 
 | 2026-09-02 | v1.4.2 | eval-harness SKILL.md 瘦身（记录性合入）：状态节史实并入本档（新增 v0 史前行）；指标表去协议数值（协议 yaml 为唯一真源）；可视化注释压缩——skill 只留方法与契约 |
 | 2026-09-03 | v1.5 | 预立协议 v2 迁移规则：老跑分不迁移、跨协议禁止直接对比、新协议新起 campaign 目录 | 用户拍板：2026-09-03（规范整改临时 plan #8） |
 | 2026-09-07 | v1.5.1 | **主机路径参数化（挂账 #1 收账）**：新增仓根 `paths.yaml`（模板 `paths.example.yaml`，机器本地不入库）+ `host_paths.py`（纯 stdlib、不 import `rl_exp`、**无 PATH 兜底**，宁缺不猜）。六处改问同一解析器：`eval.py` IsaacLab 根、`run_ablation.py` 的 `_ISAAC_ROOT`（连带 `_log_dir_for_tag` 的 `logs/rsl_rl` glob 与 train/eval 的 cwd；找不到直接 SystemExit，`--summarize`/`--by-terrain` 不依赖故仍可裸跑）、`--python` 缺省、`run_offline_checks.bat` 引导、`hooks\pre-commit` 的 `PY`、`framework_pin_check.detect_root`。**provenance 同批修**：lizard 根改问 `git rev-parse --show-toplevel`，IsaacLab 根改问登记路径——旧代码把"调用路径的爹"当配置，junction 布局一死就把自己仓的 rev 记成 IsaacLab 的（表现为 `git_rev_lizard=unknown` + `git_rev_isaaclab` 串位），v5 campaign 各行已按新逻辑重跑纠正 | 用户："不同环境会找不到，要注册 isaac lab 与 env 的位置"；v5 评测实测踩到 rev 串位与 `_ISAAC_ROOT` 落错树 |
+| 2026-09-11 | v1.5.2 | 入库 CSV 瘦身：`dump_tb.py` 加 `--max_points`（按 tag 自适应抽样、保首尾——首尾必须留，`plot_tb` 标的就是末值；同长 tag 抽样后仍同长，否则墙上时间图静默消失）与 `--csv_in`（重抽样不需 tensorboard、不需 tfevents）；已训三版 `tb_scalars.csv` 20-22 MB → 210-227 KB，全量转 `tb_scalars.full.csv` 留机器本地（`.gitignore`），入库记录由全量抽样得到、可复现；`test_dump_tb_sampling.py` 入离线闸门 | 用户质疑"代码可生成的东西不该入库"——记录链的源头（tfevents）在 IsaacLab 树、机器本地且会被清理，故记录必须入库，缩的是存什么 |

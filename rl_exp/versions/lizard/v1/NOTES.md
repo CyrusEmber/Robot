@@ -27,7 +27,7 @@
   `--max_iterations 14000 --seed 42`，run = `logs/rsl_rl/lizard_rough_teacher/2026-08-31_11-12-20`
   （08-31 11:12 启动 → 09-01 13:04 落 final `model_13999.pt`）。
   ckpt obs 266 → 确认 v1 配方（env.yaml 无 v2 增量 term）
-- 逐迭代曲线: 已导出 `tb_scalars.csv`（406000 点 / 29 tags）。
+- 逐迭代曲线: 已导出 `tb_scalars.csv`（**抽样记录**: 150 点/tag × 29 tags；全量 406000 点留机器本地 `tb_scalars.full.csv`，不入库）。
   关键读数（iteration: value）: mean_reward -2.47→1.53(1k)→4.73(4k)→7.49(8k)→8.09(12k)→7.12(14k)；
   track_lin_vel_xy_exp 0.63(4k)→0.72(14k)；terrain_levels 0.32→0.63（仅训练诊断）
 - eval 结果（2026-09-01，协议 Locomotion-Eval-v1，seed 123，task `Lizard-Rough-v1`，
@@ -104,8 +104,11 @@
     --mode nominal|robust --seed 123 --tag v1_<it> --group v1 --headless
   :: 逐地形长表 + pivot
   python ablation_harness\run_ablation.py --by-terrain --group v1
-  :: 曲线数据导出（入库）+ 汇总报告（不入库，可再生）
-  python rl_exp\tools\trainlog\dump_tb.py --log_dir <run> --out rl_exp\versions\lizard\v1\tb_scalars.csv
+  :: 曲线数据：全量先留本地（不入库），入库记录由它抽样而来（抽样不需要 tensorboard）
+  python rl_exp\tools\trainlog\dump_tb.py --log_dir <run> --out rl_exp\versions\lizard\v1\tb_scalars.full.csv
+  python rl_exp\tools\trainlog\dump_tb.py --csv_in rl_exp\versions\lizard\v1\tb_scalars.full.csv ^
+      --out rl_exp\versions\lizard\v1\tb_scalars.csv --max_points 150
+  :: 汇总报告（不入库，可再生）
   python ablation_harness\plot_eval.py --protocol locomotion_eval_v1 --group v1 ^
     --report rl_exp\versions\lizard\v1
   :: 仅当需要贴图（工单/PPT）时再出散 PNG（ckpt 迭代号需手传 --mark）
