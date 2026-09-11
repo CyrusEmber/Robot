@@ -96,10 +96,12 @@
 | 文件 | 作用 |
 |---|---|
 | `tools\verify\teacher_smoke.py` | teacher 冒烟（v2）：obs 308 维 + 全特权段判读（MASS_SUM≈72 / 力矢量 / 法线 / 摩擦 / wrench=0）；per-term 布局从 observation_manager 现场推导，无魔数切片 |
-| `tools\verify\teacher_smoke_v3.py` | teacher 冒烟（v3）：三组 90/208/83 + extero 顺序 lf/rf/rl/rr + tilt/r_fc 活性 + 有限性 + extero std>ε（防死通道回归） |
-| `tools\verify\teacher_smoke_v5.py` | teacher 冒烟（v5 双环境）：PLAY（三组 90/208/83 + v5 奖励集合活性 + 无速度课程 + 无 SIR）+ TRAIN 2env（SIR 在真 TerrainImporter 上实例化、origin 重指落格内、Curriculum/terrain_levels 有限） |
-| `tools\verify\teacher_smoke_v8.py` | teacher 冒烟（v8 = v6 契约在解剖学资产上）：三组 90/208/83 + spine scale 0.25 + SIR TRAIN 落格（同 v6 冒烟结构，V8 引用） |
-| `tools\verify\teacher_smoke_v11.py` | teacher 冒烟（v11）：PLAY（obs 381 三组 + ParticleVelocityCommand 命令回落 (0,3) + spine 0.25）+ TRAIN（4×120 param-grid 生成 + joint_sir 活性 + 桶±抖动命令 + frontier_max_v 键；TRAIN 段开训前跑） |
+| `tools\verify\teacher_smoke_runner.py` | 冒烟 runner：唯一协议 + SMOKE_SPEC 版本表（同 TEACHER_PRIVILEGED_SPEC 形态，代码级真源）。开新版本 = 加表行 + 建薄壳，复制整文件违规（versioning.mdc A-3） |
+| `tools\verify\teacher_smoke_v3.py` | 薄壳 = runner SMOKE_SPEC["v3"]：三组 90/208/83 + extero 顺序 lf/rf/rl/rr + tilt/foot_clearance 活性 + feet_air_time 已替换 + 有限性（PLAY-only） |
+| `tools\verify\teacher_smoke_v5.py` | 薄壳 = SMOKE_SPEC["v5"]：PLAY（90/208/83 + v5 反塌缩奖励集合 + 无速度课程 + 无 SIR）+ TRAIN 2env（SIR 在真 TerrainImporter 上实例化、origin 重指落 10×20 格内、terrain_levels 有限） |
+| `tools\verify\teacher_smoke_v6.py` | 薄壳 = SMOKE_SPEC["v6"]：v5 契约在轴改正资产上 + v6.1 spine_scale 0.25 解锁 |
+| `tools\verify\teacher_smoke_v8.py` | 薄壳 = SMOKE_SPEC["v8"]：v6 契约在解剖学资产上（v6.2 参数、rebase of v6） |
+| `tools\verify\teacher_smoke_v11.py` | 薄壳 = SMOKE_SPEC["v11"]：PLAY 无 tilt 只剩 time_out + ParticleVelocityCommand 回落 (0,3) + spine 0.25；TRAIN 4×120 param-grid + joint_sir 活性 + 桶±抖动命令（train_extras）+ frontier_max_v 键；开训前跑 |
 | `tools\verify\check_joints_v8.py` | 关节功能检查（v8 解剖学资产）：**布局硬闸**（neck_pitch 球头必 +X、tail3_pitch 天线必 −X、前腿在前/左右各就位——v6"信骨名不信造型"教训条目化）+ 单关节注入驱动读数（头侧 pitch 关节欠阻尼读数注意事项在档） |
 | `tools\verify\test_v5_rewards.py` | v5 奖励离线单测（mock env）：线性核 8 case（站立 0/倒退负/超速封顶/min_speed clamp）/ feet_slide ×c_k / 肚皮罚不随 c_k 退火 / undesired_contacts ×c_k |
 | `tools\verify\test_v5_terrain_sir.py` | v5.3 SIR 地形课程离线单测（mock env）：TerrainGenerator 列→类型映射复刻 / 初始 reset 跳过 + origin 重指一致 / 成功三态判定（存活×位移×命令距离）/ 双侧软边带 / 带内重采样 / 流量不足保权 / 游走 clamp / replay 全历史池 / 块评估节流（240 步量化推进）。（v5.4 进度分制版 10/10 随弃案保全于 git `3ef2aa0`，复活见家族挂账 #15） |

@@ -50,7 +50,7 @@ alwaysApply: false
    runner cfg 逐版本化：`experiment_name = <family>_<场景>_vN`（一版本一日志目录，
    禁共用；存量目录不迁移）
 2. 写 `versions/<family>/vN+1/PLAN.md` 与 `NOTES.md`，并落 `base.json`（`{"base": "vN", "note": ""}`，血统根用 `null`）。base = 改配方那天眼红的**唯一母本快照**；对其他版本的决策引用只进 PLAN 散文，不进 base.json（一个 run 只有一棵代码树）。重基（废案迁移到新母本）= 改 base.json 的 base 字段并在 note 记一笔。base 按家族相对路径解析：主线写 `vN`；支线内裸 `vN` 先命中本线（parkour 的 v2 写 `v1` 指 `parkour/v1`，绝不落主线），跨线引用写全路径。**PLAN 每版必写**（变更少简短即可）：多变量设计（新 obs 布局 / 奖励包 / DR 协议 / 新支线 v1）用完整版——提案态载体，评审与决策记录所在，含修订记录节，冻结前定稿；单变量小改（一个 term 增删或 yaml 数值档，不涉 obs 布局与多 term 权衡）用**简短骨架**：目的/假设（≤3 行）/ diff 清单 / 验收 / 训练命令。NOTES **必含骨架**：目的 / 假设 / 相对上版 diff / 训练命令 / 结果回填 / 结论
-3. 代码级结构变更（新 term）走版本差异机制 + 新任务 id 常驻注册（机制各家族自定义，见其 FAMILY.md）；纯参数变更（yaml-only）不需要新任务 id
+3. 代码级结构变更（新 term）走版本差异机制 + 新任务 id 常驻注册（机制各家族自定义，见其 FAMILY.md）；纯参数变更（yaml-only）不需要新任务 id。**冒烟脚本同理**：运行时契约核对集中在 `tools/verify/teacher_smoke_runner.py`，新版本 = 给其 `SMOKE_SPEC` 加一行 + 建薄壳 `teacher_smoke_vN.py`（调用 `main("vN")`）；**复制整份冒烟脚本造新版本 = 违规**（复制件无闸门，漏改一条断言永久静默）。表行与上一版逐字段人审，并按该版特有的一条断言做破坏测试确认咬得住。
 4. 训练 → 曲线导出（`rl_exp/tools/trainlog/dump_tb.py`）→ eval（`ablation_harness/eval.py`）→ 结果回填 NOTES.md
 5. 家族文档版本历史表加一行；git 侧 commit + tag `<family>-vN+1`（tag = 整树快照；commit/push 细节走 git-auto-sync skill）
 
