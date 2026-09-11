@@ -54,7 +54,7 @@ alwaysApply: false
 4. 训练 → 曲线导出（`rl_exp/tools/trainlog/dump_tb.py`）→ eval（`ablation_harness/eval.py`）→ 结果回填 NOTES.md
 5. 家族文档版本历史表加一行；git 侧 commit + tag `<family>-vN+1`（tag = 整树快照；commit/push 细节走 git-auto-sync skill）
 
-**机器闸门（v10/v11 记录欠账的对策，2026-09-10；血统闸 2026-09-10 补）**：第 2/5 步可量化项（每版本目录四件套 PLAN/NOTES/yaml/asset_lock 锁自身 + **base.json 血统边合法** + FAMILY 版本史行 + FILEMAP 行）由 `rl_exp\tools\verify\check_version_docs.py` 看守——`run_offline_checks.bat` 第 12 项 + pre-commit 均跑，漏记录与 DR 漂移同级红；tag 缺失仅 WARN（遗留前缀 v1/v2/v5 不统一）。纯约定没闸门 = 必然欠账。
+**机器闸门**：第 2/5 步可量化项（每版本目录四件套 PLAN/NOTES/yaml/asset_lock 锁自身 + **base.json 血统边合法** + FAMILY 版本史行 + FILEMAP 行）由 `rl_exp\tools\verify\check_version_docs.py` 看守——`run_offline_checks.bat` + pre-commit 均跑，漏记录与 DR 漂移同级红；tag 缺失仅 WARN（历史前缀可不统一）。纯约定没闸门 = 必然欠账。
 
 **红线**：已发布 term 的实现永不改语义（新版本只允许加 term）；冻结目录只读。
 
