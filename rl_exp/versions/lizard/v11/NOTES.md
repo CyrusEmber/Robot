@@ -53,6 +53,27 @@
   python scripts\reinforcement_learning\rsl_rl\train.py --task Lizard-Rough-v11 --max_iterations 15000 --seed 42
   ```
 - log 目录: logs/rsl_rl/lizard_rough_teacher_v11/
+- 首跑实证（2026-09-11，resume smoke，非开训；TRAIN 段由此首次起仿真）:
+  - **4096 env（默认）stock 2\*\*26 接触栈溢出 → obs NaN 崩溃**（日志 635–644 行，
+    `collisionStackSize` 需 ≥67.2M 字节）：与 v4 NOTES 第 2 条预警同源——接触
+    密度问题，不是栈容量问题；按家族纪律**未再抬栈**（v4 PLAN：溢出复发 → 修
+    接触几何）。**结论：v11 按现行地形网格不能以默认 4096 env 开训**，开训前
+    必须先处理接触几何（或由用户拍板接受 2\*\*28 症状修补）
+  - **512 env 干净**：60 iter / 165 s，无溢出无 NaN（接触对数量随 env 数缩放，
+    stock 2\*\*26 余量 ~8×）。该 env 数是 smoke 专用选择，**不构成配方改动**
+  - 真续训四证（同一 checkpoint `model_50.pt`：counter=1224）:
+
+    | 场景 | 命令 | 实证 |
+    |---|---|---|
+    | 全新 | `--num_envs 512 --max_iterations 60` | save hook 生效：`model_0/50/59` 带 counter = 24/1224/1440（= it×24）|
+    | 真续训 | `--resume --checkpoint model_50.pt --max_iterations 20` | 报告 `counter=1224 c_k=0.5631 lr=4.9745e-4`、`next_eval_step=1440`（首个块边界 > counter）、半块 `n=11`、`particle_entropy=0.8325 frontier_max_v=2.938`；首存 counter=1248 |
+    | 权重模式 | `--resume --weights_only` | 明示丢弃课程状态；首存 `counter=24`（冷时钟）——与真续训的 1248 成数值对照 |
+    | 老式无状态 ckpt + `--resume` | 同上（把 checkpoint 的 `infos` 剥空） | `train.py:226` RuntimeError **硬中断**，训练前退出，提示 `--weights_only` |
+
+  - 判读：真续训的 c_k 连续（0.2 → 0.5631，未回热）、粒子分布/半块证据/评估时刻
+    全带过来；权重模式同一 checkpoint 却从 c_k=0.2 冷起——两模式可用数值区分。
+    机制与限制（不存 RNG、非逐位复现、c_k-only 版本仍回热）见
+    `../v12/NOTES.md`「续训」+ `rl_exp/tasks/curriculum_state.py`
 - 验收（预注册，~2000 iter 节点判读，详表见 PLAN §8）:
   1. `Curriculum/joint_sir/frontier_max_v` 爬升（课程活性）
   2. `particle_entropy` 不塌 0（多模态健康）
