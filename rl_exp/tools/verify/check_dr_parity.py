@@ -219,6 +219,20 @@ def _version_yamls() -> dict[str, pathlib.Path]:
     return yamls
 
 
+def _recipe_dirs() -> list[pathlib.Path]:
+    """Every version dir (main line AND side lines, e.g. lizard/parkour/v1)
+    that carries its own frozen *_params.yaml -- recursive so side lines are
+    not invisible to the asset-lock scan. The asset CONTRACT (usda joints vs
+    lizard joint_order) stays main-line-only: side lines are different
+    recipe schemas and are gated by check_version_docs for records/lineage."""
+    dirs: list[pathlib.Path] = []
+    for fdir in sorted(p for p in _VERSIONS.iterdir() if p.is_dir()):
+        for cfg in sorted(fdir.rglob("*_params.yaml")):
+            if re.fullmatch(r"v\d+", cfg.parent.name):
+                dirs.append(cfg.parent)
+    return dirs
+
+
 def check_asset_contract() -> list[str]:
     problems = []
     for tag, path in _version_yamls().items():
@@ -263,18 +277,20 @@ def _lock_files() -> list[str]:
     return files
 
 
+def _own_yaml(vdir: pathlib.Path) -> pathlib.Path:
+    return next(iter(sorted(vdir.glob("*_params.yaml"))))
+
+
 def _asset_hashes(vdir: pathlib.Path) -> dict[str, str]:
-    """Global assets + that version's own lizard_params.yaml (post-freeze yaml
+    """Global assets + that version's own frozen params yaml (post-freeze yaml
     edits are contract breaks, not tweaks)."""
     files = _lock_files()
-    files.append(str((vdir / "lizard_params.yaml").relative_to(_EXP)).replace("\\", "/"))
+    files.append(str(_own_yaml(vdir).relative_to(_EXP)).replace("\\", "/"))
     return {rel: hashlib.sha256((_EXP / rel).read_bytes()).hexdigest() for rel in files}
 
 
 def update_asset_locks() -> None:
-    for vdir in sorted(_VERSIONS.glob("*/v*")):
-        if not (vdir / "lizard_params.yaml").exists():
-            continue
+    for vdir in _recipe_dirs():
         current = _asset_hashes(vdir)
         lock = vdir / "asset_lock.json"
         if lock.exists():
@@ -297,9 +313,7 @@ def update_asset_locks() -> None:
 
 def check_asset_locks() -> list[str]:
     problems = []
-    for vdir in sorted(_VERSIONS.glob("*/v*")):
-        if not (vdir / "lizard_params.yaml").exists():
-            continue
+    for vdir in _recipe_dirs():
         vtag = str(vdir.relative_to(_VERSIONS))
         lock = vdir / "asset_lock.json"
         if not lock.exists():
@@ -311,7 +325,7 @@ def check_asset_locks() -> list[str]:
             if recorded.get(rel) != sha:
                 problems.append(f"{vtag}: asset changed since freeze: {rel} "
                                 f"{recorded.get(rel, '?')[:8]} -> {sha[:8]}")
-    print(f"  versions locked: {len(list(_VERSIONS.glob('*/v*')))}")
+    print(f"  versions locked: {len(_recipe_dirs())}")
     return problems
 
 

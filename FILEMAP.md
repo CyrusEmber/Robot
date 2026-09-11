@@ -62,7 +62,8 @@
 | `lizard\v10\` | **在训**（2026-09-09 启动，4096 env）：tilt 终止删除单变量版（`v10\NOTES.md` 判决门验收 1–5）；PLAN/NOTES/yaml/asset_lock 齐 |
 | `lizard\v11\` | **实施完成待开训**（开训门 = v10 判决）：联合粒子地形课程——`param_grid_terrain.py` 参数组合网格 + `JointSIRTerrainCurriculum`（Lee 2020 逐步 Tr，挂账 #15 候选 a）+ `ParticleVelocityCommand` 桶命令 + PLAY 变体 + `test_joint_sir.py`；v11.1 审查四修（stairs 顶档 0.45 / SIR 结算式清零 / joint_sir 常量化 / PLAN 勘误）见 `v11\PLAN.md` 修订记录 |
 | `lizard\v12\` | **提案**（2026-09-10 代码实施同日，未冻结）：Miki S8 鲁棒性包——关节 offset 复位随机 + 基座范围 yaml 化 + 摩擦偶发调低 + teacher 侧高度环噪声（`test_v12_noise.py`）+ r_slip 回 −0.003；方案见 `v12\PLAN.md` |
-| `lizard\parkour\` | **支线 v1 初稿已开**（2026-09-04，分支 `paper/parkour-in-the-wild`，训练未启动）：Parkour in the Wild（跑/爬/跳多专家蒸馏+RL 微调）。`PLAN.md` = 路线层（组件映射/偏差声明/决策记录）；`v1\PLAN.md` = 版本方案 SSOT（位置任务/probe gate/专家表/蒸馏微调方案），`v1\NOTES.md` = 结果回填 |
+| `lizard\parkour\` | **支线 route 层**（2026-09-04，分支 `paper/parkour-in-the-wild`，训练未启动）：Parkour in the Wild（跑/爬/跳多专家蒸馏+RL 微调）。`PLAN.md` = 路线层（组件映射/偏差声明/决策记录）；`parkour_params.yaml` = 支线开发态参数 |
+| `lizard\parkour\v1\` | 支线版本包：`v1\PLAN.md` = 版本方案 SSOT（位置任务/probe gate/专家表/蒸馏微调方案），`v1\NOTES.md` = 结果回填，`v1\base.json` = 支线血统根（null），`v1\parkour_params.yaml` = 冻结副本（未冻结，训练启动时定稿），`v1\asset_lock.json` = 资产锁 |
 | `vN\PLAN.md` | 版本级计划存档（目的/假设/决策点/验收线/结论一句话；v3 原生，v0–v2 为 2026-09-01 追溯补录；结果回填仍走 NOTES） |
 | `vN\NOTES.md` | 版本文档：目的/参数 diff/训练命令/结果回填 |
 | `vN\tb_scalars.csv` | 训练后经 dump_tb.py 导出的逐迭代曲线 |
@@ -120,7 +121,7 @@
 | `tools\verify\test_recovery_parity.py` | recovery 向量化 vs 朴素参考实现等价性（纯 torch，随机+6 组边界） |
 | `tools\verify\test_staged_curriculum.py` | 课程组件离线单测（mock managers，不起仿真） |
 | `tools\verify\run_offline_checks.bat` | **离线全套一键**（13 项：pin/parity/recovery/staged 课程/teacher 网络/student 网络/v3 课程+环形/obs 布局/v5 奖励/v5 SIR/v11 联合 SIR/版本文档/v12 噪声模型，秒级不起仿真）；改 tasks 或 harness 后、commit 前必跑 |
-| `tools\verify\check_version_docs.py` | **版本文档完备闸 + 血统闸**（stdlib，pre-commit 也跑）：每版本目录四件套（PLAN/NOTES/yaml/asset_lock 锁自身）+ `base.json` 血统边合法（母本存在且自身有 base.json；`--tree` 打血缘树）+ FAMILY 版本史行 + FILEMAP 行，缺即红——v10/v11 记录欠两版的根因（纯约定无闸门）的机器对策；tag 缺失仅 WARN（遗留前缀不一） |
+| `tools\verify\check_version_docs.py` | **版本文档完备闸 + 血统闸**（stdlib，pre-commit 也跑）：每版本目录四件套（PLAN/NOTES/`*_params.yaml`/asset_lock 锁自身，**支线 `versions/<family>/<line>/vN/` 递归覆盖**）+ `base.json` 血统边合法（母本存在且自身有 base.json；`--tree` 打血缘树）+ FAMILY 版本史行（线前缀键 `parkour/v1`）+ FILEMAP 行，缺即红——v10/v11 记录欠两版的根因（纯约定无闸门）的机器对策；tag 缺失仅 WARN（遗留前缀不一） |
 | `tools\diagnose\debug_pose.py` | reset 后立即 dump 全部腿关节轴心世界坐标 |
 | `tools\diagnose\diagnose_nan.py` | Flat 任务 NaN obs 诊断（历史问题排查用） |
 | `tools\diagnose\direction_probe.py` | **方向探针**（v6 倒走归因工具，默认指 v8 最新 run）：强制前进窗口下量 disp_head——世界位移在头方向投影，负值+正命令=真倒走；训后验收复用 |

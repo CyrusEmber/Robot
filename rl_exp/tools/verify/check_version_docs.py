@@ -24,6 +24,10 @@ decision references to other versions stay in PLAN.md prose). The lineage
 numbers in FAMILY.md are handles, not an ordering contract -- the DAG in
 base.json files is the SSOT, so v7<-v6 vs v9<-v8 rebases never break
 neighbors' records.
+
+Side lines (versioning.mdc A, 分线条款: versions/<family>/<line>/vN/) are
+found recursively and keyed by family-relative path ("parkour/v1"), so their
+records are gated the same as main-line vN.
 """
 
 import json
@@ -62,90 +66,119 @@ def main(show_tree: bool = "--tree" in sys.argv) -> int:
         else:
             family_text = family_md.read_text(encoding="utf-8")
 
-        versions = sorted(p.name for p in family_dir.glob("v[0-9]*") if p.is_dir())
+        # recursive: side lines (versions/<family>/<line>/vN/, versioning.mdc A
+        # 分线条款) are keyed by family-relative path, e.g. "parkour/v1"
+        rels = sorted(
+            "/".join(p.relative_to(family_dir).parts)
+            for p in family_dir.rglob("v[0-9]*")
+            if p.is_dir()
+        )
         parent: dict[str, str | None] = {}
-        for vdir in sorted(p for p in family_dir.glob("v[0-9]*") if p.is_dir()):
-            name = vdir.name
-            for piece in ("PLAN.md", "NOTES.md", "lizard_params.yaml", "asset_lock.json"):
+        for rel in rels:
+            vdir = family_dir.joinpath(*rel.split("/"))
+            own_yaml = sorted(f.name for f in vdir.glob("*_params.yaml"))
+            if len(own_yaml) != 1:
+                problems.append(
+                    f"{family}/{rel}: expected exactly one *_params.yaml, found "
+                    f"{own_yaml or 'none'} (versioning.mdc A-2 four-piece set)"
+                )
+            for piece in ("PLAN.md", "NOTES.md", "asset_lock.json"):
                 if not (vdir / piece).is_file():
                     problems.append(
-                        f"{family}/{name}: {piece} missing (versioning.mdc A-2 four-piece set)"
+                        f"{family}/{rel}: {piece} missing (versioning.mdc A-2 four-piece set)"
                     )
             lock_path = vdir / "asset_lock.json"
-            if lock_path.is_file():
+            if lock_path.is_file() and own_yaml:
                 try:
                     lock = json.loads(lock_path.read_text(encoding="utf-8"))
-                    key = f"versions/{family}/{name}/lizard_params.yaml"
+                    key = f"versions/{family}/{rel}/{own_yaml[0]}"
                     if key not in lock.get("files", {}):
                         problems.append(
-                            f"{family}/{name}: asset_lock.json does not lock its own yaml ({key})"
+                            f"{family}/{rel}: asset_lock.json does not lock its own yaml ({key})"
                         )
                 except (json.JSONDecodeError, OSError) as err:
-                    problems.append(f"{family}/{name}: asset_lock.json unreadable ({err})")
-            if not re.search(rf"^\|\s*{name}\s*\|", family_text, re.MULTILINE):
+                    problems.append(f"{family}/{rel}: asset_lock.json unreadable ({err})")
+            if not re.search(rf"^\|\s*{re.escape(rel)}\s*\|", family_text, re.MULTILINE):
                 problems.append(
-                    f"{family}/{name}: no '| {name} |' row in FAMILY.md version history (versioning.mdc A-5)"
+                    f"{family}/{rel}: no '| {rel} |' row in FAMILY.md version history (versioning.mdc A-5)"
                 )
-            if f"{family}\\{name}\\" not in filemap_text:
+            filemap_key = family + "\\" + rel.replace("/", "\\") + "\\"
+            if filemap_key not in filemap_text:
                 problems.append(
-                    f"{family}/{name}: no '{family}\\{name}\\' row in FILEMAP.md (versioning.mdc A-5)"
+                    f"{family}/{rel}: no '{filemap_key}' row in FILEMAP.md (versioning.mdc A-5)"
                 )
+            # line versions need the qualified prefix: bare "v1" would collide
+            # with the main line's first generation
+            leaf = rel.rsplit("/", 1)[-1]
+            tag_stem = f"{family}-{rel.replace('/', '-')}" if "/" in rel else f"{family}-{leaf}"
             if not any(
-                t == name or t == f"{family}-{name}" or t.startswith(f"{family}-{name}.")
+                t == tag_stem
+                or t.startswith(f"{tag_stem}.")
+                or ("/" not in rel and t == leaf)  # legacy unprefixed main-line tags
                 for t in tags
             ):
                 warnings.append(
-                    f"{family}/{name}: no git tag ({name} or {family}-{name}[.minor]) --"
+                    f"{family}/{rel}: no git tag ({leaf} or {tag_stem}[.minor]) --"
                     " fine for proposals; must exist once training starts"
                 )
             base_path = vdir / "base.json"
             if not base_path.is_file():
                 problems.append(
-                    f"{family}/{name}: base.json missing (lineage edge -- versioning.mdc A-2)"
+                    f"{family}/{rel}: base.json missing (lineage edge -- versioning.mdc A-2)"
                 )
                 continue
             try:
                 data = json.loads(base_path.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, OSError) as err:
-                problems.append(f"{family}/{name}: base.json unreadable ({err})")
+                problems.append(f"{family}/{rel}: base.json unreadable ({err})")
                 continue
             if "base" not in data:
-                problems.append(f"{family}/{name}: base.json has no 'base' field (root uses null)")
+                problems.append(f"{family}/{rel}: base.json has no 'base' field (root uses null)")
             else:
-                parent[name] = data["base"]
+                parent[rel] = data["base"]
 
-        # pass 2: validate edges now that every base.json is collected
-        for name, base in parent.items():
+        # pass 2: resolve + validate edges now that every base.json is
+        # collected; a bare base name resolves inside the version's own line
+        edges: dict[str, str] = {}
+        for rel, base in parent.items():
             if base is None:
                 continue  # lineage root
-            if base not in versions:
-                problems.append(f"{family}/{name}: base '{base}' is not a known version")
-            elif base not in parent:
-                problems.append(f"{family}/{name}: base '{base}' has no base.json itself")
+            line_dir = rel.rsplit("/", 1)[0] if "/" in rel else ""
+            cand = base if base in rels else (f"{line_dir}/{base}" if line_dir else base)
+            if cand not in rels:
+                problems.append(f"{family}/{rel}: base '{base}' is not a known version")
+            elif cand not in parent:
+                problems.append(f"{family}/{rel}: base '{base}' has no base.json itself")
+            else:
+                edges[rel] = cand
 
-        # cycle guard over the lineage edges collected above
-        for start in parent:
+        # cycle guard over the resolved lineage edges
+        for start in edges:
             seen = {start}
-            node: str | None = parent[start]
+            node: str | None = edges[start]
             while node is not None:
                 if node in seen:
                     problems.append(f"{family}/{start}: lineage cycle through {node}")
                     break
                 seen.add(node)
-                node = parent.get(node)
+                node = edges.get(node)
 
-        if show_tree and versions:
+        if show_tree and rels:
             children: dict[str | None, list[str]] = {}
-            for v in versions:
-                children.setdefault(parent.get(v), []).append(v)
+            for rel in rels:
+                children.setdefault(edges.get(rel), []).append(rel)
+
+            def _sort_key(s: str) -> tuple:
+                line, leaf = s.rsplit("/", 1) if "/" in s else ("", s)
+                return (line, int(re.search(r"\d+", leaf).group()))
 
             def _walk(node: str, indent: int) -> None:
                 print(f"  {'  ' * indent}{node}")
-                for child in sorted(children.get(node, []), key=lambda s: int(s[1:])):
+                for child in sorted(children.get(node, []), key=_sort_key):
                     _walk(child, indent + 1)
 
             print(f"  lineage tree ({family}):")
-            for root in sorted(children.get(None, []), key=lambda s: int(s[1:])):
+            for root in sorted(children.get(None, []), key=_sort_key):
                 _walk(root, 0)
 
     print(f"  families checked: {len(families)} ({', '.join(p.name for p in families)})")
