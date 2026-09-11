@@ -1,4 +1,4 @@
 {
   "base": "v6",
-  "note": "rebase of v6 root cause: anatomical axis + joint rename"
+  "note": "v6.2 params, rebase of v6 root cause: anatomical axis + joint rename (v6.2 has no tag -- lizard-v6 is the anchor, 400/20 spine PD in its yaml)"
 }
