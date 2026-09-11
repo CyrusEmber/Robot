@@ -38,8 +38,9 @@
 ## 2. 总路线（Miki 两阶段 + EP 工程）
 
 ```
-Phase 1  Teacher: 特权 actor PPO（当前 = v10 在训——tilt 删除单变量版，判决门见
-         v10\NOTES.md 验收 1–5；v11 联合粒子地形课程已实施待开训，版本态速览见 FAMILY）
+Phase 1  Teacher: 特权 actor PPO（当前 = v10 **已训完 15000 iter、判决半通过**——终止
+         占比/success/tracking 达标，terrain_levels 未继续爬，见 v10\NOTES.md 结果表与
+         DIAGNOSE.md；v11 联合粒子地形课程已实施，开训门 = v10 判决已出，待用户拍板开训）
 Phase 2  Student: 蒸馏（belief encoder + 加噪扫描 + 重建损失）
 Phase 3  部署: student → ONNX → UE
 ```
