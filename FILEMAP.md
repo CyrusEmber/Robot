@@ -122,7 +122,8 @@
 | `tools\verify\framework_pin_check.py` | **框架 pin 检查**：grep IsaacLab 源码树里我们依赖的内部符号（cfg.func 替换 / RayCaster.meshes / live PD 增益 / warp kernel 等）+ 比对已验证 commit `28a37ce`（perf-2026-06-24）；升级 IsaacLab 后第一件事 |
 | `tools\verify\test_recovery_parity.py` | recovery 向量化 vs 朴素参考实现等价性（纯 torch，随机+6 组边界） |
 | `tools\verify\test_staged_curriculum.py` | 课程组件离线单测（mock managers，不起仿真） |
-| `tools\verify\run_offline_checks.bat` | **离线全套一键**（13 项：pin/parity/recovery/staged 课程/teacher 网络/student 网络/v3 课程+环形/obs 布局/v5 奖励/v5 SIR/v11 联合 SIR/版本文档/v12 噪声模型，秒级不起仿真）；改 tasks 或 harness 后、commit 前必跑 |
+| `tools\verify\run_offline_checks.bat` | **离线全套一键**（14 项：pin/parity/recovery/staged 课程/teacher 网络/student 网络/v3 课程+环形/obs 布局/v5 奖励/v5 SIR/v11 联合 SIR/版本文档/v12 噪声模型/pxr 泄漏闸，秒级不起仿真）；改 tasks 或 harness 后、commit 前必跑 |
+| `tools\verify\check_pxr_leak.py` | **P001/P003 闸门**：import 任务 cfg 链（teacher/lizard/agents）断言 `pxr` 不进 sys.modules——防 hydra compose 期 pip usd-core pxr 毒化 Kit 启动（omni.physx "No to_python converter" 崩）；改 env cfg/mdp 顶层 import 后必跑 |
 | `tools\verify\check_version_docs.py` | **版本文档完备闸 + 血统闸**（stdlib，pre-commit 也跑）：每版本目录四件套（PLAN/NOTES/`*_params.yaml`/asset_lock 锁自身，**支线 `versions/<family>/<line>/vN/` 递归覆盖**）+ `base.json` 血统边合法（母本存在且自身有 base.json；`--tree` 打血缘树）+ FAMILY 版本史行（线前缀键 `parkour/v1`）+ FILEMAP 行，缺即红——v10/v11 记录欠两版的根因（纯约定无闸门）的机器对策；tag 缺失仅 WARN（遗留前缀不一） |
 | `tools\diagnose\debug_pose.py` | reset 后立即 dump 全部腿关节轴心世界坐标 |
 | `tools\diagnose\diagnose_nan.py` | Flat 任务 NaN obs 诊断（历史问题排查用） |

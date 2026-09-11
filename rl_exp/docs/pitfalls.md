@@ -1,4 +1,4 @@
-# 排坑记录
+，# 排坑记录
 
 ## P001 Kit 启动报 TfNotice 错（omni.UsdMdl 加载失败）
 
@@ -99,3 +99,64 @@ buffer 喂值，测不出这个时序。
 
 训练 TB 里 `Curriculum/<term>/metric` 与 `Metrics/<metric>` 长期背离
 （一个恒 0、一个在涨）即同类 bug。
+
+## P003 Kit 启动报 "No to_python (by-value) converter"（omni.physx 崩）
+
+**日期**: 2026-09-11
+**影响**: v10 训完后的 GUI 回放（play.py）启动即崩；同一 import 链下 TRAIN
+也会崩。09-09 启动的 v10 训练进程不受影响（毒 import 09-10 才落地）。
+
+### 症状
+
+```
+TypeError: No to_python (by-value) converter found for C++ type:
+class pxrInternal_v0_25_11__pxrReserved__::UsdTimeCode
+[ext: omni.physx-110.1.11] Failed to startup python extension.
+RuntimeError: Caught an unknown exception!   (omni.usd.libs 的 UsdShade 命中
+site-packages\pxr 的 Tf，两套 25.11 混载)
+```
+
+### 根因链
+
+v11 落地（commit `a9bacea`）在 `teacher_mdp.py` 顶层加了
+`from isaaclab.envs.mdp.commands import UniformVelocityCommand`：
+
+```
+teacher_mdp 顶层 import（hydra compose 阶段，pre-AppLauncher）
+→ velocity_command.py:17  from isaaclab.assets import Articulation
+→ base_articulation.py:19 from ...sim import SimulationContext
+→ simulation_context.py:31 from isaaclab.scene_data import SceneDataProvider
+→ scene_data_provider.py:16 from pxr import UsdGeom   ← pip usd-core pxr 进 sys.modules
+→ Kit 启动：extscache 分体 pxr 与 pip 单体 pxr 同版本标签（25.11）混载
+  → C++ 转换器注册冲突 → omni.physx 崩
+```
+
+P001 同族（毒源换了）：P001 是 `isaaclab.sensors.ray_caster`，本例是
+`isaaclab.envs.mdp.commands` 的**类**模块。stock 自己不被毒是因为
+`UniformVelocityCommandCfg.class_type` 默认就是字符串懒解析
+（`"{DIR}.velocity_command:UniformVelocityCommand"`，configclass 包成
+`ResolvableString`，命令管理器构建期才 import）。
+
+### 修复
+
+- `teacher_mdp.py`: 顶层 import 换成无毒的 `commands_cfg`（只有 Cfg 类）；
+  `ParticleVelocityCommand` 改 `_build_particle_command()` 工厂 + 模块
+  `__getattr__` 懒构建；Cfg 的 `class_type` 用字符串
+  `"rl_exp.tasks.teacher_mdp:ParticleVelocityCommand"`（stock 同款机制）。
+- 新闸门 `check_pxr_leak.py` 进 `run_offline_checks.bat`（P001 的
+  one-liner 闸门化——v11 当时 13 项闸门全绿仍炸，缺的就是这项）。
+
+### 通用规则
+
+P001 规则升级：除 `isaaclab.sensors.*` 外，**类模块**（含
+`isaaclab.envs.mdp.commands.velocity_command`）同样会把 pxr 拖进
+sys.modules；对应的 `commands_cfg` 模块无毒。凡"类定义需要基类"的场景，
+用字符串 `class_type` + 工厂懒构建，不要在模块顶层 import 类模块。
+
+### 检测方法
+
+`run_offline_checks.bat` 现含 check_pxr_leak.py。手工单跑：
+
+```bash
+python -c "import sys; import rl_exp.tasks.teacher_env_cfg; print('PXR LEAKED' if 'pxr' in sys.modules else 'CLEAN')"
+```
