@@ -30,7 +30,7 @@ import torch
 import warp as wp
 
 from isaaclab.envs import mdp
-from isaaclab.envs.mdp.commands import UniformVelocityCommand, UniformVelocityCommandCfg
+from isaaclab.envs.mdp.commands.commands_cfg import UniformVelocityCommandCfg
 from isaaclab.managers import CurriculumTermCfg, ManagerTermBase, ObservationTermCfg, SceneEntityCfg
 from isaaclab.utils.configclass import configclass
 from isaaclab.utils.math import quat_apply_inverse, yaw_quat
@@ -43,6 +43,13 @@ from isaaclab.utils.warp.kernels import raycast_mesh_masked_kernel
 # sys.modules["pxr"] before Kit starts and breaks omni.kit.usd.mdl
 # ("extension class wrapper for base class TfNotice has not been created yet").
 # Import it lazily at runtime instead (FootContactNormalsTerm.__init__).
+#
+# P003 (2026-09-11, same family, second trigger): the CLASS modules of
+# `isaaclab.envs.mdp.commands` are also poison (velocity_command ->
+# isaaclab.assets -> simulation_context -> scene_data -> pxr -> omni.physx
+# "No to_python converter" at Kit boot). The Cfg module commands_cfg is clean.
+# That is why ParticleVelocityCommand is built lazily below and referenced by
+# string class_type; keep ALL class-module imports out of this file's top.
 
 if __name__ == "__main__":
     raise RuntimeError("This module is not meant to be executed directly.")
@@ -723,61 +730,74 @@ from the curriculum (a stale name silently falls back to uniform commands).
 """
 
 
-class ParticleVelocityCommand(UniformVelocityCommand):
-    """Velocity command whose lin_vel_x comes from the joint SIR particle.
+def _build_particle_command():
+    """Build :class:`ParticleVelocityCommand` on first access (post-kit).
 
-    The joint curriculum term sets :attr:`desired_vel` for the resetting envs
-    at ITS compute hook -- ``ManagerBasedRLEnv._reset_idx`` calls the
-    curriculum manager (:369) BEFORE the command manager reset (:394), so this
-    term's :meth:`_resample_command` reads the fresh particle values; the
-    ordering is load-bearing (v11 PLAN section 4.2). Where no curriculum term
-    exists (PLAY variants) or the buffer is unset (-1), lin_vel_x falls back
-    to the stock uniform range sample.
-
-    Also accumulates the paper's per-step traversability label (Eq. 2):
-    ``nu = 1`` iff the base velocity projected on the commanded direction
-    exceeds ``v_pr_threshold`` [m/s] (signed projection -- reversal drift
-    scores 0; overspeed is not penalized). The curriculum term reads
-    ``_nu_sum``/``_step_count`` for the ended episodes at its hook, before
-    :meth:`reset` zeroes them. Mid-episode resampling must stay disabled
-    (``resampling_time_range=(1e9, 1e9)`` in the V11 wiring) so a whole
-    episode keeps one particle pairing.
+    The base class module ``isaaclab.envs.mdp.commands.velocity_command`` pulls
+    pip usd-core pxr into ``sys.modules`` pre-kit (P003), so the subclass is
+    defined lazily: the Cfg below points at it by string, resolved by the
+    command manager at env build time (after Kit has started) -- the same
+    lazy mechanism the stock ``UniformVelocityCommandCfg`` uses.
     """
+    from isaaclab.envs.mdp.commands import UniformVelocityCommand
 
-    cfg: ParticleVelocityCommandCfg
+    class ParticleVelocityCommand(UniformVelocityCommand):
+        """Velocity command whose lin_vel_x comes from the joint SIR particle.
 
-    def __init__(self, cfg: ParticleVelocityCommandCfg, env):
-        super().__init__(cfg, env)
-        self._nu_sum = torch.zeros(self.num_envs, device=self.device)
+        The joint curriculum term sets :attr:`desired_vel` for the resetting envs
+        at ITS compute hook -- ``ManagerBasedRLEnv._reset_idx`` calls the
+        curriculum manager (:369) BEFORE the command manager reset (:394), so this
+        term's :meth:`_resample_command` reads the fresh particle values; the
+        ordering is load-bearing (v11 PLAN section 4.2). Where no curriculum term
+        exists (PLAY variants) or the buffer is unset (-1), lin_vel_x falls back
+        to the stock uniform range sample.
 
-    def _update_metrics(self):
-        super()._update_metrics()
-        cmd_xy = self.vel_command_b[:, :2]
-        cmd_norm = torch.linalg.norm(cmd_xy, dim=-1)
-        v_pr = (self.robot.data.root_lin_vel_b.torch[:, :2] * cmd_xy).sum(-1) / cmd_norm.clamp_min(1e-6)
-        nu = (v_pr > self.cfg.v_pr_threshold) & (cmd_norm > 1e-6)
-        self._nu_sum += nu.float()
+        Also accumulates the paper's per-step traversability label (Eq. 2):
+        ``nu = 1`` iff the base velocity projected on the commanded direction
+        exceeds ``v_pr_threshold`` [m/s] (signed projection -- reversal drift
+        scores 0; overspeed is not penalized). The curriculum term reads
+        ``_nu_sum``/``_step_count`` for the ended episodes at its hook, before
+        :meth:`reset` zeroes them. Mid-episode resampling must stay disabled
+        (``resampling_time_range=(1e9, 1e9)`` in the V11 wiring) so a whole
+        episode keeps one particle pairing.
+        """
 
-    def reset(self, env_ids=None):
-        extras = super().reset(env_ids)
-        if env_ids is None:
-            env_ids = slice(None)
-        self._nu_sum[env_ids] = 0.0
-        return extras
+        cfg: ParticleVelocityCommandCfg
 
-    def _resample_command(self, env_ids):
-        super()._resample_command(env_ids)
-        sir_cfg = getattr(self._env.curriculum_manager.cfg, JOINT_SIR_TERM, None)
-        if sir_cfg is None:
-            return
-        desired = sir_cfg.func.desired_vel[env_ids]
-        jitter = (torch.rand_like(desired) * 2.0 - 1.0) * self.cfg.command_jitter
-        # sentinel is desired_vel's -1 init; 0.0 is a legal bucket (v11.1 --
-        # the old ``> 0.0`` test would have swallowed a 0.0 bucket into the
-        # uniform fallback)
-        self.vel_command_b[env_ids, 0] = torch.where(
-            desired >= 0.0, (desired + jitter).clamp_min(0.0), self.vel_command_b[env_ids, 0]
-        )
+        def __init__(self, cfg: ParticleVelocityCommandCfg, env):
+            super().__init__(cfg, env)
+            self._nu_sum = torch.zeros(self.num_envs, device=self.device)
+
+        def _update_metrics(self):
+            super()._update_metrics()
+            cmd_xy = self.vel_command_b[:, :2]
+            cmd_norm = torch.linalg.norm(cmd_xy, dim=-1)
+            v_pr = (self.robot.data.root_lin_vel_b.torch[:, :2] * cmd_xy).sum(-1) / cmd_norm.clamp_min(1e-6)
+            nu = (v_pr > self.cfg.v_pr_threshold) & (cmd_norm > 1e-6)
+            self._nu_sum += nu.float()
+
+        def reset(self, env_ids=None):
+            extras = super().reset(env_ids)
+            if env_ids is None:
+                env_ids = slice(None)
+            self._nu_sum[env_ids] = 0.0
+            return extras
+
+        def _resample_command(self, env_ids):
+            super()._resample_command(env_ids)
+            sir_cfg = getattr(self._env.curriculum_manager.cfg, JOINT_SIR_TERM, None)
+            if sir_cfg is None:
+                return
+            desired = sir_cfg.func.desired_vel[env_ids]
+            jitter = (torch.rand_like(desired) * 2.0 - 1.0) * self.cfg.command_jitter
+            # sentinel is desired_vel's -1 init; 0.0 is a legal bucket (v11.1 --
+            # the old ``> 0.0`` test would have swallowed a 0.0 bucket into the
+            # uniform fallback)
+            self.vel_command_b[env_ids, 0] = torch.where(
+                desired >= 0.0, (desired + jitter).clamp_min(0.0), self.vel_command_b[env_ids, 0]
+            )
+
+    return ParticleVelocityCommand
 
 
 @configclass
@@ -788,11 +808,21 @@ class ParticleVelocityCommandCfg(UniformVelocityCommandCfg):
     (SSOT).
     """
 
-    class_type: type = ParticleVelocityCommand
+    class_type: type | str = "rl_exp.tasks.teacher_mdp:ParticleVelocityCommand"
+    """Resolved lazily by the command manager (P003: the class module is a
+    pre-kit pxr poison, so it must never be imported at compose time)."""
     v_pr_threshold: float = 0.2
     """Per-step traversability label threshold [m/s] (paper Eq. 2)."""
     command_jitter: float = 0.1
     """Uniform jitter [m/s] around the particle's bucket value."""
+
+
+def __getattr__(name):
+    if name == "ParticleVelocityCommand":
+        cls = _build_particle_command()
+        globals()[name] = cls
+        return cls
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 @configclass

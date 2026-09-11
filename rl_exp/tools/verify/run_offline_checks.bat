@@ -59,6 +59,9 @@ echo [12/12] version-record completeness (four-piece set / FAMILY row / FILEMAP 
 echo [13/13] v12 height-ring noise model (conditions / scopes / outliers / c_k / mid redraw)
 "%PY%" rl_exp\tools\verify\test_v12_noise.py || goto :fail
 
+echo [14/14] pre-kit pxr leak gate (P001/P003: env cfg import chain must stay pxr-clean)
+"%PY%" rl_exp\tools\verify\check_pxr_leak.py || goto :fail
+
 echo ALL_OFFLINE_CHECKS_PASSED
 exit /b 0
 
