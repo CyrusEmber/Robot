@@ -22,6 +22,12 @@ platform_width > size - 2*border 使金字塔台阶退化为恰好一级台阶�
              "站得住但两脚悬空"——首版诊断就漏了这一条，见 DIAGNOSE.md 结果）
   fall     = 几何口径（tilt>40° 或 clearance<0.6×初始站高，持续 0.5 s，
              沿用 locomotion_eval_v1，与终止项解耦）
+  移动     = Phase 2 报 overshoot_frac（fwd/命令−1；跟踪核只罚低速、超速被 clamp 成
+             满分，偏差只会朝正方向跑）/ fwd_std（抖动）/ crab_deg（体坐标 atan2(lat,fwd)）
+             / drift_x,drift_y,v_world（世界系独立判据）/ foot_duty（逐脚占空比）。
+             注意：**不要手写 yaw**——本任务的 root_quat_w 与奖励核的 yaw 帧差 180°
+             （自检：−R(ψ)·v_b 才等于 root_lin_vel_w），手写 atan2 会给出反向 180° 的
+             "朝向"；判横向漂移一律用世界位移/世界速度（两者经 dx/dt、dy/dt 互证）。
 
 Usage（repo 根目录）:
     "E:/IsaacLab/env_isaaclab/Scripts/python.exe" rl_exp\\tools\\diagnose\\diagnose_support.py --headless
@@ -37,6 +43,7 @@ import argparse
 import datetime
 import importlib.metadata
 import json
+import math
 import pathlib
 import sys
 
@@ -200,8 +207,9 @@ def run_case(case: Case, ctx: dict) -> dict:
 
     pol = zero_policy if case.policy_kind == "zero" else policy
     series: dict[str, list] = {k: [] for k in (
-        "fwd_speed", "tilt_root_deg", "clearance", "x", "tilt_spine_deg",
+        "fwd_speed", "tilt_root_deg", "clearance", "x", "y", "tilt_spine_deg",
         "fz_spine", "fz_base", "fz_feet", "feet_down", "foot_z", "reward",
+        "lat_speed", "vel_w_x", "vel_w_y",
     )}
     for step in range(num_steps):
         cmd_term.vel_command_b[:] = cmd_t
@@ -214,8 +222,14 @@ def run_case(case: Case, ctx: dict) -> dict:
         tilt_spine = torch.acos(quat_tilt_cos(q, _WXYZ).clamp(0.0, 1.0)).rad2deg()
         snap = {
             "fwd_speed": data.root_lin_vel_b.torch[:, 0].clone(),
+            # 体坐标横向速度：与 fwd 的比值 = 蟹行角（比值与坐标系约定无关）
+            "lat_speed": data.root_lin_vel_b.torch[:, 1].clone(),
+            # 世界系速度/位置：横向漂移的独立判据（体坐标约定可能骗人，世界位移不会）
+            "vel_w_x": data.root_lin_vel_w.torch[:, 0].clone(),
+            "vel_w_y": data.root_lin_vel_w.torch[:, 1].clone(),
             "tilt_root_deg": torch.acos((-data.projected_gravity_b.torch[:, 2]).clamp(0.0, 1.0)).rad2deg(),
             "x": data.root_pos_w.torch[:, 0].clone(),
+            "y": data.root_pos_w.torch[:, 1].clone(),
             "tilt_spine_deg": tilt_spine,
             "fz_spine": fz[:, ctx["sensor_ids"]["spine"], 2].clone(),
             "fz_base": fz[:, ctx["sensor_ids"]["base"], 2].clone(),
@@ -287,9 +301,15 @@ def analyze_stand(res: dict, col: int, step_dt: float, stand_height: float,
 
 
 def analyze_flat(res: dict, col: int, step_dt: float, weight_n: float,
-                 term_names: list[str], term_idx: dict) -> dict:
+                 term_names: list[str], term_idx: dict, foot_names: list[str],
+                 cmd_speed: float) -> dict:
     v = res["valid"][:, col]
     fwd = stack(res["series"], "fwd_speed")[:, col][v]
+    lat = stack(res["series"], "lat_speed")[:, col][v]
+    y = stack(res["series"], "y")[:, col][v]
+    xw = stack(res["series"], "x")[:, col][v]
+    vx = stack(res["series"], "vel_w_x")[:, col][v]
+    vy = stack(res["series"], "vel_w_y")[:, col][v]
     tilt = stack(res["series"], "tilt_root_deg")[:, col][v]
     fz_sp = stack(res["series"], "fz_spine")[:, col][v]     # (T, S)
     fz_b = stack(res["series"], "fz_base")[:, col][v]
@@ -301,6 +321,17 @@ def analyze_flat(res: dict, col: int, step_dt: float, weight_n: float,
     ledger = {term_idx[k]: round(rew[:, i].mean().item(), 3) for k, i in term_idx.items()}
     return {
         "fwd_speed_mean": round(fwd.mean().item(), 3),
+        # 超速偏差：跟踪核只罚低速（超速被 clamp 成满分），所以偏差只会朝正方向跑
+        "overshoot_frac": round(fwd.mean().item() / cmd_speed - 1.0, 3) if cmd_speed > 0 else None,
+        "fwd_speed_std": round(fwd.std().item(), 3) if fwd.numel() > 1 else 0.0,
+        "lat_speed_mean": round(lat.mean().item(), 3),
+        "lat_speed_absmax": round(lat.abs().max().item(), 3) if lat.numel() else 0.0,
+        # 蟹行角 = 速度方向相对体 x 轴（前进方向）的偏角；>0 说明真正在斜着走
+        "crab_deg_mean": round(math.degrees(math.atan2(lat.mean().item(), fwd.mean().item())), 1),
+        "v_world_mean": round(math.hypot(vx.mean().item(), vy.mean().item()), 3),
+        # 世界位移：横向漂移的最终判据（手写 yaw 已在自检中证伪，见 docstring 移动段）
+        "drift_x_m": round((xw[-1] - xw[0]).item(), 2) if xw.numel() else 0.0,
+        "drift_y_m": round((y[-1] - y[0]).item(), 2) if y.numel() else 0.0,
         "tilt_max_deg": round(tilt.max().item(), 1),
         "neck_support_frac": round(neck_mask.float().mean().item(), 4),
         "neck_support_max_s": round(max_sustain_s(neck_mask, step_dt), 2),
@@ -309,6 +340,8 @@ def analyze_flat(res: dict, col: int, step_dt: float, weight_n: float,
         "first_event": ("neck_load" if t_neck is not None and (t_lift is None or t_neck <= t_lift)
                         else "feet_lift" if t_lift is not None else "none"),
         "foot_load_frac": [round(x, 3) for x in (feet.mean(dim=0) / weight_n).tolist()],
+        "foot_duty": [round(x, 3) for x in (feet > FOOT_CONTACT_N).float().mean(dim=0).tolist()],
+        "foot_names": list(foot_names),
         "ledger": ledger,
     }
 
@@ -338,7 +371,8 @@ def analyze_step(res: dict, col: int, step_dt: float) -> dict:
 
 def series_to_json(res: dict, columns: list[str]) -> dict:
     """10 Hz 抽样时序（统计已用 50 Hz 全量算完，json 只留回看用）。"""
-    scalar_keys = ["fwd_speed", "tilt_root_deg", "clearance", "x", "fz_base"]
+    scalar_keys = ["fwd_speed", "tilt_root_deg", "clearance", "x", "y", "fz_base",
+                   "lat_speed", "yaw_deg", "vel_w_x", "vel_w_y"]
     n0 = len(res["series"]["t"]) if "t" in res["series"] else len(res["series"]["fwd_speed"])
     idx = list(range(0, n0, SUBSAMPLE))
     out: dict = {"columns": columns, "series": {}}
@@ -466,7 +500,9 @@ def main():
                 rec["stats"][name] = analyze_stand(res, c, ctx["step_dt"], stand_height,
                                                     weight_n, ctx["foot_names"])
             elif name == "flat":
-                rec["stats"][name] = analyze_flat(res, c, ctx["step_dt"], weight_n, term_names, term_idx)
+                rec["stats"][name] = analyze_flat(res, c, ctx["step_dt"], weight_n, term_names,
+                                                  term_idx, ctx["foot_names"],
+                                                  math.hypot(case.cmd[0], case.cmd[1]))
             else:
                 rec["stats"][name] = analyze_step(res, c, ctx["step_dt"])
         with open(out_dir / f"{case.name}.json", "w", encoding="utf-8") as f:
@@ -499,13 +535,23 @@ def main():
     p2 = [r for r in results if r["case"].startswith("p2")]
     if p2:
         lines += ["", "## Phase 2 平地直行（flat 列；first_event: neck_load=先低头承重 / feet_lift=先失稳）",
-                  "", "| case | fwd_mean | tilt_max | neck_frac | neck_max_s | belly_frac | feet<2 | first_event | ledger |",
-                  "|---|---|---|---|---|---|---|---|---|"]
+                  "",
+                  "移动列口径：overshoot_frac=fwd 均值/命令−1（跟踪核只罚低速，超速被 clamp 成满分）；"
+                  "fwd_std=速度抖动；lat_mean=体坐标横向速度均值、drift_x/drift_y=世界位移、"
+                  "crab=速度相对体 x 轴偏角（≈ lat/fwd，与坐标系约定无关）、v_world=世界速度均值"
+                  "（三者互证横向漂移）；foot_duty/foot_load_frac 顺序见 foot_names",
+                  "",
+                  "| case | cmd | fwd_mean | overshoot | fwd_std | lat_mean | drift_x | drift_y | crab | v_world | tilt_max | feet<2 | foot_duty | foot_load_frac | neck_frac | belly_frac | ledger |",
+                  "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
         for r in p2:
             s = r["stats"]["flat"]
-            lines.append(f"| {r['case']} | {s['fwd_speed_mean']} | {s['tilt_max_deg']} | "
-                         f"{s['neck_support_frac']} | {s['neck_support_max_s']} | {s['belly_gt10n_frac']} | "
-                         f"{s['feet_below2_frac']} | {s['first_event']} | {json.dumps(s['ledger'])} |")
+            lines.append(f"| {r['case']} | {math.hypot(r['cmd'][0], r['cmd'][1]):g} | "
+                         f"{s['fwd_speed_mean']} | {s['overshoot_frac']} | {s['fwd_speed_std']} | "
+                         f"{s['lat_speed_mean']} | {s['drift_x_m']} | {s['drift_y_m']} | "
+                         f"{s['crab_deg_mean']}° | {s['v_world_mean']} | {s['tilt_max_deg']} | "
+                         f"{s['feet_below2_frac']} | {s['foot_duty']} | {s['foot_load_frac']} | "
+                         f"{s['neck_support_frac']} | {s['belly_gt10n_frac']} | "
+                         f"{json.dumps(s['ledger'])} |")
     p3 = [r for r in results if r["case"].startswith("p3")]
     if p3:
         lines += ["", "## Phase 3 单级台阶（0.3 m/s 正对；crossed=过沿后再走 ≥1 m）", "",
