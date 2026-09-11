@@ -138,13 +138,16 @@ def main(show_tree: bool = "--tree" in sys.argv) -> int:
                 parent[rel] = data["base"]
 
         # pass 2: resolve + validate edges now that every base.json is
-        # collected; a bare base name resolves inside the version's own line
+        # collected; bare base names resolve INSIDE the version's own line
+        # first (bare "v1" from parkour/v2 means parkour/v1, never main-line
+        # v1); cross-line references write the qualified family-relative path
         edges: dict[str, str] = {}
         for rel, base in parent.items():
             if base is None:
                 continue  # lineage root
             line_dir = rel.rsplit("/", 1)[0] if "/" in rel else ""
-            cand = base if base in rels else (f"{line_dir}/{base}" if line_dir else base)
+            own = f"{line_dir}/{base}" if line_dir else base
+            cand = own if own in rels else (base if base in rels else own)
             if cand not in rels:
                 problems.append(f"{family}/{rel}: base '{base}' is not a known version")
             elif cand not in parent:
