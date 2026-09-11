@@ -1,22 +1,38 @@
 diff --git a/scripts/reinforcement_learning/rsl_rl/play.py b/scripts/reinforcement_learning/rsl_rl/play.py
-index a033e2d7b..e2b0282bd 100644
+index a033e2d7b..53348a03a 100644
 --- a/scripts/reinforcement_learning/rsl_rl/play.py
 +++ b/scripts/reinforcement_learning/rsl_rl/play.py
-@@ -146,6 +146,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
+@@ -144,8 +144,24 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
+         # set the log directory for the environment
+         env_cfg.log_dir = log_dir
  
++        # keyboard teleop (opt-in via --viz kit): the operator owns the velocity
++        # command, so every autonomous mutation of the command term must be off
++        # BEFORE the env is built. Setting this after gym.make is a no-op, and the
++        # first CommandManager.compute would then clobber the keyed command:
++        # heading_command recomputes yaw from a random target every step (turn keys
++        # dead), rel_standing_envs zeroes a fraction of the envs, and
++        # resampling_time_range re-rolls lin_vel_x/y mid-run.
++        cmd_cfg = getattr(getattr(env_cfg, "commands", None), "base_velocity", None)
++        keyboard_requested = cmd_cfg is not None and "kit" in (getattr(args_cli, "visualizer", None) or [])
++        if keyboard_requested:
++            cmd_cfg.heading_command = False
++            cmd_cfg.rel_standing_envs = 0.0
++            cmd_cfg.rel_heading_envs = 0.0
++            cmd_cfg.resampling_time_range = (1.0e9, 1.0e9)
++
          # create isaac environment
          env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
 +        base_env = env
  
          # convert to single-agent instance if required by the RL algorithm
          if isinstance(env.unwrapped.cfg, DirectMARLEnvCfg):
-@@ -212,6 +213,13 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
+@@ -212,6 +228,12 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
              export_policy_as_jit(policy_nn, normalizer=normalizer, path=export_model_dir, filename="policy.pt")
              export_policy_as_onnx(policy_nn, normalizer=normalizer, path=export_model_dir, filename="policy.onnx")
  
 +        keyboard = None
-+        visualizer = getattr(args_cli, "visualizer", [])
-+        if "kit" in visualizer:
++        if keyboard_requested:
 +            from isaaclab.devices.keyboard import Se2Keyboard, Se2KeyboardCfg
 +
 +            keyboard = Se2Keyboard(Se2KeyboardCfg())
@@ -24,7 +40,7 @@ index a033e2d7b..e2b0282bd 100644
          dt = env.unwrapped.step_dt
  
          # reset environment
-@@ -223,6 +231,19 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
+@@ -223,6 +245,19 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
                  start_time = time.time()
                  # run everything in inference mode
                  with torch.inference_mode():

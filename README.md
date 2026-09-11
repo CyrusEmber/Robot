@@ -39,6 +39,21 @@
 git clone <本仓> <REPO>        :: 例 E:\robot
 ```
 
+**一步到位（推荐）**：下面 5 步有现成脚本，幂等，可重复跑：
+
+```bat
+<REPO>\setup.bat <ROOT>
+:: venv 名不是 env_isaaclab 时：第三个参数给出 venv 目录
+<REPO>\setup.bat <ROOT> <ROOT>\<你的 venv>
+```
+
+它写 venv `.pth`、建目录并拷入 fork shim、**逐个应用 `fork_patches\*.patch`
+（已打则跳过并写明）**、按本机生成 `paths.yaml`、接上 pre-commit。任一步失败都打
+`[FAIL]` 并以非零码退出——**漏打补丁不会再静默失效**。脚本纯 ASCII（`.bat` 按控制台
+代码页读，非 ASCII 注释会把解析带崩），只改 `.pth` / shim / 补丁 / `paths.yaml`。
+
+以下是同样 5 步的手工版本（脚本失效、或想逐步确认时用）。
+
 **1. venv .pth**（`import rl_exp` 全局可达；文件内容 = **git 仓目录 `<REPO>`**
 一行，不是 `<ROOT>`；`env_isaaclab` 只是本仓示例 venv 名，路径跟着改即可）：
 
@@ -47,19 +62,49 @@ echo <REPO>> <ROOT>\env_isaaclab\Lib\site-packages\rl_exp.pth
 ```
 
 **2. fork shim**（`<ROOT>` 源码树唯一常驻文件：`import isaaclab_tasks` 时
-自动注册全部 lizard 任务；现成副本在 `<REPO>\rl_exp\fork_patches\`）：
+自动注册全部 lizard 任务；现成副本在 `<REPO>\rl_exp\fork_patches\`。**stock 树里
+没有 `config\lizard\` 目录，要先建**——`import_packages` 用 `pkgutil` 自动发现带
+`__init__.py` 的目录，父级 `config\__init__.py` 不用动）：
 
 ```bat
+mkdir <ROOT>\source\isaaclab_tasks\isaaclab_tasks\manager_based\locomotion\velocity\config\lizard
 copy <REPO>\rl_exp\fork_patches\config_lizard___init__.py ^
   <ROOT>\source\isaaclab_tasks\isaaclab_tasks\manager_based\locomotion\velocity\config\lizard\__init__.py
 ```
 
-**3. play.py 键盘遥控补丁**（可选，仅遥控回放需要；含键盘接线 + 命令直写
-回退，`fork_patches\play_keyboard.patch` 即完整差异，手工版本见补丁内容）：
+**3. 遥控回放（可选）**：键盘遥控两条路，按任务范围选。两条都要求
+`--viz kit`（键盘是 Kit 窗口设备，没窗口收不到按键）和 `--real-time`
+（按墙钟走，按键才落得进去）。键位：小键盘/方向键前后左右，`Z`/`X` 转向，`L` 清零。
+**按住才动、松开即停**（设备是 press/release 增量配平，不会滑行）；Alt+Tab 失焦会丢
+release、命令卡住不归零，按 `L` 兜底。按一次的量级在 `play_keyboard_task.KEY_SENSITIVITY`
+（默认 x=3.0 m/s、y=0.4、yaw=1.0 rad/s；v8 训练范围 x(-1,3)、y(±0.5)、yaw(±1)——stock
+`Se2KeyboardCfg` 默认 x 只有 0.8，相对上限太慢，故覆盖）。
+
+**A. 仓内变体（推荐，不改 `<ROOT>`）**——覆盖有 `commands.base_velocity` 的
+Lizard `-Play` 任务，`<ROOT>` 重装/换版本不失效：
+
+```bat
+<ROOT>\env_isaaclab\Scripts\python.exe <ROOT>\scripts\reinforcement_learning\rsl_rl\play.py ^
+  --task Lizard-Rough-Play-v8-keyboard ^
+  --external_callback rl_exp.tools.diagnose.play_keyboard_task.register ^
+  --viz kit --real-time --num_envs 1
+```
+
+离线自检 `python -m rl_exp.tools.diagnose.play_keyboard_task`。
+
+**B. play.py 补丁**（任意带 `base_velocity` 的任务通用，代价是随 `<ROOT>` 走、
+重装要重打；`setup.bat` 第 3 步已自动处理，含"已打则跳过"）：
 
 ```bat
 git -C <ROOT> apply <REPO>\rl_exp\fork_patches\play_keyboard.patch
 ```
+
+两者同时开不冲突（写的是同一个键盘值，只是冗余）。区别在**怎么防覆盖**：
+A 换掉命令 term（`_resample_command` 空操作）；B 保持 stock term，但在
+`gym.make` **之前**关掉它的自主变更——`heading_command` / `rel_standing_envs` /
+`rel_heading_envs` / `resampling_time_range`。B 漏掉这一步就是坏的：`env.step`
+内的 `CommandManager.compute` 会在同一步把键盘命令覆盖回去（转向键全失效、
+每 10 s 重采样），键盘输入活不过第一次 compute。
 
 **4. 主机路径登记**（`<ROOT>` 与 venv python 的唯一真源。评测台
 `eval.py`/`run_ablation.py`、离线闸门 `run_offline_checks.bat`、`hooks\pre-commit`

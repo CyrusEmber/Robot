@@ -9,7 +9,8 @@
 
 | 文件 | 作用 |
 |---|---|
-| `README.md` | 仓说明：内容物 + 自装 Isaac Lab 要求 + 新机器摆位五步（含 `paths.yaml` 主机路径登记） |
+| `README.md` | 仓说明：内容物 + 自装 Isaac Lab 要求 + 新机器摆位（`setup.bat` 一键版 + 手工五步；含 `paths.yaml` 主机路径登记） |
+| `setup.bat` | **新机器摆位一键脚本**（README 五步的自动化 + 幂等版）：写 venv `.pth`、建 `config\lizard\` 并拷入 fork shim、逐个应用 `fork_patches\*.patch`（`git apply --check --reverse` 判已打则跳过，否则打；打不上 `[FAIL]` 非零退出——补丁漏打/坏掉不再静默）、按本机生成 `paths.yaml`、设 `core.hooksPath`。成功判定看**结果**（文件在不在 / git 退出码）不看残留 ERRORLEVEL；纯 ASCII（`.bat` 按控制台代码页读，非 ASCII 会带崩解析） |
 | `AGENTS.md` | agent 工作守则（对抗性审查四问 / 先计划后动手 / 沟通语气）+ IsaacLab 官方守则（API 命名/工具链/commit 规范）；与 `ponytail.mdc` 重复的条目刻意不写 |
 | `FILEMAP.md` | 本文件 |
 | `paths.example.yaml` | **主机路径模板**：`isaac_root`（IsaacLab 源码树，持 `scripts/` 与 `logs/`）+ `python`（装了 isaaclab/rsl_rl 的 venv 解释器）。每台机器 copy 成 `paths.yaml`（已进 `.gitignore`，机器本地事实不入库），由 `ablation_harness\host_paths.py` 单点读取。优先级：命令行 > `RL_ISAAC_ROOT`/`RL_PYTHON` > `paths.yaml` > 向上探测 |
@@ -40,6 +41,7 @@
 | `teacher_networks.py` | **v3 teacher 网络**：`SplitEncoderModel`（MLPModel 子类：g_e 每脚共享 {80,60}→24 / g_p {64,32}→24 / f_π {256,160,128}，三流各自 EmpiricalNormalization，f_π 段序冻结 [proprio\|l_e\|l_priv]）+ `DecayingLrPPO`（lr 0.9999/iter）；经 `class_name` 点路径注册，零 rsl_rl 改动 |
 | `student_networks.py` | **Phase 2 接口锁**：`BeliefEncoder` GRU 2×50（b'=100）、`AttentionGate`/`BeliefMapper` {64,64}、`StudentPolicy`（f_π 输入 210 与 teacher 恒等）、`BeliefDecoder`（208+24）、`load_from_teacher`（g_e/f_π 权重 + o_p 归一化统计迁移 + 段序恒等断言） |
 | `teacher_mdp.py` | 特权 obs term：真值速度/接触布尔/**力矢量/接触法线（warp 射线）/每脚摩擦/大小腿接触/持续外力**/air time/逐 body 质量（只增不改纪律）；v3 段 = D 包（c_k 纯函数课程 + tilt 终止 + `FootClearanceReward` 防拖脚 + reset 化 c_k 锚点缩放 DR 包装）；v5 段 = `SpawnWeightSIRTerrainCurriculum` 行 SIR（v5–v10 冻结）；v11 段 = `ParticleVelocityCommand`（Eq.2 标签 + 桶命令）+ `JointSIRTerrainCurriculum`（联合粒子 SIR，逐步 Tr，跨块累积结算），模块常量 `JOINT_SIR_TERM`；v12 段 = `sample_ring_noise`（工况 60/30/10 抽样）+ `NoisyFootRing`（w/ε_f/ε_p 三层 + outlier + 中途重抽 + c_k 缩放）+ `FootFrictionDipTerm`（p_dip 摩擦重抽 + 特权 obs 缓存直写） |
+| `curriculum_state.py` | **真续训状态层**（2026-09-11，`versions/lizard/PLAN.md` 挂账 #11）：`collect`/`apply_state` 快照并回填 joint SIR 全量运行时（粒子/权重/episodes/in_band/tr_sum/回放池/`env_pair`/`desired_vel`/`env_type`）+ `common_step_counter`（c_k 时钟 + 块评估节流基准），落在 checkpoint 的 `infos[STATE_KEY]`（内嵌单文件，无 sidecar 失同步）；恢复前按**静态指纹**全量校验（types/num_rows/n_levels/n_pairs/n_v/velocity/**combo_cols**/cfg）——yaml 改地形网格会让 pair 重编号而计数可能不变，只比计数抓不住（`test_static_fingerprint_catches_grid_edit` 就是这条）；`apply_resume_state` 管语义：无 joint SIR 任务透传、有 term 但 checkpoint 无状态**硬中断**并提示 `--weights_only`；`hook_runner_save` 包 `runner.save`（`*args/**kwargs` 透传，防 rsl_rl 签名漂移；针脚在 `framework_pin_check.py`）。**时序契约**：apply 必须在 `RslRlVecEnvWrapper` 首次 reset **之前**（fork `scripts\reinforcement_learning\rsl_rl\train.py` 两行接入——恢复后首个 episode 即落在恢复的粒子/c_k 上；**补丁存档 `fork_patches\train_curriculum_resume.patch`**，`setup.bat` 幂等重打，漏打即静默退回冷启动）。不存 per-episode 瞬态（`_nu_sum`/ring noise/摩擦 dip）与地形 spawn 状态（reset 重写）；不存 RNG（统计连续，刻意非逐位复现）。**门 = joint SIR 存在**：c_k-only 版本（v3–v10）仍回热（挂账 #11 余项） |
 | `param_grid_terrain.py` | v11 参数组合地形网格构建器：yaml 难度等级表 → 每 combo 一个 sub-terrain（单值 range，插值 no-op），名称编码 `<type>\|<lvl>_<lvl>...`；列饥饿守卫 |
 | `play_utils.py` | **PLAY 共享工具**：`DR_EVENT_NAMES` + `disable_dr_events()`——全部 PLAY 变体的 DR 置空单一真源（与 harness 的 dr_controller 同步清单互指）；corruption 关闭遍历全部现存 obs 组（v3 无 policy 组） |
 | `staged_curriculum.py` | 通用阶段课程组件（度量阈值+持续时长+依赖门控） |
@@ -66,7 +68,7 @@
 | `lizard\parkour\v1\` | 支线版本包：`v1\PLAN.md` = 版本方案 SSOT（位置任务/probe gate/专家表/蒸馏微调方案），`v1\NOTES.md` = 结果回填，`v1\base.json` = 支线血统根（null），`v1\parkour_params.yaml` = 冻结副本（未冻结，训练启动时定稿），`v1\asset_lock.json` = 资产锁 |
 | `vN\PLAN.md` | 版本级计划存档（目的/假设/决策点/验收线/结论一句话；v3 原生，v0–v2 为 2026-09-01 追溯补录；结果回填仍走 NOTES） |
 | `vN\NOTES.md` | 版本文档：目的/参数 diff/训练命令/结果回填 |
-| `vN\tb_scalars.csv` | 训练后经 dump_tb.py 导出的逐迭代曲线 |
+| `vN\tb_scalars.csv` | 训练后经 dump_tb.py 导出的逐迭代曲线，**抽样入库**（`--max_points 150`，150 点/tag ≈ 210 KB：全量 15k 点/tag ≈ 20 MB/版本，60 MB 三份，不值当）；全量留机器本地 `vN\tb_scalars.full.csv`（`.gitignore`），入库记录由它抽样得到（不需 tensorboard、不需 tfevents） |
 | `vN\asset_lock.json` | 冻结时资产 sha256（`lizard.urdf` + `lizard.usda`）。冻结 yaml 只钉路径不钉内容，此锁补这个洞：资产原地换代 → 常驻任务 id 复现被破坏 → 闸门⑥报警。有意换代在同一 commit 里 `--update-locks` |
 
 ### 资产与管线（Blender → URDF → USD，工具在 `tools\` 下按类分目录）
@@ -107,6 +109,7 @@
 | `tools\verify\test_v5_terrain_sir.py` | v5.3 SIR 地形课程离线单测（mock env）：TerrainGenerator 列→类型映射复刻 / 初始 reset 跳过 + origin 重指一致 / 成功三态判定（存活×位移×命令距离）/ 双侧软边带 / 带内重采样 / 流量不足保权 / 游走 clamp / replay 全历史池 / 块评估节流（240 步量化推进）。（v5.4 进度分制版 10/10 随弃案保全于 git `3ef2aa0`，复活见家族挂账 #15） |
 | `tools\verify\test_joint_sir.py` | v11 联合 SIR 离线单测（mock env，10 项）：param-grid combo 展开 / Eq.2 标签 / 桶命令（含 0.0 桶 + 回落 + 抖动带）/ 兜底三分支 / 初始 spawn / Eq.7 权重 + 保旧权 / **跨块累积**（v11.1：未结算 pair 计数器跨块保留，旧代码必红）/ radix 编解码 / replay / 单轴游走 clamp |
 | `tools\verify\test_v12_noise.py` | v12 高度环噪声离线单测（mock env）：工况比率 60/30/10 / offset 恒偏置 + foot_index 列选 / σ_p·c_k 幅度缩放 / outlier 全替换带 clamp / **中途重抽**（过半触发一次，reset 重臂）/ 无事件干净回退（PLAY/nominal 语义） |
+| `tools\verify\test_resume_state.py` | 真续训状态层离线单测（mock env，复用 `test_joint_sir` 夹具，10 项）：逐位往返 + **c_k 连续**（不回热）/ 静态指纹抓"地形网格改动而 n_pairs 不变"的静默错位 / 速度桶与任务身份不符拒恢复 / 评估时钟与权重一致性拒恢复 / 无 joint SIR 任务透传 / 有 term 无状态**硬中断** + `--weights_only` 显式降级 / save hook 注入 + 参数透传 + `wraps` 保名 / `env_type` 漂移告警并还原 / 未覆盖课程 term 绊线。**注**：只证载荷往返，接线时序（恢复早于首次 reset）只能真跑 smoke 证 |
 | `tools\verify\check_obs_layout.py` | **obs 布局静态门**（离线）：v1/v2/v3 组名 + 组内 term 顺序 + extero 脚序 + 环形总点数 + c_k steps_per_iteration 与 runner num_steps_per_env 一致性（静默错位在 env 加载前炸出） |
 | `tools\verify\test_teacher_networks.py` | SplitEncoderModel 离线单测：前向 shape / 梯度 / 三组归一化更新 / 命名子模块摘取 / JIT-ONNX 导出 / 契约违约 |
 | `tools\verify\test_student_networks.py` | student belief 栈离线单测：GRU 步进 / α∈[0,1] / 门控槽对齐 / 解码器维数 / load_from_teacher 等价 + 段序失配 raise |
@@ -129,12 +132,13 @@
 | `tools\diagnose\diagnose_nan.py` | Flat 任务 NaN obs 诊断（历史问题排查用） |
 | `tools\diagnose\direction_probe.py` | **方向探针**（v6 倒走归因工具，默认指 v8 最新 run）：强制前进窗口下量 disp_head——世界位移在头方向投影，负值+正命令=真倒走；训后验收复用 |
 | `tools\diagnose\play_fast_task.py` | 注册 `Lizard-Rough-Play-v8-fast`（前进窗口钉 1–3 m/s）——play.py `--external_callback` 挂钩，GUI 目视用 |
+| `tools\diagnose\play_keyboard_task.py` | **键盘遥控**（play.py `--external_callback`）：把任意 `Lizard-*-Play-vN` 的 `commands.base_velocity.class_type` 换成 `KeyboardVelocityCommand`（`_resample_command` 空操作 + `_update_command` 直写 `vel_command_b` 读 `Se2Keyboard`）——不改 IsaacLab 树，stock `UniformVelocityCommand` 的 heading/resample 覆盖问题从源头消失；`python -m` 跑离线自检。备选路线是 `fork_patches\play_keyboard.patch`（改 `<ROOT>` 的 play.py，任意带 `base_velocity` 的任务通用；已在 `gym.make` 前关掉命令 term 的自主变更，否则被 `CommandManager.compute` 覆盖） |
 
 ### 训练工具与 UE 导出
 
 | 文件 | 作用 |
 |---|---|
-| `tools\trainlog\dump_tb.py` | TB 事件文件 → CSV（版本记录用：`--log_dir <run目录> --out versions\lizard\vN\tb_scalars.csv`） |
+| `tools\trainlog\dump_tb.py` | TB 事件文件 → CSV（版本记录用：`--log_dir <run目录> --out versions\lizard\vN\tb_scalars.csv`）。`--max_points N` 按 tag 自适应抽样、**保首尾**（首尾必须留：`plot_tb` 标的就是末值；同长 tag 抽样后仍同长，否则墙上时间图会静默消失）；`--csv_in` 可对已有 CSV 重抽样，**不需 tensorboard** |
 | `tools\trainlog\probe_run.py` | **训练中巡检探针**（skill `isaaclab-train-probe`，取代 read_curriculum）：`--exp v4`/`--run <目录>`/默认最活跃 run，只读 tfevents 出健康快照——进度+ETA（max_iterations 读 params/agent.yaml）、各 tag last/窗口均值/Δ% 趋势、终止计数、课程值、NaN/骤降/事件停更/ckpt 落后告警；秒级不起仿真 |
 | `tools\trainlog\plot_tb.py` | tb_scalars.csv → 训练曲线 PNG（reward/终止/局长/课程/墙上时间五张，`--mark` 标已评测 ckpt，默认 200 DPI）；墙上时间由 `Train/mean_reward/time` 的 step 轴（引擎自记秒数）派生，不靠累加估计；`figure`/`series_to_figs` 供 `ablation_harness\plot_eval.py` 的 HTML 报告共用。**产物不入库**（可再生） |
 | `ue\build_lizard_ue.py` | UE 编辑器脚本：按 `ue\lizard_ue.json` 组装蜥蜴物理 Actor |
@@ -174,5 +178,3 @@
 - `blender\build_rig.py`、`patch_*.py` 是管线早期一次性脚本，仅考古价值
 - **`ablation_harness\results\...\summary.csv` 里 2026-08-28 两行的 `energy_per_m_j` 数值无效**（energy 修复前少乘 step_dt，虚高 ~50×）；其余列有效，energy 列重跑后才有意义
 - 旧趴窝 checkpoint：`E:\IsaacLab\logs\rsl_rl\lizard_rough\2026-08-28_14-08-22`（15000 iters，家族 run，不在仓里）
-| `curriculum_state.py` | **真续训状态层**（2026-09-11，`versions/lizard/PLAN.md` 挂账 #11）：`collect`/`apply_state` 快照并回填 joint SIR 全量运行时（粒子/权重/episodes/in_band/tr_sum/回放池/`env_pair`/`desired_vel`/`env_type`）+ `common_step_counter`（c_k 时钟 + 块评估节流基准），落在 checkpoint 的 `infos[STATE_KEY]`（内嵌单文件，无 sidecar 失同步）；恢复前按**静态指纹**全量校验（types/num_rows/n_levels/n_pairs/n_v/velocity/**combo_cols**/cfg）——yaml 改地形网格会让 pair 重编号而计数可能不变，只比计数抓不住（`test_static_fingerprint_catches_grid_edit` 就是这条）；`apply_resume_state` 管语义：无 joint SIR 任务透传、有 term 但 checkpoint 无状态**硬中断**并提示 `--weights_only`；`hook_runner_save` 包 `runner.save`（`*args/**kwargs` 透传，防 rsl_rl 签名漂移；针脚在 `framework_pin_check.py`）。**时序契约**：apply 必须在 `RslRlVecEnvWrapper` 首次 reset **之前**（fork `scripts\reinforcement_learning\rsl_rl\train.py` 两行接入——恢复后首个 episode 即落在恢复的粒子/c_k 上；**补丁存档 `fork_patches\train_curriculum_resume.patch`**，`setup.bat` 幂等重打，漏打即静默退回冷启动）。不存 per-episode 瞬态（`_nu_sum`/ring noise/摩擦 dip）与地形 spawn 状态（reset 重写）；不存 RNG（统计连续，刻意非逐位复现）。**门 = joint SIR 存在**：c_k-only 版本（v3–v10）仍回热（挂账 #11 余项） |
-| `tools\verify\test_resume_state.py` | 真续训状态层离线单测（mock env，复用 `test_joint_sir` 夹具，10 项）：逐位往返 + **c_k 连续**（不回热）/ 静态指纹抓"地形网格改动而 n_pairs 不变"的静默错位 / 速度桶与任务身份不符拒恢复 / 评估时钟与权重一致性拒恢复 / 无 joint SIR 任务透传 / 有 term 无状态**硬中断** + `--weights_only` 显式降级 / save hook 注入 + 参数透传 + `wraps` 保名 / `env_type` 漂移告警并还原 / 未覆盖课程 term 绊线。**注**：只证载荷往返，接线时序（恢复早于首次 reset）只能真跑 smoke 证 |
