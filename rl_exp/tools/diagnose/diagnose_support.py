@@ -18,6 +18,8 @@ platform_width > size - 2*border 使金字塔台阶退化为恰好一级台阶�
 
 判据（DIAGNOSE.md 预定）：
   头颈承重 = 胸/颈 link 法向力 > 10% 体重，持续 > 0.5 s
+  着地     = 四脚法向力 > 1 N（Phase 1 零命令/零动作本该四脚承重：只看 tilt 会漏掉
+             "站得住但两脚悬空"——首版诊断就漏了这一条，见 DIAGNOSE.md 结果）
   fall     = 几何口径（tilt>40° 或 clearance<0.6×初始站高，持续 0.5 s，
              沿用 locomotion_eval_v1，与终止项解耦）
 
@@ -199,7 +201,7 @@ def run_case(case: Case, ctx: dict) -> dict:
     pol = zero_policy if case.policy_kind == "zero" else policy
     series: dict[str, list] = {k: [] for k in (
         "fwd_speed", "tilt_root_deg", "clearance", "x", "tilt_spine_deg",
-        "fz_spine", "fz_base", "fz_feet", "feet_down", "reward",
+        "fz_spine", "fz_base", "fz_feet", "feet_down", "foot_z", "reward",
     )}
     for step in range(num_steps):
         cmd_term.vel_command_b[:] = cmd_t
@@ -218,6 +220,8 @@ def run_case(case: Case, ctx: dict) -> dict:
             "fz_spine": fz[:, ctx["sensor_ids"]["spine"], 2].clone(),
             "fz_base": fz[:, ctx["sensor_ids"]["base"], 2].clone(),
             "fz_feet": fz[:, ctx["sensor_ids"]["feet"], 2].clone(),
+            # 脚 body 世界 z（几何口径，与接触力互证）：flat 列地面 z=0 -> 即离地高度
+            "foot_z": data.body_pos_w.torch[:, ctx["body_ids"]["feet"], 2].clone(),
         }
         snap["feet_down"] = (snap["fz_feet"] > FOOT_CONTACT_N).sum(dim=1)
         if ctx["center_ray"] is not None:
@@ -248,11 +252,15 @@ def stack(series: dict, key: str) -> torch.Tensor:
     return torch.stack(series[key])
 
 
-def analyze_stand(res: dict, col: int, step_dt: float, stand_height: float) -> dict:
+def analyze_stand(res: dict, col: int, step_dt: float, stand_height: float,
+                  weight_n: float, foot_names: list[str]) -> dict:
     v = res["valid"][:, col]
     tilt = stack(res["series"], "tilt_root_deg")[:, col][v]
     x = stack(res["series"], "x")[:, col][v]
     fz_b = stack(res["series"], "fz_base")[:, col][v]
+    feet = stack(res["series"], "fz_feet")[:, col][v]          # (T, 4) 逐脚法向力
+    feet_down = stack(res["series"], "feet_down")[:, col][v]
+    foot_z = stack(res["series"], "foot_z")[:, col][v]         # (T, 4) 逐脚世界 z
     bad = tilt > FALL_TILT_DEG
     if res["series"]["clearance"]:
         clr = stack(res["series"], "clearance")[:, col][v]
@@ -266,6 +274,14 @@ def analyze_stand(res: dict, col: int, step_dt: float, stand_height: float) -> d
         "min_clearance": min_clr,
         "drift_m": round((x[-1] - x[0]).item(), 3) if x.numel() else 0.0,
         "max_belly_fz_n": round(fz_b.max().item(), 1),
+        # 着地闸（零命令/零动作本该四脚承重；站立闸只看 tilt 会漏掉两只脚悬空）
+        "feet_down_mean": round(feet_down.float().mean().item(), 2),
+        "feet_down_min": int(feet_down.min().item()),
+        "lift_frac": round((feet_down < 4).float().mean().item(), 3),   # 非四脚着地占比
+        "air_frac": round((feet_down == 0).float().mean().item(), 3),   # 全脚离地占比
+        "foot_z_min": [round(z, 3) for z in foot_z.min(dim=0).values.tolist()],
+        "foot_load_frac": [round(f, 3) for f in (feet.mean(dim=0) / weight_n).tolist()],
+        "foot_names": list(foot_names),
         "fell": fell,
     }
 
@@ -334,6 +350,8 @@ def series_to_json(res: dict, columns: list[str]) -> dict:
         d["tilt_spine_deg"] = [[round(x, 1) for x in res["series"]["tilt_spine_deg"][i][col].tolist()]
                                for i in idx]
         d["fz_spine"] = [[round(x, 1) for x in res["series"]["fz_spine"][i][col].tolist()] for i in idx]
+        d["fz_feet"] = [[round(x, 1) for x in res["series"]["fz_feet"][i][col].tolist()] for i in idx]
+        d["foot_z"] = [[round(x, 3) for x in res["series"]["foot_z"][i][col].tolist()] for i in idx]
         d["feet_down"] = [int(res["series"]["feet_down"][i][col].item()) for i in idx]
         out["series"][name] = d
     return out
@@ -374,7 +392,7 @@ def main():
     device = mbenv.device
 
     spine_ids, _ = robot.find_bodies(SPINE_BODIES, preserve_order=True)
-    foot_ids, _ = robot.find_bodies([".*_foot"], preserve_order=True)
+    foot_ids, foot_names = robot.find_bodies([".*_foot"], preserve_order=True)
     sensor_ids = {
         "spine": contact.find_sensors(SPINE_BODIES, preserve_order=True)[0],
         "feet": contact.find_sensors([".*_foot"], preserve_order=True)[0],
@@ -402,6 +420,7 @@ def main():
         "contact": contact, "scanner": scanner, "center_ray": center_ray,
         "policy": policy, "device": mbenv.device, "step_dt": mbenv.step_dt,
         "body_ids": {"spine": spine_ids, "feet": foot_ids},
+        "foot_names": foot_names,
         "sensor_ids": sensor_ids,
     }
 
@@ -444,7 +463,8 @@ def main():
         rec = {"case": case.name, "cmd": case.cmd, "seed": case.seed, "stats": {}}
         for name, c in col_env.items():
             if case.name.startswith("p1"):
-                rec["stats"][name] = analyze_stand(res, c, ctx["step_dt"], stand_height)
+                rec["stats"][name] = analyze_stand(res, c, ctx["step_dt"], stand_height,
+                                                    weight_n, ctx["foot_names"])
             elif name == "flat":
                 rec["stats"][name] = analyze_flat(res, c, ctx["step_dt"], weight_n, term_names, term_idx)
             else:
@@ -461,13 +481,21 @@ def main():
     lines = [f"# v10 支撑诊断 summary（{datetime.datetime.now():%F %T}）", ""]
     p1 = [r for r in results if r["case"].startswith("p1")]
     if p1:
-        lines += ["## Phase 1 站立闸（flat 列；fell=fell 判据见文件头）", "",
-                  "| case | max_tilt_deg | min_clearance | drift_m | max_belly_fz_n | fell |",
-                  "|---|---|---|---|---|---|"]
+        lines += ["## Phase 1 站立闸（flat 列；fell=fell 判据见文件头）",
+                  "",
+                  "脚列口径：feet_down=法向力>1N 的脚数（稳定段均值/最小值）；lift_frac=非四脚着地"
+                  "占比；air_frac=全脚离地占比；foot_z_min=逐脚最低世界 z（flat 地面 z=0，即离地"
+                  "最低点）；foot_load_frac=逐脚载荷占体重比（顺序见 foot_names）",
+                  "",
+                  "| case | max_tilt_deg | min_clearance | drift_m | max_belly_fz_n | feet_down | lift_frac | air_frac | foot_z_min | foot_load_frac | foot_names | fell |",
+                  "|---|---|---|---|---|---|---|---|---|---|---|---|"]
         for r in p1:
             s = r["stats"]["flat"]
             lines.append(f"| {r['case']} | {s['max_tilt_deg']} | {s['min_clearance']} | "
-                         f"{s['drift_m']} | {s['max_belly_fz_n']} | {s['fell']} |")
+                         f"{s['drift_m']} | {s['max_belly_fz_n']} | "
+                         f"{s['feet_down_mean']}/{s['feet_down_min']} | {s['lift_frac']} | "
+                         f"{s['air_frac']} | {s['foot_z_min']} | {s['foot_load_frac']} | "
+                         f"{','.join(s['foot_names'])} | {s['fell']} |")
     p2 = [r for r in results if r["case"].startswith("p2")]
     if p2:
         lines += ["", "## Phase 2 平地直行（flat 列；first_event: neck_load=先低头承重 / feet_lift=先失稳）",
