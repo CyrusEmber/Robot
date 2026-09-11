@@ -19,6 +19,14 @@ _tmp_*
 rl_exp/versions/**/plots/
 **/report*.html
 
+# full-fidelity per-iteration curves stay machine-local: ~20 MB per version (60 MB
+# for the three trained so far) for 14-15k rows/tag at ~52 B/row, and every trend
+# the version notes read off them survives sampling. The committed
+# rl_exp/versions/**/tb_scalars.csv is the `dump_tb.py --max_points 150` record
+# (~210 KB) and is regenerable from these without TensorBoard:
+#   dump_tb.py --csv_in <vN/tb_scalars.full.csv> --out <vN/tb_scalars.csv> --max_points 150
+rl_exp/versions/**/tb_scalars.full.csv
+
 # blender autosave backups
 *.blend1
 

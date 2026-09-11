@@ -65,6 +65,9 @@ echo [14/14] pre-kit pxr leak gate (P001/P003: env cfg import chain must stay px
 echo [15/15] curriculum resume state (roundtrip / fingerprint / hard-abort / hook)
 "%PY%" rl_exp\tools\verify\test_resume_state.py || goto :fail
 
+echo [16] tb_scalars record sampling (max_points / first+last / CLI resample)
+"%PY%" rl_exp\tools\verify\test_dump_tb_sampling.py || goto :fail
+
 echo ALL_OFFLINE_CHECKS_PASSED
 exit /b 0
 
