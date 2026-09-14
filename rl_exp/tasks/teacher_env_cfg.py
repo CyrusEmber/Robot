@@ -454,6 +454,16 @@ TEACHER_PRIVILEGED_SPEC: dict[str, set[str]] = {
         "thigh_shank_contacts",
         "base_external_wrench",
     },
+    # v13 keeps the v10-v12 privileged-term set (priv 83, obs 381): the Miki
+    # symmetric tracking-kernel swap touches the reward contract only, never
+    # the obs contract.
+    "v13": {
+        "foot_contact_forces",
+        "foot_contact_normals",
+        "foot_friction",
+        "thigh_shank_contacts",
+        "base_external_wrench",
+    },
 }
 
 
@@ -1561,3 +1571,63 @@ class LizardRoughTeacherEnvCfg_V12_PLAY(LizardRoughTeacherEnvCfg_V12):
         # deterministic eval must not roam (the command term then takes its
         # range fallback)
         setattr(self.curriculum, teacher_mdp.JOINT_SIR_TERM, None)
+
+
+@configclass
+class LizardRoughTeacherEnvCfg_V13(LizardRoughTeacherEnvCfg_V10):
+    """v13 recipe: symmetric Miki tracking kernel (single-variable fix).
+
+    v10 diagnosis (2026-09-11, ``DIAGNOSE.md`` + ``NOTES.md``) pinned three
+    holes in the v5 EP kernel ``track_lin_vel_xy_lin``: it scores only the
+    velocity projection onto the command axis, so overspeed is free (clamp at
+    ``speed_c``; measured +48..54 percent at 0.3 m/s command while the ledger
+    read 1.47/1.5), lateral drift is invisible (constant ~20 deg crab,
+    body-relative sideslip 0.16..0.39 m/s against a heading rotation of at
+    most 9 deg), and zero command carries no stop gradient (standing scores 0
+    regardless of motion -- the 10 s zero-command run kept drifting).
+
+    v13 swaps the kernel for the Miki et al. 2022 symmetric form
+    ``exp(-||v_cmd - v_yaw||^2 / 0.25)`` on the full 2D error -- one kernel
+    closes all three holes, including the stop objective (a stationary base at
+    zero command earns the full weight). Everything else (obs 381, DR,
+    terrain, terminations, curriculum) is byte-identical to v10.
+
+    RISK (pre-registered, v13 yaml): the v3/v4 runs collapsed to a
+    foot-pad-creeping optimum under the OLD exp kernel because standing
+    freeloaded residual credit. The rest of the v5 anti-collapse package
+    (r_fc sign fix, r_slip x10, belly -0.5) stays wired, so the freeloading
+    gap that killed v3/v4 no longer exists; if the creep recurs anyway
+    (feet_slide ledger worse than v10's, rear-foot duty collapsing, low-speed
+    success_rate regressing), the version is scrapped and the rollback line
+    is v10. Deliberate deviation from the paper: weight stays 1.5 (not 0.75)
+    to keep the tracking ceiling and penalty ratios identical to v10.
+    """
+
+    params_version = "v13"
+
+    def __post_init__(self):
+        super().__post_init__()
+        v13 = _load_params(self.params_version)["v13"]["track_goal_vel"]
+        self.rewards.track_lin_vel_xy_lin = None
+        self.rewards.track_lin_vel_xy_miki = RewTerm(
+            func=teacher_mdp.track_lin_vel_xy_miki,
+            weight=v13["weight"],
+            params={
+                "command_name": "base_velocity",
+                "sigma_sq": v13["sigma_sq"],
+            },
+        )
+
+
+@configclass
+class LizardRoughTeacherEnvCfg_V13_PLAY(LizardRoughTeacherEnvCfg_V13):
+    """v13 play variant: same as v10 PLAY (no randomization, no curriculum)."""
+
+    def __post_init__(self):
+        super().__post_init__()
+
+        # deterministic evaluation: shared PLAY wiring (single source, see play_utils)
+        apply_play_wiring(self)
+
+        # SIR reassigns spawn origins per episode -- deterministic eval must not roam
+        self.curriculum.terrain_levels = None

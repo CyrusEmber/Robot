@@ -1,0 +1,4 @@
+{
+  "base": "v10",
+  "note": "v10 recipe, single variable: symmetric Miki tracking kernel swaps out the EP linear kernel"
+}

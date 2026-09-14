@@ -68,6 +68,9 @@ echo [15/15] curriculum resume state (roundtrip / fingerprint / hard-abort / hoo
 echo [16] tb_scalars record sampling (max_points / first+last / CLI resample)
 "%PY%" rl_exp\tools\verify\test_dump_tb_sampling.py || goto :fail
 
+echo [17] v13 symmetric tracking kernel (miki wired / EP gone / v5+v10 frozen)
+"%PY%" rl_exp\tools\verify\check_reward_v13.py || goto :fail
+
 echo ALL_OFFLINE_CHECKS_PASSED
 exit /b 0
 

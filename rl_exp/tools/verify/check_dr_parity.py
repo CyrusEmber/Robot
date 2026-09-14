@@ -68,6 +68,10 @@ ALLOWLIST: set[str] = {
     # v10 recipe (versions/lizard/v10/NOTES.md): the tilt termination is
     # deleted on the teacher line only -- the family baseline never had it
     "self.terminations.tilt = None",  # v10: D1 removal (fall -> reward ledger, no term)
+    # v13 recipe (versions/lizard/v13/NOTES.md): symmetric Miki tracking
+    # kernel swaps out the EP linear kernel on the teacher line only
+    "self.rewards.track_lin_vel_xy_lin = None",  # v13: EP kernel removed (single-variable swap)
+    "self.rewards.track_lin_vel_xy_miki = RewTerm(",  # v13: exp(-||v_cmd - v_yaw||^2/sigma_sq)
     # v12 recipe (versions/lizard/v12/PLAN.md): Miki S8 reset/observation
     # robustness package, teacher line only. The three reset_joints_* terms
     # are wired via a setattr loop (V3 convention), so only these lines

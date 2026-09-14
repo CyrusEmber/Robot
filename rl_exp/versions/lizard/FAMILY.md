@@ -65,6 +65,8 @@
 | Lizard-Rough-Play-v11 | `LizardRoughTeacherEnvCfg_V11_PLAY` | versions/lizard/v11（实施完成待训） | v11 回放 |
 | **Lizard-Rough-v12** | `LizardRoughTeacherEnvCfg_V12` | versions/lizard/v12（**提案，未冻结**——训练启动时冻结） | Miki S8 鲁棒性包（关节/基座复位随机 + 摩擦偶发调低 + teacher 侧高度环噪声）+ r_slip 回 −0.003；obs 同 v11 三组 90/208/83 |
 | Lizard-Rough-Play-v12 | `LizardRoughTeacherEnvCfg_V12_PLAY` | versions/lizard/v12（**提案，未冻结**——训练启动时冻结） | v12 回放（环干净、无 dip） |
+| **Lizard-Rough-v13** | `LizardRoughTeacherEnvCfg_V13` | versions/lizard/v13（**实施完成待训**，base = v10） | Miki 对称跟踪核 `exp(−‖Δv‖²/0.25)` 换掉 EP 线性核（闭超速/横向/停车三账本盲区，单变量；weight 保 1.5） |
+| Lizard-Rough-Play-v13 | `LizardRoughTeacherEnvCfg_V13_PLAY` | versions/lizard/v13（实施完成待训） | v13 回放 |
 
 注：teacher 任务 id 与配方版本同步，且**全部常驻注册**——旧版本不会因代码
 演进而失复现（机制见 [OBS.md](OBS.md)「版本差异结构」节）。`Lizard-Rough-v0` 无任务 id
@@ -100,6 +102,7 @@ vN 编号只是句柄，不是顺序契约——重基（v7→v9 迁 v8、v10 �
 | v10 | 2026-09-09 | 单变量删除 tilt 终止（v8.1 之上唯一差异，yaml `tilt_terminate: null`）：翻倒数据留在 rollout 里自供翻身梯度（肚皮接触只罚不终 + 2 m 尾地面翻正），只有 time_out 收局。4096 env，experiment `lizard_rough_teacher_v10`。**训完 15000 iter（2026-09-09 启动 → 2026-09-11 判决）**；判决门 = `v10\NOTES.md` 验收 1–5 | **半通过**（`v10\NOTES.md` 表 + `DIAGNOSE.md`）：time_out **1.0000**（tilt tag 消失）、success 0.048→**0.135**（峰 0.30）、track_lin 0.002→**1.134**（> v8.1 基线 0.79）、belly 恒 **0** = ✅✅；**terrain_levels 未爬**（4.54→4.05，峰 4.63 < v5 同 iter 的 5.75）= ❌；起身观察项未验证。附带（`DIAGNOSE.md` 修正口径后）：零命令下策略 2–3 脚站、**左后**脚基本悬空、**左前**扛 62%；平地直行恒定 ~20° 蟹行（世界横移 2.4–6.2 m/10 s，主因相对机身侧滑）+ 低速超速 48–54% 而账本仍满分 |
 | v11 | 2026-09-10 | 联合粒子地形课程（Lee 2020 Alg S1 + 联合扩展）：粒子 = (参数格 combo, 速度桶)，`param_grid_terrain.py` 参数组合网格（治对角线问题）+ 逐步 Tr 测量（挂账 #15 候选 a 落地）+ `ParticleVelocityCommand` 桶命令接线 + 带空方向分流兜底。实施完成（件 1–5，离线闸门 11/11 绿；smoke TRAIN 段留开训前补跑）；开训门 = v10 判决。v11.1 审查四修见 `v11\PLAN.md` 修订记录（stairs 顶档 0.45、SIR 结算式清零、joint_sir 常量化、PLAN 勘误） | （训练后补） |
 | v12 | 2026-09-10 | Miki S8 鲁棒性包（提案，代码实施同日）：关节初值/速度 reset 随机（offset 型三组，替换 stock 对全零默认 no-op 的 scale 型）+ 基座姿态/速度范围 yaml 化（stock 值原样暴露）+ 足底摩擦偶发调低（p_dip 0.1 → [0.05,0.3]，特权 obs 缓存同调用更新）+ teacher 侧高度环噪声（工况 60/30/10 + w/ε_f/ε_p 三层 + outlier，幅度 × c_k，中途重抽；无学生蒸馏，用户拍板）+ r_slip 回 −0.003。obs 契约不变（90/208/83）。方案见 `v12\PLAN.md` | （训练后补） |
+| v13 | 2026-09-14 | 换回 Miki 对称跟踪核（用户拍板；单变量，base = v10）：`track_lin_vel_xy_miki` = `exp(−‖v_cmd−v_yaw‖²/0.25)`（全 2D 误差、yaw 帧、无 min_speed → cmd=0 站立拿满分 = 停车首次进账本），替掉 EP 线性核（超速饱和中性/横向投影不可见/零命令无梯度三账本盲区，v10 判决实证）。weight 保 1.5 不随 paper 0.75（保天花板与罚项比例 = 纯核形状消融）。风险预注册：v3/v4 exp 核趴窝病历，判废线 = v10。闸 `check_reward_v13.py` | （训练后补） |
 | parkour/v1 | 2026-09-04 | 支线初稿（未冻结未训练，分支 `paper/parkour-in-the-wild`）：跑/爬/跳多专家蒸馏+RL 微调（PITW 配方）；血统 = 支线根（base.json null，与主线 vN 无配方血缘）；参数冻结副本 `parkour\v1\parkour_params.yaml` | （训练后补） |
 
 > **退休注记（2026-09-07，资产换代后果）**：v1/v3/v5 的**原地复现已退役**——

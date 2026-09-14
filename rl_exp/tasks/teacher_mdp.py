@@ -472,6 +472,38 @@ def track_lin_vel_xy_lin(env, command_name: str,
     return torch.clamp(proj, max=speed_c) / speed_c
 
 
+def track_lin_vel_xy_miki(env, command_name: str,
+                          asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+                          sigma_sq: float = 0.25) -> torch.Tensor:
+    """Symmetric 2D linear-velocity tracking (Miki et al. 2022 form).
+
+    r = exp(-||v_cmd - v_yaw||^2 / sigma_sq): the error is the FULL 2D vector in
+    the yaw-aligned gravity frame, so overspeed, lateral drift and standstill all
+    cost. At zero command a stationary base earns 1.0 -- the stop objective the
+    v5 EP kernel never had (standing scored 0 regardless of motion). v13 swaps
+    this in for ``track_lin_vel_xy_lin``, whose one-sided kernel left exactly
+    those three holes (diagnosed 2026-09-11 on v10: +48..54 percent overspeed at
+    0.3 m/s command, a constant ~20 deg crab, no stop gradient at zero command).
+
+    Deliberate deviation from the paper: the weight stays 1.5 (not 0.75) so the
+    tracking credit ceiling and its ratio against the penalty stack stay
+    byte-identical to v10 -- single-variable kernel-shape ablation.
+
+    Args:
+        env: the manager-based env.
+        command_name: velocity command term name.
+        asset_cfg: articulation to read.
+        sigma_sq: kernel bandwidth [m^2/s^2] (paper 0.25).
+    Returns:
+        Shape ``(num_envs,)``.
+    """
+    asset = env.scene[asset_cfg.name]
+    vel_yaw = quat_apply_inverse(yaw_quat(asset.data.root_quat_w.torch),
+                                 asset.data.root_lin_vel_w.torch)[:, :2]
+    cmd = env.command_manager.get_command(command_name)[:, :2]
+    return torch.exp(-(cmd - vel_yaw).square().sum(dim=-1) / sigma_sq)
+
+
 def feet_slide_ck(env, sensor_cfg: SceneEntityCfg,
                   asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     """r_slip (paper S7): penalize contact-foot sliding speed, scaled by c_k.

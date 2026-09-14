@@ -40,13 +40,16 @@
 ```
 Phase 1  Teacher: 特权 actor PPO（当前 = v10 **已训完 15000 iter、判决半通过**——终止
          占比/success/tracking 达标，terrain_levels 未继续爬，见 v10\NOTES.md 结果表与
-         DIAGNOSE.md；v11 联合粒子地形课程已实施，开训门 = v10 判决已出，待用户拍板开训）
+         DIAGNOSE.md；v13 = Miki 对称跟踪核单变量消融（闭超速/横向/停车三账本盲区，
+         2026-09-14 用户拍板）已实施待训；v11 联合粒子地形课程已实施，开训门 = v10
+         判决已出，待用户拍板开训）
 Phase 2  Student: 蒸馏（belief encoder + 加噪扫描 + 重建损失）
 Phase 3  部署: student → ONNX → UE
 ```
 
-当前训练入口：`--task Lizard-Rough-v10`（回放 `Lizard-Rough-Play-v10`）；
-验证链与摆位见仓根 README。
+待训入口：`--task Lizard-Rough-v13`（回放 `Lizard-Rough-Play-v13`，用户拍板的速度
+目标修正消融线）；`--task Lizard-Rough-v11`（联合粒子地形课程线）。验证链与摆位见
+仓根 README。
 
 **并行支线**：parkour 支线（Parkour in the Wild 范式：跑/爬/跳多专家 → DAgger
 蒸馏 → RL 微调）已开 v1（2026-09-04，分支 `paper/parkour-in-the-wild`），路线与

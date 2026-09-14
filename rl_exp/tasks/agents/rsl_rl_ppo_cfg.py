@@ -227,6 +227,17 @@ class LizardTeacherV12PPORunnerCfg(LizardTeacherV11PPORunnerCfg):
 
 
 @configclass
+class LizardTeacherV13PPORunnerCfg(LizardTeacherV10PPORunnerCfg):
+    """Runner cfg for `Lizard-Rough-v13` (symmetric Miki tracking kernel).
+
+    Same recipe as v10 (paper S1 hyperparams, three-encoder model); only the
+    log dir changes -- one version, one dir (versioning.mdc §A).
+    """
+
+    experiment_name = "lizard_rough_teacher_v13"
+
+
+@configclass
 class LizardParkourClimbPPORunnerCfg(LizardFlatPPORunnerCfg):
     """Runner cfg for `Lizard-Parkour-Climb-v1` (position-task stairs expert).
 
