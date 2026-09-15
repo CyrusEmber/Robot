@@ -15,6 +15,66 @@
   isaaclab-asset-pipeline / isaaclab-eval-harness / isaaclab-train-probe /
   git-auto-sync），方法论与项目约定；新机器接线方式见下文"AI 开发环境"节
 
+## 架构概览
+
+以下展示目标架构与续训流程；实现进度、支持范围和验收标准见
+[ARCH_PLAN.md](ARCH_PLAN.md)，图中能力不代表均已实现或验收通过。
+
+### 整体架构
+
+```mermaid
+flowchart TB
+    A["实验输入<br/>代码 · 配方 · 资产"]
+    B["配置构建与核验<br/>配置快照 + Golden"]
+    C["训练运行<br/>环境 + Runner"]
+    D["实验产物<br/>Checkpoint + 运行记录"]
+
+    A --> B --> C --> D
+
+    E["课程状态恢复<br/>Joint SIR · 行 SIR · c_k"]
+    E --> C
+
+    F["后续能力<br/>评估 · 蒸馏 · 导出"]
+    D --> F
+
+    classDef main fill:#eef4ff,stroke:#7c9bc6,color:#183153,stroke-width:1px;
+    classDef state fill:#edf7f1,stroke:#80aa91,color:#234632,stroke-width:1px;
+    classDef future fill:#f5f5f5,stroke:#aaa,color:#555,stroke-dasharray:4 4;
+    class A,B,C,D main;
+    class E state;
+    class F future;
+```
+
+### 一次续训怎么发生
+
+```mermaid
+flowchart LR
+    A["读取旧<br/>Checkpoint"]
+    B["校验身份<br/>配置与状态"]
+    C["回填课程<br/>首次 reset 前"]
+    D["加载模型<br/>与优化器"]
+    E["冻结记录<br/>开始训练"]
+
+    A --> B --> C --> D --> E
+
+    classDef step fill:#eef4ff,stroke:#7c9bc6,color:#183153,stroke-width:1px;
+    class A,B,C,D,E step;
+```
+
+课程状态校验失败时默认终止；显式 `--drop_curriculum_state` 才允许丢弃课程状态并冷启动，
+不绕过模型加载或其它配置检查。开关兼容与具体支持范围见详细计划。
+
+### 三道独立验收
+
+| 验收 | 回答的问题 |
+|---|---|
+| **离线状态验证** | 保存和回填有没有丢状态？下一次课程更新是否一致？ |
+| **真实续训验证** | 实际训练中的恢复时序和状态使用是否正确？ |
+| **隔离重建验证** | 离开原目录，能否靠保存的材料重新构建？ |
+
+优先完成离线状态与真实续训验证；归档与隔离重建负责长期找回实验。
+三项不能互相替代，未执行的验收不计通过。
+
 ## 环境要求（自备）
 
 本仓**不含 Isaac Lab**。自行安装 Isaac Lab 源码树（3.x manager-based 框架）
