@@ -57,7 +57,9 @@
 ### 本批未覆盖（不得据本批宣称通过）
 
 - **1.5 隔离重建**：无重建记录，`已验证重建` 恒为**未知**（非必需项，不影响其它结论）。
+  - **追加（2026-09-15 晚）**：已执行一轮按需演练（重建项目材料 + 复用声明环境），范围内通过，见 1.5a 节；本批结论不受影响。
 - **1.4b C 层代表任务**（c_k-only `v3`、行 SIR `v14`、joint SIR `v12` 的真续训）：**未执行**。
+  - **追加（2026-09-15 晚）**：**已执行**（3 代表任务 × resume/drop，15 臂；`afd1e54`），结论见 1.4b 节。
 - **1.3a S01–S10**（载荷/指纹/损坏/边界/兼容）：**已执行（离线）**，见下节。
 - **无归档的"可取回"项**：一律保持未知（`PLAN.md` #18），本批不因此判失败，也不提升为通过。
 
@@ -65,6 +67,19 @@
 
 - ~~fork 补丁仍以 `weights_only=args_cli.weights_only` 调用~~ **已修（1.3，2026-09-15）**：新补丁传 `drop_curriculum_state=args_cli.drop_curriculum_state or args_cli.weights_only`，旧 CLI 名保留为别名 + 一行弃用提示（仅在使用旧名时打印）；两条补丁插入点已解耦，`git apply --check --reverse` 各自幂等。
 - IsaacLab 树内 `source/isaaclab_tasks/…/velocity/config/spider/` 未跟踪 ⇒ 该树所有 run 的 isaaclab 来源项都会记未知。需在树里提交或删除该目录，才能让这一项可判通过。
+  - **追加说明（2026-09-15 晚，归档到位；原判"未知"保留）**：该目录内容与脏树 diff 已入仓——
+    `rl_exp/archive/2026-09-15_19-08-50/untracked/isaaclab/source/…/config/spider/`，逐文件 sha256（前 16）：
+    `__init__.py` `7f59990e30e3faf4`（933 B）、`agents/__init__.py` `3be19bd191a2d878`（192 B）、
+    `agents/rsl_rl_ppo_cfg.py` `69db92b889acaa89`（1236 B）、`spider_env_cfg.py` `9bdc2896be9456b1`（4815 B）；
+    同目录另存 `isaaclab.diff` / `rsl_rl.diff` = `13aee682fe1efb37`（17632 B）。
+  - **归档绑定的是哪一次**：那份 diff 绑 **19-08-50 那次 run**（其 T1 记录 `13aee682`），**不是 R4/R1 的 `cc25f24b`**
+    （R1 的 286 行 diff 内容从未落盘，且现树已漂移，按硬约束 6 不得补造）。故 R4 的"代码可取回"**仍为未知**。
+  - **旁证（强度上限写清）**：① 状态清单摘要三点同值 `391d17f7db7b64ea`（R1 `15-30-08` / `19-08-50` / 现在的树）——
+    只证**文件集合与状态一致**，不含内容；② 上面 4 个 `.py` 的 mtime 均为 `2026-08-24 17:26–17:48`，早于 R1 约三周且至今未变。
+    两条合起来只支持"**很可能未被改动**"；mtime 可被 `copy2`/`robocopy` 保留，不构成同一份的证明。
+  - **升级为"通过"的条件**：某 run 的 T1 里带**未跟踪文件的逐文件内容摘要**时，其归档材料才可与记录判"同一份"。
+    现在 `code.<source>.untracked*` 只有名字 / 数量 / `untracked_requires_archive` 标志，**没有内容摘要**——这是
+    R4 无法收口的根因，已作为 provenance 改进项登记（`PLAN.md` #18 衍生项）。
 - ~~`REQUIRES_CURRICULUM_STATE` 的声明目前只落在 `*_PLAY` 变体（`False`）上，基类的 `True` 声明缺失~~ **已修（1.3，2026-09-15）**：基类声明落在 `LizardRoughTeacherEnvCfg_V5`（`REQUIRES_CURRICULUM_STATE: ClassVar[bool] = True`，v6–v14 继承），8 个 `*_PLAY` 显式 `False`，V3/V4 不声明（其 staged 课程未覆盖，只 WARN）。仍按 `8ac2eb9` 的 `ClassVar` 形态（进 `[21]` 通过、`[24]` golden 34/34 不变）；读取一律用 `curriculum_state.REQUIRES_CURRICULUM_STATE` 常量 + `getattr(type(cfg), ...)`，不再有 `AttributeError`。
 - 声明仍会出现在 `to_dict()` / `params/env.yaml`（上游 `class_to_dict` 按实例命名空间遍历，`configclass` 已把类成员拷到实例上）：该 dump 是**记录面**，不进 golden 也不进 run manifest 的 cfg 摘要，故不改声明语义；要连它一起干净需动上游 `utils/dict.py`（增补丁），本轮不做。
 - 本批期间该声明与快照 ClassVar 排除曾在并发编辑中一度消失（快照排除已按原设计恢复）；`cfg_snapshot.py` 同一时间被两方写入，后续应避免同文件并发编辑。
