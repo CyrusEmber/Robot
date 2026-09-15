@@ -2,10 +2,13 @@
 
 > 生成：2026-09-14。状态：**实施完成待训**（base = v13；验收与假阳闸预注册于 `NOTES.md`）。
 > **v14.3 修订（2026-09-15，用户拍板）**：前栽不再收局 —— 头承重改为**奖励惩罚**
-> （`head_load_penalty`，无阈值/无姿态门控），终止项只剩侧翻（pitch 无关判据）。
+> （`head_load_penalty`，无阈值/无姿态门控），终止项只剩 roll。
+> **v14.4 修订（2026-09-15，用户拍板）**：roll 改读**基座四元数**、单调覆盖整圈
+> （`|roll| > 70°` 含肚朝上）＋ `|pitch| > 80°` 护栏；"留肚朝上供起身梯度"的前提作废
+> （Miki 无起身目标，倒了就是翻车）。
 > 本 PLAN 是 v14.0 的计划快照：下文提到的 `pg_over_tilt_limit()` / `TiltPitchRollTerm` /
 > `terminations.head_plant_roll` / `v14.fall_gate` / `Locomotion-Eval-v1` 一律以
-> `NOTES.md`（v14.3）与实际代码为准。
+> `NOTES.md`（v14.4）与实际代码为准。
 
 ## 目的/假设（≤3 行）
 

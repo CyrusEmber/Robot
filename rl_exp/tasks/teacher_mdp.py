@@ -39,7 +39,7 @@ from isaaclab.managers import (
     TerminationTermCfg,
 )
 from isaaclab.utils.configclass import configclass
-from isaaclab.utils.math import quat_apply_inverse, yaw_quat
+from isaaclab.utils.math import euler_xyz_from_quat, quat_apply_inverse, yaw_quat
 from isaaclab.utils.warp.kernels import raycast_mesh_masked_kernel
 
 # ponytail: RayCaster is deliberately NOT imported at module top. This module is
@@ -333,32 +333,55 @@ def tilt_terminate(env, gravity_z_limit: float = -0.6) -> torch.Tensor:
     return robot.data.projected_gravity_b[:, 2] > gravity_z_limit
 
 
-# v14: roll-over fall gate (gravity direction), stateful dwell.
+# v14: roll-over fall gate, stateful dwell.
 # v14.3: the nose-down/head-contact limb left the termination side -- head
 # load-bearing is now penalized, not terminated (see head_load_penalty).
+# v14.4: the roll is read from the base quaternion, monotone over the whole
+# turn. The gravity-based |sin| form released everything past 110 deg, which
+# kept the belly-up family alive for a "get-up gradient" the teacher recipe
+# never had (user decision: downed poses are crashes to cut, not data to keep).
 
 
-def roll_over_trigger(pg_b: torch.Tensor, roll_limit_deg: float) -> torch.Tensor:
-    """True where the base has rolled past ``roll_limit_deg`` onto a side.
+def roll_over_trigger(root_quat_w: torch.Tensor, roll_limit_deg: float,
+                      pitch_guard_deg: float) -> torch.Tensor:
+    """True where the base is rolled past ``roll_limit_deg`` onto a side or its back.
 
-    The roll is read off the gravity direction ``pg_b`` (``projected_gravity_b``,
-    upright = (0, 0, -1)) and is **pitch-invariant**: the raw lateral component
-    is ``|pg_b.y| = |sin(roll)| * cos(pitch)``, which under-reads a pose that is
-    both rolled and pitched (30 deg nose-down + 80 deg roll reads 60 deg).
-    Dividing by ``|cos(pitch)| = hypot(pg_b.y, pg_b.z)`` recovers ``|sin(roll)|``
-    exactly, so the gate fires for ``roll in (limit, 180 - limit)`` and stays
-    silent by construction wherever the lateral component is zero -- including
-    the deliberately un-gated back-down / belly-down attitudes that carry the
-    v10 get-up gradient.
+    The roll is the ZYX roll of the base attitude, taken off the base quaternion
+    rather than off projected gravity. Gravity is one direction vector, so it
+    fixes the attitude only up to a rotation about the world vertical -- exactly
+    the information this gate needs. The quaternion form is
+
+    * yaw-invariant: a pure heading change leaves the roll alone;
+    * pitch-free: ``|pg_b.y| = |sin(roll)| * cos(pitch)`` under-reads a pose that
+      is rolled *and* pitched (30 deg nose-down + 80 deg roll read as 60) and the
+      pitch-attenuation fix still folded the turn at 90 deg;
+    * monotone: ``|sin(roll)|`` climbs to 90 deg then falls again, so a body that
+      had rolled past vertical came back down through the threshold and was
+      released -- everything past 110 deg stayed in the rollout.
+
+    The firing range is therefore the full ``|roll| > roll_limit_deg``. Because
+    ``|roll| > 90 deg`` is equivalent to the base up-axis pointing below the
+    horizon, the belly-up end of the axis (including a nose-over onto the back)
+    is inside the gate; v14.0-v14.3 kept it alive to preserve the v10 get-up
+    gradient, but the recipe has no get-up objective and the harness scores those
+    episodes as falls anyway. Belly-down prone sits at roll ~ 0 and is invisible
+    to this axis -- ungated by design, and base contact stays un-gated too (v3.6
+    made it a penalty, and that stands).
 
     Args:
-        pg_b: projected gravity in the base frame, shape (num_envs, 3).
-        roll_limit_deg: roll limit [deg], symmetric (side fall either way).
+        root_quat_w: base attitude quaternion in the world frame, (w, x, y, z),
+            shape (num_envs, 4).
+        roll_limit_deg: roll limit [deg], symmetric (either side).
+        pitch_guard_deg: skip the gate while ``|pitch|`` is above this [deg]. The
+            ZYX decomposition is singular at ``|pitch| = 90 deg``, where the roll
+            it reports is no longer a roll of the body (nose-vertical rears and
+            dives fall in this window; the harness still scores them).
     Returns:
         Shape ``(num_envs,)`` bool.
     """
-    lateral = pg_b[:, 1].abs()
-    return lateral > math.sin(math.radians(roll_limit_deg)) * torch.hypot(pg_b[:, 1], pg_b[:, 2])
+    roll, pitch, _ = euler_xyz_from_quat(root_quat_w)
+    over = roll.abs() > math.radians(roll_limit_deg)
+    return over & (pitch.abs() < math.radians(pitch_guard_deg))
 
 
 
@@ -366,10 +389,10 @@ class RollOverTerm(ManagerTermBase):
     """Terminate once :func:`roll_over_trigger` holds for ``dwell_s``.
 
     The dwell window is what the deleted v3 gate was missing (it fired on any
-    instantaneous tilt): a vault or slip transient clears, but a side fall --
-    the pose this gate is meant to cut -- persists. The counter clears when the
-    condition clears and on every episode reset (``TerminationManager.reset``
-    calls ``reset(env_ids)`` on stateful terms).
+    instantaneous tilt): a vault or slip transient clears, but a body left on its
+    side or back -- the pose this gate is meant to cut -- persists. The counter
+    clears when the condition clears and on every episode reset
+    (``TerminationManager.reset`` calls ``reset(env_ids)`` on stateful terms).
     """
 
     def __init__(self, cfg: TerminationTermCfg, env):
@@ -377,12 +400,12 @@ class RollOverTerm(ManagerTermBase):
         self._robot = env.scene["robot"]
         self._steps = torch.zeros(env.num_envs, dtype=torch.long, device=self._robot.device)
 
-    def __call__(self, env, roll_limit_deg: float = 70.0, dwell_s: float = 0.5) -> torch.Tensor:
+    def __call__(self, env, roll_limit_deg: float = 70.0, pitch_guard_deg: float = 80.0,
+                 dwell_s: float = 0.5) -> torch.Tensor:
         # params stay in the signature: the manager passes the term-cfg params
         # here per call and validates them against it (same as the other
         # class-based terms in this module)
-        pg_b = self._robot.data.projected_gravity_b.torch
-        over = roll_over_trigger(pg_b, roll_limit_deg)
+        over = roll_over_trigger(self._robot.data.root_quat_w.torch, roll_limit_deg, pitch_guard_deg)
         self._steps = torch.where(over, self._steps + 1, torch.zeros_like(self._steps))
         dwell_steps = max(1, int(round(dwell_s / env.step_dt)))
         return self._steps >= dwell_steps

@@ -367,16 +367,25 @@ v14:
   # pinned at 0.019.
   # v14.3 (user decision 2026-09-15): head load-bearing is NOT a termination any
   # more -- it is a per-step penalty (head_load below), so the "nose-down
-  # attitude on a slope" false-positive surface goes away with it. The only
-  # remaining termination is roll-over, and its criterion is pitch-invariant
-  # (teacher_mdp.roll_over_trigger): a pose that is both pitched and rolled no
-  # longer hides under the roll limit.
+  # attitude on a slope" false-positive surface goes away with it.
+  # v14.4 (user decision 2026-09-15): the remaining termination reads the base
+  # quaternion, not gravity -- yaw-invariant, pitch-free and monotone over the
+  # whole turn.
   roll_over:
-    # |sin(roll)| past this -> terminated, symmetric (侧翻 either way). The
-    # pitch-invariant form fires for roll in (70, 110) deg; past 110 the lateral
-    # gravity component shrinks again and the pose is indistinguishable from a
-    # back-down fall -- which stays un-gated on purpose (v10 get-up gradient).
+    # ZYX roll of the base past this -> terminated, symmetric (侧翻 either way).
+    # |roll| > 90 deg means the base up-axis points below the horizon, i.e. onto
+    # its side or its back, so the whole downed half of the axis is inside the
+    # gate. v14.0-v14.3 instead released everything past 110 deg (the |sin| form
+    # comes back down) to keep the belly-up family alive for a get-up gradient
+    # the teacher recipe has no objective for -- retired: a downed pose is a
+    # crash to cut. Belly-down prone (roll ~ 0) stays invisible to this axis, and
+    # base contact is unaffected (penalty-only since v3.6).
     roll_limit_deg: 70.0
+    # Skip the gate while the base is nose-vertical: the ZYX decomposition is
+    # singular at |pitch| = 90 deg and the roll it reports there is not a roll of
+    # the body. Nose-up rears land in this window on purpose -- the harness still
+    # scores any real fall there.
+    pitch_guard_deg: 80.0
     dwell_s: 0.5
   # Continuous penalty for weight carried through the neck chain: any +z ground
   # reaction on the head costs in proportion -- no dead zone, no attitude gate.
@@ -389,14 +398,15 @@ v14:
     force_scale: 706.0
     head_body_names:
       - ".*neck.*"
-  # PRE-REGISTERED tripwire: Episode_Termination/roll_over must stay near zero
-  # (the v3 gate ate 0.60-0.76 of episodes). If it climbs while low-speed
-  # success_rate stalls, the limit is too tight -> raise it (or move the gate
-  # onto the foot-ray terrain normal) instead of scrapping v14; the rollback line
-  # stays v13.
-  # Eval note (v14.3): a gate-triggered episode IS a harness fall -- the gate
-  # fires at roll > 70 deg, which already satisfies the harness tilt criterion
-  # (> 40 deg) on that same frame, and Locomotion-Eval-v2 samples that frame
-  # (v1 dropped each episode's terminal frame, so a gate firing exactly on its
-  # dwell boundary showed one frame too few for the 0.5 s window).
+  # PRE-REGISTERED tripwire: Episode_Termination/roll_over must stay far below
+  # the v3 fingerprint (that gate ate 0.60-0.76 of episodes). It is no longer
+  # expected to be ~0: since v14.4 the gate also cuts the belly-up half of the
+  # roll axis, so any episode that ends upside down counts. If it climbs into
+  # the 0.6+ band while low-speed success_rate stalls, the limit is too tight ->
+  # raise it instead of scrapping v14; the rollback line stays v13.
+  # Eval note (v14.4): a gate-triggered episode IS a harness fall, on that same
+  # frame -- |roll| > 70 deg forces tilt = acos(cos(pitch)cos(roll)) >= 70 deg,
+  # well past the harness threshold (> 40 deg), and Locomotion-Eval-v2 samples
+  # the frame the termination fired on (v1 dropped terminal frames, which cost a
+  # gate firing exactly on its dwell boundary one frame of its 0.5 s window).
 

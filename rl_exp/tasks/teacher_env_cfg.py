@@ -1649,19 +1649,26 @@ class LizardRoughTeacherEnvCfg_V14(LizardRoughTeacherEnvCfg_V13):
     v10 deleted the v3 tilt termination because it killed legitimate pitch
     (instantaneous total tilt > 53 deg: 0.60 of episodes in v8.1, 0.76 in v6,
     success_rate pinned at 0.019 -- see versions/lizard/v10/NOTES.md). v14 stops
-    exactly one pose: rolled onto a side (``|roll|`` past ``roll_limit_deg``,
-    read off the gravity direction with the pitch attenuation divided out),
-    sustained for ``dwell_s``. Nose-up pitch (vaulting, stair climbing) never
-    fires, and a plain belly-down or back-down fall (roll near 0) stays in the
-    rollout data -- the v10 get-up gradient story survives.
+    exactly one pose: rolled onto a side or its back -- the ZYX roll of the base
+    quaternion past ``roll_limit_deg``, sustained for ``dwell_s``. Pitch alone
+    never fires (nose-up vaults, stair climbing) and the roll is yaw-invariant,
+    so heading changes are free.
 
     v14.3 (user decision 2026-09-15): the front-plant termination is gone. Head
     load-bearing is penalized per step instead (:func:`teacher_mdp.head_load_penalty`
     -- vertical contact force through the neck chain, proportional, no threshold,
     no attitude gate), so a head-planted pose costs reward but keeps its rollout
     data, and the "sustained nose-down attitude on a slope" false-positive
-    surface disappears along with the termination. Everything else is
-    byte-identical to v13.
+    surface disappears along with the termination.
+
+    v14.4 (user decision 2026-09-15): the roll moved off projected gravity onto
+    the base quaternion, so it is monotone over the whole turn. The old ``|sin|``
+    form came back down past 110 deg, and v14.0-v14.3 protected that belly-up
+    family plus back-down falls for a "get-up gradient" the teacher recipe has no
+    objective for -- a downed pose is a crash to cut, not data to keep. Belly-down
+    prone sits at roll ~ 0 and is invisible to this axis (kept, like base contact,
+    which has been penalty-only since v3.6). Everything else is byte-identical to
+    v13.
 
     Pre-registered tripwire (v14 yaml + NOTES): Episode_Termination/roll_over
     must stay low (the v3 gate ate 0.60-0.76 of episodes); if it climbs there
@@ -1679,6 +1686,7 @@ class LizardRoughTeacherEnvCfg_V14(LizardRoughTeacherEnvCfg_V13):
             func=teacher_mdp.RollOverTerm,
             params={
                 "roll_limit_deg": roll_over["roll_limit_deg"],
+                "pitch_guard_deg": roll_over["pitch_guard_deg"],
                 "dwell_s": roll_over["dwell_s"],
             },
         )
