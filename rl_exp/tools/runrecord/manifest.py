@@ -43,14 +43,13 @@ import importlib.util
 import json
 import os
 import pathlib
-import subprocess
 import sys
-from datetime import datetime
 
 _REPO = pathlib.Path(__file__).resolve().parents[3]
 if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
+from rl_exp.tools.runrecord import provenance as prov  # noqa: E402
 from rl_exp.tools.verify import cfg_snapshot as cs  # noqa: E402
 
 FORMAT_VERSION = 1
@@ -62,26 +61,9 @@ STAGES = ("pre_make", "env_constructed", "ready_to_learn")
 EVIDENCE_LEVELS = ("记录完整", "可重建", "已验证重建")
 RESULTS = ("通过", "失败", "未知")
 
-_UNTRACKED_CAP = 40
-
 
 def _now() -> str:
-    return datetime.now().astimezone().isoformat(timespec="seconds")
-
-
-def _sha256_bytes(payload: bytes) -> str:
-    return hashlib.sha256(payload).hexdigest()
-
-
-def _sha256_file(path: pathlib.Path, chunk: int = 1 << 20) -> str | None:
-    try:
-        digest = hashlib.sha256()
-        with open(path, "rb") as handle:
-            for block in iter(lambda: handle.read(chunk), b""):
-                digest.update(block)
-        return digest.hexdigest()
-    except OSError:
-        return None
+    return prov.now()
 
 
 def _atomic_write(path: pathlib.Path, text: str) -> None:
@@ -90,92 +72,6 @@ def _atomic_write(path: pathlib.Path, text: str) -> None:
     tmp.write_text(text, encoding="utf-8")
     os.replace(tmp, path)
 
-
-def _git(root: pathlib.Path | None, *args: str) -> str:
-    if root is None:
-        return ""
-    try:
-        return subprocess.run(
-            ["git", *args], capture_output=True, text=True, check=True, cwd=root
-        ).stdout.strip()
-    except (OSError, subprocess.CalledProcessError):
-        return ""
-
-
-def git_state(root: pathlib.Path | None, label: str) -> dict:
-    """Provenance of one git work tree: revision, dirty state, diffs, untracked files.
-
-    Untracked files are the honest weak spot: a hash of the tree cannot bring them
-    back, so they are listed by name and flagged as needing archiving.
-
-    Args:
-        root: the work tree root, or None when it could not be resolved.
-        label: human label used in the ``resolved`` flag ("repository" / "isaaclab").
-
-    Returns:
-        The record for this tree; ``available: False`` when git could not answer.
-    """
-    if root is None:
-        return {"available": False, "detail": f"{label} root unresolved"}
-    rev = _git(root, "rev-parse", "HEAD")
-    if not rev:
-        return {"available": False, "detail": f"{root} is not a git work tree"}
-    porcelain = _git(root, "status", "--porcelain=v2")
-    status_lines = porcelain.splitlines()
-    untracked = sorted(line.split(" ", 1)[1] for line in status_lines if line.startswith("? "))
-    diff = _git(root, "diff", "HEAD")
-    return {
-        "available": True,
-        "root": cs.relativize(str(root)),
-        "rev": rev[:12],
-        "dirty": bool(status_lines),
-        "status_porcelain_sha256": _sha256_bytes(porcelain.encode("utf-8")),
-        "diff_sha256": _sha256_bytes(diff.encode("utf-8")),
-        "diff_lines": len(diff.splitlines()),
-        "untracked_count": len(untracked),
-        "untracked": untracked[:_UNTRACKED_CAP],
-        "untracked_requires_archive": bool(untracked),
-    }
-
-
-def rsl_rl_state() -> dict:
-    """Provenance of rsl_rl: source tree when editable, distribution version when installed."""
-    try:
-        spec = importlib.util.find_spec("rsl_rl")
-    except (ImportError, ValueError):
-        spec = None
-    origin = getattr(spec, "origin", None) if spec is not None else None
-    if origin:
-        package_dir = pathlib.Path(origin).resolve().parent
-        tree = _git(package_dir, "rev-parse", "--show-toplevel")
-        if tree:
-            state = git_state(pathlib.Path(tree), "rsl_rl")
-            state["mode"] = "editable/source"
-            return state
-    try:
-        from importlib.metadata import version
-
-        return {"available": True, "mode": "installed", "distribution_version": version("rsl_rl")}
-    except Exception as err:  # noqa: BLE001 - record the gap, never crash a run
-        return {"available": False, "detail": f"{type(err).__name__}: {err}"}
-
-
-def code_sources() -> dict:
-    """All code the run depends on, recorded from what is actually importable."""
-    isaac = os.environ.get("RL_ISAAC_ROOT")
-    if not isaac:
-        try:
-            from ablation_harness.host_paths import isaac_root
-
-            resolved = isaac_root()
-            isaac = str(resolved) if resolved else None
-        except Exception:  # noqa: BLE001
-            isaac = None
-    return {
-        "repository": git_state(_REPO, "repository"),
-        "isaaclab": git_state(pathlib.Path(isaac) if isaac else None, "isaaclab"),
-        "rsl_rl": rsl_rl_state(),
-    }
 
 
 def asset_digest(params_version: str | None) -> dict:
@@ -207,7 +103,7 @@ def asset_digest(params_version: str | None) -> dict:
     hashes: dict[str, str] = {}
     missing: list[str] = []
     for rel, recorded in sorted(files.items()):
-        digest = _sha256_file(_REPO / "rl_exp" / rel)
+        digest = prov.sha256_file(_REPO / "rl_exp" / rel)
         if digest is None:
             missing.append(rel)
             continue
@@ -216,9 +112,9 @@ def asset_digest(params_version: str | None) -> dict:
         hashes[rel] = digest
     return {
         "lock": cs.relativize(str(lock_path)),
-        "lock_sha256": _sha256_file(lock_path),
+        "lock_sha256": prov.sha256_file(lock_path),
         "file_count": len(files),
-        "manifest_sha256": _sha256_bytes(
+        "manifest_sha256": prov.sha256_bytes(
             json.dumps(hashes, sort_keys=True, separators=(",", ":")).encode("utf-8")
         ),
         "missing_or_changed": missing,
@@ -347,7 +243,7 @@ def begin(*, log_dir, task: str | None, argv: list[str], env_cfg, agent_cfg) -> 
             "argv": argv,
             "log_dir": cs.relativize(str(ctx.log_dir)),
             "started_at": _now(),
-            "code": code_sources(),
+            "code": prov.code_sources(),
         }
         version = getattr(env_cfg, "params_version", None)
         assets = asset_digest(version if isinstance(version, str) else None)
@@ -536,11 +432,11 @@ def freeze(
             "resume": {
                 "requested": weights_only,
                 "source": cs.relativize(str(source)) if source else None,
-                "source_sha256": _sha256_file(source) if source else None,
+                "source_sha256": prov.sha256_file(source) if source else None,
                 "loaded_iteration": getattr(runner, "current_learning_iteration", None),
                 "curriculum_state": _curriculum_state_evidence(env),
             },
-            "code": code_sources(),
+            "code": prov.code_sources(),
         }
         ctx.manifest.setdefault("stages", {})["ready_to_learn"] = stage
         ctx.manifest["failures"] = list(ctx.failures)
@@ -599,7 +495,7 @@ def _index_checkpoint(ctx: RunContext, path: pathlib.Path, payload: dict) -> Non
     """Append the checkpoint's own file hash to the external index (never into T1)."""
     try:
         index = json.loads(ctx.index_path.read_text(encoding="utf-8")) if ctx.index_path.is_file() else {}
-        file_digest = _sha256_file(path)
+        file_digest = prov.sha256_file(path)
         index[path.name] = {
             "sha256": file_digest,
             "size": path.stat().st_size if path.exists() else None,
@@ -706,7 +602,7 @@ def _verify_self_consistency(manifest: dict, problems: list[str]) -> list[dict]:
 
 def _verify_code(manifest: dict, problems: list[str]) -> list[dict]:
     recorded = manifest.get("code", {})
-    fresh = code_sources()
+    fresh = prov.code_sources()
     rows: list[dict] = []
     for name in ("repository", "isaaclab", "rsl_rl"):
         before, after = recorded.get(name, {}), fresh.get(name, {})
@@ -800,7 +696,7 @@ def _verify_payload(run_dir: pathlib.Path, manifest: dict, problems: list[str]) 
     for name, entry in index.items():
         if not isinstance(entry, dict):
             continue
-        digest = _sha256_file(run_dir / name)
+        digest = prov.sha256_file(run_dir / name)
         if digest is None:
             bad.append(f"{name}: missing")
         elif digest != entry.get("sha256"):

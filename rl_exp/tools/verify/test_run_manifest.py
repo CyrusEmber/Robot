@@ -24,6 +24,7 @@ sys.path.insert(0, "rl_exp/tools/verify")
 import torch  # noqa: E402
 
 from rl_exp.tools.runrecord import manifest as M  # noqa: E402
+from rl_exp.tools.runrecord import provenance as prov  # noqa: E402
 from rl_exp.tasks.agents.rsl_rl_ppo_cfg import LizardTeacherV14PPORunnerCfg  # noqa: E402
 from rl_exp.tasks.teacher_env_cfg import LizardRoughTeacherEnvCfg_V14  # noqa: E402
 
@@ -130,7 +131,7 @@ def main() -> int:
         manifest = json.loads((run_dir / M.MANIFEST_NAME).read_text(encoding="utf-8"))
         check("record/stages", all(s in manifest["stages"] for s in M.STAGES), f"{list(manifest['stages'])}")
         check("record/t1-frozen", ctx.frozen and bool(ctx.t1_sha256), "T1 not frozen")
-        self_hash = M._sha256_file(run_dir / M.MANIFEST_NAME)
+        self_hash = prov.sha256_file(run_dir / M.MANIFEST_NAME)
         check(
             "record/no-self-hash",
             self_hash not in json.dumps(manifest),
@@ -166,7 +167,7 @@ def main() -> int:
         )
         index = json.loads((run_dir / M.INDEX_NAME).read_text(encoding="utf-8"))
         entry = next(v for k, v in index.items() if isinstance(v, dict))
-        check("checkpoint/index-sha", entry["sha256"] == M._sha256_file(next(run_dir.glob("*.pt"))), f"{entry}")
+        check("checkpoint/index-sha", entry["sha256"] == prov.sha256_file(next(run_dir.glob("*.pt"))), f"{entry}")
 
         rows, problems = M.verify(run_dir)
         check("verify/clean", not problems, f"{problems[:2]}")

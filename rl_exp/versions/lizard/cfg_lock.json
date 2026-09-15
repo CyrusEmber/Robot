@@ -1,12 +1,23 @@
 {
- "cfg_snapshot_format": 1,
- "note": "recipe golden for every registered rl_exp task; regenerate only on an intended change",
- "locked_at_rev": "7999f1f0f983",
- "locked_dirty": false,
- "locked_isaaclab_rev": "28a37cecdd43",
- "locked_python": "3.12.13",
+ "lock_format": 2,
+ "note": "recipe golden, keyed by framework combination: entry keys are '<combination>|<task id>' and a training run never adds one",
+ "baselines": {
+  "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13": {
+   "created_at": "2026-09-15T14:50:22+08:00",
+   "reason": "lock format v2: entry keys carry the framework combination (isaaclab|rsl_rl|python) so a baseline is per combination and runs never add entries; all 34 snapshots and digests byte-identical to v1",
+   "created_rev": "84f2a32e8e14",
+   "created_dirty": true,
+   "combination": {
+    "isaaclab_rev": "28a37cecdd43",
+    "rsl_rl": "source:28a37cecdd43",
+    "python": "3.12.13"
+   },
+   "cfg_snapshot_format": 1,
+   "task_count": 34
+  }
+ },
  "entries": {
-  "Lizard-Parkour-Climb-Play-v1": {
+  "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Parkour-Climb-Play-v1": {
    "version": null,
    "env_cfg_class": "rl_exp.tasks.parkour_env_cfg:ParkourClimbEnvCfg_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardParkourClimbPPORunnerCfg",
@@ -2115,7 +2126,7 @@
     }
    }
   },
-  "Lizard-Parkour-Climb-v1": {
+  "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Parkour-Climb-v1": {
    "version": null,
    "env_cfg_class": "rl_exp.tasks.parkour_env_cfg:ParkourClimbEnvCfg",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardParkourClimbPPORunnerCfg",
@@ -4752,7 +4763,7 @@
     }
    }
   },
-  "Lizard-Rough-Play-v1": {
+  "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-Play-v1": {
    "version": "v1",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V1_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherPPORunnerCfg",
@@ -6878,7 +6889,7 @@
     }
    }
   },
-  "Lizard-Rough-Play-v10": {
+  "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-Play-v10": {
    "version": "v10",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V10_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV10PPORunnerCfg",
@@ -9946,7 +9957,7 @@
     }
    }
   },
-  "Lizard-Rough-Play-v11": {
+  "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-Play-v11": {
    "version": "v11",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V11_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV11PPORunnerCfg",
@@ -14152,7 +14163,7 @@
     }
    }
   },
-  "Lizard-Rough-Play-v12": {
+  "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-Play-v12": {
    "version": "v12",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V12_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV12PPORunnerCfg",
@@ -18569,7 +18580,7 @@
     }
    }
   },
-  "Lizard-Rough-Play-v13": {
+  "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-Play-v13": {
    "version": "v13",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V13_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV13PPORunnerCfg",
@@ -21638,7 +21649,7 @@
     }
    }
   },
-  "Lizard-Rough-Play-v14": {
+  "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-Play-v14": {
    "version": "v14",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V14_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV14PPORunnerCfg",
@@ -24767,7 +24778,7 @@
     }
    }
   },
-  "Lizard-Rough-Play-v2": {
+  "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-Play-v2": {
    "version": "v2",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V2_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV2PPORunnerCfg",
@@ -27106,7 +27117,7 @@
     }
    }
   },
-  "Lizard-Rough-Play-v3": {
+  "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-Play-v3": {
    "version": "v3",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V3_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV3PPORunnerCfg",
@@ -30052,7 +30063,7 @@
     }
    }
   },
-  "Lizard-Rough-Play-v4": {
+  "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-Play-v4": {
    "version": "v4",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V4_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV4PPORunnerCfg",
@@ -32998,7 +33009,7 @@
     }
    }
   },
-  "Lizard-Rough-Play-v5": {
+  "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-Play-v5": {
    "version": "v5",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V5_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV5PPORunnerCfg",
@@ -36074,7 +36085,7 @@
     }
    }
   },
-  "Lizard-Rough-Play-v6": {
+  "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-Play-v6": {
    "version": "v6",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V6_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV6PPORunnerCfg",
@@ -39150,7 +39161,7 @@
     }
    }
   },
-  "Lizard-Rough-Play-v8": {
+  "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-Play-v8": {
    "version": "v8",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V8_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV8PPORunnerCfg",
@@ -42226,7 +42237,7 @@
     }
    }
   },
-  "Lizard-Rough-v1": {
+  "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-v1": {
    "version": "v1",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V1",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherPPORunnerCfg",
@@ -44880,7 +44891,7 @@
     }
    }
   },
-  "Lizard-Rough-v10": {
+  "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-v10": {
    "version": "v10",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V10",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV10PPORunnerCfg",
@@ -48495,7 +48506,7 @@
     }
    }
   },
-  "Lizard-Rough-v11": {
+  "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-v11": {
    "version": "v11",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V11",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV11PPORunnerCfg",
@@ -53258,7 +53269,7 @@
     }
    }
   },
-  "Lizard-Rough-v12": {
+  "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-v12": {
    "version": "v12",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V12",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV12PPORunnerCfg",
@@ -58308,7 +58319,7 @@
     }
    }
   },
-  "Lizard-Rough-v13": {
+  "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-v13": {
    "version": "v13",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V13",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV13PPORunnerCfg",
@@ -61924,7 +61935,7 @@
     }
    }
   },
-  "Lizard-Rough-v14": {
+  "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-v14": {
    "version": "v14",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V14",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV14PPORunnerCfg",
@@ -65600,7 +65611,7 @@
     }
    }
   },
-  "Lizard-Rough-v2": {
+  "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-v2": {
    "version": "v2",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V2",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV2PPORunnerCfg",
@@ -68467,7 +68478,7 @@
     }
    }
   },
-  "Lizard-Rough-v3": {
+  "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-v3": {
    "version": "v3",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V3",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV3PPORunnerCfg",
@@ -72007,7 +72018,7 @@
     }
    }
   },
-  "Lizard-Rough-v4": {
+  "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-v4": {
    "version": "v4",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V4",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV4PPORunnerCfg",
@@ -75547,7 +75558,7 @@
     }
    }
   },
-  "Lizard-Rough-v5": {
+  "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-v5": {
    "version": "v5",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V5",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV5PPORunnerCfg",
@@ -79170,7 +79181,7 @@
     }
    }
   },
-  "Lizard-Rough-v6": {
+  "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-v6": {
    "version": "v6",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V6",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV6PPORunnerCfg",
@@ -82793,7 +82804,7 @@
     }
    }
   },
-  "Lizard-Rough-v8": {
+  "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-v8": {
    "version": "v8",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V8",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV8PPORunnerCfg",
@@ -86416,7 +86427,7 @@
     }
    }
   },
-  "Lizard-Velocity-Curriculum-Flat-Play-v0": {
+  "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Velocity-Curriculum-Flat-Play-v0": {
    "version": null,
    "env_cfg_class": "rl_exp.tasks.curriculum_env_cfg:LizardCurriculumFlatEnvCfg_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardCurriculumFlatPPORunnerCfg",
@@ -88033,7 +88044,7 @@
     }
    }
   },
-  "Lizard-Velocity-Curriculum-Flat-v0": {
+  "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Velocity-Curriculum-Flat-v0": {
    "version": null,
    "env_cfg_class": "rl_exp.tasks.curriculum_env_cfg:LizardCurriculumFlatEnvCfg",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardCurriculumFlatPPORunnerCfg",
@@ -90296,7 +90307,7 @@
     }
    }
   },
-  "Lizard-Velocity-Curriculum-Rough-Play-v0": {
+  "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Velocity-Curriculum-Rough-Play-v0": {
    "version": null,
    "env_cfg_class": "rl_exp.tasks.curriculum_rough_env_cfg:LizardCurriculumRoughEnvCfg_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardCurriculumRoughPPORunnerCfg",
@@ -92248,7 +92259,7 @@
     }
    }
   },
-  "Lizard-Velocity-Curriculum-Rough-v0": {
+  "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Velocity-Curriculum-Rough-v0": {
    "version": null,
    "env_cfg_class": "rl_exp.tasks.curriculum_rough_env_cfg:LizardCurriculumRoughEnvCfg",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardCurriculumRoughPPORunnerCfg",
@@ -94851,7 +94862,7 @@
     }
    }
   },
-  "Lizard-Velocity-Flat-Play-v0": {
+  "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Velocity-Flat-Play-v0": {
    "version": null,
    "env_cfg_class": "rl_exp.tasks.lizard_env_cfg:LizardFlatEnvCfg_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardFlatPPORunnerCfg",
@@ -96446,7 +96457,7 @@
     }
    }
   },
-  "Lizard-Velocity-Flat-v0": {
+  "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Velocity-Flat-v0": {
    "version": null,
    "env_cfg_class": "rl_exp.tasks.lizard_env_cfg:LizardFlatEnvCfg",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardFlatPPORunnerCfg",
@@ -98569,7 +98580,7 @@
     }
    }
   },
-  "Lizard-Velocity-Rough-Play-v0": {
+  "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Velocity-Rough-Play-v0": {
    "version": null,
    "env_cfg_class": "rl_exp.tasks.rough_env_cfg:LizardRoughEnvCfg_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardRoughPPORunnerCfg",
@@ -100504,7 +100515,7 @@
     }
    }
   },
-  "Lizard-Velocity-Rough-v0": {
+  "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Velocity-Rough-v0": {
    "version": null,
    "env_cfg_class": "rl_exp.tasks.rough_env_cfg:LizardRoughEnvCfg",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardRoughPPORunnerCfg",

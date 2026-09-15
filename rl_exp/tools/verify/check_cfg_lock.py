@@ -17,23 +17,38 @@ golden is the recipe as launched, not a re-derivation.
 
 Modes
 -----
-default        verify every registered task against the lock (drift -> exit 1)
-``--update``   write/refresh the lock from the current tree
-``--diff``     print changed field paths against the lock
+default            verify every registered task against the baseline for the current
+                   framework combination (drift -> exit 1)
+``--update --reason "<why>"``
+                   create/refresh that baseline; prints the field-level diff first and
+                   refuses without a reason
+``--diff``         print changed field paths against the baseline
 ``--vs-upstream``  value diff against ``LocomotionVelocityRoughEnvCfg`` defaults,
-                   with a provenance column ("值相同" does not prove "来自继承")
-``--tasks``    restrict to task ids containing any of these substrings
+                   attributed to the version that last set each value
+``--tasks``        restrict to task ids containing any of these substrings
 
-Scope note: the lock records resolved *values*, so it is tied to the framework
-revision that produced them (``locked_isaaclab_rev``). A framework upgrade makes
-the whole lock a new baseline pair, exactly as ARCH_PLAN Step 2 requires -- it is
-never a routine "update the golden" chore.
+Three properties this file is built to keep:
+
+**Growth is bounded by framework combinations, not by runs.** Entry keys are
+``<combination>|<task id>`` and ``baselines`` describes each combination once. A task
+therefore never appears twice, training run number 200 adds nothing, and a new key
+appears only when the IsaacLab / rsl_rl / Python combination changes (old combinations
+are kept, since an old recipe must stay checkable under the framework it was built on).
+
+**The text is chosen for git diffs.** JSON with ``indent=1`` puts one key per line,
+key order is the semantic order (so it comes from the config, not from a sort), and
+floats are ``repr`` -- a changed leaf changes exactly one line, and an unchanged run
+changes nothing at all.
+
+**A baseline is never overwritten as a reflex.** ``--update`` demands a reason, prints
+the concrete differences it is about to absorb, and a framework upgrade with no
+baseline for that combination fails loudly with instructions instead of quietly
+re-baselining ("更新 golden 当消警" is the failure mode this prevents).
 """
 
 import json
 import pathlib
 import re
-import subprocess
 import sys
 
 _REPO = pathlib.Path(__file__).resolve().parents[3]
@@ -41,20 +56,16 @@ sys.path.insert(0, str(_REPO))
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 import cfg_snapshot as cs  # noqa: E402
+from rl_exp.tools.runrecord import provenance as prov  # noqa: E402
 
 LOCK_PATH = _REPO / "rl_exp" / "versions" / "lizard" / "cfg_lock.json"
+LOCK_FORMAT = 2
 UPSTREAM_CFG = "isaaclab_tasks.manager_based.locomotion.velocity.velocity_env_cfg:LocomotionVelocityRoughEnvCfg"
 _TASK_VERSION = re.compile(r"Lizard-Rough(?:-Play)?-v(\d+)")
 _DIFF_LIMIT = 60
-
-
-def _git(*args: str) -> str:
-    try:
-        return subprocess.run(
-            ["git", *args], capture_output=True, text=True, check=True, cwd=_REPO
-        ).stdout.strip()
-    except (OSError, subprocess.CalledProcessError):
-        return ""
+_ENTRY_KEYS = {"version", "env_cfg_class", "agent_cfg_class", "digest", "snapshot"}
+"""An entry is a recipe fact about a task id. Anything run-scoped here would mean the
+lock grows with training runs, which is exactly what it must not do."""
 
 
 def resolve_entry(entry: str):
@@ -148,28 +159,54 @@ def _print_diff(task_id: str, old, new, header: str) -> None:
 def verify(lock: dict, current: dict, problems: list[str], show_diff: bool, only: list[str]) -> None:
     """Every registered task must be locked, and its resolved config unchanged.
 
-    ``only`` narrows the scope to task ids containing one of the given substrings;
-    everything outside it is neither checked nor reported (a filtered run must not
-    look like mass retirement).
+    The baseline is selected by framework combination: the same recipe under a
+    different IsaacLab / rsl_rl / Python combination is a DIFFERENT baseline, not a
+    drift. ``only`` narrows the scope to task ids containing one of the given
+    substrings; everything outside it is neither checked nor reported (a filtered run
+    must not look like mass retirement).
     """
+    combo = combination()
+    key = combination_key(combo)
+    baselines = lock.get("baselines", {})
+    if key not in baselines:
+        problems.append(
+            f"no baseline for this framework combination ({key}); the lock holds {sorted(baselines)}. "
+            f"A framework upgrade gets its OWN baseline pair -- never an in-place overwrite. "
+            f'Create one deliberately: --update --reason "<why this combination needs a baseline>"'
+        )
+        return
+    baseline = baselines[key]
+    if baseline.get("cfg_snapshot_format") != cs.FORMAT_VERSION:
+        problems.append(
+            f"baseline snapshot format {baseline.get('cfg_snapshot_format')} != serializer "
+            f"{cs.FORMAT_VERSION}: the stored snapshots cannot be compared with freshly taken ones"
+        )
+        return
     entries = lock.get("entries", {})
     in_scope = lambda task_id: not only or any(token in task_id for token in only)  # noqa: E731
     for task_id, entry in current.items():
         if not in_scope(task_id):
             continue
-        if task_id not in entries:
-            problems.append(f"{task_id}: no golden entry (run --update once the tree is the baseline)")
+        stored = entries.get(entry_key(key, task_id))
+        if stored is None:
+            problems.append(f"{task_id}: no golden entry in this baseline (drifted out, or a new task)")
             continue
-        if cs.digest(entries[task_id]["snapshot"]) != entries[task_id]["digest"]:
+        if cs.digest(stored["snapshot"]) != stored["digest"]:
             problems.append(
                 f"{task_id}: golden entry is internally inconsistent (digest does not match "
                 f"its own snapshot) -- the lock was hand-edited; a drift diff would be unusable"
             )
-        if entries[task_id]["digest"] != entry["digest"]:
+        extra = set(stored) - _ENTRY_KEYS
+        if extra:
+            problems.append(
+                f"{task_id}: golden entry carries fields that are not recipe facts {sorted(extra)}; "
+                f"run-scoped data here would make the lock grow with every run"
+            )
+        if stored["digest"] != entry["digest"]:
             problems.append(f"{task_id}: config drift vs golden")
             if show_diff:
-                _print_diff(task_id, entries[task_id]["snapshot"], entry["snapshot"], "")
-        claimed = entries[task_id].get("version")
+                _print_diff(task_id, stored["snapshot"], entry["snapshot"], "")
+        claimed = stored.get("version")
         if claimed != entry["version"]:
             problems.append(
                 f"{task_id}: params_version {entry['version']!r} != golden {claimed!r} "
@@ -181,43 +218,167 @@ def verify(lock: dict, current: dict, problems: list[str], show_diff: bool, only
                 f"{task_id}: task id claims v{match.group(1)} but the cfg loads "
                 f"params_version={entry['version']!r}"
             )
-    for task_id in entries:
-        if task_id not in current and in_scope(task_id):
+    for stored_key in entries:
+        combo_part, _, task_id = stored_key.rpartition("|")
+        if combo_part not in baselines:
+            problems.append(
+                f"{stored_key}: entry claims a baseline {combo_part!r} that the lock does not describe"
+            )
+        elif task_id not in current and in_scope(task_id):
             problems.append(f"{task_id}: golden entry has no registered task (retired task or renamed id)")
-    if lock.get("cfg_snapshot_format") != cs.FORMAT_VERSION:
-        problems.append(
-            f"lock format {lock.get('cfg_snapshot_format')} != serializer {cs.FORMAT_VERSION}"
+
+
+def combination() -> dict:
+    """The framework combination a baseline belongs to.
+
+    The resolved config depends on the framework code as much as on this repo's
+    recipes, so a baseline is keyed by what produced it -- not by when it was taken
+    and never by which run needed it.
+    """
+    return {
+        "isaaclab_rev": prov.rev(prov.isaac_root()) or "unresolved",
+        "rsl_rl": prov.rsl_rl_id(),
+        "python": sys.version.split()[0],
+    }
+
+
+def combination_key(combo: dict) -> str:
+    """Short, stable key of a framework combination."""
+    return f"isaaclab={combo['isaaclab_rev']}|rsl_rl={combo['rsl_rl']}|python={combo['python']}"
+
+
+def entry_key(combo_key: str, task_id: str) -> str:
+    """Entry key: the combination first, so a task never appears twice by accident.
+
+    The combination lives in the KEY rather than in a nested mapping on purpose: the
+    stored snapshots keep the same indentation as before, so introducing baselines cost
+    a key rewrite instead of re-indenting every line of every snapshot -- a format
+    change that rewrites the whole file is unreadable in review, which defeats the
+    point of a diffable golden.
+    """
+    return f"{combo_key}|{task_id}"
+
+
+def load_lock() -> tuple[dict, str | None]:
+    """Read the lock file; the second value is an error, not an exception.
+
+    A lock written by an older format is reported, never migrated in place: the
+    numbers in it would silently change meaning.
+    """
+    if not LOCK_PATH.is_file():
+        return {}, (
+            f"{cs.relativize(str(LOCK_PATH))} missing; create the baseline deliberately with "
+            f'--update --reason "<why>" (no golden means no drift detection at all)'
         )
+    try:
+        lock = json.loads(LOCK_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as err:
+        return {}, f"lock unreadable: {err}"
+    if lock.get("lock_format") != LOCK_FORMAT:
+        return lock, (
+            f"lock format {lock.get('lock_format')} != {LOCK_FORMAT}; regenerate deliberately with "
+            f'--update --reason "<why>" -- an in-place rewrite would hide what moved'
+        )
+    return lock, None
 
 
-def update(current: dict) -> int:
-    lock = {
+def _previous_entries(lock: dict, key: str, entries: dict) -> dict | None:
+    """Entries of an existing baseline for this combination, keyed by task id.
+
+    Handles the pre-v2 flat lock too: during a format migration the reviewer needs to see
+    what actually moved, not "34 tasks appeared".
+    """
+    keys = [stored for stored in entries if stored.startswith(f"{key}|")]
+    if keys:
+        return {stored.split("|")[-1]: entries[stored] for stored in keys}
+    if "lock_format" not in lock or lock.get("lock_format") == 1:
+        # pre-v2 flat lock: compare against it so a migration reports what moved
+        return lock.get("entries") or None
+    return None
+
+
+def _baseline_changes(previous: dict | None, current: dict) -> list[str]:
+    """Print a per-task field-level diff of a baseline update; return the summary lines.
+
+    This is the review the user reads before the lock is rewritten. It prints the
+    concrete changed field paths, not just "the digest moved".
+    """
+    if previous is None:
+        return [f"new baseline ({len(current)} tasks)"]
+    changed = [t for t in current if t in previous and previous[t]["digest"] != current[t]["digest"]]
+    added = [t for t in current if t not in previous]
+    removed = [t for t in previous if t not in current]
+    for task_id in changed:
+        _print_diff(task_id, previous[task_id]["snapshot"], current[task_id]["snapshot"], "")
+    summary = []
+    if changed:
+        summary.append(f"{len(changed)} task(s) changed: {changed[:5]}")
+    if added:
+        summary.append(f"{len(added)} task(s) added: {added[:5]}")
+    if removed:
+        summary.append(f"{len(removed)} task(s) removed: {removed[:5]}")
+    if not summary:
+        summary.append("no content change (provenance or format only)")
+    return summary
+
+
+def update(current: dict, reason: str | None) -> int:
+    """Write/refresh the baseline for the current framework combination.
+
+    Refuses without ``--reason``: a baseline must never be rewritten as a reflex to
+    make a red gate green ("更新 golden 当消警"), so the update carries a stated
+    reason and prints the concrete differences first.
+    """
+    combo = combination()
+    key = combination_key(combo)
+    lock, error = load_lock()  # a missing/older lock is fine here: this is the deliberate act
+    baselines = dict(lock.get("baselines", {}))
+    # only same-format entries are keyed by combination; a pre-v2 flat lock is re-keyed
+    # from scratch below (its bare task ids are the ones being replaced)
+    entries = dict(lock.get("entries", {})) if lock.get("lock_format") == LOCK_FORMAT else {}
+    previous = _previous_entries(lock, key, entries)
+    if error:
+        print(f"  note: {error}")
+    if previous is not None and "lock_format" not in lock:
+        print(f"  note: pre-v2 lock; entries compared below and re-keyed into format {LOCK_FORMAT}")
+
+    print(f"  combination: {key}")
+    for line in _baseline_changes(previous, current):
+        print(f"  change: {line}")
+    if not reason:
+        print("  REFUSED: --update needs --reason. Review the diff above (field paths, not just digests),")
+        print('           then re-run: --update --reason "lizard-v15 golden: <what moved and why>"')
+        return 1
+
+    # this combination is replaced wholesale; every other combination is kept as it was
+    entries = {stored: value for stored, value in entries.items() if not stored.startswith(f"{key}|")}
+    entries.update({entry_key(key, task_id): entry for task_id, entry in current.items()})
+    baselines[key] = {
+        "created_at": prov.now(),
+        "reason": reason,
+        "created_rev": prov.rev(_REPO),
+        "created_dirty": bool(prov.git(_REPO, "status", "--porcelain")),
+        "combination": combo,
         "cfg_snapshot_format": cs.FORMAT_VERSION,
-        "note": "recipe golden for every registered rl_exp task; regenerate only on an intended change",
-        "locked_at_rev": _git("rev-parse", "HEAD")[:12],
-        "locked_dirty": bool(_git("status", "--porcelain")),
-        "locked_isaaclab_rev": cs.ISAAC_ROOT and _git_rev(cs.ISAAC_ROOT),
-        "locked_python": sys.version.split()[0],
-        "entries": current,
+        "task_count": len(current),
+    }
+    lock = {
+        "lock_format": LOCK_FORMAT,
+        "note": (
+            "recipe golden, keyed by framework combination: entry keys are '<combination>|<task id>' "
+            "and a training run never adds one"
+        ),
+        "baselines": dict(sorted(baselines.items())),
+        "entries": dict(sorted(entries.items())),
     }
     LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with open(LOCK_PATH, "w", encoding="utf-8") as f:
-        json.dump(lock, f, indent=1, ensure_ascii=False)
-        f.write("\n")
+    LOCK_PATH.write_text(json.dumps(lock, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
     size = LOCK_PATH.stat().st_size
-    print(f"  lock written: {LOCK_PATH.relative_to(_REPO)} ({size / 1024:.0f} KiB, {len(current)} tasks)")
-    if lock["locked_dirty"]:
-        print("  WARN: repo tree was dirty -- this golden is NOT a clean baseline")
+    print(f"  lock written: {cs.relativize(str(LOCK_PATH))} ({size / 1024:.0f} KiB)")
+    print(f"  baselines in file: {len(lock['baselines'])}, entries: {len(lock['entries'])}")
+    if baselines[key]["created_dirty"]:
+        print("  WARN: repo tree is dirty -- this baseline is NOT a clean one; regenerate after committing")
     return 0
-
-
-def _git_rev(root) -> str:
-    try:
-        return subprocess.run(
-            ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True, cwd=root
-        ).stdout.strip()[:12]
-    except (OSError, subprocess.CalledProcessError):
-        return ""
 
 
 def attribution(cfg_cls) -> dict[str, str]:
@@ -290,18 +451,16 @@ def main() -> int:
     print(f"  registered rl_exp tasks: {len(current)}")
 
     if "--update" in args:
-        return update(current)
+        return update(current, _value_of(args, "--reason"))
 
     if "--vs-upstream" in args:
         return vs_upstream(current, only)
 
     problems: list[str] = []
-    if not LOCK_PATH.is_file():
-        problems.append(f"{LOCK_PATH.relative_to(_REPO)} missing (run with --update to create the baseline)")
-        lock = {}
+    lock, error = load_lock()
+    if error:
+        problems.append(error)
     else:
-        with open(LOCK_PATH, encoding="utf-8") as f:
-            lock = json.load(f)
         verify(lock, current, problems, show_diff="--diff" in args, only=only)
 
     for problem in problems:
@@ -309,8 +468,16 @@ def main() -> int:
     if problems:
         print(f"CFG_LOCK_DRIFT ({len(problems)})")
         return 1
-    print(f"CFG_LOCK_OK ({len(current)} tasks)")
+    print(f"CFG_LOCK_OK ({len(current)} tasks, {combination_key(combination())})")
     return 0
+
+
+def _value_of(args: list[str], flag: str) -> str | None:
+    """Value following a flag, or None (a bare flag carries no reason)."""
+    if flag not in args:
+        return None
+    index = args.index(flag) + 1
+    return args[index] if index < len(args) and not args[index].startswith("--") else None
 
 
 if __name__ == "__main__":
