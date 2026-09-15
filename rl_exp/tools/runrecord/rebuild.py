@@ -383,6 +383,35 @@ def _reachable(path: pathlib.Path) -> bool:
         return False
 
 
+def check_drill_scope(root: pathlib.Path, deps: list[pathlib.Path], originals: list[pathlib.Path]) -> list[dict]:
+    """State which materials were rebuilt and which dependencies were reused.
+
+    ARCH_PLAN 1.5 coverage table: a drill that only swaps the path configuration while the
+    materials stay where they were proves the configuration works -- it is **not** a
+    material recovery drill, and this row refuses to call it one.
+    """
+    if not originals:
+        return []
+    if _under(root, originals):
+        return [
+            _ROW(
+                "已验证重建",
+                "未知",
+                f"scope: the rebuild root ({root}) is inside the original tree, so only the path "
+                f"configuration changed -- this is not a material recovery drill",
+            )
+        ]
+    reused = [str(dep) for dep in deps] or ["none declared"]
+    return [
+        _ROW(
+            "已验证重建",
+            "通过",
+            f"scope: materials rebuilt under {root}; dependencies reused: {reused} "
+            f"(Python environment was {'reused' if deps else 'not declared'})",
+        )
+    ]
+
+
 def check_material(record: dict, dest: pathlib.Path) -> list[dict]:
     """The payload copies still hash as captured -- no silent local patch."""
     bad = [
@@ -555,7 +584,8 @@ def check(dest: pathlib.Path, root: pathlib.Path, deps: list[pathlib.Path] | Non
         return [_ROW("已验证重建", "失败", "material: captured without the run manifest")], problems
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 
-    rows = check_material(record, dest)
+    rows = check_drill_scope(root, deps or [], originals or [])
+    rows.extend(check_material(record, dest))
     rows.extend(check_sources(root, deps or [], originals or []))
     rows.extend(check_asset_origins(root, deps or [], originals or [], manifest))
     rows.extend(_informational(M._verify_self_consistency(manifest, problems)))

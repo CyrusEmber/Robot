@@ -222,6 +222,19 @@ def main() -> int:
             any(r["result"] == "失败" and "the lock resolves back into the original tree" in r["detail"] for r in rows),
             f"{[(r['result'], r['detail'][:60]) for r in rows if r['result'] == '失败']}",
         )
+        rows, _ = R.check(dest, deps[0], deps, originals=[deps[0]])
+        check(
+            "check/path-config-only-is-not-a-drill",
+            R._exit_code(rows, []) != 0
+            and any("not a material recovery drill" in r["detail"] and r["required"] for r in rows),
+            f"{[(r['result'], r['detail'][:70]) for r in rows]}",
+        )
+        rows, _ = R.check(dest, root / "rebuild_root", deps, originals=[gone])
+        check(
+            "check/scope-declares-reuse",
+            any(r["detail"].startswith("scope: materials rebuilt") and r["result"] == "通过" for r in rows),
+            f"{[r['detail'][:70] for r in rows]}",
+        )
 
         # 7. the missing-file negative test
         rows, problems = R.maintest(dest, root / "rebuild_root", deps, [gone])

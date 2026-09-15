@@ -755,8 +755,9 @@ def _verify_code(manifest: dict, problems: list[str]) -> list[dict]:
                     "可重建",
                     "未知",
                     f"{name}: the run had {len(code_in_untracked)} untracked code file(s) "
-                    f"(e.g. {code_in_untracked[:2]}); the record hashes them but cannot restore them "
-                    f"(PLAN.md #18).{ignored}",
+                    f"(e.g. {code_in_untracked[:2]}); this record hashes them and stops there -- whether the "
+                    f"content was kept is asserted by the 1.5 drill material (rebuild --capture --archive), "
+                    f"not by the run record (PLAN.md #18).{ignored}",
                 )
             )
         elif dirty_then and diff_moved:
@@ -766,7 +767,8 @@ def _verify_code(manifest: dict, problems: list[str]) -> list[dict]:
                     "未知",
                     f"{name}: the run worked in a dirty tree and that diff no longer matches "
                     f"(recorded {str(before.get('diff_sha256'))[:8]} -> {str(after.get('diff_sha256'))[:8]}); "
-                    f"uncommitted code is hashed, not stored (PLAN.md #18).{ignored}",
+                    f"uncommitted code is hashed, not stored here -- the 1.5 drill material is where that is "
+                    f"asserted (PLAN.md #18).{ignored}",
                 )
             )
         elif moved:

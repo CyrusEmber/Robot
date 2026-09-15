@@ -1,0 +1,344 @@
+diff --git a/isaaclab.bat b/isaaclab.bat
+index 131c75e16..e69de29bb 100644
+--- a/isaaclab.bat
++++ b/isaaclab.bat
+@@ -1,49 +0,0 @@
+-@echo off
+-setlocal EnableExtensions EnableDelayedExpansion
+-
+-rem Copyright (c) 2022-2025, The Isaac Lab Project Developers
+-rem (https://github.com/isaac-sim/IsaacLab/blob/main/CONTRIBUTORS.md).
+-rem All rights reserved.
+-rem
+-rem SPDX-License-Identifier: BSD-3-Clause
+-
+-set "ISAACLAB_PATH=%~dp0"
+-rem Remove trailing backslash.
+-if "%ISAACLAB_PATH:~-1%"=="\" set "ISAACLAB_PATH=%ISAACLAB_PATH:~0,-1%"
+-
+-rem Find python to run CLI.
+-if defined VIRTUAL_ENV (
+-    set "python_exe=%VIRTUAL_ENV%\Scripts\python.exe"
+-) else if defined CONDA_PREFIX (
+-    set "python_exe=%CONDA_PREFIX%\python.exe"
+-) else if exist "%ISAACLAB_PATH%\_isaac_sim\python.bat" (
+-    set "python_exe=%ISAACLAB_PATH%\_isaac_sim\python.bat"
+-) else (
+-    rem Fallback.
+-    set "python_exe=python"
+-)
+-
+-rem Add source/isaaclab to PYTHONPATH so we can import isaaclab.cli.
+-set "PYTHONPATH=%ISAACLAB_PATH%\source\isaaclab;%PYTHONPATH%"
+-
+-rem Let Kit associate direct wrapper launches with the Isaac Sim desktop icon.
+-if "%RESOURCE_NAME%"=="" set "RESOURCE_NAME=IsaacSim"
+-
+-rem If a local Isaac Sim binary is present, source its env setup so that
+-rem PYTHONPATH/PATH/EXP_PATH are correct without depending on a conda
+-rem activate.d hook (those don't fire under e.g. `conda run` on Windows).
+-if exist "%ISAACLAB_PATH%\_isaac_sim\" (
+-    if exist "%ISAACLAB_PATH%\_isaac_sim\setup_conda_env.bat" (
+-        call "%ISAACLAB_PATH%\_isaac_sim\setup_conda_env.bat" >NUL
+-    ) else (
+-        echo [WARNING] _isaac_sim is present but _isaac_sim\setup_conda_env.bat is missing; Isaac Sim env vars not exported. 1>&2
+-        echo [WARNING] Re-extract the Isaac Sim Windows zip if you intend to use the bundled binary. 1>&2
+-    )
+-)
+-
+-rem Execute CLI.
+-"%python_exe%" -c "from isaaclab.cli import cli; cli()" %*
+-
+-if errorlevel 1 exit /b 1
+-endlocal
+-exit /b 0
+diff --git a/scripts/reinforcement_learning/rsl_rl/play.py b/scripts/reinforcement_learning/rsl_rl/play.py
+index a033e2d7b..53348a03a 100644
+--- a/scripts/reinforcement_learning/rsl_rl/play.py
++++ b/scripts/reinforcement_learning/rsl_rl/play.py
+@@ -144,8 +144,24 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
+         # set the log directory for the environment
+         env_cfg.log_dir = log_dir
+ 
++        # keyboard teleop (opt-in via --viz kit): the operator owns the velocity
++        # command, so every autonomous mutation of the command term must be off
++        # BEFORE the env is built. Setting this after gym.make is a no-op, and the
++        # first CommandManager.compute would then clobber the keyed command:
++        # heading_command recomputes yaw from a random target every step (turn keys
++        # dead), rel_standing_envs zeroes a fraction of the envs, and
++        # resampling_time_range re-rolls lin_vel_x/y mid-run.
++        cmd_cfg = getattr(getattr(env_cfg, "commands", None), "base_velocity", None)
++        keyboard_requested = cmd_cfg is not None and "kit" in (getattr(args_cli, "visualizer", None) or [])
++        if keyboard_requested:
++            cmd_cfg.heading_command = False
++            cmd_cfg.rel_standing_envs = 0.0
++            cmd_cfg.rel_heading_envs = 0.0
++            cmd_cfg.resampling_time_range = (1.0e9, 1.0e9)
++
+         # create isaac environment
+         env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
++        base_env = env
+ 
+         # convert to single-agent instance if required by the RL algorithm
+         if isinstance(env.unwrapped.cfg, DirectMARLEnvCfg):
+@@ -212,6 +228,12 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
+             export_policy_as_jit(policy_nn, normalizer=normalizer, path=export_model_dir, filename="policy.pt")
+             export_policy_as_onnx(policy_nn, normalizer=normalizer, path=export_model_dir, filename="policy.onnx")
+ 
++        keyboard = None
++        if keyboard_requested:
++            from isaaclab.devices.keyboard import Se2Keyboard, Se2KeyboardCfg
++
++            keyboard = Se2Keyboard(Se2KeyboardCfg())
++
+         dt = env.unwrapped.step_dt
+ 
+         # reset environment
+@@ -223,6 +245,19 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
+                 start_time = time.time()
+                 # run everything in inference mode
+                 with torch.inference_mode():
++                    if keyboard is not None:
++                        command = keyboard.advance()
++                        if hasattr(base_env.unwrapped, "set_command"):
++                            base_env.unwrapped.set_command(command)
++                        else:
++                            # fallback: write the command straight into the
++                            # velocity command term (ManagerBasedRLEnv has no
++                            # set_command in this fork)
++                            term = base_env.unwrapped.command_manager.get_term("base_velocity")
++                            cmd = command.to(term.vel_command_b.device)
++                            if cmd.dim() == 1:
++                                cmd = cmd.unsqueeze(0)
++                            term.vel_command_b[:] = cmd
+                     # agent stepping
+                     actions = policy(obs)
+                     # env stepping
+diff --git a/scripts/reinforcement_learning/rsl_rl/train.py b/scripts/reinforcement_learning/rsl_rl/train.py
+index 3ea4449f3..fad84952b 100644
+--- a/scripts/reinforcement_learning/rsl_rl/train.py
++++ b/scripts/reinforcement_learning/rsl_rl/train.py
+@@ -75,6 +75,22 @@ parser.add_argument(
+ )
+ parser.add_argument("--seed", type=int, default=None, help="Seed used for the environment")
+ parser.add_argument("--max_iterations", type=int, default=None, help="RL Policy training iterations.")
++parser.add_argument(
++    "--drop_curriculum_state",
++    action="store_true",
++    default=False,
++    help="With --resume: restore weights/optimizer only and drop the checkpoint's curriculum state"
++    " (c_k re-heats, the terrain curricula cold-start). Without it a task that declares"
++    " REQUIRES_CURRICULUM_STATE -- or wires a registered stateful curriculum term -- refuses to"
++    " resume from a checkpoint that carries no curriculum state.",
++)
++parser.add_argument(
++    "--weights_only",
++    action="store_true",
++    default=False,
++    help="Deprecated alias of --drop_curriculum_state (it never meant 'weights only': rsl_rl still"
++    " loads model and optimizer; only the curriculum state was dropped).",
++)
+ parser.add_argument(
+     "--distributed", action="store_true", default=False, help="Run training with multiple GPUs or nodes."
+ )
+@@ -87,6 +103,13 @@ cli_args.add_rsl_rl_args(parser)
+ add_launcher_args(parser)
+ args_cli, remaining_args = setup_preset_cli(parser)
+ 
++# One deprecation line, once per process: the old flag keeps working (same behavior).
++if args_cli.weights_only:
++    print(
++        "[WARN] --weights_only is deprecated: it only ever dropped the curriculum state (rsl_rl still"
++        " loads model + optimizer). Use --drop_curriculum_state."
++    )
++
+ if args_cli.video:
+     args_cli.enable_cameras = True
+ 
+@@ -188,6 +211,19 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
+         # set the log directory for the environment (works for all environment types)
+         env_cfg.log_dir = log_dir
+ 
++        # Run manifest T0 (ARCH_PLAN 1.2): what this run declares BEFORE anything is
++        # built -- recipe / asset lock / code provenance / requested resume. ImportError
++        # (no rl_exp package) only warns, as the curriculum-state hooks do: recording
++        # must never break training, but it must also never go missing silently.
++        try:
++            from rl_exp.tools.runrecord import manifest as run_manifest
++        except ImportError as exc:
++            run_manifest = None
++            print(f"[WARN] run manifest unavailable ({exc}); this run will not record what it was")
++        run_context = run_manifest.begin(
++            log_dir=log_dir, task=args_cli.task, argv=sys.argv, env_cfg=env_cfg, agent_cfg=agent_cfg
++        ) if run_manifest else None
++
+         # create isaac environment
+         env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
+ 
+@@ -197,10 +233,46 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
+ 
+             env = multi_agent_to_single_agent(env)
+ 
++        # Run manifest: the env exists now, so check what it actually resolved against
++        # the declaration above (num_envs, dts, seed, params_version, obs group dims).
++        if run_manifest is not None:
++            run_manifest.after_env(run_context, env)
++
+         # save resume path before creating a new log_dir
+         if agent_cfg.resume or agent_cfg.algorithm.class_name == "Distillation":
+             resume_path = get_checkpoint_path(log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint)
+ 
++        # Restore the curriculum state (registered SIR term state + the c_k clock) BEFORE the wrapper:
++        # RslRlVecEnvWrapper.__init__ runs the first full reset, and that reset is what makes the SIR
++        # terms respawn the envs -- on the restored state, when it is already in place. Without this the
++        # policy resumes but the curriculum cold-starts (v3/NOTES incident).
++        #
++        # The task-side declaration is read straight off type(env_cfg) -- an object this scope already
++        # holds -- so a task that requires curriculum continuity still aborts when the module below
++        # cannot be imported, instead of resuming with a silently cold curriculum.
++        drop_curriculum_state = args_cli.drop_curriculum_state or args_cli.weights_only
++        curriculum_resume = None
++        if agent_cfg.resume or agent_cfg.algorithm.class_name == "Distillation":
++            requires_state = bool(getattr(type(env_cfg), "REQUIRES_CURRICULUM_STATE", False))
++            try:
++                from rl_exp.tasks.curriculum_state import apply_resume_state
++            except ImportError as exc:
++                curriculum_resume = {"status": "module_unavailable", "error": f"{type(exc).__name__}: {exc}"}
++                if requires_state and not drop_curriculum_state:
++                    raise RuntimeError(
++                        f"curriculum-state resume is required by {type(env_cfg).__name__} but"
++                        f" rl_exp.tasks.curriculum_state is unavailable ({exc}); resuming would cold-start"
++                        " the curriculum. Pass --drop_curriculum_state to accept that explicitly."
++                    ) from exc
++                print(
++                    f"[WARN] curriculum-state resume unavailable ({exc}); the curriculum state is NOT"
++                    " restored (c_k re-heats, the SIR terms cold-start)"
++                )
++            else:
++                curriculum_resume = apply_resume_state(
++                    env.unwrapped, resume_path, drop_curriculum_state=drop_curriculum_state
++                )
++
+         # wrap for video recording
+         if args_cli.video:
+             video_kwargs = {
+@@ -225,6 +297,25 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
+             runner = DistillationRunner(env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device)
+         else:
+             raise ValueError(f"Unsupported runner class: {agent_cfg.class_name}")
++        # Every checkpoint carries the curriculum state in its infos slot, so model and curriculum state
++        # live in ONE file and cannot drift apart (no sidecar). No-op for tasks with no curriculum state.
++        # A task that declares the curriculum contract must never save checkpoints that cannot be
++        # resumed, so a failed install is fatal there and a warning elsewhere.
++        try:
++            from rl_exp.tasks.curriculum_state import hook_runner_save
++        except ImportError as exc:  # already reported at the resume step
++            if getattr(type(env_cfg), "REQUIRES_CURRICULUM_STATE", False):
++                raise RuntimeError(
++                    f"{type(env_cfg).__name__} requires a resumable curriculum state but"
++                    f" rl_exp.tasks.curriculum_state cannot be imported ({exc}); this run's checkpoints"
++                    " would carry no curriculum state."
++                ) from exc
++        else:
++            if not hook_runner_save(runner, env):
++                print(
++                    "[WARN] curriculum state is NOT saved by this rank (multi-GPU: only rank 0 writes the"
++                    " state it verified); multi-GPU resume is not a verified configuration"
++                )
+         # configure_seed must be called after runner construction so that PyTorch deterministic settings
+         # do not interfere with the runner's internal initialization.
+         if args_cli.deterministic:
+@@ -237,10 +328,34 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
+             # load previously trained model
+             runner.load(resume_path)
+ 
++        # Run manifest: index every checkpoint's file hash OUTSIDE the checkpoint (never
++        # inside it) and stamp the frozen T1 digest into its infos slot. Installed after
++        # the curriculum hook on purpose: it is the outer wrapper, so it hashes the file
++        # the inner one has already finished writing.
++        if run_manifest is not None:
++            run_manifest.hook_runner_save(runner, run_context)
++
+         # dump the configuration into log-directory
+         dump_yaml(os.path.join(log_dir, "params", "env.yaml"), env_cfg)
+         dump_yaml(os.path.join(log_dir, "params", "agent.yaml"), agent_cfg)
+ 
++        # Run manifest T1 (ARCH_PLAN 1.2): the runner exists and the checkpoint is
++        # restored, so the training conditions are finally known -- freeze the record
++        # here, BEFORE learn. Later checkpoints reference this digest; a failure above
++        # leaves the run marked incomplete instead of pretending it was ready.
++        if run_manifest is not None:
++            run_manifest.freeze(
++                run_context,
++                runner=runner,
++                env=env,
++                agent_cfg=agent_cfg,
++                resume_path=resume_path
++                if (agent_cfg.resume or agent_cfg.algorithm.class_name == "Distillation")
++                else None,
++                drop_curriculum_state=drop_curriculum_state,
++                curriculum_resume=curriculum_resume,
++            )
++
+         # run training
+         try:
+             runner.learn(num_learning_iterations=agent_cfg.max_iterations, init_at_random_ep_len=True)
+diff --git a/source/isaaclab_tasks/isaaclab_tasks/direct/anymal_c/anymal_c_env.py b/source/isaaclab_tasks/isaaclab_tasks/direct/anymal_c/anymal_c_env.py
+index 3c1c0aa0e..a26b46446 100644
+--- a/source/isaaclab_tasks/isaaclab_tasks/direct/anymal_c/anymal_c_env.py
++++ b/source/isaaclab_tasks/isaaclab_tasks/direct/anymal_c/anymal_c_env.py
+@@ -55,11 +55,13 @@ class AnymalCEnv(DirectRLEnv):
+                 "flat_orientation_l2",
+             ]
+         }
+-        # Get specific body indices
+         self._base_id, _ = self._contact_sensor.find_sensors("base")
+         self._feet_ids, _ = self._contact_sensor.find_sensors(".*FOOT")
+         self._undesired_contact_body_ids, _ = self._contact_sensor.find_sensors(".*THIGH")
+ 
++    def set_command(self, command: torch.Tensor):
++        self._commands[:] = command.to(device=self.device)
++
+     def _setup_scene(self):
+         self._robot = Articulation(self.cfg.robot)
+         self.scene.articulations["robot"] = self._robot
+diff --git a/source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/velocity_env_cfg.py b/source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/velocity_env_cfg.py
+index b1b7e0043..bc0d81f4d 100644
+--- a/source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/velocity_env_cfg.py
++++ b/source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/velocity_env_cfg.py
+@@ -202,8 +202,8 @@ class EventsCfg:
+         mode="startup",
+         params={
+             "asset_cfg": SceneEntityCfg("robot", body_names=".*"),
+-            "static_friction_range": (0.8, 0.8),
+-            "dynamic_friction_range": (0.6, 0.6),
++            "static_friction_range": (0.4, 1.2),
++            "dynamic_friction_range": (0.3, 1.0),
+             "restitution_range": (0.0, 0.0),
+             "num_buckets": 64,
+         },
+@@ -238,11 +238,12 @@ class EventsCfg:
+     # reset
+     base_external_force_torque = EventTerm(
+         func=mdp.apply_external_force_torque,
+-        mode="reset",
++        mode="interval",
++        interval_range_s=(4.0, 8.0),
+         params={
+             "asset_cfg": SceneEntityCfg("robot", body_names="base"),
+-            "force_range": (0.0, 0.0),
+-            "torque_range": (-0.0, 0.0),
++            "force_range": (-30.0, 30.0),
++            "torque_range": (-5.0, 5.0),
+         },
+     )
+ 
+@@ -275,8 +276,8 @@ class EventsCfg:
+     push_robot = EventTerm(
+         func=mdp.push_by_setting_velocity,
+         mode="interval",
+-        interval_range_s=(10.0, 15.0),
+-        params={"velocity_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5)}},
++        interval_range_s=(3.0, 6.0),
++        params={"velocity_range": {"x": (-1.5, 1.5), "y": (-1.5, 1.5), "z": (-0.3, 0.3)}},
+     )

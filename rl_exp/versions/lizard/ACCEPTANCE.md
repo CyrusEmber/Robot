@@ -111,21 +111,23 @@
 
 ---
 
-## 1.5 准备件 · 隔离重建闸门（2026-09-15，离线）
+## 1.5a · 恢复演练工具（2026-09-15，离线）
 
-**本节不是 1.5 通过。** 1.5 的出口（"已验证重建：配置与加载级"）要求正向验收、来源断言与缺件
-负测试在**真隔离环境**里全过；本节只交付闸门本身与一次真 run 上的负证据，`已验证重建` 仍为未知。
+**本节不是"1.5 演练通过"。** 按 `ARCH_PLAN` v0.17，1.5 已从主交付出口改为**条件触发的独立恢复演练**
+（触发：某实验值得长期保留 / 要对外声明可重建 / 归档迁移前留证据），不阻塞日常训练与 Step 2 迁移。
+本节只交付**演练工具**（`rebuild.py` + 离线门 `[27]`）与一次真 run 上的取材证据；演练本身（另用一份
+路径配置指向重建位置 + 声明复用环境 + 跑 `--check`/`--maintest`）**尚未执行**，故评级仍为未知。
 
 ### 前提
 
 | 项 | 值 |
 |---|---|
-| 任务 id | 不适用（闸门离线；R1 的 dry-run 用 `Lizard-Rough-v14` 的真 run 记录当输入） |
-| 代码摘要 | Robot 工作树**未提交**（本次改动：`tools/runrecord/rebuild.py`、`test_rebuild_gate.py`、`run_offline_checks.bat`、`FILEMAP.md`、本文件）；提交后须按同表重跑 |
-| 框架摘要 | 同 1.2b/1.3a：IsaacLab rev `28a37cecdd43`，rsl_rl editable，Python 3.12.13 |
-| 设备与规模 | 无仿真（纯文件/git + torch）；不依赖 seed |
+| 任务 id | 不适用（工具离线；实测取材用真 run `Lizard-Rough-v14`） |
+| 代码摘要 | Robot rev `27a25fa` + 本文件所在提交（`rebuild.py`、`test_rebuild_gate.py`、`run_offline_checks.bat`） |
+| 框架摘要 | 同 1.2b/1.3a：IsaacLab rev `28a37cecdd43`（跑 run 用原 tree），Python 3.12.13（原 venv） |
+| 设备与规模 | 无仿真（纯文件/git + torch）；取材用 run 为单卡 64 env、seed 42、2 iter |
 | 容差 | 摘要与内容哈希精确相等；无数值容差 |
-| 验证命令 | `rl_exp\tools\verify\run_offline_checks.bat` → `[27] REBUILD_GATE_TEST_OK`；单跑 `python rl_exp\tools\verify\test_rebuild_gate.py` |
+| 验证命令 | `rl_exp\tools\verify\run_offline_checks.bat` → `[27] REBUILD_GATE_TEST_OK`（30 项）；单跑 `python rl_exp\tools\verify\test_rebuild_gate.py` |
 
 ### 检查与结果
 
@@ -138,19 +140,21 @@
 | P5 | 来源断言（不落回原树） | 单测 `check/fallback-to-original-fails`、`check/no-original-is-unknown`、`check/undeclared-import-location-fails`、`check/asset-lock-fallback-fails`、`check/readable-original-is-informational` | **通过**：模块解析落回 `--original` 原树 = **失败**；资产锁解析落回原树 = **失败**；落在重建根与 `--dep` 之外 = 失败；未给 `--original` = 未知（不冒充）；原目录"仍可读"只作信息行（`required=False`），不判失败（**v0.16 收窄**：不做系统级访问切断） |
 | P6 | 缺件负测试与退出码口径 | 单测 `maintest/removed-payload-fails`、`maintest/restored-payload-passes`、`check/edited-payload-fails`、`check/refused-material-not-claimed`、`check/failed-material-blocks` | **通过**：删一个必需载荷检查必失败、还原必通过（还原后仍不过 = **未知**，不冒充通过）；被改载荷由材料摘要行判失败；拒采材料 `--check` 退 2（不计通过）、失败材料退 1（阻塞） |
 | P7 | 载荷绑定与配置 | 单测 `check/binding-row`、`check/exit-code` | **通过**：ckpt 可加载且 `infos` 回指本记录 run id + T1 摘要；配方按 golden 再推导一致 |
+| P8 | "只换配置"不算材料恢复演练 | 单测 `check/path-config-only-is-not-a-drill`、`check/scope-declares-reuse` | **通过**：`--root` 落在原树内 ⇒ 记**未知**（不冒充材料恢复）；正常演练输出 scope 行，写明"材料重建在哪、依赖复用了哪些" |
+| P9 | 演练①②步实测（选定实验 + 取材） | 真 run `Lizard-Rough-v14`（`logs\rsl_rl\lizard_rough_teacher_v14\2026-09-15_19-08-50`，T1 `aeba04549bc363f1`，2 iter）→ `rebuild --capture … --archive rl_exp\archive` | **通过（材料可取材）**：`REBUILD_CAPTURE_OK`；`repository`=`git-rev`（rev `27a25fa`）、`isaaclab`/`rsl_rl`=`stored-diff`（脏树 diff 已入仓 `rl_exp\archive\<run_id>\`，摘要逐项比对 == 记录值 `13aee682fe1e`）、`assets`=`in-repo-git`、`payload`=`copied`（`model_0/1.pt` + 记录，材料内 12 个载荷文件各有摘要）；材料落 `E:\rl_rebuild\material` |
 
 ### 结论与边界
 
-- 可**宣告**：1.5 闸门已落地并进离线套件（`[27]` 28/28）；**R1 不可作 1.5 主体**——闸门在真 run 上实测拒绝，
-  这是"判据非摆设"的证据（与 1.2b R4 把该 run 的 isaaclab 来源判未知同一事实）。
-- **验收口径按 v0.16 收窄**（用户拍板 2026-09-15）：判据 = "解析不落回原树"，**不做**账号/ACL 等系统级访问切断；
-  出口措辞相应为"**受检查路径上的配置与加载级重建通过**"。边界：不覆盖任意隐藏读取（包内部/缓存/环境变量旁路）。
-- **不可**据本节宣告 1.5 通过。缺口清单（真跑前必须逐项关闭）：
-  1. **重建根未搭**：未建干净解释器（自定义 `.pth`，不继承指向原仓的 `.pth`；原 venv 的 `site-packages` 只作
-     声明依赖挂在末尾）、未拷两棵代码树到声明 rev、未重建 IsaacLab 脏树（补丁 + 未跟踪 `spider/`）；
-     `--check`/`--maintest` 尚未在**真重建树**上跑过。
-  2. **归档落点**（`PLAN.md` #18 触发条件已到）：已定**仓内 git**（IsaacLab 三个 extras 拆成仓内补丁 + `spider/` 入仓），尚未落盘。
-  3. **主体 run 必须是"取材窗口内"的新 run**：现有历史 run 的脏树状态已漂移，且按硬约束 6 不得补造。
+- 可**宣告**：演练工具与取材闸门已落地并进离线套件（`[27]` 30/30）；**演练①②步（选实验 + 备材料）在真 run 上跑通**；
+  R1 因脏树漂移被闸门拒采——判据非摆设的证据（与 1.2b R4 把该 run 的 isaaclab 来源判未知同一事实）。
+- **口径**：v0.16 收窄验收强度（不做账号/ACL，判据 = 解析不落回原树；原目录可读只作信息行）；v0.17 把 1.5 从主出口
+  移到**按需演练**，并引入**覆盖范围表**（重建材料+复用环境 / 连环境一并重装 / 只换配置不算演练）。
+- **不可**据本节宣告 1.5 演练通过。剩余步骤（③ 另用一份路径配置指向重建位置与声明环境；④ `--check` + `--maintest`，
+  记录覆盖范围）**尚未执行**：
+  1. **重建位置未搭**：未把代码/配置/资产/ckpt 另置一处（按覆盖范围表选"只重建材料、复用声明环境"还是"连环境一并重装"），
+     未写那份指向重建位置的路径配置；`--check`/`--maintest` 尚未在真重建位置跑过。
+  2. **归档落盘状态**：`rl_exp\archive\<run_id>\` 已生成，须**入仓提交**才算"取回得"（小文件进 Git，#18 改判）。
+  3. **边界**：不做系统级访问切断，不覆盖任意隐藏读取（包内部/缓存/环境变量旁路）；不承诺推理或训练结果等价。
 
 
 
