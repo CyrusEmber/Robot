@@ -27,8 +27,11 @@ pins the policy gates that keep a resume honest:
 * S09 the declaration is a class attribute (V5..V14 inherit it, PLAY overrides it) that
   does not enter the config data; a non-zero rank neither restores nor saves
 * S10 the manifest records the outcome ``apply_resume_state`` returned (test_run_manifest)
-* B-layer: both SIR terms, given the same statistics and a reset RNG, produce the same
-  curriculum update
+* B-layer (1.4a): both SIR terms, given the same statistics and a reset RNG, produce the
+  same curriculum update -- driven through the production entry point and per update
+  branch (measured update, below ``n_traj_min``, band-empty fallback, walk, replay), each
+  fixture asserting the branch it claims to hit; and the c_k-only clock is compared
+  against an independently recomputed c_k from the SAVED schedule around the boundaries
 
 NOTE: this proves the payload round-trip and the update mapping, NOT the wiring timing.
 That the restore lands before the wrapper's first full reset is train.py behavior and
@@ -50,10 +53,13 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 from isaaclab.managers import ManagerTermBase  # noqa: E402
 
+import cfg_snapshot as cs  # noqa: E402
+
 from rl_exp.tasks.curriculum_state import (  # noqa: E402
     REQUIRES_CURRICULUM_STATE,
     STATE_KEY,
     _tensor_eq,
+    adapter_for,
     apply_resume_state,
     apply_state,
     collect,
@@ -83,6 +89,12 @@ from test_v5_terrain_sir import _term as _row_term  # noqa: E402
 
 CK = dict(c0=0.2, decay=0.98, steps_per_iteration=24)
 """The v3 c_k schedule used by the tests (matches the v11 yaml section)."""
+
+ROW_SEED = 31
+"""Fixed test RNG seed for the B-layer row-SIR comparisons (both sides reseeded per call)."""
+
+JOINT_SEED = 32
+"""Fixed test RNG seed for the B-layer joint-SIR comparisons."""
 
 ROW_TERM = "terrain_levels"
 """The term name V5..V14 wire the row SIR under."""
@@ -179,6 +191,13 @@ def test_roundtrip_bitwise_and_ck_continuity() -> None:
     assert state is not None and state["clock"]["common_step_counter"] == 123
     assert state["written_at_iter"] == 5 and state["task"] == "_TaskCfgV12"
     assert state["num_envs"] == NUM_ENVS
+    # regression cover for the joint SIR's historical field set: a slot that silently
+    # loses one of these would still round-trip, just with that state gone
+    assert set(state["terms"][JOINT_SIR_TERM]["runtime"]) == {
+        "particles", "weights", "episodes", "in_band", "tr_sum", "history",
+        "env_pair", "desired_vel", "env_type", "next_eval_step",
+        "tr_block_sum", "tr_block_count", "last_tr_mean",
+    }
 
     env2, term2 = _pair(_terrain())  # cold: cold-start particles, clock at 0
     assert env2.common_step_counter == 0
@@ -402,7 +421,7 @@ def test_uncovered_stateful_term_tripwire() -> None:
 class _TaskCfgV14:
     """Stand-in env cfg: the v14 recipe declares the curriculum contract, as the real class does."""
 
-    __requires_curriculum_state__ = True
+    REQUIRES_CURRICULUM_STATE = True
 
 
 class _TaskCfgV14Plain:
@@ -749,8 +768,14 @@ def test_declaration_is_class_level_and_off_in_play() -> None:
     assert getattr(LizardRoughTeacherEnvCfg_V14, REQUIRES_CURRICULUM_STATE) is True  # inherited
     assert getattr(LizardRoughTeacherEnvCfg_V13_PLAY, REQUIRES_CURRICULUM_STATE) is False
     assert not hasattr(LizardRoughTeacherEnvCfg_V4, REQUIRES_CURRICULUM_STATE)  # v4 has no SIR term
+
+    # not config data: the cfg snapshot (the recipe golden and every run manifest's
+    # cfg digest) excludes ClassVars, so changing the declaration cannot look like
+    # changing the configuration. Upstream's to_dict walks the instance namespace and
+    # still carries it -- that dump is a per-run artifact, not a comparison surface.
     cfg = LizardRoughTeacherEnvCfg_V5()
-    assert REQUIRES_CURRICULUM_STATE not in cfg.to_dict()  # a statement about the recipe, not data
+    assert REQUIRES_CURRICULUM_STATE not in cs.snapshot(cfg)  # the golden/digest surface
+    assert REQUIRES_CURRICULUM_STATE in cfg.to_dict()  # upstream dump: recorded, not compared
 
 
 def test_non_zero_rank_neither_restores_nor_saves() -> None:
@@ -789,7 +814,7 @@ def test_fork_patch_call_site_contract() -> None:
     """
     patch = (_REPO / "rl_exp" / "fork_patches" / "train_curriculum_resume.patch").read_text(encoding="utf-8")
     assert "drop_curriculum_state" in patch and "--weights_only" in patch
-    assert 'getattr(type(env_cfg), "__requires_curriculum_state__", False)' in patch
+    assert "REQUIRES_CURRICULUM_STATE" in patch and "__requires_curriculum_state__" not in patch
     assert "except ImportError as exc:" in patch
     assert "raise RuntimeError(" in patch
     assert "if not hook_runner_save(runner, env):" in patch
@@ -798,7 +823,10 @@ def test_fork_patch_call_site_contract() -> None:
 
 def test_b_layer_update_equivalence() -> None:
     """1.4a B layer: same statistics + a reset RNG => the same real curriculum update."""
-    for label, episodes, successes in (("sufficient traffic", 3.0, 1.0), ("below n_traj_min", 0.5, 0.2)):
+    # n_traj_min is 6, so the first case is a settled measurement update (p_hat 0.7 is in
+    # band) and the second keeps the prior weight -- the branch split is the point here;
+    # the per-branch fixtures live in the *_branch_equivalence tests below
+    for label, episodes, successes in (("measured update", 10.0, 7.0), ("below n_traj_min", 0.5, 0.2)):
         state, env1, term1 = _row_payload()
         env2, term2 = _row_pair(counter=0)
         apply_state(env2, state, report=lambda *_: None)
@@ -830,6 +858,291 @@ def test_b_layer_update_equivalence() -> None:
     for key in ("particles", "weights", "episodes", "in_band", "tr_sum", "history"):
         assert _tensor_eq(getattr(term3, "_" + key), getattr(term4, "_" + key)), key
     assert term3._next_eval_step == term4._next_eval_step
+
+
+def _spy(obj, name: str) -> list:
+    """Count the calls of a method (evidence that a fixture hit the branch it claims)."""
+    real = getattr(obj, name)
+    calls: list = []
+
+    def wrapper(*args, **kwargs):
+        calls.append(1)
+        return real(*args, **kwargs)
+
+    setattr(obj, name, wrapper)
+    return calls
+
+
+def _b_update(env, term, block: int, seed: int):
+    """Drive the REAL production update at the block edge under a fixed test RNG."""
+    env.common_step_counter = block
+    torch.manual_seed(seed)
+    return term(env, torch.arange(int(env.num_envs)))
+
+
+def test_b_layer_row_sir_branch_equivalence() -> None:
+    """1.4a B layer, row SIR: every update branch, original vs restored, bitwise.
+
+    Each fixture sets the pre-state that SELECTS a branch and then asserts that branch's
+    signature, so a fixture that stops reaching its branch fails instead of passing
+    vacuously. The pre-state is collected, restored into a cold term, and both terms are
+    driven through the production entry point (``term(env, ids)`` at the block edge) --
+    which also covers the throttle (``next_eval_step``) and the respawn of the resetting
+    envs, not just the resample.
+    """
+    def flags(term, **spec):
+        term.cfg.p_transition = spec["p_transition"]
+        term.cfg.p_replay = spec["p_replay"]
+
+    def prior(term, row: int):
+        for t in range(term._num_types):
+            term._weights[t] = torch.zeros(term._num_rows).scatter_(0, torch.tensor([row]), 1.0)
+
+    def measured(term):
+        """Settled rows, only row 0 in band: the measurement replaces the prior."""
+        for t in range(term._num_types):
+            term._episodes[t] = torch.full((term._num_rows,), 10.0)
+            term._successes[t] = torch.zeros(term._num_rows)
+            term._successes[t][0] = 7.0
+            term._weights[t] = torch.full((term._num_rows,), 1.0 / term._num_rows)
+
+    def sparse(term):
+        """Every row below n_traj_min: the prior weight must survive."""
+        for t in range(term._num_types):
+            term._episodes[t] = torch.full((term._num_rows,), 3.0)
+            term._successes[t] = torch.full((term._num_rows,), 1.0)
+        prior(term, 5)
+
+    def all_out_of_band(term):
+        """Every row settled and nothing in band: the whole type re-explores uniformly."""
+        for t in range(term._num_types):
+            term._episodes[t] = torch.full((term._num_rows,), 10.0)
+            term._successes[t] = torch.zeros(term._num_rows)
+        prior(term, 3)
+
+    def walkable(term):
+        sparse(term)
+        prior(term, 3)
+
+    def replayable(term):
+        sparse(term)
+        for t in range(term._num_types):
+            term._history[t] = torch.tensor([7, 8]).repeat(5)
+
+    def expect_measured(term, _calls):
+        for t in range(term._num_types):
+            assert float(term._weights[t][0]) == 1.0, "the measurement must replace the prior"
+            assert bool((term._particles[t] == 0).all())
+            assert float(term._episodes[t].abs().max()) == 0.0  # consumed: stats zeroed
+            assert float(term._successes[t].abs().max()) == 0.0
+
+    def expect_sparse(term, _calls):
+        for t in range(term._num_types):
+            assert float(term._weights[t][5]) == 1.0, "below n_traj_min the prior weight survives"
+            assert bool((term._particles[t] == 5).all())
+            assert float(term._episodes[t].abs().max()) == 0.0  # row SIR zeroes every block
+
+    def expect_flat(term, _calls):
+        for t in range(term._num_types):
+            want = torch.full((term._num_rows,), 1.0 / term._num_rows)
+            assert torch.allclose(term._weights[t], want), "an all-out-of-band type re-explores uniformly"
+
+    def expect_walk(term, _calls):
+        for t in range(term._num_types):
+            assert set(term._particles[t].tolist()) <= {2, 4}, "p_transition=1 must walk off row 3"
+
+    def expect_replay(term, _calls):
+        for t in range(term._num_types):
+            assert set(term._particles[t].tolist()) <= {7, 8}, "p_replay=1 must redraw from the pool"
+
+    cases = (
+        ("measured update", dict(p_transition=0.0, p_replay=0.0), measured, expect_measured),
+        ("below n_traj_min", dict(p_transition=0.0, p_replay=0.0), sparse, expect_sparse),
+        ("band-empty fallback", dict(p_transition=0.0, p_replay=0.0), all_out_of_band, expect_flat),
+        ("random walk", dict(p_transition=1.0, p_replay=0.0), walkable, expect_walk),
+        ("replay", dict(p_transition=0.0, p_replay=1.0), replayable, expect_replay),
+    )
+    for label, spec, setup, expect in cases:
+        env1, term1 = _row_pair(counter=120)
+        flags(term1, **spec)  # set before collect: the cfg is part of the fingerprint
+        setup(term1)
+        state = collect(env1, it=1)
+        env2, term2 = _row_pair(counter=0)
+        flags(term2, **spec)  # same flags, so the restored state still fits
+        saved = state["terms"][ROW_TERM]["runtime"]
+        cold = adapter_for(type(term2)).runtime(term2, env2)
+        # negative control: cold != payload, so a no-op restore fails this test
+        assert any(not _tensor_eq(saved[k], cold[k]) for k in cold), label
+        apply_state(env2, state, report=lambda *_: None)
+
+        assert _tensor_eq(_b_update(env1, term1, 240, ROW_SEED), _b_update(env2, term2, 240, ROW_SEED)), label
+        for key in ("particles", "weights", "episodes", "successes", "history"):
+            assert _tensor_eq(getattr(term1, "_" + key), getattr(term2, "_" + key)), f"{label}: {key}"
+        assert term1._next_eval_step == term2._next_eval_step == 480, label
+        assert _tensor_eq(term1._env_type, term2._env_type), label
+        for attr in ("terrain_levels", "terrain_types", "env_origins"):
+            assert _tensor_eq(getattr(env1.scene.terrain, attr), getattr(env2.scene.terrain, attr)), f"{label}: {attr}"
+        expect(term1, [])
+        expect(term2, [])
+
+
+def test_b_layer_joint_sir_branch_equivalence() -> None:
+    """1.4a B layer, joint SIR: every update branch, original vs restored, bitwise.
+
+    Same shape as the row-SIR test. ``_fallback_weights`` and ``_walk`` are counted on the
+    source term: the branch fixtures are one-hot priors (or all-settled counters), so the
+    way the particles can leave that prior IS the branch under test. Branch *semantics*
+    (which neighbor, which clamp) are pinned by ``test_joint_sir.py``; here the claim is
+    that the restored term reaches the same branch with the same result.
+    """
+    def flags(term, **spec):
+        term.cfg.p_transition = spec["p_transition"]
+        term.cfg.p_replay = spec["p_replay"]
+
+    def fill(term, *, episodes, in_band=0.0, tr_sum=0.0):
+        for ti in range(len(term._types)):
+            n = term._n_pairs[ti]
+            term._episodes[ti] = torch.full((n,), float(episodes))
+            term._in_band[ti] = torch.full((n,), float(in_band))
+            term._tr_sum[ti] = torch.full((n,), float(tr_sum))
+
+    def mid(term, ti: int) -> int:
+        """A pair with room to move on at least one axis (velocity or a param axis)."""
+        return term._n_pairs[ti] // 2
+
+    def prior(term):
+        for ti in range(len(term._types)):
+            term._weights[ti] = torch.zeros(term._n_pairs[ti]).scatter_(0, torch.tensor([mid(term, ti)]), 1.0)
+
+    def measured(term):
+        """Every pair settled, pair 0 carrying all the in-band trajectories."""
+        fill(term, episodes=10.0)
+        for ti in range(len(term._types)):
+            term._in_band[ti][0] = 10.0
+
+    def sparse(term):
+        fill(term, episodes=3.0, in_band=1.0, tr_sum=3.0)
+        prior(term)
+
+    def frontier(term):
+        """Every pair settled and out of band; combo 0 learned, the rest not."""
+        fill(term, episodes=10.0)
+        for ti in range(len(term._types)):
+            term._tr_sum[ti][: term._n_v] = 10.0
+
+    def walkable(term):
+        sparse(term)
+
+    def replayable(term):
+        sparse(term)
+        for ti in range(len(term._types)):
+            term._history[ti] = torch.tensor([1, 2]).repeat(2)
+
+    def expect_measured(term, _calls):
+        for ti in range(len(term._types)):
+            assert float(term._weights[ti][0]) == 1.0
+            assert bool((term._particles[ti] == 0).all())
+            assert float(term._episodes[ti].abs().max()) == 0.0  # settled pairs are consumed
+            assert float(term._in_band[ti].abs().max()) == 0.0
+            assert float(term._tr_sum[ti].abs().max()) == 0.0
+
+    def expect_sparse(term, _calls):
+        for ti in range(len(term._types)):
+            assert float(term._weights[ti][mid(term, ti)]) == 1.0
+            assert bool((term._particles[ti] == mid(term, ti)).all())
+            assert float(term._episodes[ti].min()) == 3.0, "unsettled pairs keep their counters across blocks"
+
+    def expect_frontier(term, calls):
+        assert calls, "the band-empty fallback must be the branch that ran"
+        for ti in range(len(term._types)):
+            n = term._n_pairs[ti]
+            if n == term._n_v:  # a single-combo type is all-learned -> uniform (paper semantics)
+                assert torch.allclose(term._weights[ti], torch.full((n,), 1.0 / n))
+                continue
+            learned = torch.zeros(n, dtype=torch.bool)
+            learned[: term._n_v] = True
+            assert abs(float(term._weights[ti][learned].sum()) - term.cfg.maintain_mass) < 1e-6
+            assert not torch.allclose(term._weights[ti], torch.full((n,), 1.0 / n))
+
+    def expect_walk(term, calls):
+        assert calls, "the walk must be the branch that ran"
+        moved = False
+        for ti in range(len(term._types)):
+            pair = mid(term, ti)
+            assert set(term._particles[ti].tolist()) <= set(term._neighbors(ti, pair)) | {pair}
+            moved = moved or set(term._particles[ti].tolist()) != {pair}
+        assert moved, "p_transition=1 must move particles off the one-hot prior (clamping aside)"
+
+    def expect_replay(term, _calls):
+        for ti in range(len(term._types)):
+            assert set(term._particles[ti].tolist()) <= {1, 2}, "p_replay=1 must redraw from the pool"
+
+    cases = (
+        ("measured update", dict(p_transition=0.0, p_replay=0.0), measured, expect_measured, ()),
+        ("below n_traj_min", dict(p_transition=0.0, p_replay=0.0), sparse, expect_sparse, ()),
+        ("band-empty frontier fallback", dict(p_transition=0.0, p_replay=0.0), frontier, expect_frontier,
+         ("_fallback_weights",)),
+        ("random walk", dict(p_transition=1.0, p_replay=0.0), walkable, expect_walk, ("_walk",)),
+        ("replay", dict(p_transition=0.0, p_replay=1.0), replayable, expect_replay, ()),
+    )
+    for label, spec, setup, expect, spied in cases:
+        env1, term1 = _pair(_terrain())
+        flags(term1, **spec)
+        setup(term1)
+        src_calls = {name: _spy(term1, name) for name in spied}
+        state = collect(env1, it=1)
+        env2, term2 = _pair(_terrain())
+        flags(term2, **spec)
+        saved = state["terms"][JOINT_SIR_TERM]["runtime"]
+        cold = adapter_for(type(term2)).runtime(term2, env2)
+        assert any(not _tensor_eq(saved[k], cold[k]) for k in cold), label
+        apply_state(env2, state, report=lambda *_: None)
+        dst_calls = {name: _spy(term2, name) for name in spied}
+
+        assert _tensor_eq(_b_update(env1, term1, 240, JOINT_SEED), _b_update(env2, term2, 240, JOINT_SEED)), label
+        for key in ("particles", "weights", "episodes", "in_band", "tr_sum", "history", "env_pair"):
+            assert _tensor_eq(getattr(term1, "_" + key), getattr(term2, "_" + key)), f"{label}: {key}"
+        assert _tensor_eq(term1.desired_vel, term2.desired_vel), label
+        assert term1._next_eval_step == term2._next_eval_step == 480, label
+        assert term1._tr_block_count == term2._tr_block_count == 0, label
+        assert term1._tr_block_sum == term2._tr_block_sum == 0.0, label
+        for attr in ("terrain_levels", "terrain_types", "env_origins"):
+            assert _tensor_eq(getattr(env1.scene.terrain, attr), getattr(env2.scene.terrain, attr)), f"{label}: {attr}"
+        expect(term1, next(iter(src_calls.values())) if src_calls else [])
+        expect(term2, next(iter(dst_calls.values())) if dst_calls else [])
+
+
+def test_b_layer_c_k_boundary_equivalence() -> None:
+    """1.4a B layer, c_k-only: the counter and the SAVED-parameter c_k at the block edges.
+
+    A c_k-only task's whole state is the counter (c_k is a pure function of it), so the
+    check is: the restored counter equals the source, and the c_k recomputed independently
+    in float64 from the *payload's* schedule parameters agrees with the live value just
+    before, at and just after an iteration boundary, |err| <= 1e-12.
+    """
+    steps = int(CK["steps_per_iteration"])
+    source = _ck_only_env(counter=10 * steps + 3)
+    state = collect(source, it=0)
+    saved = state["clock"]["ck"]["static"]
+    assert state["terms"] == {} and saved == {"c0": 0.2, "decay": 0.98, "steps_per_iteration": 24}
+
+    restored = _ck_only_env(counter=0)
+    apply_state(restored, state, report=lambda *_: None)
+    assert restored.common_step_counter == 10 * steps + 3
+    assert ck_value(restored) == ck_value(source)
+
+    def reference(counter: int) -> float:
+        """The same formula through an independent float64 path (no `**` on the same operands)."""
+        return math.exp(math.log(saved["c0"]) * saved["decay"] ** (counter // saved["steps_per_iteration"]))
+
+    seen = {}
+    for counter in (steps - 1, steps, steps + 1, 10 * steps - 1, 10 * steps, 10 * steps + 1, 977):
+        for env in (source, restored):
+            env.common_step_counter = counter
+        assert ck_value(source) == ck_value(restored), counter
+        assert abs(ck_value(restored) - reference(counter)) <= 1e-12, counter
+        seen[counter] = ck_value(restored)
+    assert seen[steps - 1] != seen[steps], "the iteration boundary is where c_k steps"
 
 
 def _main() -> None:

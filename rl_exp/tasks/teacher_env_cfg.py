@@ -24,6 +24,7 @@ and the parked reward fixes get re-applied (plan §2.3).
 import math
 import pathlib
 from collections.abc import Callable
+from typing import ClassVar
 
 import torch
 import yaml
@@ -1144,14 +1145,14 @@ class LizardRoughTeacherEnvCfg_V5(LizardRoughTeacherEnvCfg_V4):
     # off ``type(env_cfg)`` -- an object it already holds -- so the declaration still
     # holds when ``rl_exp.tasks.curriculum_state`` cannot be imported.
     #
-    # Dunder-named on purpose: ``configclass`` back-fills annotations, and BOTH
-    # serializers walk the instance namespace that ``_custom_post_init`` fills with
-    # class members (upstream does the same to its own ``_usd_*`` ClassVars, which is
-    # why those sit in the frozen golden). A plain or ``ClassVar``-annotated member
-    # would therefore enter the recipe golden, the cfg snapshot and every run
-    # manifest's cfg digest; ``__``-prefixed names are skipped by both serializers, so
-    # the declaration stays what it is: a statement about the recipe, not recipe data.
-    __requires_curriculum_state__ = True
+    # A ``ClassVar`` on purpose: it states something ABOUT the recipe (its resume
+    # contract), so it is not recipe data. ``configclass`` copies it onto the instance
+    # like any other class member, which is why the cfg snapshot excludes ClassVars
+    # (format 2, reviewed baseline) -- without that filter, changing the declaration
+    # would look like changing the configuration. It stays visible in ``to_dict()``
+    # (upstream ``class_to_dict`` walks the instance namespace); that dump is a
+    # per-run artifact, not a comparison surface.
+    REQUIRES_CURRICULUM_STATE: ClassVar[bool] = True
 
     def __post_init__(self):
         super().__post_init__()
@@ -1240,7 +1241,7 @@ class LizardRoughTeacherEnvCfg_V5_PLAY(LizardRoughTeacherEnvCfg_V5):
     """
 
     # PLAY resumes no curriculum (it wires none): explicit override of V5 (ARCH_PLAN 1.3)
-    __requires_curriculum_state__ = False
+    REQUIRES_CURRICULUM_STATE: ClassVar[bool] = False
 
     def __post_init__(self):
         super().__post_init__()
@@ -1288,7 +1289,7 @@ class LizardRoughTeacherEnvCfg_V6(LizardRoughTeacherEnvCfg_V5):
 class LizardRoughTeacherEnvCfg_V6_PLAY(LizardRoughTeacherEnvCfg_V6):
     """v6 play variant: same as v5 PLAY (no randomization, no curriculum)."""
 
-    __requires_curriculum_state__ = False
+    REQUIRES_CURRICULUM_STATE: ClassVar[bool] = False
 
     def __post_init__(self):
         super().__post_init__()
@@ -1328,7 +1329,7 @@ class LizardRoughTeacherEnvCfg_V8(LizardRoughTeacherEnvCfg_V6):
 class LizardRoughTeacherEnvCfg_V8_PLAY(LizardRoughTeacherEnvCfg_V8):
     """v8 play variant: same as v6 PLAY (no randomization, no curriculum)."""
 
-    __requires_curriculum_state__ = False
+    REQUIRES_CURRICULUM_STATE: ClassVar[bool] = False
 
     def __post_init__(self):
         super().__post_init__()
@@ -1372,7 +1373,7 @@ class LizardRoughTeacherEnvCfg_V10(LizardRoughTeacherEnvCfg_V8):
 class LizardRoughTeacherEnvCfg_V10_PLAY(LizardRoughTeacherEnvCfg_V10):
     """v10 play variant: same as v8 PLAY (no randomization, no curriculum)."""
 
-    __requires_curriculum_state__ = False
+    REQUIRES_CURRICULUM_STATE: ClassVar[bool] = False
 
     def __post_init__(self):
         super().__post_init__()
@@ -1467,7 +1468,7 @@ class LizardRoughTeacherEnvCfg_V11_PLAY(LizardRoughTeacherEnvCfg_V11):
     uniform range sample, matching the v10 PLAY behavior.
     """
 
-    __requires_curriculum_state__ = False
+    REQUIRES_CURRICULUM_STATE: ClassVar[bool] = False
 
     def __post_init__(self):
         super().__post_init__()
@@ -1597,7 +1598,7 @@ class LizardRoughTeacherEnvCfg_V12_PLAY(LizardRoughTeacherEnvCfg_V12):
     ``reset_base`` handling: PLAY randomization is seeded, not zeroed.
     """
 
-    __requires_curriculum_state__ = False
+    REQUIRES_CURRICULUM_STATE: ClassVar[bool] = False
 
     def __post_init__(self):
         super().__post_init__()
@@ -1661,7 +1662,7 @@ class LizardRoughTeacherEnvCfg_V13(LizardRoughTeacherEnvCfg_V10):
 class LizardRoughTeacherEnvCfg_V13_PLAY(LizardRoughTeacherEnvCfg_V13):
     """v13 play variant: same as v10 PLAY (no randomization, no curriculum)."""
 
-    __requires_curriculum_state__ = False
+    REQUIRES_CURRICULUM_STATE: ClassVar[bool] = False
 
     def __post_init__(self):
         super().__post_init__()
@@ -1738,7 +1739,7 @@ class LizardRoughTeacherEnvCfg_V14(LizardRoughTeacherEnvCfg_V13):
 class LizardRoughTeacherEnvCfg_V14_PLAY(LizardRoughTeacherEnvCfg_V14):
     """v14 play variant: same as v13 PLAY (no randomization, no curriculum)."""
 
-    __requires_curriculum_state__ = False
+    REQUIRES_CURRICULUM_STATE: ClassVar[bool] = False
 
     def __post_init__(self):
         super().__post_init__()

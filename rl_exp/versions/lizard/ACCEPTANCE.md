@@ -65,7 +65,8 @@
 
 - ~~fork 补丁仍以 `weights_only=args_cli.weights_only` 调用~~ **已修（1.3，2026-09-15）**：新补丁传 `drop_curriculum_state=args_cli.drop_curriculum_state or args_cli.weights_only`，旧 CLI 名保留为别名 + 一行弃用提示（仅在使用旧名时打印）；两条补丁插入点已解耦，`git apply --check --reverse` 各自幂等。
 - IsaacLab 树内 `source/isaaclab_tasks/…/velocity/config/spider/` 未跟踪 ⇒ 该树所有 run 的 isaaclab 来源项都会记未知。需在树里提交或删除该目录，才能让这一项可判通过。
-- ~~`REQUIRES_CURRICULUM_STATE` 的声明目前只落在 `*_PLAY` 变体（`False`）上，基类的 `True` 声明缺失~~ **已修（1.3，2026-09-15）**：基类声明落在 `LizardRoughTeacherEnvCfg_V5`（v6–v14 继承），8 个 `*_PLAY` 显式 `False`，V3/V4 不声明（其 staged 课程未覆盖，只 WARN）；属性名改为 dunder **`__requires_curriculum_state__`**（普通/`ClassVar` 命名都会经 `configclass` 的实例命名空间进快照，dunder 由两个序列化器一致跳过）。`curriculum_state.REQUIRES_CURRICULUM_STATE` 常量即该名字，改用 `getattr(type(cfg), ...)` 读取，不再有 `AttributeError`。
+- ~~`REQUIRES_CURRICULUM_STATE` 的声明目前只落在 `*_PLAY` 变体（`False`）上，基类的 `True` 声明缺失~~ **已修（1.3，2026-09-15）**：基类声明落在 `LizardRoughTeacherEnvCfg_V5`（`REQUIRES_CURRICULUM_STATE: ClassVar[bool] = True`，v6–v14 继承），8 个 `*_PLAY` 显式 `False`，V3/V4 不声明（其 staged 课程未覆盖，只 WARN）。仍按 `8ac2eb9` 的 `ClassVar` 形态（进 `[21]` 通过、`[24]` golden 34/34 不变）；读取一律用 `curriculum_state.REQUIRES_CURRICULUM_STATE` 常量 + `getattr(type(cfg), ...)`，不再有 `AttributeError`。
+- 声明仍会出现在 `to_dict()` / `params/env.yaml`（上游 `class_to_dict` 按实例命名空间遍历，`configclass` 已把类成员拷到实例上）：该 dump 是**记录面**，不进 golden 也不进 run manifest 的 cfg 摘要，故不改声明语义；要连它一起干净需动上游 `utils/dict.py`（增补丁），本轮不做。
 - 本批期间该声明与快照 ClassVar 排除曾在并发编辑中一度消失（快照排除已按原设计恢复）；`cfg_snapshot.py` 同一时间被两方写入，后续应避免同文件并发编辑。
 
 
@@ -82,7 +83,7 @@
 | 框架摘要 | IsaacLab 源码树 rev `28a37cecdd43`，工作树 11 项未提交差异（两个 fork 补丁 + 本地 shim 等）；Python 3.12.13 |
 | 设备与规模 | 无仿真（纯 torch + 桩对象）；桩 env 数 6/8；不依赖 seed |
 | 容差 | A 层位级相等（`torch.equal`）；B 层同 seed 下位级相等；无数值容差 |
-| 验证命令 | `rl_exp\tools\verify\run_offline_checks.bat`（cwd 本仓）→ `ALL_OFFLINE_CHECKS_PASSED`；`[15]` 23/23、`[21]` `CONFIGCLASS_FIELDS_OK`、`[24]` `CFG_LOCK_OK (34 tasks)`、`[26]` `RUN_MANIFEST_TEST_OK` |
+| 验证命令 | `rl_exp\tools\verify\run_offline_checks.bat`（cwd 本仓）→ `ALL_OFFLINE_CHECKS_PASSED`；`[15]` 23/23（**本批**；B 层补齐后为 26/26，见 §1.4a）、`[21]` `CONFIGCLASS_FIELDS_OK`、`[24]` `CFG_LOCK_OK (34 tasks)`、`[26]` `RUN_MANIFEST_TEST_OK` |
 | 补丁一致性 | `git apply --check --reverse` 两补丁各自幂等；pristine + 两补丁按序应用后与 fork 树 `train.py` 逐字节一致（`%TEMP%\patch_check.py`） |
 | 负对照（闸门反证） | 去掉行 SIR 地形摘要比较 ⇒ `test_row_sir_type_order_and_terrain_changes_rejected` 失败；不比较 c_k 调度参数 ⇒ `test_c_k_schedule_evidence_per_parameter` 失败；去掉有限性闸门 ⇒ `test_corrupt_row_sir_payload_rejected` 失败（`%TEMP%\falsify_guards.py`，跑完原模块复原） |
 
@@ -98,13 +99,52 @@
 | S06 原子回填 | `test_corrupt_row_sir_payload_rejected`（失败后逐项不变）、`test_hard_fail_boundaries`（同类型两实例） | **通过**：校验全过才写入；同 adapter 两实例明确拒绝（不覆盖、不任选） |
 | S07 硬失败边界 | `test_missing_state_hard_aborts_and_weights_only_opts_out`、`test_hard_fail_boundaries`、`test_uncovered_stateful_term_tripwire`、`test_fork_patch_call_site_contract` | **通过**（离线面）：缺载荷/缺 slot/改名/未覆盖 term/已知类未实例化均明确处置；**调用侧**（含模块内部 ImportError）以补丁静态契约 + 树一致性校验覆盖，**未起真进程** |
 | S08 兼容与 drop | `test_v1_payload_migrates_with_its_missing_evidence`、`test_drop_alias_and_conflict` | **通过**：v1 迁移为唯一 joint slot、缺证据列明且不以当前值补造；旧入口可用 + 弃用提示；新旧参数矛盾报错。**未复核**：drop 后 rsl_rl 仍加载 model/optimizer（属 rsl_rl 行为，需真跑） |
-| S09 声明与分布式 | `test_declaration_is_class_level_and_off_in_play`、`test_non_zero_rank_neither_restores_nor_saves`；闸门 `[21]`/`[24]` | **通过**：声明为类属性（V5 声明、v6–v14 继承、8 个 PLAY 显式 False、V4 无）；不进 `to_dict()`；`[24]` golden 34/34 不变；非 0 rank 拒绝恢复且不装 hook |
+| S09 声明与分布式 | `test_declaration_is_class_level_and_off_in_play`、`test_non_zero_rank_neither_restores_nor_saves`；闸门 `[21]`/`[24]` | **通过**：声明为类属性（V5 声明、v6–v14 继承、8 个 PLAY 显式 False、V4 无）；不进 cfg 快照（golden 34/34 不变、`to_dict()` 仍带该键属记录面）；非 0 rank 拒绝恢复且不装 hook |
 | S10 实际恢复证据 | `test_run_manifest` 的 `s10/restored-complete`、`s10/restored-partial-v1`、`s10/dropped`、`s10/module-unavailable`、`record/distributed-flags` | **通过**：T1 的 `resume.curriculum_state` 直接引用 apply 返回结果（源版本/已恢复项/缺证据/丢弃/c_k 状态）；partial 只判未知、drop 记为不阻塞未知、声明任务模块缺失计失败 |
-| B 层（1.4a） | `test_b_layer_update_equivalence` | **通过**：行 SIR（正常权重更新 + 流量不足保留两分支）与 joint SIR，同统计 + 复位 RNG 下单次真实课程更新输出逐位一致 |
+| B 层（1.4a） | `test_b_layer_update_equivalence`、`test_b_layer_row_sir_branch_equivalence`、`test_b_layer_joint_sir_branch_equivalence`、`test_b_layer_c_k_boundary_equivalence` | **通过**：行 SIR（正常权重更新 + 流量不足保留两分支）与 joint SIR，同统计 + 复位 RNG 下单次真实课程更新输出逐位一致；分支级用 spy 断到实际走的分支；c_k 迭代边界前后取自不同迭代 |
 
 ### 结论与边界
 
 - 可**宣告**："1.3 离线状态恢复验收通过"（S01–S10 + A/B 层）。
 - **不可**据本表宣告：运行时续训连续（C 层 1.4b 未执行）、多卡续训已验证（明确不在保证范围）、drop 路径的 rsl_rl 加载行为（未真跑）、隔离重建（1.5）。
 - 工作树未提交 ⇒ 本记录绑定**内容**而非 revision；提交后按同表重跑方可挂 revision。
+
+
+---
+
+## 1.4a · 恢复验收 B 层补全（2026-09-15）
+
+1.3a 的 B 层只覆盖行 SIR 两条分支、每线一次更新。本节按 `ARCH_PLAN.md` 1.4a 补齐**分支级**与
+**c_k 迭代边界**覆盖；A 层（S01–S10）沿用上节，不重复。
+
+### 前提
+
+| 项 | 值 |
+|---|---|
+| 任务 id | 不适用（离线；测试桩 env/cfg，不注册 gym 任务） |
+| 代码摘要 | Robot rev `fe4e8f1` + 工作树未提交（本批：`verify/test_resume_state.py`；同批另有一路并行编辑把声明改为 `ClassVar[bool]`，本轮全套闸门在该改动落定后重跑） |
+| 框架摘要 | IsaacLab 源码树 rev `28a37cecdd43`；Python 3.12.13 |
+| 设备与规模 | 无仿真（纯 torch + 桩对象）；桩 env 数 6（joint SIR）/8（行 SIR） |
+| 容差 | 位级相等（`torch.equal`）；c_k 与**按载荷保存参数独立重算**的 float64 值，绝对误差 ≤ 1e-12 |
+| 验证命令 | `rl_exp\tools\verify\run_offline_checks.bat`（cwd 本仓）→ `ALL_OFFLINE_CHECKS_PASSED`；`[15]` **26 passed**（+3 新增）、`[24]` `CFG_LOCK_OK (34 tasks)`、`[26]` `RUN_MANIFEST_TEST_OK` |
+| 负对照（7 例反证） | `%TEMP%\falsify_b_layer.py`（逐例改一处生产行为、跑目标用例、逐字节复原 `curriculum_state.py`/`teacher_mdp.py`）：no-op 回填 / 行 SIR 丢弃测量 / 行 SIR 丢弃全带外回退 / joint 游走退化为恒等 / joint 前沿回退退化为均匀 / joint 未结算也清零统计 / c_k 迭代序号 +1 —— **七例全部 FIRED**（每例都让目标用例失败，无虚过） |
+
+### 检查与结果
+
+| 编号 | 覆盖用例 | 实际结果 |
+|---|---|---|
+| B1 行 SIR 分支 | `test_b_layer_row_sir_branch_equivalence`（测量更新 / `n_traj_min` 以下 / 全带外回退 / 随机游走 / replay） | **通过**：每例先断言分支签名（测量替换先验、先验权重存活、全域重探均匀、粒子落 ±1 行、粒子来自受限回放池），再走生产入口 `term(env, ids)`（块边界，含节流 `next_eval_step` 与重生目标），原对象与恢复对象逐位一致；回填前先断言"冷对象 ≠ 载荷"（no-op 回填必失败） |
+| B2 joint SIR 分支 | `test_b_layer_joint_sir_branch_equivalence`（同五例；回退走 `_fallback_weights` 有向前沿，游走用 `_walk` 计数探针） | **通过**：`maintain_mass` 份额、前沿非均匀（单 combo 类型按论文语义退均匀）、未结算 pair 保留统计跨块累积、结算 pair 清零统计均合生产语义；两线逐位一致 |
+| B3 c_k 边界 | `test_b_layer_c_k_boundary_equivalence` | **通过**：counter 恢复为源值；边界前 / 边界 / 边界后 / 多块处 counter 一致、c_k 与按保存参数独立重算的 float64 值误差 ≤ 1e-12，且边界处确实变化（非平凡） |
+| B4 旧字段回归 | `test_roundtrip_bitwise_and_ck_continuity`（增 joint 槽字段集断言） | **通过**：载荷少一个 joint 运行时字段即失败——"静默丢状态"不再能通过往返 |
+
+### 本批修正（旧夹具虚标）
+
+- 旧 B 层标为"正常权重更新"的一例用 `episodes=3.0`，而 `n_traj_min=6` ⇒ 实际走的是**保留旧权重**分支，与另一例同支：标注与夹具不符。已改为 `episodes=10.0 / successes=7.0` 的真测量更新（`p_hat=0.7` 落带内），并在 docstring 写明分支归属；两分支的精确签名断言改由 B1 承担。
+
+### 结论与边界
+
+- 可**宣告**：**1.4a A/B 层离线验收通过**（A 层 S01–S10 见 §1.3a）。
+- **不可**据本节宣告：接线时序正确（apply 早于 wrapper 首次 reset）——只有 1.4b C 层真跑能证；冷热前 N 步逐位一致（RNG/出生/per-episode 瞬态刻意不存）；多卡续训（不在保证范围）。
+- B 层证明的是"**状态 → 更新映射**一致"，不是"复现"。
 

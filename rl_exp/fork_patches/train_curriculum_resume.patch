@@ -11,7 +11,7 @@ diff --git a/scripts/reinforcement_learning/rsl_rl/train.py b/scripts/reinforcem
 +    default=False,
 +    help="With --resume: restore weights/optimizer only and drop the checkpoint's curriculum state"
 +    " (c_k re-heats, the terrain curricula cold-start). Without it a task that declares"
-+    " __requires_curriculum_state__ -- or wires a registered stateful curriculum term -- refuses to"
++    " REQUIRES_CURRICULUM_STATE -- or wires a registered stateful curriculum term -- refuses to"
 +    " resume from a checkpoint that carries no curriculum state.",
 +)
 +parser.add_argument(
@@ -53,7 +53,7 @@ diff --git a/scripts/reinforcement_learning/rsl_rl/train.py b/scripts/reinforcem
 +        drop_curriculum_state = args_cli.drop_curriculum_state or args_cli.weights_only
 +        curriculum_resume = None
 +        if agent_cfg.resume or agent_cfg.algorithm.class_name == "Distillation":
-+            requires_state = bool(getattr(type(env_cfg), "__requires_curriculum_state__", False))
++            requires_state = bool(getattr(type(env_cfg), "REQUIRES_CURRICULUM_STATE", False))
 +            try:
 +                from rl_exp.tasks.curriculum_state import apply_resume_state
 +            except ImportError as exc:
@@ -87,7 +87,7 @@ diff --git a/scripts/reinforcement_learning/rsl_rl/train.py b/scripts/reinforcem
 +        try:
 +            from rl_exp.tasks.curriculum_state import hook_runner_save
 +        except ImportError as exc:  # already reported at the resume step
-+            if getattr(type(env_cfg), "__requires_curriculum_state__", False):
++            if getattr(type(env_cfg), "REQUIRES_CURRICULUM_STATE", False):
 +                raise RuntimeError(
 +                    f"{type(env_cfg).__name__} requires a resumable curriculum state but"
 +                    f" rl_exp.tasks.curriculum_state cannot be imported ({exc}); this run's checkpoints"

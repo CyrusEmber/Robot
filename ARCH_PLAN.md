@@ -1,7 +1,7 @@
 # ARCH_PLAN —— 实验可复现性与配置组织重整（提案，待审核）
 
 > 意图文档，非 SSOT。事实侧见 `FAMILY.md` / `OBS.md` / `HARNESS.md` / `FILEMAP.md`。
-> 落地后挂账归 `PLAN.md` #14（归档敞口另记 #18）。修订：v0.13（2026-09-15，1.3a 离线落地——注册表 + v2 载荷、两条 SIR 线 + c_k 解耦、声明门与开关正名、T1 记实际恢复结果；1.4b C 层真跑待执行）
+> 落地后挂账归 `PLAN.md` #14（归档敞口另记 #18）。修订：v0.14（2026-09-15，1.4a 离线执行——B 层分支级 + c_k 迭代边界，`[15]` 26/26 + 7 例反证；1.4b C 层真跑仍待执行）· v0.13（2026-09-15，1.3a 离线落地——注册表 + v2 载荷、两条 SIR 线 + c_k 解耦、声明门与开关正名、T1 记实际恢复结果）
 >
 > **读法**：只看 §速读 §详案 §不做。附录 A/B 是证据与审计留痕，审完即可不看。
 
@@ -28,7 +28,7 @@
 | 1.1 | 配置快照（recipe/run）+ 值差异报告 + golden + 闸门 | **已完成 1.1a/1.1b/1.1c**：序列化器 + golden 覆盖 34 个注册任务/PLAY、按框架组合保存（套件 `[23][24][25]`） |
 | 1.2 | 会话记录 T0–T3 + 外部 ckpt 索引 + 两维度 `--verify` | **1.2a 已落地**（套件 `[26]`，补丁已应用）；**1.2b 运行时验收待真跑**（起仿真，需专门安排） |
 | 1.3 | 状态注册表（joint SIR + 行 SIR + c_k）+ 边界收紧 | **1.3a 已落地**（套件 `[15]` 23/23：S01–S10 + B 层演算级）；fork 补丁与树已同步（`--drop_curriculum_state` + 声明门 + 结果入 T1）。**1.4b C 层真跑待执行** |
-| 1.4 | 恢复验收三层（A/B/C） | A/B 自动化，C 含冷启动负对照 |
+| 1.4 | 恢复验收三层（A/B/C） | **1.4a 已执行（离线）**：A 层 S01–S10 + B 层**分支级**（测量/流量不足/全带外回退/游走/replay）与 c_k 迭代边界，`[15]` 26/26 + 7 例闸门反证，记录见 `versions/lizard/ACCEPTANCE.md` §1.4a；1.4b C 层真跑待执行（含冷启动负对照） |
 | 1.5 | 隔离重建（一个新 run，原源码/资产不可访问） | 来源断言与缺件负测试通过，至少一条达"已验证重建：配置与加载级" |
 | 2 | v15 配方化 | 硬 A/B/C 全过 |
 | 3 | 协议对象 + eval 四项绑定 + 地形映射 A→B + 导出校验 | 协议摘要进 manifest 与 eval |
@@ -154,7 +154,7 @@
 | 全部带 c_k | `common_step_counter` | 仅 joint SIR 路径回填 | 解耦：有 c_k 就恢复 |
 | 其它课程 term | 任何 `ManagerTermBase` | 仅 WARN | 注册表未登记 **且任务声明要求恢复 ⇒ 硬失败** |
 
-1. **补丁 ImportError** 现 WARN 后继续 → 对声明要求课程恢复的任务改硬失败（声明 `__requires_curriculum_state__` 放任务 cfg 侧，读 `type(env_cfg)` 不依赖 rl_exp 导入；**已落地**），其它任务透传。保存 hook 安装失败同样只在声明任务上终止。
+1. **补丁 ImportError** 现 WARN 后继续 → 对声明要求课程恢复的任务改硬失败（声明 `REQUIRES_CURRICULUM_STATE`（`ClassVar[bool]`）放任务 cfg 侧，读 `type(env_cfg)` 不依赖 rl_exp 导入；**已落地**），其它任务透传。保存 hook 安装失败同样只在声明任务上终止。
 2. **`--weights_only` 正名**：实测只丢课程状态，rsl_rl **仍加载 model + optimizer**（`_peek_lr` 读 optimizer 学习率即证）→ 新增 `--drop_curriculum_state`，旧名保留为别名 + 弃用提示（不改公开行为）；`PLAN.md` #11 措辞同步。**已落地**：CLI 与 Python 入口（`apply_resume_state`/`freeze`）双名并存，显式给出互相矛盾的取值时明确报错。
 3. **多 GPU 不在保证范围**：状态只从 rank 0 写；manifest 记 `distributed`/rank；README 与本文各写一句。**已落地**：非 0 rank 拒绝恢复、不装保存 hook，T1 记 `runner_is_distributed`/`runner_gpu_global_rank` 与 `multi_gpu_resume_verified: false`。
 
@@ -172,7 +172,7 @@
 | S06 原子回填 | 多 slot 中最后一项损坏；同类型多实例 | 所有校验在修改对象前完成，失败后全部对象及 counter 不变；多实例要么分别恢复，要么明确拒绝，禁止键覆盖或任选其一 |
 | S07 硬失败边界 | 要求恢复但无载荷/缺 slot/未覆盖 term；已知类尚未实例化；调用侧导入失败（含模块内部 ImportError）；保存 hook 安装失败 | 未显式 drop 时，在首次 reset/训练前终止；新训练要求记录课程状态时，保存 hook 失败也终止。非声明任务的未覆盖项只透传并明确报告，不伪称已覆盖 |
 | S08 兼容与 drop | v1 原始样本；CLI 与 Python 旧 weights_only 入口；新 drop 入口 | v1 可解析为唯一 joint slot，缺失指纹列为未知，不以当前值补造；缺少必需证据时不通过完整恢复验收。显式 drop 保持课程冷启动并继续原模型/optimizer 加载行为；旧入口有弃用提示；新旧参数冲突明确报错 |
-| S09 声明与分布式 | 类属性声明（dunder `__requires_curriculum_state__`，V5 声明 / v6–v14 继承 / PLAY 显式 False；快照格式 2 排除 ClassVar）；模拟 rank 0/非 0 | 全部注册任务 golden 不变，声明不进入配置数据；PLAY 行为符合显式声明。非 0 rank 不安装课程保存 hook；T1 记录真实分布式标志/rank，不宣称多卡恢复验证通过 |
+| S09 声明与分布式 | `ClassVar[bool]` 声明（V5 声明 / v6–v14 继承 / 8 个 PLAY 显式 False / V4 无；快照格式 2 排除 ClassVar）；模拟 rank 0/非 0 | 全部注册任务 golden 不变，声明不进入配置数据（快照/golden/run manifest 的 cfg 摘要）；`to_dict()` 仍带该键（上游按实例命名空间遍历），属记录面不作比较。PLAY 行为符合显式声明。非 0 rank 不安装课程保存 hook；T1 记录真实分布式标志/rank，不宣称多卡恢复验证通过 |
 | S10 实际恢复证据 | 成功恢复、显式 drop、未覆盖、失败分别运行 | manifest 读取 apply 的实际结果，列出源版本、实际挂载/已恢复/丢弃/缺证据项及 c_k 状态；注册表支持列表或 counter 非零都不能充当恢复成功证据 |
 
 **1.4 恢复验收三层**
@@ -185,11 +185,11 @@
 
 不要求冷热前 N 步逐位一致（RNG、出生、per-episode 瞬态刻意不存）。负测试保留：有 term 无状态 → 硬失败 + 显式放行参数。
 
-**1.4a A/B 层执行口径（待实现/执行）**
+**1.4a A/B 层执行口径（已执行 2026-09-15，离线；证据见 `versions/lizard/ACCEPTANCE.md` §1.4a）**
 
-- A 层执行 S01–S10；joint SIR 保留旧字段的回归覆盖。通过只声明载荷与回填正确。
-- B 层对两种 SIR 使用真实生产更新函数，在相同设备/dtype 下给原对象和恢复对象相同统计输入，每次调用前恢复相同测试 RNG 状态。分别覆盖流量不足、正常权重更新、全带外回退、随机游走与 replay；particles/weights/history/统计清零及下一调度时点精确一致。fixture 必须实际触发目标分支；只运行 collect/apply 不算 B 层。
-- c_k-only 在迭代边界前、边界及边界后比较 counter 和按保存参数计算的 c_k（float64，绝对误差不超过 1e-12）。测试可控制 RNG，但不新增生产 RNG 恢复保证，也不改冻结 term 的演算语义。
+- A 层执行 S01–S10；joint SIR 保留旧字段的回归覆盖（槽字段集缺失即失败）。通过只声明载荷与回填正确。
+- B 层对两种 SIR 使用真实生产更新函数，在相同设备/dtype 下给原对象和恢复对象相同统计输入，每次调用前恢复相同测试 RNG 状态。分别覆盖流量不足、正常权重更新、全带外回退、随机游走与 replay；particles/weights/history/统计清零及下一调度时点精确一致。fixture 必须实际触发目标分支；只运行 collect/apply 不算 B 层。**已落地**：五例分支夹具各先断言分支签名（含 `_fallback_weights`/`_walk` 探针），再过生产入口 `term(env, ids)`（含节流与重生）；`[15]` 26/26，7 例闸门反证全 FIRED。
+- c_k-only 在迭代边界前、边界及边界后比较 counter 和按保存参数计算的 c_k（float64，绝对误差不超过 1e-12）。**已落地**：值取自载荷保存参数独立重算，边界处确实变化。测试可控制 RNG，但不新增生产 RNG 恢复保证，也不改冻结 term 的演算语义。
 
 **1.4b C 层真实恢复（与 1.2b 同批，待执行）**
 
@@ -325,7 +325,7 @@ observation_protocol: {id: teacher_obs_v3, sha256: "..."}
 
 ## 附录 B · 来源分级与修订留痕
 
-**v0.13（本轮）**：1.3a 落地（离线）。`curriculum_state.py` 改为注册表 + v2 载荷（命名 slot / `clock` c_k 指纹 / adapter 版本 / 原子回填 / v1 迁移列缺证据），覆盖 joint SIR + 行 SIR 两线并把 c_k 时钟与 term 解耦；行 SIR 静态指纹补 `terrain_config_sha256` 与 9 项 cfg（列分配不变的类型换序/参数改也拒绝），新增有限性/非负/索引 dtype 闸门；声明 `__requires_curriculum_state__` 放任务 cfg 类上（V5 声明、v6–v14 继承、8 个 PLAY 显式 False、v4 无），并以 **dunder 命名 + 快照格式 2 的 ClassVar 过滤**双保险不进配置数据（后者由 1.2b 轮落地并重基线 golden，见 `versions/lizard/ACCEPTANCE.md`）；fork 补丁与树同步（声明门硬失败、`--drop_curriculum_state` + 别名/冲突、hook 安装失败不静默、两条补丁插入点解耦以便 `--check --reverse` 幂等，重建校验 pristine+两补丁 == 树）；T1 记录 apply 的实际结果（S10）与真实分布式标志。离线 `[15]` 23/23 + 三处闸门反证（去掉指纹比较/有限性/声明即失败）。**未做**：1.4b C 层真跑（代表任务与判据见 1.4b），故本步只宣告”离线状态恢复验收通过”。**v0.12**：按用户”补验收标准”要求新增验收记录通则、1.3a S01–S10 载荷/指纹/失败/兼容检查、1.4 A/B/C 具体事件与默认阈值、1.2b 联合实物检查，以及 3.5 P01–P07 协议/评估/导出/蒸馏清单。保留原版路线与归档决定；本轮仅改计划，新增条目均待实现/执行，步数与容差为执行前须冻结的验收口径。
+**v0.14（本轮）**：1.4a 离线执行——B 层从"每线一次更新"扩到**分支级**：行 SIR/joint SIR 各五例（流量不足、测量更新、全带外回退、随机游走、replay），每例先断言分支签名（joint 侧对 `_fallback_weights`/`_walk` 计数探针）、再过生产入口 `term(env, ids)`（块边界，含节流与重生），原对象与恢复对象逐位一致；回填前先断言冷对象 ≠ 载荷（no-op 回填必失败）。c_k-only 增边界比对：counter 与按**载荷保存参数**独立重算的 float64 c_k 在边界前/边界/边界后误差 ≤1e-12，且边界处确实变化。joint 槽字段集增回归断言（少一字段即失败）。修一处旧夹具虚标：标为"正常权重更新"的一例 `episodes=3.0 < n_traj_min=6`，实际走保留先验分支。离线 `[15]` 26/26 + 7 例闸门反证（no-op 回填 / 丢弃测量 / 丢弃回退 / 游走退化为恒等 / 回退退化为均匀 / 未结算也清零 / c_k 序号 +1）全 FIRED。**未做**：1.4b C 层真跑（代表任务与判据见 1.4b），故本步只宣告"1.4a A/B 层离线验收通过"；接线时序仍未经真跑证明。**v0.13**：1.3a 落地（离线）。`curriculum_state.py` 改为注册表 + v2 载荷（命名 slot / `clock` c_k 指纹 / adapter 版本 / 原子回填 / v1 迁移列缺证据），覆盖 joint SIR + 行 SIR 两线并把 c_k 时钟与 term 解耦；行 SIR 静态指纹补 `terrain_config_sha256` 与 9 项 cfg（列分配不变的类型换序/参数改也拒绝），新增有限性/非负/索引 dtype 闸门；声明 `REQUIRES_CURRICULUM_STATE`（`ClassVar[bool]`）放任务 cfg 类上（V5 声明、v6–v14 继承、8 个 PLAY 显式 False、v4 无），靠**快照格式 2 的 ClassVar 排除**不进配方 golden 与 run manifest 的 cfg 摘要（该排除由 1.2b 轮落地并重基线 golden，见 `versions/lizard/ACCEPTANCE.md`；`to_dict()`/`params/env.yaml` 仍带该键，属记录面）；fork 补丁与树同步（声明门硬失败、`--drop_curriculum_state` + 别名/冲突、hook 安装失败不静默、两条补丁插入点解耦以便 `--check --reverse` 幂等，重建校验 pristine+两补丁 == 树）；T1 记录 apply 的实际结果（S10）与真实分布式标志。离线 `[15]` 26/26（含分支级与 c_k 迭代边界 B 层）+ 三处闸门反证（去掉指纹比较/有限性/声明即失败）。**未做**：1.4b C 层真跑（代表任务与判据见 1.4b），故本步只宣告”离线状态恢复验收通过”。**v0.12**：按用户”补验收标准”要求新增验收记录通则、1.3a S01–S10 载荷/指纹/失败/兼容检查、1.4 A/B/C 具体事件与默认阈值、1.2b 联合实物检查，以及 3.5 P01–P07 协议/评估/导出/蒸馏清单。保留原版路线与归档决定；本轮仅改计划，新增条目均待实现/执行，步数与容差为执行前须冻结的验收口径。
 
 **决策来源分级**：`用户明示`（直接指令）/ `审核建议`（三轮审核，是建议非拍板）/ `提案选择`（作者选择，无授权）。~~待默认通过~~ 不作授权依据（v0.1 用错，已删）。
 

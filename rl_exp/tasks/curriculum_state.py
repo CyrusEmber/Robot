@@ -119,19 +119,18 @@ CK_VERSION = 1
 V1_JOINT_SIR_TERM = "joint_sir"
 """Term name the v1 schema implied: its payload carried no name, only one joint SIR state."""
 
-REQUIRES_CURRICULUM_STATE = "__requires_curriculum_state__"
-"""Name of the task-side declaration (a class attribute on the env cfg class).
+REQUIRES_CURRICULUM_STATE = "REQUIRES_CURRICULUM_STATE"
+"""Name of the task-side declaration (a ``ClassVar`` on the env cfg class).
 
 Read at the train.py call site through ``type(env_cfg)`` -- an object train.py already
 holds -- so a task that declares it still aborts on import failure instead of silently
 cold-starting. Set on the SIR-carrying teacher recipes (V5..V14 inherit it; every
 ``*_PLAY`` variant overrides it to False).
 
-Dunder-named on purpose: ``configclass`` back-fills annotations and both serializers
-(``to_dict`` and ``cfg_snapshot``) walk the instance namespace, which
-``_custom_post_init`` fills with class members -- so a plain or ``ClassVar``-annotated
-name would enter the recipe golden and every run manifest's cfg digest. ``__``-prefixed
-names are skipped by both, keeping the declaration out of the config data.
+A ``ClassVar`` because it states something *about* the recipe (its resume contract)
+rather than being recipe data: ``configclass`` copies class members onto the instance,
+so the cfg snapshot excludes ClassVars (format 2, reviewed baseline) and the
+declaration never moves the recipe golden or a run manifest's cfg digest.
 """
 
 _SIZE_WARN_BYTES = 64 * 2**20
