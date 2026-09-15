@@ -41,13 +41,13 @@ from isaaclab.managers import ManagerTermBase  # noqa: E402
 
 from rl_exp.tasks.curriculum_state import (  # noqa: E402
     STATE_KEY,
-    _other_stateful_terms,
-    _static_state,
     _tensor_eq,
     apply_resume_state,
     apply_state,
     collect,
     hook_runner_save,
+    static_state,
+    uncovered_terms,
 )
 from rl_exp.tasks.param_grid_terrain import build_param_grid_terrain_cfg  # noqa: E402
 from rl_exp.tasks.teacher_mdp import JOINT_SIR_TERM, ck_value, init_ck  # noqa: E402
@@ -117,12 +117,19 @@ def _write_ckpt(path, *, state=None, it=9, lr=5.0e-4):
     return path
 
 
+def _only_slot(state: dict) -> str:
+    """Name of the single covered term slot in a v2 payload (these tests wire one term)."""
+    names = list(state["terms"])
+    assert len(names) == 1, f"expected exactly one covered term, got {names}"
+    return names[0]
+
+
 def test_roundtrip_bitwise_and_ck_continuity() -> None:
     torch.manual_seed(11)
     env1, term1 = _pair(_terrain())
     env1, term1 = _drive(env1, term1)
     state = collect(env1, it=5)
-    assert state is not None and state["common_step_counter"] == 123
+    assert state is not None and state["clock"]["common_step_counter"] == 123
     assert state["written_at_iter"] == 5 and state["task"] == "_TaskCfgV12"
     assert state["num_envs"] == NUM_ENVS
 
@@ -164,7 +171,8 @@ def test_static_fingerprint_catches_grid_edit() -> None:
     )
     env2, term2 = _pair(terrain13)
 
-    saved, now = state["static"], _static_state(term2)
+    saved = state["terms"][_only_slot(state)]["static"]
+    now = static_state(term2, env2)
     assert saved["n_pairs"] == now["n_pairs"]  # counts alone would NOT catch this
     assert saved["n_v"] == now["n_v"]
     assert not _tensor_eq(saved["combo_cols"], now["combo_cols"])
@@ -197,8 +205,9 @@ def test_corrupt_clock_and_weights_rejected() -> None:
     state = collect(env1)
     env2, term2 = _pair(_terrain())
 
-    state["runtime"]["next_eval_step"] = 240
-    state["common_step_counter"] = 500  # block edge is now in the past
+    slot = state["terms"][_only_slot(state)]["runtime"]
+    slot["next_eval_step"] = 240
+    state["clock"]["common_step_counter"] = 500  # block edge is now in the past
     try:
         apply_state(env2, state, report=lambda *_: None)
     except ValueError as exc:
@@ -206,8 +215,8 @@ def test_corrupt_clock_and_weights_rejected() -> None:
     else:
         raise AssertionError("an eval edge below the restored clock must abort")
 
-    state["common_step_counter"] = 0
-    state["runtime"]["weights"][0] = state["runtime"]["weights"][0] * 0.5
+    state["clock"]["common_step_counter"] = 0
+    slot["weights"][0] = slot["weights"][0] * 0.5
     try:
         apply_state(env2, state, report=lambda *_: None)
     except ValueError as exc:
@@ -251,7 +260,7 @@ def test_termless_task_passthrough() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         path = _write_ckpt(pathlib.Path(tmp) / "model_9.pt", state=state)
         reports: list[str] = []
-        assert apply_resume_state(env_play, path, report=reports.append) is False
+        assert apply_resume_state(env_play, path, report=reports.append)["status"] == "no_state"
         assert any("wires no" in r for r in reports)
     assert env_play.common_step_counter == 0
 
@@ -269,21 +278,22 @@ def test_missing_state_hard_aborts_and_weights_only_opts_out() -> None:
         try:
             apply_resume_state(env2, stateless, report=lambda *_: None)
         except RuntimeError as exc:
-            assert "--weights_only" in str(exc)
+            assert "--drop_curriculum_state" in str(exc)
         else:
             raise AssertionError("a stateless checkpoint on a joint-SIR task must abort")
         assert env2.common_step_counter == 0 and torch.equal(term2._particles[0], cold)
 
         stated = _write_ckpt(pathlib.Path(tmp) / "model_10.pt", state=state, it=10)
         reports: list[str] = []
-        assert apply_resume_state(env2, stated, weights_only=True, report=reports.append) is False
-        assert any("--weights_only" in r and "dropped" in r for r in reports)
+        # ``weights_only`` is the deprecated alias of ``drop_curriculum_state``; both must opt out
+        assert apply_resume_state(env2, stated, weights_only=True, report=reports.append)["status"] == "dropped"
+        assert any("--drop_curriculum_state" in r and "dropped" in r for r in reports)
         assert env2.common_step_counter == 0 and torch.equal(term2._particles[0], cold)
 
         reports = []
-        assert apply_resume_state(env2, stated, report=reports.append) is True
+        assert apply_resume_state(env2, stated, report=reports.append)["status"] == "restored"
         assert env2.common_step_counter == 123
-        assert torch.equal(term2._particles[0], state["runtime"]["particles"][0])
+        assert torch.equal(term2._particles[0], state["terms"][_only_slot(state)]["runtime"]["particles"][0])
         assert any("iter=10" in r and "lr=0.0005" in r for r in reports)
         assert any("particle_entropy" in r for r in reports)
 
@@ -330,13 +340,13 @@ def test_uncovered_stateful_term_tripwire() -> None:
     env, term = _pair(_terrain())
     fake = object.__new__(type("_FakeStatefulTerm", (ManagerTermBase,), {}))
     setattr(env.curriculum_manager.cfg, "speed_curriculum", SimpleNamespace(func=fake))
-    assert _other_stateful_terms(env) == ["speed_curriculum"]
+    assert uncovered_terms(env) == ["speed_curriculum"]
 
     with tempfile.TemporaryDirectory() as tmp:
         path = _write_ckpt(pathlib.Path(tmp) / "model_9.pt", state=collect(env))
         reports: list[str] = []
         apply_resume_state(env, path, report=reports.append)
-    assert any("NOT covered by this module" in r for r in reports)
+    assert any("not covered by any registered adapter" in r for r in reports)
 
 
 def _main() -> None:
