@@ -109,6 +109,50 @@
 - **不可**据本表宣告：运行时续训连续（C 层 1.4b 未执行）、多卡续训已验证（明确不在保证范围）、drop 路径的 rsl_rl 加载行为（未真跑）、隔离重建（1.5）。
 - 工作树未提交 ⇒ 本记录绑定**内容**而非 revision；提交后按同表重跑方可挂 revision。
 
+---
+
+## 1.5 准备件 · 隔离重建闸门（2026-09-15，离线）
+
+**本节不是 1.5 通过。** 1.5 的出口（"已验证重建：配置与加载级"）要求正向验收、来源断言与缺件
+负测试在**真隔离环境**里全过；本节只交付闸门本身与一次真 run 上的负证据，`已验证重建` 仍为未知。
+
+### 前提
+
+| 项 | 值 |
+|---|---|
+| 任务 id | 不适用（闸门离线；R1 的 dry-run 用 `Lizard-Rough-v14` 的真 run 记录当输入） |
+| 代码摘要 | Robot 工作树**未提交**（本次改动：`tools/runrecord/rebuild.py`、`test_rebuild_gate.py`、`run_offline_checks.bat`、`FILEMAP.md`、本文件）；提交后须按同表重跑 |
+| 框架摘要 | 同 1.2b/1.3a：IsaacLab rev `28a37cecdd43`，rsl_rl editable，Python 3.12.13 |
+| 设备与规模 | 无仿真（纯文件/git + torch）；不依赖 seed |
+| 容差 | 摘要与内容哈希精确相等；无数值容差 |
+| 验证命令 | `rl_exp\tools\verify\run_offline_checks.bat` → `[27] REBUILD_GATE_TEST_OK`；单跑 `python rl_exp\tools\verify\test_rebuild_gate.py` |
+
+### 检查与结果
+
+| 编号 | 检查 | 输入/操作 | 实际结果 |
+|---|---|---|---|
+| P1 | 取材闸门对**已漂移脏树** | R1（`…/2026-09-15_15-30-08`）真 run 记录 → `rebuild --capture`，再对同一目标跑 `--check` | **通过（按预期拒采：capture 退出 2、check 退出 2）**：`isaaclab`/`rsl_rl` 记录 `cc25f24b` ≠ 现树 `13aee682`（286 行 diff 内容从未落盘，run 目录那份 `git/IsaacLab.diff` 字节哈希对不上）；`repository` = `git-rev`、`assets` = `in-repo-git`、`payload` = `copied` 三项本可取材。目标目录**只有** `rebuild_material.json`，**无 `material/`**（严格：拒采不写材料）；`--check` 报 `REBUILD_CHECK_PARTIAL` + `material was not captured (verdict=refused)`，不冒充通过。证据：`%TEMP%\rebuild_r1_dryrun\rebuild_material.json`（同命令可重跑复现） |
+| P2 | 脏树 diff 无归档落点 | 单测 `capture/refuse-without-archive` | **通过**：拒采理由直指 `PLAN.md #18`（哈希 ≠ 可取回） |
+| P3 | 带归档则一致 | 单测 `capture/accept-with-archive`、`stored-diff-hashes-as-recorded`、`payload-hash-matches`、`untracked-payload-stored` | **通过**：diff 与未跟踪代码内容落 `--archive` 与 `material/`，逐文件摘要与记录值相等（含 CRLF 往返不损哈希） |
+| P4 | 未跟踪代码只有哈希没有内容 | 单测 `capture/refuse-vanished-untracked`、`capture/refuse-drifted-diff`、`capture/refuse-edited-record` | **通过**：`spider/` 类内容缺失、diff 漂移、冻结后被改记录（T1 摘要对不上）均拒采/判失败 |
+| P5 | 来源断言（不落回原树） | 单测 `check/fallback-to-original-fails`、`check/no-original-is-unknown`、`check/undeclared-import-location-fails`、`check/asset-lock-fallback-fails`、`check/readable-original-is-informational` | **通过**：模块解析落回 `--original` 原树 = **失败**；资产锁解析落回原树 = **失败**；落在重建根与 `--dep` 之外 = 失败；未给 `--original` = 未知（不冒充）；原目录"仍可读"只作信息行（`required=False`），不判失败（**v0.16 收窄**：不做系统级访问切断） |
+| P6 | 缺件负测试与退出码口径 | 单测 `maintest/removed-payload-fails`、`maintest/restored-payload-passes`、`check/edited-payload-fails`、`check/refused-material-not-claimed`、`check/failed-material-blocks` | **通过**：删一个必需载荷检查必失败、还原必通过（还原后仍不过 = **未知**，不冒充通过）；被改载荷由材料摘要行判失败；拒采材料 `--check` 退 2（不计通过）、失败材料退 1（阻塞） |
+| P7 | 载荷绑定与配置 | 单测 `check/binding-row`、`check/exit-code` | **通过**：ckpt 可加载且 `infos` 回指本记录 run id + T1 摘要；配方按 golden 再推导一致 |
+
+### 结论与边界
+
+- 可**宣告**：1.5 闸门已落地并进离线套件（`[27]` 28/28）；**R1 不可作 1.5 主体**——闸门在真 run 上实测拒绝，
+  这是"判据非摆设"的证据（与 1.2b R4 把该 run 的 isaaclab 来源判未知同一事实）。
+- **验收口径按 v0.16 收窄**（用户拍板 2026-09-15）：判据 = "解析不落回原树"，**不做**账号/ACL 等系统级访问切断；
+  出口措辞相应为"**受检查路径上的配置与加载级重建通过**"。边界：不覆盖任意隐藏读取（包内部/缓存/环境变量旁路）。
+- **不可**据本节宣告 1.5 通过。缺口清单（真跑前必须逐项关闭）：
+  1. **重建根未搭**：未建干净解释器（自定义 `.pth`，不继承指向原仓的 `.pth`；原 venv 的 `site-packages` 只作
+     声明依赖挂在末尾）、未拷两棵代码树到声明 rev、未重建 IsaacLab 脏树（补丁 + 未跟踪 `spider/`）；
+     `--check`/`--maintest` 尚未在**真重建树**上跑过。
+  2. **归档落点**（`PLAN.md` #18 触发条件已到）：已定**仓内 git**（IsaacLab 三个 extras 拆成仓内补丁 + `spider/` 入仓），尚未落盘。
+  3. **主体 run 必须是"取材窗口内"的新 run**：现有历史 run 的脏树状态已漂移，且按硬约束 6 不得补造。
+
+
 
 ---
 

@@ -98,6 +98,9 @@ echo [25] recipe golden gate falsifier (each drift must still fire)
 echo [26] run manifest (T0/T1 record, checkpoint infos, external index, --verify)
 "%PY%" rl_exp\tools\verify\test_run_manifest.py || goto :fail
 
+echo [27] isolation rebuild gate (material capture/refusal, sources, missing-file negative test)
+"%PY%" rl_exp\tools\verify\test_rebuild_gate.py || goto :fail
+
 echo ALL_OFFLINE_CHECKS_PASSED
 exit /b 0
 

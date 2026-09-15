@@ -1,0 +1,115 @@
+diff --git a/isaaclab.bat b/isaaclab.bat
+index 131c75e16..e69de29bb 100644
+--- a/isaaclab.bat
++++ b/isaaclab.bat
+@@ -1,49 +0,0 @@
+-@echo off
+-setlocal EnableExtensions EnableDelayedExpansion
+-
+-rem Copyright (c) 2022-2025, The Isaac Lab Project Developers
+-rem (https://github.com/isaac-sim/IsaacLab/blob/main/CONTRIBUTORS.md).
+-rem All rights reserved.
+-rem
+-rem SPDX-License-Identifier: BSD-3-Clause
+-
+-set "ISAACLAB_PATH=%~dp0"
+-rem Remove trailing backslash.
+-if "%ISAACLAB_PATH:~-1%"=="\" set "ISAACLAB_PATH=%ISAACLAB_PATH:~0,-1%"
+-
+-rem Find python to run CLI.
+-if defined VIRTUAL_ENV (
+-    set "python_exe=%VIRTUAL_ENV%\Scripts\python.exe"
+-) else if defined CONDA_PREFIX (
+-    set "python_exe=%CONDA_PREFIX%\python.exe"
+-) else if exist "%ISAACLAB_PATH%\_isaac_sim\python.bat" (
+-    set "python_exe=%ISAACLAB_PATH%\_isaac_sim\python.bat"
+-) else (
+-    rem Fallback.
+-    set "python_exe=python"
+-)
+-
+-rem Add source/isaaclab to PYTHONPATH so we can import isaaclab.cli.
+-set "PYTHONPATH=%ISAACLAB_PATH%\source\isaaclab;%PYTHONPATH%"
+-
+-rem Let Kit associate direct wrapper launches with the Isaac Sim desktop icon.
+-if "%RESOURCE_NAME%"=="" set "RESOURCE_NAME=IsaacSim"
+-
+-rem If a local Isaac Sim binary is present, source its env setup so that
+-rem PYTHONPATH/PATH/EXP_PATH are correct without depending on a conda
+-rem activate.d hook (those don't fire under e.g. `conda run` on Windows).
+-if exist "%ISAACLAB_PATH%\_isaac_sim\" (
+-    if exist "%ISAACLAB_PATH%\_isaac_sim\setup_conda_env.bat" (
+-        call "%ISAACLAB_PATH%\_isaac_sim\setup_conda_env.bat" >NUL
+-    ) else (
+-        echo [WARNING] _isaac_sim is present but _isaac_sim\setup_conda_env.bat is missing; Isaac Sim env vars not exported. 1>&2
+-        echo [WARNING] Re-extract the Isaac Sim Windows zip if you intend to use the bundled binary. 1>&2
+-    )
+-)
+-
+-rem Execute CLI.
+-"%python_exe%" -c "from isaaclab.cli import cli; cli()" %*
+-
+-if errorlevel 1 exit /b 1
+-endlocal
+-exit /b 0
+diff --git a/source/isaaclab_tasks/isaaclab_tasks/direct/anymal_c/anymal_c_env.py b/source/isaaclab_tasks/isaaclab_tasks/direct/anymal_c/anymal_c_env.py
+index 3c1c0aa0e..a26b46446 100644
+--- a/source/isaaclab_tasks/isaaclab_tasks/direct/anymal_c/anymal_c_env.py
++++ b/source/isaaclab_tasks/isaaclab_tasks/direct/anymal_c/anymal_c_env.py
+@@ -55,11 +55,13 @@ class AnymalCEnv(DirectRLEnv):
+                 "flat_orientation_l2",
+             ]
+         }
+-        # Get specific body indices
+         self._base_id, _ = self._contact_sensor.find_sensors("base")
+         self._feet_ids, _ = self._contact_sensor.find_sensors(".*FOOT")
+         self._undesired_contact_body_ids, _ = self._contact_sensor.find_sensors(".*THIGH")
+ 
++    def set_command(self, command: torch.Tensor):
++        self._commands[:] = command.to(device=self.device)
++
+     def _setup_scene(self):
+         self._robot = Articulation(self.cfg.robot)
+         self.scene.articulations["robot"] = self._robot
+diff --git a/source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/velocity_env_cfg.py b/source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/velocity_env_cfg.py
+index b1b7e0043..bc0d81f4d 100644
+--- a/source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/velocity_env_cfg.py
++++ b/source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/velocity_env_cfg.py
+@@ -202,8 +202,8 @@ class EventsCfg:
+         mode="startup",
+         params={
+             "asset_cfg": SceneEntityCfg("robot", body_names=".*"),
+-            "static_friction_range": (0.8, 0.8),
+-            "dynamic_friction_range": (0.6, 0.6),
++            "static_friction_range": (0.4, 1.2),
++            "dynamic_friction_range": (0.3, 1.0),
+             "restitution_range": (0.0, 0.0),
+             "num_buckets": 64,
+         },
+@@ -238,11 +238,12 @@ class EventsCfg:
+     # reset
+     base_external_force_torque = EventTerm(
+         func=mdp.apply_external_force_torque,
+-        mode="reset",
++        mode="interval",
++        interval_range_s=(4.0, 8.0),
+         params={
+             "asset_cfg": SceneEntityCfg("robot", body_names="base"),
+-            "force_range": (0.0, 0.0),
+-            "torque_range": (-0.0, 0.0),
++            "force_range": (-30.0, 30.0),
++            "torque_range": (-5.0, 5.0),
+         },
+     )
+ 
+@@ -275,8 +276,8 @@ class EventsCfg:
+     push_robot = EventTerm(
+         func=mdp.push_by_setting_velocity,
+         mode="interval",
+-        interval_range_s=(10.0, 15.0),
+-        params={"velocity_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5)}},
++        interval_range_s=(3.0, 6.0),
++        params={"velocity_range": {"x": (-1.5, 1.5), "y": (-1.5, 1.5), "z": (-0.3, 0.3)}},
+     )
+ 
+ 

@@ -132,8 +132,13 @@ copy <REPO>\rl_exp\fork_patches\config_lizard___init__.py ^
   <ROOT>\source\isaaclab_tasks\isaaclab_tasks\manager_based\locomotion\velocity\config\lizard\__init__.py
 ```
 
-**3. 遥控回放（可选）**：键盘遥控两条路，按任务范围选。两条都要求
-`--viz kit`（键盘是 Kit 窗口设备，没窗口收不到按键）和 `--real-time`
+**2b. 本机树的额外改动（重建用，1.5）**：`fork_patches\` 除补丁外还带两件——`local_tree_extras.patch`
+（`isaaclab.bat` 置空 + `anymal_c_env.py` + `velocity_env_cfg.py` 三处本地改动）与 `isaaclab_untracked\`
+（未跟踪任务 config `spider\`）。要重建**运行时那棵树**，顺序是：声明 rev 的 clone → 逐个应用
+`fork_patches\*.patch` → 把 `isaaclab_untracked\source\...` 拷回 `<ROOT>\source\...`；三样齐了才等于运行时
+状态，缺一样来源断言就会判"落回原树/内容不符"。归档口径见 `ARCH_PLAN.md` §1.5 与 `PLAN.md` #18。
+
+**3. 遥控回放（可选）**：键盘遥控两条路，按任务范围选。两条都要求`--viz kit`（键盘是 Kit 窗口设备，没窗口收不到按键）和 `--real-time`
 （按墙钟走，按键才落得进去）。键位：小键盘/方向键前后左右，`Z`/`X` 转向，`L` 清零。
 **按住才动、松开即停**（设备是 press/release 增量配平，不会滑行）；Alt+Tab 失焦会丢
 release、命令卡住不归零，按 `L` 兜底。按一次的量级在 `play_keyboard_task.KEY_SENSITIVITY`
