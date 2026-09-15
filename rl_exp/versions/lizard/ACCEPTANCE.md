@@ -84,7 +84,7 @@
 | 设备与规模 | 无仿真（纯 torch + 桩对象）；桩 env 数 6/8；不依赖 seed |
 | 容差 | A 层位级相等（`torch.equal`）；B 层同 seed 下位级相等；无数值容差 |
 | 验证命令 | `rl_exp\tools\verify\run_offline_checks.bat`（cwd 本仓）→ `ALL_OFFLINE_CHECKS_PASSED`；`[15]` 23/23（**本批**；B 层补齐后为 26/26，见 §1.4a）、`[21]` `CONFIGCLASS_FIELDS_OK`、`[24]` `CFG_LOCK_OK (34 tasks)`、`[26]` `RUN_MANIFEST_TEST_OK` |
-| 补丁一致性 | `git apply --check --reverse` 两补丁各自幂等；pristine + 两补丁按序应用后与 fork 树 `train.py` 逐字节一致（`%TEMP%\patch_check.py`） |
+| 补丁一致性 | **已固化为常态检查**：`[1]` `framework_pin_check.py` 现重建校验——把 `fork_patches/*.patch` 按序应用到 `git show HEAD:` 的 pristine 副本上，与 fork 树逐字节比（行尾归一，`core.autocrlf` 属本机设置），并报告每份存档是否已应用／可反向。2026-09-15 复跑：两存档各自 `--check --reverse` 幂等、pristine + 两补丁 == 树；反证两例 **FIRED**（树内补丁区域外手加一行 ⇒ 只有逐字节比能抓；反向卸掉一补丁 ⇒ `NOT applied` 报出）。配套 `.gitattributes` 钉 `*.patch text eol=lf`（CRLF 签出会让 hunk 匹配不上 LF 树，setup.bat 会静默失败） |
 | 负对照（闸门反证） | 去掉行 SIR 地形摘要比较 ⇒ `test_row_sir_type_order_and_terrain_changes_rejected` 失败；不比较 c_k 调度参数 ⇒ `test_c_k_schedule_evidence_per_parameter` 失败；去掉有限性闸门 ⇒ `test_corrupt_row_sir_payload_rejected` 失败（`%TEMP%\falsify_guards.py`，跑完原模块复原） |
 
 ### 检查与结果（S01–S10 + B 层，全部**通过**）

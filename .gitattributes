@@ -1,0 +1,5 @@
+# The fork patch archives are consumed verbatim: setup.bat applies them with `git apply`
+# (step 3) and framework_pin_check.py rebuilds the fork tree from them. A CRLF checkout
+# makes hunks fail to match a LF tree, which would show up as "neither applied nor
+# appliable" instead of the drift it is meant to be, so the archives stay LF everywhere.
+*.patch text eol=lf

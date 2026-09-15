@@ -127,7 +127,7 @@
 | `tools\verify\terrain_preflight.py` | **开训前地形预检**（skill `isaaclab-pretrain-check`）：离线生成全部子地形 + 粗糙度统计（foot-plate relief 核心指标）+ PNG 渲染到 `_tmp_terrain_previews\` |
 | `tools\verify\joint_check.py` | reset 后打印关节角（验证默认位姿加载） |
 | `tools\verify\check_dr_parity.py` | **契约漂移闸门（--strict 即 CI）**：① teacher vs 家族 DR wiring 行静态对比；② `play_utils.DR_EVENT_NAMES` 与 `dr_controller._DR_EVENT_NAMES` 两份列表同步；③ 全部 `*_PLAY` 类必须调 `apply_play_wiring`；④ 两侧 `ArticulationCfg` 字面块行比对；⑤ 资产结构契约（usda 文本 vs 各 yaml：joint_order/Geometry scope/base_link/body 模式，资产换代改名即报警）；⑥ 资产锁比对（见 `asset_lock.json`）。`--update-locks` 仅在有意换代资产的同一 commit 里跑 |
-| `tools\verify\framework_pin_check.py` | **框架 pin 检查**：grep IsaacLab 源码树里我们依赖的内部符号（cfg.func 替换 / RayCaster.meshes / live PD 增益 / warp kernel 等）+ 比对已验证 commit `28a37ce`（perf-2026-06-24）；升级 IsaacLab 后第一件事 |
+| `tools\verify\framework_pin_check.py` | **框架 pin 检查**：grep IsaacLab 源码树里我们依赖的内部符号（cfg.func 替换 / RayCaster.meshes / live PD 增益 / warp kernel 等）+ 比对已验证 commit `28a37ce`（perf-2026-06-24）；升级 IsaacLab 后第一件事。**另含补丁存档校验**（2026-09-15）：把 `fork_patches\*.patch` 按序应用到 `git show HEAD:` 的 pristine 副本再与 fork 树逐字节比（行尾归一），并报每份存档"已应用／未应用／不可反向"——`setup.bat` 只看树侧，存档与树分叉会让它照样打印 `[ok]` 而静默丢一个 hunk。存档行尾由 `.gitattributes` 钉 `*.patch text eol=lf` |
 | `tools\verify\test_recovery_parity.py` | recovery 向量化 vs 朴素参考实现等价性（纯 torch，随机+6 组边界） |
 | `tools\verify\test_staged_curriculum.py` | 课程组件离线单测（mock managers，不起仿真） |
 | `tools\verify\run_offline_checks.bat` | **离线全套一键**（26 项：pin/parity/recovery/staged 课程/teacher 网络/student 网络/v3 课程+环形/obs 布局/v5 奖励/v5 SIR/v11 联合 SIR/版本文档/v12 噪声模型/pxr 泄漏闸/续训状态/tb 抽样/v13 跟踪核/v14 摔倒闸/验收量测（同帧+abs 侧滑）/eval 帧契约 v2/configclass 字段面 + 其负测试/配置序列化器/**配方 golden 锁 + 其负测试/运行记录**，秒级不起仿真）；改 tasks 或 harness 后、commit 前必跑 |

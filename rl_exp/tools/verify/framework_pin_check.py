@@ -17,12 +17,17 @@ Usage: python rl_exp\\tools\\verify\\framework_pin_check.py [--isaac-root PATH] 
 import argparse
 import pathlib
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 
 # the one reader of machine-local host paths, shared with the eval harness
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3] / "ablation_harness"))
 import host_paths  # noqa: E402
+
+_REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
+PATCH_DIR = _REPO_ROOT / "rl_exp" / "fork_patches"
 
 PINNED_SHA = "28a37cecdd433c22d9eabd6a5954add9f13a8951"
 PINNED_DESC = "perf-2026-06-24 (tested 2026-08-31)"
@@ -101,6 +106,86 @@ RSL_RL_NEEDLES = [
 ]
 
 
+def _patch_targets(patch: pathlib.Path) -> list[str]:
+    """The file paths one patch touches, read from its ``+++ b/<path>`` headers."""
+    return re.findall(r"^\+\+\+ b/(.+?)\s*$", patch.read_text(encoding="utf-8"), re.M)
+
+
+def _git(args: list[str], cwd: pathlib.Path | None = None) -> subprocess.CompletedProcess:
+    """Run git (text mode); ``cwd`` defaults to this process's directory."""
+    return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
+
+
+def check_fork_patches(root: pathlib.Path, failures: list[str]) -> None:
+    """The archives under ``fork_patches/`` must still describe this fork tree.
+
+    setup.bat only ever looks at the tree -- forward-apply, or ``--check --reverse``
+    to skip what is already applied -- so an archive that drifted from its own
+    baseline, or a tree hand-edited inside a patched region, keeps exit code 0 while
+    a hunk silently disappears: the resume hook, the run manifest, the declaration
+    gate. Rebuild each archive from the tree's own HEAD in a scratch repo, chain them
+    the way setup.bat does, and compare the result byte for byte.
+    """
+    patches = sorted(PATCH_DIR.glob("*.patch"))
+    if not patches:
+        return
+    if not (root / ".git").exists():
+        print("WARN: fork tree is not a git repo -- cannot verify the patch archives against it")
+        return
+    targets = sorted({rel for patch in patches for rel in _patch_targets(patch)})
+    baseline_ok = True
+    scratch = pathlib.Path(tempfile.mkdtemp(prefix="pin_patch_"))
+    try:
+        subprocess.run(["git", "init", "-q", "."], cwd=scratch, check=True, capture_output=True)
+        for rel in targets:
+            blob = subprocess.run(
+                ["git", "-C", str(root), "show", f"HEAD:{rel}"], capture_output=True, check=False
+            )
+            if blob.returncode != 0:
+                failures.append(f"{rel}: not in the fork tree's HEAD -- cannot rebuild {len(patches)} archive(s)")
+                baseline_ok = False
+                continue
+            dest = scratch / rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(blob.stdout)
+        for patch in patches:
+            applied = _git(["-C", str(root), "apply", "--check", str(patch)])
+            reversed_ = _git(["-C", str(root), "apply", "--check", "--reverse", str(patch)])
+            if applied.returncode == 0:
+                failures.append(
+                    f"{patch.name}: NOT applied to the fork tree (setup.bat step 3 applies the archives; "
+                    "without them the run silently loses the hook it declares)"
+                )
+                baseline_ok = False
+            elif reversed_.returncode != 0:
+                failures.append(
+                    f"{patch.name}: neither applied nor appliable -- the tree and the archive disagree "
+                    f"({reversed_.stderr.strip().splitlines()[:1]})"
+                )
+                baseline_ok = False
+            if baseline_ok:
+                chained = _git(["apply", "-p1", str(patch)], cwd=scratch)
+                if chained.returncode != 0:
+                    failures.append(
+                        f"{patch.name}: does not apply to its own baseline (re-pin the archive): "
+                        f"{chained.stderr.strip().splitlines()[:1]}"
+                    )
+                    baseline_ok = False
+        if baseline_ok:
+            for rel in targets:
+                # newline-normalized: core.autocrlf is machine-local and both the
+                # archives and the hunks are newline-agnostic, so a CRLF difference is
+                # a local checkout setting, not a content drift
+                rebuilt = (scratch / rel).read_bytes().replace(b"\r\n", b"\n")
+                actual = (root / rel).read_bytes().replace(b"\r\n", b"\n")
+                if rebuilt != actual:
+                    failures.append(f"{rel}: rebuilt-from-archives != fork tree (a hunk was edited in one place only)")
+    except (OSError, subprocess.SubprocessError) as err:  # noqa: BLE001
+        print(f"WARN: patch-archive rebuild unavailable ({type(err).__name__}: {err})")
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
 def detect_root(cli: str | None) -> pathlib.Path | None:
     """IsaacLab tree: explicit flag, then host_paths, then the venv's own tree."""
     root = host_paths.isaac_root(override=cli)
@@ -162,6 +247,8 @@ def main() -> int:
         print(("FAIL: " if args.strict else "WARN: ") + msg)
         if args.strict:
             failures.append(msg)
+
+    check_fork_patches(root, failures)
 
     for f in failures:
         print(f"FAIL: {f}")
