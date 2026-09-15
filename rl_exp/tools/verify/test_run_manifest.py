@@ -25,6 +25,7 @@ import torch  # noqa: E402
 
 from rl_exp.tools.runrecord import manifest as M  # noqa: E402
 from rl_exp.tools.runrecord import provenance as prov  # noqa: E402
+from rl_exp.tasks import curriculum_state as cstate  # noqa: E402
 from rl_exp.tasks.agents.rsl_rl_ppo_cfg import LizardTeacherV14PPORunnerCfg  # noqa: E402
 from rl_exp.tasks.teacher_env_cfg import LizardRoughTeacherEnvCfg_V14  # noqa: E402
 
@@ -85,11 +86,13 @@ def _record(
     save_early: bool = False,
     runner_lr: float | None = None,
     resume_path: pathlib.Path | None = None,
+    curriculum_resume: dict | None = None,
 ):
     """Run the four recording call sites against stubs, saving one checkpoint.
 
     ``runner_lr`` defaults to the recipe's own value, so the "declared == effective"
     case is the honest default and a mismatch has to be asked for explicitly.
+    ``curriculum_resume`` stands in for the outcome ``apply_resume_state`` returns.
     """
     cfg = LizardRoughTeacherEnvCfg_V14()
     agent = LizardTeacherV14PPORunnerCfg()
@@ -107,7 +110,8 @@ def _record(
             env=env,
             agent_cfg=agent,
             resume_path=str(resume_path) if resume_path else None,
-            weights_only=False,
+            drop_curriculum_state=False,
+            curriculum_resume=curriculum_resume,
         )
     if not save_early:
         runner.save(tmp / "model_42.pt")
@@ -199,8 +203,15 @@ def main() -> int:
         )
         check(
             "record/curriculum-evidence",
-            manifest["stages"]["ready_to_learn"]["resume"]["curriculum_state"].get("state_version"),
-            "state version not recorded",
+            manifest["stages"]["ready_to_learn"]["resume"]["curriculum_module"].get("state_version")
+            == cstate.STATE_VERSION
+            and manifest["stages"]["ready_to_learn"]["resume"]["curriculum_state"]["status"] == "fresh_run",
+            f"{manifest['stages']['ready_to_learn']['resume']}",
+        )
+        check(
+            "record/distributed-flags",
+            manifest["stages"]["ready_to_learn"]["distributed"]["multi_gpu_resume_verified"] is False,
+            f"{manifest['stages']['ready_to_learn']['distributed']}",
         )
         saved = runner.saves[-1].get(M.CKPT_INFOS_KEY, {})
         check(
@@ -224,6 +235,40 @@ def main() -> int:
         )
         check("verify/rebuild-unknown", _result(rows, "已验证重建") == "未知", "1.5 not built yet, must not claim")
         check("verify/exit-code", M.main(["--verify", str(run_dir)]) == 0, "clean run must exit 0")
+
+        # --- S10: what the restore actually did, per outcome ----------------------
+        # The record carries apply_resume_state's own report; each shape has to land on
+        # the right verdict -- and a *declared* task must not pass with a cold curriculum.
+        ckpt = root / "model_9.pt"
+        ckpt.write_bytes(b"not really a checkpoint")
+        for label, outcome, want, blocking in (
+            (
+                "restored-complete",
+                {"status": "restored", "source_version": 2, "evidence": "complete", "terms": [{"name": "terrain_levels"}],
+                 "c_k": {"restored": True, "schedule": "matched"}, "common_step_counter": 28800, "rank": 0},
+                "通过",
+                False,
+            ),
+            (
+                "restored-partial-v1",
+                {"status": "restored", "source_version": 1, "evidence": "partial", "terms": [{"name": "joint_sir"}],
+                 "missing_evidence": ["clock.ck", "terms.joint_sir.static.terrain_config_sha256"]},
+                "未知",
+                False,
+            ),
+            ("dropped", {"status": "dropped", "evidence": "none"}, "未知", False),
+            ("module-unavailable", {"status": "module_unavailable", "error": "ImportError: boom"}, "未知", True),
+        ):
+            sub = pathlib.Path(tempfile.mkdtemp(dir=root))
+            _record(sub / "run", resume_path=ckpt, curriculum_resume=outcome)
+            sub_rows, sub_problems = M.verify(sub / "run")
+            check(
+                f"s10/{label}",
+                _detail_result(sub_rows, "curriculum:") == want
+                and (any("curriculum state required" in p for p in sub_problems) == blocking),
+                f"{_detail_result(sub_rows, 'curriculum:')} problems={sub_problems}",
+            )
+            shutil.rmtree(sub)
 
         # --- negatives -----------------------------------------------------------
         bad = _tamper(run_dir, lambda d: d["declaration"].__setitem__("num_envs", 1))

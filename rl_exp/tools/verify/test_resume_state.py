@@ -4,29 +4,39 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""Offline test for the true-resume curriculum state (no sim, plain torch).
+"""Offline test for the true-resume curriculum state (ARCH_PLAN 1.3a, S01-S10).
 
-Round-trips the joint SIR + c_k clock through the checkpoint payload and pins
-the policy gates that keep a resume honest:
+Round-trips the registered SIR terms + the c_k clock through the checkpoint payload and
+pins the policy gates that keep a resume honest:
 
-* bitwise round-trip of every runtime tensor, ``common_step_counter`` and the
-  derived ``c_k``; the cold term turns into the saved one
-* the static fingerprint catches a yaml/terrain edit that renumbers particles
-  while leaving counts like ``n_pairs`` intact (the silent-corruption case)
-* task/env-count/schema mismatch, corrupt eval clock and inconsistent weights
-  are rejected instead of restored
-* policy: no joint SIR term -> passthrough; term + stateless checkpoint ->
-  hard abort naming ``--weights_only``; ``--weights_only`` -> explicit drop
-* ``hook_runner_save`` rides the checkpoint's ``infos`` slot, passes extra
-  args through and leaves termless tasks untouched
-* the per-env type draw mismatch warns and restores the saved assignment; an
-  uncovered stateful curriculum term is called out
+* S01/S03 bitwise round-trip of every runtime tensor, the counter and the derived c_k for
+  the joint SIR, the row SIR and a c_k-only task; ``collect`` hands out copies, and no
+  joint-only field is fabricated into a row-SIR term
+* S02 the row SIR fingerprint: a grid edit, a reordered equal-proportion type (the same
+  column split!), a retuned terrain parameter and each of its 9 cfg entries abort
+* S04 the c_k schedule is evidence: the counter alone is not, and changing c0/decay/
+  steps_per_iteration or the existence of c_k is refused
+* S05 identity/corruption: task, env count, unknown version, NaN/Inf, negative counts,
+  out-of-range particles/history/env_type, bad shapes and a broken eval clock are
+  rejected instead of restored
+* S06 nothing is written until every slot has passed; two terms of one class are refused
+* S07 hard-fail boundaries: a declared task without a payload or slot aborts, an
+  uncovered stateful term is reported, a registered class wired un-instantiated aborts
+* S08 v1 payloads migrate with their missing evidence listed (never backfilled); the
+  deprecated ``weights_only`` entry works, and contradicting it is an error
+* S09 the declaration is a class attribute (V5..V14 inherit it, PLAY overrides it) that
+  does not enter the config data; a non-zero rank neither restores nor saves
+* S10 the manifest records the outcome ``apply_resume_state`` returned (test_run_manifest)
+* B-layer: both SIR terms, given the same statistics and a reset RNG, produce the same
+  curriculum update
 
-NOTE: this proves the payload round-trip, NOT the wiring timing. That the
-restore lands before the wrapper's first full reset (so the respawn consumes
-the restored particles) is train.py behavior and only a smoke run proves it.
+NOTE: this proves the payload round-trip and the update mapping, NOT the wiring timing.
+That the restore lands before the wrapper's first full reset is train.py behavior and
+only a smoke run proves it (1.4b C layer).
 """
 
+import math
+import os
 import pathlib
 import sys
 import tempfile
@@ -36,10 +46,12 @@ import torch
 
 _REPO = pathlib.Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_REPO))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 from isaaclab.managers import ManagerTermBase  # noqa: E402
 
 from rl_exp.tasks.curriculum_state import (  # noqa: E402
+    REQUIRES_CURRICULUM_STATE,
     STATE_KEY,
     _tensor_eq,
     apply_resume_state,
@@ -50,6 +62,12 @@ from rl_exp.tasks.curriculum_state import (  # noqa: E402
     uncovered_terms,
 )
 from rl_exp.tasks.param_grid_terrain import build_param_grid_terrain_cfg  # noqa: E402
+from rl_exp.tasks.teacher_env_cfg import (  # noqa: E402
+    LizardRoughTeacherEnvCfg_V4,
+    LizardRoughTeacherEnvCfg_V5,
+    LizardRoughTeacherEnvCfg_V13_PLAY,
+    LizardRoughTeacherEnvCfg_V14,
+)
 from rl_exp.tasks.teacher_mdp import JOINT_SIR_TERM, ck_value, init_ck  # noqa: E402
 from test_joint_sir import (  # noqa: E402
     GRID,
@@ -59,9 +77,38 @@ from test_joint_sir import (  # noqa: E402
     _terrain,
     _term,
 )
+from test_v5_terrain_sir import NUM_ENVS as ROW_ENVS  # noqa: E402
+from test_v5_terrain_sir import _env as _row_env  # noqa: E402
+from test_v5_terrain_sir import _term as _row_term  # noqa: E402
 
 CK = dict(c0=0.2, decay=0.98, steps_per_iteration=24)
 """The v3 c_k schedule used by the tests (matches the v11 yaml section)."""
+
+ROW_TERM = "terrain_levels"
+"""The term name V5..V14 wire the row SIR under."""
+
+ROW_CFG_KEYS = (
+    "command_name",
+    "band",
+    "eval_every",
+    "n_traj_min",
+    "p_transition",
+    "p_replay",
+    "success_ratio",
+    "soft_edge",
+    "steps_per_iteration",
+)
+ROW_CFG_OTHER = {
+    "command_name": "other_velocity",
+    "band": (0.4, 0.8),
+    "eval_every": 5,
+    "n_traj_min": 4,
+    "p_transition": 0.5,
+    "p_replay": 0.2,
+    "success_ratio": 0.7,
+    "soft_edge": 0.1,
+    "steps_per_iteration": 12,
+}
 
 
 class _TaskCfgV12:
@@ -347,6 +394,442 @@ def test_uncovered_stateful_term_tripwire() -> None:
         reports: list[str] = []
         apply_resume_state(env, path, report=reports.append)
     assert any("not covered by any registered adapter" in r for r in reports)
+
+
+# --- row SIR (v5..v14 line) + c_k-only + the boundary cases ------------------------
+
+
+class _TaskCfgV14:
+    """Stand-in env cfg: the v14 recipe declares the curriculum contract, as the real class does."""
+
+    __requires_curriculum_state__ = True
+
+
+class _TaskCfgV14Plain:
+    """The same recipe WITHOUT the declaration (a task that tolerates a cold curriculum)."""
+
+
+def _row_grid(names, props, *, rows=10, cols=20):
+    """A row-SIR terrain grid: ordered sub-terrain names, proportions, column split."""
+    origins = torch.zeros(rows, cols, 3)
+    origins[:, :, 0] = torch.arange(rows).unsqueeze(1) * 100.0
+    origins[:, :, 1] = torch.arange(cols).unsqueeze(0) * 1.0
+    sub = {name: SimpleNamespace(proportion=p) for name, p in zip(names, props)}
+    types = (torch.arange(ROW_ENVS).float() / (ROW_ENVS / cols)).long()
+    return SimpleNamespace(
+        cfg=SimpleNamespace(terrain_generator=SimpleNamespace(sub_terrains=sub)),
+        terrain_origins=origins,
+        terrain_levels=torch.zeros(ROW_ENVS, dtype=torch.long),
+        terrain_types=types,
+        env_origins=torch.zeros(ROW_ENVS, 3),
+    )
+
+
+def _row_pair(terrain=None, *, counter=0, cfg_cls=_TaskCfgV14):
+    """(env, term) for the row SIR line, wired and c_k-armed the way V5..V14 wire it."""
+    terrain = _row_grid(("t0", "t1", "t2"), (0.2, 0.3, 0.5)) if terrain is None else terrain
+    env = _row_env(terrain, counter=counter)
+    env.cfg = cfg_cls()
+    env.num_envs = ROW_ENVS
+    term = _row_term(env)
+    env.curriculum_manager = SimpleNamespace(cfg=SimpleNamespace(**{ROW_TERM: SimpleNamespace(func=term)}))
+    init_ck(env, None, **CK)
+    return env, term
+
+
+def _ck_only_env(*, counter=0, ck=True):
+    """An env that wires no curriculum term and only runs the c_k clock (v3/v4 line)."""
+    env = _row_env(_row_grid(("t0", "t1", "t2"), (0.2, 0.3, 0.5)), counter=counter)
+    env.cfg = _TaskCfgV14()
+    env.num_envs = ROW_ENVS
+    env.curriculum_manager = SimpleNamespace(cfg=SimpleNamespace(terrain_levels=None))
+    if ck:
+        init_ck(env, None, **CK)
+    return env
+
+
+def _perturb_row(term):
+    """Give every row-SIR runtime field a value the cold term does not have."""
+    for t in range(term._num_types):
+        term._weights[t] = torch.full((term._num_rows,), 1.0 + 0.5 * t)
+        term._weights[t] = term._weights[t] / term._weights[t].sum()
+        term._particles[t] = torch.arange(term._num_rows - 1, -1, -1)
+        term._episodes[t] = torch.full((term._num_rows,), 3.0)
+        term._successes[t] = torch.full((term._num_rows,), 1.0)
+        term._history[t] = torch.arange(term._num_rows, dtype=torch.long) % term._num_rows
+    term._next_eval_step = 240
+
+
+def _row_payload(*, counter=120):
+    """A row-SIR payload carrying a non-initial state (S01's fixture)."""
+    torch.manual_seed(20)
+    env, term = _row_pair(counter=counter)
+    _perturb_row(term)
+    return collect(env, it=3), env, term
+
+
+def test_row_sir_roundtrip_and_field_set() -> None:
+    state, env1, term1 = _row_payload()
+    slot = state["terms"][ROW_TERM]
+    assert slot["adapter"] == "row_sir" and slot["adapter_version"] == 1
+    assert slot["term_type"].endswith(".SpawnWeightSIRTerrainCurriculum")
+    assert set(slot["runtime"]) == {
+        "particles", "weights", "episodes", "successes", "history", "env_type", "next_eval_step"
+    }
+    assert set(slot["static"]) == {
+        "types", "num_types", "num_rows", "type_cols", "terrain_config_sha256", "cfg"
+    }
+    assert sorted(slot["static"]["cfg"]) == sorted(ROW_CFG_KEYS)
+    assert state["clock"]["ck"]["static"] == {"c0": 0.2, "decay": 0.98, "steps_per_iteration": 24}
+    assert state["task"] == "_TaskCfgV14" and state["num_envs"] == ROW_ENVS
+
+    # S01: collect hands out copies -- a later update of the live term must not rewrite it
+    snapshot = slot["runtime"]["weights"][0].clone()
+    term1._weights[0] *= 2.0
+    assert torch.equal(slot["runtime"]["weights"][0], snapshot)
+    term1._weights[0] /= 2.0
+
+    env2, term2 = _row_pair(counter=0)
+    out = apply_state(env2, state, report=lambda *_: None)
+    assert out["evidence"] == "complete" and out["c_k"] == {"restored": True, "schedule": "matched"}
+    assert [term["name"] for term in out["terms"]] == [ROW_TERM]
+    assert env2.common_step_counter == 120 and ck_value(env2) == ck_value(env1)
+    for key in ("particles", "weights", "episodes", "successes", "history"):
+        assert _tensor_eq(getattr(term2, "_" + key), getattr(term1, "_" + key)), key
+    assert torch.equal(term2._env_type, term1._env_type)
+    assert term2._next_eval_step == term1._next_eval_step == 240
+    assert not hasattr(term2, "_env_pair")  # joint-only field: never fabricated into a row slot
+
+
+def test_row_sir_type_order_and_terrain_changes_rejected() -> None:
+    torch.manual_seed(21)
+    props = (0.3, 0.3, 0.4)
+    env1, term1 = _row_pair(_row_grid(("t0", "t1", "t2"), props), counter=120)
+    _perturb_row(term1)
+    state = collect(env1)
+
+    # the same proportions and the same column split: only the two type NAMES moved
+    swapped = _row_grid(("t1", "t0", "t2"), props)
+    env2, term2 = _row_pair(swapped, counter=0)
+    assert all(torch.equal(a, b) for a, b in zip(term1._type_cols, term2._type_cols))
+    try:
+        apply_state(env2, state, report=lambda *_: None)
+    except ValueError as exc:
+        assert "terrain_config_sha256" in str(exc) or "types" in str(exc), str(exc)
+    else:
+        raise AssertionError("reordering two equal-proportion types must abort")
+
+    # the same names and proportions, one difficulty parameter moved
+    retuned = _row_grid(("t0", "t1", "t2"), (0.2, 0.3, 0.5))
+    retuned.cfg.terrain_generator.sub_terrains["t1"].noise_amp = (0.2, 0.3)
+    env3, term3 = _row_pair(retuned, counter=0)
+    try:
+        apply_state(env3, state, report=lambda *_: None)
+    except ValueError as exc:
+        assert "terrain_config_sha256" in str(exc), str(exc)
+    else:
+        raise AssertionError("a retuned terrain parameter must abort")
+
+    # a different grid: rows are the particles, so num_rows has to bind too
+    env4, term4 = _row_pair(_row_grid(("t0", "t1", "t2"), (0.2, 0.3, 0.5), rows=8), counter=0)
+    try:
+        apply_state(env4, state, report=lambda *_: None)
+    except ValueError as exc:
+        assert "num_rows" in str(exc) or "static" in str(exc), str(exc)
+    else:
+        raise AssertionError("a changed row count must abort")
+
+
+def test_row_sir_cfg_entries_each_rejected() -> None:
+    for key in ROW_CFG_KEYS:
+        state, env1, term1 = _row_payload()
+        env2, term2 = _row_pair(counter=0)
+        setattr(term2.cfg, key, ROW_CFG_OTHER[key])
+        try:
+            apply_state(env2, state, report=lambda *_: None)
+        except ValueError as exc:
+            assert f"static.cfg.{key}" in str(exc) or "next_eval_step" in str(exc), f"{key}: {exc}"
+        else:
+            raise AssertionError(f"a changed cfg.{key} must abort")
+        assert env2.common_step_counter == 0
+
+
+def test_c_k_only_roundtrip() -> None:
+    env1 = _ck_only_env(counter=288)
+    state = collect(env1, it=2)
+    assert state is not None and state["terms"] == {}  # empty terms = no covered term, legal
+    assert state["clock"]["ck"]["static"] == {"c0": 0.2, "decay": 0.98, "steps_per_iteration": 24}
+
+    env2 = _ck_only_env(counter=0)
+    out = apply_state(env2, state, report=lambda *_: None)
+    assert out["terms"] == [] and out["evidence"] == "complete"
+    assert out["c_k"] == {"restored": True, "schedule": "matched"}
+    assert env2.common_step_counter == 288
+    assert ck_value(env2) == ck_value(env1)  # the c_k clock continues, not re-heats
+
+
+def test_c_k_schedule_evidence_per_parameter() -> None:
+    state, env1, term1 = _row_payload()
+    for key, other in (("c0", 0.3), ("decay", 0.97), ("steps_per_iteration", 12)):
+        env2, term2 = _row_pair(counter=0)
+        env2._lizard_ck_params = {**CK, key: other}
+        try:
+            apply_state(env2, state, report=lambda *_: None)
+        except ValueError as exc:
+            assert f"clock.ck.static.{key}" in str(exc), str(exc)
+        else:
+            raise AssertionError(f"the same counter under another {key} is a different c_k")
+        assert env2.common_step_counter == 0
+
+    # c_k existence, both directions: a schedule that vanished, and one that appeared
+    env3, term3 = _row_pair(counter=0)
+    del env3._lizard_ck_params
+    try:
+        apply_state(env3, state, report=lambda *_: None)
+    except ValueError as exc:
+        assert "wires no init_ck" in str(exc), str(exc)
+    else:
+        raise AssertionError("a checkpoint schedule on a task without one must abort")
+
+    del env1._lizard_ck_params
+    stateless_c_k = collect(env1)  # the same task, now running no schedule
+    assert stateless_c_k["clock"]["ck"] is None
+    env5, term5 = _row_pair(counter=0)  # a task WITH the schedule, resumed from the above
+    try:
+        apply_state(env5, stateless_c_k, report=lambda *_: None)
+    except ValueError as exc:
+        assert "records none" in str(exc), str(exc)
+    else:
+        raise AssertionError("the counter alone is not evidence; an absent fingerprint must abort")
+
+    # both sides explicitly schedule-less: legal, and the counter still continues
+    env4 = _ck_only_env(counter=0, ck=False)
+    out = apply_state(env4, stateless_c_k, report=lambda *_: None)
+    assert out["c_k"] == {"restored": True, "schedule": "none"}
+    assert env4.common_step_counter == 120
+
+
+def test_corrupt_row_sir_payload_rejected() -> None:
+    cases = {
+        "nan weight": lambda s: s["terms"][ROW_TERM]["runtime"]["weights"][0].__setitem__(0, float("nan")),
+        "inf episode": lambda s: s["terms"][ROW_TERM]["runtime"]["episodes"][0].__setitem__(0, float("inf")),
+        "negative weight": lambda s: s["terms"][ROW_TERM]["runtime"]["weights"][0].__setitem__(0, -0.5),
+        "weights not normalized": lambda s: s["terms"][ROW_TERM]["runtime"]["weights"][0].mul_(0.5),
+        "negative successes": lambda s: s["terms"][ROW_TERM]["runtime"]["successes"][0].__setitem__(0, -1.0),
+        "successes above episodes": lambda s: s["terms"][ROW_TERM]["runtime"]["successes"][0].__setitem__(0, 5.0),
+        "particle out of range": lambda s: s["terms"][ROW_TERM]["runtime"]["particles"][0].__setitem__(0, 99),
+        "float particles": lambda s: s["terms"][ROW_TERM]["runtime"].__setitem__(
+            "particles", [s["terms"][ROW_TERM]["runtime"]["particles"][0].float()]
+        ),
+        "history index out of range": lambda s: s["terms"][ROW_TERM]["runtime"]["history"][0].__setitem__(0, 99),
+        "history too short": lambda s: s["terms"][ROW_TERM]["runtime"].__setitem__(
+            "history", [torch.zeros(2, dtype=torch.long)]
+        ),
+        "env_type out of range": lambda s: s["terms"][ROW_TERM]["runtime"]["env_type"].__setitem__(0, 99),
+        "env_type wrong length": lambda s: s["terms"][ROW_TERM]["runtime"].__setitem__(
+            "env_type", torch.zeros(2, dtype=torch.long)
+        ),
+        "unknown container version": lambda s: s.__setitem__("version", 99),
+        "missing clock": lambda s: s.pop("clock"),
+        "missing slot": lambda s: s.__setitem__("terms", {}),
+        "extra slot": lambda s: s["terms"].__setitem__("ghost", dict(s["terms"][ROW_TERM])),
+    }
+    for label, mutate in cases.items():
+        state, _env1, _term1 = _row_payload()
+        mutate(state)
+        env2, term2 = _row_pair(counter=0)
+        before = [t.clone() for t in term2._weights]
+        counter_before = env2.common_step_counter
+        try:
+            apply_state(env2, state, report=lambda *_: None)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"{label}: must be rejected")
+        # S06: nothing is written before every slot has passed
+        assert all(torch.equal(a, b) for a, b in zip(term2._weights, before)), label
+        assert env2.common_step_counter == counter_before, label
+
+
+def test_hard_fail_boundaries() -> None:
+    state, env1, term1 = _row_payload()
+
+    # a renamed term is a mismatch, not a correspondence to guess
+    renamed = {"version": state["version"], **{k: v for k, v in state.items() if k != "terms"}}
+    renamed["terms"] = {"terrain_levels_new": state["terms"][ROW_TERM]}
+    env2, term2 = _row_pair(counter=0)
+    try:
+        apply_state(env2, renamed, report=lambda *_: None)
+    except ValueError as exc:
+        assert "renamed term" in str(exc), str(exc)
+    else:
+        raise AssertionError("a renamed term must need an explicit migration")
+
+    # two terms of one registered class: no silent key overwrite, no arbitrary pick
+    env3, term3 = _row_pair(counter=0)
+    env3.curriculum_manager.cfg.__dict__["second_row_sir"] = SimpleNamespace(func=term3)
+    try:
+        collect(env3)
+    except RuntimeError as exc:
+        assert "one instance per term class" in str(exc), str(exc)
+    else:
+        raise AssertionError("two instances of one registered class must be refused")
+
+    # a registered class wired as the CLASS (not an instance) is not "no term"
+    from rl_exp.tasks.teacher_mdp import SpawnWeightSIRTerrainCurriculum
+
+    env4 = _ck_only_env()
+    env4.curriculum_manager = SimpleNamespace(
+        cfg=SimpleNamespace(terrain_levels=SimpleNamespace(func=SpawnWeightSIRTerrainCurriculum))
+    )
+    try:
+        collect(env4)
+    except RuntimeError as exc:
+        assert "not an instance" in str(exc), str(exc)
+    else:
+        raise AssertionError("a class wired instead of an instance must abort")
+
+    # a declared task that wires no term at all still requires continuity
+    plain = _row_pair(counter=0, cfg_cls=_TaskCfgV14Plain)[0]
+    assert not hasattr(type(plain.cfg), REQUIRES_CURRICULUM_STATE)
+
+
+def test_v1_payload_migrates_with_its_missing_evidence() -> None:
+    torch.manual_seed(23)
+    env1, term1 = _pair(_terrain())
+    env1, term1 = _drive(env1, term1)
+    v2 = collect(env1, it=7)
+    slot = v2["terms"][JOINT_SIR_TERM]
+    v1 = {
+        "version": 1,
+        "written_at_iter": 4,
+        "task": "_TaskCfgV12",
+        "num_envs": NUM_ENVS,
+        "common_step_counter": v2["clock"]["common_step_counter"],
+        "static": {k: v for k, v in slot["static"].items() if k != "terrain_config_sha256"},
+        "runtime": slot["runtime"],
+    }
+    env2, term2 = _pair(_terrain())
+    reports: list[str] = []
+    out = apply_state(env2, v1, report=reports.append)
+    assert out["source_version"] == 1 and out["payload_version"] == 2
+    assert out["evidence"] == "partial"  # readable, deliberately not declared complete
+    assert out["missing_evidence"] == ["clock.ck", "terms.joint_sir.static.terrain_config_sha256"]
+    assert out["c_k"] == {"restored": True, "schedule": "unverified"}
+    assert env2.common_step_counter == v2["clock"]["common_step_counter"]
+    # the live parameters are NOT written into the migrated payload: no manufactured evidence
+    assert any("missing evidence: clock.ck" in r for r in reports)
+    assert any("v1 payload" in r for r in reports)
+
+
+def test_drop_alias_and_conflict() -> None:
+    torch.manual_seed(24)
+    env1, term1 = _pair(_terrain())
+    env1, term1 = _drive(env1, term1)
+    state = collect(env1)
+    env2, term2 = _pair(_terrain())
+    with tempfile.TemporaryDirectory() as tmp:
+        path = _write_ckpt(pathlib.Path(tmp) / "model_9.pt", state=state, it=9)
+        try:
+            apply_resume_state(env2, path, drop_curriculum_state=True, weights_only=False)
+        except ValueError as exc:
+            assert "conflicts" in str(exc), str(exc)
+        else:
+            raise AssertionError("contradicting the deprecated alias must be an error")
+        assert env2.common_step_counter == 0
+        reports: list[str] = []
+        out = apply_resume_state(env2, path, weights_only=True, report=reports.append)
+        assert out["status"] == "dropped" and out["evidence"] == "none"
+        assert any("DEPRECATED" in r for r in reports)
+        assert env2.common_step_counter == 0  # explicit drop = cold curriculum
+
+
+def test_declaration_is_class_level_and_off_in_play() -> None:
+    assert getattr(LizardRoughTeacherEnvCfg_V5, REQUIRES_CURRICULUM_STATE) is True
+    assert getattr(LizardRoughTeacherEnvCfg_V14, REQUIRES_CURRICULUM_STATE) is True  # inherited
+    assert getattr(LizardRoughTeacherEnvCfg_V13_PLAY, REQUIRES_CURRICULUM_STATE) is False
+    assert not hasattr(LizardRoughTeacherEnvCfg_V4, REQUIRES_CURRICULUM_STATE)  # v4 has no SIR term
+    cfg = LizardRoughTeacherEnvCfg_V5()
+    assert REQUIRES_CURRICULUM_STATE not in cfg.to_dict()  # a statement about the recipe, not data
+
+
+def test_non_zero_rank_neither_restores_nor_saves() -> None:
+    state, env1, term1 = _row_payload()
+    env2, term2 = _row_pair(counter=0)
+    os.environ["RANK"] = "1"
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = _write_ckpt(pathlib.Path(tmp) / "model_9.pt", state=state, it=9)
+            reports: list[str] = []
+            out = apply_resume_state(env2, path, report=reports.append)
+            assert out["status"] == "rank_skipped" and out["rank"] == 1
+            assert env2.common_step_counter == 0
+            assert any("multi-GPU resume is not covered" in r for r in reports)
+
+            class _Runner:
+                gpu_global_rank = 1
+                is_distributed = True
+
+                def save(self, path, infos=None, *args, **kwargs):
+                    return None
+
+            assert hook_runner_save(_Runner(), env1, report=reports.append) is False
+            assert any("saves no curriculum state" in r for r in reports)
+    finally:
+        del os.environ["RANK"]
+
+
+def test_fork_patch_call_site_contract() -> None:
+    """S07's call-site half: the archived patches must carry the declaration gate.
+
+    train.py itself needs a running Isaac Sim app, so the constraint is pinned on the
+    archive instead: the ImportError branch reads the declaration off ``type(env_cfg)``
+    (available without importing rl_exp) and only tolerates a missing module when the
+    caller asked for a drop.
+    """
+    patch = (_REPO / "rl_exp" / "fork_patches" / "train_curriculum_resume.patch").read_text(encoding="utf-8")
+    assert "drop_curriculum_state" in patch and "--weights_only" in patch
+    assert 'getattr(type(env_cfg), "__requires_curriculum_state__", False)' in patch
+    assert "except ImportError as exc:" in patch
+    assert "raise RuntimeError(" in patch
+    assert "if not hook_runner_save(runner, env):" in patch
+    assert "drop_curriculum_state=drop_curriculum_state" in patch
+
+
+def test_b_layer_update_equivalence() -> None:
+    """1.4a B layer: same statistics + a reset RNG => the same real curriculum update."""
+    for label, episodes, successes in (("sufficient traffic", 3.0, 1.0), ("below n_traj_min", 0.5, 0.2)):
+        state, env1, term1 = _row_payload()
+        env2, term2 = _row_pair(counter=0)
+        apply_state(env2, state, report=lambda *_: None)
+        for term in (term1, term2):
+            for t in range(term._num_types):
+                term._weights[t] = torch.full((term._num_rows,), 1.0 / term._num_rows)
+                term._episodes[t] = torch.full((term._num_rows,), episodes)
+                term._successes[t] = torch.full((term._num_rows,), successes)
+                term._history[t] = torch.arange(term._num_rows, dtype=torch.long)
+        torch.manual_seed(7)
+        term1._resample()
+        torch.manual_seed(7)
+        term2._resample()
+        for key in ("particles", "weights", "episodes", "successes", "history"):
+            assert _tensor_eq(getattr(term1, "_" + key), getattr(term2, "_" + key)), f"{label}: {key}"
+        assert term1._next_eval_step == term2._next_eval_step, label
+
+    # the same for the joint SIR, driven by the real Eq. 2/3 statistics
+    torch.manual_seed(25)
+    env3, term3 = _pair(_terrain())
+    env3, term3 = _drive(env3, term3)
+    state = collect(env3)
+    env4, term4 = _pair(_terrain())
+    apply_state(env4, state, report=lambda *_: None)
+    torch.manual_seed(8)
+    term3._resample_all()
+    torch.manual_seed(8)
+    term4._resample_all()
+    for key in ("particles", "weights", "episodes", "in_band", "tr_sum", "history"):
+        assert _tensor_eq(getattr(term3, "_" + key), getattr(term4, "_" + key)), key
+    assert term3._next_eval_step == term4._next_eval_step
 
 
 def _main() -> None:
