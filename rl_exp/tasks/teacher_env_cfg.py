@@ -1644,40 +1644,53 @@ class LizardRoughTeacherEnvCfg_V13_PLAY(LizardRoughTeacherEnvCfg_V13):
 
 @configclass
 class LizardRoughTeacherEnvCfg_V14(LizardRoughTeacherEnvCfg_V13):
-    """v14 recipe: per-axis pitch/roll fall gate (single-variable addition).
+    """v14 recipe: roll-over fall gate + head-load penalty (v14.3).
 
     v10 deleted the v3 tilt termination because it killed legitimate pitch
     (instantaneous total tilt > 53 deg: 0.60 of episodes in v8.1, 0.76 in v6,
-    success_rate pinned at 0.019 -- see versions/lizard/v10/NOTES.md). v14 adds
-    a gate that stops only the two poses worth cutting: the front plant
-    (NOSE-DOWN past ``pitch_down_limit_deg`` **and** head contact past
-    ``head_contact_n`` -- a nose-down attitude alone never fires) and rolled
-    onto a side (``|roll|`` past ``roll_limit_deg``, read off the gravity
-    direction), each sustained for ``dwell_s``.
-    Nose-up pitch (vaulting, stair climbing) never fires, and a plain
-    belly-down or back-down fall (pitch and roll near 0) stays in the rollout
-    data -- the v10 get-up gradient story survives. Everything else is
+    success_rate pinned at 0.019 -- see versions/lizard/v10/NOTES.md). v14 stops
+    exactly one pose: rolled onto a side (``|roll|`` past ``roll_limit_deg``,
+    read off the gravity direction with the pitch attenuation divided out),
+    sustained for ``dwell_s``. Nose-up pitch (vaulting, stair climbing) never
+    fires, and a plain belly-down or back-down fall (roll near 0) stays in the
+    rollout data -- the v10 get-up gradient story survives.
+
+    v14.3 (user decision 2026-09-15): the front-plant termination is gone. Head
+    load-bearing is penalized per step instead (:func:`teacher_mdp.head_load_penalty`
+    -- vertical contact force through the neck chain, proportional, no threshold,
+    no attitude gate), so a head-planted pose costs reward but keeps its rollout
+    data, and the "sustained nose-down attitude on a slope" false-positive
+    surface disappears along with the termination. Everything else is
     byte-identical to v13.
 
-    Pre-registered tripwire (v14 yaml + NOTES): Episode_Termination/
-    head_plant_roll must stay low (the v3 gate ate 0.60-0.76 of episodes); if
-    it climbs there while low-speed success_rate stalls, the limits are too
-    tight and the rollback line is v13.
+    Pre-registered tripwire (v14 yaml + NOTES): Episode_Termination/roll_over
+    must stay low (the v3 gate ate 0.60-0.76 of episodes); if it climbs there
+    while low-speed success_rate stalls, the limit is too tight and the rollback
+    line is v13.
     """
 
     params_version = "v14"
 
     def __post_init__(self):
         super().__post_init__()
-        gate = _load_params(self.params_version)["v14"]["fall_gate"]
-        self.terminations.head_plant_roll = DoneTerm(
-            func=teacher_mdp.HeadPlantRollTerm,
+        v14 = _load_params(self.params_version)["v14"]
+        roll_over = v14["roll_over"]
+        self.terminations.roll_over = DoneTerm(
+            func=teacher_mdp.RollOverTerm,
             params={
-                "pitch_down_limit_deg": gate["pitch_down_limit_deg"],
-                "head_contact_n": gate["head_contact_n"],
-                "head_body_names": tuple(gate["head_body_names"]),
-                "roll_limit_deg": gate["roll_limit_deg"],
-                "dwell_s": gate["dwell_s"],
+                "roll_limit_deg": roll_over["roll_limit_deg"],
+                "dwell_s": roll_over["dwell_s"],
+            },
+        )
+        head_load = v14["head_load"]
+        self.rewards.head_load_penalty = RewTerm(
+            func=teacher_mdp.head_load_penalty,
+            weight=head_load["weight"],
+            params={
+                "sensor_cfg": SceneEntityCfg(
+                    "contact_forces", body_names=tuple(head_load["head_body_names"])
+                ),
+                "force_scale": head_load["force_scale"],
             },
         )
 

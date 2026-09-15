@@ -72,9 +72,11 @@ ALLOWLIST: set[str] = {
     # kernel swaps out the EP linear kernel on the teacher line only
     "self.rewards.track_lin_vel_xy_lin = None",  # v13: EP kernel removed (single-variable swap)
     "self.rewards.track_lin_vel_xy_miki = RewTerm(",  # v13: exp(-||v_cmd - v_yaw||^2/sigma_sq)
-    # v14 recipe (versions/lizard/v14/NOTES.md): front-plant / roll-over fall
-    # gate on the teacher line only (family baseline never had a tilt term)
-    "self.terminations.head_plant_roll = DoneTerm(",  # v14: nose-down + head contact / |roll| + dwell
+    # v14 recipe (versions/lizard/v14/NOTES.md): roll-over gate + head-load
+    # penalty on the teacher line only (family baseline never had a tilt term;
+    # v14.3 replaced the front-plant termination with a reward penalty)
+    "self.terminations.roll_over = DoneTerm(",  # v14.3: pitch-invariant |sin(roll)| + dwell
+    "self.rewards.head_load_penalty = RewTerm(",  # v14.3: head weight-bearing, penalized per step
     # v12 recipe (versions/lizard/v12/PLAN.md): Miki S8 reset/observation
     # robustness package, teacher line only. The three reset_joints_* terms
     # are wired via a setattr loop (V3 convention), so only these lines
