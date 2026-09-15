@@ -9,8 +9,8 @@
 
 ## 当前状态
 
-- 协议版本：**locomotion_eval_v1**（`protocols/locomotion_eval_v1.yaml` 冻结；`results/` 按协议目录组织）
-- 代码基线：v1.5.2（v1.4 报告 + 训练侧 iteration↔墙上时间曲线 + v1.5 协议 v2 迁移规则；可视化产物**不入库**，PNG 默认 200 DPI；版本记录 `tb_scalars.csv` 为 `--max_points 150` 抽样，全量本机留档）
+- 协议版本：**locomotion_eval_v2 当前**（`protocols/locomotion_eval_v2.yaml`）；`locomotion_eval_v1` 冻结封存，老结果留 `results/locomotion_eval_v1/` 原地（v1/v2 不得混表）
+- 代码基线：v1.6（协议 v2 落地：采样帧 → post-physics/pre-reset + 终止帧捕获 + 回归闸 `test_eval_frame_v2.py`；此前 v1.5.2 抽样入库 / v1.5 协议 v2 迁移规则 / v1.4 报告；可视化产物**不入库**）
 - 部署形态：仓根独立目录，全部自定位。机器本地事实（IsaacLab 树 + venv 解释器）登记在仓根 `paths.yaml`（模板 `paths.example.yaml`），唯一读者 `host_paths.py`；`E:\IsaacLab\ablation_harness` junction 已废，原机可 `rmdir` 摘链接
 
 ## 版本历史
@@ -29,7 +29,7 @@
 
 | # | 事项 | 优先级 |
 |---|---|---|
-| 1 | 暂无。原 #1（`eval.py`/`run_ablation.py`/`_log_dir_for_tag` 的 junction hack 参数化 → 评测台完全脱离 IsaacLab 树）已由 v1.5.1 落地：机器本地路径改由仓根 `paths.yaml` 登记、`host_paths.py` 单点读取 | — |
+| 1 | **v2 运行时验收尚未跑**：① v14 零动作冒烟（核对 `terminal frames captured=` == 早收局 env 数，= 0 即 hook 失效）；② 同一 ckpt v1/v2 对照（预期 fall_rate(v2) ≥ fall_rate(v1)，其余指标在 ±0.02 内）；③ 基线（v13/v10 的 ckpt）在 v2 下重跑，v2 行才有对账对象。原 #1（路径参数化）已由 v1.5.1 落地 | 高 |
 
 ## 升级触发（防"永远不升"）
 
@@ -59,3 +59,4 @@ harness 代码高频变更 / 多机器人共用 / 评测协议 v2 出现时 → 
 | 2026-09-03 | v1.5 | 预立协议 v2 迁移规则：老跑分不迁移、跨协议禁止直接对比、新协议新起 campaign 目录 | 用户拍板：2026-09-03（规范整改临时 plan #8） |
 | 2026-09-07 | v1.5.1 | **主机路径参数化（挂账 #1 收账）**：新增仓根 `paths.yaml`（模板 `paths.example.yaml`，机器本地不入库）+ `host_paths.py`（纯 stdlib、不 import `rl_exp`、**无 PATH 兜底**，宁缺不猜）。六处改问同一解析器：`eval.py` IsaacLab 根、`run_ablation.py` 的 `_ISAAC_ROOT`（连带 `_log_dir_for_tag` 的 `logs/rsl_rl` glob 与 train/eval 的 cwd；找不到直接 SystemExit，`--summarize`/`--by-terrain` 不依赖故仍可裸跑）、`--python` 缺省、`run_offline_checks.bat` 引导、`hooks\pre-commit` 的 `PY`、`framework_pin_check.detect_root`。**provenance 同批修**：lizard 根改问 `git rev-parse --show-toplevel`，IsaacLab 根改问登记路径——旧代码把"调用路径的爹"当配置，junction 布局一死就把自己仓的 rev 记成 IsaacLab 的（表现为 `git_rev_lizard=unknown` + `git_rev_isaaclab` 串位），v5 campaign 各行已按新逻辑重跑纠正 | 用户："不同环境会找不到，要注册 isaac lab 与 env 的位置"；v5 评测实测踩到 rev 串位与 `_ISAAC_ROOT` 落错树 |
 | 2026-09-11 | v1.5.2 | 入库 CSV 瘦身：`dump_tb.py` 加 `--max_points`（按 tag 自适应抽样、保首尾——首尾必须留，`plot_tb` 标的就是末值；同长 tag 抽样后仍同长，否则墙上时间图静默消失）与 `--csv_in`（重抽样不需 tensorboard、不需 tfevents）；已训三版 `tb_scalars.csv` 20-22 MB → 210-227 KB，全量转 `tb_scalars.full.csv` 留机器本地（`.gitignore`），入库记录由全量抽样得到、可复现；`test_dump_tb_sampling.py` 入离线闸门 | 用户质疑"代码可生成的东西不该入库"——记录链的源头（tfevents）在 IsaacLab 树、机器本地且会被清理，故记录必须入库，缩的是存什么 |
+| 2026-09-15 | v1.6 | **协议 v2 落地（采样帧）**：`protocols/locomotion_eval_v2.yaml`（时间线/阈值/suite/DR 全抄 v1，唯一变更 = 帧定义）。`eval.py` 采样点从 `step()` 之前（obs 帧）移到之后（reward 帧），并 hook `mbenv._reset_idx` 在 auto-reset 覆盖数据前抓下**终止帧**——`step()` 内 `scene.update()` 与 `_reset_idx()` 之间是唯一可读窗口，IsaacLab 无公开回调（`record_pre_reset` 是 HDF5 形状），hook 失效由每次运行的 `terminal frames captured=N` 暴露。副产物：`end_pos` 改用终止帧（H1 的 pre-step 近似作废）。回归闸 `rl_exp/tools/verify/test_eval_frame_v2.py`（v1 截断读作 no-fall / v2 满窗读作 fall）入离线套件第 [20] 步。**已知代价**：帧右移一个 `step_dt`（20 ms），全指标有微小漂移 ⇒ 与 v1 行不可比 | 代码审查 #3：v1 丢掉终止帧，门闸 dwell 恰好满 25 帧收局的 episode 只能看到 24 帧 → fall 漏记 |

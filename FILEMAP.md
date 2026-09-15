@@ -65,7 +65,7 @@
 | `lizard\v11\` | **实施完成待开训**（开训门 = v10 判决）：联合粒子地形课程——`param_grid_terrain.py` 参数组合网格 + `JointSIRTerrainCurriculum`（Lee 2020 逐步 Tr，挂账 #15 候选 a）+ `ParticleVelocityCommand` 桶命令 + PLAY 变体 + `test_joint_sir.py`；v11.1 审查四修（stairs 顶档 0.45 / SIR 结算式清零 / joint_sir 常量化 / PLAN 勘误）见 `v11\PLAN.md` 修订记录 |
 | `lizard\v12\` | **提案**（2026-09-10 代码实施同日，未冻结）：Miki S8 鲁棒性包——关节 offset 复位随机 + 基座范围 yaml 化 + 摩擦偶发调低 + teacher 侧高度环噪声（`test_v12_noise.py`）+ r_slip 回 −0.003；方案见 `v12\PLAN.md` |
 | `lizard\v13\` | **实施完成待训**（2026-09-14，单变量，base = v10）：换回 Miki 对称跟踪核 `track_lin_vel_xy_miki` = `exp(−‖v_cmd−v_yaw‖²/0.25)`（全 2D 误差，闭超速/横向/停车三账本盲区；weight 保 1.5）；静态闸 `check_reward_v13.py`；**v13.1 验收三修**（abs 双向 + 逐时刻 MAE、固定场景对比弃 `terrain_levels`、`feet_slide` 降观察项）；风险预注册（v3/v4 趴窝病历）见 `v13\NOTES.md` |
-| `lizard\v14\` | **实施完成待训**（2026-09-14，单变量，base = v13）：加回摔倒闸——`teacher_mdp.head_plant_or_roll_trigger`（前栽 = `pg_b.x > sin(45°)` **∧** 头链接触力 >10 N；侧翻 = `\|pg_b.y\| > sin(70°)`，重力方向）+ `HeadPlantRollTerm`（per-env dwell 0.5 s + reset 钩子），yaml `v14.fall_gate`（45°/10 N/`[".*neck.*"]`/70°/0.5 s）；相对 v3 旧闸三点去风险 = 分轴 + 前栽合取（鼻朝上/单纯前倾不收局）+ dwell；仰翻/趴地不掐（保 v10 起身梯度）；闸 `check_terminations_v14.py`；假阳闸预注册见 `v14\NOTES.md` |
+| `lizard\v14\` | **实施完成待训**（base = v13；2026-09-15 判据改形 v14.3）：终止项只剩**侧翻**——`teacher_mdp.roll_over_trigger`（`\|sin(roll)\| > sin(70°)` 的 pitch 无关形：`\|pg_b.y\| > sin(lim)·hypot(pg_b.y, pg_b.z)`）+ `RollOverTerm`（per-env dwell 0.5 s + reset 钩子），yaml `v14.roll_over`；**头承重 = 惩罚** `head_load_penalty`（头链 contact_forces 竖向力 relu 求和 / 706 N，权重 -1.0，无阈值/无姿态门控/无足部卸载条件），yaml `v14.head_load`。前栽不再收局（留在 rollout 保 v10 起身梯度 + 消掉坡上前倾假阳面）、仰翻/趴地不掐；闸 `check_terminations_v14.py`（侧翻判据 + 惩罚算术 + 接线 + v13 冻结），预注册闸见 `v14\NOTES.md`；评测用 Locomotion-Eval-v2 |
 | `lizard\parkour\` | **支线 route 层**（2026-09-04，分支 `paper/parkour-in-the-wild`，训练未启动）：Parkour in the Wild（跑/爬/跳多专家蒸馏+RL 微调）。`PLAN.md` = 路线层（组件映射/偏差声明/决策记录）；`parkour_params.yaml` = 支线开发态参数 |
 | `lizard\parkour\v1\` | 支线版本包：`v1\PLAN.md` = 版本方案 SSOT（位置任务/probe gate/专家表/蒸馏微调方案），`v1\NOTES.md` = 结果回填，`v1\base.json` = 支线血统根（null），`v1\parkour_params.yaml` = 冻结副本（未冻结，训练启动时定稿），`v1\asset_lock.json` = 资产锁 |
 | `vN\PLAN.md` | 版本级计划存档（目的/假设/决策点/验收线/结论一句话；v3 原生，v0–v2 为 2026-09-01 追溯补录；结果回填仍走 NOTES） |
@@ -151,7 +151,7 @@
 | `fork_patches\config_lizard___init__.py` | fork shim 现成副本（装到 IsaacLab 树注册任务用） |
 | `__init__.py` | 包声明（`import rl_exp` 入口，经 venv .pth 可达） |
 
-## ablation_harness\ —— 评测系统（Locomotion-Eval-v1）
+## ablation_harness\ —— 评测系统（Locomotion-Eval-v2 当前；v1 封存）
 
 | 文件 | 作用 |
 |---|---|
@@ -164,9 +164,10 @@
 | `components\command_player.py` | 命令时间线播放器（协议 yaml 是唯一真源） |
 | `components\dr_controller.py` | nominal/robust 模式的 DR 开关变换 |
 | `components\recovery.py` | recovery push：冲击注入 + 恢复计时（只统计冲击时仍在第一局的 env） |
-| `protocols\locomotion_eval_v1.yaml` | **评测协议契约（冻结）**：6 段命令时间线 / kick 规格 / 阈值。改动 = 新建 v2 |
+| `protocols\locomotion_eval_v1.yaml` | **评测协议契约（冻结封存）**：早于 v2 的采样帧口径（step 前 = obs 帧，终止帧丢失） |
+| `protocols\locomotion_eval_v2.yaml` | **评测协议契约（当前）**：时间线/阈值/suite/DR 同 v1，唯一变更 = 帧定义（step 后 = reward 帧，含 hook 抓到的终止帧）。改动 = 新建 v3；**v1/v2 结果不得混表** |
 | `specs\example_baseline.yaml` | 消融 spec 示例 |
-| `results\locomotion_eval_v1\` | 跑分落盘（记录即数据，随仓提交）。campaign 分组：`--group v1` → `locomotion_eval_v1\v1\<run_id>\` + 组内专属 `summary.csv`（全局指标）+ `terrains.csv`（逐地形长表，`--by-terrain` 生成）；`--summarize [--group v1]` 看单组或汇总 |
+| `results\locomotion_eval_v1\` | v1 跑分落盘（记录即数据，随仓提交；**冻结不迁移**，不与 v2 混表）。campaign 分组：`--group v1` → `locomotion_eval_v1\v1\<run_id>\` + 组内专属 `summary.csv`（全局指标）+ `terrains.csv`（逐地形长表，`--by-terrain` 生成）；`--summarize [--group v1]` 看单组或汇总。v2 结果同构落 `results\locomotion_eval_v2\` |
 
 ## .codemaker\skills\tool\ —— AI 开发技能（方法论）
 
