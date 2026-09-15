@@ -1,8 +1,8 @@
 {
  "cfg_snapshot_format": 1,
  "note": "recipe golden for every registered rl_exp task; regenerate only on an intended change",
- "locked_at_rev": "c14cdc66eeaf",
- "locked_dirty": true,
+ "locked_at_rev": "7999f1f0f983",
+ "locked_dirty": false,
  "locked_isaaclab_rev": "28a37cecdd43",
  "locked_python": "3.12.13",
  "entries": {
