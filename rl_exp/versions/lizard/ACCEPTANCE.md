@@ -54,6 +54,30 @@
 | 影响 | 格式 1 记录的配方项一律降级为**未知**（不可比），不得据旧摘要判失败或通过；格式 2 之后的 run（R1′）配方项判通过 |
 
 
+### golden 基线来源补记（2026-09-15 晚，F2 收口）
+
+**问题**：Step 2 硬 A 要"与整改前 golden 逐字段一致"，而落盘基线的戳是 `created_rev cc1b2e7083ec` + `created_dirty true`
+（格式 2 重基线时树上有未提交改动）。`created_dirty` 本身不证明 golden 错——它说明 `created_rev` 单独**不足以**标识生成 golden 的完整代码状态。
+
+**处置（不是把 `dirty` 改成 `false` 消警）**：
+
+1. 先在带未提交改动的工作树上跑 `check_cfg_lock --update`（**不带** `--reason`）→ 工具自判 **`no content change (provenance or format only)`** 并**拒绝写入**。"内容与干净树再生一致"由此由工具给出，不靠人声明。
+2. 在**确定的干净提交**上重新生成：`git clone E:\Robot E:\rl_golden_clean`（HEAD `cee0adb`，`git status --short` 为空）→ 克隆内跑 `--update --reason "clean-tree baseline: …"`。
+3. 结果：与旧文件相比**只有 4 行元数据**变化（`created_at` / `reason` / `created_rev` → `cee0adb1f51f` / `created_dirty` → `false`）；**34 个任务、1 个组合块、2642 KiB 的配置内容一字未动**（`git diff --stat` = 4 insertions / 4 deletions）。
+4. 等价性双证：第 1 步（工具的逐字段判定）+ 第 3 步（逐行 diff 只剩元数据）。
+
+**旧基线（格式 1）保留方式（明确到可取回）**：
+
+| 项 | 值 |
+|---|---|
+| commit | `7525268`（"records: stamp the golden baseline from a clean tree"） |
+| 路径 | `rl_exp/versions/lizard/cfg_lock.json` |
+| 文件摘要 | sha256 `176513b73a9e19f708bd449b48fd1db9b773817cacf2464dadfabc9d763cab40`，2,634,664 B |
+| 取回 | `git show 7525268:rl_exp/versions/lizard/cfg_lock.json > <out>` 或 `git checkout 7525268 -- rl_exp/versions/lizard/cfg_lock.json` |
+| 1→2 变化 | `ClassVar` 成员离开快照：34 个任务各 12 条路径（6 个 PLAY 各另 1 条 `REQUIRES_CURRICULUM_STATE`）；**无任何配置值改变**；lock 2674 → 2642 KiB |
+
+**边界**：格式 1 的条目**只在 git 历史**里（同一组合块被就地重写，文件内不并存两份）——`ARCH_PLAN` 1.1c 的"旧 block 保留"按字面只适用于**框架组合变化**；格式变更路径以 git 历史为保留手段。格式 1 时期的配方项仍一律**未知**（不可比），不据旧摘要判失败或通过。
+
 ### 本批未覆盖（不得据本批宣称通过）
 
 - **1.5 隔离重建**：无重建记录，`已验证重建` 恒为**未知**（非必需项，不影响其它结论）。

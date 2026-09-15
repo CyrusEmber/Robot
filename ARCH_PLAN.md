@@ -108,7 +108,7 @@
 
 **1.1c lock 格式 v2（2026-09-15，按用户拍板的三条硬要求改）**
 
-- **增长只由框架组合驱动，不由 run 驱动**：lock 结构为 `baselines[组合] → entries[任务 id]`，组合键 = `isaaclab=<rev>|rsl_rl=<editable rev 或 distribution 版本>|python=<ver>`（据 `runrecord/provenance.py`，与运行记录同一套 provenance 规则）。entries 只认注册任务 id，**跑 200 次训练也不增一行**；只在框架组合变化时新增**独立 block**，旧 block 保留（老组合必须仍可查）。另有结构校验：entry 若夹带 `run_id` 之类 per-run 字段即报失败。
+- **增长只由框架组合驱动，不由 run 驱动**：lock 结构为 `baselines[组合] → entries[任务 id]`，组合键 = `isaaclab=<rev>|rsl_rl=<editable rev 或 distribution 版本>|python=<ver>`（据 `runrecord/provenance.py`，与运行记录同一套 provenance 规则）。entries 只认注册任务 id，**跑 200 次训练也不增一行**；只在框架组合变化时新增**独立 block**，旧 block 保留（老组合必须仍可查）——**格式变更属另一条路径**：同一组合块被就地重写，旧内容以 **git 历史**为保留手段（格式 1 旧基线的 commit / 路径 / 摘要 / 取回方法见 `versions/lizard/ACCEPTANCE.md` §1.2b「golden 基线来源补记」）。另有结构校验：entry 若夹带 `run_id` 之类 per-run 字段即报失败。
 - **文本按 Git 差异设计**：JSON `indent=1` 一 key 一行、键序 = 语义序（来自配方而非排序）、浮点 `repr` ⇒ **改一个叶子只动一行**，没改就一行不动；并有"重复落盘字节一致"断言。
 - **禁止自动覆盖消警**：`--update` **必须带 `--reason`**，先打印**逐字段差异**（不是只说"摘要变了"），无 reason 直接拒绝且**不写文件**；框架组合变了但没有对应 baseline ⇒ 报失败并给出"另建基线"的指令，绝不就地重写。
 - 迁移实测：v1 → v2 内容中性（34 个任务快照与摘要一字未变），故拒绝与接受两条路径都出过证据。

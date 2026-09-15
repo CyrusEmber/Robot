@@ -3,10 +3,10 @@
  "note": "recipe golden, keyed by framework combination: entry keys are '<combination>|<task id>' and a training run never adds one",
  "baselines": {
   "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13": {
-   "created_at": "2026-09-15T15:56:35+08:00",
-   "reason": "snapshot format 2: ClassVar members are declarations about a recipe, not recipe data (IsaacLab _usd_* USD API hints, our REQUIRES_CURRICULUM_STATE), so they leave the golden; every config value is unchanged",
-   "created_rev": "cc1b2e7083ec",
-   "created_dirty": true,
+   "created_at": "2026-09-15T20:15:48+08:00",
+   "reason": "clean-tree baseline: regenerated in a pristine clone of the target commit; content unchanged, the stamp moves off a dirty working tree",
+   "created_rev": "cee0adb1f51f",
+   "created_dirty": false,
    "combination": {
     "isaaclab_rev": "28a37cecdd43",
     "rsl_rl": "source:28a37cecdd43",
