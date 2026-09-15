@@ -117,6 +117,65 @@ def _checkpoint_exists(data: dict, _arm_dir: pathlib.Path) -> bool | None:
     return path.exists()
 
 
+def is_termless(data: dict) -> bool:
+    """c_k-only line: no registered curriculum term, so the counter IS the state.
+
+    There is no schedule to be due, no per-update sample (P3) and no update event to count;
+    the clock checks (plus c_k, a pure function of the counter) carry that line instead.
+    """
+    if "terms" in data:  # the observer reports the registry: a definitive signal
+        return not data["terms"]
+    for key in ("p1", "p2"):
+        terms = ((data.get(key) or {}).get("collect") or {}).get("terms")
+        if terms is not None:
+            return not terms
+    return False
+
+
+def check_c_k_continuity(report: Report, arm: str, data: dict, cold: bool, source: dict | None) -> None:
+    """c_k must continue across the restore -- never re-heat to c0.
+
+    c_k = c0 ** (decay ** k) is a pure function of the counter and RISES toward 1 with k
+    (c0=0.2, decay=0.98). The checks: the live c_k matches the payload's own schedule
+    parameters recomputed through an independent float64 path (|err| <= 1e-12); a resume's c_k
+    at entry equals the source run's c_k at exit (continuity, i.e. no re-heat); and c_k never
+    jumps back toward c0 during the run.
+    """
+    import math
+
+    params = (((data.get("p1") or {}).get("collect") or {}).get("clock") or {}).get("ck", {}).get("static")
+    if not params:
+        report.check(arm, "c_k schedule parameters known (from the restored payload)", None,
+                     "the restored payload carried no c_k fingerprint")
+        return
+    enter, exit_ = data.get("learn_enter") or {}, data.get("learn_exit") or {}
+    steps = int(params["steps_per_iteration"])
+
+    def reference(counter: int) -> float:
+        return math.exp(math.log(params["c0"]) * params["decay"] ** (counter // steps))
+
+    for label, sample in (("enter", enter), ("exit", exit_)):
+        counter, live = sample.get("counter"), sample.get("c_k")
+        if counter is None or live is None:
+            report.check(arm, f"c_k/{label} sampled", None, f"counter={counter} c_k={live}")
+            continue
+        report.check(arm, f"c_k/{label} matches the payload's schedule (|err| <= 1e-12)",
+                     abs(live - reference(counter)) <= 1e-12,
+                     f"counter={counter} live={live} reference={reference(counter):.12f}")
+    if enter.get("c_k") is not None and exit_.get("c_k") is not None:
+        report.check(arm, "c_k never re-heats inside the run (it only rises toward 1)",
+                     exit_["c_k"] >= enter["c_k"], f"{enter['c_k']} -> {exit_['c_k']}")
+    if cold:
+        report.check(arm, "drop arm re-heats to c0 and starts from a cold clock",
+                     enter.get("c_k") == params["c0"] and enter.get("counter") == 0,
+                     f"c_k={enter.get('c_k')} c0={params['c0']} counter={enter.get('counter')}")
+    elif source is not None:
+        source_c_k = (source.get("learn_exit") or {}).get("c_k")
+        report.check(arm, "resume entry c_k == the source run's exit c_k (continuity, no re-heat)",
+                     source_c_k is not None and enter.get("c_k") == source_c_k,
+                     f"enter={enter.get('c_k')} source_exit={source_c_k}")
+
+
 def check_source(report: Report, arm: str, data: dict, arm_dir: pathlib.Path, task: str) -> None:
     """The source fixture: long enough to produce real updates, and a usable checkpoint."""
     enter, exit_ = data.get("learn_enter"), data.get("learn_exit")
@@ -140,8 +199,8 @@ def check_source(report: Report, arm: str, data: dict, arm_dir: pathlib.Path, ta
     report.check(arm, "losses finite", all(all(v == v and abs(v) != float("inf") for v in loss.values())
                                           for loss in losses), f"n_losses={len(losses)}")
     events = data.get("curriculum_updates") or []
-    if task == "v3":  # c_k-only: no registered term, the counter IS the state
-        report.check(arm, "c_k-only line wires no SIR term (nothing to update)", not events, f"events={len(events)}")
+    if is_termless(data):  # c_k-only: no registered term, nothing to update
+        report.check(arm, "c_k-only line wires no SIR term (the clock is the state)", not events, f"events={len(events)}")
     else:
         report.check(arm, "at least 2 real curriculum updates", len(events) >= 2, f"events={len(events)}")
         legal = all(e["legal"]["ok"] for e in events)
@@ -236,7 +295,7 @@ def compare_first_reset_fields(report: Report, arm: str, p1: dict, p2: dict, exp
 
 
 def check_t_arm(report: Report, arm: str, data: dict, expect_arm: str, source_counter: int | None,
-                iterations: int) -> None:
+                iterations: int, source: dict | None = None) -> None:
     """The main evidence: a full continuous run after the restore."""
     enter, exit_ = data.get("learn_enter"), data.get("learn_exit")
     expected = iterations * STEPS_PER_ITERATION
@@ -275,20 +334,28 @@ def check_t_arm(report: Report, arm: str, data: dict, expect_arm: str, source_co
     report.check(arm, "each optimizer update advances every Adam step by one",
                  len(per_update) <= 1, f"per-update deltas={per_update[:4]}")
     events = data.get("curriculum_updates") or []
-    if expect_arm == "drop":
+    if is_termless(data):
+        report.check(arm, "c_k-only line: no update event exists to count", not events, f"events={len(events)}")
+        check_c_k_continuity(report, arm, data, expect_arm == "drop", source)
+    elif expect_arm == "drop":
         report.check(arm, "the cold curriculum still updates on schedule", len(events) >= 2, f"events={len(events)}")
     else:
         report.check(arm, "resumed curriculum updates on schedule (>=2)", len(events) >= 2, f"events={len(events)}")
-    report.check(arm, "every update leaves a legal state", all(e["legal"]["ok"] for e in events),
-                 f"problems={[e['legal']['problems'] for e in events if not e['legal']['ok']]}")
-    block = DEFAULT_BLOCK_ITERATIONS * STEPS_PER_ITERATION
-    report.check(arm, "updates land at or after their block edge and re-arm by one block",
-                 all(e["clock"] >= e["next_eval_before"] and e["next_eval_after"] == e["next_eval_before"] + block
-                     for e in events), f"{[(e['clock'], e['next_eval_before'], e['next_eval_after']) for e in events]}")
+    if not is_termless(data):
+        report.check(arm, "every update leaves a legal state", all(e["legal"]["ok"] for e in events),
+                     f"problems={[e['legal']['problems'] for e in events if not e['legal']['ok']]}")
+        block = DEFAULT_BLOCK_ITERATIONS * STEPS_PER_ITERATION
+        report.check(arm, "updates land at or after their block edge and re-arm by one block",
+                     all(e["clock"] >= e["next_eval_before"] and e["next_eval_after"] == e["next_eval_before"] + block
+                         for e in events),
+                     f"{[(e['clock'], e['next_eval_before'], e['next_eval_after']) for e in events]}")
     load = data.get("load") or {}
     report.check(arm, "the runner loaded the requested checkpoint", load.get("checkpoint_iter") is not None,
                  f"checkpoint_iter={load.get('checkpoint_iter')} current={load.get('current_learning_iteration')}")
-    report.check(arm, "P0/P1/P2/P3 sampled", all(data.get(k) for k in ("p0", "p1", "p2", "p3")))
+    sampled = [k for k in ("p0", "p1", "p2") if data.get(k)] + (["p3"] if data.get("p3") else [])
+    report.check(arm, "P0/P1/P2 sampled" + (" (+P3)" if not is_termless(data) else " (no P3: no term to update)"),
+                 all(data.get(k) for k in ("p0", "p1", "p2")) and (is_termless(data) or bool(data.get("p3"))),
+                 f"sampled={sampled}")
     if expect_arm == "drop":
         report.check(arm, "drop P1 is cold", sample_counter(data.get("p1")) == 0, f"p1={sample_counter(data.get('p1'))}")
     elif source_counter is not None:
@@ -332,7 +399,10 @@ def check_resave(report: Report, arm: str, data: dict, expect_arm: str) -> None:
     for slot in (state.get("terms") or {}).values():
         if "next_eval_step" in (slot.get("runtime") or {}):
             saved_next = int(slot["runtime"]["next_eval_step"])
-    if expect_arm == "drop":
+    if saved_next is None and is_termless(data):
+        report.check(arm, "c_k-only: the resaved clock is the state (no schedule to advance)", None,
+                     f"payload counter={clock}")
+    elif expect_arm == "drop":
         report.check(arm, "drop payload advanced from a cold start", saved_next is not None and saved_next > 240,
                      f"next_eval_step={saved_next}")
     else:
@@ -432,7 +502,8 @@ def main() -> int:
         elif head.startswith("t_"):
             if expect_arm == "resume" and source_counter.get(task) is None:
                 report.check(name, "source counter known", None, "no s_ arm found: arithmetic not adjudicated")
-            check_t_arm(report, name, data, expect_arm, source_counter.get(task), args.iterations)
+            check_t_arm(report, name, data, expect_arm, source_counter.get(task), args.iterations,
+                        arms.get(f"s_{task}"))
             if args.resave:
                 check_resave(report, name, data, expect_arm)
 

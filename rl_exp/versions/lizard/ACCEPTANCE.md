@@ -196,3 +196,80 @@
 - **不可**据本节宣告：接线时序正确（apply 早于 wrapper 首次 reset）——只有 1.4b C 层真跑能证；冷热前 N 步逐位一致（RNG/出生/per-episode 瞬态刻意不存）；多卡续训（不在保证范围）。
 - B 层证明的是"**状态 → 更新映射**一致"，不是"复现"。
 
+---
+
+## 1.4b · 恢复验收 C 层（真跑，2026-09-15）
+
+C 层只认**真实 trainer 进程**里的观察点：另写一套"逐行对齐 train.py"的流程会与 trainer 分叉，只能当辅助。
+做法是把观察器注入真进程，**只包装读取**：
+
+* `rl_exp/tools/verify/cstate_observer.py`（逻辑，入仓）+ 3 行 `sitecustomize.py`（`%TEMP%\obs`，经 `PYTHONPATH` 注入，不入仓）。
+* 包装点：`apply_resume_state`（P0/P1）、`OnPolicyRunner.load`（与 ckpt 逐项比 actor/critic/optimizer）、
+  `OnPolicyRunner.learn`（单次调用跑满，**不循环 `learn(1)`**——rsl_rl 的 `learn` 按 `start_it + n` 计数，且每次收尾会保存并关掉
+  logging writer，反复 `learn(1)` 会反复用同一个 iteration 编号）、`env.step`（逐 step Δcounter）、
+  `alg.update`（optimizer 更新与步数）、两个 SIR 的 `_resample`/`_resample_all`（**真实课程更新事件**）。
+* `rl_exp/tools/verify/check_c_layer.py` 读这些 JSON 判据（`--resave` 另开最终 ckpt 校验）。
+
+### 前提
+
+| 项 | 值 |
+|---|---|
+| 任务 id | `Lizard-Rough-v14`（行 SIR）/ `Lizard-Rough-v12`（joint SIR）/ `Lizard-Rough-v3`（c_k-only，无 term），注册表核验通过 |
+| 代码摘要 | Robot rev `9fc06d6`（含本轮 `_check_eval_clock` 修复 + 新离线用例）+ 工作树未提交 `tools/verify/cstate_observer.py`、`check_c_layer.py`。**时序**：t_v12-resume 首次尝试在修复前（18:16，被闸门拒），其余有效运行在修复后；修复只**放宽**接受范围，不影响既有通过项 |
+| 框架摘要 | IsaacLab 树 rev `28a37cecdd43` + 两个 fork 补丁（`git apply --check --reverse` 幂等）；rsl_rl 装于 venv `site-packages`；Python 3.12.13 |
+| 设备与规模 | 单卡 RTX 3060 Ti 8 GB（开跑前桌面占用 ~1 GB）、64 env、seed 42、`--headless`、`sim.dt=0.005`/`decimation=4`/`episode_length_s=20` ⇒ H = 1000 步 |
+| 运行长度 | **84 it = 2016 步** ≥ `max(2B, 2H)` = `max(480, 2000)` = 2000（每支一次 `learn()`） |
+| 容差 | 张量按内容摘要位级相等；counter 精确整数；c_k 与独立 float64 重算 \|err\| ≤ 1e-12；Adam `step` 每次更新每参数 +1 |
+| 命令形态（cwd `E:\IsaacLab`） | 源：`train.py --task <id> --headless --num_envs 64 --seed 42 --max_iterations 20`；短路径：`--resume --load_run <src> --checkpoint model_39.pt --max_iterations 1`；主证据：同上但 `--max_iterations 84`；drop 臂另加 `--drop_curriculum_state` |
+| 实测速度 | 稳态 v14 ≈ 1.9–2.1 s/it、v12 ≈ 1.85 s/it、v3 ≈ 2.8 s/it（先前用 2-iteration run 估的 5.4 s/it 混入了第一迭代与环境创建，偏高）；单支 84 it ≈ 3–4.5 min |
+| 验证命令 | `python rl_exp\tools\verify\check_c_layer.py --root %TEMP%\c4 --resave --source-checkpoint v14=<ckpt> …` → **`C_LAYER_OK (0 failing)`**（15 臂 × 全判据） |
+| 证据路径 | 每臂 `%TEMP%\c4\<arm>\observe_<pid>.json` + `<arm>.log`；汇总 `%TEMP%\c4\c_layer_report.json`；run 目录见下表 |
+| 负对照 | `%TEMP%\falsify_clock_rule.py`：把时钟规则改回 `next_eval <= counter` ⇒ 新用例失败；还原后通过（**FIRED**） |
+
+### 臂与 run
+
+| 臂 | run 目录（`logs\rsl_rl\<exp>\`，机器本地） | counter | it | 真实课程更新 |
+|---|---|---|---|---|
+| s_v14 | `lizard_rough_teacher_v14\2026-09-15_17-51-57` | 0 → 960 | 39 | 4 次 @247/487/722/960 |
+| s_v12 | `lizard_rough_teacher_v12\2026-09-15_17-55-59` | 0 → 960 | 39 | 3 次 @250/485/734 |
+| s_v3 | `lizard_rough_teacher_v3\2026-09-15_19-21-40` | 0 → 480 | 19 | 无 term（时钟即状态） |
+| p_v14-resume / p_v14-drop | `…_v14\2026-09-15_18-02-30` / `18-04-33` | 960 → 984 / 0 → 24 | 39 | — |
+| p_v12-resume / p_v12-drop | `…_v12\2026-09-15_18-05-28` / `18-06-00` | 960 → 984 / 0 → 24 | 39 | — |
+| p_v3-resume / p_v3-drop | `…_v3\2026-09-15_18-06-00` / `18-06-23` | 480 → 504 / 0 → 24 | 19 | — |
+| t_v14-resume / t_v14-drop | `…_v14\2026-09-15_18-09-30` / `18-12-40` | 960 → 2976 / 0 → 2016 | 122 | 8 / 8 |
+| t_v12-resume / t_v12-drop | `…_v12\2026-09-15_18-21-05` / `19-05-29` | 960 → 2976 / 0 → 2016 | 122 | **9** / 8 |
+| t_v3-resume / t_v3-drop | `…_v3\2026-09-15_19-29-07` / `19-35-43` | 480 → 2496 / 0 → 2016 | 102 | 无 term（c_k 另验） |
+
+### 检查与结果（全部**通过**）
+
+| 编号 | 检查 | 实际结果 |
+|---|---|---|
+| C1 回填与首次 reset | P1 的 counter == 源 counter（960/960/480）；P1→P2 **持久状态**（particles/weights/episodes/successes/history 等）逐位不变、counter 不变；**出生相关**状态（`env_type`/`env_pair`/`desired_vel`）允许按生产规则重采样（两案分开判，不无条件要求位级相等） | **通过**：行 SIR（v14）与 joint SIR（v12）都保持持久集，出生集只查合法；c_k-only 线无 schedule 可到期，另记 |
+| C2 时钟推进 | 逐 `env.step` 前后 `counter_after − counter_before == 1`（**不**按 iteration 增量反推）：源 960/960/480 步、主证据 2016 步/臂，`deltas={'1': n}` 且 `bad=0`；终态算术 resume `2976−960=2016`、`2496−480=2016`，drop `2016−0=2016` | **通过**：三线六臂全对；2016 ≥ 2000 |
+| C3 c_k 连续（不回热） | 真跑取值：v3-resume 入口 c_k `0.341477468432` == 源出口值（**连续、未回热**）、出口 `0.82129495338`；与按载荷参数独立重算的 float64 值 \|err\| ≤ 1e-12；drop 入口 `c0=0.2` 且 counter=0、出口 `0.744611194915`（回热对照） | **通过**（c_k 的实跑证据取自 c_k-only 线；v14/v12 的 c_k 由 §1.4a 的 1e-12 用例 + 载荷指纹覆盖） |
+| C4 课程更新时点 | 记录**实际更新事件**（不凭 counter 猜）：每个事件 `clock ≥ next_eval_before`、`next_eval_after == next_eval_before + 240`、事件后状态合法（权重和/索引/`env_type`/`env_pair`/`desired_vel` 有限）。观察到的时点 247/250 = 块沿 240 之后**第一个带 reset 的 step**（term 由 `_reset_idx` 调用） | **通过**：v14 源 4 次、v12 源 3 次、主证据每臂 ≥2 次（含恢复后立刻补发的挂起块 ⇒ v12-resume 9 次）；`ok` 无 problems |
+| C5 训练正常推进 | 84 次 optimizer 更新/臂、参数每次均变化、Adam `step` 每参数每次 +1（每次更新总量 +902）、全部 loss 有限；最终 ckpt 可加载且 `iter` == 最后完成迭代、载荷 counter == 观测终值、调度前进（`--resave`） | **通过**：六臂一致；`param_moved` 84/84 |
+| C6 冷启动负对照 | 同 checkpoint、同 84 it、同 64 env/seed；drop 臂 P1 counter=0 且无 SIR 状态、入口 c_k=c0、终态 2016；同任务 resume 臂 2976/2496 | **通过**（两臂都推进，差异只在课程状态） |
+| C7 S08 遗留：drop 后是否仍加载 model/optimizer | `runner.load()` 之后、首次 `update()` 之前与**同一 ckpt** 逐项比：actor 33/33、critic 32/32 键逐位相等；optimizer `param_groups` 相等 + `state` 41/41 张量相等（含 `step`/`exp_avg`/`exp_avg_sq`）；resume 与 drop **两臂都与该 ckpt 一致** | **通过**：不用"reward 相近"推断（该推断不成立），改为直接状态比较 |
+
+### 本批修正：`_check_eval_clock` 曾把合法 ckpt 判为不可恢复
+
+真跑抓到（A/B 层看不见）：
+
+```
+ValueError: curriculum state in the checkpoint does not fit this task: runtime.next_eval_step[joint_sir]
+960 is not the first block edge above 960  [checkpoint …v12\2026-09-15_17-55-59\model_39.pt]
+```
+
+- **事实**：v12 源在 counter=960 保存，而块沿 960 的更新尚未触发（term 只在带 reset 的 step 被调用；v14 的同位置更新恰在 960 触发）⇒ 同配方、同迭代数，可恢复与否取决于 env 是否恰在边界步 reset。
+- **旧规则**：`next_eval_step > counter` 严格成立，否则硬拒 ⇒ **挂起（pending）状态被误判为不一致**；counter 落在 `[edge, edge+6]` 窗口内保存的 ckpt 同样会被拒（v14 的更新落在 247，说明该窗口真实存在）。
+- **新规则**：`next_eval_step % block == 0 and next_eval_step > counter − block`——接受"覆盖当前 counter 的块沿或下一个块沿"（挂起/已到期），仍拒绝**落后整块及以上**的调度（块大小被改 / 手改载荷的证据）。
+- **覆盖**：`test_eval_clock_accepts_a_pending_edge_and_rejects_a_stale_one`（3 接受 + 3 拒绝）；`%TEMP%\falsify_clock_rule.py` 证明改回旧规则该用例必失败；离线 `[15]` **27 passed**、全套 `ALL_OFFLINE_CHECKS_PASSED`。
+- **代价/边界**：放宽后不再保证"载荷调度与 counter 严格同步"，只保证"调度自洽且不落后整块"；C1 的"是否到期"改为分案判定，到期时要求**实际发生对应更新**（v12-resume 的 9 次事件即此案）。
+
+### 结论与边界
+
+- 可**宣告**："**1.4 C 层集成级恢复验收通过（三条代表线 × resume/drop）**"：回填早于首次 reset、逐 step 时钟 +1、课程按真实节流更新且合法、训练正常推进、drop 冷启动且两臂同 ckpt 加载。
+- **不可**据本节宣告：① "复现"——冷热前 N 步不逐位一致（RNG/出生/per-episode 瞬态刻意不存），C 层只证**接线时序**；② 其它版本的 C 层（v5–v10、v13 共享同一适配器与注册表，但未逐版本真跑）；③ 多卡续训（非 0 rank 明确拒绝，不在保证范围）；④ 长期训练统计等价（84 it 只够覆盖 ≥2 个课程块与 2H）。
+- **本批损耗（记录在案）**：批量链式启动被 shell 截断两次（t_v12-drop 41/84 it、S·v3 264 步），产物**不计证据**，均改单臂重跑；`s_v14`/`s_v12` 两臂的 `run_dir` 未记录（观察器后补该字段），其 ckpt 由 `--source-checkpoint` 显式给出。
+

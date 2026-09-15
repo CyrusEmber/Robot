@@ -96,6 +96,25 @@ def _unwrap(env):
     return unwrap(env)
 
 
+def _registered_terms(env) -> list[str]:
+    """The env's registered stateful curriculum terms (positive signal for c_k-only lines)."""
+    try:
+        from rl_exp.tasks.curriculum_state import covered_terms
+
+        return sorted(covered_terms(_unwrap(env)))
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _c_k(env) -> float | None:
+    try:
+        from rl_exp.tasks.teacher_mdp import ck_value
+
+        return round(float(ck_value(_unwrap(env))), 12)
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _term_instances(env) -> list:
     """The registered stateful curriculum terms of this env (production registry)."""
     try:
@@ -370,11 +389,13 @@ def _install_learn_hook() -> None:
     real_learn = OnPolicyRunner.learn
 
     def learn_wrapped(self, num_learning_iterations, *args, **kwargs):
+        _records["terms"] = sorted(_registered_terms(self.env))
         _records["learn_enter"] = {
             "requested": int(num_learning_iterations),
             "current_learning_iteration": int(getattr(self, "current_learning_iteration", -1)),
             "num_envs": int(getattr(self.env, "num_envs", -1)),
             "counter": _counter(self.env),
+            "c_k": _c_k(self.env),
             "kwargs": {k: v for k, v in kwargs.items() if isinstance(v, (int, float, bool, str))},
         }
         _records["run_dir"] = str(getattr(getattr(self, "logger", None), "log_dir", "") or "")
@@ -384,6 +405,7 @@ def _install_learn_hook() -> None:
         _records["learn_exit"] = {
             "current_learning_iteration": int(getattr(self, "current_learning_iteration", -1)),
             "counter": _counter(self.env),
+            "c_k": _c_k(self.env),
         }
         _maybe_flush(force=True)
         return out
