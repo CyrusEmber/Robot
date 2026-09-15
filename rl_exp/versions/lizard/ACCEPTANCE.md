@@ -113,10 +113,11 @@
 
 ## 1.5a · 恢复演练工具（2026-09-15，离线）
 
-**本节不是"1.5 演练通过"。** 按 `ARCH_PLAN` v0.17，1.5 已从主交付出口改为**条件触发的独立恢复演练**
+**本节结论按覆盖范围限定。** 按 `ARCH_PLAN` v0.17，1.5 已从主交付出口改为**条件触发的独立恢复演练**
 （触发：某实验值得长期保留 / 要对外声明可重建 / 归档迁移前留证据），不阻塞日常训练与 Step 2 迁移。
-本节只交付**演练工具**（`rebuild.py` + 离线门 `[27]`）与一次真 run 上的取材证据；演练本身（另用一份
-路径配置指向重建位置 + 声明复用环境 + 跑 `--check`/`--maintest`）**尚未执行**，故评级仍为未知。
+本节交付**演练工具**（`rebuild.py` + 离线门 `[27]`）与**一次完整演练**：选定实验 → 备材料 → 另用一份
+路径配置指向重建位置与声明复用环境 → 检查与缺件负测试（P10–P13）。覆盖范围 = **重建项目材料、复用
+已声明的现有环境**，故结论只到"本次演练范围内：配置与加载级重建通过"。
 
 ### 前提
 
@@ -137,24 +138,26 @@
 | P2 | 脏树 diff 无归档落点 | 单测 `capture/refuse-without-archive` | **通过**：拒采理由直指 `PLAN.md #18`（哈希 ≠ 可取回） |
 | P3 | 带归档则一致 | 单测 `capture/accept-with-archive`、`stored-diff-hashes-as-recorded`、`payload-hash-matches`、`untracked-payload-stored` | **通过**：diff 与未跟踪代码内容落 `--archive` 与 `material/`，逐文件摘要与记录值相等（含 CRLF 往返不损哈希） |
 | P4 | 未跟踪代码只有哈希没有内容 | 单测 `capture/refuse-vanished-untracked`、`capture/refuse-drifted-diff`、`capture/refuse-edited-record` | **通过**：`spider/` 类内容缺失、diff 漂移、冻结后被改记录（T1 摘要对不上）均拒采/判失败 |
-| P5 | 来源断言（不落回原树） | 单测 `check/fallback-to-original-fails`、`check/no-original-is-unknown`、`check/undeclared-import-location-fails`、`check/asset-lock-fallback-fails`、`check/readable-original-is-informational` | **通过**：模块解析落回 `--original` 原树 = **失败**；资产锁解析落回原树 = **失败**；落在重建根与 `--dep` 之外 = 失败；未给 `--original` = 未知（不冒充）；原目录"仍可读"只作信息行（`required=False`），不判失败（**v0.16 收窄**：不做系统级访问切断） |
+| P5 | 来源断言（**只断言声明为重建的材料**） | 单测 `check/fallback-to-original-fails`、`check/no-original-is-unknown`、`check/undeclared-import-location-fails`、`check/asset-lock-fallback-fails`、`check/readable-original-is-informational`、`check/reused-deps-are-not-asserted`、`check/rebuilt-module-is-asserted` | **通过**：声明重建的模块解析落回 `--original` 原树 = **失败**；资产锁同判；落在重建根与 `--dep` 之外 = 失败；未给 `--original` = 未知；**声明复用的依赖不判**（只记录，"config 指向对就对了"，不再自证）；`--rebuilt-module` 可把框架一并纳入断言（环境重装的覆盖范围用）；原目录"仍可读"只作信息行（v0.16：不做系统级访问切断） |
 | P6 | 缺件负测试与退出码口径 | 单测 `maintest/removed-payload-fails`、`maintest/restored-payload-passes`、`check/edited-payload-fails`、`check/refused-material-not-claimed`、`check/failed-material-blocks` | **通过**：删一个必需载荷检查必失败、还原必通过（还原后仍不过 = **未知**，不冒充通过）；被改载荷由材料摘要行判失败；拒采材料 `--check` 退 2（不计通过）、失败材料退 1（阻塞） |
 | P7 | 载荷绑定与配置 | 单测 `check/binding-row`、`check/exit-code` | **通过**：ckpt 可加载且 `infos` 回指本记录 run id + T1 摘要；配方按 golden 再推导一致 |
 | P8 | "只换配置"不算材料恢复演练 | 单测 `check/path-config-only-is-not-a-drill`、`check/scope-declares-reuse` | **通过**：`--root` 落在原树内 ⇒ 记**未知**（不冒充材料恢复）；正常演练输出 scope 行，写明"材料重建在哪、依赖复用了哪些" |
 | P9 | 演练①②步实测（选定实验 + 取材） | 真 run `Lizard-Rough-v14`（`logs\rsl_rl\lizard_rough_teacher_v14\2026-09-15_19-08-50`，T1 `aeba04549bc363f1`，2 iter）→ `rebuild --capture … --archive rl_exp\archive` | **通过（材料可取材）**：`REBUILD_CAPTURE_OK`；`repository`=`git-rev`（rev `27a25fa`）、`isaaclab`/`rsl_rl`=`stored-diff`（脏树 diff 已入仓 `rl_exp\archive\<run_id>\`，摘要逐项比对 == 记录值 `13aee682fe1e`）、`assets`=`in-repo-git`、`payload`=`copied`（`model_0/1.pt` + 记录，材料内 12 个载荷文件各有摘要）；材料落 `E:\rl_rebuild\material` |
 
+| P10 | 演练③步：第二份机器路径配置 | 在重建位置写 `E:\rl_rebuild\proj\paths.yaml`（`isaac_root: E:/IsaacLab`、`python: E:/IsaacLab/env_isaaclab/Scripts/python.exe`，即**声明复用的同一环境**） | **通过**：重建位置自带一份路径配置；项目材料为 `git clone` 后 `remote remove origin` 的 `27a25fa`（该 run 的声明 rev，工作树干净） |
+| P11 | 演练④步：**负对照**（材料仍在原地） | cwd `E:\Robot`（原项目），`--check E:\rl_rebuild\material --root E:\rl_rebuild\proj --original E:\Robot` | **通过（按预期失败，退 1）**：`sources: rebuilt material ['rl_exp'] resolved back into the original tree (E:\Robot\rl_exp\__init__.py)`、`assets: the lock resolves back into the original tree`——"只换配置、材料仍在原地"会被区分出来（覆盖范围表第三行） |
+| P12 | 演练④步：**正式检查**（从重建位置跑） | cwd `E:\rl_rebuild\proj`，`RL_ISAAC_ROOT=E:\IsaacLab`，`--check … --root E:\rl_rebuild\proj --dep E:\IsaacLab\source --dep E:\IsaacLab\env_isaaclab\Lib\site-packages --original E:\Robot` | **通过（`REBUILD_CHECK_OK`，退 0）**：材料 12 文件摘要一致；`rl_exp` 解析在重建位置（非原树）；资产锁解析在重建位置；配方按 golden `3c6439cea8e2` 从**重建代码**再推导一致；`model_1.pt` 可加载且回指 T1 `aeba04549bc363f1` |
+| P13 | 演练④步：缺件负测试 | 同 P12 + `--maintest` | **通过**：删 `run/model_0.pt` ⇒ 检查必失败（实测失败）；还原 ⇒ `REBUILD_CHECK_OK` |
+
 ### 结论与边界
 
-- 可**宣告**：演练工具与取材闸门已落地并进离线套件（`[27]` 30/30）；**演练①②步（选实验 + 备材料）在真 run 上跑通**；
-  R1 因脏树漂移被闸门拒采——判据非摆设的证据（与 1.2b R4 把该 run 的 isaaclab 来源判未知同一事实）。
-- **口径**：v0.16 收窄验收强度（不做账号/ACL，判据 = 解析不落回原树；原目录可读只作信息行）；v0.17 把 1.5 从主出口
-  移到**按需演练**，并引入**覆盖范围表**（重建材料+复用环境 / 连环境一并重装 / 只换配置不算演练）。
-- **不可**据本节宣告 1.5 演练通过。剩余步骤（③ 另用一份路径配置指向重建位置与声明环境；④ `--check` + `--maintest`，
-  记录覆盖范围）**尚未执行**：
-  1. **重建位置未搭**：未把代码/配置/资产/ckpt 另置一处（按覆盖范围表选"只重建材料、复用声明环境"还是"连环境一并重装"），
-     未写那份指向重建位置的路径配置；`--check`/`--maintest` 尚未在真重建位置跑过。
-  2. **归档落盘状态**：`rl_exp\archive\<run_id>\` 已生成，须**入仓提交**才算"取回得"（小文件进 Git，#18 改判）。
-  3. **边界**：不做系统级访问切断，不覆盖任意隐藏读取（包内部/缓存/环境变量旁路）；不承诺推理或训练结果等价。
+- 可**宣告（仅限本次演练范围）**：**重建项目材料 + 复用声明的现有环境 ⇒ 配置与加载级重建通过**。
+  - 重建项：项目代码（`rl_exp`，rev `27a25fa`）、资产（83 文件锁）、该 run 的 ckpt 与记录、脏树归档材料；
+  - 复用项（**只记录、不断言**）：Python 解释器与预装框架（`E:\IsaacLab` 源码树 + venv `site-packages` 中的 isaacsim / torch / rsl_rl）；
+  - 依据：P10–P13；工具侧"只断言声明为重建的材料"这条口径由 `[27]` 增补测试覆盖。
+- **不可外推**：环境未重装 ⇒ 不证明环境安装过程可复现；未做系统级访问切断 ⇒ 不覆盖隐藏读取（包内部 / 缓存 / 环境变量旁路）；2 iter run ⇒ 不承诺推理或训练结果等价。
+- 工具版本说明：演练②的取材材料落在 `27a25fa`，故 P12/P13 跑的是**重建出的那份工具**；P11 用工作树当前工具（多一条 scope 行、框架断言更严）——判据行一致，结论不受影响。
+- 演练转按需：后续触发（值得长期保留的实验 / 要对外声明可重建 / 归档迁移前）再跑，不阻塞日常训练与 Step 2。
 
 
 

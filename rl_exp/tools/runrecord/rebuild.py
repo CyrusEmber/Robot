@@ -14,12 +14,12 @@ splits that into three things, all of which this module does **without a simulat
     for a rebuild. That is ``PLAN.md`` #18 turned into a gate: to capture a run whose code
     was dirty or untracked, you must name where that content lives (``--archive``).
 ``--check <dest> --root <rebuild_root>``
-    Run inside the rebuilt tree. Answers the plan's three questions: the material digests
-    still describe the material, every imported module and the asset lock resolve inside
-    the rebuild root (or a declared dependency) and **never back into the original source
-    or asset trees**, and the configuration plus checkpoint payload agree with the frozen
-    T1 record. Whether the originals are still readable is recorded as scope, not required:
-    1.5 claims "受检查路径上的配置与加载级重建通过", not OS-level isolation (v0.16).
+    Run inside the rebuilt tree. Checks the materials the drill says it rebuilt: the material
+    digests, the project's own import path and asset lock resolving under the rebuild root
+    (declared dependencies are recorded, not asserted -- see ``check_sources``), and the
+    configuration plus checkpoint payload agreeing with the frozen T1 record. Whether the
+    originals are still readable is recorded as scope, not required: 1.5 claims a drill-scoped
+    "config and load rebuild", never OS-level isolation (v0.16/v0.17).
 ``--maintest <dest> --root <rebuild_root>``
     The missing-file negative test: drop one required payload, the check must fail; put it
     back, the check must pass.
@@ -51,7 +51,10 @@ from rl_exp.tools.verify import cfg_snapshot as cs  # noqa: E402
 MATERIAL_NAME = "rebuild_material.json"
 MATERIAL_FORMAT = 1
 CODE_SOURCES = ("repository", "isaaclab", "rsl_rl")
-IMPORTED_MODULES = ("rl_exp", "isaaclab", "isaaclab_tasks", "rsl_rl")
+#: Packages the drill asserts by default: the project's own import path. The framework
+#: (``isaaclab``/``rsl_rl`` editable installs) is a declared dependency under the
+#: "rebuild the materials, reuse the environment" coverage, so it is recorded, not asserted.
+REBUILT_MODULES = ("rl_exp",)
 _ROW = M._row
 
 
@@ -383,7 +386,12 @@ def _reachable(path: pathlib.Path) -> bool:
         return False
 
 
-def check_drill_scope(root: pathlib.Path, deps: list[pathlib.Path], originals: list[pathlib.Path]) -> list[dict]:
+def check_drill_scope(
+    root: pathlib.Path,
+    deps: list[pathlib.Path],
+    originals: list[pathlib.Path],
+    rebuilt: tuple[str, ...] = REBUILT_MODULES,
+) -> list[dict]:
     """State which materials were rebuilt and which dependencies were reused.
 
     ARCH_PLAN 1.5 coverage table: a drill that only swaps the path configuration while the
@@ -406,8 +414,7 @@ def check_drill_scope(root: pathlib.Path, deps: list[pathlib.Path], originals: l
         _ROW(
             "已验证重建",
             "通过",
-            f"scope: materials rebuilt under {root}; dependencies reused: {reused} "
-            f"(Python environment was {'reused' if deps else 'not declared'})",
+            f"scope: rebuilt {list(rebuilt)} under {root}; dependencies reused, not asserted: {reused}",
         )
     ]
 
@@ -429,13 +436,21 @@ def check_material(record: dict, dest: pathlib.Path) -> list[dict]:
     ]
 
 
-def check_sources(root: pathlib.Path, deps: list[pathlib.Path], originals: list[pathlib.Path]) -> list[dict]:
-    """Where do the modules a rebuild imports actually come from?
+def check_sources(
+    root: pathlib.Path,
+    deps: list[pathlib.Path],
+    originals: list[pathlib.Path],
+    rebuilt: tuple[str, ...] = REBUILT_MODULES,
+) -> list[dict]:
+    """Did the materials this drill says it rebuilt actually come from the rebuild?
 
-    The claim is bounded on purpose (ARCH_PLAN 1.5, v0.16): nothing the rebuild resolves may
-    fall back into the original source tree, and nothing may come from an undeclared
-    location. Whether the original directories are still *readable* is recorded, not
-    required -- that would be OS-level isolation, which is explicitly out of scope here.
+    Only the declared-rebuilt packages are asserted. A dependency this drill reuses -- the
+    interpreter, the pre-installed framework (``isaaclab``/``rsl_rl`` editable installs),
+    the binary runtime -- is by definition whatever the declared environment provides, so
+    asserting where it resolves would be proving the declaration to itself. What the path
+    configuration *cannot* tell you is whether the project's own materials came from the
+    rebuild: ``paths.yaml`` has no key for the project root, and the import path arrives
+    through a ``.pth`` inside the venv. That gap is what this row closes.
     """
     rows: list[dict] = []
     if not originals:
@@ -443,13 +458,13 @@ def check_sources(root: pathlib.Path, deps: list[pathlib.Path], originals: list[
             _ROW(
                 "已验证重建",
                 "未知",
-                "sources: no original source/asset path given (--original), so no fallback was asserted",
+                "sources: no original path given (--original), so no fallback was asserted",
             )
         )
         return rows
     allowed = [root, *deps]
     fell_back, undeclared = [], []
-    for module in IMPORTED_MODULES:
+    for module in rebuilt:
         origin = _module_origin(module)
         if origin is None:
             undeclared.append(f"{module}: not importable here")
@@ -461,14 +476,14 @@ def check_sources(root: pathlib.Path, deps: list[pathlib.Path], originals: list[
         _ROW(
             "已验证重建",
             "失败" if (fell_back or undeclared) else "通过",
-            "sources: "
+            f"sources: rebuilt material {list(rebuilt)} "
             + (
                 f"resolved back into the original tree ({fell_back[:2]})"
                 if fell_back
-                else f"outside the rebuild root and declared dependencies ({undeclared[:2]})"
+                else f"came from outside the rebuild and its declared dependencies ({undeclared[:2]})"
                 if undeclared
-                else f"every import resolves under {root}"
-                + (f" (declared dependencies: {[str(dep) for dep in deps]})" if deps else "")
+                else f"resolves under {root}"
+                + (f" (dependencies, recorded not asserted: {[str(dep) for dep in deps]})" if deps else "")
             ),
         )
     )
@@ -544,15 +559,23 @@ def check_payload_binding(run_dir: pathlib.Path, manifest: dict) -> list[dict]:
     ]
 
 
-def check(dest: pathlib.Path, root: pathlib.Path, deps: list[pathlib.Path] | None = None, originals: list[pathlib.Path] | None = None):
+def check(
+    dest: pathlib.Path,
+    root: pathlib.Path,
+    deps: list[pathlib.Path] | None = None,
+    originals: list[pathlib.Path] | None = None,
+    rebuilt: tuple[str, ...] | None = None,
+):
     """Check a rebuild against the material captured for a run.
 
     Args:
         dest: the directory holding ``rebuild_material.json`` (and ``material/``).
         root: the rebuild root -- where the rebuilt code and assets are expected to be.
-        deps: locations of declared, pre-installed dependencies (interpreter, framework).
-        originals: the original source/asset roots. Nothing may resolve back into them; their
-            readability is recorded as scope only (no OS-level access cut is performed).
+        deps: locations of declared, pre-installed dependencies (interpreter, framework). They
+            are recorded as reused; nothing about them is asserted.
+        originals: the original project/asset roots. Materials declared rebuilt may not resolve
+            back into them; their readability is recorded as scope only (no OS-level access cut).
+        rebuilt: packages the drill declares rebuilt, i.e. the ones actually asserted.
 
     Returns:
         ``(rows, problems)`` in the same shape the run manifest uses: evidence level
@@ -584,9 +607,10 @@ def check(dest: pathlib.Path, root: pathlib.Path, deps: list[pathlib.Path] | Non
         return [_ROW("已验证重建", "失败", "material: captured without the run manifest")], problems
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 
-    rows = check_drill_scope(root, deps or [], originals or [])
+    rebuilt = tuple(rebuilt or REBUILT_MODULES)
+    rows = check_drill_scope(root, deps or [], originals or [], rebuilt)
     rows.extend(check_material(record, dest))
-    rows.extend(check_sources(root, deps or [], originals or []))
+    rows.extend(check_sources(root, deps or [], originals or [], rebuilt))
     rows.extend(check_asset_origins(root, deps or [], originals or [], manifest))
     rows.extend(_informational(M._verify_self_consistency(manifest, problems)))
     rows.extend(_informational(M._verify_code(manifest, problems)))
@@ -622,7 +646,7 @@ def _exit_code(rows: list[dict], problems: list[str]) -> int:
 # ---------------------------------------------------------------------------------
 
 
-def maintest(dest: pathlib.Path, root: pathlib.Path, deps=None, originals=None):
+def maintest(dest: pathlib.Path, root: pathlib.Path, deps=None, originals=None, rebuilt=None):
     """Remove one required payload: the check must fail. Put it back: it must pass."""
     record_path = dest / MATERIAL_NAME
     record = json.loads(record_path.read_text(encoding="utf-8")) if record_path.is_file() else {}
@@ -634,7 +658,7 @@ def maintest(dest: pathlib.Path, root: pathlib.Path, deps=None, originals=None):
     rows: list[dict] = []
     try:
         victim.unlink()
-        removed_rows, removed_problems = check(dest, root, deps, originals)
+        removed_rows, removed_problems = check(dest, root, deps, originals, rebuilt)
         failed = _exit_code(removed_rows, removed_problems) != 0
         rows.append(
             _ROW(
@@ -723,16 +747,17 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         deps = _paths(flag("--dep", repeat=True) or [])
         originals = _paths(flag("--original", repeat=True) or [])
+        rebuilt = tuple(flag("--rebuilt-module", repeat=True) or []) or REBUILT_MODULES
         rows, problems = (
-            check(dest, pathlib.Path(root), deps, originals)
+            check(dest, pathlib.Path(root), deps, originals, rebuilt)
             if name == "--check"
-            else maintest(dest, pathlib.Path(root), deps, originals)
+            else maintest(dest, pathlib.Path(root), deps, originals, rebuilt)
         )
         print(f"  rebuild: {cs.relativize(str(dest))} (root {cs.relativize(root)})")
         return _report(rows, problems)
     print(__doc__.splitlines()[0])
     print("usage: python -m rl_exp.tools.runrecord.rebuild --capture <run_dir> <dest> [--archive DIR]")
-    print("       python -m rl_exp.tools.runrecord.rebuild --check <dest> --root <rebuild_root> [--dep P]... --original P...")
+    print("       python -m rl_exp.tools.runrecord.rebuild --check <dest> --root <rebuild_root> [--rebuilt-module NAME]... [--dep P]... --original P...")
     print("       python -m rl_exp.tools.runrecord.rebuild --maintest <dest> --root <rebuild_root> ...")
     return 2
 

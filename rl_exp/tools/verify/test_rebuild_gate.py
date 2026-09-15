@@ -213,8 +213,20 @@ def main() -> int:
         rows, _ = R.check(dest, root / "rebuild_root", [], [gone])
         check(
             "check/undeclared-import-location-fails",
-            any(r["result"] == "失败" and "outside the rebuild root" in r["detail"] for r in rows),
+            any(r["result"] == "失败" and "outside the rebuild" in r["detail"] for r in rows),
             f"{[(r['result'], r['detail'][:60]) for r in rows if r['result'] == '失败']}",
+        )
+        rows = R.check_sources(root / "rebuild_root", deps, [gone])
+        check(
+            "check/reused-deps-are-not-asserted",
+            R._exit_code(rows, []) == 0 and "resolves under" in rows[0]["detail"],
+            "the framework is a declared dependency, so where it resolves is recorded, not asserted",
+        )
+        rows = R.check_sources(root / "rebuild_root", deps[:1], [gone], rebuilt=("rl_exp", "isaaclab"))
+        check(
+            "check/rebuilt-module-is-asserted",
+            any("isaaclab" in r["detail"] and r["result"] == "失败" for r in rows),
+            "declaring the framework rebuilt as well must assert where it came from",
         )
         rows, _ = R.check(dest, root / "rebuild_root", deps, originals=[deps[0]])
         check(
@@ -232,7 +244,7 @@ def main() -> int:
         rows, _ = R.check(dest, root / "rebuild_root", deps, originals=[gone])
         check(
             "check/scope-declares-reuse",
-            any(r["detail"].startswith("scope: materials rebuilt") and r["result"] == "通过" for r in rows),
+            any(r["detail"].startswith("scope: rebuilt") and r["result"] == "通过" for r in rows),
             f"{[r['detail'][:70] for r in rows]}",
         )
 
