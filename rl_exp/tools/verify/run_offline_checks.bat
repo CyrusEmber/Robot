@@ -80,6 +80,24 @@ echo [19] acceptance metrics (yaw frame / abs sideslip / per-frame MAE / kernel 
 echo [20] eval frame contract v2 (terminal frame closes the fall window / v1 truncation)
 "%PY%" rl_exp\tools\verify\test_eval_frame_v2.py || goto :fail
 
+echo [21] configclass field surface (params_version field vs to_dict vs own_fields)
+"%PY%" rl_exp\tools\verify\check_configclass_fields.py || goto :fail
+
+echo [22] configclass field-surface gate falsifier (each drift must still fire)
+"%PY%" rl_exp\tools\verify\test_configclass_fields_gate.py || goto :fail
+
+echo [23] config snapshot serializer (order / floats / identities / paths / digest)
+"%PY%" rl_exp\tools\verify\test_cfg_snapshot.py || goto :fail
+
+echo [24] recipe golden lock (every registered task/PLAY vs versions\lizard\cfg_lock.json)
+"%PY%" rl_exp\tools\verify\check_cfg_lock.py || goto :fail
+
+echo [25] recipe golden gate falsifier (each drift must still fire)
+"%PY%" rl_exp\tools\verify\test_cfg_lock_gate.py || goto :fail
+
+echo [26] run manifest (T0/T1 record, checkpoint infos, external index, --verify)
+"%PY%" rl_exp\tools\verify\test_run_manifest.py || goto :fail
+
 echo ALL_OFFLINE_CHECKS_PASSED
 exit /b 0
 

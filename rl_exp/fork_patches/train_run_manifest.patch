@@ -1,0 +1,71 @@
+diff --git a/scripts/reinforcement_learning/rsl_rl/train.py b/scripts/reinforcement_learning/rsl_rl/train.py
+--- a/scripts/reinforcement_learning/rsl_rl/train.py
++++ b/scripts/reinforcement_learning/rsl_rl/train.py
+@@ -196,5 +196,18 @@
+         # set the log directory for the environment (works for all environment types)
+         env_cfg.log_dir = log_dir
+ 
++        # Run manifest T0 (ARCH_PLAN 1.2): what this run declares BEFORE anything is
++        # built -- recipe / asset lock / code provenance / requested resume. ImportError
++        # (no rl_exp package) only warns, as the curriculum-state hooks do: recording
++        # must never break training, but it must also never go missing silently.
++        try:
++            from rl_exp.tools.runrecord import manifest as run_manifest
++        except ImportError as exc:
++            run_manifest = None
++            print(f"[WARN] run manifest unavailable ({exc}); this run will not record what it was")
++        run_context = run_manifest.begin(
++            log_dir=log_dir, task=args_cli.task, argv=sys.argv, env_cfg=env_cfg, agent_cfg=agent_cfg
++        ) if run_manifest else None
++
+         # create isaac environment
+         env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
+@@ -208,7 +220,12 @@
+         # save resume path before creating a new log_dir
+         if agent_cfg.resume or agent_cfg.algorithm.class_name == "Distillation":
+             resume_path = get_checkpoint_path(log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint)
+ 
++        # Run manifest: the env exists now, so check what it actually resolved against
++        # the declaration above (num_envs, dts, seed, params_version, obs group dims).
++        if run_manifest is not None:
++            run_manifest.after_env(run_context, env)
++
+         # Restore the curriculum state (lizard joint SIR particles + the c_k clock) BEFORE the wrapper:
+         # RslRlVecEnvWrapper.__init__ runs the first full reset, and that reset is what makes the joint
+         # SIR term respawn the envs -- on the restored particles, when the state is already in place.
+@@ -249,6 +266,12 @@
+             runner = DistillationRunner(env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device)
+         else:
+             raise ValueError(f"Unsupported runner class: {agent_cfg.class_name}")
++        # Run manifest: index every checkpoint's file hash OUTSIDE the checkpoint (never
++        # inside it) and stamp the frozen T1 digest into its infos slot. Installed after
++        # the curriculum hook on purpose: it is the outer wrapper, so it hashes the file
++        # the inner one has already finished writing.
++        if run_manifest is not None:
++            run_manifest.hook_runner_save(runner, run_context)
+         # Every checkpoint carries the curriculum state in its infos slot, so model and curriculum state
+         # live in ONE file and cannot drift apart (no sidecar). No-op for tasks without the joint SIR.
+         try:
+@@ -270,6 +293,22 @@
+         # dump the configuration into log-directory
+         dump_yaml(os.path.join(log_dir, "params", "env.yaml"), env_cfg)
+         dump_yaml(os.path.join(log_dir, "params", "agent.yaml"), agent_cfg)
+ 
++        # Run manifest T1 (ARCH_PLAN 1.2): the runner exists and the checkpoint is
++        # restored, so the training conditions are finally known -- freeze the record
++        # here, BEFORE learn. Later checkpoints reference this digest; a failure above
++        # leaves the run marked incomplete instead of pretending it was ready.
++        if run_manifest is not None:
++            run_manifest.freeze(
++                run_context,
++                runner=runner,
++                env=env,
++                agent_cfg=agent_cfg,
++                resume_path=resume_path
++                if (agent_cfg.resume or agent_cfg.algorithm.class_name == "Distillation")
++                else None,
++                weights_only=args_cli.weights_only,
++            )
++
+         # run training
+         try:
