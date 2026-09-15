@@ -484,7 +484,8 @@ def freeze(
             "empirical_normalization": getattr(agent_cfg, "empirical_normalization", None),
             "term_classes": _term_classes(env),
             "resume": {
-                "requested": weights_only,
+                "resumed": source is not None,
+                "drop_curriculum_state_requested": weights_only,
                 "source": cs.relativize(str(source)) if source else None,
                 "source_sha256": prov.sha256_file(source) if source else None,
                 "loaded_iteration": getattr(runner, "current_learning_iteration", None),
