@@ -1,0 +1,580 @@
+[1/11] framework pin check (IsaacLab internals + pinned SHA)
+IsaacLab root: E:\IsaacLab
+WARN: IsaacLab tree has uncommitted changes (11 entries) -- needle checks read the working tree, not the pinned SHA
+ISAAC_SHA_MATCH 28a37cecdd43 (perf-2026-06-24 (tested 2026-08-31))
+PIN_CHECK_OK
+[2/11] freeze contracts (DR/wiring + robot block parity, DR lists, PLAY coverage, asset contract + locks)
+[check] wiring parity (family vs teacher)
+  family wiring lines: 21 | teacher wiring lines: 21
+[check] DR event list sync (play_utils vs dr_controller)
+  play_utils: 11 events | dr_controller: 11 events
+[check] PLAY wiring coverage (apply_play_wiring)
+  PLAY classes checked
+[check] robot ArticulationCfg parity (family vs teacher)
+  family robot block: 24 lines | teacher: 24 lines
+[check] asset contract (usda prims/joints vs yamls + hardcoded paths)
+  yamls checked: 16
+[check] asset lock (frozen versions vs current assets)
+  versions locked: 16
+PARITY_OK
+[3/11] recovery vectorization parity
+  ok random seed0
+  ok random seed1
+  ok random seed2
+  ok random seed3
+  ok all-below
+  ok none-below
+  ok done-midwindow
+  ok short-tail
+  ok single-env
+ALL_RECOVERY_PARITY_TESTS_PASSED
+[4/11] staged curriculum offline test
+ALL_STAGED_CURRICULUM_TESTS_PASSED
+[5/11] teacher split-encoder networks (forward/gradient/export/transfer)
+  ok test_actor_forward_and_gradient
+  ok test_critic_forward
+  ok test_normalization_updates_per_group
+  ok test_named_submodule_extraction
+  ok test_export_wrappers
+  ok test_contract_enforcement
+  ok test_decaying_lr_ppo_rejects_adaptive_schedule
+ALL_TEACHER_NETWORK_TESTS_PASSED
+[6/11] student belief networks (GRU/gate/decoder/load_from_teacher)
+  ok test_gru_step_shapes
+  ok test_forward_shapes_and_gate_range
+  ok test_decoder_output_dim
+  ok test_load_from_teacher_equality
+  ok test_segment_mismatch_raises
+ALL_STUDENT_NETWORK_TESTS_PASSED
+[7/11] v3 curriculum + ring pattern (c_k math, tilt predicate, geometry)
+  ok test_ck_schedule_direction
+  ok test_ck_no_params_fallback
+  ok test_ck_scale_range_anchors
+  ok test_tilt_terminate_predicate
+  ok test_ring_pattern_geometry
+ALL_V3_CURRICULUM_TESTS_PASSED
+[8/11] obs layout gate (group names, term order, c_k step consistency)
+  teacher versions checked: v1/v2/v3/v4/v5/v11/v12
+OBS_LAYOUT_OK
+[9/11] v5 anti-collapse rewards (linear tracking / slip / belly / c_k scaling)
+  PASS test_track_lin_vel_lin_kernel
+  PASS test_feet_slide_ck
+  PASS test_belly_contact_force
+  PASS test_undesired_contacts_ck
+V5_REWARDS_TEST_OK
+[10/11] v5.3 SIR terrain curriculum (band / resample / walk clamp / replay / throttle)
+  PASS test_column_type_mapping
+  PASS test_initial_spawn_reassigns_all_envs
+  PASS test_success_predicate
+  PASS test_band_soft_edges
+  PASS test_resample_selects_in_band_rows
+  PASS test_insufficient_traffic_keeps_weights
+  PASS test_random_walk_clamps
+  PASS test_replay_draws_from_history
+  PASS test_block_eval_throttle
+V5_TERRAIN_SIR_TEST_OK
+[11/11] v11 joint SIR terrain curriculum (param grid / Eq.2-3-7 / fallback / walk / command)
+[OK] test_builder_combos_and_ranges
+[OK] test_command_term_eq2_labels
+[OK] test_command_term_sources_particle_velocity
+[OK] test_fallback_branches_unit
+[OK] test_initial_spawn_reassigns_all_envs
+[OK] test_measurement_eq7_and_throttle
+[OK] test_parse_split_and_radix
+[OK] test_replay_redraw
+[OK] test_sparse_pair_accumulates_across_blocks
+[OK] test_walk_single_axis_and_clamp
+test_joint_sir: 10 passed
+[12/12] version-record completeness (four-piece set / FAMILY row / FILEMAP row)
+  families checked: 1 (lizard)
+  WARN: lizard/parkour/v1: no git tag (v1 or lizard-parkour-v1[.minor]) -- fine for proposals; must exist once training starts
+  WARN: lizard/v0: no git tag (v0 or lizard-v0[.minor]) -- fine for proposals; must exist once training starts
+  WARN: lizard/v12: no git tag (v12 or lizard-v12[.minor]) -- fine for proposals; must exist once training starts
+  WARN: lizard/v13: no git tag (v13 or lizard-v13[.minor]) -- fine for proposals; must exist once training starts
+  WARN: lizard/v14: no git tag (v14 or lizard-v14[.minor]) -- fine for proposals; must exist once training starts
+  WARN: lizard/v3: no git tag (v3 or lizard-v3[.minor]) -- fine for proposals; must exist once training starts
+  WARN: lizard/v4: no git tag (v4 or lizard-v4[.minor]) -- fine for proposals; must exist once training starts
+  WARN: lizard/v7: no git tag (v7 or lizard-v7[.minor]) -- fine for proposals; must exist once training starts
+  WARN: lizard/v9: no git tag (v9 or lizard-v9[.minor]) -- fine for proposals; must exist once training starts
+VERSION_DOCS_OK
+[13/13] v12 height-ring noise model (conditions / scopes / outliers / c_k / mid redraw)
+V12_NOISE_OK
+[14/14] pre-kit pxr leak gate (P001/P003: env cfg import chain must stay pxr-clean)
+check_pxr_leak: OK (task cfg import chain is pxr-clean)
+[15/15] curriculum resume state (roundtrip / fingerprint / hard-abort / hook)
+[OK] test_b_layer_c_k_boundary_equivalence
+[OK] test_b_layer_joint_sir_branch_equivalence
+[OK] test_b_layer_row_sir_branch_equivalence
+[OK] test_b_layer_update_equivalence
+[OK] test_c_k_only_roundtrip
+[OK] test_c_k_schedule_evidence_per_parameter
+[OK] test_corrupt_clock_and_weights_rejected
+[OK] test_corrupt_row_sir_payload_rejected
+[OK] test_declaration_is_class_level_and_off_in_play
+[OK] test_drop_alias_and_conflict
+[OK] test_env_type_mismatch_warns_and_restores_saved
+[OK] test_eval_clock_accepts_a_pending_edge_and_rejects_a_stale_one
+[OK] test_fork_patch_call_site_contract
+[OK] test_hard_fail_boundaries
+[OK] test_hook_runner_save_rides_and_passes_through
+[OK] test_missing_state_hard_aborts_and_weights_only_opts_out
+[OK] test_non_zero_rank_neither_restores_nor_saves
+[OK] test_roundtrip_bitwise_and_ck_continuity
+[OK] test_row_sir_cfg_entries_each_rejected
+[OK] test_row_sir_roundtrip_and_field_set
+[OK] test_row_sir_type_order_and_terrain_changes_rejected
+[OK] test_static_fingerprint_catches_grid_edit
+[OK] test_task_identity_mismatch_rejected
+[OK] test_termless_task_passthrough
+[OK] test_uncovered_stateful_term_tripwire
+[OK] test_v1_payload_migrates_with_its_missing_evidence
+[OK] test_velocity_bucket_mismatch_rejected
+test_resume_state: 27 passed
+[16] tb_scalars record sampling (max_points / first+last / CLI resample)
+DUMP_TB_SAMPLING_OK
+[17] v13 symmetric tracking kernel (miki wired / EP gone / v5+v10 frozen)
+check_reward_v13: OK (miki kernel wired / EP kernel gone / v5+v10 frozen / yaml + v13.1 standstill table)
+[18] v14 front-plant/roll fall gate (predicate / dwell / wiring / v13 frozen)
+check_terminations_v14: OK (quaternion roll, monotone past vertical / pitch-guard window / gate => tilt >= limit sweep / dwell / head-load penalty arithmetic / both terms wired / v10 tilt removal kept / v13 frozen / yaml)
+[19] acceptance metrics (yaw frame / abs sideslip / per-frame MAE / kernel frame contract)
+[OK] test_alternating_forward_speed_is_exposed_by_mae
+[OK] test_alternating_sideslip_cannot_pass_acceptance
+[OK] test_kernel_rewards_tracking_and_penalizes_all_errors
+[OK] test_pitch_does_not_read_as_underspeed
+[OK] test_same_relative_motion_scores_the_same_after_yaw_changes
+test_acceptance_metrics: 5 passed
+[20] eval frame contract v2 (terminal frame closes the fall window / v1 truncation)
+  ok terminal frame closes the window (its v1 truncation does not)
+  ok one frame short is still no fall
+  ok window ending on the final row
+  ok upright episode stays clean
+ALL_EVAL_FRAME_V2_TESTS_PASSED
+[21] configclass field surface (params_version field vs to_dict vs own_fields)
+  configclasses carrying params_version: 34
+  name  value  field  own  instdict  to_dict  cls_attr  fields  own_fields  to_dict_keys
+  LizardCurriculumFlatEnvCfg  None  1  0  1  1  0  26  0  26
+  LizardCurriculumFlatEnvCfg_PLAY  None  1  0  1  1  0  26  0  26
+  LizardCurriculumRoughEnvCfg  None  1  0  1  1  0  26  0  26
+  LizardCurriculumRoughEnvCfg_PLAY  None  1  0  1  1  0  26  0  26
+  LizardFlatEnvCfg  None  1  1  1  1  0  26  1  26
+  LizardFlatEnvCfg_PLAY  None  1  0  1  1  0  26  0  26
+  LizardRoughEnvCfg  None  1  0  1  1  0  26  0  26
+  LizardRoughEnvCfg_PLAY  None  1  0  1  1  0  26  0  26
+  LizardRoughTeacherEnvCfg  'v2'  1  1  1  1  0  26  1  26
+  LizardRoughTeacherEnvCfg_PLAY  'v2'  1  0  1  1  0  26  0  26
+  LizardRoughTeacherEnvCfg_V1  'v1'  1  1  1  1  0  26  1  26
+  LizardRoughTeacherEnvCfg_V10  'v10'  1  1  1  1  0  27  1  27
+  LizardRoughTeacherEnvCfg_V10_PLAY  'v10'  1  0  1  1  0  27  1  27
+  LizardRoughTeacherEnvCfg_V11  'v11'  1  1  1  1  0  27  1  27
+  LizardRoughTeacherEnvCfg_V11_PLAY  'v11'  1  0  1  1  0  27  1  27
+  LizardRoughTeacherEnvCfg_V12  'v12'  1  1  1  1  0  27  1  27
+  LizardRoughTeacherEnvCfg_V12_PLAY  'v12'  1  0  1  1  0  27  1  27
+  LizardRoughTeacherEnvCfg_V13  'v13'  1  1  1  1  0  27  1  27
+  LizardRoughTeacherEnvCfg_V13_PLAY  'v13'  1  0  1  1  0  27  1  27
+  LizardRoughTeacherEnvCfg_V14  'v14'  1  1  1  1  0  27  1  27
+  LizardRoughTeacherEnvCfg_V14_PLAY  'v14'  1  0  1  1  0  27  1  27
+  LizardRoughTeacherEnvCfg_V1_PLAY  'v1'  1  0  1  1  0  26  0  26
+  LizardRoughTeacherEnvCfg_V2  'v2'  1  1  1  1  0  26  1  26
+  LizardRoughTeacherEnvCfg_V2_PLAY  'v2'  1  0  1  1  0  26  0  26
+  LizardRoughTeacherEnvCfg_V3  'v3'  1  1  1  1  0  26  1  26
+  LizardRoughTeacherEnvCfg_V3_PLAY  'v3'  1  0  1  1  0  26  0  26
+  LizardRoughTeacherEnvCfg_V4  'v4'  1  1  1  1  0  26  1  26
+  LizardRoughTeacherEnvCfg_V4_PLAY  'v4'  1  0  1  1  0  26  0  26
+  LizardRoughTeacherEnvCfg_V5  'v5'  1  1  1  1  0  27  2  27
+  LizardRoughTeacherEnvCfg_V5_PLAY  'v5'  1  0  1  1  0  27  1  27
+  LizardRoughTeacherEnvCfg_V6  'v6'  1  1  1  1  0  27  1  27
+  LizardRoughTeacherEnvCfg_V6_PLAY  'v6'  1  0  1  1  0  27  1  27
+  LizardRoughTeacherEnvCfg_V8  'v8'  1  1  1  1  0  27  1  27
+  LizardRoughTeacherEnvCfg_V8_PLAY  'v8'  1  0  1  1  0  27  1  27
+  VERDICT: params_version IS a dataclass field in all 34 classes.
+    mechanism: annotations back-filled (configclass.py:99), every member becomes
+      field(default_factory=...) (:475), dataclass() wraps (:115) and erases the
+      class attribute -> the value exists on instances only, and DOES reach
+      to_dict()/from_dict and params/env.yaml (train.py:273 -> dict.py:57).
+    => Step 2 may promote it to an explicit build argument; the field, its default
+       and the log surface must be preserved (no getattr(cls, 'params_version') reads).
+CONFIGCLASS_FIELDS_OK
+[22] configclass field-surface gate falsifier (each drift must still fire)
+  to_dict loss      : FIRES
+  instance loss    : FIRES
+  field loss       : FIRES
+  cls attr mismatch: FIRES
+  mixed surface    : FIRES
+  branch mismatch  : FIRES
+CONFIGCLASS_FIELDS_GATE_FALSIFIABLE
+[23] config snapshot serializer (order / floats / identities / paths / digest)
+  ok   snapshot/json-stable
+  ok   order/obs-groups-visible
+  ok   order/extero-terms
+  ok   order/digest-covers-order
+  ok   floats/bit-exact
+  ok   floats/no-fixed-digits
+  ok   floats/tagged-nan
+  ok   floats/tagged-inf
+  ok   floats/tagged--inf
+  ok   floats/bare-nan-illegal
+  ok   identity/callables-present
+  ok   identity/name-form
+  ok   identity/no-address
+  ok   identity/terrain-generator-class-type
+  ok   missing/distinguishable
+  ok   missing/deepcopy-breaks-identity
+  ok   missing/detected-by-type
+  ok   agent/no-address
+  ok   agent/missing-tagged
+  ok   agent/deterministic
+  ok   digest/cross-process-stable
+  ok   paths/repo-relative
+  ok   paths/no-absolute-leak
+  ok   paths/external-untouched
+  ok   tags/__slice__
+  ok   tags/__tuple__
+  ok   digest/deterministic
+  ok   digest/discriminates
+  ok   digest/versioned-format
+  snapshot digest (v14): d63c5ad7e6e50bb2... size 49359 bytes
+CFG_SNAPSHOT_OK
+[24] recipe golden lock (every registered task/PLAY vs versions\lizard\cfg_lock.json)
+  registered rl_exp tasks: 34
+CFG_LOCK_OK (34 tasks, isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13)
+[25] recipe golden gate falsifier (each drift must still fire)
+  combination: isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13
+  ok   baseline/clean
+  ok   baseline/entry-is-recipe-only
+  ok   baseline/keys-carry-combination
+  FIRES digest <- Lizard-Rough-v14: golden entry is internally inconsistent (digest does not match its own snapshot) -- the lock was hand-edited; a drift diff would be unusable
+  ok   drift/digest
+  FIRES snapshot only <- Lizard-Rough-v14: golden entry is internally inconsistent (digest does not match its own snapshot) -- the lock was hand-edited; a drift diff would be unusable
+  ok   drift/hand-edited-lock
+  Lizard-Rough-v14: 1 path(s) differ
+    env.decimation: 999 -> 4
+  FIRES nested leaf <- Lizard-Rough-v14: golden entry is internally inconsistent (digest does not match its own snapshot) -- the lock was hand-edited; a drift diff would be unusable
+  ok   drift/snapshot-leaf
+  FIRES lock version <- Lizard-Rough-v14: params_version 'v14' != golden 'v3' (the task id and the recipe it loads disagree)
+  ok   drift/version
+  FIRES id says v14, cfg loads v3 <- Lizard-Rough-v14: params_version 'v3' != golden 'v14' (the task id and the recipe it loads disagree)
+  ok   drift/task-id-vs-recipe
+  FIRES per-run field <- Lizard-Rough-v14: golden entry carries fields that are not recipe facts ['run_id']; run-scoped data here would make the lock grow with every run
+  ok   drift/run-scoped-entry
+  FIRES bogus entry <- Lizard-Rough-v99: golden entry has no registered task (retired task or renamed id)
+  ok   drift/retired-entry
+  FIRES entry removed <- Lizard-Rough-v14: no golden entry in this baseline (drifted out, or a new task)
+  ok   drift/missing-entry
+  FIRES combination moved <- no baseline for this framework combination (isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13); the lock holds ['isaaclab=deadbeef|rsl_rl=-|python=0']. A framework upgrade gets its OWN baseline pair -- never an in-place overwrite. Create one deliberately: --update --reason "<why this combination needs a baseline>"
+  ok   drift/no-baseline-for-combination
+  FIRES entry names a baseline the lock does not describe <- isaaclab=deadbeef|Lizard-Rough-v14: entry claims a baseline 'isaaclab=deadbeef' that the lock does not describe
+  ok   drift/orphan-entry
+  FIRES stale snapshot format <- baseline snapshot format 0 != serializer 2: the stored snapshots cannot be compared with freshly taken ones
+  ok   drift/snapshot-format
+  ok   lock/format-refused
+  ok   lock/missing-reported
+  note: C:\Users\yanke03\AppData\Local\Temp\cfg_lock_u1vl33ec\written.json missing; create the baseline deliberately with --update --reason "<why>" (no golden means no drift detection at all)
+  combination: isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13
+  change: new baseline (2 tasks)
+  REFUSED: --update needs --reason. Review the diff above (field paths, not just digests),
+           then re-run: --update --reason "lizard-v15 golden: <what moved and why>"
+  ok   update/refused-without-reason
+  ok   update/refused-wrote-nothing
+  note: C:\Users\yanke03\AppData\Local\Temp\cfg_lock_u1vl33ec\written.json missing; create the baseline deliberately with --update --reason "<why>" (no golden means no drift detection at all)
+  combination: isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13
+  change: new baseline (2 tasks)
+  lock written: C:\Users\yanke03\AppData\Local\Temp\cfg_lock_u1vl33ec\written.json (148 KiB)
+  baselines in file: 1, entries: 2
+  WARN: repo tree is dirty -- this baseline is NOT a clean one; regenerate after committing
+  ok   update/writes-with-reason
+  ok   update/one-block-per-combination
+  ok   update/entries-are-keyed-task-ids
+  ok   text/roundtrip-byte-identical
+  ok   text/one-line-per-changed-leaf
+  ok   diff/paths
+  ok   diff/limit-honoured
+CFG_LOCK_GATE_FALSIFIABLE
+[26] run manifest (T0/T1 record, checkpoint infos, external index, --verify)
+[run-manifest] 2026-09-15_14-00-00_v14: T0 recorded (C:\Users\yanke03\AppData\Local\Temp\runrecord_xcb6blwv\2026-09-15_14-00-00_v14\run_manifest.json)
+[run-manifest] 2026-09-15_14-00-00_v14: env built as declared (obs groups ['proprio', 'extero', 'priv'])
+[run-manifest] 2026-09-15_14-00-00_v14: T1 frozen sha256=799c9eadbfa08bd8 iter=42
+  ok   record/stages
+  ok   record/t1-frozen
+  ok   record/no-self-hash
+  ok   record/code-sources
+  ok   record/declaration
+  ok   record/resolved-models
+  ok   record/effective-lr
+  ok   record/obs-dims
+  ok   record/curriculum-evidence
+  ok   record/distributed-flags
+  ok   checkpoint/infos
+  ok   checkpoint/index-sha
+  ok   verify/clean
+  ok   verify/record-complete
+  ok   verify/assets
+  ok   verify/recipe
+  ok   verify/checkpoints
+  ok   verify/no-unexplained-failure
+  ok   verify/rebuild-unknown
+  run: C:\Users\yanke03\AppData\Local\Temp\runrecord_xcb6blwv\2026-09-15_14-00-00_v14
+  [记录完整] 通过: T0/T1 present, T1 sha256=799c9eadbfa08bd8
+  [记录完整] 通过: T1 digest re-derived from the record (799c9eadbfa08bd8)
+  [记录完整] 通过: declared/actual agree on 5 field(s)
+  [可重建] 通过: repository: rev aaaa1111 and its diff digest match
+  [可重建] 通过: isaaclab: rev bbbb2222 and its diff digest match
+  [可重建] 通过: rsl_rl: rev bbbb2222 and its diff digest match
+  [可重建] 通过: assets: 83 locked file(s) match (allow-list only (USD dependency closure not implemented))
+  [可重建] 通过: recipe: reviewed golden unchanged (3c6439cea8e2)
+  [记录完整] 通过: curriculum: fresh run, no resume to restore
+  [可重建] 通过: checkpoints: 1 file(s) match; payload contents not read (tensor digests live inside the checkpoint's infos)
+  [已验证重建] 未知: isolation rebuild is ARCH_PLAN 1.5: no rebuild record, so nothing is claimed here (not required yet)
+  evidence levels: pass=10 fail=0 unknown=1 (of which required-and-unknown: 0)
+RUN_MANIFEST_OK
+  ok   verify/exit-code
+[run-manifest] run: T0 recorded (C:\Users\yanke03\AppData\Local\Temp\runrecord_xcb6blwv\tmpehw652mq\run\run_manifest.json)
+[run-manifest] run: env built as declared (obs groups ['proprio', 'extero', 'priv'])
+[run-manifest] run: T1 frozen sha256=e4f9ebb74b6940ab iter=42
+  ok   s10/restored-complete
+[run-manifest] run: T0 recorded (C:\Users\yanke03\AppData\Local\Temp\runrecord_xcb6blwv\tmpe3htadpo\run\run_manifest.json)
+[run-manifest] run: env built as declared (obs groups ['proprio', 'extero', 'priv'])
+[run-manifest] run: T1 frozen sha256=56a2da3171e20123 iter=42
+  ok   s10/restored-partial-v1
+[run-manifest] run: T0 recorded (C:\Users\yanke03\AppData\Local\Temp\runrecord_xcb6blwv\tmpgwl8bzb1\run\run_manifest.json)
+[run-manifest] run: env built as declared (obs groups ['proprio', 'extero', 'priv'])
+[run-manifest] run: T1 frozen sha256=8194ef6740f9c999 iter=42
+  ok   s10/dropped
+[run-manifest] run: T0 recorded (C:\Users\yanke03\AppData\Local\Temp\runrecord_xcb6blwv\tmp_w7x4o1p\run\run_manifest.json)
+[run-manifest] run: env built as declared (obs groups ['proprio', 'extero', 'priv'])
+[run-manifest] run: T1 frozen sha256=0178e0affb827c08 iter=42
+  ok   s10/module-unavailable
+  run: C:\Users\yanke03\AppData\Local\Temp\runrecord_xcb6blwv\2026-09-15_14-00-00_v14_tampered
+  [记录完整] 通过: T0/T1 present, T1 sha256=799c9eadbfa08bd8
+  [记录完整] 失败: T1 digest mismatch: the record was edited after freezing
+  [记录完整] 通过: declared/actual agree on 5 field(s)
+  [可重建] 通过: repository: rev aaaa1111 and its diff digest match
+  [可重建] 通过: isaaclab: rev bbbb2222 and its diff digest match
+  [可重建] 通过: rsl_rl: rev bbbb2222 and its diff digest match
+  [可重建] 通过: assets: 83 locked file(s) match (allow-list only (USD dependency closure not implemented))
+  [可重建] 通过: recipe: reviewed golden unchanged (3c6439cea8e2)
+  [记录完整] 通过: curriculum: fresh run, no resume to restore
+  [可重建] 通过: checkpoints: 1 file(s) match; payload contents not read (tensor digests live inside the checkpoint's infos)
+  [已验证重建] 未知: isolation rebuild is ARCH_PLAN 1.5: no rebuild record, so nothing is claimed here (not required yet)
+  evidence levels: pass=9 fail=1 unknown=1 (of which required-and-unknown: 0)
+  BLOCKING: record: T1 digest does not describe the manifest it lives in
+RUN_MANIFEST_DRIFT (1)
+  ok   negative/declaration-edited
+  ok   negative/forged-pair
+  run: C:\Users\yanke03\AppData\Local\Temp\runrecord_xcb6blwv\2026-09-15_14-00-00_v14_tampered
+  [记录完整] 失败: stages missing: ['ready_to_learn'] (run never reached T1?)
+  [记录完整] 失败: T1 digest mismatch: the record was edited after freezing
+  [记录完整] 通过: declared/actual agree on 5 field(s)
+  [可重建] 通过: repository: rev aaaa1111 and its diff digest match
+  [可重建] 通过: isaaclab: rev bbbb2222 and its diff digest match
+  [可重建] 通过: rsl_rl: rev bbbb2222 and its diff digest match
+  [可重建] 通过: assets: 83 locked file(s) match (allow-list only (USD dependency closure not implemented))
+  [可重建] 通过: recipe: reviewed golden unchanged (3c6439cea8e2)
+  [记录完整] 未知: curriculum: status=None source_version=None terms=[none] c_k=None counter=None rank=None
+  [可重建] 通过: checkpoints: 1 file(s) match; payload contents not read (tensor digests live inside the checkpoint's infos)
+  [已验证重建] 未知: isolation rebuild is ARCH_PLAN 1.5: no rebuild record, so nothing is claimed here (not required yet)
+  evidence levels: pass=7 fail=2 unknown=2 (of which required-and-unknown: 1)
+  BLOCKING: C:\Users\yanke03\AppData\Local\Temp\runrecord_xcb6blwv\2026-09-15_14-00-00_v14_tampered: incomplete record, missing ['ready_to_learn']
+  BLOCKING: record: T1 digest does not describe the manifest it lives in
+RUN_MANIFEST_DRIFT (2)
+  ok   negative/missing-t1
+  run: C:\Users\yanke03\AppData\Local\Temp\runrecord_xcb6blwv\2026-09-15_14-00-00_v14_tampered
+  [记录完整] 通过: T0/T1 present, T1 sha256=220e20ec63bdf50e
+  [记录完整] 通过: T1 digest re-derived from the record (220e20ec63bdf50e)
+  [记录完整] 通过: declared/actual agree on 5 field(s)
+  [可重建] 通过: repository: recorded at deadbeef1234, tree has since moved to aaaa1111; the run's code is reachable at the recorded revision
+  [可重建] 通过: isaaclab: rev bbbb2222 and its diff digest match
+  [可重建] 通过: rsl_rl: rev bbbb2222 and its diff digest match
+  [可重建] 通过: assets: 83 locked file(s) match (allow-list only (USD dependency closure not implemented))
+  [可重建] 通过: recipe: reviewed golden unchanged (3c6439cea8e2)
+  [记录完整] 通过: curriculum: fresh run, no resume to restore
+  [可重建] 通过: checkpoints: 1 file(s) match; payload contents not read (tensor digests live inside the checkpoint's infos)
+  [已验证重建] 未知: isolation rebuild is ARCH_PLAN 1.5: no rebuild record, so nothing is claimed here (not required yet)
+  evidence levels: pass=10 fail=0 unknown=1 (of which required-and-unknown: 0)
+RUN_MANIFEST_OK
+  ok   verify/rev-moved-is-reachable
+  run: C:\Users\yanke03\AppData\Local\Temp\runrecord_xcb6blwv\2026-09-15_14-00-00_v14_tampered
+  [记录完整] 通过: T0/T1 present, T1 sha256=f6dbcd4ac77451b4
+  [记录完整] 通过: T1 digest re-derived from the record (f6dbcd4ac77451b4)
+  [记录完整] 通过: declared/actual agree on 5 field(s)
+  [可重建] 未知: repository: the run had 1 untracked code file(s) (e.g. ['rl_exp/tasks/new_thing.py']); this record hashes them and stops there -- whether the content was kept is asserted by the 1.5 drill material (rebuild --capture --archive), not by the run record (PLAN.md #18).
+  [可重建] 通过: isaaclab: rev bbbb2222 and its diff digest match
+  [可重建] 通过: rsl_rl: rev bbbb2222 and its diff digest match
+  [可重建] 通过: assets: 83 locked file(s) match (allow-list only (USD dependency closure not implemented))
+  [可重建] 通过: recipe: reviewed golden unchanged (3c6439cea8e2)
+  [记录完整] 通过: curriculum: fresh run, no resume to restore
+  [可重建] 通过: checkpoints: 1 file(s) match; payload contents not read (tensor digests live inside the checkpoint's infos)
+  [已验证重建] 未知: isolation rebuild is ARCH_PLAN 1.5: no rebuild record, so nothing is claimed here (not required yet)
+  evidence levels: pass=9 fail=0 unknown=2 (of which required-and-unknown: 1)
+  NOT CLAIMED: repository: the run had 1 untracked code file(s) (e.g. ['rl_exp/tasks/new_thing.py']); this record hashes them and stops there -- whether the content was kept is asserted by the 1.5 drill material (rebuild --capture --archive), not by the run record (PLAN.md #18).
+RUN_MANIFEST_PARTIAL (1 required claim(s) unknown)
+  ok   verify/untracked-code-unrecoverable
+  run: C:\Users\yanke03\AppData\Local\Temp\runrecord_xcb6blwv\2026-09-15_14-00-00_v14_tampered
+  [记录完整] 通过: T0/T1 present, T1 sha256=ffc74dc08fc3eea1
+  [记录完整] 通过: T1 digest re-derived from the record (ffc74dc08fc3eea1)
+  [记录完整] 通过: declared/actual agree on 5 field(s)
+  [可重建] 未知: repository: the run worked in a dirty tree and that diff no longer matches (recorded differen -> d); uncommitted code is hashed, not stored here -- the 1.5 drill material is where that is asserted (PLAN.md #18).
+  [可重建] 通过: isaaclab: rev bbbb2222 and its diff digest match
+  [可重建] 通过: rsl_rl: rev bbbb2222 and its diff digest match
+  [可重建] 通过: assets: 83 locked file(s) match (allow-list only (USD dependency closure not implemented))
+  [可重建] 通过: recipe: reviewed golden unchanged (3c6439cea8e2)
+  [记录完整] 通过: curriculum: fresh run, no resume to restore
+  [可重建] 通过: checkpoints: 1 file(s) match; payload contents not read (tensor digests live inside the checkpoint's infos)
+  [已验证重建] 未知: isolation rebuild is ARCH_PLAN 1.5: no rebuild record, so nothing is claimed here (not required yet)
+  evidence levels: pass=9 fail=0 unknown=2 (of which required-and-unknown: 1)
+  NOT CLAIMED: repository: the run worked in a dirty tree and that diff no longer matches (recorded differen -> d); uncommitted code is hashed, not stored here -- the 1.5 drill material is where that is asserted (PLAN.md #18).
+RUN_MANIFEST_PARTIAL (1 required claim(s) unknown)
+  ok   verify/dirty-diff-unrecoverable
+  run: C:\Users\yanke03\AppData\Local\Temp\runrecord_xcb6blwv\2026-09-15_14-00-00_v14_tampered
+  [记录完整] 通过: T0/T1 present, T1 sha256=799c9eadbfa08bd8
+  [记录完整] 失败: T1 digest mismatch: the record was edited after freezing
+  [记录完整] 通过: declared/actual agree on 5 field(s)
+  [可重建] 通过: repository: rev aaaa1111 and its diff digest match
+  [可重建] 通过: isaaclab: rev bbbb2222 and its diff digest match
+  [可重建] 通过: rsl_rl: rev bbbb2222 and its diff digest match
+  [可重建] 失败: assets: [] (recorded 83 files)
+  [可重建] 通过: recipe: reviewed golden unchanged (3c6439cea8e2)
+  [记录完整] 通过: curriculum: fresh run, no resume to restore
+  [可重建] 通过: checkpoints: 1 file(s) match; payload contents not read (tensor digests live inside the checkpoint's infos)
+  [已验证重建] 未知: isolation rebuild is ARCH_PLAN 1.5: no rebuild record, so nothing is claimed here (not required yet)
+  evidence levels: pass=8 fail=2 unknown=1 (of which required-and-unknown: 0)
+  BLOCKING: record: T1 digest does not describe the manifest it lives in
+  BLOCKING: assets: content differs from the recorded lock
+RUN_MANIFEST_DRIFT (2)
+  ok   negative/assets-changed
+  run: C:\Users\yanke03\AppData\Local\Temp\runrecord_xcb6blwv\2026-09-15_14-00-00_v14_tampered
+  [记录完整] 通过: T0/T1 present, T1 sha256=799c9eadbfa08bd8
+  [记录完整] 失败: T1 digest mismatch: the record was edited after freezing
+  [记录完整] 通过: declared/actual agree on 5 field(s)
+  [可重建] 通过: repository: rev aaaa1111 and its diff digest match
+  [可重建] 通过: isaaclab: rev bbbb2222 and its diff digest match
+  [可重建] 通过: rsl_rl: rev bbbb2222 and its diff digest match
+  [可重建] 通过: assets: 83 locked file(s) match (allow-list only (USD dependency closure not implemented))
+  [可重建] 通过: recipe: reviewed golden unchanged (3c6439cea8e2)
+  [记录完整] 通过: curriculum: fresh run, no resume to restore
+  [可重建] 通过: checkpoints: 1 file(s) match; payload contents not read (tensor digests live inside the checkpoint's infos)
+  [已验证重建] 未知: isolation rebuild is ARCH_PLAN 1.5: no rebuild record, so nothing is claimed here (not required yet)
+  evidence levels: pass=9 fail=1 unknown=1 (of which required-and-unknown: 0)
+  BLOCKING: record: T1 digest does not describe the manifest it lives in
+RUN_MANIFEST_DRIFT (1)
+  ok   negative/recipe-changed
+[run-manifest] 2026-09-15_13-00-00_v14: T0 recorded (C:\Users\yanke03\AppData\Local\Temp\runrecord_xcb6blwv\2026-09-15_13-00-00_v14\run_manifest.json)
+[run-manifest] 2026-09-15_13-00-00_v14: env built as declared (obs groups ['proprio', 'extero', 'priv'])
+[run-manifest] 2026-09-15_13-00-00_v14: T1 frozen sha256=c5841c531f5241e2 iter=42
+  ok   negative/pre-t1-checkpoint
+  run: C:\Users\yanke03\AppData\Local\Temp\runrecord_xcb6blwv\2026-09-15_13-00-00_v14
+  [记录完整] 通过: T0/T1 present, T1 sha256=c5841c531f5241e2
+  [记录完整] 通过: T1 digest re-derived from the record (c5841c531f5241e2)
+  [记录完整] 通过: declared/actual agree on 5 field(s)
+  [可重建] 通过: repository: rev aaaa1111 and its diff digest match
+  [可重建] 通过: isaaclab: rev bbbb2222 and its diff digest match
+  [可重建] 通过: rsl_rl: rev bbbb2222 and its diff digest match
+  [可重建] 通过: assets: 83 locked file(s) match (allow-list only (USD dependency closure not implemented))
+  [可重建] 通过: recipe: reviewed golden unchanged (3c6439cea8e2)
+  [记录完整] 通过: curriculum: fresh run, no resume to restore
+  [可重建] 未知: checkpoints: 1 file(s) match; payload contents not read (tensor digests live inside the checkpoint's infos)
+  [已验证重建] 未知: isolation rebuild is ARCH_PLAN 1.5: no rebuild record, so nothing is claimed here (not required yet)
+  evidence levels: pass=9 fail=0 unknown=2 (of which required-and-unknown: 1)
+  BLOCKING: checkpoints: 1 written before T1 froze: ['model_0.pt']
+RUN_MANIFEST_DRIFT (1)
+  ok   negative/pre-t1-verify
+  run: C:\Users\yanke03\AppData\Local\Temp\runrecord_xcb6blwv\2026-09-15_14-00-00_v14
+  [记录完整] 通过: T0/T1 present, T1 sha256=799c9eadbfa08bd8
+  [记录完整] 通过: T1 digest re-derived from the record (799c9eadbfa08bd8)
+  [记录完整] 通过: declared/actual agree on 5 field(s)
+  [可重建] 通过: repository: rev aaaa1111 and its diff digest match
+  [可重建] 通过: isaaclab: rev bbbb2222 and its diff digest match
+  [可重建] 通过: rsl_rl: rev bbbb2222 and its diff digest match
+  [可重建] 通过: assets: 83 locked file(s) match (allow-list only (USD dependency closure not implemented))
+  [可重建] 通过: recipe: reviewed golden unchanged (3c6439cea8e2)
+  [记录完整] 通过: curriculum: fresh run, no resume to restore
+  [可重建] 失败: checkpoints: ['model_42.pt: missing']
+  [已验证重建] 未知: isolation rebuild is ARCH_PLAN 1.5: no rebuild record, so nothing is claimed here (not required yet)
+  evidence levels: pass=9 fail=1 unknown=1 (of which required-and-unknown: 0)
+  BLOCKING: checkpoints: ['model_42.pt: missing']
+RUN_MANIFEST_DRIFT (1)
+  ok   negative/checkpoint-gone
+  run: C:\Users\yanke03\AppData\Local\Temp\runrecord_xcb6blwv\2026-09-15_14-00-00_v14
+  [记录完整] 通过: T0/T1 present, T1 sha256=799c9eadbfa08bd8
+  [记录完整] 通过: T1 digest re-derived from the record (799c9eadbfa08bd8)
+  [记录完整] 通过: declared/actual agree on 5 field(s)
+  [可重建] 通过: repository: rev aaaa1111 and its diff digest match
+  [可重建] 通过: isaaclab: rev bbbb2222 and its diff digest match
+  [可重建] 通过: rsl_rl: rev bbbb2222 and its diff digest match
+  [可重建] 通过: assets: 83 locked file(s) match (allow-list only (USD dependency closure not implemented))
+  [可重建] 通过: recipe: reviewed golden unchanged (3c6439cea8e2)
+  [记录完整] 通过: curriculum: fresh run, no resume to restore
+  [可重建] 通过: checkpoints: 1 file(s) match; payload contents not read (tensor digests live inside the checkpoint's infos)
+  [已验证重建] 未知: isolation rebuild is ARCH_PLAN 1.5: no rebuild record, so nothing is claimed here (not required yet)
+  evidence levels: pass=10 fail=0 unknown=1 (of which required-and-unknown: 0)
+RUN_MANIFEST_OK
+  ok   negative/checkpoint-restored
+[run-manifest] 2026-09-15_12-00-00_v14: T0 recorded (C:\Users\yanke03\AppData\Local\Temp\runrecord_xcb6blwv\2026-09-15_12-00-00_v14\run_manifest.json)
+[run-manifest] FAIL: env construction disagreed with the declaration -- num_envs: declared 4096 != actual 64
+[run-manifest] 2026-09-15_12-00-00_v14: T1 frozen sha256=553cbc36d30c3f85 iter=42
+  ok   negative/env-mismatch-fails
+  run: C:\Users\yanke03\AppData\Local\Temp\runrecord_xcb6blwv\2026-09-15_12-00-00_v14
+  [记录完整] 失败: recorded failures: env construction disagreed with the declaration -- num_envs: declared 4096 != actual 64
+  [记录完整] 通过: T1 digest re-derived from the record (553cbc36d30c3f85)
+  [记录完整] 失败: construction disagreement in the record: ['num_envs: declared 4096 != actual 64']
+  [可重建] 通过: repository: rev aaaa1111 and its diff digest match
+  [可重建] 通过: isaaclab: rev bbbb2222 and its diff digest match
+  [可重建] 通过: rsl_rl: rev bbbb2222 and its diff digest match
+  [可重建] 通过: assets: 83 locked file(s) match (allow-list only (USD dependency closure not implemented))
+  [可重建] 通过: recipe: reviewed golden unchanged (3c6439cea8e2)
+  [记录完整] 通过: curriculum: fresh run, no resume to restore
+  [可重建] 通过: checkpoints: 1 file(s) match; payload contents not read (tensor digests live inside the checkpoint's infos)
+  [已验证重建] 未知: isolation rebuild is ARCH_PLAN 1.5: no rebuild record, so nothing is claimed here (not required yet)
+  evidence levels: pass=8 fail=2 unknown=1 (of which required-and-unknown: 0)
+  BLOCKING: C:\Users\yanke03\AppData\Local\Temp\runrecord_xcb6blwv\2026-09-15_12-00-00_v14: env construction disagreed with the declaration -- num_envs: declared 4096 != actual 64
+  BLOCKING: record: declared/actual disagree -- ['num_envs: declared 4096 != actual 64']
+RUN_MANIFEST_DRIFT (2)
+  ok   negative/env-mismatch-verify
+  ok   determinism/state-digest
+RUN_MANIFEST_TEST_OK
+[27] isolation rebuild gate (material capture/refusal, sources, missing-file negative test)
+[run-manifest] run_drifted: T0 recorded (C:\Users\yanke03\AppData\Local\Temp\rebuild_gate_zklf9lhy\run_drifted\run_manifest.json)
+[run-manifest] run_drifted: env built as declared (obs groups ['proprio', 'extero', 'priv'])
+[run-manifest] run_drifted: T1 frozen sha256=abbfb4a33d1aded0 iter=42
+  ok   capture/refuse-drifted-diff
+  ok   capture/refusal-writes-no-material
+  ok   capture/refusal-is-written-down
+[run-manifest] run_noarch: T0 recorded (C:\Users\yanke03\AppData\Local\Temp\rebuild_gate_zklf9lhy\run_noarch\run_manifest.json)
+[run-manifest] run_noarch: env built as declared (obs groups ['proprio', 'extero', 'priv'])
+[run-manifest] run_noarch: T1 frozen sha256=a290f3d8c7b8ef45 iter=42
+  ok   capture/refuse-without-archive
+  ok   capture/accept-with-archive
+  ok   capture/stored-diff-hashes-as-recorded
+  ok   capture/payload-keeps-the-content
+  ok   capture/payload-hash-matches
+  ok   capture/clean-source-needs-no-archive
+[run-manifest] run_untracked: T0 recorded (C:\Users\yanke03\AppData\Local\Temp\rebuild_gate_zklf9lhy\run_untracked\run_manifest.json)
+[run-manifest] run_untracked: env built as declared (obs groups ['proprio', 'extero', 'priv'])
+[run-manifest] run_untracked: T1 frozen sha256=065bd1dfded45e2b iter=42
+  ok   capture/refuse-vanished-untracked
+  ok   capture/keep-untracked-code
+  ok   capture/untracked-payload-stored
+  ok   check/exit-code
+  ok   check/material-row
+  ok   check/binding-row
+  ok   check/informational-rows-do-not-decide
+  ok   check/no-original-is-unknown
+  ok   check/fallback-to-original-fails
+  ok   check/readable-original-is-informational
+  ok   check/undeclared-import-location-fails
+  ok   check/reused-deps-are-not-asserted
+  ok   check/rebuilt-module-is-asserted
+  ok   check/asset-lock-fallback-fails
+  ok   check/path-config-only-is-not-a-drill
+  ok   check/scope-declares-reuse
+  ok   maintest/removed-payload-fails
+  ok   maintest/restored-payload-passes
+  ok   maintest/payload-is-back
+  ok   check/refused-material-not-claimed
+  ok   check/edited-payload-fails
+[run-manifest] run_forged: T0 recorded (C:\Users\yanke03\AppData\Local\Temp\rebuild_gate_zklf9lhy\run_forged\run_manifest.json)
+[run-manifest] run_forged: env built as declared (obs groups ['proprio', 'extero', 'priv'])
+[run-manifest] run_forged: T1 frozen sha256=d9d7237a7b0e7892 iter=42
+  ok   capture/refuse-edited-record
+  ok   check/failed-material-blocks
+REBUILD_GATE_TEST_OK
+ALL_OFFLINE_CHECKS_PASSED

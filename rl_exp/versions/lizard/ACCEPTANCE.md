@@ -86,6 +86,7 @@
   - **追加（2026-09-15 晚）**：**已执行**（3 代表任务 × resume/drop，15 臂；`afd1e54`），结论见 1.4b 节。
 - **1.3a S01–S10**（载荷/指纹/损坏/边界/兼容）：**已执行（离线）**，见下节。
 - **无归档的"可取回"项**：一律保持未知（`PLAN.md` #18），本批不因此判失败，也不提升为通过。
+- **出口判定（2026-09-15 晚，F3 补记）**：本批**必需**验收 ①②③④ **通过**（R2 动态模型类进 T1、R3 恢复后生效 lr、R5/R6 失败无 T1、R7/R8 引用漂移与未声明来源判失败）；**R4 的两项未知属非必需项**（未跟踪代码可取得、格式 1 配方摘要可比性），**不阻塞本阶段出口**，原判定与边界一并保留。§1.2b 追加说明只补"材料在哪、摘要多少"，**不把当时的未知改判为通过**。
 
 ### 已知瑕疵（不阻塞本批，需另行处理）
 
@@ -315,4 +316,33 @@ ValueError: curriculum state in the checkpoint does not fit this task: runtime.n
 - 可**宣告**："**1.4 C 层集成级恢复验收通过（三条代表线 × resume/drop）**"：回填早于首次 reset、逐 step 时钟 +1、课程按真实节流更新且合法、训练正常推进、drop 冷启动且两臂同 ckpt 加载。
 - **不可**据本节宣告：① "复现"——冷热前 N 步不逐位一致（RNG/出生/per-episode 瞬态刻意不存），C 层只证**接线时序**；② 其它版本的 C 层（v5–v10、v13 共享同一适配器与注册表，但未逐版本真跑）；③ 多卡续训（非 0 rank 明确拒绝，不在保证范围）；④ 长期训练统计等价（84 it 只够覆盖 ≥2 个课程块与 2H）。
 - **本批损耗（记录在案）**：批量链式启动被 shell 截断两次（t_v12-drop 41/84 it、S·v3 264 步），产物**不计证据**，均改单臂重跑；`s_v14`/`s_v12` 两臂的 `run_dir` 未记录（观察器后补该字段），其 ckpt 由 `--source-checkpoint` 显式给出。
+
+---
+
+## Step 1 汇总复核（2026-09-15 晚，F1）
+
+**性质**：**追加**条目。历史各节的原摘要与原结论**不改**（硬约束 6）；此前 1.3a / 1.5a 前提里"提交后须按同表重跑"的要求由此闭合到 revision。
+
+### 前提（本次复核绑定的对象）
+
+| 项 | 值 |
+|---|---|
+| 项目 rev | `00d0b07c768fa8db0206007cd9ad74ed6d976f33`（`00d0b07`）；**跟踪文件零改动**（`git diff HEAD` = 0 行，空摘要 `e3b0c442…`）。当时树上另有 2 项**未跟踪**：`ablation_harness/results/locomotion_eval_v2/v14/`（并发 eval 产物，非本次改动）与本日志 |
+| IsaacLab | rev `28a37cecdd43`，dirty，diff `13aee682fe1efb37…`，**344 行**；未跟踪 6 项（代码根内 1 项 `…/velocity/config/spider/`） |
+| rsl_rl | 同树同 rev，`editable/source`（包目录 `env_isaaclab\Lib\site-packages\rsl_rl`） |
+| Python | `E:\IsaacLab\env_isaaclab\Scripts\python.exe`，3.12.13 |
+| 框架组合 | `isaaclab=28a37cecdd43\|rsl_rl=source:28a37cecdd43\|python=3.12.13`（与 `cfg_lock.json` 的 baseline 键一致） |
+| 命令 | `rl_exp\tools\verify\run_offline_checks.bat`（cwd 本仓） |
+| 结果 | `ALL_OFFLINE_CHECKS_PASSED`；`[1] PIN_CHECK_OK`、`[15]`（`test_joint_sir` 10 passed / `test_resume_state` 27 passed）、`[21] CONFIGCLASS_FIELDS_OK`、`[24] CFG_LOCK_OK (34 tasks)`、`[26] RUN_MANIFEST_TEST_OK`、`[27] REBUILD_GATE_TEST_OK` |
+| 日志 | `rl_exp/versions/lizard/verify_logs/step1-offline-00d0b07-2026-09-15.log`（入库） |
+
+### 框架漂移（286 → 344 行）影响审查
+
+| 项 | 结论 |
+|---|---|
+| rev 与未跟踪清单 | 与 R1 相同（rev `28a37cecdd43`；未跟踪 6 项，代码根内仍是 `spider/`）⇒ 漂移只在**已跟踪文件的 diff 内容** |
+| 逐文件归属 | **不可证**：R1 只记整体 diff 摘要（`cc25f24b`，286 行）+ 文件清单（同 5 个文件），未逐文件记摘要，内容也未落盘 ⇒ 按硬约束 6 记**未知**；不得反推"只差 train.py" |
+| extras 实际影响面（当前内容由 `fork_patches/local_tree_extras.patch` 钉住，`git apply --check --reverse` 通过） | `isaaclab.bat` 置空、`anymal_c_env.py` 加 `set_command` ⇒ **不在 lizard 路径**（bat 不参与 `python scripts/…`；anymal 是另一条 direct 任务）。`velocity_env_cfg.py` 的 DR 改动分两半：**值**半边被本仓覆盖（`lizard_params.yaml:141-142` = `[0.4,1.2]/[0.3,1.0]`，由 `lizard_env_cfg.py:159-160`、`teacher_env_cfg.py:614-615`、`parkour_env_cfg.py:424-425` 显式赋值）；**模式与节拍**半边（`base_external_force_torque.mode=interval` 及 `interval_range_s`、`push_robot.interval_range_s`）**未覆盖 ⇒ 继承进 lizard**，golden 里已能看到该形状（`mode: interval`） |
+| 是否补 C 层 | **不需要**：可归属的增量是 `train.py`/`play.py` 的 wrapper 与恢复门，已由 1.3a S01–S10 + 1.4b C 层覆盖；不可归属部分按未知处理，既不据此判失效，也不据此补跑 |
+| **新登记风险** | fork 树里的 DR 放大**会静默改变新 run 的 DR**（值被本仓覆盖、模式与节拍走继承），目前只有 golden 差异能抓到。这同时是"golden 承重"的正面证据。建议后续把这三处 DR 改动显式收编进本仓参数（或至少在 `fork_patches` 里标明其语义），避免"改 fork 树 = 改实验且无痕" |
 
