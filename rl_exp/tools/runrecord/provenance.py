@@ -76,15 +76,52 @@ def sha256_file(path: pathlib.Path | None, chunk: int = 1 << 20) -> str | None:
         return None
 
 
-def git_state(root: pathlib.Path | None, label: str) -> dict:
+# untracked entries that are not code: logs, caches, scratch dirs. Recorded, but they
+# do not make a run unrebuildable -- treating them as blockers would leave every
+# verdict "unknown" forever on a working machine, which is as useless as a green light.
+_NON_CODE_TOKENS = ("__pycache__", ".pyc", "logs/", "logs\\", ".tmp", ".log")
+
+
+def split_untracked(untracked: list[str], root: pathlib.Path | None, code_root: pathlib.Path | None) -> tuple[list[str], list[str]]:
+    """Split untracked files into those inside the importable code root and the rest.
+
+    Args:
+        untracked: paths as git reported them, relative to ``root``.
+        root: the work tree root.
+        code_root: where importable code lives (``<repo>``, ``<tree>/source``), or None.
+
+    Returns:
+        ``(in_code_root, outside)``: only the first group can change what a run did.
+    """
+    inside: list[str] = []
+    outside: list[str] = []
+    for relative in untracked:
+        cleaned = relative.strip('"')
+        if any(token in cleaned for token in _NON_CODE_TOKENS):
+            outside.append(cleaned)
+            continue
+        if root is None or code_root is None:
+            outside.append(cleaned)
+            continue
+        target = (root / cleaned).resolve()
+        if str(target).startswith(str(code_root)):
+            inside.append(cleaned)
+        else:
+            outside.append(cleaned)
+    return inside, outside
+
+
+def git_state(root: pathlib.Path | None, label: str, code_root: pathlib.Path | None = None) -> dict:
     """Provenance of one git work tree.
 
     Args:
         root: the work tree root, or None when it could not be resolved.
         label: name used in the ``available: False`` explanation.
+        code_root: importable-code root used to judge untracked files; None counts every
+            untracked file as relevant.
 
     Returns:
-        Revision, dirty flag, diff and status digests, and the untracked file list.
+        Revision, dirty flag, diff and status digests, and the untracked file split.
     """
     if root is None:
         return {"available": False, "detail": f"{label} root unresolved"}
@@ -94,6 +131,7 @@ def git_state(root: pathlib.Path | None, label: str) -> dict:
     porcelain = git(root, "status", "--porcelain=v2")
     status_lines = porcelain.splitlines()
     untracked = sorted(line.split(" ", 1)[1] for line in status_lines if line.startswith("? "))
+    in_code, outside = split_untracked(untracked, root, code_root)
     diff = git(root, "diff", "HEAD")
     return {
         "available": True,
@@ -105,7 +143,9 @@ def git_state(root: pathlib.Path | None, label: str) -> dict:
         "diff_lines": len(diff.splitlines()),
         "untracked_count": len(untracked),
         "untracked": untracked[:UNTRACKED_CAP],
-        "untracked_requires_archive": bool(untracked),
+        "untracked_in_code_root": in_code,
+        "untracked_outside_code_root": outside,
+        "untracked_requires_archive": bool(in_code),
     }
 
 
@@ -133,8 +173,9 @@ def rsl_rl_state() -> dict:
         package_dir = pathlib.Path(origin).resolve().parent
         tree = git(package_dir, "rev-parse", "--show-toplevel")
         if tree:
-            state = git_state(pathlib.Path(tree), "rsl_rl")
+            state = git_state(pathlib.Path(tree), "rsl_rl", code_root=package_dir)
             state["mode"] = "editable/source"
+            state["package_dir"] = relativize(str(package_dir))
             return state
     try:
         from importlib.metadata import version
@@ -156,8 +197,9 @@ def rsl_rl_id() -> str:
 
 def code_sources() -> dict:
     """All code the run depends on, recorded from what is actually importable."""
+    tree = isaac_root()
     return {
-        "repository": git_state(_REPO, "repository"),
-        "isaaclab": git_state(isaac_root(), "isaaclab"),
+        "repository": git_state(_REPO, "repository", code_root=_REPO),
+        "isaaclab": git_state(tree, "isaaclab", code_root=(tree / "source") if tree else None),
         "rsl_rl": rsl_rl_state(),
     }

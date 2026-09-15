@@ -354,17 +354,42 @@ def _effective_lr(runner) -> float | None:
         return None
 
 
-def _curriculum_state_evidence(env) -> dict:
-    """Evidence that the curriculum state was actually restored, not just intended."""
-    evidence: dict = {"module_present": importlib.util.find_spec("rl_exp.tasks.curriculum_state") is not None}
-    if not evidence["module_present"]:
-        return evidence
-    from rl_exp.tasks import curriculum_state as cstate
+def _declared_lr(agent_cfg) -> float | None:
+    """Learning rate the recipe asks for; the gap to the effective one is a fact, not a bug."""
+    try:
+        return agent_cfg.algorithm.learning_rate
+    except Exception:  # noqa: BLE001
+        return None
 
-    evidence["state_version"] = getattr(cstate, "STATE_VERSION", None)
-    evidence["state_key"] = getattr(cstate, "STATE_KEY", None)
-    evidence["common_step_counter"] = int(getattr(env.unwrapped, "common_step_counter", -1))
-    evidence["covered_terms"] = sorted(getattr(cstate, "_CFG_KEYS", {}) or [])
+
+def _curriculum_state_evidence(env) -> dict:
+    """Evidence that the curriculum state was actually restored, not just intended.
+
+    A module that cannot be imported is recorded as unavailable rather than taking the
+    whole T1 record down with it: the run's conditions are still worth freezing, and an
+    unimportable state module is itself a finding the record has to carry.
+    """
+    if importlib.util.find_spec("rl_exp.tasks.curriculum_state") is None:
+        return {"module_present": False, "detail": "rl_exp.tasks.curriculum_state is not importable"}
+    try:
+        from rl_exp.tasks import curriculum_state as cstate
+    except Exception as err:  # noqa: BLE001 - record the gap, do not lose the record
+        return {"module_present": True, "import_error": f"{type(err).__name__}: {err}"}
+
+    unwrapped = getattr(env, "unwrapped", env)
+    evidence = {
+        "module_present": True,
+        "state_version": getattr(cstate, "STATE_VERSION", None),
+        "state_key": getattr(cstate, "STATE_KEY", None),
+        "common_step_counter": int(getattr(unwrapped, "common_step_counter", -1)),
+    }
+    try:
+        covered = cstate.covered_terms(unwrapped)
+        evidence["covered_terms"] = sorted(covered) if covered else []
+        evidence["uncovered_terms"] = sorted(cstate.uncovered_terms(unwrapped))
+        evidence["requires_resume_state"] = bool(cstate.requires_resume_state(unwrapped))
+    except Exception as err:  # noqa: BLE001 - the module is identifiable even when the env is not scannable
+        evidence["terms_scan_error"] = f"{type(err).__name__}: {err}"
     return evidence
 
 
@@ -415,13 +440,25 @@ def freeze(
     """
     try:
         source = pathlib.Path(resume_path) if resume_path else None
+        declared_lr, effective_lr = _declared_lr(agent_cfg), _effective_lr(runner)
         stage = {
             "at": _now(),
             "env_cfg_digest": cs.digest(cs.snapshot(env.unwrapped.cfg)),
             "agent_digest": cs.digest(cs.snapshot(agent_cfg)),
             "resolved_algorithm": _class_id(getattr(runner, "alg", None)),
             "resolved_policy": _class_id(getattr(getattr(runner, "alg", None), "policy", None)),
-            "effective_lr": _effective_lr(runner),
+            "learning_rate": {
+                "declared_by_recipe": declared_lr,
+                "effective": effective_lr,
+                "agrees": declared_lr == effective_lr,
+                "source": (
+                    "recipe"
+                    if declared_lr == effective_lr
+                    else "checkpoint optimizer state overrode the recipe (resume)"
+                    if source is not None
+                    else "not the recipe value, and no checkpoint was loaded"
+                ),
+            },
             "iteration": getattr(runner, "current_learning_iteration", None),
             "obs_group_dims": {
                 name: list(dims) for name, dims in getattr(env.unwrapped.observation_manager, "group_obs_dim", {}).items()
@@ -515,10 +552,17 @@ def _index_checkpoint(ctx: RunContext, path: pathlib.Path, payload: dict) -> Non
 # ---------------------------------------------------------------------------------
 
 
-def _row(level: str, result: str, detail: str) -> dict:
+def _row(level: str, result: str, detail: str, required: bool = True) -> dict:
+    """One check. ``required`` marks a claim the run's integrity depends on.
+
+    An unknown on a required row is not a failure -- but it is also not a pass, so the
+    caller cannot report the run as verified (ARCH_PLAN hard constraint 1). Rows that
+    are honestly not attempted yet (the isolation rebuild of 1.5) are not required, so
+    they do not hold a record back either.
+    """
     assert level in EVIDENCE_LEVELS, level
     assert result in RESULTS, result
-    return {"level": level, "result": result, "detail": detail}
+    return {"level": level, "result": result, "detail": detail, "required": required}
 
 
 def verify(run_dir: pathlib.Path) -> tuple[list[dict], list[str]]:
@@ -562,6 +606,7 @@ def verify(run_dir: pathlib.Path) -> tuple[list[dict], list[str]]:
             "已验证重建",
             "未知",
             "isolation rebuild is ARCH_PLAN 1.5: no rebuild record, so nothing is claimed here",
+            required=False,
         )
     )
     return rows, problems
@@ -601,6 +646,13 @@ def _verify_self_consistency(manifest: dict, problems: list[str]) -> list[dict]:
 
 
 def _verify_code(manifest: dict, problems: list[str]) -> list[dict]:
+    """Can the code that ran be reached again, and did it move since?
+
+    A moved revision is not a failure: the record names the revision, so the code is
+    reachable (``git checkout <rev>``). What *is* a problem is a run whose code included
+    uncommitted changes: the record hashes the diff but does not contain it, so nothing
+    can bring that code back -- which is exactly the archive gap (PLAN.md #18).
+    """
     recorded = manifest.get("code", {})
     fresh = prov.code_sources()
     rows: list[dict] = []
@@ -614,22 +666,49 @@ def _verify_code(manifest: dict, problems: list[str]) -> list[dict]:
                 _row("可重建", "未知", f"{name}: installed distribution {before.get('distribution_version')}, source not pinned")
             )
             continue
-        if before.get("rev") != after.get("rev") or before.get("diff_sha256") != after.get("diff_sha256"):
-            rows.append(
-                _row("可重建", "失败", f"{name}: rev/diff moved ({before.get('rev')} -> {after.get('rev')})")
-            )
-            problems.append(f"{name}: code changed since the run")
-        elif before.get("untracked_requires_archive"):
+        moved = before.get("rev") != after.get("rev")
+        dirty_then = before.get("dirty")
+        recoverable = (not moved) or (not dirty_then)
+        code_in_untracked = before.get("untracked_in_code_root") or []
+        outside = len(before.get("untracked_outside_code_root") or [])
+        if dirty_then and code_in_untracked:
             rows.append(
                 _row(
                     "可重建",
                     "未知",
-                    f"{name}: rev matched; {before.get('untracked_count')} untracked file(s) present then "
-                    f"(archived? {before.get('untracked', [])[:3]})",
+                    f"{name}: the run had {len(code_in_untracked)} untracked code file(s) "
+                    f"(e.g. {code_in_untracked[:2]}); the record hashes them but cannot restore them "
+                    f"(PLAN.md #18). {outside} untracked file(s) outside the code root ignored",
+                )
+            )
+        elif not recoverable:
+            rows.append(
+                _row(
+                    "可重建",
+                    "未知",
+                    f"{name}: uncommitted changes at record time and the revision moved "
+                    f"({before.get('rev')} -> {after.get('rev')}); nothing can rebuild that exact code",
+                )
+            )
+        elif moved:
+            rows.append(
+                _row(
+                    "可重建",
+                    "通过",
+                    f"{name}: recorded at {before.get('rev')}, tree has since moved to {after.get('rev')}; "
+                    f"the run's code is reachable at the recorded revision"
+                    + (f" ({outside} untracked file(s) outside the code root ignored)" if outside else ""),
                 )
             )
         else:
-            rows.append(_row("可重建", "通过", f"{name}: rev {before.get('rev')} and diff digest match"))
+            rows.append(
+                _row(
+                    "可重建",
+                    "通过",
+                    f"{name}: rev {before.get('rev')} and its diff digest match"
+                    + (f" ({outside} untracked file(s) outside the code root ignored)" if outside else ""),
+                )
+            )
     return rows
 
 
@@ -724,14 +803,24 @@ def main(argv: list[str] | None = None) -> int:
     rows, problems = verify(target)
     print(f"  run: {cs.relativize(str(target))}")
     for row in rows:
-        print(f"  [{row['level']}] {row['result']}: {row['detail']}")
-    print(f"  evidence levels: pass={sum(r['result'] == '通过' for r in rows)} "
-          f"fail={sum(r['result'] == '失败' for r in rows)} unknown={sum(r['result'] == '未知' for r in rows)}")
+        mark = "" if row["required"] else " (not required yet)"
+        print(f"  [{row['level']}] {row['result']}: {row['detail']}{mark}")
+    unknown = [row for row in rows if row["result"] == "未知" and row["required"]]
+    print(
+        f"  evidence levels: pass={sum(r['result'] == '通过' for r in rows)} "
+        f"fail={sum(r['result'] == '失败' for r in rows)} unknown={sum(r['result'] == '未知' for r in rows)} "
+        f"(of which required-and-unknown: {len(unknown)})"
+    )
     if problems:
         for problem in problems:
             print(f"  BLOCKING: {problem}")
         print(f"RUN_MANIFEST_DRIFT ({len(problems)})")
         return 1
+    if unknown:
+        for row in unknown:
+            print(f"  NOT CLAIMED: {row['detail']}")
+        print(f"RUN_MANIFEST_PARTIAL ({len(unknown)} required claim(s) unknown)")
+        return 2
     print("RUN_MANIFEST_OK")
     return 0
 

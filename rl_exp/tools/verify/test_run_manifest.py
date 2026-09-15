@@ -77,19 +77,38 @@ class _StubEnv:
         )
 
 
-def _record(tmp: pathlib.Path, *, num_envs: int | None = None, freeze_it: bool = True, save_early: bool = False):
-    """Run the four recording call sites against stubs, saving one checkpoint."""
+def _record(
+    tmp: pathlib.Path,
+    *,
+    num_envs: int | None = None,
+    freeze_it: bool = True,
+    save_early: bool = False,
+    runner_lr: float | None = None,
+    resume_path: pathlib.Path | None = None,
+):
+    """Run the four recording call sites against stubs, saving one checkpoint.
+
+    ``runner_lr`` defaults to the recipe's own value, so the "declared == effective"
+    case is the honest default and a mismatch has to be asked for explicitly.
+    """
     cfg = LizardRoughTeacherEnvCfg_V14()
     agent = LizardTeacherV14PPORunnerCfg()
     env = _StubEnv(cfg, num_envs)
-    runner = _StubRunner()
+    runner = _StubRunner(lr=agent.algorithm.learning_rate if runner_lr is None else runner_lr)
     ctx = M.begin(log_dir=tmp, task=TASK, argv=["train.py", "--task", TASK], env_cfg=cfg, agent_cfg=agent)
     M.hook_runner_save(runner, ctx)
     if save_early:
         runner.save(tmp / "model_0.pt")
     M.after_env(ctx, env)
     if freeze_it:
-        M.freeze(ctx, runner=runner, env=env, agent_cfg=agent, resume_path=None, weights_only=False)
+        M.freeze(
+            ctx,
+            runner=runner,
+            env=env,
+            agent_cfg=agent,
+            resume_path=str(resume_path) if resume_path else None,
+            weights_only=False,
+        )
     if not save_early:
         runner.save(tmp / "model_42.pt")
     return ctx, env, runner
@@ -122,8 +141,24 @@ def _detail_result(rows: list[dict], prefix: str) -> str | None:
     return next((row["result"] for row in rows if row["detail"].startswith(prefix)), None)
 
 
+def _clean_sources() -> dict:
+    """A synthetic clean-tree provenance, so the test does not depend on the dev tree.
+
+    Recording from the live tree would make every assertion here depend on whether the
+    developer happens to have uncommitted work, which is exactly the situation the
+    record is supposed to describe rather than inherit.
+    """
+    return {
+        "repository": {"available": True, "rev": "aaaa1111", "dirty": False, "diff_sha256": "d", "untracked_in_code_root": []},
+        "isaaclab": {"available": True, "rev": "bbbb2222", "dirty": False, "diff_sha256": "d", "untracked_in_code_root": []},
+        "rsl_rl": {"available": True, "mode": "editable/source", "rev": "bbbb2222", "dirty": False, "diff_sha256": "d", "untracked_in_code_root": []},
+    }
+
+
 def main() -> int:
     root = pathlib.Path(tempfile.mkdtemp(prefix="runrecord_"))
+    real_sources = prov.code_sources
+    prov.code_sources = _clean_sources
     try:
         run_dir = root / "2026-09-15_14-00-00_v14"
         ctx, env, runner = _record(run_dir)
@@ -146,8 +181,10 @@ def main() -> int:
         check("record/declaration", {"seed", "num_envs", "sim_dt", "control_dt", "assets"} <= set(manifest["declaration"]))
         check(
             "record/effective-lr",
-            manifest["stages"]["ready_to_learn"]["effective_lr"] == 3e-4,
-            f"{manifest['stages']['ready_to_learn']['effective_lr']}",
+            manifest["stages"]["ready_to_learn"]["learning_rate"]["effective"]
+            == LizardTeacherV14PPORunnerCfg().algorithm.learning_rate
+            and manifest["stages"]["ready_to_learn"]["learning_rate"]["agrees"] is True,
+            f"{manifest['stages']['ready_to_learn']['learning_rate']}",
         )
         check(
             "record/obs-dims",
@@ -205,10 +242,40 @@ def main() -> int:
         check("negative/missing-t1", M.main(["--verify", str(bad)]) == 1, "missing T1 not reported")
         shutil.rmtree(bad)
 
-        bad = _tamper(run_dir, lambda d: d["code"]["repository"].__setitem__("rev", "0" * 12))
-        check("negative/code-moved", M.main(["--verify", str(bad)]) == 1, "moved revision not reported")
-        shutil.rmtree(bad)
+        # A moved revision on a clean record is NOT a failure: the code is reachable at the
+        # recorded revision, which is the point of recording it (verified by exit 0).
+        moved = _tamper(
+            run_dir, lambda d: d["code"]["repository"].__setitem__("rev", "deadbeef1234"), refresh_t1=True
+        )
+        moved_rows, moved_problems = M.verify(moved)
+        check(
+            "verify/rev-moved-is-reachable",
+            M.main(["--verify", str(moved)]) == 0
+            and not moved_problems
+            and any("reachable at the recorded revision" in row["detail"] for row in moved_rows),
+            f"{[r for r in moved_rows if r['level'] == '可重建']}",
+        )
+        shutil.rmtree(moved)
 
+        # A run whose code included UNTRACKED source cannot be rebuilt from the record:
+        # unknown on a required claim -> neither green nor a failure (hard constraint 1),
+        # and it must name the archive gap it is a symptom of.
+        dirty = _tamper(
+            run_dir,
+            lambda d: d["code"]["repository"].update(
+                dirty=True, rev="deadbeef1234", untracked_in_code_root=["rl_exp/tasks/new_thing.py"]
+            ),
+            refresh_t1=True,
+        )
+        dirty_rows, _ = M.verify(dirty)
+        check(
+            "verify/untracked-code-unrecoverable",
+            M.main(["--verify", str(dirty)]) == 2
+            and any("PLAN.md #18" in row["detail"] for row in dirty_rows)
+            and not any(row["result"] == "失败" for row in dirty_rows),
+            f"{[r for r in dirty_rows if r['level'] == '可重建']}",
+        )
+        shutil.rmtree(dirty)
         bad = _tamper(run_dir, lambda d: d["declaration"]["assets"].__setitem__("manifest_sha256", "0" * 64))
         check("negative/assets-changed", M.main(["--verify", str(bad)]) == 1, "asset drift not reported")
         shutil.rmtree(bad)
@@ -251,6 +318,7 @@ def main() -> int:
             "state digest unstable",
         )
     finally:
+        prov.code_sources = real_sources
         shutil.rmtree(root, ignore_errors=True)
 
     for problem in PROBLEMS:
