@@ -3,10 +3,10 @@
  "note": "recipe golden, keyed by framework combination: entry keys are '<combination>|<task id>' and a training run never adds one",
  "baselines": {
   "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13": {
-   "created_at": "2026-09-15T14:50:22+08:00",
-   "reason": "lock format v2: entry keys carry the framework combination (isaaclab|rsl_rl|python) so a baseline is per combination and runs never add entries; all 34 snapshots and digests byte-identical to v1",
-   "created_rev": "84f2a32e8e14",
-   "created_dirty": true,
+   "created_at": "2026-09-15T14:56:34+08:00",
+   "reason": "provenance refresh: same content, clean-tree stamp (created_dirty was true while the tooling was uncommitted)",
+   "created_rev": "9409d24bd236",
+   "created_dirty": false,
    "combination": {
     "isaaclab_rev": "28a37cecdd43",
     "rsl_rl": "source:28a37cecdd43",
