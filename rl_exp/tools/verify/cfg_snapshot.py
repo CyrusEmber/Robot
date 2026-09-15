@@ -40,15 +40,24 @@ self-referential hash" constraint); the digest goes next to it.
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 import os
 import pathlib
 import re
 from dataclasses import MISSING
+from typing import ClassVar
 
-FORMAT_VERSION = 1
-"""Snapshot format version; record it next to any snapshot whose digest is pinned."""
+FORMAT_VERSION = 2
+"""Snapshot format version; record it next to any snapshot whose digest is pinned.
+
+1 -> 2: ``ClassVar`` members are excluded. A ``ClassVar`` is a statement *about* a
+recipe (IsaacLab's ``_usd_*`` API hints, this repo's ``REQUIRES_CURRICULUM_STATE``),
+not recipe data, and ``configclass`` copies it onto the instance anyway -- so it used to
+leak into the golden and make a declaration change look like a config change. Digests
+taken under 1 and under 2 are not comparable, which is what the version is for.
+"""
 
 MISSING_TAG = "__missing__"
 CALLABLE_TAG = "__callable__"
@@ -111,6 +120,30 @@ def _array_tag(obj) -> dict:
     return {ARRAY_TAG: {"dtype": dtype, "shape": shape, "sha256": hashlib.sha256(payload).hexdigest()}}
 
 
+@functools.lru_cache(maxsize=None)
+def _class_var_names(cls) -> frozenset[str]:
+    """Names this class declares as ``ClassVar``: statements *about* a recipe, not data.
+
+    ``configclass`` back-fills annotations and ``_custom_post_init`` copies every
+    non-callable class member onto the instance, so a ``ClassVar`` shows up in
+    ``vars(obj)`` even though ``dataclass()`` never made it a field. A declaration such
+    as ``REQUIRES_CURRICULUM_STATE`` states the recipe's *resume contract* -- it is not
+    part of what the recipe is, so it stays out of the snapshot, and out of the golden
+    and the manifest's config digest with it. IsaacLab's own ``_usd_*`` API hints are
+    ``ClassVar`` for the same reason (statements about how a cfg maps to USD).
+    """
+    annotations: dict = {}
+    for klass in cls.__mro__:
+        annotations.update(klass.__dict__.get("__annotations__", {}))
+    return frozenset(
+        name
+        for name, annotation in annotations.items()
+        if annotation is ClassVar
+        or getattr(annotation, "__origin__", None) is ClassVar
+        or (isinstance(annotation, str) and annotation.startswith(("ClassVar", "typing.ClassVar")))
+    )
+
+
 def snapshot(obj, *, _depth: int = 0):
     """Convert a config value into a JSON-safe, order-preserving snapshot.
 
@@ -159,10 +192,17 @@ def snapshot(obj, *, _depth: int = 0):
         # does `self.observations.extero = ...`), so those groups exist on the
         # instance but are NOT dataclass fields -- walking the declared fields
         # silently drops the observation groups the network contract is built on.
-        out = {name: snapshot(value, _depth=depth) for name, value in vars(obj).items() if not name.startswith("__")}
+        class_vars = _class_var_names(type(obj))
+        out = {
+            name: snapshot(value, _depth=depth)
+            for name, value in vars(obj).items()
+            if not name.startswith("__") and name not in class_vars
+        }
         for name in obj.__dataclass_fields__:
-            if name not in out:
+            if name not in out and name not in class_vars:
                 # declared but never set on the instance: absent, NOT an explicit None
+                # (``__dataclass_fields__`` keeps ClassVar pseudo-entries; they are not
+                # fields and not config data, so they are not re-added here)
                 out[name] = {MISSING_TAG: True}
         return out
     if isinstance(obj, dict):

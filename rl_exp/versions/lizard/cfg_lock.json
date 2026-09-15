@@ -3,16 +3,16 @@
  "note": "recipe golden, keyed by framework combination: entry keys are '<combination>|<task id>' and a training run never adds one",
  "baselines": {
   "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13": {
-   "created_at": "2026-09-15T14:56:34+08:00",
-   "reason": "provenance refresh: same content, clean-tree stamp (created_dirty was true while the tooling was uncommitted)",
-   "created_rev": "9409d24bd236",
-   "created_dirty": false,
+   "created_at": "2026-09-15T15:56:35+08:00",
+   "reason": "snapshot format 2: ClassVar members are declarations about a recipe, not recipe data (IsaacLab _usd_* USD API hints, our REQUIRES_CURRICULUM_STATE), so they leave the golden; every config value is unchanged",
+   "created_rev": "cc1b2e7083ec",
+   "created_dirty": true,
    "combination": {
     "isaaclab_rev": "28a37cecdd43",
     "rsl_rl": "source:28a37cecdd43",
     "python": "3.12.13"
    },
-   "cfg_snapshot_format": 1,
+   "cfg_snapshot_format": 2,
    "task_count": 34
   }
  },
@@ -21,7 +21,7 @@
    "version": null,
    "env_cfg_class": "rl_exp.tasks.parkour_env_cfg:ParkourClimbEnvCfg_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardParkourClimbPPORunnerCfg",
-   "digest": "674770dbf26d3ef6250158e402e4b0bf661cbbd74651a4a8ac16ae7a7f9ed612",
+   "digest": "4c2abcf5b3b64803cb8c520a2a6a52a88c107d13f493d08eb17fae4ff8a417d2",
    "snapshot": {
     "env": {
      "viewer": {
@@ -70,10 +70,7 @@
        "compliant_contact_stiffness": null,
        "compliant_contact_damping": null,
        "friction_combine_mode": "multiply",
-       "restitution_combine_mode": "multiply",
-       "_usd_applied_schema": "PhysxMaterialAPI",
-       "_usd_field_exceptions": {},
-       "_usd_namespace": "physxMaterial"
+       "restitution_combine_mode": "multiply"
       },
       "use_fabric": true,
       "render_interval": 4,
@@ -244,19 +241,7 @@
          "solver_position_iteration_count": null,
          "solver_velocity_iteration_count": null,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxRigidBodyAPI",
-         "_usd_field_exceptions": {
-          "PhysxRigidBodyAPI": {
-           "__tuple__": [
-            "physxRigidBody",
-            [
-             "disable_gravity"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxRigidBody"
+         "stabilization_threshold": null
         },
         "collision_props": null,
         "activate_contact_sensors": true,
@@ -268,19 +253,7 @@
          "solver_position_iteration_count": 8,
          "solver_velocity_iteration_count": 0,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxArticulationAPI",
-         "_usd_field_exceptions": {
-          "PhysxArticulationAPI": {
-           "__tuple__": [
-            "physxArticulation",
-            [
-             "articulation_enabled"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxArticulation"
+         "stabilization_threshold": null
         },
         "fixed_tendons_props": null,
         "spatial_tendons_props": null,
@@ -497,10 +470,7 @@
         "compliant_contact_stiffness": null,
         "compliant_contact_damping": null,
         "friction_combine_mode": "multiply",
-        "restitution_combine_mode": "multiply",
-        "_usd_applied_schema": "PhysxMaterialAPI",
-        "_usd_field_exceptions": {},
-        "_usd_namespace": "physxMaterial"
+        "restitution_combine_mode": "multiply"
        },
        "max_init_terrain_level": null,
        "debug_vis": false
@@ -2130,7 +2100,7 @@
    "version": null,
    "env_cfg_class": "rl_exp.tasks.parkour_env_cfg:ParkourClimbEnvCfg",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardParkourClimbPPORunnerCfg",
-   "digest": "e417d335c64e16471850b0981568dc0a84d29779e936359292439303f31641e3",
+   "digest": "3f4e376aaeb97ce610d175aa4c66feee3a192bb8f35a4823e5cff7fa1d654193",
    "snapshot": {
     "env": {
      "viewer": {
@@ -2179,10 +2149,7 @@
        "compliant_contact_stiffness": null,
        "compliant_contact_damping": null,
        "friction_combine_mode": "multiply",
-       "restitution_combine_mode": "multiply",
-       "_usd_applied_schema": "PhysxMaterialAPI",
-       "_usd_field_exceptions": {},
-       "_usd_namespace": "physxMaterial"
+       "restitution_combine_mode": "multiply"
       },
       "use_fabric": true,
       "render_interval": 4,
@@ -2353,19 +2320,7 @@
          "solver_position_iteration_count": null,
          "solver_velocity_iteration_count": null,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxRigidBodyAPI",
-         "_usd_field_exceptions": {
-          "PhysxRigidBodyAPI": {
-           "__tuple__": [
-            "physxRigidBody",
-            [
-             "disable_gravity"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxRigidBody"
+         "stabilization_threshold": null
         },
         "collision_props": null,
         "activate_contact_sensors": true,
@@ -2377,19 +2332,7 @@
          "solver_position_iteration_count": 8,
          "solver_velocity_iteration_count": 0,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxArticulationAPI",
-         "_usd_field_exceptions": {
-          "PhysxArticulationAPI": {
-           "__tuple__": [
-            "physxArticulation",
-            [
-             "articulation_enabled"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxArticulation"
+         "stabilization_threshold": null
         },
         "fixed_tendons_props": null,
         "spatial_tendons_props": null,
@@ -2606,10 +2549,7 @@
         "compliant_contact_stiffness": null,
         "compliant_contact_damping": null,
         "friction_combine_mode": "multiply",
-        "restitution_combine_mode": "multiply",
-        "_usd_applied_schema": "PhysxMaterialAPI",
-        "_usd_field_exceptions": {},
-        "_usd_namespace": "physxMaterial"
+        "restitution_combine_mode": "multiply"
        },
        "max_init_terrain_level": 0,
        "debug_vis": false
@@ -4767,7 +4707,7 @@
    "version": "v1",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V1_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherPPORunnerCfg",
-   "digest": "b9366aef4076d60b00233c9029f0e201886c24bfa49177e3799bb3539b2de807",
+   "digest": "b103726ab73ff20710e6d8ba7745cf5f2a74b2bd0967a580f1329e964a929e36",
    "snapshot": {
     "env": {
      "viewer": {
@@ -4816,10 +4756,7 @@
        "compliant_contact_stiffness": null,
        "compliant_contact_damping": null,
        "friction_combine_mode": "multiply",
-       "restitution_combine_mode": "multiply",
-       "_usd_applied_schema": "PhysxMaterialAPI",
-       "_usd_field_exceptions": {},
-       "_usd_namespace": "physxMaterial"
+       "restitution_combine_mode": "multiply"
       },
       "use_fabric": true,
       "render_interval": 4,
@@ -4990,19 +4927,7 @@
          "solver_position_iteration_count": null,
          "solver_velocity_iteration_count": null,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxRigidBodyAPI",
-         "_usd_field_exceptions": {
-          "PhysxRigidBodyAPI": {
-           "__tuple__": [
-            "physxRigidBody",
-            [
-             "disable_gravity"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxRigidBody"
+         "stabilization_threshold": null
         },
         "collision_props": null,
         "activate_contact_sensors": true,
@@ -5014,19 +4939,7 @@
          "solver_position_iteration_count": 8,
          "solver_velocity_iteration_count": 0,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxArticulationAPI",
-         "_usd_field_exceptions": {
-          "PhysxArticulationAPI": {
-           "__tuple__": [
-            "physxArticulation",
-            [
-             "articulation_enabled"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxArticulation"
+         "stabilization_threshold": null
         },
         "fixed_tendons_props": null,
         "spatial_tendons_props": null,
@@ -5332,10 +5245,7 @@
         "compliant_contact_stiffness": null,
         "compliant_contact_damping": null,
         "friction_combine_mode": "multiply",
-        "restitution_combine_mode": "multiply",
-        "_usd_applied_schema": "PhysxMaterialAPI",
-        "_usd_field_exceptions": {},
-        "_usd_namespace": "physxMaterial"
+        "restitution_combine_mode": "multiply"
        },
        "max_init_terrain_level": null,
        "debug_vis": false
@@ -6893,7 +6803,7 @@
    "version": "v10",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V10_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV10PPORunnerCfg",
-   "digest": "d94469d22baf856270d9385386cfe0d70b66223f5f13740f31c14fbc2f587908",
+   "digest": "ba901e0e5222b7926f9ed25ca1a8fd765a38bd384c41bd0e8c3be32fab54b047",
    "snapshot": {
     "env": {
      "viewer": {
@@ -6942,10 +6852,7 @@
        "compliant_contact_stiffness": null,
        "compliant_contact_damping": null,
        "friction_combine_mode": "multiply",
-       "restitution_combine_mode": "multiply",
-       "_usd_applied_schema": "PhysxMaterialAPI",
-       "_usd_field_exceptions": {},
-       "_usd_namespace": "physxMaterial"
+       "restitution_combine_mode": "multiply"
       },
       "use_fabric": true,
       "render_interval": 4,
@@ -7116,19 +7023,7 @@
          "solver_position_iteration_count": null,
          "solver_velocity_iteration_count": null,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxRigidBodyAPI",
-         "_usd_field_exceptions": {
-          "PhysxRigidBodyAPI": {
-           "__tuple__": [
-            "physxRigidBody",
-            [
-             "disable_gravity"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxRigidBody"
+         "stabilization_threshold": null
         },
         "collision_props": null,
         "activate_contact_sensors": true,
@@ -7140,19 +7035,7 @@
          "solver_position_iteration_count": 8,
          "solver_velocity_iteration_count": 0,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxArticulationAPI",
-         "_usd_field_exceptions": {
-          "PhysxArticulationAPI": {
-           "__tuple__": [
-            "physxArticulation",
-            [
-             "articulation_enabled"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxArticulation"
+         "stabilization_threshold": null
         },
         "fixed_tendons_props": null,
         "spatial_tendons_props": null,
@@ -7499,10 +7382,7 @@
         "compliant_contact_stiffness": null,
         "compliant_contact_damping": null,
         "friction_combine_mode": "multiply",
-        "restitution_combine_mode": "multiply",
-        "_usd_applied_schema": "PhysxMaterialAPI",
-        "_usd_field_exceptions": {},
-        "_usd_namespace": "physxMaterial"
+        "restitution_combine_mode": "multiply"
        },
        "max_init_terrain_level": null,
        "debug_vis": false
@@ -9961,7 +9841,7 @@
    "version": "v11",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V11_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV11PPORunnerCfg",
-   "digest": "21be1e3a1b8449a791fcadc32202c92f1c3439541b6f643e8bc3400c41341801",
+   "digest": "cd18e965f8f410c632bcb449c5daa5207eeeb2856b238b26673e93717af16e54",
    "snapshot": {
     "env": {
      "viewer": {
@@ -10010,10 +9890,7 @@
        "compliant_contact_stiffness": null,
        "compliant_contact_damping": null,
        "friction_combine_mode": "multiply",
-       "restitution_combine_mode": "multiply",
-       "_usd_applied_schema": "PhysxMaterialAPI",
-       "_usd_field_exceptions": {},
-       "_usd_namespace": "physxMaterial"
+       "restitution_combine_mode": "multiply"
       },
       "use_fabric": true,
       "render_interval": 4,
@@ -10184,19 +10061,7 @@
          "solver_position_iteration_count": null,
          "solver_velocity_iteration_count": null,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxRigidBodyAPI",
-         "_usd_field_exceptions": {
-          "PhysxRigidBodyAPI": {
-           "__tuple__": [
-            "physxRigidBody",
-            [
-             "disable_gravity"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxRigidBody"
+         "stabilization_threshold": null
         },
         "collision_props": null,
         "activate_contact_sensors": true,
@@ -10208,19 +10073,7 @@
          "solver_position_iteration_count": 8,
          "solver_velocity_iteration_count": 0,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxArticulationAPI",
-         "_usd_field_exceptions": {
-          "PhysxArticulationAPI": {
-           "__tuple__": [
-            "physxArticulation",
-            [
-             "articulation_enabled"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxArticulation"
+         "stabilization_threshold": null
         },
         "fixed_tendons_props": null,
         "spatial_tendons_props": null,
@@ -11702,10 +11555,7 @@
         "compliant_contact_stiffness": null,
         "compliant_contact_damping": null,
         "friction_combine_mode": "multiply",
-        "restitution_combine_mode": "multiply",
-        "_usd_applied_schema": "PhysxMaterialAPI",
-        "_usd_field_exceptions": {},
-        "_usd_namespace": "physxMaterial"
+        "restitution_combine_mode": "multiply"
        },
        "max_init_terrain_level": null,
        "debug_vis": false
@@ -14167,7 +14017,7 @@
    "version": "v12",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V12_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV12PPORunnerCfg",
-   "digest": "4b931d1f83bdd2b33569f09766400be059fd0bd24310abc46716f10b718c6c25",
+   "digest": "6b6677093f624c65540061a8fa3cb39f0655fe586c8922e99c01bf4abb41c2d4",
    "snapshot": {
     "env": {
      "viewer": {
@@ -14216,10 +14066,7 @@
        "compliant_contact_stiffness": null,
        "compliant_contact_damping": null,
        "friction_combine_mode": "multiply",
-       "restitution_combine_mode": "multiply",
-       "_usd_applied_schema": "PhysxMaterialAPI",
-       "_usd_field_exceptions": {},
-       "_usd_namespace": "physxMaterial"
+       "restitution_combine_mode": "multiply"
       },
       "use_fabric": true,
       "render_interval": 4,
@@ -14390,19 +14237,7 @@
          "solver_position_iteration_count": null,
          "solver_velocity_iteration_count": null,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxRigidBodyAPI",
-         "_usd_field_exceptions": {
-          "PhysxRigidBodyAPI": {
-           "__tuple__": [
-            "physxRigidBody",
-            [
-             "disable_gravity"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxRigidBody"
+         "stabilization_threshold": null
         },
         "collision_props": null,
         "activate_contact_sensors": true,
@@ -14414,19 +14249,7 @@
          "solver_position_iteration_count": 8,
          "solver_velocity_iteration_count": 0,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxArticulationAPI",
-         "_usd_field_exceptions": {
-          "PhysxArticulationAPI": {
-           "__tuple__": [
-            "physxArticulation",
-            [
-             "articulation_enabled"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxArticulation"
+         "stabilization_threshold": null
         },
         "fixed_tendons_props": null,
         "spatial_tendons_props": null,
@@ -15908,10 +15731,7 @@
         "compliant_contact_stiffness": null,
         "compliant_contact_damping": null,
         "friction_combine_mode": "multiply",
-        "restitution_combine_mode": "multiply",
-        "_usd_applied_schema": "PhysxMaterialAPI",
-        "_usd_field_exceptions": {},
-        "_usd_namespace": "physxMaterial"
+        "restitution_combine_mode": "multiply"
        },
        "max_init_terrain_level": null,
        "debug_vis": false
@@ -18584,7 +18404,7 @@
    "version": "v13",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V13_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV13PPORunnerCfg",
-   "digest": "46ea19a398feaa2e89dcdfb9a380ab8a424073c5e763c397b1086981f2ed3335",
+   "digest": "98c0eb0c0b9fc79a0de30d64f9da113f3be360745bcfe57c83ff329f288c3034",
    "snapshot": {
     "env": {
      "viewer": {
@@ -18633,10 +18453,7 @@
        "compliant_contact_stiffness": null,
        "compliant_contact_damping": null,
        "friction_combine_mode": "multiply",
-       "restitution_combine_mode": "multiply",
-       "_usd_applied_schema": "PhysxMaterialAPI",
-       "_usd_field_exceptions": {},
-       "_usd_namespace": "physxMaterial"
+       "restitution_combine_mode": "multiply"
       },
       "use_fabric": true,
       "render_interval": 4,
@@ -18807,19 +18624,7 @@
          "solver_position_iteration_count": null,
          "solver_velocity_iteration_count": null,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxRigidBodyAPI",
-         "_usd_field_exceptions": {
-          "PhysxRigidBodyAPI": {
-           "__tuple__": [
-            "physxRigidBody",
-            [
-             "disable_gravity"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxRigidBody"
+         "stabilization_threshold": null
         },
         "collision_props": null,
         "activate_contact_sensors": true,
@@ -18831,19 +18636,7 @@
          "solver_position_iteration_count": 8,
          "solver_velocity_iteration_count": 0,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxArticulationAPI",
-         "_usd_field_exceptions": {
-          "PhysxArticulationAPI": {
-           "__tuple__": [
-            "physxArticulation",
-            [
-             "articulation_enabled"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxArticulation"
+         "stabilization_threshold": null
         },
         "fixed_tendons_props": null,
         "spatial_tendons_props": null,
@@ -19190,10 +18983,7 @@
         "compliant_contact_stiffness": null,
         "compliant_contact_damping": null,
         "friction_combine_mode": "multiply",
-        "restitution_combine_mode": "multiply",
-        "_usd_applied_schema": "PhysxMaterialAPI",
-        "_usd_field_exceptions": {},
-        "_usd_namespace": "physxMaterial"
+        "restitution_combine_mode": "multiply"
        },
        "max_init_terrain_level": null,
        "debug_vis": false
@@ -21653,7 +21443,7 @@
    "version": "v14",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V14_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV14PPORunnerCfg",
-   "digest": "05776251c593ce58083a1e372dfbfeb6cc4fb2e7da9722c1a72d6b9c1f24aadc",
+   "digest": "6d82285386cbb7cf9566a5d79ee7fcb39738cf1390d3ed37c1ca42854d052891",
    "snapshot": {
     "env": {
      "viewer": {
@@ -21702,10 +21492,7 @@
        "compliant_contact_stiffness": null,
        "compliant_contact_damping": null,
        "friction_combine_mode": "multiply",
-       "restitution_combine_mode": "multiply",
-       "_usd_applied_schema": "PhysxMaterialAPI",
-       "_usd_field_exceptions": {},
-       "_usd_namespace": "physxMaterial"
+       "restitution_combine_mode": "multiply"
       },
       "use_fabric": true,
       "render_interval": 4,
@@ -21876,19 +21663,7 @@
          "solver_position_iteration_count": null,
          "solver_velocity_iteration_count": null,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxRigidBodyAPI",
-         "_usd_field_exceptions": {
-          "PhysxRigidBodyAPI": {
-           "__tuple__": [
-            "physxRigidBody",
-            [
-             "disable_gravity"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxRigidBody"
+         "stabilization_threshold": null
         },
         "collision_props": null,
         "activate_contact_sensors": true,
@@ -21900,19 +21675,7 @@
          "solver_position_iteration_count": 8,
          "solver_velocity_iteration_count": 0,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxArticulationAPI",
-         "_usd_field_exceptions": {
-          "PhysxArticulationAPI": {
-           "__tuple__": [
-            "physxArticulation",
-            [
-             "articulation_enabled"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxArticulation"
+         "stabilization_threshold": null
         },
         "fixed_tendons_props": null,
         "spatial_tendons_props": null,
@@ -22259,10 +22022,7 @@
         "compliant_contact_stiffness": null,
         "compliant_contact_damping": null,
         "friction_combine_mode": "multiply",
-        "restitution_combine_mode": "multiply",
-        "_usd_applied_schema": "PhysxMaterialAPI",
-        "_usd_field_exceptions": {},
-        "_usd_namespace": "physxMaterial"
+        "restitution_combine_mode": "multiply"
        },
        "max_init_terrain_level": null,
        "debug_vis": false
@@ -24782,7 +24542,7 @@
    "version": "v2",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V2_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV2PPORunnerCfg",
-   "digest": "fa65f325d8f2a5f0be933bd195a6f8a427499c73865b8f7bf6257c6dc398f12a",
+   "digest": "fc399b6cf51d6755f621562079362dc6920e81d7cf183b92f9162d40df49ea05",
    "snapshot": {
     "env": {
      "viewer": {
@@ -24831,10 +24591,7 @@
        "compliant_contact_stiffness": null,
        "compliant_contact_damping": null,
        "friction_combine_mode": "multiply",
-       "restitution_combine_mode": "multiply",
-       "_usd_applied_schema": "PhysxMaterialAPI",
-       "_usd_field_exceptions": {},
-       "_usd_namespace": "physxMaterial"
+       "restitution_combine_mode": "multiply"
       },
       "use_fabric": true,
       "render_interval": 4,
@@ -25005,19 +24762,7 @@
          "solver_position_iteration_count": null,
          "solver_velocity_iteration_count": null,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxRigidBodyAPI",
-         "_usd_field_exceptions": {
-          "PhysxRigidBodyAPI": {
-           "__tuple__": [
-            "physxRigidBody",
-            [
-             "disable_gravity"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxRigidBody"
+         "stabilization_threshold": null
         },
         "collision_props": null,
         "activate_contact_sensors": true,
@@ -25029,19 +24774,7 @@
          "solver_position_iteration_count": 8,
          "solver_velocity_iteration_count": 0,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxArticulationAPI",
-         "_usd_field_exceptions": {
-          "PhysxArticulationAPI": {
-           "__tuple__": [
-            "physxArticulation",
-            [
-             "articulation_enabled"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxArticulation"
+         "stabilization_threshold": null
         },
         "fixed_tendons_props": null,
         "spatial_tendons_props": null,
@@ -25347,10 +25080,7 @@
         "compliant_contact_stiffness": null,
         "compliant_contact_damping": null,
         "friction_combine_mode": "multiply",
-        "restitution_combine_mode": "multiply",
-        "_usd_applied_schema": "PhysxMaterialAPI",
-        "_usd_field_exceptions": {},
-        "_usd_namespace": "physxMaterial"
+        "restitution_combine_mode": "multiply"
        },
        "max_init_terrain_level": null,
        "debug_vis": false
@@ -27121,7 +26851,7 @@
    "version": "v3",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V3_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV3PPORunnerCfg",
-   "digest": "c8622c78f03d94a090c7f5da88580786a25cf8a6ffb66b61adf38a156edad394",
+   "digest": "12f2478e6659ddaaf48111faa1b9d89ede34b676532fd892f2f308c8ac0f82d4",
    "snapshot": {
     "env": {
      "viewer": {
@@ -27170,10 +26900,7 @@
        "compliant_contact_stiffness": null,
        "compliant_contact_damping": null,
        "friction_combine_mode": "multiply",
-       "restitution_combine_mode": "multiply",
-       "_usd_applied_schema": "PhysxMaterialAPI",
-       "_usd_field_exceptions": {},
-       "_usd_namespace": "physxMaterial"
+       "restitution_combine_mode": "multiply"
       },
       "use_fabric": true,
       "render_interval": 4,
@@ -27344,19 +27071,7 @@
          "solver_position_iteration_count": null,
          "solver_velocity_iteration_count": null,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxRigidBodyAPI",
-         "_usd_field_exceptions": {
-          "PhysxRigidBodyAPI": {
-           "__tuple__": [
-            "physxRigidBody",
-            [
-             "disable_gravity"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxRigidBody"
+         "stabilization_threshold": null
         },
         "collision_props": null,
         "activate_contact_sensors": true,
@@ -27368,19 +27083,7 @@
          "solver_position_iteration_count": 8,
          "solver_velocity_iteration_count": 0,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxArticulationAPI",
-         "_usd_field_exceptions": {
-          "PhysxArticulationAPI": {
-           "__tuple__": [
-            "physxArticulation",
-            [
-             "articulation_enabled"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxArticulation"
+         "stabilization_threshold": null
         },
         "fixed_tendons_props": null,
         "spatial_tendons_props": null,
@@ -27716,10 +27419,7 @@
         "compliant_contact_stiffness": null,
         "compliant_contact_damping": null,
         "friction_combine_mode": "multiply",
-        "restitution_combine_mode": "multiply",
-        "_usd_applied_schema": "PhysxMaterialAPI",
-        "_usd_field_exceptions": {},
-        "_usd_namespace": "physxMaterial"
+        "restitution_combine_mode": "multiply"
        },
        "max_init_terrain_level": null,
        "debug_vis": false
@@ -30067,7 +29767,7 @@
    "version": "v4",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V4_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV4PPORunnerCfg",
-   "digest": "49e4a537258f80dea836366f425f257f711285ba68bd03d25caa97e1ea283c28",
+   "digest": "4e14ba0e3358288b72f62fc7e7a9b2cf4933c0ad88ee052e97dfc750decb6d1d",
    "snapshot": {
     "env": {
      "viewer": {
@@ -30116,10 +29816,7 @@
        "compliant_contact_stiffness": null,
        "compliant_contact_damping": null,
        "friction_combine_mode": "multiply",
-       "restitution_combine_mode": "multiply",
-       "_usd_applied_schema": "PhysxMaterialAPI",
-       "_usd_field_exceptions": {},
-       "_usd_namespace": "physxMaterial"
+       "restitution_combine_mode": "multiply"
       },
       "use_fabric": true,
       "render_interval": 4,
@@ -30290,19 +29987,7 @@
          "solver_position_iteration_count": null,
          "solver_velocity_iteration_count": null,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxRigidBodyAPI",
-         "_usd_field_exceptions": {
-          "PhysxRigidBodyAPI": {
-           "__tuple__": [
-            "physxRigidBody",
-            [
-             "disable_gravity"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxRigidBody"
+         "stabilization_threshold": null
         },
         "collision_props": null,
         "activate_contact_sensors": true,
@@ -30314,19 +29999,7 @@
          "solver_position_iteration_count": 8,
          "solver_velocity_iteration_count": 0,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxArticulationAPI",
-         "_usd_field_exceptions": {
-          "PhysxArticulationAPI": {
-           "__tuple__": [
-            "physxArticulation",
-            [
-             "articulation_enabled"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxArticulation"
+         "stabilization_threshold": null
         },
         "fixed_tendons_props": null,
         "spatial_tendons_props": null,
@@ -30662,10 +30335,7 @@
         "compliant_contact_stiffness": null,
         "compliant_contact_damping": null,
         "friction_combine_mode": "multiply",
-        "restitution_combine_mode": "multiply",
-        "_usd_applied_schema": "PhysxMaterialAPI",
-        "_usd_field_exceptions": {},
-        "_usd_namespace": "physxMaterial"
+        "restitution_combine_mode": "multiply"
        },
        "max_init_terrain_level": null,
        "debug_vis": false
@@ -33013,7 +32683,7 @@
    "version": "v5",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V5_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV5PPORunnerCfg",
-   "digest": "8d6bf2773778c83a01374a63cc79bf66a7c64e28bbb89f092b95bbbb2fc22208",
+   "digest": "3fd37fcfcff3de8e995676659c8bd3553d8c79ace4787414b353ed2147972f76",
    "snapshot": {
     "env": {
      "viewer": {
@@ -33062,10 +32732,7 @@
        "compliant_contact_stiffness": null,
        "compliant_contact_damping": null,
        "friction_combine_mode": "multiply",
-       "restitution_combine_mode": "multiply",
-       "_usd_applied_schema": "PhysxMaterialAPI",
-       "_usd_field_exceptions": {},
-       "_usd_namespace": "physxMaterial"
+       "restitution_combine_mode": "multiply"
       },
       "use_fabric": true,
       "render_interval": 4,
@@ -33236,19 +32903,7 @@
          "solver_position_iteration_count": null,
          "solver_velocity_iteration_count": null,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxRigidBodyAPI",
-         "_usd_field_exceptions": {
-          "PhysxRigidBodyAPI": {
-           "__tuple__": [
-            "physxRigidBody",
-            [
-             "disable_gravity"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxRigidBody"
+         "stabilization_threshold": null
         },
         "collision_props": null,
         "activate_contact_sensors": true,
@@ -33260,19 +32915,7 @@
          "solver_position_iteration_count": 8,
          "solver_velocity_iteration_count": 0,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxArticulationAPI",
-         "_usd_field_exceptions": {
-          "PhysxArticulationAPI": {
-           "__tuple__": [
-            "physxArticulation",
-            [
-             "articulation_enabled"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxArticulation"
+         "stabilization_threshold": null
         },
         "fixed_tendons_props": null,
         "spatial_tendons_props": null,
@@ -33619,10 +33262,7 @@
         "compliant_contact_stiffness": null,
         "compliant_contact_damping": null,
         "friction_combine_mode": "multiply",
-        "restitution_combine_mode": "multiply",
-        "_usd_applied_schema": "PhysxMaterialAPI",
-        "_usd_field_exceptions": {},
-        "_usd_namespace": "physxMaterial"
+        "restitution_combine_mode": "multiply"
        },
        "max_init_terrain_level": null,
        "debug_vis": false
@@ -36089,7 +35729,7 @@
    "version": "v6",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V6_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV6PPORunnerCfg",
-   "digest": "5c5bfd674a59f34982802709d80633b11bc9304f5ed0d7b7a9bc3a93e82b2a39",
+   "digest": "41a8b3f7d3ad3d2fc616e900fa2d46ae666b8a5140dac0be092a55b86adc8da0",
    "snapshot": {
     "env": {
      "viewer": {
@@ -36138,10 +35778,7 @@
        "compliant_contact_stiffness": null,
        "compliant_contact_damping": null,
        "friction_combine_mode": "multiply",
-       "restitution_combine_mode": "multiply",
-       "_usd_applied_schema": "PhysxMaterialAPI",
-       "_usd_field_exceptions": {},
-       "_usd_namespace": "physxMaterial"
+       "restitution_combine_mode": "multiply"
       },
       "use_fabric": true,
       "render_interval": 4,
@@ -36312,19 +35949,7 @@
          "solver_position_iteration_count": null,
          "solver_velocity_iteration_count": null,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxRigidBodyAPI",
-         "_usd_field_exceptions": {
-          "PhysxRigidBodyAPI": {
-           "__tuple__": [
-            "physxRigidBody",
-            [
-             "disable_gravity"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxRigidBody"
+         "stabilization_threshold": null
         },
         "collision_props": null,
         "activate_contact_sensors": true,
@@ -36336,19 +35961,7 @@
          "solver_position_iteration_count": 8,
          "solver_velocity_iteration_count": 0,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxArticulationAPI",
-         "_usd_field_exceptions": {
-          "PhysxArticulationAPI": {
-           "__tuple__": [
-            "physxArticulation",
-            [
-             "articulation_enabled"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxArticulation"
+         "stabilization_threshold": null
         },
         "fixed_tendons_props": null,
         "spatial_tendons_props": null,
@@ -36695,10 +36308,7 @@
         "compliant_contact_stiffness": null,
         "compliant_contact_damping": null,
         "friction_combine_mode": "multiply",
-        "restitution_combine_mode": "multiply",
-        "_usd_applied_schema": "PhysxMaterialAPI",
-        "_usd_field_exceptions": {},
-        "_usd_namespace": "physxMaterial"
+        "restitution_combine_mode": "multiply"
        },
        "max_init_terrain_level": null,
        "debug_vis": false
@@ -39165,7 +38775,7 @@
    "version": "v8",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V8_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV8PPORunnerCfg",
-   "digest": "9ddaf2f18af752dca45079d60da3ec4b755e6e0864d308a168c2c94657c061f6",
+   "digest": "55fe6b7bc9afa2a78ae869c13ee87c4ca5454e28eee7e3800ebd5c743b67525a",
    "snapshot": {
     "env": {
      "viewer": {
@@ -39214,10 +38824,7 @@
        "compliant_contact_stiffness": null,
        "compliant_contact_damping": null,
        "friction_combine_mode": "multiply",
-       "restitution_combine_mode": "multiply",
-       "_usd_applied_schema": "PhysxMaterialAPI",
-       "_usd_field_exceptions": {},
-       "_usd_namespace": "physxMaterial"
+       "restitution_combine_mode": "multiply"
       },
       "use_fabric": true,
       "render_interval": 4,
@@ -39388,19 +38995,7 @@
          "solver_position_iteration_count": null,
          "solver_velocity_iteration_count": null,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxRigidBodyAPI",
-         "_usd_field_exceptions": {
-          "PhysxRigidBodyAPI": {
-           "__tuple__": [
-            "physxRigidBody",
-            [
-             "disable_gravity"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxRigidBody"
+         "stabilization_threshold": null
         },
         "collision_props": null,
         "activate_contact_sensors": true,
@@ -39412,19 +39007,7 @@
          "solver_position_iteration_count": 8,
          "solver_velocity_iteration_count": 0,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxArticulationAPI",
-         "_usd_field_exceptions": {
-          "PhysxArticulationAPI": {
-           "__tuple__": [
-            "physxArticulation",
-            [
-             "articulation_enabled"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxArticulation"
+         "stabilization_threshold": null
         },
         "fixed_tendons_props": null,
         "spatial_tendons_props": null,
@@ -39771,10 +39354,7 @@
         "compliant_contact_stiffness": null,
         "compliant_contact_damping": null,
         "friction_combine_mode": "multiply",
-        "restitution_combine_mode": "multiply",
-        "_usd_applied_schema": "PhysxMaterialAPI",
-        "_usd_field_exceptions": {},
-        "_usd_namespace": "physxMaterial"
+        "restitution_combine_mode": "multiply"
        },
        "max_init_terrain_level": null,
        "debug_vis": false
@@ -42241,7 +41821,7 @@
    "version": "v1",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V1",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherPPORunnerCfg",
-   "digest": "5bb7428c3036159eb9933cd1fbf3e124c412510e804c5129de0ef4e24f8e6a53",
+   "digest": "5cf672d73a472ce1607711cbd88e42bd12cc35506f6d3d5b89f850c0a43ee831",
    "snapshot": {
     "env": {
      "viewer": {
@@ -42290,10 +41870,7 @@
        "compliant_contact_stiffness": null,
        "compliant_contact_damping": null,
        "friction_combine_mode": "multiply",
-       "restitution_combine_mode": "multiply",
-       "_usd_applied_schema": "PhysxMaterialAPI",
-       "_usd_field_exceptions": {},
-       "_usd_namespace": "physxMaterial"
+       "restitution_combine_mode": "multiply"
       },
       "use_fabric": true,
       "render_interval": 4,
@@ -42464,19 +42041,7 @@
          "solver_position_iteration_count": null,
          "solver_velocity_iteration_count": null,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxRigidBodyAPI",
-         "_usd_field_exceptions": {
-          "PhysxRigidBodyAPI": {
-           "__tuple__": [
-            "physxRigidBody",
-            [
-             "disable_gravity"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxRigidBody"
+         "stabilization_threshold": null
         },
         "collision_props": null,
         "activate_contact_sensors": true,
@@ -42488,19 +42053,7 @@
          "solver_position_iteration_count": 8,
          "solver_velocity_iteration_count": 0,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxArticulationAPI",
-         "_usd_field_exceptions": {
-          "PhysxArticulationAPI": {
-           "__tuple__": [
-            "physxArticulation",
-            [
-             "articulation_enabled"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxArticulation"
+         "stabilization_threshold": null
         },
         "fixed_tendons_props": null,
         "spatial_tendons_props": null,
@@ -42806,10 +42359,7 @@
         "compliant_contact_stiffness": null,
         "compliant_contact_damping": null,
         "friction_combine_mode": "multiply",
-        "restitution_combine_mode": "multiply",
-        "_usd_applied_schema": "PhysxMaterialAPI",
-        "_usd_field_exceptions": {},
-        "_usd_namespace": "physxMaterial"
+        "restitution_combine_mode": "multiply"
        },
        "max_init_terrain_level": 5,
        "debug_vis": false
@@ -44895,7 +44445,7 @@
    "version": "v10",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V10",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV10PPORunnerCfg",
-   "digest": "452808a25b401d332595c7d67faaa3ee87b2dd866c4c2bc74aef9227b6340447",
+   "digest": "f56c4a1d5c5d7d451e71f2aabf0bd7a9e5bf80927af37953fe14aac121bfd285",
    "snapshot": {
     "env": {
      "viewer": {
@@ -44944,10 +44494,7 @@
        "compliant_contact_stiffness": null,
        "compliant_contact_damping": null,
        "friction_combine_mode": "multiply",
-       "restitution_combine_mode": "multiply",
-       "_usd_applied_schema": "PhysxMaterialAPI",
-       "_usd_field_exceptions": {},
-       "_usd_namespace": "physxMaterial"
+       "restitution_combine_mode": "multiply"
       },
       "use_fabric": true,
       "render_interval": 4,
@@ -45118,19 +44665,7 @@
          "solver_position_iteration_count": null,
          "solver_velocity_iteration_count": null,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxRigidBodyAPI",
-         "_usd_field_exceptions": {
-          "PhysxRigidBodyAPI": {
-           "__tuple__": [
-            "physxRigidBody",
-            [
-             "disable_gravity"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxRigidBody"
+         "stabilization_threshold": null
         },
         "collision_props": null,
         "activate_contact_sensors": true,
@@ -45142,19 +44677,7 @@
          "solver_position_iteration_count": 8,
          "solver_velocity_iteration_count": 0,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxArticulationAPI",
-         "_usd_field_exceptions": {
-          "PhysxArticulationAPI": {
-           "__tuple__": [
-            "physxArticulation",
-            [
-             "articulation_enabled"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxArticulation"
+         "stabilization_threshold": null
         },
         "fixed_tendons_props": null,
         "spatial_tendons_props": null,
@@ -45501,10 +45024,7 @@
         "compliant_contact_stiffness": null,
         "compliant_contact_damping": null,
         "friction_combine_mode": "multiply",
-        "restitution_combine_mode": "multiply",
-        "_usd_applied_schema": "PhysxMaterialAPI",
-        "_usd_field_exceptions": {},
-        "_usd_namespace": "physxMaterial"
+        "restitution_combine_mode": "multiply"
        },
        "max_init_terrain_level": null,
        "debug_vis": false
@@ -48510,7 +48030,7 @@
    "version": "v11",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V11",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV11PPORunnerCfg",
-   "digest": "75e344a6ece0802c4f849d991bc0d6ddec620d6e08eb14d0604568043f352e0a",
+   "digest": "3b9fd20b7ff97c75b9b9980c7bb30fc1a251453128bd3d8a22bf6aae45ec3609",
    "snapshot": {
     "env": {
      "viewer": {
@@ -48559,10 +48079,7 @@
        "compliant_contact_stiffness": null,
        "compliant_contact_damping": null,
        "friction_combine_mode": "multiply",
-       "restitution_combine_mode": "multiply",
-       "_usd_applied_schema": "PhysxMaterialAPI",
-       "_usd_field_exceptions": {},
-       "_usd_namespace": "physxMaterial"
+       "restitution_combine_mode": "multiply"
       },
       "use_fabric": true,
       "render_interval": 4,
@@ -48733,19 +48250,7 @@
          "solver_position_iteration_count": null,
          "solver_velocity_iteration_count": null,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxRigidBodyAPI",
-         "_usd_field_exceptions": {
-          "PhysxRigidBodyAPI": {
-           "__tuple__": [
-            "physxRigidBody",
-            [
-             "disable_gravity"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxRigidBody"
+         "stabilization_threshold": null
         },
         "collision_props": null,
         "activate_contact_sensors": true,
@@ -48757,19 +48262,7 @@
          "solver_position_iteration_count": 8,
          "solver_velocity_iteration_count": 0,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxArticulationAPI",
-         "_usd_field_exceptions": {
-          "PhysxArticulationAPI": {
-           "__tuple__": [
-            "physxArticulation",
-            [
-             "articulation_enabled"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxArticulation"
+         "stabilization_threshold": null
         },
         "fixed_tendons_props": null,
         "spatial_tendons_props": null,
@@ -50251,10 +49744,7 @@
         "compliant_contact_stiffness": null,
         "compliant_contact_damping": null,
         "friction_combine_mode": "multiply",
-        "restitution_combine_mode": "multiply",
-        "_usd_applied_schema": "PhysxMaterialAPI",
-        "_usd_field_exceptions": {},
-        "_usd_namespace": "physxMaterial"
+        "restitution_combine_mode": "multiply"
        },
        "max_init_terrain_level": null,
        "debug_vis": false
@@ -53273,7 +52763,7 @@
    "version": "v12",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V12",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV12PPORunnerCfg",
-   "digest": "a9203d0a1fd80408b4866459c21535a41e27ed82298b652b1fcd4cc023b15b6b",
+   "digest": "04c2b2081731fd83b7c62335c3fcfcce1a01b957837a1efd894e411a1bd2783a",
    "snapshot": {
     "env": {
      "viewer": {
@@ -53322,10 +52812,7 @@
        "compliant_contact_stiffness": null,
        "compliant_contact_damping": null,
        "friction_combine_mode": "multiply",
-       "restitution_combine_mode": "multiply",
-       "_usd_applied_schema": "PhysxMaterialAPI",
-       "_usd_field_exceptions": {},
-       "_usd_namespace": "physxMaterial"
+       "restitution_combine_mode": "multiply"
       },
       "use_fabric": true,
       "render_interval": 4,
@@ -53496,19 +52983,7 @@
          "solver_position_iteration_count": null,
          "solver_velocity_iteration_count": null,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxRigidBodyAPI",
-         "_usd_field_exceptions": {
-          "PhysxRigidBodyAPI": {
-           "__tuple__": [
-            "physxRigidBody",
-            [
-             "disable_gravity"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxRigidBody"
+         "stabilization_threshold": null
         },
         "collision_props": null,
         "activate_contact_sensors": true,
@@ -53520,19 +52995,7 @@
          "solver_position_iteration_count": 8,
          "solver_velocity_iteration_count": 0,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxArticulationAPI",
-         "_usd_field_exceptions": {
-          "PhysxArticulationAPI": {
-           "__tuple__": [
-            "physxArticulation",
-            [
-             "articulation_enabled"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxArticulation"
+         "stabilization_threshold": null
         },
         "fixed_tendons_props": null,
         "spatial_tendons_props": null,
@@ -55014,10 +54477,7 @@
         "compliant_contact_stiffness": null,
         "compliant_contact_damping": null,
         "friction_combine_mode": "multiply",
-        "restitution_combine_mode": "multiply",
-        "_usd_applied_schema": "PhysxMaterialAPI",
-        "_usd_field_exceptions": {},
-        "_usd_namespace": "physxMaterial"
+        "restitution_combine_mode": "multiply"
        },
        "max_init_terrain_level": null,
        "debug_vis": false
@@ -58323,7 +57783,7 @@
    "version": "v13",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V13",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV13PPORunnerCfg",
-   "digest": "c185f3bebc3896a959b7ff80a0b7021d132d0b6a52227efe9a09b915052c5b0d",
+   "digest": "a2298d9a049fe429ee331c28ba8562b07227c826c91280514000b61131f8e95d",
    "snapshot": {
     "env": {
      "viewer": {
@@ -58372,10 +57832,7 @@
        "compliant_contact_stiffness": null,
        "compliant_contact_damping": null,
        "friction_combine_mode": "multiply",
-       "restitution_combine_mode": "multiply",
-       "_usd_applied_schema": "PhysxMaterialAPI",
-       "_usd_field_exceptions": {},
-       "_usd_namespace": "physxMaterial"
+       "restitution_combine_mode": "multiply"
       },
       "use_fabric": true,
       "render_interval": 4,
@@ -58546,19 +58003,7 @@
          "solver_position_iteration_count": null,
          "solver_velocity_iteration_count": null,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxRigidBodyAPI",
-         "_usd_field_exceptions": {
-          "PhysxRigidBodyAPI": {
-           "__tuple__": [
-            "physxRigidBody",
-            [
-             "disable_gravity"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxRigidBody"
+         "stabilization_threshold": null
         },
         "collision_props": null,
         "activate_contact_sensors": true,
@@ -58570,19 +58015,7 @@
          "solver_position_iteration_count": 8,
          "solver_velocity_iteration_count": 0,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxArticulationAPI",
-         "_usd_field_exceptions": {
-          "PhysxArticulationAPI": {
-           "__tuple__": [
-            "physxArticulation",
-            [
-             "articulation_enabled"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxArticulation"
+         "stabilization_threshold": null
         },
         "fixed_tendons_props": null,
         "spatial_tendons_props": null,
@@ -58929,10 +58362,7 @@
         "compliant_contact_stiffness": null,
         "compliant_contact_damping": null,
         "friction_combine_mode": "multiply",
-        "restitution_combine_mode": "multiply",
-        "_usd_applied_schema": "PhysxMaterialAPI",
-        "_usd_field_exceptions": {},
-        "_usd_namespace": "physxMaterial"
+        "restitution_combine_mode": "multiply"
        },
        "max_init_terrain_level": null,
        "debug_vis": false
@@ -61939,7 +61369,7 @@
    "version": "v14",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V14",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV14PPORunnerCfg",
-   "digest": "b5348330fb416786f3adae8bc40f8c08cf94ebe4ce284f647760761697b12495",
+   "digest": "3c6439cea8e28b7191dee91e39510bc5ee08bf3f774291d4d9c6c07c3dad7b77",
    "snapshot": {
     "env": {
      "viewer": {
@@ -61988,10 +61418,7 @@
        "compliant_contact_stiffness": null,
        "compliant_contact_damping": null,
        "friction_combine_mode": "multiply",
-       "restitution_combine_mode": "multiply",
-       "_usd_applied_schema": "PhysxMaterialAPI",
-       "_usd_field_exceptions": {},
-       "_usd_namespace": "physxMaterial"
+       "restitution_combine_mode": "multiply"
       },
       "use_fabric": true,
       "render_interval": 4,
@@ -62162,19 +61589,7 @@
          "solver_position_iteration_count": null,
          "solver_velocity_iteration_count": null,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxRigidBodyAPI",
-         "_usd_field_exceptions": {
-          "PhysxRigidBodyAPI": {
-           "__tuple__": [
-            "physxRigidBody",
-            [
-             "disable_gravity"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxRigidBody"
+         "stabilization_threshold": null
         },
         "collision_props": null,
         "activate_contact_sensors": true,
@@ -62186,19 +61601,7 @@
          "solver_position_iteration_count": 8,
          "solver_velocity_iteration_count": 0,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxArticulationAPI",
-         "_usd_field_exceptions": {
-          "PhysxArticulationAPI": {
-           "__tuple__": [
-            "physxArticulation",
-            [
-             "articulation_enabled"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxArticulation"
+         "stabilization_threshold": null
         },
         "fixed_tendons_props": null,
         "spatial_tendons_props": null,
@@ -62545,10 +61948,7 @@
         "compliant_contact_stiffness": null,
         "compliant_contact_damping": null,
         "friction_combine_mode": "multiply",
-        "restitution_combine_mode": "multiply",
-        "_usd_applied_schema": "PhysxMaterialAPI",
-        "_usd_field_exceptions": {},
-        "_usd_namespace": "physxMaterial"
+        "restitution_combine_mode": "multiply"
        },
        "max_init_terrain_level": null,
        "debug_vis": false
@@ -65615,7 +65015,7 @@
    "version": "v2",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V2",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV2PPORunnerCfg",
-   "digest": "f441b9b738300f7e7138e5b26f7097190086c1a81c484836d89eabd8484d9c8c",
+   "digest": "2cdebd7f0fc997bdfc0a496c5604f48a2f8087df0671b1919b951dec9afd7080",
    "snapshot": {
     "env": {
      "viewer": {
@@ -65664,10 +65064,7 @@
        "compliant_contact_stiffness": null,
        "compliant_contact_damping": null,
        "friction_combine_mode": "multiply",
-       "restitution_combine_mode": "multiply",
-       "_usd_applied_schema": "PhysxMaterialAPI",
-       "_usd_field_exceptions": {},
-       "_usd_namespace": "physxMaterial"
+       "restitution_combine_mode": "multiply"
       },
       "use_fabric": true,
       "render_interval": 4,
@@ -65838,19 +65235,7 @@
          "solver_position_iteration_count": null,
          "solver_velocity_iteration_count": null,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxRigidBodyAPI",
-         "_usd_field_exceptions": {
-          "PhysxRigidBodyAPI": {
-           "__tuple__": [
-            "physxRigidBody",
-            [
-             "disable_gravity"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxRigidBody"
+         "stabilization_threshold": null
         },
         "collision_props": null,
         "activate_contact_sensors": true,
@@ -65862,19 +65247,7 @@
          "solver_position_iteration_count": 8,
          "solver_velocity_iteration_count": 0,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxArticulationAPI",
-         "_usd_field_exceptions": {
-          "PhysxArticulationAPI": {
-           "__tuple__": [
-            "physxArticulation",
-            [
-             "articulation_enabled"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxArticulation"
+         "stabilization_threshold": null
         },
         "fixed_tendons_props": null,
         "spatial_tendons_props": null,
@@ -66180,10 +65553,7 @@
         "compliant_contact_stiffness": null,
         "compliant_contact_damping": null,
         "friction_combine_mode": "multiply",
-        "restitution_combine_mode": "multiply",
-        "_usd_applied_schema": "PhysxMaterialAPI",
-        "_usd_field_exceptions": {},
-        "_usd_namespace": "physxMaterial"
+        "restitution_combine_mode": "multiply"
        },
        "max_init_terrain_level": 5,
        "debug_vis": false
@@ -68482,7 +67852,7 @@
    "version": "v3",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V3",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV3PPORunnerCfg",
-   "digest": "f4f2f050b4e757da08e7167e310b8e3b1320589d1f8d122b81689249ec8c916a",
+   "digest": "7151fe087e74e48ff9265f891141b74447f76ade118339859bd44928b854db84",
    "snapshot": {
     "env": {
      "viewer": {
@@ -68531,10 +67901,7 @@
        "compliant_contact_stiffness": null,
        "compliant_contact_damping": null,
        "friction_combine_mode": "multiply",
-       "restitution_combine_mode": "multiply",
-       "_usd_applied_schema": "PhysxMaterialAPI",
-       "_usd_field_exceptions": {},
-       "_usd_namespace": "physxMaterial"
+       "restitution_combine_mode": "multiply"
       },
       "use_fabric": true,
       "render_interval": 4,
@@ -68705,19 +68072,7 @@
          "solver_position_iteration_count": null,
          "solver_velocity_iteration_count": null,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxRigidBodyAPI",
-         "_usd_field_exceptions": {
-          "PhysxRigidBodyAPI": {
-           "__tuple__": [
-            "physxRigidBody",
-            [
-             "disable_gravity"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxRigidBody"
+         "stabilization_threshold": null
         },
         "collision_props": null,
         "activate_contact_sensors": true,
@@ -68729,19 +68084,7 @@
          "solver_position_iteration_count": 8,
          "solver_velocity_iteration_count": 0,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxArticulationAPI",
-         "_usd_field_exceptions": {
-          "PhysxArticulationAPI": {
-           "__tuple__": [
-            "physxArticulation",
-            [
-             "articulation_enabled"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxArticulation"
+         "stabilization_threshold": null
         },
         "fixed_tendons_props": null,
         "spatial_tendons_props": null,
@@ -69077,10 +68420,7 @@
         "compliant_contact_stiffness": null,
         "compliant_contact_damping": null,
         "friction_combine_mode": "multiply",
-        "restitution_combine_mode": "multiply",
-        "_usd_applied_schema": "PhysxMaterialAPI",
-        "_usd_field_exceptions": {},
-        "_usd_namespace": "physxMaterial"
+        "restitution_combine_mode": "multiply"
        },
        "max_init_terrain_level": 0,
        "debug_vis": false
@@ -72022,7 +71362,7 @@
    "version": "v4",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V4",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV4PPORunnerCfg",
-   "digest": "5982213792bf17021dd5a0921b7567d2c9105071a4a53ef29537daf561b606fc",
+   "digest": "62a3cd20218a67ed27904de86d6dd6dc119ce573c5e5ca7dd5912612853c54f2",
    "snapshot": {
     "env": {
      "viewer": {
@@ -72071,10 +71411,7 @@
        "compliant_contact_stiffness": null,
        "compliant_contact_damping": null,
        "friction_combine_mode": "multiply",
-       "restitution_combine_mode": "multiply",
-       "_usd_applied_schema": "PhysxMaterialAPI",
-       "_usd_field_exceptions": {},
-       "_usd_namespace": "physxMaterial"
+       "restitution_combine_mode": "multiply"
       },
       "use_fabric": true,
       "render_interval": 4,
@@ -72245,19 +71582,7 @@
          "solver_position_iteration_count": null,
          "solver_velocity_iteration_count": null,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxRigidBodyAPI",
-         "_usd_field_exceptions": {
-          "PhysxRigidBodyAPI": {
-           "__tuple__": [
-            "physxRigidBody",
-            [
-             "disable_gravity"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxRigidBody"
+         "stabilization_threshold": null
         },
         "collision_props": null,
         "activate_contact_sensors": true,
@@ -72269,19 +71594,7 @@
          "solver_position_iteration_count": 8,
          "solver_velocity_iteration_count": 0,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxArticulationAPI",
-         "_usd_field_exceptions": {
-          "PhysxArticulationAPI": {
-           "__tuple__": [
-            "physxArticulation",
-            [
-             "articulation_enabled"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxArticulation"
+         "stabilization_threshold": null
         },
         "fixed_tendons_props": null,
         "spatial_tendons_props": null,
@@ -72617,10 +71930,7 @@
         "compliant_contact_stiffness": null,
         "compliant_contact_damping": null,
         "friction_combine_mode": "multiply",
-        "restitution_combine_mode": "multiply",
-        "_usd_applied_schema": "PhysxMaterialAPI",
-        "_usd_field_exceptions": {},
-        "_usd_namespace": "physxMaterial"
+        "restitution_combine_mode": "multiply"
        },
        "max_init_terrain_level": 0,
        "debug_vis": false
@@ -75562,7 +74872,7 @@
    "version": "v5",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V5",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV5PPORunnerCfg",
-   "digest": "1ccc6d4d7fa47b5c269f48f5f2cbd54b0b6a680f53765e7cdcf9e855d5188e63",
+   "digest": "d7e06c72ac907412ee712d4bf965e065de04cc0629e41c074b4077a4d0154199",
    "snapshot": {
     "env": {
      "viewer": {
@@ -75611,10 +74921,7 @@
        "compliant_contact_stiffness": null,
        "compliant_contact_damping": null,
        "friction_combine_mode": "multiply",
-       "restitution_combine_mode": "multiply",
-       "_usd_applied_schema": "PhysxMaterialAPI",
-       "_usd_field_exceptions": {},
-       "_usd_namespace": "physxMaterial"
+       "restitution_combine_mode": "multiply"
       },
       "use_fabric": true,
       "render_interval": 4,
@@ -75785,19 +75092,7 @@
          "solver_position_iteration_count": null,
          "solver_velocity_iteration_count": null,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxRigidBodyAPI",
-         "_usd_field_exceptions": {
-          "PhysxRigidBodyAPI": {
-           "__tuple__": [
-            "physxRigidBody",
-            [
-             "disable_gravity"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxRigidBody"
+         "stabilization_threshold": null
         },
         "collision_props": null,
         "activate_contact_sensors": true,
@@ -75809,19 +75104,7 @@
          "solver_position_iteration_count": 8,
          "solver_velocity_iteration_count": 0,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxArticulationAPI",
-         "_usd_field_exceptions": {
-          "PhysxArticulationAPI": {
-           "__tuple__": [
-            "physxArticulation",
-            [
-             "articulation_enabled"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxArticulation"
+         "stabilization_threshold": null
         },
         "fixed_tendons_props": null,
         "spatial_tendons_props": null,
@@ -76168,10 +75451,7 @@
         "compliant_contact_stiffness": null,
         "compliant_contact_damping": null,
         "friction_combine_mode": "multiply",
-        "restitution_combine_mode": "multiply",
-        "_usd_applied_schema": "PhysxMaterialAPI",
-        "_usd_field_exceptions": {},
-        "_usd_namespace": "physxMaterial"
+        "restitution_combine_mode": "multiply"
        },
        "max_init_terrain_level": null,
        "debug_vis": false
@@ -79185,7 +78465,7 @@
    "version": "v6",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V6",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV6PPORunnerCfg",
-   "digest": "d88352dc6e48b6efd1cbc6d231fe936d23da8f52ba6838ab2af28f4dcaebb901",
+   "digest": "fc37a2c6d348930cb3f909aac13d3bf7a2e15fd8d9fcd8d692e06dee56238272",
    "snapshot": {
     "env": {
      "viewer": {
@@ -79234,10 +78514,7 @@
        "compliant_contact_stiffness": null,
        "compliant_contact_damping": null,
        "friction_combine_mode": "multiply",
-       "restitution_combine_mode": "multiply",
-       "_usd_applied_schema": "PhysxMaterialAPI",
-       "_usd_field_exceptions": {},
-       "_usd_namespace": "physxMaterial"
+       "restitution_combine_mode": "multiply"
       },
       "use_fabric": true,
       "render_interval": 4,
@@ -79408,19 +78685,7 @@
          "solver_position_iteration_count": null,
          "solver_velocity_iteration_count": null,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxRigidBodyAPI",
-         "_usd_field_exceptions": {
-          "PhysxRigidBodyAPI": {
-           "__tuple__": [
-            "physxRigidBody",
-            [
-             "disable_gravity"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxRigidBody"
+         "stabilization_threshold": null
         },
         "collision_props": null,
         "activate_contact_sensors": true,
@@ -79432,19 +78697,7 @@
          "solver_position_iteration_count": 8,
          "solver_velocity_iteration_count": 0,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxArticulationAPI",
-         "_usd_field_exceptions": {
-          "PhysxArticulationAPI": {
-           "__tuple__": [
-            "physxArticulation",
-            [
-             "articulation_enabled"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxArticulation"
+         "stabilization_threshold": null
         },
         "fixed_tendons_props": null,
         "spatial_tendons_props": null,
@@ -79791,10 +79044,7 @@
         "compliant_contact_stiffness": null,
         "compliant_contact_damping": null,
         "friction_combine_mode": "multiply",
-        "restitution_combine_mode": "multiply",
-        "_usd_applied_schema": "PhysxMaterialAPI",
-        "_usd_field_exceptions": {},
-        "_usd_namespace": "physxMaterial"
+        "restitution_combine_mode": "multiply"
        },
        "max_init_terrain_level": null,
        "debug_vis": false
@@ -82808,7 +82058,7 @@
    "version": "v8",
    "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V8",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV8PPORunnerCfg",
-   "digest": "299a86c94553948849866b0922254cfab07d6d7819bb76749abb30ac9347c846",
+   "digest": "5eee2f191b864e0900c3f7dd94122c6f1dc3fb04601bbc77780b9065aa50c965",
    "snapshot": {
     "env": {
      "viewer": {
@@ -82857,10 +82107,7 @@
        "compliant_contact_stiffness": null,
        "compliant_contact_damping": null,
        "friction_combine_mode": "multiply",
-       "restitution_combine_mode": "multiply",
-       "_usd_applied_schema": "PhysxMaterialAPI",
-       "_usd_field_exceptions": {},
-       "_usd_namespace": "physxMaterial"
+       "restitution_combine_mode": "multiply"
       },
       "use_fabric": true,
       "render_interval": 4,
@@ -83031,19 +82278,7 @@
          "solver_position_iteration_count": null,
          "solver_velocity_iteration_count": null,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxRigidBodyAPI",
-         "_usd_field_exceptions": {
-          "PhysxRigidBodyAPI": {
-           "__tuple__": [
-            "physxRigidBody",
-            [
-             "disable_gravity"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxRigidBody"
+         "stabilization_threshold": null
         },
         "collision_props": null,
         "activate_contact_sensors": true,
@@ -83055,19 +82290,7 @@
          "solver_position_iteration_count": 8,
          "solver_velocity_iteration_count": 0,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxArticulationAPI",
-         "_usd_field_exceptions": {
-          "PhysxArticulationAPI": {
-           "__tuple__": [
-            "physxArticulation",
-            [
-             "articulation_enabled"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxArticulation"
+         "stabilization_threshold": null
         },
         "fixed_tendons_props": null,
         "spatial_tendons_props": null,
@@ -83414,10 +82637,7 @@
         "compliant_contact_stiffness": null,
         "compliant_contact_damping": null,
         "friction_combine_mode": "multiply",
-        "restitution_combine_mode": "multiply",
-        "_usd_applied_schema": "PhysxMaterialAPI",
-        "_usd_field_exceptions": {},
-        "_usd_namespace": "physxMaterial"
+        "restitution_combine_mode": "multiply"
        },
        "max_init_terrain_level": null,
        "debug_vis": false
@@ -86431,7 +85651,7 @@
    "version": null,
    "env_cfg_class": "rl_exp.tasks.curriculum_env_cfg:LizardCurriculumFlatEnvCfg_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardCurriculumFlatPPORunnerCfg",
-   "digest": "aaa5cd18fdb36268e004777a9abd79bb5f50ac9e362f9150f23e444cac6ac06f",
+   "digest": "bafc04788639a77dc70a9e8cee894622033cfe3d0ff93c39fde17cbacc696299",
    "snapshot": {
     "env": {
      "viewer": {
@@ -86480,10 +85700,7 @@
        "compliant_contact_stiffness": null,
        "compliant_contact_damping": null,
        "friction_combine_mode": "multiply",
-       "restitution_combine_mode": "multiply",
-       "_usd_applied_schema": "PhysxMaterialAPI",
-       "_usd_field_exceptions": {},
-       "_usd_namespace": "physxMaterial"
+       "restitution_combine_mode": "multiply"
       },
       "use_fabric": true,
       "render_interval": 4,
@@ -86654,19 +85871,7 @@
          "solver_position_iteration_count": null,
          "solver_velocity_iteration_count": null,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxRigidBodyAPI",
-         "_usd_field_exceptions": {
-          "PhysxRigidBodyAPI": {
-           "__tuple__": [
-            "physxRigidBody",
-            [
-             "disable_gravity"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxRigidBody"
+         "stabilization_threshold": null
         },
         "collision_props": null,
         "activate_contact_sensors": true,
@@ -86678,19 +85883,7 @@
          "solver_position_iteration_count": 8,
          "solver_velocity_iteration_count": 0,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxArticulationAPI",
-         "_usd_field_exceptions": {
-          "PhysxArticulationAPI": {
-           "__tuple__": [
-            "physxArticulation",
-            [
-             "articulation_enabled"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxArticulation"
+         "stabilization_threshold": null
         },
         "fixed_tendons_props": null,
         "spatial_tendons_props": null,
@@ -86837,10 +86030,7 @@
         "compliant_contact_stiffness": null,
         "compliant_contact_damping": null,
         "friction_combine_mode": "multiply",
-        "restitution_combine_mode": "multiply",
-        "_usd_applied_schema": "PhysxMaterialAPI",
-        "_usd_field_exceptions": {},
-        "_usd_namespace": "physxMaterial"
+        "restitution_combine_mode": "multiply"
        },
        "max_init_terrain_level": null,
        "debug_vis": false
@@ -88048,7 +87238,7 @@
    "version": null,
    "env_cfg_class": "rl_exp.tasks.curriculum_env_cfg:LizardCurriculumFlatEnvCfg",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardCurriculumFlatPPORunnerCfg",
-   "digest": "f277d3c0c52e40f9a3dd01dedb947cff4bbfcd48caf06ec163d26165571e610b",
+   "digest": "7dc83a3956641c060ca7540054939ef24143315a172665a8d9ff62c6c64963c9",
    "snapshot": {
     "env": {
      "viewer": {
@@ -88097,10 +87287,7 @@
        "compliant_contact_stiffness": null,
        "compliant_contact_damping": null,
        "friction_combine_mode": "multiply",
-       "restitution_combine_mode": "multiply",
-       "_usd_applied_schema": "PhysxMaterialAPI",
-       "_usd_field_exceptions": {},
-       "_usd_namespace": "physxMaterial"
+       "restitution_combine_mode": "multiply"
       },
       "use_fabric": true,
       "render_interval": 4,
@@ -88271,19 +87458,7 @@
          "solver_position_iteration_count": null,
          "solver_velocity_iteration_count": null,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxRigidBodyAPI",
-         "_usd_field_exceptions": {
-          "PhysxRigidBodyAPI": {
-           "__tuple__": [
-            "physxRigidBody",
-            [
-             "disable_gravity"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxRigidBody"
+         "stabilization_threshold": null
         },
         "collision_props": null,
         "activate_contact_sensors": true,
@@ -88295,19 +87470,7 @@
          "solver_position_iteration_count": 8,
          "solver_velocity_iteration_count": 0,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxArticulationAPI",
-         "_usd_field_exceptions": {
-          "PhysxArticulationAPI": {
-           "__tuple__": [
-            "physxArticulation",
-            [
-             "articulation_enabled"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxArticulation"
+         "stabilization_threshold": null
         },
         "fixed_tendons_props": null,
         "spatial_tendons_props": null,
@@ -88454,10 +87617,7 @@
         "compliant_contact_stiffness": null,
         "compliant_contact_damping": null,
         "friction_combine_mode": "multiply",
-        "restitution_combine_mode": "multiply",
-        "_usd_applied_schema": "PhysxMaterialAPI",
-        "_usd_field_exceptions": {},
-        "_usd_namespace": "physxMaterial"
+        "restitution_combine_mode": "multiply"
        },
        "max_init_terrain_level": 5,
        "debug_vis": false
@@ -90311,7 +89471,7 @@
    "version": null,
    "env_cfg_class": "rl_exp.tasks.curriculum_rough_env_cfg:LizardCurriculumRoughEnvCfg_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardCurriculumRoughPPORunnerCfg",
-   "digest": "9872cd2622b6b49a9639968d0022e2ce942d760e2c0362455631d7bbb3a8c5c8",
+   "digest": "9795a09d843cc7b866b13e501f5c0705007e7624bbf4ae82dd47b43a1cb13990",
    "snapshot": {
     "env": {
      "viewer": {
@@ -90360,10 +89520,7 @@
        "compliant_contact_stiffness": null,
        "compliant_contact_damping": null,
        "friction_combine_mode": "multiply",
-       "restitution_combine_mode": "multiply",
-       "_usd_applied_schema": "PhysxMaterialAPI",
-       "_usd_field_exceptions": {},
-       "_usd_namespace": "physxMaterial"
+       "restitution_combine_mode": "multiply"
       },
       "use_fabric": true,
       "render_interval": 4,
@@ -90534,19 +89691,7 @@
          "solver_position_iteration_count": null,
          "solver_velocity_iteration_count": null,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxRigidBodyAPI",
-         "_usd_field_exceptions": {
-          "PhysxRigidBodyAPI": {
-           "__tuple__": [
-            "physxRigidBody",
-            [
-             "disable_gravity"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxRigidBody"
+         "stabilization_threshold": null
         },
         "collision_props": null,
         "activate_contact_sensors": true,
@@ -90558,19 +89703,7 @@
          "solver_position_iteration_count": 8,
          "solver_velocity_iteration_count": 0,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxArticulationAPI",
-         "_usd_field_exceptions": {
-          "PhysxArticulationAPI": {
-           "__tuple__": [
-            "physxArticulation",
-            [
-             "articulation_enabled"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxArticulation"
+         "stabilization_threshold": null
         },
         "fixed_tendons_props": null,
         "spatial_tendons_props": null,
@@ -90876,10 +90009,7 @@
         "compliant_contact_stiffness": null,
         "compliant_contact_damping": null,
         "friction_combine_mode": "multiply",
-        "restitution_combine_mode": "multiply",
-        "_usd_applied_schema": "PhysxMaterialAPI",
-        "_usd_field_exceptions": {},
-        "_usd_namespace": "physxMaterial"
+        "restitution_combine_mode": "multiply"
        },
        "max_init_terrain_level": null,
        "debug_vis": false
@@ -92263,7 +91393,7 @@
    "version": null,
    "env_cfg_class": "rl_exp.tasks.curriculum_rough_env_cfg:LizardCurriculumRoughEnvCfg",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardCurriculumRoughPPORunnerCfg",
-   "digest": "6bdc73a2652c4416502503240200fcab27733adbd0c122b7e174c20e861adbd0",
+   "digest": "d118fc8c609a736fa833730ebde03750e87eb12576aa251e1d63b0fb56101cf2",
    "snapshot": {
     "env": {
      "viewer": {
@@ -92312,10 +91442,7 @@
        "compliant_contact_stiffness": null,
        "compliant_contact_damping": null,
        "friction_combine_mode": "multiply",
-       "restitution_combine_mode": "multiply",
-       "_usd_applied_schema": "PhysxMaterialAPI",
-       "_usd_field_exceptions": {},
-       "_usd_namespace": "physxMaterial"
+       "restitution_combine_mode": "multiply"
       },
       "use_fabric": true,
       "render_interval": 4,
@@ -92486,19 +91613,7 @@
          "solver_position_iteration_count": null,
          "solver_velocity_iteration_count": null,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxRigidBodyAPI",
-         "_usd_field_exceptions": {
-          "PhysxRigidBodyAPI": {
-           "__tuple__": [
-            "physxRigidBody",
-            [
-             "disable_gravity"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxRigidBody"
+         "stabilization_threshold": null
         },
         "collision_props": null,
         "activate_contact_sensors": true,
@@ -92510,19 +91625,7 @@
          "solver_position_iteration_count": 8,
          "solver_velocity_iteration_count": 0,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxArticulationAPI",
-         "_usd_field_exceptions": {
-          "PhysxArticulationAPI": {
-           "__tuple__": [
-            "physxArticulation",
-            [
-             "articulation_enabled"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxArticulation"
+         "stabilization_threshold": null
         },
         "fixed_tendons_props": null,
         "spatial_tendons_props": null,
@@ -92828,10 +91931,7 @@
         "compliant_contact_stiffness": null,
         "compliant_contact_damping": null,
         "friction_combine_mode": "multiply",
-        "restitution_combine_mode": "multiply",
-        "_usd_applied_schema": "PhysxMaterialAPI",
-        "_usd_field_exceptions": {},
-        "_usd_namespace": "physxMaterial"
+        "restitution_combine_mode": "multiply"
        },
        "max_init_terrain_level": 5,
        "debug_vis": false
@@ -94866,7 +93966,7 @@
    "version": null,
    "env_cfg_class": "rl_exp.tasks.lizard_env_cfg:LizardFlatEnvCfg_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardFlatPPORunnerCfg",
-   "digest": "fc4ff32283e16a58b6d71c903ac0a8b7761662324154797f3dab8eda582028b3",
+   "digest": "62884683ce8eefdb2fcb3ecd5cc3ea582cc5c292de80a3ad490b640539bd89ed",
    "snapshot": {
     "env": {
      "viewer": {
@@ -94915,10 +94015,7 @@
        "compliant_contact_stiffness": null,
        "compliant_contact_damping": null,
        "friction_combine_mode": "multiply",
-       "restitution_combine_mode": "multiply",
-       "_usd_applied_schema": "PhysxMaterialAPI",
-       "_usd_field_exceptions": {},
-       "_usd_namespace": "physxMaterial"
+       "restitution_combine_mode": "multiply"
       },
       "use_fabric": true,
       "render_interval": 4,
@@ -95089,19 +94186,7 @@
          "solver_position_iteration_count": null,
          "solver_velocity_iteration_count": null,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxRigidBodyAPI",
-         "_usd_field_exceptions": {
-          "PhysxRigidBodyAPI": {
-           "__tuple__": [
-            "physxRigidBody",
-            [
-             "disable_gravity"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxRigidBody"
+         "stabilization_threshold": null
         },
         "collision_props": null,
         "activate_contact_sensors": true,
@@ -95113,19 +94198,7 @@
          "solver_position_iteration_count": 8,
          "solver_velocity_iteration_count": 0,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxArticulationAPI",
-         "_usd_field_exceptions": {
-          "PhysxArticulationAPI": {
-           "__tuple__": [
-            "physxArticulation",
-            [
-             "articulation_enabled"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxArticulation"
+         "stabilization_threshold": null
         },
         "fixed_tendons_props": null,
         "spatial_tendons_props": null,
@@ -95272,10 +94345,7 @@
         "compliant_contact_stiffness": null,
         "compliant_contact_damping": null,
         "friction_combine_mode": "multiply",
-        "restitution_combine_mode": "multiply",
-        "_usd_applied_schema": "PhysxMaterialAPI",
-        "_usd_field_exceptions": {},
-        "_usd_namespace": "physxMaterial"
+        "restitution_combine_mode": "multiply"
        },
        "max_init_terrain_level": null,
        "debug_vis": false
@@ -96461,7 +95531,7 @@
    "version": null,
    "env_cfg_class": "rl_exp.tasks.lizard_env_cfg:LizardFlatEnvCfg",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardFlatPPORunnerCfg",
-   "digest": "27c61aefa28dca97dfddaaf49e22d5b859279ea0c456b55854a2691be2ab40f7",
+   "digest": "3452ff19d220e07c53105a18696ce610e3e69789c33672447a7a47a4bbca51fd",
    "snapshot": {
     "env": {
      "viewer": {
@@ -96510,10 +95580,7 @@
        "compliant_contact_stiffness": null,
        "compliant_contact_damping": null,
        "friction_combine_mode": "multiply",
-       "restitution_combine_mode": "multiply",
-       "_usd_applied_schema": "PhysxMaterialAPI",
-       "_usd_field_exceptions": {},
-       "_usd_namespace": "physxMaterial"
+       "restitution_combine_mode": "multiply"
       },
       "use_fabric": true,
       "render_interval": 4,
@@ -96684,19 +95751,7 @@
          "solver_position_iteration_count": null,
          "solver_velocity_iteration_count": null,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxRigidBodyAPI",
-         "_usd_field_exceptions": {
-          "PhysxRigidBodyAPI": {
-           "__tuple__": [
-            "physxRigidBody",
-            [
-             "disable_gravity"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxRigidBody"
+         "stabilization_threshold": null
         },
         "collision_props": null,
         "activate_contact_sensors": true,
@@ -96708,19 +95763,7 @@
          "solver_position_iteration_count": 8,
          "solver_velocity_iteration_count": 0,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxArticulationAPI",
-         "_usd_field_exceptions": {
-          "PhysxArticulationAPI": {
-           "__tuple__": [
-            "physxArticulation",
-            [
-             "articulation_enabled"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxArticulation"
+         "stabilization_threshold": null
         },
         "fixed_tendons_props": null,
         "spatial_tendons_props": null,
@@ -96867,10 +95910,7 @@
         "compliant_contact_stiffness": null,
         "compliant_contact_damping": null,
         "friction_combine_mode": "multiply",
-        "restitution_combine_mode": "multiply",
-        "_usd_applied_schema": "PhysxMaterialAPI",
-        "_usd_field_exceptions": {},
-        "_usd_namespace": "physxMaterial"
+        "restitution_combine_mode": "multiply"
        },
        "max_init_terrain_level": 5,
        "debug_vis": false
@@ -98584,7 +97624,7 @@
    "version": null,
    "env_cfg_class": "rl_exp.tasks.rough_env_cfg:LizardRoughEnvCfg_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardRoughPPORunnerCfg",
-   "digest": "d06e70db8a3c380e53d2db437a90d574c7a58cbaee4a51af59389145cafe11a6",
+   "digest": "05fd7fe727c3f6ff707d7f4cd5ce706a2dbaa0587cf827d8147471cb455580f0",
    "snapshot": {
     "env": {
      "viewer": {
@@ -98633,10 +97673,7 @@
        "compliant_contact_stiffness": null,
        "compliant_contact_damping": null,
        "friction_combine_mode": "multiply",
-       "restitution_combine_mode": "multiply",
-       "_usd_applied_schema": "PhysxMaterialAPI",
-       "_usd_field_exceptions": {},
-       "_usd_namespace": "physxMaterial"
+       "restitution_combine_mode": "multiply"
       },
       "use_fabric": true,
       "render_interval": 4,
@@ -98807,19 +97844,7 @@
          "solver_position_iteration_count": null,
          "solver_velocity_iteration_count": null,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxRigidBodyAPI",
-         "_usd_field_exceptions": {
-          "PhysxRigidBodyAPI": {
-           "__tuple__": [
-            "physxRigidBody",
-            [
-             "disable_gravity"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxRigidBody"
+         "stabilization_threshold": null
         },
         "collision_props": null,
         "activate_contact_sensors": true,
@@ -98831,19 +97856,7 @@
          "solver_position_iteration_count": 8,
          "solver_velocity_iteration_count": 0,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxArticulationAPI",
-         "_usd_field_exceptions": {
-          "PhysxArticulationAPI": {
-           "__tuple__": [
-            "physxArticulation",
-            [
-             "articulation_enabled"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxArticulation"
+         "stabilization_threshold": null
         },
         "fixed_tendons_props": null,
         "spatial_tendons_props": null,
@@ -99149,10 +98162,7 @@
         "compliant_contact_stiffness": null,
         "compliant_contact_damping": null,
         "friction_combine_mode": "multiply",
-        "restitution_combine_mode": "multiply",
-        "_usd_applied_schema": "PhysxMaterialAPI",
-        "_usd_field_exceptions": {},
-        "_usd_namespace": "physxMaterial"
+        "restitution_combine_mode": "multiply"
        },
        "max_init_terrain_level": null,
        "debug_vis": false
@@ -100519,7 +99529,7 @@
    "version": null,
    "env_cfg_class": "rl_exp.tasks.rough_env_cfg:LizardRoughEnvCfg",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardRoughPPORunnerCfg",
-   "digest": "1a675ee72294993a3c30e0ce5308957039f92dd60f7aea22fec80580736325f1",
+   "digest": "4a389e2ec80a548547b27b02b37eb8db2a32d24550914a26915ec7cf4b54155c",
    "snapshot": {
     "env": {
      "viewer": {
@@ -100568,10 +99578,7 @@
        "compliant_contact_stiffness": null,
        "compliant_contact_damping": null,
        "friction_combine_mode": "multiply",
-       "restitution_combine_mode": "multiply",
-       "_usd_applied_schema": "PhysxMaterialAPI",
-       "_usd_field_exceptions": {},
-       "_usd_namespace": "physxMaterial"
+       "restitution_combine_mode": "multiply"
       },
       "use_fabric": true,
       "render_interval": 4,
@@ -100742,19 +99749,7 @@
          "solver_position_iteration_count": null,
          "solver_velocity_iteration_count": null,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxRigidBodyAPI",
-         "_usd_field_exceptions": {
-          "PhysxRigidBodyAPI": {
-           "__tuple__": [
-            "physxRigidBody",
-            [
-             "disable_gravity"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxRigidBody"
+         "stabilization_threshold": null
         },
         "collision_props": null,
         "activate_contact_sensors": true,
@@ -100766,19 +99761,7 @@
          "solver_position_iteration_count": 8,
          "solver_velocity_iteration_count": 0,
          "sleep_threshold": null,
-         "stabilization_threshold": null,
-         "_usd_applied_schema": "PhysxArticulationAPI",
-         "_usd_field_exceptions": {
-          "PhysxArticulationAPI": {
-           "__tuple__": [
-            "physxArticulation",
-            [
-             "articulation_enabled"
-            ]
-           ]
-          }
-         },
-         "_usd_namespace": "physxArticulation"
+         "stabilization_threshold": null
         },
         "fixed_tendons_props": null,
         "spatial_tendons_props": null,
@@ -101084,10 +100067,7 @@
         "compliant_contact_stiffness": null,
         "compliant_contact_damping": null,
         "friction_combine_mode": "multiply",
-        "restitution_combine_mode": "multiply",
-        "_usd_applied_schema": "PhysxMaterialAPI",
-        "_usd_field_exceptions": {},
-        "_usd_namespace": "physxMaterial"
+        "restitution_combine_mode": "multiply"
        },
        "max_init_terrain_level": 5,
        "debug_vis": false
