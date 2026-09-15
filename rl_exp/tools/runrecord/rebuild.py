@@ -691,7 +691,9 @@ def main(argv: list[str] | None = None) -> int:
         if root is None:
             print(f"usage: python -m rl_exp.tools.runrecord.rebuild {name} <dest> --root <rebuild_root>")
             return 2
-        deps, originals = _paths(flag("--dep", repeat=True) or []), _paths(flag("--original", repeat=True) or [])        rows, problems = (
+        deps = _paths(flag("--dep", repeat=True) or [])
+        originals = _paths(flag("--original", repeat=True) or [])
+        rows, problems = (
             check(dest, pathlib.Path(root), deps, originals)
             if name == "--check"
             else maintest(dest, pathlib.Path(root), deps, originals)
