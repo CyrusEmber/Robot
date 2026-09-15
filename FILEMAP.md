@@ -72,6 +72,7 @@
 | `vN\NOTES.md` | 版本文档：目的/参数 diff/训练命令/结果回填 |
 | `vN\tb_scalars.csv` | 训练后经 dump_tb.py 导出的逐迭代曲线，**抽样入库**（`--max_points 150`，150 点/tag ≈ 210 KB：全量 15k 点/tag ≈ 20 MB/版本，60 MB 三份，不值当）；全量留机器本地 `vN\tb_scalars.full.csv`（`.gitignore`），入库记录由它抽样得到（不需 tensorboard、不需 tfevents） |
 | `vN\asset_lock.json` | 冻结时资产 sha256（`lizard.urdf` + `lizard.usda`）。冻结 yaml 只钉路径不钉内容，此锁补这个洞：资产原地换代 → 常驻任务 id 复现被破坏 → 闸门⑥报警。有意换代在同一 commit 里 `--update-locks` |
+| `lizard\cfg_lock.json` | **配方 golden（家族级，闸门产物）**：34 个注册任务的 env+agent 解析后字段树 + 摘要 + `params_version`，条目按 gym 任务 id 索引；不写进 `vN\`（冻结目录只读，`check_version_docs.py` 看守 vN 五件套）。改配置而未重生成即红；`locked_dirty` 为真表示该 golden 不是干净基线（提交后重生成） |
 
 ### 资产与管线（Blender → URDF → USD，工具在 `tools\` 下按类分目录）
 
@@ -129,9 +130,18 @@
 | `tools\verify\framework_pin_check.py` | **框架 pin 检查**：grep IsaacLab 源码树里我们依赖的内部符号（cfg.func 替换 / RayCaster.meshes / live PD 增益 / warp kernel 等）+ 比对已验证 commit `28a37ce`（perf-2026-06-24）；升级 IsaacLab 后第一件事 |
 | `tools\verify\test_recovery_parity.py` | recovery 向量化 vs 朴素参考实现等价性（纯 torch，随机+6 组边界） |
 | `tools\verify\test_staged_curriculum.py` | 课程组件离线单测（mock managers，不起仿真） |
-| `tools\verify\run_offline_checks.bat` | **离线全套一键**（19 项：pin/parity/recovery/staged 课程/teacher 网络/student 网络/v3 课程+环形/obs 布局/v5 奖励/v5 SIR/v11 联合 SIR/版本文档/v12 噪声模型/pxr 泄漏闸/续训状态/tb 抽样/v13 跟踪核/v14 摔倒闸/验收量测（同帧+abs 侧滑），秒级不起仿真）；改 tasks 或 harness 后、commit 前必跑 |
+| `tools\verify\run_offline_checks.bat` | **离线全套一键**（26 项：pin/parity/recovery/staged 课程/teacher 网络/student 网络/v3 课程+环形/obs 布局/v5 奖励/v5 SIR/v11 联合 SIR/版本文档/v12 噪声模型/pxr 泄漏闸/续训状态/tb 抽样/v13 跟踪核/v14 摔倒闸/验收量测（同帧+abs 侧滑）/eval 帧契约 v2/configclass 字段面 + 其负测试/配置序列化器/**配方 golden 锁 + 其负测试/运行记录**，秒级不起仿真）；改 tasks 或 harness 后、commit 前必跑 |
 | `tools\verify\check_pxr_leak.py` | **P001/P003 闸门**：import 任务 cfg 链（teacher/lizard/agents）断言 `pxr` 不进 sys.modules——防 hydra compose 期 pip usd-core pxr 毒化 Kit 启动（omni.physx "No to_python converter" 崩）；改 env cfg/mdp 顶层 import 后必跑 |
 | `tools\verify\check_version_docs.py` | **版本文档完备闸 + 血统闸**（stdlib，pre-commit 也跑）：每版本目录四件套（PLAN/NOTES/`*_params.yaml`/asset_lock 锁自身，**支线 `versions/<family>/<line>/vN/` 递归覆盖**）+ `base.json` 血统边合法（母本存在且自身有 base.json；`--tree` 打血缘树）+ FAMILY 版本史行（线前缀键 `parkour/v1`）+ FILEMAP 行，缺即红——v10/v11 记录欠两版的根因（纯约定无闸门）的机器对策；tag 缺失仅 WARN（遗留前缀不一） |
+| `tools\verify\check_configclass_fields.py` | **configclass 字段面闸门（ARCH_PLAN 1.0，离线）**：扫 `rl_exp\tasks` 全部带 `params_version` 的配置类（34/34 实测**是** dataclass 字段），打印 `__dataclass_fields__`/`to_dict()`/`__configclass_own_fields__`/类属性可读性；抓"声明字段未序列化""家族内字段/非字段混杂""类属性可读性不一致""字段不在 to_dict 而日志会丢"；`--env-yaml` 比真实 dump，`--json` 落完整面 |
+| `tools\verify\test_configclass_fields_gate.py` | 上者负测试：注入 6 种漂移（to_dict 丢失/实例缺失/字段未序列化/类属性变可读/字段面混杂/分支契约不一致）必须全部触发 |
+| `tools\verify\cfg_snapshot.py` | **配置快照序列化器（ARCH_PLAN 1.1）**：顺序敏感（映射与序列保插入序并纳入摘要）、浮点 `repr` 位级往返、callable→`module:qualname`、**MISSING 按类型判定**（构造期深拷贝会破坏 `is MISSING` 身份）、repo/Isaac 路径相对化、**对象地址不进文本**（否则摘要跟分配器走）；输出 canonical JSON + sha256 |
+| `tools\verify\test_cfg_snapshot.py` | 上者离线验证：obs 组次序/摘要覆盖顺序（倒序必变）/浮点位级（1e-320、-0.0）/无地址/agent 树 MISSING 标签/路径相对化/**跨进程摘要一致**（两个 `PYTHONHASHSEED`） |
+| `tools\verify\check_cfg_lock.py` | **配方 golden 闸门（ARCH_PLAN 1.1b，离线）**：从 gym registry 取全部 rl_exp 注册任务（34 个，含 PLAY 与 parkour 线），按 `env_cfg_entry_point` **只构造不 `gym.make`**，与 `versions\lizard\cfg_lock.json` 比摘要；另查 golden 条目自洽（摘要 vs 自带快照，防手改）、`params_version` 与任务 id 声明一致、条目与注册任务一一对应、快照格式版本。`--update` 重生成（记 rev/dirty/isaaclab rev）、`--diff` 打字段路径差、`--vs-upstream` 与框架默认比值并按 MRO 归因到"最后改值的版本"、`--tasks` 收窄 |
+| `tools\verify\test_cfg_lock_gate.py` | 上者负测试：摘要漂移/手改 lock/版本不符/任务 id 与配方不符/条目对不上/格式版本/差异路径与限额，全部必须触发 |
+| `tools\runrecord\manifest.py` | **运行记录（ARCH_PLAN 1.2，训练路径实际调用）**：T0 `pre_make`（配方/资产锁/代码来源/请求的 resume，落盘即写）+ 环境构造后核验（声明 vs 实际 num_envs/dt/seed/params_version + 实况 obs 组维度，不一致记失败）+ T1 `ready_to_learn`（解析后的算法/策略类、恢复后**实际生效 lr**、obs 组、resume 源哈希、课程状态证据）并在 `learn` 前冻结 → ckpt `infos` 只带 run id + T1 摘要 + 迭代 + 载荷摘要；**文件哈希另存 `checkpoints.json`**（不回写、不自引用）。整个 manifest 走 `cfg_snapshot` 落盘（MISSING/浮点/路径/地址同规则）。`--verify` 出两维度（记录完整/可重建/已验证重建 × 通过/失败/未知）：重算 T1 摘要、重校验声明-实际对儿、代码 rev+diff、资产 83 文件、配方再推导、ckpt 文件哈希；任一失败阻塞 |
+| `tools\verify\test_run_manifest.py` | 上者离线验证（stub env/runner，29 项）：四调用点记录 + ckpt infos/index + 两维度报告，负例含**改过声明/连摘要一起伪造**（由记录内自洽性抓）、缺 T1、代码移动、资产变更、配方漂移、T1 前存档的 ckpt、ckpt 文件消失、声明-实际不符 |
+| `fork_patches\train_run_manifest.patch` | 训练侧四个调用点（T0 在 `gym.make` 前 / 构造后核验 / runner 后装 save 钩子 / `learn` 前冻结）+ ImportError 仅告警。**依赖 `train_curriculum_resume.patch` 先应用**（save 钩子上下文与它相邻）；`git apply --check --reverse` 幂等，setup.bat 按文件名顺序应用 |
 | `tools\diagnose\debug_pose.py` | reset 后立即 dump 全部腿关节轴心世界坐标 |
 | `tools\diagnose\diag_metrics.py` | **验收量测纯函数**（no sim，torch）：`yaw_frame_lin_vel`（= 奖励核同帧）、`forward_error`（签名/abs 均值误差 + 逐帧 MAE）、`sideslip_abs_mean`（`mean|vel_yaw_y|`）；诊断工具与离线闸共用，防"验收与奖励不同坐标系"复发 |
 | `tools\verify\test_acceptance_metrics.py` | 验收量测离线闸（no sim，5 例）：核满分/超速/欠速/侧滑降分、yaw 不变性（同相对运动同奖励）、**混俯仰不误报欠速**（体坐标在 45° 俯仰下假阴 −29% → 旧实现必失败，作回归证据）、**左右交替侧滑必判不通过**（签名均值 ≈0 会放行）、快慢交替由逐帧 MAE 暴露 |
