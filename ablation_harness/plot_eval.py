@@ -102,7 +102,7 @@ def _trend(runs: list[dict], dpi: int):
         ax.legend(fontsize=7)
         if not plotted:
             ax.text(0.5, 0.5, "no data", ha="center", va="center", fontsize=8, color="grey")
-    fig.suptitle("eval vs checkpoint (protocol Locomotion-Eval-v1)", fontsize=10)
+    fig.suptitle(f"eval vs checkpoint (protocol {runs[0]['protocol']})", fontsize=10)
     fig.tight_layout()
     return fig
 

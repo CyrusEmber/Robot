@@ -82,6 +82,12 @@ def fall_flags(
     robot can dodge them. Fall is defined geometrically: tilt beyond the
     threshold OR base clearance below the threshold, sustained (filters bumps).
 
+    The window counts *sampled* frames only, so the frame contract matters: a
+    dwell-terminated episode whose bad run is exactly ``sustain_steps`` long
+    measures as no-fall if its terminal frame is missing (that is the
+    Locomotion-Eval-v1 vs v2 difference -- see
+    ``protocols/locomotion_eval_v2.yaml``).
+
     Args:
         tilt_cos: (T, N) cos of the tilt angle = -projected_gravity_b[:, 2].
         clearance: (T, N) base height above the terrain [m], None if no scanner.

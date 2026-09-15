@@ -12,7 +12,7 @@ plus one row into the protocol's summary.csv.
 
 Usage (from E:\\IsaacLab):
     python ablation_harness\\eval.py --task Lizard-Rough-v2 --checkpoint <model.pt> ^
-        --protocol locomotion_eval_v1 --mode nominal --seed 123
+        --protocol locomotion_eval_v2 --mode nominal --seed 123
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ from isaaclab.app import AppLauncher
 parser = argparse.ArgumentParser(description="Locomotion eval harness runner.")
 parser.add_argument("--task", type=str, required=True, help="Registered TRAIN task id (not -Play).")
 parser.add_argument("--checkpoint", type=str, default=None, help="Policy checkpoint; omit for a zero-action smoke run.")
-parser.add_argument("--protocol", type=str, default="locomotion_eval_v1", help="Protocol name under protocols/.")
+parser.add_argument("--protocol", type=str, default="locomotion_eval_v2", help="Protocol name under protocols/.")
 parser.add_argument("--mode", type=str, default="nominal", choices=["nominal", "robust"])
 parser.add_argument("--seed", type=int, default=123, help="Eval seed (pins DR realizations and resets).")
 parser.add_argument("--envs_per_terrain", type=int, default=None,
@@ -181,9 +181,36 @@ def _make_policy(wrapper, mbenv, agent_cfg, device) -> tuple[object, str]:
     return policy, "zero_action"
 
 
+def _snapshot(robot, scanner, center_ray) -> dict:
+    """One frame of per-env state read from the live buffers [m/s, m/s, cos, m, W]."""
+    data = robot.data
+    snap = {
+        "lin_vel_b": data.root_lin_vel_b.torch.clone(),
+        "ang_vel_b": data.root_ang_vel_b.torch.clone(),
+        "tilt_cos": -data.projected_gravity_b.torch[:, 2].clone(),
+        "root_pos_w": data.root_pos_w.torch.clone(),
+        "energy": metrics.step_energy(
+            data.joint_stiffness.torch, data.joint_damping.torch,
+            data.joint_pos_target.torch, data.joint_pos.torch, data.joint_vel.torch,
+        ),
+    }
+    if scanner is not None:
+        terrain_z = scanner.data.ray_hits_w.torch[:, center_ray, 2]
+        snap["clearance"] = data.root_pos_w.torch[:, 2] - terrain_z
+    return snap
+
+
 def _rollout(wrapper, mbenv, robot, policy, player, cmd_term, scanner, center_ray,
              push, num_steps: int, step_dt: float, device: str) -> dict:
-    """One protocol episode per env; data frozen after each env's first done."""
+    """One protocol episode per env; data frozen after each env's first done.
+
+    Frames are the **post-physics, pre-reset** states (Locomotion-Eval-v2): the
+    frame the reward and the terminations actually saw. v1 sampled the pre-step
+    state instead -- one ``step_dt`` early, and blind to each episode's terminal
+    frame, which the auto-reset inside ``step()`` overwrites before it can be
+    read (see ``protocols/locomotion_eval_v2.yaml`` for why that last frame
+    matters to the fall window).
+    """
     series = {
         "lin_vel_b": [], "ang_vel_b": [], "cmd": [], "tilt_cos": [],
         "clearance": [], "energy": [],
@@ -193,36 +220,44 @@ def _rollout(wrapper, mbenv, robot, policy, player, cmd_term, scanner, center_ra
     end_pos = robot.data.root_pos_w.torch.clone()
     obs = wrapper.get_observations()
 
+    # terminal-frame capture: scene tensors are refreshed at the end of the
+    # physics block (scene.update) and overwritten only after that, by the
+    # auto-reset inside step() -- so the terminal state is readable exactly in
+    # the window between the two. IsaacLab exposes no callback for that window
+    # (record_pre_reset is its nearest neighbour and is HDF5-shaped), so hook
+    # the reset itself. Installed here, after the construction-time reset, so
+    # every call is a rollout termination.
+    terminal: dict = {}
+    pending_ids: torch.Tensor | None = None
+    captured_frames = 0
+    _orig_reset_idx = mbenv._reset_idx
+
+    def _reset_with_capture(env_ids):
+        nonlocal pending_ids
+        terminal.update(_snapshot(robot, scanner, center_ray))
+        pending_ids = env_ids.clone()
+        _orig_reset_idx(env_ids)
+
+    mbenv._reset_idx = _reset_with_capture
+
     for step in range(num_steps):
         cmd = player.command_at(step * step_dt)
         cmd_term.vel_command_b[:] = cmd
         if push is not None and step == push[0]:
             recovery_mod.apply_kick(robot, push[1], push[2])
 
-        # Snapshot BEFORE wrapper.step(): IsaacLab resets terminated envs inside
-        # step(), so any post-step read of scene tensors returns respawn values,
-        # not terminal ones (H1: end_pos and the done-step series entries were
-        # spawn garbage). ponytail: pre-step snapshot is off by one step_dt from
-        # the true terminal state; the post-physics pre-reset state is not
-        # observable through the public step() API.
-        data = robot.data
-        snap = {
-            "lin_vel_b": data.root_lin_vel_b.torch.clone(),
-            "ang_vel_b": data.root_ang_vel_b.torch.clone(),
-            "tilt_cos": -data.projected_gravity_b.torch[:, 2].clone(),
-            "root_pos_w": data.root_pos_w.torch.clone(),
-        }
-        if scanner is not None:
-            terrain_z = scanner.data.ray_hits_w.torch[:, center_ray, 2]
-            snap["clearance"] = data.root_pos_w.torch[:, 2] - terrain_z
-        snap["energy"] = metrics.step_energy(
-            data.joint_stiffness.torch, data.joint_damping.torch,
-            data.joint_pos_target.torch, data.joint_pos.torch, data.joint_vel.torch,
-        )
-
         with torch.inference_mode():
             actions = policy(obs)
         obs, _, _, _ = wrapper.step(actions)
+
+        snap = _snapshot(robot, scanner, center_ray)
+        if pending_ids is not None:
+            # rows whose episode ended this step: their scene tensors already
+            # hold respawn values, so put the captured terminal frame back
+            for key, value in snap.items():
+                value[pending_ids] = terminal[key][pending_ids]
+            captured_frames += int(pending_ids.numel())
+            pending_ids = None
 
         for key in ("lin_vel_b", "ang_vel_b", "tilt_cos", "clearance", "energy"):
             if key in snap:
@@ -234,7 +269,10 @@ def _rollout(wrapper, mbenv, robot, policy, player, cmd_term, scanner, center_ra
         if bool(newly_done.any()):
             env_ids = newly_done.nonzero(as_tuple=False).squeeze(-1)
             first_done[env_ids] = step
+            # the terminal frame itself, not a pre-step approximation (H1)
             end_pos[env_ids] = snap["root_pos_w"][env_ids]
+
+    mbenv._reset_idx = _orig_reset_idx
 
     # capture before close(): scene tensors are freed on close
     return {
@@ -242,6 +280,7 @@ def _rollout(wrapper, mbenv, robot, policy, player, cmd_term, scanner, center_ra
         "first_done": first_done,
         "start_pos": start_pos,
         "end_pos": end_pos,
+        "terminal_frames": captured_frames,
         "terrain_types": mbenv.scene.terrain.terrain_types.clone(),
     }
 
@@ -457,6 +496,10 @@ def main():
     _persist(result, segments, recovery, run_id, tag)
 
     print(f"[EVAL] protocol={result['protocol']} mode={result['mode']} run_id={run_id}")
+    # v2 hook liveness: it must capture one frame per early-ended episode, so 0
+    # here means the private _reset_idx hook went stale on an IsaacLab bump
+    print(f"[EVAL] terminal frames captured={rollout['terminal_frames']} "
+          f"early_done_envs={(rollout['first_done'] < num_steps).sum().item()}")
     print(f"[EVAL] success={result['global']['success_rate']:.3f} fall={result['global']['fall_rate']:.3f} "
           f"lin_mae={result['global']['lin_mae_mps']:.3f} energy_per_m={result['global']['energy_per_m_j']:.1f}")
     if recovery is not None:

@@ -77,6 +77,9 @@ echo [18] v14 front-plant/roll fall gate (predicate / dwell / wiring / v13 froze
 echo [19] acceptance metrics (yaw frame / abs sideslip / per-frame MAE / kernel frame contract)
 "%PY%" rl_exp\tools\verify\test_acceptance_metrics.py || goto :fail
 
+echo [20] eval frame contract v2 (terminal frame closes the fall window / v1 truncation)
+"%PY%" rl_exp\tools\verify\test_eval_frame_v2.py || goto :fail
+
 echo ALL_OFFLINE_CHECKS_PASSED
 exit /b 0
 
