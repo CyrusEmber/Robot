@@ -265,6 +265,46 @@ def test_velocity_bucket_mismatch_rejected() -> None:
         raise AssertionError("velocity-bucket drift must abort the restore")
 
 
+def test_eval_clock_accepts_a_pending_edge_and_rejects_a_stale_one() -> None:
+    """A checkpoint saved at (or just past) an edge before the term was called is resumable.
+
+    The term re-arms only when it is called, and it is called on the first step at/after the
+    edge where an env resets (real runs: the 240 edge fired at clock 247). A payload saved in
+    that window legitimately carries ``next_eval_step <= counter`` -- the update is pending.
+    A schedule a whole block behind the counter is still refused (changed block size /
+    hand-edited payload).
+    """
+    block = 240
+
+    def restore_with(counter: int, next_eval: int):
+        torch.manual_seed(9)
+        env1, term1 = _pair(_terrain())
+        state = collect(env1)
+        env2, term2 = _pair(_terrain())
+        slot = state["terms"][_only_slot(state)]["runtime"]
+        slot["next_eval_step"] = next_eval
+        state["clock"]["common_step_counter"] = counter
+        term2._next_eval_step = next_eval
+        apply_state(env2, state, report=lambda *_: None)
+        return term2
+
+    for counter, next_eval, why in (
+        (960, 960, "saved exactly on the edge, before the term re-armed"),
+        (962, 960, "saved a few steps past the edge, before any env reset"),
+        (960, 1200, "the usual case: the edge is ahead of the counter"),
+    ):
+        term = restore_with(counter, next_eval)
+        assert term._next_eval_step == next_eval, (counter, next_eval, why)
+
+    for counter, next_eval in ((500, 240), (960, 720), (960, 240)):
+        try:
+            restore_with(counter, next_eval)
+        except ValueError as exc:
+            assert "next_eval_step" in str(exc), (counter, next_eval, exc)
+        else:
+            raise AssertionError(f"a schedule a block or more behind the clock must abort ({counter}, {next_eval})")
+
+
 def test_corrupt_clock_and_weights_rejected() -> None:
     torch.manual_seed(5)
     env1, term1 = _pair(_terrain())

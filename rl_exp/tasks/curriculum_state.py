@@ -542,11 +542,23 @@ def _check_env_vectors(rt: dict, env, keys: tuple[str, ...], problems: list[str]
 
 
 def _check_eval_clock(cfg, rt: dict, counter: int, problems: list[str], tag: str) -> None:
-    """``next_eval_step`` must stay the first block edge above the restored counter."""
+    """``next_eval_step`` must be the block edge covering the restored counter, or the next one.
+
+    The term only re-arms when it is CALLED, and it is called from ``_reset_idx`` -- i.e. on the
+    first step at/after the edge where at least one env resets (measured on the real runs: the
+    edge at 240 fired at clock 247). A checkpoint saved between the edge and that call is
+    therefore perfectly valid with ``next_eval_step <= counter``: the update is *pending* and
+    fires at the first reset-carrying step after the restore. Requiring ``next_eval_step >
+    counter`` (the pre-2026-09-15 rule) made such checkpoints unresumable -- it hard-failed a
+    v12 resume at counter 960 with ``next_eval_step=960``, while the same recipe at the same
+    iteration count resumed fine when an env happened to reset exactly on the edge step.
+    What must still be rejected is a schedule that fell a whole block (or more) behind the
+    counter: that is evidence of a changed block size / hand-edited payload, not a pending edge.
+    """
     block = int(cfg.eval_every) * int(cfg.steps_per_iteration)
     next_eval = int(rt.get("next_eval_step", -1))
-    if block > 0 and (next_eval % block != 0 or next_eval <= counter):
-        problems.append(f"runtime.next_eval_step[{tag}] {next_eval} is not the first block edge above {counter}")
+    if block > 0 and (next_eval % block != 0 or next_eval <= counter - block):
+        problems.append(f"runtime.next_eval_step[{tag}] {next_eval} is not the block edge covering {counter}")
 
 
 def adapter_for(cls) -> _Adapter | None:
