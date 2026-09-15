@@ -1,7 +1,7 @@
 # ARCH_PLAN —— 实验可复现性与配置组织重整（提案，待审核）
 
 > 意图文档，非 SSOT。事实侧见 `FAMILY.md` / `OBS.md` / `HARNESS.md` / `FILEMAP.md`。
-> 落地后挂账归 `PLAN.md` #14（归档敞口另记 #18）。修订：v0.12（2026-09-15，补齐载荷、真实续训、协议与导出的可执行验收；新增项待实现/执行）
+> 落地后挂账归 `PLAN.md` #14（归档敞口另记 #18）。修订：v0.13（2026-09-15，1.3a 离线落地——注册表 + v2 载荷、两条 SIR 线 + c_k 解耦、声明门与开关正名、T1 记实际恢复结果；1.4b C 层真跑待执行）
 >
 > **读法**：只看 §速读 §详案 §不做。附录 A/B 是证据与审计留痕，审完即可不看。
 
@@ -27,7 +27,7 @@
 | 1.0 | `params_version` 字段性质实测 | **已完成**：是字段、类属性读不到；整改形态 = 提成显式入参并保字段与日志面 |
 | 1.1 | 配置快照（recipe/run）+ 值差异报告 + golden + 闸门 | **已完成 1.1a/1.1b/1.1c**：序列化器 + golden 覆盖 34 个注册任务/PLAY、按框架组合保存（套件 `[23][24][25]`） |
 | 1.2 | 会话记录 T0–T3 + 外部 ckpt 索引 + 两维度 `--verify` | **1.2a 已落地**（套件 `[26]`，补丁已应用）；**1.2b 运行时验收待真跑**（起仿真，需专门安排） |
-| 1.3 | 状态注册表（joint SIR + 行 SIR + c_k）+ 边界收紧 | 三条线续训连续可证 |
+| 1.3 | 状态注册表（joint SIR + 行 SIR + c_k）+ 边界收紧 | **1.3a 已落地**（套件 `[15]` 23/23：S01–S10 + B 层演算级）；fork 补丁与树已同步（`--drop_curriculum_state` + 声明门 + 结果入 T1）。**1.4b C 层真跑待执行** |
 | 1.4 | 恢复验收三层（A/B/C） | A/B 自动化，C 含冷启动负对照 |
 | 1.5 | 隔离重建（一个新 run，原源码/资产不可访问） | 来源断言与缺件负测试通过，至少一条达"已验证重建：配置与加载级" |
 | 2 | v15 配方化 | 硬 A/B/C 全过 |
@@ -154,9 +154,9 @@
 | 全部带 c_k | `common_step_counter` | 仅 joint SIR 路径回填 | 解耦：有 c_k 就恢复 |
 | 其它课程 term | 任何 `ManagerTermBase` | 仅 WARN | 注册表未登记 **且任务声明要求恢复 ⇒ 硬失败** |
 
-1. **补丁 ImportError** 现 WARN 后继续 → 对声明要求课程恢复的任务改硬失败（声明放任务 cfg 侧，如 `REQUIRES_CURRICULUM_STATE`），其它任务透传。
-2. **`--weights_only` 正名**：实测只丢课程状态，rsl_rl **仍加载 model + optimizer**（`_peek_lr` 读 optimizer 学习率即证）→ 新增 `--drop_curriculum_state`，旧名保留为别名 + 弃用提示（不改公开行为）；`PLAN.md` #11 措辞同步。
-3. **多 GPU 不在保证范围**：状态只从 rank 0 写；manifest 记 `distributed`/rank；README 与本文各写一句。
+1. **补丁 ImportError** 现 WARN 后继续 → 对声明要求课程恢复的任务改硬失败（声明 `__requires_curriculum_state__` 放任务 cfg 侧，读 `type(env_cfg)` 不依赖 rl_exp 导入；**已落地**），其它任务透传。保存 hook 安装失败同样只在声明任务上终止。
+2. **`--weights_only` 正名**：实测只丢课程状态，rsl_rl **仍加载 model + optimizer**（`_peek_lr` 读 optimizer 学习率即证）→ 新增 `--drop_curriculum_state`，旧名保留为别名 + 弃用提示（不改公开行为）；`PLAN.md` #11 措辞同步。**已落地**：CLI 与 Python 入口（`apply_resume_state`/`freeze`）双名并存，显式给出互相矛盾的取值时明确报错。
+3. **多 GPU 不在保证范围**：状态只从 rank 0 写；manifest 记 `distributed`/rank；README 与本文各写一句。**已落地**：非 0 rank 拒绝恢复、不装保存 hook，T1 记 `runner_is_distributed`/`runner_gpu_global_rank` 与 `multi_gpu_resume_verified: false`。
 
 **1.3a 载荷与接口验收（待实现/执行）**
 
@@ -172,7 +172,7 @@
 | S06 原子回填 | 多 slot 中最后一项损坏；同类型多实例 | 所有校验在修改对象前完成，失败后全部对象及 counter 不变；多实例要么分别恢复，要么明确拒绝，禁止键覆盖或任选其一 |
 | S07 硬失败边界 | 要求恢复但无载荷/缺 slot/未覆盖 term；已知类尚未实例化；调用侧导入失败（含模块内部 ImportError）；保存 hook 安装失败 | 未显式 drop 时，在首次 reset/训练前终止；新训练要求记录课程状态时，保存 hook 失败也终止。非声明任务的未覆盖项只透传并明确报告，不伪称已覆盖 |
 | S08 兼容与 drop | v1 原始样本；CLI 与 Python 旧 weights_only 入口；新 drop 入口 | v1 可解析为唯一 joint slot，缺失指纹列为未知，不以当前值补造；缺少必需证据时不通过完整恢复验收。显式 drop 保持课程冷启动并继续原模型/optimizer 加载行为；旧入口有弃用提示；新旧参数冲突明确报错 |
-| S09 声明与分布式 | ClassVar 声明、训练/PLAY 继承；模拟 rank 0/非 0 | 全部注册任务 golden 不变，声明不进入配置数据；PLAY 行为符合显式声明。非 0 rank 不安装课程保存 hook；T1 记录真实分布式标志/rank，不宣称多卡恢复验证通过 |
+| S09 声明与分布式 | 类属性声明（dunder `__requires_curriculum_state__`，V5 声明 / v6–v14 继承 / PLAY 显式 False；快照格式 2 排除 ClassVar）；模拟 rank 0/非 0 | 全部注册任务 golden 不变，声明不进入配置数据；PLAY 行为符合显式声明。非 0 rank 不安装课程保存 hook；T1 记录真实分布式标志/rank，不宣称多卡恢复验证通过 |
 | S10 实际恢复证据 | 成功恢复、显式 drop、未覆盖、失败分别运行 | manifest 读取 apply 的实际结果，列出源版本、实际挂载/已恢复/丢弃/缺证据项及 c_k 状态；注册表支持列表或 counter 非零都不能充当恢复成功证据 |
 
 **1.4 恢复验收三层**
@@ -317,7 +317,7 @@ observation_protocol: {id: teacher_obs_v3, sha256: "..."}
 | run 记录 | `git_rev_lizard`/`git_rev_isaaclab`（`eval.py:370-371`）、seed/num_envs（`:365-366`） | 缺 rsl_rl 版本、sim dt/控制频率（`eval.py:454` 用过即弃）、协议串、资产绑定、resume 源、dirty；本仓脏树不记（`logger.py:44`/`train.py:265`） |
 | 最终冻结时点 | runner 构造在 `scripts/reinforcement_learning/rsl_rl/train.py:247-249`，恢复在 `:270`（IsaacLab 树） | RSL-RL `algorithms/ppo.py:416-424` 构造时解析模型类与 obs 分组，`:390-391` 恢复 optimizer 与学习率；环境构造后尚未确定最终训练条件 |
 | 资产锁 | `asset_lock.json` = urdf + usda + `meshes/**`（`check_dr_parity.py:278-288`） | **allow-list，非依赖闭包**；当前 usda 无外部引用（本次检索无命中）⇒ 缺口潜在 |
-| 状态 | `curriculum_state.py` 覆盖 joint SIR + c_k | 只认 `JointSIRTerrainCurriculum`（`:90-99`）；行 SIR 未覆盖（`teacher_mdp.py:726`，`:364-369` 仅 WARN）；`common_step_counter` 仅在 joint SIR 路径回填（`:290`）；补丁 ImportError 仅 WARN（`patch:28-38`）；多 GPU 仅 rank 0（`:385-388`） |
+| 状态 | `curriculum_state.py` **已整改（1.3a，2026-09-15）** | 注册表 + v2 载荷（命名 slot + `clock` c_k 指纹）：joint SIR 与**行 SIR**（`teacher_mdp.py:726`）同构覆盖，`common_step_counter` 与 term 解耦（有 c_k 就回填），未覆盖 stateful term 在声明任务上硬失败，v1 载荷迁移且缺证据列为未知；补丁 ImportError 改为按 `type(env_cfg)` 声明判定（声明任务终止），`--drop_curriculum_state` + 旧名别名 + 冲突报错；多 GPU 非 0 rank 拒绝恢复/不装 hook，T1 记真实 rank 且 `multi_gpu_resume_verified: false`。离线 `[15]` 23/23 |
 | 地形 | 课程**重算**生成时公式 | 生成侧 cumsum + `0.001` 偏置 + dict 插入序（`terrain_generator.py:241-247`、`:249`、`:264-266`）↔ 课程侧（`teacher_mdp.py:1078-1149`）；`TerrainImporter` 只导入单个 mesh（`terrain_importer.py:92`）、`terrain_names` 是 mesh 名（`:143`）、生成器实例即弃（`:89-99`）⇒ 无法事后反解 |
 | 地形产物 | `rl_exp/tasks/param_grid_terrain.py:14-17` 明确各行是随机地形的独立噪声实例 | 同列映射可对应不同几何；映射证据不能替代实际产物 |
 | 隔离重建 | `README.md:57-61` 的安装步骤通过 `.pth` 将仓库加入导入路径 | 仅换工作目录仍可能加载原源码与资产；须验证真实来源并禁止未声明回退 |
@@ -325,7 +325,7 @@ observation_protocol: {id: teacher_obs_v3, sha256: "..."}
 
 ## 附录 B · 来源分级与修订留痕
 
-**v0.12（本轮）**：按用户“补验收标准”要求新增验收记录通则、1.3a S01–S10 载荷/指纹/失败/兼容检查、1.4 A/B/C 具体事件与默认阈值、1.2b 联合实物检查，以及 3.5 P01–P07 协议/评估/导出/蒸馏清单。保留原版路线与归档决定；本轮仅改计划，新增条目均待实现/执行，步数与容差为执行前须冻结的验收口径。
+**v0.13（本轮）**：1.3a 落地（离线）。`curriculum_state.py` 改为注册表 + v2 载荷（命名 slot / `clock` c_k 指纹 / adapter 版本 / 原子回填 / v1 迁移列缺证据），覆盖 joint SIR + 行 SIR 两线并把 c_k 时钟与 term 解耦；行 SIR 静态指纹补 `terrain_config_sha256` 与 9 项 cfg（列分配不变的类型换序/参数改也拒绝），新增有限性/非负/索引 dtype 闸门；声明 `__requires_curriculum_state__` 放任务 cfg 类上（V5 声明、v6–v14 继承、8 个 PLAY 显式 False、v4 无），并以 **dunder 命名 + 快照格式 2 的 ClassVar 过滤**双保险不进配置数据（后者由 1.2b 轮落地并重基线 golden，见 `versions/lizard/ACCEPTANCE.md`）；fork 补丁与树同步（声明门硬失败、`--drop_curriculum_state` + 别名/冲突、hook 安装失败不静默、两条补丁插入点解耦以便 `--check --reverse` 幂等，重建校验 pristine+两补丁 == 树）；T1 记录 apply 的实际结果（S10）与真实分布式标志。离线 `[15]` 23/23 + 三处闸门反证（去掉指纹比较/有限性/声明即失败）。**未做**：1.4b C 层真跑（代表任务与判据见 1.4b），故本步只宣告”离线状态恢复验收通过”。**v0.12**：按用户”补验收标准”要求新增验收记录通则、1.3a S01–S10 载荷/指纹/失败/兼容检查、1.4 A/B/C 具体事件与默认阈值、1.2b 联合实物检查，以及 3.5 P01–P07 协议/评估/导出/蒸馏清单。保留原版路线与归档决定；本轮仅改计划，新增条目均待实现/执行，步数与容差为执行前须冻结的验收口径。
 
 **决策来源分级**：`用户明示`（直接指令）/ `审核建议`（三轮审核，是建议非拍板）/ `提案选择`（作者选择，无授权）。~~待默认通过~~ 不作授权依据（v0.1 用错，已删）。
 

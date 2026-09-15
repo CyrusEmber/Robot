@@ -216,6 +216,13 @@ python scripts\reinforcement_learning\rsl_rl\train.py --task Lizard-Rough-v2 --m
 历史版本复现：任务 id 常驻注册（如 `Lizard-Rough-v1` = v1 配方 obs 266），
 机制见 `rl_exp/FAMILY.md`。
 
+**续训（`--resume`）**：课程状态（SIR 粒子/权重/统计 + c_k 时钟）随 checkpoint 内嵌存取，
+恢复前逐项核验（任务/env 数/载荷版本/slot/指纹），核验通过才回填；声明了课程契约的任务
+（teacher v5–v14）缺状态时**训练前硬失败**，要明确丢弃课程状态请加
+`--drop_curriculum_state`（旧名 `--weights_only` 仍可用，会打弃用提示；两者都只丢课程状态，
+rsl_rl 照常加载 model + optimizer）。多卡续训**不在保证范围**：状态只从 rank 0 写，
+非 0 rank 明确拒绝并记录，别据此宣称多卡续训已验证。
+
 ## AI 开发环境（可选）
 
 codemaker 工作区在 `<ROOT>` 时，把仓内 skill 目录接到工作区技能目录：

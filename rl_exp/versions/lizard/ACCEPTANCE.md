@@ -58,14 +58,53 @@
 
 - **1.5 隔离重建**：无重建记录，`已验证重建` 恒为**未知**（非必需项，不影响其它结论）。
 - **1.4b C 层代表任务**（c_k-only `v3`、行 SIR `v14`、joint SIR `v12` 的真续训）：**未执行**。
-- **1.3a S01–S10**（载荷/指纹/损坏/边界/兼容）：属 1.3 那轮，**未执行**；本批只用到"声明不进配置数据"（S09 的一部分，见下节）。
-- **S10 的接口缝**：`apply_resume_state` 的 outcome dict 目前**未进 T1**（fork 补丁丢弃了返回值）→ 待补，之后 manifest 才能直接引用恢复的实际结果。
+- **1.3a S01–S10**（载荷/指纹/损坏/边界/兼容）：**已执行（离线）**，见下节。
 - **无归档的"可取回"项**：一律保持未知（`PLAN.md` #18），本批不因此判失败，也不提升为通过。
 
 ### 已知瑕疵（不阻塞本批，需另行处理）
 
-- fork 补丁仍以 `weights_only=args_cli.weights_only` 调用，即使未使用该开关也会打印一行 `DEPRECATED: weights_only= is now drop_curriculum_state=`。应在新补丁里改传 `drop_curriculum_state`，旧 CLI 名保留为别名。
+- ~~fork 补丁仍以 `weights_only=args_cli.weights_only` 调用~~ **已修（1.3，2026-09-15）**：新补丁传 `drop_curriculum_state=args_cli.drop_curriculum_state or args_cli.weights_only`，旧 CLI 名保留为别名 + 一行弃用提示（仅在使用旧名时打印）；两条补丁插入点已解耦，`git apply --check --reverse` 各自幂等。
 - IsaacLab 树内 `source/isaaclab_tasks/…/velocity/config/spider/` 未跟踪 ⇒ 该树所有 run 的 isaaclab 来源项都会记未知。需在树里提交或删除该目录，才能让这一项可判通过。
-- `REQUIRES_CURRICULUM_STATE` 的声明目前只落在 `*_PLAY` 变体（`False`）上，**基类的 `True` 声明缺失**，因此 `V14.REQUIRES_CURRICULUM_STATE` 取不到值（`AttributeError`）。属 1.3 那轮未完的部分；本批未依赖它（`requires_resume_state` 走的是 wire 了注册 term 的路径）。
+- ~~`REQUIRES_CURRICULUM_STATE` 的声明目前只落在 `*_PLAY` 变体（`False`）上，基类的 `True` 声明缺失~~ **已修（1.3，2026-09-15）**：基类声明落在 `LizardRoughTeacherEnvCfg_V5`（v6–v14 继承），8 个 `*_PLAY` 显式 `False`，V3/V4 不声明（其 staged 课程未覆盖，只 WARN）；属性名改为 dunder **`__requires_curriculum_state__`**（普通/`ClassVar` 命名都会经 `configclass` 的实例命名空间进快照，dunder 由两个序列化器一致跳过）。`curriculum_state.REQUIRES_CURRICULUM_STATE` 常量即该名字，改用 `getattr(type(cfg), ...)` 读取，不再有 `AttributeError`。
 - 本批期间该声明与快照 ClassVar 排除曾在并发编辑中一度消失（快照排除已按原设计恢复）；`cfg_snapshot.py` 同一时间被两方写入，后续应避免同文件并发编辑。
+
+
+---
+
+## 1.3a · 载荷与接口离线验收（2026-09-15）
+
+### 前提
+
+| 项 | 值 |
+|---|---|
+| 任务 id | 不适用（离线；用测试桩 env/cfg，不注册 gym 任务） |
+| 代码摘要 | Robot 工作树**未提交**（1.3a 改动：`rl_exp/tasks/curriculum_state.py`、`teacher_env_cfg.py`、`runrecord/manifest.py`、`verify/test_resume_state.py`、`verify/test_run_manifest.py`、`fork_patches/*.patch`、`README.md`/`FILEMAP.md`/`PLAN.md`/`ARCH_PLAN.md`）；提交后须按同表重跑 |
+| 框架摘要 | IsaacLab 源码树 rev `28a37cecdd43`，工作树 11 项未提交差异（两个 fork 补丁 + 本地 shim 等）；Python 3.12.13 |
+| 设备与规模 | 无仿真（纯 torch + 桩对象）；桩 env 数 6/8；不依赖 seed |
+| 容差 | A 层位级相等（`torch.equal`）；B 层同 seed 下位级相等；无数值容差 |
+| 验证命令 | `rl_exp\tools\verify\run_offline_checks.bat`（cwd 本仓）→ `ALL_OFFLINE_CHECKS_PASSED`；`[15]` 23/23、`[21]` `CONFIGCLASS_FIELDS_OK`、`[24]` `CFG_LOCK_OK (34 tasks)`、`[26]` `RUN_MANIFEST_TEST_OK` |
+| 补丁一致性 | `git apply --check --reverse` 两补丁各自幂等；pristine + 两补丁按序应用后与 fork 树 `train.py` 逐字节一致（`%TEMP%\patch_check.py`） |
+| 负对照（闸门反证） | 去掉行 SIR 地形摘要比较 ⇒ `test_row_sir_type_order_and_terrain_changes_rejected` 失败；不比较 c_k 调度参数 ⇒ `test_c_k_schedule_evidence_per_parameter` 失败；去掉有限性闸门 ⇒ `test_corrupt_row_sir_payload_rejected` 失败（`%TEMP%\falsify_guards.py`，跑完原模块复原） |
+
+### 检查与结果（S01–S10 + B 层，全部**通过**）
+
+| 编号 | 覆盖用例 | 实际结果 |
+|---|---|---|
+| S01 完整往返 | `test_roundtrip_bitwise_and_ck_continuity`（joint）、`test_row_sir_roundtrip_and_field_set`（行 SIR）、`test_c_k_only_roundtrip`（c_k-only） | **通过**：三线全字段位级一致 + counter 一致；`collect` 交出独立副本 |
+| S02 行 SIR 指纹 | `test_row_sir_type_order_and_terrain_changes_rejected`、`test_row_sir_cfg_entries_each_rejected`、`test_static_fingerprint_catches_grid_edit`、`test_velocity_bucket_mismatch_rejected` | **通过**：网格/有序类型名/地形配置摘要/9 项 cfg 逐项变化均拒绝；**列分配逐位相同**的等占比类型换序也被拒 |
+| S03 行 SIR 状态 | `test_row_sir_roundtrip_and_field_set` | **通过**：7 项运行时全恢复；无 joint 专有字段被虚构；`env_type` 参与恢复并检测重生差异 |
+| S04 c_k 指纹 | `test_c_k_schedule_evidence_per_parameter`、`test_c_k_only_roundtrip` | **通过**：counter 不变改 c0/decay/steps_per_iteration 均拒；c_k 存在性双向不匹配均拒；`ck=None` = 明确无 c_k；空 `terms` 合法 |
+| S05 身份与损坏 | `test_corrupt_row_sir_payload_rejected`、`test_corrupt_clock_and_weights_rejected`、`test_task_identity_mismatch_rejected` | **通过**：NaN/Inf、负值、未归一权重、计数反序、越界粒子/历史/env_type、浮点索引、错长度、未知版本、缺/多 slot、缺字段全部报错 |
+| S06 原子回填 | `test_corrupt_row_sir_payload_rejected`（失败后逐项不变）、`test_hard_fail_boundaries`（同类型两实例） | **通过**：校验全过才写入；同 adapter 两实例明确拒绝（不覆盖、不任选） |
+| S07 硬失败边界 | `test_missing_state_hard_aborts_and_weights_only_opts_out`、`test_hard_fail_boundaries`、`test_uncovered_stateful_term_tripwire`、`test_fork_patch_call_site_contract` | **通过**（离线面）：缺载荷/缺 slot/改名/未覆盖 term/已知类未实例化均明确处置；**调用侧**（含模块内部 ImportError）以补丁静态契约 + 树一致性校验覆盖，**未起真进程** |
+| S08 兼容与 drop | `test_v1_payload_migrates_with_its_missing_evidence`、`test_drop_alias_and_conflict` | **通过**：v1 迁移为唯一 joint slot、缺证据列明且不以当前值补造；旧入口可用 + 弃用提示；新旧参数矛盾报错。**未复核**：drop 后 rsl_rl 仍加载 model/optimizer（属 rsl_rl 行为，需真跑） |
+| S09 声明与分布式 | `test_declaration_is_class_level_and_off_in_play`、`test_non_zero_rank_neither_restores_nor_saves`；闸门 `[21]`/`[24]` | **通过**：声明为类属性（V5 声明、v6–v14 继承、8 个 PLAY 显式 False、V4 无）；不进 `to_dict()`；`[24]` golden 34/34 不变；非 0 rank 拒绝恢复且不装 hook |
+| S10 实际恢复证据 | `test_run_manifest` 的 `s10/restored-complete`、`s10/restored-partial-v1`、`s10/dropped`、`s10/module-unavailable`、`record/distributed-flags` | **通过**：T1 的 `resume.curriculum_state` 直接引用 apply 返回结果（源版本/已恢复项/缺证据/丢弃/c_k 状态）；partial 只判未知、drop 记为不阻塞未知、声明任务模块缺失计失败 |
+| B 层（1.4a） | `test_b_layer_update_equivalence` | **通过**：行 SIR（正常权重更新 + 流量不足保留两分支）与 joint SIR，同统计 + 复位 RNG 下单次真实课程更新输出逐位一致 |
+
+### 结论与边界
+
+- 可**宣告**："1.3 离线状态恢复验收通过"（S01–S10 + A/B 层）。
+- **不可**据本表宣告：运行时续训连续（C 层 1.4b 未执行）、多卡续训已验证（明确不在保证范围）、drop 路径的 rsl_rl 加载行为（未真跑）、隔离重建（1.5）。
+- 工作树未提交 ⇒ 本记录绑定**内容**而非 revision；提交后按同表重跑方可挂 revision。
 
