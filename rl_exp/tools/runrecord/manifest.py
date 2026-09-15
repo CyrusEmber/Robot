@@ -123,7 +123,13 @@ def asset_digest(params_version: str | None) -> dict:
 
 
 def recipe_ref(env_cfg) -> dict:
-    """The recipe this run declares, plus whether it still matches the committed golden."""
+    """The recipe this run declares, plus whether it still matches the committed golden.
+
+    The run's own digest contains the session's overrides (``--num_envs``, seed, device,
+    log dir), so it is recorded but never required to equal the recipe golden. What the
+    overrides actually changed is recorded separately, because "the recipe says X and the
+    run used Y" is the fact a later reader needs.
+    """
     snapshot = cs.snapshot(env_cfg)
     version = getattr(env_cfg, "params_version", None)
     ref = {
@@ -142,8 +148,19 @@ def recipe_ref(env_cfg) -> dict:
         ref["golden"] = f"golden lock unreadable: {err}"
         return ref
     entry = next((e for e in entries.values() if e.get("env_cfg_class", "").endswith(type(env_cfg).__name__)), None)
-    ref["golden_digest"] = entry.get("digest") if entry else None
-    ref["golden_task"] = next((k for k, e in entries.items() if e is entry), None) if entry else None
+    if entry is None:
+        ref["golden"] = f"no golden entry for {type(env_cfg).__name__}"
+        return ref
+    ref["golden_task"] = next((k.split("|")[-1] for k, e in entries.items() if e is entry), None)
+    ref["golden_digest"] = entry.get("digest")
+    golden_env = (entry.get("snapshot") or {}).get("env")
+    if golden_env is not None:
+        from rl_exp.tools.verify.check_cfg_lock import walk_diff
+
+        rows: list = []
+        walk_diff(golden_env, snapshot, "", rows, limit=200)
+        ref["session_overrides"] = [f"{path}: {before} -> {after}" for path, before, after in rows[:40]]
+        ref["session_override_count"] = len(rows)
     ref["golden_digest_note"] = (
         "golden digest is over env+agent recipe defaults; this run's digest also "
         "contains session overrides, so the two are recorded, not required equal"
@@ -446,7 +463,7 @@ def freeze(
             "env_cfg_digest": cs.digest(cs.snapshot(env.unwrapped.cfg)),
             "agent_digest": cs.digest(cs.snapshot(agent_cfg)),
             "resolved_algorithm": _class_id(getattr(runner, "alg", None)),
-            "resolved_policy": _class_id(getattr(getattr(runner, "alg", None), "policy", None)),
+            "resolved_models": _resolved_models(runner),
             "learning_rate": {
                 "declared_by_recipe": declared_lr,
                 "effective": effective_lr,
@@ -492,6 +509,25 @@ def _class_id(obj) -> str | None:
         return None
     cls = type(obj)
     return f"{cls.__module__}:{cls.__qualname__}"
+
+
+def _resolved_models(runner) -> dict:
+    """The model objects the runner actually built, keyed by where they live.
+
+    Which attribute holds the network differs between rsl_rl versions and recipes (a
+    combined ``policy`` in some, split ``actor``/``critic`` in others), so every holder
+    is scanned and the attribute name is part of the key -- the record says where the
+    class came from, not just that something was there.
+    """
+    out: dict[str, str | None] = {}
+    for holder_name, holder in (("alg", getattr(runner, "alg", None)), ("runner", runner)):
+        if holder is None:
+            continue
+        for attr in ("policy", "actor", "critic", "actor_critic", "model"):
+            obj = getattr(holder, attr, None)
+            if obj is not None and hasattr(obj, "state_dict"):
+                out[f"{holder_name}.{attr}"] = _class_id(obj)
+    return out
 
 
 def hook_runner_save(runner, ctx: RunContext) -> None:
@@ -667,10 +703,11 @@ def _verify_code(manifest: dict, problems: list[str]) -> list[dict]:
             )
             continue
         moved = before.get("rev") != after.get("rev")
+        diff_moved = before.get("diff_sha256") != after.get("diff_sha256")
         dirty_then = before.get("dirty")
-        recoverable = (not moved) or (not dirty_then)
         code_in_untracked = before.get("untracked_in_code_root") or []
         outside = len(before.get("untracked_outside_code_root") or [])
+        ignored = f" ({outside} untracked file(s) outside the code root ignored)" if outside else ""
         if dirty_then and code_in_untracked:
             rows.append(
                 _row(
@@ -678,16 +715,17 @@ def _verify_code(manifest: dict, problems: list[str]) -> list[dict]:
                     "未知",
                     f"{name}: the run had {len(code_in_untracked)} untracked code file(s) "
                     f"(e.g. {code_in_untracked[:2]}); the record hashes them but cannot restore them "
-                    f"(PLAN.md #18). {outside} untracked file(s) outside the code root ignored",
+                    f"(PLAN.md #18).{ignored}",
                 )
             )
-        elif not recoverable:
+        elif dirty_then and diff_moved:
             rows.append(
                 _row(
                     "可重建",
                     "未知",
-                    f"{name}: uncommitted changes at record time and the revision moved "
-                    f"({before.get('rev')} -> {after.get('rev')}); nothing can rebuild that exact code",
+                    f"{name}: the run worked in a dirty tree and that diff no longer matches "
+                    f"(recorded {str(before.get('diff_sha256'))[:8]} -> {str(after.get('diff_sha256'))[:8]}); "
+                    f"uncommitted code is hashed, not stored (PLAN.md #18).{ignored}",
                 )
             )
         elif moved:
@@ -697,7 +735,8 @@ def _verify_code(manifest: dict, problems: list[str]) -> list[dict]:
                     "通过",
                     f"{name}: recorded at {before.get('rev')}, tree has since moved to {after.get('rev')}; "
                     f"the run's code is reachable at the recorded revision"
-                    + (f" ({outside} untracked file(s) outside the code root ignored)" if outside else ""),
+                    + ("" if not dirty_then else " (recorded as a dirty tree; see the diff digest)")
+                    + ignored,
                 )
             )
         else:
@@ -706,7 +745,8 @@ def _verify_code(manifest: dict, problems: list[str]) -> list[dict]:
                     "可重建",
                     "通过",
                     f"{name}: rev {before.get('rev')} and its diff digest match"
-                    + (f" ({outside} untracked file(s) outside the code root ignored)" if outside else ""),
+                    + ("" if not dirty_then else f" (dirty tree at record time: {before.get('diff_lines')} diff lines)")
+                    + ignored,
                 )
             )
     return rows
@@ -738,29 +778,43 @@ def _verify_assets(manifest: dict, problems: list[str]) -> list[dict]:
 
 
 def _verify_recipe(manifest: dict, problems: list[str]) -> list[dict]:
+    """Did the reviewed recipe for this task move since the run?
+
+    The check is against the *recipe*, re-derived the same way the golden lock builds it
+    (registry class, no session overrides). Comparing the lock's digest with the run's own
+    digest would be wrong by construction: the run's config carries ``--num_envs``, seed,
+    device and log dir, and those are session facts, not recipe drift.
+    """
     declaration = manifest.get("declaration", {})
     task = manifest.get("task")
-    recorded = declaration.get("recipe", {}).get("recipe_digest")
-    if not recorded:
+    recipe = declaration.get("recipe", {})
+    if not recipe.get("recipe_digest"):
         return [_row("可重建", "未知", "recipe: no digest recorded")]
+    overrides = recipe.get("session_override_count")
+    note = f"; {overrides} field(s) differ from the recipe defaults (session overrides)" if overrides else ""
     try:
-        from gymnasium.envs.registration import registry
+        import rl_exp.tasks  # noqa: F401 - registers the tasks
+        from rl_exp.tools.verify.check_cfg_lock import build_entry, registered_tasks
 
-        import rl_exp.tasks  # noqa: F401
-
-        spec = registry.get(task)
-        env_cfg = spec.kwargs["env_cfg_entry_point"] if spec else None
-        if env_cfg is None:
-            return [_row("可重建", "未知", f"recipe: task {task} no longer registered")]
-        from rl_exp.tools.verify.check_cfg_lock import resolve_entry
-
-        fresh = cs.digest(cs.snapshot(resolve_entry(env_cfg)()))
+        spec = registered_tasks().get(task)
+        fresh = build_entry(task, spec)["digest"] if spec else None
     except Exception as err:  # noqa: BLE001
         return [_row("可重建", "未知", f"recipe: could not re-derive ({type(err).__name__}: {err})")]
+    if fresh is None:
+        return [_row("可重建", "未知", f"recipe: task {task} is no longer registered")]
+    recorded = recipe.get("golden_digest")
+    if recorded is None:
+        return [_row("可重建", "未知", f"recipe: the run recorded no golden digest (no lock in that tree){note}")]
     if fresh != recorded:
-        problems.append("recipe: re-derived digest differs from the run's record")
-        return [_row("可重建", "失败", "recipe: the code no longer builds the recorded config")]
-    return [_row("可重建", "通过", f"recipe: re-derived digest matches ({str(recorded)[:16]})")]
+        problems.append("recipe: the reviewed recipe for this task has changed since the run")
+        return [
+            _row(
+                "可重建",
+                "失败",
+                f"recipe: reviewed golden moved ({str(recorded)[:12]} -> {str(fresh)[:12]}){note}",
+            )
+        ]
+    return [_row("可重建", "通过", f"recipe: reviewed golden unchanged ({str(fresh)[:12]}){note}")]
 
 
 def _verify_payload(run_dir: pathlib.Path, manifest: dict, problems: list[str]) -> list[dict]:

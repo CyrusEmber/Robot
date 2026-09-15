@@ -180,6 +180,12 @@ def main() -> int:
         )
         check("record/declaration", {"seed", "num_envs", "sim_dt", "control_dt", "assets"} <= set(manifest["declaration"]))
         check(
+            "record/resolved-models",
+            manifest["stages"]["ready_to_learn"]["resolved_algorithm"].endswith("_StubAlg")
+            and manifest["stages"]["ready_to_learn"]["resolved_models"].get("alg.policy", "").endswith("_StubPolicy"),
+            f"{manifest['stages']['ready_to_learn']['resolved_models']}",
+        )
+        check(
             "record/effective-lr",
             manifest["stages"]["ready_to_learn"]["learning_rate"]["effective"]
             == LizardTeacherV14PPORunnerCfg().algorithm.learning_rate
@@ -263,7 +269,10 @@ def main() -> int:
         dirty = _tamper(
             run_dir,
             lambda d: d["code"]["repository"].update(
-                dirty=True, rev="deadbeef1234", untracked_in_code_root=["rl_exp/tasks/new_thing.py"]
+                dirty=True,
+                rev="deadbeef1234",
+                diff_sha256="different",
+                untracked_in_code_root=["rl_exp/tasks/new_thing.py"],
             ),
             refresh_t1=True,
         )
@@ -276,6 +285,22 @@ def main() -> int:
             f"{[r for r in dirty_rows if r['level'] == '可重建']}",
         )
         shutil.rmtree(dirty)
+
+        # a dirty tree whose diff no longer matches cannot be recreated either: the hash
+        # proves it was different, it cannot bring the code back
+        stale = _tamper(
+            run_dir,
+            lambda d: d["code"]["repository"].update(dirty=True, diff_sha256="different"),
+            refresh_t1=True,
+        )
+        stale_rows, _ = M.verify(stale)
+        check(
+            "verify/dirty-diff-unrecoverable",
+            M.main(["--verify", str(stale)]) == 2
+            and any("that diff no longer matches" in row["detail"] for row in stale_rows),
+            f"{[r for r in stale_rows if r['level'] == '可重建']}",
+        )
+        shutil.rmtree(stale)
         bad = _tamper(run_dir, lambda d: d["declaration"]["assets"].__setitem__("manifest_sha256", "0" * 64))
         check("negative/assets-changed", M.main(["--verify", str(bad)]) == 1, "asset drift not reported")
         shutil.rmtree(bad)
