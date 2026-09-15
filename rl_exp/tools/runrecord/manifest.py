@@ -143,16 +143,21 @@ def recipe_ref(env_cfg) -> dict:
         ref["golden"] = "no golden lock in this tree"
         return ref
     try:
-        entries = json.loads(lock_path.read_text(encoding="utf-8")).get("entries", {})
+        lock = json.loads(lock_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as err:
         ref["golden"] = f"golden lock unreadable: {err}"
         return ref
+    entries = lock.get("entries", {})
     entry = next((e for e in entries.values() if e.get("env_cfg_class", "").endswith(type(env_cfg).__name__)), None)
     if entry is None:
         ref["golden"] = f"no golden entry for {type(env_cfg).__name__}"
         return ref
-    ref["golden_task"] = next((k.split("|")[-1] for k, e in entries.items() if e is entry), None)
+    golden_key = next((k for k, e in entries.items() if e is entry), None)
+    ref["golden_task"] = golden_key.split("|")[-1] if golden_key else None
+    ref["golden_combination"] = golden_key.rsplit("|", 1)[0] if golden_key else None
     ref["golden_digest"] = entry.get("digest")
+    baseline = (lock.get("baselines") or {}).get(ref["golden_combination"], {})
+    ref["golden_snapshot_format"] = baseline.get("cfg_snapshot_format")
     golden_env = (entry.get("snapshot") or {}).get("env")
     if golden_env is not None:
         from rl_exp.tools.verify.check_cfg_lock import walk_diff
@@ -806,16 +811,54 @@ def _verify_recipe(manifest: dict, problems: list[str]) -> list[dict]:
     recorded = recipe.get("golden_digest")
     if recorded is None:
         return [_row("可重建", "未知", f"recipe: the run recorded no golden digest (no lock in that tree){note}")]
-    if fresh != recorded:
-        problems.append("recipe: the reviewed recipe for this task has changed since the run")
+    # A golden can move for two very different reasons, and the record must not confuse
+    # them: the recipe itself changed (a real failure -- the run's conditions are gone),
+    # or the baseline was taken under another framework combination or another snapshot
+    # format (no comparison is possible, so the claim is unknown, not failed).
+    from rl_exp.tools.verify.check_cfg_lock import combination, combination_key
+
+    current_combination = combination_key(combination())
+    recorded_combination = recipe.get("golden_combination")
+    if recorded_combination and recorded_combination != current_combination:
         return [
             _row(
                 "可重建",
-                "失败",
-                f"recipe: reviewed golden moved ({str(recorded)[:12]} -> {str(fresh)[:12]}){note}",
+                "未知",
+                f"recipe: the run's baseline belongs to another framework combination "
+                f"({recorded_combination}); this tree is {current_combination}{note}",
             )
         ]
-    return [_row("可重建", "通过", f"recipe: reviewed golden unchanged ({str(fresh)[:12]}){note}")]
+    current_format = cs.FORMAT_VERSION
+    recorded_format = recipe.get("golden_snapshot_format")
+    if fresh == recorded:
+        return [_row("可重建", "通过", f"recipe: reviewed golden unchanged ({str(fresh)[:12]}){note}")]
+    if recorded_format is None:
+        return [
+            _row(
+                "可重建",
+                "未知",
+                f"recipe: the record predates the snapshot-format tag, so a difference "
+                f"({str(recorded)[:12]} -> {str(fresh)[:12]}) cannot be attributed to the recipe or to the "
+                f"snapshot semantics{note}",
+            )
+        ]
+    if recorded_format != current_format:
+        return [
+            _row(
+                "可重建",
+                "未知",
+                f"recipe: snapshot semantics changed since the run (format {recorded_format} -> "
+                f"{current_format}), so the recorded golden digest is not comparable{note}",
+            )
+        ]
+    problems.append("recipe: the reviewed recipe for this task has changed since the run")
+    return [
+        _row(
+            "可重建",
+            "失败",
+            f"recipe: reviewed golden moved ({str(recorded)[:12]} -> {str(fresh)[:12]}){note}",
+        )
+    ]
 
 
 def _verify_payload(run_dir: pathlib.Path, manifest: dict, problems: list[str]) -> list[dict]:
