@@ -31,7 +31,13 @@ import warp as wp
 
 from isaaclab.envs import mdp
 from isaaclab.envs.mdp.commands.commands_cfg import UniformVelocityCommandCfg
-from isaaclab.managers import CurriculumTermCfg, ManagerTermBase, ObservationTermCfg, SceneEntityCfg
+from isaaclab.managers import (
+    CurriculumTermCfg,
+    ManagerTermBase,
+    ObservationTermCfg,
+    SceneEntityCfg,
+    TerminationTermCfg,
+)
 from isaaclab.utils.configclass import configclass
 from isaaclab.utils.math import quat_apply_inverse, yaw_quat
 from isaaclab.utils.warp.kernels import raycast_mesh_masked_kernel
@@ -327,6 +333,89 @@ def tilt_terminate(env, gravity_z_limit: float = -0.6) -> torch.Tensor:
     return robot.data.projected_gravity_b[:, 2] > gravity_z_limit
 
 
+# v14: per-axis fall gate (nose-down pitch / roll), stateful dwell
+
+
+def head_plant_or_roll_trigger(pg_b: torch.Tensor, head_force_n: torch.Tensor,
+                               pitch_down_limit_deg: float, head_contact_n: float,
+                               roll_limit_deg: float) -> torch.Tensor:
+    """True where the base front-plants (nose-down AND head on the ground) or rolls over.
+
+    Both limbs read the gravity direction ``pg_b`` (``projected_gravity_b``,
+    upright = (0, 0, -1)): the body x component signs the nose-down attitude
+    (nose-UP never fires), the body y component is the roll. The front limb
+    additionally requires head ground contact, so a nose-down attitude alone
+    never terminates -- only the pose worth cutting, "hind feet up, head
+    planted".
+
+    Args:
+        pg_b: projected gravity in the base frame, shape (num_envs, 3).
+        head_force_n: peak contact-force norm over the head bodies [N].
+        pitch_down_limit_deg: nose-down pitch limit [deg].
+        head_contact_n: head ground-contact force threshold [N].
+        roll_limit_deg: roll limit [deg], symmetric (side fall either way).
+    Returns:
+        Shape ``(num_envs,)`` bool.
+    """
+    nose_down = pg_b[:, 0] > math.sin(math.radians(pitch_down_limit_deg))
+    front_plant = nose_down & (head_force_n > head_contact_n)
+    return front_plant | (pg_b[:, 1].abs() > math.sin(math.radians(roll_limit_deg)))
+
+
+class HeadPlantRollTerm(ManagerTermBase):
+    """Terminate once :func:`head_plant_or_roll_trigger` holds for ``dwell_s``.
+
+    The dwell window is what the deleted v3 gate was missing (it fired on any
+    instantaneous tilt): a vault or slip transient clears, but the pose this
+    gate is meant to cut -- hind feet up with the head planted, or rolled onto
+    a side -- persists. The counter clears when the condition clears and on
+    every episode reset (``TerminationManager.reset`` calls ``reset(env_ids)``
+    on stateful terms).
+    """
+
+    _CONTACT_SENSOR = "contact_forces"
+
+    def __init__(self, cfg: TerminationTermCfg, env):
+        super().__init__(cfg, env)
+        self._robot = env.scene["robot"]
+        self._contact = env.scene[self._CONTACT_SENSOR]
+        self._head_ids, _ = self._robot.find_bodies(
+            cfg.params.get("head_body_names", [".*neck.*"]), preserve_order=True
+        )
+        if not self._head_ids:
+            raise ValueError(
+                f"HeadPlantRollTerm: head_body_names {cfg.params.get('head_body_names')}"
+                " matched no body"
+            )
+        self._steps = torch.zeros(env.num_envs, dtype=torch.long, device=self._robot.device)
+
+    def _head_force_n(self) -> torch.Tensor:
+        """Peak contact-force norm over the head bodies [N], shape (num_envs,)."""
+        forces = self._contact.data.net_forces_w.torch[:, self._head_ids, :]
+        return forces.norm(dim=-1).amax(dim=1)
+
+    def __call__(self, env, pitch_down_limit_deg: float = 45.0, head_contact_n: float = 10.0,
+                 head_body_names: tuple[str, ...] = (".*neck.*",), roll_limit_deg: float = 70.0,
+                 dwell_s: float = 0.5) -> torch.Tensor:
+        # params stay in the signature: the manager passes the term-cfg params
+        # here per call and validates them against it (same as the other
+        # class-based terms in this module; head_body_names is consumed by
+        # __init__ when the body ids are resolved)
+        pg_b = self._robot.data.projected_gravity_b.torch
+        over = head_plant_or_roll_trigger(
+            pg_b, self._head_force_n(), pitch_down_limit_deg, head_contact_n, roll_limit_deg
+        )
+        self._steps = torch.where(over, self._steps + 1, torch.zeros_like(self._steps))
+        dwell_steps = max(1, int(round(dwell_s / env.step_dt)))
+        return self._steps >= dwell_steps
+
+    def reset(self, env_ids=None) -> None:
+        if env_ids is None:
+            self._steps.zero_()
+        else:
+            self._steps[env_ids] = 0
+
+
 # D2: anti-drag foot clearance reward (deliberate inversion of the paper's r_fc
 # which penalizes swing feet flying TOO HIGH; v3 penalizes swing feet BELOW
 # terrain + clearance -- see PLAN v3.1 D2 for the semantics discussion)
@@ -472,6 +561,25 @@ def track_lin_vel_xy_lin(env, command_name: str,
     return torch.clamp(proj, max=speed_c) / speed_c
 
 
+def miki_tracking_kernel(cmd_xy: torch.Tensor, vel_yaw_xy: torch.Tensor,
+                         sigma_sq: float = 0.25) -> torch.Tensor:
+    """Pure Miki et al. 2022 symmetric 2D tracking kernel ``exp(-||dv||^2/sigma_sq)``.
+
+    Split out of :func:`track_lin_vel_xy_miki` so the offline gate can test the
+    kernel's frame contract without a sim (perfect tracking -> 1.0; overspeed,
+    underspeed and sideslip all lose credit; a pitched attitude must not read as
+    underspeed because the error is taken in the yaw-aligned gravity frame).
+
+    Args:
+        cmd_xy: commanded velocity [m/s], shape (N, 2).
+        vel_yaw_xy: base velocity in the yaw-aligned gravity frame [m/s], shape (N, 2).
+        sigma_sq: kernel bandwidth [m^2/s^2] (paper 0.25).
+    Returns:
+        Shape ``(num_envs,)`` in ``[0, 1]``.
+    """
+    return torch.exp(-(cmd_xy - vel_yaw_xy).square().sum(dim=-1) / sigma_sq)
+
+
 def track_lin_vel_xy_miki(env, command_name: str,
                           asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
                           sigma_sq: float = 0.25) -> torch.Tensor:
@@ -501,7 +609,7 @@ def track_lin_vel_xy_miki(env, command_name: str,
     vel_yaw = quat_apply_inverse(yaw_quat(asset.data.root_quat_w.torch),
                                  asset.data.root_lin_vel_w.torch)[:, :2]
     cmd = env.command_manager.get_command(command_name)[:, :2]
-    return torch.exp(-(cmd - vel_yaw).square().sum(dim=-1) / sigma_sq)
+    return miki_tracking_kernel(cmd, vel_yaw, sigma_sq)
 
 
 def feet_slide_ck(env, sensor_cfg: SceneEntityCfg,

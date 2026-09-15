@@ -9,7 +9,8 @@
 # belly_contact_force). Base sections are shared shape; recipe deltas live
 # ONLY in the v3/v5 sections.
 # v10 = v8.1 params + the "v10" section (tilt termination removed).
-# v13 = v10 params verbatim + the "v13" section (symmetric Miki tracking kernel).
+# v14 = v13 params verbatim + the "v14" section (per-axis pitch/roll fall gate);
+# the "v13" section stays as the symmetric-kernel frozen record.
 
 robot:
   name: lizard
@@ -357,3 +358,38 @@ v13:
   # success / fall; terrain_levels is curriculum state, not capability).
   # feet_slide alone is NOT a scrap line: walking for real can raise the slide
   # cost while standing still lowers it.
+
+# --- v14 recipe deltas (per-axis pitch/roll fall gate, versions/lizard/v14/NOTES.md) ---
+v14:
+  # The v3 tilt termination (pg_z > -0.6, TOTAL tilt, instantaneous) was deleted
+  # in v10 for false positives: 0.60 (v8.1) / 0.76 (v6) of episodes ended on
+  # legitimate pitch (slopes, vaulting, spine articulation) and success_rate was
+  # pinned at 0.019. v14 differs on all three counts that made v3 fail:
+  #   * per-axis instead of total tilt (pg_b x = nose-down pitch, y = roll);
+  #   * the pitch limb is ONE-SIDED *and* conjunctive -- nose-up never fires,
+  #     and nose-down alone is not enough (head contact required);
+  #   * a dwell window instead of an instantaneous check.
+  # What it deliberately does NOT catch: a plain belly-down or back-down fall
+  # (pitch and roll near 0) stays in the rollout data, keeping the v10 get-up
+  # gradient. Values are ablation knobs, not paper-pinned.
+  # The front limb is a CONJUNCTION (v14.1, user decision): a nose-down attitude
+  # alone never terminates -- only "sustained nose-down AND head on the ground"
+  # (the hind-feet-up / head-planted pose). The head is the neck chain
+  # (head_body_names), read from the stock contact_forces sensor that covers
+  # Robot/.* -- same body convention the diagnose tool uses for 头颈承重.
+  fall_gate:
+    pitch_down_limit_deg: 45.0   # 前栽：pg_b.x（鼻朝下）
+    head_contact_n: 10.0         # 头贴地：头链接触力 [N]
+    head_body_names:
+      - ".*neck.*"
+    roll_limit_deg: 70.0         # 侧翻：|pg_b.y|（重力方向），双侧
+    dwell_s: 0.5
+  # PRE-REGISTERED tripwire: Episode_Termination/tilt_pitch_roll must stay near
+  # zero (the v3 gate ate 0.60-0.76 of episodes). If it climbs while low-speed
+  # success_rate stalls or plateaus (v3's fingerprint), the limits are too tight
+  # -> raise them (or move the gate onto the foot-ray terrain normal) instead of
+  # scrapping v14; the rollback line stays v13.
+  # Eval note: the harness fall criterion (tilt > 40 deg sustained 0.5 s) is
+  # STRICTER than this gate (70 deg), so the gate cannot hide a fall from
+  # Locomotion-Eval-v1 -- a gate-triggered episode still reads as a fall.
+

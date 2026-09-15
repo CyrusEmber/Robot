@@ -464,6 +464,15 @@ TEACHER_PRIVILEGED_SPEC: dict[str, set[str]] = {
         "thigh_shank_contacts",
         "base_external_wrench",
     },
+    # v14 keeps the v13 set verbatim: the fall gate is a termination, so it
+    # touches neither the obs contract nor the reward contract.
+    "v14": {
+        "foot_contact_forces",
+        "foot_contact_normals",
+        "foot_friction",
+        "thigh_shank_contacts",
+        "base_external_wrench",
+    },
 }
 
 
@@ -1622,6 +1631,60 @@ class LizardRoughTeacherEnvCfg_V13(LizardRoughTeacherEnvCfg_V10):
 @configclass
 class LizardRoughTeacherEnvCfg_V13_PLAY(LizardRoughTeacherEnvCfg_V13):
     """v13 play variant: same as v10 PLAY (no randomization, no curriculum)."""
+
+    def __post_init__(self):
+        super().__post_init__()
+
+        # deterministic evaluation: shared PLAY wiring (single source, see play_utils)
+        apply_play_wiring(self)
+
+        # SIR reassigns spawn origins per episode -- deterministic eval must not roam
+        self.curriculum.terrain_levels = None
+
+
+@configclass
+class LizardRoughTeacherEnvCfg_V14(LizardRoughTeacherEnvCfg_V13):
+    """v14 recipe: per-axis pitch/roll fall gate (single-variable addition).
+
+    v10 deleted the v3 tilt termination because it killed legitimate pitch
+    (instantaneous total tilt > 53 deg: 0.60 of episodes in v8.1, 0.76 in v6,
+    success_rate pinned at 0.019 -- see versions/lizard/v10/NOTES.md). v14 adds
+    a gate that stops only the two poses worth cutting: the front plant
+    (NOSE-DOWN past ``pitch_down_limit_deg`` **and** head contact past
+    ``head_contact_n`` -- a nose-down attitude alone never fires) and rolled
+    onto a side (``|roll|`` past ``roll_limit_deg``, read off the gravity
+    direction), each sustained for ``dwell_s``.
+    Nose-up pitch (vaulting, stair climbing) never fires, and a plain
+    belly-down or back-down fall (pitch and roll near 0) stays in the rollout
+    data -- the v10 get-up gradient story survives. Everything else is
+    byte-identical to v13.
+
+    Pre-registered tripwire (v14 yaml + NOTES): Episode_Termination/
+    head_plant_roll must stay low (the v3 gate ate 0.60-0.76 of episodes); if
+    it climbs there while low-speed success_rate stalls, the limits are too
+    tight and the rollback line is v13.
+    """
+
+    params_version = "v14"
+
+    def __post_init__(self):
+        super().__post_init__()
+        gate = _load_params(self.params_version)["v14"]["fall_gate"]
+        self.terminations.head_plant_roll = DoneTerm(
+            func=teacher_mdp.HeadPlantRollTerm,
+            params={
+                "pitch_down_limit_deg": gate["pitch_down_limit_deg"],
+                "head_contact_n": gate["head_contact_n"],
+                "head_body_names": tuple(gate["head_body_names"]),
+                "roll_limit_deg": gate["roll_limit_deg"],
+                "dwell_s": gate["dwell_s"],
+            },
+        )
+
+
+@configclass
+class LizardRoughTeacherEnvCfg_V14_PLAY(LizardRoughTeacherEnvCfg_V14):
+    """v14 play variant: same as v13 PLAY (no randomization, no curriculum)."""
 
     def __post_init__(self):
         super().__post_init__()

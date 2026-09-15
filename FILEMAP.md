@@ -64,7 +64,8 @@
 | `lizard\v10\` | **已训完 15000 iter，判决半通过**（2026-09-11，`v10\NOTES.md` 验收 1–5 对账 + `DIAGNOSE.md` 支撑/移动诊断）；PLAN/NOTES/yaml/asset_lock 齐 |
 | `lizard\v11\` | **实施完成待开训**（开训门 = v10 判决）：联合粒子地形课程——`param_grid_terrain.py` 参数组合网格 + `JointSIRTerrainCurriculum`（Lee 2020 逐步 Tr，挂账 #15 候选 a）+ `ParticleVelocityCommand` 桶命令 + PLAY 变体 + `test_joint_sir.py`；v11.1 审查四修（stairs 顶档 0.45 / SIR 结算式清零 / joint_sir 常量化 / PLAN 勘误）见 `v11\PLAN.md` 修订记录 |
 | `lizard\v12\` | **提案**（2026-09-10 代码实施同日，未冻结）：Miki S8 鲁棒性包——关节 offset 复位随机 + 基座范围 yaml 化 + 摩擦偶发调低 + teacher 侧高度环噪声（`test_v12_noise.py`）+ r_slip 回 −0.003；方案见 `v12\PLAN.md` |
-| `lizard\v13\` | **实施完成待训**（2026-09-14，单变量，base = v10）：换回 Miki 对称跟踪核 `track_lin_vel_xy_miki` = `exp(−‖v_cmd−v_yaw‖²/0.25)`（全 2D 误差，闭超速/横向/停车三账本盲区；weight 保 1.5）；静态闸 `check_reward_v13.py`；风险预注册（v3/v4 趴窝病历，判废线 v10）见 `v13\NOTES.md` |
+| `lizard\v13\` | **实施完成待训**（2026-09-14，单变量，base = v10）：换回 Miki 对称跟踪核 `track_lin_vel_xy_miki` = `exp(−‖v_cmd−v_yaw‖²/0.25)`（全 2D 误差，闭超速/横向/停车三账本盲区；weight 保 1.5）；静态闸 `check_reward_v13.py`；**v13.1 验收三修**（abs 双向 + 逐时刻 MAE、固定场景对比弃 `terrain_levels`、`feet_slide` 降观察项）；风险预注册（v3/v4 趴窝病历）见 `v13\NOTES.md` |
+| `lizard\v14\` | **实施完成待训**（2026-09-14，单变量，base = v13）：加回摔倒闸——`teacher_mdp.head_plant_or_roll_trigger`（前栽 = `pg_b.x > sin(45°)` **∧** 头链接触力 >10 N；侧翻 = `\|pg_b.y\| > sin(70°)`，重力方向）+ `HeadPlantRollTerm`（per-env dwell 0.5 s + reset 钩子），yaml `v14.fall_gate`（45°/10 N/`[".*neck.*"]`/70°/0.5 s）；相对 v3 旧闸三点去风险 = 分轴 + 前栽合取（鼻朝上/单纯前倾不收局）+ dwell；仰翻/趴地不掐（保 v10 起身梯度）；闸 `check_terminations_v14.py`；假阳闸预注册见 `v14\NOTES.md` |
 | `lizard\parkour\` | **支线 route 层**（2026-09-04，分支 `paper/parkour-in-the-wild`，训练未启动）：Parkour in the Wild（跑/爬/跳多专家蒸馏+RL 微调）。`PLAN.md` = 路线层（组件映射/偏差声明/决策记录）；`parkour_params.yaml` = 支线开发态参数 |
 | `lizard\parkour\v1\` | 支线版本包：`v1\PLAN.md` = 版本方案 SSOT（位置任务/probe gate/专家表/蒸馏微调方案），`v1\NOTES.md` = 结果回填，`v1\base.json` = 支线血统根（null），`v1\parkour_params.yaml` = 冻结副本（未冻结，训练启动时定稿），`v1\asset_lock.json` = 资产锁 |
 | `vN\PLAN.md` | 版本级计划存档（目的/假设/决策点/验收线/结论一句话；v3 原生，v0–v2 为 2026-09-01 追溯补录；结果回填仍走 NOTES） |
@@ -112,7 +113,8 @@
 | `tools\verify\test_v12_noise.py` | v12 高度环噪声离线单测（mock env）：工况比率 60/30/10 / offset 恒偏置 + foot_index 列选 / σ_p·c_k 幅度缩放 / outlier 全替换带 clamp / **中途重抽**（过半触发一次，reset 重臂）/ 无事件干净回退（PLAY/nominal 语义） |
 | `tools\verify\test_resume_state.py` | 真续训状态层离线单测（mock env，复用 `test_joint_sir` 夹具，10 项）：逐位往返 + **c_k 连续**（不回热）/ 静态指纹抓"地形网格改动而 n_pairs 不变"的静默错位 / 速度桶与任务身份不符拒恢复 / 评估时钟与权重一致性拒恢复 / 无 joint SIR 任务透传 / 有 term 无状态**硬中断** + `--weights_only` 显式降级 / save hook 注入 + 参数透传 + `wraps` 保名 / `env_type` 漂移告警并还原 / 未覆盖课程 term 绊线。**注**：只证载荷往返，接线时序（恢复早于首次 reset）只能真跑 smoke 证 |
 | `tools\verify\check_obs_layout.py` | **obs 布局静态门**（离线）：v1/v2/v3 组名 + 组内 term 顺序 + extero 脚序 + 环形总点数 + c_k steps_per_iteration 与 runner num_steps_per_env 一致性（静默错位在 env 加载前炸出） |
-| `tools\verify\check_reward_v13.py` | v13 跟踪核静态门（离线）：V13/PLAY 挂 `track_lin_vel_xy_miki`（weight/sigma_sq 对 yaml）+ EP 核移除；V5/V10 冻结不动（EP 核在、miki 不泄漏）；v13 yaml 记录齐 |
+| `tools\verify\check_reward_v13.py` | v13 跟踪核静态门（离线）：V13/PLAY 挂 `track_lin_vel_xy_miki`（weight/sigma_sq 对 yaml）+ EP 核移除；V5/V10 冻结不动（EP 核在、miki 不泄漏）；v13 yaml 记录齐 + v13.1 预注册静止值表（1.047/0.552/0.027 → 增益 0.453/0.948/1.473，由 weight/sigma_sq 推出） |
+| `tools\verify\check_terminations_v14.py` | v14 摔倒闸静态门（离线 + torch，不起仿真）：判据单测（直立/头平放不触发 / **鼻朝下 80° 但无头接触不触发** = v14.1 合取 / 20° 前倾 + 400 N 不触发 / 60° 前栽 + 50 N 触发 / **鼻朝上 90° 不触发** = v3 假阳病根 / 双侧 roll 80° 触发 / 26° 斜坡 + 40° 鼻朝上不触发）+ dwell 累积-清零-reset 语义（stub env，25 步 @0.02 s 触发；轻接触永不累积）+ V14/PLAY 接线与 v10 `tilt` 删除共存 + V13 冻结不动 + yaml 记录 |
 | `tools\verify\test_teacher_networks.py` | SplitEncoderModel 离线单测：前向 shape / 梯度 / 三组归一化更新 / 命名子模块摘取 / JIT-ONNX 导出 / 契约违约 |
 | `tools\verify\test_student_networks.py` | student belief 栈离线单测：GRU 步进 / α∈[0,1] / 门控槽对齐 / 解码器维数 / load_from_teacher 等价 + 段序失配 raise |
 | `tools\verify\test_v3_curriculum.py` | v3 课程/几何离线单测：c_k 方向与热身长度 / 无参退化 1.0 / DR 锚点缩放 / tilt 判据 / 环形 pattern 几何（52 点逐环） |
@@ -127,10 +129,12 @@
 | `tools\verify\framework_pin_check.py` | **框架 pin 检查**：grep IsaacLab 源码树里我们依赖的内部符号（cfg.func 替换 / RayCaster.meshes / live PD 增益 / warp kernel 等）+ 比对已验证 commit `28a37ce`（perf-2026-06-24）；升级 IsaacLab 后第一件事 |
 | `tools\verify\test_recovery_parity.py` | recovery 向量化 vs 朴素参考实现等价性（纯 torch，随机+6 组边界） |
 | `tools\verify\test_staged_curriculum.py` | 课程组件离线单测（mock managers，不起仿真） |
-| `tools\verify\run_offline_checks.bat` | **离线全套一键**（17 项：pin/parity/recovery/staged 课程/teacher 网络/student 网络/v3 课程+环形/obs 布局/v5 奖励/v5 SIR/v11 联合 SIR/版本文档/v12 噪声模型/pxr 泄漏闸/续训状态/tb 抽样/v13 跟踪核，秒级不起仿真）；改 tasks 或 harness 后、commit 前必跑 |
+| `tools\verify\run_offline_checks.bat` | **离线全套一键**（19 项：pin/parity/recovery/staged 课程/teacher 网络/student 网络/v3 课程+环形/obs 布局/v5 奖励/v5 SIR/v11 联合 SIR/版本文档/v12 噪声模型/pxr 泄漏闸/续训状态/tb 抽样/v13 跟踪核/v14 摔倒闸/验收量测（同帧+abs 侧滑），秒级不起仿真）；改 tasks 或 harness 后、commit 前必跑 |
 | `tools\verify\check_pxr_leak.py` | **P001/P003 闸门**：import 任务 cfg 链（teacher/lizard/agents）断言 `pxr` 不进 sys.modules——防 hydra compose 期 pip usd-core pxr 毒化 Kit 启动（omni.physx "No to_python converter" 崩）；改 env cfg/mdp 顶层 import 后必跑 |
 | `tools\verify\check_version_docs.py` | **版本文档完备闸 + 血统闸**（stdlib，pre-commit 也跑）：每版本目录四件套（PLAN/NOTES/`*_params.yaml`/asset_lock 锁自身，**支线 `versions/<family>/<line>/vN/` 递归覆盖**）+ `base.json` 血统边合法（母本存在且自身有 base.json；`--tree` 打血缘树）+ FAMILY 版本史行（线前缀键 `parkour/v1`）+ FILEMAP 行，缺即红——v10/v11 记录欠两版的根因（纯约定无闸门）的机器对策；tag 缺失仅 WARN（遗留前缀不一） |
 | `tools\diagnose\debug_pose.py` | reset 后立即 dump 全部腿关节轴心世界坐标 |
+| `tools\diagnose\diag_metrics.py` | **验收量测纯函数**（no sim，torch）：`yaw_frame_lin_vel`（= 奖励核同帧）、`forward_error`（签名/abs 均值误差 + 逐帧 MAE）、`sideslip_abs_mean`（`mean|vel_yaw_y|`）；诊断工具与离线闸共用，防"验收与奖励不同坐标系"复发 |
+| `tools\verify\test_acceptance_metrics.py` | 验收量测离线闸（no sim，5 例）：核满分/超速/欠速/侧滑降分、yaw 不变性（同相对运动同奖励）、**混俯仰不误报欠速**（体坐标在 45° 俯仰下假阴 −29% → 旧实现必失败，作回归证据）、**左右交替侧滑必判不通过**（签名均值 ≈0 会放行）、快慢交替由逐帧 MAE 暴露 |
 | `tools\diagnose\diagnose_nan.py` | Flat 任务 NaN obs 诊断（历史问题排查用） |
 | `tools\diagnose\direction_probe.py` | **方向探针**（v6 倒走归因工具，默认指 v8 最新 run）：强制前进窗口下量 disp_head——世界位移在头方向投影，负值+正命令=真倒走；训后验收复用 |
 | `tools\diagnose\play_fast_task.py` | 注册 `Lizard-Rough-Play-v8-fast`（前进窗口钉 1–3 m/s）——play.py `--external_callback` 挂钩，GUI 目视用 |

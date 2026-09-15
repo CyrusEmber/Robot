@@ -1,0 +1,4 @@
+{
+  "base": "v13",
+  "note": "v13 recipe, single variable: per-axis pitch/roll fall gate (nose-down pitch / |roll|, with dwell) on top of the symmetric Miki tracking kernel"
+}

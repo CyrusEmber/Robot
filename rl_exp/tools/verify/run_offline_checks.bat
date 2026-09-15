@@ -71,6 +71,12 @@ echo [16] tb_scalars record sampling (max_points / first+last / CLI resample)
 echo [17] v13 symmetric tracking kernel (miki wired / EP gone / v5+v10 frozen)
 "%PY%" rl_exp\tools\verify\check_reward_v13.py || goto :fail
 
+echo [18] v14 front-plant/roll fall gate (predicate / dwell / wiring / v13 frozen)
+"%PY%" rl_exp\tools\verify\check_terminations_v14.py || goto :fail
+
+echo [19] acceptance metrics (yaw frame / abs sideslip / per-frame MAE / kernel frame contract)
+"%PY%" rl_exp\tools\verify\test_acceptance_metrics.py || goto :fail
+
 echo ALL_OFFLINE_CHECKS_PASSED
 exit /b 0
 

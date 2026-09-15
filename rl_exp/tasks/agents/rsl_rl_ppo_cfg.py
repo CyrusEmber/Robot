@@ -238,6 +238,17 @@ class LizardTeacherV13PPORunnerCfg(LizardTeacherV10PPORunnerCfg):
 
 
 @configclass
+class LizardTeacherV14PPORunnerCfg(LizardTeacherV10PPORunnerCfg):
+    """Runner cfg for `Lizard-Rough-v14` (per-axis pitch/roll fall gate).
+
+    Same recipe as v10 (paper S1 hyperparams, three-encoder model); only the
+    log dir changes -- one version, one dir (versioning.mdc §A).
+    """
+
+    experiment_name = "lizard_rough_teacher_v14"
+
+
+@configclass
 class LizardParkourClimbPPORunnerCfg(LizardFlatPPORunnerCfg):
     """Runner cfg for `Lizard-Parkour-Climb-v1` (position-task stairs expert).
 
