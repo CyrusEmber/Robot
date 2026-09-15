@@ -1,0 +1,292 @@
+The '--headless' CLI argument is deprecated. Omit '--viz' for default headless. If config visualizers are enabled and you want to force headless, use '--viz none'.
+[ISAACLAB] AppLauncher initialization complete
+E:\IsaacLab\env_isaaclab\Lib\site-packages\gymnasium\envs\registration.py:512: DeprecationWarning: [33mWARN: The environment Lizard-Rough-v10 is out of date. You should consider upgrading to version `v13`.[0m
+  logger.deprecation(
+[INFO]: Base environment:
+	Environment device    : cuda:0
+	Environment seed      : 1000
+	Physics step-size     : 0.005
+	Rendering step-size   : 0.02
+	Environment step-size : 0.02
+[INFO]: libcarb.so unavailable — Fabric notice suspension disabled (Linux x86_64 only)
+[INFO]: Registered backend 'physx' for factory Articulation.
+[INFO] Generating terrains based on curriculum took Last: 0.021601 s
+[INFO]: Registered backend 'physx' for factory FrameView.
+[INFO]: Registered backend 'physx' for factory RayCaster.
+[INFO]: Physics scene prim path: /physicsScene
+[INFO]: Time taken for scene creation Last: 1.554787 s, Mean: 1.554787 s, Std: 0.000000 s, N: 1
+[INFO]: Scene manager:  <class InteractiveScene>
+	Number of environments: 9
+	Environment spacing   : 2.5
+	Source prim name      : /World/envs/env_0
+	Global prim paths     : ['/World/ground']
+	Replicate physics     : True
+[INFO]: Simulation parameters for joints in /World/envs/env_.*/Robot:
++------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|                                                   Simulation Joint Information (Prim path: /World/envs/env_.*/Robot)                                                   |
++-------+-------------------+-----------+---------+----------+-----------------+------------------+------------------+-----------------+-----------------+---------------+
+| Index | Name              | Stiffness | Damping | Armature | Static Friction | Dynamic Friction | Viscous Friction | Position Limits | Velocity Limits | Effort Limits |
++-------+-------------------+-----------+---------+----------+-----------------+------------------+------------------+-----------------+-----------------+---------------+
+|   0   | chest_yaw_joint   |  400.000  |  20.000 |  0.000   |      0.000      |      0.000       |      0.000       | [-0.600, 0.600] |     5.9e+36     |     80.000    |
+|   1   | tail1_yaw_joint   |  400.000  |  20.000 |  0.000   |      0.000      |      0.000       |      0.000       | [-0.600, 0.600] |     5.9e+36     |     80.000    |
+|   2   | rr_haa_joint      |  800.000  |  40.000 |  0.000   |      0.000      |      0.000       |      0.000       | [-0.600, 0.600] |     5.9e+36     |    180.000    |
+|   3   | rl_haa_joint      |  800.000  |  40.000 |  0.000   |      0.000      |      0.000       |      0.000       | [-0.600, 0.600] |     5.9e+36     |    180.000    |
+|   4   | chest_pitch_joint |  400.000  |  20.000 |  0.000   |      0.000      |      0.000       |      0.000       | [-0.500, 0.500] |     5.9e+36     |     80.000    |
+|   5   | tail1_pitch_joint |  400.000  |  20.000 |  0.000   |      0.000      |      0.000       |      0.000       | [-0.500, 0.500] |     5.9e+36     |     80.000    |
+|   6   | rr_hfe_joint      |  800.000  |  40.000 |  0.000   |      0.000      |      0.000       |      0.000       | [-1.200, 1.200] |     5.9e+36     |    180.000    |
+|   7   | rl_hfe_joint      |  800.000  |  40.000 |  0.000   |      0.000      |      0.000       |      0.000       | [-1.200, 1.200] |     5.9e+36     |    180.000    |
+|   8   | neck_yaw_joint    |  400.000  |  20.000 |  0.000   |      0.000      |      0.000       |      0.000       | [-0.600, 0.600] |     5.9e+36     |     80.000    |
+|   9   | rf_haa_joint      |  800.000  |  40.000 |  0.000   |      0.000      |      0.000       |      0.000       | [-0.600, 0.600] |     5.9e+36     |    180.000    |
+|   10  | lf_haa_joint      |  800.000  |  40.000 |  0.000   |      0.000      |      0.000       |      0.000       | [-0.600, 0.600] |     5.9e+36     |    180.000    |
+|   11  | tail2_yaw_joint   |  400.000  |  20.000 |  0.000   |      0.000      |      0.000       |      0.000       | [-0.600, 0.600] |     5.9e+36     |     80.000    |
+|   12  | rr_kfe_joint      |  800.000  |  40.000 |  0.000   |      0.000      |      0.000       |      0.000       | [-1.600, 1.600] |     5.9e+36     |    180.000    |
+|   13  | rl_kfe_joint      |  800.000  |  40.000 |  0.000   |      0.000      |      0.000       |      0.000       | [-1.600, 1.600] |     5.9e+36     |    180.000    |
+|   14  | neck_pitch_joint  |  400.000  |  20.000 |  0.000   |      0.000      |      0.000       |      0.000       | [-0.500, 0.500] |     5.9e+36     |     80.000    |
+|   15  | rf_hfe_joint      |  800.000  |  40.000 |  0.000   |      0.000      |      0.000       |      0.000       | [-1.200, 1.200] |     5.9e+36     |    180.000    |
+|   16  | lf_hfe_joint      |  800.000  |  40.000 |  0.000   |      0.000      |      0.000       |      0.000       | [-1.200, 1.200] |     5.9e+36     |    180.000    |
+|   17  | tail2_pitch_joint |  400.000  |  20.000 |  0.000   |      0.000      |      0.000       |      0.000       | [-0.500, 0.500] |     5.9e+36     |     80.000    |
+|   18  | rr_foot_joint     |  200.000  |  12.000 |  0.000   |      0.000      |      0.000       |      0.000       | [-0.500, 0.500] |     5.9e+36     |     70.000    |
+|   19  | rl_foot_joint     |  200.000  |  12.000 |  0.000   |      0.000      |      0.000       |      0.000       | [-0.500, 0.500] |     5.9e+36     |     70.000    |
+|   20  | rf_kfe_joint      |  800.000  |  40.000 |  0.000   |      0.000      |      0.000       |      0.000       | [-1.600, 1.600] |     5.9e+36     |    180.000    |
+|   21  | lf_kfe_joint      |  800.000  |  40.000 |  0.000   |      0.000      |      0.000       |      0.000       | [-1.600, 1.600] |     5.9e+36     |    180.000    |
+|   22  | tail3_yaw_joint   |  400.000  |  20.000 |  0.000   |      0.000      |      0.000       |      0.000       | [-0.600, 0.600] |     5.9e+36     |     80.000    |
+|   23  | rf_foot_joint     |  200.000  |  12.000 |  0.000   |      0.000      |      0.000       |      0.000       | [-0.500, 0.500] |     5.9e+36     |     70.000    |
+|   24  | lf_foot_joint     |  200.000  |  12.000 |  0.000   |      0.000      |      0.000       |      0.000       | [-0.500, 0.500] |     5.9e+36     |     70.000    |
+|   25  | tail3_pitch_joint |  400.000  |  20.000 |  0.000   |      0.000      |      0.000       |      0.000       | [-0.500, 0.500] |     5.9e+36     |     80.000    |
++-------+-------------------+-----------+---------+----------+-----------------+------------------+------------------+-----------------+-----------------+---------------+
+[INFO]: Read mesh prim: /World/ground/terrain/mesh with 356 vertices and 1470 faces.
+[INFO]: Time taken for simulation start Last: 1.191454 s, Mean: 1.191454 s, Std: 0.000000 s, N: 1
+[INFO] Command Manager:  <CommandManager> contains 1 active terms.
++------------------------------------------------+
+|              Active Command Terms              |
++-------+---------------+------------------------+
+| Index | Name          |          Type          |
++-------+---------------+------------------------+
+|   0   | base_velocity | UniformVelocityCommand |
++-------+---------------+------------------------+
+
+[INFO] Event Manager:  <EventManager> contains 2 active terms.
++-------------------------------------+
+| Active Event Terms in Mode: 'reset' |
++---------+---------------------------+
+|  Index  | Name                      |
++---------+---------------------------+
+|    0    | reset_base                |
+|    1    | reset_robot_joints        |
++---------+---------------------------+
++---------------------------------+
+| Active Event Terms in Mode: 'startup' |
++--------------+------------------+
+|    Index     | Name             |
++--------------+------------------+
+|      0       | init_ck          |
++--------------+------------------+
+
+[INFO] Recorder Manager:  <RecorderManager> contains 0 active terms.
++---------------------+
+| Active Recorder Terms |
++-----------+---------+
+|   Index   | Name    |
++-----------+---------+
++-----------+---------+
+
+[INFO]: Resolved joint names for the action term JointPositionAction: ['rr_haa_joint', 'rl_haa_joint', 'rr_hfe_joint', 'rl_hfe_joint', 'rf_haa_joint', 'lf_haa_joint', 'rr_kfe_joint', 'rl_kfe_joint', 'rf_hfe_joint', 'lf_hfe_joint', 'rr_foot_joint', 'rl_foot_joint', 'rf_kfe_joint', 'lf_kfe_joint', 'rf_foot_joint', 'lf_foot_joint'] [[2, 3, 6, 7, 9, 10, 12, 13, 15, 16, 18, 19, 20, 21, 23, 24]]
+[INFO]: Resolved joint names for the action term JointPositionAction: ['chest_yaw_joint', 'tail1_yaw_joint', 'chest_pitch_joint', 'tail1_pitch_joint', 'neck_yaw_joint', 'tail2_yaw_joint', 'neck_pitch_joint', 'tail2_pitch_joint', 'tail3_yaw_joint', 'tail3_pitch_joint'] [[0, 1, 4, 5, 8, 11, 14, 17, 22, 25]]
+[INFO] Action Manager:  <ActionManager> contains 2 active terms.
++-------------------------------------+
+|   Active Action Terms (shape: 26)   |
++-------+-----------------+-----------+
+| Index | Name            | Dimension |
++-------+-----------------+-----------+
+|   0   | joint_pos_legs  |        16 |
+|   1   | joint_pos_spine |        10 |
++-------+-----------------+-----------+
+
+[INFO] Observation Manager: <ObservationManager> contains 3 groups.
++---------------------------------------------------------+
+| Active Observation Terms in Group: 'proprio' (shape: (90,)) |
++-----------+---------------------------------+-----------+
+|   Index   | Name                            |   Shape   |
++-----------+---------------------------------+-----------+
+|     0     | base_lin_vel                    |    (3,)   |
+|     1     | base_ang_vel                    |    (3,)   |
+|     2     | projected_gravity               |    (3,)   |
+|     3     | velocity_commands               |    (3,)   |
+|     4     | joint_pos                       |   (26,)   |
+|     5     | joint_vel                       |   (26,)   |
+|     6     | actions                         |   (26,)   |
++-----------+---------------------------------+-----------+
++--------------------------------------------------------+
+| Active Observation Terms in Group: 'extero' (shape: (208,)) |
++-------------+----------------------------+-------------+
+|    Index    | Name                       |    Shape    |
++-------------+----------------------------+-------------+
+|      0      | lf_foot_ring               |    (52,)    |
+|      1      | rf_foot_ring               |    (52,)    |
+|      2      | rl_foot_ring               |    (52,)    |
+|      3      | rr_foot_ring               |    (52,)    |
++-------------+----------------------------+-------------+
++--------------------------------------------------------+
+| Active Observation Terms in Group: 'priv' (shape: (83,)) |
++----------+----------------------------------+----------+
+|  Index   | Name                             |  Shape   |
++----------+----------------------------------+----------+
+|    0     | base_lin_vel_true                |   (3,)   |
+|    1     | base_ang_vel_true                |   (3,)   |
+|    2     | foot_contact                     |   (4,)   |
+|    3     | feet_air_time                    |   (4,)   |
+|    4     | body_mass                        |  (27,)   |
+|    5     | foot_contact_forces              |  (12,)   |
+|    6     | foot_contact_normals             |  (12,)   |
+|    7     | foot_friction                    |   (4,)   |
+|    8     | thigh_shank_contacts             |   (8,)   |
+|    9     | base_external_wrench             |   (6,)   |
++----------+----------------------------------+----------+
+
+[INFO] Termination Manager:  <TerminationManager> contains 1 active terms.
++-----------------------------+
+|   Active Termination Terms  |
++-------+----------+----------+
+| Index | Name     | Time Out |
++-------+----------+----------+
+|   0   | time_out |   True   |
++-------+----------+----------+
+
+[INFO] Reward Manager:  <RewardManager> contains 13 active terms.
++-----------------------------------------+
+|           Active Reward Terms           |
++-------+----------------------+----------+
+| Index | Name                 |   Weight |
++-------+----------------------+----------+
+|   0   | track_ang_vel_z_exp  |      0.5 |
+|   1   | lin_vel_z_l2         |     -2.0 |
+|   2   | ang_vel_xy_l2        |    -0.05 |
+|   3   | dof_torques_l2       |   -1e-05 |
+|   4   | dof_acc_l2           | -2.5e-07 |
+|   5   | action_rate_l2       |    -0.01 |
+|   6   | undesired_contacts   |     -1.0 |
+|   7   | flat_orientation_l2  |      0.0 |
+|   8   | dof_pos_limits       |      0.0 |
+|   9   | foot_clearance       |   -0.003 |
+|   10  | track_lin_vel_xy_lin |      1.5 |
+|   11  | feet_slide           |    -0.03 |
+|   12  | belly_contact_force  |     -0.5 |
++-------+----------------------+----------+
+
+[INFO] Curriculum Manager:  <CurriculumManager> contains 0 active terms.
++----------------------+
+| Active Curriculum Terms |
++-----------+----------+
+|   Index   | Name     |
++-----------+----------+
++-----------+----------+
+
+[INFO]: Completed setting up the environment...
+--------------------------------------------------------------------------------
+Resolved observation sets: 
+	 actor :  ['proprio', 'extero', 'priv']
+	 critic :  ['proprio', 'extero', 'priv']
+--------------------------------------------------------------------------------
+Actor Model: SplitEncoderModel(
+  (obs_normalizers): ModuleDict(
+    (proprio): EmpiricalNormalization()
+    (extero): EmpiricalNormalization()
+    (priv): EmpiricalNormalization()
+  )
+  (g_e): MLP(
+    (0): Linear(in_features=52, out_features=80, bias=True)
+    (1): LeakyReLU(negative_slope=0.01)
+    (2): Linear(in_features=80, out_features=60, bias=True)
+    (3): LeakyReLU(negative_slope=0.01)
+    (4): Linear(in_features=60, out_features=24, bias=True)
+  )
+  (g_p): MLP(
+    (0): Linear(in_features=83, out_features=64, bias=True)
+    (1): LeakyReLU(negative_slope=0.01)
+    (2): Linear(in_features=64, out_features=32, bias=True)
+    (3): LeakyReLU(negative_slope=0.01)
+    (4): Linear(in_features=32, out_features=24, bias=True)
+  )
+  (distribution): GaussianDistribution()
+  (mlp): MLP(
+    (0): Linear(in_features=210, out_features=256, bias=True)
+    (1): LeakyReLU(negative_slope=0.01)
+    (2): Linear(in_features=256, out_features=160, bias=True)
+    (3): LeakyReLU(negative_slope=0.01)
+    (4): Linear(in_features=160, out_features=128, bias=True)
+    (5): LeakyReLU(negative_slope=0.01)
+    (6): Linear(in_features=128, out_features=26, bias=True)
+  )
+)
+Critic Model: SplitEncoderModel(
+  (obs_normalizers): ModuleDict(
+    (proprio): EmpiricalNormalization()
+    (extero): EmpiricalNormalization()
+    (priv): EmpiricalNormalization()
+  )
+  (g_e): MLP(
+    (0): Linear(in_features=52, out_features=80, bias=True)
+    (1): LeakyReLU(negative_slope=0.01)
+    (2): Linear(in_features=80, out_features=60, bias=True)
+    (3): LeakyReLU(negative_slope=0.01)
+    (4): Linear(in_features=60, out_features=24, bias=True)
+  )
+  (g_p): MLP(
+    (0): Linear(in_features=83, out_features=64, bias=True)
+    (1): LeakyReLU(negative_slope=0.01)
+    (2): Linear(in_features=64, out_features=32, bias=True)
+    (3): LeakyReLU(negative_slope=0.01)
+    (4): Linear(in_features=32, out_features=24, bias=True)
+  )
+  (mlp): MLP(
+    (0): Linear(in_features=210, out_features=256, bias=True)
+    (1): LeakyReLU(negative_slope=0.01)
+    (2): Linear(in_features=256, out_features=160, bias=True)
+    (3): LeakyReLU(negative_slope=0.01)
+    (4): Linear(in_features=160, out_features=128, bias=True)
+    (5): LeakyReLU(negative_slope=0.01)
+    (6): Linear(in_features=128, out_features=1, bias=True)
+  )
+)
+[DIAG] mass=72.00 kg -> weight=706.3 N (foot_body_mass_kg=['1.53', '1.53', '1.53', '1.53'])
+[DIAG] instant foot contact sum=856.0 N (ratio 1.212) stand_height=0.950 m — 稳态交叉校验见 --phases 0
+[DIAG] contact sensor bodies: 27 (no-collision, force must be ~0: ['chest_yaw', 'neck_yaw', 'tail1_yaw', 'tail2_yaw', 'tail3_yaw', 'rf_kfe', 'lf_kfe', 'rr_kfe', 'rl_kfe'])
+[DIAG] ledger terms: ['track_lin_vel_xy_lin', 'feet_slide', 'belly_contact_force']
+[DIAG] measure check -> E:\Robot\rl_exp\tools\diagnose\out\v10_loadclosure\p0_measure_check.json
+[DIAG] load closure: ΣF_all/mg=1.0044 residual=-3.1 N a_z_equiv=-0.044 m/s^2 Δv_z=-0.0114 m/s momentum_can_explain=False
+[DIAG] non-foot loading: [('tail3_pitch', 72.83), ('base_link', 0.0), ('chest_yaw', 0.0), ('tail1_yaw', 0.0), ('rr_haa', 0.0)]
+[DIAG] load closure_zero_action: ΣF_all/mg=1.0017 residual=-1.2 N a_z_equiv=-0.017 m/s^2 Δv_z=-0.0006 m/s momentum_can_explain=False
+[DIAG] non-foot loading_zero_action: [('base_link', 0.0), ('chest_yaw', 0.0), ('tail1_yaw', 0.0), ('rr_haa', 0.0), ('rl_haa', 0.0)]
+[DIAG] running p1a_zero_action_5s ...
+[DIAG] p1a_zero_action_5s: {"max_tilt_deg": 5.2, "min_clearance": null, "drift_m": 0.076, "max_belly_fz_n": 0.0, "feet_down_mean": 3.85, "feet_down_min": 0, "lift_frac": 0.056, "air_frac": 0.028, "foot_z_min": [0.074, 0.074, 0.07, 0.074], "foot_load_frac": [0.187, 0.274, 0.325, 0.215], "foot_names": ["rr_foot", "rl_foot", "rf_foot", "lf_foot"], "load_closure": {"n_bodies": 27, "sum_all_mean_n": 706.7, "sum_all_ratio": 1.0005, "sum_all_p95_n": 737.8, "residual_n": -0.4, "a_z_equiv_mps2": -0.005, "dv_z_window_mps": 0.3965, "momentum_can_explain": true, "per_body_desc": [{"body": "rf_foot", "mean_fz_n": 229.71, "frac_of_weight": 0.3252}, {"body": "rl_foot", "mean_fz_n": 193.35, "frac_of_weight": 0.2737}, {"body": "lf_foot", "mean_fz_n": 151.53, "frac_of_weight": 0.2145}, {"body": "rr_foot", "mean_fz_n": 132.1, "frac_of_weight": 0.187}, {"body": "base_link", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "chest_yaw", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "tail1_yaw", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "rr_haa", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "rl_haa", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "chest_pitch", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "tail1_pitch", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "rr_hfe", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "rl_hfe", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "neck_yaw", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "rf_haa", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "lf_haa", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "tail2_yaw", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "rr_kfe", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "rl_kfe", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "neck_pitch", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "rf_hfe", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "lf_hfe", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "tail2_pitch", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "rf_kfe", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "lf_kfe", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "tail3_yaw", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "tail3_pitch", "mean_fz_n": 0.0, "frac_of_weight": 0.0}]}, "non_foot_ranking": [{"body": "base_link", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "chest_yaw", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "tail1_yaw", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "rr_haa", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "rl_haa", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "chest_pitch", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "tail1_pitch", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "rr_hfe", "mean_fz_n": 0.0, "frac_of_weight": 0.0}], "fell": false}
+[DIAG] running p1b_policy_still_10s ...
+[DIAG] p1b_policy_still_10s: {"max_tilt_deg": 17.8, "min_clearance": null, "drift_m": 0.307, "max_belly_fz_n": 0.0, "feet_down_mean": 2.84, "feet_down_min": 0, "lift_frac": 1.0, "air_frac": 0.018, "foot_z_min": [0.08, 0.123, 0.104, 0.074], "foot_load_frac": [0.026, 0.008, 0.23, 0.624], "foot_names": ["rr_foot", "rl_foot", "rf_foot", "lf_foot"], "load_closure": {"n_bodies": 27, "sum_all_mean_n": 696.5, "sum_all_ratio": 0.9861, "sum_all_p95_n": 728.1, "residual_n": 9.8, "a_z_equiv_mps2": 0.136, "dv_z_window_mps": -0.3244, "momentum_can_explain": false, "per_body_desc": [{"body": "lf_foot", "mean_fz_n": 440.74, "frac_of_weight": 0.624}, {"body": "rf_foot", "mean_fz_n": 162.74, "frac_of_weight": 0.2304}, {"body": "tail3_pitch", "mean_fz_n": 69.64, "frac_of_weight": 0.0986}, {"body": "rr_foot", "mean_fz_n": 18.05, "frac_of_weight": 0.0256}, {"body": "rl_foot", "mean_fz_n": 5.35, "frac_of_weight": 0.0076}, {"body": "base_link", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "chest_yaw", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "tail1_yaw", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "rr_haa", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "rl_haa", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "chest_pitch", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "tail1_pitch", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "rr_hfe", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "rl_hfe", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "neck_yaw", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "rf_haa", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "lf_haa", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "tail2_yaw", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "rr_kfe", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "rl_kfe", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "neck_pitch", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "rf_hfe", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "lf_hfe", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "tail2_pitch", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "rf_kfe", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "lf_kfe", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "tail3_yaw", "mean_fz_n": 0.0, "frac_of_weight": 0.0}]}, "non_foot_ranking": [{"body": "tail3_pitch", "mean_fz_n": 69.64, "frac_of_weight": 0.0986}, {"body": "base_link", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "chest_yaw", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "tail1_yaw", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "rr_haa", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "rl_haa", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "chest_pitch", "mean_fz_n": 0.0, "frac_of_weight": 0.0}, {"body": "tail1_pitch", "mean_fz_n": 0.0, "frac_of_weight": 0.0}], "fell": false}
+[INFO]: SimulationContext cleared
+# v10 支撑诊断 summary（2026-09-14 18:48:26）
+
+## Phase 1 站立闸（flat 列；fell=fell 判据见文件头）
+
+脚列口径：feet_down=法向力>1N 的脚数（稳定段均值/最小值）；lift_frac=非四脚着地占比；air_frac=全脚离地占比；foot_z_min=逐脚最低世界 z（flat 地面 z=0，即离地最低点）；foot_load_frac=逐脚载荷占体重比（顺序见 foot_names）
+
+承重列（2026-09-14 补）：`ΣF_body/mg`=**全 body** 法向力加总/体重——只加四只脚时缺的 ~10% 靠它判去处；`a_z_eq`=解释缺额所需的竖直加速度 [m/s²]，`Δv_z`=窗口端点速度差 [m/s]（|Δv_z| 远小于 a_z_eq×T 时缺额**不可能**是动量）；`非足top3`=逐 body平均载荷前三。注意 `max_belly_fz_n` 是基准阈值项，不是载荷量。
+
+| case | max_tilt_deg | min_clearance | drift_m | ΣF_body/mg | a_z_eq | Δv_z | 非足top3 | max_belly_fz_n | feet_down | lift_frac | air_frac | foot_z_min | foot_load_frac | foot_names | fell |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| p1a_zero_action_5s | 5.2 | None | 0.076 | 1.0005 | -0.005 | 0.3965 | base_link=0.0N,chest_yaw=0.0N,tail1_yaw=0.0N | 0.0 | 3.85/0 | 0.056 | 0.028 | [0.074, 0.074, 0.07, 0.074] | [0.187, 0.274, 0.325, 0.215] | rr_foot,rl_foot,rf_foot,lf_foot | False |
+| p1b_policy_still_10s | 17.8 | None | 0.307 | 0.9861 | 0.136 | -0.3244 | tail3_pitch=69.64N,base_link=0.0N,chest_yaw=0.0N | 0.0 | 2.84/0 | 1.0 | 0.018 | [0.08, 0.123, 0.104, 0.074] | [0.026, 0.008, 0.23, 0.624] | rr_foot,rl_foot,rf_foot,lf_foot | False |
+
+[DIAG] output -> E:\Robot\rl_exp\tools\diagnose\out\v10_loadclosure
+Loading user config located at: 'e:/isaaclab/env_isaaclab/lib/site-packages/isaacsim/kit/data/Kit/IsaacLab/3.0/user.config.json'
+2026-09-14T10:47:12Z [0ms] [Warning] [omni.ext.plugin] [ext: isaaclab_visualizers] Extensions config 'extension.toml' doesn't exist 'e:/isaaclab/source/isaaclab_visualizers' or 'e:/isaaclab/source/isaaclab_visualizers/config'
+2026-09-14T10:47:12Z [299ms] [Warning] [omni.usd_config.extension] Enable omni.materialx.libs extension to use MaterialX
+2026-09-14T10:47:13Z [1,677ms] [Warning] [isaacsim.core.simulation_manager.plugin] USD stage is not available; stage-opened subscription is deferred
+2026-09-14T10:47:13Z [1,678ms] [Warning] [isaacsim.core.simulation_manager.plugin] USD stage is not available; stage-opened subscription is deferred
+2026-09-14T10:47:20Z [8,204ms] [Warning] [isaaclab_physx.physics.physx_manager] TGS solver with enable_external_forces_every_iteration=False may cause noisy velocities.
+2026-09-14T10:47:22Z [10,417ms] [Warning] [usdrt.population.plugin] Last global time was not created. Did you call setEnableUsdNoticeHandling?
+2026-09-14T10:47:22Z [10,723ms] [Warning] [isaaclab.actuators.actuator_pd] The <ImplicitActuatorCfg> object has a value for 'effort_limit'. This parameter will be removed in the future. To set the effort limit, please use 'effort_limit_sim' instead.
+2026-09-14T10:47:22Z [10,723ms] [Warning] [isaaclab.actuators.actuator_pd] The <ImplicitActuatorCfg> object has a value for 'velocity_limit'. Previously, although this value was specified, it was not getting used by implicit actuators. Since this parameter affects the simulation behavior, we continue to not use it. This parameter will be removed in the future. To set the velocity limit, please use 'velocity_limit_sim' instead.
+2026-09-14T10:47:22Z [10,766ms] [Warning] [isaaclab.actuators.actuator_pd] The <ImplicitActuatorCfg> object has a value for 'effort_limit'. This parameter will be removed in the future. To set the effort limit, please use 'effort_limit_sim' instead.
+2026-09-14T10:47:22Z [10,766ms] [Warning] [isaaclab.actuators.actuator_pd] The <ImplicitActuatorCfg> object has a value for 'velocity_limit'. Previously, although this value was specified, it was not getting used by implicit actuators. Since this parameter affects the simulation behavior, we continue to not use it. This parameter will be removed in the future. To set the velocity limit, please use 'velocity_limit_sim' instead.
+2026-09-14T10:47:22Z [10,780ms] [Warning] [isaaclab.actuators.actuator_pd] The <ImplicitActuatorCfg> object has a value for 'effort_limit'. This parameter will be removed in the future. To set the effort limit, please use 'effort_limit_sim' instead.
+2026-09-14T10:47:22Z [10,780ms] [Warning] [isaaclab.actuators.actuator_pd] The <ImplicitActuatorCfg> object has a value for 'velocity_limit'. Previously, although this value was specified, it was not getting used by implicit actuators. Since this parameter affects the simulation behavior, we continue to not use it. This parameter will be removed in the future. To set the velocity limit, please use 'velocity_limit_sim' instead.
+2026-09-14T10:47:23Z [10,964ms] [Warning] [isaaclab.envs.mdp.commands.velocity_command] The velocity command has the 'ranges.heading' attribute set to '(-3.141592653589793, 3.141592653589793)' but the heading command is not active. Consider setting the flag for the heading command to True.

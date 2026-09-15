@@ -1,0 +1,1202 @@
+{
+ "quat": {
+  "residual_projected_gravity": {
+   "median": 0.0,
+   "mean": 0.00052,
+   "max": 0.10422,
+   "max_at_step": 0
+  },
+  "residual_body_vs_world_vel_full_rot": {
+   "median": 0.0,
+   "mean": 0.00228,
+   "max": 0.45581,
+   "max_at_step": 0
+  },
+  "residual_yawframe_vs_body_vel_expected_nonzero": {
+   "median": 0.00941,
+   "mean": 0.01868,
+   "max": 0.45581,
+   "max_at_step": 0
+  },
+  "note": "median 才是判据：出生落地冲击会把 max 拉高；yaw 帧残差在机身有俯仰时本就非零",
+  "yaw_lib_deg": -12.96,
+  "yaw_hand_wxyz_deg": 164.64,
+  "yaw_hand_minus_lib_deg": 177.6,
+  "tilt_lib_deg": 15.81,
+  "tilt_hand_wxyz_deg": 13.58
+ },
+ "weight": {
+  "action": "policy_zero_cmd",
+  "mass_kg": 72.0,
+  "mass_g_n": 706.3,
+  "settled_foot_sum_n": 636.6,
+  "ratio": 0.9013,
+  "settled_all_body_sum_n": 709.5,
+  "settled_all_body_ratio": 1.0044,
+  "foot_body_mass_kg": [
+   1.53,
+   1.53,
+   1.53,
+   1.53
+  ]
+ },
+ "load_closure": {
+  "n_bodies": 27,
+  "sum_all_mean_n": 709.5,
+  "sum_all_ratio": 1.0044,
+  "sum_all_p95_n": 781.7,
+  "residual_n": -3.1,
+  "a_z_equiv_mps2": -0.044,
+  "dv_z_window_mps": -0.0114,
+  "momentum_can_explain": false,
+  "per_body_desc": [
+   {
+    "body": "lf_foot",
+    "mean_fz_n": 455.83,
+    "frac_of_weight": 0.6454
+   },
+   {
+    "body": "rf_foot",
+    "mean_fz_n": 149.51,
+    "frac_of_weight": 0.2117
+   },
+   {
+    "body": "tail3_pitch",
+    "mean_fz_n": 72.83,
+    "frac_of_weight": 0.1031
+   },
+   {
+    "body": "rr_foot",
+    "mean_fz_n": 31.29,
+    "frac_of_weight": 0.0443
+   },
+   {
+    "body": "base_link",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "chest_yaw",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "tail1_yaw",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "rr_haa",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "rl_haa",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "chest_pitch",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "tail1_pitch",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "rr_hfe",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "rl_hfe",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "neck_yaw",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "rf_haa",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "lf_haa",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "tail2_yaw",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "rr_kfe",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "rl_kfe",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "neck_pitch",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "rf_hfe",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "lf_hfe",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "tail2_pitch",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "rl_foot",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "rf_kfe",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "lf_kfe",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "tail3_yaw",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   }
+  ]
+ },
+ "load_closure_full_window": {
+  "n_bodies": 27,
+  "sum_all_mean_n": 699.1,
+  "sum_all_ratio": 0.9898,
+  "sum_all_p95_n": 824.3,
+  "residual_n": 7.2,
+  "a_z_equiv_mps2": 0.1,
+  "dv_z_window_mps": 0.3196,
+  "momentum_can_explain": true,
+  "per_body_desc": [
+   {
+    "body": "lf_foot",
+    "mean_fz_n": 432.24,
+    "frac_of_weight": 0.612
+   },
+   {
+    "body": "rf_foot",
+    "mean_fz_n": 143.33,
+    "frac_of_weight": 0.2029
+   },
+   {
+    "body": "tail3_pitch",
+    "mean_fz_n": 67.43,
+    "frac_of_weight": 0.0955
+   },
+   {
+    "body": "rr_foot",
+    "mean_fz_n": 55.13,
+    "frac_of_weight": 0.0781
+   },
+   {
+    "body": "rl_foot",
+    "mean_fz_n": 1.02,
+    "frac_of_weight": 0.0014
+   },
+   {
+    "body": "base_link",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "chest_yaw",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "tail1_yaw",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "rr_haa",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "rl_haa",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "chest_pitch",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "tail1_pitch",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "rr_hfe",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "rl_hfe",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "neck_yaw",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "rf_haa",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "lf_haa",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "tail2_yaw",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "rr_kfe",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "rl_kfe",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "neck_pitch",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "rf_hfe",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "lf_hfe",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "tail2_pitch",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "rf_kfe",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "lf_kfe",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "tail3_yaw",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   }
+  ]
+ },
+ "load_closure_downsampled": {
+  "n_bodies": 27,
+  "sum_all_mean_n": 678.3,
+  "sum_all_ratio": 0.9603,
+  "sum_all_p95_n": 784.7,
+  "residual_n": 28.1,
+  "a_z_equiv_mps2": 0.39,
+  "dv_z_window_mps": 0.3179,
+  "momentum_can_explain": false,
+  "per_body_desc": [
+   {
+    "body": "lf_foot",
+    "mean_fz_n": 423.6,
+    "frac_of_weight": 0.5997
+   },
+   {
+    "body": "rf_foot",
+    "mean_fz_n": 142.23,
+    "frac_of_weight": 0.2014
+   },
+   {
+    "body": "tail3_pitch",
+    "mean_fz_n": 64.79,
+    "frac_of_weight": 0.0917
+   },
+   {
+    "body": "rr_foot",
+    "mean_fz_n": 47.64,
+    "frac_of_weight": 0.0675
+   },
+   {
+    "body": "base_link",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "chest_yaw",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "tail1_yaw",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "rr_haa",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "rl_haa",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "chest_pitch",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "tail1_pitch",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "rr_hfe",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "rl_hfe",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "neck_yaw",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "rf_haa",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "lf_haa",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "tail2_yaw",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "rr_kfe",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "rl_kfe",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "neck_pitch",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "rf_hfe",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "lf_hfe",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "tail2_pitch",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "rl_foot",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "rf_kfe",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "lf_kfe",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "tail3_yaw",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   }
+  ]
+ },
+ "non_foot_ranking": [
+  {
+   "body": "tail3_pitch",
+   "mean_fz_n": 72.83,
+   "frac_of_weight": 0.1031
+  },
+  {
+   "body": "base_link",
+   "mean_fz_n": 0.0,
+   "frac_of_weight": 0.0
+  },
+  {
+   "body": "chest_yaw",
+   "mean_fz_n": 0.0,
+   "frac_of_weight": 0.0
+  },
+  {
+   "body": "tail1_yaw",
+   "mean_fz_n": 0.0,
+   "frac_of_weight": 0.0
+  },
+  {
+   "body": "rr_haa",
+   "mean_fz_n": 0.0,
+   "frac_of_weight": 0.0
+  },
+  {
+   "body": "rl_haa",
+   "mean_fz_n": 0.0,
+   "frac_of_weight": 0.0
+  },
+  {
+   "body": "chest_pitch",
+   "mean_fz_n": 0.0,
+   "frac_of_weight": 0.0
+  },
+  {
+   "body": "tail1_pitch",
+   "mean_fz_n": 0.0,
+   "frac_of_weight": 0.0
+  }
+ ],
+ "naming_spawn_base_frame": {
+  "rr_foot": [
+   -0.597,
+   -0.789,
+   -0.839
+  ],
+  "rl_foot": [
+   -0.603,
+   0.787,
+   -0.848
+  ],
+  "rf_foot": [
+   0.475,
+   -0.831,
+   -0.839
+  ],
+  "lf_foot": [
+   0.48,
+   0.827,
+   -0.839
+  ]
+ },
+ "naming_end_base_frame": {
+  "rr_foot": [
+   -0.59,
+   -1.128,
+   -0.464
+  ],
+  "rl_foot": [
+   -0.583,
+   0.645,
+   -0.916
+  ],
+  "rf_foot": [
+   0.939,
+   -0.733,
+   -0.588
+  ],
+  "lf_foot": [
+   0.029,
+   0.421,
+   -1.018
+  ]
+ },
+ "contact_sampling": {
+  "rr_foot": {
+   "duty_full": 0.87,
+   "mean_n_full": 55.13,
+   "duty_downsampled": 0.85,
+   "mean_n_downsampled": 47.64
+  },
+  "rl_foot": {
+   "duty_full": 0.02,
+   "mean_n_full": 1.02,
+   "duty_downsampled": 0.0,
+   "mean_n_downsampled": 0.0
+  },
+  "rf_foot": {
+   "duty_full": 0.865,
+   "mean_n_full": 143.33,
+   "duty_downsampled": 0.85,
+   "mean_n_downsampled": 142.23
+  },
+  "lf_foot": {
+   "duty_full": 0.97,
+   "mean_n_full": 432.24,
+   "duty_downsampled": 0.95,
+   "mean_n_downsampled": 423.6
+  }
+ },
+ "drift_split": {
+  "yaw_frame_vy_mean": 0.067,
+  "body_vy_mean": 0.06,
+  "world_vy_mean": 0.061
+ },
+ "zero_action": {
+  "quat": {
+   "residual_projected_gravity": {
+    "median": 0.0,
+    "mean": 0.00159,
+    "max": 0.31843,
+    "max_at_step": 0
+   },
+   "residual_body_vs_world_vel_full_rot": {
+    "median": 0.0,
+    "mean": 0.00221,
+    "max": 0.44191,
+    "max_at_step": 0
+   },
+   "residual_yawframe_vs_body_vel_expected_nonzero": {
+    "median": 0.00153,
+    "mean": 0.00635,
+    "max": 0.44191,
+    "max_at_step": 0
+   },
+   "note": "median 才是判据：出生落地冲击会把 max 拉高；yaw 帧残差在机身有俯仰时本就非零",
+   "yaw_lib_deg": 5.16,
+   "yaw_hand_wxyz_deg": 152.9,
+   "yaw_hand_minus_lib_deg": 147.75,
+   "tilt_lib_deg": 4.96,
+   "tilt_hand_wxyz_deg": 7.13
+  },
+  "weight": {
+   "action": "zero_action",
+   "mass_kg": 72.0,
+   "mass_g_n": 706.3,
+   "settled_foot_sum_n": 707.5,
+   "ratio": 1.0017,
+   "settled_all_body_sum_n": 707.5,
+   "settled_all_body_ratio": 1.0017,
+   "foot_body_mass_kg": [
+    1.53,
+    1.53,
+    1.53,
+    1.53
+   ]
+  },
+  "load_closure": {
+   "n_bodies": 27,
+   "sum_all_mean_n": 707.5,
+   "sum_all_ratio": 1.0017,
+   "sum_all_p95_n": 728.8,
+   "residual_n": -1.2,
+   "a_z_equiv_mps2": -0.017,
+   "dv_z_window_mps": -0.0006,
+   "momentum_can_explain": false,
+   "per_body_desc": [
+    {
+     "body": "lf_foot",
+     "mean_fz_n": 210.43,
+     "frac_of_weight": 0.2979
+    },
+    {
+     "body": "rr_foot",
+     "mean_fz_n": 196.5,
+     "frac_of_weight": 0.2782
+    },
+    {
+     "body": "rf_foot",
+     "mean_fz_n": 163.93,
+     "frac_of_weight": 0.2321
+    },
+    {
+     "body": "rl_foot",
+     "mean_fz_n": 136.69,
+     "frac_of_weight": 0.1935
+    },
+    {
+     "body": "base_link",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "chest_yaw",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "tail1_yaw",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "rr_haa",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "rl_haa",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "chest_pitch",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "tail1_pitch",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "rr_hfe",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "rl_hfe",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "neck_yaw",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "rf_haa",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "lf_haa",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "tail2_yaw",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "rr_kfe",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "rl_kfe",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "neck_pitch",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "rf_hfe",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "lf_hfe",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "tail2_pitch",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "rf_kfe",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "lf_kfe",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "tail3_yaw",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "tail3_pitch",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    }
+   ]
+  },
+  "load_closure_full_window": {
+   "n_bodies": 27,
+   "sum_all_mean_n": 729.2,
+   "sum_all_ratio": 1.0324,
+   "sum_all_p95_n": 742.9,
+   "residual_n": -22.9,
+   "a_z_equiv_mps2": -0.318,
+   "dv_z_window_mps": 0.4544,
+   "momentum_can_explain": false,
+   "per_body_desc": [
+    {
+     "body": "lf_foot",
+     "mean_fz_n": 222.29,
+     "frac_of_weight": 0.3147
+    },
+    {
+     "body": "rr_foot",
+     "mean_fz_n": 214.29,
+     "frac_of_weight": 0.3034
+    },
+    {
+     "body": "rf_foot",
+     "mean_fz_n": 161.79,
+     "frac_of_weight": 0.2291
+    },
+    {
+     "body": "rl_foot",
+     "mean_fz_n": 130.86,
+     "frac_of_weight": 0.1853
+    },
+    {
+     "body": "base_link",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "chest_yaw",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "tail1_yaw",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "rr_haa",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "rl_haa",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "chest_pitch",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "tail1_pitch",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "rr_hfe",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "rl_hfe",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "neck_yaw",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "rf_haa",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "lf_haa",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "tail2_yaw",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "rr_kfe",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "rl_kfe",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "neck_pitch",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "rf_hfe",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "lf_hfe",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "tail2_pitch",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "rf_kfe",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "lf_kfe",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "tail3_yaw",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "tail3_pitch",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    }
+   ]
+  },
+  "load_closure_downsampled": {
+   "n_bodies": 27,
+   "sum_all_mean_n": 684.3,
+   "sum_all_ratio": 0.9688,
+   "sum_all_p95_n": 761.9,
+   "residual_n": 22.1,
+   "a_z_equiv_mps2": 0.306,
+   "dv_z_window_mps": 0.4543,
+   "momentum_can_explain": false,
+   "per_body_desc": [
+    {
+     "body": "lf_foot",
+     "mean_fz_n": 192.18,
+     "frac_of_weight": 0.2721
+    },
+    {
+     "body": "rr_foot",
+     "mean_fz_n": 188.64,
+     "frac_of_weight": 0.2671
+    },
+    {
+     "body": "rf_foot",
+     "mean_fz_n": 152.84,
+     "frac_of_weight": 0.2164
+    },
+    {
+     "body": "rl_foot",
+     "mean_fz_n": 150.61,
+     "frac_of_weight": 0.2132
+    },
+    {
+     "body": "base_link",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "chest_yaw",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "tail1_yaw",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "rr_haa",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "rl_haa",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "chest_pitch",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "tail1_pitch",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "rr_hfe",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "rl_hfe",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "neck_yaw",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "rf_haa",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "lf_haa",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "tail2_yaw",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "rr_kfe",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "rl_kfe",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "neck_pitch",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "rf_hfe",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "lf_hfe",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "tail2_pitch",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "rf_kfe",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "lf_kfe",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "tail3_yaw",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    },
+    {
+     "body": "tail3_pitch",
+     "mean_fz_n": 0.0,
+     "frac_of_weight": 0.0
+    }
+   ]
+  },
+  "non_foot_ranking": [
+   {
+    "body": "base_link",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "chest_yaw",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "tail1_yaw",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "rr_haa",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "rl_haa",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "chest_pitch",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "tail1_pitch",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   },
+   {
+    "body": "rr_hfe",
+    "mean_fz_n": 0.0,
+    "frac_of_weight": 0.0
+   }
+  ],
+  "naming_spawn_base_frame": {
+   "rr_foot": [
+    -0.597,
+    -0.789,
+    -0.839
+   ],
+   "rl_foot": [
+    -0.603,
+    0.787,
+    -0.848
+   ],
+   "rf_foot": [
+    0.475,
+    -0.831,
+    -0.839
+   ],
+   "lf_foot": [
+    0.48,
+    0.827,
+    -0.839
+   ]
+  },
+  "naming_end_base_frame": {
+   "rr_foot": [
+    -0.597,
+    -0.785,
+    -0.841
+   ],
+   "rl_foot": [
+    -0.603,
+    0.8,
+    -0.84
+   ],
+   "rf_foot": [
+    0.242,
+    -0.849,
+    -0.917
+   ],
+   "lf_foot": [
+    0.36,
+    0.785,
+    -0.928
+   ]
+  },
+  "contact_sampling": {
+   "rr_foot": {
+    "duty_full": 0.94,
+    "mean_n_full": 214.29,
+    "duty_downsampled": 0.95,
+    "mean_n_downsampled": 188.64
+   },
+   "rl_foot": {
+    "duty_full": 0.93,
+    "mean_n_full": 130.86,
+    "duty_downsampled": 0.925,
+    "mean_n_downsampled": 150.61
+   },
+   "rf_foot": {
+    "duty_full": 0.945,
+    "mean_n_full": 161.79,
+    "duty_downsampled": 0.925,
+    "mean_n_downsampled": 152.84
+   },
+   "lf_foot": {
+    "duty_full": 0.925,
+    "mean_n_full": 222.29,
+    "duty_downsampled": 0.9,
+    "mean_n_downsampled": 192.18
+   }
+  },
+  "drift_split": {
+   "yaw_frame_vy_mean": -0.009,
+   "body_vy_mean": -0.009,
+   "world_vy_mean": -0.007
+  }
+ }
+}
