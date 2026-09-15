@@ -410,6 +410,10 @@ def _curriculum_state_evidence(env) -> dict:
         evidence["covered_terms"] = sorted(covered) if covered else []
         evidence["uncovered_terms"] = sorted(cstate.uncovered_terms(unwrapped))
         evidence["requires_resume_state"] = bool(cstate.requires_resume_state(unwrapped))
+        # the raw declaration: the only thing readable when the module itself is missing
+        evidence["declares_curriculum_state"] = bool(
+            getattr(type(getattr(unwrapped, "cfg", None)), cstate.REQUIRES_CURRICULUM_STATE, False)
+        )
     except Exception as err:  # noqa: BLE001 - the module is identifiable even when the env is not scannable
         evidence["terms_scan_error"] = f"{type(err).__name__}: {err}"
     return evidence
@@ -444,7 +448,9 @@ def freeze(
     env,
     agent_cfg,
     resume_path: str | None,
-    weights_only: bool = False,
+    drop_curriculum_state: bool | None = None,
+    curriculum_resume: dict | None = None,
+    weights_only: bool | None = None,
 ) -> None:
     """Stage ``ready_to_learn``: the final manifest, frozen, before ``learn``.
 
@@ -458,8 +464,23 @@ def freeze(
         env: the wrapped vec env.
         agent_cfg: the resolved agent config.
         resume_path: the checkpoint this run resumed from, if any.
-        weights_only: whether the caller asked to drop the curriculum state.
+        drop_curriculum_state: whether the caller asked to drop the curriculum state.
+        curriculum_resume: the outcome :func:`~rl_exp.tasks.curriculum_state.apply_resume_state`
+            returned -- what the restore *actually did*. Recorded verbatim: the record
+            must not re-derive it from a counter or from the registry's support list.
+        weights_only: deprecated alias of ``drop_curriculum_state``.
     """
+    if drop_curriculum_state is not None and weights_only is not None and bool(weights_only) != bool(drop_curriculum_state):
+        raise ValueError(
+            f"weights_only={weights_only!r} conflicts with drop_curriculum_state="
+            f"{drop_curriculum_state!r}; they are the same switch, so pass one of them"
+        )
+    if weights_only is not None:
+        print(
+            "[run-manifest] DEPRECATED: freeze(weights_only=) is now freeze(drop_curriculum_state=)"
+            " (same behavior)"
+        )
+    drop_curriculum_state = bool(drop_curriculum_state) or bool(weights_only)
     try:
         source = pathlib.Path(resume_path) if resume_path else None
         declared_lr, effective_lr = _declared_lr(agent_cfg), _effective_lr(runner)
@@ -488,13 +509,26 @@ def freeze(
             "obs_groups": getattr(agent_cfg, "obs_groups", None),
             "empirical_normalization": getattr(agent_cfg, "empirical_normalization", None),
             "term_classes": _term_classes(env),
+            # S09 (ARCH_PLAN 1.3): the *actual* distributed flags, next to the launch-time
+            # declaration in T0. Non-zero ranks neither restore nor save curriculum state
+            # (it belongs to rank 0's envs), so multi-GPU resume is recorded as unverified.
+            "distributed": {
+                "launch": _distributed(),
+                "runner_is_distributed": bool(getattr(runner, "is_distributed", False)),
+                "runner_gpu_global_rank": getattr(runner, "gpu_global_rank", None),
+                "multi_gpu_resume_verified": False,
+            },
             "resume": {
                 "resumed": source is not None,
-                "drop_curriculum_state_requested": weights_only,
+                "drop_curriculum_state": drop_curriculum_state,
                 "source": cs.relativize(str(source)) if source else None,
                 "source_sha256": prov.sha256_file(source) if source else None,
                 "loaded_iteration": getattr(runner, "current_learning_iteration", None),
-                "curriculum_state": _curriculum_state_evidence(env),
+                # what the restore did (from apply_resume_state), not what it could have done
+                "curriculum_state": (
+                    dict(curriculum_resume) if curriculum_resume is not None else {"status": "fresh_run"}
+                ),
+                "curriculum_module": _curriculum_state_evidence(env),
             },
             "code": prov.code_sources(),
         }
@@ -642,6 +676,7 @@ def verify(run_dir: pathlib.Path) -> tuple[list[dict], list[str]]:
     rows.extend(_verify_code(manifest, problems))
     rows.extend(_verify_assets(manifest, problems))
     rows.extend(_verify_recipe(manifest, problems))
+    rows.extend(_verify_curriculum_state(manifest, problems))
     rows.extend(_verify_payload(run_dir, manifest, problems))
     rows.append(
         _row(
@@ -889,6 +924,43 @@ def _verify_payload(run_dir: pathlib.Path, manifest: dict, problems: list[str]) 
             f"payload contents not read (tensor digests live inside the checkpoint's infos)",
         )
     ]
+
+
+def _verify_curriculum_state(manifest: dict, problems: list[str]) -> list[dict]:
+    """S10 (ARCH_PLAN 1.3): did the curriculum state carry over, and is that *recorded*?
+
+    The row reads the outcome ``apply_resume_state`` returned, not the registry's
+    support list and not the counter: a task that could restore something, or an env
+    whose counter happens to be non-zero, is not evidence that a restore happened.
+    """
+    stage = manifest.get("stages", {}).get("ready_to_learn", {})
+    resume = stage.get("resume") or {}
+    outcome = resume.get("curriculum_state") or {}
+    status = outcome.get("status")
+    coverage = resume.get("curriculum_module") or {}
+    declared = bool(coverage.get("declares_curriculum_state"))
+
+    if status == "fresh_run":
+        return [_row("记录完整", "通过", "curriculum: fresh run, no resume to restore")]
+
+    terms = ", ".join(sorted(t.get("name", "?") for t in outcome.get("terms") or [])) or "none"
+    detail = (
+        f"curriculum: status={status} source_version={outcome.get('source_version')} terms=[{terms}]"
+        f" c_k={outcome.get('c_k')} counter={outcome.get('common_step_counter')} rank={outcome.get('rank')}"
+    )
+    if status == "restored":
+        missing = outcome.get("missing_evidence") or []
+        if outcome.get("evidence") == "complete" and not missing:
+            return [_row("记录完整", "通过", detail)]
+        # loadable, deliberately not declared complete: the missing witnesses are listed
+        return [_row("记录完整", "未知", f"{detail} missing_evidence={missing}")]
+    if status == "dropped":
+        return [_row("记录完整", "未知", f"{detail} (explicitly dropped: the curriculum cold-starts)", False)]
+    if outcome.get("notes"):
+        detail = f"{detail} notes={outcome['notes']}"
+    if status == "module_unavailable" or (declared and status in (None, "no_state", "rank_skipped")):
+        problems.append(f"curriculum state required but not restored ({status})")
+    return [_row("记录完整", "未知", detail)]
 
 
 def main(argv: list[str] | None = None) -> int:

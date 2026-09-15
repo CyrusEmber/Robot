@@ -119,13 +119,19 @@ CK_VERSION = 1
 V1_JOINT_SIR_TERM = "joint_sir"
 """Term name the v1 schema implied: its payload carried no name, only one joint SIR state."""
 
-REQUIRES_CURRICULUM_STATE = "REQUIRES_CURRICULUM_STATE"
-"""Name of the task-side declaration (a ``ClassVar`` on the env cfg class).
+REQUIRES_CURRICULUM_STATE = "__requires_curriculum_state__"
+"""Name of the task-side declaration (a class attribute on the env cfg class).
 
-Read at the train.py call site through ``type(env_cfg)`` -- NOT through this module
--- so a task that declares it still aborts on import failure instead of silently
+Read at the train.py call site through ``type(env_cfg)`` -- an object train.py already
+holds -- so a task that declares it still aborts on import failure instead of silently
 cold-starting. Set on the SIR-carrying teacher recipes (V5..V14 inherit it; every
 ``*_PLAY`` variant overrides it to False).
+
+Dunder-named on purpose: ``configclass`` back-fills annotations and both serializers
+(``to_dict`` and ``cfg_snapshot``) walk the instance namespace, which
+``_custom_post_init`` fills with class members -- so a plain or ``ClassVar``-annotated
+name would enter the recipe golden and every run manifest's cfg digest. ``__``-prefixed
+names are skipped by both, keeping the declaration out of the config data.
 """
 
 _SIZE_WARN_BYTES = 64 * 2**20
@@ -164,6 +170,14 @@ def _terrain_gen_cfg(env):
     """The terrain generator cfg the SIR terms parse their grid from."""
     terrain = getattr(getattr(_unwrap(env), "scene", None), "terrain", None)
     return getattr(getattr(terrain, "cfg", None), "terrain_generator", None)
+
+
+def _slot_tensors(rt: dict, key: str) -> list:
+    """A slot runtime entry as a list of tensors (per type, or the single env-level one)."""
+    value = rt.get(key)
+    if isinstance(value, list):
+        return value
+    return [value] if value is not None else []
 
 
 def _terrain_config_sha256(gen_cfg) -> str | None:
@@ -245,6 +259,33 @@ class _Adapter:
     def _cfg_values(self, term) -> dict:
         return {key: getattr(term.cfg, key) for key in self.cfg_keys}
 
+    def _check_tensors(
+        self,
+        rt: dict,
+        name: str,
+        problems: list[str],
+        keys: tuple[str, ...],
+        index_keys: tuple[str, ...] = (),
+        count_keys: tuple[str, ...] = (),
+    ) -> None:
+        """Finiteness, non-negativity and index dtype for one slot's runtime tensors.
+
+        These need their own gate: the per-key numeric checks below compare values, and a
+        NaN compares ``False`` against every threshold -- so a poisoned weight, a negative
+        count or a float tensor standing in for an index would otherwise restore silently.
+        """
+        for key in keys:
+            for ti, tensor in enumerate(_slot_tensors(rt, key)):
+                where = f"runtime.{key}[{ti}] (terms.{name})"
+                if not isinstance(tensor, torch.Tensor) or not tensor.numel():
+                    continue
+                if not bool(torch.isfinite(tensor.to(torch.float64)).all()):
+                    problems.append(f"{where} is not finite (NaN/Inf)")
+                elif key in count_keys and bool((tensor < 0).any()):
+                    problems.append(f"{where} has negative entries")
+                elif key in index_keys and tensor.is_floating_point():
+                    problems.append(f"{where} is floating point, expected an index dtype")
+
     def _check_static(
         self, term, gen_cfg, name: str, slot: dict, problems: list[str], missing: list[str]
     ) -> None:
@@ -322,6 +363,14 @@ class _JointSIRAdapter(_Adapter):
         self._check_static(term, _terrain_gen_cfg(env), name, slot, problems, missing)
         self._check_common_cfg(term, name, slot, problems, missing)
         rt = slot.get("runtime", {})
+        self._check_tensors(
+            rt,
+            name,
+            problems,
+            ("particles", "weights", "episodes", "in_band", "tr_sum", "history", "env_pair", "desired_vel"),
+            index_keys=("particles", "history", "env_pair"),
+            count_keys=("weights", "episodes", "in_band"),
+        )
         n_part = int(term.cfg.particles_per_type)
         for ti, n_pairs in enumerate(term._n_pairs):
             for key in ("particles", "weights", "episodes", "in_band", "tr_sum", "history"):
@@ -417,6 +466,14 @@ class _SpawnWeightSIRAdapter(_Adapter):
         self._check_static(term, _terrain_gen_cfg(env), name, slot, problems, missing)
         self._check_common_cfg(term, name, slot, problems, missing)
         rt = slot.get("runtime", {})
+        self._check_tensors(
+            rt,
+            name,
+            problems,
+            ("particles", "weights", "episodes", "successes", "history", "env_type"),
+            index_keys=("particles", "history", "env_type"),
+            count_keys=("weights", "episodes", "successes"),
+        )
         rows = int(term._num_rows)
         for key in ("particles", "weights", "episodes", "successes", "history"):
             got = rt.get(key, [])
@@ -430,6 +487,8 @@ class _SpawnWeightSIRAdapter(_Adapter):
                 if key == "history":
                     if tensor.numel() < rows:
                         problems.append(f"runtime.{key}[{ti}] has {tensor.numel()} < {rows} entries")
+                    elif tensor.numel() and int(tensor.max()) >= rows:
+                        problems.append(f"runtime.{key}[{ti}] holds particle index {int(tensor.max())} >= {rows}")
                 elif tensor.numel() != rows:
                     problems.append(f"runtime.{key}[{ti}] has {tensor.numel()} != {rows}")
         for key in ("particles", "weights", "episodes", "successes"):
@@ -821,9 +880,10 @@ def apply_state(env, state: dict, *, report=print) -> dict:
         }
         for name, adapter, _t, slot in to_apply
     ]
-    restore_counter = bool(to_apply) or ck_live is not None
-    if restore_counter:
-        env.common_step_counter = counter
+    # the counter is a declared field of the payload, so it is restored whenever one is
+    # carried -- whether or not this task runs a c_k schedule (a c_k-only task's whole
+    # state IS that counter; a task with no schedule at all still gets its clock back)
+    env.common_step_counter = counter
 
     schedule = _schedule_verdict(clock, ck_live, missing)
     source_version = int(state.get("source_version") or state.get("version") or 0)
@@ -852,14 +912,16 @@ def apply_state(env, state: dict, *, report=print) -> dict:
         "skipped_terms": missing_slots,
         "extra_slots": extra_slots,
         "uncovered_terms": uncovered_terms(env),
-        "c_k": {"restored": bool(restore_counter and ck_live is not None), "schedule": schedule},
+        # ``restored`` = the clock field from the payload was written; ``schedule`` says how
+        # far the c_k *schedule* could be verified (none = both sides schedule-less)
+        "c_k": {"restored": True, "schedule": schedule},
         "common_step_counter": int(env.common_step_counter),
         "notes": notes,
     }
     if not to_apply:
         report(
             "[curriculum-state] WARN: no registered term state was restored"
-            f" (c_k {'restored' if restore_counter else 'absent'})"
+            f" (c_k schedule {'restored' if ck_live is not None else 'absent'})"
         )
     for note in notes:
         report(f"[curriculum-state] NOTE: {note}")
@@ -897,7 +959,7 @@ def apply_resume_state(
     env,
     resume_path: str,
     *,
-    drop_curriculum_state: bool = False,
+    drop_curriculum_state: bool | None = None,
     weights_only: bool | None = None,
     report=print,
 ) -> dict:
@@ -919,19 +981,25 @@ def apply_resume_state(
         actual result, not something re-derived from the env.
 
     Raises:
-        RuntimeError: When this task requires curriculum continuity (it declares
-            ``REQUIRES_CURRICULUM_STATE`` or wires a registered term) but the
-            checkpoint cannot provide it and no explicit drop was requested --
-            silently resuming as a fresh curriculum is the failure this module
-            exists to prevent.
+        RuntimeError: When this task requires curriculum continuity (it declares the
+            curriculum-state attribute or wires a registered term) but the checkpoint
+            cannot provide it and no explicit drop was requested -- silently resuming as
+            a fresh curriculum is the failure this module exists to prevent.
+        ValueError: When the deprecated ``weights_only`` contradicts
+            ``drop_curriculum_state``, or when a payload does not fit the live task.
     """
     env = _unwrap(env)
+    if drop_curriculum_state is not None and weights_only is not None and bool(weights_only) != bool(drop_curriculum_state):
+        raise ValueError(
+            f"weights_only={weights_only!r} conflicts with drop_curriculum_state={drop_curriculum_state!r};"
+            " they are the same switch, so pass one of them"
+        )
     if weights_only is not None:
         report(
             "[curriculum-state] DEPRECATED: weights_only= is now drop_curriculum_state="
             " (same behavior: drop the curriculum state, keep weights/optimizer)"
         )
-        drop_curriculum_state = drop_curriculum_state or bool(weights_only)
+    drop_curriculum_state = bool(drop_curriculum_state) or bool(weights_only)
 
     rank = _rank()
     if rank != 0:

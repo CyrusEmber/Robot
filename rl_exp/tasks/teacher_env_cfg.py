@@ -1328,7 +1328,7 @@ class LizardRoughTeacherEnvCfg_V8(LizardRoughTeacherEnvCfg_V6):
 class LizardRoughTeacherEnvCfg_V8_PLAY(LizardRoughTeacherEnvCfg_V8):
     """v8 play variant: same as v6 PLAY (no randomization, no curriculum)."""
 
-    REQUIRES_CURRICULUM_STATE: ClassVar[bool] = False
+    __requires_curriculum_state__ = False
 
     def __post_init__(self):
         super().__post_init__()
@@ -1372,7 +1372,7 @@ class LizardRoughTeacherEnvCfg_V10(LizardRoughTeacherEnvCfg_V8):
 class LizardRoughTeacherEnvCfg_V10_PLAY(LizardRoughTeacherEnvCfg_V10):
     """v10 play variant: same as v8 PLAY (no randomization, no curriculum)."""
 
-    REQUIRES_CURRICULUM_STATE: ClassVar[bool] = False
+    __requires_curriculum_state__ = False
 
     def __post_init__(self):
         super().__post_init__()
@@ -1467,7 +1467,7 @@ class LizardRoughTeacherEnvCfg_V11_PLAY(LizardRoughTeacherEnvCfg_V11):
     uniform range sample, matching the v10 PLAY behavior.
     """
 
-    REQUIRES_CURRICULUM_STATE: ClassVar[bool] = False
+    __requires_curriculum_state__ = False
 
     def __post_init__(self):
         super().__post_init__()
@@ -1597,7 +1597,7 @@ class LizardRoughTeacherEnvCfg_V12_PLAY(LizardRoughTeacherEnvCfg_V12):
     ``reset_base`` handling: PLAY randomization is seeded, not zeroed.
     """
 
-    REQUIRES_CURRICULUM_STATE: ClassVar[bool] = False
+    __requires_curriculum_state__ = False
 
     def __post_init__(self):
         super().__post_init__()
@@ -1661,7 +1661,7 @@ class LizardRoughTeacherEnvCfg_V13(LizardRoughTeacherEnvCfg_V10):
 class LizardRoughTeacherEnvCfg_V13_PLAY(LizardRoughTeacherEnvCfg_V13):
     """v13 play variant: same as v10 PLAY (no randomization, no curriculum)."""
 
-    REQUIRES_CURRICULUM_STATE: ClassVar[bool] = False
+    __requires_curriculum_state__ = False
 
     def __post_init__(self):
         super().__post_init__()
@@ -1738,7 +1738,7 @@ class LizardRoughTeacherEnvCfg_V14(LizardRoughTeacherEnvCfg_V13):
 class LizardRoughTeacherEnvCfg_V14_PLAY(LizardRoughTeacherEnvCfg_V14):
     """v14 play variant: same as v13 PLAY (no randomization, no curriculum)."""
 
-    REQUIRES_CURRICULUM_STATE: ClassVar[bool] = False
+    __requires_curriculum_state__ = False
 
     def __post_init__(self):
         super().__post_init__()

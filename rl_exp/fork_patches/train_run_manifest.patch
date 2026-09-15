@@ -1,7 +1,7 @@
 diff --git a/scripts/reinforcement_learning/rsl_rl/train.py b/scripts/reinforcement_learning/rsl_rl/train.py
 --- a/scripts/reinforcement_learning/rsl_rl/train.py
 +++ b/scripts/reinforcement_learning/rsl_rl/train.py
-@@ -196,5 +196,18 @@
+@@ -211,6 +211,19 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
          # set the log directory for the environment (works for all environment types)
          env_cfg.log_dir = log_dir
  
@@ -20,33 +20,30 @@ diff --git a/scripts/reinforcement_learning/rsl_rl/train.py b/scripts/reinforcem
 +
          # create isaac environment
          env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
-@@ -208,7 +220,12 @@
-         # save resume path before creating a new log_dir
-         if agent_cfg.resume or agent_cfg.algorithm.class_name == "Distillation":
-             resume_path = get_checkpoint_path(log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint)
+ 
+@@ -220,6 +233,11 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
+ 
+             env = multi_agent_to_single_agent(env)
  
 +        # Run manifest: the env exists now, so check what it actually resolved against
 +        # the declaration above (num_envs, dts, seed, params_version, obs group dims).
 +        if run_manifest is not None:
 +            run_manifest.after_env(run_context, env)
 +
-         # Restore the curriculum state (lizard joint SIR particles + the c_k clock) BEFORE the wrapper:
-         # RslRlVecEnvWrapper.__init__ runs the first full reset, and that reset is what makes the joint
-         # SIR term respawn the envs -- on the restored particles, when the state is already in place.
-@@ -249,6 +266,12 @@
-             runner = DistillationRunner(env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device)
-         else:
-             raise ValueError(f"Unsupported runner class: {agent_cfg.class_name}")
+         # save resume path before creating a new log_dir
+         if agent_cfg.resume or agent_cfg.algorithm.class_name == "Distillation":
+             resume_path = get_checkpoint_path(log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint)
+@@ -310,10 +328,34 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
+             # load previously trained model
+             runner.load(resume_path)
+ 
 +        # Run manifest: index every checkpoint's file hash OUTSIDE the checkpoint (never
 +        # inside it) and stamp the frozen T1 digest into its infos slot. Installed after
 +        # the curriculum hook on purpose: it is the outer wrapper, so it hashes the file
 +        # the inner one has already finished writing.
 +        if run_manifest is not None:
 +            run_manifest.hook_runner_save(runner, run_context)
-         # Every checkpoint carries the curriculum state in its infos slot, so model and curriculum state
-         # live in ONE file and cannot drift apart (no sidecar). No-op for tasks without the joint SIR.
-         try:
-@@ -270,6 +293,22 @@
++
          # dump the configuration into log-directory
          dump_yaml(os.path.join(log_dir, "params", "env.yaml"), env_cfg)
          dump_yaml(os.path.join(log_dir, "params", "agent.yaml"), agent_cfg)
@@ -64,8 +61,10 @@ diff --git a/scripts/reinforcement_learning/rsl_rl/train.py b/scripts/reinforcem
 +                resume_path=resume_path
 +                if (agent_cfg.resume or agent_cfg.algorithm.class_name == "Distillation")
 +                else None,
-+                weights_only=args_cli.weights_only,
++                drop_curriculum_state=drop_curriculum_state,
++                curriculum_resume=curriculum_resume,
 +            )
 +
          # run training
          try:
+             runner.learn(num_learning_iterations=agent_cfg.max_iterations, init_at_random_ep_len=True)
