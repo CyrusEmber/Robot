@@ -15,6 +15,8 @@ parameters/external forces/pushes) is configured in the SSOT yaml and wired
 here so the policy cannot memorize a single dynamics realization.
 """
 
+import copy
+import functools
 import pathlib
 from typing import ClassVar
 
@@ -42,6 +44,21 @@ _RL_EXP_DIR = pathlib.Path(__file__).resolve().parents[1]
 _VERSION_FAMILY = "lizard"
 
 
+@functools.lru_cache(maxsize=64)
+def _params_document(path: str, stamp: tuple[int, int]) -> dict:
+    """Parse a params yaml, cached on ``stamp`` = (mtime_ns, size).
+
+    One cfg construction runs a chain of ``__post_init__`` that each re-read the same
+    yaml; the parse, not the cfg wiring, was the cost of building a config. The dev yaml
+    is a live tuning file, so the stamp -- not the version name -- is the cache key.
+
+    ponytail: ceiling -- a rewrite that keeps both mtime_ns and size is served from the
+    cache; 64 entries covers every version one build touches.
+    """
+    with open(path, encoding="utf-8") as f:
+        return yaml.safe_load(f)
+
+
 def _load_params(version: str | None = None) -> dict:
     """Load the lizard SSOT yaml.
 
@@ -55,8 +72,12 @@ def _load_params(version: str | None = None) -> dict:
         path = _RL_EXP_DIR / "versions" / _VERSION_FAMILY / "lizard_params.yaml"
     else:
         path = _RL_EXP_DIR / "versions" / _VERSION_FAMILY / version / "lizard_params.yaml"
-    with open(path, encoding="utf-8") as f:
-        return yaml.safe_load(f)
+    stat = path.stat()
+    # deepcopy on every call, the first one included: the cache holds the parsed document,
+    # the caller gets its own tree. What is frozen is the file, not the object built from it,
+    # and a shared tree would let one cfg's edit reach another's (~1 ms here vs ~50 ms to
+    # re-parse; test_params_isolation.py fails if this turns into a plain return).
+    return copy.deepcopy(_params_document(str(path), (stat.st_mtime_ns, stat.st_size)))
 
 
 @configclass

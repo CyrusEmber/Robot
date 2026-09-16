@@ -309,6 +309,25 @@ def main() -> int:
         )
         shutil.rmtree(moved)
 
+        # A baseline taken under another framework combination is NOT recipe drift: the
+        # digest was never comparable, so the claim is unknown. Reporting it as drift would
+        # send someone hunting a recipe change that never happened.
+        other_combo = _tamper(
+            run_dir,
+            lambda d: d["declaration"]["recipe"].__setitem__(
+                "golden_combination", "isaaclab=0000|rsl_rl=x|python=9.9"
+            ),
+            refresh_t1=True,
+        )
+        combo_rows, combo_problems = M.verify(other_combo)
+        check(
+            "verify/another-combination",
+            any("another framework combination" in row["detail"] for row in combo_rows)
+            and not combo_problems,
+            f"{[r for r in combo_rows if r['level'] == '可重建']}",
+        )
+        shutil.rmtree(other_combo)
+
         # A run whose code included UNTRACKED source cannot be rebuilt from the record:
         # unknown on a required claim -> neither green nor a failure (hard constraint 1),
         # and it must name the archive gap it is a symptom of.

@@ -27,6 +27,8 @@ Deviations from the paper (declared, parkour/v1/PLAN.md section 2):
 
 from __future__ import annotations
 
+import copy
+import functools
 import pathlib
 from typing import ClassVar
 
@@ -70,6 +72,21 @@ _LINE_DIR = _RL_EXP_DIR / "versions" / _LINE_KEY
 _DEFAULT_VERSION = "v1"
 
 
+@functools.lru_cache(maxsize=64)
+def _params_document(path: str, stamp: tuple[int, int]) -> dict:
+    """Parse a params yaml, cached on ``stamp`` = (mtime_ns, size).
+
+    One cfg construction runs a chain of ``__post_init__`` that each re-read the same
+    yaml; the parse, not the cfg wiring, was the cost of building a config.
+
+    ponytail: ceiling -- a rewrite that keeps both mtime_ns and size is served from the
+    cache; nothing rewrites these files inside a process, and 64 entries covers every
+    version one build touches.
+    """
+    with open(path, encoding="utf-8") as f:
+        return yaml.safe_load(f)
+
+
 def _load_params(version: str | None = None) -> dict:
     """Load this line's parameter SSOT.
 
@@ -86,8 +103,12 @@ def _load_params(version: str | None = None) -> dict:
     path = _LINE_DIR / f"{_LINE_DIR.name}_params.yaml"
     if version is not None:
         path = _LINE_DIR / version / path.name
-    with open(path, encoding="utf-8") as f:
-        return yaml.safe_load(f)
+    stat = path.stat()
+    # deepcopy on every call, the first one included: the cache holds the parsed document,
+    # the caller gets its own tree. What is frozen is the file, not the object built from it,
+    # and a shared tree would let one cfg's edit reach another's (~1 ms here vs ~50 ms to
+    # re-parse; test_params_isolation.py fails if this turns into a plain return).
+    return copy.deepcopy(_params_document(str(path), (stat.st_mtime_ns, stat.st_size)))
 
 
 # Climb expert terrain: stairs up + down in one expert (user decision

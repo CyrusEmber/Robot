@@ -66,6 +66,7 @@ that combination fails loudly with instructions instead of quietly re-baselining
 ("更新 golden 当消警" is the failure mode this prevents).
 """
 
+import functools
 import json
 import pathlib
 import re
@@ -324,12 +325,20 @@ def verify_entries(
             problems.append(f"{task_id}: golden entry has no registered task (retired task or renamed id)")
 
 
+@functools.lru_cache(maxsize=1)
 def combination() -> dict:
     """The framework combination a baseline belongs to.
 
     The resolved config depends on the framework code as much as on this repo's
     recipes, so a baseline is keyed by what produced it -- not by when it was taken
     and never by which run needed it.
+
+    Cached per process: this costs four git subprocesses on the host IsaacLab tree,
+    and a golden check or a ``verify`` re-asks for it once per task / per run.
+
+    ponytail: ceiling -- a change to the IsaacLab tree or to the installed rsl_rl
+    inside one process is not observed. Both are host facts fixed before the process
+    starts; a test that fakes git must call ``combination.cache_clear()``.
     """
     return {
         "isaaclab_rev": prov.rev(prov.isaac_root()) or "unresolved",
