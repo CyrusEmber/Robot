@@ -1,7 +1,7 @@
 # Lizard 训练家族总文档
 
 > 一个版本 = 一代训练配方（参数冻结副本 + 版本文档 + 训练记录）。代码共享继承，
-> 参数严格按版本隔离：跑 v1 只读 `versions/lizard/v1/lizard_params.yaml`，v2 读 v2 的，
+> 参数严格按版本隔离：跑 v1 只读 `versions/lizard/main/v1/lizard_params.yaml`，v2 读 v2 的，
 > 开发态 `lizard_params.yaml` 的修改永远不影响已冻结版本。
 > **本文只收已成立的事实（现在时/过去时）**：任何"待/未/若"字头的内容住
 > [PLAN.md](PLAN.md)（路线/挂账），此处最多留挂账号指针。
@@ -33,7 +33,7 @@
   拟在**老框架**下训练、项目并行迁新框架，前置门见该 PLAN）
 - 开发态 yaml: `lizard_params.yaml`（家族活实验用，改动不追溯）
 - 布局（2026-09-01 迁移）: 包名 `rl_exp`（家族无关），冻结配方按家族分层
-  `versions/lizard/vN/`；代码只在 git 仓，IsaacLab 根常驻 1 行注册 shim
+  `versions/lizard/main/vN/`；代码只在 git 仓，IsaacLab 根常驻 1 行注册 shim
 - 支线：**parkour v1 初稿已开**（2026-09-04，分支 `paper/parkour-in-the-wild`，
   训练未启动）——跑/爬/跳多专家蒸馏+RL 微调线，方案见 `parkour/v1/PLAN.md`，
   路线与决策记录见 `parkour/PLAN.md`；主线 v0–v5 为主创始线，编号互不影响
@@ -54,30 +54,30 @@
 | Lizard-Velocity-Rough-Play-v0 | `LizardRoughEnvCfg_PLAY` | 开发态 | 同上，回放 |
 | Lizard-Velocity-Curriculum-Rough-v0 | `LizardCurriculumRoughEnvCfg` | 开发态 | 三课程粗糙变体 |
 | Lizard-Velocity-Curriculum-Rough-Play-v0 | `LizardCurriculumRoughEnvCfg_PLAY` | 开发态 | 同上，回放 |
-| **Lizard-Rough-v2** | `LizardRoughTeacherEnvCfg_V2` | **versions/lizard/v2（冻结）** | teacher Phase 1（特权 actor） |
-| Lizard-Rough-Play-v2 | `LizardRoughTeacherEnvCfg_V2_PLAY` | **versions/lizard/v2（冻结）** | teacher 回放 |
-| Lizard-Rough-v1 | `LizardRoughTeacherEnvCfg_V1` | versions/lizard/v1（冻结） | v1 配方复现入口（obs 266） |
-| Lizard-Rough-Play-v1 | `LizardRoughTeacherEnvCfg_V1_PLAY` | versions/lizard/v1（冻结） | v1 配方回放 |
-| **Lizard-Rough-v3** | `LizardRoughTeacherEnvCfg_V3` | **versions/lizard/v3（冻结）** | teacher 论文对齐版（obs 三组 90/208/83，装配完成待训练） |
-| Lizard-Rough-Play-v3 | `LizardRoughTeacherEnvCfg_V3_PLAY` | **versions/lizard/v3（冻结）** | v3 回放 |
-| **Lizard-Rough-v4** | `LizardRoughTeacherEnvCfg_V4` | versions/lizard/v4（**提案，未冻结**——训练启动时冻结） | 碎石地重定标（obs 同 v3 三组 90/208/83；纯地形+物理缓冲区变更，spec 不变） |
-| Lizard-Rough-Play-v4 | `LizardRoughTeacherEnvCfg_V4_PLAY` | versions/lizard/v4（**提案，未冻结**——训练启动时冻结） | v4 回放 |
-| **Lizard-Rough-v5** | `LizardRoughTeacherEnvCfg_V5` | versions/lizard/v5（**已训首跑判废**——资产轴错配横行，见 v6） | 反划脚奖励包（r_fc 符号 + r_slip + 肚皮受力罚 + EP 线性跟踪；命令 (0,3) 无速度课程；obs 同 v3 三组 90/208/83，spec 不变） |
-| Lizard-Rough-Play-v5 | `LizardRoughTeacherEnvCfg_V5_PLAY` | versions/lizard/v5（已训判废） | v5 回放 |
-| **Lizard-Rough-v6** | `LizardRoughTeacherEnvCfg_V6` | versions/lizard/v6（**已训判废**——倒走，骨命名装反，见 v6 NOTES） | 资产前向轴转正 + v6.1 脊柱解锁 + v6.2 脊柱 PD 400/20；其余逐字同 v5 |
-| Lizard-Rough-Play-v6 | `LizardRoughTeacherEnvCfg_V6_PLAY` | versions/lizard/v6（已训判废） | v6 回放 |
-| **Lizard-Rough-v8** | `LizardRoughTeacherEnvCfg_V8` | versions/lizard/v8（**已冻结待训**，tag `lizard-v8.1`） | 资产解剖学转正 + 全关节重命名；reward/obs 逐字同 v6.2，v8.1 r_slip ×10 |
-| Lizard-Rough-Play-v8 | `LizardRoughTeacherEnvCfg_V8_PLAY` | versions/lizard/v8（已冻结待训） | v8 回放 |
-| **Lizard-Rough-v10** | `LizardRoughTeacherEnvCfg_V10` | versions/lizard/v10（**已训完 15000 iter，判决半通过**，见下文件史行） | v8.1 之上单变量删除 tilt 终止（翻倒数据留 rollout 自供翻身梯度） |
-| Lizard-Rough-Play-v10 | `LizardRoughTeacherEnvCfg_V10_PLAY` | versions/lizard/v10（已训完，判决半通过） | v10 回放 |
-| **Lizard-Rough-v11** | `LizardRoughTeacherEnvCfg_V11` | versions/lizard/v11（**实施完成待训**，开训门 = v10 判决） | 联合粒子地形课程（参数格 combo × 速度桶，逐 Tr 测量） |
-| Lizard-Rough-Play-v11 | `LizardRoughTeacherEnvCfg_V11_PLAY` | versions/lizard/v11（实施完成待训） | v11 回放 |
-| **Lizard-Rough-v12** | `LizardRoughTeacherEnvCfg_V12` | versions/lizard/v12（**提案，未冻结**——训练启动时冻结） | Miki S8 鲁棒性包（关节/基座复位随机 + 摩擦偶发调低 + teacher 侧高度环噪声）+ r_slip 回 −0.003；obs 同 v11 三组 90/208/83 |
-| Lizard-Rough-Play-v12 | `LizardRoughTeacherEnvCfg_V12_PLAY` | versions/lizard/v12（**提案，未冻结**——训练启动时冻结） | v12 回放（环干净、无 dip） |
-| **Lizard-Rough-v13** | `LizardRoughTeacherEnvCfg_V13` | versions/lizard/v13（**实施完成待训**，base = v10） | Miki 对称跟踪核 `exp(−‖Δv‖²/0.25)` 换掉 EP 线性核（闭超速/横向/停车三账本盲区，单变量；weight 保 1.5） |
-| Lizard-Rough-Play-v13 | `LizardRoughTeacherEnvCfg_V13_PLAY` | versions/lizard/v13（实施完成待训） | v13 回放 |
-| **Lizard-Rough-v14** | `LizardRoughTeacherEnvCfg_V14` | versions/lizard/v14（**实施完成待训**，base = v13） | v14.4：终止项只有**翻覆**（基座四元数 ZYX roll，`\|roll\| > 70°`，单调覆盖整圈含肚朝上；`\|pitch\| > 80°` 护栏；持续 0.5 s）；**头承重改为惩罚**（`head_load_penalty` = 头链竖向接触力 relu 求和 / 706 N，权重 -1.0，无阈值、无姿态门控）——前栽不收局（代价走惩罚），趴地/base 接触不管（v3.6 起就是惩罚）；obs/DR/地形/课程同 v13 |
-| Lizard-Rough-Play-v14 | `LizardRoughTeacherEnvCfg_V14_PLAY` | versions/lizard/v14（实施完成待训） | v14 回放 |
+| **Lizard-Rough-v2** | `LizardRoughTeacherEnvCfg_V2` | **versions/lizard/main/v2（冻结）** | teacher Phase 1（特权 actor） |
+| Lizard-Rough-Play-v2 | `LizardRoughTeacherEnvCfg_V2_PLAY` | **versions/lizard/main/v2（冻结）** | teacher 回放 |
+| Lizard-Rough-v1 | `LizardRoughTeacherEnvCfg_V1` | versions/lizard/main/v1（冻结） | v1 配方复现入口（obs 266） |
+| Lizard-Rough-Play-v1 | `LizardRoughTeacherEnvCfg_V1_PLAY` | versions/lizard/main/v1（冻结） | v1 配方回放 |
+| **Lizard-Rough-v3** | `LizardRoughTeacherEnvCfg_V3` | **versions/lizard/main/v3（冻结）** | teacher 论文对齐版（obs 三组 90/208/83，装配完成待训练） |
+| Lizard-Rough-Play-v3 | `LizardRoughTeacherEnvCfg_V3_PLAY` | **versions/lizard/main/v3（冻结）** | v3 回放 |
+| **Lizard-Rough-v4** | `LizardRoughTeacherEnvCfg_V4` | versions/lizard/main/v4（**提案，未冻结**——训练启动时冻结） | 碎石地重定标（obs 同 v3 三组 90/208/83；纯地形+物理缓冲区变更，spec 不变） |
+| Lizard-Rough-Play-v4 | `LizardRoughTeacherEnvCfg_V4_PLAY` | versions/lizard/main/v4（**提案，未冻结**——训练启动时冻结） | v4 回放 |
+| **Lizard-Rough-v5** | `LizardRoughTeacherEnvCfg_V5` | versions/lizard/main/v5（**已训首跑判废**——资产轴错配横行，见 v6） | 反划脚奖励包（r_fc 符号 + r_slip + 肚皮受力罚 + EP 线性跟踪；命令 (0,3) 无速度课程；obs 同 v3 三组 90/208/83，spec 不变） |
+| Lizard-Rough-Play-v5 | `LizardRoughTeacherEnvCfg_V5_PLAY` | versions/lizard/main/v5（已训判废） | v5 回放 |
+| **Lizard-Rough-v6** | `LizardRoughTeacherEnvCfg_V6` | versions/lizard/main/v6（**已训判废**——倒走，骨命名装反，见 v6 NOTES） | 资产前向轴转正 + v6.1 脊柱解锁 + v6.2 脊柱 PD 400/20；其余逐字同 v5 |
+| Lizard-Rough-Play-v6 | `LizardRoughTeacherEnvCfg_V6_PLAY` | versions/lizard/main/v6（已训判废） | v6 回放 |
+| **Lizard-Rough-v8** | `LizardRoughTeacherEnvCfg_V8` | versions/lizard/main/v8（**已冻结待训**，tag `lizard-v8.1`） | 资产解剖学转正 + 全关节重命名；reward/obs 逐字同 v6.2，v8.1 r_slip ×10 |
+| Lizard-Rough-Play-v8 | `LizardRoughTeacherEnvCfg_V8_PLAY` | versions/lizard/main/v8（已冻结待训） | v8 回放 |
+| **Lizard-Rough-v10** | `LizardRoughTeacherEnvCfg_V10` | versions/lizard/main/v10（**已训完 15000 iter，判决半通过**，见下文件史行） | v8.1 之上单变量删除 tilt 终止（翻倒数据留 rollout 自供翻身梯度） |
+| Lizard-Rough-Play-v10 | `LizardRoughTeacherEnvCfg_V10_PLAY` | versions/lizard/main/v10（已训完，判决半通过） | v10 回放 |
+| **Lizard-Rough-v11** | `LizardRoughTeacherEnvCfg_V11` | versions/lizard/main/v11（**实施完成待训**，开训门 = v10 判决） | 联合粒子地形课程（参数格 combo × 速度桶，逐 Tr 测量） |
+| Lizard-Rough-Play-v11 | `LizardRoughTeacherEnvCfg_V11_PLAY` | versions/lizard/main/v11（实施完成待训） | v11 回放 |
+| **Lizard-Rough-v12** | `LizardRoughTeacherEnvCfg_V12` | versions/lizard/main/v12（**提案，未冻结**——训练启动时冻结） | Miki S8 鲁棒性包（关节/基座复位随机 + 摩擦偶发调低 + teacher 侧高度环噪声）+ r_slip 回 −0.003；obs 同 v11 三组 90/208/83 |
+| Lizard-Rough-Play-v12 | `LizardRoughTeacherEnvCfg_V12_PLAY` | versions/lizard/main/v12（**提案，未冻结**——训练启动时冻结） | v12 回放（环干净、无 dip） |
+| **Lizard-Rough-v13** | `LizardRoughTeacherEnvCfg_V13` | versions/lizard/main/v13（**实施完成待训**，base = v10） | Miki 对称跟踪核 `exp(−‖Δv‖²/0.25)` 换掉 EP 线性核（闭超速/横向/停车三账本盲区，单变量；weight 保 1.5） |
+| Lizard-Rough-Play-v13 | `LizardRoughTeacherEnvCfg_V13_PLAY` | versions/lizard/main/v13（实施完成待训） | v13 回放 |
+| **Lizard-Rough-v14** | `LizardRoughTeacherEnvCfg_V14` | versions/lizard/main/v14（**实施完成待训**，base = v13） | v14.4：终止项只有**翻覆**（基座四元数 ZYX roll，`\|roll\| > 70°`，单调覆盖整圈含肚朝上；`\|pitch\| > 80°` 护栏；持续 0.5 s）；**头承重改为惩罚**（`head_load_penalty` = 头链竖向接触力 relu 求和 / 706 N，权重 -1.0，无阈值、无姿态门控）——前栽不收局（代价走惩罚），趴地/base 接触不管（v3.6 起就是惩罚）；obs/DR/地形/课程同 v13 |
+| Lizard-Rough-Play-v14 | `LizardRoughTeacherEnvCfg_V14_PLAY` | versions/lizard/main/v14（实施完成待训） | v14 回放 |
 
 注：teacher 任务 id 与配方版本同步，且**全部常驻注册**——旧版本不会因代码
 演进而失复现（机制见 [OBS.md](OBS.md)「版本差异结构」节）。`Lizard-Rough-v0` 无任务 id
@@ -100,22 +100,22 @@ vN 编号只是句柄，不是顺序契约——重基（v7→v9 迁 v8、v10 �
 
 | 版本 | 日期 | 摘要 | 教训 |
 |---|---|---|---|
-| v0 | 2026-08-28 | 首版冻结：72kg、DR 全套、基线奖励（回滚态）、teacher 特权 obs。未训练即被 v1 取代，存档作全量 DR 对照 | 未训即被取代也要存档——v1 收窄后"有得比"全靠这份对照 |
-| v1 | 2026-08-31 | teacher 首跑：v0 仅 DR 段全部收窄（无一归零）。已训练 14000 iters 并出评测分（0.635 = base+x 位移达标率——Y 轴资产上即**横行成绩**，见 v5\NOTES 问题所在）。**原地复现已退役**（v6 资产换代后跑 `Lizard-Rough-v1` = 新资产静默错配，复现走 git checkout tag；见本节末退休注记） | 一次只动一个变量：特权 obs 单独救活趴窝（0.254→0.635），激励逃生舱假设被对照否定 |
-| v2 | 2026-08-31 | 特权 obs 论文对齐补全（+forces/normals/friction/thigh-shank/wrench 共 42 维，266→308）；yaml 与 v1 相同 | 纯代码级 obs 变更可不升 yaml——契约差异写在代码 spec 里足够 |
-| v3 | 2026-09-01 | teacher 论文对齐版（obs 三组 90/208/83=381：脚环 extero + 三编码器；tilt 终止 + 防拖 r_fc + c_k 课程 + DR reset 化）。首跑完成 2026-09-01（2048 env × 4999 iter，全程等效 stage 0），结果回填见 NOTES。**原地复现已退役**（同 v1；划脚诊断本身 frame 无关，结论存活） | 结构重排先过装配 gate：gate bug 让首跑全程等效 stage 0，代价一整跑 |
-| v4 | 2026-09-02 | 碎石地重定标：脚掌实测 0.46×0.51 m（v3.6 误用骨长 0.131），random_rough 间距 0.5 m ≥ 掌宽 + 噪声 (0.10,0.35) step 0.02；v3.6.1 collision stack 补丁回 stock 2**26。待训练（启动前先看地形） | 定标用实测碰撞 bbox 不用骨长（0.131 勘误）——数字必须可溯源到测量 |
-| v5 | 2026-09-03 | 反划脚奖励包：r_fc 符号 + r_slip + 肚皮受力罚 + EP 线性跟踪；命令 (0,3) 无速度课程；obs 同 v3。首跑（~2000+ iters，2026-09-07）**横行判废**：资产长轴 Y vs 任务 +X 前向错配——奖励包本身教会了位移，方向沿身体右侧。**原地复现已退役**（同 v1） | **资产坐标系列进任务前先对表**：URDF 长轴方向必须在开训前对上命令系 +X（几何备忘写了"长轴 = Y"没人连到任务约定）；位移首次有收益的版本才会暴露轴错配 |
-| v6 | 2026-09-07 | 资产前向轴转正（blend R_z(-90°) + AXIS_MAP 同步）+ v6.1 脊柱/尾动作解锁（scale 0→0.25，用户拍板）+ v6.2 脊柱 PD 400/20（测量依据见 NOTES）；其余逐字同 v5。**已训判废**（2026-09-08 停训 8950/15000：**倒走**——骨命名与解剖学 180° 装反，转正的"命名头"=解剖学尾；归因链见 `v6\NOTES.md`） | **"头"的判定必须锚定造型证据（球头/锥尾），禁止只信骨名**——装配验证全信骨名，名字错则全链绿灯 |
-| v7 | 2026-09-08 | ghost 断腿鲁棒性（提案，代码未实施）：截肢近似 DR（p=0.3 整腿 stiffness→0 + 质量 ×0.001，契约维度不变）+ `damage_flags` 4 维进 actor obs（90→94，UE 断腿事件直填）+ v8 ckpt 微调（PITW 配方）。**v7.1 同日归档**：未启动即迁 v9 重基 v8（用户拍板"按顺序开 v9"），实施见 `v9\PLAN.md` | 提案未启动前提失效（v6 判废）→ 编号顺序 < 语义正确：占位号让位，血缘号接管 |
-| v8 | 2026-09-08 | 资产解剖学转正 + 全关节重命名（v6 判废根因修复）：blend 再转 R_z(+180°)（球头→+X）+ 26 关节按解剖学改名 + 全版本 yaml 迁移 + 注册 `Lizard-Rough-v8`；reward/obs 逐字同 v6.2，v8.1 r_slip ×10（预注册升级，v6 数据触发）。布局硬闸入 `check_joints_v8.py` | （训练后补） |
-| v9 | 2026-09-08 | ghost 断腿鲁棒性（提案，代码未实施，自 v7 迁入重基 v8）：截肢近似 DR（p=0.3 整腿 stiffness→0 + 质量 ×0.001，契约维度不变）+ `damage_flags` 4 维进 actor obs（90→94，UE 断腿事件直填）+ v8 ckpt 微调（PITW 配方，weight surgery 90→94）。limp/分级/多腿/mid-episode 不做 | （训练后补） |
-| v10 | 2026-09-09 | 单变量删除 tilt 终止（v8.1 之上唯一差异，yaml `tilt_terminate: null`）：翻倒数据留在 rollout 里自供翻身梯度（肚皮接触只罚不终 + 2 m 尾地面翻正），只有 time_out 收局。4096 env，experiment `lizard_rough_teacher_v10`。**训完 15000 iter（2026-09-09 启动 → 2026-09-11 判决）**；判决门 = `v10\NOTES.md` 验收 1–5 | **半通过**（`v10\NOTES.md` 表 + `DIAGNOSE.md`）：time_out **1.0000**（tilt tag 消失）、success 0.048→**0.135**（峰 0.30）、track_lin 0.002→**1.134**（> v8.1 基线 0.79）、belly 恒 **0** = ✅✅；**terrain_levels 未爬**（4.54→4.05，峰 4.63 < v5 同 iter 的 5.75）= ❌；起身观察项未验证。附带（`DIAGNOSE.md` 修正口径后）：零命令下策略 2–3 脚站、**左后**脚基本悬空、**左前**扛 62%；平地直行恒定 ~20° 蟹行（世界横移 2.4–6.2 m/10 s，主因相对机身侧滑）+ 低速超速 48–54% 而账本仍满分 |
-| v11 | 2026-09-10 | 联合粒子地形课程（Lee 2020 Alg S1 + 联合扩展）：粒子 = (参数格 combo, 速度桶)，`param_grid_terrain.py` 参数组合网格（治对角线问题）+ 逐步 Tr 测量（挂账 #15 候选 a 落地）+ `ParticleVelocityCommand` 桶命令接线 + 带空方向分流兜底。实施完成（件 1–5，离线闸门 11/11 绿；smoke TRAIN 段留开训前补跑）；开训门 = v10 判决。v11.1 审查四修见 `v11\PLAN.md` 修订记录（stairs 顶档 0.45、SIR 结算式清零、joint_sir 常量化、PLAN 勘误） | （训练后补） |
-| v12 | 2026-09-10 | Miki S8 鲁棒性包（提案，代码实施同日）：关节初值/速度 reset 随机（offset 型三组，替换 stock 对全零默认 no-op 的 scale 型）+ 基座姿态/速度范围 yaml 化（stock 值原样暴露）+ 足底摩擦偶发调低（p_dip 0.1 → [0.05,0.3]，特权 obs 缓存同调用更新）+ teacher 侧高度环噪声（工况 60/30/10 + w/ε_f/ε_p 三层 + outlier，幅度 × c_k，中途重抽；无学生蒸馏，用户拍板）+ r_slip 回 −0.003。obs 契约不变（90/208/83）。方案见 `v12\PLAN.md` | （训练后补） |
-| v13 | 2026-09-14 | 换回 Miki 对称跟踪核（用户拍板；单变量，base = v10）：`track_lin_vel_xy_miki` = `exp(−‖v_cmd−v_yaw‖²/0.25)`（全 2D 误差、yaw 帧、无 min_speed → cmd=0 站立拿满分 = 停车首次进账本），替掉 EP 线性核（超速饱和中性/横向投影不可见/零命令无梯度三账本盲区，v10 判决实证）。weight 保 1.5 不随 paper 0.75（保天花板与罚项比例 = 纯核形状消融）。风险预注册：v3/v4 exp 核趴窝病历，判废线 = v10。闸 `check_reward_v13.py`。**v13.1（开训前）**：验收口径三修——速度误差改 `abs` 双向 + 逐时刻 MAE 报告、"不劣化"改固定场景（弃 `terrain_levels`）、`feet_slide` 降观察项改组合判废；**v13.2**：验收量测换帧（前向 `vel_yaw_x` = 奖励同帧）+ 侧滑改 `mean(|vel_yaw_y|)`（签名均值被左右摆动抵消），闸 `test_acceptance_metrics.py` | （训练后补） |
-| v14 | 2026-09-14（v14.3 09-15 / v14.4 09-15） | 加回摔倒闸（用户要求：roll 歪了即终止），三次改形后 = **v14.4**：终止项 = `teacher_mdp.roll_over_trigger` —— 取**基座四元数**的 ZYX roll（`euler_xyz_from_quat`），`\|roll\| > 70°`，单调覆盖整圈（`\|roll\| > 90°` ⟺ 上轴掉到地平线以下 = 翻到底/肚朝上也在闸内；`\|sin\|` 形在 110° 后回落会放过这一族，已废），`\|pitch\| > 80°` 鼻子朝天护栏（ZYX 在 ±90° 退化），`RollOverTerm`（per-env dwell 0.5 s + reset 钩子），yaml `v14.roll_over`；头承重 = `head_load_penalty`（`RewTerm`，`SceneEntityCfg` 过滤 contact_forces 到头链 → 世界系 +z 力 relu 求和 / 706 N，权重 -1.0，**无阈值、无姿态门控、无足部卸载条件**，不做 c_k 缩放），yaml `v14.head_load`。前栽不再收局（v14.3，代价走惩罚）；趴地/base 接触不管（roll≈0 看不见，v3.6 起是惩罚）。v14.4 的判据修正前提：**"留肚朝上供起身梯度"不成立** —— Miki 配方没有起身目标，倒了就是翻车（用户拍板）。闸 `check_terminations_v14.py`（姿态用例 + 护栏窗 + `闸⇒tilt≥70°` 网格扫描 + 惩罚算术 + 接线 + v13 冻结）。评测用 Locomotion-Eval-v2（终止帧可见） | （训练后补） |
-| v15 | 2026-09-16 | 地形课程换 **joint SIR**（用户拍板："用 SIR 课程，不要 v14 的地形课程"；base = v14，提案态未实施）：v5 行 SIR（`SpawnWeightSIRTerrainCurriculum`，只调难度行、类型维度不可调）→ v11 机制的**联合粒子 SIR**，粒子 = (类型**内部**参数档 combo, 速度桶)，**类型份额固定、不跨类型**（env→type 初始化锁定 `teacher_mdp.py:1150`；重生只在同类型粒子池抽 `:1190-1204`；游走只动参数档/速度桶 `:1307-1329`）；`build_param_grid_terrain_cfg` 参数格（每 combo 一个单值 sub-terrain，默认 57 combo + flat = 58 类型 / 4×120）+ `ParticleVelocityCommand`（buckets 0.5…3.0 + jitter）+ `Curriculum/joint_sir/{tr_mean, particle_entropy}`（判读量；`frontier_max_v` 冷启动即满值 3.0，**不作能力进度**）；obs/动作/奖励/终止/DR/资产逐字段同 v14。方案见 `v15\PLAN.md` | **首跑该课程线**（v11 仅 6-iter 冒烟、v12 无 run ⇒ 均不作基线）；本版拟在**老框架**下训练而项目并行迁新框架 ⇒ 前置门：开训前打 tag、进程不得重启、训练结束前不得 `cfg_lock --update`；**机制评审 5 条**（类型流量不可调 / 短局+翻覆可吃高权重 / 冷启动保护仅 240 步 / 权重新旧尺度混用 / `frontier_max_v` 冷启动即满值）已逐条核证并记账于 `v15\PLAN.md`「评审发现」，**修复已落共享实现**（2026-09-16：信任闸 / 单尺度 estimate / 局部支撑 / verified frontier / 逐类型 Tr；v11/v12 因共用 term 其 golden 已随之重生成 ⇒ 需偏差声明或 v15 专用变体，待拍板）；**v15.3（2026-09-16）重规划**：保留联合 SIR，但改评分与冷启动——逐帧标签换 yaw 帧跟踪误差（`track_tol_mps` 初始 0.3 待验证）、`Tr` 分母改固定窗口 `W`、冷启动改显式 `anchor_combo` + 全部最低桶、每块只做一次局部扩展；**取消**硬解锁 / 85% 锚集 / 掌握判据，命令与类型份额不变 |
+| main/v0 | 2026-08-28 | 首版冻结：72kg、DR 全套、基线奖励（回滚态）、teacher 特权 obs。未训练即被 v1 取代，存档作全量 DR 对照 | 未训即被取代也要存档——v1 收窄后"有得比"全靠这份对照 |
+| main/v1 | 2026-08-31 | teacher 首跑：v0 仅 DR 段全部收窄（无一归零）。已训练 14000 iters 并出评测分（0.635 = base+x 位移达标率——Y 轴资产上即**横行成绩**，见 v5\NOTES 问题所在）。**原地复现已退役**（v6 资产换代后跑 `Lizard-Rough-v1` = 新资产静默错配，复现走 git checkout tag；见本节末退休注记） | 一次只动一个变量：特权 obs 单独救活趴窝（0.254→0.635），激励逃生舱假设被对照否定 |
+| main/v2 | 2026-08-31 | 特权 obs 论文对齐补全（+forces/normals/friction/thigh-shank/wrench 共 42 维，266→308）；yaml 与 v1 相同 | 纯代码级 obs 变更可不升 yaml——契约差异写在代码 spec 里足够 |
+| main/v3 | 2026-09-01 | teacher 论文对齐版（obs 三组 90/208/83=381：脚环 extero + 三编码器；tilt 终止 + 防拖 r_fc + c_k 课程 + DR reset 化）。首跑完成 2026-09-01（2048 env × 4999 iter，全程等效 stage 0），结果回填见 NOTES。**原地复现已退役**（同 v1；划脚诊断本身 frame 无关，结论存活） | 结构重排先过装配 gate：gate bug 让首跑全程等效 stage 0，代价一整跑 |
+| main/v4 | 2026-09-02 | 碎石地重定标：脚掌实测 0.46×0.51 m（v3.6 误用骨长 0.131），random_rough 间距 0.5 m ≥ 掌宽 + 噪声 (0.10,0.35) step 0.02；v3.6.1 collision stack 补丁回 stock 2**26。待训练（启动前先看地形） | 定标用实测碰撞 bbox 不用骨长（0.131 勘误）——数字必须可溯源到测量 |
+| main/v5 | 2026-09-03 | 反划脚奖励包：r_fc 符号 + r_slip + 肚皮受力罚 + EP 线性跟踪；命令 (0,3) 无速度课程；obs 同 v3。首跑（~2000+ iters，2026-09-07）**横行判废**：资产长轴 Y vs 任务 +X 前向错配——奖励包本身教会了位移，方向沿身体右侧。**原地复现已退役**（同 v1） | **资产坐标系列进任务前先对表**：URDF 长轴方向必须在开训前对上命令系 +X（几何备忘写了"长轴 = Y"没人连到任务约定）；位移首次有收益的版本才会暴露轴错配 |
+| main/v6 | 2026-09-07 | 资产前向轴转正（blend R_z(-90°) + AXIS_MAP 同步）+ v6.1 脊柱/尾动作解锁（scale 0→0.25，用户拍板）+ v6.2 脊柱 PD 400/20（测量依据见 NOTES）；其余逐字同 v5。**已训判废**（2026-09-08 停训 8950/15000：**倒走**——骨命名与解剖学 180° 装反，转正的"命名头"=解剖学尾；归因链见 `v6\NOTES.md`） | **"头"的判定必须锚定造型证据（球头/锥尾），禁止只信骨名**——装配验证全信骨名，名字错则全链绿灯 |
+| main/v7 | 2026-09-08 | ghost 断腿鲁棒性（提案，代码未实施）：截肢近似 DR（p=0.3 整腿 stiffness→0 + 质量 ×0.001，契约维度不变）+ `damage_flags` 4 维进 actor obs（90→94，UE 断腿事件直填）+ v8 ckpt 微调（PITW 配方）。**v7.1 同日归档**：未启动即迁 v9 重基 v8（用户拍板"按顺序开 v9"），实施见 `v9\PLAN.md` | 提案未启动前提失效（v6 判废）→ 编号顺序 < 语义正确：占位号让位，血缘号接管 |
+| main/v8 | 2026-09-08 | 资产解剖学转正 + 全关节重命名（v6 判废根因修复）：blend 再转 R_z(+180°)（球头→+X）+ 26 关节按解剖学改名 + 全版本 yaml 迁移 + 注册 `Lizard-Rough-v8`；reward/obs 逐字同 v6.2，v8.1 r_slip ×10（预注册升级，v6 数据触发）。布局硬闸入 `check_joints_v8.py` | （训练后补） |
+| main/v9 | 2026-09-08 | ghost 断腿鲁棒性（提案，代码未实施，自 v7 迁入重基 v8）：截肢近似 DR（p=0.3 整腿 stiffness→0 + 质量 ×0.001，契约维度不变）+ `damage_flags` 4 维进 actor obs（90→94，UE 断腿事件直填）+ v8 ckpt 微调（PITW 配方，weight surgery 90→94）。limp/分级/多腿/mid-episode 不做 | （训练后补） |
+| main/v10 | 2026-09-09 | 单变量删除 tilt 终止（v8.1 之上唯一差异，yaml `tilt_terminate: null`）：翻倒数据留在 rollout 里自供翻身梯度（肚皮接触只罚不终 + 2 m 尾地面翻正），只有 time_out 收局。4096 env，experiment `lizard_rough_teacher_v10`。**训完 15000 iter（2026-09-09 启动 → 2026-09-11 判决）**；判决门 = `v10\NOTES.md` 验收 1–5 | **半通过**（`v10\NOTES.md` 表 + `DIAGNOSE.md`）：time_out **1.0000**（tilt tag 消失）、success 0.048→**0.135**（峰 0.30）、track_lin 0.002→**1.134**（> v8.1 基线 0.79）、belly 恒 **0** = ✅✅；**terrain_levels 未爬**（4.54→4.05，峰 4.63 < v5 同 iter 的 5.75）= ❌；起身观察项未验证。附带（`DIAGNOSE.md` 修正口径后）：零命令下策略 2–3 脚站、**左后**脚基本悬空、**左前**扛 62%；平地直行恒定 ~20° 蟹行（世界横移 2.4–6.2 m/10 s，主因相对机身侧滑）+ 低速超速 48–54% 而账本仍满分 |
+| main/v11 | 2026-09-10 | 联合粒子地形课程（Lee 2020 Alg S1 + 联合扩展）：粒子 = (参数格 combo, 速度桶)，`param_grid_terrain.py` 参数组合网格（治对角线问题）+ 逐步 Tr 测量（挂账 #15 候选 a 落地）+ `ParticleVelocityCommand` 桶命令接线 + 带空方向分流兜底。实施完成（件 1–5，离线闸门 11/11 绿；smoke TRAIN 段留开训前补跑）；开训门 = v10 判决。v11.1 审查四修见 `v11\PLAN.md` 修订记录（stairs 顶档 0.45、SIR 结算式清零、joint_sir 常量化、PLAN 勘误） | （训练后补） |
+| main/v12 | 2026-09-10 | Miki S8 鲁棒性包（提案，代码实施同日）：关节初值/速度 reset 随机（offset 型三组，替换 stock 对全零默认 no-op 的 scale 型）+ 基座姿态/速度范围 yaml 化（stock 值原样暴露）+ 足底摩擦偶发调低（p_dip 0.1 → [0.05,0.3]，特权 obs 缓存同调用更新）+ teacher 侧高度环噪声（工况 60/30/10 + w/ε_f/ε_p 三层 + outlier，幅度 × c_k，中途重抽；无学生蒸馏，用户拍板）+ r_slip 回 −0.003。obs 契约不变（90/208/83）。方案见 `v12\PLAN.md` | （训练后补） |
+| main/v13 | 2026-09-14 | 换回 Miki 对称跟踪核（用户拍板；单变量，base = v10）：`track_lin_vel_xy_miki` = `exp(−‖v_cmd−v_yaw‖²/0.25)`（全 2D 误差、yaw 帧、无 min_speed → cmd=0 站立拿满分 = 停车首次进账本），替掉 EP 线性核（超速饱和中性/横向投影不可见/零命令无梯度三账本盲区，v10 判决实证）。weight 保 1.5 不随 paper 0.75（保天花板与罚项比例 = 纯核形状消融）。风险预注册：v3/v4 exp 核趴窝病历，判废线 = v10。闸 `check_reward_v13.py`。**v13.1（开训前）**：验收口径三修——速度误差改 `abs` 双向 + 逐时刻 MAE 报告、"不劣化"改固定场景（弃 `terrain_levels`）、`feet_slide` 降观察项改组合判废；**v13.2**：验收量测换帧（前向 `vel_yaw_x` = 奖励同帧）+ 侧滑改 `mean(|vel_yaw_y|)`（签名均值被左右摆动抵消），闸 `test_acceptance_metrics.py` | （训练后补） |
+| main/v14 | 2026-09-14（v14.3 09-15 / v14.4 09-15） | 加回摔倒闸（用户要求：roll 歪了即终止），三次改形后 = **v14.4**：终止项 = `teacher_mdp.roll_over_trigger` —— 取**基座四元数**的 ZYX roll（`euler_xyz_from_quat`），`\|roll\| > 70°`，单调覆盖整圈（`\|roll\| > 90°` ⟺ 上轴掉到地平线以下 = 翻到底/肚朝上也在闸内；`\|sin\|` 形在 110° 后回落会放过这一族，已废），`\|pitch\| > 80°` 鼻子朝天护栏（ZYX 在 ±90° 退化），`RollOverTerm`（per-env dwell 0.5 s + reset 钩子），yaml `v14.roll_over`；头承重 = `head_load_penalty`（`RewTerm`，`SceneEntityCfg` 过滤 contact_forces 到头链 → 世界系 +z 力 relu 求和 / 706 N，权重 -1.0，**无阈值、无姿态门控、无足部卸载条件**，不做 c_k 缩放），yaml `v14.head_load`。前栽不再收局（v14.3，代价走惩罚）；趴地/base 接触不管（roll≈0 看不见，v3.6 起是惩罚）。v14.4 的判据修正前提：**"留肚朝上供起身梯度"不成立** —— Miki 配方没有起身目标，倒了就是翻车（用户拍板）。闸 `check_terminations_v14.py`（姿态用例 + 护栏窗 + `闸⇒tilt≥70°` 网格扫描 + 惩罚算术 + 接线 + v13 冻结）。评测用 Locomotion-Eval-v2（终止帧可见） | （训练后补） |
+| main/v15 | 2026-09-16 | 地形课程换 **joint SIR**（用户拍板："用 SIR 课程，不要 v14 的地形课程"；base = v14，提案态未实施）：v5 行 SIR（`SpawnWeightSIRTerrainCurriculum`，只调难度行、类型维度不可调）→ v11 机制的**联合粒子 SIR**，粒子 = (类型**内部**参数档 combo, 速度桶)，**类型份额固定、不跨类型**（env→type 初始化锁定 `teacher_mdp.py:1150`；重生只在同类型粒子池抽 `:1190-1204`；游走只动参数档/速度桶 `:1307-1329`）；`build_param_grid_terrain_cfg` 参数格（每 combo 一个单值 sub-terrain，默认 57 combo + flat = 58 类型 / 4×120）+ `ParticleVelocityCommand`（buckets 0.5…3.0 + jitter）+ `Curriculum/joint_sir/{tr_mean, particle_entropy}`（判读量；`frontier_max_v` 冷启动即满值 3.0，**不作能力进度**）；obs/动作/奖励/终止/DR/资产逐字段同 v14。方案见 `v15\PLAN.md` | **首跑该课程线**（v11 仅 6-iter 冒烟、v12 无 run ⇒ 均不作基线）；本版拟在**老框架**下训练而项目并行迁新框架 ⇒ 前置门：开训前打 tag、进程不得重启、训练结束前不得 `cfg_lock --update`；**机制评审 5 条**（类型流量不可调 / 短局+翻覆可吃高权重 / 冷启动保护仅 240 步 / 权重新旧尺度混用 / `frontier_max_v` 冷启动即满值）已逐条核证并记账于 `v15\PLAN.md`「评审发现」，**修复已落共享实现**（2026-09-16：信任闸 / 单尺度 estimate / 局部支撑 / verified frontier / 逐类型 Tr；v11/v12 因共用 term 其 golden 已随之重生成 ⇒ 需偏差声明或 v15 专用变体，待拍板）；**v15.3（2026-09-16）重规划**：保留联合 SIR，但改评分与冷启动——逐帧标签换 yaw 帧跟踪误差（`track_tol_mps` 初始 0.3 待验证）、`Tr` 分母改固定窗口 `W`、冷启动改显式 `anchor_combo` + 全部最低桶、每块只做一次局部扩展；**取消**硬解锁 / 85% 锚集 / 掌握判据，命令与类型份额不变 |
 | parkour/v1 | 2026-09-04 | 支线初稿（未冻结未训练，分支 `paper/parkour-in-the-wild`）：跑/爬/跳多专家蒸馏+RL 微调（PITW 配方）；血统 = 支线根（base.json null，与主线 vN 无配方血缘）；参数冻结副本 `parkour\v1\parkour_params.yaml` | （训练后补） |
 | baseline/v1 | 2026-09-16 | 支线初稿（未冻结未训练）：**平地 + 固定 `0.5,0,0` 命令 + 零课程 + 零 DR** 的能力基线——只回答"这副机器人能否学会持续行走"，不预留第二臂；血统 = 支线根（base.json null）；配方代码自包含（只依赖框架基类与框架 mdp + 本线 `baseline_mdp.py` 的两个核副本），不 import 任何其它线的 cfg/mdp；观测 90 维单组 proprio + 普通 MLP；参数冻结副本 `baseline\v1\baseline_params.yaml` | （训练后补） |
 
@@ -186,7 +186,7 @@ v8 转正 180° 后轴值翻转（X/Y 分量取反），且**腿名自 v8 起等
 |---|---|---|
 | 每迭代 | success_rate / reward / curriculum 曲线 | log 目录 TB 事件文件 → `dump_tb.py` 导 csv |
 | 每次 eval | 协议跑分（nominal/robust/逐地形） | `ablation_harness/results/locomotion_eval_v1/` |
-| 每版本 | 目的/改动/命令/结果/结论 | `versions/lizard/vN/NOTES.md` |
+| 每版本 | 目的/改动/命令/结果/结论 | `versions/lizard/main/vN/NOTES.md` |
 | 家族层 | 版本历史 / 任务表 / 家族特有机制 | 本文档 |
 
 ## 开新版本流程

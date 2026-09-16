@@ -29,7 +29,7 @@ from rl_exp.tasks.teacher_env_cfg import (  # noqa: E402
     LizardRoughTeacherEnvCfg_V13_PLAY,
 )
 
-_PARAMS = _REPO / "rl_exp" / "versions" / "lizard" / "v13" / "lizard_params.yaml"
+_PARAMS = _REPO / "rl_exp" / "versions" / "lizard" / "main" / "v13" / "main_params.yaml"
 
 # yaml: kernel params recorded; v5 EP-kernel section stays as the frozen record
 params = yaml.safe_load(_PARAMS.read_text(encoding="utf-8"))

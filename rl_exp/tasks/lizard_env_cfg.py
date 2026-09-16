@@ -38,10 +38,18 @@ from rl_exp.tasks.play_utils import apply_play_wiring
 # this file lives at rl_exp/tasks/lizard_env_cfg.py -> exp root is parents[1]
 _RL_EXP_DIR = pathlib.Path(__file__).resolve().parents[1]
 
-# family namespace layer: frozen recipes live under versions/<family>/<version>/
-# (teacher_env_cfg.py keeps its own copy of this constant -- loud failure on
+# family namespace layer: frozen recipes live under versions/<family>/<line>/<version>/
+# (teacher_env_cfg.py keeps its own copy of these constants -- loud failure on
 # drift: a wrong path raises at cfg construction, never silently trains stale)
 _VERSION_FAMILY = "lizard"
+
+# ARCH_PLAN 2.1a: the main line owns its own directory like every other line, so its
+# handle is "lizard/main" and its parameter files are main_params.yaml (a path names its
+# line). Both the declared handle and the loaded path have to move together: the handle is
+# what the golden gate and the run record route by, the path is what actually gets read.
+_LINE_KEY = f"{_VERSION_FAMILY}/main"
+_LINE_DIR = _RL_EXP_DIR / "versions" / _VERSION_FAMILY / "main"
+_PARAMS_NAME = "main_params.yaml"
 
 
 @functools.lru_cache(maxsize=64)
@@ -64,14 +72,15 @@ def _load_params(version: str | None = None) -> dict:
 
     Args:
         version: Version name (e.g. "v0") to read the FROZEN copy under
-            ``rl_exp/versions/<family>/<version>/lizard_params.yaml``, or None to
-            read the live dev yaml (``versions/<family>/lizard_params.yaml``). Versioned runs must always pass their own
-            version so dev-yaml edits can never drift a frozen recipe.
+            ``rl_exp/versions/<family>/main/<version>/main_params.yaml``, or None to
+            read the live dev yaml (``versions/<family>/main/main_params.yaml``). Versioned
+            runs must always pass their own version so dev-yaml edits can never drift a
+            frozen recipe.
     """
     if version is None:
-        path = _RL_EXP_DIR / "versions" / _VERSION_FAMILY / "lizard_params.yaml"
+        path = _LINE_DIR / _PARAMS_NAME
     else:
-        path = _RL_EXP_DIR / "versions" / _VERSION_FAMILY / version / "lizard_params.yaml"
+        path = _LINE_DIR / version / _PARAMS_NAME
     stat = path.stat()
     # deepcopy on every call, the first one included: the cache holds the parsed document,
     # the caller gets its own tree. What is frozen is the file, not the object built from it,
@@ -88,10 +97,11 @@ class LizardFlatEnvCfg(LocomotionVelocityRoughEnvCfg):
     # by, instead of guessing from a task id or an entry-point path. ClassVar on purpose
     # -- a plain member would be back-filled into a dataclass field and change every
     # task's config snapshot, turning a declaration into a golden refresh.
-    params_line: ClassVar[str] = _VERSION_FAMILY
+    params_line: ClassVar[str] = _LINE_KEY
 
     # param generation: None = live dev yaml (family experiments);
-    # a frozen version ("v0", "v1", ...) reads versions/<family>/<version>/lizard_params.yaml
+    # a frozen version ("v0", "v1", ...) reads
+    # versions/<family>/main/<version>/main_params.yaml
     params_version = None
 
     def __post_init__(self):

@@ -24,7 +24,7 @@ from rl_exp.tasks.teacher_env_cfg import (  # noqa: E402
     LizardRoughTeacherEnvCfg_V10_PLAY,
 )
 
-_PARAMS = _REPO / "rl_exp" / "versions" / "lizard" / "v10" / "lizard_params.yaml"
+_PARAMS = _REPO / "rl_exp" / "versions" / "lizard" / "main" / "v10" / "main_params.yaml"
 
 # yaml: removal recorded as a null knob; v3 frozen record intact
 params = yaml.safe_load(_PARAMS.read_text(encoding="utf-8"))

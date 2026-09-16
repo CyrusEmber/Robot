@@ -41,7 +41,7 @@ def _bucket_jitter_check(train_env, reset_info):
 
     term = train_env.unwrapped.command_manager.get_term("base_velocity")
     assert isinstance(term, ParticleVelocityCommand), f"TRAIN command term is {type(term).__name__}"
-    v11_yaml = _REPO / "rl_exp" / "versions" / "lizard" / "v11" / "lizard_params.yaml"
+    v11_yaml = _REPO / "rl_exp" / "versions" / "lizard" / "main" / "v11" / "main_params.yaml"
     v11y = yaml.safe_load(v11_yaml.read_text(encoding="utf-8"))["v11"]
     buckets = torch.tensor(v11y["velocity_buckets"])
     vx = term.vel_command_b[:, 0]

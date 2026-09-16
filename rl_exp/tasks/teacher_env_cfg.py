@@ -42,7 +42,7 @@ from isaaclab.managers import ObservationTermCfg as ObsTerm
 from isaaclab.managers import RewardTermCfg as RewTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.managers import TerminationTermCfg as DoneTerm
-from isaaclab.sensors import RayCasterCfg, patterns
+from isaaclab.sensors import patterns
 from isaaclab.terrains import TerrainGeneratorCfg
 from isaaclab.utils.configclass import configclass
 
@@ -53,7 +53,7 @@ from isaaclab_tasks.manager_based.locomotion.velocity.velocity_env_cfg import (
 )
 from isaaclab_tasks.utils import preset
 
-from rl_exp.tasks import teacher_mdp
+from rl_exp.tasks import components, teacher_mdp
 from rl_exp.tasks.param_grid_terrain import build_param_grid_terrain_cfg
 from rl_exp.tasks.play_utils import apply_play_wiring
 from rl_exp.tasks.staged_curriculum import StageCfg, StagedCurriculumTerm, StagedCurriculumTermCfg
@@ -64,6 +64,12 @@ _RL_EXP_DIR = pathlib.Path(__file__).resolve().parents[1]
 # family layer constant -- own copy by the zero-family-import discipline (drift
 # fails loudly: wrong path raises at cfg construction)
 _VERSION_FAMILY = "lizard"
+
+# ARCH_PLAN 2.1a: own copy of the main line's handle and directory (same discipline as
+# above -- drift raises at construction instead of reading a stale tree)
+_LINE_KEY = f"{_VERSION_FAMILY}/main"
+_LINE_DIR = _RL_EXP_DIR / "versions" / _VERSION_FAMILY / "main"
+_PARAMS_NAME = "main_params.yaml"
 
 
 @functools.lru_cache(maxsize=64)
@@ -82,8 +88,8 @@ def _params_document(path: str, stamp: tuple[int, int]) -> dict:
 
 
 def _load_params(version: str) -> dict:
-    """Load the frozen lizard_params.yaml copy of ``version`` (never the dev yaml)."""
-    path = _RL_EXP_DIR / "versions" / _VERSION_FAMILY / version / "lizard_params.yaml"
+    """Load the frozen main_params.yaml copy of ``version`` (never the dev yaml)."""
+    path = _LINE_DIR / version / _PARAMS_NAME
     stat = path.stat()
     # deepcopy on every call, the first one included: the cache holds the parsed document,
     # the caller gets its own tree. What is frozen is the file, not the object built from it,
@@ -520,9 +526,9 @@ class LizardRoughTeacherEnvCfg(LocomotionVelocityRoughEnvCfg):
 
     # declared owner: the recipe line every gate routes by (ClassVar so this statement
     # about the recipe does not enter the config snapshot and move the golden)
-    params_line: ClassVar[str] = _VERSION_FAMILY
+    params_line: ClassVar[str] = _LINE_KEY
 
-    # v2 = latest (paper-aligned privileged obs); see versions/lizard/v2/NOTES.md
+    # v2 = latest (paper-aligned privileged obs); see versions/lizard/main/v2/NOTES.md
     params_version = "v2"
 
     def __post_init__(self):
@@ -600,21 +606,19 @@ class LizardRoughTeacherEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.scene.terrain.terrain_type = "generator"
         self.scene.terrain.terrain_generator = TEACHER_TERRAINS_CFG
         self.scene.terrain.max_init_terrain_level = 5
-        # bodies live under the importer's Geometry scope (flattened USD:
-        # /Robot/Geometry/base_link); the base task assumes /Robot/base.
-        # Pattern covers the full leg span (feet at |x| up to ~1.4 m), 0.2 m
-        # resolution -> 15x9 = 135 points.
-        self.scene.height_scanner = RayCasterCfg(
-            prim_path="{ENV_REGEX_NS}/Robot/Geometry/base_link",
-            offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 20.0)),
-            ray_alignment="yaw",
-            pattern_cfg=patterns.GridPatternCfg(resolution=0.2, size=[2.8, 1.6]),
-            debug_vis=False,
-            mesh_prim_paths=["/World/ground"],
-        )
-        # scanner at the policy rate: same cadence the base class gives the
-        # stock scanner (the family replacement accidentally leaves 0 -> 200 Hz)
-        self.scene.height_scanner.update_period = self.decimation * self.sim.dt
+        # height sensing: one writer for the whole component -- v1/v2 the ground grid
+        # scanner, v3+ four per-foot rings with their geometry from the yaml. The
+        # recipes that swapped form used to null the scanner here and build the rings
+        # in their own subclass; the choice resolves by version now, so no subclass
+        # writes any of these names.
+        for name, sensor in components.height_sensing(
+            self.params_version,
+            decimation=self.decimation,
+            dt=self.sim.dt,
+            params=params,
+            ring_pattern_cls=RingPatternCfg,
+        ).items():
+            setattr(self.scene, name, sensor)
 
         # --- rewards / terminations: lizard body-name patterns from SSOT ---
         self.rewards.feet_air_time.params["sensor_cfg"] = SceneEntityCfg(
@@ -952,28 +956,9 @@ class LizardRoughTeacherEnvCfg_V3(LizardRoughTeacherEnvCfg):
         ck = v3["curriculum_ck"]
 
         # --- C1/C2: per-foot ring casters replace the base height scanner ---
-        # (the casters also register /World/ground in RayCaster.meshes, which
-        # the priv foot_contact_normals / r_fc raycasts rely on)
-        self.scene.height_scanner = None
-        pattern_cfg = RingPatternCfg(
-            ring_counts=tuple(ring["ring_counts"]),
-            ring_radii=tuple(ring["ring_radii"]),
-        )
-        update_period = self.decimation * self.sim.dt
-        for foot in ("lf", "rf", "rl", "rr"):
-            setattr(
-                self.scene,
-                f"{foot}_foot_ring",
-                RayCasterCfg(
-                    prim_path=f"{{ENV_REGEX_NS}}/Robot/Geometry/{foot}_foot",
-                    offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, ring["ray_offset_z"])),
-                    ray_alignment="yaw",
-                    pattern_cfg=pattern_cfg,
-                    debug_vis=False,
-                    mesh_prim_paths=["/World/ground"],
-                    update_period=update_period,
-                ),
-            )
+        # (built once in the base class by components.height_sensing, which resolves the
+        # sensing form by version; `ring` below is still the yaml geometry for the obs
+        # terms and for the priv foot_contact_normals / r_fc raycasts)
 
         # --- obs restructure: single flat policy group -> three named groups ---
         # group attr insertion order == term concat order (manager reads __dict__);

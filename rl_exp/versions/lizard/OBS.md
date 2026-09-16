@@ -66,7 +66,7 @@ v3 obs 不再是单向量拼接，而是三个**命名 obs 组**（`teacher_netw
 | `extero` | 208 | 4 脚 × 52 点环形扫描，term 顺序 lf/rf/rl/rr（网络按 `[N,4,52]` reshape 的契约）；`height_scan` 相对脚高、`scan_offset=0.0`（v2 的 −0.5 是为 base 高度居中设计，脚环不适用） |
 | `priv` | 83 | 与 v2 特权段逐项相同（真值速度 6 + contact 4 + air 4 + mass 27 + forces 12 + normals 12 + friction 4 + thigh_shank 8 + wrench 6） |
 
-**v3 有意偏差声明**（细节与依据见 `versions/lizard/v3/PLAN.md` §6.5/§10 v3.3）：
+**v3 有意偏差声明**（细节与依据见 `versions/lizard/main/v3/PLAN.md` §6.5/§10 v3.3）：
 真值速度/逐 body 质量超集（同 v2 决策 B）；无历史/无 CPG（蒸馏侧补）；r_fc 取
 防拖脚反向语义（论文罚"抬太高"）；undesired_contacts 豁免 c_k 恒定 -1.0；
 DR 课程不含 friction（`foot_friction_truth` 读回缓存只在 startup 语义有效）；

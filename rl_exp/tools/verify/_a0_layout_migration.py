@@ -39,6 +39,7 @@ MAIN = FAMILY / "main"
 _LINE = "lizard"
 _TARGET_LINE = "lizard/main"
 _VERSION_DIR = re.compile(r"^v[0-9]+$")
+PARAMS_SUFFIX = "_params.yaml"  # mirrors recipe_lines: a parameter file names its own line
 
 # The files A0 has to write after the moves (its own checklist below). The precondition is an
 # intersection against this set plus the paths that move -- an unrelated dirty file is not
@@ -64,10 +65,12 @@ WRITE_SET = (
 
 CHECKLIST = f"""follow-up edits A0 still needs (not done by this script):
   recipe_lines.py        drop the "main line is the family root" special case; key the
-                         main line as {_TARGET_LINE!r}; is_main_line must become
+                         main line as {_TARGET_LINE!r} (done, with the family directory
+                         no longer a line at all); is_main_line must become
                          name == "main" -- "/" not in key would now call every side line
-                         a main line; relax the version-directory rule so a line's first
-                         recipe need not be called v1
+                         a main line (done); the version-directory rule still says v<N>,
+                         and relaxing it is only needed when a line's first recipe is not
+                         called v1 -- baseline chose v1, so nothing to do today
   check_dr_parity.py     version path lists and the asset-lock keys (regenerate with
                          --update-locks and review the diff field by field)
   check_version_docs.py  family-relative version keys ({_TARGET_LINE}/vN) + FAMILY/FILEMAP rows
@@ -163,7 +166,8 @@ def plan() -> tuple[list[tuple[str, str]], list[str]]:
         refusals.append(f"{MAIN} already exists -- the migration either ran or started twice")
 
     versions = sorted(p.name for p in FAMILY.iterdir() if p.is_dir() and _VERSION_DIR.match(p.name))
-    for name in versions + ["cfg_lock.json", f"{_LINE}_params.yaml"]:
+    params = f"{MAIN.name}{PARAMS_SUFFIX}"  # the basename rule: a file names its own line
+    for name in [*versions, "cfg_lock.json"]:
         source = FAMILY / name
         if not source.exists():
             continue
@@ -171,12 +175,20 @@ def plan() -> tuple[list[tuple[str, str]], list[str]]:
             refusals.append(f"{source.relative_to(_REPO)} has no tracked files -- git mv would refuse it")
         moves.append((str(source.relative_to(_REPO)), str((MAIN / name).relative_to(_REPO))))
 
-    # the basename rule: once the line directory is `main`, every parameter file is
-    # main_params.yaml -- the dev file and one per frozen version
+    # the line's own parameters: moved *and* renamed. The first attempt renamed only the
+    # frozen copies and left main/lizard_params.yaml behind, which discovery then refused
+    # -- the rule is that a path names its line.
+    dev = FAMILY / f"{_LINE}{PARAMS_SUFFIX}"
+    if dev.exists():
+        if not tracked(dev):
+            refusals.append(f"{dev.relative_to(_REPO)} has no tracked files -- git mv would refuse it")
+        moves.append((str(dev.relative_to(_REPO)), str((MAIN / params).relative_to(_REPO))))
+
+    # one per frozen version
     for name in versions:
-        source = MAIN / name / f"{_LINE}_params.yaml"
-        if (FAMILY / name / f"{_LINE}_params.yaml").exists():
-            moves.append((str(source.relative_to(_REPO)), str((MAIN / name / "main_params.yaml").relative_to(_REPO))))
+        source = MAIN / name / f"{_LINE}{PARAMS_SUFFIX}"
+        if (FAMILY / name / f"{_LINE}{PARAMS_SUFFIX}").exists():
+            moves.append((str(source.relative_to(_REPO)), str((MAIN / name / params).relative_to(_REPO))))
 
     return moves, refusals
 

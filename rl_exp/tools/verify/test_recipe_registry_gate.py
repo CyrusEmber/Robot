@@ -35,7 +35,7 @@ from recipe_lines import discover  # noqa: E402
 NOTICE_DAY = _dt.date(2026, 9, 16)
 DUE_DAY = _dt.date(2026, 10, 15)
 FREEZE = "2026-10-15"
-MAIN = "lizard"
+MAIN = "lizard/main"
 SIDE = "lizard/parkour"
 
 
@@ -43,7 +43,7 @@ def _tree(tmp: pathlib.Path) -> dict:
     """A synthetic versions tree with a main line and a side line."""
     root = tmp / "versions"
     for line, name, versions in (
-        (root / "lizard", "lizard", ["v0"]),
+        (root / "lizard" / "main", "main", ["v0"]),
         (root / "lizard" / "parkour", "parkour", ["v1"]),
     ):
         line.mkdir(parents=True, exist_ok=True)

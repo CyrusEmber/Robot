@@ -29,7 +29,7 @@ EXP_DIR = pathlib.Path(__file__).resolve().parents[2]
 
 
 def main():
-    with open(EXP_DIR / "versions" / "lizard" / "lizard_params.yaml", encoding="utf-8") as f:
+    with open(EXP_DIR / "versions" / "lizard" / "main" / "main_params.yaml", encoding="utf-8") as f:
         params = yaml.safe_load(f)
 
     urdf_path = str(EXP_DIR / "versions" / "lizard" / "lizard.urdf")

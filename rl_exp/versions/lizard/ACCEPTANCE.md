@@ -492,6 +492,58 @@ ValueError: curriculum state in the checkpoint does not fit this task: runtime.n
 
 ### 回填（执行后）
 
-*待执行后补：实际移动数、`[2] --update-locks` 的逐字段 diff 是否与上表逐项相符、闸门结果与 `[24]` golden 是否漂移。*
+### 回填（执行后，2026-09-16）
+
+| 项 | 结果 |
+|---|---|
+| 实际移动 | **34 项**：16 个版本目录 + 线 `cfg_lock.json` + 线参数 + 16 处改名。**首版脚本漏了线根 dev yaml 的改名**，留下 `main/lizard_params.yaml`，被 `recipe_lines` 当场拒绝（"basename names its line"）⇒ 已补 `git mv` 并把该步写进脚本 |
+| 纯改名 | 55 个文件为 `R`（内容零变化）：线 `cfg_lock.json`、16 组 PLAN/NOTES/base.json 与版本内其它工件 |
+| 允许变化项 | 16 个 `asset_lock.json` 各 **1 行增删**，唯一变化 = 自身 yaml 路径键（`versions/lizard/vN/lizard_params.yaml` → `versions/lizard/main/vN/main_params.yaml`）；**sha256 两侧逐字节相同** ⇒ 改名没动内容；`baseline/v1` 与 `parkour/v1` unchanged；16 个 `base.json` 内容未变 |
+| 线 golden 漂移 | **无** —— `[24] CFG_LOCK_OK (36 tasks, 3 line(s), isaaclab=28a37cecdd43\|rsl_rl=source:28a37cecdd43\|python=3.12.13)`。快照记值不记 yaml 路径，与预期一致（不是"重生成后全绿"，`--update` 全程未跑） |
+| 冻结看守 | `[35] GOLDEN_FROZEN_OK (3 baseline file(s) unchanged since rev 020e6fb)` ⇒ 线 golden 的内容确实没动 |
+| 闸门 | **`ALL_OFFLINE_CHECKS_PASSED (37/37 in 30.7s)`**；`[12] VERSION_DOCS_OK` |
+| 计划外（必须记） | A0 暴露一个**既有缺陷**：`manifest.asset_digest()` 按版本名 glob 资产锁，而 `v1` 现在三条线命中（baseline/main/parkour）⇒ 旧代码取排序第一 = **取错锁**。已改为按声明的 `params_line` 解析；无声明时对多命中**拒绝而不猜**；`rebuild.py` 改为从**记录里的锁路径**反推线（比再查一遍更忠实于记录） |
+| 跟随改动 | `lizard_env_cfg` / `teacher_env_cfg` 的 `params_line`（`lizard` → `lizard/main`）与 yaml 路径常量；6 个闸门/工具的写死路径；FAMILY 16 行键（`\| vN \|` → `\| main/vN \|`）；FILEMAP 16 行路径；活文档散文（FAMILY/PLAN/REWARDS/OBS/README） |
+| 未改（有意） | 冻结记录 `vN/PLAN.md` 与 `NOTES.md` 里的旧路径、`ACCEPTANCE.md` 的历史小节 —— 记录写的是当时那棵树，改写成今天的布局就不再是证据 |
+| 已知上限 | `recipe_lines` 的版本目录规则仍是 `v<N>`；放宽到任意标签只在某线首版不叫 v1 时才需要（baseline 用了 v1 ⇒ 今日不需要） |
+
+## B1 · 组件库切片 1（height sensing，2026-09-16）
+
+**性质**：**追加**条目，阶段 B（`ARCH_PLAN` §2.4）的 B1 第一片。改动面 = 新增 `rl_exp/tasks/components.py`；`rl_exp/tasks/teacher_env_cfg.py` 三处（import、基类单点写入、V3 删掉重复写入）；新增闸门 `test_component_ownership.py`（套件 `[37]`）。
+
+### 落地
+
+| 项 | 内容 |
+|---|---|
+| 组件形态 | `components.height_sensing(version, ...) -> {name: sensor}`：v1/v2 = 单个地面 grid scanner；v3+ = `height_scanner=None` + 4 个 `{foot}_foot_ring`（几何仍读 yaml `v3.foot_ring`） |
+| 写入点 | 由 3 处（基类建 scanner、V3 置 `None`、V3 再建 4 环）并为 **1 处**（基类一次循环 `setattr`） |
+| 版本解析 | 按版本判定（`GRID_SCANNER` / `FOOT_RINGS` 两张表），未知版本**抛错**；不再靠 MRO 静默继承 |
+| 刻意不动 | `RingPatternCfg` / `ring_pattern` 留在 `teacher_env_cfg`（其 `__callable__` 路径已写进 golden 76 处，搬移 = 无行为变化却重写全部 V3+ 条目）；pattern 改由调用方注入 |
+
+### 检查与结果
+
+| 编号 | 命令 | 结果 |
+|---|---|---|
+| 门 1（字段面） | `check_cfg_lock.py` | **通过（A0 落地前那次）**：`36 tasks, 3 line(s)`、`CFG_LOCK_OK` —— 换成单点写入后 36 个任务的 cfg 树逐字段不变 |
+| 门 2（非快照） | `test_component_ownership.py` | **通过**：`COMPONENT_OWNERSHIP_OK (1 component(s), 5 owned name(s), 1 host file(s))`；12 个版本各自解析出**完整且唯一**的形态（grid 形态无环、ring 形态无 grid、四脚环几何一致）；`v99` 未声明版本抛 `ValueError` |
+| 门 2 反证 | 同上 `--self-test` | **通过**：`COMPONENT_OWNERSHIP_SELFTEST_OK` —— 直接赋值 / 写被拥有实体的字段 / 字面量 `setattr` 三种"第二个写入者"都着火，"走组件循环"不着火 |
+| 基线冻结 | `check_golden_frozen.py` | **通过**：`GOLDEN_FROZEN_OK`（见下节重锚） |
+
+### B0 追加：A0 迁移触发的合法重锚
+
+| 项 | 值 |
+|---|---|
+| 触发 | A0 把主线搬进 `versions/lizard/main/`（git staged rename 34 项）：`versions/lizard/cfg_lock.json` → `versions/lizard/main/cfg_lock.json` |
+| 证据 | 迁移前后 sha256 **完全相同** `4326bd0b…a12b`（2,581,820 B）⇒ 内容零变化、纯搬家；另两份基线摘要亦未变 |
+| 处置 | 按本闸门声明的合法路径：同一次改动里改 `FROZEN` 表路径 + 补本条记录，**未改任何摘要值** |
+| 残留 | 锁文件内部 `note` 仍写 `line 'lizard'`（改名收尾属 A0 清单），不影响条目内容，也不影响硬 A 的比较对象 |
+
+### 边界与阻塞（不得据本片宣称通过）
+
+- **门 1 的时点限定**：上表门 1 是 **A0 落地前**的实跑（当时线键仍是 `lizard`）。A0 落地后 `[24]` 独立红于 `lizard: 32 task(s) declare this line … but no such line exists ['lizard/baseline','lizard/main','lizard/parkour']`（`params_line` 收尾在 A0 清单里）⇒ **切到新布局后必须重跑门 1**，本片不以 A0 前的绿替代。
+- **端到端未验证**：全量套件在 `[2]` 即失败（A0 中场：16 个 `asset_lock.json` 键未按 `--update-locks` 重生成），fail-fast 让 `[24]`–`[37]` 全部跳过 ⇒ `[35]/[37]` 与既有条目的共存**本批未验证**。
+- **硬 A（B3）仍不可做**：v11/v12 基线不可由任何 rev 取回（见 B0 节），须待那批内容提交后重跑 clone 等价性。
+- **后续切片**：`terminations` → `terrain block` → `commands` → `obs 组` → `_load_params` 收敛（最后一片等 A1 提交，避免与其缓存/隔离改动互踩）。
+
 
 

@@ -108,7 +108,7 @@ def main() -> int:
             problems.append(f"v3: priv order {groups['priv']} != contract")
 
     # yaml: ring pattern totals to 208 extero dims and c_k step consistency
-    with open(_EXP / "versions" / "lizard" / "v3" / "lizard_params.yaml", encoding="utf-8") as f:
+    with open(_EXP / "versions" / "lizard" / "main" / "v3" / "main_params.yaml", encoding="utf-8") as f:
         params = yaml.safe_load(f)
     v3y = params["v3"]
     counts = v3y["foot_ring"]["ring_counts"]
@@ -153,7 +153,7 @@ def main() -> int:
 
     # yaml: v4 is a verbatim copy of v3's (terrain lives in code, not yaml) --
     # guard the copy's own ring totals and c_k step consistency
-    with open(_EXP / "versions" / "lizard" / "v4" / "lizard_params.yaml", encoding="utf-8") as f:
+    with open(_EXP / "versions" / "lizard" / "main" / "v4" / "main_params.yaml", encoding="utf-8") as f:
         params = yaml.safe_load(f)
     v4y = params["v3"]
     counts = v4y["foot_ring"]["ring_counts"]
@@ -205,7 +205,7 @@ def main() -> int:
         problems.append(f"v5: lin_vel_x range {v5.commands.base_velocity.ranges.lin_vel_x} != (0.0, 3.0)")
 
     # v5 yaml: ring totals, c_k step consistency, r_fc sign
-    with open(_EXP / "versions" / "lizard" / "v5" / "lizard_params.yaml", encoding="utf-8") as f:
+    with open(_EXP / "versions" / "lizard" / "main" / "v5" / "main_params.yaml", encoding="utf-8") as f:
         params = yaml.safe_load(f)
     v5y_v3 = params["v3"]
     counts = v5y_v3["foot_ring"]["ring_counts"]
@@ -272,7 +272,7 @@ def main() -> int:
 
     # v11: joint particle terrain curriculum wiring (plan versions/lizard/v11/PLAN.md)
     v11 = LizardRoughTeacherEnvCfg_V11()
-    with open(_EXP / "versions" / "lizard" / "v11" / "lizard_params.yaml", encoding="utf-8") as f:
+    with open(_EXP / "versions" / "lizard" / "main" / "v11" / "main_params.yaml", encoding="utf-8") as f:
         v11y = yaml.safe_load(f)["v11"]
     v11_runner_steps = LizardTeacherV11PPORunnerCfg().num_steps_per_env
     if v11.curriculum.terrain_levels is not None:
@@ -350,7 +350,7 @@ def main() -> int:
 
     # v12: Miki S8 robustness package (plan versions/lizard/v12/PLAN.md)
     v12 = LizardRoughTeacherEnvCfg_V12()
-    with open(_EXP / "versions" / "lizard" / "v12" / "lizard_params.yaml", encoding="utf-8") as f:
+    with open(_EXP / "versions" / "lizard" / "main" / "v12" / "main_params.yaml", encoding="utf-8") as f:
         v12_params = yaml.safe_load(f)
     v12y = v12_params["v12"]
     v12_runner_steps = LizardTeacherV12PPORunnerCfg().num_steps_per_env

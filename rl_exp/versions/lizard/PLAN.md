@@ -60,7 +60,7 @@ Phase 3  部署: student → ONNX → UE
 
 决策记录:
 
-- **参数版本化**（2026-08-28，用户拍板）: `rl_exp/versions/lizard/vN/` 冻结参数副本 +
+- **参数版本化**（2026-08-28，用户拍板）: `rl_exp/versions/lizard/main/vN/` 冻结参数副本 +
   NOTES.md + tb_scalars.csv；跑 vN 只读 vN 的副本（teacher v0 已钉死 `TEACHER_PARAMS_VERSION="v0"`）。
   家族总文档 `FAMILY.md`（任务注册表/版本历史/开新版本流程）。配方变更才升版，换 seed 不升。
 - **teacher actor 吃特权**（Miki 式 A 方案，用户拍板），蒸馏成本（belief encoder 全套）接受。
@@ -88,7 +88,7 @@ success_rate 0.31，课程全卡 stage 0，地形等级 0.1/9。
 再决定是否动激励。修复方案细节保留在下表，随时可重新应用：
 
 **2026-09-01 重定向**：v1 对照实验已出结论（特权救活趴窝但 fall 上升，v1 NOTES），
-反趴窝杠杆已按论文口径在 **v3** 落地（`versions/lizard/v3/PLAN.md` D1–D4：tilt 终止 +
+反趴窝杠杆已按论文口径在 **v3** 落地（`versions/lizard/main/v3/PLAN.md` D1–D4：tilt 终止 +
 防拖 r_fc 替换 feet_air_time + c_k 惩罚课程 + DR reset 化；接触终止按 D0-6 拍板明确
 不做）。下表候选仅作 v3 失效时的备选升级路径（对应 v3 PLAN §9 风险表"belly-down
 趴窝敞口"行：① 接触惩罚 -1→-5 即本表第 3 行）；挂账 #7 的"奖励修复重应用"以此为准。
@@ -115,7 +115,7 @@ success_rate 0.31，课程全卡 stage 0，地形等级 0.1/9。
 |---|---|---|
 | 1 | ✅ teacher env 独立快照重写（去掉 lizard 中间层继承） | 完成 2026-08-28 |
 | 2 | ✅ teacher_smoke 解包 bug（gym 5 元组）+ 冒烟通过 | 完成 2026-08-28 |
-| 3 | ✅ teacher v1 训练 14000 iters + 验收：对照判出**特权救活趴窝**（零动作 success 0.254 → v1 0.635）；遗留 fall 随迭代上升（0.03→0.33）、gap_40cm 不跳 → `versions\lizard\v1\NOTES.md` | 完成 2026-09-01 |
+| 3 | ✅ teacher v1 训练 14000 iters + 验收：对照判出**特权救活趴窝**（零动作 success 0.254 → v1 0.635）；遗留 fall 随迭代上升（0.03→0.33）、gap_40cm 不跳 → `versions\lizard\main\v1\NOTES.md` | 完成 2026-09-01 |
 | 4 | 摩擦/外力真值 obs term（event 缓存） | 🟡 Phase 2 前 |
 | 5 | 三噪声模型 C++→Python 移植 | 🟡 Phase 2 |
 | 6 | 延迟注入 DR（EP 技巧） | 🟡 UE 部署前 |

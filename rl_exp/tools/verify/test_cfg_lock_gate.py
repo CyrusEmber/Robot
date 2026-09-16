@@ -54,8 +54,8 @@ def _entry(snapshot: dict | None = None, version: str | None = "v1") -> dict:
 
 
 def _tree(root: pathlib.Path) -> dict:
-    """A two-line ``versions/`` tree: ``lizard`` (v1, v2) and ``lizard/parkour`` (v1)."""
-    for key, versions in {"lizard": ["v1", "v2"], "lizard/parkour": ["v1"]}.items():
+    """A two-line ``versions/`` tree: ``lizard/main`` (v1, v2) and ``lizard/parkour`` (v1)."""
+    for key, versions in {"lizard/main": ["v1", "v2"], "lizard/parkour": ["v1"]}.items():
         line_dir = root.joinpath(*key.split("/"))
         line_dir.mkdir(parents=True, exist_ok=True)
         (line_dir / f"{line_dir.name}_params.yaml").write_text("x: 1\n", encoding="utf-8")
@@ -81,7 +81,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = pathlib.Path(tmp)
         lines = _tree(tmp_path / "versions")
-        lizard, parkour = lines["lizard"], lines["lizard/parkour"]
+        lizard, parkour = lines["lizard/main"], lines["lizard/parkour"]
 
         # --- entry-level rules (synthetic: no gym, no framework import) -----------
         good = {g.entry_key(KEY, "Lizard-Test-v1"): _entry(version="v1")}

@@ -41,7 +41,7 @@ from rl_exp.tasks.teacher_env_cfg import (  # noqa: E402
     LizardRoughTeacherEnvCfg_V14_PLAY,
 )
 
-_PARAMS = _REPO / "rl_exp" / "versions" / "lizard" / "v14" / "lizard_params.yaml"
+_PARAMS = _REPO / "rl_exp" / "versions" / "lizard" / "main" / "v14" / "main_params.yaml"
 params = yaml.safe_load(_PARAMS.read_text(encoding="utf-8"))
 v14 = params["v14"]
 roll, head = v14["roll_over"], v14["head_load"]

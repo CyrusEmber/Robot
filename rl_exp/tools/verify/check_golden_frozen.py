@@ -31,12 +31,15 @@ import tempfile
 _REPO = pathlib.Path(__file__).resolve().parents[3]
 
 # Frozen 2026-09-16 at rev 020e6fb, before any stage-B edit; see
-# rl_exp/versions/lizard/ACCEPTANCE.md section "B0 · 基线冻结". Re-baselining is legitimate --
-# it just has to be deliberate: same change edits this table and that record, and states the
+# rl_exp/versions/lizard/ACCEPTANCE.md section "B0 · 基线冻结". Re-baselining is legitimate -- it
+# just has to be deliberate: same change edits this table and that record, and states the
 # reason. Refreshing one side alone is what the freeze forbids.
+#
+# One such edit already happened: A0 moved the main line into versions/lizard/main/ and this
+# path followed it (reason and the digest-unchanged proof are in the record's B0 addendum).
 FROZEN = {
     "rl_exp/versions/cfg_baselines.json": "b18a517c43ddef5f79609dc4dea94080ad8a15926a778835bb0aa8a079c95c03",
-    "rl_exp/versions/lizard/cfg_lock.json": "4326bd0bbf0b0b263fd071d9f3f2b1cc0a51d5137d30050567917eaa6b92a12b",
+    "rl_exp/versions/lizard/main/cfg_lock.json": "4326bd0bbf0b0b263fd071d9f3f2b1cc0a51d5137d30050567917eaa6b92a12b",
     "rl_exp/versions/lizard/parkour/cfg_lock.json": "6c60a9263323547856f4984ee4e373893260f8c99ec88e0a116a17d7cbb4c20a",
 }
 

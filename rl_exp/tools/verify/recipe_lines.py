@@ -78,14 +78,17 @@ class RecipeLine:
 
     @property
     def is_main_line(self) -> bool:
-        """True for the family's own line (``"lizard"``), False for side lines.
+        """True for the line that carries the robot contract (``main``), False otherwise.
 
         Side lines carry a different recipe schema -- ``lizard/parkour`` has no
         ``joint_order``/body-name lists -- so checks that assert the robot contract use
         this to stay main-line-only, while checks about *assets and records* cover every
-        line. Stated here instead of being implied by a glob depth.
+        line. Was ``"/" not in self.key``, which only worked while the main line was the
+        family directory itself: once it moved to ``main/``, every side line's key also
+        has no slash, so that test would have handed ``parkour`` and ``baseline`` to the
+        robot-contract assertions as if they were the main line.
         """
-        return "/" not in self.key
+        return self.name == "main"
 
 
 def _is_version_dir(path: pathlib.Path) -> bool:
@@ -93,16 +96,26 @@ def _is_version_dir(path: pathlib.Path) -> bool:
 
 
 def _line_roots(family_dir: pathlib.Path) -> list[pathlib.Path]:
-    """The family's main line, plus every side line (a subdir holding ``v<N>`` dirs).
+    """Every recipe line under the family: a subdir with ``v<N>`` dirs or its own params file.
 
     One level only: a line of a line has no use case yet, and allowing arbitrary
     nesting would make ``"lizard/parkour"`` ambiguous with ``"lizard/parkour/x"``.
+
+    The family directory itself is no longer a line. It used to be the main line, which
+    made this discovery asymmetric and left ``is_main_line`` to be inferred from the shape
+    of a key; once the main line moved into ``main/`` that asymmetry described nothing, and
+    the family directory -- which holds only assets and family-level records -- would have
+    been read as a line with no parameter SSOT. The second condition keeps a brand-new line
+    visible before its first version is frozen: without it that line's parameters would be
+    a silent skip, which is the failure this module exists to prevent.
     """
-    roots = [family_dir]
+    roots: list[pathlib.Path] = []
     for child in sorted(p for p in family_dir.iterdir() if p.is_dir()):
-        if _VERSION_DIR.fullmatch(child.name):
+        if _is_version_dir(child):
             continue
-        if any(_is_version_dir(entry) for entry in child.iterdir()):
+        if any(_is_version_dir(entry) for entry in child.iterdir()) or (
+            child / f"{child.name}{PARAMS_SUFFIX}"
+        ).is_file():
             roots.append(child)
     return roots
 
@@ -151,6 +164,17 @@ def discover(versions_dir: pathlib.Path | None = None) -> dict[str, RecipeLine]:
     problems: list[str] = []
     lines: dict[str, RecipeLine] = {}
     for family_dir in sorted(p for p in root_dir.iterdir() if p.is_dir()):
+        for stray in sorted(family_dir.glob(f"*{PARAMS_SUFFIX}")):
+            problems.append(
+                f"{stray}: parameters outside any line -- a family directory holds assets and"
+                f" records; its lines own the parameters. A file left here would be a silent"
+                f" skip, which is exactly what a half-finished layout move produces."
+            )
+        for stray in sorted(p for p in family_dir.iterdir() if _is_version_dir(p)):
+            problems.append(
+                f"{stray}: version directory outside any line -- only a line's own directory"
+                f" holds versions ({family_dir.name}/<line>/vN)"
+            )
         for line_root in _line_roots(family_dir):
             key = line_root.relative_to(root_dir).as_posix()
             versions: dict[str, pathlib.Path] = {}

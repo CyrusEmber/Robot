@@ -5,7 +5,7 @@
 
 > **文件逐个说明见 [FILEMAP.md](FILEMAP.md)（新协作者/下一个 AI 必读）**
 
-- `rl_exp/` — 任务包（gym 注册、env cfg、参数版本 versions/lizard/vN、
+- `rl_exp/` — 任务包（gym 注册、env cfg、参数版本 versions/lizard/main/vN、
   Blender 资产管线、工具脚本）。入口文档（家族之家 `rl_exp/versions/lizard/`）：
   - `rl_exp/versions/lizard/FAMILY.md` — 家族总文档（任务表 / 版本历史 / obs 布局）
   - `rl_exp/versions/lizard/PLAN.md` — 训练计划与挂账
@@ -215,7 +215,7 @@ python ablation_harness\eval.py --task Lizard-Rough-v2 --mode nominal --seed 123
 `git config core.hooksPath hooks` 接线（本地配置不随仓走）；全套离线闸门
 仍走 `run_offline_checks.bat`，hook 只是最后防线不是替代。
 
-注意：`versions\lizard\v2\` 是 teacher 运行时依赖（冻结参数），不是备份文档——
+注意：`versions\lizard\main\v2\` 是 teacher 运行时依赖（冻结参数），不是备份文档——
 漏拷 teacher 起不来。目录层级是硬约束（cfg 内 `parents[1]` 路径计算依赖）。
 
 ## 训练

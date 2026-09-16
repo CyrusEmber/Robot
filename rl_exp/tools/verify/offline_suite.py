@@ -90,6 +90,8 @@ CHECKS: list[tuple[str, list[str]]] = [
      [f"{_V}/check_golden_frozen.py"]),
     ("recipe lifecycle decision contract (verdicts / warning shape / flag independence)",
      [f"{_V}/recipe_lifecycle.py"]),
+    ("one writer per structural component (form per recipe version, no second writer)",
+     [f"{_V}/test_component_ownership.py"]),
 ]
 
 

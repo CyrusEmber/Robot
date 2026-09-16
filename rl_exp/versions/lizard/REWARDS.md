@@ -3,7 +3,7 @@
 > **定位**：奖励的"为什么"——每个 term 买什么行为、收什么税、在哪些版本生效。
 > 权重数值的真源是代码与 yaml（本表是镜像，冲突以代码为准）：
 > stock 项 = 框架基类 `velocity_env_cfg.py::RewardsCfg`；teacher 覆盖 =
-> `rl_exp/tasks/teacher_env_cfg.py`；数值 = `versions/lizard/vN/lizard_params.yaml`。
+> `rl_exp/tasks/teacher_env_cfg.py`；数值 = `versions/lizard/main/vN/lizard_params.yaml`。
 > 论文对应：Miki et al. 2022 S7（`papers/miki-perceptive-locomotion/detail.md`）、
 > Cheng et al. 2023 Eq.2（`papers/extreme-parkour/detail.md`）。
 > 姊妹契约：obs 布局见 [OBS.md](OBS.md)（同款约定——语义镜像，数值真源在代码）。
@@ -99,6 +99,6 @@
 | v8.1 | r_slip ×10（−0.003 → −0.03，v6 划脚数据触发的预注册升级） |
 | v12 | r_slip 回 −0.003（用户拍板 2026-09-10；v8.1 升级从未在干净步态配方下探针） |
 
-冻结配方的实际数值以各自 `versions/lizard/vN/lizard_params.yaml` 为准；
+冻结配方的实际数值以各自 `versions/lizard/main/vN/lizard_params.yaml` 为准；
 本表描述 v5 当前形态。改奖励 = 走 versioning 规则（已冻结开 vN+1，
 提案态 vN.M 修订）。

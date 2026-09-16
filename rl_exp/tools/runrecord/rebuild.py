@@ -229,7 +229,16 @@ def _asset_item(recorded: dict, params_version: str | None, problems: list[str],
     if not lock_path.is_file():
         refusals.append(f"assets: lock {lock_rel} is not in this tree")
         return {"retrieval": "none"}
-    live = M.asset_digest(params_version)
+    # the recorded lock names its own line (versions/<family>/<line>/vN/asset_lock.json), so
+    # the line is read from the record instead of guessed: "v1" exists on three lines now,
+    # and a lookup by version name alone returns whichever sorts first
+    line_key = None
+    parts = pathlib.PurePosixPath(str(lock_rel).replace("\\", "/")).parts
+    if "versions" in parts:
+        tail = parts[parts.index("versions") + 1 : -2]
+        if tail:
+            line_key = "/".join(tail)
+    live = M.asset_digest(params_version, line_key)
     if live.get("missing_or_changed"):
         problems.append(f"assets: {live['missing_or_changed'][:3]} (lock says {recorded.get('file_count')} files)")
         return {"retrieval": "none", "lock": lock_rel, "detail": "files missing or changed"}

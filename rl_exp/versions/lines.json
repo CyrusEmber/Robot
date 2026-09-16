@@ -2,7 +2,7 @@
   "format": 1,
   "revision": 2,
   "lines": {
-    "lizard": {
+    "lizard/main": {
       "status": "active",
       "successor": null,
       "retired_at": null,

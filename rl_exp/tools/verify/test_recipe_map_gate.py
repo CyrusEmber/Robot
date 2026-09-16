@@ -30,12 +30,12 @@ from check_recipe_map import bind, load, registered, validate  # noqa: E402
 ENV_V14 = "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V14"
 AGENT_V14 = "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV14PPORunnerCfg"
 TASK = "Lizard-Rough-v14"
-LINES = {"lizard": None, "lizard/parkour": None}
+LINES = {"lizard/main": None, "lizard/parkour": None}
 REGISTERED = {TASK: {"env_cfg_entry_point": ENV_V14, "rsl_rl_cfg_entry_point": AGENT_V14}}
 
 
 def _entry(**over) -> dict:
-    entry = {"line": "lizard", "env_cfg_entry": ENV_V14, "agent_entry": AGENT_V14, "legacy_task_version": "v14"}
+    entry = {"line": "lizard/main", "env_cfg_entry": ENV_V14, "agent_entry": AGENT_V14, "legacy_task_version": "v14"}
     entry.update(over)
     return entry
 

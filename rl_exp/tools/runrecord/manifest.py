@@ -81,7 +81,7 @@ def _atomic_write(path: pathlib.Path, text: str) -> None:
 
 
 
-def asset_digest(params_version: str | None) -> dict:
+def asset_digest(params_version: str | None, line_key: str | None = None) -> dict:
     """Digest of the frozen asset lock (an allow-list, not a dependency closure).
 
     The paths listed by the lock are resolved relative to ``rl_exp`` (that is how the
@@ -91,6 +91,11 @@ def asset_digest(params_version: str | None) -> dict:
     Args:
         params_version: the recipe version whose lock applies, or None for the live
             development recipe (which has no lock).
+        line_key: the recipe line that owns the version. Version names repeat across
+            lines -- ``v1`` exists on main, parkour and baseline -- so a search by version
+            alone has several answers and used to return whichever sorted first. Give the
+            line and the answer is unambiguous; leave it out and several matches are
+            reported rather than guessed.
 
     Returns:
         The asset reference: lock path, lock hash, per-file hash map digest, and the
@@ -98,10 +103,32 @@ def asset_digest(params_version: str | None) -> dict:
     """
     if not params_version:
         return {"lock": None, "detail": "live development recipe: no frozen asset lock"}
-    candidates = sorted(_REPO.glob(f"rl_exp/versions/lizard/**/{params_version}/asset_lock.json"))
-    if not candidates:
-        return {"lock": None, "detail": f"no asset_lock.json for {params_version!r}"}
-    lock_path = candidates[0]
+    lock_path = None
+    if line_key:
+        from rl_exp.tools.verify.recipe_lines import RecipeLineError, discover
+
+        try:
+            lines = discover()
+        except RecipeLineError as err:
+            return {"lock": None, "detail": f"recipe line discovery failed: {err}"}
+        line = lines.get(line_key)
+        if line is None:
+            return {"lock": None, "detail": f"params_line={line_key!r} is not a discovered recipe line"}
+        candidate = line.root / params_version / "asset_lock.json"
+        if not candidate.is_file():
+            return {"lock": None, "detail": f"line {line_key!r} has no {params_version} asset lock"}
+        lock_path = candidate
+    if lock_path is None:
+        candidates = sorted(_REPO.glob(f"rl_exp/versions/lizard/**/{params_version}/asset_lock.json"))
+        if len(candidates) > 1:
+            return {
+                "lock": None,
+                "detail": f"{len(candidates)} lines carry a {params_version} lock"
+                f" {[c.relative_to(_REPO).as_posix() for c in candidates]}; the caller must name the line",
+            }
+        if not candidates:
+            return {"lock": None, "detail": f"no asset_lock.json for {params_version!r}"}
+        lock_path = candidates[0]
     try:
         lock = json.loads(lock_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as err:
@@ -301,7 +328,9 @@ def begin(*, log_dir, task: str | None, argv: list[str], env_cfg, agent_cfg) -> 
             "code": prov.code_sources(),
         }
         version = getattr(env_cfg, "params_version", None)
-        assets = asset_digest(version if isinstance(version, str) else None)
+        assets = asset_digest(
+            version if isinstance(version, str) else None, getattr(type(env_cfg), "params_line", None)
+        )
         ctx.manifest["declaration"] = {
             "recipe": recipe_ref(env_cfg),
             "agent_digest": cs.digest(cs.snapshot(agent_cfg)),
@@ -878,7 +907,8 @@ def _verify_assets(manifest: dict, problems: list[str]) -> list[dict]:
     lock = recorded.get("lock")
     if not lock:
         return [_row("可重建", "未知", f"assets: {recorded.get('detail', 'no lock recorded')}")]
-    fresh = asset_digest(manifest.get("declaration", {}).get("recipe", {}).get("params_version"))
+    declared_recipe = manifest.get("declaration", {}).get("recipe", {})
+    fresh = asset_digest(declared_recipe.get("params_version"), declared_recipe.get("params_line"))
     if fresh.get("manifest_sha256") != recorded.get("manifest_sha256"):
         problems.append("assets: content differs from the recorded lock")
         return [
