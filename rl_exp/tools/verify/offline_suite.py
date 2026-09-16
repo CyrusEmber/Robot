@@ -21,6 +21,10 @@ only under its own temp dir**. Sequential execution used to hide a check that wr
 shared path -- two files in one repo root, not an interleaving bug -- but in parallel that
 becomes a race, so a new check that must write somewhere shared has to say so here rather
 than assume the suite is serial.
+
+The rules and the cost budgets are written down in ``OFFLINE_CHECKS.md`` (next to this
+file): read it before adding a check. The shape gate ``check_suite_shape.py`` enforces the
+static half of it, and the budgets below are enforced here because they need the timings.
 """
 
 from __future__ import annotations
@@ -92,12 +96,28 @@ CHECKS: list[tuple[str, list[str]]] = [
      [f"{_V}/recipe_lifecycle.py"]),
     ("one writer per structural component (form per recipe version, no second writer)",
      [f"{_V}/test_component_ownership.py"]),
+    ("suite shape (single list / entries exist / no undeclared interpreter children)",
+     [f"{_V}/check_suite_shape.py"]),
 ]
 
 
 def default_jobs() -> int:
     """Workers to use: half the cores, so the import bursts do not thrash each other."""
     return max(1, min(6, (os.cpu_count() or 2) // 2))
+
+
+# What stops the suite growing back into minutes (OFFLINE_CHECKS.md). A check is a process
+# that pays an interpreter + torch import before its first assertion, so the cost of the
+# suite is (how many checks) x (that import) + what a check does inside. Both numbers are
+# declared here, on purpose: raising one is a reviewable act, and the alternative is that
+# the suite silently becomes the thing nobody runs.
+#
+# SERIAL_BUDGET_S is the *sum* of every check's own seconds, not the wall clock: cores and
+# --jobs change the wall clock, so a wall budget would be a machine-speed gate. The sum is
+# what grew from 170s to 200s+ as checks were added, and it is what a check has to justify.
+PER_CHECK_BUDGET_S = 25.0
+SERIAL_BUDGET_S = 400.0
+SOLO_RECHECKS = 3  # breaching checks re-run alone, worst first, before they are blamed
 
 
 def _run_one(interpreter: str, argv: list[str], stop: threading.Event) -> tuple[int | None, str, float]:
@@ -140,17 +160,19 @@ def _verdict(output: str) -> str:
 
 def run_checks(
     interpreter: str, jobs: int, checks: list[tuple[str, list[str]]], verbose: bool = False
-) -> tuple[list[tuple[int, str, int, str]], float, int]:
+) -> tuple[list[tuple[int, str, int, str]], float, int, list[tuple[int, str, float]]]:
     """Run every check, at most ``jobs`` at a time, stopping the queue on the first failure.
 
     Returns:
-        ``(failures, seconds, skipped)`` with one ``(index, label, exit code, output)`` per
-        failed check, in list order. Fail-fast is kept from the sequential suite: a check
-        that turns red stops the queue, so only the checks already in flight finish -- none
-        of them is ever silently dropped from the report.
+        ``(failures, seconds, skipped, timings)`` with one ``(index, label, exit code, output)``
+        per failed check, in list order, and one ``(index, label, seconds)`` per check that ran.
+        Fail-fast is kept from the sequential suite: a check that turns red stops the queue, so
+        only the checks already in flight finish -- none of them is ever silently dropped from
+        the report.
     """
     stop = threading.Event()
     failures: list[tuple[int, str, int, str]] = []
+    timings: list[tuple[int, str, float]] = []
     skipped = 0
     total = len(checks)
     started_at = time.time()
@@ -166,6 +188,7 @@ def run_checks(
                 skipped += 1
                 print(f"[{index}/{total}] {label} ... skipped (an earlier check failed)", flush=True)
                 continue
+            timings.append((index, label, seconds))
             state = "ok" if code == 0 else f"FAIL rc={code}"
             print(f"[{index}/{total}] {label} ... {state} ({seconds:.1f}s) -> {_verdict(output)}", flush=True)
             if verbose and output:
@@ -173,18 +196,45 @@ def run_checks(
             if code != 0:
                 failures.append((index, label, code, output))
                 stop.set()
-    return sorted(failures), time.time() - started_at, skipped
+    return sorted(failures), time.time() - started_at, skipped, timings
+
+
+def _over_budget(
+    timings: list[tuple[int, str, float]],
+    interpreter: str,
+    checks: list[tuple[str, list[str]]] | None = None,
+) -> tuple[list[tuple[int, str, float]], float]:
+    """Which checks are over budget, and the serial sum.
+
+    A check over ``PER_CHECK_BUDGET_S`` is re-run *alone* before it is blamed: in a wave it
+    shares the machine with five other import bursts, and blaming that would make the budget
+    a load-sensitive gate that gets disabled after its first false red.
+    """
+    checks = CHECKS if checks is None else checks
+    serial = sum(seconds for _, _, seconds in timings)
+    breaches: list[tuple[int, str, float]] = []
+    worst = sorted((t for t in timings if t[2] > PER_CHECK_BUDGET_S), key=lambda t: -t[2])[:SOLO_RECHECKS]
+    for index, label, seconds in worst:
+        _, _, alone = _run_one(interpreter, checks[index - 1][1], threading.Event())
+        over = alone > PER_CHECK_BUDGET_S
+        print(
+            f"  [{index}/{len(checks)}] {label}: {seconds:.1f}s in the wave, {alone:.1f}s alone "
+            f"(budget {PER_CHECK_BUDGET_S:g}s) -- {'over' if over else 'machine load only'}",
+            flush=True,
+        )
+        if over:
+            breaches.append((index, label, alone))
+    return breaches, serial
 
 
 def self_test() -> int:
-    """Prove the scheduler: exit codes are read, and a failure really does skip the queue."""
+    """Prove the scheduler: exit codes are read, a failure skips the queue, budgets blame a check."""
     problems: list[str] = []
-    clean, _, _ = run_checks(
-        sys.executable, 2, [("a", ["-c", "print('VERDICT_A')"]), ("b", ["-c", "print('VERDICT_B')"])]
-    )
+    quick = [("quick", ["-c", "print('q')"])]
+    clean, _, _, _ = run_checks(sys.executable, 2, [("a", ["-c", "print('VERDICT_A')"]), ("b", ["-c", "print('VERDICT_B')"])])
     if clean:
         problems.append(f"all-passing checks reported as failures: {clean}")
-    bad, _, _ = run_checks(
+    bad, _, _, _ = run_checks(
         sys.executable,
         1,
         [("fails", ["-c", "print('VERDICT_NG'); raise SystemExit(3)"]), ("must not run", ["-c", "raise SystemExit(9)"])],
@@ -195,9 +245,21 @@ def self_test() -> int:
         problems.append(f"failure did not carry its exit code and output: {bad[0][2]}")
     # A bad interpreter must read as a failed check (the whole suite red), never as a crash
     # that drops the checks already in flight.
-    missing, _, _ = run_checks(str(_REPO / "no-such-python.exe"), 2, [("x", ["-c", "print(1)"])])
+    missing, _, _, _ = run_checks(str(_REPO / "no-such-python.exe"), 2, [("x", ["-c", "print(1)"])])
     if [index for index, *_ in missing] != [1] or missing[0][2] != 127:
         problems.append(f"a missing interpreter was not reported as a failed check: {missing}")
+    # Budget: only a check that is slow *alone* is blamed; a slow wave is load, not a cost.
+    global PER_CHECK_BUDGET_S
+    saved, PER_CHECK_BUDGET_S = PER_CHECK_BUDGET_S, 0.0
+    try:
+        blamed, serial = _over_budget([(1, "quick", 0.1)], sys.executable, quick)
+    finally:
+        PER_CHECK_BUDGET_S = saved
+    if [index for index, *_ in blamed] != [1] or serial != 0.1:
+        problems.append(f"a check over budget alone was not blamed (or the sum is wrong): {blamed} {serial}")
+    load_only, _ = _over_budget([(1, "quick", 999.0)], sys.executable, quick)
+    if load_only:
+        problems.append(f"machine load was blamed on the check: {load_only}")
     for problem in problems:
         print(f"  FAIL {problem}")
     if problems:
@@ -227,7 +289,7 @@ def main(argv: list[str] | None = None) -> int:
     # passing suite into a traceback on the summary line.
     sys.stdout.reconfigure(errors="replace")
 
-    failures, seconds, skipped = run_checks(args.python, args.jobs, CHECKS, args.verbose)
+    failures, seconds, skipped, timings = run_checks(args.python, args.jobs, CHECKS, args.verbose)
     total = len(CHECKS)
     if failures:
         for index, label, code, output in failures:
@@ -235,7 +297,19 @@ def main(argv: list[str] | None = None) -> int:
             print(output.rstrip())
         print(f"OFFLINE_CHECK_FAILED ({total} check(s): {len(failures)} failed, {skipped} skipped, {seconds:.1f}s, jobs={args.jobs})")
         return 1
-    print(f"ALL_OFFLINE_CHECKS_PASSED ({total}/{total} in {seconds:.1f}s, jobs={args.jobs})")
+    breaches, serial = _over_budget(timings, args.python)
+    if breaches or serial > SERIAL_BUDGET_S:
+        for index, label, alone in breaches:
+            print(f"  [{index}/{total}] {label}: {alone:.1f}s alone > {PER_CHECK_BUDGET_S:g}s per check")
+        if serial > SERIAL_BUDGET_S:
+            print(f"  serial {serial:.0f}s > {SERIAL_BUDGET_S:g}s budget (wall {seconds:.1f}s, jobs={args.jobs})")
+        print(
+            "OFFLINE_SUITE_BUDGET_EXCEEDED (make the check cheaper -- one process per check, no "
+            "re-reading frozen data per cfg, no interpreter children -- or raise the budget in "
+            "the same commit; see rl_exp/tools/verify/OFFLINE_CHECKS.md)"
+        )
+        return 1
+    print(f"ALL_OFFLINE_CHECKS_PASSED ({total}/{total} in {seconds:.1f}s, serial {serial:.0f}s, jobs={args.jobs})")
     return 0
 
 
