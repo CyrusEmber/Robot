@@ -840,7 +840,7 @@ classvar the declaration cannot carry (no class to hold it): v5/play REQUIRES_CU
 
 - `RECIPES["v5"]` 的 train/play 任务 id 是**写出来的**，不从版本串推 —— 改名不能静默把这个闸门指向空。
 - **`recipe.py` 仍不在 `[37]` 的 HOSTS 里**：元素会写 `commands.base_velocity`（`components` 拥有的名字），`play_pins_full_command_range` 就是这么写的。把它加进扫描表会立刻红 —— 元素是独立于 `teacher_env_cfg.py` 的第二类合法写者，要不要扩 `[37]` 的范围，得先定义"元素豁免"的形状，本轮不动。
-- **没有动 `FILEMAP.md`**：工作树里它带着并行侧 obs_protocol 的在飞改动（连同 `runrecord/manifest.py`、`verify/offline_suite.py`、`verify/OFFLINE_CHECKS.md`），一并 `git add` 会把别人的半成品写进我的提交。`recipe.py` 的 FILEMAP 条目留待他们批次落定后补。
+- **`FILEMAP.md` 只补 `[41]` 新打印的那一句**：落笔时它正带着并行侧 obs_protocol 的在飞改动（连同 `runrecord/manifest.py`），整份 `git add` 会把别人的半成品写进我的提交；那批他们随后自行提交（`38d80a6` / `a7e2b27` / `9afc9b8`），补记随之落在一个小提交里。v5 的**元素清单是状态**（上面进度表），代码地图只描述机制，不抄第二份。
 - **未合口（本轮定：不合）**：`components.observations` 的三张手抄表 vs `versions/obs_protocols.json`。理由：`obs_protocol` 自称"只声明 identity、不构建 config"，而 `check_obs_protocol` 是拿声明去比**构造出来的** cfg；让 `components.observations` 反过来读它，闸门就变成声明比声明 —— B3 点名的第一号失败模式（与自己比恒等）。且声明侧仍在飞。等他们 3.1d 落定后再议。
 - 仍未声明：v6 · v8 · v10 · v11 joint SIR 接线 · v12 鲁棒性包 + 环噪声事件 · v13 核替换 · v14 `head_load`，各自还需 PLAY 元素。**每加一个元素跑 `[24]` + `[41]`**。
 
