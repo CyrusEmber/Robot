@@ -98,6 +98,10 @@ CHECKS: list[tuple[str, list[str]]] = [
      [f"{_V}/test_component_ownership.py"]),
     ("suite shape (single list / entries exist / no undeclared interpreter children)",
      [f"{_V}/check_suite_shape.py"]),
+    ("lifecycle startup gate (identity/status/flags; a refusal must leave its T0 verdict)",
+     [f"{_V}/test_lifecycle_gate.py"]),
+    ("launcher (directory-driven plan; its record must match the trainer's T0)",
+     [f"{_V}/test_launcher.py"]),
 ]
 
 
