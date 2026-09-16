@@ -89,7 +89,7 @@ echo [22] configclass field-surface gate falsifier (each drift must still fire)
 echo [23] config snapshot serializer (order / floats / identities / paths / digest)
 "%PY%" rl_exp\tools\verify\test_cfg_snapshot.py || goto :fail
 
-echo [24] recipe golden lock (per-line entries vs versions\<line>\cfg_lock.json, shared baselines)
+echo [24] recipe golden lock (per-line entries vs versions\^<line^>\cfg_lock.json, shared baselines)
 "%PY%" rl_exp\tools\verify\check_cfg_lock.py || goto :fail
 
 echo [25] recipe golden gate falsifier (each drift must still fire)
@@ -110,7 +110,7 @@ echo [29] recipe line lifecycle (identity / retirement evidence / announced noti
 echo [30] recipe lifecycle gate falsifier (each refusal must still fire)
 "%PY%" rl_exp\tools\verify\test_recipe_registry_gate.py || goto :fail
 
-echo [31] recipe identity map (task -> recipe + revision -> config entries, vs registration)
+echo [31] recipe identity map (task id to recipe, revision to config entries, vs registration)
 "%PY%" rl_exp\tools\verify\check_recipe_map.py || goto :fail
 
 echo [32] recipe map gate falsifier (each refusal must still fire)
