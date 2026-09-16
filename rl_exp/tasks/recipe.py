@@ -22,6 +22,7 @@ not moved yet" would pass every check it was asked to pass.
 
 from __future__ import annotations
 
+import isaaclab_tasks.manager_based.locomotion.velocity.mdp as mdp
 from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import RewardTermCfg as RewTerm
 from isaaclab.managers import SceneEntityCfg
@@ -233,6 +234,149 @@ def v5_sir_terrain_curriculum(cfg) -> None:
     )
 
 
+def v6_spine_unlock(cfg) -> None:
+    """v6.1: the whole spine term (rear + neck + tail, 10 joints) becomes live.
+
+    v1-v5 left ``spine_scale`` at the class default 0.0, so the spine and tail were
+    policy-frozen and only wobbled passively under PD 150/10. The value is read from *this*
+    recipe's yaml (0.25), and that is what keeps v1-v5 pinned at 0.0: a recipe is the document
+    it names, not this element's behaviour. The 26-dim action layout and the obs groups
+    (90/208/83) are untouched: only the spine channels start moving.
+    """
+    cfg.actions.joint_pos_spine.scale = _doc(cfg)["action"]["spine_scale"]
+
+
+def v11_joint_sir_curriculum(cfg) -> None:
+    """v11: the joint (terrain combination, velocity bucket) particle filter replaces the row SIR.
+
+    The v5 scalar-row SIR is dropped first -- a field the frozen v11 recipe states, not a detail
+    that can be skipped. The replacement is installed under ``teacher_mdp.JOINT_SIR_TERM`` rather
+    than ``terrain_levels``: the command term and ``check_obs_layout`` look the term up by that
+    same name (v11.1). Measurement returns to the paper's per-state-transition Tr (Lee et al. 2020
+    Eq. 2/3/7, family PLAN ledger #15 option a); velocity enters the particle as a repo extension.
+    The param-sampled terrain and the particle-sourced command term are structural and declared in
+    ``components.TERRAIN_BY_RECIPE`` / ``components.COMMAND_RANGE``.
+    """
+    v11 = _doc(cfg)["v11"]
+    sir = v11["terrain_curriculum"]
+    cfg.curriculum.terrain_levels = None
+    setattr(
+        cfg.curriculum,
+        teacher_mdp.JOINT_SIR_TERM,
+        teacher_mdp.JointSIRTerrainCurriculumCfg(
+            func=teacher_mdp.JointSIRTerrainCurriculum,
+            command_name="base_velocity",
+            band=tuple(sir["band"]),
+            velocity_buckets=tuple(v11["velocity_buckets"]),
+            particles_per_type=int(sir["particles_per_type"]),
+            eval_every=int(sir["eval_every"]),
+            n_traj_min=int(sir["n_traj_min"]),
+            p_transition=float(sir["p_transition"]),
+            p_replay=float(sir["p_replay"]),
+            maintain_mass=float(sir["maintain_mass"]),
+            steps_per_iteration=int(sir["steps_per_iteration"]),
+        ),
+    )
+
+
+def v12_reset_robustness(cfg) -> None:
+    """v12: the Miki et al. 2022 S8 reset/observation robustness package.
+
+    The audit against the paper's S8 list found three gaps on top of v11, all numbers in the
+    recipe's yaml:
+
+    * ``reset_robot_joints`` scales the default pose -- all-zero for this sprawled rig, so it has
+      been a silent no-op. It is dropped and replaced by three ``reset_joints_by_offset`` terms
+      (legs / feet / spine) that randomize initial position *and* velocity, soft-limit clamped.
+    * the base pose/velocity reset ranges move into the yaml (stock base-cfg values until now:
+      pose x/y +-0.5 m, yaw +-3.14 rad, 6-axis velocity +-0.5 -- now tunable).
+    * occasional foot-friction dips and the per-episode height-ring noise state get their reset
+      events. ``components.observations`` owns the four extero terms' func and parameters (the
+      ``NoisyFootRing`` + ``sample_ring_noise`` pair), so this element only wires the events --
+      extero names, order and the 208 width stay the contract.
+
+    Deliberate deviation (user decision 2026-09-10, no student distillation): the noise rides the
+    TEACHER actor, so the priv group stays clean.
+    """
+    v12 = _doc(cfg)["v12"]
+    rr = v12["reset_randomization"]
+    hn = v12["height_noise"]
+
+    cfg.events.reset_robot_joints = None
+    for name, patterns, key in (
+        ("reset_joints_legs", [".*_haa_joint", ".*_hfe_joint", ".*_kfe_joint"], "legs"),
+        ("reset_joints_feet", [".*_foot_joint"], "feet"),
+        ("reset_joints_spine", ["chest_.*", "neck_.*", "tail[0-9]_.*"], "spine"),
+    ):
+        setattr(
+            cfg.events,
+            name,
+            EventTerm(
+                func=mdp.reset_joints_by_offset,
+                mode="reset",
+                params={
+                    "asset_cfg": SceneEntityCfg("robot", joint_names=patterns),
+                    "position_range": tuple(rr["joints"][key]),
+                    "velocity_range": tuple(rr["joint_velocity"]),
+                },
+            ),
+        )
+    cfg.events.reset_base.params["pose_range"] = {a: tuple(r) for a, r in rr["base_pose_range"].items()}
+    cfg.events.reset_base.params["velocity_range"] = {a: tuple(r) for a, r in rr["base_velocity_range"].items()}
+    cfg.events.foot_friction_dip = EventTerm(
+        func=teacher_mdp.FootFrictionDipTerm,
+        mode="reset",
+        params={
+            "asset_cfg": SceneEntityCfg("robot", body_names=".*_foot"),
+            "static_friction_range": tuple(rr["friction_dip"]["static"]),
+            "dynamic_ratio_range": tuple(rr["friction_dip"]["dynamic_ratio"]),
+            "p_dip": float(rr["friction_dip"]["p_dip"]),
+        },
+    )
+    cfg.events.sample_ring_noise = EventTerm(
+        func=teacher_mdp.sample_ring_noise,
+        mode="reset",
+        params={"ratios": tuple(hn["ratios"])},
+    )
+
+
+def v13_miki_kernel(cfg) -> None:
+    """v13: the symmetric Miki et al. 2022 tracking kernel replaces the v5 EP one.
+
+    The v10 diagnosis pinned three holes in ``track_lin_vel_xy_lin``: it scores only the velocity
+    projection onto the command axis, so overspeed is free (measured +48..54% at 0.3 m/s while the
+    ledger read 1.47/1.5), lateral drift is invisible, and a zero command carries no stop gradient.
+    ``exp(-||v_cmd - v_yaw||^2 / 0.25)`` on the full 2D error closes all three. Weight stays 1.5
+    (not the paper's 0.75) so the tracking ceiling and penalty ratios stay identical to v10.
+    """
+    v13 = _doc(cfg)["v13"]["track_goal_vel"]
+    cfg.rewards.track_lin_vel_xy_lin = None
+    cfg.rewards.track_lin_vel_xy_miki = RewTerm(
+        func=teacher_mdp.track_lin_vel_xy_miki,
+        weight=v13["weight"],
+        params={"command_name": "base_velocity", "sigma_sq": v13["sigma_sq"]},
+    )
+
+
+def v14_head_load(cfg) -> None:
+    """v14.3: the front-plant termination becomes a per-step penalty.
+
+    A head-planted pose costs reward but keeps its rollout data, which removes the "sustained
+    nose-down attitude on a slope" false-positive surface along with the termination. The roll-over
+    fall gate that stops a rolled-onto-side/back pose is owned by ``components.terminations``
+    (``components.ROLL_OVER``), not by this element.
+    """
+    head_load = _doc(cfg)["v14"]["head_load"]
+    cfg.rewards.head_load_penalty = RewTerm(
+        func=teacher_mdp.head_load_penalty,
+        weight=head_load["weight"],
+        params={
+            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=tuple(head_load["head_body_names"])),
+            "force_scale": head_load["force_scale"],
+        },
+    )
+
+
 def play_drops_speed_curriculum(cfg) -> None:
     """Evaluation determinism: a good policy must not have its range widened mid-run."""
     cfg.curriculum.speed_curriculum = None
@@ -249,6 +393,13 @@ def play_drops_sir_terrain_curriculum(cfg) -> None:
     cfg.curriculum.terrain_levels = None
 
 
+def play_drops_joint_sir_curriculum(cfg) -> None:
+    """Deterministic evaluation: the joint SIR reassigns spawn origins *and velocities* per
+    episode, so a replay must keep its pairing. The particle command term stays wired and then
+    takes its uniform-range fallback, which is what the frozen v11/v12 PLAY recipes do."""
+    setattr(cfg.curriculum, teacher_mdp.JOINT_SIR_TERM, None)
+
+
 # Named recipe elements, in application order. An element takes the env cfg and owns its fields
 # outright -- the same contract as the five structural components in :mod:`rl_exp.tasks.components`,
 # and it gets the same treatment: one writer, resolved by recipe, never by the MRO.
@@ -261,64 +412,78 @@ ELEMENTS: dict[str, object] = {
     "v5_drops_speed_curriculum": v5_drops_speed_curriculum,
     "v5_reward_package": v5_reward_package,
     "v5_sir_terrain_curriculum": v5_sir_terrain_curriculum,
+    "v6_spine_unlock": v6_spine_unlock,
+    "v11_joint_sir_curriculum": v11_joint_sir_curriculum,
+    "v12_reset_robustness": v12_reset_robustness,
+    "v13_miki_kernel": v13_miki_kernel,
+    "v14_head_load": v14_head_load,
     "play_drops_speed_curriculum": play_drops_speed_curriculum,
     "play_pins_full_command_range": play_pins_full_command_range,
     "play_drops_sir_terrain_curriculum": play_drops_sir_terrain_curriculum,
+    "play_drops_joint_sir_curriculum": play_drops_joint_sir_curriculum,
 }
 
 # What each recipe is: the ordered elements it applies on top of the shared wiring (and, for its
 # PLAY variant, the extra ones after the shared PLAY wiring), plus the registered tasks it claims
 # to reproduce -- named, not derived from the version string, because a task id is a published
 # name and a rename must not silently re-point this gate at nothing.
+#
+# Each delta is stated once, as the previous recipe's delta plus its own additions -- which is what
+# the recipes are (vN's subclass extends vN-1's body). Writing them out again per version would put
+# "v8 declares the same as v6" in three places to keep in sync; sharing the tuple makes it one
+# object. What stays explicit, per recipe, is the task ids.
+_V3_DELTA: tuple[str, ...] = (
+    "v3_contact_headroom",
+    "v3_speed_curriculum",
+    "v3_anti_drag_reward",
+    "v3_ck_clock",
+)
+_V4_DELTA: tuple[str, ...] = (*_V3_DELTA, "v4_stock_contact_stack")
+_V5_DELTA: tuple[str, ...] = (
+    *_V4_DELTA,
+    "v5_drops_speed_curriculum",
+    "v5_reward_package",
+    "v5_sir_terrain_curriculum",
+)
+# v6.1 unlocks the spine; v8 and v10 add nothing to the cfg (the asset flip and the tilt flag are
+# not cfg fields), so the three recipes share this one list and their task ids are the difference.
+_V6_DELTA: tuple[str, ...] = (*_V5_DELTA, "v6_spine_unlock")
+_V11_DELTA: tuple[str, ...] = (*_V6_DELTA, "v11_joint_sir_curriculum")
+_V12_DELTA: tuple[str, ...] = (*_V11_DELTA, "v12_reset_robustness")
+# v13 branches off v10, not off v12: the single-variable kernel fix on the v10 line.
+_V13_DELTA: tuple[str, ...] = (*_V6_DELTA, "v13_miki_kernel")
+_V14_DELTA: tuple[str, ...] = (*_V13_DELTA, "v14_head_load")
+
+_V3_PLAY: tuple[str, ...] = ("play_drops_speed_curriculum", "play_pins_full_command_range")
+_SIR_PLAY: tuple[str, ...] = ("play_drops_sir_terrain_curriculum",)
+"""The only PLAY element v5-v10 and v13/v14 need: they keep v5's yaml-sourced forward range, so the
+``_V3_PLAY`` pair is absent by design -- it would null a curriculum they already dropped and pin the
+range to the curriculum's (-1, 5) where the frozen PLAY recipe says (0, 3)."""
+_JOINT_SIR_PLAY: tuple[str, ...] = ("play_drops_joint_sir_curriculum",)
+"""v11/v12 replace the row SIR with the joint one, so their PLAY guard is the joint term."""
+
 RECIPES: dict[str, dict] = {
     "v1": {"elements": (), "play_elements": (), "train": "Lizard-Rough-v1", "play": "Lizard-Rough-Play-v1"},
     "v2": {"elements": (), "play_elements": (), "train": "Lizard-Rough-v2", "play": "Lizard-Rough-Play-v2"},
-    "v3": {
-        "elements": ("v3_contact_headroom", "v3_speed_curriculum", "v3_anti_drag_reward", "v3_ck_clock"),
-        "play_elements": ("play_drops_speed_curriculum", "play_pins_full_command_range"),
-        "train": "Lizard-Rough-v3",
-        "play": "Lizard-Rough-Play-v3",
-    },
-    # v4's delta is v3's plus one line: the stock contact stack, re-tested on coarser rubble.
-    "v4": {
-        "elements": (
-            "v3_contact_headroom",
-            "v3_speed_curriculum",
-            "v3_anti_drag_reward",
-            "v3_ck_clock",
-            "v4_stock_contact_stack",
-        ),
-        "play_elements": ("play_drops_speed_curriculum", "play_pins_full_command_range"),
-        "train": "Lizard-Rough-v4",
-        "play": "Lizard-Rough-Play-v4",
-    },
-    # v5 rebuilds the reward economics and hands the terrain curriculum to SIR. Its PLAY
-    # variant keeps the yaml's forward-only window: the v3/v4 PLAY elements are deliberately
-    # absent (play_drops_speed_curriculum would null a curriculum v5 already dropped, and
-    # play_pins_full_command_range would pin (-1, 5) where the frozen PLAY recipe says (0, 3)),
-    # so only the SIR rollout guard is left.
-    "v5": {
-        "elements": (
-            "v3_contact_headroom",
-            "v3_speed_curriculum",
-            "v3_anti_drag_reward",
-            "v3_ck_clock",
-            "v4_stock_contact_stack",
-            "v5_drops_speed_curriculum",
-            "v5_reward_package",
-            "v5_sir_terrain_curriculum",
-        ),
-        "play_elements": ("play_drops_sir_terrain_curriculum",),
-        "train": "Lizard-Rough-v5",
-        "play": "Lizard-Rough-Play-v5",
-    },
-    "v6": {"elements": None},
-    "v8": {"elements": None},
-    "v10": {"elements": None},
-    "v11": {"elements": None},
-    "v12": {"elements": None},
-    "v13": {"elements": None},
-    "v14": {"elements": None},
+    "v3": {"elements": _V3_DELTA, "play_elements": _V3_PLAY, "train": "Lizard-Rough-v3", "play": "Lizard-Rough-Play-v3"},
+    "v4": {"elements": _V4_DELTA, "play_elements": _V3_PLAY, "train": "Lizard-Rough-v4", "play": "Lizard-Rough-Play-v4"},
+    "v5": {"elements": _V5_DELTA, "play_elements": _SIR_PLAY, "train": "Lizard-Rough-v5", "play": "Lizard-Rough-Play-v5"},
+    # v6/v8/v10 share one element list: v6.1 unlocks the spine (one yaml-sourced line), v8 and
+    # v10 change no cfg field at all -- v8's flip + joint renames are the asset, v10's tilt
+    # removal is the yaml flag components.terminations already reads. An empty delta is stated
+    # as v6's list, never as ``None``: these recipes ARE declared, what they declare beyond v6
+    # is nothing.
+    "v6": {"elements": _V6_DELTA, "play_elements": _SIR_PLAY, "train": "Lizard-Rough-v6", "play": "Lizard-Rough-Play-v6"},
+    "v8": {"elements": _V6_DELTA, "play_elements": _SIR_PLAY, "train": "Lizard-Rough-v8", "play": "Lizard-Rough-Play-v8"},
+    "v10": {"elements": _V6_DELTA, "play_elements": _SIR_PLAY, "train": "Lizard-Rough-v10", "play": "Lizard-Rough-Play-v10"},
+    # v11 hands the terrain curriculum to the joint particle filter; v12 adds the reset/obs
+    # robustness package on top of it. v13 deliberately branches off v10, NOT off v12 -- it is the
+    # single-variable kernel fix on the v10 line -- so its list is v6's plus its own element, and
+    # the joint SIR / v12 resets are absent from it by construction.
+    "v11": {"elements": _V11_DELTA, "play_elements": _JOINT_SIR_PLAY, "train": "Lizard-Rough-v11", "play": "Lizard-Rough-Play-v11"},
+    "v12": {"elements": _V12_DELTA, "play_elements": _JOINT_SIR_PLAY, "train": "Lizard-Rough-v12", "play": "Lizard-Rough-Play-v12"},
+    "v13": {"elements": _V13_DELTA, "play_elements": _SIR_PLAY, "train": "Lizard-Rough-v13", "play": "Lizard-Rough-Play-v13"},
+    "v14": {"elements": _V14_DELTA, "play_elements": _SIR_PLAY, "train": "Lizard-Rough-v14", "play": "Lizard-Rough-Play-v14"},
 }
 
 

@@ -91,7 +91,7 @@ def classvar_gaps(cls, built) -> list[str]:
 def main(argv: list[str] | None = None) -> int:
     """Gate entry point: build each declared recipe and compare it against the frozen golden."""
     problems: list[str] = []
-    gaps: list[str] = []
+    gaps: dict[str, list[str]] = {}
     mapping = lock.recipe_map()
     try:
         combo_key = lock.combination_key(lock.combination())
@@ -148,7 +148,8 @@ def main(argv: list[str] | None = None) -> int:
                     f" {type(err).__name__}: {err}"
                 )
             else:
-                gaps += [f"{version}/{kind} {gap}" for gap in classvar_gaps(cls, built)]
+                for gap in classvar_gaps(cls, built):
+                    gaps.setdefault(gap, []).append(f"{version}/{kind}")
             rows: list = []
             lock.walk_diff(stored["snapshot"]["env"], cs.snapshot(built), "", rows)
             if rows:
@@ -162,8 +163,10 @@ def main(argv: list[str] | None = None) -> int:
     waiting = recipe.pending()
     if waiting:
         print(f"  not declared yet (not compared): {waiting}")
-    for gap in gaps:
-        print(f"  classvar the declaration cannot carry (no class to hold it): {gap}")
+    # one line per gap class, not one per recipe: eighteen identical lines are a line to skip,
+    # and the recipes that share a gap share it for the same reason
+    for gap, recipes in sorted(gaps.items()):
+        print(f"  classvar the declaration cannot carry: {gap} -- in {', '.join(recipes)}")
     if problems:
         print("RECIPE_BUILD_FAILED")
         return 1
