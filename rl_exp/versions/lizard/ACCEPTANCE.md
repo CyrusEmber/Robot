@@ -790,6 +790,66 @@ ValueError: curriculum state in the checkpoint does not fit this task: runtime.n
 5. 全绿后按仓库惯例提交（pre-commit 三闸会自动跑）。
 6. **未合口**：`components.observations` 仍带三张手抄表（`PROPRIO_TERMS`/`BASELINE_PRIV_TERMS`/`SPEC_TERMS`），而 `tasks/obs_protocol.py` + `versions/obs_protocols.json` 已声明同一身份（按 task 带 `version`/`line`/`groups`/`terms`/`dropped_terms`）。现由 `check_obs_protocol` 互钉；合口 = 组件只留构造、按 (line, version) 读声明，删掉三张表。**是否合、何时合由用户定**（声明面属并行批次）。
 
+---
+
+## 3.1 · obs 协议声明与双源闸门（离线，2026-09-16）
+
+### 前提与范围
+
+依 `ARCH_PLAN.md` v0.21「Step 3 施工件表」。本片**只做离线段**：几何一致性、导出校验、蒸馏不在内（记未执行）。全程不碰并行批次的写点，提交按路径限定。
+
+### 落地（件号 → 产物 → 提交）
+
+| 件 | 产物 | 提交 |
+|---|---|---|
+| 3.1a | `versions/obs_protocols.json`：36 任务 → 11 协议身份，**key = 自身 `groups` 摘要前 12 位** | `6742a64` |
+| 3.1a′ | `versions/lizard/obs_protocol_anchors.json`：已审 `digest`/`label`/`dims`/`purpose`，闸门只读不写 | `6742a64`、`5d4cb38` |
+| 3.1a 读者 | `tasks/obs_protocol.py`（纯 stdlib；脚序由 extero 项名派生） | `6742a64` |
+| 3.1b | `tools/verify/check_obs_protocol.py` + `test_obs_protocol_gate.py`（20 例反证） | `f20a568` |
+| 3.1c | `check_obs_layout.py`／`test_cfg_snapshot.py`／`teacher_smoke_runner.py`／`teacher_smoke.py`／`parkour_smoke.py` 改读声明 | `6ccfe2f`、`5d4cb38` |
+| 3.1d | `manifest.py::recipe_ref` 记协议身份 + 已审摘要 + 宽度（与实构 `obs_layout_digest` 分开命名） | `38d80a6` |
+| 3.1f（离线半） | `test_teacher_networks.py` 脚序标记输入 | `be89bc5` |
+| 3.1g | clip/scale/噪声**数值**入声明（非"有无"） | `6742a64` |
+| 3.1h | `OBS.md` 补 v13/v14/v15 行与真源注记 | `53c0d42` |
+| 套件挂载 | `[42]/[43]`（离线半区；`--live` 归真跑窗口） | `a7e2b27` |
+
+### 检查与结果（本机实跑）
+
+```
+check_obs_protocol.py             11 protocols | 36 tasks | golden 36 | live 0   → 与 golden 一致
+check_obs_protocol.py --live      golden 36 | live 36                          → 两来源一致
+test_obs_protocol_gate.py         OBS_PROTOCOL_GATE_OK（20/20）
+check_obs_layout.py               OBS_LAYOUT_OK（顺序/脚序来自声明）
+test_cfg_snapshot.py              CFG_SNAPSHOT_OK（脚序来自声明）
+pytest test_teacher_networks.py   8 passed
+test_run_manifest.py              RUN_MANIFEST_TEST_OK
+check_suite_shape.py              SUITE_SHAPE_OK（改套件后）
+```
+
+**关键反证（每条都真红）**：交换两个 term（报 `same members, different order`）／交换两个组（报组序）／翻转 `enable_corruption`／`dropped_terms` 加一项／未审锚点／key 与内容脱钩／golden↔声明双向覆盖缺失／`--only` 过滤不掩盖范围内问题。
+
+**3.1f 的能力证明**：把 `teacher_networks` 的 reshape 临时改成 point-major，测试报
+`AssertionError: marking foot 0 (lf) moved latent segments [0, 1, 2, 3]`（1 failed）；改回后 8 passed，且该文件 `git diff` 为空。这正是"维度全对、语义全错"的错法。
+
+**已装事实**（声明不再是 stand-in）：v14 teacher cfg 实测 `obs_protocol=6cd53ec273dc`、`obs_protocol_dims={proprio:90, extero:208, priv:83}`，与本次会话实构的 `obs_layout_digest` 并列记录。
+
+### 本片修正（均由反证或实测抓到）
+
+1. **"有无"不是事实**：首版把噪声/clip 记成存在性，"改一个 sigma"仍为真 ⇒ 改为记**值**（11 个 key 全变，锚点重批）。
+2. **重批必须先自证是表示变化**：重批锚点前对新旧声明做结构对比（`tasks 36/36，structural drift: none`），确认无 term/顺序/dropped/flag 变化，才写新摘要；理由写进锚点注记。
+3. **未测宽度必须抛错**：`dims_for` 对未批协议直接 `ProtocolError`。写 parkour 时当场被拦（PLAY 身份单独成身份、未批宽度），而非给出 0 或默默跳过。
+4. **无向声明补造入口**：v7/v9/v15 目录存在但无注册入口，闸门按"有历史目录、无注册入口"登记，缺号不补造。
+5. **套件提交不卷走并行批次**：工作树含他人的在飞重写 ⇒ 只提交索引（`hash-object -w` + `update-index --cacheinfo`），实测 `1 file changed, 3 insertions(+)`，其重写保持未暂存。
+
+### 边界（**不得**据本节宣称）
+
+- **真 env 未跑**：3.1e（实际 manager 的逐 term 维度、最终张量维度、实际 joint/body 名与索引序）与 3.1f 真跑半、以及 `--live` 入套件 —— 全部**未知**。
+- **v0 家族（flat/rough/curriculum）宽度为空**：无真跑量过，无人断言。
+- **声明不参与 cfg 构造**（与并行批次写点隔离的取舍）：装配事实仍在代码，`components.observations` 的三张表与声明是同一身份的两处，现由 `[8]` + `[42]` 互钉；是否合口由用户定（见上节接手点第 6 条）。
+- 几何一致性、导出前协议校验、蒸馏数据 manifest = **未执行**。
+- `OBS.md` 的 v15 行只声明"有目录、无入口"，不声明其布局。
+- 本节为**离线段**通过，**不得**称为"Step 3 全部通过"。
+
 
 
 
