@@ -89,7 +89,7 @@ echo [22] configclass field-surface gate falsifier (each drift must still fire)
 echo [23] config snapshot serializer (order / floats / identities / paths / digest)
 "%PY%" rl_exp\tools\verify\test_cfg_snapshot.py || goto :fail
 
-echo [24] recipe golden lock (every registered task/PLAY vs versions\lizard\cfg_lock.json)
+echo [24] recipe golden lock (per-line entries vs versions\<line>\cfg_lock.json, shared baselines)
 "%PY%" rl_exp\tools\verify\check_cfg_lock.py || goto :fail
 
 echo [25] recipe golden gate falsifier (each drift must still fire)
@@ -100,6 +100,15 @@ echo [26] run manifest (T0/T1 record, checkpoint infos, external index, --verify
 
 echo [27] isolation rebuild gate (material capture/refusal, sources, missing-file negative test)
 "%PY%" rl_exp\tools\verify\test_rebuild_gate.py || goto :fail
+
+echo [28] recipe line discovery (yaml/lock convention, refusals must fire)
+"%PY%" rl_exp\tools\verify\test_recipe_lines.py || goto :fail
+
+echo [29] recipe line lifecycle (identity / retirement evidence / announced notice period)
+"%PY%" rl_exp\tools\verify\check_recipe_registry.py || goto :fail
+
+echo [30] recipe lifecycle gate falsifier (each refusal must still fire)
+"%PY%" rl_exp\tools\verify\test_recipe_registry_gate.py || goto :fail
 
 echo ALL_OFFLINE_CHECKS_PASSED
 exit /b 0

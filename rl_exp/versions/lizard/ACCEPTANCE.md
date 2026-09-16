@@ -344,5 +344,36 @@ ValueError: curriculum state in the checkpoint does not fit this task: runtime.n
 | 逐文件归属 | **不可证**：R1 只记整体 diff 摘要（`cc25f24b`，286 行）+ 文件清单（同 5 个文件），未逐文件记摘要，内容也未落盘 ⇒ 按硬约束 6 记**未知**；不得反推"只差 train.py" |
 | extras 实际影响面（当前内容由 `fork_patches/local_tree_extras.patch` 钉住，`git apply --check --reverse` 通过） | `isaaclab.bat` 置空、`anymal_c_env.py` 加 `set_command` ⇒ **不在 lizard 路径**（bat 不参与 `python scripts/…`；anymal 是另一条 direct 任务）。`velocity_env_cfg.py` 的 DR 改动分两半：**值**半边被本仓覆盖（`lizard_params.yaml:141-142` = `[0.4,1.2]/[0.3,1.0]`，由 `lizard_env_cfg.py:159-160`、`teacher_env_cfg.py:614-615`、`parkour_env_cfg.py:424-425` 显式赋值）；**模式与节拍**半边（`base_external_force_torque.mode=interval` 及 `interval_range_s`、`push_robot.interval_range_s`）**未覆盖 ⇒ 继承进 lizard**，golden 里已能看到该形状（`mode: interval`） |
 | 是否补 C 层 | **不需要**：可归属的增量是 `train.py`/`play.py` 的 wrapper 与恢复门，已由 1.3a S01–S10 + 1.4b C 层覆盖；不可归属部分按未知处理，既不据此判失效，也不据此补跑 |
-| **新登记风险** | fork 树里的 DR 放大**会静默改变新 run 的 DR**（值被本仓覆盖、模式与节拍走继承），目前只有 golden 差异能抓到。这同时是"golden 承重"的正面证据。建议后续把这三处 DR 改动显式收编进本仓参数（或至少在 `fork_patches` 里标明其语义），避免"改 fork 树 = 改实验且无痕" |
+| **新登记风险** | fork 树里的 DR 放大**会静默改变新 run 的 DR**（值被本仓覆盖、模式与节拍走继承），目前只有 golden 差异能抓到。这同时是"golden 承重"的正面证据。建议后续把这三处 DR 改动显式收编进本仓参数（或至少在 `fork_patches` 里标明其语义），避免“改 fork 树 = 改实验且无痕” |
+
+## 2.1 · 配方线生命周期（离线半，2026-09-16）
+
+**性质**：**追加**条目。只覆盖 `ARCH_PLAN.md` §2.1/§2.2 的**离线部分**（L01 全部、L05/L06 的离线半边）。L02/L03/L04 与 L05/L06 的入口侧**未跑，记未知**；旧入口尚未接线 ⇒ 只能声明"新入口限制有效"，不得据本批宣称 Step 2 通过。
+
+### 前提
+
+| 项 | 值 |
+|---|---|
+| 项目 rev | `2a3883c`；**工作树未冻结** —— 另有并行批次的未提交改动（`rl_exp/tasks/*.py`、`cfg_lock.json`、`FAMILY.md`、`PLAN.md`、`check_cfg_lock.py`、`check_dr_parity.py`、`check_version_docs.py`、`run_offline_checks.bat`，以及新增的 `recipe_lines.py`、`versions/cfg_baselines.json`、`versions/lizard/parkour/cfg_lock.json`、`versions/lizard/v15/`）。本批改动 = 新增 `versions/lines.json`、`check_recipe_registry.py`、`test_recipe_registry_gate.py`；改 `run_offline_checks.bat`（`[29][30]`）与 `ARCH_PLAN.md` |
+| 任务 id | 不适用（离线闸门，不构造 env；线由 `recipe_lines.discover()` 发现） |
+| 设备 / env 数 / seed | 不适用（无 sim、无 env、无随机源） |
+| 框架组合 | 未绑定（本批为纯文本 gate，不读 isaaclab/rsl_rl 版本） |
+| 预设容差 | 无（离散判定：每条规则红或绿） |
+
+### 检查与结果
+
+| 编号 | 命令 | 结果 |
+|---|---|---|
+| L01 显式身份 | `python rl_exp\tools\verify\check_recipe_registry.py` | **通过**：`recipe lines discovered: 2 ['lizard', 'lizard/parkour']`、`index: lines.json revision=1 entries=2`、`lifecycle consistent`。未登记线、悬空线、第三态 `status`、缺字段、夹带 run 字段均被拒绝 |
+| L05 记录冻结（离线半边） | 同上 | **通过**：索引入口键白名单（夹带 run-scoped 字段即红）；生命周期不是 env/agent cfg 的输入 ⇒ 不进配方摘要。"启动后改目录，原 T1 不变"需 manifest 接线 ⇒ **未知** |
+| L06 迁移生效（离线半边） | `python rl_exp\tools\verify\test_recipe_registry_gate.py` | **通过**：23 例反证 + 1 例时钟无关性全部着火。提示期（`active` + 声明 + 条件未满足）判绿、`retired` 且条件已满足判绿、提前退休判红、到期仍 `active` 判红、自由文本条件判红。"提示期放行结果与无声明 `active` 逐项相同"需入口侧 ⇒ **未知** |
+| 反证先行 | 同上 | 每条拒绝都由合成树 + 合成索引驱动，未触碰真实索引；`retire_not_before` 为 revision 型时同一索引在两个不同日期判据一致（无时钟依赖） |
+
+### 结论与边界
+
+- **通过**：L01（身份解析与拒绝）；L05/L06 的离线半边
+- **未知**：L02（入口执行）、L03（历史续训）、L04（历史兼容）、L05/L06 的入口侧 —— 全部需 §2.2 接线，属阶段 C
+- **未做**：A3（`check_cfg_lock` 身份改消费显式映射）等锁格式 v3 结构冻结后重读；A0（布局改造 `main/` + `baseline`、参数文件按闸门改名、`is_main_line` 判据更换）等并行批次落地
+- **口径**：本批**未跑全量套件**（`run_offline_checks.bat` 端到端），只跑了新增两条 ⇒ `[2][12][24][28]` 与新增条目的共存**未在本批验证，记未知**
+- **证据**：gate 脚本 + 上表命令（未另存日志文件；`verify_logs/` 现存的是套件整跑日志）
 

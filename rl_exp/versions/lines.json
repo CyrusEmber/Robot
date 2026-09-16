@@ -1,0 +1,20 @@
+{
+  "format": 1,
+  "revision": 1,
+  "lines": {
+    "lizard": {
+      "status": "active",
+      "successor": null,
+      "retired_at": null,
+      "reason": null,
+      "deprecation": null
+    },
+    "lizard/parkour": {
+      "status": "active",
+      "successor": null,
+      "retired_at": null,
+      "reason": null,
+      "deprecation": null
+    }
+  }
+}

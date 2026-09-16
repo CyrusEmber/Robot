@@ -1,0 +1,4 @@
+{
+  "base": "v14",
+  "note": "v14 recipe (roll-over gate + head-load penalty on the v13 Miki kernel) with the terrain curriculum swapped: v5 row SIR -> v11 joint particle SIR (param-grid combo x velocity bucket), plus the ParticleVelocityCommand it requires"
+}

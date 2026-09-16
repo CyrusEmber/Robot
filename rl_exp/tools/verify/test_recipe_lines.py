@@ -1,0 +1,111 @@
+# -*- coding: utf-8 -*-
+"""Negative control for recipe_lines.discover: every refusal must actually fire.
+
+The gate's value is not "it finds the yaml" -- it is "an unrecognised tree is an error
+instead of a silent skip", so each convention violation is tampered for explicitly and
+must raise. A discovery entry whose leniency modes were never demonstrated is how the
+three previous copies drifted apart in the first place.
+"""
+
+import pathlib
+import sys
+import tempfile
+
+sys.path.insert(0, ".")
+sys.path.insert(0, "rl_exp/tools/verify")
+from recipe_lines import RecipeLineError, discover  # noqa: E402
+
+PROBLEMS: list[str] = []
+
+
+def check(name: str, ok: bool, detail: str = "") -> None:
+    print(f"  {'ok  ' if ok else 'FAIL'} {name}{'' if ok else f': {detail}'}")
+    if not ok:
+        PROBLEMS.append(f"{name}: {detail}")
+
+
+def _make_tree(root: pathlib.Path, lines: dict[str, list[str]]) -> pathlib.Path:
+    """Build ``versions/<key>/<key_leaf>_params.yaml`` plus one yaml per version dir."""
+    for key, versions in lines.items():
+        line_root = root.joinpath(*key.split("/"))
+        line_root.mkdir(parents=True, exist_ok=True)
+        (line_root / f"{line_root.name}_params.yaml").write_text("x: 1\n", encoding="utf-8")
+        for version in versions:
+            version_dir = line_root / version
+            version_dir.mkdir(exist_ok=True)
+            (version_dir / f"{line_root.name}_params.yaml").write_text("x: 1\n", encoding="utf-8")
+    return root
+
+
+def _refuses(name: str, root: pathlib.Path, keyword: str) -> None:
+    try:
+        discover(root)
+    except RecipeLineError as err:
+        check(name, keyword in str(err), f"raised without {keyword!r}: {err}")
+        return
+    check(name, False, "no error raised")
+
+
+def main() -> int:
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = pathlib.Path(tmp)
+
+        # --- happy path: main line + side line, numeric version order -------------
+        root = _make_tree(tmp_path / "ok", {"lizard": ["v10", "v2"], "lizard/parkour": ["v1"]})
+        lines = discover(root)
+        check("ok/line-keys", sorted(lines) == ["lizard", "lizard/parkour"], f"{sorted(lines)}")
+        check(
+            "ok/version-order-numeric",
+            list(lines["lizard"].versions) == ["v2", "v10"],
+            f"{list(lines['lizard'].versions)}",
+        )
+        check("ok/side-line-own-yaml", lines["lizard/parkour"].dev_yaml.name == "parkour_params.yaml")
+        check(
+            "ok/lock-is-per-line",
+            lines["lizard"].lock_path.name == "cfg_lock.json"
+            and lines["lizard"].lock_path.parent != lines["lizard/parkour"].lock_path.parent,
+            "two lines resolved to the same lock file",
+        )
+
+        # --- a non-version subdirectory is not a line ----------------------------
+        (tmp_path / "ok" / "lizard" / "docs").mkdir()
+        check("ok/plain-subdir-not-a-line", sorted(discover(root)) == ["lizard", "lizard/parkour"])
+
+        # --- refusals ------------------------------------------------------------
+        _refuses("refuse/absent-versions-dir", tmp_path / "nope", "does not exist")
+
+        zero = _make_tree(tmp_path / "zero", {"lizard": ["v1"]})
+        (zero / "lizard" / "lizard_params.yaml").unlink()
+        _refuses("refuse/no-params-at-line-root", zero, "no *")
+
+        two = _make_tree(tmp_path / "two", {"lizard": ["v1"]})
+        (two / "lizard" / "other_params.yaml").write_text("x: 1\n", encoding="utf-8")
+        _refuses("refuse/two-params-at-line-root", two, "exactly one")
+
+        two_versions = _make_tree(tmp_path / "twover", {"lizard": ["v1"]})
+        (two_versions / "lizard" / "v1" / "lizard_params.yaml").unlink()
+        _refuses("refuse/no-frozen-yaml", two_versions, "no *")
+
+        renamed = _make_tree(tmp_path / "renamed", {"lizard": ["v1"]})
+        (renamed / "lizard" / "lizard_params.yaml").rename(renamed / "lizard" / "lizard_v1_params.yaml")
+        _refuses("refuse/basename-names-its-line", renamed, "convention")
+
+    # --- the real tree: the two lines that exist today ---------------------------
+    real = discover()
+    check("real/lines", sorted(real) == ["lizard", "lizard/parkour"], f"{sorted(real)}")
+    check("real/main-line-covers-v0-to-v15", len(real["lizard"].versions) == 16, f"{sorted(real['lizard'].versions)}")
+    check(
+        "real/frozen-yamls-exist",
+        all(path.is_file() for line in real.values() for path in line.versions.values()),
+        "a discovered frozen yaml is missing on disk",
+    )
+
+    if PROBLEMS:
+        print(f"RECIPE_LINES_GATE_FAILED ({len(PROBLEMS)})")
+        return 1
+    print("RECIPE_LINES_OK")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
