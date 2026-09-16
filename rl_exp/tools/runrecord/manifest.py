@@ -158,6 +158,34 @@ def asset_digest(params_version: str | None, line_key: str | None = None) -> dic
     }
 
 
+def protocol_ref(task_id: str | None) -> dict:
+    """The observation protocol a task's recipe declares (``ARCH_PLAN`` Step 3.1d).
+
+    Two different facts, named apart on purpose: ``obs_protocol_digest`` is the *declared*
+    protocol -- the layout a reviewer approved and the gate holds the tree to -- while
+    ``obs_layout_digest`` is the observation subtree this session actually instantiated. They
+    agree until someone edits a layout without re-declaring it, and that drift is worth being
+    able to read off a run record rather than re-deriving later.
+    """
+    if not isinstance(task_id, str) or not task_id:
+        return {"obs_protocol": None, "obs_protocol_note": "no golden task id, so no protocol to name"}
+    try:
+        from rl_exp.tasks import obs_protocol
+    except ImportError as err:  # the declaration is in-repo, so this is a broken install
+        return {"obs_protocol": None, "obs_protocol_note": f"obs_protocol unimportable: {err!r}"}
+    try:
+        key = obs_protocol.protocol_for(task_id)
+        entry = (obs_protocol.anchors().get("protocols") or {}).get(key)
+    except obs_protocol.ProtocolError as err:
+        return {"obs_protocol": None, "obs_protocol_note": f"{task_id}: {err}"}
+    entry = entry if isinstance(entry, dict) else {}
+    return {
+        "obs_protocol": key,
+        "obs_protocol_digest": entry.get("digest"),
+        "obs_protocol_dims": entry.get("dims") or {},
+    }
+
+
 def recipe_ref(env_cfg) -> dict:
     """The recipe this run declares, plus whether it still matches the committed golden.
 
@@ -172,7 +200,7 @@ def recipe_ref(env_cfg) -> dict:
         "params_version": version if isinstance(version, str) else None,
         "recipe_digest": cs.digest(snapshot),
         "obs_layout_digest": cs.digest(snapshot.get("observations", {})),
-        "note": "obs_layout_digest stands in for the protocol object (ARCH_PLAN Step 3)",
+        "note": "obs_layout_digest is the layout this session instantiated; obs_protocol* is the declared protocol (ARCH_PLAN Step 3.1d)",
     }
     # the golden lives in the file of the line this recipe declares (one file per line,
     # so "whose golden is this" is readable); the combination block is shared by all lines
@@ -209,6 +237,7 @@ def recipe_ref(env_cfg) -> dict:
     ref["golden_task"] = golden_key.split("|")[-1] if golden_key else None
     ref["golden_combination"] = golden_key.rsplit("|", 1)[0] if golden_key else None
     ref["golden_digest"] = entry.get("digest")
+    ref.update(protocol_ref(ref.get("golden_task")))
     baselines_path = _REPO / "rl_exp" / "versions" / "cfg_baselines.json"
     baseline: dict = {}
     if baselines_path.is_file():
