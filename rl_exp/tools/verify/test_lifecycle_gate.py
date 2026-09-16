@@ -181,6 +181,21 @@ def _identity_cases(tmp: pathlib.Path) -> list[str]:
     verdict, _ = _gate(tmp, declared_line=MAIN)
     if not verdict.allowed:
         problems.append(f"a declared line that agrees with the map must proceed, got {verdict!r}")
+
+    # the directory can be relocated (a retired fixture cannot be produced by retiring a real
+    # line, 2.1a), and the record still says which directory answered
+    fixture = _tree(tmp / "fixture", lines={MAIN: _entry()}, recipes={MAIN_RECIPE: MAIN})
+    os.environ[lifecycle.INDEX_DIR_ENV] = str(fixture)
+    try:
+        relocated = lifecycle.read_index()
+        if relocated["digests"] != lifecycle.read_index(fixture)["digests"]:
+            problems.append("the relocated directory must be the one read, digests included")
+        if relocated["digests"] == lifecycle.read_index(_active_tree(tmp))["digests"]:
+            problems.append("the relocation must not silently read this checkout instead")
+    finally:
+        os.environ.pop(lifecycle.INDEX_DIR_ENV, None)
+    if lifecycle.index_root() != pathlib.Path(lifecycle._REPO):
+        problems.append("without the override the checkout's own directory must be read")
     return problems
 
 

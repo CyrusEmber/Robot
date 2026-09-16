@@ -34,6 +34,7 @@ refusal, never in a default of ``active``.
 from __future__ import annotations
 
 import datetime
+import os
 import pathlib
 
 from rl_exp.tools.runrecord import provenance as prov
@@ -43,6 +44,26 @@ from rl_exp.tools.verify import check_recipe_map, check_recipe_registry, recipe_
 _REPO = pathlib.Path(__file__).resolve().parents[3]
 LINES_PATH = _REPO / "rl_exp" / "versions" / "lines.json"
 RECIPES_PATH = _REPO / "rl_exp" / "versions" / "recipes.json"
+
+INDEX_DIR_ENV = "RL_RECIPE_DIR"
+"""Where the recipe directory is read from, overriding this checkout's ``rl_exp/versions``.
+
+A machine/testing hook, like ``RL_ISAAC_ROOT``: retiring a real line to test the retired path is
+forbidden by 2.1a, so the entry-side cases (L02/L03) point the read at a tree that *is* retired.
+It moves where the directory is read from and nothing else -- the verdict still comes from
+whatever directory that is, and the digest recorded in T0 says which one answered.
+"""
+
+
+def index_root() -> pathlib.Path:
+    """The repository root whose ``rl_exp/versions`` holds the directory this run reads.
+
+    Returns:
+        The repository root named by :data:`INDEX_DIR_ENV` (a fixture tree whose own
+        ``rl_exp/versions`` carries the lines under test), or this checkout.
+    """
+    override = os.environ.get(INDEX_DIR_ENV, "").strip()
+    return pathlib.Path(override) if override else _REPO
 
 
 def read_index(root: pathlib.Path | None = None) -> dict:
@@ -58,7 +79,7 @@ def read_index(root: pathlib.Path | None = None) -> dict:
         ``digests`` maps each file to its SHA-256 -- the record needs to name *which* revision
         of the directory granted the permission, not just its number.
     """
-    root = pathlib.Path(root) if root is not None else _REPO
+    root = pathlib.Path(root) if root is not None else index_root()
     lines_path = root / "rl_exp" / "versions" / "lines.json"
     recipes_path = root / "rl_exp" / "versions" / "recipes.json"
     lines = check_recipe_registry.load(lines_path)
