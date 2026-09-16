@@ -17,7 +17,7 @@ import sys
 _REPO = pathlib.Path(__file__).absolute().parents[3]
 sys.path.insert(0, str(_REPO))
 
-from rl_exp.tasks import lizard_env_cfg, parkour_env_cfg, teacher_env_cfg  # noqa: E402
+from rl_exp.tasks import baseline_env_cfg, lizard_env_cfg, parkour_env_cfg, teacher_env_cfg  # noqa: E402
 
 PROBE = "__isolation_probe__"
 
@@ -51,6 +51,9 @@ def main() -> int:
     _probe(teacher_env_cfg._load_params, "v14", "teacher frozen v14")
     _probe(lizard_env_cfg._load_params, "v14", "family frozen v14")
     _probe(parkour_env_cfg._load_params, "v1", "parkour frozen v1")
+    # the baseline line used to re-parse per call and now shares the cache -- the probe is what
+    # keeps that upgrade from being the day it started handing out one tree
+    _probe(baseline_env_cfg._load_params, "v1", "baseline frozen v1")
     _probe(lizard_env_cfg._load_params, None, "family dev yaml")
     print("PARAMS_ISOLATION_OK")
     return 0

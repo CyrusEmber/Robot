@@ -27,12 +27,8 @@ Deviations from the paper (declared, parkour/v1/PLAN.md section 2):
 
 from __future__ import annotations
 
-import copy
-import functools
 import pathlib
 from typing import ClassVar
-
-import yaml
 
 import isaaclab.sim as sim_utils
 import isaaclab.terrains as terrain_gen
@@ -57,7 +53,7 @@ from isaaclab_tasks.manager_based.locomotion.velocity.velocity_env_cfg import (
 )
 from isaaclab_tasks.utils import preset
 
-from rl_exp.tasks import parkour_mdp
+from rl_exp.tasks import parkour_mdp, recipe_params
 from rl_exp.tasks.play_utils import apply_play_wiring
 
 if __name__ == "__main__":
@@ -68,23 +64,7 @@ _RL_EXP_DIR = pathlib.Path(__file__).resolve().parents[1]
 # family-relative handle of this recipe line: the one place that answers "whose line is
 # this", used both here for the parameter path and by the gates for the lock routing
 _LINE_KEY = "lizard/parkour"
-_LINE_DIR = _RL_EXP_DIR / "versions" / _LINE_KEY
 _DEFAULT_VERSION = "v1"
-
-
-@functools.lru_cache(maxsize=64)
-def _params_document(path: str, stamp: tuple[int, int]) -> dict:
-    """Parse a params yaml, cached on ``stamp`` = (mtime_ns, size).
-
-    One cfg construction runs a chain of ``__post_init__`` that each re-read the same
-    yaml; the parse, not the cfg wiring, was the cost of building a config.
-
-    ponytail: ceiling -- a rewrite that keeps both mtime_ns and size is served from the
-    cache; nothing rewrites these files inside a process, and 64 entries covers every
-    version one build touches.
-    """
-    with open(path, encoding="utf-8") as f:
-        return yaml.safe_load(f)
 
 
 def _load_params(version: str | None = None) -> dict:
@@ -98,17 +78,9 @@ def _load_params(version: str | None = None) -> dict:
             next version in the dev copy would move a task that claims to be frozen).
 
     Returns:
-        The resolved parameters of this line.
+        The resolved parameters of this line, as this caller's own tree.
     """
-    path = _LINE_DIR / f"{_LINE_DIR.name}_params.yaml"
-    if version is not None:
-        path = _LINE_DIR / version / path.name
-    stat = path.stat()
-    # deepcopy on every call, the first one included: the cache holds the parsed document,
-    # the caller gets its own tree. What is frozen is the file, not the object built from it,
-    # and a shared tree would let one cfg's edit reach another's (~1 ms here vs ~50 ms to
-    # re-parse; test_params_isolation.py fails if this turns into a plain return).
-    return copy.deepcopy(_params_document(str(path), (stat.st_mtime_ns, stat.st_size)))
+    return recipe_params.load(_LINE_KEY, version)
 
 
 # Climb expert terrain: stairs up + down in one expert (user decision

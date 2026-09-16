@@ -35,8 +35,6 @@ reads the issued command tensor rather than trusting the config, because a confi
 import pathlib
 from typing import ClassVar
 
-import yaml
-
 import isaaclab.sim as sim_utils
 from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets import ArticulationCfg
@@ -50,7 +48,7 @@ from isaaclab_tasks.manager_based.locomotion.velocity.velocity_env_cfg import (
     LocomotionVelocityRoughEnvCfg,
 )
 
-from rl_exp.tasks import baseline_mdp
+from rl_exp.tasks import baseline_mdp, recipe_params
 from rl_exp.tasks.play_utils import apply_play_wiring
 
 # this file lives at rl_exp/tasks/baseline_env_cfg.py -> exp root is parents[1]
@@ -59,7 +57,6 @@ _RL_EXP_DIR = pathlib.Path(__file__).resolve().parents[1]
 # family-relative handle of this recipe line: the one place that answers "whose line is
 # this", used both here for the parameter path and by the gates for the lock routing
 _LINE_KEY = "lizard/baseline"
-_LINE_DIR = _RL_EXP_DIR / "versions" / _LINE_KEY
 _DEFAULT_VERSION = "v1"
 
 
@@ -72,13 +69,10 @@ def _load_params(version: str | None = None) -> dict:
             version-stamped task that read the dev yaml would be pinned to a mutable file.
 
     Returns:
-        The resolved parameters of this line.
+        The resolved parameters of this line, as this caller's own tree -- the line shares the
+        one loader now, so it also gets the parse cache every other line had.
     """
-    path = _LINE_DIR / f"{_LINE_DIR.name}_params.yaml"
-    if version is not None:
-        path = _LINE_DIR / version / path.name
-    with open(path, encoding="utf-8") as f:
-        return yaml.safe_load(f)
+    return recipe_params.load(_LINE_KEY, version)
 
 
 @configclass

@@ -15,12 +15,8 @@ parameters/external forces/pushes) is configured in the SSOT yaml and wired
 here so the policy cannot memorize a single dynamics realization.
 """
 
-import copy
-import functools
 import pathlib
 from typing import ClassVar
-
-import yaml
 
 import isaaclab.sim as sim_utils
 from isaaclab.actuators import ImplicitActuatorCfg
@@ -33,6 +29,7 @@ import isaaclab_tasks.manager_based.locomotion.velocity.mdp as mdp
 from isaaclab_tasks.manager_based.locomotion.velocity.velocity_env_cfg import LocomotionVelocityRoughEnvCfg
 from isaaclab_tasks.utils import preset
 
+from rl_exp.tasks import recipe_params
 from rl_exp.tasks.play_utils import apply_play_wiring
 
 # this file lives at rl_exp/tasks/lizard_env_cfg.py -> exp root is parents[1]
@@ -48,23 +45,6 @@ _VERSION_FAMILY = "lizard"
 # line). Both the declared handle and the loaded path have to move together: the handle is
 # what the golden gate and the run record route by, the path is what actually gets read.
 _LINE_KEY = f"{_VERSION_FAMILY}/main"
-_LINE_DIR = _RL_EXP_DIR / "versions" / _VERSION_FAMILY / "main"
-_PARAMS_NAME = "main_params.yaml"
-
-
-@functools.lru_cache(maxsize=64)
-def _params_document(path: str, stamp: tuple[int, int]) -> dict:
-    """Parse a params yaml, cached on ``stamp`` = (mtime_ns, size).
-
-    One cfg construction runs a chain of ``__post_init__`` that each re-read the same
-    yaml; the parse, not the cfg wiring, was the cost of building a config. The dev yaml
-    is a live tuning file, so the stamp -- not the version name -- is the cache key.
-
-    ponytail: ceiling -- a rewrite that keeps both mtime_ns and size is served from the
-    cache; 64 entries covers every version one build touches.
-    """
-    with open(path, encoding="utf-8") as f:
-        return yaml.safe_load(f)
 
 
 def _load_params(version: str | None = None) -> dict:
@@ -76,17 +56,12 @@ def _load_params(version: str | None = None) -> dict:
             read the live dev yaml (``versions/<family>/main/main_params.yaml``). Versioned
             runs must always pass their own version so dev-yaml edits can never drift a
             frozen recipe.
+
+    Returns:
+        The resolved parameters of this line: the shared loader's parse, as this caller's own
+        tree (see :mod:`rl_exp.tasks.recipe_params` for why the cache must not be handed out).
     """
-    if version is None:
-        path = _LINE_DIR / _PARAMS_NAME
-    else:
-        path = _LINE_DIR / version / _PARAMS_NAME
-    stat = path.stat()
-    # deepcopy on every call, the first one included: the cache holds the parsed document,
-    # the caller gets its own tree. What is frozen is the file, not the object built from it,
-    # and a shared tree would let one cfg's edit reach another's (~1 ms here vs ~50 ms to
-    # re-parse; test_params_isolation.py fails if this turns into a plain return).
-    return copy.deepcopy(_params_document(str(path), (stat.st_mtime_ns, stat.st_size)))
+    return recipe_params.load(_LINE_KEY, version)
 
 
 @configclass

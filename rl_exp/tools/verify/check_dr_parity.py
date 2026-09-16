@@ -89,6 +89,11 @@ ALLOWLIST: set[str] = {
     'self.events.reset_base.params["velocity_range"] = {a: tuple(r) for a, r in rr["base_velocity_range"].items()}',
     "self.events.foot_friction_dip = EventTerm(",  # v12: occasional low-friction feet
     "self.events.sample_ring_noise = EventTerm(",  # v12: per-episode extero corruption state
+    # stage B (ARCH_PLAN.md 2.4, B1): the teacher's base-contact narrowing moved into
+    # components.terminations, so this literal line now exists on the family side only. Semantics
+    # are unchanged and golden-verified (ACCEPTANCE.md "B1 · 组件库切片 2": 36 tasks CFG_LOCK_OK);
+    # the family line stays inline until its own recipe line is migrated.
+    'self.terminations.base_contact.params["sensor_cfg"] = SceneEntityCfg(',
 }
 
 # ArticulationCfg block lines that only exist on one side BY DESIGN

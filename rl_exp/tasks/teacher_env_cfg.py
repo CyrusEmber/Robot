@@ -21,27 +21,20 @@ collapses under privilege, the incentive-escape-hatch hypothesis is confirmed
 and the parked reward fixes get re-applied (plan §2.3).
 """
 
-import copy
-import functools
 import math
 import pathlib
 from collections.abc import Callable
 from typing import ClassVar
 
 import torch
-import yaml
-from typing import ClassVar
 
 import isaaclab.sim as sim_utils
 import isaaclab.terrains as terrain_gen
 from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets import ArticulationCfg
 from isaaclab.managers import EventTermCfg as EventTerm
-from isaaclab.managers import ObservationGroupCfg
-from isaaclab.managers import ObservationTermCfg as ObsTerm
 from isaaclab.managers import RewardTermCfg as RewTerm
 from isaaclab.managers import SceneEntityCfg
-from isaaclab.managers import TerminationTermCfg as DoneTerm
 from isaaclab.sensors import patterns
 from isaaclab.terrains import TerrainGeneratorCfg
 from isaaclab.utils.configclass import configclass
@@ -53,8 +46,7 @@ from isaaclab_tasks.manager_based.locomotion.velocity.velocity_env_cfg import (
 )
 from isaaclab_tasks.utils import preset
 
-from rl_exp.tasks import components, teacher_mdp
-from rl_exp.tasks.param_grid_terrain import build_param_grid_terrain_cfg
+from rl_exp.tasks import components, recipe_params, teacher_mdp
 from rl_exp.tasks.play_utils import apply_play_wiring
 from rl_exp.tasks.staged_curriculum import StageCfg, StagedCurriculumTerm, StagedCurriculumTermCfg
 
@@ -65,37 +57,22 @@ _RL_EXP_DIR = pathlib.Path(__file__).resolve().parents[1]
 # fails loudly: wrong path raises at cfg construction)
 _VERSION_FAMILY = "lizard"
 
-# ARCH_PLAN 2.1a: own copy of the main line's handle and directory (same discipline as
-# above -- drift raises at construction instead of reading a stale tree)
+# ARCH_PLAN 2.1a: own copy of the main line's handle (same discipline as above -- drift raises
+# at construction instead of reading a stale tree). The parameter path is derived from this
+# handle by recipe_params, the single loader every recipe line shares.
 _LINE_KEY = f"{_VERSION_FAMILY}/main"
-_LINE_DIR = _RL_EXP_DIR / "versions" / _VERSION_FAMILY / "main"
-_PARAMS_NAME = "main_params.yaml"
-
-
-@functools.lru_cache(maxsize=64)
-def _params_document(path: str, stamp: tuple[int, int]) -> dict:
-    """Parse a params yaml, cached on ``stamp`` = (mtime_ns, size).
-
-    One cfg construction runs a chain of ``__post_init__`` that each re-read the same
-    yaml; the parse, not the cfg wiring, was the cost of building a config.
-
-    ponytail: ceiling -- a rewrite that keeps both mtime_ns and size is served from the
-    cache. These files are frozen per version and nothing rewrites them inside a process;
-    64 entries covers every version one build touches.
-    """
-    with open(path, encoding="utf-8") as f:
-        return yaml.safe_load(f)
 
 
 def _load_params(version: str) -> dict:
-    """Load the frozen main_params.yaml copy of ``version`` (never the dev yaml)."""
-    path = _LINE_DIR / version / _PARAMS_NAME
-    stat = path.stat()
-    # deepcopy on every call, the first one included: the cache holds the parsed document,
-    # the caller gets its own tree. What is frozen is the file, not the object built from it,
-    # and a shared tree would let one cfg's edit reach another's (~1 ms here vs ~50 ms to
-    # re-parse; test_params_isolation.py fails if this turns into a plain return).
-    return copy.deepcopy(_params_document(str(path), (stat.st_mtime_ns, stat.st_size)))
+    """Load the frozen main_params.yaml copy of ``version`` (never the dev yaml).
+
+    Args:
+        version: the frozen version handle this recipe reads.
+
+    Returns:
+        The resolved parameters of this line, as this caller's own tree.
+    """
+    return recipe_params.load(_LINE_KEY, version, frozen_only=True)
 
 
 # frozen snapshot of the lizard-scaled rough terrains (16 m tiles, ~2x stock
@@ -528,6 +505,12 @@ class LizardRoughTeacherEnvCfg(LocomotionVelocityRoughEnvCfg):
     # about the recipe does not enter the config snapshot and move the golden)
     params_line: ClassVar[str] = _LINE_KEY
 
+    # True on the PLAY variants of the curriculum-gated recipes: evaluation has no curriculum to
+    # widen the range on a good policy, so they pin the full forward range instead (the rule
+    # itself lives in components.commands). ClassVar so this statement about the recipe does not
+    # enter the config snapshot and move the golden.
+    PLAY_PINS_COMMAND_RANGE: ClassVar[bool] = False
+
     # v2 = latest (paper-aligned privileged obs); see versions/lizard/main/v2/NOTES.md
     params_version = "v2"
 
@@ -603,9 +586,19 @@ class LizardRoughTeacherEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.sim.render_interval = self.decimation
 
         # --- terrain + perceptive scanner (frozen snapshot) ---
-        self.scene.terrain.terrain_type = "generator"
-        self.scene.terrain.terrain_generator = TEACHER_TERRAINS_CFG
-        self.scene.terrain.max_init_terrain_level = 5
+        # terrain: one writer for the whole block -- which payload a recipe picks and the row
+        # it spawns at are declared in components.TERRAIN_BY_RECIPE.
+        for name, value in components.terrain(
+            self.params_version,
+            params=params,
+            payloads={
+                "TEACHER_TERRAINS_CFG": TEACHER_TERRAINS_CFG,
+                "TEACHER_TERRAINS_CFG_V3": TEACHER_TERRAINS_CFG_V3,
+                "TEACHER_TERRAINS_CFG_V4": TEACHER_TERRAINS_CFG_V4,
+                "TEACHER_TERRAINS_CFG_V5": TEACHER_TERRAINS_CFG_V5,
+            },
+        ).items():
+            setattr(self.scene.terrain, name, value)
         # height sensing: one writer for the whole component -- v1/v2 the ground grid
         # scanner, v3+ four per-foot rings with their geometry from the yaml. The
         # recipes that swapped form used to null the scanner here and build the rings
@@ -627,16 +620,26 @@ class LizardRoughTeacherEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.undesired_contacts.params["sensor_cfg"] = SceneEntityCfg(
             "contact_forces", body_names=names_params["undesired_contact_body_names"]
         )
-        # the base task assumes the anymal base body is called "base" (termination term)
-        self.terminations.base_contact.params["sensor_cfg"] = SceneEntityCfg(
-            "contact_forces", body_names=[base_name]
-        )
+        # terminations: one writer for the whole component -- a recipe narrows the inherited
+        # base-contact term, drops it, or adds tilt / roll-over gates (components.terminations);
+        # no subclass writes these names any more.
+        for name, term in components.terminations(
+            self.params_version,
+            params=params,
+            base_contact=self.terminations.base_contact,
+            base_body=base_name,
+        ).items():
+            setattr(self.terminations, name, term)
 
-        # --- commands: paper-faithful local override (plan §4.3); the yaml
-        # keeps the wide lizard ambition ranges for the family tasks ---
-        self.commands.base_velocity.ranges.lin_vel_x = (-1.0, 1.0)
-        self.commands.base_velocity.ranges.lin_vel_y = (-0.5, 0.5)
-        self.commands.base_velocity.ranges.ang_vel_z = (-1.0, 1.0)
+        # commands: one writer for the term -- the per-recipe forward range, and the replacement
+        # term the particle recipes use, are declared in components.COMMAND_RANGE.
+        for name, command in components.commands(
+            self.params_version,
+            params=params,
+            base_velocity=self.commands.base_velocity,
+            pins_full_range=self.PLAY_PINS_COMMAND_RANGE,
+        ).items():
+            setattr(self.commands, name, command)
 
         # --- domain randomization (frozen wiring; ranges from the SSOT yaml) ---
         # ground friction (startup, bucketed materials)
@@ -720,62 +723,17 @@ class LizardRoughTeacherEnvCfg(LocomotionVelocityRoughEnvCfg):
         # spawn height jitter: survive imperfect initialization drops
         self.events.reset_base.params["pose_range"]["z"] = tuple(dr_params["reset_height_range"])
 
-        # --- privileged observations (plan §4.2): ground truth for the ACTOR ---
-        # privilege 1: clean height scan (no observation noise, clip kept)
-        self.observations.policy.height_scan = ObsTerm(
-            func=mdp.height_scan,
-            params={"sensor_cfg": SceneEntityCfg("height_scanner")},
-            clip=(-1.0, 1.0),
-        )
-        # privilege 2: true base velocities (the proprioceptive terms carry
-        # sensor noise; these are the ground-truth counterparts)
-        self.observations.policy.base_lin_vel_true = ObsTerm(func=mdp.base_lin_vel)
-        self.observations.policy.base_ang_vel_true = ObsTerm(func=mdp.base_ang_vel)
-        # privilege 3: foot contact flags, swing durations, per-body mass
-        self.observations.policy.foot_contact = ObsTerm(
-            func=teacher_mdp.foot_contact_bools,
-            params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"), "threshold": 1.0},
-        )
-        self.observations.policy.feet_air_time = ObsTerm(
-            func=teacher_mdp.feet_air_time,
-            params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot")},
-        )
-        self.observations.policy.body_mass = ObsTerm(
-            func=teacher_mdp.body_mass_truth,
-            params={"asset_cfg": SceneEntityCfg("robot", body_names=".*")},
-        )
-        # privilege 4 (v2, Miki et al. 2022 table completion): contact force
-        # vectors, contact normals, per-foot friction, thigh/shank contact
-        # flags, persistent external wrench -- see FAMILY.md obs layout table
-        self.observations.policy.foot_contact_forces = ObsTerm(
-            func=teacher_mdp.foot_contact_forces,
-            params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot")},
-        )
-        self.observations.policy.foot_contact_normals = ObsTerm(
-            func=teacher_mdp.FootContactNormalsTerm,
-            params={"mesh_prim_path": "/World/ground", "max_distance": 2.0, "start_offset": 0.5},
-        )
-        self.observations.policy.foot_friction = ObsTerm(
-            func=teacher_mdp.foot_friction_truth,
-            params={"asset_cfg": SceneEntityCfg("robot", body_names=".*_foot")},
-        )
-        self.observations.policy.thigh_shank_contacts = ObsTerm(
-            func=teacher_mdp.thigh_shank_contacts,
-            params={
-                "sensor_cfg": SceneEntityCfg("contact_forces", body_names=[".*_hfe", ".*_kfe"]),
-                "threshold": 1.0,
-            },
-        )
-        self.observations.policy.base_external_wrench = ObsTerm(
-            func=teacher_mdp.base_external_wrench,
-            params={"asset_cfg": SceneEntityCfg("robot", body_names=[base_name])},
-        )
-        # strip the incremental terms this recipe's version does not include
-        # (TEACHER_PRIVILEGED_SPEC governs; keeps old recipes reproducible)
-        allowed = TEACHER_PRIVILEGED_SPEC[self.params_version]
-        every = set().union(*TEACHER_PRIVILEGED_SPEC.values())
-        for term_name in sorted(every - allowed):
-            setattr(self.observations.policy, term_name, None)
+        # observations: one writer for the groups -- which terms exist, which group each one
+        # belongs to, and how a recipe's version prunes them, are all declared in
+        # components.observations (the spec table above says which incremental privileged terms
+        # a recipe includes).
+        for name, group in components.observations(
+            self.params_version,
+            params=params,
+            base_policy=self.observations.policy,
+            spec=TEACHER_PRIVILEGED_SPEC,
+        ).items():
+            setattr(self.observations, name, group)
 
 
 @configclass
@@ -906,15 +864,9 @@ class LizardRoughTeacherEnvCfg_V3(LizardRoughTeacherEnvCfg):
 
     def __post_init__(self):
         super().__post_init__()
-        # v3.4: swap in the Miki-aligned terrain (base __init__ wired the v1/v2
-        # frozen generator; swapping after super() is the same late-replace the
-        # base itself does -- curriculum=True already set on the new cfg)
-        self.scene.terrain.terrain_generator = TEACHER_TERRAINS_CFG_V3
-        # v3.5: paper curriculum prerequisite -- spawn at the EASIEST row and
-        # let stock terrain_levels_vel (per-robot success-driven row promotion)
-        # climb; the discrete stand-in for the particle-filter curriculum only
-        # holds if training starts from level 0 (v1/v2 snapshots keep 5: frozen)
-        self.scene.terrain.max_init_terrain_level = 0
+        # v3.4 terrain payload (Miki-aligned) and v3.5 spawn row (the easiest one, so stock
+        # terrain_levels_vel climbs from the bottom) are declared in
+        # components.TERRAIN_BY_RECIPE; the base class writes the block once.
 
         # --- v3.6.1: PhysX contact buffer headroom ---
         # belly contact is now persistent by design (base_contact termination
@@ -927,11 +879,11 @@ class LizardRoughTeacherEnvCfg_V3(LizardRoughTeacherEnvCfg):
 
         # --- v3.6: staged speed curriculum replaces the (-1, 1) paper override ---
         # v1 replay showed foot-pad creeping is the optimum at a 1 m/s command
-        # cap; widen -1..2 -> 5 gated by success_rate >= 0.8 sustained 120 s,
-        # so stages the robot cannot track are never applied (user decision
+        # cap; the range climbs -1..2 -> 5 gated by success_rate >= 0.8 sustained
+        # 120 s, so stages the robot cannot track are never applied (user decision
         # 2026-09-01). Stage 0 also seeds the cfg range so the first resamples
-        # already match the curriculum.
-        self.commands.base_velocity.ranges.lin_vel_x = (-1.0, 2.0)
+        # already match the curriculum; the range itself is declared in
+        # components.COMMAND_RANGE.
         self.curriculum.speed_curriculum = StagedCurriculumTermCfg(
             func=StagedCurriculumTerm,
             stages=[
@@ -943,15 +895,12 @@ class LizardRoughTeacherEnvCfg_V3(LizardRoughTeacherEnvCfg):
         )
 
         # --- v3.6: belly-contact termination removed (executes D0-6) ---
-        # the sprawled body sits low, so base contact is a crouch signal, not a
-        # fall -- and the trained robot never flips. Contact stays penalized
-        # by rewards.undesired_contacts (user decision 2026-09-01: penalty only).
-        self.terminations.base_contact = None
+        # (the whole termination set is owned by components.terminations, which resolves it by
+        # version; the v3.6 rationale lives there)
 
         params = _load_params(self.params_version)
         v3 = params["v3"]
         ring = v3["foot_ring"]
-        tilt = v3["tilt_terminate"]
         rfc = v3["r_fc"]
         ck = v3["curriculum_ck"]
 
@@ -961,47 +910,10 @@ class LizardRoughTeacherEnvCfg_V3(LizardRoughTeacherEnvCfg):
         # terms and for the priv foot_contact_normals / r_fc raycasts)
 
         # --- obs restructure: single flat policy group -> three named groups ---
-        # group attr insertion order == term concat order (manager reads __dict__);
-        # the extero foot order (lf, rf, rl, rr) is the network reshape contract
-        proprio_group = ObservationGroupCfg()
-        for name in (
-            "base_lin_vel", "base_ang_vel", "projected_gravity", "velocity_commands",
-            "joint_pos", "joint_vel", "actions",
-        ):
-            setattr(proprio_group, name, getattr(self.observations.policy, name))
-        self.observations.proprio = proprio_group
+        # (owned by components.observations, which also holds the group's attribute order --
+        # that order is the term concat order and the network's reshape contract)
 
-        extero_group = ObservationGroupCfg()
-        for foot in ("lf", "rf", "rl", "rr"):
-            setattr(
-                extero_group,
-                f"{foot}_foot_ring",
-                ObsTerm(
-                    func=mdp.height_scan,
-                    params={
-                        "sensor_cfg": SceneEntityCfg(f"{foot}_foot_ring"),
-                        "offset": ring["scan_offset"],
-                    },
-                    clip=tuple(ring["clip"]),
-                ),
-            )
-        self.observations.extero = extero_group
-
-        priv_group = ObservationGroupCfg()
-        for name in (
-            "base_lin_vel_true", "base_ang_vel_true", "foot_contact", "feet_air_time",
-            "body_mass", "foot_contact_forces", "foot_contact_normals", "foot_friction",
-            "thigh_shank_contacts", "base_external_wrench",
-        ):
-            setattr(priv_group, name, getattr(self.observations.policy, name))
-        self.observations.priv = priv_group
-        self.observations.policy = None
-
-        # --- D1: tilt termination ---
-        self.terminations.tilt = DoneTerm(
-            func=teacher_mdp.tilt_terminate,
-            params={"gravity_z_limit": tilt["gravity_z_limit"]},
-        )
+        # --- D1: tilt termination (built by components.terminations) ---
 
         # --- D2: anti-drag foot clearance replaces the feet_air_time reward ---
         # (the feet_air_time OBS term stays in the priv group)
@@ -1058,6 +970,10 @@ class LizardRoughTeacherEnvCfg_V3(LizardRoughTeacherEnvCfg):
 class LizardRoughTeacherEnvCfg_V3_PLAY(LizardRoughTeacherEnvCfg_V3):
     """v3 play variant: obs 381, no randomization, curriculum off."""
 
+    # no curriculum here to widen the range mid-evaluation: let components.commands pin the
+    # full forward range instead of the curriculum-gated one
+    PLAY_PINS_COMMAND_RANGE: ClassVar[bool] = True
+
     def __post_init__(self):
         super().__post_init__()
 
@@ -1065,10 +981,9 @@ class LizardRoughTeacherEnvCfg_V3_PLAY(LizardRoughTeacherEnvCfg_V3):
         apply_play_wiring(self)
 
         # v3.6: eval determinism -- the staged speed curriculum would widen
-        # command ranges mid-eval on a good policy; fix the full ambition range
-        # instead and drop the curriculum term
+        # command ranges mid-eval on a good policy, so drop the curriculum term
+        # (the pinned range is stated by PLAY_PINS_COMMAND_RANGE above)
         self.curriculum.speed_curriculum = None
-        self.commands.base_velocity.ranges.lin_vel_x = (-1.0, 5.0)
 
 
 @configclass
@@ -1089,8 +1004,8 @@ class LizardRoughTeacherEnvCfg_V4(LizardRoughTeacherEnvCfg_V3):
 
     def __post_init__(self):
         super().__post_init__()
-        # v4: rubble coarse enough for the real soles (TEACHER_TERRAINS_CFG_V4)
-        self.scene.terrain.terrain_generator = TEACHER_TERRAINS_CFG_V4
+        # v4's terrain payload (coarser rubble for the real soles) is declared in
+        # components.TERRAIN_BY_RECIPE; the base class writes the block once.
         # v4: drop the v3.6.1 PhysX headroom -- re-test the stock 2**26 with
         # the coarser terrain. WARNING (user decision 2026-09-02): INSPECT THE
         # TERRAIN BEFORE LAUNCHING TRAINING/TESTS. If the overflow comes back
@@ -1105,6 +1020,10 @@ class LizardRoughTeacherEnvCfg_V4(LizardRoughTeacherEnvCfg_V3):
 class LizardRoughTeacherEnvCfg_V4_PLAY(LizardRoughTeacherEnvCfg_V4):
     """v4 play variant: obs 381, no randomization, curriculum off."""
 
+    # no curriculum here to widen the range mid-evaluation: let components.commands pin the
+    # full forward range instead of the curriculum-gated one
+    PLAY_PINS_COMMAND_RANGE: ClassVar[bool] = True
+
     def __post_init__(self):
         super().__post_init__()
 
@@ -1112,10 +1031,9 @@ class LizardRoughTeacherEnvCfg_V4_PLAY(LizardRoughTeacherEnvCfg_V4):
         apply_play_wiring(self)
 
         # v3.6: eval determinism -- the staged speed curriculum would widen
-        # command ranges mid-eval on a good policy; fix the full ambition range
-        # instead and drop the curriculum term
+        # command ranges mid-eval on a good policy, so drop the curriculum term
+        # (the pinned range is stated by PLAY_PINS_COMMAND_RANGE above)
         self.curriculum.speed_curriculum = None
-        self.commands.base_velocity.ranges.lin_vel_x = (-1.0, 5.0)
 
 
 @configclass
@@ -1170,10 +1088,10 @@ class LizardRoughTeacherEnvCfg_V5(LizardRoughTeacherEnvCfg_V4):
         v5 = params["v5"]
         base_name = params["robot"]["base_body_name"]
 
-        # commands: forward-only ambition range, no staged speed curriculum
-        # (stage 0's (-1, 2) window kept a 50% standstill-freeload band under
-        # the exp kernel; the linear kernel below needs no range gating)
-        self.commands.base_velocity.ranges.lin_vel_x = tuple(v5["commands"]["lin_vel_x"])
+        # commands: forward-only ambition range from this recipe's yaml, and no staged speed
+        # curriculum (stage 0's (-1, 2) window kept a 50% standstill-freeload band under the exp
+        # kernel; the linear kernel below needs no range gating). The range is declared in
+        # components.COMMAND_RANGE.
         self.curriculum.speed_curriculum = None
 
         # --- v5.3: SIR particle terrain curriculum (Lee et al. 2020 Alg. S1,
@@ -1181,9 +1099,8 @@ class LizardRoughTeacherEnvCfg_V5(LizardRoughTeacherEnvCfg_V4):
         # grid = v4 + one flat type; rows = difficulty particles, envs respawn
         # per reset on the type's particle set. The v3.5 "spawn at easiest
         # row" prerequisite dies here: SIR samples uniformly at start (paper
-        # line 1), so initial terrain levels are uniform too.
-        self.scene.terrain.terrain_generator = TEACHER_TERRAINS_CFG_V5
-        self.scene.terrain.max_init_terrain_level = None
+        # line 1) -- the payload and that uniform spawn are declared in
+        # components.TERRAIN_BY_RECIPE.
         sir = v5["terrain_curriculum"]
         self.curriculum.terrain_levels = teacher_mdp.SIRTerrainCurriculumCfg(
             func=teacher_mdp.SpawnWeightSIRTerrainCurriculum,
@@ -1374,9 +1291,8 @@ class LizardRoughTeacherEnvCfg_V10(LizardRoughTeacherEnvCfg_V8):
 
     def __post_init__(self):
         super().__post_init__()
-        # D1 removal, yaml-driven (v10.tilt_terminate: null -> no tilt term)
-        if _load_params(self.params_version)["v10"]["tilt_terminate"] is None:
-            self.terminations.tilt = None
+        # D1 removal is yaml-driven (v10.tilt_terminate: null) and owned by
+        # components.terminations, which reads the same flag in the single writer.
 
 
 @configclass
@@ -1422,11 +1338,8 @@ class LizardRoughTeacherEnvCfg_V11(LizardRoughTeacherEnvCfg_V10):
         params = _load_params(self.params_version)
         v11 = params["v11"]
 
-        # v11 terrain: param-sampled grid. The builder sets curriculum=True
-        # itself (pit: replacing the generator after super() otherwise drops
-        # the flag and the column split stops being deterministic).
-        self.scene.terrain.terrain_generator = build_param_grid_terrain_cfg(v11["terrain_grid"])
-        self.scene.terrain.max_init_terrain_level = None
+        # v11 terrain: the param-sampled grid, built from this recipe's own grid section (the
+        # builder sets curriculum=True itself) -- declared in components.TERRAIN_BY_RECIPE.
 
         # v11 curriculum: joint SIR replaces the v5 row SIR (setattr via the
         # module constant -- the command term and check_obs_layout look the
@@ -1451,22 +1364,9 @@ class LizardRoughTeacherEnvCfg_V11(LizardRoughTeacherEnvCfg_V10):
             ),
         )
 
-        # v11 command: particle-sourced lin_vel_x + the Eq. 2 label
-        # accumulator. Field-by-field copy from the v5-wired term (its ranges
-        # object already carries the v5 (0, 3) narrowing).
-        vc = v11["velocity_command"]
-        base_cmd = self.commands.base_velocity
-        new_cmd = teacher_mdp.ParticleVelocityCommandCfg()
-        new_cmd.asset_name = base_cmd.asset_name
-        new_cmd.resampling_time_range = (1.0e9, 1.0e9)
-        new_cmd.heading_command = base_cmd.heading_command
-        new_cmd.heading_control_stiffness = base_cmd.heading_control_stiffness
-        new_cmd.rel_heading_envs = base_cmd.rel_heading_envs
-        new_cmd.rel_standing_envs = base_cmd.rel_standing_envs
-        new_cmd.ranges = base_cmd.ranges
-        new_cmd.v_pr_threshold = float(vc["v_pr_threshold"])
-        new_cmd.command_jitter = float(vc["command_jitter"])
-        self.commands.base_velocity = new_cmd
+        # v11 command: the particle-sourced term -- a field-by-field copy of the v5-wired term
+        # (whose ranges already carry the yaml narrowing) -- is declared in
+        # components.COMMAND_RANGE.
 
 
 @configclass
@@ -1577,25 +1477,13 @@ class LizardRoughTeacherEnvCfg_V12(LizardRoughTeacherEnvCfg_V11):
         )
 
         # --- height-ring noise (paper S8) on the actor extero group ---
-        # reset event owns the per-episode state; the four extero terms swap
-        # their func in place -- names, order and dims (208) stay the contract
+        # reset event owns the per-episode state; the four extero terms' func and parameters are
+        # set by components.observations -- names, order and dims (208) stay the contract
         self.events.sample_ring_noise = EventTerm(
             func=teacher_mdp.sample_ring_noise,
             mode="reset",
             params={"ratios": tuple(hn["ratios"])},
         )
-        for i, foot in enumerate(("lf", "rf", "rl", "rr")):
-            term = getattr(self.observations.extero, f"{foot}_foot_ring")
-            term.func = teacher_mdp.NoisyFootRing
-            term.params = {
-                **term.params,
-                "foot_index": i,
-                "sigma_w": float(hn["sigma_w"]),
-                "sigma_f": float(hn["sigma_f"]),
-                "sigma_p": float(hn["sigma_p"]),
-                "outlier_prob": float(hn["outlier_prob"]),
-                "outlier_range": tuple(hn["outlier_range"]),
-            }
 
 
 @configclass
@@ -1723,15 +1611,7 @@ class LizardRoughTeacherEnvCfg_V14(LizardRoughTeacherEnvCfg_V13):
     def __post_init__(self):
         super().__post_init__()
         v14 = _load_params(self.params_version)["v14"]
-        roll_over = v14["roll_over"]
-        self.terminations.roll_over = DoneTerm(
-            func=teacher_mdp.RollOverTerm,
-            params={
-                "roll_limit_deg": roll_over["roll_limit_deg"],
-                "pitch_guard_deg": roll_over["pitch_guard_deg"],
-                "dwell_s": roll_over["dwell_s"],
-            },
-        )
+        # the v14 fall gate (roll_over) is owned by components.terminations
         head_load = v14["head_load"]
         self.rewards.head_load_penalty = RewTerm(
             func=teacher_mdp.head_load_penalty,
