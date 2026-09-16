@@ -894,6 +894,8 @@ check_suite_shape.py              SUITE_SHAPE_OK（改套件后）
 3. **未测宽度必须抛错**：`dims_for` 对未批协议直接 `ProtocolError`。写 parkour 时当场被拦（PLAY 身份单独成身份、未批宽度），而非给出 0 或默默跳过。
 4. **无向声明补造入口**：v7/v9/v15 目录存在但无注册入口，闸门按"有历史目录、无注册入口"登记，缺号不补造。
 5. **套件提交不卷走并行批次**：工作树含他人的在飞重写 ⇒ 只提交索引（`hash-object -w` + `update-index --cacheinfo`），实测 `1 file changed, 3 insertions(+)`，其重写保持未暂存。
+6. **宽度原先没有任何完整性保护**（自查）：协议 `digest` 只覆盖 `groups`，而 `dims` 存在锚点里 ⇒ 原地改一个宽度既不红也无人断言（smoke 只在真跑时读它）。现宽度由 `dims_digest` 自钉，并加结构性规则（组名必须真实存在且 live、值为正整数、同一协议**要么全填要么全空**）；补 6 例反证：原地改宽度、缺 `dims_digest`、未知组名、`True` 当宽度、半填、以及"是否存在多组协议可供该规则测试"的存在性检查（否则规则会静默不被测）。
+7. **假红地雷**（自查）：`check_obs_layout` 的 v3/v4/v5 段原共用一份从 **v12** 取的顺序常量 ⇒ 只改 v12 的布局会误红 v3/v4/v5，而该文件在 pre-commit 里。实测证据：`v12-only change: constant still == v3 terms → False`，而 `v3 own declaration unchanged → True`。现各段按自己的 task id 取（v3/v4/v5/v12 各一份），脚序也改为 `feet_for` 派生。
 
 ### 边界（**不得**据本节宣称）
 

@@ -106,6 +106,34 @@ def main() -> int:
         f"{g.check_anchors(unreferenced, anchors)[:3]}",
     )
 
+    # --- the approved widths are pinned by their own digest --------------------------
+    dimmed = sorted(key for key, entry in ANCHORED["protocols"].items() if entry.get("dims"))[0]
+
+    edited = copy_of(ANCHORED)
+    first_group = sorted(edited["protocols"][dimmed]["dims"])[0]
+    edited["protocols"][dimmed]["dims"][first_group] += 1
+    fires("dims/in-place-edit", "without a re-approval", g.check_anchors(DECLARED, edited))
+
+    unapproved = copy_of(ANCHORED)
+    unapproved["protocols"][dimmed].pop("dims_digest")
+    fires("dims/no-approved-digest", "without a re-approval", g.check_anchors(DECLARED, unapproved))
+
+    stray = copy_of(ANCHORED)
+    stray["protocols"][dimmed]["dims"]["invented_group"] = 5
+    fires("dims/unknown-group", "does not carry live", g.check_anchors(DECLARED, stray))
+
+    typed = copy_of(ANCHORED)
+    typed["protocols"][dimmed]["dims"][first_group] = True
+    fires("dims/bool-is-not-a-width", "not a positive integer", g.check_anchors(DECLARED, typed))
+
+    # all-or-nothing needs a protocol that carries more than one width to be testable at all
+    multi = sorted(key for key, entry in ANCHORED["protocols"].items() if len(entry.get("dims") or {}) > 1)
+    check("dims/a-multi-group-protocol-exists", bool(multi), "no multi-group width map to test the rule against")
+    if multi:
+        partial = copy_of(ANCHORED)
+        partial["protocols"][multi[0]]["dims"].pop(sorted(partial["protocols"][multi[0]]["dims"])[0])
+        fires("dims/partial-map", "all or nothing", g.check_anchors(DECLARED, partial))
+
     # --- ordering: the case a dimension check would pass ------------------------------
     swapped = copy_of(DECLARED)
     groups = swapped["protocols"][key]["groups"]

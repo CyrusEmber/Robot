@@ -47,11 +47,27 @@ from rl_exp.tasks.agents.rsl_rl_ppo_cfg import (  # noqa: E402
 # never restated here: the feet, the term order and which terms a version actually carries
 # were the same facts kept in two places, and the second copy is the one that goes stale.
 # A task id, not a version string, is how the declaration is addressed: identity is read.
-V3_EXTERO_ORDER = obs_protocol.live_terms_for("Lizard-Rough-v12", "extero")
-V3_PROPRIO_ORDER = obs_protocol.live_terms_for("Lizard-Rough-v12", "proprio")
-V3_PRIV_ORDER = obs_protocol.live_terms_for("Lizard-Rough-v12", "priv")
+def _group_orders(task_id: str) -> tuple[list[str], list[str], list[str]]:
+    """The declared proprio/extero/priv orders of one recipe, by its own task id.
+
+    Per recipe, not one shared triple: v3/v4/v5/v12 share an identity today, and the day one of
+    them diverges, a single shared constant computed from another version would red the rest for
+    a change that never touched them.
+    """
+    return (
+        obs_protocol.live_terms_for(task_id, "proprio"),
+        obs_protocol.live_terms_for(task_id, "extero"),
+        obs_protocol.live_terms_for(task_id, "priv"),
+    )
+
+
+V3_PROPRIO_ORDER, V3_EXTERO_ORDER, V3_PRIV_ORDER = _group_orders("Lizard-Rough-v3")
+V4_PROPRIO_ORDER, V4_EXTERO_ORDER, V4_PRIV_ORDER = _group_orders("Lizard-Rough-v4")
+V5_PROPRIO_ORDER, V5_EXTERO_ORDER, V5_PRIV_ORDER = _group_orders("Lizard-Rough-v5")
+V12_PROPRIO_ORDER, V12_EXTERO_ORDER, V12_PRIV_ORDER = _group_orders("Lizard-Rough-v12")
 V1_POLICY_ORDER = obs_protocol.live_terms_for("Lizard-Rough-v1", "policy")
 V2_POLICY_ORDER = obs_protocol.live_terms_for("Lizard-Rough-v2", "policy")
+TEACHER_FEET = obs_protocol.feet_for("Lizard-Rough-v3")
 
 # group-level settings, not terms (mirrors the observation manager's skip list)
 _GROUP_FIELDS = {
@@ -124,7 +140,7 @@ def main() -> int:
     # scan-reading sensors: v3 must not keep a policy group or base height scanner
     if getattr(v3.scene, "height_scanner", "missing") is not None:
         problems.append("v3: base height_scanner should be retired (foot rings own extero)")
-    for foot in ("lf", "rf", "rl", "rr"):
+    for foot in TEACHER_FEET:
         if getattr(v3.scene, f"{foot}_foot_ring", None) is None:
             problems.append(f"v3: missing {foot}_foot_ring RayCasterCfg")
 
@@ -134,15 +150,15 @@ def main() -> int:
     if set(groups) != {"proprio", "extero", "priv"}:
         problems.append(f"v4: expected proprio/extero/priv groups, got {sorted(groups)}")
     else:
-        if groups["proprio"] != V3_PROPRIO_ORDER:
+        if groups["proprio"] != V4_PROPRIO_ORDER:
             problems.append(f"v4: proprio order {groups['proprio']} != contract")
-        if groups["extero"] != V3_EXTERO_ORDER:
-            problems.append(f"v4: extero order {groups['extero']} != {V3_EXTERO_ORDER}")
-        if groups["priv"] != V3_PRIV_ORDER:
+        if groups["extero"] != V4_EXTERO_ORDER:
+            problems.append(f"v4: extero order {groups['extero']} != {V4_EXTERO_ORDER}")
+        if groups["priv"] != V4_PRIV_ORDER:
             problems.append(f"v4: priv order {groups['priv']} != contract")
     if getattr(v4.scene, "height_scanner", "missing") is not None:
         problems.append("v4: base height_scanner should be retired (foot rings own extero)")
-    for foot in ("lf", "rf", "rl", "rr"):
+    for foot in TEACHER_FEET:
         if getattr(v4.scene, f"{foot}_foot_ring", None) is None:
             problems.append(f"v4: missing {foot}_foot_ring RayCasterCfg")
 
@@ -172,11 +188,11 @@ def main() -> int:
     if set(groups) != {"proprio", "extero", "priv"}:
         problems.append(f"v5: expected proprio/extero/priv groups, got {sorted(groups)}")
     else:
-        if groups["proprio"] != V3_PROPRIO_ORDER:
+        if groups["proprio"] != V5_PROPRIO_ORDER:
             problems.append(f"v5: proprio order {groups['proprio']} != contract")
-        if groups["extero"] != V3_EXTERO_ORDER:
-            problems.append(f"v5: extero order {groups['extero']} != {V3_EXTERO_ORDER}")
-        if groups["priv"] != V3_PRIV_ORDER:
+        if groups["extero"] != V5_EXTERO_ORDER:
+            problems.append(f"v5: extero order {groups['extero']} != {V5_EXTERO_ORDER}")
+        if groups["priv"] != V5_PRIV_ORDER:
             problems.append(f"v5: priv order {groups['priv']} != contract")
 
     # v5 recipe wiring: anti-collapse reward package must be complete
@@ -355,14 +371,14 @@ def main() -> int:
     if set(groups) != {"proprio", "extero", "priv"}:
         problems.append(f"v12: expected proprio/extero/priv groups, got {sorted(groups)}")
     else:
-        if groups["proprio"] != V3_PROPRIO_ORDER:
+        if groups["proprio"] != V12_PROPRIO_ORDER:
             problems.append(f"v12: proprio order {groups['proprio']} != contract")
-        if groups["extero"] != V3_EXTERO_ORDER:
-            problems.append(f"v12: extero order {groups['extero']} != {V3_EXTERO_ORDER}")
-        if groups["priv"] != V3_PRIV_ORDER:
+        if groups["extero"] != V12_EXTERO_ORDER:
+            problems.append(f"v12: extero order {groups['extero']} != {V12_EXTERO_ORDER}")
+        if groups["priv"] != V12_PRIV_ORDER:
             problems.append(f"v12: priv order {groups['priv']} != contract")
         hn_y = v12y["height_noise"]
-        for i, foot in enumerate(("lf", "rf", "rl", "rr")):
+        for i, foot in enumerate(obs_protocol.feet_for("Lizard-Rough-v12")):
             term = getattr(v12.observations.extero, f"{foot}_foot_ring")
             if term.func is not teacher_mdp.NoisyFootRing:
                 problems.append(f"v12: extero term {foot}_foot_ring func is not NoisyFootRing")

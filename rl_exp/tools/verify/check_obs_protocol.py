@@ -53,6 +53,41 @@ def content_digest(groups) -> str:
     return hashlib.sha256(inv.canonical(groups).encode("utf-8")).hexdigest()
 
 
+def dims_digest(dims) -> str:
+    """The digest over a protocol's approved widths, key order irrelevant (keys are group names).
+
+    The protocol digest covers the layout, not the widths, so without this an approved width
+    edited in place would change nothing a check can see: the widths are read by the smoke runs
+    (real-run only) and recorded in manifests, and nothing compared them to an approved value.
+    """
+    return hashlib.sha256(inv.canonical(dict(sorted((dims or {}).items()))).encode("utf-8")).hexdigest()
+
+
+def check_dims(key: str, groups: dict, dims) -> list[str]:
+    """Structural rules for an approved width map: real groups, positive ints, all or nothing.
+
+    All-or-nothing because a partial map is ambiguous to read: an absent group reads as "not
+    measured" and as "zero" at the same time, and the two mean different things to a caller.
+    """
+    out: list[str] = []
+    if dims is None:
+        return out
+    if not isinstance(dims, dict):
+        return [f"{key}: dims must be an object"]
+    live = {group for group, body in groups.items() if not body.get("dropped")}
+    unknown = sorted(set(dims) - live)
+    if unknown:
+        out.append(f"{key}: dims name group(s) this protocol does not carry live: {unknown}")
+    missing = sorted(live - set(dims))
+    if dims and missing:
+        out.append(f"{key}: dims must be all or nothing -- no width for {missing}")
+    for group, value in sorted(dims.items()):
+        # bool is an int in Python, and `True` as a width is a typo, not a measurement
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            out.append(f"{key}: dims[{group!r}] = {value!r} is not a positive integer")
+    return out
+
+
 def load(path: pathlib.Path) -> dict:
     """Read a JSON document, or return a stand-in that reports why it could not be read."""
     if not path.is_file():
@@ -91,7 +126,8 @@ def check_self(document: dict) -> list[str]:
 
 
 def check_anchors(document: dict, anchors: dict) -> list[str]:
-    """Reviewed digests: every protocol approved, and an unreferenced one still has a purpose."""
+    """Reviewed digests: every protocol approved, an unreferenced one still has a purpose, and
+    the approved widths consistent with themselves and with the protocol they belong to."""
     if "_missing" in anchors or "_unreadable" in anchors:
         return [next(iter(anchors.values()))]
     approved = anchors.get("protocols")
@@ -100,18 +136,27 @@ def check_anchors(document: dict, anchors: dict) -> list[str]:
     out: list[str] = []
     referenced = {entry.get("protocol") for entry in (document.get("tasks") or {}).values() if isinstance(entry, dict)}
     for key, entry in sorted((document.get("protocols") or {}).items()):
+        groups = entry.get("groups") if isinstance(entry, dict) else None
         anchor = approved.get(key)
         if anchor is None:
             out.append(f"{key}: no approved anchor -- a new or edited protocol is red until a human approves its digest")
             continue
         digest = entry.get("digest") if isinstance(entry, dict) else None
-        if isinstance(anchor, dict):
-            if anchor.get("digest") != digest:
-                out.append(f"{key}: approved digest {anchor.get('digest')!r} != declared {digest!r}")
-            if key not in referenced and not anchor.get("purpose"):
-                out.append(f"{key}: no task references this protocol and its anchor states no purpose")
-        else:
+        if not isinstance(anchor, dict):
             out.append(f"{key}: anchor must be an object carrying the approved digest")
+            continue
+        if anchor.get("digest") != digest:
+            out.append(f"{key}: approved digest {anchor.get('digest')!r} != declared {digest!r}")
+        if key not in referenced and not anchor.get("purpose"):
+            out.append(f"{key}: no task references this protocol and its anchor states no purpose")
+        dims = anchor.get("dims")
+        out.extend(check_dims(key, groups if isinstance(groups, dict) else {}, dims))
+        if isinstance(dims, dict) and dims:
+            if anchor.get("dims_digest") != dims_digest(dims):
+                out.append(
+                    f"{key}: approved dims digest {anchor.get('dims_digest')!r} != recomputed "
+                    f"{dims_digest(dims)!r} -- a width was edited without a re-approval"
+                )
     for key in sorted(set(approved) - set(document.get("protocols") or {})):
         out.append(f"{key}: anchor for a protocol the declaration does not define")
     return out

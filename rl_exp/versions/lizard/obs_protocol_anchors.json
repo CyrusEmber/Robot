@@ -1,6 +1,6 @@
 {
  "format": 1,
- "note": "Approved observation protocol digests (ARCH_PLAN Step 3.1a). Re-approved 2026-09-16 when clip/scale/noise values entered the record; the diff against the previous approval was verified to be representation only (no term, order, dropped or flag change). The gate reads this file and never rewrites it: a new or edited protocol stays red until a human writes its digest here. A protocol no task references must state a purpose. dims are the approved per-group widths (empty = no real run has asserted them yet).",
+ "note": "Approved observation protocol digests (ARCH_PLAN Step 3.1a). Re-approved 2026-09-16 when clip/scale/noise values entered the record; the diff against the previous approval was verified to be representation only (no term, order, dropped or flag change). The gate reads this file and never rewrites it: a new or edited protocol stays red until a human writes its digest here. A protocol no task references must state a purpose. dims are the approved per-group widths (empty = no real run has asserted them yet). dims_digest pins the approved widths; a width may only change with a re-approval.",
  "protocols": {
   "1d87d5c6b546": {
    "digest": "1d87d5c6b5463bc836b5754bbb24c9a49dd7453f67c075a1e61f2805da36165d",
@@ -8,7 +8,8 @@
    "purpose": "",
    "dims": {
     "policy": 308
-   }
+   },
+   "dims_digest": "47fd1c1c28a3eb1becc9ae86fccb0d546363e44755ac327519b53113ffe34f09"
   },
   "287479dc40c7": {
    "digest": "287479dc40c730de7b59824620882369ef7a5809330d18878d77c1229a85bcb8",
@@ -22,7 +23,8 @@
    "purpose": "",
    "dims": {
     "policy": 278
-   }
+   },
+   "dims_digest": "2ddee16f6c375b12460b1ecbcac5eae2f826521b6c5c2c62062aaeb8b405b984"
   },
   "583eaf23b9d1": {
    "digest": "583eaf23b9d1e96fb0d24fed81308aedfc9bfa7eec0b7da04ac90202768831f6",
@@ -30,7 +32,8 @@
    "purpose": "",
    "dims": {
     "policy": 266
-   }
+   },
+   "dims_digest": "a4fcb3a5bd982e93784afa7905a35b9763127124405997be1eb1bde6a44e3ce6"
   },
   "6cd53ec273dc": {
    "digest": "6cd53ec273dc43be29cfe27edb2d5f02782d7aef9a15d46d29451f1ad0efa2d3",
@@ -40,7 +43,8 @@
     "proprio": 90,
     "extero": 208,
     "priv": 83
-   }
+   },
+   "dims_digest": "30059d45eaa1af554943f513abd31ef95554ef2291cf186e8bb4df39851b4a2d"
   },
   "a25a8c39001b": {
    "digest": "a25a8c39001b9aad8ef56c49e6ff77134973afe45dc5277968e1f94275f67bd9",
@@ -54,7 +58,8 @@
    "purpose": "",
    "dims": {
     "policy": 266
-   }
+   },
+   "dims_digest": "a4fcb3a5bd982e93784afa7905a35b9763127124405997be1eb1bde6a44e3ce6"
   },
   "cf66ed6422c8": {
    "digest": "cf66ed6422c82ed7da5bb356b5b1a5d6b8b8b6f5b76dbe45b851366765fdca69",
@@ -62,7 +67,8 @@
    "purpose": "",
    "dims": {
     "policy": 308
-   }
+   },
+   "dims_digest": "47fd1c1c28a3eb1becc9ae86fccb0d546363e44755ac327519b53113ffe34f09"
   },
   "d8de5bc507a7": {
    "digest": "d8de5bc507a76e9904a912347a74caa32675e11efd5ab73fb5cfbfb2a41758c2",
@@ -70,7 +76,8 @@
    "purpose": "",
    "dims": {
     "policy": 278
-   }
+   },
+   "dims_digest": "2ddee16f6c375b12460b1ecbcac5eae2f826521b6c5c2c62062aaeb8b405b984"
   },
   "fa849f7f2d7c": {
    "digest": "fa849f7f2d7c4e144d29955806722b9adbd580b006790b73f5cb7c5ca7c7fd82",
