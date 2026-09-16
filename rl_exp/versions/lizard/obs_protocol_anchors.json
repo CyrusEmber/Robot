@@ -1,0 +1,61 @@
+{
+ "format": 1,
+ "note": "Approved observation protocol digests (ARCH_PLAN Step 3.1a). Approved by the reviewer on 2026-09-16 from the layout survey; the gate reads this file and never rewrites it. A protocol no task references must state a purpose.",
+ "protocols": {
+  "229a965ae531": {
+   "digest": "229a965ae531d587b7aaf977187804cffe3d4ca652926b72e5983f6c7c48f27f",
+   "label": "",
+   "purpose": ""
+  },
+  "2ce098461987": {
+   "digest": "2ce09846198767df7616a83f47c0623a303c93aafc6a1dd3699e3c7ae961133e",
+   "label": "",
+   "purpose": ""
+  },
+  "312414193c59": {
+   "digest": "312414193c59486a190ac388f659051f93dd5f2e038b4e3a8c730a9b382545b4",
+   "label": "",
+   "purpose": ""
+  },
+  "4e3a05b18d34": {
+   "digest": "4e3a05b18d3467d423bb3123575c6ed846f3907d3be18fd7a145e5fdfe0e46eb",
+   "label": "",
+   "purpose": ""
+  },
+  "4fe06fabc5a6": {
+   "digest": "4fe06fabc5a6e4e3e24a6881edc79ebc9039915818dec6dab034511be6f84807",
+   "label": "",
+   "purpose": ""
+  },
+  "5d807f35d732": {
+   "digest": "5d807f35d7325b0354bf8b0a8a0e16d154e96e16b0c7d710cdf3022849293325",
+   "label": "",
+   "purpose": ""
+  },
+  "68f52cb973ca": {
+   "digest": "68f52cb973ca15818c7a83ad7a7320b7682de24d0eb9c3d6c623f7a0400b202d",
+   "label": "",
+   "purpose": ""
+  },
+  "76d123194eb2": {
+   "digest": "76d123194eb244a2da86f5793c95e6b325822ceacb5d9831889f3f15abde7d05",
+   "label": "",
+   "purpose": ""
+  },
+  "89bb3eb4f9d2": {
+   "digest": "89bb3eb4f9d24f52b0db59c7f2b2f30bb865d6474cdb1839b2f16bef38f8702e",
+   "label": "",
+   "purpose": ""
+  },
+  "8c85740ad26c": {
+   "digest": "8c85740ad26c7352b1f9d2cf69e5865e5d54b243a347d692f70c8c06ce4832cf",
+   "label": "",
+   "purpose": ""
+  },
+  "f53b94af2da5": {
+   "digest": "f53b94af2da5829034d466cb679b5d47570acf3517d17bf8ae53260c510a5f3b",
+   "label": "",
+   "purpose": ""
+  }
+ }
+}

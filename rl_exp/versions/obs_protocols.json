@@ -1,0 +1,697 @@
+{
+ "format": 1,
+ "note": "Observation protocol declaration (ARCH_PLAN Step 3.1a). Protocols are keyed by the first 12 hex of their content digest over 'groups' in recorded order; the gate recomputes it and the approved digests live in versions/lizard/obs_protocol_anchors.json.",
+ "protocols": {
+  "229a965ae531": {
+   "digest": "229a965ae531d587b7aaf977187804cffe3d4ca652926b72e5983f6c7c48f27f",
+   "label": "",
+   "groups": {
+    "policy": {
+     "dropped": false,
+     "terms": [
+      "base_lin_vel",
+      "base_ang_vel",
+      "projected_gravity",
+      "velocity_commands",
+      "joint_pos",
+      "joint_vel",
+      "actions",
+      "height_scan",
+      "base_lin_vel_true",
+      "base_ang_vel_true",
+      "foot_contact",
+      "feet_air_time",
+      "body_mass",
+      "foot_contact_forces",
+      "foot_contact_normals",
+      "foot_friction",
+      "thigh_shank_contacts",
+      "base_external_wrench"
+     ],
+     "dropped_terms": [],
+     "clip": [
+      "height_scan"
+     ],
+     "noise": [
+      "base_lin_vel",
+      "base_ang_vel",
+      "projected_gravity",
+      "joint_pos",
+      "joint_vel"
+     ],
+     "flags": {
+      "concatenate_dim": -1,
+      "concatenate_terms": true,
+      "enable_corruption": true,
+      "flatten_history_dim": true,
+      "history_length": null
+     }
+    }
+   }
+  },
+  "2ce098461987": {
+   "digest": "2ce09846198767df7616a83f47c0623a303c93aafc6a1dd3699e3c7ae961133e",
+   "label": "",
+   "groups": {
+    "policy": {
+     "dropped": false,
+     "terms": [
+      "base_lin_vel",
+      "base_ang_vel",
+      "projected_gravity",
+      "velocity_commands",
+      "joint_pos",
+      "joint_vel",
+      "actions",
+      "height_scan"
+     ],
+     "dropped_terms": [
+      "height_scan"
+     ],
+     "clip": [],
+     "noise": [
+      "base_lin_vel",
+      "base_ang_vel",
+      "projected_gravity",
+      "joint_pos",
+      "joint_vel"
+     ],
+     "flags": {
+      "concatenate_dim": -1,
+      "concatenate_terms": true,
+      "enable_corruption": true,
+      "flatten_history_dim": true,
+      "history_length": null
+     }
+    }
+   }
+  },
+  "312414193c59": {
+   "digest": "312414193c59486a190ac388f659051f93dd5f2e038b4e3a8c730a9b382545b4",
+   "label": "",
+   "groups": {
+    "policy": {
+     "dropped": false,
+     "terms": [
+      "base_lin_vel",
+      "base_ang_vel",
+      "projected_gravity",
+      "velocity_commands",
+      "joint_pos",
+      "joint_vel",
+      "actions",
+      "height_scan",
+      "base_lin_vel_true",
+      "base_ang_vel_true",
+      "foot_contact",
+      "feet_air_time",
+      "body_mass",
+      "foot_contact_forces",
+      "foot_contact_normals",
+      "foot_friction",
+      "thigh_shank_contacts",
+      "base_external_wrench"
+     ],
+     "dropped_terms": [
+      "foot_contact_forces",
+      "foot_contact_normals",
+      "foot_friction",
+      "thigh_shank_contacts",
+      "base_external_wrench"
+     ],
+     "clip": [
+      "height_scan"
+     ],
+     "noise": [
+      "base_lin_vel",
+      "base_ang_vel",
+      "projected_gravity",
+      "joint_pos",
+      "joint_vel"
+     ],
+     "flags": {
+      "concatenate_dim": -1,
+      "concatenate_terms": true,
+      "enable_corruption": true,
+      "flatten_history_dim": true,
+      "history_length": null
+     }
+    }
+   }
+  },
+  "4e3a05b18d34": {
+   "digest": "4e3a05b18d3467d423bb3123575c6ed846f3907d3be18fd7a145e5fdfe0e46eb",
+   "label": "",
+   "groups": {
+    "policy": {
+     "dropped": false,
+     "terms": [
+      "base_lin_vel",
+      "base_ang_vel",
+      "projected_gravity",
+      "velocity_commands",
+      "joint_pos",
+      "joint_vel",
+      "actions",
+      "height_scan",
+      "position_commands"
+     ],
+     "dropped_terms": [
+      "velocity_commands"
+     ],
+     "clip": [
+      "height_scan"
+     ],
+     "noise": [],
+     "flags": {
+      "concatenate_dim": -1,
+      "concatenate_terms": true,
+      "enable_corruption": true,
+      "flatten_history_dim": true,
+      "history_length": null
+     }
+    }
+   }
+  },
+  "4fe06fabc5a6": {
+   "digest": "4fe06fabc5a6e4e3e24a6881edc79ebc9039915818dec6dab034511be6f84807",
+   "label": "",
+   "groups": {
+    "policy": {
+     "dropped": false,
+     "terms": [
+      "base_lin_vel",
+      "base_ang_vel",
+      "projected_gravity",
+      "velocity_commands",
+      "joint_pos",
+      "joint_vel",
+      "actions",
+      "height_scan",
+      "position_commands"
+     ],
+     "dropped_terms": [
+      "velocity_commands"
+     ],
+     "clip": [
+      "height_scan"
+     ],
+     "noise": [],
+     "flags": {
+      "concatenate_dim": -1,
+      "concatenate_terms": true,
+      "enable_corruption": false,
+      "flatten_history_dim": true,
+      "history_length": null
+     }
+    }
+   }
+  },
+  "5d807f35d732": {
+   "digest": "5d807f35d7325b0354bf8b0a8a0e16d154e96e16b0c7d710cdf3022849293325",
+   "label": "",
+   "groups": {
+    "policy": {
+     "dropped": false,
+     "terms": [
+      "base_lin_vel",
+      "base_ang_vel",
+      "projected_gravity",
+      "velocity_commands",
+      "joint_pos",
+      "joint_vel",
+      "actions",
+      "height_scan"
+     ],
+     "dropped_terms": [
+      "height_scan"
+     ],
+     "clip": [],
+     "noise": [
+      "base_lin_vel",
+      "base_ang_vel",
+      "projected_gravity",
+      "joint_pos",
+      "joint_vel"
+     ],
+     "flags": {
+      "concatenate_dim": -1,
+      "concatenate_terms": true,
+      "enable_corruption": false,
+      "flatten_history_dim": true,
+      "history_length": null
+     }
+    }
+   }
+  },
+  "68f52cb973ca": {
+   "digest": "68f52cb973ca15818c7a83ad7a7320b7682de24d0eb9c3d6c623f7a0400b202d",
+   "label": "",
+   "groups": {
+    "policy": {
+     "dropped": false,
+     "terms": [
+      "base_lin_vel",
+      "base_ang_vel",
+      "projected_gravity",
+      "velocity_commands",
+      "joint_pos",
+      "joint_vel",
+      "actions",
+      "height_scan"
+     ],
+     "dropped_terms": [],
+     "clip": [
+      "height_scan"
+     ],
+     "noise": [
+      "base_lin_vel",
+      "base_ang_vel",
+      "projected_gravity",
+      "joint_pos",
+      "joint_vel",
+      "height_scan"
+     ],
+     "flags": {
+      "concatenate_dim": -1,
+      "concatenate_terms": true,
+      "enable_corruption": true,
+      "flatten_history_dim": true,
+      "history_length": null
+     }
+    }
+   }
+  },
+  "76d123194eb2": {
+   "digest": "76d123194eb244a2da86f5793c95e6b325822ceacb5d9831889f3f15abde7d05",
+   "label": "",
+   "groups": {
+    "policy": {
+     "dropped": false,
+     "terms": [
+      "base_lin_vel",
+      "base_ang_vel",
+      "projected_gravity",
+      "velocity_commands",
+      "joint_pos",
+      "joint_vel",
+      "actions",
+      "height_scan",
+      "base_lin_vel_true",
+      "base_ang_vel_true",
+      "foot_contact",
+      "feet_air_time",
+      "body_mass",
+      "foot_contact_forces",
+      "foot_contact_normals",
+      "foot_friction",
+      "thigh_shank_contacts",
+      "base_external_wrench"
+     ],
+     "dropped_terms": [],
+     "clip": [
+      "height_scan"
+     ],
+     "noise": [
+      "base_lin_vel",
+      "base_ang_vel",
+      "projected_gravity",
+      "joint_pos",
+      "joint_vel"
+     ],
+     "flags": {
+      "concatenate_dim": -1,
+      "concatenate_terms": true,
+      "enable_corruption": false,
+      "flatten_history_dim": true,
+      "history_length": null
+     }
+    }
+   }
+  },
+  "89bb3eb4f9d2": {
+   "digest": "89bb3eb4f9d24f52b0db59c7f2b2f30bb865d6474cdb1839b2f16bef38f8702e",
+   "label": "",
+   "groups": {
+    "policy": {
+     "dropped": false,
+     "terms": [
+      "base_lin_vel",
+      "base_ang_vel",
+      "projected_gravity",
+      "velocity_commands",
+      "joint_pos",
+      "joint_vel",
+      "actions",
+      "height_scan",
+      "base_lin_vel_true",
+      "base_ang_vel_true",
+      "foot_contact",
+      "feet_air_time",
+      "body_mass",
+      "foot_contact_forces",
+      "foot_contact_normals",
+      "foot_friction",
+      "thigh_shank_contacts",
+      "base_external_wrench"
+     ],
+     "dropped_terms": [
+      "foot_contact_forces",
+      "foot_contact_normals",
+      "foot_friction",
+      "thigh_shank_contacts",
+      "base_external_wrench"
+     ],
+     "clip": [
+      "height_scan"
+     ],
+     "noise": [
+      "base_lin_vel",
+      "base_ang_vel",
+      "projected_gravity",
+      "joint_pos",
+      "joint_vel"
+     ],
+     "flags": {
+      "concatenate_dim": -1,
+      "concatenate_terms": true,
+      "enable_corruption": false,
+      "flatten_history_dim": true,
+      "history_length": null
+     }
+    }
+   }
+  },
+  "8c85740ad26c": {
+   "digest": "8c85740ad26c7352b1f9d2cf69e5865e5d54b243a347d692f70c8c06ce4832cf",
+   "label": "",
+   "groups": {
+    "policy": {
+     "dropped": true,
+     "flags": {},
+     "terms": [],
+     "dropped_terms": [],
+     "clip": [],
+     "noise": []
+    },
+    "proprio": {
+     "dropped": false,
+     "terms": [
+      "base_lin_vel",
+      "base_ang_vel",
+      "projected_gravity",
+      "velocity_commands",
+      "joint_pos",
+      "joint_vel",
+      "actions"
+     ],
+     "dropped_terms": [],
+     "clip": [],
+     "noise": [
+      "base_lin_vel",
+      "base_ang_vel",
+      "projected_gravity",
+      "joint_pos",
+      "joint_vel"
+     ],
+     "flags": {
+      "concatenate_dim": -1,
+      "concatenate_terms": true,
+      "enable_corruption": false,
+      "flatten_history_dim": true,
+      "history_length": null
+     }
+    },
+    "extero": {
+     "dropped": false,
+     "terms": [
+      "lf_foot_ring",
+      "rf_foot_ring",
+      "rl_foot_ring",
+      "rr_foot_ring"
+     ],
+     "dropped_terms": [],
+     "clip": [
+      "lf_foot_ring",
+      "rf_foot_ring",
+      "rl_foot_ring",
+      "rr_foot_ring"
+     ],
+     "noise": [],
+     "flags": {
+      "concatenate_dim": -1,
+      "concatenate_terms": true,
+      "enable_corruption": false,
+      "flatten_history_dim": true,
+      "history_length": null
+     }
+    },
+    "priv": {
+     "dropped": false,
+     "terms": [
+      "base_lin_vel_true",
+      "base_ang_vel_true",
+      "foot_contact",
+      "feet_air_time",
+      "body_mass",
+      "foot_contact_forces",
+      "foot_contact_normals",
+      "foot_friction",
+      "thigh_shank_contacts",
+      "base_external_wrench"
+     ],
+     "dropped_terms": [],
+     "clip": [],
+     "noise": [],
+     "flags": {
+      "concatenate_dim": -1,
+      "concatenate_terms": true,
+      "enable_corruption": false,
+      "flatten_history_dim": true,
+      "history_length": null
+     }
+    }
+   }
+  },
+  "f53b94af2da5": {
+   "digest": "f53b94af2da5829034d466cb679b5d47570acf3517d17bf8ae53260c510a5f3b",
+   "label": "",
+   "groups": {
+    "policy": {
+     "dropped": false,
+     "terms": [
+      "base_lin_vel",
+      "base_ang_vel",
+      "projected_gravity",
+      "velocity_commands",
+      "joint_pos",
+      "joint_vel",
+      "actions",
+      "height_scan"
+     ],
+     "dropped_terms": [],
+     "clip": [
+      "height_scan"
+     ],
+     "noise": [
+      "base_lin_vel",
+      "base_ang_vel",
+      "projected_gravity",
+      "joint_pos",
+      "joint_vel",
+      "height_scan"
+     ],
+     "flags": {
+      "concatenate_dim": -1,
+      "concatenate_terms": true,
+      "enable_corruption": false,
+      "flatten_history_dim": true,
+      "history_length": null
+     }
+    }
+   }
+  }
+ },
+ "tasks": {
+  "Lizard-Baseline-Flat-Play-v1": {
+   "protocol": "5d807f35d732",
+   "version": "v1",
+   "line": "lizard/baseline"
+  },
+  "Lizard-Baseline-Flat-v1": {
+   "protocol": "5d807f35d732",
+   "version": "v1",
+   "line": "lizard/baseline"
+  },
+  "Lizard-Parkour-Climb-Play-v1": {
+   "protocol": "4fe06fabc5a6",
+   "version": "v1",
+   "line": "lizard/parkour"
+  },
+  "Lizard-Parkour-Climb-v1": {
+   "protocol": "4e3a05b18d34",
+   "version": "v1",
+   "line": "lizard/parkour"
+  },
+  "Lizard-Rough-Play-v1": {
+   "protocol": "89bb3eb4f9d2",
+   "version": "v1",
+   "line": "lizard/main"
+  },
+  "Lizard-Rough-Play-v10": {
+   "protocol": "8c85740ad26c",
+   "version": "v10",
+   "line": "lizard/main"
+  },
+  "Lizard-Rough-Play-v11": {
+   "protocol": "8c85740ad26c",
+   "version": "v11",
+   "line": "lizard/main"
+  },
+  "Lizard-Rough-Play-v12": {
+   "protocol": "8c85740ad26c",
+   "version": "v12",
+   "line": "lizard/main"
+  },
+  "Lizard-Rough-Play-v13": {
+   "protocol": "8c85740ad26c",
+   "version": "v13",
+   "line": "lizard/main"
+  },
+  "Lizard-Rough-Play-v14": {
+   "protocol": "8c85740ad26c",
+   "version": "v14",
+   "line": "lizard/main"
+  },
+  "Lizard-Rough-Play-v2": {
+   "protocol": "76d123194eb2",
+   "version": "v2",
+   "line": "lizard/main"
+  },
+  "Lizard-Rough-Play-v3": {
+   "protocol": "8c85740ad26c",
+   "version": "v3",
+   "line": "lizard/main"
+  },
+  "Lizard-Rough-Play-v4": {
+   "protocol": "8c85740ad26c",
+   "version": "v4",
+   "line": "lizard/main"
+  },
+  "Lizard-Rough-Play-v5": {
+   "protocol": "8c85740ad26c",
+   "version": "v5",
+   "line": "lizard/main"
+  },
+  "Lizard-Rough-Play-v6": {
+   "protocol": "8c85740ad26c",
+   "version": "v6",
+   "line": "lizard/main"
+  },
+  "Lizard-Rough-Play-v8": {
+   "protocol": "8c85740ad26c",
+   "version": "v8",
+   "line": "lizard/main"
+  },
+  "Lizard-Rough-v1": {
+   "protocol": "312414193c59",
+   "version": "v1",
+   "line": "lizard/main"
+  },
+  "Lizard-Rough-v10": {
+   "protocol": "8c85740ad26c",
+   "version": "v10",
+   "line": "lizard/main"
+  },
+  "Lizard-Rough-v11": {
+   "protocol": "8c85740ad26c",
+   "version": "v11",
+   "line": "lizard/main"
+  },
+  "Lizard-Rough-v12": {
+   "protocol": "8c85740ad26c",
+   "version": "v12",
+   "line": "lizard/main"
+  },
+  "Lizard-Rough-v13": {
+   "protocol": "8c85740ad26c",
+   "version": "v13",
+   "line": "lizard/main"
+  },
+  "Lizard-Rough-v14": {
+   "protocol": "8c85740ad26c",
+   "version": "v14",
+   "line": "lizard/main"
+  },
+  "Lizard-Rough-v2": {
+   "protocol": "229a965ae531",
+   "version": "v2",
+   "line": "lizard/main"
+  },
+  "Lizard-Rough-v3": {
+   "protocol": "8c85740ad26c",
+   "version": "v3",
+   "line": "lizard/main"
+  },
+  "Lizard-Rough-v4": {
+   "protocol": "8c85740ad26c",
+   "version": "v4",
+   "line": "lizard/main"
+  },
+  "Lizard-Rough-v5": {
+   "protocol": "8c85740ad26c",
+   "version": "v5",
+   "line": "lizard/main"
+  },
+  "Lizard-Rough-v6": {
+   "protocol": "8c85740ad26c",
+   "version": "v6",
+   "line": "lizard/main"
+  },
+  "Lizard-Rough-v8": {
+   "protocol": "8c85740ad26c",
+   "version": "v8",
+   "line": "lizard/main"
+  },
+  "Lizard-Velocity-Curriculum-Flat-Play-v0": {
+   "protocol": "5d807f35d732",
+   "version": null,
+   "line": "lizard/main"
+  },
+  "Lizard-Velocity-Curriculum-Flat-v0": {
+   "protocol": "2ce098461987",
+   "version": null,
+   "line": "lizard/main"
+  },
+  "Lizard-Velocity-Curriculum-Rough-Play-v0": {
+   "protocol": "f53b94af2da5",
+   "version": null,
+   "line": "lizard/main"
+  },
+  "Lizard-Velocity-Curriculum-Rough-v0": {
+   "protocol": "68f52cb973ca",
+   "version": null,
+   "line": "lizard/main"
+  },
+  "Lizard-Velocity-Flat-Play-v0": {
+   "protocol": "5d807f35d732",
+   "version": null,
+   "line": "lizard/main"
+  },
+  "Lizard-Velocity-Flat-v0": {
+   "protocol": "2ce098461987",
+   "version": null,
+   "line": "lizard/main"
+  },
+  "Lizard-Velocity-Rough-Play-v0": {
+   "protocol": "f53b94af2da5",
+   "version": null,
+   "line": "lizard/main"
+  },
+  "Lizard-Velocity-Rough-v0": {
+   "protocol": "68f52cb973ca",
+   "version": null,
+   "line": "lizard/main"
+  }
+ }
+}

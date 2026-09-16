@@ -29,6 +29,7 @@ Exit code is 0 on a readable set of goldens, 1 when a golden is missing or unrea
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import pathlib
 import re
@@ -142,10 +143,50 @@ def survey(paths: list[pathlib.Path]) -> tuple[dict[str, dict], dict[str, list[s
     return clusters, facts, problems
 
 
+def record(clusters: dict[str, list[str]], facts: dict[str, dict]) -> dict:
+    """The declaration draft: protocols keyed by their own content digest.
+
+    The key is the digest rather than a human name because a name can drift from the content
+    it claims to describe, and a silent edit would then keep the same key. Keyed by digest, an
+    edit changes the key, the entry no longer describes itself, and the gate is red before any
+    reviewer has to notice. Labels stay free text and never take part in the check.
+    """
+    protocols: dict[str, dict] = {}
+    tasks: dict[str, dict] = {}
+    for signature, task_ids in clusters.items():
+        body = json.loads(signature)
+        digest = hashlib.sha256(canonical(body).encode("utf-8")).hexdigest()
+        protocols.setdefault(digest[:12], {"digest": digest, "label": "", "groups": body})
+        for task in task_ids:
+            fact = facts[task]
+            tasks[task] = {"protocol": digest[:12], "version": fact["version"], "line": fact["line"]}
+    return {
+        "format": 1,
+        "note": (
+            "Observation protocol declaration (ARCH_PLAN Step 3.1a). Protocols are keyed by the "
+            "first 12 hex of their content digest over 'groups' in recorded order; the gate "
+            "recomputes it and the approved digests live in versions/lizard/obs_protocol_anchors.json."
+        ),
+        "protocols": dict(sorted(protocols.items())),
+        "tasks": dict(sorted(tasks.items())),
+    }
+
+
+def canonical(body) -> str:
+    """Order-preserving canonical JSON: group and term order is part of the protocol."""
+    return json.dumps(body, ensure_ascii=False, sort_keys=False, separators=(",", ":"))
+
+
 def main(argv: list[str] | None = None) -> int:
-    """Print the clusters (human table, or ``--json``), then every problem."""
+    """Print the clusters (human table, or ``--json``), then every problem.
+
+    ``--out`` writes the declaration draft instead of printing; it is the only mode that writes
+    anything, and it exists so the draft is produced by the same reader that the gate's offline
+    half uses rather than retyped.
+    """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--json", action="store_true", help="emit the survey as JSON instead of a table")
+    parser.add_argument("--out", metavar="PATH", help="write the declaration draft to PATH (authoring only)")
     args = parser.parse_args(argv)
 
     paths = goldens()
@@ -153,7 +194,17 @@ def main(argv: list[str] | None = None) -> int:
         print("  FAIL no cfg_lock.json found under rl_exp/versions")
         return 1
     clusters, facts, problems = survey(paths)
+    if problems:
+        for problem in problems:
+            print(f"  FAIL {problem}")
+        return 1
     print(f"  goldens: {len(paths)} | tasks: {len(facts)} | distinct layouts: {len(clusters)}")
+    if args.out:
+        document = record(clusters, facts)
+        path = pathlib.Path(args.out)
+        path.write_text(json.dumps(document, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+        print(f"  wrote {path} ({len(document['protocols'])} protocol(s), {len(document['tasks'])} task(s))")
+        return 0
     if args.json:
         print(json.dumps({"clusters": clusters, "tasks": facts}, ensure_ascii=False, indent=1))
     else:
@@ -170,9 +221,7 @@ def main(argv: list[str] | None = None) -> int:
                 live = [t if t not in value["dropped_terms"] else f"{t}(dropped)" for t in value["terms"]]
                 print(f"    {group}: {', '.join(live)}")
             print(f"    tasks: {', '.join(sorted(tasks))}")
-    for problem in problems:
-        print(f"  FAIL {problem}")
-    return 1 if problems else 0
+    return 0
 
 
 if __name__ == "__main__":
