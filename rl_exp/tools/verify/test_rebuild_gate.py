@@ -11,6 +11,7 @@ manifest contains stays decided in one place.
 """
 
 import json
+import os
 import pathlib
 import shutil
 import sys
@@ -25,6 +26,11 @@ from rl_exp.tools.runrecord import manifest as M  # noqa: E402
 from rl_exp.tools.runrecord import provenance as prov  # noqa: E402
 from rl_exp.tools.runrecord import rebuild as R  # noqa: E402
 from test_run_manifest import _record  # noqa: E402
+
+# This gate exists to record dirty/untracked runs, so its synthetic runs have to be allowed
+# to start from one -- the launch guard in run_manifest.begin is opted out here deliberately,
+# stating a reason exactly as a human would have to.
+os.environ.setdefault(M.DIRTY_OVERRIDE_ENV, "offline test: exercises dirty/untracked run records")
 
 PROBLEMS: list[str] = []
 TASK = "Lizard-Rough-v14"

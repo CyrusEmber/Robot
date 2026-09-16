@@ -16,6 +16,7 @@ here so the policy cannot memorize a single dynamics realization.
 """
 
 import pathlib
+from typing import ClassVar
 
 import yaml
 
@@ -61,6 +62,12 @@ def _load_params(version: str | None = None) -> dict:
 @configclass
 class LizardFlatEnvCfg(LocomotionVelocityRoughEnvCfg):
     """26-joint lizard on flat ground, full domain randomization."""
+
+    # which recipe line these parameters belong to: the declared owner every gate routes
+    # by, instead of guessing from a task id or an entry-point path. ClassVar on purpose
+    # -- a plain member would be back-filled into a dataclass field and change every
+    # task's config snapshot, turning a declaration into a golden refresh.
+    params_line: ClassVar[str] = _VERSION_FAMILY
 
     # param generation: None = live dev yaml (family experiments);
     # a frozen version ("v0", "v1", ...) reads versions/<family>/<version>/lizard_params.yaml

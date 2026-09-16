@@ -497,6 +497,10 @@ class LizardRoughTeacherEnvCfg(LocomotionVelocityRoughEnvCfg):
     includes is governed by ``TEACHER_PRIVILEGED_SPEC`` above.
     """
 
+    # declared owner: the recipe line every gate routes by (ClassVar so this statement
+    # about the recipe does not enter the config snapshot and move the golden)
+    params_line: ClassVar[str] = _VERSION_FAMILY
+
     # v2 = latest (paper-aligned privileged obs); see versions/lizard/v2/NOTES.md
     params_version = "v2"
 

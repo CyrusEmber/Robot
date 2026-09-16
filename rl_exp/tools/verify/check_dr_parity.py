@@ -40,6 +40,9 @@ import pathlib
 import re
 import sys
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from recipe_lines import RecipeLine, RecipeLineError, discover  # noqa: E402
+
 _REPO = pathlib.Path(__file__).resolve().parents[3]
 _EXP = _REPO / "rl_exp"
 _TASKS = _EXP / "tasks"
@@ -219,32 +222,47 @@ def _yaml_block_list(text: str, key: str) -> list[str]:
     return [item.strip().strip("\"'") for item in re.findall(r"[ \t]+- (.+)", match.group(1))]
 
 
-def _version_yamls() -> dict[str, pathlib.Path]:
-    yamls = {"dev": _VERSIONS / "lizard" / "lizard_params.yaml"}
-    for vdir in sorted(_VERSIONS.glob("*/v*")):
-        cfg = vdir / "lizard_params.yaml"
-        if cfg.exists():
-            yamls[str(vdir.relative_to(_VERSIONS))] = cfg
+def _recipe_lines(problems: list[str]) -> list[RecipeLine]:
+    """Every recipe line the tree declares, through the one shared discovery entry.
+
+    A tree that breaks the yaml/lock convention is reported here and yields no lines --
+    never a partial list. A gate that checks "the files it happened to recognise" cannot
+    tell a clean tree from an unrecognised one, which is how this file's two older
+    discovery copies (a fixed filename, and a recursive glob) came to disagree.
+    """
+    try:
+        return list(discover().values())
+    except RecipeLineError as err:
+        problems.append(f"recipe line discovery: {err}")
+        return []
+
+
+def _version_yamls(problems: list[str]) -> dict[str, pathlib.Path]:
+    """Main-line yamls, keyed the way records are (``lizard/dev``, ``lizard/v14``).
+
+    Main-line-only on purpose: the asset CONTRACT asserts the usda against
+    ``joint_order`` and the body-name lists, which a side line's different recipe schema
+    does not carry (``lizard/parkour``). Every line is still covered by the asset LOCK.
+    """
+    yamls: dict[str, pathlib.Path] = {}
+    for line in _recipe_lines(problems):
+        if not line.is_main_line:
+            continue
+        yamls[f"{line.key}/dev"] = line.dev_yaml
+        for version, path in line.versions.items():
+            yamls[f"{line.key}/{version}"] = path
     return yamls
 
 
-def _recipe_dirs() -> list[pathlib.Path]:
-    """Every version dir (main line AND side lines, e.g. lizard/parkour/v1)
-    that carries its own frozen *_params.yaml -- recursive so side lines are
-    not invisible to the asset-lock scan. The asset CONTRACT (usda joints vs
-    lizard joint_order) stays main-line-only: side lines are different
-    recipe schemas and are gated by check_version_docs for records/lineage."""
-    dirs: list[pathlib.Path] = []
-    for fdir in sorted(p for p in _VERSIONS.iterdir() if p.is_dir()):
-        for cfg in sorted(fdir.rglob("*_params.yaml")):
-            if re.fullmatch(r"v\d+", cfg.parent.name):
-                dirs.append(cfg.parent)
-    return dirs
+def _recipe_yamls(problems: list[str]) -> list[pathlib.Path]:
+    """Every frozen yaml in the tree; a yaml's parent directory is its version dir."""
+    return [path for line in _recipe_lines(problems) for path in line.versions.values()]
 
 
 def check_asset_contract() -> list[str]:
     problems = []
-    for tag, path in _version_yamls().items():
+    yamls = _version_yamls(problems)
+    for tag, path in yamls.items():
         text = path.read_text(encoding="utf-8")
         usda_path = _EXP / _yaml_scalar(text, "usd_path")
         if not usda_path.exists():
@@ -268,7 +286,7 @@ def check_asset_contract() -> list[str]:
             for pattern in _yaml_block_list(text, key):
                 if not any(re.search(pattern, link) for link in links):
                     problems.append(f"{tag}: body pattern matches no link: {key}={pattern}")
-    print(f"  yamls checked: {len(_version_yamls())}")
+    print(f"  yamls checked: {len(yamls)}")
     return problems
 
 
@@ -286,21 +304,24 @@ def _lock_files() -> list[str]:
     return files
 
 
-def _own_yaml(vdir: pathlib.Path) -> pathlib.Path:
-    return next(iter(sorted(vdir.glob("*_params.yaml"))))
-
-
-def _asset_hashes(vdir: pathlib.Path) -> dict[str, str]:
+def _asset_hashes(yaml_path: pathlib.Path) -> dict[str, str]:
     """Global assets + that version's own frozen params yaml (post-freeze yaml
     edits are contract breaks, not tweaks)."""
     files = _lock_files()
-    files.append(str(_own_yaml(vdir).relative_to(_EXP)).replace("\\", "/"))
+    files.append(str(yaml_path.relative_to(_EXP)).replace("\\", "/"))
     return {rel: hashlib.sha256((_EXP / rel).read_bytes()).hexdigest() for rel in files}
 
 
-def update_asset_locks() -> None:
-    for vdir in _recipe_dirs():
-        current = _asset_hashes(vdir)
+def update_asset_locks() -> list[str]:
+    """Rewrite every version lock that actually changed; return discovery problems.
+
+    Discovery problems are returned rather than raised so ``--update-locks`` can refuse
+    loudly instead of printing ``LOCKS_UPDATED`` over a tree it only half understood.
+    """
+    problems: list[str] = []
+    for yaml_path in _recipe_yamls(problems):
+        vdir = yaml_path.parent
+        current = _asset_hashes(yaml_path)
         lock = vdir / "asset_lock.json"
         if lock.exists():
             try:
@@ -318,23 +339,26 @@ def update_asset_locks() -> None:
         (vdir / "asset_lock.json").write_text(
             json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         print(f"  locked {vdir.relative_to(_VERSIONS)}")
+    return problems
 
 
 def check_asset_locks() -> list[str]:
     problems = []
-    for vdir in _recipe_dirs():
+    yamls = _recipe_yamls(problems)
+    for yaml_path in yamls:
+        vdir = yaml_path.parent
         vtag = str(vdir.relative_to(_VERSIONS))
         lock = vdir / "asset_lock.json"
         if not lock.exists():
             problems.append(f"{vtag}: no asset_lock.json (run --update-locks once)")
             continue
-        current = _asset_hashes(vdir)
+        current = _asset_hashes(yaml_path)
         recorded = json.loads(lock.read_text(encoding="utf-8"))["files"]
         for rel, sha in current.items():
             if recorded.get(rel) != sha:
                 problems.append(f"{vtag}: asset changed since freeze: {rel} "
                                 f"{recorded.get(rel, '?')[:8]} -> {sha[:8]}")
-    print(f"  versions locked: {len(_recipe_dirs())}")
+    print(f"  versions locked: {len(yamls)}")
     return problems
 
 
@@ -346,7 +370,12 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.update_locks:
-        update_asset_locks()
+        problems = update_asset_locks()
+        if problems:
+            for p in problems:
+                print(f"  DRIFT: {p}")
+            print("LOCKS_NOT_UPDATED")
+            return 1
         print("LOCKS_UPDATED")
         return 0
 

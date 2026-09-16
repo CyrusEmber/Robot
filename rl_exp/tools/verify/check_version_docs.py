@@ -6,12 +6,14 @@
 """Version-record completeness gate (no sim, stdlib only -- pre-commit safe).
 
 Mechanizes versioning.mdc section A steps 2 and 5: every recipe version
-directory ships the four-piece set (PLAN.md, NOTES.md, lizard_params.yaml,
-asset_lock.json locking its own yaml), the family FAMILY.md version-history
+directory ships the four-piece set (PLAN.md, NOTES.md, <line>_params.yaml --
+named after its line, so a path names its owner, asset_lock.json locking its
+own yaml), the family FAMILY.md version-history
 table carries its row, and FILEMAP.md lists the directory. Ungated
 conventions were the root cause of the v10/v11 record debt (v11 NOTES.md
 missing at kickoff, FAMILY/FILEMAP lagging two versions), so the same drift
-now turns red like any other freeze-contract violation.
+now turns red like any other freeze-contract violation. Which directories are
+discoverable at all is delegated to ``recipe_lines`` rather than counted here.
 
 Known ceiling (warn, not fail): git tags. Legacy versions predate the tag
 discipline and prefix styles differ (v1/v2/v5 vs lizard-vN), so a missing
@@ -36,6 +38,9 @@ import re
 import subprocess
 import sys
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from recipe_lines import RecipeLineError, discover  # noqa: E402
+
 _REPO = pathlib.Path(__file__).resolve().parents[3]
 _VERSIONS = _REPO / "rl_exp" / "versions"
 
@@ -57,6 +62,26 @@ def main(show_tree: bool = "--tree" in sys.argv) -> int:
     filemap_text = (_REPO / "FILEMAP.md").read_text(encoding="utf-8")
     families = sorted(p for p in _VERSIONS.iterdir() if p.is_dir())
 
+    # Which directories are discoverable versions, and under which params filename, is
+    # answered by recipe_lines -- the single owner of that convention. Counting
+    # *_params.yaml here as well is how this file and check_dr_parity came to disagree
+    # about a misnamed or missing file (each thought the other checked it).
+    try:
+        lines = discover()
+        discovery_error: str | None = None
+    except RecipeLineError as err:
+        lines = {}
+        discovery_error = str(err)
+    # keys are in this file's own record space: a version directory's path relative to
+    # its family ("v0" for the main line, "parkour/v1" for a side line)
+    discovered = {
+        f"{line.key}/{version}".split("/", 1)[1]: path.name
+        for line in lines.values()
+        for version, path in line.versions.items()
+    }
+    if discovery_error is not None:
+        problems.append(f"recipe line discovery: {discovery_error}")
+
     for family_dir in families:
         family = family_dir.name
         family_md = family_dir / "FAMILY.md"
@@ -76,11 +101,11 @@ def main(show_tree: bool = "--tree" in sys.argv) -> int:
         parent: dict[str, str | None] = {}
         for rel in rels:
             vdir = family_dir.joinpath(*rel.split("/"))
-            own_yaml = sorted(f.name for f in vdir.glob("*_params.yaml"))
-            if len(own_yaml) != 1:
+            own_yaml = discovered.get(rel)
+            if discovery_error is None and own_yaml is None:
                 problems.append(
-                    f"{family}/{rel}: expected exactly one *_params.yaml, found "
-                    f"{own_yaml or 'none'} (versioning.mdc A-2 four-piece set)"
+                    f"{family}/{rel}: recipe_lines cannot discover this version directory "
+                    f"(versioning.mdc A-2: exactly one params file, named after its line)"
                 )
             for piece in ("PLAN.md", "NOTES.md", "asset_lock.json"):
                 if not (vdir / piece).is_file():
@@ -88,10 +113,10 @@ def main(show_tree: bool = "--tree" in sys.argv) -> int:
                         f"{family}/{rel}: {piece} missing (versioning.mdc A-2 four-piece set)"
                     )
             lock_path = vdir / "asset_lock.json"
-            if lock_path.is_file() and own_yaml:
+            if lock_path.is_file() and own_yaml is not None:
                 try:
                     lock = json.loads(lock_path.read_text(encoding="utf-8"))
-                    key = f"versions/{family}/{rel}/{own_yaml[0]}"
+                    key = f"versions/{family}/{rel}/{own_yaml}"
                     if key not in lock.get("files", {}):
                         problems.append(
                             f"{family}/{rel}: asset_lock.json does not lock its own yaml ({key})"

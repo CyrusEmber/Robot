@@ -12,6 +12,7 @@ checkpoint written before T1 all have to be reported as blocking.
 """
 
 import json
+import os
 import pathlib
 import shutil
 import sys
@@ -386,6 +387,72 @@ def main() -> int:
             "determinism/state-digest",
             M._state_digest(runner) == M._state_digest(runner),
             "state digest unstable",
+        )
+        # --- a dirty project tree is refused at launch, not merely recorded -------
+        # No revision restores a dirty tree, so the run's rebuildable claim could never be
+        # proved -- learning that at launch beats learning it months later. The provenance
+        # is injected so the case does not depend on whether the developer happens to have
+        # uncommitted work.
+        dirty_sources = json.loads(json.dumps(_clean_sources()))
+        dirty_sources["repository"].update(dirty=True, diff_lines=17, untracked_count=2)
+        prov.code_sources = lambda: dirty_sources
+        dirty_dir = root / "2026-09-15_11-00-00_v14"
+        dirty_dir.mkdir()
+        cfg_dirty = LizardRoughTeacherEnvCfg_V14()
+        agent_dirty = LizardTeacherV14PPORunnerCfg()
+        saved_override = os.environ.pop(M.DIRTY_OVERRIDE_ENV, None)
+        try:
+            M.begin(log_dir=dirty_dir, task=TASK, argv=["train.py"], env_cfg=cfg_dirty, agent_cfg=agent_dirty)
+            check("dirty/refused", False, "a dirty project tree was accepted without a stated reason")
+        except RuntimeError as err:
+            check("dirty/refused", M.DIRTY_OVERRIDE_ENV in str(err) and "dirty" in str(err), f"{err}")
+        refused = json.loads((dirty_dir / M.MANIFEST_NAME).read_text(encoding="utf-8"))
+        check(
+            "dirty/refusal-is-recorded",
+            any("refused" in failure for failure in refused.get("failures", [])),
+            f"{refused.get('failures')}",
+        )
+        check(
+            "dirty/refusal-wrote-t0",
+            "pre_make" in refused.get("stages", {}),
+            "the refusal left no evidence on disk",
+        )
+        check("dirty/refusal-verify-blocks", M.main(["--verify", str(dirty_dir)]) != 0, "a refused launch verified clean")
+
+        os.environ[M.DIRTY_OVERRIDE_ENV] = "offline test: must run in whatever tree it finds"
+        try:
+            ctx_dirty = M.begin(
+                log_dir=dirty_dir, task=TASK, argv=["train.py"], env_cfg=cfg_dirty, agent_cfg=agent_dirty
+            )
+            check(
+                "dirty/override-records-its-reason",
+                ctx_dirty.manifest["declaration"].get("dirty_tree_override_reason", "").startswith("offline test"),
+                f"{ctx_dirty.manifest['declaration'].get('dirty_tree_override_reason')}",
+            )
+        finally:
+            if saved_override is None:
+                os.environ.pop(M.DIRTY_OVERRIDE_ENV, None)
+            else:
+                os.environ[M.DIRTY_OVERRIDE_ENV] = saved_override
+        check(
+            "dirty/clean-tree-needs-no-override",
+            M.dirty_tree_refusal(types.SimpleNamespace(manifest={"code": _clean_sources()})) is None,
+            "a clean tree was refused",
+        )
+        check(
+            "dirty/only-the-project-tree-blocks",
+            M.dirty_tree_refusal(
+                types.SimpleNamespace(
+                    manifest={
+                        "code": {
+                            **_clean_sources(),
+                            "isaaclab": {**_clean_sources()["isaaclab"], "dirty": True},
+                        }
+                    }
+                )
+            )
+            is None,
+            "the IsaacLab tree (expected to carry uncommitted fork patches) blocked a launch",
         )
     finally:
         prov.code_sources = real_sources

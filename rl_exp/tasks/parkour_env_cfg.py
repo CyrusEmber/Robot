@@ -28,6 +28,7 @@ Deviations from the paper (declared, parkour/v1/PLAN.md section 2):
 from __future__ import annotations
 
 import pathlib
+from typing import ClassVar
 
 import yaml
 
@@ -62,10 +63,29 @@ if __name__ == "__main__":
 
 _RL_EXP_DIR = pathlib.Path(__file__).resolve().parents[1]
 
+# family-relative handle of this recipe line: the one place that answers "whose line is
+# this", used both here for the parameter path and by the gates for the lock routing
+_LINE_KEY = "lizard/parkour"
+_LINE_DIR = _RL_EXP_DIR / "versions" / _LINE_KEY
+_DEFAULT_VERSION = "v1"
 
-def _load_params() -> dict:
-    """Load the parkour line dev-state parameter SSOT."""
-    path = _RL_EXP_DIR / "versions" / "lizard" / "parkour" / "parkour_params.yaml"
+
+def _load_params(version: str | None = None) -> dict:
+    """Load this line's parameter SSOT.
+
+    Args:
+        version: a frozen version handle (``"v1"``) to read that version's frozen copy, or
+            None for the live dev yaml. Always pass the cfg's own ``params_version``: a
+            version-stamped task that read the dev yaml would be pinned to a mutable file
+            (its golden says nothing about which content it described, and drafting the
+            next version in the dev copy would move a task that claims to be frozen).
+
+    Returns:
+        The resolved parameters of this line.
+    """
+    path = _LINE_DIR / f"{_LINE_DIR.name}_params.yaml"
+    if version is not None:
+        path = _LINE_DIR / version / path.name
     with open(path, encoding="utf-8") as f:
         return yaml.safe_load(f)
 
@@ -278,9 +298,14 @@ class ParkourClimbEnvCfg(LocomotionVelocityRoughEnvCfg):
     M2 milestone adds a position-task terrain-levels curriculum.
     """
 
+    # declared owner: this line's tasks are version-stamped, so the version is declared
+    # here too -- the same pair the other recipe modules carry (params_line + params_version)
+    params_line: ClassVar[str] = _LINE_KEY
+    params_version = _DEFAULT_VERSION
+
     def __post_init__(self):
         super().__post_init__()
-        params = _load_params()
+        params = _load_params(self.params_version)
         robot_params = params["robot"]
         actuator_params = params["actuators"]
         action_params = params["action"]

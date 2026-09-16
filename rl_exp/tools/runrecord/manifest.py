@@ -31,6 +31,13 @@ training, but a failure before T1 makes the run **incomplete** -- the manifest g
 outcome this module must not produce, so every check either passes, fails visibly, or
 is reported as unknown with a reason.
 
+One thing this module **refuses** instead of recording: a training launch from a dirty
+project tree (``dirty_tree_refusal``). The T0 record is still written first, so a refused
+launch leaves evidence rather than nothing; the refusal is then a ``failure`` entry plus a
+non-zero exit. A dirty tree is not a run whose provenance is merely awkward -- no revision
+restores it, so its rebuildable claim could never be proven, and finding that out months
+later is strictly worse than finding it out at launch.
+
 Verify offline: ``python -m rl_exp.tools.runrecord.manifest --verify <log_dir>``.
 The report is two-dimensional, as the plan requires: evidence level (record complete /
 rebuildable / rebuild verified) crossed with result (pass / fail / unknown).
@@ -138,12 +145,29 @@ def recipe_ref(env_cfg) -> dict:
         "obs_layout_digest": cs.digest(snapshot.get("observations", {})),
         "note": "obs_layout_digest stands in for the protocol object (ARCH_PLAN Step 3)",
     }
-    lock_path = _REPO / "rl_exp" / "versions" / "lizard" / "cfg_lock.json"
-    if not lock_path.is_file():
-        ref["golden"] = "no golden lock in this tree"
+    # the golden lives in the file of the line this recipe declares (one file per line,
+    # so "whose golden is this" is readable); the combination block is shared by all lines
+    from rl_exp.tools.verify.recipe_lines import RecipeLineError, discover
+
+    line_key = getattr(type(env_cfg), "params_line", None)
+    try:
+        lines = discover()
+    except RecipeLineError as err:
+        ref["golden"] = f"recipe line discovery failed: {err}"
+        return ref
+    line = lines.get(line_key)
+    if line is None:
+        ref["golden"] = (
+            f"env cfg {type(env_cfg).__name__} declares params_line={line_key!r}, "
+            f"which is not a discovered recipe line {sorted(lines)}"
+        )
+        return ref
+    ref["params_line"] = line.key
+    if not line.lock_path.is_file():
+        ref["golden"] = f"no golden lock for line {line.key!r} in this tree"
         return ref
     try:
-        lock = json.loads(lock_path.read_text(encoding="utf-8"))
+        lock = json.loads(line.lock_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as err:
         ref["golden"] = f"golden lock unreadable: {err}"
         return ref
@@ -156,7 +180,16 @@ def recipe_ref(env_cfg) -> dict:
     ref["golden_task"] = golden_key.split("|")[-1] if golden_key else None
     ref["golden_combination"] = golden_key.rsplit("|", 1)[0] if golden_key else None
     ref["golden_digest"] = entry.get("digest")
-    baseline = (lock.get("baselines") or {}).get(ref["golden_combination"], {})
+    baselines_path = _REPO / "rl_exp" / "versions" / "cfg_baselines.json"
+    baseline: dict = {}
+    if baselines_path.is_file():
+        try:
+            baseline = (json.loads(baselines_path.read_text(encoding="utf-8")).get("baselines") or {}).get(
+                ref["golden_combination"], {}
+            )
+        except (OSError, json.JSONDecodeError) as err:
+            baseline = {}
+            ref["golden_baselines_note"] = f"baselines unreadable: {err}"
     ref["golden_snapshot_format"] = baseline.get("cfg_snapshot_format")
     golden_env = (entry.get("snapshot") or {}).get("env")
     if golden_env is not None:
@@ -297,7 +330,52 @@ def begin(*, log_dir, task: str | None, argv: list[str], env_cfg, agent_cfg) -> 
     if drifted:
         # the run is about to use assets that no longer match the frozen lock
         ctx.fail(f"assets differ from the frozen lock: {drifted[:3]} (total {len(drifted)})")
+    # last, with T0 already on disk: a refused launch leaves evidence, not nothing
+    refusal = dirty_tree_refusal(ctx)
+    if refusal is not None:
+        ctx.fail(f"refused to start: {refusal}")
+        raise RuntimeError(f"[run-manifest] refused to start: {refusal}")
+    override_reason = os.environ.get(DIRTY_OVERRIDE_ENV, "").strip()
+    if override_reason:
+        ctx.manifest.setdefault("declaration", {})["dirty_tree_override_reason"] = override_reason
+        ctx.flush()
+        print(f"[run-manifest] WARNING: dirty tree accepted via {DIRTY_OVERRIDE_ENV}: {override_reason}")
     return ctx
+
+
+DIRTY_OVERRIDE_ENV = "RL_ALLOW_DIRTY_TREE"
+"""Environment variable naming the reason a launch from a dirty tree is accepted.
+
+An environment variable rather than a trainer CLI flag on purpose: the guard lives in the
+module the trainer already calls, so turning it on needs no fork patch and no edit to the
+fork tree -- and the fork tree is exactly where a CLI flag would have to live.
+"""
+
+
+def dirty_tree_refusal(ctx: RunContext) -> str | None:
+    """Why this launch must abort, or None when the project tree may be trained from.
+
+    Scoped to the project repository, not to every recorded code source: the IsaacLab tree
+    is *expected* to carry the fork patches uncommitted, so refusing on it would refuse
+    every launch and train people to set the override as a habit. Both stay recorded.
+
+    Args:
+        ctx: the run context whose T0 has just been written.
+
+    Returns:
+        The refusal message, or None when the tree is clean or the override carries a reason.
+    """
+    source = (ctx.manifest.get("code") or {}).get("repository") or {}
+    if not source.get("dirty"):
+        return None
+    if os.environ.get(DIRTY_OVERRIDE_ENV, "").strip():
+        return None
+    return (
+        f"the project tree is dirty (rev {source.get('rev', '?')}, "
+        f"{source.get('diff_lines', '?')} diff line(s), {source.get('untracked_count', '?')} untracked): "
+        f"no revision restores it, so this run's rebuildable claim could never be proven. Commit first, "
+        f'or state the reason explicitly: {DIRTY_OVERRIDE_ENV}="<why this dirty tree must run>"'
+    )
 
 
 def _control_dt(env_cfg) -> float | None:

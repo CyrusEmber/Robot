@@ -1,0 +1,18 @@
+{
+ "lock_format": 3,
+ "note": "framework-combination baselines, shared by every recipe line: a combination is a fact about IsaacLab / rsl_rl / Python, not about any one recipe",
+ "baselines": {
+  "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13": {
+   "created_at": "2026-09-16T10:45:50+08:00",
+   "reason": "joint SIR fixes 2026-09-16 (review #1-#5): trust gate (min_episode_frac/require_survive), one-scale estimate + local support (unmeasured_prior), verified frontier, per-type Tr; maintain_mass retired",
+   "created_rev": "2a3883c761a2",
+   "created_dirty": true,
+   "combination": {
+    "isaaclab_rev": "28a37cecdd43",
+    "rsl_rl": "source:28a37cecdd43",
+    "python": "3.12.13"
+   },
+   "cfg_snapshot_format": 2
+  }
+ }
+}

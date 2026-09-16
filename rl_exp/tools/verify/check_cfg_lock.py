@@ -19,31 +19,51 @@ Modes
 -----
 default            verify every registered task against the baseline for the current
                    framework combination (drift -> exit 1)
-``--update --reason "<why>"``
-                   create/refresh that baseline; prints the field-level diff first and
-                   refuses without a reason
+``--update --line <line> --reason "<why>"``
+                   refresh ONE recipe line's golden for the current framework
+                   combination; prints the field-level diff first, refuses without a
+                   reason, and cannot reach another line's file
+``--line <line>``  restrict to one recipe line (family-relative, e.g. ``lizard/parkour``)
 ``--diff``         print changed field paths against the baseline
 ``--vs-upstream``  value diff against ``LocomotionVelocityRoughEnvCfg`` defaults,
                    attributed to the version that last set each value
 ``--tasks``        restrict to task ids containing any of these substrings
 
-Three properties this file is built to keep:
+Storage is split so that "whose golden is this" is readable and writable:
+
+* ``rl_exp/versions/cfg_baselines.json`` -- one block per framework combination. A
+  combination is a fact about IsaacLab / rsl_rl / Python, not about a recipe, so it is
+  stored once for the whole tree instead of once per line.
+* ``rl_exp/versions/<family>[/<line>]/cfg_lock.json`` -- that line's golden entries only.
+
+Four properties this file is built to keep:
+
+**Ownership is declared, never guessed.** Every registered recipe names its line as a
+``ClassVar`` on the env cfg (``params_line``) and the gate routes by that. A task id and
+an entry-point path are both names that a rename can move while the recipe stays put, so
+deriving the owner from either cannot distinguish "unowned" from "owned by someone I did
+not think of" -- and an unowned task would be checked against nothing while looking green.
+
+**An update cannot rewrite another line's golden.** ``--update`` requires ``--line`` and
+writes only that line's file (plus, at most, *adding* a combination block). Before the
+split, one ``--update`` replaced every entry under the combination, so seeding a new
+task's golden silently absorbed any drift in the other 33 -- attributed to the new task's
+reason string. That is the accident this shape exists to prevent.
 
 **Growth is bounded by framework combinations, not by runs.** Entry keys are
-``<combination>|<task id>`` and ``baselines`` describes each combination once. A task
-therefore never appears twice, training run number 200 adds nothing, and a new key
-appears only when the IsaacLab / rsl_rl / Python combination changes (old combinations
-are kept, since an old recipe must stay checkable under the framework it was built on).
+``<combination>|<task id>`` and the combination blocks describe each combination once. A
+task therefore never appears twice, training run number 200 adds nothing, and a new key
+appears only when the IsaacLab / rsl_rl / Python combination changes (old combinations are
+kept, since an old recipe must stay checkable under the framework it was built on).
 
-**The text is chosen for git diffs.** JSON with ``indent=1`` puts one key per line,
-key order is the semantic order (so it comes from the config, not from a sort), and
-floats are ``repr`` -- a changed leaf changes exactly one line, and an unchanged run
-changes nothing at all.
+**The text is chosen for git diffs.** JSON with ``indent=1`` puts one key per line, key
+order is the semantic order (so it comes from the config, not from a sort), and floats are
+``repr`` -- a changed leaf changes exactly one line, and an unchanged run changes nothing.
 
-**A baseline is never overwritten as a reflex.** ``--update`` demands a reason, prints
-the concrete differences it is about to absorb, and a framework upgrade with no
-baseline for that combination fails loudly with instructions instead of quietly
-re-baselining ("更新 golden 当消警" is the failure mode this prevents).
+**A baseline is never overwritten as a reflex.** ``--update`` demands a reason, prints the
+concrete differences it is about to absorb, and a framework upgrade with no baseline for
+that combination fails loudly with instructions instead of quietly re-baselining
+("更新 golden 当消警" is the failure mode this prevents).
 """
 
 import json
@@ -56,13 +76,19 @@ sys.path.insert(0, str(_REPO))
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 import cfg_snapshot as cs  # noqa: E402
+from recipe_lines import RecipeLine, RecipeLineError, discover  # noqa: E402
 from rl_exp.tools.runrecord import provenance as prov  # noqa: E402
 
-LOCK_PATH = _REPO / "rl_exp" / "versions" / "lizard" / "cfg_lock.json"
-LOCK_FORMAT = 2
+# One baseline block per framework combination, shared by every recipe line: a
+# combination describes IsaacLab / rsl_rl / Python, which is not a property of any
+# one line, so storing it per line would mean N copies that can disagree.
+BASELINES_PATH = _REPO / "rl_exp" / "versions" / "cfg_baselines.json"
+LOCK_FORMAT = 3
 UPSTREAM_CFG = "isaaclab_tasks.manager_based.locomotion.velocity.velocity_env_cfg:LocomotionVelocityRoughEnvCfg"
-_TASK_VERSION = re.compile(r"Lizard-Rough(?:-Play)?-v(\d+)")
 _DIFF_LIMIT = 60
+# a trailing version suffix in a task id ("...-v14"): a claim about a version of the
+# id's own line, checked against that line's discovered versions
+_VERSION_SUFFIX = re.compile(r"-v(\d+)$")
 _ENTRY_KEYS = {"version", "env_cfg_class", "agent_cfg_class", "digest", "snapshot"}
 """An entry is a recipe fact about a task id. Anything run-scoped here would mean the
 lock grows with training runs, which is exactly what it must not do."""
@@ -93,6 +119,43 @@ def registered_tasks() -> dict[str, dict]:
         if isinstance(env_entry, str) and env_entry.startswith("rl_exp."):
             out[task_id] = {"env": env_entry, "agent": agent_entry}
     return dict(sorted(out.items()))
+
+
+def declared_line(spec: dict) -> str | None:
+    """The recipe line a task declares it belongs to, or None when it declares none.
+
+    Read off the class as a ``ClassVar`` (so this costs no instantiation), never inferred
+    from the task id or the entry-point path: both are names that a rename moves while the
+    recipe stays put, and a gate that guesses its owner cannot tell "unowned" apart from
+    "owned by someone I did not think of".
+    """
+    line = getattr(resolve_entry(spec["env"]), "params_line", None)
+    return line if isinstance(line, str) and line else None
+
+
+def route_tasks(specs: dict[str, dict]) -> tuple[dict[str, list[str]], list[str]]:
+    """Group registered task ids by declared line; report the ones that declare none.
+
+    Args:
+        specs: task id -> registration spec, as returned by :func:`registered_tasks`.
+
+    Returns:
+        Line handle -> task ids, and the ownership problems (a task missing from the map
+        is a problem, never a skip -- an unowned task would be checked against no golden
+        at all while still looking green).
+    """
+    problems: list[str] = []
+    by_line: dict[str, list[str]] = {}
+    for task_id, spec in specs.items():
+        line = declared_line(spec)
+        if line is None:
+            problems.append(
+                f"{task_id}: env cfg {spec['env']} declares no params_line -- a registered "
+                f"recipe must name its line, or no gate can say whose golden it needs"
+            )
+            continue
+        by_line.setdefault(line, []).append(task_id)
+    return by_line, problems
 
 
 def build_entry(task_id: str, spec: dict) -> dict:
@@ -156,40 +219,57 @@ def _print_diff(task_id: str, old, new, header: str) -> None:
         print(f"    ... {len(rows) - _DIFF_LIMIT} more (raise _DIFF_LIMIT to see them)")
 
 
-def verify(lock: dict, current: dict, problems: list[str], show_diff: bool, only: list[str]) -> None:
-    """Every registered task must be locked, and its resolved config unchanged.
+def verify_baseline(baselines: dict, problems: list[str]) -> str | None:
+    """The current combination's key when it is declared, else report why it is not.
 
-    The baseline is selected by framework combination: the same recipe under a
-    different IsaacLab / rsl_rl / Python combination is a DIFFERENT baseline, not a
-    drift. ``only`` narrows the scope to task ids containing one of the given
-    substrings; everything outside it is neither checked nor reported (a filtered run
-    must not look like mass retirement).
+    The baseline is selected by framework combination: the same recipe under a different
+    IsaacLab / rsl_rl / Python combination is a DIFFERENT baseline, not a drift.
     """
-    combo = combination()
-    key = combination_key(combo)
-    baselines = lock.get("baselines", {})
+    key = combination_key(combination())
     if key not in baselines:
         problems.append(
-            f"no baseline for this framework combination ({key}); the lock holds {sorted(baselines)}. "
-            f"A framework upgrade gets its OWN baseline pair -- never an in-place overwrite. "
-            f'Create one deliberately: --update --reason "<why this combination needs a baseline>"'
+            f"no baseline for this framework combination ({key}); "
+            f"{cs.relativize(str(BASELINES_PATH))} holds {sorted(baselines)}. A framework "
+            f"upgrade gets its OWN baseline -- never an in-place overwrite. Create one "
+            f'deliberately: --update --line <line> --reason "<why this combination needs one>"'
         )
-        return
+        return None
     baseline = baselines[key]
     if baseline.get("cfg_snapshot_format") != cs.FORMAT_VERSION:
         problems.append(
             f"baseline snapshot format {baseline.get('cfg_snapshot_format')} != serializer "
             f"{cs.FORMAT_VERSION}: the stored snapshots cannot be compared with freshly taken ones"
         )
-        return
-    entries = lock.get("entries", {})
+        return None
+    return key
+
+
+def verify_entries(
+    line: RecipeLine,
+    baselines: dict,
+    key: str,
+    entries: dict,
+    current: dict,
+    problems: list[str],
+    show_diff: bool,
+    only: list[str],
+) -> None:
+    """Every task of this line must be locked, and its resolved config unchanged.
+
+    ``only`` narrows the scope to task ids containing one of the given substrings;
+    everything outside it is neither checked nor reported (a filtered run must not look
+    like mass retirement).
+    """
     in_scope = lambda task_id: not only or any(token in task_id for token in only)  # noqa: E731
     for task_id, entry in current.items():
         if not in_scope(task_id):
             continue
         stored = entries.get(entry_key(key, task_id))
         if stored is None:
-            problems.append(f"{task_id}: no golden entry in this baseline (drifted out, or a new task)")
+            problems.append(
+                f"{task_id}: no golden entry for line {line.key!r} in this baseline "
+                f"(drifted out, or a new task)"
+            )
             continue
         if cs.digest(stored["snapshot"]) != stored["digest"]:
             problems.append(
@@ -210,19 +290,35 @@ def verify(lock: dict, current: dict, problems: list[str], show_diff: bool, only
         if claimed != entry["version"]:
             problems.append(
                 f"{task_id}: params_version {entry['version']!r} != golden {claimed!r} "
-                f"(the task id and the recipe it loads disagree)"
+                f"(the recipe this task loads is not the one the golden was taken from)"
             )
-        match = _TASK_VERSION.fullmatch(task_id)
-        if match and entry["version"] != f"v{match.group(1)}":
+        # A version suffix in the task id is a claim about a version of THIS line, so it
+        # is checked against the line's declared versions. It is not used to derive
+        # ownership (that is params_line) and it is not compared against params_version
+        # when the recipe declares none: `Lizard-Velocity-Flat-v0` and the parkour line
+        # carry a registration version while reading the dev yaml, so that comparison
+        # would be red for reasons that are not drift. Ceiling: an unversioned recipe
+        # whose id claims a version is not caught here.
+        match = _VERSION_SUFFIX.search(task_id)
+        if match is None:
+            continue
+        id_version = f"v{match.group(1)}"
+        if id_version not in line.versions:
             problems.append(
-                f"{task_id}: task id claims v{match.group(1)} but the cfg loads "
+                f"{task_id}: task id claims {id_version}, which line {line.key!r} does not "
+                f"have {sorted(line.versions)} (a typo here names a golden that cannot exist)"
+            )
+        elif entry["version"] is not None and id_version != entry["version"]:
+            problems.append(
+                f"{task_id}: task id claims {id_version} but the cfg loads "
                 f"params_version={entry['version']!r}"
             )
     for stored_key in entries:
         combo_part, _, task_id = stored_key.rpartition("|")
         if combo_part not in baselines:
             problems.append(
-                f"{stored_key}: entry claims a baseline {combo_part!r} that the lock does not describe"
+                f"{stored_key}: entry claims a baseline {combo_part!r} that is not declared "
+                f"in {cs.relativize(str(BASELINES_PATH))}"
             )
         elif task_id not in current and in_scope(task_id):
             problems.append(f"{task_id}: golden entry has no registered task (retired task or renamed id)")
@@ -259,42 +355,66 @@ def entry_key(combo_key: str, task_id: str) -> str:
     return f"{combo_key}|{task_id}"
 
 
-def load_lock() -> tuple[dict, str | None]:
-    """Read the lock file; the second value is an error, not an exception.
+def load_baselines() -> tuple[dict, str | None]:
+    """Read the shared framework-combination baselines; the second value is an error.
 
-    A lock written by an older format is reported, never migrated in place: the
-    numbers in it would silently change meaning.
+    A baseline is a statement about the framework combination (IsaacLab rev / rsl_rl /
+    Python), which is not a property of any one recipe line -- so it exists once for the
+    whole tree and every line points at it. One copy per line would mean N answers to
+    "is this combination known", free to disagree.
     """
-    if not LOCK_PATH.is_file():
+    if not BASELINES_PATH.is_file():
         return {}, (
-            f"{cs.relativize(str(LOCK_PATH))} missing; create the baseline deliberately with "
-            f'--update --reason "<why>" (no golden means no drift detection at all)'
+            f"{cs.relativize(str(BASELINES_PATH))} missing; a combination gets its own "
+            f'baseline deliberately: --update --line <line> --reason "<why>"'
         )
     try:
-        lock = json.loads(LOCK_PATH.read_text(encoding="utf-8"))
+        data = json.loads(BASELINES_PATH.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as err:
-        return {}, f"lock unreadable: {err}"
-    if lock.get("lock_format") != LOCK_FORMAT:
-        return lock, (
-            f"lock format {lock.get('lock_format')} != {LOCK_FORMAT}; regenerate deliberately with "
-            f'--update --reason "<why>" -- an in-place rewrite would hide what moved'
+        return {}, f"baselines unreadable: {err}"
+    if data.get("lock_format") != LOCK_FORMAT:
+        return data.get("baselines", {}), (
+            f"baselines format {data.get('lock_format')} != {LOCK_FORMAT}; migrate deliberately "
+            f"-- an --update rewrite would hide what moved"
         )
-    return lock, None
+    return data.get("baselines", {}), None
 
 
-def _previous_entries(lock: dict, key: str, entries: dict) -> dict | None:
-    """Entries of an existing baseline for this combination, keyed by task id.
+def load_entries(line: RecipeLine) -> tuple[dict, str | None]:
+    """Read one recipe line's golden entries; the second value is an error.
 
-    Handles the pre-v2 flat lock too: during a format migration the reviewer needs to see
-    what actually moved, not "34 tasks appeared".
+    One file per line on purpose: ``--update`` must not be able to rewrite a different
+    line's golden, and the entry schema is deliberately closed (extra fields are run-scoped
+    data), so the file path is the only place a golden's owner can be read off.
+    """
+    path = line.lock_path
+    if not path.is_file():
+        return {}, (
+            f"{cs.relativize(str(path))} missing (line {line.key!r} has no golden); create it "
+            f'deliberately with --update --line {line.key} --reason "<why>"'
+        )
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as err:
+        return {}, f"{cs.relativize(str(path))} unreadable: {err}"
+    if data.get("lock_format") != LOCK_FORMAT:
+        return data.get("entries", {}), (
+            f"{cs.relativize(str(path))}: format {data.get('lock_format')} != {LOCK_FORMAT}; "
+            f"migrate deliberately -- an --update rewrite would hide what moved"
+        )
+    return data.get("entries", {}), None
+
+
+def _previous_entries(entries: dict, key: str) -> dict | None:
+    """This line's existing entries for this combination, keyed by task id.
+
+    The reviewer has to see what actually moved (field paths), not "34 tasks appeared",
+    so the comparison is per task id.
     """
     keys = [stored for stored in entries if stored.startswith(f"{key}|")]
-    if keys:
-        return {stored.split("|")[-1]: entries[stored] for stored in keys}
-    if "lock_format" not in lock or lock.get("lock_format") == 1:
-        # pre-v2 flat lock: compare against it so a migration reports what moved
-        return lock.get("entries") or None
-    return None
+    if not keys:
+        return None
+    return {stored.split("|")[-1]: entries[stored] for stored in keys}
 
 
 def _baseline_changes(previous: dict | None, current: dict) -> list[str]:
@@ -322,37 +442,65 @@ def _baseline_changes(previous: dict | None, current: dict) -> list[str]:
     return summary
 
 
-def update(current: dict, reason: str | None) -> int:
-    """Write/refresh the baseline for the current framework combination.
+def update(line: RecipeLine, current: dict, reason: str | None) -> int:
+    """Write/refresh ONE recipe line's golden entries for the current combination.
 
-    Refuses without ``--reason``: a baseline must never be rewritten as a reflex to
-    make a red gate green ("更新 golden 当消警"), so the update carries a stated
-    reason and prints the concrete differences first.
+    Refuses without ``--reason``: a baseline must never be rewritten as a reflex to make
+    a red gate green ("更新 golden 当消警"), so the update carries a stated reason and
+    prints the concrete differences first.
+
+    At most two files are touched: this line's own entries, and -- only by *adding* a
+    block -- the shared combination baselines. A different line's golden is not reachable
+    from here, which is the whole reason the entries live per line.
     """
     combo = combination()
     key = combination_key(combo)
-    lock, error = load_lock()  # a missing/older lock is fine here: this is the deliberate act
-    baselines = dict(lock.get("baselines", {}))
-    # only same-format entries are keyed by combination; a pre-v2 flat lock is re-keyed
-    # from scratch below (its bare task ids are the ones being replaced)
-    entries = dict(lock.get("entries", {})) if lock.get("lock_format") == LOCK_FORMAT else {}
-    previous = _previous_entries(lock, key, entries)
-    if error:
-        print(f"  note: {error}")
-    if previous is not None and "lock_format" not in lock:
-        print(f"  note: pre-v2 lock; entries compared below and re-keyed into format {LOCK_FORMAT}")
+    baselines, baselines_error = load_baselines()  # missing is fine: this is the deliberate act
+    entries, entries_error = load_entries(line)
+    entries = dict(entries)
+    previous = _previous_entries(entries, key)
+    for error in (baselines_error, entries_error):
+        if error:
+            print(f"  note: {error}")
 
     print(f"  combination: {key}")
-    for line in _baseline_changes(previous, current):
-        print(f"  change: {line}")
+    print(f"  line: {line.key} ({len(current)} task(s)) [{cs.relativize(str(line.lock_path))}]")
+    for summary in _baseline_changes(previous, current):
+        print(f"  change: {summary}")
     if not reason:
         print("  REFUSED: --update needs --reason. Review the diff above (field paths, not just digests),")
-        print('           then re-run: --update --reason "lizard-v15 golden: <what moved and why>"')
+        print(f'           then re-run: --update --line {line.key} --reason "<what moved and why>"')
         return 1
 
-    # this combination is replaced wholesale; every other combination is kept as it was
+    # this line's entries for this combination are replaced; this line's other
+    # combinations are kept, and no other line is written at all
     entries = {stored: value for stored, value in entries.items() if not stored.startswith(f"{key}|")}
     entries.update({entry_key(key, task_id): entry for task_id, entry in current.items()})
+    line_lock = {
+        "lock_format": LOCK_FORMAT,
+        "note": (
+            f"recipe golden of line {line.key!r}: entry keys are '<combination>|<task id>' "
+            f"and a training run never adds one"
+        ),
+        # the reason for THIS line's last golden revision lives here, not in the shared
+        # combination block: a combination block records why that framework combination
+        # was opened at all, and one field there would be overwritten by whichever line
+        # updated last (every line's reason would vanish except the newest)
+        "reason": reason,
+        "reason_at": prov.now(),
+        "reason_rev": prov.rev(_REPO),
+        "entries": dict(sorted(entries.items())),
+    }
+    line.lock_path.parent.mkdir(parents=True, exist_ok=True)
+    line.lock_path.write_text(json.dumps(line_lock, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    print(
+        f"  entries written: {cs.relativize(str(line.lock_path))} "
+        f"({line.lock_path.stat().st_size / 1024:.0f} KiB, {len(line_lock['entries'])} entries)"
+    )
+
+    if key in baselines:
+        print(f"  combination baseline declared: {cs.relativize(str(BASELINES_PATH))} ({len(baselines)} total)")
+        return 0
     baselines[key] = {
         "created_at": prov.now(),
         "reason": reason,
@@ -360,22 +508,19 @@ def update(current: dict, reason: str | None) -> int:
         "created_dirty": bool(prov.git(_REPO, "status", "--porcelain")),
         "combination": combo,
         "cfg_snapshot_format": cs.FORMAT_VERSION,
-        "task_count": len(current),
     }
-    lock = {
+    shared = {
         "lock_format": LOCK_FORMAT,
         "note": (
-            "recipe golden, keyed by framework combination: entry keys are '<combination>|<task id>' "
-            "and a training run never adds one"
+            "framework-combination baselines, shared by every recipe line: a combination is a "
+            "fact about IsaacLab / rsl_rl / Python, not about any one recipe"
         ),
         "baselines": dict(sorted(baselines.items())),
-        "entries": dict(sorted(entries.items())),
     }
-    LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
-    LOCK_PATH.write_text(json.dumps(lock, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
-    size = LOCK_PATH.stat().st_size
-    print(f"  lock written: {cs.relativize(str(LOCK_PATH))} ({size / 1024:.0f} KiB)")
-    print(f"  baselines in file: {len(lock['baselines'])}, entries: {len(lock['entries'])}")
+    BASELINES_PATH.parent.mkdir(parents=True, exist_ok=True)
+    BASELINES_PATH.write_text(json.dumps(shared, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    print(f"  combination baseline CREATED: {cs.relativize(str(BASELINES_PATH))} ({len(baselines)} total)")
+    print("  note: every other line now needs its own entries for this combination (--update --line ...)")
     if baselines[key]["created_dirty"]:
         print("  WARN: repo tree is dirty -- this baseline is NOT a clean one; regenerate after committing")
     return 0
@@ -441,34 +586,85 @@ def vs_upstream(current: dict, only: list[str]) -> int:
     return 0
 
 
-def main() -> int:
-    args = sys.argv[1:]
+def main(argv: list[str] | None = None) -> int:
+    args = sys.argv[1:] if argv is None else list(argv)
     only: list[str] = []
     if "--tasks" in args:
         only = [t for t in args[args.index("--tasks") + 1].split(",") if t]
+    line_arg = _value_of(args, "--line")
 
-    current = {task_id: build_entry(task_id, spec) for task_id, spec in registered_tasks().items()}
-    print(f"  registered rl_exp tasks: {len(current)}")
+    specs = registered_tasks()
+    by_line, problems = route_tasks(specs)
+    print(f"  registered rl_exp tasks: {len(specs)} in {len(by_line)} declared line(s)")
+
+    try:
+        lines = discover()
+    except RecipeLineError as err:
+        print(f"  DRIFT: recipe line discovery: {err}")
+        print("CFG_LOCK_DRIFT (1)")
+        return 1
+    print(f"  discovered recipe lines: {sorted(lines)}")
+
+    for line_key in sorted(by_line):
+        if line_key not in lines:
+            problems.append(
+                f"{line_key}: {len(by_line[line_key])} task(s) declare this line "
+                f"(e.g. {sorted(by_line[line_key])[0]}) but no such line exists {sorted(lines)}"
+                f" -- a typo in params_line would send the golden to a file nobody reads"
+            )
+    if line_arg is not None and line_arg not in lines:
+        problems.append(f"--line {line_arg!r} is not a discovered line {sorted(lines)}")
+
+    target = {
+        line_key: task_ids
+        for line_key, task_ids in by_line.items()
+        if line_key in lines and (line_arg is None or line_key == line_arg)
+    }
+    current = {
+        line_key: {task_id: build_entry(task_id, specs[task_id]) for task_id in sorted(task_ids)}
+        for line_key, task_ids in sorted(target.items())
+    }
 
     if "--update" in args:
-        return update(current, _value_of(args, "--reason"))
+        if line_arg is None:
+            print("  REFUSED: --update needs --line <line>. One whole-tree update would rewrite")
+            print("           every line's golden under a single reason string, silently absorbing")
+            print(f"           any drift in the lines you did not mean to touch. Lines: {sorted(lines)}")
+            return 1
+        if line_arg not in current:
+            print(f"  REFUSED: --line {line_arg!r} has no registered task in a discovered line")
+            return 1
+        return update(lines[line_arg], current[line_arg], _value_of(args, "--reason"))
 
+    flat_current = {task_id: entry for entries in current.values() for task_id, entry in entries.items()}
     if "--vs-upstream" in args:
-        return vs_upstream(current, only)
+        return vs_upstream(flat_current, only)
 
-    problems: list[str] = []
-    lock, error = load_lock()
-    if error:
-        problems.append(error)
+    baselines, baselines_error = load_baselines()
+    if baselines_error:
+        problems.append(baselines_error)
+        key = None
     else:
-        verify(lock, current, problems, show_diff="--diff" in args, only=only)
+        key = verify_baseline(baselines, problems)
+
+    if key is not None:
+        for line_key, line_current in current.items():
+            entries, entries_error = load_entries(lines[line_key])
+            if entries_error:
+                problems.append(entries_error)
+                continue
+            verify_entries(
+                lines[line_key], baselines, key, entries, line_current, problems,
+                show_diff="--diff" in args, only=only,
+            )
 
     for problem in problems:
         print(f"  DRIFT: {problem}")
     if problems:
         print(f"CFG_LOCK_DRIFT ({len(problems)})")
         return 1
-    print(f"CFG_LOCK_OK ({len(current)} tasks, {combination_key(combination())})")
+    checked = sum(len(entries) for entries in current.values())
+    print(f"CFG_LOCK_OK ({checked} tasks, {len(current)} line(s), {combination_key(combination())})")
     return 0
 
 

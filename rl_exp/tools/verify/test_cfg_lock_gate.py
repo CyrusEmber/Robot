@@ -1,14 +1,18 @@
 # -*- coding: utf-8 -*-
 """Negative control for check_cfg_lock.py: every drift it claims to catch must fire.
 
-Runs against the real lock file and two real tasks (fast), then tampers copies of the
-lock/current pair and requires a problem for each tamper. A gate whose failure modes
-were never demonstrated is not a gate.
+Runs partly against the real lock files and registry (fast), a synthetic
+two-line tree in a temp directory, and requires a problem for each tamper. A gate whose
+failure modes were never demonstrated is not a gate.
 
-Beyond drift, this pins the three properties the lock format is required to hold:
-growth is bounded by framework combinations (runs add nothing), the text diffs one
-line per changed leaf and re-serializes byte-identically, and an update without a
-stated reason is refused rather than silently re-baselining.
+Beyond entry drift, this pins the properties the per-line split exists to hold:
+
+* ownership is declared -- a task whose cfg names no line must be reported, not skipped;
+* an update cannot reach another line's golden (the accident the split prevents), and a
+  whole-tree ``--update`` without ``--line`` is refused before it writes anything;
+* growth is bounded by framework combinations (runs add nothing), the text diffs one line
+  per changed leaf and re-serializes byte-identically, and an update without a stated
+  reason is refused rather than silently re-baselining.
 """
 
 import difflib
@@ -20,10 +24,11 @@ import tempfile
 
 sys.path.insert(0, ".")
 sys.path.insert(0, "rl_exp/tools/verify")
+import cfg_snapshot as cs  # noqa: E402
 import check_cfg_lock as g  # noqa: E402
 
-TASKS = ["Lizard-Rough-v14", "Lizard-Velocity-Flat-v0"]
 PROBLEMS: list[str] = []
+KEY = g.combination_key(g.combination())
 
 
 def check(name: str, ok: bool, detail: str = "") -> None:
@@ -32,182 +37,202 @@ def check(name: str, ok: bool, detail: str = "") -> None:
         PROBLEMS.append(f"{name}: {detail}")
 
 
-def _fixture() -> tuple[dict, dict, str]:
-    with open(g.LOCK_PATH, encoding="utf-8") as f:
-        lock = json.load(f)
-    combo = g.combination()
-    key = g.combination_key(combo)
-    specs = g.registered_tasks()
-    current = {task: g.build_entry(task, specs[task]) for task in TASKS}
-    return lock, current, key
+def _snapshot(decimation: int = 4) -> dict:
+    """A tiny stand-in for a resolved cfg snapshot (only needs to be diffable)."""
+    return {"env": {"decimation": decimation, "episode_length_s": 20.0}, "agent": None}
 
 
-def _entries(lock: dict, key: str) -> dict:
-    """The lock's entries for one combination, keyed by task id (as the code sees them)."""
-    return {stored.split("|")[-1]: value for stored, value in lock["entries"].items() if stored.startswith(f"{key}|")}
-
-
-def _fires(mutate_lock, mutate_current, tag: str, show_diff: bool = False, only: list[str] | None = None) -> bool:
-    lock, current, key = _fixture()
-    if mutate_lock is not None:
-        mutate_lock(lock, _entries(lock, key), key)
-    if mutate_current is not None:
-        mutate_current(current)
-    problems: list[str] = []
-    g.verify(lock, current, problems, show_diff=show_diff, only=TASKS if only is None else only)
-    print(f"  {'FIRES' if problems else 'SILENT'} {tag}" + (f" <- {problems[0]}" if problems else ""))
-    return bool(problems)
-
-
-def _rekey(lock: dict, old: str, new: str) -> None:
-    """Move a whole baseline (block + its entries) to another combination key."""
-    lock["baselines"][new] = lock["baselines"].pop(old)
-    lock["entries"] = {
-        (f"{new}|{stored.split('|', 1)[1]}" if stored.startswith(f"{old}|") else stored): value
-        for stored, value in lock["entries"].items()
+def _entry(snapshot: dict | None = None, version: str | None = "v1") -> dict:
+    snap = _snapshot() if snapshot is None else snapshot
+    return {
+        "version": version,
+        "env_cfg_class": "rl_exp.tasks.x:Cfg",
+        "agent_cfg_class": "rl_exp.tasks.agents.y:Runner",
+        "digest": cs.digest(snap),
+        "snapshot": snap,
     }
 
 
+def _tree(root: pathlib.Path) -> dict:
+    """A two-line ``versions/`` tree: ``lizard`` (v1, v2) and ``lizard/parkour`` (v1)."""
+    for key, versions in {"lizard": ["v1", "v2"], "lizard/parkour": ["v1"]}.items():
+        line_dir = root.joinpath(*key.split("/"))
+        line_dir.mkdir(parents=True, exist_ok=True)
+        (line_dir / f"{line_dir.name}_params.yaml").write_text("x: 1\n", encoding="utf-8")
+        for version in versions:
+            (line_dir / version).mkdir(exist_ok=True)
+            (line_dir / version / f"{line_dir.name}_params.yaml").write_text("x: 1\n", encoding="utf-8")
+    return g.discover(root)
+
+
+def _verify(line, entries: dict, current: dict, only: list[str] | None = None) -> list[str]:
+    baselines = {KEY: {"cfg_snapshot_format": cs.FORMAT_VERSION}}
+    problems: list[str] = []
+    g.verify_entries(line, baselines, KEY, entries, current, problems, show_diff=True, only=only or [])
+    return problems
+
+
+def _fires(name: str, keyword: str, line, entries: dict, current: dict, only: list[str] | None = None) -> None:
+    problems = _verify(line, entries, current, only)
+    check(name, any(keyword in p for p in problems), f"no problem containing {keyword!r}: {problems}")
+
+
 def main() -> int:
-    lock, current, key = _fixture()
-    print(f"  combination: {key}")
-    base_problems: list[str] = []
-    g.verify(lock, current, base_problems, show_diff=False, only=TASKS)
-    check("baseline/clean", not base_problems, f"{base_problems[:2]}")
-    check(
-        "baseline/entry-is-recipe-only",
-        all(set(entry) == g._ENTRY_KEYS for entry in lock["entries"].values()),
-        "an entry carries non-recipe fields",
-    )
-    check(
-        "baseline/keys-carry-combination",
-        all(stored.startswith(f"{key}|") for stored in lock["entries"]) and key in lock["baselines"],
-        "entry keys do not name the baseline they belong to",
-    )
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = pathlib.Path(tmp)
+        lines = _tree(tmp_path / "versions")
+        lizard, parkour = lines["lizard"], lines["lizard/parkour"]
 
-    # --- drift -------------------------------------------------------------------
-    check(
-        "drift/digest",
-        _fires(lambda l, e, k: e[TASKS[0]].__setitem__("digest", "0" * 64), None, "digest"),
-    )
-    check(
-        "drift/hand-edited-lock",
-        _fires(lambda l, e, k: e[TASKS[0]]["snapshot"]["env"].__setitem__("decimation", 999), None, "snapshot only"),
-    )
-    check(
-        "drift/snapshot-leaf",
-        _fires(
-            lambda l, e, k: (
-                e[TASKS[0]]["snapshot"]["env"].__setitem__("decimation", 999),
-                e[TASKS[0]].__setitem__("digest", "0" * 64),
-            ),
-            None,
-            "nested leaf",
-            show_diff=True,
-        ),
-    )
-    check("drift/version", _fires(lambda l, e, k: e[TASKS[0]].__setitem__("version", "v3"), None, "lock version"))
-    check(
-        "drift/task-id-vs-recipe",
-        _fires(None, lambda c: c[TASKS[0]].__setitem__("version", "v3"), "id says v14, cfg loads v3"),
-    )
-    check(
-        "drift/run-scoped-entry",
-        _fires(lambda l, e, k: e[TASKS[0]].__setitem__("run_id", "2026-09-15_14-00-00_v14"), None, "per-run field"),
-    )
-    check(
-        "drift/retired-entry",
-        _fires(
-            lambda l, e, k: l["entries"].__setitem__(g.entry_key(k, "Lizard-Rough-v99"), {"digest": "x"}),
-            None,
-            "bogus entry",
-            only=["Lizard-Rough-v99"],
-        ),
-    )
-    check(
-        "drift/missing-entry",
-        _fires(lambda l, e, k: l["entries"].pop(g.entry_key(k, TASKS[0])), None, "entry removed"),
-    )
-    check(
-        "drift/no-baseline-for-combination",
-        _fires(lambda l, e, k: _rekey(l, k, "isaaclab=deadbeef|rsl_rl=-|python=0"), None, "combination moved"),
-    )
-    check(
-        "drift/orphan-entry",
-        _fires(
-            lambda l, e, k: l["entries"].__setitem__(f"isaaclab=deadbeef|{TASKS[0]}", l["entries"][g.entry_key(k, TASKS[0])]),
-            None,
-            "entry names a baseline the lock does not describe",
-        ),
-    )
-    check(
-        "drift/snapshot-format",
-        _fires(lambda l, e, k: l["baselines"][k].__setitem__("cfg_snapshot_format", 0), None, "stale snapshot format"),
-    )
+        # --- entry-level rules (synthetic: no gym, no framework import) -----------
+        good = {g.entry_key(KEY, "Lizard-Test-v1"): _entry(version="v1")}
+        current = {"Lizard-Test-v1": _entry(version="v1")}
+        check("entries/clean", _verify(lizard, good, current) == [], f"{_verify(lizard, good, current)}")
 
-    # --- lock file level ---------------------------------------------------------
-    tmp = pathlib.Path(tempfile.mkdtemp(prefix="cfg_lock_"))
-    real_lock = g.LOCK_PATH
-    try:
-        broken = tmp / "cfg_lock.json"
-        broken.write_text(json.dumps({**lock, "lock_format": 1}), encoding="utf-8")
-        g.LOCK_PATH = broken
-        _, error = g.load_lock()
-        check("lock/format-refused", bool(error) and "format" in error, f"{error}")
-        gone = tmp / "absent.json"
-        g.LOCK_PATH = gone
-        _, error = g.load_lock()
-        check("lock/missing-reported", bool(error) and "missing" in error, f"{error}")
+        _fires("entries/missing", "no golden entry", lizard, {}, current)
 
-        # update refuses without a reason, and (importantly) does not touch the file
-        write_target = tmp / "written.json"
-        g.LOCK_PATH = write_target
-        check("update/refused-without-reason", g.update(current, None) == 1, "update wrote without a reason")
-        check("update/refused-wrote-nothing", not write_target.exists(), "a refused update still wrote the file")
-        check("update/writes-with-reason", g.update(current, "test baseline") == 0 and write_target.is_file())
-        written = json.loads(write_target.read_text(encoding="utf-8"))
-        check(
-            "update/one-block-per-combination",
-            written["lock_format"] == g.LOCK_FORMAT
-            and len(written["baselines"]) == 1
-            and len(written["entries"]) == len(TASKS)
-            and written["baselines"][g.combination_key(g.combination())]["reason"] == "test baseline",
-            f"baselines={list(written['baselines'])}, entries={len(written['entries'])}",
+        stale = dict(good)
+        stale[g.entry_key(KEY, "Lizard-Test-v1")] = _entry(_snapshot(decimation=999), version="v1")
+        _fires("entries/digest-mismatch", "config drift", lizard, stale, current)
+
+        hand_edited = copy_stored(good, snapshot=_snapshot(decimation=999))
+        _fires("entries/hand-edited", "internally inconsistent", lizard, hand_edited, current)
+
+        run_scoped = copy_stored(good)
+        run_scoped[g.entry_key(KEY, "Lizard-Test-v1")]["run_id"] = 7
+        _fires("entries/run-scoped-field", "not recipe facts", lizard, run_scoped, current)
+
+        _fires("entries/version-changed", "params_version", lizard, copy_stored(good, version="v2"), current)
+
+        _fires("entries/retired", "no registered task", lizard, {g.entry_key(KEY, "Lizard-Gone-v1"): _entry()}, {})
+
+        orphan = {g.entry_key("isaaclab=x|rsl_rl=y|python=9", "Lizard-Test-v1"): _entry()}
+        problems: list[str] = []
+        g.verify_entries(lizard, {KEY: {"cfg_snapshot_format": cs.FORMAT_VERSION}}, KEY, orphan, current, problems, False, [])
+        check("entries/undeclared-combination", any("is not declared" in p for p in problems), f"{problems}")
+
+        # a task id's version must exist in its own line; when the recipe declares no
+        # version the id's suffix is a registration number, so it must stay quiet
+        id_missing = {g.entry_key(KEY, "Lizard-Test-v9"): _entry(version="v9")}
+        _fires("entries/id-version-not-in-line", "does not have", lizard, id_missing, {"Lizard-Test-v9": _entry(version="v9")})
+
+        mismatch = {g.entry_key(KEY, "Lizard-Test-v2"): _entry(version="v2")}
+        _fires(
+            "entries/id-version-vs-recipe",
+            "task id claims",
+            lizard,
+            mismatch,
+            {"Lizard-Test-v2": _entry(version="v1")},
         )
+        unversioned = {g.entry_key(KEY, "Lizard-Test-v1"): _entry(version=None)}
         check(
-            "update/entries-are-keyed-task-ids",
-            {stored.split("|")[-1] for stored in written["entries"]} == set(TASKS)
-            and all(stored.startswith(g.combination_key(g.combination()) + "|") for stored in written["entries"]),
-            f"{list(written['entries'])[:2]}",
+            "entries/id-version-quiet-when-unversioned",
+            _verify(lizard, unversioned, {"Lizard-Test-v1": _entry(version=None)}) == [],
+            "the documented ceiling (id carries a registration version) turned noisy",
         )
-    finally:
-        g.LOCK_PATH = real_lock
-        shutil.rmtree(tmp, ignore_errors=True)
 
-    # --- text format: stable and one line per changed leaf -----------------------
-    text = json.dumps(lock, indent=1, ensure_ascii=False) + "\n"
-    again = json.dumps(json.loads(text), indent=1, ensure_ascii=False) + "\n"
-    check("text/roundtrip-byte-identical", again == text, "re-serializing the lock changed its bytes")
+        check(
+            "entries/only-filter-scopes",
+            _verify(lizard, {}, {"Lizard-Test-v1": _entry()}, only=["Other"]) == [],
+            "a filtered run reported an out-of-scope task as retired/missing",
+        )
 
-    edited = json.loads(text)
-    stored_key = g.entry_key(key, TASKS[0])
-    leaf = edited["entries"][stored_key]["snapshot"]["env"]["decimation"]
-    edited["entries"][stored_key]["snapshot"]["env"]["decimation"] = leaf + 1
-    edited_text = json.dumps(edited, indent=1, ensure_ascii=False) + "\n"
-    diff = [line for line in difflib.unified_diff(text.splitlines(), edited_text.splitlines(), lineterm="") if line[:1] in "+-" and line[:3] not in ("+++", "---")]
-    check("text/one-line-per-changed-leaf", len(diff) == 2, f"{len(diff)} changed lines: {diff[:4]}")
+        # --- the split: an update cannot reach another line's file ----------------
+        real_baselines = g.BASELINES_PATH
+        g.BASELINES_PATH = tmp_path / "versions" / "cfg_baselines.json"
+        try:
+            parkour.lock_path.write_text('{"lock_format": 3, "entries": {"sentinel": {}}}\n', encoding="utf-8")
+            before = parkour.lock_path.read_bytes()
+            before_shared = g.BASELINES_PATH.read_bytes() if g.BASELINES_PATH.exists() else None
 
-    rows: list = []
-    g.walk_diff({"a": 1, "b": {"c": [1, 2]}}, {"a": 2, "b": {"c": [1, 2, 3]}, "d": 4}, "", rows)
-    check("diff/paths", sorted(path for path, _, _ in rows) == ["a", "b.c[]", "d"], f"{rows}")
-    limited: list = []
-    g.walk_diff({"a": 1, "b": 2, "c": 3}, {"a": 9, "b": 9, "c": 9}, "", limited, 1)
-    check("diff/limit-honoured", len(limited) <= 2, f"{len(limited)} rows with limit=1")
+            check("update/refuses-without-reason", g.update(lizard, current, None) == 1, "update ran without a reason")
+            check("update/refused-wrote-nothing", not lizard.lock_path.exists(), "a refused update still wrote")
+            check(
+                "update/refused-kept-other-line",
+                parkour.lock_path.read_bytes() == before,
+                "a refused update touched another line",
+            )
 
-    for problem in PROBLEMS:
-        print(f"  {problem}")
-    print("CFG_LOCK_GATE_FALSIFIABLE" if not PROBLEMS else "CFG_LOCK_GATE_SILENT")
-    return 0 if not PROBLEMS else 1
+            check("update/writes-with-reason", g.update(lizard, current, "test baseline") == 0 and lizard.lock_path.is_file())
+            written = json.loads(lizard.lock_path.read_text(encoding="utf-8"))
+            check(
+                "update/one-block-per-combination",
+                written["lock_format"] == g.LOCK_FORMAT
+                and len(written["entries"]) == len(current)
+                and all(stored.startswith(f"{KEY}|") for stored in written["entries"]),
+                f"{list(written['entries'])[:2]}",
+            )
+            check(
+                "update/did-not-touch-other-line",
+                parkour.lock_path.read_bytes() == before,
+                "updating one line rewrote another line's golden -- the accident this split prevents",
+            )
+            shared = json.loads(g.BASELINES_PATH.read_text(encoding="utf-8"))
+            check(
+                "update/added-combination-once",
+                list(shared["baselines"]) == [KEY] and shared["baselines"][KEY]["reason"] == "test baseline",
+                f"{list(shared['baselines'])}",
+            )
+            shared_bytes = g.BASELINES_PATH.read_bytes()
+            g.update(lizard, current, "second reason")
+            check(
+                "update/kept-existing-combination",
+                g.BASELINES_PATH.read_bytes() == shared_bytes,
+                "a second update rewrote the shared combination block",
+            )
+            check(
+                "update/only-touched-own-baselines",
+                before_shared is None and g.BASELINES_PATH.is_file(),
+                "the shared baselines were expected to be created here",
+            )
+        finally:
+            g.BASELINES_PATH = real_baselines
+
+        # --- text format: stable and one line per changed leaf --------------------
+        text = json.dumps(written, indent=1, ensure_ascii=False) + "\n"
+        again = json.dumps(json.loads(text), indent=1, ensure_ascii=False) + "\n"
+        check("text/roundtrip-byte-identical", again == text, "re-serializing the lock changed its bytes")
+
+        edited = json.loads(text)
+        stored_key = g.entry_key(KEY, "Lizard-Test-v1")
+        edited["entries"][stored_key]["snapshot"]["env"]["decimation"] += 1
+        edited_text = json.dumps(edited, indent=1, ensure_ascii=False) + "\n"
+        diff = [
+            line for line in difflib.unified_diff(text.splitlines(), edited_text.splitlines(), lineterm="")
+            if line[:1] in "+-" and line[:3] not in ("+++", "---")
+        ]
+        check("text/one-line-per-changed-leaf", len(diff) == 2, f"{len(diff)} changed lines: {diff[:4]}")
+
+    # --- the real tree: today's goldens must verify through the new routing ------
+    real_paths = {key: line.lock_path for key, line in g.discover().items() if line.lock_path.is_file()}
+    real_bytes = {key: path.read_bytes() for key, path in real_paths.items()}
+    check("main/whole-tree-update-refused", g.main(["--update", "--reason", "x"]) == 1)
+    check("main/unknown-line-refused", g.main(["--update", "--line", "nope/v1", "--reason", "x"]) == 1)
+    check("main/real-tree-clean", g.main([]) == 0, "the real lock files no longer verify")
+    check(
+        "main/refusals-wrote-nothing",
+        all(path.read_bytes() == real_bytes[key] for key, path in real_paths.items()),
+        "a refused or read-only run rewrote a real lock file",
+    )
+
+    if PROBLEMS:
+        print(f"CFG_LOCK_GATE_FAILED ({len(PROBLEMS)})")
+        return 1
+    print("CFG_LOCK_GATE_OK")
+    return 0
+
+
+def copy_stored(entries: dict, snapshot: dict | None = None, version: str | None = None) -> dict:
+    """Deep-ish copy of a stored-entries map, optionally replacing one entry's fields."""
+    out = json.loads(json.dumps(entries))
+    if snapshot is not None or version is not None:
+        stored = out[g.entry_key(KEY, "Lizard-Test-v1")]
+        if snapshot is not None:
+            stored["snapshot"] = snapshot
+        # keep the digest as recorded: a snapshot edited without its digest is the
+        # hand-edited case this file pins separately
+        if version is not None:
+            stored["version"] = version
+    return out
 
 
 if __name__ == "__main__":
