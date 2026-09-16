@@ -2,9 +2,13 @@
 
 > obs = **契约面**：定网络输入形状与 teacher↔student 蒸馏接口（L_re 重建目标），
 > 被版本之外的系统依赖，故享家族级 SSOT（与 REWARDS.md 平级）。
-> **数值真源仍是代码**：`teacher_env_cfg.py`（含 `TEACHER_PRIVILEGED_SPEC`）+
-> `check_obs_layout.py` 静态断言 + `teacher_smoke_v3.py` 运行时核对——本文只做
-> 语义镜像（约定同 REWARDS.md"数值真源仍是代码+各 vN yaml"）。
+> **数值真源（2026-09-16 变更）**：布局与维度的**声明面**已迁到
+> `versions/obs_protocols.json`（`rl_exp/tasks/obs_protocol.py` 是唯一读者），已审摘要与
+> 分组宽度在 `versions/lizard/obs_protocol_anchors.json`，闸门 `check_obs_protocol.py`
+> 同时对冻结 golden 与实构 cfg 两侧断言。`check_obs_layout.py`、`test_cfg_snapshot.py`、
+> `teacher_smoke_runner.py`、`teacher_smoke*.py`、`parkour_smoke.py` 里的顺序/脚序/宽度
+> 副本已改为消费该声明。**装配事实仍在代码**（`teacher_env_cfg.py` 含
+> `TEACHER_PRIVILEGED_SPEC`）；本文只做语义镜像（约定同 REWARDS.md）。
 > 时态纪律：只收已成立事实；"待补/待改"住 PLAN.md 挂账（摩擦/外力真值 = 挂账 #4）。
 
 ## 演进总表
@@ -16,8 +20,13 @@
 | v3 | 三命名组 | 90+208+83 = 381 | 脚环 extero 208 替代网格扫描；三编码器输入契约（`teacher_networks.py` `OBS_GROUP_CONTRACT`） |
 | v4 | 同 v3 | 同 v3 | spec 不变（纯地形 + 物理缓冲区变更） |
 | v5 | 同 v3 | 同 v3 | spec 不变（反划脚奖励包变更） |
-| v6–v11 | 同 v3 | 同 v3 | 布局不变（v8 资产换代重命名关节不改契约；v10 删 tilt 终止、v11 命令换 ParticleVelocityCommand，均非 obs 布局） |
+| v6 | 同 v3 | 同 v3 | spec 不变（v6.1 脊柱解锁） |
+| v7, v9 | 未实现 | — | 目录存在、**无 cfg、无注册入口**（闸门按"有历史目录、无注册入口"登记） |
+| v8 | 同 v3 | 同 v3 | 资产换代重命名关节，不改契约 |
+| v10–v11 | 同 v3 | 同 v3 | v10 删 tilt 终止、v11 命令换 ParticleVelocityCommand，均非 obs 布局 |
 | v12 | 同 v3 | 同 v3 | **布局/维度不变**；extero 值级噪声：`NoisyFootRing` 工况 60/30/10 + w/ε_f/ε_p 三层 + outlier，幅度 × c_k（teacher 侧，无蒸馏——有意偏差，见 v12 PLAN §3） |
+| v13–v14 | 同 v3 | 同 v3 | 奖励/课程与 fall 闸变更，非 obs 布局。**本表此前止于 v12，v13/v14 无门**——现由 `check_obs_protocol.py` 覆盖（20 个任务共用同一协议身份） |
+| v15 | 未实现 | — | `main/v15/` 目录已建，**无 cfg、无注册入口**（同 v7/v9）：布局无从声明 |
 
 ## v1 布局（266，单向量，actor 全可见 critic 同源）
 
