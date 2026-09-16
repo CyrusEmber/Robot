@@ -19,6 +19,7 @@ _EXP = _REPO / "rl_exp"
 sys.path.insert(0, str(_REPO))
 
 from rl_exp.tasks import teacher_mdp  # noqa: E402
+from rl_exp.tasks import obs_protocol  # noqa: E402
 from isaaclab.envs.mdp.events import reset_joints_by_offset  # noqa: E402
 from rl_exp.tasks.teacher_env_cfg import (  # noqa: E402
     LizardRoughTeacherEnvCfg_V1,
@@ -42,21 +43,15 @@ from rl_exp.tasks.agents.rsl_rl_ppo_cfg import (  # noqa: E402
     LizardTeacherV12PPORunnerCfg,
 )
 
-V3_EXTERO_ORDER = ["lf_foot_ring", "rf_foot_ring", "rl_foot_ring", "rr_foot_ring"]
-V3_PROPRIO_ORDER = [
-    "base_lin_vel", "base_ang_vel", "projected_gravity", "velocity_commands",
-    "joint_pos", "joint_vel", "actions",
-]
-V3_PRIV_BASE = [
-    "base_lin_vel_true", "base_ang_vel_true", "foot_contact", "feet_air_time",
-    "body_mass",
-]
-V3_PRIV_ORDER = V3_PRIV_BASE + [
-    "foot_contact_forces", "foot_contact_normals", "foot_friction",
-    "thigh_shank_contacts", "base_external_wrench",
-]
-V1_POLICY_ORDER = V3_PROPRIO_ORDER + ["height_scan"] + V3_PRIV_BASE
-V2_POLICY_ORDER = V3_PROPRIO_ORDER + ["height_scan"] + V3_PRIV_ORDER
+# The layouts are read from the protocol declaration (rl_exp/versions/obs_protocols.json),
+# never restated here: the feet, the term order and which terms a version actually carries
+# were the same facts kept in two places, and the second copy is the one that goes stale.
+# A task id, not a version string, is how the declaration is addressed: identity is read.
+V3_EXTERO_ORDER = obs_protocol.live_terms_for("Lizard-Rough-v12", "extero")
+V3_PROPRIO_ORDER = obs_protocol.live_terms_for("Lizard-Rough-v12", "proprio")
+V3_PRIV_ORDER = obs_protocol.live_terms_for("Lizard-Rough-v12", "priv")
+V1_POLICY_ORDER = obs_protocol.live_terms_for("Lizard-Rough-v1", "policy")
+V2_POLICY_ORDER = obs_protocol.live_terms_for("Lizard-Rough-v2", "policy")
 
 # group-level settings, not terms (mirrors the observation manager's skip list)
 _GROUP_FIELDS = {

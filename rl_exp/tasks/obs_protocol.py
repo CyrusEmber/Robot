@@ -90,6 +90,22 @@ def terms_for(task_id: str, group: str) -> list[str]:
     return list(entry.get("terms") or [])
 
 
+def live_terms_for(task_id: str, group: str) -> list[str]:
+    """The terms a group actually carries: the declared order minus the dropped ones.
+
+    A dropped term is still part of the declaration -- it says the cfg had a term there and
+    took it away -- while the manager sees only the live ones. Both questions are asked, so
+    both answers are available from one place.
+
+    Raises:
+        ProtocolError: as :func:`terms_for`.
+    """
+    groups = groups_for(task_id)
+    terms = terms_for(task_id, group)
+    dropped = set(groups[group].get("dropped_terms") or [])
+    return [term for term in terms if term not in dropped]
+
+
 def feet_for(task_id: str, group: str = "extero") -> tuple[str, ...]:
     """The foot order a task's ring group encodes, derived from its term names.
 

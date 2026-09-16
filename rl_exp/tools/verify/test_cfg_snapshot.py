@@ -38,6 +38,7 @@ sys.path.insert(0, ".")
 sys.path.insert(0, "rl_exp/tools/verify")
 import cfg_snapshot as cs  # noqa: E402
 from rl_exp.tasks.agents.rsl_rl_ppo_cfg import LizardTeacherV14PPORunnerCfg  # noqa: E402
+from rl_exp.tasks import obs_protocol  # noqa: E402
 from rl_exp.tasks.teacher_env_cfg import (  # noqa: E402
     LizardRoughTeacherEnvCfg_V13,
     LizardRoughTeacherEnvCfg_V14,
@@ -62,14 +63,14 @@ _GROUP_FIELDS = {"enable_corruption", "concatenate_terms", "history_length", "fl
 def check_order(snap: dict, cfg) -> None:
     """Order is preserved from the live instance and is inside the digest.
 
-    The extero term order is asserted against the frozen contract (the network
-    reshapes ``[N, 4, 52]`` in that order; mirror of ``check_obs_layout.V3_EXTERO_ORDER``),
-    so this is not a restatement of how the snapshot was built. Group-level settings
-    live in the same mapping; they are not terms.
+    The extero term order is asserted against the protocol declaration, which owns that
+    contract (the network reshapes ``[N, 4, 52]`` in that order), so this is not a
+    restatement of how the snapshot was built. Group-level settings live in the same
+    mapping; they are not terms.
     """
     groups = snap["observations"]
     terms = [t for t in groups["extero"] if t not in _GROUP_FIELDS]
-    expected = ["lf_foot_ring", "rf_foot_ring", "rl_foot_ring", "rr_foot_ring"]
+    expected = obs_protocol.live_terms_for("Lizard-Rough-v14", "extero")
     check("order/obs-groups-visible", {"proprio", "extero", "priv"} <= set(groups), f"got {sorted(groups)}")
     check("order/extero-terms", terms == expected, f"{terms} != {expected}")
 
