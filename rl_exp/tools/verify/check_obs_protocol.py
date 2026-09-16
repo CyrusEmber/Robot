@@ -45,7 +45,7 @@ _REPO = pathlib.Path(__file__).resolve().parents[3]
 DECLARATION = _REPO / "rl_exp" / "versions" / "obs_protocols.json"
 ANCHORS = _REPO / "rl_exp" / "versions" / "lizard" / "obs_protocol_anchors.json"
 FORMAT_VERSION = 1
-_ORDERED_FIELDS = ("terms", "dropped_terms", "clip", "noise")
+_ORDERED_FIELDS = ("terms", "dropped_terms", "clip", "scale", "noise")
 
 
 def content_digest(groups) -> str:

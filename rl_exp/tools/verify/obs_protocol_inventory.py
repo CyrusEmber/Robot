@@ -10,8 +10,8 @@ Authoring material for the protocol declaration (``ARCH_PLAN`` 3.1a) and the raw
 gate: the goldens are the constructed cfg trees the lock gate already verified, so this needs
 no isaaclab import and stays usable while the task tree is mid-edit.
 
-The cluster key is the layout itself -- ordered group names, ordered term names, and the
-per-term clip/scale/noise presence -- never the recipe version. Two recipes that share a
+The cluster key is the layout itself -- ordered group names, ordered term names, the clip,
+scale and noise values, and the group flags -- never the recipe version. Two recipes that share a
 layout share a protocol identity even when their version numbers are neighbours; two
 neighbouring versions with different layouts must not be merged. Clustering by version would
 paper over exactly that, which is the failure this file exists to make visible.
@@ -82,12 +82,20 @@ def layout(observations) -> tuple[dict[str, dict], list[str]]:
         return out, [repr(observations)]
     for group, body in observations.items():
         if body is None:
-            out[group] = {"dropped": True, "flags": {}, "terms": [], "dropped_terms": [], "clip": [], "noise": []}
+            out[group] = {
+                "dropped": True,
+                "flags": {},
+                "terms": [],
+                "dropped_terms": [],
+                "clip": {},
+                "scale": {},
+                "noise": {},
+            }
             continue
         if not isinstance(body, dict):
             unclassified.append(f"{group} (neither a mapping nor null)")
             continue
-        terms, clipped, noisy, dropped = [], [], [], []
+        terms, clipped, noisy, dropped, scaled = [], {}, {}, [], {}
         for name, value in body.items():
             if name in _GROUP_FIELDS:
                 continue
@@ -99,11 +107,22 @@ def layout(observations) -> tuple[dict[str, dict], list[str]]:
                 unclassified.append(f"{group}.{name}")
                 continue
             terms.append(name)
+            # the values, not just their presence: a noise sigma or a clip bound edited in
+            # place is the change this record exists to catch, and "has noise" cannot see it
             if value.get("clip") is not None:
-                clipped.append(name)
+                clipped[name] = value["clip"]
+            if value.get("scale") is not None:
+                scaled[name] = value["scale"]
             if value.get("noise") is not None:
-                noisy.append(name)
-        out[group] = {"dropped": False, "terms": terms, "dropped_terms": dropped, "clip": clipped, "noise": noisy}
+                noisy[name] = value["noise"]
+        out[group] = {
+            "dropped": False,
+            "terms": terms,
+            "dropped_terms": dropped,
+            "clip": clipped,
+            "scale": scaled,
+            "noise": noisy,
+        }
         # group flags are part of the identity: TRAIN corrupts and applies noise, PLAY does
         # neither, so a cluster that ignored them would call two contracts the same.
         out[group]["flags"] = {name: body[name] for name in sorted(_GROUP_FIELDS & set(body))}

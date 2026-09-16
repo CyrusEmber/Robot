@@ -1,59 +1,59 @@
 {
  "format": 1,
- "note": "Approved observation protocol digests (ARCH_PLAN Step 3.1a). Approved by the reviewer on 2026-09-16 from the layout survey; the gate reads this file and never rewrites it. A protocol no task references must state a purpose.",
+ "note": "Approved observation protocol digests (ARCH_PLAN Step 3.1a). Re-approved 2026-09-16 when clip/scale/noise values entered the record; the diff against the previous approval was verified to be representation only (no term, order, dropped or flag change). The gate reads this file and never rewrites it: a new or edited protocol stays red until a human writes its digest here. A protocol no task references must state a purpose.",
  "protocols": {
-  "229a965ae531": {
-   "digest": "229a965ae531d587b7aaf977187804cffe3d4ca652926b72e5983f6c7c48f27f",
+  "1d87d5c6b546": {
+   "digest": "1d87d5c6b5463bc836b5754bbb24c9a49dd7453f67c075a1e61f2805da36165d",
    "label": "",
    "purpose": ""
   },
-  "2ce098461987": {
-   "digest": "2ce09846198767df7616a83f47c0623a303c93aafc6a1dd3699e3c7ae961133e",
+  "287479dc40c7": {
+   "digest": "287479dc40c730de7b59824620882369ef7a5809330d18878d77c1229a85bcb8",
    "label": "",
    "purpose": ""
   },
-  "312414193c59": {
-   "digest": "312414193c59486a190ac388f659051f93dd5f2e038b4e3a8c730a9b382545b4",
+  "4d4a26c4c8a2": {
+   "digest": "4d4a26c4c8a2b02355ad2c98226a5e0d3f5283a0d18aed0ec095c50459f70d6e",
    "label": "",
    "purpose": ""
   },
-  "4e3a05b18d34": {
-   "digest": "4e3a05b18d3467d423bb3123575c6ed846f3907d3be18fd7a145e5fdfe0e46eb",
+  "583eaf23b9d1": {
+   "digest": "583eaf23b9d1e96fb0d24fed81308aedfc9bfa7eec0b7da04ac90202768831f6",
    "label": "",
    "purpose": ""
   },
-  "4fe06fabc5a6": {
-   "digest": "4fe06fabc5a6e4e3e24a6881edc79ebc9039915818dec6dab034511be6f84807",
+  "6cd53ec273dc": {
+   "digest": "6cd53ec273dc43be29cfe27edb2d5f02782d7aef9a15d46d29451f1ad0efa2d3",
    "label": "",
    "purpose": ""
   },
-  "5d807f35d732": {
-   "digest": "5d807f35d7325b0354bf8b0a8a0e16d154e96e16b0c7d710cdf3022849293325",
+  "a25a8c39001b": {
+   "digest": "a25a8c39001b9aad8ef56c49e6ff77134973afe45dc5277968e1f94275f67bd9",
    "label": "",
    "purpose": ""
   },
-  "68f52cb973ca": {
-   "digest": "68f52cb973ca15818c7a83ad7a7320b7682de24d0eb9c3d6c623f7a0400b202d",
+  "c71114b0c0fd": {
+   "digest": "c71114b0c0fdfcffb7859a0389830d740273cf392ef44da91639f8ae7f5a4a52",
    "label": "",
    "purpose": ""
   },
-  "76d123194eb2": {
-   "digest": "76d123194eb244a2da86f5793c95e6b325822ceacb5d9831889f3f15abde7d05",
+  "cf66ed6422c8": {
+   "digest": "cf66ed6422c82ed7da5bb356b5b1a5d6b8b8b6f5b76dbe45b851366765fdca69",
    "label": "",
    "purpose": ""
   },
-  "89bb3eb4f9d2": {
-   "digest": "89bb3eb4f9d24f52b0db59c7f2b2f30bb865d6474cdb1839b2f16bef38f8702e",
+  "d8de5bc507a7": {
+   "digest": "d8de5bc507a76e9904a912347a74caa32675e11efd5ab73fb5cfbfb2a41758c2",
    "label": "",
    "purpose": ""
   },
-  "8c85740ad26c": {
-   "digest": "8c85740ad26c7352b1f9d2cf69e5865e5d54b243a347d692f70c8c06ce4832cf",
+  "fa849f7f2d7c": {
+   "digest": "fa849f7f2d7c4e144d29955806722b9adbd580b006790b73f5cb7c5ca7c7fd82",
    "label": "",
    "purpose": ""
   },
-  "f53b94af2da5": {
-   "digest": "f53b94af2da5829034d466cb679b5d47570acf3517d17bf8ae53260c510a5f3b",
+  "fdef56347528": {
+   "digest": "fdef56347528a58fee8c6384c959de61c0c63057f418f877a324b6ddb9154393",
    "label": "",
    "purpose": ""
   }
