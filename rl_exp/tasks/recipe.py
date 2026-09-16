@@ -146,6 +146,93 @@ def v4_stock_contact_stack(cfg) -> None:
     cfg.sim.physics.default.gpu_collision_stack_size = 2**26
 
 
+def v5_drops_speed_curriculum(cfg) -> None:
+    """v5 removes the staged speed curriculum (v5.0).
+
+    Installed by ``v3_speed_curriculum`` above and taken away here, exactly as the subclass
+    chain did it: the staged term is a *field* of the curriculum block, so leaving it out of
+    the element list would make the built cfg state ``absent`` where the frozen recipe states
+    ``null`` -- and the snapshot keeps those apart on purpose. The reason it goes: stage 0's
+    (-1, 2) window kept a 50% standstill-freeload band under the exp kernel, and the linear
+    kernel below needs no range gating.
+    """
+    cfg.curriculum.speed_curriculum = None
+
+
+def v5_reward_package(cfg) -> None:
+    """The reward-side anti-collapse package (v5.0-v5.2).
+
+    v3/v4 trained to a foot-pad creeping optimum (15555 iters, success_rate pinned at the
+    standstill freeload baseline, terrain levels frozen at 1.27, foot_clearance reward never
+    above 5e-5), so four holes are closed here:
+
+    * the exp tracking kernel let ``|v_cmd| < 0.5`` stand still for half the command
+      distribution -- the linear (Cheng et al. 2023 Eq. 2) form scores standing 0 and reversal
+      negative;
+    * ``r_slip`` charges contact-foot sliding (paper S7, c_k-scaled) -- the only direct
+      anti-creeping term, dropped from v3 by an erratum;
+    * ``r_co`` narrows to thigh/shank (HFE/KFE) and the base body moves to a dedicated
+      continuous belly-force penalty at a *constant* weight (lying flat must never become free
+      as c_k anneals), HAA/spine exempt (user decision);
+    * both new weights are negative in this recipe's yaml -- v5.0/v5.1 shipped them positive,
+      i.e. paying for sliding and belly contact (same bug class as the v3 ``r_fc`` sign flip).
+    """
+    doc = _doc(cfg)
+    v5 = doc["v5"]
+    base_name = doc["robot"]["base_body_name"]
+
+    cfg.rewards.track_lin_vel_xy_exp = None
+    cfg.rewards.track_lin_vel_xy_lin = RewTerm(
+        func=teacher_mdp.track_lin_vel_xy_lin,
+        weight=v5["track_goal_vel"]["weight"],
+        params={"command_name": "base_velocity", "min_speed": v5["track_goal_vel"]["min_speed"]},
+    )
+    # both cfgs must be explicit params so the manager resolves body_ids (a defaulted
+    # SceneEntityCfg stays unresolved and indexes with body_ids=None)
+    cfg.rewards.feet_slide = RewTerm(
+        func=teacher_mdp.feet_slide_ck,
+        weight=v5["r_slip"]["weight"],
+        params={
+            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
+            "asset_cfg": SceneEntityCfg("robot", body_names=".*_foot"),
+        },
+    )
+    cfg.rewards.undesired_contacts.func = teacher_mdp.undesired_contacts_ck
+    cfg.rewards.belly_contact_force = RewTerm(
+        func=teacher_mdp.belly_contact_force,
+        weight=v5["belly_contact_force"]["weight"],
+        params={
+            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=[base_name]),
+            "force_scale": v5["belly_contact_force"]["force_scale"],
+        },
+    )
+
+
+def v5_sir_terrain_curriculum(cfg) -> None:
+    """v5.3: the SIR particle terrain curriculum replaces the stock level walk.
+
+    Lee et al. 2020 Algorithm S1 (discrete adaptation): a particle is (terrain type, difficulty
+    row) on the fixed 8-type x 10-row x 20-col grid -- v4's types plus a flat bootstrap column --
+    and spawn traffic is redistributed per measured success band. The v3.5 "spawn at the easiest
+    row" prerequisite dies here: SIR samples uniformly at start (paper line 1), which is why
+    ``components.TERRAIN_BY_RECIPE["v5"]`` carries no start level and why this term owns
+    ``terrain_levels`` instead.
+    """
+    sir = _doc(cfg)["v5"]["terrain_curriculum"]
+    cfg.curriculum.terrain_levels = teacher_mdp.SIRTerrainCurriculumCfg(
+        func=teacher_mdp.SpawnWeightSIRTerrainCurriculum,
+        command_name="base_velocity",
+        band=tuple(sir["band"]),
+        eval_every=int(sir["eval_every"]),
+        n_traj_min=int(sir["n_traj_min"]),
+        p_transition=float(sir["p_transition"]),
+        p_replay=float(sir["p_replay"]),
+        success_ratio=float(sir["success_ratio"]),
+        soft_edge=float(sir["soft_edge"]),
+        steps_per_iteration=int(sir["steps_per_iteration"]),
+    )
+
+
 def play_drops_speed_curriculum(cfg) -> None:
     """Evaluation determinism: a good policy must not have its range widened mid-run."""
     cfg.curriculum.speed_curriculum = None
@@ -154,6 +241,12 @@ def play_drops_speed_curriculum(cfg) -> None:
 def play_pins_full_command_range(cfg) -> None:
     """Pin the range the curriculum would have climbed to (see ``components.FULL_FORWARD_RANGE``)."""
     cfg.commands.base_velocity.ranges.lin_vel_x = components.FULL_FORWARD_RANGE
+
+
+def play_drops_sir_terrain_curriculum(cfg) -> None:
+    """Deterministic evaluation: the SIR term would reassign spawn origins per episode from
+    replay outcomes, so a replay must keep the terrain assignment it started with."""
+    cfg.curriculum.terrain_levels = None
 
 
 # Named recipe elements, in application order. An element takes the env cfg and owns its fields
@@ -165,8 +258,12 @@ ELEMENTS: dict[str, object] = {
     "v3_anti_drag_reward": v3_anti_drag_reward,
     "v3_ck_clock": v3_ck_clock,
     "v4_stock_contact_stack": v4_stock_contact_stack,
+    "v5_drops_speed_curriculum": v5_drops_speed_curriculum,
+    "v5_reward_package": v5_reward_package,
+    "v5_sir_terrain_curriculum": v5_sir_terrain_curriculum,
     "play_drops_speed_curriculum": play_drops_speed_curriculum,
     "play_pins_full_command_range": play_pins_full_command_range,
+    "play_drops_sir_terrain_curriculum": play_drops_sir_terrain_curriculum,
 }
 
 # What each recipe is: the ordered elements it applies on top of the shared wiring (and, for its
@@ -195,7 +292,26 @@ RECIPES: dict[str, dict] = {
         "train": "Lizard-Rough-v4",
         "play": "Lizard-Rough-Play-v4",
     },
-    "v5": {"elements": None},
+    # v5 rebuilds the reward economics and hands the terrain curriculum to SIR. Its PLAY
+    # variant keeps the yaml's forward-only window: the v3/v4 PLAY elements are deliberately
+    # absent (play_drops_speed_curriculum would null a curriculum v5 already dropped, and
+    # play_pins_full_command_range would pin (-1, 5) where the frozen PLAY recipe says (0, 3)),
+    # so only the SIR rollout guard is left.
+    "v5": {
+        "elements": (
+            "v3_contact_headroom",
+            "v3_speed_curriculum",
+            "v3_anti_drag_reward",
+            "v3_ck_clock",
+            "v4_stock_contact_stack",
+            "v5_drops_speed_curriculum",
+            "v5_reward_package",
+            "v5_sir_terrain_curriculum",
+        ),
+        "play_elements": ("play_drops_sir_terrain_curriculum",),
+        "train": "Lizard-Rough-v5",
+        "play": "Lizard-Rough-Play-v5",
+    },
     "v6": {"elements": None},
     "v8": {"elements": None},
     "v10": {"elements": None},

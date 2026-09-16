@@ -20,6 +20,20 @@ gate instead of a flag on the golden gate:
 A recipe whose delta is not declared yet is *printed*, never skipped: silence reads as "passed",
 and a builder that quietly produces "v14 minus whatever has not moved yet" would be green and
 wrong.
+
+The same rule covers the one thing ``build()`` structurally cannot carry. A ``ClassVar`` is a
+statement *about* a recipe, so the snapshot (format 2) leaves it out -- and the declaration path
+has no class to put it on: ``build()`` returns the shared base class, whose MRO says nothing
+about the version it was handed. Two readers see this differently, and the gate prints the
+difference with both values rather than deciding it is harmless:
+
+* ``PLAY_PINS_COMMAND_RANGE`` is read at *construction time*, by the base ``__post_init__``. The
+  declaration path reproduces its effect instead of the statement (``play_pins_full_command_range``
+  writes the same range afterwards), so the printed gap is already materialized in the fields.
+* ``REQUIRES_CURRICULUM_STATE`` is read at *runtime* off ``type(cfg)`` (``curriculum_state``,
+  ``runrecord.manifest``). The declaration path cannot state it, and nothing in the fields makes
+  up for it -- a real, open gap (``ACCEPTANCE.md`` B3, v5 entry), which is why it is printed on
+  every run instead of being fixed by a flag that would only look fixed.
 """
 
 from __future__ import annotations
@@ -57,9 +71,27 @@ def frozen_entries(line_key: str, cache: dict[str, dict]) -> tuple[dict, str | N
     return entries, error
 
 
+def classvar_gaps(cls, built) -> list[str]:
+    """ClassVars ``cls`` states that the built cfg's class does not, as ``name: stated != carried``.
+
+    Compared class to class, never through a constructed instance: the point of the check is that
+    the declaration path carries no class of its own, so ``type(built)`` is the shared base and a
+    name only the version class annotates shows up here. The names come from the snapshot's own
+    ``ClassVar`` filter, so "left out of the golden" and "printed here" are one rule, not two.
+    """
+    out: list[str] = []
+    for name in cs._class_var_names(cls):
+        stated = getattr(cls, name, "not stated")
+        carried = getattr(type(built), name, "not stated")
+        if carried != stated:
+            out.append(f"{name}: {stated!r} != {carried!r}")
+    return out
+
+
 def main(argv: list[str] | None = None) -> int:
     """Gate entry point: build each declared recipe and compare it against the frozen golden."""
     problems: list[str] = []
+    gaps: list[str] = []
     mapping = lock.recipe_map()
     try:
         combo_key = lock.combination_key(lock.combination())
@@ -105,6 +137,18 @@ def main(argv: list[str] | None = None) -> int:
                     f"{task_id}: built cfg carries params_version={getattr(built, 'params_version', None)!r}"
                     f" while the recipe is {version!r}"
                 )
+            # the recipe map names the class this task is built from, so the ClassVar comparison
+            # reads a declaration instead of guessing the class name from the version string
+            entry = (mapping.get("recipes", {}).get(recipe_key or "") or {}).get("env_cfg_entry")
+            try:
+                cls = lock.resolve_entry(entry)
+            except (ImportError, AttributeError, TypeError, ValueError) as err:
+                problems.append(
+                    f"{task_id}: recipe {recipe_key!r} entry {entry!r} does not resolve:"
+                    f" {type(err).__name__}: {err}"
+                )
+            else:
+                gaps += [f"{version}/{kind} {gap}" for gap in classvar_gaps(cls, built)]
             rows: list = []
             lock.walk_diff(stored["snapshot"]["env"], cs.snapshot(built), "", rows)
             if rows:
@@ -118,6 +162,8 @@ def main(argv: list[str] | None = None) -> int:
     waiting = recipe.pending()
     if waiting:
         print(f"  not declared yet (not compared): {waiting}")
+    for gap in gaps:
+        print(f"  classvar the declaration cannot carry (no class to hold it): {gap}")
     if problems:
         print("RECIPE_BUILD_FAILED")
         return 1
