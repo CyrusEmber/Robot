@@ -56,8 +56,10 @@ _REPO = pathlib.Path(__file__).resolve().parents[3]
 if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
+from rl_exp.tools.runrecord import lifecycle as lifecycle_gate  # noqa: E402
 from rl_exp.tools.runrecord import provenance as prov  # noqa: E402
 from rl_exp.tools.verify import cfg_snapshot as cs  # noqa: E402
+from rl_exp.tools.verify import recipe_lifecycle  # noqa: E402
 
 FORMAT_VERSION = 1
 MANIFEST_NAME = "run_manifest.json"
@@ -317,6 +319,7 @@ def begin(*, log_dir, task: str | None, argv: list[str], env_cfg, agent_cfg) -> 
         The run context to hand to the later stages.
     """
     ctx = RunContext(pathlib.Path(log_dir), task)
+    declined: str | None = None
     try:
         ctx.manifest = {
             "run_manifest_format": FORMAT_VERSION,
@@ -348,6 +351,31 @@ def begin(*, log_dir, task: str | None, argv: list[str], env_cfg, agent_cfg) -> 
             },
             "distributed": _distributed(),
         }
+        # Lifecycle (ARCH_PLAN 2.2, stage C1): the directory is read once, here, and the verdict
+        # is recorded in T0 before anything is built. This is where the old trainer and the
+        # tuning entry (which shells out to it) get their answer -- the gate lives in the module
+        # they already call, so no new call site can be forgotten.
+        #
+        # A raising gate is a refusal, not a warning: an unknown permission is not a permission.
+        try:
+            verdict, lifecycle_evidence = lifecycle_gate.startup_check(
+                task=task,
+                argv=argv,
+                agent_cfg=agent_cfg,
+                log_dir=ctx.log_dir,
+                declared_line=(ctx.manifest["declaration"]["recipe"] or {}).get("params_line"),
+            )
+        except Exception as err:  # noqa: BLE001
+            verdict = None
+            lifecycle_evidence = {
+                "allowed": False,
+                "reason": f"lifecycle check failed: {type(err).__name__}: {err}",
+            }
+        ctx.manifest["declaration"]["lifecycle"] = lifecycle_evidence
+        if verdict is None or not verdict.allowed:
+            declined = lifecycle_evidence["reason"]
+        elif verdict.warn:
+            print(f"[run-manifest] WARNING: {verdict.warn}")
         ctx.manifest["stages"] = {"pre_make": {"at": _now()}}
         # T0 hits disk immediately: if the process dies during gym.make, the launch
         # declaration must already be on disk
@@ -359,7 +387,12 @@ def begin(*, log_dir, task: str | None, argv: list[str], env_cfg, agent_cfg) -> 
     if drifted:
         # the run is about to use assets that no longer match the frozen lock
         ctx.fail(f"assets differ from the frozen lock: {drifted[:3]} (total {len(drifted)})")
-    # last, with T0 already on disk: a refused launch leaves evidence, not nothing
+    # with T0 already on disk: a refused launch leaves evidence, not nothing. The directory's
+    # answer comes first: a line that is retired refuses whatever state the tree is in, and the
+    # message it carries (which successor to move to) is the one the caller needs.
+    if declined is not None:
+        ctx.fail(f"refused to start: {declined}")
+        raise RuntimeError(f"[run-manifest] refused to start: {declined}")
     refusal = dirty_tree_refusal(ctx)
     if refusal is not None:
         ctx.fail(f"refused to start: {refusal}")
@@ -780,6 +813,7 @@ def verify(run_dir: pathlib.Path) -> tuple[list[dict], list[str]]:
         problems.append(f"{run_dir}: manifest format {manifest.get('run_manifest_format')} != {FORMAT_VERSION}")
 
     rows.extend(_verify_self_consistency(manifest, problems))
+    rows.extend(_verify_lifecycle(manifest, problems))
     rows.extend(_verify_code(manifest, problems))
     rows.extend(_verify_assets(manifest, problems))
     rows.extend(_verify_recipe(manifest, problems))
@@ -827,6 +861,51 @@ def _verify_self_consistency(manifest: dict, problems: list[str]) -> list[dict]:
     else:
         rows.append(_row("记录完整", "通过", f"declared/actual agree on {len(checked)} field(s)"))
     return rows
+
+
+def _verify_lifecycle(manifest: dict, problems: list[str]) -> list[dict]:
+    """Was this launch permitted by the directory, and does the record still say so?
+
+    The live directory is re-read only to *compare* with what was recorded: a launch that the
+    directory has since moved past is reported as such, never re-judged (hard constraint 6 --
+    the record is what was true when the run started, not what today's layout would allow) and
+    never silently upgraded to a pass. The recorded verdict itself is under the T1 digest, so it
+    cannot be edited into a permission after the fact.
+    """
+    recorded = (manifest.get("declaration") or {}).get("lifecycle")
+    if not recorded:
+        return [
+            _row(
+                "记录完整",
+                "未知",
+                "no lifecycle verdict recorded: this launch predates the gate, so nothing is claimed",
+            )
+        ]
+    if recorded.get("allowed") is not True:
+        problems.append(f"lifecycle: the launch was refused ({recorded.get('reason')})")
+        return [_row("记录完整", "失败", f"lifecycle refused the launch: {recorded.get('reason')}")]
+    if recorded.get("status") not in recipe_lifecycle.STATUSES:
+        problems.append(f"lifecycle: recorded status {recorded.get('status')!r} is not a status")
+        return [_row("记录完整", "失败", f"lifecycle recorded status {recorded.get('status')!r}")]
+    live = lifecycle_gate.read_index()
+    if live.get("digests") == recorded.get("directory_sha256"):
+        return [
+            _row(
+                "记录完整",
+                "通过",
+                f"line {recorded.get('line')} was {recorded.get('status')} at revision"
+                f" {recorded.get('directory_revision')}, and the directory has not changed since",
+            )
+        ]
+    return [
+        _row(
+            "记录完整",
+            "未知",
+            "the recipe directory has changed since this launch: the recorded verdict stands as"
+            " what this run was started under, and today's directory is not re-applied to it",
+            required=False,
+        )
+    ]
 
 
 def _verify_code(manifest: dict, problems: list[str]) -> list[dict]:

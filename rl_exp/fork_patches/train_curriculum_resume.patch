@@ -1,7 +1,7 @@
 diff --git a/scripts/reinforcement_learning/rsl_rl/train.py b/scripts/reinforcement_learning/rsl_rl/train.py
 --- a/scripts/reinforcement_learning/rsl_rl/train.py
 +++ b/scripts/reinforcement_learning/rsl_rl/train.py
-@@ -75,6 +75,22 @@ parser.add_argument(
+@@ -75,6 +75,31 @@ parser.add_argument(
  )
  parser.add_argument("--seed", type=int, default=None, help="Seed used for the environment")
  parser.add_argument("--max_iterations", type=int, default=None, help="RL Policy training iterations.")
@@ -21,10 +21,19 @@ diff --git a/scripts/reinforcement_learning/rsl_rl/train.py b/scripts/reinforcem
 +    help="Deprecated alias of --drop_curriculum_state (it never meant 'weights only': rsl_rl still"
 +    " loads model and optimizer; only the curriculum state was dropped).",
 +)
++parser.add_argument(
++    "--allow_retired_resume",
++    action="store_true",
++    default=False,
++    help="Continue a recipe line that has been retired. It only lifts the lifecycle restriction,"
++    " and only for a resume whose source checkpoint actually resolves; it never drops the"
++    " curriculum state (see --drop_curriculum_state). Without a resume it is refused rather"
++    " than read as a general permission.",
++)
  parser.add_argument(
      "--distributed", action="store_true", default=False, help="Run training with multiple GPUs or nodes."
  )
-@@ -87,6 +103,13 @@ cli_args.add_rsl_rl_args(parser)
+@@ -87,6 +112,13 @@ cli_args.add_rsl_rl_args(parser)
  add_launcher_args(parser)
  args_cli, remaining_args = setup_preset_cli(parser)
  
@@ -38,10 +47,26 @@ diff --git a/scripts/reinforcement_learning/rsl_rl/train.py b/scripts/reinforcem
  if args_cli.video:
      args_cli.enable_cameras = True
  
-@@ -201,6 +224,37 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
-         if agent_cfg.resume or agent_cfg.algorithm.class_name == "Distillation":
-             resume_path = get_checkpoint_path(log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint)
- 
+@@ -167,6 +199,17 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
+         log_root_path = os.path.join("logs", "rsl_rl", agent_cfg.experiment_name)
+         log_root_path = os.path.abspath(log_root_path)
+         print(f"[INFO] Logging experiment in directory: {log_root_path}")
++
++        # The resume source is resolved here, BEFORE anything creates this run's own log
++        # directory (the run manifest writes T0 into it, which mkdir's it): with the default
++        # load_run (".*") the newest directory under the log root would otherwise be this run's
++        # own empty one, and a plain --resume would resolve to a directory with no checkpoint.
++        # It is also what the lifecycle check reads as "the checkpoint this run continues from".
++        resume_path = (
++            get_checkpoint_path(log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint)
++            if agent_cfg.resume or agent_cfg.algorithm.class_name == "Distillation"
++            else None
++        )
+         # specify directory for logging runs: {time-stamp}_{run_name}
+         log_dir = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+         # The Ray Tune workflow extracts experiment name using the logging line below, hence, do not
+@@ -200,6 +243,34 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
+         # save resume path before creating a new log_dir
 +        # Restore the curriculum state (registered SIR term state + the c_k clock) BEFORE the wrapper:
 +        # RslRlVecEnvWrapper.__init__ runs the first full reset, and that reset is what makes the SIR
 +        # terms respawn the envs -- on the restored state, when it is already in place. Without this the
@@ -52,7 +77,8 @@ diff --git a/scripts/reinforcement_learning/rsl_rl/train.py b/scripts/reinforcem
 +        # cannot be imported, instead of resuming with a silently cold curriculum.
 +        drop_curriculum_state = args_cli.drop_curriculum_state or args_cli.weights_only
 +        curriculum_resume = None
-+        if agent_cfg.resume or agent_cfg.algorithm.class_name == "Distillation":
+         if agent_cfg.resume or agent_cfg.algorithm.class_name == "Distillation":
+-            resume_path = get_checkpoint_path(log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint)
 +            requires_state = bool(getattr(type(env_cfg), "REQUIRES_CURRICULUM_STATE", False))
 +            try:
 +                from rl_exp.tasks.curriculum_state import apply_resume_state
@@ -72,11 +98,10 @@ diff --git a/scripts/reinforcement_learning/rsl_rl/train.py b/scripts/reinforcem
 +                curriculum_resume = apply_resume_state(
 +                    env.unwrapped, resume_path, drop_curriculum_state=drop_curriculum_state
 +                )
-+
+ 
          # wrap for video recording
          if args_cli.video:
-             video_kwargs = {
-@@ -225,6 +279,25 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
+@@ -225,6 +296,25 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
              runner = DistillationRunner(env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device)
          else:
              raise ValueError(f"Unsupported runner class: {agent_cfg.class_name}")
