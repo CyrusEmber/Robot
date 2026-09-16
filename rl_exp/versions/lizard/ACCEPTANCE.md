@@ -507,6 +507,21 @@ ValueError: curriculum state in the checkpoint does not fit this task: runtime.n
 | 未改（有意） | 冻结记录 `vN/PLAN.md` 与 `NOTES.md` 里的旧路径、`ACCEPTANCE.md` 的历史小节 —— 记录写的是当时那棵树，改写成今天的布局就不再是证据 |
 | 已知上限 | `recipe_lines` 的版本目录规则仍是 `v<N>`；放宽到任意标签只在某线首版不叫 v1 时才需要（baseline 用了 v1 ⇒ 今日不需要） |
 
+### 独立审核与修复（2026-09-16，审核方复签阶段 A）
+
+审核方对 `9ee6773` 做了**逐字节**核验（迁移前后 Git 对象比对：17 个参数文件内容不变、16 组 base/PLAN/NOTES 不变、主线 golden 不变、16 个 asset_lock 的变化严格限于自身 YAML 路径键），结论 **A0 迁移通过**，同时指出三项并已修复：
+
+| 编号 | 问题 | 修法与提交 |
+|---|---|---|
+| P1 | `9ee6773` 的 `teacher_env_cfg.py` 已导入 `components`，而该模块未跟踪 ⇒ **HEAD 自身不可导入**，37/37 只证明本机工作树 | 完整提交组件库 `1083952`；复核查明套件引用的 38 个文件全部已跟踪且存在，导入链闭合 |
+| P1 | `check_recipe_map.bind()` 只比 `params_version`、未比 `params_line` ⇒ 把某配方指到**另一条已存在线**时两侧均返回"无问题"，而配置仍属原线 | `bind()` 增比 `params_line`，反证加"版本对但线错"与"配置不声明线"两例 `83f0a40`；真树 36/36 一致 |
+| P2 | A3 未收口：`check_cfg_lock` 仍以任务名尾缀正则推导版本、且不消费 `recipes.json` ⇒ 身份规则两套并存 | 删除该推导，改消费显式映射（声明版本 == `params_version`；声明版本在该线须有冻结目录；映射线与 `params_line` 一致），golden 内容比较不动 `83f0a40` |
+
+**复审证据**：修复后全套 **38/38**（含 `[12] [24] [25] [31] [32] [35] [36]`），审核方据此**签收阶段 A**。
+
+**边界（不因签收而改变）**：L02–L04 与 L05/L06 的**入口侧**仍未接线 ⇒ 按原口径记**未知**，属阶段 C；本次签收不覆盖运行期验收。
+**教训（记一笔，防重犯）**：两次同类事故（`9ee6773` 的 components、更早的 v15）根因相同 —— 提交前未核"HEAD 能否独立成立"。此后提交前查两件事：① `git diff --cached`（索引里到底有什么）② 新提交物引用的文件是否同样进入 HEAD。
+
 ## B1 · 组件库切片 1（height sensing，2026-09-16）
 
 **性质**：**追加**条目，阶段 B（`ARCH_PLAN` §2.4）的 B1 第一片。改动面 = 新增 `rl_exp/tasks/components.py`；`rl_exp/tasks/teacher_env_cfg.py` 三处（import、基类单点写入、V3 删掉重复写入）；新增闸门 `test_component_ownership.py`（套件 `[37]`）。
