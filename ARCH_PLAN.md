@@ -283,6 +283,7 @@
 
 - 生命周期半边：`rl_exp/versions/lines.json`（键 = `recipe_lines.discover()` 的线句柄）+ 套件 `[29]`/`[30]`
 - 身份半边：`rl_exp/versions/recipes.json`（`recipes["<id>@<修订>"]` + `tasks[任务 id]`，**34 个注册任务全覆盖**，配置入口与 `gym.register` 逐字一致）+ 套件 `[31]`/`[32]`。实测：映射闸门 34/34 一致；身份闸门反证 16 例 + 真注册表 34 任务解析全过。**天花板**：`[31]` 用 `ast` 解析注册模块而非 import registry ⇒ 不被树里的半成品拖红；`[24]` 走真注册表，两者不一致本身可查
+- 附带（本批踩出的真实故障）：`[33] check_suite_banners.py` —— 套件 `echo` 横幅里未转义的 `<`/`>` 在 bat 里是**重定向**。本批的 `->` 真往仓库根写过一个 `config` 垃圾文件并吞掉自己的横幅，`[24]` 行的 `\<line>\` 每跑一次报输入重定向错，而**套件不会因此变红**（echo 的 errorlevel 无人检查）⇒ 只写约定必然复现，故加扫描闸门（自带探测器自检 11 形状 + 空扫描防护）
 - `legacy_task_version` 实测绑定：teacher 12 个任务（v1–v14，无 v7/v9）= `vN`、parkour 2 个 = `v1`、v0 家族 8 个 = `null`（其 `params_version` 实测即 `None`，id 后缀 `v0` 不是配方声明 ⇒ 闸门只做单向校验：**声明了版本就必须是任务 id 的 dash 分词**，`v1` 不被 `Lizard-Rough-v14` 满足）
 
 **A3 的配置侧绑定已落地**（未等锁 v3 冻结即做完 —— 早先"等 v3"的判断是错的：绑定只依赖声明的入口点，不读锁）：`[31] --bind-config` 把 34 个声明的 `env_cfg_entry` 逐个导入并**构造**实例，`params_version` 与 `legacy_task_version` 34/34 一致（构造失败记红、不记跳过；类属性读不到故必须构造，1.0 已证）。

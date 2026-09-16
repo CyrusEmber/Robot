@@ -116,6 +116,9 @@ echo [31] recipe identity map (task id to recipe, revision to entries, vs regist
 echo [32] recipe map gate falsifier (each refusal must still fire)
 "%PY%" rl_exp\tools\verify\test_recipe_map_gate.py || goto :fail
 
+echo [33] suite banner hygiene (no bare redirects in echo lines; detector self-tested)
+"%PY%" rl_exp\tools\verify\check_suite_banners.py || goto :fail
+
 echo ALL_OFFLINE_CHECKS_PASSED
 exit /b 0
 
