@@ -84,12 +84,26 @@ from rl_exp.tools.runrecord import provenance as prov  # noqa: E402
 # combination describes IsaacLab / rsl_rl / Python, which is not a property of any
 # one line, so storing it per line would mean N copies that can disagree.
 BASELINES_PATH = _REPO / "rl_exp" / "versions" / "cfg_baselines.json"
+# the explicit task -> recipe -> version/line map (one identity rule set, shared with the
+# map gate; this file compares golden content, it does not re-derive identity from names)
+RECIPES_PATH = _REPO / "rl_exp" / "versions" / "recipes.json"
 LOCK_FORMAT = 3
 UPSTREAM_CFG = "isaaclab_tasks.manager_based.locomotion.velocity.velocity_env_cfg:LocomotionVelocityRoughEnvCfg"
 _DIFF_LIMIT = 60
 # a trailing version suffix in a task id ("...-v14"): a claim about a version of the
 # id's own line, checked against that line's discovered versions
-_VERSION_SUFFIX = re.compile(r"-v(\d+)$")
+@functools.lru_cache(maxsize=1)
+def recipe_map() -> dict:
+    """The task -> recipe mapping, read from the explicit map file.
+
+    Returns:
+        The parsed map, or an empty one when the file is missing -- every task then reports
+        "no recipe mapping", which is the honest reading of a missing map.
+    """
+    try:
+        return json.loads(RECIPES_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
 _ENTRY_KEYS = {"version", "env_cfg_class", "agent_cfg_class", "digest", "snapshot"}
 """An entry is a recipe fact about a task id. Anything run-scoped here would mean the
 lock grows with training runs, which is exactly what it must not do."""
@@ -254,6 +268,7 @@ def verify_entries(
     problems: list[str],
     show_diff: bool,
     only: list[str],
+    recipes: dict | None = None,
 ) -> None:
     """Every task of this line must be locked, and its resolved config unchanged.
 
@@ -262,6 +277,7 @@ def verify_entries(
     like mass retirement).
     """
     in_scope = lambda task_id: not only or any(token in task_id for token in only)  # noqa: E731
+    catalog = recipe_map() if recipes is None else recipes
     for task_id, entry in current.items():
         if not in_scope(task_id):
             continue
@@ -293,26 +309,32 @@ def verify_entries(
                 f"{task_id}: params_version {entry['version']!r} != golden {claimed!r} "
                 f"(the recipe this task loads is not the one the golden was taken from)"
             )
-        # A version suffix in the task id is a claim about a version of THIS line, so it
-        # is checked against the line's declared versions. It is not used to derive
-        # ownership (that is params_line) and it is not compared against params_version
-        # when the recipe declares none: `Lizard-Velocity-Flat-v0` and the parkour line
-        # carry a registration version while reading the dev yaml, so that comparison
-        # would be red for reasons that are not drift. Ceiling: an unversioned recipe
-        # whose id claims a version is not caught here.
-        match = _VERSION_SUFFIX.search(task_id)
-        if match is None:
+        # Identity comes from the explicit map, not from a version suffix parsed out of the
+        # task id: two rules for one question is how a map that allows something and a regex
+        # that rejects it end up coexisting. The declared version must equal what the cfg
+        # loads and must have a frozen directory on the line that owns it; a recipe declaring
+        # no version is a dev recipe (the v0 family and parkour read the live yaml), so no
+        # version comparison applies to it.
+        recipe_key = (catalog.get("tasks") or {}).get(task_id)
+        if not recipe_key:
+            problems.append(f"{task_id}: no recipe mapping in {cs.relativize(str(RECIPES_PATH))}")
             continue
-        id_version = f"v{match.group(1)}"
-        if id_version not in line.versions:
+        recipe = (catalog.get("recipes") or {}).get(recipe_key) or {}
+        declared_version = recipe.get("legacy_task_version")
+        if declared_version != entry["version"]:
             problems.append(
-                f"{task_id}: task id claims {id_version}, which line {line.key!r} does not "
-                f"have {sorted(line.versions)} (a typo here names a golden that cannot exist)"
+                f"{task_id}: recipe {recipe_key} declares version {declared_version!r} but the "
+                f"cfg loads params_version={entry['version']!r}"
             )
-        elif entry["version"] is not None and id_version != entry["version"]:
+        if declared_version is not None and declared_version not in line.versions:
             problems.append(
-                f"{task_id}: task id claims {id_version} but the cfg loads "
-                f"params_version={entry['version']!r}"
+                f"{task_id}: recipe {recipe_key} declares {declared_version}, which line "
+                f"{line.key!r} does not have {sorted(line.versions)} (a golden that cannot exist)"
+            )
+        if recipe.get("line") != line.key:
+            problems.append(
+                f"{task_id}: recipe {recipe_key} declares line {recipe.get('line')!r} but the "
+                f"cfg's params_line routes it to {line.key!r}"
             )
     for stored_key in entries:
         combo_part, _, task_id = stored_key.rpartition("|")

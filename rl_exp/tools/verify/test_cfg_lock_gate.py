@@ -65,15 +65,40 @@ def _tree(root: pathlib.Path) -> dict:
     return g.discover(root)
 
 
-def _verify(line, entries: dict, current: dict, only: list[str] | None = None) -> list[str]:
+def _synthetic_map(line, current: dict) -> dict:
+    """The map a hand-built tree needs, agreeing with its live entries by default.
+
+    Identity now comes from ``versions/recipes.json``, so a synthetic tree has to carry a
+    map as well. Making the default agree with the live config keeps every other case about
+    what it was about, and a case that wants map drift hands in its own.
+    """
+    recipes: dict = {}
+    tasks: dict = {}
+    for task_id, entry in current.items():
+        key = f"synthetic-{task_id}@1"
+        recipes[key] = {
+            "line": line.key,
+            "env_cfg_entry": "rl_exp.tasks.x:Cfg",
+            "agent_entry": "rl_exp.tasks.agents.y:Runner",
+            "legacy_task_version": entry.get("version") if isinstance(entry, dict) else None,
+        }
+        tasks[task_id] = key
+    return {"format": 1, "recipes": recipes, "tasks": tasks}
+
+
+def _verify(line, entries: dict, current: dict, only: list[str] | None = None,
+            recipes: dict | None = None) -> list[str]:
     baselines = {KEY: {"cfg_snapshot_format": cs.FORMAT_VERSION}}
     problems: list[str] = []
-    g.verify_entries(line, baselines, KEY, entries, current, problems, show_diff=True, only=only or [])
+    catalog = _synthetic_map(line, current) if recipes is None else recipes
+    g.verify_entries(line, baselines, KEY, entries, current, problems, show_diff=True, only=only or [],
+                     recipes=catalog)
     return problems
 
 
-def _fires(name: str, keyword: str, line, entries: dict, current: dict, only: list[str] | None = None) -> None:
-    problems = _verify(line, entries, current, only)
+def _fires(name: str, keyword: str, line, entries: dict, current: dict, only: list[str] | None = None,
+           recipes: dict | None = None) -> None:
+    problems = _verify(line, entries, current, only, recipes)
     check(name, any(keyword in p for p in problems), f"no problem containing {keyword!r}: {problems}")
 
 
@@ -110,18 +135,30 @@ def main() -> int:
         g.verify_entries(lizard, {KEY: {"cfg_snapshot_format": cs.FORMAT_VERSION}}, KEY, orphan, current, problems, False, [])
         check("entries/undeclared-combination", any("is not declared" in p for p in problems), f"{problems}")
 
-        # a task id's version must exist in its own line; when the recipe declares no
-        # version the id's suffix is a registration number, so it must stay quiet
+        # the map's declared version must be the version the cfg loads, and it must have a
+        # frozen directory on the line that owns it; a recipe declaring no version is a dev
+        # recipe, so no version comparison applies to it
         id_missing = {g.entry_key(KEY, "Lizard-Test-v9"): _entry(version="v9")}
-        _fires("entries/id-version-not-in-line", "does not have", lizard, id_missing, {"Lizard-Test-v9": _entry(version="v9")})
+        _fires("entries/declared-version-not-in-line", "does not have", lizard, id_missing,
+               {"Lizard-Test-v9": _entry(version="v9")})
 
         mismatch = {g.entry_key(KEY, "Lizard-Test-v2"): _entry(version="v2")}
         _fires(
-            "entries/id-version-vs-recipe",
-            "task id claims",
+            "entries/recipe-declares-other-version",
+            "declares version",
             lizard,
             mismatch,
             {"Lizard-Test-v2": _entry(version="v1")},
+            recipes={
+                "format": 1,
+                "recipes": {"synthetic-Lizard-Test-v2@1": {
+                    "line": "lizard/main",
+                    "env_cfg_entry": "rl_exp.tasks.x:Cfg",
+                    "agent_entry": "rl_exp.tasks.agents.y:Runner",
+                    "legacy_task_version": "v2",
+                }},
+                "tasks": {"Lizard-Test-v2": "synthetic-Lizard-Test-v2@1"},
+            },
         )
         unversioned = {g.entry_key(KEY, "Lizard-Test-v1"): _entry(version=None)}
         check(

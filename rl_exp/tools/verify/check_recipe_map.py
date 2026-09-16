@@ -186,7 +186,7 @@ def _build_entry(entry: str):
 
 
 def bind(entries, build=_build_entry) -> list[str]:
-    """The config-side half of identity: the declared entry, built, carries the declared version.
+    """The config-side half of identity: the built entry carries the declared version and line.
 
     Args:
         entries: the ``recipes`` mapping of a parsed ``recipes.json``.
@@ -204,14 +204,22 @@ def bind(entries, build=_build_entry) -> list[str]:
             continue
         declared = entry.get("legacy_task_version")
         try:
-            actual = getattr(build(entry["env_cfg_entry"]), "params_version", None)
-        except Exception as err:  # any failure at all means the version cannot be shown
-            out.append(f"{key}: cannot build {entry['env_cfg_entry']!r} to read its version: {err!r}")
+            cfg = build(entry["env_cfg_entry"])
+        except Exception as err:  # any failure at all means the identity cannot be shown
+            out.append(f"{key}: cannot build {entry['env_cfg_entry']!r}: {err!r}")
             continue
+        actual = getattr(cfg, "params_version", None)
         if actual != declared:
             out.append(
                 f"{key}: declared legacy_task_version={declared!r} but {entry['env_cfg_entry']}"
                 f" carries params_version={actual!r}"
+            )
+        actual_line = getattr(cfg, "params_line", None)
+        if actual_line != entry.get("line"):
+            out.append(
+                f"{key}: declares line {entry.get('line')!r} but {entry['env_cfg_entry']}"
+                f" carries params_line={actual_line!r}"
+                f" -- lifecycle permissions would be read from the wrong line"
             )
     return out
 

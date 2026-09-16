@@ -29,6 +29,7 @@ from check_recipe_map import bind, load, registered, validate  # noqa: E402
 
 ENV_V14 = "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V14"
 AGENT_V14 = "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV14PPORunnerCfg"
+LINE = "lizard/main"
 TASK = "Lizard-Rough-v14"
 LINES = {"lizard/main": None, "lizard/parkour": None}
 REGISTERED = {TASK: {"env_cfg_entry_point": ENV_V14, "rsl_rl_cfg_entry_point": AGENT_V14}}
@@ -99,7 +100,8 @@ def _builder(versions: dict):
         value = versions[entry]
         if isinstance(value, Exception):
             raise value
-        return type("Cfg", (), {"params_version": value})()
+        version, line = value if isinstance(value, tuple) else (value, LINE)
+        return type("Cfg", (), {"params_version": version, "params_line": line})()
 
     return build
 
@@ -112,6 +114,9 @@ BIND_CASES: list[tuple[str, dict, dict, str | None]] = [
      "declared legacy_task_version=None"),
     ("entry point cannot be built", {"r@1": _entry()}, {ENV_V14: ImportError("no module named")}, "cannot build"),
     ("entry point is not a string, left to validate", {"r@1": _entry(env_cfg_entry=17)}, {}, None),
+    ("right version, wrong line", {"r@1": _entry()}, {ENV_V14: ("v14", "lizard/baseline")},
+     "lifecycle permissions would be read from the wrong line"),
+    ("config declares no line at all", {"r@1": _entry()}, {ENV_V14: ("v14", None)}, "params_line=None"),
 ]
 
 
