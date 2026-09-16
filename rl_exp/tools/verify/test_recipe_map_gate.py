@@ -25,7 +25,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from check_recipe_map import registered, validate  # noqa: E402
+from check_recipe_map import bind, registered, validate  # noqa: E402
 
 ENV_V14 = "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V14"
 AGENT_V14 = "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV14PPORunnerCfg"
@@ -92,11 +92,42 @@ CASES: list[tuple[str, dict, dict, str | None]] = [
 ]
 
 
+def _builder(versions: dict):
+    """A stand-in for building an entry point: the map gives the version, or an error."""
+
+    def build(entry: str):
+        value = versions[entry]
+        if isinstance(value, Exception):
+            raise value
+        return type("Cfg", (), {"params_version": value})()
+
+    return build
+
+
+BIND_CASES: list[tuple[str, dict, dict, str | None]] = [
+    ("binding agrees", {"r@1": _entry()}, {ENV_V14: "v14"}, None),
+    ("class carries no version", {"r@1": _entry()}, {ENV_V14: None}, "carries params_version=None"),
+    ("class carries a different version", {"r@1": _entry()}, {ENV_V14: "v13"}, "carries params_version='v13'"),
+    ("declared null while the class carries one", {"r@1": _entry(legacy_task_version=None)}, {ENV_V14: "v0"},
+     "declared legacy_task_version=None"),
+    ("entry point cannot be built", {"r@1": _entry()}, {ENV_V14: ImportError("no module named")}, "cannot build"),
+    ("entry point is not a string, left to validate", {"r@1": _entry(env_cfg_entry=17)}, {}, None),
+]
+
+
 def main() -> int:
     """Run every case, then pin the registration parser against the real module."""
     failures: list[str] = []
     for label, doc, registry, expected in CASES:
         problems = validate(doc, LINES, registry)
+        if expected is None:
+            if problems:
+                failures.append(f"{label}: expected clean, got {problems}")
+        elif not any(expected in problem for problem in problems):
+            failures.append(f"{label}: expected {expected!r}, got {problems}")
+
+    for label, entries, versions, expected in BIND_CASES:
+        problems = bind(entries, build=_builder(versions))
         if expected is None:
             if problems:
                 failures.append(f"{label}: expected clean, got {problems}")
@@ -113,9 +144,9 @@ def main() -> int:
     if failures:
         for failure in failures:
             print(f"FAIL {failure}")
-        print(f"recipe map falsifier: {len(failures)}/{len(CASES) + 1} cases wrong")
+        print(f"recipe map falsifier: {len(failures)}/{len(CASES) + len(BIND_CASES) + 1} cases wrong")
         return 1
-    print(f"  map refusals fired: {len(CASES)} cases + 34-task registration parse")
+    print(f"  map refusals fired: {len(CASES)} map cases + {len(BIND_CASES)} binding cases + 34-task registration parse")
     print("RECIPE_MAP_GATE_OK")
     return 0
 

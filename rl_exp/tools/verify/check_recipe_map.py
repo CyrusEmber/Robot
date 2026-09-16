@@ -28,7 +28,9 @@ id. Until then the declared value is checked for form and against the task id on
 
 from __future__ import annotations
 
+import argparse
 import ast
+import importlib
 import json
 import pathlib
 import re
@@ -166,6 +168,54 @@ def validate(recipes, lines, registered_tasks) -> list[str]:
     return out
 
 
+def _build_entry(entry: str):
+    """Import and build the config class a recipe names.
+
+    The class attribute is not readable -- the decorator removes it once the dataclass
+    exists, so the value only lives on an instance. That is why an identity check has to
+    build one rather than read the class.
+
+    Args:
+        entry: the ``module:qualname`` a recipe declares.
+
+    Returns:
+        The constructed config instance.
+    """
+    module_name, _, cls_name = entry.partition(":")
+    return getattr(importlib.import_module(module_name), cls_name)()
+
+
+def bind(entries, build=_build_entry) -> list[str]:
+    """The config-side half of identity: the declared entry, built, carries the declared version.
+
+    Args:
+        entries: the ``recipes`` mapping of a parsed ``recipes.json``.
+        build: turns an entry point into an instance. Injected so the falsifier can drive
+            every verdict without importing isaaclab.
+
+    Returns:
+        Every mismatch. A class that cannot be built is a problem, never a skip: an
+        identity that cannot be shown is not a verified one.
+    """
+    out: list[str] = []
+    for key in sorted(entries):
+        entry = entries[key]
+        if not isinstance(entry, dict) or not isinstance(entry.get("env_cfg_entry"), str):
+            continue
+        declared = entry.get("legacy_task_version")
+        try:
+            actual = getattr(build(entry["env_cfg_entry"]), "params_version", None)
+        except Exception as err:  # any failure at all means the version cannot be shown
+            out.append(f"{key}: cannot build {entry['env_cfg_entry']!r} to read its version: {err!r}")
+            continue
+        if actual != declared:
+            out.append(
+                f"{key}: declared legacy_task_version={declared!r} but {entry['env_cfg_entry']}"
+                f" carries params_version={actual!r}"
+            )
+    return out
+
+
 def load(path: pathlib.Path = RECIPES) -> dict:
     """Read the recipe map, or stand in for it when it is missing or unreadable."""
     if not path.is_file():
@@ -176,8 +226,23 @@ def load(path: pathlib.Path = RECIPES) -> dict:
         return {"_unreadable": f"{path}: {err}"}
 
 
-def main() -> int:
-    """Gate entry point: discover lines, parse the registration, check the map."""
+def main(argv: list[str] | None = None) -> int:
+    """Gate entry point: discover lines, parse the registration, check the map.
+
+    Args:
+        argv: command line, defaulting to ``sys.argv[1:]``.
+
+    Returns:
+        Process exit code: 0 when the map describes the tree, 1 otherwise.
+    """
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument(
+        "--bind-config",
+        action="store_true",
+        help="also build each declared env cfg entry point and compare its params_version "
+        "(needs isaaclab importable; without it the structural half still runs)",
+    )
+    args = parser.parse_args(argv)
     try:
         lines = discover()
     except RecipeLineError as err:
@@ -191,6 +256,10 @@ def main() -> int:
     entries = recipes.get("recipes") or {}
     tasks = recipes.get("tasks") or {}
     print(f"  recipes declared: {len(entries)} | task mappings: {len(tasks)} | lines: {sorted(lines)}")
+    if args.bind_config:
+        bound = bind(entries)
+        problems.extend(bound)
+        print(f"  config binding: {len(entries)} entries built, {len(bound)} mismatch(es)")
     for problem in problems:
         print(f"  FAIL {problem}")
     if problems:

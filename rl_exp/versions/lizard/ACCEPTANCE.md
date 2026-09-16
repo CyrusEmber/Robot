@@ -409,7 +409,10 @@ ValueError: curriculum state in the checkpoint does not fit this task: runtime.n
 | 编号 | 命令 | 结果 |
 |---|---|---|
 | L01 身份映射 | `python rl_exp\tools\verify\check_recipe_map.py` | **通过**：`recipes declared: 34 | task mappings: 34`，与 `gym.register` 逐字一致（env/agent 入口、任务键集、line 引用） |
-| 反证 | `python rl_exp\tools\verify\test_recipe_map_gate.py` | **通过**：16 例全部着火，外加"从真实 `tasks\__init__.py` 读出 34 个任务" |
+| 反证 | `python rl_exp\tools\verify\test_recipe_map_gate.py` | **通过**：16 例地图反证 + 6 例绑定反证全部着火，外加"从真实 `tasks\__init__.py` 读出 34 个任务" |
+| L01 配置侧绑定（原计划归 A3） | `E:\IsaacLab\env_isaaclab\Scripts\python.exe rl_exp\tools\verify\check_recipe_map.py --bind-config` | **通过**：34 个声明的 `env_cfg_entry` 逐个导入并**构造**实例，其 `params_version` 与 `legacy_task_version` **34/34 一致**（teacher = `vN`、parkour = `v1`、v0 家族 = 双向 `null`）。类属性读不到（1.0 已证）故必须构造；构造失败记红、不记跳过 |
+
+绑定不需要锁文件，因此**未等锁 v3 冻结即可执行** —— 早先"等 v3 结构冻结"的判断是错的，已纠正。绑定落地后 `check_cfg_lock.py` 里按任务 id 推断版本的旧校验（`_TASK_VERSION`）成为冗余：`id 分词 == declared`（本闸门）+ `declared == params_version`（本闸门）⇒ 传递出 `id 声明 == 实际版本`。该文件属并行批次，删除留给 A3 收口。
 
 ### 本批修正（两处，均由反证抓到）
 
@@ -418,9 +421,9 @@ ValueError: curriculum state in the checkpoint does not fit this task: runtime.n
 
 ### 结论与边界
 
-- **通过**：L01（配方身份映射与拒绝）
+- **通过**：L01（配方身份映射与拒绝 + 配置侧绑定 34/34）
 - **未知**：L02/L03/L04 与 L05/L06 的入口侧（同 §2.1）
-- **未做**：`params_version` 与 `legacy_task_version` 的**配置侧绑定**属 A3（本批只做声明侧形态与任务 id 一致性）；A0 未动
-- **口径**：本批同样**未跑全量套件** ⇒ `[31][32]` 与既有条目的端到端共存**未验证**
+- **未做**：`check_cfg_lock.py` 里冗余的旧 `_TASK_VERSION` 校验删除（并行批次文件，留 A3 收口）；A0 未动
+- **口径**：本批同样**未跑全量套件** ⇒ `[31][32]`（含 `--bind-config`）与既有条目的端到端共存**未验证**
 - **证据**：gate 脚本 + 上表命令（未另存日志文件）
 
