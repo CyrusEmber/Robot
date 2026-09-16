@@ -778,7 +778,7 @@ ValueError: curriculum state in the checkpoint does not fit this task: runtime.n
 | v3 | **已声明** | `v3_contact_headroom` · `v3_speed_curriculum` · `v3_anti_drag_reward` · `v3_ck_clock`；PLAY = `play_drops_speed_curriculum` · `play_pins_full_command_range` |
 | v4 | **已声明** | v3 四项 + `v4_stock_contact_stack`；PLAY 同 v3 |
 | v5 | **已声明** | v3 四项 + `v4_stock_contact_stack` + `v5_drops_speed_curriculum` · `v5_reward_package` · `v5_sir_terrain_curriculum`；PLAY = `play_drops_sir_terrain_curriculum`（见下节） |
-| v6–v14 | **未声明**（仍写在子类里，`elements: None`） | 待搬：v6 · v8 · v10 · v11 joint SIR 接线 · v12 鲁棒性包 + 环噪声事件 · v13 核替换 · v14 `head_load`；各自还需 PLAY 元素 |
+| v6–v14 | **已声明** | v6 `v6_spine_unlock`；v8/v10 无 cfg 增量（同 v6 表）；v11 `v11_joint_sir_curriculum`；v12 `v12_reset_robustness`；v13 `v13_miki_kernel`（从 v10 分叉）；v14 `v14_head_load`（见下下节） |
 
 实测：`RECIPE_BUILD_OK (8 task(s) field-identical to the frozen golden)`（提交 `3360642`）。**每加一个元素跑 `[24]` + `[41]`**。
 
@@ -830,6 +830,8 @@ classvar the declaration cannot carry (no class to hold it): v4/play PLAY_PINS_C
 classvar the declaration cannot carry (no class to hold it): v5/train REQUIRES_CURRICULUM_STATE: True != 'not stated'
 classvar the declaration cannot carry (no class to hold it): v5/play REQUIRES_CURRICULUM_STATE: False != 'not stated'
 ```
+
+（以上是本条提交当时的原样输出。v6–v14 声明完后同样的行变成 18 行、措辞也改短，遂按**缺口类**聚合——下一节记的是新格式。）
 
 这是 `[41]` 原有纪律（"未声明 ≠ 通过"要打印）扩到 ClassVar 面：`build()` 返回**共享基类**实例，而 `ClassVar` 是"关于配方的声明"，快照格式 2 把它排除 ⇒ 声明路径**结构上**没有地方承载它。两个名字的后果不同：
 
@@ -905,6 +907,59 @@ check_suite_shape.py              SUITE_SHAPE_OK（改套件后）
 - 几何一致性、导出前协议校验、蒸馏数据 manifest = **未执行**。
 - `OBS.md` 的 v15 行只声明"有目录、无入口"，不声明其布局。
 - 本节为**离线段**通过，**不得**称为"Step 3 全部通过"。
+
+## B3 · v6–v14 元素化（剩余九条配方，B3 收口，2026-09-16）
+
+**性质**：**追加**条目，B3 收口。改动面 = `recipe.py`（5 个元素 + delta 常量链 + 一个 `mdp` import）、`check_recipe_build.py`（ClassVar 缺口按类聚合）；`teacher_env_cfg.py` 一字未动。
+
+### 落地
+
+| 版本 | 新增元素 | cfg 增量是什么 |
+|---|---|---|
+| v6 | `v6_spine_unlock` | 1 行：`action.spine_scale`（本版本 yaml 0.25；v1–v5 仍 0.0，因为值来自各自文档） |
+| v8 | — | **0 行**：+180° 翻转与 26 关节改名在资产面，yaml 的名字迁移由基类按**本版本**文档读 |
+| v10 | — | **0 行**：tilt 删除是 yaml 标志（`v10.tilt_terminate: null`），`components.terminations` 早已是唯一写者 |
+| v11 | `v11_joint_sir_curriculum` | 行 SIR → 联合粒子（`JOINT_SIR_TERM`）；参数格地形与粒子命令 term 在 `components.TERRAIN_BY_RECIPE` / `COMMAND_RANGE` |
+| v12 | `v12_reset_robustness` | 三个 `reset_joints_by_offset` + base 复位范围 yaml 化 + 摩擦 dip + 环噪声事件（extero 四项的 func/参数归 `components.observations`） |
+| v13 | `v13_miki_kernel` | 线性核 → Miki 对称核 |
+| v14 | `v14_head_load` | 头承力罚（`roll_over` 终止归 `components.terminations`） |
+
+PLAY：v5–v10 与 v13/v14 用 `play_drops_sir_terrain_curriculum`；v11/v12 换成 `play_drops_joint_sir_curriculum`。
+
+### 三个判断
+
+- **delta 写成链，v13 从 v10 分叉**：`_V3_DELTA → _V4 → _V5 → _V6`，v11/v12 接 `_V6`，**v13 也接 `_V6`**（V13 的基类是 V10，不是 V12）——元素表按**类链**写，不按版本号顺序。每个 delta 只写一次：v8/v10"与 v6 同"是一个对象的事实，不是三份副本要对齐。
+- **v8/v10 的空增量用 v6 的表，不是 `None`**：声明的是"除了 v6 的 delta 没有别的"，不是"未声明"。`None` 留给真正没搬的版本——现在一个都没有。
+- **PLAY 守卫必须跟课程换名**：v11/v12 的课程是联合项，照抄 v3 那对 PLAY 元素会去 null 一个不存在的 `terrain_levels`（无害），却**留下**联合项在跑（有害：评估会按 episode 重派起点与速度）。冻结的 v11/v12 PLAY 只 null 联合项、把粒子命令 term 留着让它自己回退到均匀范围 —— 元素照此。
+
+### 结果
+
+| 编号 | 命令 | 结果 |
+|---|---|---|
+| 硬 A（全部配方） | `check_recipe_build.py`（套件 `[41]`） | **通过**：`RECIPE_BUILD_OK (24 task(s) field-identical to the frozen golden)` —— 12 条配方 × train/play 全部**声明构建**与冻结 golden 逐字段一致；`pending()` 已空，输出里不再有 `not declared yet` 行 |
+| 门 1 | `check_cfg_lock.py`（套件 `[24]`） | **通过**：`CFG_LOCK_OK (36 tasks, 3 line(s))`（本批未改任何 cfg） |
+| 单写者 | `test_component_ownership.py`（套件 `[37]`） | **通过**：`COMPONENT_OWNERSHIP_OK (5 component(s), 16 owned name(s))` |
+| golden 摘要 | `check_golden_frozen.py`（套件 `[35]`） | **通过**：`GOLDEN_FROZEN_OK`（3 份基线文件自 `020e6fb` 未动） |
+| 旁证 | `check_obs_layout` `[8]` · `check_dr_parity` `[2]` · `check_pxr_leak` `[14]` · `check_reward_v13` · `check_terminations_v10` · `check_terminations_v14` · `check_suite_shape` · `test_joint_sir`（12 例）· `test_v12_noise` | **全绿**（v10/v13/v14 的冻结断言未动 —— 因为版本类一字未改） |
+
+### ClassVar 缺口打印改为按类聚合
+
+```
+classvar the declaration cannot carry: PLAY_PINS_COMMAND_RANGE: True != False -- in v3/play, v4/play
+classvar the declaration cannot carry: REQUIRES_CURRICULUM_STATE: True != 'not stated' -- in v5/train, v6/train, v8/train, ...
+classvar the declaration cannot carry: REQUIRES_CURRICULUM_STATE: False != 'not stated' -- in v5/play, v6/play, v8/play, ...
+```
+
+缺口性质与修法不变（见上节）。改的只是可读性：每条配方一行会变成 18 行同文，而"每次跑都刷屏的同文"恰好会被当成噪音跳过，聚合后 3 行，仍然每次跑都出现。
+
+### 边界
+
+- **24/24 已声明，`[41]` 仍保留 `not declared yet` 那条打印**：下一条新配方（v15+）填进 `RECIPES` 而没写元素时，是被打印，不是静默通过。闸门不因"当前全绿"而收掉这条纪律。
+- `recipe.py` 新增 `isaaclab_tasks...velocity.mdp` import（v12 的 `reset_joints_by_offset` 用）。`[14]` 复跑仍 pxr-clean：与 `teacher_env_cfg.py` 同一模块，没有新增链路。
+- `recipe.py` 仍不在 `[37]` 的 HOSTS 里（理由见上节边界）。
+- **ClassVar 真缺口未修，且现在覆盖 v5–v14 全部 18 个任务**：读取侧一改，18 个任务一起受益、也一起被验。**C2/C3 的 launcher 把 `build()` 变成默认训练路径之前必须落**，否则这批配方的续训声明对 manifest 与 save 守卫是隐形的（安全性仍由 `covered` 项兜住，见上节）。
+- obs 三表合口本轮仍未动（上节已定）。
+- 本节只证"声明与冻结 golden 逐字段一致"；**不证**元素在真环境下的行为等价（那是 C 层真跑的事），也不证 PLAY 的 `ClassVar` 面（见上节缺口）。
 
 
 
