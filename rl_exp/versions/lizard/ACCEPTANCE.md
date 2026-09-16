@@ -468,4 +468,30 @@ ValueError: curriculum state in the checkpoint does not fit this task: runtime.n
 - 干净 clone 需补机器路径配置（`paths.yaml` 是机器本地文件、不在仓内，`RL_ISAAC_ROOT` 由环境变量给）⇒ "可追溯"的准确含义是"**代码内容可由 rev 取得，主机路径由 `paths.yaml`/环境变量提供**"，不是"克隆即可跑"。
 - 本次只验读模式；**未跑全量套件端到端** ⇒ "`[35]` 与既有条目共存"按 A 带同口径记**未验证**。
 
+## 2.4 · A0 布局迁移（ARCH_PLAN 2.1a；声明先于执行）
+
+**性质**：**追加**条目。A0 会触碰 16 个冻结物，所以先落"允许变化清单"**再执行** —— 否则 `--update-locks` 之后的"全绿"可能只是把意外变化一并接受。本节分两段：声明（执行前落盘）与回填（执行后补）。
+
+### 声明的允许变化清单（执行前）
+
+| 对象 | 允许的变化 | 不允许的变化 |
+|---|---|---|
+| 17 个参数文件（dev 1 + 冻结 16） | **文件名** `lizard_params.yaml` → `main_params.yaml`（`recipe_lines` 规则要求基名 = 线名） | 内容任何一个字节 |
+| 16 个冻结 `vN/asset_lock.json` | **自身 yaml 的仓库相对路径键**（`versions/lizard/vN/lizard_params.yaml` → `versions/lizard/main/vN/main_params.yaml`） | 资产 sha256（`lizard.urdf` / `lizard.usda` / meshes）、键序、其余键、键的增删 |
+| 线级 `cfg_lock.json` | **位置** `versions/lizard/` → `versions/lizard/main/`；内容**零变化** | 任何条目或摘要变化。若真出现，说明快照记录了路径 ⇒ 必须逐字段审查并在此单独声明后才接受 |
+| 16 个 `vN/base.json` | **无变化**（规则是"线内裸 `vN` 先命中本线"，`main/v14` 写 `v13` 仍解析到 `main/v13`） | 任何变化 |
+| `vN/` 内的 PLAN/NOTES/yaml 正文 | **无变化** | 任何变化 |
+
+### 前置检查（执行前，已过）
+
+| 项 | 结果 |
+|---|---|
+| A0 写入集 ∩ 脏集 | **空** —— 3 个脏文件与本迁移无关，脚本明确列为"ignored on purpose" |
+| 被搬目录内未跟踪文件 | 无（v15 已于 2026-09-16 入索引，`baseline/` 已提交且不在移动集） |
+| 计划移动 | **34 项**：16 个版本目录 + 线 `cfg_lock.json` + `lizard_params.yaml` + 16 处改名 |
+
+### 回填（执行后）
+
+*待执行后补：实际移动数、`[2] --update-locks` 的逐字段 diff 是否与上表逐项相符、闸门结果与 `[24]` golden 是否漂移。*
+
 
