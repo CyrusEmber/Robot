@@ -765,10 +765,31 @@ ValueError: curriculum state in the checkpoint does not fit this task: runtime.n
 
 ### 边界
 
-- **未声明 ≠ 通过**：v3–v14 的 delta 仍写在子类里，本闸门对它们**不比较也不宣称**。`RECIPE_BUILD_OK` 的准确含义是"v1/v2 四条已声明的配方逐字段一致"。
+- **未声明 ≠ 通过**：v5–v14 的 delta 仍写在子类里，本闸门对它们**不比较也不宣称**。`RECIPE_BUILD_OK` 的准确含义是"已声明的那几条配方逐字段一致"（当前 v1–v4）。
 - **PLAY 的 `ClassVar` 不进快照**（格式 2 已定）：`REQUIRES_CURRICULUM_STATE` 之类构建器造不出来也验不了 ⇒ 等 PLAY 元素化时补一条**类侧**断言（比类与构建器两条路径的 ClassVar 取值），本闸门现在看不见这一面。
-- v1/v2 之外没有任何迁移发生；两条路径（类 + 声明）在过渡期并存，漂移面由 `[24]` + `[41]` 双闸覆盖。
+- v5 起尚未迁移；两条路径（类 + 声明）在过渡期并存，漂移面由 `[24]` + `[41]` 双闸覆盖。
 - **下一步（S2）**：v3 的 delta 元素化并逐条收口 —— 速度课程 / `r_fc`（`feet_air_time=None` + `foot_clearance`）/ `c_k`（`init_ck` 事件）/ reset DR 三件；随后 v4（一行 headroom）、v5（奖励包 + 行 SIR）、v12（鲁棒性包 + 环噪声事件）、v13（核替换）、v14（`head_load`），v11（joint SIR 接线、参数格地形与粒子命令已在组件侧）。
+
+### 进度（逐版本，2026-09-16 当日）
+
+| 版本 | 状态 | 元素 |
+|---|---|---|
+| v1 / v2 | **已声明** | 无 delta（`elements: ()`） |
+| v3 | **已声明** | `v3_contact_headroom` · `v3_speed_curriculum` · `v3_anti_drag_reward` · `v3_ck_clock`；PLAY = `play_drops_speed_curriculum` · `play_pins_full_command_range` |
+| v4 | **已声明** | v3 四项 + `v4_stock_contact_stack`；PLAY 同 v3 |
+| v5–v14 | **未声明**（仍写在子类里，`elements: None`） | 待搬：v5 奖励包 + 行 SIR · v6 · v8 · v10 · v11 joint SIR 接线 · v12 鲁棒性包 + 环噪声事件 · v13 核替换 · v14 `head_load`；各自还需 PLAY 元素 |
+
+实测：`RECIPE_BUILD_OK (8 task(s) field-identical to the frozen golden)`（提交 `3360642`）。**每加一个元素跑 `[24]` + `[41]`**。
+
+### 接手点（下一个会话）
+
+1. 读 `rl_exp/tasks/recipe.py`（元素 + `RECIPES` 表 + `build`）；读目标版本在 `teacher_env_cfg.py` 的子类 body 作为**搬运源**（逐行搬，不改语义）。
+2. 加元素函数（`_doc(cfg)` 取该配方的参数文档），在 `RECIPES["v<版本>"]` 填 `elements` / `play_elements` / `train` / `play` 任务 id。
+3. `build()` 已支持 `play_elements`（共享 PLAY 接线**之后**施加）。
+4. `[41]` 会打印未声明版本 —— **不许**用"半套元素 + 声明成已迁移"骗绿：未声明的必须留 `None`。
+5. 全绿后按仓库惯例提交（pre-commit 三闸会自动跑）。
+6. **未合口**：`components.observations` 仍带三张手抄表（`PROPRIO_TERMS`/`BASELINE_PRIV_TERMS`/`SPEC_TERMS`），而 `tasks/obs_protocol.py` + `versions/obs_protocols.json` 已声明同一身份（按 task 带 `version`/`line`/`groups`/`terms`/`dropped_terms`）。现由 `check_obs_protocol` 互钉；合口 = 组件只留构造、按 (line, version) 读声明，删掉三张表。**是否合、何时合由用户定**（声明面属并行批次）。
+
 
 
 
