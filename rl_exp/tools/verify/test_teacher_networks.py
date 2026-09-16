@@ -14,10 +14,16 @@ and the JIT/ONNX export wrappers.
 import torch
 from tensordict import TensorDict
 
+from rl_exp.tasks import obs_protocol
 from rl_exp.tasks.teacher_networks import SplitEncoderModel
 
 N = 8
-DIM = {"proprio": 90, "extero": 208, "priv": 83}
+# widths and feet come from the protocol declaration: a literal here would be a fourth copy of
+# a fact that already exists twice, and the copies are what drift apart at a version boundary
+_TEACHER = "Lizard-Rough-v12"
+_DECLARED = obs_protocol.dims_for(_TEACHER)
+DIM = {name: _DECLARED[name] for name in ("proprio", "extero", "priv")}
+FEET = obs_protocol.feet_for(_TEACHER)
 ACTION_DIM = 26
 
 
@@ -150,6 +156,67 @@ def test_contract_enforcement() -> None:
         raise AssertionError("non-divisible extero dim should raise")
     except ValueError:
         pass
+
+
+def _zero_obs(extero: torch.Tensor) -> TensorDict:
+    return TensorDict(
+        {
+            "proprio": torch.zeros(N, DIM["proprio"]),
+            "extero": extero,
+            "priv": torch.zeros(N, DIM["priv"]),
+        },
+        batch_size=[N],
+    )
+
+
+def _marker_model(num_feet: int):
+    """A teacher built from scratch over zero obs, with normalisation off.
+
+    Normalisation off on purpose: with a running-mean encoder in the path the marker leaves a
+    trace of its own history, and this test is about which slice each foot encoder reads. One
+    model is reused for every marker so the encoders compared are the same weights.
+    """
+    obs = _zero_obs(torch.zeros(N, DIM["extero"]))
+    return SplitEncoderModel(obs, _mock_groups(), "actor", ACTION_DIM, obs_normalization=False, num_feet=num_feet)
+
+
+def test_foot_split_reads_the_declared_order() -> None:
+    """The extero group splits per foot in the declared order, checked with marker inputs.
+
+    A dimension check cannot see this: 208 points rearranged into four wrong blocks of 52 still
+    sum to 208, so a rotated foot order passes shape and fails behaviour. The markers say which
+    slice each foot's encoder actually reads, and the feet come from the declaration.
+    """
+    num_feet = len(FEET)
+    model = _marker_model(num_feet)
+    points = model.points_per_foot
+    assert points * num_feet == DIM["extero"], f"{points} points x {num_feet} feet != {DIM['extero']}"
+    assert model.num_feet == num_feet, f"model splits into {model.num_feet} feet, declaration says {num_feet}"
+    per_foot = model.extero_latent_per_foot
+    start = DIM["proprio"]
+    base_latent = model.get_latent(_zero_obs(torch.zeros(N, DIM["extero"])))
+
+    for index, foot in enumerate(FEET):
+        marked = torch.zeros(N, DIM["extero"])
+        marked[:, index * points : (index + 1) * points] = 5.0
+        latent = model.get_latent(_zero_obs(marked))
+        moved = [
+            other
+            for other in range(num_feet)
+            if not torch.equal(
+                latent[:, start + other * per_foot : start + (other + 1) * per_foot],
+                base_latent[:, start + other * per_foot : start + (other + 1) * per_foot],
+            )
+        ]
+        assert moved == [index], f"marking foot {index} ({foot}) moved latent segments {moved}"
+
+    # the check has to be able to fail: reading the same 208 points as (points, feet) -- the
+    # plausible wrong reshape -- must give a different per-foot encoding, or the markers above
+    # would pass whichever order the code used
+    probe = torch.arange(N * DIM["extero"], dtype=torch.float32).reshape(N, DIM["extero"])
+    right = model.g_e(probe.view(N, num_feet, points))
+    wrong = model.g_e(probe.view(N, points, num_feet).transpose(1, 2))
+    assert not torch.allclose(right, wrong), "foot-major and point-major reads agree: the markers carry no information"
 
 
 def test_decaying_lr_ppo_rejects_adaptive_schedule() -> None:
