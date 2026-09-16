@@ -45,8 +45,10 @@ v14 `roll_over`；`tilt = None`）、DR、资产与关节接口 —— **逐字�
 1. **并行迁移的资产保全**（用户拍板 2026-09-15 / 2026-09-16）：
    - 开训前**必须打 tag**（`versioning.mdc:41`：启动训练时无 tag → 视同冻结，立即补打）；
    - 训练进程**不得重启/续训**（重启 = 从磁盘 import 新框架代码，本次 run 的来源被劈成两段）；
-   - 训练结束前**不得对 `cfg_lock` 做 `--update`**（`--update` 整体替换组合块，
-     旧 golden 永久丢失，且本 run 的"可重建"行会翻红）；
+   - 训练结束前**不得对 `cfg_lock` 做 `--update`**（本 run 的"可重建"行绑在 golden 上：
+     重生成 = 把本版期间的真实漂移吞进 golden，声明随即失真。**注 2026-09-16**：v0.20 起
+     `--update` 已是**按线作用域**（`--update --line lizard --reason ...`，只写该线锁文件，
+     不再整体替换组合块），但"训练结束前不许动"这条禁令不变）；
    - 评测 v15 ckpt 需要本版代码 → 迁移后必须保留旧任务 id 映射、不许静默重定向
      （`ARCH_PLAN.md` Step 2.1 不变量）。
 2. **首跑声明**：joint SIR 这条线在仓内**从未真训**（v11 只有 `max_iterations=6` 的冒烟，
@@ -95,7 +97,7 @@ python scripts\reinforcement_learning\rsl_rl\train.py --task Lizard-Rough-v15 --
 4. `teacher_smoke_runner.py`：`SMOKE_SPEC["v15"]` 行 + 薄壳 `teacher_smoke_v15.py`
 5. `check_dr_parity.py` 白名单：新接线的 term 行（`curriculum.joint_sir` / `commands.base_velocity`）
 6. 离线套件：`run_offline_checks.bat` 跑绿（含 v11 联合 SIR 闸、v14 摔倒闸、版本文档闸）
-7. 冻结前 `cfg_lock --update --reason "v15 初稿"` + tag `<family>-v15`
+7. 冻结前 `cfg_lock --update --line lizard --reason "v15 初稿"` + tag `<family>-v15`
 
 ## 已知风险 / 回滚线
 
@@ -136,7 +138,8 @@ v15.3 重规划再改**逐帧标签 + 固定分母 + 冷启动**（见下节）�
 等行号是**改动前**的历史证据，保留备查，不再对应当前代码。
 
 副作用记账：v11/v12 的配方引用同一个 term ⇒ 它们**已不是冻结时的语义**
-（`cfg_lock.json` golden 随之重生成，reason 记 2026-09-16）。共享 term 继续改需要
+（`versions/lizard/cfg_lock.json` golden 随之重生成，reason 记 2026-09-16；**v0.20 起**
+golden 拆为路线级锁，线上次修订的理由记在该线锁文件的 `reason` 字段）。共享 term 继续改需要
 **显式偏差声明**或**给 v15 一个专用变体**——这条待拍板（见"待拍板"2）。
 
 ## 算法语义（v15.3 固定，不再改）

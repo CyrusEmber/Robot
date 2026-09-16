@@ -186,6 +186,12 @@ copy <REPO>\paths.example.yaml <REPO>\paths.yaml
 挂着 junction，`rmdir <ROOT>\ablation_harness` 摘链接即可（**只准 rmdir**，递归
 del 会穿透删真身）。
 
+**开训前置：本仓工作树必须干净。** 脏树开训会被 `run_manifest.begin` **硬拒**并在 run
+目录留下一条拒训记录（T0 先落盘）：没有 rev 能还原脏树，该 run 的"可重建"永远无法
+证明。确需在脏树上开训必须显式声明理由：`set RL_ALLOW_DIRTY_TREE="<为什么>"`，理由写进
+manifest（记为偏差，不是免检）。IsaacLab 树带未提交的 fork 补丁属**预期状态**，只记录
+不阻拦。
+
 **5. 验证链**（全部通过 = 摆位成功）：
 
 ```bat
