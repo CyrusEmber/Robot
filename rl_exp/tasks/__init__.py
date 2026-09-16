@@ -362,3 +362,31 @@ gym.register(
         "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardParkourClimbPPORunnerCfg",
     },
 )
+
+##
+# Baseline line (versions/lizard/baseline/): flat ground, a fixed low-speed forward
+# command, no curriculum and no domain randomization. The line answers one question, so
+# its recipe is one file (baseline_env_cfg.py) plus its own parameter SSOT, with no
+# imports from any other recipe module.
+##
+
+
+gym.register(
+    id="Lizard-Baseline-Flat-v1",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": "rl_exp.tasks.baseline_env_cfg:BaselineFlatEnvCfg",
+        "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardBaselinePPORunnerCfg",
+    },
+)
+
+gym.register(
+    id="Lizard-Baseline-Flat-Play-v1",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": "rl_exp.tasks.baseline_env_cfg:BaselineFlatEnvCfg_PLAY",
+        "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardBaselinePPORunnerCfg",
+    },
+)

@@ -427,3 +427,45 @@ ValueError: curriculum state in the checkpoint does not fit this task: runtime.n
 - **口径**：本批同样**未跑全量套件** ⇒ `[31][32]`（含 `--bind-config`）与既有条目的端到端共存**未验证**
 - **证据**：gate 脚本 + 上表命令（未另存日志文件）
 
+## B0 · 基线冻结（阶段 B 开工，2026-09-16）
+
+**性质**：**追加**条目，`ARCH_PLAN.md` §2.4 阶段 B 的开工准备。**不改任何实现**：新增冻结闸门 `check_golden_frozen.py`（套件 `[35]`）+ 本节记录。开工第一件事是钉住"整改前 golden"——它同时是硬 A 的比较对象与 B 期间被禁止移动的那份东西。
+
+### 锚（阶段 B 的验收预期值）
+
+| 项 | 值 |
+|---|---|
+| 项目 rev | `020e6fb34034b2621f359e999cb441463b3127fc`（`020e6fb`） |
+| 基线文件 | `versions/cfg_baselines.json` sha256 `b18a517c43ddef5f…`（764 B）；`versions/lizard/cfg_lock.json` sha256 `4326bd0bbf0b0b26…`（2,581,820 B）；`versions/lizard/parkour/cfg_lock.json` sha256 `6c60a92633235478…`（123,845 B） |
+| 框架组合 | `isaaclab=28a37cecdd43\|rsl_rl=source:28a37cecdd43\|python=3.12.13` |
+| 三文件状态 | `git status --porcelain` 对这三条为空 ⇒ 锚是**提交态字节**，不受并行批次未提交改动影响 |
+
+### 比较口径（硬 A 之前冻结，不由实现者事后选）
+
+- **比较对象**：新构建器**构造**出的 cfg 树 vs golden 条目内的 `snapshot`；身份沿用 `check_cfg_lock` 的 `env_cfg_class` / `agent_cfg_class` + `digest`。B 期间**禁改比较器与规范化规则**——只禁 `--update` 挡不住"把标准搬到实现那一侧"。
+- **缺失 ≠ 默认值**：沿用快照格式 2 规则——缺失写缺失哨兵，默认值写默认值。
+- **顺序有语义**：obs 组 / term 序 / joint 序 / 地形列→combo 序均有序并纳入摘要。
+- **浮点**：`repr` 往返，**无容差**；非有限值走标签，不用容差掩盖差异。
+- **允许变化的路径**：B1 期间**期望为空**；真出现就逐条列**字段路径** + 旧值 + 新值 + 转换规则 + 不影响运行语义的验证，禁整字段或整子树豁免。
+
+### 等价性验证（本次实测，只读）
+
+| 步骤 | 命令 | 结果 |
+|---|---|---|
+| 干净树再生 | `git clone --local --depth 1 E:\Robot E:\rl_b0_020e6fb`；`set PYTHONPATH=E:\rl_b0_020e6fb` + `set RL_ISAAC_ROOT=E:/IsaacLab`；`check_cfg_lock.py` | **34 任务 / 2 线**；**v11/v12 各 3 条路径漂移**：`env.curriculum.joint_sir.min_episode_frac: 0.5 -> <absent>`、`env.curriculum.joint_sir.require_survive: true -> <absent>`、`env.curriculum.joint_sir.unmeasured_prior: 0.5 -> <absent>` |
+| 工作树 | `check_cfg_lock.py`（本仓） | **36 任务 / 3 线**，`CFG_LOCK_OK`（`baseline` 线随并行批次新增，属 A 带范围） |
+| 字段归属 | `git grep -n unmeasured_prior HEAD -- rl_exp/tasks/teacher_mdp.py` | **空** ⇒ HEAD 无该字段；现只在未提交的 `teacher_mdp.py`（定义处 `:1026-1037`） |
+
+**结论（硬 A 前置未满足，写死）**：现 golden 的 **v11/v12 条目只由未提交的工作树内容生成** —— `cfg_baselines.json` 的 `created_rev 2a3883c` + `created_dirty: true` 由此得到具体解释：不是"戳不好看"，而是这批条目**不可由任何 rev 取得**。⇒ **B1 可以开工**（B1 不改 cfg 内容，改动面与 golden 无关），**B3 必须等该内容被提交后重跑上表第 1 行**，全绿才可比。否则硬 A 比的是一个谁也重建不出来的期望值。
+
+### B 期间冻结（机械看守，不靠约定）
+
+禁 `cfg_lock --update`、禁手改锁、禁替换 golden、禁改比较器与规范化规则；由 `check_golden_frozen.py` 按摘要看守——自测 `GOLDEN_FROZEN_SELFTEST_OK`（改字节 / 删文件 / 不变三种都判过），实跑 `GOLDEN_FROZEN_OK (3 baseline file(s) unchanged since rev 020e6fb)`。**合法重基线** = 同一次改动里同时改该闸门的 `FROZEN` 表与本节（附理由 + 逐字段差异审查）；只改一侧即判红。
+
+### 边界（不得据本节宣称）
+
+- 本节只钉"**预期值未被移动**"：**不判 golden 是否正确**（B3 的活）、不判 `baseline` 线新增（2 任务、落点未跟踪）、36 vs 34 计数差异、参数加载读模块（`_load_params` 缓存/隔离）——均属 A 带。
+- 干净 clone 需补机器路径配置（`paths.yaml` 是机器本地文件、不在仓内，`RL_ISAAC_ROOT` 由环境变量给）⇒ "可追溯"的准确含义是"**代码内容可由 rev 取得，主机路径由 `paths.yaml`/环境变量提供**"，不是"克隆即可跑"。
+- 本次只验读模式；**未跑全量套件端到端** ⇒ "`[35]` 与既有条目共存"按 A 带同口径记**未验证**。
+
+

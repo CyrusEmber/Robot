@@ -1,6 +1,6 @@
 {
   "format": 1,
-  "revision": 1,
+  "revision": 2,
   "lines": {
     "lizard": {
       "status": "active",
@@ -10,6 +10,13 @@
       "deprecation": null
     },
     "lizard/parkour": {
+      "status": "active",
+      "successor": null,
+      "retired_at": null,
+      "reason": null,
+      "deprecation": null
+    },
+    "lizard/baseline": {
       "status": "active",
       "successor": null,
       "retired_at": null,

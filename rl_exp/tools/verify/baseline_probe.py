@@ -1,0 +1,225 @@
+# -*- coding: utf-8 -*-
+"""Startup probe for a baseline task: read what the env actually does, before training.
+
+A recipe that says 0.5 m/s and a command manager that issues something else look
+identical in the config file. This probe therefore reads the values the env produces --
+the issued command tensor, the resolved observation groups, the per-term reward
+magnitudes, the randomization that is actually in force -- and refuses to pass if any of
+them disagrees with the recipe.
+
+Run before the first training run of a baseline version:
+
+    python rl_exp\\tools\\verify\\baseline_probe.py --task Lizard-Baseline-Flat-v1
+
+Exit code is 0 only when every check passed; the reward magnitudes and the action
+diagnostics are printed for judgement, not asserted (an action mean is not a pass/fail
+criterion: it depends on joint scale, default pose and gait).
+"""
+
+import argparse
+
+from isaaclab.app import AppLauncher
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--task", default="Lizard-Baseline-Flat-v1")
+parser.add_argument("--num_envs", type=int, default=16)
+parser.add_argument("--steps", type=int, default=60, help="control steps to observe")
+parser.add_argument(
+    "--random-actions",
+    action="store_true",
+    help="excite the interface with uniform actions instead of holding zero: the action and "
+    "joint diagnostics are meaningless without excitation, but the robot then falls, so the "
+    "reward magnitudes are no longer nominal. Run both ways.",
+)
+AppLauncher.add_app_launcher_args(parser)
+args_cli = parser.parse_args()
+app_launcher = AppLauncher(args_cli)
+simulation_app = app_launcher.app
+
+import gymnasium as gym  # noqa: E402
+import torch  # noqa: E402
+
+import isaaclab_tasks  # noqa: F401, E402
+
+from rl_exp.tasks.baseline_env_cfg import BaselineFlatEnvCfg  # noqa: E402
+
+PROBLEMS: list[str] = []
+EXPECTED_COMMAND = (0.5, 0.0, 0.0)
+# every randomization event the framework base registers: the recipe turns all of them
+# off by name, because deleting the c_k clock alone leaves two interval events running
+DR_EVENTS = (
+    "physics_material",
+    "add_base_mass",
+    "base_com",
+    "base_external_force_torque",
+    "push_robot",
+    "reset_robot_joints",
+)
+
+
+def check(name: str, ok: bool, detail: str = "") -> None:
+    print(f"  {'ok  ' if ok else 'FAIL'} {name}{'' if ok else f': {detail}'}")
+    if not ok:
+        PROBLEMS.append(f"{name}: {detail}")
+
+
+def term_values(manager, name: str):
+    """Per-term values of a manager, robust to how the fork stores them.
+
+    Reward and termination managers have moved their per-term tensors around across
+    versions; a probe that dies on the internal name would report nothing at all.
+    """
+    for attr in ("_step_reward", "_step_values"):
+        table = getattr(manager, attr, None)
+        names = getattr(manager, "_term_names", None)
+        if table is not None and names is not None and name in names:
+            return table[:, names.index(name)]
+    sums = getattr(manager, "_episode_sums", None)
+    if sums is not None and name in sums:
+        return sums[name]
+    return None
+
+
+def main() -> int:
+    cfg = BaselineFlatEnvCfg()
+    cfg.scene.num_envs = args_cli.num_envs
+    env = gym.make(args_cli.task, cfg=cfg)
+    unwrapped = env.unwrapped
+    num_envs = args_cli.num_envs
+    dt = getattr(unwrapped, "step_dt", None)
+
+    # --- events: the randomization must be off, by name and in effect --------------
+    print("[probe] events")
+    for event_name in DR_EVENTS:
+        event = getattr(unwrapped.cfg.events, event_name, "absent")
+        check(f"events/{event_name}-off", event is None, f"{event!r} is still wired")
+    reset_base = getattr(unwrapped.cfg.events, "reset_base", None)
+    check("events/reset_base-kept", reset_base is not None, "no reset event: nothing places the robot")
+
+    obs, _ = env.reset()
+    robot = unwrapped.scene["robot"]
+    masses = robot.data.body_mass.torch
+    check(
+        "events/no-mass-randomization",
+        bool((masses == masses[0]).all()),
+        f"base body mass differs across envs (tolerance 0 expected): {masses[:, 0][:4]}",
+    )
+    default_pos = robot.data.default_joint_pos.torch
+    check(
+        "events/no-joint-reset-randomization",
+        bool((default_pos == default_pos[0]).all()),
+        "default joint positions differ across envs",
+    )
+
+    # --- command: read the tensor the env issues, not the config -------------------
+    print("[probe] command")
+    cmd_term = unwrapped.command_manager.get_term("base_velocity")
+    expected = torch.tensor(EXPECTED_COMMAND, device=unwrapped.device).expand(num_envs, 3)
+    observed = cmd_term.command[:, :3]
+    check(
+        "command/issued-at-reset",
+        bool(torch.allclose(observed, expected, atol=1e-6)),
+        f"issued {observed[0].tolist()} != {EXPECTED_COMMAND}",
+    )
+    standing = getattr(cmd_term, "is_standing_env", None)
+    check("command/no-standing-envs", standing is None or not bool(standing.any()), f"{standing}")
+    heading = getattr(cmd_term, "is_heading_env", None)
+    check("command/no-heading-envs", heading is None or not bool(heading.any()), f"{heading}")
+
+    command_stable = True
+    action_rows = []
+    term_counts = {"time_out": 0, "fall": 0}
+    reward_sums: dict[str, torch.Tensor] = {}
+    reward_halves: dict[str, list[torch.Tensor]] = {}
+    joint_means = {"|q|": [], "|qd|": [], "|tau|": [], "at_limit": []}
+    reward_names = list(getattr(unwrapped.reward_manager, "_term_names", []))
+    act_dim = unwrapped.action_manager.total_action_dim
+    soft_limits = robot.data.soft_joint_pos_limits.torch
+    span = (soft_limits[..., 1] - soft_limits[..., 0]).clamp_min(1e-6)
+    last_action = None
+    for step in range(args_cli.steps):
+        if args_cli.random_actions:
+            actions = torch.empty(num_envs, act_dim, device=unwrapped.device).uniform_(-1.0, 1.0)
+        else:
+            actions = torch.zeros(num_envs, act_dim, device=unwrapped.device)
+        with torch.inference_mode():
+            obs, rew, term, trunc, _ = env.step(actions)
+        if not torch.allclose(cmd_term.command[:, :3], expected, atol=1e-6):
+            command_stable = False
+        action = unwrapped.action_manager.action
+        action_rows.append(action.abs())
+        if last_action is not None:
+            action_rows.append((action - last_action).abs())
+        last_action = action.clone()
+        term_counts["time_out"] += int((trunc & ~term).sum())
+        term_counts["fall"] += int((term & ~trunc).sum())
+        near_limit = (robot.data.joint_pos.torch - soft_limits[..., 0]).abs() / span
+        joint_means["|q|"].append(robot.data.joint_pos.torch.abs().mean().reshape(1))
+        joint_means["|qd|"].append(robot.data.joint_vel.torch.abs().mean().reshape(1))
+        joint_means["|tau|"].append(robot.data.applied_torque.torch.abs().mean().reshape(1))
+        joint_means["at_limit"].append((near_limit < 0.05).float().mean().reshape(1))
+        for name in reward_names:
+            value = term_values(unwrapped.reward_manager, name)
+            if value is None:
+                continue
+            reward_sums[name] = reward_sums.get(name, torch.zeros_like(value)) + value
+            half = 0 if step < args_cli.steps // 2 else 1
+            halves = reward_halves.setdefault(name, [torch.zeros_like(value), torch.zeros_like(value)])
+            halves[half] = halves[half] + value
+
+    check("command/issued-stable-over-rollout", command_stable, "the issued command changed during the rollout")
+
+    # --- observations -------------------------------------------------------------
+    print("[probe] observations")
+    groups = obs if isinstance(obs, dict) else {"policy": obs}
+    check("obs/single-policy-group", sorted(groups) == ["policy"], f"{sorted(groups)}")
+    policy = groups.get("policy")
+    check("obs/policy-90-dims", policy is not None and policy.shape[-1] == 90, f"{tuple(policy.shape) if policy is not None else None}")
+    check("obs/finite", bool(torch.isfinite(policy).all()), "non-finite observation")
+
+    # --- terminations -------------------------------------------------------------
+    print("[probe] terminations")
+    termination_names = set(getattr(unwrapped.termination_manager, "_term_names", []))
+    for needed in ("base_contact", "time_out"):
+        check(f"terminations/{needed}-present", needed in termination_names, f"{sorted(termination_names)}")
+    print(f"  info episodes over {args_cli.steps} steps: {term_counts}")
+
+    # --- diagnostics (printed, not asserted) --------------------------------------
+    print(f"[probe] rewards over {args_cli.steps} steps x {num_envs} envs (per-step mean per env)")
+    for name, total in sorted(reward_sums.items()):
+        per_step = (total / args_cli.steps).mean().item()
+        print(f"  {name:28s} {per_step:+.6f}")
+    if action_rows:
+        stacked = torch.stack(action_rows)
+        action_abs = unwrapped.action_manager.action.abs()
+        print("[probe] action diagnostics (reference for 'is it moving at all')")
+        print(f"  mean|a| {action_abs.mean().item():.4f}  p95 {torch.quantile(action_abs.flatten(), 0.95).item():.4f}  max {action_abs.max().item():.4f}")
+        print(f"  mean|da| {stacked[-1].mean().item():.4f}  (adjacent-step diff)")
+        print(f"  per-dim mean|a| commanded dims: {(action_abs.mean(dim=0) > 1e-4).sum().item()}/{act_dim}")
+    if joint_means["|tau|"]:
+        stacked_means = {key: torch.cat(values) for key, values in joint_means.items()}
+        print("[probe] joint diagnostics (mean over the rollout)")
+        print(
+            f"  |q| {stacked_means['|q|'].mean().item():.4f} rad   "
+            f"|qd| {stacked_means['|qd|'].mean().item():.4f} rad/s   "
+            f"|tau| {stacked_means['|tau|'].mean().item():.4f} N.m   "
+            f"near-limit {stacked_means['at_limit'].mean().item() * 100:.2f}%"
+        )
+        # a joint that is never loaded is a wiring or limit symptom, not a policy property;
+        # worth naming here so a silent dead joint cannot hide behind an average
+        torque_per_joint = robot.data.applied_torque.torch.abs().mean(dim=0)
+        quiet = [robot.joint_names[i] for i in torch.nonzero(torque_per_joint < 1e-3).flatten().tolist()]
+        print(f"  joints with ~zero mean |tau| ({len(quiet)}): {quiet if quiet else 'none'}")
+    if dt is not None:
+        print(f"[probe] control dt {dt:.4f} s")
+
+    env.close()
+    if PROBLEMS:
+        print(f"BASELINE_PROBE_FAILED ({len(PROBLEMS)})")
+        return 1
+    print("BASELINE_PROBE_OK")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

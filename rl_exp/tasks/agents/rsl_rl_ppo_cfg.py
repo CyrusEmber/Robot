@@ -286,3 +286,48 @@ class LizardParkourClimbPPORunnerCfg(LizardFlatPPORunnerCfg):
         use_clipped_value_loss=True,
         clip_param=0.2,
     )
+
+
+@configclass
+class LizardBaselinePPORunnerCfg(RslRlOnPolicyRunnerCfg):
+    """Runner cfg for `Lizard-Baseline-Flat-v1` (flat ground, fixed speed, proprio MLP).
+
+    A plain MLP over the single proprio group, and the framework's own velocity-task
+    PPO hyperparameters -- deliberately not the paper S1 recipe and not the three-encoder
+    model, both of which were tuned for 4096 envs with a 381-dim, three-group observation.
+    Reusing them here would describe a different recipe than the one being recorded.
+
+    ``obs_normalization`` is off rather than merely reset: normalization statistics are
+    training state, and this line starts from a random policy with no state inherited
+    from anywhere. One version, one log dir (versioning.mdc A).
+    """
+
+    num_steps_per_env = 24
+    max_iterations = 3000
+    save_interval = 50
+    experiment_name = "lizard_baseline_v1"
+    actor = RslRlMLPModelCfg(
+        hidden_dims=[256, 128, 128],
+        activation="elu",
+        obs_normalization=False,
+        distribution_cfg=RslRlMLPModelCfg.GaussianDistributionCfg(init_std=1.0),
+    )
+    critic = RslRlMLPModelCfg(
+        hidden_dims=[256, 128, 128],
+        activation="elu",
+        obs_normalization=False,
+    )
+    algorithm = RslRlPpoAlgorithmCfg(
+        value_loss_coef=1.0,
+        use_clipped_value_loss=True,
+        clip_param=0.2,
+        entropy_coef=0.005,
+        num_learning_epochs=5,
+        num_mini_batches=4,
+        learning_rate=1.0e-3,
+        schedule="adaptive",
+        gamma=0.99,
+        lam=0.95,
+        desired_kl=0.01,
+        max_grad_norm=1.0,
+    )

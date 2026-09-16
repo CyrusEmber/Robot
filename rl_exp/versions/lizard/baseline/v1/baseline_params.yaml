@@ -1,0 +1,172 @@
+# baseline_params.yaml — SSOT of the flat-ground walking baseline line
+# (versions/lizard/baseline/). Frozen copies live in
+# versions/lizard/baseline/vN/baseline_params.yaml; a versioned task always reads its
+# own copy, never this file.
+#
+# This line exists to answer one question and nothing else: can this robot learn to
+# walk forward at a fixed low speed on flat ground, starting from a random policy?
+# So the recipe states what it has, and just as deliberately, what it has NOT:
+#
+#   absent by design -> no terrain generator, no height scanner, no foot-ring sensors,
+#   no privileged observation group, no c_k clock, no terrain curriculum, no staged
+#   speed curriculum, no domain randomization, no push/external-wrench events.
+#
+# Absent means absent, not zero: this file has no `domain_randomization` section at
+# all, and baseline_env_cfg.py sets every randomization event to None explicitly
+# rather than inheriting a framework default -- "no curriculum" and "no DR" are two
+# independent decisions even though the teacher line couples them through c_k.
+#
+# Geometry/joints/mass/inertia/limits live in lizard.urdf (Blender-generated, shared
+# with the other lines); robot/actuators/sim/names below are the v14 effective values,
+# frozen here so this recipe carries no parameter version inherited from another line.
+
+robot:
+  name: lizard
+  usd_path: assets/lizard/lizard.usda
+  base_body_name: base_link
+  base_init_height: 1.1
+
+# ground-truth joint order (URDF tree order after the v8 anatomy rename)
+joint_order:
+  - chest_yaw
+  - chest_pitch
+  - neck_yaw
+  - neck_pitch
+  - rf_haa
+  - rf_hfe
+  - rf_kfe
+  - rf_foot
+  - lf_haa
+  - lf_hfe
+  - lf_kfe
+  - lf_foot
+  - tail1_yaw
+  - tail1_pitch
+  - tail2_yaw
+  - tail2_pitch
+  - tail3_yaw
+  - tail3_pitch
+  - rr_haa
+  - rr_hfe
+  - rr_kfe
+  - rr_foot
+  - rl_haa
+  - rl_hfe
+  - rl_kfe
+  - rl_foot
+
+# regex pattern -> default angle (rad). Zero pose IS the natural stance (baked into
+# the URDF joint origins): thigh sprawled out-down, shank vertical, blade flat.
+default_joint_pos:
+  ".*_haa_joint": 0.0
+  ".*_hfe_joint": 0.0
+  ".*_kfe_joint": 0.0
+  ".*_foot_joint": 0.0
+  "chest_.*": 0.0
+  "tail[0-9]_.*": 0.0
+  "neck.*_.*": 0.0
+
+# ImplicitActuatorCfg groups: PD runs inside the physics solver at 200 Hz (sampled
+# 50 Hz explicit torque PD is unstable on the low-inertia spine joints).
+actuators:
+  legs:
+    joint_patterns:
+      - ".*_haa_joint"
+      - ".*_hfe_joint"
+      - ".*_kfe_joint"
+    stiffness: 800.0
+    damping: 40.0
+    effort_limit: 180.0
+    velocity_limit: 10.0
+    armature: 0.0
+  feet:
+    joint_patterns:
+      - ".*_foot_joint"
+    stiffness: 200.0
+    damping: 12.0
+    effort_limit: 70.0
+    velocity_limit: 6.0
+    armature: 0.0
+  spine:
+    joint_patterns:
+      - "chest_.*"
+      - "tail[0-9]_.*"
+      - "neck.*_yaw_joint"
+      - "neck.*_pitch_joint"
+    stiffness: 400.0
+    damping: 20.0
+    effort_limit: 80.0
+    velocity_limit: 4.0
+    armature: 0.0
+
+# frozen action interface: two groups, 26 dims total, same split/scale as v14.
+# The split is the deployed interface (UE consumes the same layout), so it is frozen
+# rather than simplified to a single group.
+action:
+  legs_scale: 0.5
+  spine_scale: 0.25
+  use_default_offset: true
+
+sim:
+  dt: 0.005
+  decimation: 4
+  episode_length_s: 20.0
+
+# body name patterns for reward/termination terms
+names:
+  foot_body_names:
+    - ".*_foot"
+  undesired_contact_body_names:
+    - ".*_hfe"
+    - ".*_kfe"
+
+# The command is a POINT, not a range: both ends equal, so sampling has nothing to
+# vary. The two switches below are the reason a "fixed" command can still be rewritten
+# at runtime, so they are off explicitly and the startup probe reads the issued
+# command tensor rather than trusting these values:
+#   heading_command=True would rewrite ang_vel_z from a heading error (v14 has it ON
+#     with rel_heading_envs=1.0 -- that is a heading-tracking task, not a fixed one);
+#   rel_standing_envs>0 would zero the command for that fraction of envs (v14: 0.02),
+#     i.e. 2% of envs are asked to stand still and would score the tracking reward for
+#     free.
+commands:
+  lin_vel_x: [0.5, 0.5]
+  lin_vel_y: [0.0, 0.0]
+  ang_vel_z: [0.0, 0.0]
+  heading_command: false
+  rel_standing_envs: 0.0
+
+# Seven terms. Rationale per term, and the two things this table is NOT:
+#   NOT a claim that dropping a term is free -- `head_load_penalty` is dropped as a
+#     simplification choice (it is not equivalent to the belly penalty: one measures
+#     the head chain's vertical reaction, the other the base's net force);
+#   NOT a consequence of c_k -- `dof_acc_l2`/`ang_vel_xy_l2` are dropped to remove
+#     constraints on purpose (fewer things to blame in a first-round diagnosis), not
+#     because they were c_k-scaled.
+# All weights are the teacher's c_k=1 values, used from step one: this line has no c_k
+# clock, so nothing anneals. Tracked as a risk in PLAN.md (an early "won't move" could
+# be a full-strength penalty stack rather than a capability problem) -- resolve it by
+# reading the per-term magnitudes the probe prints, not by assuming.
+rewards:
+  track_lin_vel_xy_miki: 1.5
+  track_ang_vel_z_exp: 0.5
+  lin_vel_z_l2: -2.0
+  action_rate_l2: -0.01
+  dof_torques_l2: -1.0e-5
+  undesired_contacts: -1.0
+  belly_contact_force: -0.5
+
+# Fall detection. On flat ground base contact means the robot is down, so it ends the
+# episode: "survival" then has a definition, and sliding forward on the belly (a reward
+# hack the tracking term would happily pay for) is a failure rather than a slow penalty.
+# RollOverTerm is not used: it lives in the shared, actively-mutated teacher_mdp.py, and
+# a per-env dwell term is more machinery than a plane needs.
+terminations:
+  base_contact_threshold: 1.0
+
+# Terms needing a physical scale. force_scale = nominal body weight (72 kg x 9.81 ~
+# 706 N): a flat belly carries ~1.0 per step at weight -0.5.
+params:
+  belly_force_scale: 706.0
+  miki_sigma_sq: 0.25
+  track_std: 0.5

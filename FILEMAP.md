@@ -69,6 +69,8 @@
 | `lizard\v15\` | **起草（提案态，未冻结未实施）**（2026-09-16，base = v14）：地形课程换 **joint SIR**（v5 行 SIR → v11 机制的联合粒子 SIR，参数格 combo × 速度桶）——`build_param_grid_terrain_cfg`（58 combos / 4×120）+ `ParticleVelocityCommand`（buckets 0.5…3.0 + jitter 0.1）+ `Curriculum/joint_sir/{tr_mean, frontier_max_v, particle_entropy}`；obs/动作/奖励/终止/DR/资产逐字段同 v14（含 roll_over 闸 + head_load 惩罚）。方案 SSOT = `v15\PLAN.md`；预注册闸与首跑声明见 `v15\NOTES.md`。**并行迁移前置门**：开训前打 tag、进程不得重启、训练结束前不得 `cfg_lock --update` |
 | `lizard\parkour\` | **支线 route 层**（2026-09-04，分支 `paper/parkour-in-the-wild`，训练未启动）：Parkour in the Wild（跑/爬/跳多专家蒸馏+RL 微调）。`PLAN.md` = 路线层（组件映射/偏差声明/决策记录）；`parkour_params.yaml` = 支线开发态参数 |
 | `lizard\parkour\v1\` | 支线版本包：`v1\PLAN.md` = 版本方案 SSOT（位置任务/probe gate/专家表/蒸馏微调方案），`v1\NOTES.md` = 结果回填，`v1\base.json` = 支线血统根（null），`v1\parkour_params.yaml` = 冻结副本（未冻结，训练启动时定稿），`v1\asset_lock.json` = 资产锁 |
+| `lizard\baseline\` | **支线 route 层**（2026-09-16，训练未启动）：能力基线——平地 + 固定 `0.5,0,0` + 零课程 + 零 DR，只回答"这副机器人能否学会持续行走"。`PLAN.md` = 轮次路线（v2 起变量逐轮加回的顺序：命令档位 → DR → 外力/推力 → 转向 → 地形/课程/观测）；`baseline_params.yaml` = 支线开发态参数（**没有** `domain_randomization` 段——缺席是设计，不是遗漏） |
+| `lizard\baseline\v1\` | 支线版本包：`v1\PLAN.md` = 全量式方案 SSOT（配方逐项 + 依据 + 六条前提校正 + 验收与探针），`v1\NOTES.md` = 结果回填，`v1\base.json` = 支线血统根（null），`v1\baseline_params.yaml` = 冻结副本，`v1\asset_lock.json` = 资产锁 |
 | `vN\PLAN.md` | 版本级计划存档（目的/假设/决策点/验收线/结论一句话；v3 原生，v0–v2 为 2026-09-01 追溯补录；结果回填仍走 NOTES） |
 | `vN\NOTES.md` | 版本文档：目的/参数 diff/训练命令/结果回填 |
 | `vN\tb_scalars.csv` | 训练后经 dump_tb.py 导出的逐迭代曲线，**抽样入库**（`--max_points 150`，150 点/tag ≈ 210 KB：全量 15k 点/tag ≈ 20 MB/版本，60 MB 三份，不值当）；全量留机器本地 `vN\tb_scalars.full.csv`（`.gitignore`），入库记录由它抽样得到（不需 tensorboard、不需 tfevents） |

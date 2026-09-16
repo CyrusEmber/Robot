@@ -1,0 +1,4 @@
+{
+  "base": null,
+  "note": "Line root: no upstream recipe. This line is a clean-room flat baseline rewritten from the framework base class upward, not a modification of any other version, so it names no parent snapshot. The values it borrowed (robot, PD, action split, sim timing) are recorded in baseline_params.yaml -- borrowed values are data, not lineage."
+}
