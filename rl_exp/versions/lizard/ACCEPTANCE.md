@@ -777,7 +777,8 @@ ValueError: curriculum state in the checkpoint does not fit this task: runtime.n
 | v1 / v2 | **已声明** | 无 delta（`elements: ()`） |
 | v3 | **已声明** | `v3_contact_headroom` · `v3_speed_curriculum` · `v3_anti_drag_reward` · `v3_ck_clock`；PLAY = `play_drops_speed_curriculum` · `play_pins_full_command_range` |
 | v4 | **已声明** | v3 四项 + `v4_stock_contact_stack`；PLAY 同 v3 |
-| v5–v14 | **未声明**（仍写在子类里，`elements: None`） | 待搬：v5 奖励包 + 行 SIR · v6 · v8 · v10 · v11 joint SIR 接线 · v12 鲁棒性包 + 环噪声事件 · v13 核替换 · v14 `head_load`；各自还需 PLAY 元素 |
+| v5 | **已声明** | v3 四项 + `v4_stock_contact_stack` + `v5_drops_speed_curriculum` · `v5_reward_package` · `v5_sir_terrain_curriculum`；PLAY = `play_drops_sir_terrain_curriculum`（见下节） |
+| v6–v14 | **未声明**（仍写在子类里，`elements: None`） | 待搬：v6 · v8 · v10 · v11 joint SIR 接线 · v12 鲁棒性包 + 环噪声事件 · v13 核替换 · v14 `head_load`；各自还需 PLAY 元素 |
 
 实测：`RECIPE_BUILD_OK (8 task(s) field-identical to the frozen golden)`（提交 `3360642`）。**每加一个元素跑 `[24]` + `[41]`**。
 
@@ -789,6 +790,59 @@ ValueError: curriculum state in the checkpoint does not fit this task: runtime.n
 4. `[41]` 会打印未声明版本 —— **不许**用"半套元素 + 声明成已迁移"骗绿：未声明的必须留 `None`。
 5. 全绿后按仓库惯例提交（pre-commit 三闸会自动跑）。
 6. **未合口**：`components.observations` 仍带三张手抄表（`PROPRIO_TERMS`/`BASELINE_PRIV_TERMS`/`SPEC_TERMS`），而 `tasks/obs_protocol.py` + `versions/obs_protocols.json` 已声明同一身份（按 task 带 `version`/`line`/`groups`/`terms`/`dropped_terms`）。现由 `check_obs_protocol` 互钉；合口 = 组件只留构造、按 (line, version) 读声明，删掉三张表。**是否合、何时合由用户定**（声明面属并行批次）。
+
+## B3 · v5 元素化（奖励包 + 行 SIR 课程，2026-09-16）
+
+**性质**：**追加**条目，B3 的第二个声明式子集。改动面 = `rl_exp/tasks/recipe.py`（4 个元素 + `RECIPES["v5"]`）、`check_recipe_build.py`（新增"声明路径带不走的 ClassVar"打印）；`teacher_env_cfg.py` 的 V5/V5_PLAY 子类**不动**（过渡期两条路径并存，漂移面由 `[24]` + `[41]` 双闸覆盖）。
+
+### 落地
+
+| 元素 | 内容 |
+|---|---|
+| `v5_drops_speed_curriculum` | `curriculum.speed_curriculum = None` |
+| `v5_reward_package` | EP 核 → `track_lin_vel_xy_lin`（yaml `v5.track_goal_vel`）；`feet_slide` = `feet_slide_ck`；`undesired_contacts.func` = `undesired_contacts_ck`；`belly_contact_force`（yaml `v5.r_slip` / `v5.belly_contact_force`） |
+| `v5_sir_terrain_curriculum` | `curriculum.terrain_levels` = `SIRTerrainCurriculumCfg`，8 参数全读 yaml `v5.terrain_curriculum` |
+| `play_drops_sir_terrain_curriculum` | PLAY 侧 `terrain_levels = None` |
+
+三处**不是搬运、是判断**（写下来，省得下次重新推）：
+
+- **r_fc 符号修正不需要元素**：`v3_anti_drag_reward` 走 `_doc(cfg)` 按**本配方**的 yaml 读 `v3.r_fc`，v5 的 yaml 副本里就是 `-0.003`。迁移前它靠"V3 在 `params_version='v5'` 时执行"生效，迁移后靠"元素读该版本的文档"生效 —— 同一件事，少一个元素。
+- **`v5_drops_speed_curriculum` 必须留，且必须排在 v3 元素之后**：`v3_speed_curriculum` 也在这份元素表里。删掉"装"只留"缺"看着更省，但 `speed_curriculum` 是**靠赋值才存在**的属性：省掉它，快照里就是"缺席"，而冻结配方记的是 `null`（1.1 明写 missing ≠ None），`[41]` 会当场红。**逐行照搬类链，语义才等价**。
+- **v3/v4 的 PLAY 元素不进 v5**：`play_drops_speed_curriculum` 会去删一个 v5 本就没有的课程（无害但说谎），`play_pins_full_command_range` 会把范围钉成 `(-1, 5)`，而冻结的 v5 PLAY 是 yaml 的 `(0, 3)`——两者都会让 `[41]` 红。这是"元素表按配方写、不按版本链继承"的直接好处。
+
+### 结果
+
+| 编号 | 命令 | 结果 |
+|---|---|---|
+| 硬 A | `check_recipe_build.py`（套件 `[41]`） | **通过**：`RECIPE_BUILD_OK (10 task(s) field-identical to the frozen golden)` —— v5 train/play 加入后仍逐字段一致；未声明的 7 个版本继续被打印 |
+| 门 1 | `check_cfg_lock.py`（套件 `[24]`） | **通过**：`CFG_LOCK_OK (36 tasks, 3 line(s))`（本批未改任何 cfg） |
+| 单写者 | `test_component_ownership.py`（套件 `[37]`） | **通过**：`COMPONENT_OWNERSHIP_OK (5 component(s), 16 owned name(s))` |
+| golden 摘要 | `check_golden_frozen.py`（套件 `[35]`） | **通过**：`GOLDEN_FROZEN_OK`（3 份基线文件自 `020e6fb` 未动） |
+| 旁证五闸 | `check_obs_layout` · `check_dr_parity` · `check_reward_v13` · `check_configclass_fields` · `check_suite_shape` | **全绿**（v5 obs 381 与冻结一致；v5/v10 的 EP 核冻结断言未动；`test_v5_rewards` 4 例 + `test_v5_terrain_sir` 9 例全过） |
+
+### 新增的可见缺口：声明路径带不走的 ClassVar
+
+`[41]` 现在**每次运行都打印**（不是判红）：
+
+```
+classvar the declaration cannot carry (no class to hold it): v3/play PLAY_PINS_COMMAND_RANGE: True != False
+classvar the declaration cannot carry (no class to hold it): v4/play PLAY_PINS_COMMAND_RANGE: True != False
+classvar the declaration cannot carry (no class to hold it): v5/train REQUIRES_CURRICULUM_STATE: True != 'not stated'
+classvar the declaration cannot carry (no class to hold it): v5/play REQUIRES_CURRICULUM_STATE: False != 'not stated'
+```
+
+这是 `[41]` 原有纪律（"未声明 ≠ 通过"要打印）扩到 ClassVar 面：`build()` 返回**共享基类**实例，而 `ClassVar` 是"关于配方的声明"，快照格式 2 把它排除 ⇒ 声明路径**结构上**没有地方承载它。两个名字的后果不同：
+
+- `PLAY_PINS_COMMAND_RANGE` 是**构造期**读取（基类 `__post_init__` 用它选范围），声明路径复现的是**效果**而非声明（`play_pins_full_command_range` 事后写同一个范围），字段面已等价 —— 打印出来是留痕，不是缺口。
+- `REQUIRES_CURRICULUM_STATE` 是**运行期**读取（`curriculum_state.requires_resume_state` 与 `runrecord.manifest` 都走 `getattr(type(cfg), ...)`），声明路径给不出 `True`，字段面也补不回来。**这是真缺口**。当前被 `need = requires_resume_state(env) or bool(covered)` 兜住（行 SIR 是注册 term，`covered` 非空 ⇒ 缺载荷 / 缺 slot 时**仍然硬失败**），退化的只有三处：声明语义本身、"声明了却没收集到状态"那条 save 守卫、以及 manifest 里那条记录。**修法在读取侧**（读实例，或按 `(line, version)` 读声明表），落在并行侧 C 的 lane。本次按用户拍板（2026-09-16）**先让它可见，不假装已修**；B3 原计划里"等 PLAY 元素化时补一条类侧断言（比两条路径的 ClassVar 取值）"由此落地为**打印**形态。
+
+### 边界
+
+- `RECIPES["v5"]` 的 train/play 任务 id 是**写出来的**，不从版本串推 —— 改名不能静默把这个闸门指向空。
+- **`recipe.py` 仍不在 `[37]` 的 HOSTS 里**：元素会写 `commands.base_velocity`（`components` 拥有的名字），`play_pins_full_command_range` 就是这么写的。把它加进扫描表会立刻红 —— 元素是独立于 `teacher_env_cfg.py` 的第二类合法写者，要不要扩 `[37]` 的范围，得先定义"元素豁免"的形状，本轮不动。
+- **没有动 `FILEMAP.md`**：工作树里它带着并行侧 obs_protocol 的在飞改动（连同 `runrecord/manifest.py`、`verify/offline_suite.py`、`verify/OFFLINE_CHECKS.md`），一并 `git add` 会把别人的半成品写进我的提交。`recipe.py` 的 FILEMAP 条目留待他们批次落定后补。
+- **未合口（本轮定：不合）**：`components.observations` 的三张手抄表 vs `versions/obs_protocols.json`。理由：`obs_protocol` 自称"只声明 identity、不构建 config"，而 `check_obs_protocol` 是拿声明去比**构造出来的** cfg；让 `components.observations` 反过来读它，闸门就变成声明比声明 —— B3 点名的第一号失败模式（与自己比恒等）。且声明侧仍在飞。等他们 3.1d 落定后再议。
+- 仍未声明：v6 · v8 · v10 · v11 joint SIR 接线 · v12 鲁棒性包 + 环噪声事件 · v13 核替换 · v14 `head_load`，各自还需 PLAY 元素。**每加一个元素跑 `[24]` + `[41]`**。
 
 ---
 
