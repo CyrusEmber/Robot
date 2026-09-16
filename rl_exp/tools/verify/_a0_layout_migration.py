@@ -12,11 +12,13 @@ does the mechanical half only: the directory move and the parameter-file renames
 else A0 needs is printed as a checklist for the person holding the change, because those
 edits land in files other work is touching.
 
-Refusal is the point of the precondition check. The first attempt at this migration died
-mid-flight for two reasons worth never repeating: ``git mv`` will not move a version
-directory whose files are untracked (it reports "source directory is empty" and moves
-nothing else), and moving a frozen tree out from under concurrent uncommitted work makes
-two change sets fight over the same paths. Both are checked before anything is staged.
+Refusal is the point of the precondition check, but it is an intersection test, not "the
+tree is clean": A0 stops only when uncommitted work overlaps the paths it moves or the files
+it has to edit -- refusing on an unrelated dirty file is how a migration gets stuck behind
+work it does not touch. The first attempt died mid-flight for two reasons worth never
+repeating: ``git mv`` will not move a directory whose files are untracked (it reports
+"source directory is empty" and then moves nothing at all), and moving a frozen tree out
+from under concurrent work makes two change sets own the same paths.
 
 Usage:
     python rl_exp\\tools\\verify\\_a0_layout_migration.py            # plan only
@@ -38,10 +40,27 @@ _LINE = "lizard"
 _TARGET_LINE = "lizard/main"
 _VERSION_DIR = re.compile(r"^v[0-9]+$")
 
-# paths whose uncommitted state would fight this migration (the batch's lock migration and
-# the gates A0 has to edit afterwards). Moving frozen trees under them is how two change
-# sets end up owning the same file.
-CONTESTED = ("rl_exp/versions", "rl_exp/tasks", "rl_exp/tools/verify")
+# The files A0 has to write after the moves (its own checklist below). The precondition is an
+# intersection against this set plus the paths that move -- an unrelated dirty file is not
+# A0's business, and refusing on one is how a migration ends up stuck behind work it does not
+# touch. The one thing never negotiable: a *moved* directory whose files are untracked,
+# because git mv refuses the whole batch on those.
+WRITE_SET = (
+    "rl_exp/versions/recipes.json",
+    "rl_exp/versions/lines.json",
+    "FILEMAP.md",
+    "README.md",
+    "rl_exp/tools/verify/recipe_lines.py",
+    "rl_exp/tools/verify/check_dr_parity.py",
+    "rl_exp/tools/verify/check_version_docs.py",
+    "rl_exp/tools/verify/check_cfg_lock.py",
+    "rl_exp/tools/runrecord/manifest.py",
+    "rl_exp/versions/lizard/FAMILY.md",
+    "rl_exp/versions/lizard/PLAN.md",
+    "rl_exp/versions/lizard/REWARDS.md",
+    "rl_exp/versions/lizard/OBS.md",
+    "rl_exp/versions/lizard/ACCEPTANCE.md",
+)
 
 CHECKLIST = f"""follow-up edits A0 still needs (not done by this script):
   recipe_lines.py        drop the "main line is the family root" special case; key the
@@ -88,28 +107,45 @@ def tracked(path: pathlib.Path) -> bool:
     return bool(git("ls-files", "--", str(path.relative_to(_REPO))))
 
 
-def contested() -> list[str]:
-    """Uncommitted changes that would fight this migration.
+def dirty_lines() -> list[str]:
+    """Every uncommitted path in the repo, as ``git status --porcelain`` lines."""
+    return [line for line in git("status", "--porcelain").splitlines() if line.strip()]
 
-    Modified tracked files count everywhere under the contested paths. Untracked files only
-    count under ``versions/`` -- a new gate next to this script is nobody's business, while
-    an untracked version directory is exactly what made ``git mv`` refuse the first time.
+
+def owned(path: str, moves: list[tuple[str, str]]) -> str | None:
+    """Why A0 owns a dirty path, or None when it is none of A0's business.
+
+    Args:
+        path: repo-relative path of the dirty entry.
+        moves: the ``(source, destination)`` pairs this run would perform.
 
     Returns:
-        The ``git status --porcelain`` lines that matter.
+        A reason string when A0 must not run on top of this change, else None.
     """
-    self_path = pathlib.Path(__file__).resolve().relative_to(_REPO).as_posix()
-    kept: list[str] = []
-    for line in git("status", "--porcelain", "--", *CONTESTED).splitlines():
-        if not line.strip():
-            continue
-        status, name = line[:2], line[3:].strip()
-        if name == self_path:
-            continue
-        if "?" in status and not name.startswith("rl_exp/versions/"):
-            continue
-        kept.append(line)
-    return kept
+    if path in WRITE_SET:
+        return "A0 edits this file"
+    for source, _destination in moves:
+        if path == source or path.startswith(f"{source}/"):
+            return "A0 moves this path"
+    return None
+
+
+def contested(moves: list[tuple[str, str]]) -> tuple[list[str], list[str]]:
+    """Split the dirty tree into what A0 owns and what it can ignore.
+
+    Args:
+        moves: the ``(source, destination)`` pairs this run would perform.
+
+    Returns:
+        ``(owned, ignored)`` porcelain lines. The ignored ones are printed too: a narrower
+        precondition is a decision that should be visible, not a silent loosening.
+    """
+    owned_lines: list[str] = []
+    ignored: list[str] = []
+    for line in dirty_lines():
+        path = line[3:].strip().strip('"')
+        (owned_lines if owned(path, moves) else ignored).append(line)
+    return owned_lines, ignored
 
 
 def plan() -> tuple[list[tuple[str, str]], list[str]]:
@@ -142,8 +178,6 @@ def plan() -> tuple[list[tuple[str, str]], list[str]]:
         if (FAMILY / name / f"{_LINE}_params.yaml").exists():
             moves.append((str(source.relative_to(_REPO)), str((MAIN / name / "main_params.yaml").relative_to(_REPO))))
 
-    if contested():
-        refusals.append("the tree carries uncommitted work under the contested paths (see below)")
     return moves, refusals
 
 
@@ -165,11 +199,14 @@ def main(argv: list[str] | None = None) -> int:
     for source, destination in moves:
         print(f"    {source}  ->  {destination}")
 
-    dirty = contested()
-    if dirty:
-        print("  uncommitted work under contested paths:")
-        for line in dirty:
+    owned_lines, ignored = contested(moves)
+    if ignored:
+        print(f"  uncommitted files A0 does not touch: {len(ignored)} (ignored on purpose)")
+    if owned_lines:
+        print("  uncommitted work A0 needs settled first -- it moves or edits these:")
+        for line in owned_lines:
             print(f"    {line}")
+        refusals.append(f"{len(owned_lines)} dirty path(s) intersect A0's own write set")
 
     if refusals:
         for reason in refusals:
