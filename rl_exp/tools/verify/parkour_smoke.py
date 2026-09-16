@@ -20,8 +20,10 @@ import torch
 
 import isaaclab_tasks  # noqa: F401
 from rl_exp.tasks.parkour_env_cfg import ParkourClimbEnvCfg_PLAY
+from rl_exp.tasks import obs_protocol
 
-EXPECTED_POLICY_DIM = 278  # parkour_params.yaml obs_layout (single policy group)
+# the parkour policy width as approved in the protocol record
+EXPECTED_POLICY_DIM = obs_protocol.dims_for("Lizard-Parkour-Climb-Play-v1")["policy"]
 
 cfg = ParkourClimbEnvCfg_PLAY()
 cfg.scene.num_envs = 2

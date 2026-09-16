@@ -1,61 +1,88 @@
 {
  "format": 1,
- "note": "Approved observation protocol digests (ARCH_PLAN Step 3.1a). Re-approved 2026-09-16 when clip/scale/noise values entered the record; the diff against the previous approval was verified to be representation only (no term, order, dropped or flag change). The gate reads this file and never rewrites it: a new or edited protocol stays red until a human writes its digest here. A protocol no task references must state a purpose.",
+ "note": "Approved observation protocol digests (ARCH_PLAN Step 3.1a). Re-approved 2026-09-16 when clip/scale/noise values entered the record; the diff against the previous approval was verified to be representation only (no term, order, dropped or flag change). The gate reads this file and never rewrites it: a new or edited protocol stays red until a human writes its digest here. A protocol no task references must state a purpose. dims are the approved per-group widths (empty = no real run has asserted them yet).",
  "protocols": {
   "1d87d5c6b546": {
    "digest": "1d87d5c6b5463bc836b5754bbb24c9a49dd7453f67c075a1e61f2805da36165d",
-   "label": "",
-   "purpose": ""
+   "label": "Lizard-Rough-v2 layout",
+   "purpose": "",
+   "dims": {
+    "policy": 308
+   }
   },
   "287479dc40c7": {
    "digest": "287479dc40c730de7b59824620882369ef7a5809330d18878d77c1229a85bcb8",
    "label": "",
-   "purpose": ""
+   "purpose": "",
+   "dims": {}
   },
   "4d4a26c4c8a2": {
    "digest": "4d4a26c4c8a2b02355ad2c98226a5e0d3f5283a0d18aed0ec095c50459f70d6e",
-   "label": "",
-   "purpose": ""
+   "label": "Lizard-Parkour-Climb-v1 layout",
+   "purpose": "",
+   "dims": {
+    "policy": 278
+   }
   },
   "583eaf23b9d1": {
    "digest": "583eaf23b9d1e96fb0d24fed81308aedfc9bfa7eec0b7da04ac90202768831f6",
-   "label": "",
-   "purpose": ""
+   "label": "Lizard-Rough-v1 layout",
+   "purpose": "",
+   "dims": {
+    "policy": 266
+   }
   },
   "6cd53ec273dc": {
    "digest": "6cd53ec273dc43be29cfe27edb2d5f02782d7aef9a15d46d29451f1ad0efa2d3",
-   "label": "",
-   "purpose": ""
+   "label": "Lizard-Rough-Play-v12 layout",
+   "purpose": "",
+   "dims": {
+    "proprio": 90,
+    "extero": 208,
+    "priv": 83
+   }
   },
   "a25a8c39001b": {
    "digest": "a25a8c39001b9aad8ef56c49e6ff77134973afe45dc5277968e1f94275f67bd9",
    "label": "",
-   "purpose": ""
+   "purpose": "",
+   "dims": {}
   },
   "c71114b0c0fd": {
    "digest": "c71114b0c0fdfcffb7859a0389830d740273cf392ef44da91639f8ae7f5a4a52",
-   "label": "",
-   "purpose": ""
+   "label": "Lizard-Rough-Play-v1 layout",
+   "purpose": "",
+   "dims": {
+    "policy": 266
+   }
   },
   "cf66ed6422c8": {
    "digest": "cf66ed6422c82ed7da5bb356b5b1a5d6b8b8b6f5b76dbe45b851366765fdca69",
-   "label": "",
-   "purpose": ""
+   "label": "Lizard-Rough-Play-v2 layout",
+   "purpose": "",
+   "dims": {
+    "policy": 308
+   }
   },
   "d8de5bc507a7": {
    "digest": "d8de5bc507a76e9904a912347a74caa32675e11efd5ab73fb5cfbfb2a41758c2",
-   "label": "",
-   "purpose": ""
+   "label": "Lizard-Parkour-Climb-Play-v1 layout",
+   "purpose": "",
+   "dims": {
+    "policy": 278
+   }
   },
   "fa849f7f2d7c": {
    "digest": "fa849f7f2d7c4e144d29955806722b9adbd580b006790b73f5cb7c5ca7c7fd82",
    "label": "",
-   "purpose": ""
+   "purpose": "",
+   "dims": {}
   },
   "fdef56347528": {
    "digest": "fdef56347528a58fee8c6384c959de61c0c63057f418f877a324b6ddb9154393",
    "label": "",
-   "purpose": ""
+   "purpose": "",
+   "dims": {}
   }
  }
 }

@@ -26,8 +26,10 @@ import isaaclab_tasks  # noqa: F401
 from rl_exp.tasks.teacher_env_cfg import (
     LizardRoughTeacherEnvCfg_PLAY,
 )
+from rl_exp.tasks import obs_protocol
 
-EXPECTED_POLICY_DIM = 308  # v2 recipe, see versions/lizard/v2/NOTES.md
+# the v2 policy width as approved in the protocol record (versions/lizard/obs_protocol_anchors.json)
+EXPECTED_POLICY_DIM = obs_protocol.dims_for("Lizard-Rough-Play-v2")["policy"]
 
 cfg = LizardRoughTeacherEnvCfg_PLAY()
 cfg.scene.num_envs = 2

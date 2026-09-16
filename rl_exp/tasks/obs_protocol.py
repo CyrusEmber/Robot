@@ -26,6 +26,7 @@ import json
 import pathlib
 
 DECLARATION = pathlib.Path(__file__).resolve().parents[2] / "rl_exp" / "versions" / "obs_protocols.json"
+ANCHORS = pathlib.Path(__file__).resolve().parents[2] / "rl_exp" / "versions" / "lizard" / "obs_protocol_anchors.json"
 _FOOT_SUFFIX = "_foot_ring"
 
 
@@ -104,6 +105,47 @@ def live_terms_for(task_id: str, group: str) -> list[str]:
     terms = terms_for(task_id, group)
     dropped = set(groups[group].get("dropped_terms") or [])
     return [term for term in terms if term not in dropped]
+
+
+def anchors() -> dict:
+    """The approved facts about each protocol: digest, widths, label, purpose.
+
+    Read from the same file the gate reads and never writes: approving a digest or a width is
+    a separate, deliberate act, and a module that could refresh them would approve anything it
+    happened to load.
+
+    Raises:
+        ProtocolError: the file is missing or unreadable.
+    """
+    try:
+        return json.loads(ANCHORS.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as err:
+        raise ProtocolError(f"cannot read {ANCHORS}: {err}") from err
+
+
+def recorded_dims(task_id: str) -> dict[str, int] | None:
+    """The approved per-group widths, or ``None`` when no real run has asserted them yet.
+
+    ``None`` and ``{}`` mean different things -- unmeasured versus measured-and-empty -- so the
+    caller can tell "nobody has looked" from "there is nothing there".
+    """
+    key = protocol_for(task_id)
+    entry = (anchors().get("protocols") or {}).get(key)
+    dims = entry.get("dims") if isinstance(entry, dict) else None
+    return dict(dims) if isinstance(dims, dict) and dims else None
+
+
+def dims_for(task_id: str) -> dict[str, int]:
+    """The approved per-group widths a smoke assertion may compare against.
+
+    Raises:
+        ProtocolError: this protocol has no measured widths. Asserting against an invented
+            width is worse than not asserting: it fails the tree for being right.
+    """
+    dims = recorded_dims(task_id)
+    if dims is None:
+        raise ProtocolError(f"{task_id}: no approved dims for this protocol; a real run has to measure them first")
+    return dims
 
 
 def feet_for(task_id: str, group: str = "extero") -> tuple[str, ...]:

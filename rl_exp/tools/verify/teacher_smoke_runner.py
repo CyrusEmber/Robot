@@ -27,8 +27,11 @@ import sys
 
 _REPO = pathlib.Path(__file__).resolve().parents[3]
 
-# network reshape contract, identical v3..v12 (not a per-version knob)
-EXPECTED_EXTERO_ORDER = ("lf_foot_ring", "rf_foot_ring", "rl_foot_ring", "rr_foot_ring")
+from rl_exp.tasks import obs_protocol
+
+# network reshape contract, identical v3..v12 (not a per-version knob): read from the
+# protocol declaration, which owns the term order and the feet
+EXPECTED_EXTERO_ORDER = tuple(obs_protocol.live_terms_for("Lizard-Rough-v12", "extero"))
 
 
 def _bucket_jitter_check(train_env, reset_info):
@@ -58,7 +61,6 @@ def _bucket_jitter_check(train_env, reset_info):
 # documented gap, not a forgotten fill.
 SMOKE_SPEC: dict[str, dict] = {
     "v3": {
-        "group_dims": {"proprio": 90, "extero": 208, "priv": 83},
         "rewards_required": ("foot_clearance",),
         "rewards_absent": ("feet_air_time",),  # D2 replacement
         "terminations_required": ("tilt",),
@@ -69,7 +71,7 @@ SMOKE_SPEC: dict[str, dict] = {
         "train": None,  # v3-era contract is PLAY-only
     },
     "v5": {
-        "group_dims": {"proprio": 90, "extero": 208, "priv": 83},
+        # widths come from the protocol declaration (filled in below)
         "rewards_required": ("track_lin_vel_xy_lin", "feet_slide", "belly_contact_force",
                              "foot_clearance", "track_ang_vel_z_exp"),
         "rewards_absent": ("track_lin_vel_xy_exp",),
@@ -84,7 +86,7 @@ SMOKE_SPEC: dict[str, dict] = {
     },
     "v6": {
         # v5 contract on the axis-corrected asset + v6.1 spine unlock
-        "group_dims": {"proprio": 90, "extero": 208, "priv": 83},
+        # widths come from the protocol declaration (filled in below)
         "rewards_required": ("track_lin_vel_xy_lin", "feet_slide", "belly_contact_force",
                              "foot_clearance", "track_ang_vel_z_exp"),
         "rewards_absent": ("track_lin_vel_xy_exp",),
@@ -99,7 +101,7 @@ SMOKE_SPEC: dict[str, dict] = {
     },
     "v8": {
         # v6 contract on the anatomy-correct asset (v6.2 params, rebase of v6)
-        "group_dims": {"proprio": 90, "extero": 208, "priv": 83},
+        # widths come from the protocol declaration (filled in below)
         "rewards_required": ("track_lin_vel_xy_lin", "feet_slide", "belly_contact_force",
                              "foot_clearance", "track_ang_vel_z_exp"),
         "rewards_absent": ("track_lin_vel_xy_exp",),
@@ -114,7 +116,7 @@ SMOKE_SPEC: dict[str, dict] = {
     },
     "v11": {
         # v10 tilt removal + joint particle curriculum (v8 PLAY minus tilt)
-        "group_dims": {"proprio": 90, "extero": 208, "priv": 83},
+        # widths come from the protocol declaration (filled in below)
         "rewards_required": ("track_lin_vel_xy_lin", "feet_slide", "belly_contact_force",
                              "foot_clearance", "track_ang_vel_z_exp"),
         "rewards_absent": ("track_lin_vel_xy_exp",),
@@ -129,6 +131,12 @@ SMOKE_SPEC: dict[str, dict] = {
         "train_extras": (_bucket_jitter_check,),
     },
 }
+
+# The widths come from the protocol declaration rather than from a copy per version, and a
+# version whose protocol has no measured widths raises here instead of being asserted against
+# a number nobody verified.
+for _ver, _spec in SMOKE_SPEC.items():
+    _spec["group_dims"] = obs_protocol.dims_for(f"Lizard-Rough-{_ver}")
 
 
 def _run_play(ver: str, spec: dict, gym, torch, teacher_env_cfg) -> None:
