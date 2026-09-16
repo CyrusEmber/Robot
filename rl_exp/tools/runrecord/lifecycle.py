@@ -202,7 +202,8 @@ def startup_check(
     task: str | None,
     argv: list[str] | None,
     agent_cfg,
-    log_dir,
+    log_dir: pathlib.Path | None = None,
+    log_root: pathlib.Path | None = None,
     root: pathlib.Path | None = None,
     today: datetime.date | None = None,
     declared_line: str | None = None,
@@ -214,7 +215,10 @@ def startup_check(
         argv: the command line (the two flags are read from it, so the fork patch needs no
             extra call site).
         agent_cfg: the resolved agent config (whether this is a resume, and from where).
-        log_dir: this run's directory; its parent is where a resume resolves from.
+        log_dir: this run's directory; its parent is where a resume resolves from. A caller with
+            no run directory yet (the launcher) passes ``log_root`` instead.
+        log_root: the experiment's log root, for a caller that has no run directory yet (the
+            launcher): it takes precedence over ``log_dir``'s parent.
         root: repository root to read, defaulting to this checkout.
         today: the date for a ``date``-condition announcement (tests inject it).
         declared_line: the line the *config class* declares (``params_line``). Two answers to
@@ -233,10 +237,12 @@ def startup_check(
     allow_retired_resume = flag_in(argv, "--allow_retired_resume")
     drop_curriculum_state = flag_in(argv, "--drop_curriculum_state") or flag_in(argv, "--weights_only")
     source = None
-    if is_resume:
+    if is_resume and (log_root is not None or log_dir is not None):
+        # the source of a resume is looked for where the run would put its own directory: one
+        # level above the run, which is the log root the caller names either way
         try:
             source = source_checkpoint(
-                pathlib.Path(log_dir).parent,
+                pathlib.Path(log_root) if log_root is not None else pathlib.Path(log_dir).parent,
                 getattr(agent_cfg, "load_run", None),
                 getattr(agent_cfg, "load_checkpoint", None),
             )
