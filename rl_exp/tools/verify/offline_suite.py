@@ -102,6 +102,9 @@ CHECKS: list[tuple[str, list[str]]] = [
      [f"{_V}/test_lifecycle_gate.py"]),
     ("launcher (directory-driven plan; its record must match the trainer's T0)",
      [f"{_V}/test_launcher.py"]),
+    ("obs protocol declaration (laid out as declared, self-consistent, digests approved)",
+     [f"{_V}/check_obs_protocol.py"]),
+    ("obs protocol gate falsifier (each drift must still fire)", [f"{_V}/test_obs_protocol_gate.py"]),
 ]
 
 
