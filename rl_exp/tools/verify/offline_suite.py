@@ -88,6 +88,8 @@ CHECKS: list[tuple[str, list[str]]] = [
      [f"{_V}/test_params_isolation.py"]),
     ("stage B acceptance baseline is still the frozen one (golden locks pinned by digest)",
      [f"{_V}/check_golden_frozen.py"]),
+    ("recipe lifecycle decision contract (verdicts / warning shape / flag independence)",
+     [f"{_V}/recipe_lifecycle.py"]),
 ]
 
 

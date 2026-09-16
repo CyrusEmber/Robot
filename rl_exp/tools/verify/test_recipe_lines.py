@@ -7,6 +7,7 @@ must raise. A discovery entry whose leniency modes were never demonstrated is ho
 three previous copies drifted apart in the first place.
 """
 
+import json
 import pathlib
 import sys
 import tempfile
@@ -90,10 +91,22 @@ def main() -> int:
         (renamed / "lizard" / "lizard_params.yaml").rename(renamed / "lizard" / "lizard_v1_params.yaml")
         _refuses("refuse/basename-names-its-line", renamed, "convention")
 
-    # --- the real tree: the two lines that exist today ---------------------------
+    # --- the real tree: discovery and the lifecycle index must agree -------------
+    # Not a hardcoded list of today's lines: what has to hold is that the filesystem and
+    # the declared index name the SAME lines (the other direction -- every declared line
+    # exists -- is the registry gate's job). A hardcoded list would need editing every
+    # time a line is added, and would then assert nothing about agreement.
     real = discover()
-    check("real/lines", sorted(real) == ["lizard", "lizard/parkour"], f"{sorted(real)}")
-    check("real/main-line-covers-v0-to-v15", len(real["lizard"].versions) == 16, f"{sorted(real['lizard'].versions)}")
+    registry = json.loads(
+        (pathlib.Path("rl_exp") / "versions" / "lines.json").read_text(encoding="utf-8")
+    )["lines"]
+    check("real/lines-match-registry", sorted(real) == sorted(registry), f"discovered {sorted(real)} vs declared {sorted(registry)}")
+    check("real/main-line-has-versions", bool(real["lizard"].versions), "the main line discovered no versions")
+    check(
+        "real/version-handles-are-vN",
+        all(name.startswith("v") and name[1:].isdigit() for line in real.values() for name in line.versions),
+        "a discovered version handle is not v<N>",
+    )
     check(
         "real/frozen-yamls-exist",
         all(path.is_file() for line in real.values() for path in line.versions.values()),

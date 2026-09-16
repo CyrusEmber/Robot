@@ -9,12 +9,14 @@
 Checks, against a fully mocked env/terrain: the param-grid builder's combo
 expansion and single-value ranges, the column -> combo split replication,
 the initial full reset (no stats pollution, particle commands + origins
-consistent), the Eq. 2/3/7 measurement chain (nu sums -> per-trajectory Tr ->
-in-band-fraction weights, keep-previous on sparse pairs + cross-block counter
-accumulation for pairs below n_traj_min, v11.1), the band-empty
-directional fallback branches, single-axis random-walk clamping, replay
-redraws, the block-evaluation throttle, and the ParticleVelocityCommand
-lin_vel_x sourcing/fallback (0.0 bucket included).
+consistent), the Eq. 2/3/7 measurement chain (nu sums -> per-trajectory Tr -> settled-pair
+estimates, keep-previous on sparse pairs + cross-block counter accumulation for
+pairs below n_traj_min, v11.1), the trust gate that books short/fall-terminated
+runs as failures (review #2), one-scale estimates + local support instead of the
+removed uniform band-empty fallback (reviews #3/#4), the verified frontier
+(review #5), single-axis random-walk clamping, replay redraws, the
+block-evaluation throttle, and the ParticleVelocityCommand lin_vel_x
+sourcing/fallback (0.0 bucket included).
 """
 
 import pathlib
@@ -74,12 +76,17 @@ def _cmd(nu, steps):
     return SimpleNamespace(_nu_sum=nu, _step_count=steps)
 
 
-def _env(terrain, cmd=None, *, counter=0, lengths=None):
+def _env(terrain, cmd=None, *, counter=0, lengths=None, timeouts=True):
     lengths = torch.zeros(NUM_ENVS, dtype=torch.long) if lengths is None else lengths
+    # trust gate inputs (review #2): the term reads the finished episode length and
+    # whether it ended by time-out
+    outs = torch.ones(NUM_ENVS, dtype=torch.bool) if timeouts else torch.zeros(NUM_ENVS, dtype=torch.bool)
     return SimpleNamespace(
         scene=_Scene(terrain),
         command_manager=SimpleNamespace(get_term=lambda name: cmd),
         episode_length_buf=lengths,
+        max_episode_length=200,
+        reset_time_outs=outs,
         common_step_counter=counter,
         num_envs=NUM_ENVS,
     )
@@ -154,9 +161,15 @@ def test_initial_spawn_reassigns_all_envs() -> None:
         assert 0 <= r < 2
         lo, hi = bounds[int(term._env_type[i])]
         assert lo <= c <= hi
-    # metrics dict contract
-    assert set(out) == {"frontier_max_v", "particle_entropy", "tr_mean"}
-    assert 0.5 <= out["frontier_max_v"] <= 1.5
+    # metrics dict contract (review #5: the verified frontier stays 0 until evidence
+    # settles; the raw sampled max moved to its own key; review #1: per-type Tr)
+    assert set(out) == {
+        "frontier_max_v", "sampled_max_v", "particle_entropy", "tr_mean", "invalid_frac",
+        "tr_mean/stairs", "tr_mean/random_rough", "tr_mean/flat",
+    }
+    assert out["frontier_max_v"] == 0.0
+    assert 0.5 <= out["sampled_max_v"] <= 1.5
+    assert out["invalid_frac"] == 0.0
 
 
 def test_measurement_eq7_and_throttle() -> None:
@@ -170,30 +183,29 @@ def test_measurement_eq7_and_throttle() -> None:
         term._particles[ti] = torch.zeros(4, dtype=torch.long)
     nu = torch.tensor([80.0, 80.0, 20.0, 20.0, 95.0, 95.0])  # Tr = 0.8 / 0.2 / 0.95
     steps = torch.full((NUM_ENVS,), 100.0)
+    long_ = torch.full((NUM_ENVS,), 150, dtype=torch.long)  # clears the trust gate
     for _ in range(6):
-        e = _env(t, _cmd(nu.clone(), steps.clone()), counter=0, lengths=torch.ones(NUM_ENVS, dtype=torch.long))
+        e = _env(t, _cmd(nu.clone(), steps.clone()), counter=0, lengths=long_.clone())
         term(e, torch.arange(NUM_ENVS))
     # below the eval block boundary: counters accumulate, no resample
     assert float(term._episodes[0].sum()) == 12.0
     assert float(term._in_band[0].sum()) == 12.0
     # block boundary triggers the resample
-    e = _env(t, _cmd(nu.clone(), steps.clone()), counter=240, lengths=torch.ones(NUM_ENVS, dtype=torch.long))
+    e = _env(t, _cmd(nu.clone(), steps.clone()), counter=240, lengths=long_.clone())
     term(e, torch.arange(NUM_ENVS))
     assert float(term._episodes[0].sum()) == 0.0
-    # stairs pair 0: 12/12 in-band episodes -> Eq. 7 weight 1.0, mixed with the
-    # 17 sparse pairs keeping their uniform prior 1/18, then normalized
-    w = term._weights[0]
-    assert abs(float(w[0]) - 18.0 / 35.0) < 1e-6
-    assert abs(float(w.sum()) - 1.0) < 1e-6
-    # rough pair 0 measured out-of-band (Tr 0.2): weight zeroed
-    assert float(term._weights[1][0]) == 0.0
-    # flat pair 0 measured Tr 0.95 (learned, out of band above) -> weight 0;
-    # the unmeasured v-neighbors keep their uniform prior -> normalized 0.5
-    # (the mixed fallback itself is unit-tested in test_fallback_branches_unit)
-    wf = term._weights[2]
-    assert float(wf[0]) == 0.0
-    assert abs(float(wf[1]) - 0.5) < 1e-6
-    assert abs(float(wf[2]) - 0.5) < 1e-6
+    # stairs pair 0: 12/12 in-band trajectories -> raw estimate 1.0. The estimate is a
+    # probability and is never mixed with a normalized sampling weight (review #4).
+    assert abs(float(term._estimate[0][0]) - 1.0) < 1e-6
+    # a pair with no settled evidence keeps the prior, on that same scale
+    assert float(term._episodes[0][5]) < 6.0
+    assert abs(float(term._estimate[0][5]) - 0.5) < 1e-6
+    # rough pair 0 measured out-of-band (Tr 0.2) -> drained
+    assert float(term._estimate[1][0]) == 0.0
+    # flat pair 0 measured Tr 0.95, above the band's upper edge -> drained too
+    assert float(term._estimate[2][0]) == 0.0
+    # per-type Tr is reported at block close (review #1)
+    assert abs(term._metrics()["tr_mean/stairs"] - 0.8) < 1e-6
 
 
 def test_sparse_pair_accumulates_across_blocks() -> None:
@@ -206,7 +218,7 @@ def test_sparse_pair_accumulates_across_blocks() -> None:
     torch.manual_seed(4)
     t = _terrain()
     term = _term(_env(t))
-    ones = torch.ones(NUM_ENVS, dtype=torch.long)
+    ones = torch.full((NUM_ENVS,), 150, dtype=torch.long)  # clears the trust gate
     nu = torch.full((NUM_ENVS,), 80.0)  # Tr 0.8 -> in band
     steps = torch.full((NUM_ENVS,), 100.0)
     e = _env(t, _cmd(nu.clone(), steps.clone()), counter=0, lengths=ones)
@@ -219,42 +231,76 @@ def test_sparse_pair_accumulates_across_blocks() -> None:
     term(e, torch.arange(NUM_ENVS))
     term._resample_all()  # block boundary with only 4 episodes on pair 0
     assert float(term._episodes[0][0]) == 4.0  # unsettled -> counter KEPT
-    assert abs(float(term._weights[0][0]) - 1.0 / 18.0) < 1e-6  # prior kept
+    assert abs(float(term._estimate[0][0]) - 0.5) < 1e-6  # prior kept
     term._env_pair[:] = 0
     term(e, torch.arange(NUM_ENVS))  # 2 more -> 6 >= n_traj_min
     term._resample_all()
     assert float(term._episodes[0][0]) == 0.0  # settled -> counter reset
-    assert abs(float(term._weights[0][0]) - 18.0 / 35.0) < 1e-6  # Eq. 7 measured
+    assert abs(float(term._estimate[0][0]) - 1.0) < 1e-6  # Eq. 7 measured, raw scale
 
 
-def test_fallback_branches_unit() -> None:
+def test_local_support_keeps_cold_start_close() -> None:
+    """Reviews #3/#4: sampling is restricted to the occupied neighbourhood, and every
+    weight lives on one probability scale (no raw/normalized mixing)."""
     term = _term(_env(_terrain()))
-    episodes = torch.zeros(18)
-    tr_sum = torch.zeros(18)
-    episodes[0] = 6.0
-    tr_sum[0] = 5.7  # Tr 0.95 -> learned
-    episodes[[3, 15]] = 6.0
-    tr_sum[[3, 15]] = 0.6  # Tr 0.1 -> unlearned
-    w = term._fallback_weights(0, episodes, tr_sum)
-    assert abs(float(w[0]) - 0.1) < 1e-6  # learned: maintenance share
-    assert abs(float(w[1]) - 0.3) < 1e-6  # v+1 frontier
-    assert abs(float(w[3]) - 0.3) < 1e-6  # combo(0,1) frontier
-    assert abs(float(w[9]) - 0.3) < 1e-6  # combo(1,0) frontier
-    assert float(w[15]) == 0.0  # unlearned, not adjacent: no mass
-    # all-failed (cold start) -> uniform
-    episodes = torch.zeros(18)
-    episodes[0] = 6.0
-    tr_sum = torch.zeros(18)
-    w = term._fallback_weights(0, episodes, tr_sum)
-    assert torch.allclose(w, torch.full((18,), 1.0 / 18))
-    # all-learned -> uniform
-    episodes = torch.full((18,), 6.0)
-    tr_sum = torch.full((18,), 6.0)  # Tr 1.0
-    w = term._fallback_weights(0, episodes, tr_sum)
-    assert torch.allclose(w, torch.full((18,), 1.0 / 18))
-    # nothing measured -> uniform
-    w = term._fallback_weights(0, torch.zeros(18), torch.zeros(18))
-    assert torch.allclose(w, torch.full((18,), 1.0 / 18))
+    particles = term._particles[0]  # cold start: combo 0 x buckets cycled (0, 1, 2, 0)
+    sup = term._support(0, particles)
+    # reachable set = combo 0 + one axis-step neighbours, across all 3 buckets
+    assert int(sup.sum()) == 9
+    assert bool(sup[:3].all())       # combo (0,0)
+    assert bool(sup[3:6].all())      # combo (0,1) -- width +1
+    assert bool(sup[9:12].all())     # combo (1,0) -- height +1
+    assert not bool(sup[6:9].any())  # combo (0,2): two steps away
+    assert not bool(sup[15])         # combo (1,2): the far corner
+    # the estimate is a raw probability, flat before any evidence
+    assert float(term._estimate[0].min()) == 0.5
+    assert float(term._estimate[0].max()) == 0.5
+    # and that estimate x support is the sampling source (one scale, no mixing)
+    assert abs(float((term._estimate[0] * sup).sum()) - 9 * 0.5) < 1e-6
+
+
+def test_trust_gate_books_short_and_fallen_as_failures() -> None:
+    """Review #2: Tr is a frame ratio, so a 3 s run with 2 s above the threshold used to
+    score 0.67 and be promoted forever. Short or fall-terminated runs are failures."""
+    torch.manual_seed(0)
+    t = _terrain()
+    term = _term(_env(t))
+    term(_env(t), torch.arange(NUM_ENVS))  # initial spawn
+    nu = torch.full((NUM_ENVS,), 80.0)  # Tr 0.8 -> would be in band
+    steps = torch.full((NUM_ENVS,), 100.0)
+    short = torch.full((NUM_ENVS,), 40, dtype=torch.long)   # < 0.5 * 200
+    long_ = torch.full((NUM_ENVS,), 150, dtype=torch.long)
+    term(_env(t, _cmd(nu.clone(), steps.clone()), lengths=short), torch.arange(NUM_ENVS))
+    assert term._invalid_block == NUM_ENVS and term._traj_block == NUM_ENVS
+    assert float(term._in_band[0].sum()) == 0.0
+    # long but ended by a termination term (no time-out): still a failure
+    term(
+        _env(t, _cmd(nu.clone(), steps.clone()), lengths=long_.clone(), timeouts=False),
+        torch.arange(NUM_ENVS),
+    )
+    assert term._invalid_block == 2 * NUM_ENVS
+    assert float(term._in_band[0].sum()) == 0.0
+    # long and survived: accepted, and its Tr lands in the per-type report
+    term(_env(t, _cmd(nu.clone(), steps.clone()), lengths=long_.clone()), torch.arange(NUM_ENVS))
+    assert float(term._in_band[0].sum()) == 2.0  # the two stairs envs
+    term._resample_all()
+    # rejected trajectories count as 0 in the block mean (documented semantics): the
+    # stairs block reads 0.8 x 2 accepted / 6 trajectories, and 12/18 were rejected
+    assert abs(term._metrics()["tr_mean/stairs"] - 0.8 * 2.0 / 6.0) < 1e-6
+    assert abs(term._metrics()["invalid_frac"] - 12.0 / 18.0) < 1e-6
+
+
+def test_verified_frontier_requires_evidence() -> None:
+    """Review #5: the sampled max reads the full bucket range at cold start, so the
+    capability metric must require a settled pair inside the band."""
+    torch.manual_seed(0)
+    term = _term(_env(_terrain()))
+    assert term._metrics()["sampled_max_v"] == 1.5
+    assert term._metrics()["frontier_max_v"] == 0.0
+    # stairs bucket 1.0 settles learned -> verified frontier lifts (mean over 3 types)
+    term._episodes[0][1] = 6.0
+    term._estimate[0][1] = 1.0
+    assert abs(term._metrics()["frontier_max_v"] - 1.0 / 3.0) < 1e-6
 
 
 def test_walk_single_axis_and_clamp() -> None:

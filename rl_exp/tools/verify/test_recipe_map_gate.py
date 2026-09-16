@@ -25,7 +25,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from check_recipe_map import bind, registered, validate  # noqa: E402
+from check_recipe_map import bind, load, registered, validate  # noqa: E402
 
 ENV_V14 = "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V14"
 AGENT_V14 = "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV14PPORunnerCfg"
@@ -134,10 +134,16 @@ def main() -> int:
         elif not any(expected in problem for problem in problems):
             failures.append(f"{label}: expected {expected!r}, got {problems}")
 
-    # the real registration module: a parser that reads nothing must not pass
+    # the real registration module: a parser that reads nothing must not pass. The
+    # expected count is derived from the declared map, not written as a literal -- a
+    # literal goes stale the moment a task is added, and then this test fails for a
+    # reason unrelated to the parser it exists to guard.
     real = registered()
-    if len(real) != 34:
-        failures.append(f"registration parser read {len(real)} tasks from rl_exp/tasks/__init__.py, expected 34")
+    declared = len(load()["tasks"])
+    if not real:
+        failures.append("registration parser read no tasks from rl_exp/tasks/__init__.py")
+    elif len(real) != declared:
+        failures.append(f"registration parser read {len(real)} tasks, the map declares {declared}")
     elif real[TASK].get("env_cfg_entry_point") != ENV_V14:
         failures.append(f"registration parser mis-read {TASK}: {real[TASK]}")
 
@@ -146,7 +152,7 @@ def main() -> int:
             print(f"FAIL {failure}")
         print(f"recipe map falsifier: {len(failures)}/{len(CASES) + len(BIND_CASES) + 1} cases wrong")
         return 1
-    print(f"  map refusals fired: {len(CASES)} map cases + {len(BIND_CASES)} binding cases + 34-task registration parse")
+    print(f"  map refusals fired: {len(CASES)} map cases + {len(BIND_CASES)} binding cases + {len(real)}-task registration parse")
     print("RECIPE_MAP_GATE_OK")
     return 0
 

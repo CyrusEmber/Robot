@@ -1022,7 +1022,23 @@ class JointSIRTerrainCurriculumCfg(CurriculumTermCfg):
     p_replay: float = 0.05
     """Replay-memory redraw probability."""
     maintain_mass: float = 0.1
-    """Band-empty fallback share kept on learned pairs (v11 PLAN 4.1)."""
+    """DEPRECATED, no longer read (2026-09-16): the ad-hoc band-empty routing was replaced
+    by :attr:`unmeasured_prior` on a single probability scale. Kept only so the frozen
+    v11/v12 yamls and the V11 wiring keep loading."""
+    min_episode_frac: float = 0.5
+    """Minimum episode length, as a fraction of ``max_episode_length``, for a trajectory's
+    Tr label to count as a traversability sample [fraction]. Shorter episodes are booked
+    as *measured failures* (``in_band = False``), never as in-band evidence: review
+    2026-09-16 #2 -- a 3 s run with 2 s above the threshold scored Tr 0.67 and landed in
+    the band, so "move briefly, then fall" could be promoted forever."""
+    require_survive: bool = True
+    """Whether a trusted trajectory must end by time-out rather than by a termination term.
+    Inert for recipes with no fall termination (v11/v12); active for v14's roll gate."""
+    unmeasured_prior: float = 0.5
+    """Band-probability prior for pairs without evidence, on the same [0, 1] scale as the
+    measured band fraction. Review #4: mixing a raw fraction with a *normalized sampling
+    probability* made every settled pair outweigh every unsettled one, so traffic followed
+    "whoever happened to accumulate n_traj_min episodes first"."""
     steps_per_iteration: int = 24
     """Policy steps per PPO iteration; must equal runner num_steps_per_env."""
 
@@ -1044,20 +1060,36 @@ class JointSIRTerrainCurriculum(ManagerTermBase):
     lin_vel_x from its velocity bucket (written to :attr:`desired_vel`,
     consumed by :class:`ParticleVelocityCommand`).
 
-    Every ``eval_every`` policy iterations: weight = fraction of the pair's
-    trajectories with per-trajectory Tr inside the band (paper Eq. 7),
-    particles resampled proportionally, random-walked one axis (params or
-    velocity), partly redrawn from the replay pool. Band-empty fallback
-    routes by direction (v11 PLAN 4.1): mixed learned/unlearned concentrates
-    on the frontier with a small maintenance share on learned pairs;
-    all-learned and all-failed (cold start) stay uniform (paper semantics,
-    and the v5.4 withdrawal precedent for cold start).
+    Every ``eval_every`` policy iterations: each pair's band probability is
+    re-estimated from its trajectories (paper Eq. 7), particles are resampled
+    from those estimates *restricted to the current particles and their one-step
+    neighbours*, then random-walked one axis (params or velocity) and partly
+    redrawn from the replay pool.
+
+    Trusted samples (review 2026-09-16 #2, #3): a trajectory only counts as a
+    traversability sample if it ran at least ``min_episode_frac`` of the episode
+    budget and (when ``require_survive``) ended by time-out -- shorter or
+    fall-terminated runs are booked as measured failures, so "move briefly, then
+    fall" can never be promoted into the band.
+
+    Weights live on ONE scale (review #4): every pair carries a raw
+    band-probability estimate in [0, 1], initialised to ``unmeasured_prior`` and
+    updated only for pairs that settled (>= ``n_traj_min`` trajectories; counters
+    accumulate across blocks). Sampling is therefore "estimate restricted to the
+    reachable neighbourhood": no mixing of a raw fraction with a normalized
+    sampling probability, and no jump to a far-away hard combination before any
+    evidence exists (the old uniform-over-the-whole-lattice fallback did both).
 
     The returned dict is logged per key as ``Curriculum/joint_sir/<key>``:
-    ``frontier_max_v`` (mean over types of the fastest bucket on the current
-    particles -- the progress metric replacing ``terrain_levels``), 
-    ``particle_entropy`` (distribution health, 0 = collapse onto one pair),
-    ``tr_mean`` (mean per-trajectory Tr over the last block).
+    ``frontier_max_v`` (mean over types of the fastest bucket whose best pair is
+    *verified learned*: >= ``n_traj_min`` trajectories and estimate inside the band
+    -- review #5: the raw sampled max already reads 3.0 m/s at cold start),
+    ``sampled_max_v`` (that raw quantity, kept for continuity), ``particle_entropy``
+    (distribution health, 0 = collapse onto one pair), ``tr_mean`` (mean Tr over the
+    block, rejected trajectories counted as 0), ``invalid_frac`` (share of the block's
+    trajectories rejected by the trust gate), and ``tr_mean/<type>`` per terrain type
+    (review #1: the type dimension is fixed by the generator's column shares, so
+    type-level behaviour must at least be observable).
     """
 
     cfg: JointSIRTerrainCurriculumCfg
@@ -1105,10 +1137,9 @@ class JointSIRTerrainCurriculum(ManagerTermBase):
         self._n_pairs: list[int] = []
         self._combo_cols: list[list[torch.Tensor]] = []
         self._particles: list[torch.Tensor] = []
-        self._weights: list[torch.Tensor] = []
+        self._estimate: list[torch.Tensor] = []
         self._episodes: list[torch.Tensor] = []
         self._in_band: list[torch.Tensor] = []
-        self._tr_sum: list[torch.Tensor] = []
         self._history: list[torch.Tensor] = []
         n_part = cfg.particles_per_type
         for type_name in self._types:
@@ -1133,13 +1164,14 @@ class JointSIRTerrainCurriculum(ManagerTermBase):
             self._n_pairs.append(n_pairs)
             self._combo_cols.append(combo_cols)
             # cold start: all particles on the easiest combo (levels all 0),
-            # velocity buckets cycled
+            # velocity buckets cycled. The estimate prior is flat, but sampling
+            # is restricted to the occupied neighbourhood (see _support), so the
+            # protection lasts until evidence actually walks outward.
             pairs = torch.arange(n_part, device=device) % n_v
             self._particles.append(pairs)
-            self._weights.append(torch.full((n_pairs,), 1.0 / n_pairs, device=device))
+            self._estimate.append(torch.full((n_pairs,), cfg.unmeasured_prior, device=device))
             self._episodes.append(torch.zeros(n_pairs, device=device))
             self._in_band.append(torch.zeros(n_pairs, device=device))
-            self._tr_sum.append(torch.zeros(n_pairs, device=device))
             self._history.append(pairs.clone())
         # env -> type follows the importer's initial column assignment, so
         # per-type env traffic follows the generator's type proportions (the
@@ -1154,6 +1186,13 @@ class JointSIRTerrainCurriculum(ManagerTermBase):
         self._tr_block_sum = 0.0
         self._tr_block_count = 0
         self._last_tr_mean = 0.0
+        # trust-gate + per-type book-keeping (review 2026-09-16 #1/#2)
+        self._invalid_block = 0
+        self._traj_block = 0
+        self._last_invalid_frac = 0.0
+        self._tr_type_sum = [0.0] * len(self._types)
+        self._tr_type_count = [0] * len(self._types)
+        self._last_tr_by_type = [0.0] * len(self._types)
         self._cmd_term = None
 
     def __call__(self, env, env_ids) -> dict[str, float]:
@@ -1168,17 +1207,29 @@ class JointSIRTerrainCurriculum(ManagerTermBase):
             tr = cmd._nu_sum[ids] / cmd._step_count[ids].clamp_min(1.0)
             pairs = self._env_pair[ids]
             types = self._env_type[ids]
+            # trust gate (review 2026-09-16 #2): a short or fall-terminated run is a
+            # measured FAILURE, never in-band evidence -- without this a 3 s run with
+            # 2 s above the threshold scored Tr 0.67 and the pair was promoted forever.
+            long_enough = (
+                env.episode_length_buf[ids] >= self.cfg.min_episode_frac * env.max_episode_length
+            )
+            survived = env.reset_time_outs[ids] | bool(not self.cfg.require_survive)
+            valid = long_enough & survived
             lo, hi = self.cfg.band
-            in_band = (tr >= lo) & (tr <= hi)
-            self._tr_block_sum += float(tr.sum())
+            in_band = valid & (tr >= lo) & (tr <= hi)
+            tr_eff = torch.where(valid, tr, torch.zeros_like(tr))
+            self._tr_block_sum += float(tr_eff.sum())
             self._tr_block_count += int(tr.numel())
+            self._invalid_block += int((~valid).sum())
+            self._traj_block += int(tr.numel())
             for t in torch.unique(types):
                 t = int(t)
                 mask = types == t
                 ones = torch.ones(int(mask.sum()), device=tr.device)
                 self._episodes[t].index_add_(0, pairs[mask], ones)
                 self._in_band[t].index_add_(0, pairs[mask], in_band[mask].float())
-                self._tr_sum[t].index_add_(0, pairs[mask], tr[mask])
+                self._tr_type_sum[t] += float(tr_eff[mask].sum())
+                self._tr_type_count[t] += int(mask.sum())
         # 2) block evaluation: every eval_every policy iterations
         if env.common_step_counter >= self._next_eval_step:
             self._resample_all()
@@ -1231,17 +1282,23 @@ class JointSIRTerrainCurriculum(ManagerTermBase):
         for ti in range(len(self._types)):
             episodes = self._episodes[ti]
             in_band = self._in_band[ti]
-            tr_sum = self._tr_sum[ti]
             settled = episodes >= self.cfg.n_traj_min
+            # ONE scale (review 2026-09-16 #4): a raw band probability per pair, updated
+            # only where evidence settled. Unsettled pairs keep their previous estimate
+            # (or the prior) instead of a normalized sampling probability -- mixing the
+            # two made every settled pair outweigh every unsettled one.
             measured = in_band / episodes.clamp_min(1.0)
-            # unsettled pairs keep their previous weight (and their counters)
-            weights = torch.where(settled, measured, self._weights[ti])
+            self._estimate[ti] = torch.where(settled, measured, self._estimate[ti])
+            # local exploration (review #3): sample only where particles already are or
+            # one axis-step away -- the old code resampled over the whole lattice, so the
+            # first block could jump straight to the hardest combination.
+            support = self._support(ti, self._particles[ti])
+            weights = self._estimate[ti] * support
             total = float(weights.sum())
             if total <= 0.0:
-                weights = self._fallback_weights(ti, episodes, tr_sum)
+                weights = support.float()
                 total = float(weights.sum())
             weights = weights / total
-            self._weights[ti] = weights
             particles = torch.multinomial(weights, n_part, replacement=True)
             particles = self._walk(ti, particles)
             pool = self._history[ti]
@@ -1253,37 +1310,32 @@ class JointSIRTerrainCurriculum(ManagerTermBase):
             self._history[ti] = torch.cat([pool, particles])
             episodes[settled] = 0
             in_band[settled] = 0
-            tr_sum[settled] = 0
+            # close this block's reporting (review #1: per-type Tr is the only
+            # type-level signal available while the type shares stay fixed)
+            self._last_tr_by_type[ti] = self._tr_type_sum[ti] / max(self._tr_type_count[ti], 1)
+            self._tr_type_sum[ti] = 0.0
+            self._tr_type_count[ti] = 0
+        if self._tr_block_count > 0:
+            self._last_tr_mean = self._tr_block_sum / self._tr_block_count
+        if self._traj_block > 0:
+            self._last_invalid_frac = self._invalid_block / self._traj_block
+        self._invalid_block = 0
+        self._traj_block = 0
 
-    def _fallback_weights(self, ti: int, episodes: torch.Tensor, tr_sum: torch.Tensor) -> torch.Tensor:
-        """Band-empty routing by direction (v11 PLAN 4.1).
+    def _support(self, ti: int, particles: torch.Tensor) -> torch.Tensor:
+        """Boolean mask of the reachable neighbourhood: occupied pairs + one-axis neighbours.
 
-        Mixed learned/unlearned: concentrate the mass on the frontier (unlearned
-        pairs one axis-step from learned ones) with a small maintenance share
-        on the learned pairs. All-learned and all-failed (cold start) stay
-        uniform -- the paper's semantics, and the v5.4 withdrawal precedent
-        (no home-made cold-start criterion).
+        Review 2026-09-16 #3: sampling is restricted to this set so the cold-start corner
+        survives until the random walk has actually carried particles outward. The old
+        band-empty routing resampled over the *whole* lattice as soon as anything settled,
+        so the first SIR block could jump straight to the hardest combination.
         """
         n_pairs = self._n_pairs[ti]
-        uniform = torch.full((n_pairs,), 1.0 / n_pairs, device=episodes.device)
-        measured = episodes >= self.cfg.n_traj_min
-        if not bool(measured.any()):
-            return uniform
-        _, hi = self.cfg.band
-        learned = measured & (tr_sum / episodes.clamp_min(1.0) >= hi)
-        if bool(learned.all()) or not bool(learned.any()):
-            return uniform
-        frontier = torch.zeros_like(learned)
-        for pair in learned.nonzero().flatten().tolist():
-            for nb in self._neighbors(ti, pair):
-                frontier[nb] = True
-        frontier &= ~learned
-        if not bool(frontier.any()):
-            frontier = ~learned
-        weights = torch.zeros(n_pairs, device=episodes.device)
-        weights[learned] = self.cfg.maintain_mass / int(learned.sum())
-        weights[frontier] += (1.0 - self.cfg.maintain_mass) / int(frontier.sum())
-        return weights
+        mask = torch.zeros(n_pairs, dtype=torch.bool, device=particles.device)
+        mask[particles] = True
+        for pair in particles.unique().tolist():
+            mask[self._neighbors(ti, pair)] = True
+        return mask
 
     def _neighbors(self, ti: int, pair: int) -> list[int]:
         """Pair indices one axis-step away (single param axis or velocity)."""
@@ -1345,22 +1397,41 @@ class JointSIRTerrainCurriculum(ManagerTermBase):
 
     def _metrics(self) -> dict[str, float]:
         n_part = self.cfg.particles_per_type
-        fmv = []
+        lo = self.cfg.band[0]
+        sampled: list[float] = []
+        verified: list[float] = []
         ent = []
         for ti in range(len(self._types)):
             vs = self._velocity[self._particles[ti] % self._n_v]
-            fmv.append(float(vs.max()) if vs.numel() else 0.0)
+            sampled.append(float(vs.max()) if vs.numel() else 0.0)
+            # verified frontier (review 2026-09-16 #5): the fastest bucket that owns a
+            # settled pair whose estimate reached the band floor. The sampled max reads
+            # 3.0 m/s the moment training starts, so it cannot serve as a capability
+            # metric; it is still reported, under its own name.
+            est = self._estimate[ti]
+            settled = self._episodes[ti] >= self.cfg.n_traj_min
+            learned = settled & (est >= lo)
+            bucket_of = torch.arange(self._n_pairs[ti], device=est.device) % self._n_v
+            reached = [float(self._velocity[v]) for v in range(self._n_v) if bool(learned[bucket_of == v].any())]
+            verified.append(max(reached) if reached else 0.0)
             hist = torch.bincount(self._particles[ti], minlength=self._n_pairs[ti]).float()
             p = hist / hist.sum().clamp_min(1.0)
             nz = p[p > 0]
             ent.append(float(-(nz * nz.log()).sum()) / max(math.log(n_part), 1e-9))
         if self._tr_block_count > 0:
             self._last_tr_mean = self._tr_block_sum / self._tr_block_count
-        return {
-            "frontier_max_v": sum(fmv) / len(fmv),
+        out = {
+            "frontier_max_v": sum(verified) / len(verified),
+            "sampled_max_v": sum(sampled) / len(sampled),
             "particle_entropy": sum(ent) / len(ent),
             "tr_mean": self._last_tr_mean,
+            "invalid_frac": self._last_invalid_frac,
         }
+        # review #1: the type dimension is fixed by the generator's column shares, so
+        # per-type Tr is the only type-level signal this term can offer.
+        for ti, name in enumerate(self._types):
+            out[f"tr_mean/{name}"] = self._last_tr_by_type[ti]
+        return out
 
 
 # --- v12: Miki et al. 2022 S8 reset/observation robustness package (plan ---

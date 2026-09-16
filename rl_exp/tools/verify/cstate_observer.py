@@ -277,8 +277,15 @@ def _legality(term, env) -> dict:
     joint = hasattr(term, "_n_pairs") and hasattr(term, "_env_pair")
     counts = term._n_pairs if joint else [term._num_rows] * term._num_types
     for ti, count in enumerate(counts):
-        weight = term._weights[ti]
-        if abs(float(weight.sum()) - 1.0) > 1e-6:
+        weight = term._estimate[ti] if joint else term._weights[ti]
+        if joint:
+            # the joint term keeps a raw band-probability estimate, not a sampling
+            # distribution (review 2026-09-16 #4), so the legality check is a range
+            if float(weight.min()) < -1e-6 or float(weight.max()) > 1.0 + 1e-6:
+                out["problems"].append(
+                    f"estimate[{ti}] range [{float(weight.min()):.4f}, {float(weight.max()):.4f}] outside [0, 1]"
+                )
+        elif abs(float(weight.sum()) - 1.0) > 1e-6:
             out["problems"].append(f"weights[{ti}] sums to {float(weight.sum()):.6f}")
         part = term._particles[ti]
         if int(part.min()) < 0 or int(part.max()) >= count:

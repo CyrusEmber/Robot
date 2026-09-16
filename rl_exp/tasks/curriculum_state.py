@@ -312,7 +312,10 @@ class _JointSIRAdapter(_Adapter):
     """v11/v12 joint particle SIR over (param combo, velocity bucket) pairs."""
 
     key = "joint_sir"
-    adapter_version = 1
+    # v2 (2026-09-16): the runtime payload replaced ``weights``/``tr_sum`` with the raw
+    # ``estimate`` list and added the trust-gate / per-type reporting counters, so a v1
+    # slot (recorded before the fixes) is rejected instead of half-applied.
+    adapter_version = 2
     term_class = JointSIRTerrainCurriculum
     cfg_keys = (
         "command_name",
@@ -323,7 +326,9 @@ class _JointSIRAdapter(_Adapter):
         "n_traj_min",
         "p_transition",
         "p_replay",
-        "maintain_mass",
+        "min_episode_frac",
+        "require_survive",
+        "unmeasured_prior",
         "steps_per_iteration",
     )
 
@@ -344,10 +349,9 @@ class _JointSIRAdapter(_Adapter):
     def runtime(self, term, env) -> dict:
         return {
             "particles": [t.detach().cpu().clone() for t in term._particles],
-            "weights": [t.detach().cpu().clone() for t in term._weights],
+            "estimate": [t.detach().cpu().clone() for t in term._estimate],
             "episodes": [t.detach().cpu().clone() for t in term._episodes],
             "in_band": [t.detach().cpu().clone() for t in term._in_band],
-            "tr_sum": [t.detach().cpu().clone() for t in term._tr_sum],
             "history": [t.detach().cpu().clone() for t in term._history],
             "env_pair": term._env_pair.detach().cpu().clone(),
             "desired_vel": term.desired_vel.detach().cpu().clone(),
@@ -356,6 +360,12 @@ class _JointSIRAdapter(_Adapter):
             "tr_block_sum": float(term._tr_block_sum),
             "tr_block_count": int(term._tr_block_count),
             "last_tr_mean": float(term._last_tr_mean),
+            "invalid_block": int(term._invalid_block),
+            "traj_block": int(term._traj_block),
+            "last_invalid_frac": float(term._last_invalid_frac),
+            "tr_type_sum": [float(v) for v in term._tr_type_sum],
+            "tr_type_count": [int(v) for v in term._tr_type_count],
+            "last_tr_by_type": [float(v) for v in term._last_tr_by_type],
         }
 
     def check(self, term, env, name, slot, problems, missing, counter) -> None:
@@ -366,13 +376,13 @@ class _JointSIRAdapter(_Adapter):
             rt,
             name,
             problems,
-            ("particles", "weights", "episodes", "in_band", "tr_sum", "history", "env_pair", "desired_vel"),
+            ("particles", "estimate", "episodes", "in_band", "history", "env_pair", "desired_vel"),
             index_keys=("particles", "history", "env_pair"),
-            count_keys=("weights", "episodes", "in_band"),
+            count_keys=("estimate", "episodes", "in_band"),
         )
         n_part = int(term.cfg.particles_per_type)
         for ti, n_pairs in enumerate(term._n_pairs):
-            for key in ("particles", "weights", "episodes", "in_band", "tr_sum", "history"):
+            for key in ("particles", "estimate", "episodes", "in_band", "history"):
                 got = rt.get(key, [])
                 numel = got[ti].numel() if ti < len(got) and isinstance(got[ti], torch.Tensor) else -1
                 want = n_part if key in ("particles", "history") else n_pairs
@@ -381,10 +391,11 @@ class _JointSIRAdapter(_Adapter):
                         problems.append(f"runtime.{key}[{ti}] has {numel} < {n_part} entries")
                 elif numel != want:
                     problems.append(f"runtime.{key}[{ti}] has {numel} != {want}")
-            weights = rt.get("weights", [])
-            if ti < len(weights) and isinstance(weights[ti], torch.Tensor):
-                if abs(float(weights[ti].sum()) - 1.0) > 1e-3:
-                    problems.append(f"runtime.weights[{ti}] sums to {float(weights[ti].sum()):.4f} != 1")
+            estimate = rt.get("estimate", [])
+            if ti < len(estimate) and isinstance(estimate[ti], torch.Tensor):
+                lo_e, hi_e = float(estimate[ti].min()), float(estimate[ti].max())
+                if lo_e < -1e-6 or hi_e > 1.0 + 1e-6:
+                    problems.append(f"runtime.estimate[{ti}] range [{lo_e:.4f}, {hi_e:.4f}] outside [0, 1]")
             particles = rt.get("particles", [])
             if ti < len(particles) and isinstance(particles[ti], torch.Tensor) and particles[ti].numel():
                 lo, hi = int(particles[ti].min()), int(particles[ti].max())
@@ -396,8 +407,24 @@ class _JointSIRAdapter(_Adapter):
     def apply(self, term, env, slot, report) -> None:
         rt = slot["runtime"]
         device = term._particles[0].device
-        for key in ("particles", "weights", "episodes", "in_band", "tr_sum", "history"):
+        for key in ("particles", "episodes", "in_band", "history"):
             setattr(term, "_" + key, [t.to(device) for t in rt[key]])
+        if "estimate" in rt:
+            term._estimate = [t.to(device) for t in rt["estimate"]]
+        else:
+            # v1 payload (pre-2026-09-16): rebuild the raw band-probability estimate from
+            # the counters it did carry -- settled pairs use their measured fraction,
+            # everything else falls back to the configured prior.
+            n_min = int(term.cfg.n_traj_min)
+            prior = float(term.cfg.unmeasured_prior)
+            term._estimate = [
+                torch.where(
+                    ep >= n_min,
+                    ib / ep.clamp_min(1.0),
+                    torch.full_like(ib, prior),
+                ).to(device)
+                for ep, ib in zip(rt["episodes"], rt["in_band"])
+            ]
         term._env_pair = rt["env_pair"].to(device)
         term.desired_vel = rt["desired_vel"].to(device)
         fresh_type = term._env_type
@@ -411,6 +438,13 @@ class _JointSIRAdapter(_Adapter):
         term._next_eval_step = int(rt["next_eval_step"])
         term._tr_block_sum = float(rt["tr_block_sum"])
         term._tr_block_count = int(rt["tr_block_count"])
+        # trust-gate / per-type reporting state (review 2026-09-16)
+        term._invalid_block = int(rt.get("invalid_block", 0))
+        term._traj_block = int(rt.get("traj_block", 0))
+        term._last_invalid_frac = float(rt.get("last_invalid_frac", 0.0))
+        term._tr_type_sum = [float(v) for v in rt.get("tr_type_sum", [0.0] * len(term._types))]
+        term._tr_type_count = [int(v) for v in rt.get("tr_type_count", [0] * len(term._types))]
+        term._last_tr_by_type = [float(v) for v in rt.get("last_tr_by_type", [0.0] * len(term._types))]
         term._last_tr_mean = float(rt["last_tr_mean"])
 
 
@@ -706,6 +740,18 @@ def _normalize(state: dict) -> dict:
     """
     if state.get("version") != 1:
         return state
+    # 2026-09-16 joint-SIR fixes: the runtime payload replaced ``weights`` (a normalized
+    # sampling distribution) and ``tr_sum`` with the raw ``estimate``. A v1 slot is still
+    # readable: the new quantity is *derived* from the counters v1 did store, and the
+    # assumption it needs (the unmeasured prior) is recorded instead of silently applied.
+    old_rt = dict(state.get("runtime") or {})
+    runtime: dict = {k: v for k, v in old_rt.items() if k not in ("weights", "tr_sum")}
+    runtime_note = None
+    if "in_band" in old_rt and "episodes" in old_rt:
+        runtime_note = (
+            "estimate omitted in the v1 payload and re-derived on apply from in_band/episodes "
+            "(settled pairs only); the v1 weight vector was dropped"
+        )
     return {
         "version": STATE_VERSION,
         "source_version": 1,
@@ -724,7 +770,8 @@ def _normalize(state: dict) -> dict:
                 "adapter_version": int(_JointSIRAdapter.adapter_version),
                 "term_type": f"{JointSIRTerrainCurriculum.__module__}.{JointSIRTerrainCurriculum.__qualname__}",
                 "static": dict(state.get("static") or {}),
-                "runtime": dict(state.get("runtime") or {}),
+                "runtime": runtime,
+                "runtime_note": runtime_note,
             }
         },
     }

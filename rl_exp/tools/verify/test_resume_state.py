@@ -194,9 +194,11 @@ def test_roundtrip_bitwise_and_ck_continuity() -> None:
     # regression cover for the joint SIR's historical field set: a slot that silently
     # loses one of these would still round-trip, just with that state gone
     assert set(state["terms"][JOINT_SIR_TERM]["runtime"]) == {
-        "particles", "weights", "episodes", "in_band", "tr_sum", "history",
+        "particles", "estimate", "episodes", "in_band", "history",
         "env_pair", "desired_vel", "env_type", "next_eval_step",
         "tr_block_sum", "tr_block_count", "last_tr_mean",
+        "invalid_block", "traj_block", "last_invalid_frac",
+        "tr_type_sum", "tr_type_count", "last_tr_by_type",
     }
 
     env2, term2 = _pair(_terrain())  # cold: cold-start particles, clock at 0
@@ -204,7 +206,7 @@ def test_roundtrip_bitwise_and_ck_continuity() -> None:
     reports: list[str] = []
     apply_state(env2, state, report=reports.append)
 
-    for key in ("particles", "weights", "episodes", "in_band", "tr_sum", "history"):
+    for key in ("particles", "estimate", "episodes", "in_band", "history"):
         a, b = getattr(term1, "_" + key), getattr(term2, "_" + key)
         assert len(a) == len(b)
         assert all(torch.equal(x, y) for x, y in zip(a, b)), key
@@ -216,7 +218,8 @@ def test_roundtrip_bitwise_and_ck_continuity() -> None:
     assert term2._last_tr_mean == term1._last_tr_mean
     assert env2.common_step_counter == 123
     assert ck_value(env2) == ck_value(env1)  # the c_k clock continues, not re-heats
-    assert abs(float(term2._weights[0].sum()) - 1.0) < 1e-6
+    assert abs(float(term2._estimate[0].max()) - float(term1._estimate[0].max())) < 1e-12
+    assert float(term2._estimate[0].min()) >= 0.0 and float(term2._estimate[0].max()) <= 1.0
     assert not [r for r in reports if "WARN" in r]
 
 
@@ -322,13 +325,16 @@ def test_corrupt_clock_and_weights_rejected() -> None:
         raise AssertionError("an eval edge below the restored clock must abort")
 
     state["clock"]["common_step_counter"] = 0
-    slot["weights"][0] = slot["weights"][0] * 0.5
+    # the joint term's sampling source is a raw band probability in [0, 1] (review
+    # 2026-09-16 #4), so the corruption that must abort is an out-of-range estimate
+    slot["estimate"][0] = slot["estimate"][0].clone()
+    slot["estimate"][0].fill_(-0.5)
     try:
         apply_state(env2, state, report=lambda *_: None)
     except ValueError as exc:
-        assert "weights" in str(exc)
+        assert "estimate" in str(exc)
     else:
-        raise AssertionError("unnormalized weights must abort")
+        raise AssertionError("an out-of-range estimate must abort")
 
 
 def test_task_identity_mismatch_rejected() -> None:
@@ -895,7 +901,7 @@ def test_b_layer_update_equivalence() -> None:
     term3._resample_all()
     torch.manual_seed(8)
     term4._resample_all()
-    for key in ("particles", "weights", "episodes", "in_band", "tr_sum", "history"):
+    for key in ("particles", "estimate", "episodes", "in_band", "history"):
         assert _tensor_eq(getattr(term3, "_" + key), getattr(term4, "_" + key)), key
     assert term3._next_eval_step == term4._next_eval_step
 
@@ -1039,20 +1045,21 @@ def test_b_layer_joint_sir_branch_equivalence() -> None:
         term.cfg.p_transition = spec["p_transition"]
         term.cfg.p_replay = spec["p_replay"]
 
-    def fill(term, *, episodes, in_band=0.0, tr_sum=0.0):
+    def fill(term, *, episodes, in_band=0.0):
         for ti in range(len(term._types)):
             n = term._n_pairs[ti]
             term._episodes[ti] = torch.full((n,), float(episodes))
             term._in_band[ti] = torch.full((n,), float(in_band))
-            term._tr_sum[ti] = torch.full((n,), float(tr_sum))
 
     def mid(term, ti: int) -> int:
         """A pair with room to move on at least one axis (velocity or a param axis)."""
         return term._n_pairs[ti] // 2
 
     def prior(term):
+        """Point the sampling source at the mid pair (the joint term samples from its
+        raw ``_estimate`` since the 2026-09-16 fixes, not from a weight vector)."""
         for ti in range(len(term._types)):
-            term._weights[ti] = torch.zeros(term._n_pairs[ti]).scatter_(0, torch.tensor([mid(term, ti)]), 1.0)
+            term._estimate[ti] = torch.zeros(term._n_pairs[ti]).scatter_(0, torch.tensor([mid(term, ti)]), 1.0)
 
     def measured(term):
         """Every pair settled, pair 0 carrying all the in-band trajectories."""
@@ -1061,14 +1068,14 @@ def test_b_layer_joint_sir_branch_equivalence() -> None:
             term._in_band[ti][0] = 10.0
 
     def sparse(term):
-        fill(term, episodes=3.0, in_band=1.0, tr_sum=3.0)
+        fill(term, episodes=3.0, in_band=1.0)
         prior(term)
 
     def frontier(term):
-        """Every pair settled and out of band; combo 0 learned, the rest not."""
+        """Every pair settled; combo 0 in band (estimate 1.0), the rest drained (0.0)."""
         fill(term, episodes=10.0)
         for ti in range(len(term._types)):
-            term._tr_sum[ti][: term._n_v] = 10.0
+            term._in_band[ti][: term._n_v] = 10.0
 
     def walkable(term):
         sparse(term)
@@ -1080,29 +1087,24 @@ def test_b_layer_joint_sir_branch_equivalence() -> None:
 
     def expect_measured(term, _calls):
         for ti in range(len(term._types)):
-            assert float(term._weights[ti][0]) == 1.0
+            assert float(term._estimate[ti][0]) == 1.0
             assert bool((term._particles[ti] == 0).all())
             assert float(term._episodes[ti].abs().max()) == 0.0  # settled pairs are consumed
             assert float(term._in_band[ti].abs().max()) == 0.0
-            assert float(term._tr_sum[ti].abs().max()) == 0.0
 
     def expect_sparse(term, _calls):
         for ti in range(len(term._types)):
-            assert float(term._weights[ti][mid(term, ti)]) == 1.0
+            assert float(term._estimate[ti][mid(term, ti)]) == 1.0
             assert bool((term._particles[ti] == mid(term, ti)).all())
             assert float(term._episodes[ti].min()) == 3.0, "unsettled pairs keep their counters across blocks"
 
     def expect_frontier(term, calls):
-        assert calls, "the band-empty fallback must be the branch that ran"
+        """Band-empty but evidence-driven: only pairs that reached the band keep traffic."""
+        assert calls, "the resample must be the branch that ran"
         for ti in range(len(term._types)):
-            n = term._n_pairs[ti]
-            if n == term._n_v:  # a single-combo type is all-learned -> uniform (paper semantics)
-                assert torch.allclose(term._weights[ti], torch.full((n,), 1.0 / n))
-                continue
-            learned = torch.zeros(n, dtype=torch.bool)
-            learned[: term._n_v] = True
-            assert abs(float(term._weights[ti][learned].sum()) - term.cfg.maintain_mass) < 1e-6
-            assert not torch.allclose(term._weights[ti], torch.full((n,), 1.0 / n))
+            learned = term._estimate[ti] >= term.cfg.band[0]
+            assert bool(learned.any())
+            assert bool(learned[term._particles[ti]].all())
 
     def expect_walk(term, calls):
         assert calls, "the walk must be the branch that ran"
@@ -1120,8 +1122,8 @@ def test_b_layer_joint_sir_branch_equivalence() -> None:
     cases = (
         ("measured update", dict(p_transition=0.0, p_replay=0.0), measured, expect_measured, ()),
         ("below n_traj_min", dict(p_transition=0.0, p_replay=0.0), sparse, expect_sparse, ()),
-        ("band-empty frontier fallback", dict(p_transition=0.0, p_replay=0.0), frontier, expect_frontier,
-         ("_fallback_weights",)),
+        ("band-empty evidence resample", dict(p_transition=0.0, p_replay=0.0), frontier, expect_frontier,
+         ("_support",)),
         ("random walk", dict(p_transition=1.0, p_replay=0.0), walkable, expect_walk, ("_walk",)),
         ("replay", dict(p_transition=0.0, p_replay=1.0), replayable, expect_replay, ()),
     )
@@ -1140,7 +1142,7 @@ def test_b_layer_joint_sir_branch_equivalence() -> None:
         dst_calls = {name: _spy(term2, name) for name in spied}
 
         assert _tensor_eq(_b_update(env1, term1, 240, JOINT_SEED), _b_update(env2, term2, 240, JOINT_SEED)), label
-        for key in ("particles", "weights", "episodes", "in_band", "tr_sum", "history", "env_pair"):
+        for key in ("particles", "estimate", "episodes", "in_band", "history", "env_pair"):
             assert _tensor_eq(getattr(term1, "_" + key), getattr(term2, "_" + key)), f"{label}: {key}"
         assert _tensor_eq(term1.desired_vel, term2.desired_vel), label
         assert term1._next_eval_step == term2._next_eval_step == 480, label
