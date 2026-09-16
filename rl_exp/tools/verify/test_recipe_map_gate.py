@@ -1,0 +1,124 @@
+# Copyright (c) 2022-2026, The Isaac Lab Project Developers (https://github.com/isaac-sim/IsaacLab/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: BSD-3-Clause
+
+# -*- coding: utf-8 -*-
+"""Negative control for ``check_recipe_map``: every refusal must actually fire.
+
+Two things get their own cases beyond the refusals, because reading the happy path does
+not reveal them:
+
+* ``check_recipe_map.registered`` reads ``id=`` as a keyword (that is how every call in
+  ``rl_exp/tasks/__init__.py`` is written). The first version read positional args only
+  and returned an empty registry, which made the gate pass for the wrong reason -- a
+  parser that finds nothing looks exactly like a tree with nothing to check.
+* the declared version must be a dash-separated token of the task id, so ``v1`` is not
+  satisfied by ``Lizard-Rough-v14``. Substring matching would have blessed a v14 task
+  mapped to a v1 recipe.
+"""
+
+from __future__ import annotations
+
+import pathlib
+import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+
+from check_recipe_map import registered, validate  # noqa: E402
+
+ENV_V14 = "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V14"
+AGENT_V14 = "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV14PPORunnerCfg"
+TASK = "Lizard-Rough-v14"
+LINES = {"lizard": None, "lizard/parkour": None}
+REGISTERED = {TASK: {"env_cfg_entry_point": ENV_V14, "rsl_rl_cfg_entry_point": AGENT_V14}}
+
+
+def _entry(**over) -> dict:
+    entry = {"line": "lizard", "env_cfg_entry": ENV_V14, "agent_entry": AGENT_V14, "legacy_task_version": "v14"}
+    entry.update(over)
+    return entry
+
+
+def _doc(recipes: dict, tasks: dict, fmt: int = 1) -> dict:
+    return {"format": fmt, "recipes": recipes, "tasks": tasks}
+
+
+CLEAN = _doc({"teacher-v14@1": _entry()}, {TASK: "teacher-v14@1"})
+
+CASES: list[tuple[str, dict, dict, str | None]] = [
+    ("registered task with no mapping", _doc({"teacher-v14@1": _entry()}, {}), REGISTERED,
+     "with no recipe mapping"),
+    ("mapping names an unregistered task", _doc({"teacher-v14@1": _entry()}, {TASK: "teacher-v14@1", "Lizard-Rough-v99": "teacher-v14@1"}),
+     REGISTERED, "names no registered task"),
+    ("mapping points at a recipe that does not exist", _doc({"teacher-v14@1": _entry()}, {TASK: "teacher-v13@1"}),
+     REGISTERED, "which no recipe defines"),
+    ("env entry redirected away from the registration",
+     _doc({"teacher-v14@1": _entry(env_cfg_entry="rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V13")},
+          {TASK: "teacher-v14@1"}), REGISTERED, "must not be redirected silently"),
+    ("agent entry redirected away from the registration",
+     _doc({"teacher-v14@1": _entry(agent_entry="rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV13PPORunnerCfg")},
+          {TASK: "teacher-v14@1"}), REGISTERED, "must not be redirected silently"),
+    ("recipe names an undiscovered line", _doc({"teacher-v14@1": _entry(line="lizard/ghost")}, {TASK: "teacher-v14@1"}),
+     REGISTERED, "is not a discovered recipe line"),
+    ("recipe key without a revision", _doc({"teacher-v14": _entry()}, {TASK: "teacher-v14"}), REGISTERED,
+     "must read <id>@<revision>"),
+    ("recipe key with revision zero", _doc({"teacher-v14@0": _entry()}, {TASK: "teacher-v14@0"}), REGISTERED,
+     "must read <id>@<revision>"),
+    ("recipe omits a field", _doc({"teacher-v14@1": {"line": "lizard"}}, {TASK: "teacher-v14@1"}), REGISTERED,
+     "recipe is missing"),
+    ("recipe carries a run-scoped field",
+     _doc({"teacher-v14@1": _entry(run_id="abc")}, {TASK: "teacher-v14@1"}), REGISTERED, "unknown fields"),
+    ("legacy version is not v<N>",
+     _doc({"teacher-v14@1": _entry(legacy_task_version="14")}, {TASK: "teacher-v14@1"}), REGISTERED,
+     "must be null or v<N>"),
+    ("v1 must not be satisfied by v14 in the task id",
+     _doc({"teacher-v1@1": _entry(legacy_task_version="v1")}, {TASK: "teacher-v1@1"}), REGISTERED, "never states"),
+    ("entry point is not module:qualname",
+     _doc({"teacher-v14@1": _entry(agent_entry="LizardTeacherV14PPORunnerCfg")}, {TASK: "teacher-v14@1"}),
+     REGISTERED, "is not module:qualname"),
+    ("format changed without this gate", _doc({"teacher-v14@1": _entry()}, {TASK: "teacher-v14@1"}, fmt=2),
+     REGISTERED, "format"),
+    # -- shapes that must stay green ------------------------------------------------
+    ("matching map", CLEAN, REGISTERED, None),
+    ("v0 family: no declared version while the id says v0",
+     _doc({"rough-v0@1": _entry(env_cfg_entry="rl_exp.tasks.rough_env_cfg:LizardRoughEnvCfg",
+                                agent_entry="rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardRoughPPORunnerCfg",
+                                legacy_task_version=None)},
+          {"Lizard-Velocity-Rough-v0": "rough-v0@1"}),
+     {"Lizard-Velocity-Rough-v0": {"env_cfg_entry_point": "rl_exp.tasks.rough_env_cfg:LizardRoughEnvCfg",
+                                   "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardRoughPPORunnerCfg"}},
+     None),
+]
+
+
+def main() -> int:
+    """Run every case, then pin the registration parser against the real module."""
+    failures: list[str] = []
+    for label, doc, registry, expected in CASES:
+        problems = validate(doc, LINES, registry)
+        if expected is None:
+            if problems:
+                failures.append(f"{label}: expected clean, got {problems}")
+        elif not any(expected in problem for problem in problems):
+            failures.append(f"{label}: expected {expected!r}, got {problems}")
+
+    # the real registration module: a parser that reads nothing must not pass
+    real = registered()
+    if len(real) != 34:
+        failures.append(f"registration parser read {len(real)} tasks from rl_exp/tasks/__init__.py, expected 34")
+    elif real[TASK].get("env_cfg_entry_point") != ENV_V14:
+        failures.append(f"registration parser mis-read {TASK}: {real[TASK]}")
+
+    if failures:
+        for failure in failures:
+            print(f"FAIL {failure}")
+        print(f"recipe map falsifier: {len(failures)}/{len(CASES) + 1} cases wrong")
+        return 1
+    print(f"  map refusals fired: {len(CASES)} cases + 34-task registration parse")
+    print("RECIPE_MAP_GATE_OK")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

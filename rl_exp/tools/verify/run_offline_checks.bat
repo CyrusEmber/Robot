@@ -110,6 +110,12 @@ echo [29] recipe line lifecycle (identity / retirement evidence / announced noti
 echo [30] recipe lifecycle gate falsifier (each refusal must still fire)
 "%PY%" rl_exp\tools\verify\test_recipe_registry_gate.py || goto :fail
 
+echo [31] recipe identity map (task -> recipe + revision -> config entries, vs registration)
+"%PY%" rl_exp\tools\verify\check_recipe_map.py || goto :fail
+
+echo [32] recipe map gate falsifier (each refusal must still fire)
+"%PY%" rl_exp\tools\verify\test_recipe_map_gate.py || goto :fail
+
 echo ALL_OFFLINE_CHECKS_PASSED
 exit /b 0
 

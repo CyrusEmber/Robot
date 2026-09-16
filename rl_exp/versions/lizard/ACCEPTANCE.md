@@ -78,6 +78,18 @@
 
 **边界**：格式 1 的条目**只在 git 历史**里（同一组合块被就地重写，文件内不并存两份）——`ARCH_PLAN` 1.1c 的"旧 block 保留"按字面只适用于**框架组合变化**；格式变更路径以 git 历史为保留手段。格式 1 时期的配方项仍一律**未知**（不可比），不据旧摘要判失败或通过。
 
+### golden 拆为路线级锁（格式 2 → 3，2026-09-16）
+
+| 项 | 内容 |
+|---|---|
+| 变更 | `lock_format` **2 → 3**：`baselines` 移入全仓共享的 `rl_exp/versions/cfg_baselines.json`（组合是框架事实，不属于任何一条线；一份才不会互相矛盾）；`entries` 按**配方线**拆文件（主线 `versions/lizard/cfg_lock.json`，支线 `versions/lizard/parkour/cfg_lock.json`）。动机：`--update` 原为**全量写**（构造全部注册任务、整体替换该组合的 entries）⇒ 给一个新任务建 golden 会**静默吸收**其它任务的漂移并挂在同一条 `--reason` 下；且 entry schema 有意封闭（多一个字段即红），"这条 golden 属于哪条线"只能由文件路径承载 |
+| 审查方式 | 迁移**不走 `--update`**（它会全量重写，正是要防的那件事），改按 cfg 类声明的 `params_line` 分组、逐条**原样搬运**并逐条比对 |
+| 实际落子 | 34 条拆为 **32**（主线）+ **2**（parkour）；**34/34 条目规范化 JSON 逐条一致**（脚本内断言）；`CFG_LOCK_OK (34 tasks, 2 line(s))` |
+| 复核命令 | `git diff --stat -- rl_exp/versions/lizard/cfg_lock.json rl_exp/versions/lizard/parkour/cfg_lock.json`；新增 `rl_exp/versions/cfg_baselines.json` |
+| **与 1→2 的关键区别** | 1→2 **改了快照内容**（ClassVar 路径离开 ⇒ 旧配方项不可比）；2→3 **一个配置值都没动**，只动落点与元数据 ⇒ 格式 2 的配方项**仍然可比**，不降级为未知 |
+| 后续一条真实改动（隔离性实证） | `--update --line lizard/parkour --reason "..."`：只写支线文件；主线锁 sha256 前后**完全一致**（本批实测）；parkour 两条各 1 条路径变化（`env.params_version: <absent> -> "v1"`），共用组合块未被改写 |
+| 旧基线（格式 2）保留方式 | 本批提交前的 `rl_exp/versions/lizard/cfg_lock.json`（`lock_format` 2 / `task_count` 34 / 2,603,613 B）；取回 `git show <本批前的 rev>:rl_exp/versions/lizard/cfg_lock.json > <out>` |
+
 ### 本批未覆盖（不得据本批宣称通过）
 
 - **1.5 隔离重建**：无重建记录，`已验证重建` 恒为**未知**（非必需项，不影响其它结论）。
@@ -376,4 +388,39 @@ ValueError: curriculum state in the checkpoint does not fit this task: runtime.n
 - **未做**：A3（`check_cfg_lock` 身份改消费显式映射）等锁格式 v3 结构冻结后重读；A0（布局改造 `main/` + `baseline`、参数文件按闸门改名、`is_main_line` 判据更换）等并行批次落地
 - **口径**：本批**未跑全量套件**（`run_offline_checks.bat` 端到端），只跑了新增两条 ⇒ `[2][12][24][28]` 与新增条目的共存**未在本批验证，记未知**
 - **证据**：gate 脚本 + 上表命令（未另存日志文件；`verify_logs/` 现存的是套件整跑日志）
+
+## 2.1b · 配方身份映射（离线，2026-09-16）
+
+**性质**：**追加**条目，补 §2.1 的另一半 —— `任务 ID → 配方 + 修订 → 配置入口` 的显式映射。仍只覆盖离线部分；入口侧（L02/L03/L04）未跑，同 §2.1 记**未知**。
+
+### 前提
+
+| 项 | 值 |
+|---|---|
+| 项目 rev | `a5a7fab` + 未提交改动（本批 = 新增 `versions/recipes.json`、`check_recipe_map.py`、`test_recipe_map_gate.py`；改 `run_offline_checks.bat`、`FILEMAP.md`、`ARCH_PLAN.md`）。工作树**仍未冻结**：并行批次 19 项未提交，锁 v3 迁移进行中 |
+| 任务 id | 全部 34 个注册任务（v0 家族 8 + teacher v1–v14 共 24 + parkour 2） |
+| 设备 / env 数 / seed | 不适用（无 sim、无 env、无随机源） |
+| 框架组合 | 未绑定（纯 stdlib：`ast` 解析注册模块，不 import registry、不 import isaaclab） |
+| 预设容差 | 无（离散判定） |
+| 声明真值来源 | 各任务 `params_version` 取自**现行** `cfg_lock` 条目（主线 32 + parkour 2）：teacher = `vN`、parkour = `v1`、v0 家族 = `None` |
+
+### 检查与结果
+
+| 编号 | 命令 | 结果 |
+|---|---|---|
+| L01 身份映射 | `python rl_exp\tools\verify\check_recipe_map.py` | **通过**：`recipes declared: 34 | task mappings: 34`，与 `gym.register` 逐字一致（env/agent 入口、任务键集、line 引用） |
+| 反证 | `python rl_exp\tools\verify\test_recipe_map_gate.py` | **通过**：16 例全部着火，外加"从真实 `tasks\__init__.py` 读出 34 个任务" |
+
+### 本批修正（两处，均由反证抓到）
+
+- **双向校验写错**：首版判"任务 id 带 `-vN` ⇒ 声明必须等于 vN" ⇒ 8 个 v0 家族任务被误判。它们的 `params_version` 实测是 `None`，**id 后缀 `v0` 不是配方声明**。改为单向：声明了版本就必须是任务 id 的 dash 分词；并加 `v1` 不被 `Lizard-Rough-v14` 满足的陷阱反证
+- **解析器读空注册表**：首版 `registered()` 只读位置参数，而 `gym.register` 的 `id` 是关键字参数 ⇒ 注册表读成空、**闸门静默通过**。由"真模块读出 34 个任务"这一例钉死
+
+### 结论与边界
+
+- **通过**：L01（配方身份映射与拒绝）
+- **未知**：L02/L03/L04 与 L05/L06 的入口侧（同 §2.1）
+- **未做**：`params_version` 与 `legacy_task_version` 的**配置侧绑定**属 A3（本批只做声明侧形态与任务 id 一致性）；A0 未动
+- **口径**：本批同样**未跑全量套件** ⇒ `[31][32]` 与既有条目的端到端共存**未验证**
+- **证据**：gate 脚本 + 上表命令（未另存日志文件）
 

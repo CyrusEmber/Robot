@@ -1,0 +1,245 @@
+{
+  "format": 1,
+  "recipes": {
+    "flat-v0@1": {
+      "line": "lizard",
+      "env_cfg_entry": "rl_exp.tasks.lizard_env_cfg:LizardFlatEnvCfg",
+      "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardFlatPPORunnerCfg",
+      "legacy_task_version": null
+    },
+    "flat-play-v0@1": {
+      "line": "lizard",
+      "env_cfg_entry": "rl_exp.tasks.lizard_env_cfg:LizardFlatEnvCfg_PLAY",
+      "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardFlatPPORunnerCfg",
+      "legacy_task_version": null
+    },
+    "curriculum-flat-v0@1": {
+      "line": "lizard",
+      "env_cfg_entry": "rl_exp.tasks.curriculum_env_cfg:LizardCurriculumFlatEnvCfg",
+      "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardCurriculumFlatPPORunnerCfg",
+      "legacy_task_version": null
+    },
+    "curriculum-flat-play-v0@1": {
+      "line": "lizard",
+      "env_cfg_entry": "rl_exp.tasks.curriculum_env_cfg:LizardCurriculumFlatEnvCfg_PLAY",
+      "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardCurriculumFlatPPORunnerCfg",
+      "legacy_task_version": null
+    },
+    "curriculum-rough-v0@1": {
+      "line": "lizard",
+      "env_cfg_entry": "rl_exp.tasks.curriculum_rough_env_cfg:LizardCurriculumRoughEnvCfg",
+      "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardCurriculumRoughPPORunnerCfg",
+      "legacy_task_version": null
+    },
+    "curriculum-rough-play-v0@1": {
+      "line": "lizard",
+      "env_cfg_entry": "rl_exp.tasks.curriculum_rough_env_cfg:LizardCurriculumRoughEnvCfg_PLAY",
+      "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardCurriculumRoughPPORunnerCfg",
+      "legacy_task_version": null
+    },
+    "rough-v0@1": {
+      "line": "lizard",
+      "env_cfg_entry": "rl_exp.tasks.rough_env_cfg:LizardRoughEnvCfg",
+      "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardRoughPPORunnerCfg",
+      "legacy_task_version": null
+    },
+    "rough-play-v0@1": {
+      "line": "lizard",
+      "env_cfg_entry": "rl_exp.tasks.rough_env_cfg:LizardRoughEnvCfg_PLAY",
+      "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardRoughPPORunnerCfg",
+      "legacy_task_version": null
+    },
+    "teacher-v1@1": {
+      "line": "lizard",
+      "env_cfg_entry": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V1",
+      "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherPPORunnerCfg",
+      "legacy_task_version": "v1"
+    },
+    "teacher-play-v1@1": {
+      "line": "lizard",
+      "env_cfg_entry": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V1_PLAY",
+      "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherPPORunnerCfg",
+      "legacy_task_version": "v1"
+    },
+    "teacher-v2@1": {
+      "line": "lizard",
+      "env_cfg_entry": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V2",
+      "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV2PPORunnerCfg",
+      "legacy_task_version": "v2"
+    },
+    "teacher-play-v2@1": {
+      "line": "lizard",
+      "env_cfg_entry": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V2_PLAY",
+      "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV2PPORunnerCfg",
+      "legacy_task_version": "v2"
+    },
+    "teacher-v3@1": {
+      "line": "lizard",
+      "env_cfg_entry": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V3",
+      "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV3PPORunnerCfg",
+      "legacy_task_version": "v3"
+    },
+    "teacher-play-v3@1": {
+      "line": "lizard",
+      "env_cfg_entry": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V3_PLAY",
+      "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV3PPORunnerCfg",
+      "legacy_task_version": "v3"
+    },
+    "teacher-v4@1": {
+      "line": "lizard",
+      "env_cfg_entry": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V4",
+      "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV4PPORunnerCfg",
+      "legacy_task_version": "v4"
+    },
+    "teacher-play-v4@1": {
+      "line": "lizard",
+      "env_cfg_entry": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V4_PLAY",
+      "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV4PPORunnerCfg",
+      "legacy_task_version": "v4"
+    },
+    "teacher-v5@1": {
+      "line": "lizard",
+      "env_cfg_entry": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V5",
+      "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV5PPORunnerCfg",
+      "legacy_task_version": "v5"
+    },
+    "teacher-play-v5@1": {
+      "line": "lizard",
+      "env_cfg_entry": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V5_PLAY",
+      "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV5PPORunnerCfg",
+      "legacy_task_version": "v5"
+    },
+    "teacher-v6@1": {
+      "line": "lizard",
+      "env_cfg_entry": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V6",
+      "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV6PPORunnerCfg",
+      "legacy_task_version": "v6"
+    },
+    "teacher-play-v6@1": {
+      "line": "lizard",
+      "env_cfg_entry": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V6_PLAY",
+      "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV6PPORunnerCfg",
+      "legacy_task_version": "v6"
+    },
+    "teacher-v8@1": {
+      "line": "lizard",
+      "env_cfg_entry": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V8",
+      "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV8PPORunnerCfg",
+      "legacy_task_version": "v8"
+    },
+    "teacher-play-v8@1": {
+      "line": "lizard",
+      "env_cfg_entry": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V8_PLAY",
+      "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV8PPORunnerCfg",
+      "legacy_task_version": "v8"
+    },
+    "teacher-v10@1": {
+      "line": "lizard",
+      "env_cfg_entry": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V10",
+      "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV10PPORunnerCfg",
+      "legacy_task_version": "v10"
+    },
+    "teacher-play-v10@1": {
+      "line": "lizard",
+      "env_cfg_entry": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V10_PLAY",
+      "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV10PPORunnerCfg",
+      "legacy_task_version": "v10"
+    },
+    "teacher-v11@1": {
+      "line": "lizard",
+      "env_cfg_entry": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V11",
+      "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV11PPORunnerCfg",
+      "legacy_task_version": "v11"
+    },
+    "teacher-play-v11@1": {
+      "line": "lizard",
+      "env_cfg_entry": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V11_PLAY",
+      "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV11PPORunnerCfg",
+      "legacy_task_version": "v11"
+    },
+    "teacher-v12@1": {
+      "line": "lizard",
+      "env_cfg_entry": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V12",
+      "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV12PPORunnerCfg",
+      "legacy_task_version": "v12"
+    },
+    "teacher-play-v12@1": {
+      "line": "lizard",
+      "env_cfg_entry": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V12_PLAY",
+      "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV12PPORunnerCfg",
+      "legacy_task_version": "v12"
+    },
+    "teacher-v13@1": {
+      "line": "lizard",
+      "env_cfg_entry": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V13",
+      "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV13PPORunnerCfg",
+      "legacy_task_version": "v13"
+    },
+    "teacher-play-v13@1": {
+      "line": "lizard",
+      "env_cfg_entry": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V13_PLAY",
+      "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV13PPORunnerCfg",
+      "legacy_task_version": "v13"
+    },
+    "teacher-v14@1": {
+      "line": "lizard",
+      "env_cfg_entry": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V14",
+      "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV14PPORunnerCfg",
+      "legacy_task_version": "v14"
+    },
+    "teacher-play-v14@1": {
+      "line": "lizard",
+      "env_cfg_entry": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V14_PLAY",
+      "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV14PPORunnerCfg",
+      "legacy_task_version": "v14"
+    },
+    "climb-v1@1": {
+      "line": "lizard/parkour",
+      "env_cfg_entry": "rl_exp.tasks.parkour_env_cfg:ParkourClimbEnvCfg",
+      "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardParkourClimbPPORunnerCfg",
+      "legacy_task_version": "v1"
+    },
+    "climb-play-v1@1": {
+      "line": "lizard/parkour",
+      "env_cfg_entry": "rl_exp.tasks.parkour_env_cfg:ParkourClimbEnvCfg_PLAY",
+      "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardParkourClimbPPORunnerCfg",
+      "legacy_task_version": "v1"
+    }
+  },
+  "tasks": {
+    "Lizard-Velocity-Flat-v0": "flat-v0@1",
+    "Lizard-Velocity-Flat-Play-v0": "flat-play-v0@1",
+    "Lizard-Velocity-Curriculum-Flat-v0": "curriculum-flat-v0@1",
+    "Lizard-Velocity-Curriculum-Flat-Play-v0": "curriculum-flat-play-v0@1",
+    "Lizard-Velocity-Rough-v0": "rough-v0@1",
+    "Lizard-Velocity-Rough-Play-v0": "rough-play-v0@1",
+    "Lizard-Velocity-Curriculum-Rough-v0": "curriculum-rough-v0@1",
+    "Lizard-Velocity-Curriculum-Rough-Play-v0": "curriculum-rough-play-v0@1",
+    "Lizard-Rough-v1": "teacher-v1@1",
+    "Lizard-Rough-Play-v1": "teacher-play-v1@1",
+    "Lizard-Rough-v2": "teacher-v2@1",
+    "Lizard-Rough-Play-v2": "teacher-play-v2@1",
+    "Lizard-Rough-v3": "teacher-v3@1",
+    "Lizard-Rough-Play-v3": "teacher-play-v3@1",
+    "Lizard-Rough-v4": "teacher-v4@1",
+    "Lizard-Rough-Play-v4": "teacher-play-v4@1",
+    "Lizard-Rough-v5": "teacher-v5@1",
+    "Lizard-Rough-Play-v5": "teacher-play-v5@1",
+    "Lizard-Rough-v6": "teacher-v6@1",
+    "Lizard-Rough-Play-v6": "teacher-play-v6@1",
+    "Lizard-Rough-v8": "teacher-v8@1",
+    "Lizard-Rough-Play-v8": "teacher-play-v8@1",
+    "Lizard-Rough-v10": "teacher-v10@1",
+    "Lizard-Rough-Play-v10": "teacher-play-v10@1",
+    "Lizard-Rough-v11": "teacher-v11@1",
+    "Lizard-Rough-Play-v11": "teacher-play-v11@1",
+    "Lizard-Rough-v12": "teacher-v12@1",
+    "Lizard-Rough-Play-v12": "teacher-play-v12@1",
+    "Lizard-Rough-v13": "teacher-v13@1",
+    "Lizard-Rough-Play-v13": "teacher-play-v13@1",
+    "Lizard-Rough-v14": "teacher-v14@1",
+    "Lizard-Rough-Play-v14": "teacher-play-v14@1",
+    "Lizard-Parkour-Climb-v1": "climb-v1@1",
+    "Lizard-Parkour-Climb-Play-v1": "climb-play-v1@1"
+  }
+}
