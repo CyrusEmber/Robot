@@ -102,7 +102,7 @@ gym.register(
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     disable_env_checker=True,
     kwargs={
-        "env_cfg_entry_point": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V2",
+        "env_cfg_entry_point": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V2",
         "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV2PPORunnerCfg",
     },
 )
@@ -112,7 +112,7 @@ gym.register(
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     disable_env_checker=True,
     kwargs={
-        "env_cfg_entry_point": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V2_PLAY",
+        "env_cfg_entry_point": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V2_PLAY",
         "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV2PPORunnerCfg",
     },
 )
@@ -122,7 +122,7 @@ gym.register(
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     disable_env_checker=True,
     kwargs={
-        "env_cfg_entry_point": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V3",
+        "env_cfg_entry_point": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V3",
         "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV3PPORunnerCfg",
     },
 )
@@ -132,7 +132,7 @@ gym.register(
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     disable_env_checker=True,
     kwargs={
-        "env_cfg_entry_point": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V3_PLAY",
+        "env_cfg_entry_point": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V3_PLAY",
         "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV3PPORunnerCfg",
     },
 )
@@ -142,7 +142,7 @@ gym.register(
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     disable_env_checker=True,
     kwargs={
-        "env_cfg_entry_point": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V4",
+        "env_cfg_entry_point": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V4",
         "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV4PPORunnerCfg",
     },
 )
@@ -152,7 +152,7 @@ gym.register(
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     disable_env_checker=True,
     kwargs={
-        "env_cfg_entry_point": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V4_PLAY",
+        "env_cfg_entry_point": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V4_PLAY",
         "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV4PPORunnerCfg",
     },
 )
@@ -162,7 +162,7 @@ gym.register(
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     disable_env_checker=True,
     kwargs={
-        "env_cfg_entry_point": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V5",
+        "env_cfg_entry_point": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V5",
         "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV5PPORunnerCfg",
     },
 )
@@ -172,7 +172,7 @@ gym.register(
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     disable_env_checker=True,
     kwargs={
-        "env_cfg_entry_point": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V5_PLAY",
+        "env_cfg_entry_point": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V5_PLAY",
         "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV5PPORunnerCfg",
     },
 )
@@ -182,7 +182,7 @@ gym.register(
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     disable_env_checker=True,
     kwargs={
-        "env_cfg_entry_point": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V6",
+        "env_cfg_entry_point": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V6",
         "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV6PPORunnerCfg",
     },
 )
@@ -192,7 +192,7 @@ gym.register(
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     disable_env_checker=True,
     kwargs={
-        "env_cfg_entry_point": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V6_PLAY",
+        "env_cfg_entry_point": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V6_PLAY",
         "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV6PPORunnerCfg",
     },
 )
@@ -202,7 +202,7 @@ gym.register(
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     disable_env_checker=True,
     kwargs={
-        "env_cfg_entry_point": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V8",
+        "env_cfg_entry_point": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V8",
         "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV8PPORunnerCfg",
     },
 )
@@ -212,7 +212,7 @@ gym.register(
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     disable_env_checker=True,
     kwargs={
-        "env_cfg_entry_point": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V8_PLAY",
+        "env_cfg_entry_point": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V8_PLAY",
         "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV8PPORunnerCfg",
     },
 )
@@ -222,7 +222,7 @@ gym.register(
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     disable_env_checker=True,
     kwargs={
-        "env_cfg_entry_point": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V10",
+        "env_cfg_entry_point": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V10",
         "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV10PPORunnerCfg",
     },
 )
@@ -232,7 +232,7 @@ gym.register(
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     disable_env_checker=True,
     kwargs={
-        "env_cfg_entry_point": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V10_PLAY",
+        "env_cfg_entry_point": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V10_PLAY",
         "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV10PPORunnerCfg",
     },
 )
@@ -242,7 +242,7 @@ gym.register(
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     disable_env_checker=True,
     kwargs={
-        "env_cfg_entry_point": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V11",
+        "env_cfg_entry_point": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V11",
         "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV11PPORunnerCfg",
     },
 )
@@ -252,7 +252,7 @@ gym.register(
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     disable_env_checker=True,
     kwargs={
-        "env_cfg_entry_point": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V11_PLAY",
+        "env_cfg_entry_point": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V11_PLAY",
         "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV11PPORunnerCfg",
     },
 )
@@ -262,7 +262,7 @@ gym.register(
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     disable_env_checker=True,
     kwargs={
-        "env_cfg_entry_point": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V12",
+        "env_cfg_entry_point": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V12",
         "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV12PPORunnerCfg",
     },
 )
@@ -272,7 +272,7 @@ gym.register(
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     disable_env_checker=True,
     kwargs={
-        "env_cfg_entry_point": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V12_PLAY",
+        "env_cfg_entry_point": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V12_PLAY",
         "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV12PPORunnerCfg",
     },
 )
@@ -282,7 +282,7 @@ gym.register(
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     disable_env_checker=True,
     kwargs={
-        "env_cfg_entry_point": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V13",
+        "env_cfg_entry_point": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V13",
         "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV13PPORunnerCfg",
     },
 )
@@ -292,7 +292,7 @@ gym.register(
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     disable_env_checker=True,
     kwargs={
-        "env_cfg_entry_point": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V13_PLAY",
+        "env_cfg_entry_point": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V13_PLAY",
         "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV13PPORunnerCfg",
     },
 )
@@ -302,7 +302,7 @@ gym.register(
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     disable_env_checker=True,
     kwargs={
-        "env_cfg_entry_point": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V14",
+        "env_cfg_entry_point": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V14",
         "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV14PPORunnerCfg",
     },
 )
@@ -312,7 +312,7 @@ gym.register(
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     disable_env_checker=True,
     kwargs={
-        "env_cfg_entry_point": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V14_PLAY",
+        "env_cfg_entry_point": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V14_PLAY",
         "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV14PPORunnerCfg",
     },
 )
@@ -322,7 +322,7 @@ gym.register(
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     disable_env_checker=True,
     kwargs={
-        "env_cfg_entry_point": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V1",
+        "env_cfg_entry_point": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V1",
         "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherPPORunnerCfg",
     },
 )
@@ -332,7 +332,7 @@ gym.register(
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     disable_env_checker=True,
     kwargs={
-        "env_cfg_entry_point": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V1_PLAY",
+        "env_cfg_entry_point": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V1_PLAY",
         "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherPPORunnerCfg",
     },
 )
@@ -376,7 +376,7 @@ gym.register(
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     disable_env_checker=True,
     kwargs={
-        "env_cfg_entry_point": "rl_exp.tasks.baseline_env_cfg:BaselineFlatEnvCfg",
+        "env_cfg_entry_point": "rl_exp.tasks.recipe_tasks:BaselineFlatEnvCfg",
         "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardBaselinePPORunnerCfg",
     },
 )
@@ -386,7 +386,7 @@ gym.register(
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     disable_env_checker=True,
     kwargs={
-        "env_cfg_entry_point": "rl_exp.tasks.baseline_env_cfg:BaselineFlatEnvCfg_PLAY",
+        "env_cfg_entry_point": "rl_exp.tasks.recipe_tasks:BaselineFlatEnvCfg_PLAY",
         "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardBaselinePPORunnerCfg",
     },
 )

@@ -149,7 +149,10 @@ def main() -> int:
         failures.append("registration parser read no tasks from rl_exp/tasks/__init__.py")
     elif len(real) != declared:
         failures.append(f"registration parser read {len(real)} tasks, the map declares {declared}")
-    elif real[TASK].get("env_cfg_entry_point") != ENV_V14:
+    elif not real[TASK].get("env_cfg_entry_point", "").endswith(f":{ENV_V14.split(':')[1]}"):
+        # the parser's job is to read the *env* entry for this task, not to agree with one module
+        # path: after the entry switch the same class is reached through recipe_tasks, and pinning
+        # the module here would make this falsifier go red for a change it does not guard
         failures.append(f"registration parser mis-read {TASK}: {real[TASK]}")
 
     if failures:

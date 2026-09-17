@@ -48,6 +48,7 @@ added, not housekeeping.
 
 from __future__ import annotations
 
+import importlib
 import json
 import pathlib
 import sys
@@ -200,6 +201,64 @@ def attribution(version: str, *, play: bool, paths: list[str], line: str = recip
             f"{where}: {len(ownerless)} field(s) changed with no declared element behind them:"
             f" {sorted(ownerless)[:5]}"
         )
+
+
+_PROBE: dict[type, object | None] = {}
+
+
+def _probe(cls) -> object | None:
+    """One instance per class per gate run: the probe reads a field, it does not compare configs."""
+    if cls not in _PROBE:
+        try:
+            _PROBE[cls] = cls()
+        except Exception:  # noqa: BLE001 - a class that cannot be built is not a candidate
+            _PROBE[cls] = None
+    return _PROBE[cls]
+
+
+def replaced_class(version: str, *, play: bool, line: str) -> tuple[type | None, str | None]:
+    """The version subclass a recipe replaces, found by scanning the line's wiring module.
+
+    Matching is by constructing each candidate and reading its ``params_version``: that value is a
+    *field* on these configclasses (1.0's finding), so the class attribute is not the version a
+    class builds. Discovered rather than looked up, because after the entry switch the identity map
+    names the generated class and a name table here would be the second hand-copied mapping this
+    migration exists to remove.
+
+    Two classes can build the same version -- the line's "latest" class and the pinned ``_V<N>`` one
+    are the same recipe by construction -- so a name carrying the version token wins when there is
+    exactly one of those; anything else that is ambiguous is a failure, never a guess.
+    """
+    module_name = recipe.LINES[line]["base"].__module__
+    module = importlib.import_module(module_name)
+    base = recipe.LINES[line]["base"]
+    candidates: list[type] = []
+    for value in vars(module).values():
+        if not isinstance(value, type) or value is base:
+            continue
+        if getattr(value, "__module__", None) != module_name:
+            continue
+        if value.__name__.endswith("_PLAY") is not bool(play):
+            continue
+        instance = _probe(value)
+        if instance is not None and getattr(instance, "params_version", None) == version:
+            candidates.append(value)
+    pinned = [cls for cls in candidates if f"_V{version.lstrip(chr(118))}" in cls.__name__]
+    if len(pinned) == 1:
+        return pinned[0], None
+    if len(pinned) > 1:
+        return None, f"{len(pinned)} classes name {version} (play={play}): {sorted(c.__name__ for c in pinned)}"
+    if len(candidates) == 1:
+        return candidates[0], None
+    if not candidates:
+        return None, (
+            f"no class in {module_name} builds params_version={version!r} (play={play}): the class"
+            " path this recipe replaces is gone -- retire this comparison deliberately if intended"
+        )
+    return None, (
+        f"{len(candidates)} classes build params_version={version!r} (play={play}) and none names"
+        f" {version}: {sorted(c.__name__ for c in candidates)}"
+    )
 
 
 def declared_diff(line_key: str, version: str) -> tuple[dict | None, str | None]:
@@ -417,16 +476,14 @@ def main(argv: list[str] | None = None) -> int:
                         f"{task_id}: built cfg carries params_version={getattr(built, 'params_version', None)!r}"
                         f" while the recipe is {version!r}"
                     )
-                # the recipe map names the class this task is built from, so the ClassVar comparison
-                # reads a declaration instead of guessing the class name from the version string
-                entry = (mapping.get("recipes", {}).get(recipe_key or "") or {}).get("env_cfg_entry")
-                try:
-                    cls = lock.resolve_entry(entry)
-                except (ImportError, AttributeError, TypeError, ValueError) as err:
-                    problems.append(
-                        f"{task_id}: recipe {recipe_key!r} entry {entry!r} does not resolve:"
-                        f" {type(err).__name__}: {err}"
-                    )
+                # the class path: the version subclass this recipe replaces, found by scanning the
+                # line's own wiring module. Not by the identity map: after the entry switch that map
+                # names the generated class, so resolving through it would compare the declaration
+                # with itself and quietly retire this gate; and a table of class names here would be
+                # the second hand-copied mapping this whole migration is about.
+                cls, why = replaced_class(version, play=play, line=line_key)
+                if cls is None:
+                    problems.append(f"{line_key}/{version}/{kind}: {why}")
                 else:
                     for name, stated, carried in classvar_gaps(cls, built):
                         gaps.setdefault(name, {"values": set(), "recipes": []})

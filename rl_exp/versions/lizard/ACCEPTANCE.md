@@ -1163,6 +1163,31 @@ resume 拒绝、save 守卫、`train.py` 的导入失败守卫、manifest 记录
 - **入口侧验收状态（本节更新）**：L02（退休线过三个入口）**通过**（三档各自真跑）；L03 的"缺状态 resume 硬拒"仍只有离线半边（真跑需一个缺课程状态的 ckpt 臂，属 C 层旧账）；L05 的"启动后改目录"**通过**（`moved` 档）。
 - 本批不新增套件条目（机制断言落在 `[41]` 内；`lifecycle_entry_run.py` 要起 sim，按 `OFFLINE_CHECKS.md` 5 不进套件）。
 
+## C2 收尾 · 翻注册表：声明路径成为训练入口（2026-09-17）
+
+**性质**：**追加**条目。上节备好的机制在本节**接上电**：26 个已声明任务的 `env_cfg_entry`（注册表）与 `env_cfg_entry_point`（身份映射）从版本类改指 `recipe_tasks` 的生成类。
+
+### 落地
+| 件 | 内容 |
+|---|---|
+| `tasks\recipe_tasks.py`（新） | 每条已声明配方 × train/play 生成一个类，**名字沿用被替换的版本类名**；名字从 `recipes.json` 读（身份映射），不另立清单；模块无需显式 import（注册表以字符串指向它） |
+| 注册表 + 身份映射 | 各 26 条 entry 改指 `rl_exp.tasks.recipe_tasks:<同类名>`（脚本改字符串，逐条打印，未手抄） |
+| `[41]` 过渡闸门 | 改为**按发现**取被替换的版本类（构造候选类读 `params_version` —— 它是字段，1.0 结论；版本令牌优先解决"最新类与 `_V<N>` 类同版"的歧义）。**不改就会静默失效**：翻表后身份映射指向生成类，闸门若仍经它取类，就是拿生成类与自己比 |
+| `test_recipe_map_gate.py` | 反证用例改为断言"解析器读到了 env 入口"（类名后缀）而非"等于某个模块路径"，否则它会为一次它并不看守的改动变红 |
+
+### 检查与结果
+| 项 | 结果 |
+|---|---|
+| 真实入口路径 | **通过**：`gym.spec('Lizard-Rough-v14')` → `rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V14` → 构造得 `params_version=v14`、`REQUIRES_CURRICULUM_STATE=True`、`type(cfg).__name__` **与翻表前同名**（PLAY 同理） |
+| 硬 A / 硬 B / 归属 / 生成类等价 | `[41]` **通过**：`RECIPE_BUILD_OK (26 task(s) field-identical to the frozen golden; 76 declared difference(s) from the stock base)`，单跑 9.8 s（预算 25） |
+| 全套 | **43/43 通过**（wave 199 s / 400）—— 含 golden `[24]`（逐字段未动）、身份映射 `[31]` + 其反证 `[32]`、obs 契约、pxr `[14]`、生命周期 `[39][40]`、组件单写点 `[37]` |
+
+### 边界
+- **版本类体已无人引用，但没删**：删除属 B 侧迁移收尾；`[41]` 的过渡闸门正靠发现它们而与配方表对账 —— 删干净时该闸门应当被**显式退役**（"找不到被替换的类"现在是红，不是跳过）。
+- **未改**：agent（PPO）配置仍由 `rsl_rl_ppo_cfg.py` 的类提供（本轮只翻 env cfg 入口）；hydra override 语义、日志目录名、`--task` 与 agent 入口的一切不变。
+- 生成类与版本类**是不同的类对象**：全仓已查无按类身份判版本的代码（只有框架基类的 `isinstance`），故无静默错。
+- 声明路径成为入口 ≠ 已被真跑覆盖：`lifecycle_entry_run.py` 的五档验的是**生命周期判定**；"声明路径训练出的 run 与类路径等价"仍由 `[41]` 的字段等价 + 将来的真跑背书。
+
 ## B4 · 硬 B 加齿：路径归属元素 + agent 侧进清单 + baseline 锁入摘要看守（2026-09-17）
 
 **性质**：**追加**条目。上一节 B2/B4 列的四条里，本节收**三条**；第 4 条（注册表翻表 / 删版本类体）由并行批次的 `apply_into` + `recipe_class` 开头，本节只记**我核实的那一步**（见末节）。改动面 = `[41]`（`covers()` 方向、`hard_b` 的两侧、agent 段）、`versions/lizard/baseline/v1/diff.json`（format 2）、`[35]`（FROZEN 第 4 项 + `FROZEN_REVS` + 两表键一致性）。
