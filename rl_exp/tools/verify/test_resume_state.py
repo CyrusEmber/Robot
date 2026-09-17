@@ -63,9 +63,13 @@ from rl_exp.tasks.curriculum_state import (  # noqa: E402
     apply_resume_state,
     apply_state,
     collect,
+    declares,
+    expected_terms,
     hook_runner_save,
     static_state,
     uncovered_terms,
+    verify_declaration,
+    wired_terms,
 )
 from rl_exp.tasks.param_grid_terrain import build_param_grid_terrain_cfg  # noqa: E402
 from rl_exp.tasks.teacher_env_cfg import (  # noqa: E402
@@ -807,6 +811,76 @@ def test_drop_alias_and_conflict() -> None:
         assert out["status"] == "dropped" and out["evidence"] == "none"
         assert any("DEPRECATED" in r for r in reports)
         assert env2.common_step_counter == 0  # explicit drop = cold curriculum
+
+
+def test_declaration_is_checked_against_wiring_and_each_save() -> None:
+    """A promise that cannot be honoured stops the run, and a checkpoint that would lie stops too.
+
+    Three findings the earlier guards could not reach: the promise may hold on the class while the
+    wiring is empty (the save guard's conjunction then reads "no promise"), a term may be wired
+    with no adapter (its state would cold-start), and a payload may carry only the clock while the
+    config asks for terms -- emptiness is not the question, coverage is.
+    """
+    torch.manual_seed(31)
+    env, term = _row_pair(counter=0)
+    assert declares(env) and verify_declaration(env) == []
+    assert expected_terms(env) == [ROW_TERM] and wired_terms(env).keys() == {ROW_TERM}
+
+    # 1. declared, but the config asks for nothing: the promise and the recipe disagree
+    unwired = _row_pair(counter=0)[0]
+    unwired.curriculum_manager = SimpleNamespace(cfg=SimpleNamespace(**{ROW_TERM: None}))
+    problems = verify_declaration(unwired)
+    assert problems and "wires no curriculum at all" in problems[0], problems
+    assert not verify_declaration(_row_pair(counter=0, cfg_cls=_TaskCfgV14Plain)[0])
+
+    class _Runner:
+        is_distributed = False
+        gpu_global_rank = 0
+        current_learning_iteration = 3
+
+        def save(self, path, infos=None, *args, **kwargs):
+            return "saved"
+
+    try:
+        hook_runner_save(_Runner(), unwired, report=lambda _line: None)
+        raise AssertionError("a declared task whose wiring cannot honour it must not start")
+    except RuntimeError as err:
+        assert "cannot honour it" in str(err)
+
+    # 2. declared, but a wired stateful term has no adapter: it could never be snapshotted
+    uncovered = _row_pair(counter=0)[0]
+    fake = object.__new__(type("_FakeStatefulTerm", (ManagerTermBase,), {}))
+    uncovered.curriculum_manager.cfg.speed_curriculum = SimpleNamespace(func=fake)
+    assert any("no registered adapter" in problem for problem in verify_declaration(uncovered))
+
+    # 3. a payload that carries only the clock is not a curriculum state for this task
+    runner = _Runner()
+    hook_runner_save(runner, env, report=lambda _line: None)
+    # the declarative side keeps asking for the term (it is the env cfg, as on a real env) while
+    # the manager's wiring is cleared after the startup check: exactly the mid-run change the
+    # older "collect came back empty" branch cannot see, because the clock makes the payload real
+    env.cfg.curriculum = SimpleNamespace(**{ROW_TERM: SimpleNamespace(func=term)})
+    env.curriculum_manager.cfg.__dict__[ROW_TERM] = None
+    payload = collect(env, it=3)
+    assert payload is not None and payload["terms"] == {}  # the clock alone: not None, not enough
+    assert expected_terms(env) == [ROW_TERM]
+    try:
+        runner.save("model_3.pt")
+        raise AssertionError("a checkpoint without the state its task promises must not be written")
+    except RuntimeError as err:
+        assert "un-resumable" in str(err)
+
+    # the falsifier: with the declaration read removed, that same save goes through -- so the
+    # finding above is the new rule, not the older empty-payload branch
+    import rl_exp.tasks.curriculum_state as cstate
+
+    try:
+        cstate.declares = lambda _env: False
+        runner2 = _Runner()
+        hook_runner_save(runner2, env, report=lambda _line: None)
+        assert runner2.save("model_3b.pt") == "saved"
+    finally:
+        cstate.declares = declares
 
 
 def test_declaration_is_class_level_and_off_in_play() -> None:

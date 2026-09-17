@@ -1105,6 +1105,36 @@ classvar the declaration cannot carry: REQUIRES_CURRICULUM_STATE: False != 'not 
 - 硬 B **不证"配方正确"**：它只证"与 stock 基类的差异恰好是声明的那 33 条"。也不证真环境行为（那要真跑）。
 - 本轮**仍不新增套件条目**：硬 B 落在既有 `[41]` 内（同一套 snapshot/diff，只换期望值），不付第二份 import 税，也不碰并行侧的 `offline_suite.py`。
 
+## 声明载体与接线对账（C2 切换入口前必须落的那批，2026-09-17）
+
+**性质**：**追加**条目。这批是"声明来源 / 启动校验 / trainer 守卫 / T0-T1 记录"四件一次做完，因为**单改一处都不完整**：只删 save 守卫的合取会把它变成"训练几小时后 save 时才炸"；只改 manifest 会让其余三个读点继续按类读取。
+
+**改动面**：`recipe.py`（`declares` 进配方表 + `declaration()` + `build()`/`base_cfg()` 返回**携带声明的合成子类**）、`curriculum_state.py`（`declares`/`wired_terms`/`expected_terms`/`verify_declaration` + 启动调用 + save 的载荷覆盖判据）、`check_recipe_build.py`（**过渡期保真闸门**：表 == 类）、`manifest.py`（T0 记 expected/wired/declaration_problems，原有 `declares_curriculum_state` 保留）、`test_resume_state.py`（新用例 + 反证）、`FILEMAP.md`。
+
+### 关键设计：不改四个读点，而是让 `type(cfg)` 说真话
+
+resume 拒绝、save 守卫、`train.py` 的导入失败守卫、manifest 记录，四者都读 `type(cfg)` 上的 `REQUIRES_CURRICULUM_STATE`。所以修法不是教四个读者认新来源，而是让**声明路径返回的类也带这句声明**（配方表为真源，`build()` 用 `type(...)` 合成子类盖上）；`launch_recipe.py`（C2 入口）与注册表仍走类路径，两条路径因此**答案一致**。
+
+> **一处实测教训（写下来免得重踩）**：盖章必须写成 `ClassVar[bool]` 标注，不能只 `setattr` 一个值。只设值会让 `cfg_snapshot` 的 ClassVar 判定失效 ⇒ 它作为**字段**进入快照 ⇒ 一次跑出 **24 条硬 A 红 + 9 条归属无主 + 1 条硬 B 未声明差异**。标注后三条全消失：声明是"关于配方的陈述"，不是数据。
+
+### 检查与结果
+
+| 编号 | 命令 | 结果 |
+|---|---|---|
+| 硬 A / 硬 B / 归属 | `check_recipe_build.py`（套件 `[41]`） | **通过**：`RECIPE_BUILD_OK (26 task(s) field-identical to the frozen golden; 33 declared difference(s) from the stock base)` |
+| 过渡期保真闸门 | 同上（每个 line/version/kind 比对表与类） | **通过**（26/26）；**反证 FIRED**：只把表里 v14 改成 `(False, False)` ⇒ `FAIL lizard/main/v14/train: the recipe states …=False while LizardRoughTeacherEnvCfg_V14 states True -- the two paths would answer differently` |
+| 台账清理 | 同上 | **通过**：`REQUIRES_CURRICULUM_STATE` 不再是缺口 ⇒ 按"陈旧台账项也红"的规则删条目（`EXPECTED_GAPS` 现只剩 `PLAY_PINS_COMMAND_RANGE`） |
+| 声明与接线对账 + save 覆盖 | `test_resume_state.py`（新用例 + 反证） | **通过**：28/28。三面：①声明 True 而配置不断言任何课程项 ⇒ `verify_declaration` 报"wires no curriculum at all"且 `hook_runner_save` 抛错；②已接的 stateful term 无 adapter ⇒ 报"no registered adapter"；③配置仍要该 term 而**接线被清空**（只有 c_k 时钟的载荷，`collect` 返回的不是 None）⇒ save 抛"un-resumable"。**反证 FIRED**：把 `declares` 读法摘掉后同一 save 顺利通过 ⇒ 上述红来自新判据，不是旧的"载荷为空"分支 |
+| 旁证 | 全量套件 | **43/43**（wave 203 s / 400 s）；`[14]` 仍 `task cfg import chain is pxr-clean`（`recipe.py` 新增 `curriculum_state` import 未破坏链） |
+
+### 边界
+
+- **合取保留**（`requires_resume_state = 声明 ∧ 有接线`）：它不再承担"声明是否成立"的判断，那件事移到启动时 `verify_declaration`（训练前终止）；它在 resume 侧仍表达"这条任务确实要恢复点什么"。
+- **对账用"配置字段"而非第二张 term 清单**：`expected_terms` 从 `cfg.curriculum.*` 派生（取不到时回落 manager 的 cfg，为的是不把 stub 读成"配置什么都没要"）。因此**不新增手抄映射**；代价是"声明与接线"的对账强度取决于 cfg 字段与 manager 是否同源（真实 env 上二者本就是同一对象）。
+- **`train.py:324` 一字未动**：它的读法在声明路径变真后自动正确 —— 这正是"改载体、不改读者"的收益。
+- **仍未做**：`launch_recipe.py` 改走 `recipe.build()`（即"声明路径成为训练入口"）与随之的版本类体删除；硬 B 仍只覆盖 env cfg（agent 配置未纳入）；真环境行为等价仍要 C 层真跑。
+- **`declares` 的值是过渡期抄自版本类的**（train True/False、play 全 False），由保真闸门逐步看守；等类体删除后，配方表成为唯一来源。
+
 
 
 

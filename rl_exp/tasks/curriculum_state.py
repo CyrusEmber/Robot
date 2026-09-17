@@ -652,11 +652,88 @@ def requires_resume_state(env) -> bool:
     The task declares it (``REQUIRES_CURRICULUM_STATE`` on the env cfg class, read
     through the class so a config value's absence cannot hide it) and wires at least
     one curriculum term. A resume of such a task must not cold-start.
+
+    The conjunction is kept deliberately: a task may state the promise while its wiring
+    is legitimately empty for one variant, and that combination is now *refused at
+    startup* by :func:`verify_declaration` rather than answered here.
     """
     cfg_cls = type(getattr(_unwrap(env), "cfg", None))
     if not getattr(cfg_cls, REQUIRES_CURRICULUM_STATE, False):
         return False
     return bool(_wired_terms(env))
+
+
+def declares(env) -> bool:
+    """The raw promise, regardless of what is wired (the statement, not its outcome)."""
+    return bool(getattr(type(getattr(_unwrap(env), "cfg", None)), REQUIRES_CURRICULUM_STATE, False))
+
+
+def wired_terms(env) -> dict[str, object]:
+    """The curriculum terms the manager actually wired, by name (empty when there is no manager)."""
+    return dict(_wired_terms(env))
+
+
+def _curriculum_cfg(env):
+    """The curriculum config: the env cfg's own field, or the manager's cfg when it has none.
+
+    On a real env these are the same object (the manager is constructed with ``cfg.curriculum``),
+    so reading the declarative side costs nothing; the fallback exists because a stand-in that
+    models only the manager side would otherwise read as "this config asks for nothing" -- and
+    that is the very mistake this check is here to catch, so it must not be made by the check.
+    """
+    unwrapped = _unwrap(env)
+    cfg = getattr(unwrapped.cfg, "curriculum", None)
+    if cfg is None:
+        cfg = getattr(getattr(unwrapped, "curriculum_manager", None), "cfg", None)
+    return cfg
+
+
+def expected_terms(env) -> list[str]:
+    """The curriculum terms this run's *config* asks for: its non-None curriculum entries.
+
+    Derived from the fields rather than from a second list somebody maintains, so the
+    expectation cannot drift from the wiring it describes -- and it answers on both build
+    paths, because the fields are there either way.
+    """
+    curriculum = _curriculum_cfg(env)
+    if curriculum is None:
+        return []
+    return sorted(name for name, value in vars(curriculum).items() if not name.startswith("_") and value is not None)
+
+
+def verify_declaration(env) -> list[str]:
+    """Why this run's curriculum statement does not hold, if it does not.
+
+    A promise is checked as a promise: **stated** (the class declares it), **asked for**
+    (the config wires something), **wired** (the manager built it) and **coverable** (an
+    adapter can snapshot it). Any of those missing means a resume of this task would
+    cold-start while the run claims otherwise, which is the incident this module exists for,
+    so the caller treats a non-empty answer as fatal *before* training starts.
+
+    Returns:
+        One line per violation; empty when the task promises nothing (nothing to check) or
+        everything it promises holds.
+    """
+    if not declares(env):
+        return []
+    expected = expected_terms(env)
+    wired = wired_terms(env)
+    problems: list[str] = []
+    if not expected:
+        problems.append(
+            "declares a resumable curriculum state but its config wires no curriculum at all"
+            " (the promise and the recipe disagree)"
+        )
+    for name in expected:
+        if name not in wired:
+            problems.append(f"config asks for curriculum term {name!r} but the manager did not wire it")
+    for name in uncovered_terms(env):
+        if name in expected or not expected:
+            problems.append(
+                f"wired stateful term {name!r} has no registered adapter, so its state cannot be"
+                " snapshotted: a resume of this task would cold-start it"
+            )
+    return problems
 
 
 def static_state(term, env) -> dict:
@@ -1187,6 +1264,18 @@ def hook_runner_save(runner, env, *, report=print) -> bool:
         True when the wrapper was installed; False when this rank does not save
         (multi-GPU: only rank 0 writes the state it verified).
     """
+    # The declaration is checked here because this is the one call site every run reaches
+    # before learning, and because the promise is about the whole run rather than about one
+    # save: a task that says "a resume continues my curriculum" has to be able to keep that
+    # promise from the first iteration, not at the first checkpoint. ``save_with_state``
+    # below enforces the same promise per save (the wiring can change mid-run).
+    promised = verify_declaration(env)
+    if promised:
+        raise RuntimeError(
+            "[curriculum-state] this task declares REQUIRES_CURRICULUM_STATE but its wiring cannot"
+            " honour it:\n  " + "\n  ".join(promised) + "\nFix the recipe/wiring, or drop the"
+            " declaration -- a run that cannot resume its curriculum must not start as if it could."
+        )
     if getattr(runner, "is_distributed", False):
         if getattr(runner, "gpu_global_rank", 0) != 0:
             report(
@@ -1201,6 +1290,20 @@ def hook_runner_save(runner, env, *, report=print) -> bool:
     @functools.wraps(original)
     def save_with_state(path, infos=None, *args, **kwargs):
         state = collect(env, it=getattr(runner, "current_learning_iteration", None))
+        # a payload that carries only the clock is NOT a curriculum state: the terms this task's
+        # config asks for can all be absent from it (SIR terms nulled after startup, an adapter
+        # that stopped covering them), and then the checkpoint resumes "successfully" into a cold
+        # curriculum. Emptiness is not the question; coverage of what was asked for is.
+        if declares(env):
+            collected = set((state or {}).get("terms") or {})
+            absent = [name for name in expected_terms(env) if name not in collected]
+            if absent:
+                raise RuntimeError(
+                    f"{type(getattr(_unwrap(env), 'cfg', None)).__name__} declares"
+                    f" {REQUIRES_CURRICULUM_STATE} but {path} would carry no state for"
+                    f" {absent}: the checkpoint would be un-resumable. Check the curriculum wiring"
+                    " (a term nulled by a recipe/PLAY variant?)."
+                )
         if state is None:
             if requires_resume_state(env):
                 raise RuntimeError(

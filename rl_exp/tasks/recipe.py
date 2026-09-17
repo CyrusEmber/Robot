@@ -23,6 +23,7 @@ not moved yet" would pass every check it was asked to pass.
 from __future__ import annotations
 
 import pathlib
+from typing import ClassVar
 
 import isaaclab.sim as sim_utils
 import isaaclab_tasks.manager_based.locomotion.velocity.mdp as mdp
@@ -33,6 +34,7 @@ from isaaclab.managers import RewardTermCfg as RewTerm
 from isaaclab.managers import SceneEntityCfg
 
 from rl_exp.tasks import baseline_env_cfg, baseline_mdp, components, recipe_params, teacher_mdp
+from rl_exp.tasks import curriculum_state as cstate
 from rl_exp.tasks import teacher_env_cfg
 from rl_exp.tasks.play_utils import apply_play_wiring
 from rl_exp.tasks.staged_curriculum import StageCfg, StagedCurriculumTerm, StagedCurriculumTermCfg
@@ -653,27 +655,27 @@ _JOINT_SIR_PLAY: tuple[str, ...] = ("play_drops_joint_sir_curriculum",)
 """v11/v12 replace the row SIR with the joint one, so their PLAY guard is the joint term."""
 
 RECIPES: dict[str, dict] = {
-    "v1": {"elements": (), "play_elements": (), "train": "Lizard-Rough-v1", "play": "Lizard-Rough-Play-v1"},
-    "v2": {"elements": (), "play_elements": (), "train": "Lizard-Rough-v2", "play": "Lizard-Rough-Play-v2"},
-    "v3": {"elements": _V3_DELTA, "play_elements": _V3_PLAY, "train": "Lizard-Rough-v3", "play": "Lizard-Rough-Play-v3"},
-    "v4": {"elements": _V4_DELTA, "play_elements": _V3_PLAY, "train": "Lizard-Rough-v4", "play": "Lizard-Rough-Play-v4"},
-    "v5": {"elements": _V5_DELTA, "play_elements": _SIR_PLAY, "train": "Lizard-Rough-v5", "play": "Lizard-Rough-Play-v5"},
+    "v1": {"elements": (), "play_elements": (), "declares": (False, False), "train": "Lizard-Rough-v1", "play": "Lizard-Rough-Play-v1"},
+    "v2": {"elements": (), "play_elements": (), "declares": (False, False), "train": "Lizard-Rough-v2", "play": "Lizard-Rough-Play-v2"},
+    "v3": {"elements": _V3_DELTA, "play_elements": _V3_PLAY, "declares": (False, False), "train": "Lizard-Rough-v3", "play": "Lizard-Rough-Play-v3"},
+    "v4": {"elements": _V4_DELTA, "play_elements": _V3_PLAY, "declares": (False, False), "train": "Lizard-Rough-v4", "play": "Lizard-Rough-Play-v4"},
+    "v5": {"elements": _V5_DELTA, "play_elements": _SIR_PLAY, "declares": (True, False), "train": "Lizard-Rough-v5", "play": "Lizard-Rough-Play-v5"},
     # v6/v8/v10 share one element list: v6.1 unlocks the spine (one yaml-sourced line), v8 and
     # v10 change no cfg field at all -- v8's flip + joint renames are the asset, v10's tilt
     # removal is the yaml flag components.terminations already reads. An empty delta is stated
     # as v6's list, never as ``None``: these recipes ARE declared, what they declare beyond v6
     # is nothing.
-    "v6": {"elements": _V6_DELTA, "play_elements": _SIR_PLAY, "train": "Lizard-Rough-v6", "play": "Lizard-Rough-Play-v6"},
-    "v8": {"elements": _V6_DELTA, "play_elements": _SIR_PLAY, "train": "Lizard-Rough-v8", "play": "Lizard-Rough-Play-v8"},
-    "v10": {"elements": _V6_DELTA, "play_elements": _SIR_PLAY, "train": "Lizard-Rough-v10", "play": "Lizard-Rough-Play-v10"},
+    "v6": {"elements": _V6_DELTA, "play_elements": _SIR_PLAY, "declares": (True, False), "train": "Lizard-Rough-v6", "play": "Lizard-Rough-Play-v6"},
+    "v8": {"elements": _V6_DELTA, "play_elements": _SIR_PLAY, "declares": (True, False), "train": "Lizard-Rough-v8", "play": "Lizard-Rough-Play-v8"},
+    "v10": {"elements": _V6_DELTA, "play_elements": _SIR_PLAY, "declares": (True, False), "train": "Lizard-Rough-v10", "play": "Lizard-Rough-Play-v10"},
     # v11 hands the terrain curriculum to the joint particle filter; v12 adds the reset/obs
     # robustness package on top of it. v13 deliberately branches off v10, NOT off v12 -- it is the
     # single-variable kernel fix on the v10 line -- so its list is v6's plus its own element, and
     # the joint SIR / v12 resets are absent from it by construction.
-    "v11": {"elements": _V11_DELTA, "play_elements": _JOINT_SIR_PLAY, "train": "Lizard-Rough-v11", "play": "Lizard-Rough-Play-v11"},
-    "v12": {"elements": _V12_DELTA, "play_elements": _JOINT_SIR_PLAY, "train": "Lizard-Rough-v12", "play": "Lizard-Rough-Play-v12"},
-    "v13": {"elements": _V13_DELTA, "play_elements": _SIR_PLAY, "train": "Lizard-Rough-v13", "play": "Lizard-Rough-Play-v13"},
-    "v14": {"elements": _V14_DELTA, "play_elements": _SIR_PLAY, "train": "Lizard-Rough-v14", "play": "Lizard-Rough-Play-v14"},
+    "v11": {"elements": _V11_DELTA, "play_elements": _JOINT_SIR_PLAY, "declares": (True, False), "train": "Lizard-Rough-v11", "play": "Lizard-Rough-Play-v11"},
+    "v12": {"elements": _V12_DELTA, "play_elements": _JOINT_SIR_PLAY, "declares": (True, False), "train": "Lizard-Rough-v12", "play": "Lizard-Rough-Play-v12"},
+    "v13": {"elements": _V13_DELTA, "play_elements": _SIR_PLAY, "declares": (True, False), "train": "Lizard-Rough-v13", "play": "Lizard-Rough-Play-v13"},
+    "v14": {"elements": _V14_DELTA, "play_elements": _SIR_PLAY, "declares": (True, False), "train": "Lizard-Rough-v14", "play": "Lizard-Rough-Play-v14"},
 }
 
 MAIN_LINE = "lizard/main"
@@ -705,6 +707,9 @@ BASELINE_RECIPES: dict[str, dict] = {
         # instead of silently carrying the recipe along. An element whose value equals the
         # base's moves no field, which the attribution check would read as a dead declaration.
         "pins": ("baseline_timing",),
+        # no curriculum at all on this line: the declaration is False for both kinds, and
+        # ``baseline_no_curriculum`` is what makes it so.
+        "declares": (False, False),
         "train": "Lizard-Baseline-Flat-v1",
         "play": "Lizard-Baseline-Flat-Play-v1",
     },
@@ -728,13 +733,62 @@ def pending(line: str = MAIN_LINE) -> list[str]:
     return sorted(version for version, decl in LINES[line]["recipes"].items() if decl["elements"] is None)
 
 
-def base_cfg(version: str, *, line: str = MAIN_LINE):
+def declaration(version: str, *, play: bool = False, line: str = MAIN_LINE) -> bool | None:
+    """Whether ``line``'s ``version`` promises a resumable curriculum state, or None if unstated.
+
+    The promise is a *statement about* a recipe, so the snapshot leaves it out (format 2 excludes
+    ``ClassVar``) and it is carried as a ``ClassVar`` on the built config rather than as a field --
+    a field would enter the frozen golden and re-anchor every lock. Until this table carries it,
+    the runtime answered by reading the version subclass; ``check_recipe_build`` compares the two
+    for as long as both paths exist, so a drifted table is red instead of quiet.
+
+    Args:
+        version: recipe version, a key of this line's recipe table.
+        play: the evaluation variant (a PLAY task never resumes a curriculum by construction).
+        line: family-relative line handle, a key of :data:`LINES`.
+
+    Returns:
+        ``True``/``False`` when the recipe states it, ``None`` when it does not state it at all
+        (``build`` then leaves the shared wiring's own statement alone).
+    """
+    entry = LINES[line]["recipes"].get(version) or {}
+    stated = entry.get("declares")
+    return None if stated is None else bool(stated[1 if play else 0])
+
+
+def _wired_class(version: str, *, play: bool, line: str):
+    """The class to construct: the line's shared wiring, plus the recipe's own statement.
+
+    A synthesized subclass, for one reason: four readers ask ``type(cfg)`` whether this task
+    promises a curriculum state -- the resume path, the save guard, the trainer's import guard and
+    the run manifest -- and a builder that returns the bare shared class silently answers "no" for
+    a recipe that declares yes. Carrying the statement on the class keeps those readers unchanged
+    and keeps the statement out of the snapshot. The class name is the shared wiring's, so nothing
+    that records ``type(cfg).__name__`` moves.
+    """
+    base = LINES[line]["base"]
+    stated = declaration(version, play=play, line=line)
+    if stated is None:
+        return base
+    # annotated as a ClassVar, not merely set: the snapshot tells the two apart by the
+    # annotation (cfg_snapshot._class_var_names), so an unannotated attribute would enter the
+    # frozen-golden comparison as a field the golden does not have -- a statement is not data
+    return type(
+        base.__name__,
+        (base,),
+        {"__annotations__": {cstate.REQUIRES_CURRICULUM_STATE: ClassVar[bool]}, cstate.REQUIRES_CURRICULUM_STATE: stated},
+    )
+
+
+def base_cfg(version: str, *, line: str = MAIN_LINE, play: bool = False):
     """The shared wiring a recipe starts from, before any of its own elements are applied.
 
     Public because the attribution check has to start where the builder starts: a checker that
-    built its own base would drift from this one without either side noticing.
+    built its own base would drift from this one without either side noticing. It carries the
+    recipe's statement for the same reason ``build`` does -- otherwise the statement itself would
+    read as a field changed by nobody.
     """
-    return LINES[line]["base"](params_version=version)
+    return _wired_class(version, play=play, line=line)(params_version=version)
 
 
 def build(version: str, *, play: bool = False, trace: list | None = None, line: str = MAIN_LINE):
@@ -771,7 +825,7 @@ def build(version: str, *, play: bool = False, trace: list | None = None, line: 
         )
     # the version travels as the *field* it is: the shared wiring resolves every structural
     # choice from it, and a subclass that only restated it is exactly what this replaces
-    cfg = base_cfg(version, line=line)
+    cfg = base_cfg(version, line=line, play=play)
     for name in elements:
         ELEMENTS[name](cfg)
         if trace is not None:

@@ -60,6 +60,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import cfg_snapshot as cs  # noqa: E402
 import check_cfg_lock as lock  # noqa: E402 - sibling gate: snapshot, diff and lock reading
 from recipe_lines import discover  # noqa: E402
+from rl_exp.tasks import curriculum_state as cstate  # noqa: E402
 from rl_exp.tasks import recipe  # noqa: E402
 
 DIFF_NAME = "diff.json"
@@ -94,12 +95,6 @@ EXPECTED_DIFFS: dict[tuple[str, str], int] = {
 """Recipe -> how many paths its difference declaration lists (``diff.json`` next to the recipe)."""
 
 EXPECTED_GAPS: dict[str, tuple[str, str]] = {
-    "REQUIRES_CURRICULUM_STATE": (
-        "read at runtime off type(cfg); the declaration path has no class to state it, and no"
-        " field makes up for it",
-        "before build() becomes the training entry (ARCH_PLAN 2.4 C2): the reading side must come"
-        " from a declaration that survives both paths",
-    ),
     "PLAY_PINS_COMMAND_RANGE": (
         "read at construction time by the base __post_init__; the declaration path reproduces its"
         " effect instead of the statement, so the gap is already materialized in the fields",
@@ -351,6 +346,28 @@ def main(argv: list[str] | None = None) -> int:
                         gaps.setdefault(name, {"values": set(), "recipes": []})
                         gaps[name]["values"].add(f"{stated!r} != {carried!r}")
                         gaps[name]["recipes"].append(f"{version}/{kind}")
+                    # The declaration has to be the same on both paths while both exist. The
+                    # class path is what trains today and the declaration path is what will, so a
+                    # recipe table drifting from the class it replaces is two different answers to
+                    # "does this task promise a curriculum state" -- and the one that loses is
+                    # whichever path nobody ran. Unstated in the table is a failure too: the table
+                    # is the source the declaration path stamps from, so it cannot be silent.
+                    stated_in_table = recipe.declaration(version, play=play, line=line_key)
+                    stated_in_class = bool(getattr(cls, cstate.REQUIRES_CURRICULUM_STATE, False))
+                    if stated_in_table is None:
+                        problems.append(
+                            f"{line_key}/{version}/{kind}: the recipe states no"
+                            f" {cstate.REQUIRES_CURRICULUM_STATE}, so the declaration path cannot"
+                            " carry it -- state it (the class path states"
+                            f" {stated_in_class})"
+                        )
+                    elif stated_in_table != stated_in_class:
+                        problems.append(
+                            f"{line_key}/{version}/{kind}: the recipe states"
+                            f" {cstate.REQUIRES_CURRICULUM_STATE}={stated_in_table} while"
+                            f" {getattr(cls, '__name__', cls)} states {stated_in_class} -- the two"
+                            " paths would answer differently"
+                        )
                 attribution(version, play=play, paths=attribution_problems, line=line_key)
                 rows: list = []
                 lock.walk_diff(stored["snapshot"]["env"], cs.snapshot(built), "", rows)
