@@ -49,6 +49,16 @@ def declaration() -> dict:
         raise ProtocolError(f"cannot read {DECLARATION}: {err}") from err
 
 
+def task_route(task_id: str) -> dict:
+    """The declaration's route for one task: ``protocol``, ``version``, ``line``.
+
+    Empty for an undeclared task: callers that need a hard failure ask
+    :func:`protocol_for`, while a reader reporting on many tasks wants the absence as a value.
+    """
+    route = (declaration().get("tasks") or {}).get(task_id)
+    return dict(route) if isinstance(route, dict) else {}
+
+
 def declared(task_id: str) -> bool:
     """Whether the declaration carries this task at all.
 

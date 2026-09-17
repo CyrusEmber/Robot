@@ -934,6 +934,38 @@ protocol gate（--live）  exit 0   golden 36 | live 34（退役的两个任务�
     - v1/v2 的 TRAIN/PLAY 差异（corruption/噪声）由**其后的 play 接线**施加（`play_utils`），不在组件里 ⇒ 组件按 `params_version` 寻址时两者形状相同，只有在**协议身份**层面才分家。
     ⇒ 合口**不需要**新造身份参数；需要的是把既有的"版本 → 该版本 TRAIN 侧布局"映射讲清（声明有 `tasks[t]["version"]`，`recipes.json` 有 `legacy_task_version`），并保证 **play 接线仍是唯一施加 PLAY 噪声/corruption 的地方**（否则"版本 → 布局"不再良定义）。
     措辞更正：合口后 `--live` 不是"自己比自己"，准确说是**退化为"声明 → 配置"的转换一致性检查**，不再提供独立正确性证据；届时唯一独立来源是冻结 golden，**3.1e 真 env 变为承重**。
+### 3.1e 真跑：live obs 契约（2026-09-17，**部分完成**）
+
+命令（本机实跑，headless）：
+```
+python rl_exp/tools/verify/obs_protocol_live.py --headless \
+  --tasks Lizard-Rough-v14 Lizard-Rough-Play-v14 Lizard-Parkour-Climb-v1 Lizard-Velocity-Flat-v0
+```
+结果：`OBS_PROTOCOL_LIVE_FAILED (1 problem(s), 3 warning(s))`
+
+**通过的部分**（读的是 live manager，不是构造物）：
+```
+v14 TRAIN / PLAY   proprio=90 extero=208 priv=83，组序与逐 term 序与声明一致，张量 (2, width) 一致，4 只脚的 <foot>_foot body 都在
+Velocity-Flat-v0   policy=90（宽度**未批**，按未批标记，不冒充通过）
+```
+**发现 1（WARN，判据未定）**：live articulation 的关节**序列**与配方文档的 `joint_order` 不同（同一 26 个关节）：
+```
+live     chest_yaw, tail1_yaw, rr_haa, rl_haa, chest_pitch, tail1_pitch, rr_hfe, rl_hfe, …
+declared chest_yaw, chest_pitch, neck_yaw, neck_pitch, rf_haa, rf_hfe, rf_kfe, rf_foot, lf_haa, …
+```
+训练侧 obs/action 走的是 **live articulation 序**；文档里的 `joint_order` 是 **URDF 树序**（`export_ue.py` 拿它比对 URDF，且它进 `ue/lizard_ue.json`）。既有闸门只把文档与 usda 关节的**集合**比对（`check_dr_parity.py:277` 用 `set(...)`），**没人比过顺序**。故：要么文档顺序只是部署侧约定（则须写明 UE 按名装配，且把 live 序钉成训练契约），要么两者本应相等（则是部署契约的真错）。**判据待用户定，本轮不判通过也不判失败**。
+
+**发现 2（FAIL，非本批文件）**：`Lizard-Parkour-Climb-v1`（`lines.json` 里 `status: active`）**根本构造不出 env**：
+```
+ValueError: Not all regular expressions are matched!
+  rear_.*: []   tail_.*: []        （.*_haa_joint / .*_foot_joint / neck.*_.* 均有匹配）
+```
+原因：`versions/lizard/parkour/v1/parkour_params.yaml` 的 `actuators.spine.joint_patterns`（:46-47）与 `default_joint_pos`（:21-22）仍用 **v8 之前的命名** `rear_.*` / `tail_.*`，而当前资产已改名 `tail1_yaw` 等 ⇒ 该 actuator 组没有任何关节，IsaacLab 直接抛错。**这与 Step 3 无关**，但它是真跑的产物：**离线闸门全绿，而一个 active 线的任务连 env 都建不起来**（`parkour_smoke.py` 能抓，但它不在套件里、需手跑）。
+
+**边界（不得据本节宣称）**：
+- 3.1e **未通过**：parkour 未跑通、joint 序判据未定、v0 家族宽度仍无人量过。
+- 只跑了 4 个任务，**不代表其余 32 个**；一次真跑不覆盖其他协议。
+- 本节证据只到"live manager 与声明一致 + 上述差异"，不含推理等价。
 
 ## B3 · v6–v14 元素化（剩余九条配方，B3 收口，2026-09-16）
 
