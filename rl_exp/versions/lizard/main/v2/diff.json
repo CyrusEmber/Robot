@@ -1,21 +1,19 @@
 {
   "format": 4,
-  "recipe": "teacher-v14@1",
+  "recipe": "teacher-v2@1",
   "line": "lizard/main",
   "note": "Hard B, lineage reading: base.json names this recipe's mother, so the declared difference is against that recipe -- not against the framework stock cfg, which would bury this version's own delta in everything its ancestors wrote. Env paths are grouped by who wrote them: the element set that touched the path (several elements can touch one path in sequence), a version-resolved component, or wiring -- the shared wiring reading this recipe's own document. params_version is filtered as identity: it says which recipe this is, and it is what makes the two recipes different at all.",
   "env": {
     "allowed": {
-      "components.terminations": {
+      "components.observations": {
         "paths": [
-          "terminations.roll_over"
+          "observations.policy.base_external_wrench",
+          "observations.policy.foot_contact_forces",
+          "observations.policy.foot_contact_normals",
+          "observations.policy.foot_friction",
+          "observations.policy.thigh_shank_contacts"
         ],
-        "why": "v14.4 adds the roll-over fall gate (quaternion roll, monotone past vertical, pitch guard); a version-resolved component writes it, not an element"
-      },
-      "v14_head_load": {
-        "paths": [
-          "rewards.head_load_penalty"
-        ],
-        "why": "v14.3 turns the front-plant termination into a per-step penalty, so a head-planted pose keeps its rollout data"
+        "why": "v2 is paper-aligned privileged obs: the five extras join the single policy group, and that group belongs to the observations component"
       }
     }
   },

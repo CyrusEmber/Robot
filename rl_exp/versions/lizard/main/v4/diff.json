@@ -1,21 +1,24 @@
 {
   "format": 4,
-  "recipe": "teacher-v14@1",
+  "recipe": "teacher-v4@1",
   "line": "lizard/main",
   "note": "Hard B, lineage reading: base.json names this recipe's mother, so the declared difference is against that recipe -- not against the framework stock cfg, which would bury this version's own delta in everything its ancestors wrote. Env paths are grouped by who wrote them: the element set that touched the path (several elements can touch one path in sequence), a version-resolved component, or wiring -- the shared wiring reading this recipe's own document. params_version is filtered as identity: it says which recipe this is, and it is what makes the two recipes different at all.",
   "env": {
     "allowed": {
-      "components.terminations": {
+      "components.terrain": {
         "paths": [
-          "terminations.roll_over"
+          "scene.terrain.terrain_generator.sub_terrains.random_rough.downsampled_scale",
+          "scene.terrain.terrain_generator.sub_terrains.random_rough.noise_range.__tuple__[0]",
+          "scene.terrain.terrain_generator.sub_terrains.random_rough.noise_range.__tuple__[1]",
+          "scene.terrain.terrain_generator.sub_terrains.random_rough.noise_step"
         ],
-        "why": "v14.4 adds the roll-over fall gate (quaternion roll, monotone past vertical, pitch guard); a version-resolved component writes it, not an element"
+        "why": "v4 re-scales the rubble for the real 0.46 x 0.51 m soles: one bump per foot, no bridging"
       },
-      "v14_head_load": {
+      "v3_contact_headroom+v4_stock_contact_stack": {
         "paths": [
-          "rewards.head_load_penalty"
+          "sim.physics.default.gpu_collision_stack_size"
         ],
-        "why": "v14.3 turns the front-plant termination into a per-step penalty, so a head-planted pose keeps its rollout data"
+        "why": "v3.6.1's raised stack is dropped again: v4 re-tests the stock 2**26 on the coarser terrain"
       }
     }
   },

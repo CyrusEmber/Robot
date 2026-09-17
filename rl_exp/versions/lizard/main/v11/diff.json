@@ -1,0 +1,109 @@
+{
+  "format": 4,
+  "recipe": "teacher-v11@1",
+  "line": "lizard/main",
+  "note": "Hard B, lineage reading: base.json names this recipe's mother, so the declared difference is against that recipe -- not against the framework stock cfg, which would bury this version's own delta in everything its ancestors wrote. Env paths are grouped by who wrote them: the element set that touched the path (several elements can touch one path in sequence), a version-resolved component, or wiring -- the shared wiring reading this recipe's own document. params_version is filtered as identity: it says which recipe this is, and it is what makes the two recipes different at all.",
+  "env": {
+    "allowed": {
+      "components.commands": {
+        "paths": [
+          "commands.base_velocity.class_type",
+          "commands.base_velocity.command_jitter",
+          "commands.base_velocity.debug_vis",
+          "commands.base_velocity.resampling_time_range.__tuple__[0]",
+          "commands.base_velocity.resampling_time_range.__tuple__[1]",
+          "commands.base_velocity.v_pr_threshold"
+        ],
+        "why": "v11 hands lin_vel_x to the particle command term (bucket + jitter, no mid-episode resampling)"
+      },
+      "components.terrain": {
+        "paths": [
+          "scene.terrain.terrain_generator.num_cols",
+          "scene.terrain.terrain_generator.num_rows",
+          "scene.terrain.terrain_generator.sub_terrains.boxes",
+          "scene.terrain.terrain_generator.sub_terrains.boxes|0_0",
+          "scene.terrain.terrain_generator.sub_terrains.boxes|0_1",
+          "scene.terrain.terrain_generator.sub_terrains.boxes|1_0",
+          "scene.terrain.terrain_generator.sub_terrains.boxes|1_1",
+          "scene.terrain.terrain_generator.sub_terrains.boxes|2_0",
+          "scene.terrain.terrain_generator.sub_terrains.boxes|2_1",
+          "scene.terrain.terrain_generator.sub_terrains.hf_pyramid_slope",
+          "scene.terrain.terrain_generator.sub_terrains.hf_pyramid_slope_inv",
+          "scene.terrain.terrain_generator.sub_terrains.pyramid_stairs",
+          "scene.terrain.terrain_generator.sub_terrains.pyramid_stairs_inv",
+          "scene.terrain.terrain_generator.sub_terrains.random_rough",
+          "scene.terrain.terrain_generator.sub_terrains.random_rough|0",
+          "scene.terrain.terrain_generator.sub_terrains.random_rough|1",
+          "scene.terrain.terrain_generator.sub_terrains.random_rough|2",
+          "scene.terrain.terrain_generator.sub_terrains.random_rough|3",
+          "scene.terrain.terrain_generator.sub_terrains.slope_inv|0",
+          "scene.terrain.terrain_generator.sub_terrains.slope_inv|1",
+          "scene.terrain.terrain_generator.sub_terrains.slope_inv|2",
+          "scene.terrain.terrain_generator.sub_terrains.slope_inv|3",
+          "scene.terrain.terrain_generator.sub_terrains.slope|0",
+          "scene.terrain.terrain_generator.sub_terrains.slope|1",
+          "scene.terrain.terrain_generator.sub_terrains.slope|2",
+          "scene.terrain.terrain_generator.sub_terrains.slope|3",
+          "scene.terrain.terrain_generator.sub_terrains.stairs_inv|0_0",
+          "scene.terrain.terrain_generator.sub_terrains.stairs_inv|0_1",
+          "scene.terrain.terrain_generator.sub_terrains.stairs_inv|0_2",
+          "scene.terrain.terrain_generator.sub_terrains.stairs_inv|1_0",
+          "scene.terrain.terrain_generator.sub_terrains.stairs_inv|1_1",
+          "scene.terrain.terrain_generator.sub_terrains.stairs_inv|1_2",
+          "scene.terrain.terrain_generator.sub_terrains.stairs_inv|2_0",
+          "scene.terrain.terrain_generator.sub_terrains.stairs_inv|2_1",
+          "scene.terrain.terrain_generator.sub_terrains.stairs_inv|2_2",
+          "scene.terrain.terrain_generator.sub_terrains.stairs_inv|3_0",
+          "scene.terrain.terrain_generator.sub_terrains.stairs_inv|3_1",
+          "scene.terrain.terrain_generator.sub_terrains.stairs_inv|3_2",
+          "scene.terrain.terrain_generator.sub_terrains.stairs_inv|4_0",
+          "scene.terrain.terrain_generator.sub_terrains.stairs_inv|4_1",
+          "scene.terrain.terrain_generator.sub_terrains.stairs_inv|4_2",
+          "scene.terrain.terrain_generator.sub_terrains.stairs|0_0",
+          "scene.terrain.terrain_generator.sub_terrains.stairs|0_1",
+          "scene.terrain.terrain_generator.sub_terrains.stairs|0_2",
+          "scene.terrain.terrain_generator.sub_terrains.stairs|1_0",
+          "scene.terrain.terrain_generator.sub_terrains.stairs|1_1",
+          "scene.terrain.terrain_generator.sub_terrains.stairs|1_2",
+          "scene.terrain.terrain_generator.sub_terrains.stairs|2_0",
+          "scene.terrain.terrain_generator.sub_terrains.stairs|2_1",
+          "scene.terrain.terrain_generator.sub_terrains.stairs|2_2",
+          "scene.terrain.terrain_generator.sub_terrains.stairs|3_0",
+          "scene.terrain.terrain_generator.sub_terrains.stairs|3_1",
+          "scene.terrain.terrain_generator.sub_terrains.stairs|3_2",
+          "scene.terrain.terrain_generator.sub_terrains.stairs|4_0",
+          "scene.terrain.terrain_generator.sub_terrains.stairs|4_1",
+          "scene.terrain.terrain_generator.sub_terrains.stairs|4_2",
+          "scene.terrain.terrain_generator.sub_terrains.stepping_stones",
+          "scene.terrain.terrain_generator.sub_terrains.stepping_stones|0_0",
+          "scene.terrain.terrain_generator.sub_terrains.stepping_stones|0_1",
+          "scene.terrain.terrain_generator.sub_terrains.stepping_stones|0_2",
+          "scene.terrain.terrain_generator.sub_terrains.stepping_stones|1_0",
+          "scene.terrain.terrain_generator.sub_terrains.stepping_stones|1_1",
+          "scene.terrain.terrain_generator.sub_terrains.stepping_stones|1_2",
+          "scene.terrain.terrain_generator.sub_terrains.stepping_stones|2_0",
+          "scene.terrain.terrain_generator.sub_terrains.stepping_stones|2_1",
+          "scene.terrain.terrain_generator.sub_terrains.stepping_stones|2_2"
+        ],
+        "why": "v11 replaces the row grid with the parameter-sampled grid: every combination becomes its own single-value sub-terrain"
+      },
+      "v11_joint_sir_curriculum": {
+        "paths": [
+          "curriculum.joint_sir"
+        ],
+        "why": "the joint (terrain combination, velocity bucket) particle filter, under its own term name"
+      },
+      "v11_joint_sir_curriculum+v5_sir_terrain_curriculum": {
+        "paths": [
+          "curriculum.terrain_levels"
+        ],
+        "why": "the row SIR term is dropped (installed by v5, taken away by v11) as the joint filter replaces it"
+      }
+    }
+  },
+  "agent": {
+    "allowed": {
+      "experiment_name": "one version, one log directory (versioning.mdc A)"
+    }
+  }
+}

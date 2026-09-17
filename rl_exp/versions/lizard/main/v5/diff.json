@@ -1,0 +1,95 @@
+{
+  "format": 4,
+  "recipe": "teacher-v5@1",
+  "line": "lizard/main",
+  "note": "Hard B, lineage reading: base.json names this recipe's mother, so the declared difference is against that recipe -- not against the framework stock cfg, which would bury this version's own delta in everything its ancestors wrote. Env paths are grouped by who wrote them: the element set that touched the path (several elements can touch one path in sequence), a version-resolved component, or wiring -- the shared wiring reading this recipe's own document. params_version is filtered as identity: it says which recipe this is, and it is what makes the two recipes different at all.",
+  "env": {
+    "allowed": {
+      "components.commands": {
+        "paths": [
+          "commands.base_velocity.ranges.lin_vel_x.__tuple__[0]",
+          "commands.base_velocity.ranges.lin_vel_x.__tuple__[1]"
+        ],
+        "why": "v5's forward-only window (0, 3) comes from its own yaml, read by the commands component"
+      },
+      "components.height_sensing": {
+        "paths": [
+          "scene.lf_foot_ring.pattern_cfg.ring_radii.__tuple__[0]",
+          "scene.lf_foot_ring.pattern_cfg.ring_radii.__tuple__[1]",
+          "scene.lf_foot_ring.pattern_cfg.ring_radii.__tuple__[2]",
+          "scene.lf_foot_ring.pattern_cfg.ring_radii.__tuple__[3]",
+          "scene.lf_foot_ring.pattern_cfg.ring_radii.__tuple__[4]",
+          "scene.rf_foot_ring.pattern_cfg.ring_radii.__tuple__[0]",
+          "scene.rf_foot_ring.pattern_cfg.ring_radii.__tuple__[1]",
+          "scene.rf_foot_ring.pattern_cfg.ring_radii.__tuple__[2]",
+          "scene.rf_foot_ring.pattern_cfg.ring_radii.__tuple__[3]",
+          "scene.rf_foot_ring.pattern_cfg.ring_radii.__tuple__[4]",
+          "scene.rl_foot_ring.pattern_cfg.ring_radii.__tuple__[0]",
+          "scene.rl_foot_ring.pattern_cfg.ring_radii.__tuple__[1]",
+          "scene.rl_foot_ring.pattern_cfg.ring_radii.__tuple__[2]",
+          "scene.rl_foot_ring.pattern_cfg.ring_radii.__tuple__[3]",
+          "scene.rl_foot_ring.pattern_cfg.ring_radii.__tuple__[4]",
+          "scene.rr_foot_ring.pattern_cfg.ring_radii.__tuple__[0]",
+          "scene.rr_foot_ring.pattern_cfg.ring_radii.__tuple__[1]",
+          "scene.rr_foot_ring.pattern_cfg.ring_radii.__tuple__[2]",
+          "scene.rr_foot_ring.pattern_cfg.ring_radii.__tuple__[3]",
+          "scene.rr_foot_ring.pattern_cfg.ring_radii.__tuple__[4]"
+        ],
+        "why": "v5.1 converts the ring radii to the paper's absolute metres (x5 sole widths)"
+      },
+      "components.terrain": {
+        "paths": [
+          "scene.terrain.max_init_terrain_level",
+          "scene.terrain.terrain_generator.sub_terrains.flat",
+          "scene.terrain.terrain_generator.sub_terrains.hf_pyramid_slope.slope_range.__tuple__[1]",
+          "scene.terrain.terrain_generator.sub_terrains.hf_pyramid_slope_inv.slope_range.__tuple__[1]"
+        ],
+        "why": "v5 adds the flat bootstrap column and re-scales the slope ends: the SIR curriculum needs a flat start"
+      },
+      "v3_speed_curriculum+v5_drops_speed_curriculum": {
+        "paths": [
+          "curriculum.speed_curriculum"
+        ],
+        "why": "v5 drops the staged speed curriculum the linear kernel makes unnecessary (installed by v3, removed here)"
+      },
+      "v5_reward_package": {
+        "paths": [
+          "rewards.belly_contact_force",
+          "rewards.feet_slide",
+          "rewards.track_lin_vel_xy_exp",
+          "rewards.track_lin_vel_xy_lin",
+          "rewards.undesired_contacts.func.__callable__"
+        ],
+        "why": "the anti-collapse package: the linear kernel replaces the exp one, r_slip and the belly penalty are added, and the contact penalty narrows to thigh/shank"
+      },
+      "v5_sir_terrain_curriculum": {
+        "paths": [
+          "curriculum.terrain_levels.band",
+          "curriculum.terrain_levels.command_name",
+          "curriculum.terrain_levels.eval_every",
+          "curriculum.terrain_levels.func.__callable__",
+          "curriculum.terrain_levels.func.__type__",
+          "curriculum.terrain_levels.n_traj_min",
+          "curriculum.terrain_levels.p_replay",
+          "curriculum.terrain_levels.p_transition",
+          "curriculum.terrain_levels.soft_edge",
+          "curriculum.terrain_levels.steps_per_iteration",
+          "curriculum.terrain_levels.success_ratio"
+        ],
+        "why": "v5.3 hands the terrain curriculum to the row SIR particle filter (band, resampling and replay knobs)"
+      },
+      "wiring": {
+        "paths": [
+          "rewards.foot_clearance.weight",
+          "rewards.undesired_contacts.params.sensor_cfg.body_names[]"
+        ],
+        "why": "the shared wiring reads this recipe's document: r_fc's sign fix and the narrowed contact-body names"
+      }
+    }
+  },
+  "agent": {
+    "allowed": {
+      "experiment_name": "one version, one log directory (versioning.mdc A)"
+    }
+  }
+}

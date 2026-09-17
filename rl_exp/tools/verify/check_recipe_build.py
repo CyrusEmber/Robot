@@ -86,13 +86,23 @@ EXPECTED_PENDING: dict[str, tuple[str, ...]] = {
 """Versions whose delta is not declared yet, per line. Printed, and red when the list is not this one."""
 
 EXPECTED_DIFFS: dict[tuple[str, str], int] = {
-    # hard B: the first new-architecture recipe declares its difference from the framework stock
-    # cfg, path by path -- 33 on the env side (each attributed to the element that produces it)
-    # and 43 on the agent side, where the stock leaves the model and algorithm unset. Pinned like
-    # the other counts: a declaration that quietly shrinks is exactly the failure this gate is
-    # built around. v14 is the first main-line recipe to declare anything: its base is its mother
-    # v13 (from base.json), and it differs by two paths -- one element, one component.
+    # Paths each recipe declares, pinned like the other counts: a declaration that quietly shrinks
+    # is exactly the failure this gate is built around. The main line's recipes declare against
+    # their mother (``base.json``); the baseline against the framework stock cfg, being a lineage
+    # root. v1 is absent on purpose -- its mother v0 has no recipe declaration, so the lineage
+    # reading has nothing to measure against. That is printed below, not papered over with a stock
+    # reading that would restate the whole line's heritage as v1's own delta.
     ("lizard/baseline", "v1"): 76,
+    ("lizard/main", "v2"): 6,
+    ("lizard/main", "v3"): 59,
+    ("lizard/main", "v4"): 6,
+    ("lizard/main", "v5"): 46,
+    ("lizard/main", "v6"): 4,
+    ("lizard/main", "v8"): 2,
+    ("lizard/main", "v10"): 2,
+    ("lizard/main", "v11"): 75,
+    ("lizard/main", "v12"): 40,
+    ("lizard/main", "v13"): 3,
     ("lizard/main", "v14"): 3,
 }
 """Recipe -> how many paths its difference declaration lists (``diff.json`` next to the recipe)."""
@@ -319,11 +329,16 @@ than written into twelve declarations, because it is not a statement anybody cou
 COMPONENT_AUTHOR = "components."
 """Prefix marking a declared path as written by a version-resolved structural component.
 
-The main line's delta has two authors: the recipe's elements, and the components in the shared
-wiring that resolve their own form from the version. Both are named in the declaration, because
-"which writer is answerable for this path" is the question, and an answer that names neither is
-how a path ends up owned by nobody.
+The main line's delta has three writers: the recipe's elements, the components in the shared wiring
+that resolve their own form from the version, and the shared wiring itself reading the recipe's
+document. All of them are named in the declaration, because "which writer is answerable for this
+path" is the question -- an entry that names nobody is how a path ends up owned by nobody.
 """
+
+WIRING_AUTHOR = "wiring"
+"""The shared wiring, reading this recipe's own document (a yaml value no element and no component
+writes). The residual writer: if a path is neither an element's nor a component's, this is what
+produced it, and saying so is more useful than saying nothing."""
 
 
 def base_of(line_key: str, version: str, declared: dict, paths: list[str]):
@@ -453,15 +468,19 @@ def hard_b(line_key: str, version: str, declared: dict, paths: list[str]) -> int
     rows = [row for row in rows if row[0].split(".")[0] not in identity]
 
     allowed = declared["env"]["allowed"]
+    flat = sorted({key for group in allowed.values() for key in group["paths"]})
+    for author, group in sorted(allowed.items()):
+        if not group["paths"]:
+            paths.append(f"{line_key}/{version}: group {author!r} declares no path -- empty groups read as coverage")
     leaves = [row[0] for row in rows]
-    undeclared = sorted({leaf for leaf in leaves if not any(covers(key, leaf) for key in allowed)})
+    undeclared = sorted({leaf for leaf in leaves if not any(covers(key, leaf) for key in flat)})
     if undeclared:
         against = f"mother {mother}" if mother else "the declared base"
         paths.append(
             f"{line_key}/{version}: {len(undeclared)} env field(s) differ from {against} without"
             f" being declared: {undeclared[:5]}"
         )
-    ineffective = sorted(key for key in allowed if not any(covers(key, leaf) for leaf in leaves))
+    ineffective = sorted(key for key in flat if not any(covers(key, leaf) for leaf in leaves))
     if ineffective:
         paths.append(
             f"{line_key}/{version}: {len(ineffective)} declared env path(s) no longer differ from"
@@ -471,31 +490,42 @@ def hard_b(line_key: str, version: str, declared: dict, paths: list[str]) -> int
     trace: list[tuple[str, object]] = []
     recipe.build(version, trace=trace, line=line_key)
     produced = authored_paths(trace, line_key, version)
-    for key in sorted(allowed):
-        author = allowed[key].get("author")
-        if not isinstance(author, str) or not author:
-            paths.append(f"{line_key}/{version}: declared env path {key!r} names no author")
-        elif author.startswith(COMPONENT_AUTHOR):
-            if any(covers(key, moved) for moves in produced.values() for moved in moves):
+    for author, group in sorted(allowed.items()):
+        # A group is one author set, and the paths in it have to be exactly the paths that set
+        # produced: the key is the authorship claim, so a path in the wrong group is a claim about
+        # a writer that did not write it. Three kinds, because this line has three writers -- the
+        # shared wiring (reading the recipe's own document), the version-resolved components, and
+        # the recipe's elements (several of which touch the same path in sequence).
+        for key in group["paths"]:
+            writers = {name for name, moves in produced.items() if any(covers(key, moved) for moved in moves)}
+            if author == WIRING_AUTHOR:
+                if writers:
+                    paths.append(
+                        f"{line_key}/{version}: {key!r} is attributed to {WIRING_AUTHOR}, but"
+                        f" elements moved it: {sorted(writers)} -- name them"
+                    )
+                elif any(component_owns(f"{COMPONENT_AUTHOR}{name}", key) for name in ownership()):
+                    paths.append(
+                        f"{line_key}/{version}: {key!r} is attributed to {WIRING_AUTHOR}, but a"
+                        " component owns a name in that path -- name the component"
+                    )
+            elif author.startswith(COMPONENT_AUTHOR):
+                if writers:
+                    paths.append(
+                        f"{line_key}/{version}: {key!r} is attributed to {author!r} but an element"
+                        f" moved it: {sorted(writers)} -- name the element"
+                    )
+                elif not component_owns(author, key):
+                    paths.append(
+                        f"{line_key}/{version}: {key!r} is attributed to {author!r}, which owns no"
+                        f" name in that path ({sorted(ownership())})"
+                    )
+            elif writers != set(author.split("+")) or not writers:
                 paths.append(
-                    f"{line_key}/{version}: {key!r} is attributed to {author!r} but an element moved"
-                    " it -- name the element, or the two authors are not being told apart"
+                    f"{line_key}/{version}: {key!r} is attributed to {author!r} while the elements"
+                    f" that moved it are {sorted(writers) or 'none'} -- the list and the element"
+                    " list have drifted apart"
                 )
-            elif not component_owns(author, key):
-                paths.append(
-                    f"{line_key}/{version}: {key!r} is attributed to {author!r}, which owns no name"
-                    f" in that path ({sorted(ownership())})"
-                )
-        elif author not in produced:
-            paths.append(
-                f"{line_key}/{version}: declared env path {key!r} names {author!r}, which this"
-                " recipe does not apply"
-            )
-        elif not any(covers(key, moved) for moved in produced[author]):
-            paths.append(
-                f"{line_key}/{version}: declared env path {key!r} is attributed to {author!r},"
-                " which does not produce it -- the list and the element list have drifted apart"
-            )
 
     agent = declared["agent"]
     agent_paths = agent["allowed"]
@@ -506,7 +536,7 @@ def hard_b(line_key: str, version: str, declared: dict, paths: list[str]) -> int
         )()
     except (ImportError, AttributeError, TypeError, KeyError, ValueError) as err:
         paths.append(f"{line_key}/{version}: the agent cfg does not resolve: {type(err).__name__}: {err}")
-        return len(allowed) + len(agent_paths)
+        return len(flat) + len(agent_paths)
 
     agent_rows: list = []
     lock.walk_diff(cs.snapshot(agent_base), cs.snapshot(agent_subject), "", agent_rows, limit=1 << 30)
@@ -526,7 +556,7 @@ def hard_b(line_key: str, version: str, declared: dict, paths: list[str]) -> int
             f"{line_key}/{version}: {len(agent_ineffective)} declared agent path(s) no longer differ"
             f" from the base: {agent_ineffective[:5]}"
         )
-    return len(allowed) + len(agent_paths)
+    return len(flat) + len(agent_paths)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -710,6 +740,16 @@ def main(argv: list[str] | None = None) -> int:
         waiting = recipe.pending(line_key)
         if waiting:
             print(f"  {line_key}: not declared yet (not compared): {waiting}")
+        undeclared_diffs = [
+            version
+            for version in sorted(recipe.LINES[line_key]["recipes"])
+            if (line_key, version) not in EXPECTED_DIFFS
+        ]
+        if undeclared_diffs:
+            # not a failure: a recipe may legitimately have no difference list (a root that is the
+            # whole line). Printed because "no declaration" and "declared, and it matches" read the
+            # same in a green run otherwise.
+            print(f"  {line_key}: no difference declaration (hard A only): {undeclared_diffs}")
     # one line per gap class, not one per recipe: eighteen identical lines are a line to skip,
     # and the recipes that share a gap share it for the same reason
     for name, seen in sorted(gaps.items()):

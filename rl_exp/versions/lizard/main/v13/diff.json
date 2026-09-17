@@ -1,21 +1,21 @@
 {
   "format": 4,
-  "recipe": "teacher-v14@1",
+  "recipe": "teacher-v13@1",
   "line": "lizard/main",
   "note": "Hard B, lineage reading: base.json names this recipe's mother, so the declared difference is against that recipe -- not against the framework stock cfg, which would bury this version's own delta in everything its ancestors wrote. Env paths are grouped by who wrote them: the element set that touched the path (several elements can touch one path in sequence), a version-resolved component, or wiring -- the shared wiring reading this recipe's own document. params_version is filtered as identity: it says which recipe this is, and it is what makes the two recipes different at all.",
   "env": {
     "allowed": {
-      "components.terminations": {
+      "v13_miki_kernel": {
         "paths": [
-          "terminations.roll_over"
+          "rewards.track_lin_vel_xy_miki"
         ],
-        "why": "v14.4 adds the roll-over fall gate (quaternion roll, monotone past vertical, pitch guard); a version-resolved component writes it, not an element"
+        "why": "v13's single-variable fix: exp(-||v_cmd - v_yaw||^2 / sigma_sq) on the full 2D error closes overspeed, sideslip and the missing stop gradient"
       },
-      "v14_head_load": {
+      "v13_miki_kernel+v5_reward_package": {
         "paths": [
-          "rewards.head_load_penalty"
+          "rewards.track_lin_vel_xy_lin"
         ],
-        "why": "v14.3 turns the front-plant termination into a per-step penalty, so a head-planted pose keeps its rollout data"
+        "why": "the EP kernel is dropped (installed by v5, taken away by v13) as the Miki kernel replaces it"
       }
     }
   },

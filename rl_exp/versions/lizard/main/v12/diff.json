@@ -1,0 +1,69 @@
+{
+  "format": 4,
+  "recipe": "teacher-v12@1",
+  "line": "lizard/main",
+  "note": "Hard B, lineage reading: base.json names this recipe's mother, so the declared difference is against that recipe -- not against the framework stock cfg, which would bury this version's own delta in everything its ancestors wrote. Env paths are grouped by who wrote them: the element set that touched the path (several elements can touch one path in sequence), a version-resolved component, or wiring -- the shared wiring reading this recipe's own document. params_version is filtered as identity: it says which recipe this is, and it is what makes the two recipes different at all.",
+  "env": {
+    "allowed": {
+      "components.observations": {
+        "paths": [
+          "observations.extero.lf_foot_ring.func.__callable__",
+          "observations.extero.lf_foot_ring.func.__type__",
+          "observations.extero.lf_foot_ring.params.foot_index",
+          "observations.extero.lf_foot_ring.params.outlier_prob",
+          "observations.extero.lf_foot_ring.params.outlier_range",
+          "observations.extero.lf_foot_ring.params.sigma_f",
+          "observations.extero.lf_foot_ring.params.sigma_p",
+          "observations.extero.lf_foot_ring.params.sigma_w",
+          "observations.extero.rf_foot_ring.func.__callable__",
+          "observations.extero.rf_foot_ring.func.__type__",
+          "observations.extero.rf_foot_ring.params.foot_index",
+          "observations.extero.rf_foot_ring.params.outlier_prob",
+          "observations.extero.rf_foot_ring.params.outlier_range",
+          "observations.extero.rf_foot_ring.params.sigma_f",
+          "observations.extero.rf_foot_ring.params.sigma_p",
+          "observations.extero.rf_foot_ring.params.sigma_w",
+          "observations.extero.rl_foot_ring.func.__callable__",
+          "observations.extero.rl_foot_ring.func.__type__",
+          "observations.extero.rl_foot_ring.params.foot_index",
+          "observations.extero.rl_foot_ring.params.outlier_prob",
+          "observations.extero.rl_foot_ring.params.outlier_range",
+          "observations.extero.rl_foot_ring.params.sigma_f",
+          "observations.extero.rl_foot_ring.params.sigma_p",
+          "observations.extero.rl_foot_ring.params.sigma_w",
+          "observations.extero.rr_foot_ring.func.__callable__",
+          "observations.extero.rr_foot_ring.func.__type__",
+          "observations.extero.rr_foot_ring.params.foot_index",
+          "observations.extero.rr_foot_ring.params.outlier_prob",
+          "observations.extero.rr_foot_ring.params.outlier_range",
+          "observations.extero.rr_foot_ring.params.sigma_f",
+          "observations.extero.rr_foot_ring.params.sigma_p",
+          "observations.extero.rr_foot_ring.params.sigma_w"
+        ],
+        "why": "v12 puts the noise state on the extero ring terms (NoisyFootRing + per-foot parameters)"
+      },
+      "v12_reset_robustness": {
+        "paths": [
+          "events.foot_friction_dip",
+          "events.reset_joints_feet",
+          "events.reset_joints_legs",
+          "events.reset_joints_spine",
+          "events.reset_robot_joints",
+          "events.sample_ring_noise"
+        ],
+        "why": "the S8 reset package: three joint-offset resets replace the silent no-op, plus the friction dip and ring-noise reset events"
+      },
+      "wiring": {
+        "paths": [
+          "rewards.feet_slide.weight"
+        ],
+        "why": "v12's r_slip x10 rides the weight the shared wiring reads from the v12 document"
+      }
+    }
+  },
+  "agent": {
+    "allowed": {
+      "experiment_name": "one version, one log directory (versioning.mdc A)"
+    }
+  }
+}

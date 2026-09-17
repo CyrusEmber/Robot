@@ -1,0 +1,118 @@
+{
+  "format": 4,
+  "recipe": "teacher-v3@1",
+  "line": "lizard/main",
+  "note": "Hard B, lineage reading: base.json names this recipe's mother, so the declared difference is against that recipe -- not against the framework stock cfg, which would bury this version's own delta in everything its ancestors wrote. Env paths are grouped by who wrote them: the element set that touched the path (several elements can touch one path in sequence), a version-resolved component, or wiring -- the shared wiring reading this recipe's own document. params_version is filtered as identity: it says which recipe this is, and it is what makes the two recipes different at all.",
+  "env": {
+    "allowed": {
+      "components.commands": {
+        "paths": [
+          "commands.base_velocity.ranges.lin_vel_x.__tuple__[1]"
+        ],
+        "why": "v3 widens the forward range to 2 m/s: a 1 m/s cap made foot-pad creeping the optimum"
+      },
+      "components.height_sensing": {
+        "paths": [
+          "scene.height_scanner",
+          "scene.lf_foot_ring",
+          "scene.rf_foot_ring",
+          "scene.rl_foot_ring",
+          "scene.rr_foot_ring"
+        ],
+        "why": "v3 replaces the ground grid scanner with four foot rings (paper S8, one scan per sole)"
+      },
+      "components.observations": {
+        "paths": [
+          "observations.extero",
+          "observations.policy",
+          "observations.priv",
+          "observations.proprio"
+        ],
+        "why": "v3 splits the single policy group into proprio/extero/priv, so the network reads streams by name"
+      },
+      "components.terminations": {
+        "paths": [
+          "terminations.base_contact",
+          "terminations.tilt"
+        ],
+        "why": "v3 narrows base_contact to the base body (v1/v2 contact every body) and adds the tilt gate"
+      },
+      "components.terrain": {
+        "paths": [
+          "scene.terrain.max_init_terrain_level",
+          "scene.terrain.terrain_generator.sub_terrains.boxes.proportion",
+          "scene.terrain.terrain_generator.sub_terrains.pyramid_stairs.step_height_range.__tuple__[1]",
+          "scene.terrain.terrain_generator.sub_terrains.pyramid_stairs_inv.step_height_range.__tuple__[1]",
+          "scene.terrain.terrain_generator.sub_terrains.random_rough.downsampled_scale",
+          "scene.terrain.terrain_generator.sub_terrains.random_rough.noise_range.__tuple__[0]",
+          "scene.terrain.terrain_generator.sub_terrains.stepping_stones"
+        ],
+        "why": "v3 swaps the v1/v2 frozen generator for the Miki-aligned terrain (stair top 0.55 m + stepping stones)"
+      },
+      "v3_anti_drag_reward": {
+        "paths": [
+          "rewards.feet_air_time",
+          "rewards.foot_clearance"
+        ],
+        "why": "v3's anti-drag pair: feet_air_time replaced by foot_clearance (r_fc), the swing-time reward"
+      },
+      "v3_ck_clock": {
+        "paths": [
+          "events.add_base_mass.func.__type__",
+          "events.add_base_mass.mode",
+          "events.base_com.default.func.__type__",
+          "events.base_com.default.mode",
+          "events.init_ck",
+          "events.randomize_actuator_gains.func.__type__",
+          "events.randomize_actuator_gains.mode",
+          "events.randomize_inertia.func.__type__",
+          "events.randomize_inertia.mode",
+          "events.randomize_joint_params.func.__type__",
+          "events.randomize_joint_params.mode",
+          "events.randomize_limb_mass.func.__type__",
+          "events.randomize_limb_mass.mode",
+          "rewards.ang_vel_xy_l2.func.__callable__",
+          "rewards.dof_acc_l2.func.__callable__",
+          "rewards.dof_torques_l2.func.__callable__"
+        ],
+        "why": "v3.1 adds the c_k clock: five DR events become c_k-scaled (func + mode), plus the init_ck event and the three c_k-gated reward callables"
+      },
+      "v3_contact_headroom": {
+        "paths": [
+          "sim.physics.default.gpu_collision_stack_size"
+        ],
+        "why": "v3.6.1 raises the collision stack 2**26 -> 2**28 against the contact overflow"
+      },
+      "v3_speed_curriculum": {
+        "paths": [
+          "curriculum.speed_curriculum"
+        ],
+        "why": "v3 gates the speed range with the staged curriculum (stage 0 is the (-1, 2) window)"
+      }
+    }
+  },
+  "agent": {
+    "allowed": {
+      "max_iterations": "the v3 PPO recipe (paper S1's encoder budget)",
+      "obs_groups.__missing__": "the three-encoder split (v3 B2): the actor reads streams by group name: the group mapping is declared where v2 had none",
+      "obs_groups.actor": "the three-encoder split (v3 B2): the actor reads streams by group name (actor side)",
+      "obs_groups.critic": "the three-encoder split (v3 B2): the actor reads streams by group name (critic side)",
+      "experiment_name": "one version, one log directory (versioning.mdc A)",
+      "actor.class_name": "the three-encoder split (v3 B2): the actor reads streams by group name",
+      "actor.hidden_dims[1]": "the three-encoder split (v3 B2): the actor reads streams by group name: per-encoder widths replace the single MLP's",
+      "actor.activation": "elu, carried over from the flat runner cfg",
+      "actor.obs_normalization": "off: the teacher line normalizes nothing",
+      "critic.class_name": "the three-encoder split (v3 B2): the actor reads streams by group name",
+      "critic.hidden_dims[1]": "the three-encoder split (v3 B2): the actor reads streams by group name: per-encoder widths replace the single MLP's",
+      "critic.activation": "elu, carried over from the flat runner cfg",
+      "critic.obs_normalization": "off: the teacher line normalizes nothing",
+      "algorithm.class_name": "the v3 PPO recipe (paper S1's budget)",
+      "algorithm.num_learning_epochs": "the v3 PPO recipe (paper S1's encoder budget)",
+      "algorithm.num_mini_batches": "the v3 PPO recipe (paper S1's encoder budget)",
+      "algorithm.learning_rate": "the v3 PPO recipe (paper S1's encoder budget)",
+      "algorithm.schedule": "the v3 PPO recipe's adaptive schedule",
+      "algorithm.gamma": "the v3 PPO recipe (paper S1's encoder budget)",
+      "algorithm.lr_decay": "the v3 PPO recipe's adaptive schedule"
+    }
+  }
+}
