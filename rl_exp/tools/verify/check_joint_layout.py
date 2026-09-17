@@ -1,5 +1,16 @@
+# Copyright (c) 2022-2026, The Isaac Lab Project Developers (https://github.com/isaac-sim/IsaacLab/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: BSD-3-Clause
+
 # -*- coding: utf-8 -*-
-"""Joint function check on the v8 (anatomy-correct) asset: layout + actuation.
+"""Joint function check on the lizard asset: layout + actuation.
+
+No version in the name on purpose: layout is a property of the *asset*, not of a recipe
+version (an old task id loads today's asset -- FAMILY.md's retirement note), so the gate
+outlives any one recipe. It runs on v8's PLAY task because the anatomy flip landed at v8 and
+the hard gate below is that flip's contract; re-point it at a newer PLAY task if an asset
+change lands there.
 
 Part 1 prints every body's position in the BASE frame (yaw-randomized spawn
 removed via quat_apply_inverse) -- expect thighs sprawling along +/-y, shanks

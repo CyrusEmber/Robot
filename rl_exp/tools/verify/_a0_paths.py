@@ -39,7 +39,6 @@ _REPO = pathlib.Path(__file__).resolve().parents[3]
 CODE = (
     "rl_exp/tools/verify/check_obs_layout.py",
     "rl_exp/tools/verify/check_reward_v13.py",
-    "rl_exp/tools/verify/check_terminations_v10.py",
     "rl_exp/tools/verify/check_terminations_v14.py",
     "rl_exp/tools/verify/teacher_smoke_runner.py",
     "rl_exp/tools/pipeline/convert_urdf.py",

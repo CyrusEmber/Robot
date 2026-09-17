@@ -31,30 +31,32 @@ set "VENV=%~2"
 if "%VENV%"=="" set "VENV=%ROOT%\env_isaaclab"
 if not "%VENV%"=="" if "%VENV:~-1%"=="\" set "VENV=%VENV:~0,-1%"
 
+rem Echo path variables as !VAR!: delayed expansion runs after the shell parsed the line, so a
+rem '&' inside a path cannot split the echo into two commands. %VAR% would.
 set "RC=0"
-echo REPO = %REPO%
-echo ROOT = %ROOT%
-echo VENV = %VENV%
+echo REPO = !REPO!
+echo ROOT = !ROOT!
+echo VENV = !VENV!
 echo.
 
 rem --- preflight: fail before touching anything -------------------------------
 if not exist "%ROOT%\source\isaaclab" (
-    echo [FAIL] %ROOT%\source\isaaclab not found -- not an IsaacLab source tree.
+    echo [FAIL] !ROOT!\source\isaaclab not found -- not an IsaacLab source tree.
     exit /b 1
 )
 if not exist "%ROOT%\.git" (
-    echo [FAIL] %ROOT%\.git not found -- the fork patches need a git checkout of the tree.
+    echo [FAIL] !ROOT!\.git not found -- the fork patches need a git checkout of the tree.
     exit /b 1
 )
 if not exist "%VENV%\Scripts\python.exe" (
-    echo [FAIL] %VENV%\Scripts\python.exe not found -- pass VENV_DIR as the 2nd argument.
+    echo [FAIL] !VENV!\Scripts\python.exe not found -- pass VENV_DIR as the 2nd argument.
     exit /b 1
 )
 
 rem --- 1. venv .pth: makes the rl_exp package importable from anywhere --------
 set "PTH=%VENV%\Lib\site-packages\rl_exp.pth"
-> "%PTH%" echo %REPO%
-if exist "%PTH%" (echo [ok]   1. rl_exp.pth written: %PTH%) else (echo [FAIL] 1. could not write %PTH% & set "RC=1")
+> "%PTH%" echo !REPO!
+if exist "%PTH%" (echo [ok]   1. rl_exp.pth written: !PTH!) else (echo [FAIL] 1. could not write !PTH! & set "RC=1")
 
 rem --- 2. fork shim: importing isaaclab_tasks registers every lizard task ----
 rem import_packages walks the tree with pkgutil and imports every directory
@@ -63,7 +65,7 @@ rem "lizard" directory does not exist in a stock tree, hence the mkdir.
 set "SHIM_DIR=%ROOT%\source\isaaclab_tasks\isaaclab_tasks\manager_based\locomotion\velocity\config\lizard"
 if not exist "%SHIM_DIR%" mkdir "%SHIM_DIR%"
 copy /y "%REPO%\rl_exp\fork_patches\config_lizard___init__.py" "%SHIM_DIR%\__init__.py" >nul
-if exist "%SHIM_DIR%\__init__.py" (echo [ok]   2. fork shim written: %SHIM_DIR%\__init__.py) else (echo [FAIL] 2. could not copy the shim into %SHIM_DIR% & set "RC=1")
+if exist "%SHIM_DIR%\__init__.py" (echo [ok]   2. fork shim written: !SHIM_DIR!\__init__.py) else (echo [FAIL] 2. could not copy the shim into !SHIM_DIR! & set "RC=1")
 
 rem --- 3. fork patches: skip what is already applied, report every decision --
 rem "apply --check --reverse" succeeds exactly when the patch is already in the
