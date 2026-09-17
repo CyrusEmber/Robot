@@ -45,6 +45,8 @@ _REPO = pathlib.Path(__file__).resolve().parents[3]
 DECLARATION = _REPO / "rl_exp" / "versions" / "obs_protocols.json"
 ANCHORS = _REPO / "rl_exp" / "versions" / "obs_protocol_anchors.json"
 LINES = _REPO / "rl_exp" / "versions" / "lines.json"
+RUNTIME_ORDERS = _REPO / "rl_exp" / "versions" / "lizard" / "joint_order_runtime.json"
+EXPORT = _REPO / "rl_exp" / "ue" / "lizard_ue.json"
 FORMAT_VERSION = 1
 _ORDERED_FIELDS = ("terms", "dropped_terms", "clip", "scale", "noise")
 
@@ -208,6 +210,43 @@ def coverage_problems(tasks: dict, registered: dict, retired, only: list[str] | 
     return out
 
 
+def check_export_agreement(export_path: pathlib.Path | None = None, pin_path: pathlib.Path | None = None) -> list[str]:
+    """The exported deployment artifact must carry the order the pin holds.
+
+    The exporter reads the pin itself, on purpose: it runs on a deployment box and must not drag
+    in the training stack. That makes this the machine check that the two readings agree, and
+    that a re-measure was followed by a re-export.
+
+    Paths are resolved at call time so the check can be exercised against temp files.
+    """
+    export_path = EXPORT if export_path is None else export_path
+    pin_path = RUNTIME_ORDERS if pin_path is None else pin_path
+    exported = load(export_path)
+    for key in ("_missing", "_unreadable"):
+        if key in exported:
+            return [exported[key]]
+    asset = (exported.get("meta") or {}).get("asset")
+    if not asset:
+        return [f"{export_path.name}: meta.asset is missing, so the exported order cannot be checked"]
+    pinned = ((load(pin_path).get("assets") or {}) if isinstance(load(pin_path), dict) else {}).get(asset) or {}
+    order = pinned.get("joint_order")
+    if not order:
+        return [f"{export_path.name}: asset {asset!r} has no pinned runtime order to compare against"]
+    out: list[str] = []
+    if exported.get("joint_order_runtime") != order:
+        out.append(
+            f"{export_path.name}: joint_order_runtime {exported.get('joint_order_runtime')}"
+            f" != the pinned order for {asset!r} -- re-export after re-measuring"
+        )
+    expected = hashlib.sha256("\n".join(order).encode("utf-8")).hexdigest()
+    if exported.get("joint_order_runtime_digest") != expected:
+        out.append(
+            f"{export_path.name}: joint_order_runtime_digest {exported.get('joint_order_runtime_digest')!r}"
+            f" != {expected!r}"
+        )
+    return out
+
+
 def compare(declared: dict, observed: dict, where: str) -> list[str]:
     """Order-sensitive layout comparison, with the same-set-different-order case named."""
     out: list[str] = []
@@ -307,6 +346,7 @@ def main(argv: list[str] | None = None) -> int:
             return 1
     problems = check_self(document)
     problems += check_anchors(document, load(ANCHORS))
+    problems += check_export_agreement()
     recorded, recorded_count = check_recorded(document, args.only)
     problems += recorded
     live_count = 0

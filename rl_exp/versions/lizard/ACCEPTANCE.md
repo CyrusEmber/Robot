@@ -981,7 +981,8 @@ FAIL Lizard-Rough-v14: live joint order differs from the measured one for 'asset
 OBS_PROTOCOL_LIVE_FAILED (1 problem(s), 1 warning(s))
 ```
 　换回后 `OBS_PROTOCOL_LIVE_OK`。即：钉住值是承重的，不是装饰。
-- **未做（也未要求）**：`lizard_ue.json` 里的 `joint_order` 仍是 URDF 序。今天仓内没有按位置装配 obs 的消费者（`build_lizard_ue.py` 只装物理 Actor），所以是**潜伏**而非在炸；一旦有人写 UE 侧 obs 装配，必须先定"按名装配"还是"改用运行序"。这条与下面那句一起构成敞口。
+- **导出侧已闭合（2026-09-17）**：`lizard_ue.json` 现在同时带**两种序**并写明用途 —— `joint_order`（URDF 树序，保留 + `joint_order_note` 标注它不是装配序）与 `joint_order_runtime`（实测运行序）+ `joint_order_runtime_digest`，`meta.obs_assembly` 写明"装配必须按关节**名**，或用 `joint_order_runtime`"。**导出器没有实测序就拒绝导出**（不写任何文件）：实测 `exit code 1` + `ValueError: no measured runtime joint order for 'assets/lizard/lizard.usda'`，且导出产物逐字节未动。
+  导出器**不 import** `rl_exp.tasks`（它在部署机上跑，不该拖进训练栈），因此它是直读数据文件的第二处读取 —— 这一处重复由闸门机器核对：`check_obs_protocol` 增 `check_export_agreement`，比对导出产物与实测序及其摘要（4 例反证：序过期、摘要过期、缺 `meta.asset`、干净）。
 
 ## B3 · v6–v14 元素化（剩余九条配方，B3 收口，2026-09-16）
 

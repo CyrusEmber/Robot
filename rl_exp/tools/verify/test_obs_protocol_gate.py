@@ -15,6 +15,7 @@ ordering cases matter most, because a same-members-different-order edit is exact
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import pathlib
 import sys
@@ -228,6 +229,40 @@ def main() -> int:
             "retirement/reader-drives-coverage",
             g.coverage_problems(tasks, fewer, g.retired_lines(lines_path), [one]) == [],
             f"{g.coverage_problems(tasks, fewer, g.retired_lines(lines_path), [one])[:3]}",
+        )
+
+    # --- the exported deployment artifact must agree with the pin ----------------------
+    with tempfile.TemporaryDirectory() as tmp:
+        pin_path, out_path = pathlib.Path(tmp) / "pin.json", pathlib.Path(tmp) / "export.json"
+        order = ["a", "b", "c"]
+        digest = hashlib.sha256("\n".join(order).encode("utf-8")).hexdigest()
+        pin_path.write_text(json.dumps({"assets": {"asset/x": {"joint_order": order}}}), encoding="utf-8")
+
+        def exported(**overrides) -> pathlib.Path:
+            body = {
+                "meta": {"asset": "asset/x"},
+                "joint_order_runtime": order,
+                "joint_order_runtime_digest": digest,
+                **overrides,
+            }
+            out_path.write_text(json.dumps(body), encoding="utf-8")
+            return out_path
+
+        check("export/clean", g.check_export_agreement(exported(), pin_path) == [], f"{g.check_export_agreement(exported(), pin_path)}")
+        fires(
+            "export/runtime-order-stale",
+            "re-export after re-measuring",
+            g.check_export_agreement(exported(joint_order_runtime=["a", "c", "b"]), pin_path),
+        )
+        fires(
+            "export/digest-stale",
+            "joint_order_runtime_digest",
+            g.check_export_agreement(exported(joint_order_runtime_digest="0" * 64), pin_path),
+        )
+        fires(
+            "export/no-asset",
+            "meta.asset is missing",
+            g.check_export_agreement(exported(meta={}), pin_path),
         )
 
     if PROBLEMS:

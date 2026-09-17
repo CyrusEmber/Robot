@@ -12,6 +12,7 @@ UE is left-handed Z-up, URDF/Isaac is right-handed Z-up. This file keeps
 right-handed values; ue/build_lizard_ue.py does the handedness conversion.
 """
 
+import hashlib
 import json
 import pathlib
 import re
@@ -25,6 +26,19 @@ EXP_DIR = pathlib.Path(__file__).resolve().parents[2]
 URDF_PATH = EXP_DIR / "versions" / "lizard" / "lizard.urdf"
 PARAMS_PATH = EXP_DIR / "versions" / "lizard" / "main" / "main_params.yaml"
 OUTPUT_DIR = EXP_DIR / "ue"
+# The measured articulation order (what the obs and the action index) lives in the protocol
+# record. Read as a data file rather than through rl_exp.tasks.obs_protocol: importing that
+# package drags in the training stack, and this exporter runs on a deployment box.
+RUNTIME_ORDER_PATH = EXP_DIR / "versions" / "lizard" / "joint_order_runtime.json"
+
+
+def runtime_joint_order(asset):
+    """The pinned articulation order for an asset, or None when nobody measured it."""
+    if not RUNTIME_ORDER_PATH.is_file():
+        return None
+    entry = (json.loads(RUNTIME_ORDER_PATH.read_text(encoding="utf-8")).get("assets") or {}).get(asset)
+    order = (entry or {}).get("joint_order")
+    return list(order) if isinstance(order, list) and order else None
 
 
 def rpy_to_matrix(rpy):
@@ -216,6 +230,20 @@ def main():
             f"  yaml: {params['joint_order']}\n  urdf: {urdf_bare}"
         )
 
+    # The deployment side needs the order the policy actually indexed, and that is not this one:
+    # the observation and the action follow the articulation order, which differs from the URDF
+    # tree order in general. Refusing to export without it keeps an artifact that cannot be
+    # assembled correctly from leaving the repo.
+    asset = params["robot"]["usd_path"]
+    runtime_order = runtime_joint_order(asset)
+    if runtime_order is None:
+        raise ValueError(
+            f"no measured runtime joint order for {asset!r}. Measure it once with\n"
+            f"  python rl_exp/tools/verify/obs_protocol_live.py --headless --tasks <task>"
+            f" --pin --reason '<why>'\n"
+            f"and re-export: the obs and the action index the articulation order, not joint_order."
+        )
+
     for joint in joints:
         if joint["type"] != "revolute":
             continue
@@ -231,14 +259,24 @@ def main():
 
     export = {
         "meta": {
-            "source": ["lizard.urdf", "lizard_params.yaml"],
+            "source": ["lizard.urdf", "lizard_params.yaml", "joint_order_runtime.json"],
+            "asset": asset,
             "units": "SI (meters, radians, kg). UE side converts to cm.",
             "handedness": "right-handed Z-up (URDF). UE is left-handed Z-up: mirror Y.",
             "default_base_height": params["robot"]["base_init_height"],
+            "obs_assembly": (
+                "Assemble observation groups by joint NAME, or use joint_order_runtime. The "
+                "obs joint block and the action vector follow joint_order_runtime (the "
+                "articulation order the policy trained on); joint_order is the URDF tree order "
+                "and is not the assembly order."
+            ),
         },
         "links": links,
         "joints": joints,
         "joint_order": params["joint_order"],
+        "joint_order_note": "URDF tree order: the asset contract, not the policy's assembly order",
+        "joint_order_runtime": runtime_order,
+        "joint_order_runtime_digest": hashlib.sha256("\n".join(runtime_order).encode("utf-8")).hexdigest(),
         "control": {
             # legs carry the policy's main action scale; spine is locked in
             # the teacher and scaled separately in the family variants

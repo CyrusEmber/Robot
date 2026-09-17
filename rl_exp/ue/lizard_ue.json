@@ -2,11 +2,14 @@
   "meta": {
     "source": [
       "lizard.urdf",
-      "lizard_params.yaml"
+      "lizard_params.yaml",
+      "joint_order_runtime.json"
     ],
+    "asset": "assets/lizard/lizard.usda",
     "units": "SI (meters, radians, kg). UE side converts to cm.",
     "handedness": "right-handed Z-up (URDF). UE is left-handed Z-up: mirror Y.",
-    "default_base_height": 1.1
+    "default_base_height": 1.1,
+    "obs_assembly": "Assemble observation groups by joint NAME, or use joint_order_runtime. The obs joint block and the action vector follow joint_order_runtime (the articulation order the policy trained on); joint_order is the URDF tree order and is not the assembly order."
   },
   "links": {
     "base_link": {
@@ -2344,6 +2347,36 @@
     "rl_kfe",
     "rl_foot"
   ],
+  "joint_order_note": "URDF tree order: the asset contract, not the policy's assembly order",
+  "joint_order_runtime": [
+    "chest_yaw",
+    "tail1_yaw",
+    "rr_haa",
+    "rl_haa",
+    "chest_pitch",
+    "tail1_pitch",
+    "rr_hfe",
+    "rl_hfe",
+    "neck_yaw",
+    "rf_haa",
+    "lf_haa",
+    "tail2_yaw",
+    "rr_kfe",
+    "rl_kfe",
+    "neck_pitch",
+    "rf_hfe",
+    "lf_hfe",
+    "tail2_pitch",
+    "rr_foot",
+    "rl_foot",
+    "rf_kfe",
+    "lf_kfe",
+    "tail3_yaw",
+    "rf_foot",
+    "lf_foot",
+    "tail3_pitch"
+  ],
+  "joint_order_runtime_digest": "416640b4d16af07209d5810aa4461be8c441e1fe319dba2e2f77d5385e245184",
   "control": {
     "action_scale": 0.5,
     "action_scale_spine": 0.25,

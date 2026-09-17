@@ -89,6 +89,22 @@ def usd_path(task_id: str) -> str | None:
     return asset if isinstance(asset, str) and asset else None
 
 
+def runtime_joint_order_for_asset(asset: str) -> list[str] | None:
+    """The measured articulation order of an asset, or ``None`` when unpinned.
+
+    Keyed by the asset because that is what the order belongs to: every recipe loading the same
+    USD resolves the same sequence, whatever line or version it belongs to.
+    """
+    if not asset or not RUNTIME_ORDERS.is_file():
+        return None
+    try:
+        entry = (json.loads(RUNTIME_ORDERS.read_text(encoding="utf-8")).get("assets") or {}).get(asset)
+    except (OSError, json.JSONDecodeError):
+        return None
+    order = (entry or {}).get("joint_order")
+    return list(order) if isinstance(order, list) and order else None
+
+
 def runtime_joint_order(task_id: str) -> list[str] | None:
     """The measured articulation order of this task's asset, or ``None`` when unpinned.
 
@@ -98,14 +114,7 @@ def runtime_joint_order(task_id: str) -> list[str] | None:
     compared from then on, never inferred from the version or the asset's name.
     """
     asset = usd_path(task_id)
-    if asset is None or not RUNTIME_ORDERS.is_file():
-        return None
-    try:
-        entry = (json.loads(RUNTIME_ORDERS.read_text(encoding="utf-8")).get("assets") or {}).get(asset)
-    except (OSError, json.JSONDecodeError):
-        return None
-    order = (entry or {}).get("joint_order")
-    return list(order) if isinstance(order, list) and order else None
+    return runtime_joint_order_for_asset(asset) if asset else None
 
 
 def joint_order_digest(task_id: str) -> str | None:

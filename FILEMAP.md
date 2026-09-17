@@ -107,7 +107,7 @@
 | `tools\pipeline\flatten_usd.py` | 压平 URDF-importer-3.0 层级（IsaacLab issue #5126 workaround） |
 | `tools\pipeline\convert_stl_to_obj.py` | STL → OBJ 转换并重写 URDF 引用 |
 | `tools\pipeline\migrate_joint_names_v8.py` | 一次性：v8 关节重命名对全部版本 yaml 的机械迁移（joint_order 改名 + 脊柱正则 `rear_.*`→`chest_.*`、`tail_.*`→`tail[0-9]_.*`；root/v8 yaml 的 joint_order 置为新 URDF 实际序，满足 export_ue 序列断言）——冻结目录改动的可审计出处 |
-| `tools\pipeline\export_ue.py` | SSOT → UE 工件（关节映射/参数打包，盲部署前置） |
+| `tools\pipeline\export_ue.py` | SSOT → UE 工件（关节映射/参数打包，盲部署前置）。**同时输出两种关节序并写明用途**：`joint_order`（URDF 树序，装配**不是**用它）+ `joint_order_runtime` 与其摘要（政策真正索引的序，来自 `joint_order_runtime.json`）+ `meta.obs_assembly` 的按名装配契约。**没有实测序就拒绝导出**（不写文件）；不 import `rl_exp.tasks`（部署机不该拖训练栈），那一处直读由 `check_obs_protocol.check_export_agreement` 机器核对 |
 | `tools\archive\patch_kfe_axis.py` | URDF 手术：kfe 轴 Z→Y + 对称限位（旧版一次性脚本，仅考古） |
 | `tools\archive\patch_stance.py` | URDF 手术：把自然站姿烘进零位（旧版一次性脚本，仅考古） |
 | `tools\diagnose\inspect_blend.py` / `inspect_glb.py` | 无头 Blender：dump blend 骨架层级 / glb 零件包围盒 |
