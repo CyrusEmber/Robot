@@ -1,0 +1,5 @@
+run_id,protocol,task,tag,mode,seed,git_rev_lizard,git_rev_isaaclab,timestamp,success_rate,fall_rate,lin_mae_mps,ang_mae_radps,energy_per_m_j,stop_overshoot_mps,recovery_mean_s,never_recovered
+Lizard-Rough-v14_3150_nominal_seed123,Locomotion-Eval-v2,Lizard-Rough-v14,3150,nominal,123,c5f56ed,28a37cecd,2026-09-15T20:08:43,0.4804,1.0,0.5636,0.2246,2420.6614,0.0,,
+Lizard-Rough-v14_850_nominal_seed123,Locomotion-Eval-v2,Lizard-Rough-v14,850,nominal,123,c5f56ed,28a37cecd,2026-09-15T20:13:06,0.2476,0.0,0.8374,0.1726,10744.2285,0.0281,,
+Lizard-Rough-v14_1150_nominal_seed123,Locomotion-Eval-v2,Lizard-Rough-v14,1150,nominal,123,cee0adb,28a37cecd,2026-09-15T20:15:07,0.2771,0.0,0.8394,0.1742,10981.2412,0.0206,,
+Lizard-Rough-v14_1300_nominal_seed123,Locomotion-Eval-v2,Lizard-Rough-v14,1300,nominal,123,cee0adb,28a37cecd,2026-09-15T20:17:07,0.1186,1.0,1.1524,0.9123,11404.9883,0.0,,
