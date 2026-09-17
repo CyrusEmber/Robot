@@ -54,8 +54,18 @@ def _run(command: list[str], *, cwd: pathlib.Path, environment: dict) -> subproc
 
 
 def _environment(python: str, index_root: pathlib.Path) -> dict:
-    """The child's environment: the fixture directory is the whole point of the run."""
-    return {**os.environ, lifecycle.INDEX_DIR_ENV: str(index_root), "PYTHONUNBUFFERED": "1"}
+    """The child's environment: the fixture directory is the whole point of the run.
+
+    ``RL_ALLOW_DIRTY_TREE`` is set because these tracks run while the repository is being
+    changed: the lifecycle answer is what they are about, and a dirty tree would refuse every
+    launch for a reason that has nothing to do with what is under test.
+    """
+    return {
+        **os.environ,
+        lifecycle.INDEX_DIR_ENV: str(index_root),
+        "RL_ALLOW_DIRTY_TREE": "lifecycle entry run: the tree is dirty by definition here",
+        "PYTHONUNBUFFERED": "1",
+    }
 
 
 def _newest_run_dir(experiment_name: str, root: pathlib.Path) -> pathlib.Path | None:
@@ -175,7 +185,7 @@ def track_announce(args, python: str, out: pathlib.Path) -> list[str]:
 def track_moved(args, python: str, out: pathlib.Path) -> list[str]:
     """L05: the directory moving on does not rewrite what the run was started under."""
     first, second = out / "fixture_moved_a", out / "fixture_moved_b"
-    fixture_entry.build(first, retire=None, announce=None, notice_until=None, today=None, successor=None)
+    fixture_entry.build(first, retire=None, announce=None, notice_until=None, today=None, successor=None, bump=1)
     result = _run(
         _trainer_command(python, args, iterations=1), cwd=_isaac_root(), environment=_environment(python, first)
     )
@@ -192,15 +202,19 @@ def track_moved(args, python: str, out: pathlib.Path) -> list[str]:
 
     # the directory is revised *after* the launch: the recorded verdict stands, and today's
     # directory is not re-applied to it (hard constraint 6)
-    fixture_entry.build(second, retire=None, announce=None, notice_until=None, today=None, successor=None)
+    fixture_entry.build(second, retire=None, announce=None, notice_until=None, today=None, successor=None, bump=2)
     os.environ[lifecycle.INDEX_DIR_ENV] = str(second)
     try:
         rows, blocking = M.verify(run_dir)
     finally:
         os.environ.pop(lifecycle.INDEX_DIR_ENV, None)
     lifecycle_rows = [row for row in rows if "line" in row.get("detail", "")]
-    if blocking:
-        problems.append(f"moved: a moved directory must not block the record: {blocking}")
+    # only the directory's own rows decide this track: a short run legitimately leaves other
+    # claims unknown (no checkpoint yet, rebuild not attempted), and letting those block would
+    # make this judgement about everything except what it is about
+    lifecycle_blocking = [item for item in blocking if "line " in item or "lifecycle" in item]
+    if lifecycle_blocking:
+        problems.append(f"moved: a moved directory must not block the record: {lifecycle_blocking}")
     if not any("changed since this launch" in row.get("detail", "") for row in rows):
         problems.append(f"moved: the moved directory must be reported: {[row['detail'] for row in lifecycle_rows]}")
     still = json.loads((run_dir / M.MANIFEST_NAME).read_text(encoding="utf-8"))

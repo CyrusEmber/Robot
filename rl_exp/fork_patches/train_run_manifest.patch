@@ -1,7 +1,7 @@
 diff --git a/scripts/reinforcement_learning/rsl_rl/train.py b/scripts/reinforcement_learning/rsl_rl/train.py
 --- a/scripts/reinforcement_learning/rsl_rl/train.py
 +++ b/scripts/reinforcement_learning/rsl_rl/train.py
-@@ -231,6 +231,19 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
+@@ -231,6 +231,27 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
          # set the log directory for the environment (works for all environment types)
          env_cfg.log_dir = log_dir
  
@@ -14,14 +14,22 @@ diff --git a/scripts/reinforcement_learning/rsl_rl/train.py b/scripts/reinforcem
 +        except ImportError as exc:
 +            run_manifest = None
 +            print(f"[WARN] run manifest unavailable ({exc}); this run will not record what it was")
-+        run_context = run_manifest.begin(
-+            log_dir=log_dir, task=args_cli.task, argv=sys.argv, env_cfg=env_cfg, agent_cfg=agent_cfg
-+        ) if run_manifest else None
++        try:
++            run_context = run_manifest.begin(
++                log_dir=log_dir, task=args_cli.task, argv=sys.argv, env_cfg=env_cfg, agent_cfg=agent_cfg
++            ) if run_manifest else None
++        except RuntimeError as err:
++            # A refusal must be observable by whoever started this process. Raising alone is not
++            # enough: the sim app is already up, its teardown runs on the way out and the process
++            # exits 0 (measured 2026-09-17 with a retired-line fixture) -- so a launch that never
++            # trained would look like a success to a CI job, an `&&` chain or a sweep scheduler.
++            print(f"[FATAL] {err}", flush=True)
++            os._exit(2)
 +
          # create isaac environment
          env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
  
-@@ -240,6 +253,11 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
+@@ -240,6 +261,11 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
  
              env = multi_agent_to_single_agent(env)
  
@@ -33,7 +41,7 @@ diff --git a/scripts/reinforcement_learning/rsl_rl/train.py b/scripts/reinforcem
          # save resume path before creating a new log_dir
          # Restore the curriculum state (registered SIR term state + the c_k clock) BEFORE the wrapper:
          # RslRlVecEnvWrapper.__init__ runs the first full reset, and that reset is what makes the SIR
-@@ -327,10 +345,34 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
+@@ -327,10 +353,34 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
              # load previously trained model
              runner.load(resume_path)
  

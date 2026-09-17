@@ -1152,13 +1152,16 @@ resume 拒绝、save 守卫、`train.py` 的导入失败守卫、manifest 记录
 | 机制等价 | `[41]` **通过**（26/26）；**灵敏度**证明："拿 v13 的类去比 v14 的 build"出 3 条差异 ⇒ 这个比对不是恒空 |
 | `[41]` 成本 | 单跑 **9.7 s**（预算 25 s；+26 次构造约 +1 s） |
 | **C4 第一档真跑（launcher）** | **通过**：`lifecycle_entry_run.py --track launcher` ⇒ 退出码 2、stderr `[launcher] refused: retired line: refusing new_train; new work belongs to an active successor line`，且**没有新建 run 目录**（拒绝发生在 spawn 之前 ⇒ trainer 从未启动）。这一档不需要 sim app，所以它现在就是真证据，不是离线断言 |
-| 其余四档 | **未跑**：`--dry-run` 已确认它们的性质（`trainer`/`tuning`/`announce`/`moved` 都要起 sim app）；窗口一到即按判据跑 |
+| 其余四档 | **真跑通过**（`--track all`，一条命令五档）：`trainer` 拒绝且 T0 记 `allowed=False`；`tuning` 被同一子进程杀死（exit 1）；`announce` exit 0 且记录 `warn="the line's announced retirement is due and the directory has not been revised; recording the overdue directory, proceeding under status=active"`；`moved` 记录保住原目录摘要、`verify` 只报告"目录已改" |
+| **由此发现并修掉的缺陷（真跑才看得见）** | 拒绝**没有被退出码观察到**：进程打印拒绝、T0 记 `allowed=false`，却 **exit 0**（Isaac 的 app 收尾在返回路径上把码归一）。按退出码判成功的调用方（CI、`&&` 链、扫参调度）会把它当成功 ⇒ fork 补丁在 T0 调用点加 try/except：打印 `[FATAL]` 后 `os._exit(2)`（`os._exit` 是必需的，降级 `raise`/`sys.exit` 依然被收尾吞掉）。实测 `RC=2`；`[1] PIN_CHECK_OK` 复验补丁链仍与 fork 树逐字节一致 |
+| `moved` 的控制修正 | 首版两份 fixture 内容相同（只改 revision 数字、值一样）⇒ 摘要相同 ⇒ 控制没生效（假过）。加 `bump=` 让 A/B 修订真的不同后，`verify` 才报出"目录已改" |
 
 ### 边界
 - **注册表未翻**：`rl_exp\tasks\__init__.py` 的 `env_cfg_entry_point` 与 `recipes.json` 的 `env_cfg_entry` 仍指版本类 ⇒ 训练走的还是类路径。翻表是三步（生成类 + 改两处字符串 + `name=` 对齐），本轮只把机制与证明备好，**没动**——因为它同时意味着版本类体可以开始删，那是 B 侧迁移的收尾节奏。
 - `recipes.json` 里 baseline 的 demo/extra 条目与 `RECIPE_DEMO`/`EXTRA_TASKS` 无关（主线任务），所以翻表不影响它们。
-- C4 的 `launch` 档只证"新入口在 `gym.make` 前拒绝"；**旧 trainer 档**才证"拒绝留 T0"、**tuning 档**才证"调参入口不能绕过"，两者都要 sim。
-- 本批不新增套件条目（机制断言落在 `[41]` 内）。
+- C4 的 `launch` 档只证"新入口在 `gym.make` 前拒绝"；`trainer` 档另外证"拒绝会被退出码观察到，且 T0 留下拒绝记录"；`tuning` 档证"调参入口不能绕过"。
+- **入口侧验收状态（本节更新）**：L02（退休线过三个入口）**通过**（三档各自真跑）；L03 的"缺状态 resume 硬拒"仍只有离线半边（真跑需一个缺课程状态的 ckpt 臂，属 C 层旧账）；L05 的"启动后改目录"**通过**（`moved` 档）。
+- 本批不新增套件条目（机制断言落在 `[41]` 内；`lifecycle_entry_run.py` 要起 sim，按 `OFFLINE_CHECKS.md` 5 不进套件）。
 
 ## B4 · 硬 B 加齿：路径归属元素 + agent 侧进清单 + baseline 锁入摘要看守（2026-09-17）
 

@@ -49,6 +49,7 @@ def build(
     notice_until: str | None,
     today: _dt.date | None,
     successor: str | None,
+    bump: int = 1,
 ) -> dict:
     """Write the fixture and describe what it should make the trainer do.
 
@@ -68,14 +69,18 @@ def build(
     lines = _loads(LINES)
     recipes = _loads(RECIPES)
     entries = lines.get("lines") or {}
-    if (retire or announce) not in entries:
+    if (retire or announce) and (retire or announce) not in entries:
         raise SystemExit(f"[fixture] {(retire or announce)!r} is not a line in this checkout: {sorted(entries)}")
     if retire and announce:
         raise SystemExit("[fixture] one line per fixture: a retired line is not a warned active line")
 
     active = [key for key, entry in entries.items() if entry.get("status") == "active"]
     target = retire or announce
-    if retire:
+    if not target:
+        # a plain copy with a bumped revision: the control for "the directory moved on after a
+        # launch", which needs two different directories and no change to any line
+        expected = "proceed; nothing about a line changed, the directory is a copy"
+    elif retire:
         if not active:
             raise SystemExit("[fixture] no active line is left to name as the successor")
         entries[retire].update(
@@ -104,7 +109,7 @@ def build(
             if due
             else "proceed, and record the announcement without a warning"
         )
-    lines["revision"] = int(lines.get("revision") or 1) + 1
+    lines["revision"] = int(lines.get("revision") or 1) + bump
 
     versions = out / "rl_exp" / "versions"
     versions.mkdir(parents=True, exist_ok=True)
@@ -115,8 +120,7 @@ def build(
     (out / "FIXTURE.md").write_text(
         "# Lifecycle fixture (ARCH_PLAN 2.3 entry side)\n\n"
         f"Written by `rl_exp/tools/verify/lifecycle_entry_fixture.py` on {_dt.date.today().isoformat()}.\n"
-        f"Line under test: `{target}` (fixture revision {lines['revision']}).\n\n"
-        f"Expected: {expected}.\n\n"
+        f"Line under test: `{target or 'none (plain copy)'}` (fixture revision {lines['revision']}).\n\n"        f"Expected: {expected}.\n\n"
         "Run it with the real trainer and the fixture directory:\n\n"
         "```\n"
         f'set RL_RECIPE_DIR={out}\n'
