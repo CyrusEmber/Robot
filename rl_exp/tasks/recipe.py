@@ -32,6 +32,7 @@ from isaaclab.assets import ArticulationCfg
 from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import RewardTermCfg as RewTerm
 from isaaclab.managers import SceneEntityCfg
+from isaaclab.utils.configclass import configclass
 
 from rl_exp.tasks import baseline_env_cfg, baseline_mdp, components, recipe_params, teacher_mdp
 from rl_exp.tasks import curriculum_state as cstate
@@ -791,6 +792,109 @@ def base_cfg(version: str, *, line: str = MAIN_LINE, play: bool = False):
     return _wired_class(version, play=play, line=line)(params_version=version)
 
 
+def apply_into(cfg, version: str, *, play: bool = False, line: str = MAIN_LINE, trace: list | None = None):
+    """Apply this recipe's declared steps to an existing cfg -- ``build``'s body, as a function.
+
+    Shared by :func:`build` and :func:`recipe_class` so the two mechanisms cannot drift: one
+    applies the steps to an instance the caller holds (and can trace), the other applies them
+    during construction, which is what a registry entry needs.
+
+    Args:
+        cfg: the cfg to subject to the recipe (usually the shared wiring's instance).
+        version: recipe version, a key of this line's recipe table.
+        play: also apply the shared PLAY wiring and the recipe's evaluation elements.
+        line: family-relative line handle, a key of :data:`LINES`.
+        trace: when a list is given, every step is appended as ``(name, callable)``.
+
+    Returns:
+        The same cfg, for chaining.
+    """
+    entry = LINES[line]["recipes"][version]
+    for name in entry["elements"]:
+        ELEMENTS[name](cfg)
+        if trace is not None:
+            trace.append((name, ELEMENTS[name]))
+    if play:
+        # the shared PLAY wiring first, then the recipe's own evaluation-determinism elements:
+        # they undo parts of what the recipe just built (a curriculum that would widen the range
+        # mid-eval, a range that no longer has a curriculum to climb it)
+        apply_play_wiring(cfg)
+        if trace is not None:
+            trace.append(("apply_play_wiring", apply_play_wiring))
+        for name in entry["play_elements"]:
+            ELEMENTS[name](cfg)
+            if trace is not None:
+                trace.append((name, ELEMENTS[name]))
+    return cfg
+
+
+def recipe_class(version: str, *, play: bool = False, line: str = MAIN_LINE, name: str | None = None):
+    """The class a registry entry can point at: the shared wiring, wired by its declared steps.
+
+    A class, because that is what a task registration resolves: hydra instantiates the entry point
+    with no arguments, so "the recipe" has to be expressible as a constructor. The steps run in
+    ``__post_init__`` -- the same place the version subclass bodies ran theirs -- which is what
+    makes the declaration path usable as *the training entry* rather than only as a comparison
+    subject. ``check_recipe_build`` compares this class against :func:`build` field for field, so
+    the two ways of applying one recipe cannot diverge.
+
+    Args:
+        version: recipe version, a key of this line's recipe table.
+        play: the deterministic evaluation variant.
+        line: family-relative line handle, a key of :data:`LINES`.
+        name: the class name to use, defaulting to a name derived from the line and version. A
+            caller that replaces a registered class passes that class's own name, so anything
+            recording ``type(cfg).__name__`` (a checkpoint payload does) cannot tell the two
+            paths apart and a resume may cross them.
+
+    Returns:
+        The config class. Construct it with no arguments.
+
+    Raises:
+        KeyError: the line or the version is not declared.
+        ValueError: the recipe's delta is not declared yet.
+    """
+    if line not in LINES:
+        raise KeyError(f"unknown recipe line {line!r}; known: {sorted(LINES)}")
+    recipes = LINES[line]["recipes"]
+    if version not in recipes:
+        raise KeyError(f"unknown recipe {version!r} on {line}; known: {sorted(recipes)}")
+    if recipes[version]["elements"] is None:
+        raise ValueError(
+            f"recipe {version!r} on {line}: its delta is not declared yet (declared: {declared(line)}),"
+            " so a class for it would have to guess the missing part"
+        )
+    base = LINES[line]["base"]
+    stated = declaration(version, play=play, line=line)
+
+    def __post_init__(self):
+        """The shared wiring's own construction, then this recipe's declared steps.
+
+        The version subclass bodies this replaces did exactly this; the class looks for
+        ``base.__post_init__`` rather than ``super()`` because this function is not defined in a
+        class body, so it has no ``__class__`` cell for the zero-argument form.
+        """
+        base.__post_init__(self)
+        apply_into(self, version, play=play, line=line)
+
+    namespace: dict = {
+        "params_version": version,
+        "__post_init__": __post_init__,
+        "__doc__": f"{line}/{version}{'/play' if play else ''}, built from its declared elements.",
+    }
+    if stated is not None:
+        # annotated, not merely set: an unannotated attribute enters the snapshot as a field
+        # (cfg_snapshot tells the two apart by the annotation), and a statement is not data
+        namespace["__annotations__"] = {cstate.REQUIRES_CURRICULUM_STATE: ClassVar[bool]}
+        namespace[cstate.REQUIRES_CURRICULUM_STATE] = stated
+    klass = type(
+        name or f"{base.__name__}_{line.split('/')[-1]}_{version}{'_PLAY' if play else ''}",
+        (base,),
+        namespace,
+    )
+    return configclass(klass)
+
+
 def build(version: str, *, play: bool = False, trace: list | None = None, line: str = MAIN_LINE):
     """The env cfg a recipe declares.
 
@@ -825,20 +929,4 @@ def build(version: str, *, play: bool = False, trace: list | None = None, line: 
         )
     # the version travels as the *field* it is: the shared wiring resolves every structural
     # choice from it, and a subclass that only restated it is exactly what this replaces
-    cfg = base_cfg(version, line=line, play=play)
-    for name in elements:
-        ELEMENTS[name](cfg)
-        if trace is not None:
-            trace.append((name, ELEMENTS[name]))
-    if play:
-        # the shared PLAY wiring first, then the recipe's own evaluation-determinism elements:
-        # they undo parts of what the recipe just built (a curriculum that would widen the range
-        # mid-eval, a range that no longer has a curriculum to climb it)
-        apply_play_wiring(cfg)
-        if trace is not None:
-            trace.append(("apply_play_wiring", apply_play_wiring))
-        for name in recipes[version]["play_elements"]:
-            ELEMENTS[name](cfg)
-            if trace is not None:
-                trace.append((name, ELEMENTS[name]))
-    return cfg
+    return apply_into(base_cfg(version, line=line, play=play), version, play=play, line=line, trace=trace)

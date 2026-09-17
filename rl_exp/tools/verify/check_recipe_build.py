@@ -88,9 +88,11 @@ EXPECTED_PENDING: dict[str, tuple[str, ...]] = {
 
 EXPECTED_DIFFS: dict[tuple[str, str], int] = {
     # hard B: the first new-architecture recipe declares its difference from the framework stock
-    # cfg, path by path. Pinned like the other counts -- a declaration that quietly shrinks is
-    # exactly the failure this gate is built around.
-    ("lizard/baseline", "v1"): 33,
+    # cfg, path by path -- 33 on the env side (each attributed to the element that produces it)
+    # and 43 on the agent side, where the stock leaves the model and algorithm unset. Pinned like
+    # the other counts: a declaration that quietly shrinks is exactly the failure this gate is
+    # built around.
+    ("lizard/baseline", "v1"): 76,
 }
 """Recipe -> how many paths its difference declaration lists (``diff.json`` next to the recipe)."""
 
@@ -223,29 +225,65 @@ def declared_diff(line_key: str, version: str) -> tuple[dict | None, str | None]
         return None, f"{cs.relativize(str(path))} is not readable JSON: {err}"
 
 
+def covers(key: str, path: str) -> bool:
+    """Does one declared entry cover a changed path? An entry covers its own subtree.
+
+    Direction matters: entries are usually shallower than the paths they cover
+    (``rewards.ang_vel_xy_l2`` covers it exactly; ``scene.robot`` covers the twelve fields the
+    robot block writes), so every comparison asks whether the *entry* covers the *path*, never
+    the other way round.
+    """
+    return path == key or path.startswith(f"{key}.")
+
+
+def agent_entry(line_key: str, version: str) -> str:
+    """The agent cfg the recipe map names for this recipe's train task.
+
+    Read from the map rather than written into the difference declaration: which class runs a
+    recipe is already declared in one place, and a second copy is a second thing to keep in step.
+    """
+    mapping = lock.recipe_map()
+    task_id = recipe.LINES[line_key]["recipes"][version]["train"]
+    recipe_key = mapping.get("tasks", {}).get(task_id)
+    entry = (mapping.get("recipes", {}).get(recipe_key or "") or {}).get("agent_entry")
+    if not isinstance(entry, str) or not entry:
+        raise KeyError(f"the recipe map names no agent entry for {task_id}")
+    return entry
+
+
 def hard_b(line_key: str, version: str, declared: dict, paths: list[str]) -> int:
     """The first new recipe must differ from its base by exactly the declared list.
 
-    Both directions, because only one of them looks like a bug: an **undeclared** change is the
-    drift this gate exists for, and a **declared** entry that no longer changes anything is how a
-    declaration rots into a description of a recipe that moved on. The recipe's base is the
-    framework stock cfg -- pinned by the declaration, and checked here rather than assumed, since
-    a wiring class that quietly carried a delta would make every later comparison meaningless.
+    Four directions, because only one of them looks like a bug:
+
+    * an **undeclared** change is the drift this gate exists for;
+    * a **declared** entry that no longer changes anything is how a declaration rots into a
+      description of a recipe that moved on;
+    * an env entry whose **named element does not produce that path** means the list and the
+      element list have stopped agreeing -- rewriting the list to go green has to reach the
+      elements too, which is the whole reason each entry names one;
+    * a base that is **not** the stock cfg plus the declared exception would make every later
+      comparison meaningless, so the claim is checked rather than assumed.
+
+    The agent side has no elements to attribute to (it is a class, not a declaration) and is
+    compared against the framework's stock agent cfg instead.
 
     Returns the number of declared paths, or 0 when the declaration could not be checked.
     """
+    env = declared["env"]
+    agent = declared["agent"]
     trace: list[tuple[str, object]] = []
     built = recipe.build(version, trace=trace, line=line_key)
     try:
-        stock = lock.resolve_entry(declared["base"]["stock"])()
-        wiring = lock.resolve_entry(declared["base"]["wiring"])(params_version=version)
+        stock = lock.resolve_entry(env["stock"])()
+        wiring = lock.resolve_entry(env["wiring"])(params_version=version)
     except (ImportError, AttributeError, TypeError, KeyError, ValueError) as err:
-        paths.append(f"{line_key}/{version}: the declared base does not resolve: {type(err).__name__}: {err}")
+        paths.append(f"{line_key}/{version}: the declared env base does not resolve: {type(err).__name__}: {err}")
         return 0
 
     wiring_rows: list = []
     lock.walk_diff(cs.snapshot(stock), cs.snapshot(wiring), "", wiring_rows, limit=1 << 30)
-    empty_except = sorted(declared["base"]["wiring_is_stock_except"])
+    empty_except = sorted(env["wiring_is_stock_except"])
     if sorted(row[0] for row in wiring_rows) != empty_except:
         paths.append(
             f"{line_key}/{version}: the base the recipe declares is not the stock cfg plus"
@@ -254,20 +292,72 @@ def hard_b(line_key: str, version: str, declared: dict, paths: list[str]) -> int
 
     rows: list = []
     lock.walk_diff(cs.snapshot(wiring), cs.snapshot(built), "", rows, limit=1 << 30)
-    allowed = declared["allowed"]
-    undeclared = sorted({row[0] for row in rows if not any(row[0] == key or row[0].startswith(f"{key}.") for key in allowed)})
+    allowed = env["allowed"]
+    leaves = [row[0] for row in rows]
+    undeclared = sorted({leaf for leaf in leaves if not any(covers(key, leaf) for key in allowed)})
     if undeclared:
         paths.append(
-            f"{line_key}/{version}: {len(undeclared)} field(s) differ from the declared base"
+            f"{line_key}/{version}: {len(undeclared)} env field(s) differ from the declared base"
             f" without being declared: {undeclared[:5]}"
         )
-    ineffective = sorted(key for key in allowed if not any(row[0] == key or row[0].startswith(f"{key}.") for row in rows))
+    ineffective = sorted(key for key in allowed if not any(covers(key, leaf) for leaf in leaves))
     if ineffective:
         paths.append(
-            f"{line_key}/{version}: {len(ineffective)} declared path(s) no longer differ from the"
-            f" base (drop them, or the list describes a recipe that moved on): {ineffective[:5]}"
+            f"{line_key}/{version}: {len(ineffective)} declared env path(s) no longer differ from"
+            f" the base (drop them, or the list describes a recipe that moved on): {ineffective[:5]}"
         )
-    return len(allowed)
+
+    # what each element actually moved, replayed the same way the attribution check does: a list
+    # entry is a claim about the declaration, and this is the declaration answering it
+    step_cfg = recipe.base_cfg(version, line=line_key)
+    produced: dict[str, set[str]] = {}
+    for name, step in trace:
+        before = cs.snapshot(step_cfg)
+        step(step_cfg)
+        moved: list = []
+        lock.walk_diff(before, cs.snapshot(step_cfg), "", moved, limit=1 << 30)
+        produced.setdefault(name, set()).update(row[0] for row in moved)
+    for key in sorted(allowed):
+        element = allowed[key].get("element")
+        if element is None:
+            paths.append(f"{line_key}/{version}: declared env path {key!r} names no element")
+        elif element not in produced:
+            paths.append(
+                f"{line_key}/{version}: declared env path {key!r} names element {element!r}, which"
+                f" this recipe does not apply"
+            )
+        elif not any(covers(key, moved) for moved in produced[element]):
+            paths.append(
+                f"{line_key}/{version}: declared env path {key!r} is attributed to {element!r},"
+                f" which does not produce it -- the list and the element list have drifted apart"
+            )
+
+    agent_paths = agent["allowed"]
+    try:
+        subject = lock.resolve_entry(agent_entry(line_key, version))()
+        agent_stock = lock.resolve_entry(agent["stock"])()
+    except (ImportError, AttributeError, TypeError, KeyError, ValueError) as err:
+        paths.append(f"{line_key}/{version}: the agent cfg does not resolve: {type(err).__name__}: {err}")
+        return len(allowed) + len(agent_paths)
+
+    agent_rows: list = []
+    lock.walk_diff(cs.snapshot(agent_stock), cs.snapshot(subject), "", agent_rows, limit=1 << 30)
+    agent_leaves = [row[0] for row in agent_rows]
+    agent_undeclared = sorted(
+        {leaf for leaf in agent_leaves if not any(covers(key, leaf) for key in agent_paths)}
+    )
+    if agent_undeclared:
+        paths.append(
+            f"{line_key}/{version}: {len(agent_undeclared)} agent field(s) differ from the stock"
+            f" agent cfg without being declared: {agent_undeclared[:5]}"
+        )
+    agent_ineffective = sorted(key for key in agent_paths if not any(covers(key, leaf) for leaf in agent_leaves))
+    if agent_ineffective:
+        paths.append(
+            f"{line_key}/{version}: {len(agent_ineffective)} declared agent path(s) no longer differ"
+            f" from the stock: {agent_ineffective[:5]}"
+        )
+    return len(allowed) + len(agent_paths)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -369,6 +459,27 @@ def main(argv: list[str] | None = None) -> int:
                             " paths would answer differently"
                         )
                 attribution(version, play=play, paths=attribution_problems, line=line_key)
+                # The switch's safety: the class a registry entry can point at has to build the
+                # same config build() does, or "the declaration path became the training entry"
+                # would change the run without changing the declaration. Constructed under the
+                # class path's own name, because a checkpoint payload records
+                # ``type(cfg).__name__``: same name, so a resume may cross the two paths.
+                try:
+                    from_class = recipe.recipe_class(
+                        version, play=play, line=line_key, name=getattr(cls, "__name__", None)
+                    )()
+                except Exception as err:  # noqa: BLE001 - a class that cannot be built is the finding
+                    problems.append(
+                        f"{line_key}/{version}/{kind}: recipe_class failed to build: {type(err).__name__}: {err}"
+                    )
+                else:
+                    class_rows: list = []
+                    lock.walk_diff(cs.snapshot(from_class), cs.snapshot(built), "", class_rows)
+                    if class_rows:
+                        problems.append(
+                            f"{line_key}/{version}/{kind}: the registrable class and build() disagree on"
+                            f" {len(class_rows)} path(s): {class_rows[:3]}"
+                        )
                 rows: list = []
                 lock.walk_diff(stored["snapshot"]["env"], cs.snapshot(built), "", rows)
                 if rows:

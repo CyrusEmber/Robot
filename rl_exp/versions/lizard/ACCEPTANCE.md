@@ -1136,6 +1136,30 @@ resume 拒绝、save 守卫、`train.py` 的导入失败守卫、manifest 记录
 - **仍未做**：`launch_recipe.py` 改走 `recipe.build()`（即"声明路径成为训练入口"）与随之的版本类体删除；硬 B 仍只覆盖 env cfg（agent 配置未纳入）；真环境行为等价仍要 C 层真跑。
 - **`declares` 的值是过渡期抄自版本类的**（train True/False、play 全 False），由保真闸门逐步看守；等类体删除后，配方表成为唯一来源。
 
+## 入口切换的机制与第一档真跑（C2 机制 / C4 部分，2026-09-17）
+
+**性质**：**追加**条目。C2 的"声明路径成为训练入口"拆成两件可分别验收的事：**机制**（本节）与**翻注册表**（未做，见边界）。C4 同理：五档真跑里只有一档不需要仿真，本节把它真跑掉。
+
+### 机制：`apply_into` + `recipe_class`
+- `build()` 的步骤体抽成 `apply_into(cfg, version, play=, line=, trace=)`，`build()` 变成"构造共享接线的实例 + `apply_into`"；`recipe_class(version, play=, line=, name=)` 生成一个 `@configclass` **子类**，其 `__post_init__` = `base.__post_init__(self)` + `apply_into(self, …)` —— 版本类体当年就在这个位置干这件事，所以注册表能指它。
+- **两者共用同一份步骤** ⇒ 不可能漂移；`[41]` 逐条断言"可注册的类构造出来的 cfg == `build()` 的 cfg"（26 个 task/kind 全过）。
+- `name=` 参数是给切换用的：**注册类叫什么名，生成的类就叫什么名**。因为 ckpt 载荷记 `type(cfg).__name__` 并参与 resume 身份核验，名字不一致会让"类路径起的 run"无法被"声明路径"续训。
+
+### 检查与结果
+
+| 项 | 结果 |
+|---|---|
+| 机制等价 | `[41]` **通过**（26/26）；**灵敏度**证明："拿 v13 的类去比 v14 的 build"出 3 条差异 ⇒ 这个比对不是恒空 |
+| `[41]` 成本 | 单跑 **9.7 s**（预算 25 s；+26 次构造约 +1 s） |
+| **C4 第一档真跑（launcher）** | **通过**：`lifecycle_entry_run.py --track launcher` ⇒ 退出码 2、stderr `[launcher] refused: retired line: refusing new_train; new work belongs to an active successor line`，且**没有新建 run 目录**（拒绝发生在 spawn 之前 ⇒ trainer 从未启动）。这一档不需要 sim app，所以它现在就是真证据，不是离线断言 |
+| 其余四档 | **未跑**：`--dry-run` 已确认它们的性质（`trainer`/`tuning`/`announce`/`moved` 都要起 sim app）；窗口一到即按判据跑 |
+
+### 边界
+- **注册表未翻**：`rl_exp\tasks\__init__.py` 的 `env_cfg_entry_point` 与 `recipes.json` 的 `env_cfg_entry` 仍指版本类 ⇒ 训练走的还是类路径。翻表是三步（生成类 + 改两处字符串 + `name=` 对齐），本轮只把机制与证明备好，**没动**——因为它同时意味着版本类体可以开始删，那是 B 侧迁移的收尾节奏。
+- `recipes.json` 里 baseline 的 demo/extra 条目与 `RECIPE_DEMO`/`EXTRA_TASKS` 无关（主线任务），所以翻表不影响它们。
+- C4 的 `launch` 档只证"新入口在 `gym.make` 前拒绝"；**旧 trainer 档**才证"拒绝留 T0"、**tuning 档**才证"调参入口不能绕过"，两者都要 sim。
+- 本批不新增套件条目（机制断言落在 `[41]` 内）。
+
 
 
 
