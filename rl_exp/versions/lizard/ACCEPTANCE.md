@@ -1054,6 +1054,45 @@ classvar the declaration cannot carry: REQUIRES_CURRICULUM_STATE: False != 'not 
 - 归属判据只覆盖 `train`/`play` 两条已声明路径；元素**执行顺序**由 `trace` 给出（不再由检查器复述），所以将来 `build()` 改序，判据跟着走而不是失效。
 - 本轮不新增套件条目：三条判据都落在既有 `[41]` 内，不付第二份 import 税。
 
+## B2/B4 · baseline 线接入构建器 + 硬 B 差异清单（2026-09-17）
+
+**性质**：**追加**条目，`ARCH_PLAN.md` §2.4 的 B2（首个新架构配方）与 B4（硬 B）。改动面 = `recipe.py`（按线分表 + `build(…, line=)` + 10 个 baseline 元素 + `pins`）、`baseline_env_cfg.py`（拆出空的共享接线基类）、`check_recipe_build.py`（按线迭代 + 硬 B）、新增 `versions/lizard/baseline/v1/diff.json`。`ARCH_PLAN:251` 说"新架构承接新的实验线"——baseline 线就是那条新线。
+
+### 落地
+
+| 件 | 内容 |
+|---|---|
+| 首个新架构配方 | `Lizard-Baseline-Flat-v1`(+Play) 可由 `recipe.build("v1", line="lizard/baseline")` 产出：10 个元素（robot · actions · flat ground · proprio obs · timing · fixed command · rewards · base contact · no curriculum · no DR）。任务/配方键（`baseline-flat-v1@1`）早在 `ed4d35b` 注册；本批补的是"这版能被**声明式**表达" |
+| 共享接线 | 新 `BaselineWiringCfg` = 框架 stock cfg + 身份（`params_line` 为 ClassVar、`params_version` 为字段），**零 delta**；`BaselineFlatEnvCfg` 改为继承它，body 留作类路径（golden 由它产出） |
+| 线维度 | `recipe.LINES = {line: {base, recipes}}`；`build/base_cfg/declared/pending` 收 `line=`（默认 main，既有调用全不受影响） |
+| 硬 B | `versions/lizard/baseline/v1/diff.json`：相对**框架基类 stock cfg** 的 33 条具名差异路径 + 每条理由；`[41]` 双向校验 |
+
+### 三条判断
+
+- **"基准是 stock cfg"这句话本身被机器校验**：`diff.json` 声明 `wiring_is_stock_except: ["params_version"]`，`[41]` 真的比对 `snapshot(stock)` 与 `snapshot(接线类)`，不等即红（实测该 diff 恰为 1 条）。理由：接线类若偷偷带 delta，后面所有比较都失去意义。
+- **差异清单写"具名路径"，不写子树前缀**：初稿量出 63 个叶子，聚成 33 条具体路径（`rewards.ang_vel_xy_l2`、`events.push_robot`、`commands.base_velocity.ranges.lin_vel_x` …）。若写 `rewards` 这种前缀，"新加一个奖励项"会自动通过——那就不叫"**只允许**一份显式差异清单"了。
+- **`baseline_timing` 是 pin，不是死声明**：它把 decimation/episode/dt/render_interval 写成与 stock **相同**的值（实测这四条不产生差异），于是 `attribution` 的"每步至少动一个字段"会判它红。**不能删**——删了声明路径就不读 yaml 的 `sim:` 段，yaml 改了类会动、声明不动；等版本子类退役后那段 yaml 就成了没人读的装饰。故给配方表加显式 `pins` 名单，且**双向**校验（pin 一旦开始动字段即要求摘掉）。
+
+### 结果
+
+| 编号 | 命令 | 结果 |
+|---|---|---|
+| 硬 A + 硬 B | `check_recipe_build.py`（套件 `[41]`） | **通过**：`RECIPE_BUILD_OK (26 task(s) field-identical to the frozen golden; 33 declared difference(s) from the stock base)` —— main 24（v1–v14×2）+ baseline 2 |
+| **反向验证（闸门真的会红）** | 三处临时破坏同时打：加一个未声明字段 / 清单里塞一条不产生差异的路径 / 摘掉 pin | **五个检测器各自打对**：未声明变化、声明了没生效、pin 变活、差异条数漂移（34≠33）、硬 A 字段漂移；banner 翻 `RECIPE_BUILD_FAILED`。随后三处**原样回滚**，复跑全绿 |
+| 门 1 | `check_cfg_lock.py`（`[24]`） | 通过：`CFG_LOCK_OK (36 tasks, 3 line(s))` |
+| 单写者 | `test_component_ownership.py`（`[37]`） | 通过：`COMPONENT_OWNERSHIP_OK (5 component(s), 16 owned name(s))` |
+| golden 摘要 | `check_golden_frozen.py`（`[35]`） | 通过：`GOLDEN_FROZEN_OK`（3 份基线文件自 `020e6fb` 未动） |
+| 旁证 | `check_obs_layout` `[8]` · `check_dr_parity` `[2]` · `check_obs_protocol` · `check_recipe_map` · `check_recipe_registry` · `check_configclass_fields`（39 类含 `BaselineWiringCfg`）· `test_params_isolation` `[34]` · `check_suite_shape` | **全绿**；新基类未影响 configclass 判定（"`params_version` 在全部类里都是 dataclass 字段"） |
+
+### 边界
+
+- **硬 B 只覆盖 env cfg**：agent（PPO）配置未纳入清单，`Lizard-Baseline-Flat-v1` 的 PPO 是否逐字段等于 framework 默认**未验**。
+- **baseline 线的锁不在 `[35]` 的 FROZEN 表里**（表内是 3 份：`cfg_baselines.json` + main + parkour）。本批没跑 `--update`、没动锁，但"这条线的 golden 被移动"目前**没有摘要看守**——属 A 带遗留（B0 节已记 baseline 线"落点未跟踪"）。
+- 版本类体与元素表**仍并存**（`BaselineFlatEnvCfg.__post_init__` 与 10 个元素逐段重复），过渡税与 teacher 线同：等 C2/C3 入口走到声明路径才能删类体。
+- `recipe.py` 仍不在 `[37]` 的 HOSTS 里；baseline 元素写 `commands.base_velocity.*`（`components` 拥有的名字），与 main 线元素情形相同。
+- 硬 B **不证"配方正确"**：它只证"与 stock 基类的差异恰好是声明的那 33 条"。也不证真环境行为（那要真跑）。
+- 本轮**仍不新增套件条目**：硬 B 落在既有 `[41]` 内（同一套 snapshot/diff，只换期望值），不付第二份 import 税，也不碰并行侧的 `offline_suite.py`。
+
 
 
 
