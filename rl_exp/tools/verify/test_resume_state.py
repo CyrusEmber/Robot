@@ -954,14 +954,18 @@ def test_fork_patch_call_site_contract() -> None:
     train.py itself needs a running Isaac Sim app, so the constraint is pinned on the
     archive instead: the ImportError branch reads the declaration off ``type(env_cfg)``
     (available without importing rl_exp) and only tolerates a missing module when the
-    caller asked for a drop.
+    caller asked for a drop. Every refusal on this path leaves through ``os._exit(2)``
+    rather than a raise -- by then the sim app is already up, its teardown runs on the way
+    out and rewrites the exit code to 0 (measured 2026-09-17), so a raise would be a
+    boundary nobody outside the process can see.
     """
     patch = (_REPO / "rl_exp" / "fork_patches" / "train_curriculum_resume.patch").read_text(encoding="utf-8")
     assert "drop_curriculum_state" in patch and "--weights_only" in patch
     assert "REQUIRES_CURRICULUM_STATE" in patch and "__requires_curriculum_state__" not in patch
     assert "except ImportError as exc:" in patch
-    assert "raise RuntimeError(" in patch
-    assert "if not hook_runner_save(runner, env):" in patch
+    assert "[FATAL]" in patch and "os._exit(2)" in patch
+    assert "raise RuntimeError(" not in patch, "no refusal on this path may be a bare raise"
+    assert "installed = hook_runner_save(runner, env)" in patch and "if not installed:" in patch
     assert "drop_curriculum_state=drop_curriculum_state" in patch
 
 

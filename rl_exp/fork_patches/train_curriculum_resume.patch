@@ -24,7 +24,7 @@ diff --git a/scripts/reinforcement_learning/rsl_rl/train.py b/scripts/reinforcem
  parser.add_argument(
      "--distributed", action="store_true", default=False, help="Run training with multiple GPUs or nodes."
  )
-@@ -87,6 +112,13 @@ cli_args.add_rsl_rl_args(parser)
+@@ -87,6 +103,13 @@ cli_args.add_rsl_rl_args(parser)
  add_launcher_args(parser)
  args_cli, remaining_args = setup_preset_cli(parser)
  
@@ -38,7 +38,7 @@ diff --git a/scripts/reinforcement_learning/rsl_rl/train.py b/scripts/reinforcem
  if args_cli.video:
      args_cli.enable_cameras = True
  
-@@ -167,6 +199,17 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
+@@ -167,6 +190,17 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
          log_root_path = os.path.join("logs", "rsl_rl", agent_cfg.experiment_name)
          log_root_path = os.path.abspath(log_root_path)
          print(f"[INFO] Logging experiment in directory: {log_root_path}")
@@ -56,7 +56,7 @@ diff --git a/scripts/reinforcement_learning/rsl_rl/train.py b/scripts/reinforcem
          # specify directory for logging runs: {time-stamp}_{run_name}
          log_dir = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
          # The Ray Tune workflow extracts experiment name using the logging line below, hence, do not
-@@ -200,6 +243,34 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
+@@ -200,6 +234,46 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
          # save resume path before creating a new log_dir
 +        # Restore the curriculum state (registered SIR term state + the c_k clock) BEFORE the wrapper:
 +        # RslRlVecEnvWrapper.__init__ runs the first full reset, and that reset is what makes the SIR
@@ -76,23 +76,35 @@ diff --git a/scripts/reinforcement_learning/rsl_rl/train.py b/scripts/reinforcem
 +            except ImportError as exc:
 +                curriculum_resume = {"status": "module_unavailable", "error": f"{type(exc).__name__}: {exc}"}
 +                if requires_state and not drop_curriculum_state:
-+                    raise RuntimeError(
-+                        f"curriculum-state resume is required by {type(env_cfg).__name__} but"
-+                        f" rl_exp.tasks.curriculum_state is unavailable ({exc}); resuming would cold-start"
-+                        " the curriculum. Pass --drop_curriculum_state to accept that explicitly."
-+                    ) from exc
++                    # a declared boundary must be observable by whoever started this process, and a
++                    # plain raise is not: the sim app is already up, its teardown runs on the way
++                    # out and the exit code comes back 0 (measured 2026-09-17)
++                    print(
++                        f"[FATAL] curriculum-state resume is required by {type(env_cfg).__name__} but"
++                        f" rl_exp.tasks.curriculum_state is unavailable ({exc}); resuming would"
++                        " cold-start the curriculum. Pass --drop_curriculum_state to accept that"
++                        " explicitly.",
++                        flush=True,
++                    )
++                    os._exit(2)
 +                print(
 +                    f"[WARN] curriculum-state resume unavailable ({exc}); the curriculum state is NOT"
 +                    " restored (c_k re-heats, the SIR terms cold-start)"
 +                )
 +            else:
-+                curriculum_resume = apply_resume_state(
-+                    env.unwrapped, resume_path, drop_curriculum_state=drop_curriculum_state
-+                )
++                try:
++                    curriculum_resume = apply_resume_state(
++                        env.unwrapped, resume_path, drop_curriculum_state=drop_curriculum_state
++                    )
++                except RuntimeError as err:
++                    # an un-resumable checkpoint is refused by design; exiting here is what makes
++                    # the refusal visible (see above)
++                    print(f"[FATAL] {err}", flush=True)
++                    os._exit(2)
  
          # wrap for video recording
          if args_cli.video:
-@@ -225,6 +296,25 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
+@@ -225,6 +299,36 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
              runner = DistillationRunner(env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device)
          else:
              raise ValueError(f"Unsupported runner class: {agent_cfg.class_name}")
@@ -104,13 +116,24 @@ diff --git a/scripts/reinforcement_learning/rsl_rl/train.py b/scripts/reinforcem
 +            from rl_exp.tasks.curriculum_state import hook_runner_save
 +        except ImportError as exc:  # already reported at the resume step
 +            if getattr(type(env_cfg), "REQUIRES_CURRICULUM_STATE", False):
-+                raise RuntimeError(
-+                    f"{type(env_cfg).__name__} requires a resumable curriculum state but"
-+                    f" rl_exp.tasks.curriculum_state cannot be imported ({exc}); this run's checkpoints"
-+                    " would carry no curriculum state."
-+                ) from exc
++                # the same rule as the resume refusal above: a declared boundary must be
++                # observable by whoever started this process, and a plain raise is not
++                print(
++                    f"[FATAL] {type(env_cfg).__name__} requires a resumable curriculum state but"
++                    f" rl_exp.tasks.curriculum_state cannot be imported ({exc}); this run's"
++                    " checkpoints would carry no curriculum state.",
++                    flush=True,
++                )
++                os._exit(2)
 +        else:
-+            if not hook_runner_save(runner, env):
++            try:
++                installed = hook_runner_save(runner, env)
++            except RuntimeError as err:
++                # this call also reconciles the declaration with the wiring, so a task whose
++                # wiring cannot honour its promise stops here -- observably
++                print(f"[FATAL] {err}", flush=True)
++                os._exit(2)
++            if not installed:
 +                print(
 +                    "[WARN] curriculum state is NOT saved by this rank (multi-GPU: only rank 0 writes the"
 +                    " state it verified); multi-GPU resume is not a verified configuration"

@@ -1,7 +1,7 @@
 diff --git a/scripts/reinforcement_learning/rsl_rl/train.py b/scripts/reinforcement_learning/rsl_rl/train.py
 --- a/scripts/reinforcement_learning/rsl_rl/train.py
 +++ b/scripts/reinforcement_learning/rsl_rl/train.py
-@@ -231,6 +231,29 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
+@@ -222,6 +222,29 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
          # set the log directory for the environment (works for all environment types)
          env_cfg.log_dir = log_dir
  
@@ -31,7 +31,7 @@ diff --git a/scripts/reinforcement_learning/rsl_rl/train.py b/scripts/reinforcem
          # create isaac environment
          env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
  
-@@ -240,6 +261,11 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
+@@ -231,6 +254,11 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
  
              env = multi_agent_to_single_agent(env)
  
@@ -43,7 +43,7 @@ diff --git a/scripts/reinforcement_learning/rsl_rl/train.py b/scripts/reinforcem
          # save resume path before creating a new log_dir
          # Restore the curriculum state (registered SIR term state + the c_k clock) BEFORE the wrapper:
          # RslRlVecEnvWrapper.__init__ runs the first full reset, and that reset is what makes the SIR
-@@ -327,10 +353,34 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
+@@ -341,10 +369,34 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
              # load previously trained model
              runner.load(resume_path)
  
@@ -78,3 +78,17 @@ diff --git a/scripts/reinforcement_learning/rsl_rl/train.py b/scripts/reinforcem
          # run training
          try:
              runner.learn(num_learning_iterations=agent_cfg.max_iterations, init_at_random_ep_len=True)
+@@ -356,4 +408,12 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
+ 
+ 
+ if __name__ == "__main__":
+-    main()
++    # Every hard stop must be observable by whoever started this process: an uncaught failure
++    # prints its traceback and leaves through os._exit, which no sim-app teardown rewrites.
++    try:
++        main()
++    except Exception:
++        import traceback
++
++        traceback.print_exc()
++        os._exit(1)
