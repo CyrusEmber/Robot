@@ -33,6 +33,7 @@ import argparse
 import concurrent.futures
 import os
 import pathlib
+import signal
 import subprocess
 import sys
 import threading
@@ -102,6 +103,8 @@ CHECKS: list[tuple[str, list[str]]] = [
      [f"{_V}/test_lifecycle_gate.py"]),
     ("launcher (directory-driven plan; its record must match the trainer's T0)",
      [f"{_V}/test_launcher.py"]),
+    ("hard A: built recipes are field-for-field the frozen golden (declaration, no subclass)",
+     [f"{_V}/check_recipe_build.py"]),
     ("obs protocol declaration (laid out as declared, self-consistent, digests approved)",
      [f"{_V}/check_obs_protocol.py"]),
     ("obs protocol gate falsifier (each drift must still fire)", [f"{_V}/test_obs_protocol_gate.py"]),
@@ -115,16 +118,44 @@ def default_jobs() -> int:
 
 # What stops the suite growing back into minutes (OFFLINE_CHECKS.md). A check is a process
 # that pays an interpreter + torch import before its first assertion, so the cost of the
-# suite is (how many checks) x (that import) + what a check does inside. Both numbers are
-# declared here, on purpose: raising one is a reviewable act, and the alternative is that
-# the suite silently becomes the thing nobody runs.
+# suite is (how many checks) x (that import) + what a check does inside.
 #
-# SERIAL_BUDGET_S is the *sum* of every check's own seconds, not the wall clock: cores and
-# --jobs change the wall clock, so a wall budget would be a machine-speed gate. The sum is
-# what grew from 170s to 200s+ as checks were added, and it is what a check has to justify.
+# Two different questions, two different mechanisms -- they are not substitutes:
+#
+# * ``PER_CHECK_BUDGET_S`` / ``SERIAL_BUDGET_S`` are **cost** control. Cost is measured
+#   under load (a wave of six import bursts), so a breach is only ever a *suspect*: it is
+#   re-measured with the machine quiet before anything is blamed, first per check (alone)
+#   and then, if the total is the problem, the whole list at ``--jobs 1``. Raising a budget
+#   is never the response to a load false alarm -- it is allowed only once the quiet number
+#   is over budget too *and* the coverage that caused it is worth its price, in the same
+#   commit as that check.
+# * ``PER_CHECK_TIMEOUT_S`` is not cost control, it is "the suite has to end": budgets are
+#   evaluated after the fact, so they cannot save you from a check that never returns.
+#   Deliberately far above the cost budget, so that a slow check is reported as cost, not
+#   killed as a hang.
 PER_CHECK_BUDGET_S = 25.0
 SERIAL_BUDGET_S = 400.0
-SOLO_RECHECKS = 3  # breaching checks re-run alone, worst first, before they are blamed
+SOLO_RECHECKS = 3  # breaching checks re-run alone, worst first, before they are suspect
+PER_CHECK_TIMEOUT_S = 180.0
+_DRAIN_TIMEOUT_S = 30.0  # bounded read after a kill, so a survivor cannot block the report
+TIMEOUT_EXIT = 124  # GNU timeout's code: a killed check is never mistaken for a pass
+
+
+def _kill_tree(proc: subprocess.Popen) -> None:
+    """Kill a check *and everything it started*.
+
+    Killing only the direct child is not enough: a grandchild that outlives its parent
+    keeps the pipe open, so the ``communicate()`` that follows would block forever -- the
+    suite would hang exactly where it is supposed to give up. On Windows that means
+    taskkill on the whole tree.
+    """
+    if os.name == "nt":
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], capture_output=True)
+        return
+    try:
+        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+    except OSError:  # already gone, or not a process-group leader
+        proc.kill()
 
 
 def _run_one(interpreter: str, argv: list[str], stop: threading.Event) -> tuple[int | None, str, float]:
@@ -133,23 +164,38 @@ def _run_one(interpreter: str, argv: list[str], stop: threading.Event) -> tuple[
     ``PYTHONIOENCODING`` keeps a check's non-ASCII verdict readable when it is captured
     rather than written straight to the console. The failure flag is set *here* rather
     than by the caller: the queue has to stop the moment a check turns red, not when the
-    main thread gets round to reading its result.
+    main thread gets round to reading its result. The timeout is the suite's promise to
+    terminate, not a cost gate -- see the constants above.
     """
     if stop.is_set():
         return None, "", 0.0
     started = time.time()
     env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
     try:
-        proc = subprocess.run(
+        proc = subprocess.Popen(
             [interpreter, *argv],
             cwd=str(_REPO),
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,  # one pipe: a surviving writer cannot hold the other open
             text=True,
             encoding="utf-8",
             errors="replace",
             env=env,
         )
-        code, output = proc.returncode, (proc.stdout or "") + (proc.stderr or "")
+        try:
+            output, _ = proc.communicate(timeout=PER_CHECK_TIMEOUT_S)
+            code = proc.returncode
+        except subprocess.TimeoutExpired:
+            _kill_tree(proc)
+            try:
+                output, _ = proc.communicate(timeout=_DRAIN_TIMEOUT_S)
+            except subprocess.TimeoutExpired:
+                output = ""
+            code = TIMEOUT_EXIT
+            output = (output or "") + (
+                f"\n[timeout] killed the process tree after {PER_CHECK_TIMEOUT_S:g}s: a budget is "
+                f"evaluated after a check returns, so a check that never returns has to be ended here\n"
+            )
     except OSError as err:
         # A missing interpreter (typo in --python, no venv, no PATH python) has to come back
         # as a failed check: a crashed runner would abandon the checks already in flight.
@@ -206,16 +252,17 @@ def run_checks(
     return sorted(failures), time.time() - started_at, skipped, timings
 
 
-def _over_budget(
+def _per_check_cost(
     timings: list[tuple[int, str, float]],
     interpreter: str,
     checks: list[tuple[str, list[str]]] | None = None,
 ) -> tuple[list[tuple[int, str, float]], float]:
-    """Which checks are over budget, and the serial sum.
+    """Which checks cost too much, and the wave's total.
 
-    A check over ``PER_CHECK_BUDGET_S`` is re-run *alone* before it is blamed: in a wave it
-    shares the machine with five other import bursts, and blaming that would make the budget
-    a load-sensitive gate that gets disabled after its first false red.
+    A wave number mixes one check's cost with five other import bursts, so it is a *suspect*
+    (性能待确认), never a verdict: the verdict is that same check run with the machine quiet.
+    Blaming the wave would make this a load-sensitive gate, and a gate that cries wolf on a
+    busy machine is a gate that gets raised until it means nothing.
     """
     checks = CHECKS if checks is None else checks
     serial = sum(seconds for _, _, seconds in timings)
@@ -223,15 +270,43 @@ def _over_budget(
     worst = sorted((t for t in timings if t[2] > PER_CHECK_BUDGET_S), key=lambda t: -t[2])[:SOLO_RECHECKS]
     for index, label, seconds in worst:
         _, _, alone = _run_one(interpreter, checks[index - 1][1], threading.Event())
-        over = alone > PER_CHECK_BUDGET_S
-        print(
-            f"  [{index}/{len(checks)}] {label}: {seconds:.1f}s in the wave, {alone:.1f}s alone "
-            f"(budget {PER_CHECK_BUDGET_S:g}s) -- {'over' if over else 'machine load only'}",
-            flush=True,
-        )
-        if over:
+        if alone > PER_CHECK_BUDGET_S:
+            print(
+                f"  [{index}/{len(checks)}] {label}: 性能待确认 {seconds:.1f}s in the wave -> "
+                f"{alone:.1f}s alone, still over the {PER_CHECK_BUDGET_S:g}s cost budget",
+                flush=True,
+            )
             breaches.append((index, label, alone))
+        else:
+            print(
+                f"  [{index}/{len(checks)}] {label}: {seconds:.1f}s in the wave was load -- "
+                f"{alone:.1f}s alone, under the {PER_CHECK_BUDGET_S:g}s budget",
+                flush=True,
+            )
     return breaches, serial
+
+
+def _total_verdict(wave_serial: float, quiet_serial: float) -> str:
+    """``regression`` only if the quiet number is over budget too -- the sole admissible basis.
+
+    The wave sum adds every check's cost to six-way resource contention, so it is not a stable
+    cost metric: it can cross the line on a machine that is merely busy, and raising the budget
+    to silence that both hides the real signal and teaches the next person to raise it again.
+    """
+    return "regression" if quiet_serial > SERIAL_BUDGET_S else "load"
+
+
+def _quiet_serial(interpreter: str) -> tuple[float, list[str]]:
+    """Re-measure the whole list one check at a time, the way a cost number has to be taken."""
+    print(
+        f"  the wave total is over budget -- re-measuring all {len(CHECKS)} checks at --jobs 1 "
+        f"before blaming any of them (a wave number is a suspect, not a cost)",
+        flush=True,
+    )
+    failures, _, _, quiet = run_checks(interpreter, 1, CHECKS)
+    if failures:
+        return 0.0, [f"[{index}/{len(CHECKS)}] {label} FAILED in the quiet re-measurement (rc={code})" for index, label, code, _ in failures]
+    return sum(seconds for _, _, seconds in quiet), []
 
 
 def self_test() -> int:
@@ -255,18 +330,52 @@ def self_test() -> int:
     missing, _, _, _ = run_checks(str(_REPO / "no-such-python.exe"), 2, [("x", ["-c", "print(1)"])])
     if [index for index, *_ in missing] != [1] or missing[0][2] != 127:
         problems.append(f"a missing interpreter was not reported as a failed check: {missing}")
-    # Budget: only a check that is slow *alone* is blamed; a slow wave is load, not a cost.
+    # Cost: a wave number is a suspect. Only a check that is slow *alone* is blamed, and the
+    # total is a regression only when the quiet number is over budget too.
     global PER_CHECK_BUDGET_S
     saved, PER_CHECK_BUDGET_S = PER_CHECK_BUDGET_S, 0.0
     try:
-        blamed, serial = _over_budget([(1, "quick", 0.1)], sys.executable, quick)
+        blamed, serial = _per_check_cost([(1, "quick", 0.1)], sys.executable, quick)
     finally:
         PER_CHECK_BUDGET_S = saved
     if [index for index, *_ in blamed] != [1] or serial != 0.1:
-        problems.append(f"a check over budget alone was not blamed (or the sum is wrong): {blamed} {serial}")
-    load_only, _ = _over_budget([(1, "quick", 999.0)], sys.executable, quick)
-    if load_only:
-        problems.append(f"machine load was blamed on the check: {load_only}")
+        problems.append(f"a check over budget alone was not blamed (or the wave sum is wrong): {blamed} {serial}")
+    suspect, _ = _per_check_cost([(1, "quick", 999.0)], sys.executable, quick)
+    if suspect:
+        problems.append(f"a slow wave was blamed on the check instead of on the load: {suspect}")
+    if _total_verdict(500.0, 300.0) != "load" or _total_verdict(500.0, 420.0) != "regression":
+        problems.append("the total verdict does not separate a busy machine from a real regression")
+
+    # Timeout: the suite has to end even when a check never returns -- including the case that
+    # hangs a naive pipe read, a child that outlives the check that started it.
+    global PER_CHECK_TIMEOUT_S
+    saved_timeout, PER_CHECK_TIMEOUT_S = PER_CHECK_TIMEOUT_S, 1.0
+    try:
+        hung, hung_seconds, _, _ = run_checks(sys.executable, 1, [("hangs", ["-c", "import time; time.sleep(30)"])])
+        orphaned, orphan_seconds, _, _ = run_checks(
+            sys.executable,
+            1,
+            [
+                (
+                    "hangs, leaves a child behind",
+                    [
+                        "-c",
+                        "import subprocess, sys, time; subprocess.Popen([sys.executable, '-c', "
+                        "'import time; time.sleep(30)']); time.sleep(30)",
+                    ],
+                )
+            ],
+        )
+    finally:
+        PER_CHECK_TIMEOUT_S = saved_timeout
+    for label, killed, seconds in (("a check that never returns", hung, hung_seconds), ("a check whose child outlives it", orphaned, orphan_seconds)):
+        if [index for index, *_ in killed] != [1] or killed[0][2] != TIMEOUT_EXIT:
+            problems.append(f"{label} was not ended: {killed}")
+        elif "[timeout]" not in killed[0][3]:
+            problems.append(f"{label} was killed without saying why")
+        elif seconds > 15:
+            problems.append(f"{label} was not cut short ({seconds:.1f}s for a 30s sleep)")
+
     for problem in problems:
         print(f"  FAIL {problem}")
     if problems:
@@ -304,19 +413,34 @@ def main(argv: list[str] | None = None) -> int:
             print(output.rstrip())
         print(f"OFFLINE_CHECK_FAILED ({total} check(s): {len(failures)} failed, {skipped} skipped, {seconds:.1f}s, jobs={args.jobs})")
         return 1
-    breaches, serial = _over_budget(timings, args.python)
-    if breaches or serial > SERIAL_BUDGET_S:
+    breaches, wave_serial = _per_check_cost(timings, args.python)
+    quiet_serial = None
+    quiet_problems: list[str] = []
+    if wave_serial > SERIAL_BUDGET_S:
+        quiet_serial, quiet_problems = _quiet_serial(args.python)
+    if quiet_problems or breaches or (quiet_serial is not None and _total_verdict(wave_serial, quiet_serial) == "regression"):
+        for problem in quiet_problems:
+            print(f"  {problem}")
         for index, label, alone in breaches:
             print(f"  [{index}/{total}] {label}: {alone:.1f}s alone > {PER_CHECK_BUDGET_S:g}s per check")
-        if serial > SERIAL_BUDGET_S:
-            print(f"  serial {serial:.0f}s > {SERIAL_BUDGET_S:g}s budget (wall {seconds:.1f}s, jobs={args.jobs})")
+        if quiet_serial is not None and _total_verdict(wave_serial, quiet_serial) == "regression":
+            print(f"  serial {quiet_serial:.0f}s quiet > {SERIAL_BUDGET_S:g}s budget (wave {wave_serial:.0f}s)")
         print(
-            "OFFLINE_SUITE_BUDGET_EXCEEDED (make the check cheaper -- one process per check, no "
-            "re-reading frozen data per cfg, no interpreter children -- or raise the budget in "
-            "the same commit; see rl_exp/tools/verify/OFFLINE_CHECKS.md)"
+            "OFFLINE_SUITE_COST_REGRESSION (confirmed with the machine quiet). Make the check "
+            "cheaper -- one process per check, no re-reading frozen data per cfg, no interpreter "
+            "children -- or, if the coverage that caused it is worth the price, raise the budget "
+            "in the same commit as that check; see rl_exp/tools/verify/OFFLINE_CHECKS.md"
         )
         return 1
-    print(f"ALL_OFFLINE_CHECKS_PASSED ({total}/{total} in {seconds:.1f}s, serial {serial:.0f}s, jobs={args.jobs})")
+    if quiet_serial is not None:
+        print(
+            f"  wave total {wave_serial:.0f}s was over budget under load; {quiet_serial:.0f}s quiet is "
+            f"within {SERIAL_BUDGET_S:g}s -- no change, and no reason to touch the budget"
+        )
+    print(
+        f"ALL_OFFLINE_CHECKS_PASSED ({total}/{total} in {seconds:.1f}s, "
+        f"wave {wave_serial:.0f}s{'' if quiet_serial is None else f', quiet {quiet_serial:.0f}s'}, jobs={args.jobs})"
+    )
     return 0
 
 
