@@ -90,8 +90,10 @@ EXPECTED_DIFFS: dict[tuple[str, str], int] = {
     # cfg, path by path -- 33 on the env side (each attributed to the element that produces it)
     # and 43 on the agent side, where the stock leaves the model and algorithm unset. Pinned like
     # the other counts: a declaration that quietly shrinks is exactly the failure this gate is
-    # built around.
+    # built around. v14 is the first main-line recipe to declare anything: its base is its mother
+    # v13 (from base.json), and it differs by two paths -- one element, one component.
     ("lizard/baseline", "v1"): 76,
+    ("lizard/main", "v14"): 3,
 }
 """Recipe -> how many paths its difference declaration lists (``diff.json`` next to the recipe)."""
 
@@ -306,54 +308,158 @@ def agent_entry(line_key: str, version: str) -> str:
     return entry
 
 
-def hard_b(line_key: str, version: str, declared: dict, paths: list[str]) -> int:
-    """The first new recipe must differ from its base by exactly the declared list.
+IDENTITY_FIELDS = ("params_version",)
+"""Fields that say *which recipe this is*, not what it does.
 
-    Four directions, because only one of them looks like a bug:
+Every recipe carries its own value by construction (``build`` asserts it), so a recipe-versus-mother
+diff always contains it -- and it is never a difference between the two recipes. Named here rather
+than written into twelve declarations, because it is not a statement anybody could get wrong.
+"""
+
+COMPONENT_AUTHOR = "components."
+"""Prefix marking a declared path as written by a version-resolved structural component.
+
+The main line's delta has two authors: the recipe's elements, and the components in the shared
+wiring that resolve their own form from the version. Both are named in the declaration, because
+"which writer is answerable for this path" is the question, and an answer that names neither is
+how a path ends up owned by nobody.
+"""
+
+
+def base_of(line_key: str, version: str, declared: dict, paths: list[str]):
+    """The two cfgs a difference declaration is read against: ``(subject, base)`` or ``None``.
+
+    The base is not a choice the declaration gets to make: ``base.json`` in the recipe's own
+    directory names its mother, and a line root (``null``) can only be compared against the
+    framework stock cfg. So the file decides the reading, the declaration only describes it --
+    and a stock block on a recipe that has a mother (or the reverse) is a second answer to a
+    question that already has one, which is a finding.
+    """
+    line = discover().get(line_key)
+    if line is None:
+        paths.append(f"{line_key}: not a discovered recipe line")
+        return None
+    base_json = line.root / version / "base.json"
+    try:
+        mother = json.loads(base_json.read_text(encoding="utf-8")).get("base")
+    except (OSError, json.JSONDecodeError) as err:
+        paths.append(f"{line_key}/{version}: base.json unreadable: {type(err).__name__}: {err}")
+        return None
+    stock_block = declared.get("base")
+    if mother is None and stock_block is None:
+        paths.append(
+            f"{line_key}/{version}: a line root has no mother, so the declaration has to say what"
+            " it is compared against (a stock block naming the framework cfg)"
+        )
+        return None
+    if mother is not None and stock_block is not None:
+        paths.append(
+            f"{line_key}/{version}: base.json names mother {mother!r}, so the stock block in the"
+            " declaration is a second answer to a question that already has one"
+        )
+        return None
+    if mother is None:
+        try:
+            stock = lock.resolve_entry(stock_block["stock"])()
+            wiring = lock.resolve_entry(stock_block["wiring"])(params_version=version)
+        except (ImportError, AttributeError, TypeError, KeyError, ValueError) as err:
+            paths.append(f"{line_key}/{version}: the declared stock base does not resolve: {type(err).__name__}: {err}")
+            return None
+        wiring_rows: list = []
+        lock.walk_diff(cs.snapshot(stock), cs.snapshot(wiring), "", wiring_rows, limit=1 << 30)
+        empty_except = sorted(stock_block["wiring_is_stock_except"])
+        if sorted(row[0] for row in wiring_rows) != empty_except:
+            paths.append(
+                f"{line_key}/{version}: the base the recipe declares is not the stock cfg plus"
+                f" {empty_except}: {[row[0] for row in wiring_rows][:5]}"
+            )
+            return None
+        return recipe.build(version, line=line_key), wiring, None
+    try:
+        return recipe.build(version, line=line_key), recipe.build(mother, line=line_key), mother
+    except Exception as err:  # noqa: BLE001 - a missing mother is the finding
+        paths.append(f"{line_key}/{version}: mother {mother!r} does not build: {type(err).__name__}: {err}")
+        return None
+
+
+def authored_paths(trace: list[tuple[str, object]], line_key: str, version: str) -> dict[str, set[str]]:
+    """What each declared element of this recipe actually moved, replayed step by step.
+
+    A declaration entry is a claim about the declaration, and this is the declaration answering it:
+    the same replay the attribution check runs, so the two cannot disagree about what an element
+    did.
+    """
+    step_cfg = recipe.base_cfg(version, line=line_key)
+    out: dict[str, set[str]] = {}
+    for name, step in trace:
+        before = cs.snapshot(step_cfg)
+        step(step_cfg)
+        moved: list = []
+        lock.walk_diff(before, cs.snapshot(step_cfg), "", moved, limit=1 << 30)
+        out.setdefault(name, set()).update(row[0] for row in moved)
+    return out
+
+
+def ownership() -> dict[str, tuple[str, ...]]:
+    """The component ownership table, imported lazily from the gate that maintains it.
+
+    ``[37]`` is where "which component owns which name" is decided, and a second copy here is the
+    drift every comparison in this file exists to prevent. Lazy because importing a sibling gate
+    pulls ``components`` and the teacher cfg, which this gate only needs on the hard-B path.
+    """
+    from test_component_ownership import OWNERSHIP  # noqa: PLC0415 - sibling gate's table
+
+    return OWNERSHIP
+
+
+def component_owns(author: str, path: str) -> bool:
+    """Does the named component own one of the names in this path?
+
+    A component-authored entry whose component does not appear in the path is a mis-attribution:
+    the claim is "this structural component wrote it", and the table is where that is decided.
+    """
+    name = author[len(COMPONENT_AUTHOR) :]
+    owned = ownership().get(name)
+    if owned is None:
+        return False
+    return any(segment in owned for segment in path.split(".")[1:])
+
+
+def hard_b(line_key: str, version: str, declared: dict, paths: list[str]) -> int:
+    """A recipe must differ from its base by exactly the declared list, and each entry must say who.
+
+    Directions, because only one of them looks like a bug:
 
     * an **undeclared** change is the drift this gate exists for;
     * a **declared** entry that no longer changes anything is how a declaration rots into a
       description of a recipe that moved on;
-    * an env entry whose **named element does not produce that path** means the list and the
-      element list have stopped agreeing -- rewriting the list to go green has to reach the
-      elements too, which is the whole reason each entry names one;
-    * a base that is **not** the stock cfg plus the declared exception would make every later
-      comparison meaningless, so the claim is checked rather than assumed.
-
-    The agent side has no elements to attribute to (it is a class, not a declaration) and is
-    compared against the framework's stock agent cfg instead.
+    * an entry whose **named author does not produce that path** means the list and the declaration
+      have stopped agreeing -- an *element* author has to have moved it in the replay, a
+      *component* author (``components.<name>``) has to be a component that owns a name in the path
+      and that no element moved. Rewriting the list to go green therefore has to reach the element
+      list, which is the whole reason each entry names one;
+    * a base that is not what ``base.json`` says it is would make every later comparison
+      meaningless, so the claim is checked rather than assumed.
 
     Returns the number of declared paths, or 0 when the declaration could not be checked.
     """
-    env = declared["env"]
-    agent = declared["agent"]
-    trace: list[tuple[str, object]] = []
-    built = recipe.build(version, trace=trace, line=line_key)
-    try:
-        stock = lock.resolve_entry(env["stock"])()
-        wiring = lock.resolve_entry(env["wiring"])(params_version=version)
-    except (ImportError, AttributeError, TypeError, KeyError, ValueError) as err:
-        paths.append(f"{line_key}/{version}: the declared env base does not resolve: {type(err).__name__}: {err}")
+    sides = base_of(line_key, version, declared, paths)
+    if sides is None:
         return 0
-
-    wiring_rows: list = []
-    lock.walk_diff(cs.snapshot(stock), cs.snapshot(wiring), "", wiring_rows, limit=1 << 30)
-    empty_except = sorted(env["wiring_is_stock_except"])
-    if sorted(row[0] for row in wiring_rows) != empty_except:
-        paths.append(
-            f"{line_key}/{version}: the base the recipe declares is not the stock cfg plus"
-            f" {empty_except}: {[row[0] for row in wiring_rows][:5]}"
-        )
-
+    subject, base, mother = sides
+    identity = {field: True for field in IDENTITY_FIELDS}
     rows: list = []
-    lock.walk_diff(cs.snapshot(wiring), cs.snapshot(built), "", rows, limit=1 << 30)
-    allowed = env["allowed"]
+    lock.walk_diff(cs.snapshot(base), cs.snapshot(subject), "", rows, limit=1 << 30)
+    rows = [row for row in rows if row[0].split(".")[0] not in identity]
+
+    allowed = declared["env"]["allowed"]
     leaves = [row[0] for row in rows]
     undeclared = sorted({leaf for leaf in leaves if not any(covers(key, leaf) for key in allowed)})
     if undeclared:
+        against = f"mother {mother}" if mother else "the declared base"
         paths.append(
-            f"{line_key}/{version}: {len(undeclared)} env field(s) differ from the declared base"
-            f" without being declared: {undeclared[:5]}"
+            f"{line_key}/{version}: {len(undeclared)} env field(s) differ from {against} without"
+            f" being declared: {undeclared[:5]}"
         )
     ineffective = sorted(key for key in allowed if not any(covers(key, leaf) for leaf in leaves))
     if ineffective:
@@ -362,55 +468,63 @@ def hard_b(line_key: str, version: str, declared: dict, paths: list[str]) -> int
             f" the base (drop them, or the list describes a recipe that moved on): {ineffective[:5]}"
         )
 
-    # what each element actually moved, replayed the same way the attribution check does: a list
-    # entry is a claim about the declaration, and this is the declaration answering it
-    step_cfg = recipe.base_cfg(version, line=line_key)
-    produced: dict[str, set[str]] = {}
-    for name, step in trace:
-        before = cs.snapshot(step_cfg)
-        step(step_cfg)
-        moved: list = []
-        lock.walk_diff(before, cs.snapshot(step_cfg), "", moved, limit=1 << 30)
-        produced.setdefault(name, set()).update(row[0] for row in moved)
+    trace: list[tuple[str, object]] = []
+    recipe.build(version, trace=trace, line=line_key)
+    produced = authored_paths(trace, line_key, version)
     for key in sorted(allowed):
-        element = allowed[key].get("element")
-        if element is None:
-            paths.append(f"{line_key}/{version}: declared env path {key!r} names no element")
-        elif element not in produced:
+        author = allowed[key].get("author")
+        if not isinstance(author, str) or not author:
+            paths.append(f"{line_key}/{version}: declared env path {key!r} names no author")
+        elif author.startswith(COMPONENT_AUTHOR):
+            if any(covers(key, moved) for moves in produced.values() for moved in moves):
+                paths.append(
+                    f"{line_key}/{version}: {key!r} is attributed to {author!r} but an element moved"
+                    " it -- name the element, or the two authors are not being told apart"
+                )
+            elif not component_owns(author, key):
+                paths.append(
+                    f"{line_key}/{version}: {key!r} is attributed to {author!r}, which owns no name"
+                    f" in that path ({sorted(ownership())})"
+                )
+        elif author not in produced:
             paths.append(
-                f"{line_key}/{version}: declared env path {key!r} names element {element!r}, which"
-                f" this recipe does not apply"
+                f"{line_key}/{version}: declared env path {key!r} names {author!r}, which this"
+                " recipe does not apply"
             )
-        elif not any(covers(key, moved) for moved in produced[element]):
+        elif not any(covers(key, moved) for moved in produced[author]):
             paths.append(
-                f"{line_key}/{version}: declared env path {key!r} is attributed to {element!r},"
-                f" which does not produce it -- the list and the element list have drifted apart"
+                f"{line_key}/{version}: declared env path {key!r} is attributed to {author!r},"
+                " which does not produce it -- the list and the element list have drifted apart"
             )
 
+    agent = declared["agent"]
     agent_paths = agent["allowed"]
     try:
-        subject = lock.resolve_entry(agent_entry(line_key, version))()
-        agent_stock = lock.resolve_entry(agent["stock"])()
+        agent_subject = lock.resolve_entry(agent_entry(line_key, version))()
+        agent_base = lock.resolve_entry(
+            agent.get("stock") or agent_entry(line_key, mother)
+        )()
     except (ImportError, AttributeError, TypeError, KeyError, ValueError) as err:
         paths.append(f"{line_key}/{version}: the agent cfg does not resolve: {type(err).__name__}: {err}")
         return len(allowed) + len(agent_paths)
 
     agent_rows: list = []
-    lock.walk_diff(cs.snapshot(agent_stock), cs.snapshot(subject), "", agent_rows, limit=1 << 30)
+    lock.walk_diff(cs.snapshot(agent_base), cs.snapshot(agent_subject), "", agent_rows, limit=1 << 30)
     agent_leaves = [row[0] for row in agent_rows]
     agent_undeclared = sorted(
         {leaf for leaf in agent_leaves if not any(covers(key, leaf) for key in agent_paths)}
     )
     if agent_undeclared:
+        against = f"mother {mother}" if mother else "the stock agent cfg"
         paths.append(
-            f"{line_key}/{version}: {len(agent_undeclared)} agent field(s) differ from the stock"
-            f" agent cfg without being declared: {agent_undeclared[:5]}"
+            f"{line_key}/{version}: {len(agent_undeclared)} agent field(s) differ from {against}"
+            f" without being declared: {agent_undeclared[:5]}"
         )
     agent_ineffective = sorted(key for key in agent_paths if not any(covers(key, leaf) for leaf in agent_leaves))
     if agent_ineffective:
         paths.append(
             f"{line_key}/{version}: {len(agent_ineffective)} declared agent path(s) no longer differ"
-            f" from the stock: {agent_ineffective[:5]}"
+            f" from the base: {agent_ineffective[:5]}"
         )
     return len(allowed) + len(agent_paths)
 
@@ -543,9 +657,17 @@ def main(argv: list[str] | None = None) -> int:
 
         # hard B: a recipe that declares its difference from the line's base carries diff.json
         for version in sorted(recipe.LINES[line_key]["recipes"]):
-            if (line_key, version) not in EXPECTED_DIFFS:
-                continue
+            pinned = (line_key, version) in EXPECTED_DIFFS
             declared, error = declared_diff(line_key, version)
+            if not pinned:
+                # a declaration nobody pinned is a declaration nobody checked: the file is present,
+                # so the comparison would look covered while the count it is held to does not exist
+                if declared is not None:
+                    problems.append(
+                        f"{line_key}/{version}: has a difference declaration that no EXPECTED_DIFFS"
+                        " entry pins -- an unchecked declaration reads as a checked one"
+                    )
+                continue
             if declared is None:
                 problems.append(f"{line_key}/{version}: hard B not checked: {error}")
                 continue
@@ -603,7 +725,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     print(
         f"RECIPE_BUILD_OK ({sum(compared.values())} task(s) field-identical to the frozen golden;"
-        f" {sum(declared_paths.values())} declared difference(s) from the stock base)"
+        f" {sum(declared_paths.values())} declared difference(s) against their own base)"
     )
     return 0
 

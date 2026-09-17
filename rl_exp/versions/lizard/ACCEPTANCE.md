@@ -381,6 +381,8 @@ ValueError: curriculum state in the checkpoint does not fit this task: runtime.n
 | L06 迁移生效（离线半边） | `python rl_exp\tools\verify\test_recipe_registry_gate.py` | **通过**：23 例反证 + 1 例时钟无关性全部着火。提示期（`active` + 声明 + 条件未满足）判绿、`retired` 且条件已满足判绿、提前退休判红、到期仍 `active` 判红、自由文本条件判红。"提示期放行结果与无声明 `active` 逐项相同"需入口侧 ⇒ **未知** |
 | 反证先行 | 同上 | 每条拒绝都由合成树 + 合成索引驱动，未触碰真实索引；`retire_not_before` 为 revision 型时同一索引在两个不同日期判据一致（无时钟依赖） |
 
+> **2026-09-17 收缩**：上表 L06 行与"时钟无关性"一条**作废**（弃用声明层删除 ⇒ 闸门无时钟，反证集由 23+1 例变为 16 例；见下文"生命周期收缩"节）。L01/L05 行的规则仍有效（`index:` 打印的字段少了 `revision`，规则未变 —— 该字段同轮删除）。
+
 ### 结论与边界
 
 - **通过**：L01（身份解析与拒绝）；L05/L06 的离线半边
@@ -969,6 +971,8 @@ ValueError: Not all regular expressions are matched!
 
 **发现 2 的处置（用户拍板 2026-09-17）**：**parkour 标记退役**（`versions/lines.json` → `revision: 3`）：`status: retired` + `retired_at: 2026-09-17` + 原因（v8 改名后 `joint_patterns`/`default_joint_pos` 失配，无法构造 env）+ `successor: null`。
 复核（本机实跑，全绿）：`check_recipe_registry` `lifecycle consistent`（`revision=3 entries=3`）· `test_lifecycle_gate` `LIFECYCLE_STARTUP_OK`（退休线拒绝新训练：`refused to start: retired line: refusing new_train`）· `test_launcher` `LAUNCHER_OK` · `check_recipe_map --bind-config` 36/36 · `check_cfg_lock` `CFG_LOCK_OK (36 tasks, 3 line(s))` · `check_obs_protocol --live` 36/36 · `check_obs_layout` `OBS_LAYOUT_OK`。
+
+> **2026-09-17 收缩**：上面提到的 `revision: 3` 这个字段已在同轮删除（无行为读者，身份由内容摘要给出，详见下文"生命周期收缩"节）；当时把 parkour 标为 retired 这件事本身不变，`status`/`retired_at`/`reason` 三项就是它的全部证据。
 **边界**：退役是**权限事实，不删内容** —— parkour 的任务仍在注册表、golden 与冻结目录保留（"已发布内容不改写"）。要连注册一起撤掉是另一次动作，本轮**未做**，也不影响上述通过项。
 **发现 1 的处置（用户拍板 A，2026-09-17）**：**钉住运行序**，判据改成"不该断言 live == 配方文档"。
 - **落点**：新文件 `versions/lizard/joint_order_runtime.json`，**按资产键**（`assets["assets/lizard/lizard.usda"]`），记实测关节序 + 测量任务 + 日期 + 理由。写它只能由 `obs_protocol_live.py --pin --reason '<why>'`（刻意行为，不是刷新）；读它只有 `rl_exp.tasks.obs_protocol` 一处（`runtime_joint_order` / `joint_order_digest`），避免检查与写入各读一份。
@@ -1156,6 +1160,44 @@ resume 拒绝、save 守卫、`train.py` 的导入失败守卫、manifest 记录
 | **由此发现并修掉的缺陷（真跑才看得见）** | 拒绝**没有被退出码观察到**：进程打印拒绝、T0 记 `allowed=false`，却 **exit 0**（Isaac 的 app 收尾在返回路径上把码归一）。按退出码判成功的调用方（CI、`&&` 链、扫参调度）会把它当成功 ⇒ fork 补丁在 T0 调用点加 try/except：打印 `[FATAL]` 后 `os._exit(2)`（`os._exit` 是必需的，降级 `raise`/`sys.exit` 依然被收尾吞掉）。实测 `RC=2`；`[1] PIN_CHECK_OK` 复验补丁链仍与 fork 树逐字节一致 |
 | `moved` 的控制修正 | 首版两份 fixture 内容相同（只改 revision 数字、值一样）⇒ 摘要相同 ⇒ 控制没生效（假过）。加 `bump=` 让 A/B 修订真的不同后，`verify` 才报出"目录已改" |
 
+> **2026-09-17 收缩（本节部分内容作废，见下方"生命周期收缩"节）**：上表 `announce`/`moved` 两档与 `tuning` 档、fixture 生成器（`lifecycle_entry_fixture.py`）、`RL_RECIPE_DIR`、`--allow_retired_resume` 均已删除；`launcher`/`trainer` 两档改打**真实**退休线 `lizard/parkour`（不再造 fixture）。上表 `launcher` 行引用的拒绝文案已变（旧文案承诺后继线，而该线没有 `successor`）。`moved` 档的断言（目录改版不改写记录）收回离线面：`test_run_manifest.py` 的 `verify/rev-moved-is-reachable` + `dirty/refusal-verify-is-not-drift` 覆盖同一族规则。
+
+### 生命周期收缩：删掉未接线的一半判定机件（2026-09-17，追加条目）
+
+**性质**：**追加**条目，同时**删减** A2/A4 交付物。触发是评审问"9 类操作 × 二值 status + 弃用声明层，要防的事其实只有一件：别对 retired 线开新训 —— 这是不是过度设计"。
+
+### 依据（实测，不是判断）
+
+| 项 | 实测 |
+|---|---|
+| 到达 `judge()` 的操作 | 只有 `new_train`/`resume`（全仓唯一调用点 `runrecord/lifecycle.py`，`operation = "resume" if is_resume else "new_train"`）⇒ 表中 `tune`/`new_recipe`/`load_ckpt`/`eval`/`export`/`rebuild`/`modify_recipe` 7 类从未被传入 |
+| `deprecation` 使用方 | `lines.json` 三行全为 `null` ⇒ 时间条件、WARN 层、`--now`、`condition_satisfied`/`retirement_due` 全部零执行 |
+| 续训豁免可达性 | 唯一退休线 `lizard/parkour` 因 v8 改名构不出 env ⇒ `--allow_retired_resume` 豁免的是"健康但已退休的线"，当前不可达 |
+| 附带发现（先于本轮存在） | `--verify` 把"在 T0 被拒"当**失败训练**（`manifest.py` 的缺 stages 分支 + `_verify_lifecycle`）⇒ 想让审计变绿的唯一办法是删掉拒绝目录，正好删掉设计要的"拒绝留痕" |
+
+### 改为
+
+- `recipe_lifecycle.judge(operation, status)`：2 类接线操作 × 二值 status；未知操作/未知 status/缺索引一律拒绝；**拒绝文案不承诺后继线**（`successor` 只做结构校验）。契约自带 7 判定 + 2 文案检查。
+- `--drop_curriculum_state`（含弃用别名 `--weights_only`）的"无 resume 即拒"迁到 `runrecord/lifecycle.curriculum_flag_problems()`，两种拼写一致，仍由 launcher 与 trainer 共用同一入口。
+- `check_recipe_registry.py` 无时钟（`--now`/`today` 删除）；保留 `format`、二值 status、退休证据（`retired_at` + `reason`）、`successor` 校验。**同轮删掉 `revision`**：它的唯一行为读者（`registry_revision` 条件）随本收缩消失，剩下的只是人读标签 + 与内容摘要冗余的跨入口对照，而人工计数器会撒谎（改目录忘 bump、bump 而内容未动，两者都不触发任何红）。目录身份由 `lines.json`/`recipes.json` 的内容摘要给出（`evidence.directory_sha256`），`--verify` 的"目录未变"行不再打印修订号。
+- `verify()` 认"T0 被拒"为**终态**：记录完整（`allowed=False` + 原因 + `failures`）、训练后才有的断言记不适用/未知且不阻塞、`--verify` 退出 2（未声称任何训练后结论）而非 1；反向仍红（拒绝与训练阶段并存、或拒绝缺 `failures`）。
+- trainer 侧 ImportError（`rl_exp` 不可用）由"WARN 后继续"改为 `[FATAL]` + `os._exit(2)`：门禁不可用 ≠ 无门禁（记录器与门禁同体，记录不是"永不打断训练"那一类）。代价：该路径下拒绝**不留记录**（记录器本身缺失），只能看 stderr。
+
+### 检查与结果
+
+| 项 | 结果 |
+|---|---|
+| 离线套件 | **43/43 通过**（`ALL_OFFLINE_CHECKS_PASSED (43/43)`；另有一次并行跑里 `[34] test_params_isolation` 单例失败、单独跑与复跑均通过，判定为并行抖动、与本轮改动路径无关） |
+| C4 launcher 档（真跑，不需 sim） | **通过**：`lifecycle_entry_run.py --track launcher --task Lizard-Parkour-Climb-v1` ⇒ 退出码 2、stderr `[launcher] refused: retired line: refusing new_train; retirement stops new work on this line`、**没有新建 run 目录**；记录里 `line=lizard/parkour`、`status=retired`、`allowed=false`，拒绝文案**不含** `successor` |
+| C4 trainer 档 | 保留档位（真跑窗口执行）：断言退出码 2、T0 留下拒绝记录、且 `manifest --verify` 把该目录读成"启动被拒"而非损坏 |
+| `moved` 档 | 收回离线面（`verify/rev-moved-is-reachable`、`dirty/refusal-verify-is-not-drift`、`test_lifecycle_gate.py` 的 verify 组） |
+| fork 补丁一致性 | `git apply --check --reverse` 两个补丁均成功 ⇒ 删除 `--allow_retired_resume` 参数块与 ImportError 改 FATAL 后，补丁链与 fork 树仍逐字节一致 |
+
+### 边界
+- **不再有"提示期 / 生效日"机制**：退休生效 = 目录显式修订；旧线不会被自动退休，也不存在运行期硬截止日。若要给某条线留迁移期，写进 `reason` 与人读的文档，不用机器判定条件表达。
+- **`eval`/`export`/`rebuild`/`load_ckpt` 不经过这张表**：它们不受退休影响，但也**没有被这层覆盖**（原表把"允许"当成已接线，是误读）。将来若某入口要受管，届时连同它的调用点一起加。
+- **身份解析仍是依赖**：`task id → recipes.json → 线 → lines.json` 任一文件不同步 ⇒ 拒绝启动（"未知即拒"的既有代价）。收缩时保留 `identity()` 的分类原因，不回退成一句笼统的"生命周期失败"。
+
 ### 边界
 - **注册表未翻**：`rl_exp\tasks\__init__.py` 的 `env_cfg_entry_point` 与 `recipes.json` 的 `env_cfg_entry` 仍指版本类 ⇒ 训练走的还是类路径。翻表是三步（生成类 + 改两处字符串 + `name=` 对齐），本轮只把机制与证明备好，**没动**——因为它同时意味着版本类体可以开始删，那是 B 侧迁移的收尾节奏。
 - `recipes.json` 里 baseline 的 demo/extra 条目与 `RECIPE_DEMO`/`EXTRA_TASKS` 无关（主线任务），所以翻表不影响它们。
@@ -1276,6 +1318,43 @@ resume 拒绝、save 守卫、`train.py` 的导入失败守卫、manifest 记录
 上一节点名的"给每个元素声明允许写入的字段集"**不做**，理由被采纳：① 要抓"同值写入 / 先改再恢复"得上完整写入追踪，而目前**没有任何实际故障**证明值得；② YAML 在既有字段上的数值变化**本来就不是字段所有权检查的职责**，现有 golden 已能拦（`[24]` 对类路径、`[41]` 对声明路径）；③ "元素与清单可同时改"不是漏洞 —— 任何源码级检查都能连规则一起改，最终仍靠 review。
 
 **本批把归属做成显式可校验的断言**（每条路径点名元素、闸门重放验证）即为该问题的收口。**后续若出现具体反例**（现有检查确实漏掉了非预期覆盖），再补**最小**检查；在此之前不扩机制。
+
+## B4 · 硬 B 谱系口径：v14 试点 + `author` 校验（2026-09-17）
+
+**性质**：**追加**条目，PLAN 台账 #24 的起步（试点一条）。改动面 = `[41]`（`hard_b` 加母版分支 + `author` 校验 + 身份字段过滤 + "有声明就必须被钉"）、新增 `main\v14\diff.json`、`baseline\v1\diff.json` 迁到 format 3。**口径不是二选一，由 `base.json` 决定**：有母版 ⇒ 对母版（谱系）；`base: null`（line root）⇒ 只能对框架基类（stock）。baseline 之所以用 stock，正因为它没有母版。
+
+### v14 − v13 的实测：3 条，两个作者 + 一个身份字段
+
+| 路径 | author | 说明 |
+|---|---|---|
+| `rewards.head_load_penalty` | `v14_head_load` | v14.3 把头部承力终止改成逐帧罚 |
+| `terminations.roll_over` | `components.terminations` | v14.4 的翻转跌落门，由**版本解析的组件**写入（没有元素写它） |
+| `params_version` | ——（按名过滤） | `'v13' → 'v14'`：**身份**，不是差异；它是"这两条配方不同"的原因本身 |
+
+⇒ main 线的 delta 有**两个作者**：配方的元素，与共享接线里按版本解析自身形态的**组件**。两者都必须在声明里点名，否则"这条路径归谁"就没有答案。
+
+### 判断
+
+- **母版从 `base.json` 读，不重抄**：`diff.json` 只描述差异；基准由版本目录里那份约定文件决定。**有母版却写 stock 块**（或反之）＝对一个已有答案的问题给第二个答案 ⇒ 红。
+- **`author` 二选一，两侧都机器校验**：`components.<名>` ⇒ 必须**没有元素**动过它（有则红，要求点名元素），且该组件在所有权表里**拥有这条路径里的某个名字**（表从 `[37]` 懒取，不抄第二份）；否则视作元素名 ⇒ 必须在 trace 重放里**真的产出**这条路径。
+- **身份字段按名过滤，不写进 12 份声明**：`params_version` 是"这是哪条配方"，不是差异；写 12 遍只会多 12 处可抄错的地方。
+- **声明必须被钉**：`diff.json` 存在而 `EXPECTED_DIFFS` 里没有它的条目 ⇒ 红（**未检查的声明读起来与已检查的一样**，这正是本仓反复出现的静默跳过形态）。
+
+### 结果
+
+| 项 | 结果 |
+|---|---|
+| 硬 A / 硬 B | **通过**：`RECIPE_BUILD_OK (26 task(s) field-identical to the frozen golden; 79 declared difference(s) against their own base)`（baseline 76 + v14 3） |
+| **反证（5 条分支各自打红后原样回滚）** | ① 组件作者但元素真的动过它 ⇒ "name the element"；② 元素作者指到不产出该路径的元素 ⇒ "does not produce it"；③ 组件作者指到不拥有该路径任何名字的组件 ⇒ "owns no name in that path"；④ 有母版却写 stock 块 ⇒ "a second answer to a question that already has one"；⑤ 摘掉 `EXPECTED_DIFFS` 条目 ⇒ "an unchecked declaration reads as a checked one" |
+| 旁证 | `[24]` `CFG_LOCK_OK (36 tasks)` · `[37]` `COMPONENT_OWNERSHIP_OK` |
+
+**试点当场抓到一条我写错的声明**：我先把 v14 的 `agent.allowed` 写成空（以为"agent 无差异"），闸门立刻报 `experiment_name` 与 v13 不同 —— 每个版本一个日志目录。空声明也要被双向检查，这正是它的价值。
+
+### 边界
+
+- **只试点 v14**：main 线其余 11 条未声明（硬 A 证明"没漂"，不证明"差异被声明"）。补法：量 `build(母版)` vs `build(本版)` → 每条路径点 `author` → 在 `EXPECTED_DIFFS` 钉数。
+- **两侧的 agent 基准不同**：baseline 对框架 stock runner cfg（line root），main 线**对母版的 agent cfg**（同为版本类，`agent_entry` 从 recipe map 取）。
+- 本批未跑全量套件端到端（并行批次仍在飞）；所跑为 `[41]` `[24]` `[37]`。
 
 
 

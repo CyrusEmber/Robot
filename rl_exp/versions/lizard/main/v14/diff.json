@@ -1,0 +1,18 @@
+{
+  "format": 3,
+  "recipe": "teacher-v14@1",
+  "line": "lizard/main",
+  "note": "Hard B, lineage reading: base.json names this recipe's mother (v13), so the declared difference is against that recipe -- not against the framework stock cfg, which would bury this version's own delta in everything its ancestors wrote. Two paths differ, and both are correct as defined here: the penalty term is v14.3's reason for existing, and the roll-over gate is the structural half that components.terminations resolves for v14 (no element writes it). params_version is filtered as identity, not a difference: it says which recipe this is, and it is what makes the two recipes different at all.",
+  "env": {
+    "allowed": {
+      "rewards.head_load_penalty": {"author": "v14_head_load", "why": "v14.3 turns the front-plant termination into a per-step penalty, so a head-planted pose keeps its rollout data"},
+      "terminations.roll_over": {"author": "components.terminations", "why": "v14.4 adds the roll-over fall gate (quaternion roll, monotone past vertical, pitch guard); a version-resolved component writes it, not an element"}
+    }
+  },
+  "agent": {
+    "allowed": {
+      "experiment_name": "one version, one log directory (versioning.mdc A); the recipe's PPO settings are otherwise the same object as v13's, which is why this is the only agent path here"
+    },
+    "why": "against v13, the motherhood reading: the agent cfg is a class per version, so what it declares is its own settings changed against the version it came from. Agent entries carry no author -- there are no elements on this side, and the class is the only writer."
+  }
+}
