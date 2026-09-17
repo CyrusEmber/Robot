@@ -15,7 +15,10 @@ ordering cases matter most, because a same-members-different-order edit is exact
 from __future__ import annotations
 
 import copy
+import json
+import pathlib
 import sys
+import tempfile
 
 sys.path.insert(0, ".")
 sys.path.insert(0, "rl_exp/tools/verify")
@@ -205,6 +208,27 @@ def main() -> int:
         g.coverage_problems(tasks, fewer, set(), [other]) == [],
         f"{g.coverage_problems(tasks, fewer, set(), [other])[:3]}",
     )
+
+    # the reader itself, not an injected answer: the first retirement control patched the module
+    # and still read the live file, because the path was bound as a default argument -- a unit
+    # test that hands in its own set never touches the reader it is supposedly testing
+    with tempfile.TemporaryDirectory() as tmp:
+        line_of_one = tasks[one]["line"]
+        lines_path = pathlib.Path(tmp) / "lines.json"
+        lines_path.write_text(
+            json.dumps({"format": 2, "lines": {line_of_one: {"status": "retired"}, "lizard/other": {"status": "active"}}}),
+            encoding="utf-8",
+        )
+        check(
+            "retirement/reader-reads-the-index",
+            g.retired_lines(lines_path) == {line_of_one},
+            f"{g.retired_lines(lines_path)}",
+        )
+        check(
+            "retirement/reader-drives-coverage",
+            g.coverage_problems(tasks, fewer, g.retired_lines(lines_path), [one]) == [],
+            f"{g.coverage_problems(tasks, fewer, g.retired_lines(lines_path), [one])[:3]}",
+        )
 
     if PROBLEMS:
         print(f"OBS_PROTOCOL_GATE_FAILED ({len(PROBLEMS)})")

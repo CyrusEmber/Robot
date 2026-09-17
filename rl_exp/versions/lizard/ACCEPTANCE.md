@@ -843,7 +843,7 @@ classvar the declaration cannot carry (no class to hold it): v5/play REQUIRES_CU
 - `RECIPES["v5"]` 的 train/play 任务 id 是**写出来的**，不从版本串推 —— 改名不能静默把这个闸门指向空。
 - **`recipe.py` 仍不在 `[37]` 的 HOSTS 里**：元素会写 `commands.base_velocity`（`components` 拥有的名字），`play_pins_full_command_range` 就是这么写的。把它加进扫描表会立刻红 —— 元素是独立于 `teacher_env_cfg.py` 的第二类合法写者，要不要扩 `[37]` 的范围，得先定义"元素豁免"的形状，本轮不动。
 - **`FILEMAP.md` 只补 `[41]` 新打印的那一句**：落笔时它正带着并行侧 obs_protocol 的在飞改动（连同 `runrecord/manifest.py`），整份 `git add` 会把别人的半成品写进我的提交；那批他们随后自行提交（`38d80a6` / `a7e2b27` / `9afc9b8`），补记随之落在一个小提交里。v5 的**元素清单是状态**（上面进度表），代码地图只描述机制，不抄第二份。
-- **未合口（本轮定：不合）**：`components.observations` 的三张手抄表 vs `versions/obs_protocols.json`。理由：`obs_protocol` 自称"只声明 identity、不构建 config"，而 `check_obs_protocol` 是拿声明去比**构造出来的** cfg；让 `components.observations` 反过来读它，闸门就变成声明比声明 —— B3 点名的第一号失败模式（与自己比恒等）。且声明侧仍在飞。等他们 3.1d 落定后再议。
+- **未合口（本轮定：不合；2026-09-17 追记：用户已定"要合"，条件已满足）**：`components.observations` 的三张手抄表 vs `versions/obs_protocols.json`。理由：`obs_protocol` 自称"只声明 identity、不构建 config"，而 `check_obs_protocol` 是拿声明去比**构造出来的** cfg；让 `components.observations` 反过来读它，闸门就变成声明比声明 —— B3 点名的第一号失败模式（与自己比恒等）。且声明侧仍在飞。**追记**：声明侧已落定（`38d80a6` 的 3.1d + `9afc9b8`），"等他们 3.1d 落定后再议"这一条件已满足；合口的身份问题与代价见 §3.1 第 11 条（**不需要新加身份参数**；代价是 `--live` 退化为转换一致性检查、3.1e 变承重）。落地须在 builder 改动静下来之后、一次落。
 - 仍未声明：v6 · v8 · v10 · v11 joint SIR 接线 · v12 鲁棒性包 + 环噪声事件 · v13 核替换 · v14 `head_load`，各自还需 PLAY 元素。**每加一个元素跑 `[24]` + `[41]`**。
 
 ---
@@ -903,7 +903,7 @@ check_suite_shape.py              SUITE_SHAPE_OK（改套件后）
 
 - **真 env 未跑**：3.1e（实际 manager 的逐 term 维度、最终张量维度、实际 joint/body 名与索引序）与 3.1f 真跑半、以及 `--live` 入套件 —— 全部**未知**。
 - **v0 家族（flat/rough/curriculum）宽度为空**：无真跑量过，无人断言。
-- **声明不参与 cfg 构造**（与并行批次写点隔离的取舍）：装配事实仍在代码，`components.observations` 的三张表与声明是同一身份的两处，现由 `[8]` + `[42]` 互钉；是否合口由用户定（见上节接手点第 6 条）。
+- **声明不参与 cfg 构造**（与并行批次写点隔离的取舍）：装配事实仍在代码，`components.observations` 的三张表与声明是同一身份的两处，现由 `[8]` + `[42]` 互钉。**用户已定"要合"**，合口的身份与代价见第 11 条（不需要新加身份参数；合口后 `--live` 退化为"声明 → 配置"的转换一致性检查，3.1e 变承重）—— 落地须在 B 的 builder 改动静下来之后、且一次落。
 - 几何一致性、导出前协议校验、蒸馏数据 manifest = **未执行**。
 - `OBS.md` 的 v15 行只声明"有目录、无入口"，不声明其布局。
 - 本节为**离线段**通过，**不得**称为"Step 3 全部通过"。
@@ -913,16 +913,27 @@ check_suite_shape.py              SUITE_SHAPE_OK（改套件后）
 评审列出三条结构性风险，当场修两条、第三条记敞口：
 
 8. **锚点路径写死家族名**（已修，`415a8bf`）：声明是**全仓**的（闸门 glob 所有线的 golden），锚点却放在 `versions/lizard/` 下 ⇒ 第二个机器人家族落地时要么改代码、要么把别家的协议塞进蜥蜴目录。现移到 `versions/obs_protocol_anchors.json`，与它钉的文件同层，也与 `recipes.json`/`lines.json`/`cfg_baselines.json` 一致（"钉与被钉同层"）。重生成声明只动了 note 一行，**key 与全部已审摘要不变**，两半区仍 36/36。
-9. **退役无法在协议层表达**（已修）：两处坏结果 —— ① 聚合门（`check_obs_layout`）在**导入期**按 task id 取值，退役一个配方会让 pre-commit 以 traceback 死掉（合法动作给出栈而不是一句话）；② `--live` 覆盖规则把"已声明但未注册"一律判红，而退役**正是**这个状态。现 `obs_protocol.declared()` 区分"没声明"（该抛）与"已声明但配方不再有 live 配置"（该报）；`check_obs_layout` 的常量为容错读者（空契约 + 具名报告 + 开头一行说明），覆盖规则抽成纯函数 `coverage_problems`，**已退役线**（读 `lines.json` 的 `status`）的任务按历史留存。证据：模拟退役（声明副本去掉 `Lizard-Rough-v3`）后
+9. **退役：前版结论越界，现按端到端反证重写**（首版 `ef47d0c`；完整反证与读者修复随本节同批提交）：上一版只证明了"声明里没有该任务时聚合门不崩"，却写成"退役已验证"—— **证据越界**。真正的退役形状是：保留历史声明与锚点 + `lines.json` 标 retired + 撤掉注册 + live 配置不可用。
+   **完整反证（跑真实聚合入口，非注入答案）**：`lines.json` 把 `lizard/main` 标 retired、注册表去掉 `Lizard-Rough-v3` 与 `-Play-v3`、从 `teacher_env_cfg` 删除 `LizardRoughTeacherEnvCfg_V3`，然后：
 ```
-import survived; undeclared recorded: ['Lizard-Rough-v3']
-v3 contract is empty, not guessed : True
-v12 contract is untouched         : True
-the report names the recipe       : True
+aggregate layout gate   exit 1   SEGMENTS_OBSOLETE: ['LizardRoughTeacherEnvCfg_V3']
+                                 "a deleted recipe class means the segment covering it must be
+                                  removed or re-pointed; no segment was run, so nothing here
+                                  has been checked"
+protocol gate（离线半）  exit 0   golden 36 | live 0
+protocol gate（--live）  exit 0   golden 36 | live 34（退役的两个任务按历史留存、不再构造）
+声明与锚点              退役任务仍在册；其协议仍有已审摘要
 ```
-反证补 6 例（完整集干净、注册但未声明、声明但未注册、退役线按历史通过、`--only` 过滤、覆盖方向）。
-**范围**：只有**聚合门**（一次查所有版本）容错；**单配方**的 smoke 与网络单测仍依赖其配方存在，退役它们要给后继配方改脚本 —— 这是依赖，不是缺陷，故不改。
-10. **"生成 + 人工审批"仍是社会控制**（敞口，未修）：闸门能查的全是**自洽**（key=内容摘要、digest=锚点、dims=dims_digest），三件事同一条命令都算得出来 ⇒ 重新生成 + 重批可以不留"有人看过"的痕迹。既有先例是 golden 的 `--update --reason`（带 reason 一键刷新）。**将来动作**：锚点加 `approved_rev`，闸门在"HEAD 已前进且该线 golden 之后有变更"时警告；`purpose` 从"仅未引用者必填"扩为每次重批必填。**不阻止橡皮图章，只让没审变得可见** —— 是否要硬红、按哪个 rev 判，待用户定。
+   为此聚合门改两处：类名导入改 `_resolve`（删类不再拖垮整个模块的导入），并加 `SEGMENTS_OBSOLETE` 前置 —— **具名拒绝**而非 traceback，且明说"什么都没检查"（不许把未跑的段当成通过）。
+   **反证当场抓到的真缺陷**：`retired_lines()` 的 `path` 原是**默认参数**，导入时绑定 `LINES`，补丁对它无效 ⇒ `--live` 仍红。根因是单测**直接注入** `retired` 集合、从没走过读者。已改为调用时解析，并补两例直接喂临时 `lines.json` 的反证（读者读索引、读者驱动覆盖规则）。
+   **仍未覆盖（不得据此宣称）**：退役后**要不要删掉该段的代码**是维护动作，闸门只能具名提醒、无法验证；本反证也无法模拟"段代码已删"的状态。单配方 smoke 与网络单测仍依赖其配方存在 —— 那对它们是依赖，不是缺陷。
+10. **"生成 + 人工审批"仍是社会控制**（敞口，未修）：闸门能查的全是**自洽**（key=内容摘要、digest=锚点、dims=dims_digest），三件事同一条命令都算得出来 ⇒ 重新生成 + 重批可以不留"有人看过"的痕迹。既有先例是 golden 的 `--update --reason`。
+   **判据更正（评审）**：`approved_rev` 只能提供**追溯**，不能证明审核发生。更稳的判据是**"审批绑定的内容摘要是否仍等于当前受审内容"**（相等即未被改写）；`rev` 用来定位来源，`purpose` 用来解释改动原因。仅凭"HEAD 已前进 + golden 有变动"发警告会混入无关变化，也可能漏掉审批范围之外的实际影响。故将来动作 = 锚点记 `approved_rev`（追溯）+ `purpose` 必填（原因），**硬红判据仍是摘要相等**。
+11. **合口的身份问题：先查再断**（评审纠正上一版的越界结论）：上一版断言"必须新增身份参数"，依据是 TRAIN/PLAY 是两个身份、v0 家族 `version` 全为 `null`。查过后这两条都**不足以**推出该结论：
+    - `components.observations` 只有**一个**调用点（`teacher_env_cfg.py:730`，传 `params_version`），**v0 家族根本不走它**（走 `lizard_env_cfg`/`rough_env_cfg`/`curriculum_*`）⇒ `version=null` 与组件寻址无关；
+    - v1/v2 的 TRAIN/PLAY 差异（corruption/噪声）由**其后的 play 接线**施加（`play_utils`），不在组件里 ⇒ 组件按 `params_version` 寻址时两者形状相同，只有在**协议身份**层面才分家。
+    ⇒ 合口**不需要**新造身份参数；需要的是把既有的"版本 → 该版本 TRAIN 侧布局"映射讲清（声明有 `tasks[t]["version"]`，`recipes.json` 有 `legacy_task_version`），并保证 **play 接线仍是唯一施加 PLAY 噪声/corruption 的地方**（否则"版本 → 布局"不再良定义）。
+    措辞更正：合口后 `--live` 不是"自己比自己"，准确说是**退化为"声明 → 配置"的转换一致性检查**，不再提供独立正确性证据；届时唯一独立来源是冻结 golden，**3.1e 真 env 变为承重**。
 
 ## B3 · v6–v14 元素化（剩余九条配方，B3 收口，2026-09-16）
 

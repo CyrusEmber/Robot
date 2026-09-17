@@ -163,15 +163,19 @@ def check_anchors(document: dict, anchors: dict) -> list[str]:
     return out
 
 
-def retired_lines(path: pathlib.Path = LINES) -> set[str]:
+def retired_lines(path: pathlib.Path | None = None) -> set[str]:
     """The recipe lines the lifecycle index marks retired.
 
     Read here because the task-key-set rule has to allow a retirement: a retired line keeps its
     declaration and its golden -- published recipe content is not rewritten -- while nothing
     registers it any more, so "declared but not registered" is the normal state of history, not
     a fault.
+
+    The path is resolved at call time, not bound as a default: a default argument captured
+    ``LINES`` at import, so the retirement control could patch the module and still read the
+    live file -- a test that injects its answer never touches the reader.
     """
-    document = load(path)
+    document = load(LINES if path is None else path)
     lines = document.get("lines") if isinstance(document, dict) else None
     if not isinstance(lines, dict):
         return set()

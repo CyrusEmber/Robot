@@ -21,27 +21,52 @@ sys.path.insert(0, str(_REPO))
 from rl_exp.tasks import teacher_mdp  # noqa: E402
 from rl_exp.tasks import obs_protocol  # noqa: E402
 from isaaclab.envs.mdp.events import reset_joints_by_offset  # noqa: E402
-from rl_exp.tasks.teacher_env_cfg import (  # noqa: E402
-    LizardRoughTeacherEnvCfg_V1,
-    LizardRoughTeacherEnvCfg_V2,
-    LizardRoughTeacherEnvCfg_V3,
-    LizardRoughTeacherEnvCfg_V4,
-    LizardRoughTeacherEnvCfg_V5,
-    LizardRoughTeacherEnvCfg_V5_PLAY,
-    LizardRoughTeacherEnvCfg_V11,
-    LizardRoughTeacherEnvCfg_V11_PLAY,
-    LizardRoughTeacherEnvCfg_V12,
-    LizardRoughTeacherEnvCfg_V12_PLAY,
-    TEACHER_TERRAINS_CFG_V4,
-    TEACHER_TERRAINS_CFG_V5,
+from rl_exp.tasks import teacher_env_cfg as _env_cfg_mod  # noqa: E402
+from rl_exp.tasks.agents import rsl_rl_ppo_cfg as _ppo_mod  # noqa: E402
+
+
+def _resolve(module, name: str):
+    """A class by name, or ``None`` when it is gone.
+
+    Resolved instead of imported so that deleting a recipe's class -- what a retirement
+    eventually does -- leaves this gate able to say so. A name import fails for the whole module,
+    which would make an aggregate gate die covering recipes that are still alive.
+    """
+    return getattr(module, name, None)
+
+
+# the recipes this gate has a segment for; a segment whose class is gone is obsolete, and the
+# gate says so rather than running into a traceback (see _obsolete_segments)
+_SEGMENT_CLASSES: tuple[str, ...] = (
+    "LizardRoughTeacherEnvCfg_V1",
+    "LizardRoughTeacherEnvCfg_V2",
+    "LizardRoughTeacherEnvCfg_V3",
+    "LizardRoughTeacherEnvCfg_V4",
+    "LizardRoughTeacherEnvCfg_V5",
+    "LizardRoughTeacherEnvCfg_V5_PLAY",
+    "LizardRoughTeacherEnvCfg_V11",
+    "LizardRoughTeacherEnvCfg_V11_PLAY",
+    "LizardRoughTeacherEnvCfg_V12",
+    "LizardRoughTeacherEnvCfg_V12_PLAY",
 )
-from rl_exp.tasks.agents.rsl_rl_ppo_cfg import (  # noqa: E402
-    LizardTeacherV3PPORunnerCfg,
-    LizardTeacherV4PPORunnerCfg,
-    LizardTeacherV5PPORunnerCfg,
-    LizardTeacherV11PPORunnerCfg,
-    LizardTeacherV12PPORunnerCfg,
-)
+
+LizardRoughTeacherEnvCfg_V1 = _resolve(_env_cfg_mod, "LizardRoughTeacherEnvCfg_V1")
+LizardRoughTeacherEnvCfg_V2 = _resolve(_env_cfg_mod, "LizardRoughTeacherEnvCfg_V2")
+LizardRoughTeacherEnvCfg_V3 = _resolve(_env_cfg_mod, "LizardRoughTeacherEnvCfg_V3")
+LizardRoughTeacherEnvCfg_V4 = _resolve(_env_cfg_mod, "LizardRoughTeacherEnvCfg_V4")
+LizardRoughTeacherEnvCfg_V5 = _resolve(_env_cfg_mod, "LizardRoughTeacherEnvCfg_V5")
+LizardRoughTeacherEnvCfg_V5_PLAY = _resolve(_env_cfg_mod, "LizardRoughTeacherEnvCfg_V5_PLAY")
+LizardRoughTeacherEnvCfg_V11 = _resolve(_env_cfg_mod, "LizardRoughTeacherEnvCfg_V11")
+LizardRoughTeacherEnvCfg_V11_PLAY = _resolve(_env_cfg_mod, "LizardRoughTeacherEnvCfg_V11_PLAY")
+LizardRoughTeacherEnvCfg_V12 = _resolve(_env_cfg_mod, "LizardRoughTeacherEnvCfg_V12")
+LizardRoughTeacherEnvCfg_V12_PLAY = _resolve(_env_cfg_mod, "LizardRoughTeacherEnvCfg_V12_PLAY")
+TEACHER_TERRAINS_CFG_V4 = _resolve(_env_cfg_mod, "TEACHER_TERRAINS_CFG_V4")
+TEACHER_TERRAINS_CFG_V5 = _resolve(_env_cfg_mod, "TEACHER_TERRAINS_CFG_V5")
+LizardTeacherV3PPORunnerCfg = _resolve(_ppo_mod, "LizardTeacherV3PPORunnerCfg")
+LizardTeacherV4PPORunnerCfg = _resolve(_ppo_mod, "LizardTeacherV4PPORunnerCfg")
+LizardTeacherV5PPORunnerCfg = _resolve(_ppo_mod, "LizardTeacherV5PPORunnerCfg")
+LizardTeacherV11PPORunnerCfg = _resolve(_ppo_mod, "LizardTeacherV11PPORunnerCfg")
+LizardTeacherV12PPORunnerCfg = _resolve(_ppo_mod, "LizardTeacherV12PPORunnerCfg")
 
 # The layouts are read from the protocol declaration (rl_exp/versions/obs_protocols.json),
 # never restated here: the feet, the term order and which terms a version actually carries
@@ -115,6 +140,18 @@ def main() -> int:
             f"{task_id}: not in the protocol declaration -- its orders cannot be checked;"
             f" a retired recipe must stay declared (historical) or be removed from this gate"
         )
+    # A covered recipe whose class is gone is a maintenance event for this gate, not a runtime
+    # surprise: this file holds a segment per recipe and constructs each class below. Saying so
+    # and stopping is the honest answer -- the remaining segments did NOT run, and must not be
+    # reported as if they had.
+    obsolete = [name for name in _SEGMENT_CLASSES if _resolve(_env_cfg_mod, name) is None]
+    if obsolete:
+        for problem in problems:
+            print(f"  DRIFT: {problem}")
+        print(f"  SEGMENTS_OBSOLETE: {obsolete}")
+        print("  a deleted recipe class means the segment covering it must be removed or re-pointed;")
+        print("  no segment was run, so nothing here has been checked")
+        return 1
 
     # v1/v2: single policy group with the frozen flat order
     for cls, tag, expected in (
