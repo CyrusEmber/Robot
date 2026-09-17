@@ -1,0 +1,39 @@
+{
+  "format": 1,
+  "note": "Measured, not authored: the articulation order the observation and the action actually use, keyed by the asset it was measured on. This is NOT the recipe's joint_order -- that one is the URDF tree order, asserted against the URDF by export_ue.py and shipped to UE. The two are different facts and nothing requires them to be equal; what matters is that this one is written down, because a permutation here silently misaligns every trained checkpoint and the run records used to say nothing about it. Re-measure after an asset change: python rl_exp/tools/verify/obs_protocol_live.py --headless --tasks <task> --pin --reason '<why>'.",
+  "assets": {
+    "assets/lizard/lizard.usda": {
+      "measured_at": "2026-09-17",
+      "measured_on": "Lizard-Rough-v14",
+      "body_count": 27,
+      "joint_order": [
+        "chest_yaw",
+        "tail1_yaw",
+        "rr_haa",
+        "rl_haa",
+        "chest_pitch",
+        "tail1_pitch",
+        "rr_hfe",
+        "rl_hfe",
+        "neck_yaw",
+        "rf_haa",
+        "lf_haa",
+        "tail2_yaw",
+        "rr_kfe",
+        "rl_kfe",
+        "neck_pitch",
+        "rf_hfe",
+        "lf_hfe",
+        "tail2_pitch",
+        "rr_foot",
+        "rl_foot",
+        "rf_kfe",
+        "lf_kfe",
+        "tail3_yaw",
+        "rf_foot",
+        "lf_foot",
+        "tail3_pitch"
+      ]
+    }
+  }
+}

@@ -27,6 +27,13 @@ from isaaclab.app import AppLauncher
 parser = argparse.ArgumentParser()
 parser.add_argument("--tasks", nargs="*", default=["Lizard-Rough-v14"])
 parser.add_argument("--envs", type=int, default=2, help="envs to build (small on purpose)")
+parser.add_argument("--pin", action="store_true", help="record the measured runtime joint order")
+parser.add_argument("--reason", default=None, help="why the order is being recorded (required with --pin)")
+parser.add_argument(
+    "--all-tasks",
+    action="store_true",
+    help="only check that every declared task's asset has a pinned order (reads files, builds nothing)",
+)
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 simulation_app = AppLauncher(args_cli).app
@@ -43,6 +50,37 @@ _REPO = pathlib.Path(__file__).resolve().parents[3]
 def _base(joint_name: str) -> str:
     """A joint's base name: the documents list ``lf_haa``, the articulation resolves ``lf_haa_joint``."""
     return joint_name[: -len("_joint")] if joint_name.endswith("_joint") else joint_name
+
+
+PARSER_EPILOGUE = (
+    "  The runtime joint order is not the recipe's joint_order: this script compares the live"
+    " articulation against the measured order pinned in versions/lizard/joint_order_runtime.json,"
+    " and only reports the recipe's own order (URDF tree order) as a warning."
+)
+
+
+def pin(asset: str, task_id: str, joints: list[str], bodies: int, reason: str) -> None:
+    """Record a measured runtime order (``--pin --reason``): the deliberate act, not a refresh.
+
+    Writing lives here, reading lives in :mod:`rl_exp.tasks.obs_protocol`, so the check and the
+    pin cannot disagree about which file holds the measured order.
+    """
+    import datetime as _dt
+    import json
+
+    path = obs_protocol.RUNTIME_ORDERS
+    document = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {"format": 1, "assets": {}}
+    previous = (document.setdefault("assets", {}).get(asset) or {}).get("joint_order")
+    document["assets"][asset] = {
+        "measured_at": _dt.date.today().isoformat(),
+        "measured_on": task_id,
+        "body_count": bodies,
+        "joint_order": joints,
+        "reason": reason,
+    }
+    path.write_text(json.dumps(document, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    state = "unchanged" if previous == joints else "changed"
+    print(f"  PINNED {asset}: {len(joints)} joints ({state}); reason: {reason}")
 
 
 def params_path(line: str, version: str | None) -> pathlib.Path | None:
@@ -102,50 +140,89 @@ def check_task(task_id: str, problems: list[str], warnings: list[str]) -> str:
         for foot in feet:
             if f"{foot}_foot" not in robot.body_names:
                 problems.append(f"{task_id}: declared foot {foot!r} has no {foot}_foot body in {robot.body_names}")
-        # joints: the declaration names terms, not joints, so the recipe's own document is the
-        # side to compare the resolved articulation against
+        # joints: the declaration names terms, not joints. Two different orders are in play --
+        # the recipe's joint_order (URDF tree order, what the deployment side reads) and the
+        # articulation order the obs and the action use. Only the second one has to be pinned,
+        # because a permutation there misaligns every checkpoint and nothing used to record it.
         route = obs_protocol.task_route(task_id)
         path = params_path(route.get("line", ""), route.get("version"))
+        live_joints = [_base(name) for name in robot.joint_names]
         if path is None:
             problems.append(f"{task_id}: no parameters document for line {route.get('line')!r}")
             joints = "no-doc"
         else:
             document = yaml.safe_load(path.read_text(encoding="utf-8"))
+            asset = (document.get("robot") or {}).get("usd_path")
             declared_joints = document.get("joint_order")
-            # the document lists base names ("lf_haa"), the articulation resolves prim names
-            # ("lf_haa_joint"): normalise before comparing, or every joint reads as both missing
-            live_joints = [_base(name) for name in robot.joint_names]
-            if declared_joints is None:
-                joints = "no joint_order declared"
-            elif set(live_joints) != set(declared_joints):
+            if args_cli.pin:
+                if not args_cli.reason:
+                    problems.append(f"{task_id}: --pin needs --reason (pinning without a stated reason is a refresh)")
+                else:
+                    pin(asset, task_id, live_joints, len(robot.body_names), args_cli.reason)
+            pinned = obs_protocol.runtime_joint_order(task_id)
+            if pinned is None:
                 problems.append(
-                    f"{task_id}: live joint names differ from the recipe's joint_order"
-                    f" (live-only {sorted(set(live_joints) - set(declared_joints))},"
-                    f" declared-only {sorted(set(declared_joints) - set(live_joints))})"
+                    f"{task_id}: asset {asset!r} has no measured runtime joint order -- run this with"
+                    f" --pin --reason '<why>' once, then the order is checked from then on"
                 )
-                joints = "NAME MISMATCH"
-            elif live_joints != list(declared_joints):
-                # Same joints, different sequence. The obs and the action follow the live
-                # articulation order; the document's order is the URDF tree order the deployment
-                # side reads. Nothing in the repo asserted the two agree -- check_dr_parity
-                # compares the document against a *set* of usda joints -- and they do not, so
-                # this is reported with both sequences rather than quietly passed.
-                warnings.append(
-                    f"{task_id}: live joint sequence != declared joint_order (same {len(live_joints)} joints)"
-                    f"\n         live     {live_joints}"
-                    f"\n         declared {list(declared_joints)}"
+                joints = f"nothing pinned for {asset}"
+            elif pinned != live_joints:
+                problems.append(
+                    f"{task_id}: live joint order differs from the measured one for {asset!r}"
+                    f"\n         live   {live_joints}"
+                    f"\n         pinned {pinned}"
                 )
-                joints = f"{len(live_joints)} joints, SEQUENCE DIFFERS from the document"
+                joints = f"{len(live_joints)} joints, MISMATCH against the measured order"
             else:
-                joints = f"{len(live_joints)} joints in declared order"
+                joints = f"{len(live_joints)} joints match the measured runtime order"
+            if declared_joints is not None and list(declared_joints) != live_joints:
+                # informational: the recipe's order is the URDF contract, not this one
+                warnings.append(
+                    f"{task_id}: recipe joint_order is the URDF tree order and differs from the"
+                    f" runtime order (not a fault; both are recorded)"
+                )
         return f"{task_id}: {'/'.join(counts)} | bodies={len(robot.body_names)} | joints={joints}"
     finally:
         env.close()
 
 
+def coverage(problems: list[str]) -> int:
+    """Every declared task's asset must carry a measured runtime joint order.
+
+    File-level only, no sim: this answers "is the order written down for everything we would
+    train", which is the part of the contract that can be checked without a run.
+    """
+    tasks = obs_protocol.declaration().get("tasks") or {}
+    assets: dict[str, list[str]] = {}
+    for task_id in sorted(tasks):
+        asset = obs_protocol.usd_path(task_id)
+        if asset is None:
+            problems.append(f"{task_id}: no usd_path in the recipe's parameters document")
+            continue
+        assets.setdefault(asset, []).append(task_id)
+        if obs_protocol.runtime_joint_order(task_id) is None:
+            problems.append(
+                f"{task_id}: asset {asset!r} has no measured runtime joint order"
+                f" -- measure it once with --pin --reason '<why>'"
+            )
+    for asset, task_ids in sorted(assets.items()):
+        order = obs_protocol.runtime_joint_order(task_ids[0]) or []
+        print(f"  OK   {asset}: {len(order)} joints pinned, {len(task_ids)} declared task(s)")
+    return len(tasks)
+
+
 def main() -> int:
     problems: list[str] = []
     warnings: list[str] = []
+    if args_cli.all_tasks:
+        covered = coverage(problems)
+        for problem in problems:
+            print(f"  FAIL {problem}")
+        if problems:
+            print(f"OBS_PROTOCOL_LIVE_FAILED ({len(problems)} problem(s))")
+            return 1
+        print(f"OBS_PROTOCOL_LIVE_OK ({covered} declared task(s), all pinned; no env built)")
+        return 0
     lines = []
     for task_id in args_cli.tasks:
         try:

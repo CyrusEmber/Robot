@@ -22,6 +22,7 @@ declared layout against the constructed cfg, which is what keeps the two from dr
 from __future__ import annotations
 
 import functools
+import hashlib
 import json
 import pathlib
 
@@ -47,6 +48,72 @@ def declaration() -> dict:
         return json.loads(DECLARATION.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as err:
         raise ProtocolError(f"cannot read {DECLARATION}: {err}") from err
+
+
+RUNTIME_ORDERS = (
+    pathlib.Path(__file__).resolve().parents[2] / "rl_exp" / "versions" / "lizard" / "joint_order_runtime.json"
+)
+
+
+def _params_document(task_id: str) -> tuple[dict, pathlib.Path] | None:
+    """The recipe's parameters document and its path, or ``None`` when it cannot be found.
+
+    Addressed by the declaration's own route (line + version), not by guessing the file's name
+    from the task id: a rename must not silently resolve to no document.
+    """
+    route = task_route(task_id)
+    line = route.get("line")
+    if not isinstance(line, str) or not line:
+        return None
+    line_dir = DECLARATION.parent / line
+    basename = f"{line_dir.name}_params.yaml"
+    version = route.get("version")
+    candidates = [line_dir / basename] if version is None else [line_dir / version / basename, line_dir / basename]
+    path = next((candidate for candidate in candidates if candidate.is_file()), None)
+    if path is None:
+        return None
+    try:
+        import yaml
+
+        return yaml.safe_load(path.read_text(encoding="utf-8")), path
+    except Exception:  # a document that cannot be parsed is a missing document here
+        return None
+
+
+def usd_path(task_id: str) -> str | None:
+    """The asset a task's recipe loads, or ``None`` when the document does not say."""
+    found = _params_document(task_id)
+    if found is None:
+        return None
+    asset = ((found[0].get("robot") or {}) if isinstance(found[0], dict) else {}).get("usd_path")
+    return asset if isinstance(asset, str) and asset else None
+
+
+def runtime_joint_order(task_id: str) -> list[str] | None:
+    """The measured articulation order of this task's asset, or ``None`` when unpinned.
+
+    Kept apart from the recipe's ``joint_order`` on purpose: that one is the URDF tree order the
+    deployment side reads, while this one is what the observation and the action actually index.
+    A permutation here misaligns every checkpoint trained before it, so it is measured once and
+    compared from then on, never inferred from the version or the asset's name.
+    """
+    asset = usd_path(task_id)
+    if asset is None or not RUNTIME_ORDERS.is_file():
+        return None
+    try:
+        entry = (json.loads(RUNTIME_ORDERS.read_text(encoding="utf-8")).get("assets") or {}).get(asset)
+    except (OSError, json.JSONDecodeError):
+        return None
+    order = (entry or {}).get("joint_order")
+    return list(order) if isinstance(order, list) and order else None
+
+
+def joint_order_digest(task_id: str) -> str | None:
+    """A digest of the pinned runtime order, for run records: which order a policy trained under."""
+    order = runtime_joint_order(task_id)
+    if order is None:
+        return None
+    return hashlib.sha256("\n".join(order).encode("utf-8")).hexdigest()
 
 
 def task_route(task_id: str) -> dict:

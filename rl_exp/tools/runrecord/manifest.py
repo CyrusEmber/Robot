@@ -183,6 +183,9 @@ def protocol_ref(task_id: str | None) -> dict:
         "obs_protocol": key,
         "obs_protocol_digest": entry.get("digest"),
         "obs_protocol_dims": entry.get("dims") or {},
+        # which articulation order the obs and the action indexed during this run: a pinned,
+        # measured fact, so a checkpoint can be traced to the order it was trained under
+        "runtime_joint_order_digest": obs_protocol.joint_order_digest(task_id),
     }
 
 
@@ -579,6 +582,11 @@ def _curriculum_state_evidence(env) -> dict:
         evidence["covered_terms"] = sorted(covered) if covered else []
         evidence["uncovered_terms"] = sorted(cstate.uncovered_terms(unwrapped))
         evidence["requires_resume_state"] = bool(cstate.requires_resume_state(unwrapped))
+        # the promise, the wiring and whether they reconcile: the three together are what a later
+        # reader needs to tell "this run never promised continuity" from "it promised and lost it"
+        evidence["expected_terms"] = cstate.expected_terms(unwrapped)
+        evidence["wired_terms"] = sorted(cstate.wired_terms(unwrapped))
+        evidence["declaration_problems"] = cstate.verify_declaration(unwrapped)
         # the raw declaration: the only thing readable when the module itself is missing
         evidence["declares_curriculum_state"] = bool(
             getattr(type(getattr(unwrapped, "cfg", None)), cstate.REQUIRES_CURRICULUM_STATE, False)

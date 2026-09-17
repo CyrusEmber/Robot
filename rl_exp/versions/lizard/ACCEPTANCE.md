@@ -963,13 +963,25 @@ ValueError: Not all regular expressions are matched!
 原因：`versions/lizard/parkour/v1/parkour_params.yaml` 的 `actuators.spine.joint_patterns`（:46-47）与 `default_joint_pos`（:21-22）仍用 **v8 之前的命名** `rear_.*` / `tail_.*`，而当前资产已改名 `tail1_yaw` 等 ⇒ 该 actuator 组没有任何关节，IsaacLab 直接抛错。**这与 Step 3 无关**，但它是真跑的产物：**离线闸门全绿，而一个 active 线的任务连 env 都建不起来**（`parkour_smoke.py` 能抓，但它不在套件里、需手跑）。
 
 **边界（不得据本节宣称）**：
-- 3.1e **未通过**：parkour 未跑通、joint 序判据未定、v0 家族宽度仍无人量过。
+- 3.1e **未通过**：只跑了 4 个任务；parkour 因构造不出 env 已退役（见下）；joint 序判据已定为"live == 已钉实测序"（见下）；v0 家族宽度仍无人量过。
 - 只跑了 4 个任务，**不代表其余 32 个**；一次真跑不覆盖其他协议。
 - 本节证据只到"live manager 与声明一致 + 上述差异"，不含推理等价。
 
 **发现 2 的处置（用户拍板 2026-09-17）**：**parkour 标记退役**（`versions/lines.json` → `revision: 3`）：`status: retired` + `retired_at: 2026-09-17` + 原因（v8 改名后 `joint_patterns`/`default_joint_pos` 失配，无法构造 env）+ `successor: null`。
 复核（本机实跑，全绿）：`check_recipe_registry` `lifecycle consistent`（`revision=3 entries=3`）· `test_lifecycle_gate` `LIFECYCLE_STARTUP_OK`（退休线拒绝新训练：`refused to start: retired line: refusing new_train`）· `test_launcher` `LAUNCHER_OK` · `check_recipe_map --bind-config` 36/36 · `check_cfg_lock` `CFG_LOCK_OK (36 tasks, 3 line(s))` · `check_obs_protocol --live` 36/36 · `check_obs_layout` `OBS_LAYOUT_OK`。
 **边界**：退役是**权限事实，不删内容** —— parkour 的任务仍在注册表、golden 与冻结目录保留（"已发布内容不改写"）。要连注册一起撤掉是另一次动作，本轮**未做**，也不影响上述通过项。
+**发现 1 的处置（用户拍板 A，2026-09-17）**：**钉住运行序**，判据改成"不该断言 live == 配方文档"。
+- **落点**：新文件 `versions/lizard/joint_order_runtime.json`，**按资产键**（`assets["assets/lizard/lizard.usda"]`），记实测关节序 + 测量任务 + 日期 + 理由。写它只能由 `obs_protocol_live.py --pin --reason '<why>'`（刻意行为，不是刷新）；读它只有 `rl_exp.tasks.obs_protocol` 一处（`runtime_joint_order` / `joint_order_digest`），避免检查与写入各读一份。
+- **判据**：live 序 == **已钉实测序** ⇒ 硬红（不等就 FAIL 并列出两个序列）。**配方 `joint_order` 与它不等只出 WARN** —— 两者服务不同事（URDF/部署序 vs 训练 I/O 序），相等是巧合不是义务，断相等会逼人改坏部署契约。
+- **覆盖**：`--all-tasks` 只读文件、不起 sim，实测 `OBS_PROTOCOL_LIVE_OK (36 declared task(s), all pinned)`（36 个声明任务全部落在同一资产上，故一处实测覆盖全部）。
+- **run 记录**：`manifest.recipe_ref` 增 `runtime_joint_order_digest`（v14 实测 `416640b4d16af072…`）⇒ ckpt 可追到"它在哪个关节序下训练"。
+- **反证（本机实跑）**：把钉住值里 `chest_yaw` 与 `tail1_yaw` 互换 ⇒
+```
+FAIL Lizard-Rough-v14: live joint order differs from the measured one for 'assets/lizard/lizard.usda'
+OBS_PROTOCOL_LIVE_FAILED (1 problem(s), 1 warning(s))
+```
+　换回后 `OBS_PROTOCOL_LIVE_OK`。即：钉住值是承重的，不是装饰。
+- **未做（也未要求）**：`lizard_ue.json` 里的 `joint_order` 仍是 URDF 序。今天仓内没有按位置装配 obs 的消费者（`build_lizard_ue.py` 只装物理 Actor），所以是**潜伏**而非在炸；一旦有人写 UE 侧 obs 装配，必须先定"按名装配"还是"改用运行序"。这条与下面那句一起构成敞口。
 
 ## B3 · v6–v14 元素化（剩余九条配方，B3 收口，2026-09-16）
 
