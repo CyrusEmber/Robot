@@ -110,6 +110,8 @@ CHECKS: list[tuple[str, list[str]]] = [
     ("obs protocol gate falsifier (each drift must still fire)", [f"{_V}/test_obs_protocol_gate.py"]),
     ("eval record format (three-state read / P04 substitutions / run-id reuse)",
      [f"{_V}/test_eval_record.py"]),
+    ("terrain split rule and record (hand-computed split / pairing identity / sanity refusals)",
+     [f"{_V}/test_terrain_map.py"]),
 ]
 
 
