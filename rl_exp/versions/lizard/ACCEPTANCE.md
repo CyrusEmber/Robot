@@ -967,6 +967,10 @@ ValueError: Not all regular expressions are matched!
 - 只跑了 4 个任务，**不代表其余 32 个**；一次真跑不覆盖其他协议。
 - 本节证据只到"live manager 与声明一致 + 上述差异"，不含推理等价。
 
+**发现 2 的处置（用户拍板 2026-09-17）**：**parkour 标记退役**（`versions/lines.json` → `revision: 3`）：`status: retired` + `retired_at: 2026-09-17` + 原因（v8 改名后 `joint_patterns`/`default_joint_pos` 失配，无法构造 env）+ `successor: null`。
+复核（本机实跑，全绿）：`check_recipe_registry` `lifecycle consistent`（`revision=3 entries=3`）· `test_lifecycle_gate` `LIFECYCLE_STARTUP_OK`（退休线拒绝新训练：`refused to start: retired line: refusing new_train`）· `test_launcher` `LAUNCHER_OK` · `check_recipe_map --bind-config` 36/36 · `check_cfg_lock` `CFG_LOCK_OK (36 tasks, 3 line(s))` · `check_obs_protocol --live` 36/36 · `check_obs_layout` `OBS_LAYOUT_OK`。
+**边界**：退役是**权限事实，不删内容** —— parkour 的任务仍在注册表、golden 与冻结目录保留（"已发布内容不改写"）。要连注册一起撤掉是另一次动作，本轮**未做**，也不影响上述通过项。
+
 ## B3 · v6–v14 元素化（剩余九条配方，B3 收口，2026-09-16）
 
 **性质**：**追加**条目，B3 收口。改动面 = `recipe.py`（5 个元素 + delta 常量链 + 一个 `mdp` import）、`check_recipe_build.py`（ClassVar 缺口按类聚合）；`teacher_env_cfg.py` 一字未动。
