@@ -988,6 +988,36 @@ classvar the declaration cannot carry: REQUIRES_CURRICULUM_STATE: False != 'not 
 - obs 三表合口本轮仍未动（上节已定）。
 - 本节只证"声明与冻结 golden 逐字段一致"；**不证**元素在真环境下的行为等价（那是 C 层真跑的事），也不证 PLAY 的 `ClassVar` 面（见上节缺口）。
 
+## B3 收尾 · `[41]` 的三条纪律（覆盖钉数 / 缺口台账 / 逐步归属，2026-09-17）
+
+**性质**：**追加**条目。改动面 = `recipe.py`（新增 `base_cfg(version)`；`build()` 增可选 `trace=`，按序记下每一步 `(name, callable)`，让读者**回放**而不是复述顺序 —— 复述顺序就是下一个漂移面）、`check_recipe_build.py`（三条判据 + 缺口按 ClassVar **名**入账）、`FILEMAP.md`。**不动任何配方的字段内容**（24/24 仍逐字段一致）。
+
+### 动了什么（都是"闸门自己的牙"，不改语义）
+
+| 判据 | 之前 | 现在 |
+|---|---|---|
+| 覆盖钉数 | `compared` 只出现在结尾那句 OK 里，比较集缩小 = 更短的绿 | `EXPECTED_COMPARED = 24` + `EXPECTED_PENDING = ()` 双向钉住：声明被撤（比较集变小）或新配方未声明就进表（pending 变多）都红 |
+| 缺口台账 | 缺口**每次打印**，永不见红；到期条件只写在散文里 | `EXPECTED_GAPS`：按 ClassVar 名给「理由 + 到期」；**台账外的新缺口即红**（一年后没人会逐条读打印），**台账里已消失的项也红**（陈旧项会盖住下一条） |
+| 逐步归属 | 无：空转元素在字段比对上**完全隐形**（字段全等 ⇒ 零差异） | 回放 `trace`：每个声明元素**必须改到至少一个字段**；且该版与基线的**全部差异必须有人认领**（"没人改却变了" = 映射不是全部事实） |
+
+### 检查与结果
+
+| 编号 | 命令 | 结果 |
+|---|---|---|
+| 硬 A（全部配方） | `check_recipe_build.py`（套件 `[41]`） | **通过**：`RECIPE_BUILD_OK (24 task(s) field-identical to the frozen golden)`，单跑 8.7 s（预算 25 s）；两条台账条目按名字打印，附「why / due」 |
+| 逐步归属反证 ①（空元素） | 进程内塞 `ELEMENTS['_noop'] = lambda cfg: None` 并挂进 v14 元素表 | **FIRED**：`element '_noop' changes nothing` |
+| 逐步归属反证 ②（无主字段） | 包一层 `build()`，在返回值上多写一个字段（`seed`） | **FIRED**：`1 field(s) changed with no declared element behind them: ['seed']` |
+| 覆盖钉数反证 | 把任一版本 `elements=None`（或从 `RECIPES` 撤一条） | 由构造保证：`compared` 变 23 ≠ 24 **且** `pending` 非空 ⇒ 两条独立红 |
+| 旁证 | 全量套件 `offline_suite.py` | **43/43 通过**（wave 188 s / 预算 400 s） |
+
+### 边界（写清楚，别把绿读成更多）
+
+- **归属 ≠ 行为等价**：它证的是"声明的每一步确实动了它该动的字段、且没有无主差异"，**不证**这些字段在真环境里产生同一行为（C 层真跑的事）。
+- **`REQUIRES_CURRICULUM_STATE` 这条真缺口未修**：本轮只是给它上了台账与到期条件（"`build()` 变成默认训练路径之前"）。读取侧的修法（载体决定 + 拆 `declared()`/`needs_restore()` + 启动时校验"声明 True ⇔ 接线非空"）仍在他们那侧，属**行为面**；本节不主张已修。
+- **save 守卫的合取今天不可达，所以没动**：只有一处类声明 True（`teacher_env_cfg.py:1083`），而所有清空课程项的元素都是 `play_drops_*`（PLAY 侧，且 PLAY 类显式声明 False）⇒ `(声明 True ∧ 接线空)` 现不存在。**注意**：删掉那个合取是**反向风险**（声明 True 却无 term 的配置会改成"训练几小时后 save 时才炸"），必须与"启动时校验"一起做，不能单删。
+- 归属判据只覆盖 `train`/`play` 两条已声明路径；元素**执行顺序**由 `trace` 给出（不再由检查器复述），所以将来 `build()` 改序，判据跟着走而不是失效。
+- 本轮不新增套件条目：三条判据都落在既有 `[41]` 内，不付第二份 import 税。
+
 
 
 

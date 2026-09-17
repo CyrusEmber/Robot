@@ -50,6 +50,40 @@ import check_cfg_lock as lock  # noqa: E402 - sibling gate: snapshot, diff and l
 from recipe_lines import discover  # noqa: E402
 from rl_exp.tasks import recipe  # noqa: E402
 
+EXPECTED_COMPARED = 24
+"""How many recipe/task pairs this gate compares, pinned.
+
+The comparison set is whatever ``RECIPES`` declares, so a version whose delta is withdrawn --
+or a new one added before its delta is written -- *silently shrinks the subject*: fewer
+comparisons, same green. A count is the cheapest way to notice, and the two pins together cover
+both directions: ``compared`` falling means a declaration was lost, ``PENDING`` growing means a
+subject arrived uncompared. Both numbers are for the state B3 closed at (12 recipes x train/play);
+a deliberate change updates them in the same commit that changes the recipes.
+"""
+
+EXPECTED_PENDING: tuple[str, ...] = ()
+"""Versions whose delta is not declared yet. Printed, and red when the list is not this one."""
+
+EXPECTED_GAPS: dict[str, tuple[str, str]] = {
+    "REQUIRES_CURRICULUM_STATE": (
+        "read at runtime off type(cfg); the declaration path has no class to state it, and no"
+        " field makes up for it",
+        "before build() becomes the training entry (ARCH_PLAN 2.4 C2): the reading side must come"
+        " from a declaration that survives both paths",
+    ),
+    "PLAY_PINS_COMMAND_RANGE": (
+        "read at construction time by the base __post_init__; the declaration path reproduces its"
+        " effect instead of the statement, so the gap is already materialized in the fields",
+        "none -- this one is carried in the fields by construction",
+    ),
+}
+"""Gaps this gate tolerates, keyed by ClassVar name: why, and when it must be gone.
+
+A gap whose name is not in this table is a failure: a *new* ClassVar the declaration cannot carry
+is exactly the kind of silent divergence the table exists to make somebody notice. Printing every
+gap on every run is how a real one becomes wallpaper -- the due column is what makes it a debt.
+"""
+
 
 def frozen_entries(line_key: str, cache: dict[str, dict]) -> tuple[dict, str | None]:
     """The frozen golden entries of the line a recipe declares it belongs to.
@@ -71,27 +105,75 @@ def frozen_entries(line_key: str, cache: dict[str, dict]) -> tuple[dict, str | N
     return entries, error
 
 
-def classvar_gaps(cls, built) -> list[str]:
-    """ClassVars ``cls`` states that the built cfg's class does not, as ``name: stated != carried``.
+def classvar_gaps(cls, built) -> list[tuple[str, object, object]]:
+    """ClassVars ``cls`` states that the built cfg's class does not, as ``(name, stated, carried)``.
 
     Compared class to class, never through a constructed instance: the point of the check is that
     the declaration path carries no class of its own, so ``type(built)`` is the shared base and a
     name only the version class annotates shows up here. The names come from the snapshot's own
-    ``ClassVar`` filter, so "left out of the golden" and "printed here" are one rule, not two.
+    ``ClassVar`` filter, so "left out of the golden" and "reported here" are one rule, not two.
+
+    Names, not rendered strings: the ledger that decides which gaps are tolerated is keyed by
+    what the gap *is*, so a statement that changes value (True -> False) stays the same debt.
     """
-    out: list[str] = []
+    out: list[tuple[str, object, object]] = []
     for name in cs._class_var_names(cls):
         stated = getattr(cls, name, "not stated")
         carried = getattr(type(built), name, "not stated")
         if carried != stated:
-            out.append(f"{name}: {stated!r} != {carried!r}")
+            out.append((name, stated, carried))
     return out
+
+
+def attribution(version: str, *, play: bool, paths: list[str]) -> None:
+    """Every declared step must change a field, and every changed field must have a step.
+
+    The builder applies named elements in order (``recipe.build``), and a declaration is only as
+    good as the mapping behind it: an element that changes nothing is invisible in a field
+    comparison, and a field that changed with no element behind it means the mapping is not the
+    whole story. Neither is visible from the golden -- both sides equal, or one side simply not
+    listed -- so this replays the recipe step by step and attributes the difference:
+
+    * each step must move at least one field;
+    * the union of what the steps moved must be exactly what the recipe moved.
+
+    Args:
+        version: the recipe to replay.
+        play: replay the evaluation variant (its steps include the shared play wiring).
+        paths: collects one line per finding (the gate's report, not an exception).
+    """
+    trace: list[tuple[str, object]] = []
+    built = recipe.build(version, play=play, trace=trace)
+    step_cfg = recipe.base_cfg(version)
+    moved: set[str] = set()
+    for name, step in trace:
+        before = cs.snapshot(step_cfg)
+        step(step_cfg)
+        rows: list = []
+        # the diff is asked for everything: the gate's own _DIFF_LIMIT would truncate the
+        # attribution and turn "moved nothing" into a claim about the first twenty paths
+        lock.walk_diff(before, cs.snapshot(step_cfg), "", rows, limit=1 << 30)
+        touched = {row[0] for row in rows}
+        if not touched:
+            paths.append(f"{version}/{'play' if play else 'train'}: element {name!r} changes nothing")
+        moved |= touched
+    rows: list = []
+    lock.walk_diff(
+        cs.snapshot(recipe.base_cfg(version)), cs.snapshot(built), "", rows, limit=1 << 30
+    )
+    ownerless = {row[0] for row in rows} - moved
+    if ownerless:
+        paths.append(
+            f"{version}/{'play' if play else 'train'}: {len(ownerless)} field(s) changed with no"
+            f" declared element behind them: {sorted(ownerless)[:5]}"
+        )
 
 
 def main(argv: list[str] | None = None) -> int:
     """Gate entry point: build each declared recipe and compare it against the frozen golden."""
     problems: list[str] = []
-    gaps: dict[str, list[str]] = {}
+    gaps: dict[str, dict] = {}
+    attribution_problems: list[str] = []
     mapping = lock.recipe_map()
     try:
         combo_key = lock.combination_key(lock.combination())
@@ -148,8 +230,11 @@ def main(argv: list[str] | None = None) -> int:
                     f" {type(err).__name__}: {err}"
                 )
             else:
-                for gap in classvar_gaps(cls, built):
-                    gaps.setdefault(gap, []).append(f"{version}/{kind}")
+                for name, stated, carried in classvar_gaps(cls, built):
+                    gaps.setdefault(name, {"values": set(), "recipes": []})
+                    gaps[name]["values"].add(f"{stated!r} != {carried!r}")
+                    gaps[name]["recipes"].append(f"{version}/{kind}")
+            attribution(version, play=play, paths=attribution_problems)
             rows: list = []
             lock.walk_diff(stored["snapshot"]["env"], cs.snapshot(built), "", rows)
             if rows:
@@ -158,15 +243,42 @@ def main(argv: list[str] | None = None) -> int:
                 )
             compared += 1
 
+    problems.extend(attribution_problems)
+    waiting = tuple(recipe.pending())
+    if waiting != EXPECTED_PENDING:
+        problems.append(
+            f"versions without a declared delta changed ({list(waiting)} != {list(EXPECTED_PENDING)}):"
+            " a subject arrived uncompared, or a declaration was withdrawn"
+        )
+    if compared != EXPECTED_COMPARED:
+        problems.append(
+            f"compared {compared} recipe/task pair(s), expected {EXPECTED_COMPARED}: the"
+            " comparison set shrank or grew without this pin being updated"
+        )
+    for name, seen in sorted(gaps.items()):
+        if name not in EXPECTED_GAPS:
+            problems.append(
+                f"classvar the declaration cannot carry, and the ledger does not know it: {name}"
+                f" -- in {', '.join(seen['recipes'])}"
+            )
+    for name in sorted(set(EXPECTED_GAPS) - set(gaps)):
+        # an entry nobody owes any more is a line that hides the next one
+        problems.append(f"the ledger still lists {name}, which is no longer a gap (drop the entry)")
+
     for problem in problems:
         print(f"  FAIL {problem}")
-    waiting = recipe.pending()
     if waiting:
-        print(f"  not declared yet (not compared): {waiting}")
+        print(f"  not declared yet (not compared): {list(waiting)}")
     # one line per gap class, not one per recipe: eighteen identical lines are a line to skip,
     # and the recipes that share a gap share it for the same reason
-    for gap, recipes in sorted(gaps.items()):
-        print(f"  classvar the declaration cannot carry: {gap} -- in {', '.join(recipes)}")
+    for name, seen in sorted(gaps.items()):
+        if name not in EXPECTED_GAPS:
+            continue
+        print(
+            f"  classvar the declaration cannot carry: {name}"
+            f" ({', '.join(sorted(seen['values']))}) -- in {', '.join(seen['recipes'])}"
+            f"\n    why: {EXPECTED_GAPS[name][0]}\n    due: {EXPECTED_GAPS[name][1]}"
+        )
     if problems:
         print("RECIPE_BUILD_FAILED")
         return 1

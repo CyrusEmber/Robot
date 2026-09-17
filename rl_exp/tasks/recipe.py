@@ -497,12 +497,24 @@ def pending() -> list[str]:
     return sorted(version for version, decl in RECIPES.items() if decl["elements"] is None)
 
 
-def build(version: str, *, play: bool = False):
+def base_cfg(version: str):
+    """The shared wiring a recipe starts from, before any of its own elements are applied.
+
+    Public because the attribution check has to start where the builder starts: a checker that
+    built its own base would drift from this one without either side noticing.
+    """
+    return teacher_env_cfg.LizardRoughTeacherEnvCfg(params_version=version)
+
+
+def build(version: str, *, play: bool = False, trace: list | None = None):
     """The env cfg a recipe declares.
 
     Args:
         version: recipe version, a key of :data:`RECIPES`.
         play: the deterministic evaluation variant (no randomization, no curriculum).
+        trace: when a list is given, every step is appended to it as ``(name, callable)``, in
+            application order -- so a reader can replay the recipe instead of restating its
+            order (and drift from it).
 
     Returns:
         The env cfg, built from the shared wiring plus this recipe's declared elements. No
@@ -523,14 +535,20 @@ def build(version: str, *, play: bool = False):
         )
     # the version travels as the *field* it is: the shared wiring resolves every structural
     # choice from it, and a subclass that only restated it is exactly what this replaces
-    cfg = teacher_env_cfg.LizardRoughTeacherEnvCfg(params_version=version)
+    cfg = base_cfg(version)
     for name in elements:
         ELEMENTS[name](cfg)
+        if trace is not None:
+            trace.append((name, ELEMENTS[name]))
     if play:
         # the shared PLAY wiring first, then the recipe's own evaluation-determinism elements:
         # they undo parts of what the recipe just built (a curriculum that would widen the range
         # mid-eval, a range that no longer has a curriculum to climb it)
         apply_play_wiring(cfg)
+        if trace is not None:
+            trace.append(("apply_play_wiring", apply_play_wiring))
         for name in RECIPES[version]["play_elements"]:
             ELEMENTS[name](cfg)
+            if trace is not None:
+                trace.append((name, ELEMENTS[name]))
     return cfg

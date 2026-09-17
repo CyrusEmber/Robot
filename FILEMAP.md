@@ -33,7 +33,7 @@
 | 文件 | 作用 |
 |---|---|
 | `__init__.py` | 全部 gym 注册（家族 8 + teacher v1–v12 各 train/play，空号版本不注册） |
-| `recipe.py` | **配方的声明式构建**（`ARCH_PLAN.md` §2.4 阶段 B3 起步）：`RECIPES` 给出每个配方的**有序元素表** + 它声称复现的注册任务 id；`build(version, play=)` = 共享接线（`LizardRoughTeacherEnvCfg(params_version=…)`，版本作为**字段**传入 ⇒ 不经版本类）+ 该配方的元素；`pending()` 列出**尚未声明**的版本（未声明 ≠ 通过）。硬 A 由 `tools\verify\check_recipe_build.py`（套件 `[41]`）以冻结 golden 比对；该闸门另**打印**声明路径结构上带不走的 `ClassVar`（快照格式 2 排除 `ClassVar`，而 `build()` 只返回共享基类 ⇒ 没有类可承载它；`REQUIRES_CURRICULUM_STATE` 是运行期读取，属真缺口） |
+| `recipe.py` | **配方的声明式构建**（`ARCH_PLAN.md` §2.4 阶段 B3 起步）：`RECIPES` 给出每个配方的**有序元素表** + 它声称复现的注册任务 id；`base_cfg(version)` = 元素之前的共享接线（`LizardRoughTeacherEnvCfg(params_version=…)`，版本作为**字段**传入 ⇒ 不经版本类），`build(version, play=, trace=)` = 共享接线 + 该配方的元素，`trace` 按序记下每一步（`(name, callable)`）让读者**回放**而不是复述顺序；`pending()` 列出**尚未声明**的版本（未声明 ≠ 通过）。硬 A 由 `tools\verify\check_recipe_build.py`（套件 `[41]`）以冻结 golden 比对，另有三条收尾判据：**覆盖钉数**（`EXPECTED_COMPARED`，比较集静默缩小即红）、**缺口台账**（`EXPECTED_GAPS` 按 ClassVar 名给理由与到期，台账外的新缺口即红，台账里的陈旧项也红）、**逐步归属**（每个声明元素必须改到字段，且全部差异必须有人认领 —— 空转元素在字段比对上隐形，只有逐步求差能抓）；该闸门另**打印**声明路径结构上带不走的 `ClassVar`（快照格式 2 排除 `ClassVar`，而 `build()` 只返回共享基类 ⇒ 没有类可承载它；`REQUIRES_CURRICULUM_STATE` 是运行期读取，属真缺口，到期条件见台账） |
 | `recipe_params.py` | **四线共用的参数文档加载器**（`ARCH_PLAN.md` §2.4 阶段 B，B1 末片）：`document()` 按 `(path, mtime_ns, size)` 缓存解析结果、`load()` 每次 deepcopy 给调用者自己的树、`path()` 按「目录名即 basename」推出冻结/dev 路径、`frozen_only=True` 拒绝 dev yaml（冻结配方不许读可变文件）。各线的 `_load_params` 只剩一行 wrapper，只保留"我是哪条线 / 是否 frozen-only"。隔离契约由 `tools\verify\test_params_isolation.py`（套件 `[34]`，5 例）看守 |
 | `lizard_env_cfg.py` | 家族平地基座：机器人装配 + DR 接线 + `_load_params`（版本参数机制） |
 | `rough_env_cfg.py` | 家族粗糙地形（蜥蜴尺度化地形 + 高度扫描 obs） |
