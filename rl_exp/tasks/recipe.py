@@ -656,27 +656,27 @@ _JOINT_SIR_PLAY: tuple[str, ...] = ("play_drops_joint_sir_curriculum",)
 """v11/v12 replace the row SIR with the joint one, so their PLAY guard is the joint term."""
 
 RECIPES: dict[str, dict] = {
-    "v1": {"elements": (), "play_elements": (), "declares": (False, False), "train": "Lizard-Rough-v1", "play": "Lizard-Rough-Play-v1"},
-    "v2": {"elements": (), "play_elements": (), "declares": (False, False), "train": "Lizard-Rough-v2", "play": "Lizard-Rough-Play-v2"},
-    "v3": {"elements": _V3_DELTA, "play_elements": _V3_PLAY, "declares": (False, False), "train": "Lizard-Rough-v3", "play": "Lizard-Rough-Play-v3"},
-    "v4": {"elements": _V4_DELTA, "play_elements": _V3_PLAY, "declares": (False, False), "train": "Lizard-Rough-v4", "play": "Lizard-Rough-Play-v4"},
-    "v5": {"elements": _V5_DELTA, "play_elements": _SIR_PLAY, "declares": (True, False), "train": "Lizard-Rough-v5", "play": "Lizard-Rough-Play-v5"},
+    "v1": {"elements": (), "play_elements": (), "declares": (False, False), "pins_full_range": (False, False), "train": "Lizard-Rough-v1", "play": "Lizard-Rough-Play-v1"},
+    "v2": {"elements": (), "play_elements": (), "declares": (False, False), "pins_full_range": (False, False), "train": "Lizard-Rough-v2", "play": "Lizard-Rough-Play-v2"},
+    "v3": {"elements": _V3_DELTA, "play_elements": _V3_PLAY, "declares": (False, False), "pins_full_range": (False, True), "train": "Lizard-Rough-v3", "play": "Lizard-Rough-Play-v3"},
+    "v4": {"elements": _V4_DELTA, "play_elements": _V3_PLAY, "declares": (False, False), "pins_full_range": (False, True), "train": "Lizard-Rough-v4", "play": "Lizard-Rough-Play-v4"},
+    "v5": {"elements": _V5_DELTA, "play_elements": _SIR_PLAY, "declares": (True, False), "pins_full_range": (False, False), "train": "Lizard-Rough-v5", "play": "Lizard-Rough-Play-v5"},
     # v6/v8/v10 share one element list: v6.1 unlocks the spine (one yaml-sourced line), v8 and
     # v10 change no cfg field at all -- v8's flip + joint renames are the asset, v10's tilt
     # removal is the yaml flag components.terminations already reads. An empty delta is stated
     # as v6's list, never as ``None``: these recipes ARE declared, what they declare beyond v6
     # is nothing.
-    "v6": {"elements": _V6_DELTA, "play_elements": _SIR_PLAY, "declares": (True, False), "train": "Lizard-Rough-v6", "play": "Lizard-Rough-Play-v6"},
-    "v8": {"elements": _V6_DELTA, "play_elements": _SIR_PLAY, "declares": (True, False), "train": "Lizard-Rough-v8", "play": "Lizard-Rough-Play-v8"},
-    "v10": {"elements": _V6_DELTA, "play_elements": _SIR_PLAY, "declares": (True, False), "train": "Lizard-Rough-v10", "play": "Lizard-Rough-Play-v10"},
+    "v6": {"elements": _V6_DELTA, "play_elements": _SIR_PLAY, "declares": (True, False), "pins_full_range": (False, False), "train": "Lizard-Rough-v6", "play": "Lizard-Rough-Play-v6"},
+    "v8": {"elements": _V6_DELTA, "play_elements": _SIR_PLAY, "declares": (True, False), "pins_full_range": (False, False), "train": "Lizard-Rough-v8", "play": "Lizard-Rough-Play-v8"},
+    "v10": {"elements": _V6_DELTA, "play_elements": _SIR_PLAY, "declares": (True, False), "pins_full_range": (False, False), "train": "Lizard-Rough-v10", "play": "Lizard-Rough-Play-v10"},
     # v11 hands the terrain curriculum to the joint particle filter; v12 adds the reset/obs
     # robustness package on top of it. v13 deliberately branches off v10, NOT off v12 -- it is the
     # single-variable kernel fix on the v10 line -- so its list is v6's plus its own element, and
     # the joint SIR / v12 resets are absent from it by construction.
-    "v11": {"elements": _V11_DELTA, "play_elements": _JOINT_SIR_PLAY, "declares": (True, False), "train": "Lizard-Rough-v11", "play": "Lizard-Rough-Play-v11"},
-    "v12": {"elements": _V12_DELTA, "play_elements": _JOINT_SIR_PLAY, "declares": (True, False), "train": "Lizard-Rough-v12", "play": "Lizard-Rough-Play-v12"},
-    "v13": {"elements": _V13_DELTA, "play_elements": _SIR_PLAY, "declares": (True, False), "train": "Lizard-Rough-v13", "play": "Lizard-Rough-Play-v13"},
-    "v14": {"elements": _V14_DELTA, "play_elements": _SIR_PLAY, "declares": (True, False), "train": "Lizard-Rough-v14", "play": "Lizard-Rough-Play-v14"},
+    "v11": {"elements": _V11_DELTA, "play_elements": _JOINT_SIR_PLAY, "declares": (True, False), "pins_full_range": (False, False), "train": "Lizard-Rough-v11", "play": "Lizard-Rough-Play-v11"},
+    "v12": {"elements": _V12_DELTA, "play_elements": _JOINT_SIR_PLAY, "declares": (True, False), "pins_full_range": (False, False), "train": "Lizard-Rough-v12", "play": "Lizard-Rough-Play-v12"},
+    "v13": {"elements": _V13_DELTA, "play_elements": _SIR_PLAY, "declares": (True, False), "pins_full_range": (False, False), "train": "Lizard-Rough-v13", "play": "Lizard-Rough-Play-v13"},
+    "v14": {"elements": _V14_DELTA, "play_elements": _SIR_PLAY, "declares": (True, False), "pins_full_range": (False, False), "train": "Lizard-Rough-v14", "play": "Lizard-Rough-Play-v14"},
 }
 
 MAIN_LINE = "lizard/main"
@@ -711,6 +711,9 @@ BASELINE_RECIPES: dict[str, dict] = {
         # no curriculum at all on this line: the declaration is False for both kinds, and
         # ``baseline_no_curriculum`` is what makes it so.
         "declares": (False, False),
+        # no curriculum to climb a range either, so the range is never "pinned for evaluation":
+        # the yaml's own window is what both kinds use.
+        "pins_full_range": (False, False),
         "train": "Lizard-Baseline-Flat-v1",
         "play": "Lizard-Baseline-Flat-Play-v1",
     },
@@ -752,13 +755,49 @@ def declaration(version: str, *, play: bool = False, line: str = MAIN_LINE) -> b
         ``True``/``False`` when the recipe states it, ``None`` when it does not state it at all
         (``build`` then leaves the shared wiring's own statement alone).
     """
+    return _stated(version, "declares", play=play, line=line)
+
+
+def pins_full_range(version: str, *, play: bool = False, line: str = MAIN_LINE) -> bool | None:
+    """Whether ``line``'s ``version`` pins the full forward range, or None if unstated.
+
+    The second ``ClassVar`` a version class used to state (``PLAY_PINS_COMMAND_RANGE``), carried
+    the same way and for the same reason. Its reader is the shared wiring's ``__post_init__``, i.e.
+    *construction* time: on v3/v4 the play variant has no curriculum left to widen the range, so it
+    asks for the full one instead of the curriculum's window. Reproducing that effect with a
+    play element afterwards -- which is what the builder did while the table was silent -- leaves
+    the statement itself unstated, and a statement that only exists on a class body dies with it.
+
+    Args:
+        version: recipe version, a key of this line's recipe table.
+        play: the evaluation variant.
+        line: family-relative line handle, a key of :data:`LINES`.
+
+    Returns:
+        ``True``/``False`` when the recipe states it, ``None`` when it does not state it at all.
+    """
+    return _stated(version, "pins_full_range", play=play, line=line)
+
+
+def _stated(version: str, key: str, *, play: bool, line: str) -> bool | None:
+    """One ``(train, play)`` statement from a recipe table, or None when the recipe does not state it."""
     entry = LINES[line]["recipes"].get(version) or {}
-    stated = entry.get("declares")
+    stated = entry.get(key)
     return None if stated is None else bool(stated[1 if play else 0])
 
 
+# The ClassVars a version class used to state about its recipe, and the accessor that now reads
+# each of them from the recipe table. One list, so "which statements must move off the class
+# bodies" has a single answer -- and so a name that has not moved yet shows up as a gap rather
+# than as a statement nobody notices is missing.
+CLASSVAR_STATEMENTS: tuple[tuple[str, object], ...] = (
+    (cstate.REQUIRES_CURRICULUM_STATE, declaration),
+    ("PLAY_PINS_COMMAND_RANGE", pins_full_range),
+)
+
+
 def _wired_class(version: str, *, play: bool, line: str):
-    """The class to construct: the line's shared wiring, plus the recipe's own statement.
+    """The class to construct: the line's shared wiring, plus the recipe's own statements.
 
     A synthesized subclass, for one reason: four readers ask ``type(cfg)`` whether this task
     promises a curriculum state -- the resume path, the save guard, the trainer's import guard and
@@ -768,8 +807,12 @@ def _wired_class(version: str, *, play: bool, line: str):
     that records ``type(cfg).__name__`` moves.
     """
     base = LINES[line]["base"]
-    stated = declaration(version, play=play, line=line)
-    if stated is None:
+    stated: dict[str, bool] = {}
+    for classvar, accessor in CLASSVAR_STATEMENTS:
+        value = accessor(version, play=play, line=line)
+        if value is not None:
+            stated[classvar] = value
+    if not stated:
         return base
     # annotated as a ClassVar, not merely set: the snapshot tells the two apart by the
     # annotation (cfg_snapshot._class_var_names), so an unannotated attribute would enter the
@@ -777,7 +820,10 @@ def _wired_class(version: str, *, play: bool, line: str):
     return type(
         base.__name__,
         (base,),
-        {"__annotations__": {cstate.REQUIRES_CURRICULUM_STATE: ClassVar[bool]}, cstate.REQUIRES_CURRICULUM_STATE: stated},
+        {
+            "__annotations__": {name: ClassVar[bool] for name in stated},
+            **stated,
+        },
     )
 
 
@@ -865,7 +911,6 @@ def recipe_class(version: str, *, play: bool = False, line: str = MAIN_LINE, nam
             " so a class for it would have to guess the missing part"
         )
     base = LINES[line]["base"]
-    stated = declaration(version, play=play, line=line)
 
     def __post_init__(self):
         """The shared wiring's own construction, then this recipe's declared steps.
@@ -882,11 +927,16 @@ def recipe_class(version: str, *, play: bool = False, line: str = MAIN_LINE, nam
         "__post_init__": __post_init__,
         "__doc__": f"{line}/{version}{'/play' if play else ''}, built from its declared elements.",
     }
-    if stated is not None:
+    stated = {
+        classvar: value
+        for classvar, accessor in CLASSVAR_STATEMENTS
+        if (value := accessor(version, play=play, line=line)) is not None
+    }
+    if stated:
         # annotated, not merely set: an unannotated attribute enters the snapshot as a field
         # (cfg_snapshot tells the two apart by the annotation), and a statement is not data
-        namespace["__annotations__"] = {cstate.REQUIRES_CURRICULUM_STATE: ClassVar[bool]}
-        namespace[cstate.REQUIRES_CURRICULUM_STATE] = stated
+        namespace["__annotations__"] = {name: ClassVar[bool] for name in stated}
+        namespace.update(stated)
     klass = type(
         name or f"{base.__name__}_{line.split('/')[-1]}_{version}{'_PLAY' if play else ''}",
         (base,),

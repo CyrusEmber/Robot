@@ -32,19 +32,18 @@ two-way -- undeclared change, declared-but-ineffective entry, and a claimed-empt
 empty -- because "only one explicit difference list" means the list and the diff are equal, not
 that one contains the other.
 
-The same rule covers the one thing ``build()`` structurally cannot carry. A ``ClassVar`` is a
-statement *about* a recipe, so the snapshot (format 2) leaves it out -- and the declaration path
-has no class to put it on: ``build()`` returns the shared base class, whose MRO says nothing
-about the version it was handed. Two readers see this differently, and the gate prints the
-difference with both values rather than deciding it is harmless:
+``ClassVar`` is the one thing a *field* comparison cannot see: a statement about a recipe is not
+recipe data, so the snapshot (format 2) leaves it out and no diff will ever report it. Those
+statements live in the recipe table (``recipe.CLASSVAR_STATEMENTS``, one list) and the declaration
+path stamps them onto the class it hands back, so both paths answer the same. This gate holds the
+transition: for as long as the version class bodies exist, each one has to state exactly what the
+table states -- unstated in the table is a failure too, since the table is what the declaration
+path stamps from. Neither value is decided here; the point is that no third answer can appear.
 
-* ``PLAY_PINS_COMMAND_RANGE`` is read at *construction time*, by the base ``__post_init__``. The
-  declaration path reproduces its effect instead of the statement (``play_pins_full_command_range``
-  writes the same range afterwards), so the printed gap is already materialized in the fields.
-* ``REQUIRES_CURRICULUM_STATE`` is read at *runtime* off ``type(cfg)`` (``curriculum_state``,
-  ``runrecord.manifest``). The declaration path cannot state it, and nothing in the fields makes
-  up for it -- a real, open gap (``ACCEPTANCE.md`` B3, v5 entry), which is why it is printed on
-  every run instead of being fixed by a flag that would only look fixed.
+A ClassVar with no home in the table and no way to be carried is printed on every run rather than
+being tolerated silently -- that is what ``EXPECTED_GAPS`` is for, and it is empty: every
+statement the class bodies make now has a table entry, so a new gap means a new statement somebody
+added, not housekeeping.
 """
 
 from __future__ import annotations
@@ -60,7 +59,6 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import cfg_snapshot as cs  # noqa: E402
 import check_cfg_lock as lock  # noqa: E402 - sibling gate: snapshot, diff and lock reading
 from recipe_lines import discover  # noqa: E402
-from rl_exp.tasks import curriculum_state as cstate  # noqa: E402
 from rl_exp.tasks import recipe  # noqa: E402
 
 DIFF_NAME = "diff.json"
@@ -96,18 +94,16 @@ EXPECTED_DIFFS: dict[tuple[str, str], int] = {
 }
 """Recipe -> how many paths its difference declaration lists (``diff.json`` next to the recipe)."""
 
-EXPECTED_GAPS: dict[str, tuple[str, str]] = {
-    "PLAY_PINS_COMMAND_RANGE": (
-        "read at construction time by the base __post_init__; the declaration path reproduces its"
-        " effect instead of the statement, so the gap is already materialized in the fields",
-        "none -- this one is carried in the fields by construction",
-    ),
-}
+EXPECTED_GAPS: dict[str, tuple[str, str]] = {}
 """Gaps this gate tolerates, keyed by ClassVar name: why, and when it must be gone.
 
 A gap whose name is not in this table is a failure: a *new* ClassVar the declaration cannot carry
 is exactly the kind of silent divergence the table exists to make somebody notice. Printing every
 gap on every run is how a real one becomes wallpaper -- the due column is what makes it a debt.
+
+Empty, and that is the point: the last entry (``PLAY_PINS_COMMAND_RANGE``) left when the recipe
+table started stating it, so the declaration path now carries every statement the version class
+bodies make. A new entry here is a real gap, not a housekeeping step.
 """
 
 
@@ -436,28 +432,28 @@ def main(argv: list[str] | None = None) -> int:
                         gaps.setdefault(name, {"values": set(), "recipes": []})
                         gaps[name]["values"].add(f"{stated!r} != {carried!r}")
                         gaps[name]["recipes"].append(f"{version}/{kind}")
-                    # The declaration has to be the same on both paths while both exist. The
-                    # class path is what trains today and the declaration path is what will, so a
-                    # recipe table drifting from the class it replaces is two different answers to
-                    # "does this task promise a curriculum state" -- and the one that loses is
-                    # whichever path nobody ran. Unstated in the table is a failure too: the table
-                    # is the source the declaration path stamps from, so it cannot be silent.
-                    stated_in_table = recipe.declaration(version, play=play, line=line_key)
-                    stated_in_class = bool(getattr(cls, cstate.REQUIRES_CURRICULUM_STATE, False))
-                    if stated_in_table is None:
-                        problems.append(
-                            f"{line_key}/{version}/{kind}: the recipe states no"
-                            f" {cstate.REQUIRES_CURRICULUM_STATE}, so the declaration path cannot"
-                            " carry it -- state it (the class path states"
-                            f" {stated_in_class})"
-                        )
-                    elif stated_in_table != stated_in_class:
-                        problems.append(
-                            f"{line_key}/{version}/{kind}: the recipe states"
-                            f" {cstate.REQUIRES_CURRICULUM_STATE}={stated_in_table} while"
-                            f" {getattr(cls, '__name__', cls)} states {stated_in_class} -- the two"
-                            " paths would answer differently"
-                        )
+                    # Every ClassVar a version class states about its recipe has to be stated by
+                    # the table instead, and agree with it -- two answers to "what does this recipe
+                    # state" is one answer too many, and the one that loses is whichever path
+                    # nobody ran. Unstated in the table is a failure: the table is what the
+                    # declaration path stamps from, so it cannot be silent. The pairing lives in
+                    # ``recipe.CLASSVAR_STATEMENTS``, so "which statements have moved off the
+                    # class bodies" has one answer instead of one list per checker.
+                    for classvar, accessor in recipe.CLASSVAR_STATEMENTS:
+                        stated_in_table = accessor(version, play=play, line=line_key)
+                        stated_in_class = bool(getattr(cls, classvar, False))
+                        if stated_in_table is None:
+                            problems.append(
+                                f"{line_key}/{version}/{kind}: the recipe states no {classvar}, so"
+                                f" the declaration path cannot carry it -- state it (the class path"
+                                f" states {stated_in_class})"
+                            )
+                        elif stated_in_table != stated_in_class:
+                            problems.append(
+                                f"{line_key}/{version}/{kind}: the recipe states {classvar}="
+                                f"{stated_in_table} while {getattr(cls, '__name__', cls)} states"
+                                f" {stated_in_class} -- the two paths would answer differently"
+                            )
                 attribution(version, play=play, paths=attribution_problems, line=line_key)
                 # The switch's safety: the class a registry entry can point at has to build the
                 # same config build() does, or "the declaration path became the training entry"
