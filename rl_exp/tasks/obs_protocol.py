@@ -49,6 +49,18 @@ def declaration() -> dict:
         raise ProtocolError(f"cannot read {DECLARATION}: {err}") from err
 
 
+def declared(task_id: str) -> bool:
+    """Whether the declaration carries this task at all.
+
+    Asked separately from :func:`protocol_for` because "not declared" and "declared but the
+    recipe has no live config any more" are different situations: the first is a typo or a gap
+    and should raise, the second is a retirement -- a legal lifecycle move whose golden and
+    frozen yaml stay -- and a gate should report it as a line of text, not die importing.
+    """
+    route = (declaration().get("tasks") or {}).get(task_id)
+    return isinstance(route, dict) and "protocol" in route
+
+
 def protocol_for(task_id: str) -> str:
     """The protocol identity a task declares.
 

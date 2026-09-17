@@ -44,6 +44,7 @@ import obs_protocol_inventory as inv  # noqa: E402
 _REPO = pathlib.Path(__file__).resolve().parents[3]
 DECLARATION = _REPO / "rl_exp" / "versions" / "obs_protocols.json"
 ANCHORS = _REPO / "rl_exp" / "versions" / "obs_protocol_anchors.json"
+LINES = _REPO / "rl_exp" / "versions" / "lines.json"
 FORMAT_VERSION = 1
 _ORDERED_FIELDS = ("terms", "dropped_terms", "clip", "scale", "noise")
 
@@ -162,6 +163,47 @@ def check_anchors(document: dict, anchors: dict) -> list[str]:
     return out
 
 
+def retired_lines(path: pathlib.Path = LINES) -> set[str]:
+    """The recipe lines the lifecycle index marks retired.
+
+    Read here because the task-key-set rule has to allow a retirement: a retired line keeps its
+    declaration and its golden -- published recipe content is not rewritten -- while nothing
+    registers it any more, so "declared but not registered" is the normal state of history, not
+    a fault.
+    """
+    document = load(path)
+    lines = document.get("lines") if isinstance(document, dict) else None
+    if not isinstance(lines, dict):
+        return set()
+    return {
+        key for key, entry in lines.items() if isinstance(entry, dict) and entry.get("status") == "retired"
+    }
+
+
+def coverage_problems(tasks: dict, registered: dict, retired, only: list[str] | None = None) -> list[str]:
+    """Both directions of the task-key-set rule (``ARCH_PLAN`` 0a).
+
+    Pulled out as a pure function so the retirement case is testable without isaaclab.
+    """
+    out: list[str] = []
+    scope = set(only or [])
+
+    def in_scope(task_id: str) -> bool:
+        return not scope or task_id in scope
+
+    for task_id in sorted(set(registered) - set(tasks)):
+        if in_scope(task_id):
+            out.append(f"{task_id}: registered task with no protocol mapping")
+    for task_id in sorted(set(tasks) - set(registered)):
+        if not in_scope(task_id):
+            continue
+        route = tasks[task_id] if isinstance(tasks[task_id], dict) else {}
+        if route.get("line") in retired:
+            continue
+        out.append(f"{task_id}: declared but not registered")
+    return out
+
+
 def compare(declared: dict, observed: dict, where: str) -> list[str]:
     """Order-sensitive layout comparison, with the same-set-different-order case named."""
     out: list[str] = []
@@ -217,14 +259,7 @@ def check_live(document: dict, only: list[str]) -> tuple[list[str], int]:
     specs = lock.registered_tasks()
     out: list[str] = []
     tasks = document.get("tasks") or {}
-    for task_id in sorted(set(specs) - set(tasks)):
-        if only and task_id not in only:
-            continue
-        out.append(f"{task_id}: registered task with no protocol mapping")
-    for task_id in sorted(set(tasks) - set(specs)):
-        if only and task_id not in only:
-            continue
-        out.append(f"{task_id}: declared but not registered")
+    out: list[str] = coverage_problems(tasks, specs, retired_lines(), only)
     checked = 0
     protocols = document.get("protocols") or {}
     for task_id in sorted(set(tasks) & set(specs)):

@@ -181,6 +181,31 @@ def main() -> int:
     problems, _ = g.check_recorded(scoped, [task_of(DECLARED, key)])
     fires("only/still-catches-in-scope", "absent from the declaration", problems)
 
+    # --- a retirement is a legal state, not a fault ------------------------------------
+    tasks = DECLARED["tasks"]
+    one = sorted(tasks)[0]
+    other = next(task for task in sorted(tasks) if task != one)
+    registered = {task: {} for task in tasks}
+    check(
+        "coverage/complete-set-is-clean",
+        g.coverage_problems(tasks, registered, set()) == [],
+        f"{g.coverage_problems(tasks, registered, set())[:3]}",
+    )
+    extra = {**registered, "Lizard-NotDeclared-v1": {}}
+    fires("coverage/registered-but-undeclared", "no protocol mapping", g.coverage_problems(tasks, extra, set()))
+    fewer = {task: route for task, route in registered.items() if task != one}
+    fires("coverage/declared-but-unregistered", "declared but not registered", g.coverage_problems(tasks, fewer, set()))
+    check(
+        "coverage/retired-line-is-history",
+        g.coverage_problems(tasks, fewer, {tasks[one]["line"]}) == [],
+        f"{g.coverage_problems(tasks, fewer, {tasks[one]['line']})[:3]}",
+    )
+    check(
+        "coverage/only-scopes",
+        g.coverage_problems(tasks, fewer, set(), [other]) == [],
+        f"{g.coverage_problems(tasks, fewer, set(), [other])[:3]}",
+    )
+
     if PROBLEMS:
         print(f"OBS_PROTOCOL_GATE_FAILED ({len(PROBLEMS)})")
         return 1

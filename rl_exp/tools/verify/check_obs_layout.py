@@ -47,27 +47,45 @@ from rl_exp.tasks.agents.rsl_rl_ppo_cfg import (  # noqa: E402
 # never restated here: the feet, the term order and which terms a version actually carries
 # were the same facts kept in two places, and the second copy is the one that goes stale.
 # A task id, not a version string, is how the declaration is addressed: identity is read.
-def _group_orders(task_id: str) -> tuple[list[str], list[str], list[str]]:
+_UNDECLARED: list[str] = []
+
+
+def _declared_orders(task_id: str) -> dict[str, list[str]]:
     """The declared proprio/extero/priv orders of one recipe, by its own task id.
 
     Per recipe, not one shared triple: v3/v4/v5/v12 share an identity today, and the day one of
-    them diverges, a single shared constant computed from another version would red the rest for
-    a change that never touched them.
+    them diverges, a constant computed from another version would red the rest for a change that
+    never touched them.
+
+    A recipe the declaration no longer carries is recorded and compared against nothing real, so
+    the gate prints a line naming it instead of dying at import: retiring a recipe is a legal
+    lifecycle move, and its golden and frozen yaml stay where they were.
     """
-    return (
-        obs_protocol.live_terms_for(task_id, "proprio"),
-        obs_protocol.live_terms_for(task_id, "extero"),
-        obs_protocol.live_terms_for(task_id, "priv"),
-    )
+    if not obs_protocol.declared(task_id):
+        _UNDECLARED.append(task_id)
+        return {"proprio": [], "extero": [], "priv": []}
+    return {group: obs_protocol.live_terms_for(task_id, group) for group in ("proprio", "extero", "priv")}
 
 
-V3_PROPRIO_ORDER, V3_EXTERO_ORDER, V3_PRIV_ORDER = _group_orders("Lizard-Rough-v3")
-V4_PROPRIO_ORDER, V4_EXTERO_ORDER, V4_PRIV_ORDER = _group_orders("Lizard-Rough-v4")
-V5_PROPRIO_ORDER, V5_EXTERO_ORDER, V5_PRIV_ORDER = _group_orders("Lizard-Rough-v5")
-V12_PROPRIO_ORDER, V12_EXTERO_ORDER, V12_PRIV_ORDER = _group_orders("Lizard-Rough-v12")
-V1_POLICY_ORDER = obs_protocol.live_terms_for("Lizard-Rough-v1", "policy")
-V2_POLICY_ORDER = obs_protocol.live_terms_for("Lizard-Rough-v2", "policy")
-TEACHER_FEET = obs_protocol.feet_for("Lizard-Rough-v3")
+def _declared_terms(task_id: str, group: str) -> list[str]:
+    """One group's declared order, or nothing with the recipe recorded as undeclared."""
+    if not obs_protocol.declared(task_id):
+        _UNDECLARED.append(task_id)
+        return []
+    return obs_protocol.live_terms_for(task_id, group)
+
+
+_V3 = _declared_orders("Lizard-Rough-v3")
+_V4 = _declared_orders("Lizard-Rough-v4")
+_V5 = _declared_orders("Lizard-Rough-v5")
+_V12 = _declared_orders("Lizard-Rough-v12")
+V3_PROPRIO_ORDER, V3_EXTERO_ORDER, V3_PRIV_ORDER = _V3["proprio"], _V3["extero"], _V3["priv"]
+V4_PROPRIO_ORDER, V4_EXTERO_ORDER, V4_PRIV_ORDER = _V4["proprio"], _V4["extero"], _V4["priv"]
+V5_PROPRIO_ORDER, V5_EXTERO_ORDER, V5_PRIV_ORDER = _V5["proprio"], _V5["extero"], _V5["priv"]
+V12_PROPRIO_ORDER, V12_EXTERO_ORDER, V12_PRIV_ORDER = _V12["proprio"], _V12["extero"], _V12["priv"]
+V1_POLICY_ORDER = _declared_terms("Lizard-Rough-v1", "policy")
+V2_POLICY_ORDER = _declared_terms("Lizard-Rough-v2", "policy")
+TEACHER_FEET = obs_protocol.feet_for("Lizard-Rough-v3") if obs_protocol.declared("Lizard-Rough-v3") else ()
 
 # group-level settings, not terms (mirrors the observation manager's skip list)
 _GROUP_FIELDS = {
@@ -89,6 +107,14 @@ def _groups(observations) -> dict[str, list[str]]:
 
 def main() -> int:
     problems = []
+    # a recipe the declaration no longer carries is reported by name: its own comparisons then
+    # read an empty contract, and without this line the only visible symptom would be a bare
+    # "!= contract" with no hint that the recipe was retired
+    for task_id in sorted(set(_UNDECLARED)):
+        problems.append(
+            f"{task_id}: not in the protocol declaration -- its orders cannot be checked;"
+            f" a retired recipe must stay declared (historical) or be removed from this gate"
+        )
 
     # v1/v2: single policy group with the frozen flat order
     for cls, tag, expected in (

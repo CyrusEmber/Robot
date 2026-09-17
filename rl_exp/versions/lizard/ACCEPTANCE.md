@@ -908,6 +908,22 @@ check_suite_shape.py              SUITE_SHAPE_OK（改套件后）
 - `OBS.md` 的 v15 行只声明"有目录、无入口"，不声明其布局。
 - 本节为**离线段**通过，**不得**称为"Step 3 全部通过"。
 
+### 结构性风险处置（review 后，2026-09-16）
+
+评审列出三条结构性风险，当场修两条、第三条记敞口：
+
+8. **锚点路径写死家族名**（已修，`415a8bf`）：声明是**全仓**的（闸门 glob 所有线的 golden），锚点却放在 `versions/lizard/` 下 ⇒ 第二个机器人家族落地时要么改代码、要么把别家的协议塞进蜥蜴目录。现移到 `versions/obs_protocol_anchors.json`，与它钉的文件同层，也与 `recipes.json`/`lines.json`/`cfg_baselines.json` 一致（"钉与被钉同层"）。重生成声明只动了 note 一行，**key 与全部已审摘要不变**，两半区仍 36/36。
+9. **退役无法在协议层表达**（已修）：两处坏结果 —— ① 聚合门（`check_obs_layout`）在**导入期**按 task id 取值，退役一个配方会让 pre-commit 以 traceback 死掉（合法动作给出栈而不是一句话）；② `--live` 覆盖规则把"已声明但未注册"一律判红，而退役**正是**这个状态。现 `obs_protocol.declared()` 区分"没声明"（该抛）与"已声明但配方不再有 live 配置"（该报）；`check_obs_layout` 的常量为容错读者（空契约 + 具名报告 + 开头一行说明），覆盖规则抽成纯函数 `coverage_problems`，**已退役线**（读 `lines.json` 的 `status`）的任务按历史留存。证据：模拟退役（声明副本去掉 `Lizard-Rough-v3`）后
+```
+import survived; undeclared recorded: ['Lizard-Rough-v3']
+v3 contract is empty, not guessed : True
+v12 contract is untouched         : True
+the report names the recipe       : True
+```
+反证补 6 例（完整集干净、注册但未声明、声明但未注册、退役线按历史通过、`--only` 过滤、覆盖方向）。
+**范围**：只有**聚合门**（一次查所有版本）容错；**单配方**的 smoke 与网络单测仍依赖其配方存在，退役它们要给后继配方改脚本 —— 这是依赖，不是缺陷，故不改。
+10. **"生成 + 人工审批"仍是社会控制**（敞口，未修）：闸门能查的全是**自洽**（key=内容摘要、digest=锚点、dims=dims_digest），三件事同一条命令都算得出来 ⇒ 重新生成 + 重批可以不留"有人看过"的痕迹。既有先例是 golden 的 `--update --reason`（带 reason 一键刷新）。**将来动作**：锚点加 `approved_rev`，闸门在"HEAD 已前进且该线 golden 之后有变更"时警告；`purpose` 从"仅未引用者必填"扩为每次重批必填。**不阻止橡皮图章，只让没审变得可见** —— 是否要硬红、按哪个 rev 判，待用户定。
+
 ## B3 · v6–v14 元素化（剩余九条配方，B3 收口，2026-09-16）
 
 **性质**：**追加**条目，B3 收口。改动面 = `recipe.py`（5 个元素 + delta 常量链 + 一个 `mdp` import）、`check_recipe_build.py`（ClassVar 缺口按类聚合）；`teacher_env_cfg.py` 一字未动。
