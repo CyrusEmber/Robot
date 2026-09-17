@@ -26,6 +26,7 @@ import math
 import pathlib
 import re
 import subprocess
+import sys
 
 from isaaclab.app import AppLauncher
 
@@ -41,6 +42,12 @@ parser.add_argument("--tag", type=str, default=None, help="Run label; defaults t
 parser.add_argument("--group", type=str, default=None,
                     help="Optional campaign folder under results/<protocol>/ (e.g. v1); its "
                          "runs and summary.csv stay inside that folder instead of the protocol root.")
+parser.add_argument("--variant", type=str, default=None,
+                    help="Suffix naming what was swapped against the base run (P04 substitutions: "
+                         "ckpt / suite / assets / protocol). Its own run_id, its own records.")
+parser.add_argument("--overwrite", action="store_true",
+                    help="Allow writing into an existing run_id whose record does not compare as "
+                         "comparable. Without it a differing record under the same run_id is refused.")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 # a -Play cfg arrives with every DR event already nulled, which silently turns
@@ -66,6 +73,7 @@ import isaaclab_tasks  # noqa: F401, E402  (registers the gym tasks)
 
 import host_paths  # noqa: E402  (machine-local IsaacLab root, see paths.example.yaml)
 import metrics  # noqa: E402
+import record  # noqa: E402  (sibling module: the eval record format, ARCH_PLAN Step 3.2a)
 import suites  # noqa: E402
 from components.command_player import CommandPlayer  # noqa: E402
 from components.dr_controller import apply_eval_mode  # noqa: E402
@@ -103,6 +111,12 @@ def _find_isaac_root() -> pathlib.Path | None:
 _LIZARD_ROOT = _git_root(_HARNESS_DIR)
 _ISAAC_ROOT = _find_isaac_root()
 _ISAAC_GIT_ROOT = _git_root(_ISAAC_ROOT)
+# The record asks two in-repo readers (the frozen asset lock and the declared obs protocol).
+# Both are stdlib-only, but they live under rl_exp, which is reached by absolute path rather
+# than as an installed package -- so the repo root joins sys.path here, next to the
+# provenance roots it was just derived from, instead of each reader guessing its own.
+if _LIZARD_ROOT is not None and str(_LIZARD_ROOT) not in sys.path:
+    sys.path.insert(0, str(_LIZARD_ROOT))
 _SUITE_REGISTRY = {
     "lizard_suite_v1": (suites.LIZARD_SUITE_V1_NAMES, suites.lizard_suite_v1),
 }
@@ -133,6 +147,123 @@ def _load_protocol(name: str) -> dict:
     path = _HARNESS_DIR / "protocols" / f"{name}.yaml"
     with open(path, encoding="utf-8") as f:
         return yaml.safe_load(f)
+
+
+def _package_version(name: str) -> str:
+    """Installed version of ``name``, or 'unknown' -- an unreadable version is not a guess."""
+    try:
+        return importlib.metadata.version(name)
+    except importlib.metadata.PackageNotFoundError:
+        return record.UNKNOWN
+
+
+def _protocol_reference(protocol: dict) -> dict:
+    """The protocol *file* this run was measured under: name, version and its content digest.
+
+    Recorded apart from the obs protocol identity (3.1a): one is the measurement contract,
+    the other is the layout the policies were trained under.
+    """
+    path = _HARNESS_DIR / "protocols" / f"{args_cli.protocol}.yaml"
+    return {
+        "name": protocol.get("name") or args_cli.protocol,
+        "version": protocol.get("version"),
+        "digest": record.file_sha256(path),
+    }
+
+
+def _suite_reference(protocol: dict, env_cfg) -> dict:
+    """The frozen terrain suite as swapped into this env cfg, plus its digest.
+
+    The digest is over the *instantiated* importer cfg, so a suite edit is visible even when
+    the run's env cfg digest is compared against another run's.
+    """
+    from rl_exp.tools.verify import cfg_snapshot
+
+    layout = protocol.get("suite_layout") or {}
+    return {
+        "name": protocol["suite"],
+        "num_rows": layout.get("num_rows"),
+        "num_cols": layout.get("num_cols"),
+        "envs_per_terrain": layout.get("envs_per_terrain"),
+        "terrains": list(_SUITE_REGISTRY[protocol["suite"]][0]),
+        "digest": cfg_snapshot.digest(cfg_snapshot.snapshot(env_cfg.scene.terrain)),
+    }
+
+
+def _obs_reference(task: str) -> dict:
+    """The declared obs protocol for this task (Step 3.1a) -- declared, not instantiated."""
+    identity, approved, note = record.UNKNOWN, record.UNKNOWN, ""
+    try:
+        from rl_exp.tools.runrecord import manifest as manifest_mod
+
+        ref = manifest_mod.protocol_ref(task)
+        identity = ref.get("obs_protocol") or record.UNKNOWN
+        approved = ref.get("obs_protocol_digest") or record.UNKNOWN
+        note = ref.get("obs_protocol_note") or ""
+    except Exception as err:  # a broken tree must degrade to 'unknown', never to no record
+        note = f"obs protocol lookup failed: {err!r}"
+    return {"identity": identity, "digest": approved, "note": note}
+
+
+def _assets_reference(env_cfg) -> dict:
+    """Declared asset lock digest vs the *actual* files: pass / fail / unknown."""
+    from rl_exp.tools.runrecord import manifest as manifest_mod
+
+    version = getattr(env_cfg, "params_version", None)
+    ref = manifest_mod.asset_digest(version if isinstance(version, str) else None, getattr(type(env_cfg), "params_line", None))
+    changed = ref.get("missing_or_changed") or []
+    manifest_sha = ref.get("manifest_sha256")
+    if manifest_sha is None:
+        verdict = "unknown"
+    else:
+        verdict = "fail" if changed else "pass"
+    return {
+        "declared_digest": manifest_sha or ref.get("lock_sha256") or record.UNKNOWN,
+        "lock": ref.get("lock"),
+        "file_count": ref.get("file_count"),
+        "manifest_sha256": manifest_sha or record.UNKNOWN,
+        "actual": {
+            "verdict": verdict,
+            "changed": changed[:10],
+            "detail": ref.get("detail") or (ref.get("closure") if manifest_sha else ""),
+        },
+    }
+
+
+def _runtime_reference(env_cfg, mbenv) -> dict:
+    """What actually ran, with the declared value kept in its own field.
+
+    The env cfg is not a substitute for either the installed versions or the values the
+    process ended up using (``--device``, num_envs), so declared and actual stay apart.
+    """
+    return {
+        "device": str(getattr(mbenv, "device", record.UNKNOWN)),
+        "device_declared": str(getattr(env_cfg.sim, "device", record.UNKNOWN)),
+        "num_envs": int(getattr(mbenv, "num_envs", -1)),
+        "num_envs_declared": int(getattr(env_cfg.scene, "num_envs", -1)),
+        "rsl_rl_version": _package_version("rsl-rl-lib"),
+        "sim_version": _package_version("isaacsim"),
+        "git_rev_lizard": _git_rev(_LIZARD_ROOT) if _LIZARD_ROOT != _ISAAC_GIT_ROOT else record.UNKNOWN,
+        "git_rev_isaaclab": _git_rev(_ISAAC_ROOT),
+    }
+
+
+def _perturbation_reference(protocol: dict, push) -> dict | None:
+    """The robust push as applied: step, kick magnitude, direction seed and horizon.
+
+    A robust protocol that declares no ``recovery_push`` applied no perturbation; that is
+    recorded as 'unknown' rather than left empty, so such a run cannot read as comparable to
+    a pushed one.
+    """
+    if args_cli.mode != "robust":
+        return None
+    push_cfg = (protocol.get("robust") or {}).get("recovery_push") or {}
+    return {
+        "t": push_cfg.get("t", record.UNKNOWN),
+        "kick_mps": push_cfg.get("kick_mps", record.UNKNOWN),
+        "direction_seed": args_cli.seed,
+        "num_steps": int(push[0]) if push is not None else record.UNKNOWN,
+    }
 
 
 def _round(value, digits=4):
@@ -166,14 +297,24 @@ def _prepare_env(protocol: dict) -> tuple[object, object]:
     return env_cfg, agent_cfg
 
 
-def _make_policy(wrapper, mbenv, agent_cfg, device) -> tuple[object, str]:
-    """Trained checkpoint policy or zero-action smoke policy."""
+def _make_policy(wrapper, mbenv, agent_cfg, device, rec: dict) -> tuple[object, str]:
+    """Trained checkpoint policy or zero-action smoke policy.
+
+    The checkpoint is hashed **here, at load**, into the record: this is the file the run
+    actually loaded, and the digest is re-read immediately after ``load`` so a checkpoint
+    overwritten while the run is in flight reads as a mismatch instead of being certified by
+    whatever sits at that path at the end (``record.read_state`` voids such a record).
+    """
     if args_cli.checkpoint is not None:
         agent_cfg.seed = args_cli.seed
         runner = OnPolicyRunner(wrapper, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
+        before = record.checkpoint_digest(args_cli.checkpoint)
         runner.load(args_cli.checkpoint)
+        rec["policy"] = {"kind": "checkpoint"}
+        rec["checkpoint"] = {**before, "sha256_after_load": record.file_sha256(before["resolved"])}
         return runner.get_inference_policy(device=device), args_cli.checkpoint
     action_dim = mbenv.action_manager.total_action_dim
+    rec["policy"] = {"kind": "zero_action", "action_dim": int(action_dim)}
 
     def policy(obs, _action_dim=action_dim):
         return torch.zeros(obs.shape[0], _action_dim, device=obs.device)
@@ -403,12 +544,34 @@ def _analyze(rollout: dict, protocol: dict, tilt_cos_min: float, clearance_min: 
     return result, segments, recovery
 
 
-def _persist(result: dict, segments: list, recovery: dict | None, run_id: str, tag: str):
-    """eval.json + one summary.csv row (same run_id overwritten)."""
+def _persist(result: dict, segments: list, recovery: dict | None, run_id: str, tag: str, rec: dict):
+    """record.json + eval.json + one summary.csv row (same run_id overwritten).
+
+    Run uniqueness (Step 3.2c) is decided **before anything is written**: a run_id that
+    already holds a record which does not compare as comparable is refused, not replaced --
+    "same name, new numbers" is how a table keeps a row nobody can reproduce. A re-run of the
+    same measurement is comparable by construction and simply overwrites itself.
+    """
     # directory keyed by the protocol FILE stem (stable); the display name stays in the JSON.
     # --group adds a campaign folder that owns both the run dirs and its summary.csv
     out_dir = _HARNESS_DIR / "results" / args_cli.protocol / (args_cli.group or "") / run_id
+    existing = out_dir / "record.json"
+    previous = record.load(existing) if existing.is_file() else None
+    refusal = record.overwrite_refusal(previous, rec)
+    if refusal is not None and not args_cli.overwrite:
+        raise SystemExit(
+            f"[EVAL] refusing to write run_id={run_id}: {refusal}. Give this run its own "
+            "identity with --variant, or replace the existing record with --overwrite."
+        )
+    state = record.read_state(rec)
+    if state["state"] != "complete":
+        raise SystemExit(
+            f"[EVAL] refusing to write an {state['state']} record for {run_id}: "
+            f"{state['missing'] or state['note']}"
+        )
     out_dir.mkdir(parents=True, exist_ok=True)
+    with open(existing, "w", encoding="utf-8") as f:
+        json.dump(rec, f, indent=2, ensure_ascii=False)
     with open(out_dir / "eval.json", "w", encoding="utf-8") as f:
         json.dump(result, f, indent=2, ensure_ascii=False)
 
@@ -430,18 +593,20 @@ def _persist(result: dict, segments: list, recovery: dict | None, run_id: str, t
         row["never_recovered"] = _round(recovery["never_recovered_frac"])
 
     summary_path = out_dir.parent / "summary.csv"
-    existing = []
+    kept_rows = []
     if summary_path.exists():
         with open(summary_path, encoding="utf-8") as f:
-            existing = [r for r in csv.DictReader(f) if r.get("run_id") != run_id]
+            kept_rows = [r for r in csv.DictReader(f) if r.get("run_id") != run_id]
     with open(summary_path, "w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=_SUMMARY_COLUMNS)
         writer.writeheader()
-        writer.writerows(existing)
+        writer.writerows(kept_rows)
         writer.writerow(row)
 
 
 def main():
+    from rl_exp.tools.verify import cfg_snapshot
+
     protocol = _load_protocol(args_cli.protocol)
     terrain_names = _SUITE_REGISTRY[protocol["suite"]][0]
 
@@ -454,7 +619,27 @@ def main():
     step_dt = mbenv.step_dt
     num_steps = int(round(float(protocol["episode_length_s"]) / step_dt))
 
-    policy, policy_label = _make_policy(wrapper, mbenv, agent_cfg, device)
+    # The record of conditions (Step 3.2b). Filled where each fact exists -- env-side facts
+    # here, the policy in _make_policy, the timeline once the player exists -- and written
+    # once in _persist, so a run that dies mid-rollout still leaves nothing half-recorded.
+    env_snap = cfg_snapshot.snapshot(env_cfg)
+    agent_snap = cfg_snapshot.snapshot(agent_cfg)
+    rec: dict = {
+        "record_format": record.RECORD_FORMAT,
+        "env_cfg": {"digest": cfg_snapshot.digest(env_snap), "snapshot": env_snap},
+        "agent_cfg": {
+            "digest": cfg_snapshot.digest(agent_snap),
+            "snapshot": agent_snap,
+            "clip_actions": agent_cfg.clip_actions,
+        },
+        "suite": _suite_reference(protocol, env_cfg),
+        "eval_protocol": _protocol_reference(protocol),
+        "obs_protocol": _obs_reference(args_cli.task),
+        "assets": _assets_reference(env_cfg),
+        "runtime": _runtime_reference(env_cfg, mbenv),
+    }
+
+    policy, policy_label = _make_policy(wrapper, mbenv, agent_cfg, device, rec)
 
     player = CommandPlayer(protocol["command_timeline"], mbenv.num_envs, device)
     cmd_term = mbenv.command_manager.get_term("base_velocity")
@@ -480,6 +665,24 @@ def main():
             recovery_mod.make_kick_directions(mbenv.num_envs, args_cli.seed, device),
         )
 
+    # the rest of the conditions: the timeline handed to the player and the windows the
+    # metrics cut from it, the thresholds, and (robust) the push as applied. `mbenv.cfg`
+    # cannot stand in for any of them -- they are all built after `gym.make`.
+    rec["commands"] = {
+        "timeline": protocol["command_timeline"],
+        "segments": player.segments(num_steps * step_dt, step_dt),
+    }
+    rec["metrics"] = {
+        "episode_length_s": float(protocol["episode_length_s"]),
+        "tracking_lin_threshold_mps": float(protocol["metrics"]["tracking_lin_threshold_mps"]),
+        "tracking_ang_threshold_radps": float(protocol["metrics"]["tracking_ang_threshold_radps"]),
+        "fall": {key: fall_cfg[key] for key in ("tilt_deg", "base_height_ratio", "sustain_s")},
+        "recovery": protocol["metrics"].get("recovery"),
+        "step_dt": step_dt,
+        "num_steps": num_steps,
+    }
+    rec["perturbation"] = _perturbation_reference(protocol, push)
+
     rollout = _rollout(wrapper, mbenv, robot, policy, player, cmd_term, scanner,
                        center_ray, push, num_steps, step_dt, device)
     gym_env.close()
@@ -493,7 +696,20 @@ def main():
     # strip only the gym API suffix of family ids ("-v0" at the very end);
     # teacher recipe versions ("-v1"/"-v2") are part of the run identity
     run_id = f"{re.sub(r'-v0$', '', args_cli.task)}_{tag}_{args_cli.mode}_seed{args_cli.seed}"
-    _persist(result, segments, recovery, run_id, tag)
+    if args_cli.variant:  # a swapped input gets its own identity, not the base run's
+        run_id = f"{run_id}_{args_cli.variant}"
+    rec["run"] = {
+        "run_id": run_id,
+        "task": args_cli.task,
+        "tag": tag,
+        "mode": args_cli.mode,
+        "seed": args_cli.seed,
+        "protocol_file": args_cli.protocol,
+        "variant": args_cli.variant,
+        "group": args_cli.group,
+        "timestamp": result["timestamp"],
+    }
+    _persist(result, segments, recovery, run_id, tag, rec)
 
     print(f"[EVAL] protocol={result['protocol']} mode={result['mode']} run_id={run_id}")
     # v2 hook liveness: it must capture one frame per early-ended episode, so 0
@@ -505,7 +721,13 @@ def main():
     if recovery is not None:
         print(f"[EVAL] recovery_mean={recovery['recovery_time_mean_s']:.2f}s "
               f"never_recovered={recovery['never_recovered_frac']:.2f}")
+    # the record's own verdict, so a reader does not have to open the file to know whether
+    # the conditions were all recorded (an 'unknown' value is complete, an absent one is not)
+    print(f"[EVAL] record={record.RECORD_FORMAT} state={record.read_state(rec)['state']} "
+          f"checkpoint={(rec.get('checkpoint') or {}).get('sha256') or 'none'} "
+          f"suite={rec['suite']['digest'][:19]} assets={rec['assets']['actual']['verdict']}")
     print(f"[EVAL] wrote results/{args_cli.protocol}/{args_cli.group + '/' if args_cli.group else ''}{run_id}/eval.json")
+    print(f"[EVAL] wrote results/{args_cli.protocol}/{args_cli.group + '/' if args_cli.group else ''}{run_id}/record.json")
 
 
 if __name__ == "__main__":

@@ -10,8 +10,37 @@
 ## 当前状态
 
 - 协议版本：**locomotion_eval_v2 当前**（`protocols/locomotion_eval_v2.yaml`）；`locomotion_eval_v1` 冻结封存，老结果留 `results/locomotion_eval_v1/` 原地（v1/v2 不得混表）
-- 代码基线：v1.6（协议 v2 落地：采样帧 → post-physics/pre-reset + 终止帧捕获 + 回归闸 `test_eval_frame_v2.py`；此前 v1.5.2 抽样入库 / v1.5 协议 v2 迁移规则 / v1.4 报告；可视化产物**不入库**）
+- 代码基线：v1.7（**eval 记录格式**：`record.py` + `eval.py` 四个采集点，每次 run 落 `record.json`，run 唯一性拒覆盖；此前 v1.6 协议 v2 采样帧；v1.5.2 抽样入库 / v1.5 协议 v2 迁移规则 / v1.4 报告；可视化产物**不入库**）
 - 部署形态：仓根独立目录，全部自定位。机器本地事实（IsaacLab 树 + venv 解释器）登记在仓根 `paths.yaml`（模板 `paths.example.yaml`），唯一读者 `host_paths.py`；`E:\IsaacLab\ablation_harness` junction 已废，原机可 `rmdir` 摘链接
+
+## 记录格式（`record_format`，独立于 eval 协议版本）
+
+一次 eval 的**条件**写在 `results/<协议>/[组/]<run_id>/record.json`（`eval.py` 与 `record.py`）：
+env cfg 与 agent/wrapper 配置（含 `clip_actions`）、实际命令时间线与解析出的 segment 窗口、
+扰动（`t`/`kick_mps`/方向 seed/步数）与指标阈值、`eval_protocol_digest`（协议 yaml 内容+name+version）、
+`obs_protocol_digest`（3.1a 声明身份+已审摘要，两者分开命名）、**加载时**哈希的 checkpoint
+（`sha256`+`size`+`mtime`，加载后立即复核）、资产（声明锁摘要 vs 实际文件 pass/fail/unknown）、
+运行时（实际 `device`/`num_envs` 与声明值分列、rsl_rl/sim 版本、两侧 git rev）。
+`gym.make` 后的 `cfg` 装不下这些：命令播放器、robust push、阈值与评估步数都在其后另建。
+
+**版本号独立**：协议语义变化（时间线/阈值/地形/DR/指标/采样帧）才开新 `locomotion_eval_vN`；
+纯溯源字段补充**不开新协议**，改这里的版本号（现行 `eval-record-1`）。
+
+**四条读侧规则**（`record.read_state`，合规即通过，违规即红，不做兼容）：
+
+1. 无 `record_format` = **legacy**：缺字段一律读作未知，不回写、不补齐、不推导；
+2. 有 `record_format` 但缺该格式必需字段 = **记录不完整**：既不得按 legacy 放行，也不得算通过
+   （未知值写 `"unknown"` 字符串，**空槽不算记录**）；
+3. 可比／不可比／未知分别有测试，缺证据**不得**自动升级为可比；
+4. 记录行为不得改变 rollout、随机数消费或指标计算 —— `record.py` 不 import torch/numpy/random，
+   由静态闸看守（`test_eval_record.py` 末例）。
+
+**可比性只看绑定面**（`record.BINDINGS`：checkpoint / suite / assets / eval 协议 / obs 协议身份+摘要）：
+任一侧 legacy 或不完整、或某绑定读作 unknown ⇒ **未知**；绑定不等 ⇒ **不可比**并点名是哪一项；
+其余元数据（run_id、时间戳、分组）不参与比较。
+
+**写侧两道硬门**：不完整的记录**拒绝落盘**（`_persist` 先判 state）；同一 `run_id` 已存在且不
+可比 ⇒ **拒绝覆盖**，须 `--variant` 另起身份（P04 四项替换各起独立 run）或 `--overwrite` 显式覆盖。
 
 ## 版本历史
 
@@ -30,6 +59,7 @@
 | # | 事项 | 优先级 |
 |---|---|---|
 | 1 | **v2 运行时验收尚未跑**：① v14 零动作冒烟（核对 `terminal frames captured=` == 早收局 env 数，= 0 即 hook 失效）；② 同一 ckpt v1/v2 对照（预期 fall_rate(v2) ≥ fall_rate(v1)，其余指标在 ±0.02 内）；③ 基线（v13/v10 的 ckpt）在 v2 下重跑，v2 行才有对账对象。原 #1（路径参数化）已由 v1.5.1 落地 | 高 |
+| 2 | **记录格式的真跑段尚未跑**（`ARCH_PLAN` Step 3.2d/3.2e 真跑半）：① 同 seed **无记录**重复（A/A 可重复性）——它是"记录代码不改变数字"对拍的前提，基线自身不可重复时该结论只能记**未知**；② 一次真实 run 落全六类内容并核验（3.2f）；③ P04 四项**真实替换**实验（ckpt/suite/资产/协议各一次，原记录与替换记录并存）；④ `--variant` / `--overwrite` 两条路径各跑一次。离线半已绿：`test_eval_record.py`（套件 [44]） | 高 |
 
 ## 升级触发（防"永远不升"）
 
@@ -60,3 +90,4 @@ harness 代码高频变更 / 多机器人共用 / 评测协议 v2 出现时 → 
 | 2026-09-07 | v1.5.1 | **主机路径参数化（挂账 #1 收账）**：新增仓根 `paths.yaml`（模板 `paths.example.yaml`，机器本地不入库）+ `host_paths.py`（纯 stdlib、不 import `rl_exp`、**无 PATH 兜底**，宁缺不猜）。六处改问同一解析器：`eval.py` IsaacLab 根、`run_ablation.py` 的 `_ISAAC_ROOT`（连带 `_log_dir_for_tag` 的 `logs/rsl_rl` glob 与 train/eval 的 cwd；找不到直接 SystemExit，`--summarize`/`--by-terrain` 不依赖故仍可裸跑）、`--python` 缺省、`run_offline_checks.bat` 引导、`hooks\pre-commit` 的 `PY`、`framework_pin_check.detect_root`。**provenance 同批修**：lizard 根改问 `git rev-parse --show-toplevel`，IsaacLab 根改问登记路径——旧代码把"调用路径的爹"当配置，junction 布局一死就把自己仓的 rev 记成 IsaacLab 的（表现为 `git_rev_lizard=unknown` + `git_rev_isaaclab` 串位），v5 campaign 各行已按新逻辑重跑纠正 | 用户："不同环境会找不到，要注册 isaac lab 与 env 的位置"；v5 评测实测踩到 rev 串位与 `_ISAAC_ROOT` 落错树 |
 | 2026-09-11 | v1.5.2 | 入库 CSV 瘦身：`dump_tb.py` 加 `--max_points`（按 tag 自适应抽样、保首尾——首尾必须留，`plot_tb` 标的就是末值；同长 tag 抽样后仍同长，否则墙上时间图静默消失）与 `--csv_in`（重抽样不需 tensorboard、不需 tfevents）；已训三版 `tb_scalars.csv` 20-22 MB → 210-227 KB，全量转 `tb_scalars.full.csv` 留机器本地（`.gitignore`），入库记录由全量抽样得到、可复现；`test_dump_tb_sampling.py` 入离线闸门 | 用户质疑"代码可生成的东西不该入库"——记录链的源头（tfevents）在 IsaacLab 树、机器本地且会被清理，故记录必须入库，缩的是存什么 |
 | 2026-09-15 | v1.6 | **协议 v2 落地（采样帧）**：`protocols/locomotion_eval_v2.yaml`（时间线/阈值/suite/DR 全抄 v1，唯一变更 = 帧定义）。`eval.py` 采样点从 `step()` 之前（obs 帧）移到之后（reward 帧），并 hook `mbenv._reset_idx` 在 auto-reset 覆盖数据前抓下**终止帧**——`step()` 内 `scene.update()` 与 `_reset_idx()` 之间是唯一可读窗口，IsaacLab 无公开回调（`record_pre_reset` 是 HDF5 形状），hook 失效由每次运行的 `terminal frames captured=N` 暴露。副产物：`end_pos` 改用终止帧（H1 的 pre-step 近似作废）。回归闸 `rl_exp/tools/verify/test_eval_frame_v2.py`（v1 截断读作 no-fall / v2 满窗读作 fall）入离线套件第 [20] 步。**已知代价**：帧右移一个 `step_dt`（20 ms），全指标有微小漂移 ⇒ 与 v1 行不可比 | 代码审查 #3：v1 丢掉终止帧，门闸 dwell 恰好满 25 帧收局的 episode 只能看到 24 帧 → fall 漏记 |
+| 2026-09-17 | v1.7 | **eval 记录格式（`ARCH_PLAN` Step 3.2a/3.2b/3.2c 离线半）**：新增 `record.py`（纯 stdlib：格式定义、三态读侧、绑定面比较、覆盖拒绝判定、checkpoint 文件摘要）+ `eval.py` 四个采集点与 `record.json` 落盘；新参数 `--variant`（替换项另起 run 身份）/`--overwrite`（显式覆盖）。闸门 `rl_exp/tools/verify/test_eval_record.py`（9 例：0c 四规则三态 / 同 run_id 拒覆盖 / P04 四替换 / 记录模块不碰 RNG 与框架）入离线套件第 [44] 步（0.2s，wave 178s）。规则节见上「记录格式」 | `ARCH_PLAN` v0.21 Step 3 施工件表；用户 2026-09-17 拍板"3.2/3.3 全开工，连真跑段" |

@@ -108,6 +108,8 @@ CHECKS: list[tuple[str, list[str]]] = [
     ("obs protocol declaration (laid out as declared, self-consistent, digests approved)",
      [f"{_V}/check_obs_protocol.py"]),
     ("obs protocol gate falsifier (each drift must still fire)", [f"{_V}/test_obs_protocol_gate.py"]),
+    ("eval record format (three-state read / P04 substitutions / run-id reuse)",
+     [f"{_V}/test_eval_record.py"]),
 ]
 
 
