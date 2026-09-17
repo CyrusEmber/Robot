@@ -1160,6 +1160,57 @@ resume 拒绝、save 守卫、`train.py` 的导入失败守卫、manifest 记录
 - C4 的 `launch` 档只证"新入口在 `gym.make` 前拒绝"；**旧 trainer 档**才证"拒绝留 T0"、**tuning 档**才证"调参入口不能绕过"，两者都要 sim。
 - 本批不新增套件条目（机制断言落在 `[41]` 内）。
 
+## B4 · 硬 B 加齿：路径归属元素 + agent 侧进清单 + baseline 锁入摘要看守（2026-09-17）
+
+**性质**：**追加**条目。上一节 B2/B4 列的四条里，本节收**三条**；第 4 条（注册表翻表 / 删版本类体）由并行批次的 `apply_into` + `recipe_class` 开头，本节只记**我核实的那一步**（见末节）。改动面 = `[41]`（`covers()` 方向、`hard_b` 的两侧、agent 段）、`versions/lizard/baseline/v1/diff.json`（format 2）、`[35]`（FROZEN 第 4 项 + `FROZEN_REVS` + 两表键一致性）。
+
+**顺带作废旧边界**：上一节"硬 B 只覆盖 env cfg"一条**自此失效** —— agent 侧已进清单。
+
+### 三条
+
+| 条 | 落地 |
+|---|---|
+| ① 每条路径必须归属某元素 | `diff.json` 的 env 条目改为 `{路径: {element, why}}`。`[41]` 用与 `attribution` **同一套 trace 重放**算出"每个元素真正动了哪些字段"，逐条比对：**没写元素名**、**元素名不存在**、**该元素不产出这条路径**——三种都红。⇒ 改清单消红必须同时改元素表，否则红（这正是上一节点名"同型洞"的堵法：归属不是自由文本，是断言） |
+| ② agent 进清单 | `diff.json.agent`：基准 = 框架 stock `RslRlOnPolicyRunnerCfg`，主体 = `recipes.json` 的 `agent_entry`（不在声明里抄第二份）。实测 stock 把 model/algorithm 整块留空 ⇒ **43 条差异**，**逐条列叶子**（写 `algorithm` 当一条前缀，等于让框架新增的 PPO 字段自动通过）。同一套双向校验：未声明 / 声明了没生效 |
+| ③ baseline 锁进 `[35]` | FROZEN 表第 4 项：`baseline/cfg_lock.json` sha256 `61d32e8d…`（**冻结于 `ed4d35b`**，晚于其余三份的 `020e6fb`）。新增 `FROZEN_REVS`——`check()` 是纯函数、自测拿它当纯函数证伪，把"谁在何时冻结"混进去等于污染被证伪的核心，故单独一张表只喂 banner，并校验**两表键一致** |
+
+### 判断
+
+- **方向**：`covers(声明项, 路径)`。条目通常比它覆盖的路径浅（`scene.robot` 覆盖 12 个叶子、`events.reset_base.params.pose_range` 覆盖 6 个 `__tuple__[n]`）。初版把方向写反，`[41]` **当场报 7 条假红** —— 假红本身是好事：说明这个比较真的在比，而不是恒空。
+- **agent 侧不做元素归属**：agent 是**类**不是声明，没有元素可归。所以它只带理由、不带元素名；`hard_b` 对两侧各施加**各自能施加**的校验，而不是把 env 的规则套上去假装两侧同构。
+- **baseline 锁的债是"最值钱"的那条**：这条线是接下来要真训的线，而在本条之前"它的 golden 被移动"**没有任何摘要看守**（B0 节原来只钉 3 份文件、且已记 baseline 线"落点未跟踪"）。现在合法重基线在这条线上也回到"两处编辑 + 理由 + 逐字段审查"。
+
+### 结果
+
+| 编号 | 命令 | 结果 |
+|---|---|---|
+| 硬 A + 硬 B | `[41]` | **通过**：`RECIPE_BUILD_OK (26 task(s) field-identical to the frozen golden; 76 declared difference(s) from the stock base)`（33 env + 43 agent） |
+| **反向验证**（五检测器 + 一张表） | 八处临时破坏 | **各自打对**：未声明 env 变化 / env 声明了没生效 / **归属元素不存在** / **归属元素不产出该路径** / agent 未声明（少一条叶子）/ agent 声明了没生效（多一条假叶子）/ 计数漂移（77≠76）/ `FROZEN_REVS` 与 `FROZEN` 键不一致（`GOLDEN_FROZEN_DRIFT`）。随后**原样回滚**，两闸复绿 |
+| golden 摘要 | `[35]`（含 `--self-test`） | **通过**：`GOLDEN_FROZEN_OK (4 baseline file(s) unchanged, frozen at: 020e6fb x3, ed4d35b x1)`；自测 `GOLDEN_FROZEN_SELFTEST_OK` |
+| 门 1 / 单写者 | `[24]` / `[37]` 复跑 | **通过**：`CFG_LOCK_OK (36 tasks, 3 line(s))` · `COMPONENT_OWNERSHIP_OK`（本批不改 cfg 内容） |
+
+### 第 4 条（版本类体并存的过渡税）：**已核实可删**，但本轮不动
+
+并行批次 384468e 已把机制备好（`apply_into` + `recipe_class`：声明做成"注册入口能指向的类"）。本批**只读**核实 baseline 线：
+
+| 比较 | 结果 |
+|---|---|
+| `recipe_class("v1", line="lizard/baseline", name="BaselineFlatEnvCfg")()` vs `build(…)` | **逐字段 0 差异** |
+| 同上 vs 该配方冻结 golden | **逐字段 0 差异** |
+
+⇒ 把注册项指到该合成类、同时删掉 `BaselineFlatEnvCfg.__post_init__` 的重复 body，**可以做到不看任何字段变化**。本轮不动的理由：那个 API 当时还在并行侧的工作树里（未提交），我在其上写调用点会把依赖钉在未提交代码上；且"翻表 + 删类体"是同一件事的三步（生成类 / 改两处字符串 / `name=` 对齐），归那一批做。
+
+### 提交归属（**写清楚，免得历史对不上**）
+
+本节的 `[41]` 改动**落在 384468e**（并行批次提交时，当时工作树里的 `[41]` 被一并 `git add` 进去）；本批自己的提交是 **`9894f73`**（`diff.json` format 2 + `[35]`）。两处合起来才是本节的完整改动面。
+
+### 边界
+
+- 硬 B **不判"这条差异是否合理"**：它只判"与基准的差异是否恰好等于声明"，合理性是 PLAN/review 的事。也不判真环境行为。
+- `FROZEN_REVS` 只喂 banner，**不是比较规则的一部分**（比较只看 `FROZEN` 摘要）。
+- agent 的"基准 = 框架 stock"未做像 env 那样的"基准确实是空"的机器校验（env 侧有 `wiring_is_stock_except`）；agent 侧直接以 stock 为基准，无中间接线类可夹带。
+- 本批**未跑全量套件端到端**（套件条目随并行批次变动）；所跑为 `[41]` `[35]`（含自测）`[24]` `[37]`。
+
 
 
 
