@@ -35,6 +35,7 @@ from rl_exp.tasks.teacher_mdp import (  # noqa: E402
     JointSIRTerrainCurriculumCfg,
     ParticleVelocityCommand,
 )
+from rl_exp.tools.verify import terrain_split_probe as probe  # noqa: E402
 
 NUM_ENVS = 6
 GRID = {
@@ -55,16 +56,32 @@ class _Scene(dict):
         self.terrain = terrain
 
 
+_CFG = None
+
+
+def _generator_cfg():
+    """The param-grid cfg, generated for real once per process.
+
+    The term consumes the record of the generation that actually ran (ARCH_PLAN Step 3.3d),
+    so the test must not write the column mapping itself -- one real generation supplies it,
+    and the mock below only wires in the origins the importer would have built from it.
+    """
+    global _CFG
+    if _CFG is None:
+        _CFG = build_param_grid_terrain_cfg(GRID)
+        probe.generate_record(_CFG)
+    return _CFG
+
+
 def _terrain():
-    cfg = build_param_grid_terrain_cfg(GRID)
+    cfg = _generator_cfg()
     origins = torch.zeros(2, 12, 3)
     origins[:, :, 0] = torch.arange(2).unsqueeze(1) * 100.0
     origins[:, :, 1] = torch.arange(12).unsqueeze(0)
-    gen_cfg = SimpleNamespace(sub_terrains=cfg.sub_terrains)
     # importer formula (terrain_importer.py:348-350): env i -> initial column
     types = torch.tensor([0, 2, 6, 8, 10, 11], dtype=torch.long)
     return SimpleNamespace(
-        cfg=SimpleNamespace(terrain_generator=gen_cfg),
+        cfg=SimpleNamespace(terrain_generator=cfg),
         terrain_origins=origins,
         terrain_levels=torch.zeros(NUM_ENVS, dtype=torch.long),
         terrain_types=types,
@@ -126,15 +143,32 @@ def test_builder_combos_and_ranges() -> None:
         raise AssertionError("num_cols=6 must raise (stairs combos lose their column)")
 
 
-def test_parse_split_and_radix() -> None:
-    term = _term(_env(_terrain()))
+def test_parse_and_column_ownership() -> None:
+    """Combo parsing plus the column ownership the **record** declares.
+
+    The hand-derived column runs that used to live here were a second copy of the generator's
+    split (ARCH_PLAN Step 3.3e): what is checked now is that the term agrees with the record
+    of the generation that really ran, not with an expectation written next to it.
+    """
+    terrain = _terrain()
+    term = _term(_env(terrain))
     assert term._types == ["stairs", "random_rough", "flat"]
     assert term._n_levels[0] == [2, 3] and term._n_pairs[0] == 18
-    assert [c.numel() for c in term._combo_cols[0]] == [1] * 6
-    assert [c.numel() for c in term._combo_cols[1]] == [2, 2]
-    assert [c.numel() for c in term._combo_cols[2]] == [2]
-    # env -> type follows the initial columns [0, 2, 6, 8, 10, 11]
-    assert term._env_type.tolist() == [0, 0, 1, 1, 2, 2]
+    record = probe.record_for(terrain)
+    by_type: dict[str, set[int]] = {}
+    for col, index in enumerate(record["columns"]):
+        by_type.setdefault(record["sub_terrains"][index].partition("|")[0], set()).add(col)
+    owned_total = 0
+    for type_index, type_cols in enumerate(term._combo_cols):
+        owned = {col for cols in type_cols for col in cols.tolist()}
+        owned_total += len(owned)
+        assert owned == by_type[term._types[type_index]], \
+            f"{term._types[type_index]}: combos own {sorted(owned)}, the record says {sorted(by_type[term._types[type_index]])}"
+    assert owned_total == len(record["columns"]), "every column belongs to exactly one combo"
+    # env -> type follows the initial column, as the record maps it
+    for env_index, col in enumerate(terrain.terrain_types.tolist()):
+        declared = record["sub_terrains"][record["columns"][col]].partition("|")[0]
+        assert declared == term._types[int(term._env_type[env_index])], f"env {env_index} (col {col})"
     # mixed-radix roundtrip (last axis fastest, product order)
     assert term._decode_levels(0, 5) == [1, 2]
     assert term._encode_combo(0, [1, 2]) == 5
@@ -153,14 +187,15 @@ def test_initial_spawn_reassigns_all_envs() -> None:
     # every env got a pair + a bucket velocity
     assert (term._env_pair >= 0).all()
     assert torch.isin(term.desired_vel, torch.tensor(VEL_BUCKETS)).all()
-    # spawn origins consistent with (row, col); columns stay within the env's type
-    bounds = {0: (0, 5), 1: (6, 9), 2: (10, 11)}
+    # spawn origins consistent with (row, col); a column's type is the record's, not a bound
+    # written down here (Step 3.3e deleted the hand-derived copy of the split)
+    record = probe.record_for(t)
     for i in range(NUM_ENVS):
         r, c = int(t.terrain_levels[i]), int(t.terrain_types[i])
         assert torch.equal(t.env_origins[i], t.terrain_origins[r, c])
         assert 0 <= r < 2
-        lo, hi = bounds[int(term._env_type[i])]
-        assert lo <= c <= hi
+        declared = record["sub_terrains"][record["columns"][c]].partition("|")[0]
+        assert declared == term._types[int(term._env_type[i])], f"env {i} (col {c})"
     # metrics dict contract (review #5: the verified frontier stays 0 until evidence
     # settles; the raw sampled max moved to its own key; review #1: per-type Tr)
     assert set(out) == {

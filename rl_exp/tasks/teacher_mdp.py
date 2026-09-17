@@ -42,6 +42,8 @@ from isaaclab.utils.configclass import configclass
 from isaaclab.utils.math import euler_xyz_from_quat, quat_apply_inverse, yaw_quat
 from isaaclab.utils.warp.kernels import raycast_mesh_masked_kernel
 
+from rl_exp.tools.verify import terrain_split_probe
+
 # ponytail: RayCaster is deliberately NOT imported at module top. This module is
 # imported by env cfgs during hydra compose (pre-AppLauncher); a top-level
 # `from isaaclab.sensors.ray_caster import RayCaster` drags in
@@ -749,21 +751,12 @@ class SpawnWeightSIRTerrainCurriculum(ManagerTermBase):
         origins = terrain.terrain_origins
         self._num_rows = int(origins.shape[0])
         num_cols = int(origins.shape[1])
-        # column -> sub-terrain type, replicating TerrainGenerator's
-        # curriculum split verbatim (normalized-proportion cumsum with the
-        # +0.001 boundary epsilon, terrain_generator.py:243-247)
-        proportions = [float(sub.proportion) for sub in gen_cfg.sub_terrains.values()]
-        total = sum(proportions)
-        cum = []
-        acc = 0.0
-        for p in proportions:
-            acc += p / total
-            cum.append(acc)
-        sub_index = []
-        for col in range(num_cols):
-            frac = col / num_cols + 0.001
-            sub_index.append(next(i for i, c in enumerate(cum) if frac < c))
-        self._num_types = len(proportions)
+        # column -> sub-terrain type comes from the record of the generation that actually
+        # ran (ARCH_PLAN Step 3.3d): this term used to replicate TerrainGenerator's
+        # curriculum split verbatim, which is a second copy of a rule the generator owns
+        record = terrain_split_probe.record_for(terrain)
+        sub_index = list(record["columns"])
+        self._num_types = len(record["sub_terrains"])
         device = origins.device
         self._type_cols = [
             torch.tensor([c for c in range(num_cols) if sub_index[c] == t], dtype=torch.long, device=device)
@@ -1104,22 +1097,12 @@ class JointSIRTerrainCurriculum(ManagerTermBase):
         self._num_rows = int(origins.shape[0])
         num_cols = int(origins.shape[1])
         device = origins.device
-        # parse combo names -> (type, levels); column -> sub-terrain index,
-        # replicating TerrainGenerator's curriculum split verbatim
-        # (terrain_generator.py:243-247)
-        names = list(gen_cfg.sub_terrains.keys())
-        proportions = [float(sub.proportion) for sub in gen_cfg.sub_terrains.values()]
-        total = sum(proportions)
-        cum = []
-        acc = 0.0
-        for p in proportions:
-            acc += p / total
-            cum.append(acc)
-        col_sub = []
-        for col in range(num_cols):
-            frac = col / num_cols + 0.001
-            col_sub.append(next(i for i, c in enumerate(cum) if frac < c))
-        col_sub = torch.tensor(col_sub, dtype=torch.long, device=device)
+        # parse combo names -> (type, levels); the column -> sub-terrain index comes from the
+        # record of the generation that actually ran (ARCH_PLAN Step 3.3d), not from a second
+        # copy of TerrainGenerator's curriculum split
+        record = terrain_split_probe.record_for(terrain)
+        names = list(record["sub_terrains"])
+        col_sub = torch.tensor(record["columns"], dtype=torch.long, device=device)
         # types in first-appearance order; per type: combo level tuples
         self._types: list[str] = []
         type_combos: dict[str, list[tuple[int, ...]]] = {}

@@ -35,6 +35,7 @@ import isaaclab_tasks.manager_based.locomotion.velocity.mdp as mdp
 
 from rl_exp.tasks import teacher_mdp
 from rl_exp.tasks.param_grid_terrain import build_param_grid_terrain_cfg
+from rl_exp.tools.verify import terrain_split_probe
 
 # The four feet, in the order the extero obs group and the network reshape contract use.
 FEET: tuple[str, ...] = ("lf", "rf", "rl", "rr")
@@ -270,6 +271,10 @@ def terrain(version: str, *, params: dict, payloads: dict[str, object]) -> dict[
             f" known: {sorted(TERRAIN_BY_RECIPE)}"
         )
     payload, start_level = TERRAIN_BY_RECIPE[version]
+    # The generator is built *inside* TerrainImporter from this cfg, and it generates while
+    # it is being constructed, so the split probe has to be watching before the cfg leaves
+    # here -- wrapping an instance afterwards would be too late (ARCH_PLAN Step 3.3d).
+    terrain_split_probe.install()
     if payload is None:
         # the builder sets curriculum=True itself: replacing a generator afterwards drops the
         # flag, and the column split stops being deterministic

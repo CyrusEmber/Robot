@@ -79,6 +79,7 @@ from rl_exp.tasks.teacher_env_cfg import (  # noqa: E402
     LizardRoughTeacherEnvCfg_V14,
 )
 from rl_exp.tasks.teacher_mdp import JOINT_SIR_TERM, ck_value, init_ck  # noqa: E402
+from rl_exp.tools.verify import terrain_split_probe as probe  # noqa: E402
 from test_joint_sir import (  # noqa: E402
     GRID,
     NUM_ENVS,
@@ -234,9 +235,10 @@ def test_static_fingerprint_catches_grid_edit() -> None:
     state = collect(env1)
 
     cfg13 = build_param_grid_terrain_cfg({**GRID, "num_cols": 13})
+    probe.generate_record(cfg13)  # the term reads the record of a real generation
     origins = torch.zeros(2, 13, 3)
     terrain13 = SimpleNamespace(
-        cfg=SimpleNamespace(terrain_generator=SimpleNamespace(sub_terrains=cfg13.sub_terrains)),
+        cfg=SimpleNamespace(terrain_generator=cfg13),
         terrain_origins=origins,
         terrain_levels=torch.zeros(NUM_ENVS, dtype=torch.long),
         terrain_types=torch.tensor([0, 2, 7, 9, 11, 12], dtype=torch.long),
@@ -478,15 +480,37 @@ class _TaskCfgV14Plain:
     """The same recipe WITHOUT the declaration (a task that tolerates a cold curriculum)."""
 
 
+_ROW_CFGS: dict[tuple, object] = {}
+
+
+def _row_generator_cfg(names, props, rows, cols):
+    """A real generator cfg (flat planes: cheap) with one real generation behind it.
+
+    The row-SIR term consumes the record of the generation that ran (ARCH_PLAN Step 3.3d);
+    the column split is the generator's, not something this test writes down.
+    """
+    key = (tuple(names), tuple(props), rows, cols)
+    if key not in _ROW_CFGS:
+        from isaaclab.terrains import MeshPlaneTerrainCfg, TerrainGeneratorCfg
+
+        cfg = TerrainGeneratorCfg(
+            size=(2.0, 2.0), border_width=0.5, num_rows=rows, num_cols=cols,
+            curriculum=True, seed=0, use_cache=False,
+            sub_terrains={name: MeshPlaneTerrainCfg(proportion=p) for name, p in zip(names, props)},
+        )
+        probe.generate_record(cfg)
+        _ROW_CFGS[key] = cfg
+    return _ROW_CFGS[key]
+
+
 def _row_grid(names, props, *, rows=10, cols=20):
     """A row-SIR terrain grid: ordered sub-terrain names, proportions, column split."""
     origins = torch.zeros(rows, cols, 3)
     origins[:, :, 0] = torch.arange(rows).unsqueeze(1) * 100.0
     origins[:, :, 1] = torch.arange(cols).unsqueeze(0) * 1.0
-    sub = {name: SimpleNamespace(proportion=p) for name, p in zip(names, props)}
     types = (torch.arange(ROW_ENVS).float() / (ROW_ENVS / cols)).long()
     return SimpleNamespace(
-        cfg=SimpleNamespace(terrain_generator=SimpleNamespace(sub_terrains=sub)),
+        cfg=SimpleNamespace(terrain_generator=_row_generator_cfg(names, props, rows, cols)),
         terrain_origins=origins,
         terrain_levels=torch.zeros(ROW_ENVS, dtype=torch.long),
         terrain_types=types,

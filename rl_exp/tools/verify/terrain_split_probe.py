@@ -42,13 +42,14 @@ _PENDING: dict[int, list[tuple[int, float, str]]] = {}
 _INSTALLED = False
 
 
-def _combo_named(cfg) -> bool:
-    """Is this generator cfg built by ``param_grid_terrain.build_param_grid_terrain_cfg``?
+def _watched(cfg) -> bool:
+    """Is this generator cfg one whose split is a column mapping?
 
-    Its combo names are ``<type>|<lvl>_<lvl>...``; the eval suites and every pre-v11 recipe
-    name their sub-terrains plainly, and nothing of theirs is captured.
+    Curriculum mode assigns one sub-terrain per column; the random mode samples per cell and
+    has no column mapping to declare (ARCH_PLAN Step 3.3, "模式区分"), so watching it would
+    only manufacture a claim it does not make.
     """
-    return any("|" in name for name in cfg.sub_terrains)
+    return bool(getattr(cfg, "curriculum", False))
 
 
 def _name_of(cfg, sub_cfg) -> str | None:
@@ -82,9 +83,24 @@ def install() -> None:
 
     original_get = TerrainGenerator._get_terrain_mesh
     original_add = TerrainGenerator._add_sub_terrain
+    original_curriculum = TerrainGenerator._generate_curriculum_terrains
+    original_random = TerrainGenerator._generate_random_terrains
+
+    def _start_generation(cfg) -> None:
+        """A generation begins here: drop whatever the previous one left for this cfg."""
+        _RECORDS.pop(id(cfg), None)
+        _PENDING.pop(id(cfg), None)
+
+    def generate_curriculum(self):
+        _start_generation(self.cfg)
+        return original_curriculum(self)
+
+    def generate_random(self):
+        _start_generation(self.cfg)
+        return original_random(self)
 
     def get_terrain_mesh(self, difficulty, cfg):
-        if _combo_named(self.cfg):
+        if _watched(self.cfg):
             record = _record_for_cfg(self.cfg)
             name = _name_of(self.cfg, cfg)
             if name is None:
@@ -98,7 +114,7 @@ def install() -> None:
         return original_get(self, difficulty, cfg)
 
     def add_sub_terrain(self, mesh, origin, row, col, sub_terrain_cfg):
-        if _combo_named(self.cfg):
+        if _watched(self.cfg):
             key = id(self.cfg)
             record = _record_for_cfg(self.cfg)
             pending = _PENDING.setdefault(key, [])
@@ -118,8 +134,9 @@ def install() -> None:
 
     TerrainGenerator._get_terrain_mesh = get_terrain_mesh
     TerrainGenerator._add_sub_terrain = add_sub_terrain
+    TerrainGenerator._generate_curriculum_terrains = generate_curriculum
+    TerrainGenerator._generate_random_terrains = generate_random
     _INSTALLED = True
-
 
 def _drain_leftovers(cfg) -> dict:
     """Record gets that never got their add, then forget them (they are per-generation)."""
@@ -141,6 +158,19 @@ def record(cfg, *, verify: bool = True) -> dict:
                 f"terrain split record for cfg {id(cfg)} cannot be consumed: " + "; ".join(problems[:5])
             )
     return record
+
+
+def generate_record(cfg, *, device: str = "cpu") -> dict:
+    """Install the probe, run a real generator with ``cfg``, and return its record.
+
+    The offline path for handing a consumer a record a **real generation** produced: the
+    generator owns the split, so a test or an offline check must not write the mapping itself.
+    """
+    install()
+    from isaaclab.terrains import TerrainGenerator
+
+    TerrainGenerator(cfg=cfg, device=device)
+    return record(cfg)
 
 
 def record_for(terrain, *, verify: bool = True) -> dict:

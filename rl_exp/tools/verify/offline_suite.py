@@ -112,6 +112,8 @@ CHECKS: list[tuple[str, list[str]]] = [
      [f"{_V}/test_eval_record.py"]),
     ("terrain split rule and record (hand-computed split / pairing identity / sanity refusals)",
      [f"{_V}/test_terrain_map.py"]),
+    ("terrain split rule has one home (no reintroduced copy; detector self-tested)",
+     [f"{_V}/check_terrain_split_source.py"]),
 ]
 
 

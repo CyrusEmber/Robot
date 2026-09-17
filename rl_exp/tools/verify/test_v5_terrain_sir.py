@@ -5,12 +5,15 @@
 
 """Offline unit test for the v5.3 SIR terrain curriculum (no sim, plain torch).
 
-Checks, against a fully mocked env/terrain: the TerrainGenerator column ->
-type split replication, the initial full reset (no stats pollution, origins
-re-pointed consistently), the terminal-episode success predicate (survival +
-displacement >= ratio x commanded distance), the soft band edges, band-driven
-resampling, insufficient-traffic weight retention, random-walk clamping,
-replay-memory redraws and the block-evaluation throttle.
+Checks, against a mocked env/terrain: the column -> type split **as the record of a real
+generation declares it** (the hand-written replication this file used to carry was deleted in
+ARCH_PLAN Step 3.3e), the initial full reset (no stats pollution, origins re-pointed
+consistently), the terminal-episode success predicate (survival + displacement >= ratio x
+commanded distance), the soft band edges, band-driven resampling, insufficient-traffic weight
+retention, random-walk clamping, replay-memory redraws and the block-evaluation throttle.
+
+The mock's generator cfg is real and cheap (flat planes): the term consumes the record a real
+``TerrainGenerator`` produced, so nothing here re-states the split rule.
 """
 
 import pathlib
@@ -26,6 +29,7 @@ from rl_exp.tasks.teacher_mdp import (  # noqa: E402
     SpawnWeightSIRTerrainCurriculum,
     SIRTerrainCurriculumCfg,
 )
+from rl_exp.tools.verify import terrain_split_probe as probe  # noqa: E402
 
 NUM_ENVS = 8
 NUM_ROWS = 10
@@ -40,12 +44,35 @@ class _Scene(dict):
         self.terrain = terrain
 
 
+_CFGS: dict[tuple, object] = {}
+
+
+def _generator_cfg(sub_props=(0.2, 0.3, 0.5)):
+    """A real generator cfg (flat planes, so it is cheap) with one real generation behind it.
+
+    The term consumes the record of the generation that ran (ARCH_PLAN Step 3.3d), so the
+    mock must hand it a cfg whose split the **generator** decided -- writing the mapping in
+    the test is exactly the copy 3.3e deleted.
+    """
+    key = tuple(sub_props)
+    if key not in _CFGS:
+        from isaaclab.terrains import MeshPlaneTerrainCfg, TerrainGeneratorCfg
+
+        cfg = TerrainGeneratorCfg(
+            size=(2.0, 2.0), border_width=0.5, num_rows=NUM_ROWS, num_cols=NUM_COLS,
+            curriculum=True, seed=0, use_cache=False,
+            sub_terrains={f"t{i}": MeshPlaneTerrainCfg(proportion=p) for i, p in enumerate(sub_props)},
+        )
+        probe.generate_record(cfg)
+        _CFGS[key] = cfg
+    return _CFGS[key]
+
+
 def _terrain(sub_props=(0.2, 0.3, 0.5)):
     origins = torch.zeros(NUM_ROWS, NUM_COLS, 3)
     origins[:, :, 0] = torch.arange(NUM_ROWS).unsqueeze(1) * 100.0
     origins[:, :, 1] = torch.arange(NUM_COLS).unsqueeze(0) * 1.0
-    sub_terrains = {f"t{i}": SimpleNamespace(proportion=p) for i, p in enumerate(sub_props)}
-    gen_cfg = SimpleNamespace(sub_terrains=sub_terrains)
+    gen_cfg = _generator_cfg(sub_props)
     # importer formula (terrain_importer.py:348-350)
     types = (torch.arange(NUM_ENVS).float() / (NUM_ENVS / NUM_COLS)).long()
     return SimpleNamespace(
@@ -84,14 +111,17 @@ def _term(env, **overrides):
     )
 
 
-def test_column_type_mapping() -> None:
-    # cum(normalized 0.2/0.3/0.5) = [0.2, 0.5, 1.0] -> cols 0-3 / 4-9 / 10-19
-    term = _term(_env(_terrain()))
-    assert term._type_cols[0].tolist() == [0, 1, 2, 3]
-    assert term._type_cols[1].tolist() == list(range(4, 10))
-    assert term._type_cols[2].tolist() == list(range(10, 20))
-    # env -> type follows the initial columns [0, 2, 5, 7, 10, 12, 15, 17]
-    assert term._env_type.tolist() == [0, 0, 1, 1, 2, 2, 2, 2]
+def test_column_type_mapping_follows_the_record() -> None:
+    """Per-type column runs are the ones the record declares (not a hand-written split)."""
+    terrain = _terrain()
+    term = _term(_env(terrain))
+    record = probe.record_for(terrain)
+    for type_index, cols in enumerate(term._type_cols):
+        declared = [col for col, index in enumerate(record["columns"]) if index == type_index]
+        assert cols.tolist() == declared, f"type {type_index}: {cols.tolist()} vs record {declared}"
+    # env -> type follows the initial column, as the record maps that column
+    for env_index, col in enumerate(terrain.terrain_types.tolist()):
+        assert record["columns"][col] == int(term._env_type[env_index]), f"env {env_index}"
 
 
 def test_initial_spawn_reassigns_all_envs() -> None:
@@ -210,7 +240,7 @@ def test_block_eval_throttle() -> None:
 
 def main() -> int:
     tests = [
-        test_column_type_mapping,
+        test_column_type_mapping_follows_the_record,
         test_initial_spawn_reassigns_all_envs,
         test_success_predicate,
         test_band_soft_edges,
