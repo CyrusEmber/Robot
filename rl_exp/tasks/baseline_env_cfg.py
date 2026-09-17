@@ -105,13 +105,35 @@ class BaselineActionsCfg(ActionsCfg):
 
 
 @configclass
-class BaselineFlatEnvCfg(LocomotionVelocityRoughEnvCfg):
-    """Flat ground, fixed 0.5 m/s forward, no curriculum, no randomization."""
+class BaselineWiringCfg(LocomotionVelocityRoughEnvCfg):
+    """The shared wiring this line's recipes start from: the framework stock cfg, plus identity.
 
-    # declared owner and version: the pair every gate routes by. ClassVar on purpose --
-    # a plain member becomes a dataclass field and would change the config snapshot.
+    The teacher line splits the same way -- a base that resolves every structural choice from the
+    version it is handed, and per-recipe deltas on top. This is that base for the baseline line,
+    and it is deliberately *empty*: the framework stock ``LocomotionVelocityRoughEnvCfg`` plus the
+    two members every gate routes by. ``BaselineFlatEnvCfg`` below is what used to be the only
+    thing here: the whole recipe, inlined. Its body is a declaration now
+    (``rl_exp.tasks.recipe``), so "what v1 is" is readable as an ordered element list instead of
+    as the residue of one ``__post_init__``.
+
+    The identity members are the point, not decoration: a base class that did not declare
+    ``params_line`` would make the builder stamp an *instance* attribute the snapshot cannot
+    filter the same way the class path filters it, and the two paths would differ by a field that
+    says nothing about the recipe.
+    """
+
     params_line: ClassVar[str] = _LINE_KEY
     params_version = _DEFAULT_VERSION
+
+
+@configclass
+class BaselineFlatEnvCfg(BaselineWiringCfg):
+    """Flat ground, fixed 0.5 m/s forward, no curriculum, no randomization.
+
+    Kept as the class path the frozen golden was built through: the declaration path
+    (``recipe.build("v1", line="lizard/baseline")``) is compared against that golden field for
+    field, so this body and the declared elements have to agree until the entry points move.
+    """
 
     def __post_init__(self):
         super().__post_init__()
