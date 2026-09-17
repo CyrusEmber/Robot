@@ -97,6 +97,33 @@ def test_unknown_valued_binding_is_complete_but_not_comparable() -> None:
     assert record.read_state(other)["state"] == "complete", "the field is recorded, only its value is unknown"
     verdict = record.compare(one, other)
     assert verdict["verdict"] == "unknown", f"unknown evidence must not compare as equal: {verdict}"
+    assert verdict["unproven"] == ["assets.declared_digest"], \
+        f"the unproven binding must be named: {verdict}"
+    assert list(verdict["differences"]) == ["assets.declared_digest"], \
+        "one side has a digest and the other does not: that is a difference too"
+
+
+def test_equal_unknowns_are_indistinguishable_but_unproven() -> None:
+    """Two records whose binding is unknown on *both* sides are the same measurement re-run.
+
+    They are not comparable in the strong sense (nothing was proven) -- the verdict stays
+    ``unknown`` -- but nothing differs, so a re-run of that measurement must be allowed to
+    overwrite itself. This is the dev line, where no frozen asset lock exists at all.
+    """
+    dev = _record()
+    dev["assets"]["declared_digest"] = record.UNKNOWN
+    twin = _record()
+    twin["assets"]["declared_digest"] = record.UNKNOWN
+    verdict = record.compare(dev, twin)
+    assert verdict["verdict"] == "unknown" and verdict["differences"] == {}, \
+        f"equal unknowns are not a difference: {verdict}"
+    assert verdict["unproven"] == ["assets.declared_digest"], "and they must be visible as unproven"
+    assert record.overwrite_refusal(dev, twin) is None, \
+        "an identical measurement re-run must be able to overwrite itself"
+    # but the dev record and a locked one do differ, and that stays refused
+    refusal = record.overwrite_refusal(dev, _record())
+    assert refusal is not None and "assets.declared_digest" in refusal, \
+        f"unknown vs a real digest is a difference: {refusal}"
 
 
 def test_conditions_carry_their_own_required_fields() -> None:
@@ -176,6 +203,10 @@ def test_run_id_reuse_is_refused_unless_comparable() -> None:
         f"a swapped suite under the same run_id must be refused, and say why: {refusal}"
     assert record.overwrite_refusal({"task": "Lizard-Rough-v14"}, base) is not None, \
         "a legacy record at that run_id cannot certify anything, so it is refused too"
+    # a *run directory* holding results but no record is the same case: 25 of the 31 run dirs
+    # in the harness predate the format, and nothing may be written over them by accident
+    assert record.overwrite_refusal(record.legacy_run(), base) is not None, \
+        "an eval.json without a record.json is a legacy run, not an empty run_id"
 
 
 def test_checkpoint_digest_follows_the_file() -> None:

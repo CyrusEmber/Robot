@@ -212,54 +212,87 @@ def read_state(record: dict) -> dict:
 def compare(a: dict, b: dict) -> dict:
     """Comparability of two records: ``comparable`` / ``not_comparable`` / ``unknown``.
 
-    A missing side, or an ``"unknown"`` binding on either side, is **unknown**: absent
-    evidence never upgrades itself into comparability. A differing binding is
-    ``not_comparable`` and names which one moved. Metadata that does not bind the
-    measurement (run id, timestamp, group) is deliberately not compared.
+    A missing side, or a binding that reads :data:`UNKNOWN`, is **unknown**: absent evidence
+    never upgrades itself into comparability. ``differences`` holds only bindings whose values
+    actually **differ**; ``unproven`` names bindings that read ``unknown`` on both sides -- equal,
+    but equal in the absence of a value. A binding that reads ``unknown`` on one side and is
+    known on the other is both. Metadata that does not bind the measurement (run id, timestamp,
+    group) is deliberately not compared.
     """
-    for label, record in (("a", a), ("b", b)):
-        state = read_state(record)
+    for label, side in (("a", a), ("b", b)):
+        state = read_state(side)
         if state["state"] != "complete":
             return {
                 "verdict": "unknown",
                 "reason": f"{label} record is {state['state']}: {state['note'] or state['missing']}",
                 "differences": {},
+                "unproven": [],
             }
     differences: dict[str, dict] = {}
+    unproven: list[str] = []
     for path in BINDINGS:
         left, right = get(a, path), get(b, path)
         left = None if left is _MISSING else left
         right = None if right is _MISSING else right
         if left is None and right is None:
             continue
+        if left == right:
+            if left == UNKNOWN:
+                unproven.append(path)
+            continue
+        differences[path] = {"a": left, "b": right}
         if left == UNKNOWN or right == UNKNOWN:
-            return {
-                "verdict": "unknown",
-                "reason": f"{path} is unknown on one side",
-                "differences": {path: {"a": left, "b": right}},
-            }
-        if left != right:
-            differences[path] = {"a": left, "b": right}
+            unproven.append(path)
     if differences:
-        return {"verdict": "not_comparable", "reason": "bindings differ", "differences": differences}
-    return {"verdict": "comparable", "reason": "", "differences": {}}
+        reason = "bindings differ" if not unproven else f"{', '.join(unproven)} cannot be compared"
+        return {
+            "verdict": "unknown" if unproven else "not_comparable",
+            "reason": reason,
+            "differences": differences,
+            "unproven": unproven,
+        }
+    if unproven:
+        return {
+            "verdict": "unknown",
+            "reason": f"{', '.join(unproven)} is unknown on both sides: equal, but unproven",
+            "differences": {},
+            "unproven": unproven,
+        }
+    return {"verdict": "comparable", "reason": "", "differences": {}, "unproven": []}
+
+
+def legacy_run() -> dict:
+    """A stand-in for a run that predates the format: results, but no record.
+
+    It reads as ``legacy``, so a run directory holding an ``eval.json`` and no ``record.json``
+    is refused exactly like a legacy record rather than mistaken for an empty run_id -- 3.2c
+    exists because an existing run whose identity cannot be established must not be replaced
+    silently.
+    """
+    return {"note": "run directory holds results without a record (pre-format)"}
 
 
 def overwrite_refusal(previous: dict | None, current: dict) -> str | None:
     """Why writing ``current`` over ``previous`` must be refused, or ``None`` when it may proceed.
 
-    ``None`` previous means nothing sits at that run_id. A comparable pair is the same
-    measurement re-run, which overwrites itself. Everything else -- a moved binding, a legacy
-    record, an incomplete one -- is refused: "same run_id, new numbers" is how a table keeps a
-    row nobody can reproduce, so the caller has to either name the difference or say so.
+    ``None`` previous means nothing sits at that run_id. A previous record that is not complete
+    -- legacy, another format, missing fields -- is refused: its identity cannot be established.
+    A complete previous record is refused when a binding **differs**; when the bindings are equal
+    the pair is the same measurement re-run and overwrites itself, and bindings that read
+    ``unknown`` on both sides count as equal there (equal evidence, absent though it is).
     """
     if previous is None:
         return None
+    state = read_state(previous)
+    if state["state"] != "complete":
+        return (
+            f"an existing record is {state['state']} "
+            f"({state['note'] or state['missing']}): its identity cannot be established"
+        )
     verdict = compare(previous, current)
-    if verdict["verdict"] == "comparable":
-        return None
-    moved = ", ".join(verdict["differences"]) or verdict["reason"]
-    return f"an existing record does not compare as comparable ({verdict['verdict']}: {moved})"
+    if verdict["differences"]:
+        return "an existing record differs on " + ", ".join(verdict["differences"])
+    return None
 
 
 def load(path: pathlib.Path | str) -> dict:

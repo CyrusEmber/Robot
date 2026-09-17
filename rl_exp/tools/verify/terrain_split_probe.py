@@ -40,6 +40,12 @@ _RECORDS: dict[int, dict] = {}
 #: cfg identity -> gets that have not been paired with an add yet, as (cfg id, difficulty, digest)
 _PENDING: dict[int, list[tuple[int, float, str]]] = {}
 _INSTALLED = False
+#: At most this many records are kept. A process builds one env (one cfg) at a time and the
+#: consumer reads the record right after, so the cap only ever evicts a cfg that is long gone --
+#: without it, a sweep that builds envs in one process grows this table without bound. Ceiling:
+#: an env whose cfg is evicted before its curriculum reads it would be refused, not misled; raise
+#: the cap if a future caller really does keep many live terrains at once.
+_MAX_RECORDS = 8
 
 
 def _watched(cfg) -> bool:
@@ -66,7 +72,21 @@ def _record_for_cfg(cfg) -> dict:
     if record is None:
         record = terrain_map.new_record(cfg, key)
         _RECORDS[key] = record
+        while len(_RECORDS) > _MAX_RECORDS:  # insertion order: the oldest cfg goes first
+            _RECORDS.pop(next(iter(_RECORDS)))
     return record
+
+
+def release(terrain) -> None:
+    """Forget the record of one terrain (its generation is done and has been consumed).
+
+    Optional: the table is capped anyway. Call it from a long-lived loop that keeps building
+    envs so the *whole* record (not just its slot) goes away with the env.
+    """
+    cfg = getattr(getattr(terrain, "cfg", None), "terrain_generator", None)
+    if cfg is not None:
+        _RECORDS.pop(id(cfg), None)
+        _PENDING.pop(id(cfg), None)
 
 
 def install() -> None:

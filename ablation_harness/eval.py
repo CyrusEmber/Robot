@@ -23,6 +23,7 @@ import datetime
 import importlib.metadata
 import json
 import math
+import os
 import pathlib
 import re
 import subprocess
@@ -46,8 +47,9 @@ parser.add_argument("--variant", type=str, default=None,
                     help="Suffix naming what was swapped against the base run (P04 substitutions: "
                          "ckpt / suite / assets / protocol). Its own run_id, its own records.")
 parser.add_argument("--overwrite", action="store_true",
-                    help="Allow writing into an existing run_id whose record does not compare as "
-                         "comparable. Without it a differing record under the same run_id is refused.")
+                    help="Allow writing into an existing run_id that cannot be certified as this "
+                         "same measurement: a differing record, a pre-format run (results but no "
+                         "record), or an unreadable record file. Without it, all three are refused.")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 # a -Play cfg arrives with every DR event already nulled, which silently turns
@@ -444,9 +446,14 @@ def _segment_stats(seg: dict, lin_err, ang_err, succ, lin_vel_b, valid, step_axi
 
 
 def _analyze(rollout: dict, protocol: dict, tilt_cos_min: float, clearance_min: float,
-             player, terrain_names, policy_label: str, num_steps: int, step_dt: float,
-             device: str, push) -> tuple[dict, list, dict | None]:
-    """Frozen protocol metrics from the rollout -> (result, segments, recovery)."""
+             sustain_steps: int, player, terrain_names, policy_label: str, num_steps: int,
+             step_dt: float, device: str, push) -> tuple[dict, list, dict | None]:
+    """Frozen protocol metrics from the rollout -> (result, segments, recovery).
+
+    ``tilt_cos_min``, ``clearance_min`` and ``sustain_steps`` arrive as arguments rather than
+    being derived here: they are the *derived* thresholds the metrics actually used, and the
+    record carries the values that ran, not the yaml they were computed from.
+    """
     m_cfg = protocol["metrics"]
     fall_cfg = m_cfg["fall"]
     series = rollout["series"]
@@ -467,7 +474,6 @@ def _analyze(rollout: dict, protocol: dict, tilt_cos_min: float, clearance_min: 
         lin_err, ang_err,
         float(m_cfg["tracking_lin_threshold_mps"]), float(m_cfg["tracking_ang_threshold_radps"]),
     )
-    sustain_steps = max(1, int(round(float(fall_cfg["sustain_s"]) / step_dt)))
     falls = metrics.fall_flags(tilt_cos, clearance, tilt_cos_min, clearance_min, sustain_steps, valid)
 
     travelled = torch.linalg.norm(end_pos[:, :2] - start_pos[:, :2], dim=-1)
@@ -544,36 +550,81 @@ def _analyze(rollout: dict, protocol: dict, tilt_cos_min: float, clearance_min: 
     return result, segments, recovery
 
 
-def _persist(result: dict, segments: list, recovery: dict | None, run_id: str, tag: str, rec: dict):
-    """record.json + eval.json + one summary.csv row (same run_id overwritten).
+def _run_dir(run_id: str) -> pathlib.Path:
+    """Where this run's artifacts live: protocol dir, optional campaign group, run_id."""
+    return _HARNESS_DIR / "results" / args_cli.protocol / (args_cli.group or "") / run_id
 
-    Run uniqueness (Step 3.2c) is decided **before anything is written**: a run_id that
-    already holds a record which does not compare as comparable is refused, not replaced --
-    "same name, new numbers" is how a table keeps a row nobody can reproduce. A re-run of the
-    same measurement is comparable by construction and simply overwrites itself.
+
+def _occupied_refusal(out_dir: pathlib.Path, rec: dict) -> str | None:
+    """Why this run_id must not be written, or ``None``. Three cases, answered apart:
+
+    * a readable record -- :func:`record.overwrite_refusal` decides;
+    * a run directory with results but **no record** -- a pre-format run, refused exactly like
+      a legacy record (0c rule 1): 25 of this harness' 31 run directories are in that state, and
+      a tag reused by accident must not overwrite one of them;
+    * an **unreadable** record file (truncated, hand-edited) -- refused, because we cannot tell
+      what it says, and the caller can replace it explicitly.
     """
-    # directory keyed by the protocol FILE stem (stable); the display name stays in the JSON.
-    # --group adds a campaign folder that owns both the run dirs and its summary.csv
-    out_dir = _HARNESS_DIR / "results" / args_cli.protocol / (args_cli.group or "") / run_id
-    existing = out_dir / "record.json"
-    previous = record.load(existing) if existing.is_file() else None
-    refusal = record.overwrite_refusal(previous, rec)
-    if refusal is not None and not args_cli.overwrite:
-        raise SystemExit(
-            f"[EVAL] refusing to write run_id={run_id}: {refusal}. Give this run its own "
-            "identity with --variant, or replace the existing record with --overwrite."
-        )
+    record_path, eval_path = out_dir / "record.json", out_dir / "eval.json"
+    if not record_path.is_file():
+        return record.overwrite_refusal(record.legacy_run(), rec) if eval_path.is_file() else None
+    try:
+        previous = record.load(record_path)
+    except (OSError, json.JSONDecodeError) as err:
+        return f"an existing record is unreadable ({err})"
+    return record.overwrite_refusal(previous, rec)
+
+
+def _guard_writes(out_dir: pathlib.Path, rec: dict, run_id: str) -> None:
+    """Refuse an occupied run_id and an incomplete record before anything is written.
+
+    Called as soon as the bindings exist (right after the policy is loaded), so a mistyped
+    ``--variant`` is refused in a second rather than after a full rollout, and again in
+    ``_persist`` as the last line of defence -- the record is what the table cites.
+    """
+    if not args_cli.overwrite:
+        refusal = _occupied_refusal(out_dir, rec)
+        if refusal is not None:
+            raise SystemExit(
+                f"[EVAL] refusing to write run_id={run_id}: {refusal}. Give this run its own "
+                "identity with --variant, or replace the existing record with --overwrite."
+            )
     state = record.read_state(rec)
     if state["state"] != "complete":
         raise SystemExit(
             f"[EVAL] refusing to write an {state['state']} record for {run_id}: "
             f"{state['missing'] or state['note']}"
         )
+
+
+def _atomic_write_json(path: pathlib.Path, payload) -> None:
+    """Write JSON through a temporary file: a crash leaves the old file or the new one.
+
+    The record is read back by later runs (the refusal compares against it), so a half-written
+    one would make the *next* run fail on garbage instead of on a decision.
+    """
+    tmp = path.with_name(path.name + ".tmp")
+    with open(tmp, "w", encoding="utf-8") as handle:
+        json.dump(payload, handle, indent=2, ensure_ascii=False)
+    os.replace(tmp, path)
+
+
+def _persist(result: dict, segments: list, recovery: dict | None, run_id: str, tag: str, rec: dict):
+    """record.json + eval.json + one summary.csv row (same run_id overwritten).
+
+    Run uniqueness (Step 3.2c) is decided **before anything is written**: a run_id that already
+    holds a record which does not compare as comparable is refused, not replaced -- "same name,
+    new numbers" is how a table keeps a row nobody can reproduce. A re-run of the same
+    measurement is comparable by construction and simply overwrites itself.
+    """
+    # directory keyed by the protocol FILE stem (stable); the display name stays in the JSON.
+    # --group adds a campaign folder that owns both the run dirs and its summary.csv
+    out_dir = _run_dir(run_id)
+    rec["run"]["timestamp"] = result["timestamp"]
+    _guard_writes(out_dir, rec, run_id)
     out_dir.mkdir(parents=True, exist_ok=True)
-    with open(existing, "w", encoding="utf-8") as f:
-        json.dump(rec, f, indent=2, ensure_ascii=False)
-    with open(out_dir / "eval.json", "w", encoding="utf-8") as f:
-        json.dump(result, f, indent=2, ensure_ascii=False)
+    _atomic_write_json(out_dir / "record.json", rec)
+    _atomic_write_json(out_dir / "eval.json", result)
 
     row = {c: "" for c in _SUMMARY_COLUMNS}
     row.update({
@@ -597,11 +648,13 @@ def _persist(result: dict, segments: list, recovery: dict | None, run_id: str, t
     if summary_path.exists():
         with open(summary_path, encoding="utf-8") as f:
             kept_rows = [r for r in csv.DictReader(f) if r.get("run_id") != run_id]
-    with open(summary_path, "w", encoding="utf-8", newline="") as f:
+    summary_tmp = summary_path.with_name(summary_path.name + ".tmp")
+    with open(summary_tmp, "w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=_SUMMARY_COLUMNS)
         writer.writeheader()
         writer.writerows(kept_rows)
         writer.writerow(row)
+    os.replace(summary_tmp, summary_path)
 
 
 def main():
@@ -640,6 +693,22 @@ def main():
         "assets": _assets_reference(env_cfg),
         "runtime": _runtime_reference(env_cfg, mbenv),
     }
+    tag = args_cli.tag or ("ckpt" if args_cli.checkpoint else "random")
+    # strip only the gym API suffix of family ids ("-v0" at the very end);
+    # teacher recipe versions ("-v1"/"-v2") are part of the run identity
+    run_id = f"{re.sub(r'-v0$', '', args_cli.task)}_{tag}_{args_cli.mode}_seed{args_cli.seed}"
+    if args_cli.variant:  # a swapped input gets its own identity, not the base run's
+        run_id = f"{run_id}_{args_cli.variant}"
+    rec["run"] = {
+        "run_id": run_id,
+        "task": args_cli.task,
+        "tag": tag,
+        "mode": args_cli.mode,
+        "seed": args_cli.seed,
+        "protocol_file": args_cli.protocol,
+        "variant": args_cli.variant,
+        "group": args_cli.group,
+    }
 
     policy, policy_label = _make_policy(wrapper, mbenv, agent_cfg, device, rec)
 
@@ -648,6 +717,7 @@ def main():
     fall_cfg = protocol["metrics"]["fall"]
     tilt_cos_min = math.cos(math.radians(float(fall_cfg["tilt_deg"])))
     clearance_min = float(fall_cfg["base_height_ratio"]) * float(env_cfg.scene.robot.init_state.pos[2])
+    sustain_steps = max(1, int(round(float(fall_cfg["sustain_s"]) / step_dt)))
 
     scanner = mbenv.scene.sensors.get("height_scanner", None)
     center_ray = None
@@ -682,35 +752,29 @@ def main():
         "recovery": protocol["metrics"].get("recovery"),
         "step_dt": step_dt,
         "num_steps": num_steps,
+        # what the metrics *used*, not the yaml they came from: a changed derivation (a dropped
+        # radians, a different initial height) must move the record even when the yaml is frozen
+        "derived": {
+            "tilt_cos_min": tilt_cos_min,
+            "clearance_min": clearance_min,
+            "sustain_steps": sustain_steps,
+        },
     }
     rec["perturbation"] = _perturbation_reference(protocol, push)
+
+    # every binding now exists, so an occupied run_id or an incomplete record is refused here
+    # rather than after the rollout (a mistyped --variant must not cost two minutes)
+    _guard_writes(_run_dir(run_id), rec, run_id)
 
     rollout = _rollout(wrapper, mbenv, robot, policy, player, cmd_term, scanner,
                        center_ray, push, num_steps, step_dt, device)
     gym_env.close()
 
     result, segments, recovery = _analyze(
-        rollout, protocol, tilt_cos_min, clearance_min, player, terrain_names,
+        rollout, protocol, tilt_cos_min, clearance_min, sustain_steps, player, terrain_names,
         policy_label, num_steps, step_dt, device, push,
     )
 
-    tag = args_cli.tag or ("ckpt" if args_cli.checkpoint else "random")
-    # strip only the gym API suffix of family ids ("-v0" at the very end);
-    # teacher recipe versions ("-v1"/"-v2") are part of the run identity
-    run_id = f"{re.sub(r'-v0$', '', args_cli.task)}_{tag}_{args_cli.mode}_seed{args_cli.seed}"
-    if args_cli.variant:  # a swapped input gets its own identity, not the base run's
-        run_id = f"{run_id}_{args_cli.variant}"
-    rec["run"] = {
-        "run_id": run_id,
-        "task": args_cli.task,
-        "tag": tag,
-        "mode": args_cli.mode,
-        "seed": args_cli.seed,
-        "protocol_file": args_cli.protocol,
-        "variant": args_cli.variant,
-        "group": args_cli.group,
-        "timestamp": result["timestamp"],
-    }
     _persist(result, segments, recovery, run_id, tag, rec)
 
     print(f"[EVAL] protocol={result['protocol']} mode={result['mode']} run_id={run_id}")

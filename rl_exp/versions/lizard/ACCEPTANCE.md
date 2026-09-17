@@ -1431,7 +1431,7 @@ main 线的 delta 有**三个写者**，不是两个：**元素集合**（同一
 | vs `..._1150_..._ckpt1150` | not_comparable | `checkpoint.sha256` |
 | vs `..._850_..._suite-roughb016` | not_comparable | `suite.digest` |
 | vs `locomotion_eval_v1/v1rec/..._proto-v1` | not_comparable | `eval_protocol.digest` |
-| vs `locomotion_eval_v2/dev/..._assets-unknown` | **unknown**（缺证据不升级为可比） | `assets.declared_digest` |
+| vs `locomotion_eval_v2/dev/..._assets-unknown` | **unknown**（缺证据不升级为可比） | 差异 4 项：`checkpoint.sha256` / `assets.declared_digest` / `obs_protocol.identity` / `obs_protocol.digest`；其中 `assets.declared_digest` 为"两侧同为 unknown"（unproven） |
 
 **3.2d 真跑对拍（同树、同 ckpt、同 seed、同模式）**：`off` 臂 = **无记录版本**的 `eval.py`（`git show 11f19f4:ablation_harness/eval.py` 在临时目录跑），`on` 臂 = 当前 `eval.py`。
 
@@ -1483,6 +1483,21 @@ main 线的 delta 有**三个写者**，不是两个：**元素集合**（同一
 ### 结论
 
 3.2 与 3.3 的**离线段全部落地**；**真跑段**：3.2d/3.2e（四项替换）/3.2f 已做，3.3c/3.3d 已做。仍未做/未知：3.2 的资产 fail 真跑、3.1e 全量、3.1f 真跑半、3.3f 产物比对、几何一致性、3.4（蒸馏与导出）＝**未执行**。**不得**据本节称"Step 3 全部通过"。
+
+## 评审修正（2026-09-17 评审 → 当日修，同树复测）
+
+评审提出六项，全部修完。**本节改变"拒写"的判据**：凡上文写到"拒绝写入"的证据，以本节口径为准（旧口径把两个"都是 unknown"的绑定也当成差异，并漏掉了"有结果、无记录"的历史目录）。
+
+| # | 缺陷 | 修 | 证据 |
+|---|---|---|---|
+| 1 | **legacy run 目录可被静默覆盖**：只认 `record.json`，只有 `eval.json` 的目录被当成空 run_id —— 仓内 31 个 run 目录里 **25 个**是这种状态 | 有结果、无记录 ⇒ 按 legacy 拒写（新增 `record.legacy_run()`）；`--overwrite` 为唯一放行 | 真跑（伪造 legacy 目录，跑后删）：**15s 拒写**并点名 legacy；加 `--overwrite` 再跑 ⇒ 放行并落全记录。离线 `test_eval_record` 增一例 |
+| 2 | **两侧同为 unknown 被当成差异** ⇒ 无冻结锁的 dev 线自跑即拒（`compare(dev, dev) = unknown`），与"同一次测量重跑即覆盖"矛盾 | `compare` 拆开 `differences`（真差异）与 `unproven`（两侧同 unknown：等而无证，仍判 unknown）；`overwrite_refusal` 只在**真有差异**或前记录不完整时拒 | 真记录实测：`dev vs dev → differences {} / refusal None`；`dev vs base → unknown` 并点名 4 项差异 |
+| 3 | **记录的是声明阈值，不是实际用到的派生值**：`tilt_cos_min` / `clearance_min` / `sustain_steps` 未入记录 ⇒ 改法不改数 | 三个派生值改由 `main` 算一次并传入（`_analyze` 不再自算），写进 `metrics.derived`。**有意未设为必需字段**：设为必需会让上文 P04 那批 `eval-record-1` 记录读作"不完整"，从而无法再被自身重写 —— 代价大于收益；派生值的兜底是已记录的 `git_rev_lizard`（harness 代码在同一仓） | 新记录含该字段（结构变更）；离线闸门 10 例复测通过 |
+| 4 | **拒写发生在 rollout 之后**：错打 `--variant` 要烧完一次完整 rollout 才被拒 | 绑定齐备处（`_make_policy` 之后）前置 `_guard_writes`，`_persist` 留同一道作兜底 | 真跑实测：同名占用拒写 **15s**（修正前同类拒写约 2 分钟） |
+| 5 | **无原子写**：`record.json` → `eval.json` → `summary.csv` 三处直写；截断的 `record.json` 会让**下一次** run 崩在 `JSONDecodeError` | `_atomic_write_json`（tmp + `os.replace`），summary 同样；记录不可读 ⇒ 拒写并说明原因，`--overwrite` 可替换 | 代码 + 离线闸门复测 |
+| 6 | **探针记录不释放**：一进程内每 env 一条，扫参数场景无界增长 | `_MAX_RECORDS = 8` 上限（插入序逐出）+ `probe.release(terrain)` | 3.3a 闸门实测：追加 12 次生成后仍为 8 条 |
+
+**结构性敞口（记台账不修）**：两套记录词汇并存（训练 `manifest.py` / 评测 `record.py`，同事实两种命名）；单源扫描闸守"副本"不守"新规则"。见 `PLAN.md` #27。
 
 
 

@@ -17,7 +17,9 @@
 
 一次 eval 的**条件**写在 `results/<协议>/[组/]<run_id>/record.json`（`eval.py` 与 `record.py`）：
 env cfg 与 agent/wrapper 配置（含 `clip_actions`）、实际命令时间线与解析出的 segment 窗口、
-扰动（`t`/`kick_mps`/方向 seed/步数）与指标阈值、`eval_protocol_digest`（协议 yaml 内容+name+version）、
+扰动（`t`/`kick_mps`/方向 seed/步数）与指标阈值、**派生阈值**（`metrics.derived`：`tilt_cos_min` /
+`clearance_min` / `sustain_steps`，即指标实际用到的值，v1.7.2 起写入、**非必需字段**：v1.7.2 之前的
+`eval-record-1` 记录没有它，读作未知而不算缺字段）、`eval_protocol_digest`（协议 yaml 内容+name+version）、
 `obs_protocol_digest`（3.1a 声明身份+已审摘要，两者分开命名）、**加载时**哈希的 checkpoint
 （`sha256`+`size`+`mtime`，加载后立即复核）、资产（声明锁摘要 vs 实际文件 pass/fail/unknown）、
 运行时（实际 `device`/`num_envs` 与声明值分列、rsl_rl/sim 版本、两侧 git rev）。
@@ -36,11 +38,15 @@ env cfg 与 agent/wrapper 配置（含 `clip_actions`）、实际命令时间线
    由静态闸看守（`test_eval_record.py` 末例）。
 
 **可比性只看绑定面**（`record.BINDINGS`：checkpoint / suite / assets / eval 协议 / obs 协议身份+摘要）：
-任一侧 legacy 或不完整、或某绑定读作 unknown ⇒ **未知**；绑定不等 ⇒ **不可比**并点名是哪一项；
+任一侧 legacy 或不完整、或某绑定读作 unknown ⇒ **未知**；`differences` 只收录**真差异**（`unproven` 另记"两侧同为 unknown"的绑定，等而无证）。
 其余元数据（run_id、时间戳、分组）不参与比较。
 
-**写侧两道硬门**：不完整的记录**拒绝落盘**（`_persist` 先判 state）；同一 `run_id` 已存在且不
-可比 ⇒ **拒绝覆盖**，须 `--variant` 另起身份（P04 四项替换各起独立 run）或 `--overwrite` 显式覆盖。
+**写侧硬门（2026-09-17 评审后收紧）**：绑定齐备处（`_make_policy` 之后）与 `_persist` 各判一次 ——
+①记录不完整 ⇒ **拒绝落盘**；②同一 `run_id` 已有**可比**记录 ⇒ 重跑自重写，其余一律拒：记录有真差异、记录为
+legacy/不完整、目录**有结果无记录**（pre-format run，仓内 25 个）、记录文件不可读。放行只有 `--variant`（另起身份）
+或 `--overwrite`（显式替换）。拒写发生在 rollout **之前**，故错打变体名秒级被拒，不再是两分钟。
+`record.json` / `eval.json` / `summary.csv` 一律 tmp+`os.replace` 原子落盘：截断的记录会让下一次 run 崩在解析上，
+而不是崩在一个决定上。
 
 ## 版本历史
 
@@ -92,3 +98,4 @@ harness 代码高频变更 / 多机器人共用 / 评测协议 v2 出现时 → 
 | 2026-09-15 | v1.6 | **协议 v2 落地（采样帧）**：`protocols/locomotion_eval_v2.yaml`（时间线/阈值/suite/DR 全抄 v1，唯一变更 = 帧定义）。`eval.py` 采样点从 `step()` 之前（obs 帧）移到之后（reward 帧），并 hook `mbenv._reset_idx` 在 auto-reset 覆盖数据前抓下**终止帧**——`step()` 内 `scene.update()` 与 `_reset_idx()` 之间是唯一可读窗口，IsaacLab 无公开回调（`record_pre_reset` 是 HDF5 形状），hook 失效由每次运行的 `terminal frames captured=N` 暴露。副产物：`end_pos` 改用终止帧（H1 的 pre-step 近似作废）。回归闸 `rl_exp/tools/verify/test_eval_frame_v2.py`（v1 截断读作 no-fall / v2 满窗读作 fall）入离线套件第 [20] 步。**已知代价**：帧右移一个 `step_dt`（20 ms），全指标有微小漂移 ⇒ 与 v1 行不可比 | 代码审查 #3：v1 丢掉终止帧，门闸 dwell 恰好满 25 帧收局的 episode 只能看到 24 帧 → fall 漏记 |
 | 2026-09-17 | v1.7 | **eval 记录格式（`ARCH_PLAN` Step 3.2a/3.2b/3.2c 离线半）**：新增 `record.py`（纯 stdlib：格式定义、三态读侧、绑定面比较、覆盖拒绝判定、checkpoint 文件摘要）+ `eval.py` 四个采集点与 `record.json` 落盘；新参数 `--variant`（替换项另起 run 身份）/`--overwrite`（显式覆盖）。闸门 `rl_exp/tools/verify/test_eval_record.py`（9 例：0c 四规则三态 / 同 run_id 拒覆盖 / P04 四替换 / 记录模块不碰 RNG 与框架）入离线套件第 [44] 步（0.2s，wave 178s）。规则节见上「记录格式」 | `ARCH_PLAN` v0.21 Step 3 施工件表；用户 2026-09-17 拍板"3.2/3.3 全开工，连真跑段" |
 | 2026-09-17 | v1.7.1 | **记录的真跑段**：`clip_actions=None`（无裁剪是事实，不是空槽）归一为 `"none"` 写入记录；真跑证据入 `rl_exp/versions/lizard/ACCEPTANCE.md` §3.2（off/on 逐位相同、A/A 逐位相同、P04 四项替换与拒绝路径、`assets=pass/unknown` 与 `policy.kind=zero_action` 两种状态实落）。新增真跑驱动 `rl_exp/tools/verify/terrain_split_env_run.py`（不进套件，起点仿真）配合 3.3c/3.3d | 记录写侧首次真跑即暴露 `clip_actions=None` 被读作"缺字段"，说明"空槽 vs 事实"必须在写侧归一 |
+| 2026-09-17 | v1.7.2 | **评审六修**：①"有结果无记录"的历史 run 目录按 legacy 拒写（仓内 25/31 属此列，此前会被当空 run_id 静默覆盖）＋`record.legacy_run()`；②`compare` 拆 `differences`/`unproven`，"两侧同 unknown"不再算差异，dev 线自跑可自重写、跨线仍拒；③派生阈值（`tilt_cos_min`/`clearance_min`/`sustain_steps`）改为 `main` 算一次传入并写入 `metrics.derived`（`_analyze` 不再自算）；④拒写前置到绑定齐备处（实测 15s，此前约 2 分钟）；⑤三处落盘改 tmp+`os.replace`，不可读记录 ⇒ 拒写（`--overwrite` 可替换）；⑥探针记录表加 8 条上限 + `probe.release()`。逐条证据见 `ACCEPTANCE.md` §评审修正 | 评审：`record.json` 缺失被当空 run_id、unknown==unknown 判成差异、记录的是声明而非实际派生值、拒写在 rollout 之后、无原子写、探针表无界 |

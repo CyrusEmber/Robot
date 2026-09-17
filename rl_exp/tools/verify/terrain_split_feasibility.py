@@ -82,6 +82,22 @@ def main() -> int:
     if not any("declared split says" in problem for problem in terrain_map.check(corrupted)):
         failures.append("negative control: a corrupted column split was not caught")
 
+    # the record table is capped: a process that keeps building envs must not grow it without
+    # bound (the consumer reads its record right after the generation, so only stale cfgs leave)
+    from isaaclab.terrains import MeshPlaneTerrainCfg, TerrainGeneratorCfg
+
+    for index in range(probe._MAX_RECORDS + 4):
+        scratch = TerrainGeneratorCfg(
+            size=(2.0, 2.0), border_width=0.5, num_rows=1, num_cols=2, curriculum=True,
+            seed=index, use_cache=False,
+            sub_terrains={"a": MeshPlaneTerrainCfg(proportion=0.5), "b": MeshPlaneTerrainCfg(proportion=0.5)},
+        )
+        probe.generate_record(scratch)
+    kept = len(probe._RECORDS)
+    print(f"records kept after {probe._MAX_RECORDS + 4} extra generations: {kept} (cap {probe._MAX_RECORDS})")
+    if kept > probe._MAX_RECORDS:
+        failures.append(f"the record table grew past its cap: {kept}")
+
     if failures:
         print(f"TERRAIN_SPLIT_FEASIBILITY_FAILED ({len(failures)} problem(s))")
         return 1
