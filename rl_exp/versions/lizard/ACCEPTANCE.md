@@ -1211,6 +1211,44 @@ resume 拒绝、save 守卫、`train.py` 的导入失败守卫、manifest 记录
 - agent 的"基准 = 框架 stock"未做像 env 那样的"基准确实是空"的机器校验（env 侧有 `wiring_is_stock_except`）；agent 侧直接以 stock 为基准，无中间接线类可夹带。
 - 本批**未跑全量套件端到端**（套件条目随并行批次变动）；所跑为 `[41]` `[35]`（含自测）`[24]` `[37]`。
 
+## 收掉最后一条声明缺口：`PLAY_PINS_COMMAND_RANGE` 进配方表（2026-09-17）
+
+**性质**：**追加**条目。本批对应"**不加验证框架、只处理已确认的声明丢失**"那一条判断：`[41]` 台账里只剩的最后一条缺口。改动面 = `recipe.py`（配方表 `pins_full_range` + `pins_full_range()` / `_stated()` + `CLASSVAR_STATEMENTS` + 两处盖章）、`[41]`（保真判据按同一张清单循环 + `EXPECTED_GAPS` 清空 + docstring）。**未扩展元素所有权系统**（理由见末节）。
+
+### 为什么这条必须在翻表前做
+
+`PLAY_PINS_COMMAND_RANGE` 的读者是**共享接线的 `__post_init__`（构造期）**：v3/v4 的 PLAY 已无课程可以把范围拉宽，所以它要满量程而不是课程窗口。配方表沉默期间，声明路径读到的是基类的 `False`，**效果**由 `play_pins_full_command_range` 事后补上 —— 字段是对的，**声明没有了**。翻表之后（注册项指向合成类、版本类体开始删），那句话只剩在类体上，**会随类体一起消失**。所以它必须在翻表之前搬进表里。
+
+### 落地
+
+| 件 | 内容 |
+|---|---|
+| 配方表 | 每个配方加 `"pins_full_range": (train, play)`，v3/v4 = `(False, True)`、其余 `(False, False)`（与 `declares` **同形同位置**） |
+| 读法 | `pins_full_range(version, play=, line=)`，与 `declaration()` 对称，共用 `_stated()` |
+| 一处清单 | `recipe.CLASSVAR_STATEMENTS = ((REQUIRES_CURRICULUM_STATE, declaration), (PLAY_PINS_COMMAND_RANGE, pins_full_range))` —— "哪些声明要离开类体"只有一个答案；`_wired_class` 与 `recipe_class` 都照它盖章（按名标注 ClassVar，不是 `setattr`） |
+| 闸门 | 保真判据改为对该清单循环（表 == 类，**两个 ClassVar × 两种 kind**）；`EXPECTED_GAPS` **清空**；docstring 里"构建器结构上带不走 ClassVar"那一段改写为过渡期规则（清单为真源、两条路径答案必须一致、无家可归者打印并须进台账） |
+
+### 结果
+
+| 编号 | 命令 | 结果 |
+|---|---|---|
+| 硬 A / 硬 B | `[41]` | **通过**：`RECIPE_BUILD_OK (26 task(s) field-identical to the frozen golden; 76 declared difference(s) from the stock base)`，**输出里不再有任何 ClassVar 缺口行**（台账空且无缺口 —— 上一节还有两类，现在为零） |
+| **反向验证** | 三处临时破坏 | **各自打对**：① v3/play 表值翻成 `False` ⇒ `…PLAY_PINS_COMMAND_RANGE=False while LizardRoughTeacherEnvCfg_V3_PLAY states True -- the two paths would answer differently`；② 删掉 v4 的表键 ⇒ train/play **各自** `states no PLAY_PINS_COMMAND_RANGE … (the class path states …)`；③ 空台账下缺口再现 ⇒ `classvar the declaration cannot carry, and the ledger does not know it`。随后**原样回滚**复绿 |
+| 旁证 | `[24]` · `[28]` · `[37]` · `[14]` | **全绿**：`CFG_LOCK_OK (36 tasks, 3 line(s))` · `test_resume_state: 28 passed` · `COMPONENT_OWNERSHIP_OK` · `task cfg import chain is pxr-clean` |
+
+### 边界
+
+- 基类**仍**声明 `PLAY_PINS_COMMAND_RANGE = False`，类路径照旧可读；本批做的是"让声明路径也说得出这句话"，**不是删旧载体** —— 删类体归翻表那批。
+- **台账空 ≠ 机制停用**：`EXPECTED_GAPS` 仍在，新增一个"表里没家、类上有"的 ClassVar 会立刻红（本轮已验证"未知缺口"分支；"陈旧台账项也红"分支由并行批次的用例覆盖）。
+- 本轮**未动翻表**（`rl_exp/tasks/__init__.py` 的 `env_cfg_entry_point` / `recipes.json` 的 `env_cfg_entry` 两处字符串）——那是并行批次的节奏；本批只把它前面最后一块砖补上。
+- 未跑全量套件端到端。
+
+### 明确不做：元素所有权系统（用户判断 2026-09-17）
+
+上一节点名的"给每个元素声明允许写入的字段集"**不做**，理由被采纳：① 要抓"同值写入 / 先改再恢复"得上完整写入追踪，而目前**没有任何实际故障**证明值得；② YAML 在既有字段上的数值变化**本来就不是字段所有权检查的职责**，现有 golden 已能拦（`[24]` 对类路径、`[41]` 对声明路径）；③ "元素与清单可同时改"不是漏洞 —— 任何源码级检查都能连规则一起改，最终仍靠 review。
+
+**本批把归属做成显式可校验的断言**（每条路径点名元素、闸门重放验证）即为该问题的收口。**后续若出现具体反例**（现有检查确实漏掉了非预期覆盖），再补**最小**检查；在此之前不扩机制。
+
 
 
 
