@@ -1,7 +1,7 @@
 diff --git a/scripts/reinforcement_learning/rsl_rl/train.py b/scripts/reinforcement_learning/rsl_rl/train.py
 --- a/scripts/reinforcement_learning/rsl_rl/train.py
 +++ b/scripts/reinforcement_learning/rsl_rl/train.py
-@@ -75,6 +75,31 @@ parser.add_argument(
+@@ -75,6 +75,22 @@ parser.add_argument(
  )
  parser.add_argument("--seed", type=int, default=None, help="Seed used for the environment")
  parser.add_argument("--max_iterations", type=int, default=None, help="RL Policy training iterations.")
@@ -20,15 +20,6 @@ diff --git a/scripts/reinforcement_learning/rsl_rl/train.py b/scripts/reinforcem
 +    default=False,
 +    help="Deprecated alias of --drop_curriculum_state (it never meant 'weights only': rsl_rl still"
 +    " loads model and optimizer; only the curriculum state was dropped).",
-+)
-+parser.add_argument(
-+    "--allow_retired_resume",
-+    action="store_true",
-+    default=False,
-+    help="Continue a recipe line that has been retired. It only lifts the lifecycle restriction,"
-+    " and only for a resume whose source checkpoint actually resolves; it never drops the"
-+    " curriculum state (see --drop_curriculum_state). Without a resume it is refused rather"
-+    " than read as a general permission.",
 +)
  parser.add_argument(
      "--distributed", action="store_true", default=False, help="Run training with multiple GPUs or nodes."
@@ -56,7 +47,7 @@ diff --git a/scripts/reinforcement_learning/rsl_rl/train.py b/scripts/reinforcem
 +        # directory (the run manifest writes T0 into it, which mkdir's it): with the default
 +        # load_run (".*") the newest directory under the log root would otherwise be this run's
 +        # own empty one, and a plain --resume would resolve to a directory with no checkpoint.
-+        # It is also what the lifecycle check reads as "the checkpoint this run continues from".
++        # It is also the source the T1 record names, for the same reason.
 +        resume_path = (
 +            get_checkpoint_path(log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint)
 +            if agent_cfg.resume or agent_cfg.algorithm.class_name == "Distillation"

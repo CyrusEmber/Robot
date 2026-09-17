@@ -394,7 +394,6 @@ def begin(*, log_dir, task: str | None, argv: list[str], env_cfg, agent_cfg) -> 
                 task=task,
                 argv=argv,
                 agent_cfg=agent_cfg,
-                log_dir=ctx.log_dir,
                 declared_line=(ctx.manifest["declaration"]["recipe"] or {}).get("params_line"),
             )
         except Exception as err:  # noqa: BLE001
@@ -406,8 +405,6 @@ def begin(*, log_dir, task: str | None, argv: list[str], env_cfg, agent_cfg) -> 
         ctx.manifest["declaration"]["lifecycle"] = lifecycle_evidence
         if verdict is None or not verdict.allowed:
             declined = lifecycle_evidence["reason"]
-        elif verdict.warn:
-            print(f"[run-manifest] WARNING: {verdict.warn}")
         ctx.manifest["stages"] = {"pre_make": {"at": _now()}}
         # T0 hits disk immediately: if the process dies during gym.make, the launch
         # declaration must already be on disk
@@ -818,8 +815,33 @@ def _row(level: str, result: str, detail: str, required: bool = True) -> dict:
     return {"level": level, "result": result, "detail": detail, "required": required}
 
 
+def refused_at_pre_make(manifest: dict) -> str | None:
+    """The refusal reason when this record stopped at T0, or None when it did not.
+
+    A refusal is a *terminal state*, not an unfinished run: T0 is written before the refusal is
+    raised (that order is what makes a refused launch distinguishable from one that never
+    started), and nothing after T0 can exist. It is only that terminal state when it is both
+    honestly recorded and the only stage there is: a record carrying a refusal *and* later
+    training stages is inconsistent, and the caller must keep reporting it.
+
+    The marker is the prefix ``ctx.fail("refused to start: ...")`` writes -- for the lifecycle
+    gate and for the dirty-tree guard alike. A reworded prefix falls back to "incomplete
+    record", which is the red direction; it never turns into a silent pass.
+    """
+    stages = list(manifest.get("stages") or {})
+    failures = manifest.get("failures") or []
+    if stages != ["pre_make"] or not failures:
+        return None
+    last = str(failures[-1])
+    return last if last.startswith("refused to start:") else None
+
+
 def verify(run_dir: pathlib.Path) -> tuple[list[dict], list[str]]:
     """Check a recorded run: what it proves, what it fails, and what cannot be checked.
+
+    A run that was refused at startup is judged as that terminal state and not as a run that
+    died on the way to T1: its record is complete, and the checks that need a trained run say
+    so instead of reporting missing stages. Everything else is checked in full.
 
     Args:
         run_dir: the run directory holding ``run_manifest.json``.
@@ -836,6 +858,22 @@ def verify(run_dir: pathlib.Path) -> tuple[list[dict], list[str]]:
         return rows, [f"{run_dir}: no manifest"]
 
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    refusal = refused_at_pre_make(manifest)
+    if refusal is not None:
+        rows.append(_row("记录完整", "通过", f"launch refused at T0, no training started: {refusal}"))
+        rows.extend(_verify_self_consistency(manifest, problems))
+        rows.extend(_verify_lifecycle(manifest, problems))
+        for what in ("code provenance", "asset lock", "recipe golden", "curriculum state", "checkpoint payload"):
+            rows.append(
+                _row(
+                    "可重建",
+                    "未知",
+                    f"{what}: not applicable -- the launch was refused at T0, so there is nothing to rebuild",
+                    required=False,
+                )
+            )
+        return rows, problems
+
     stages = manifest.get("stages", {})
     missing = [stage for stage in STAGES if stage not in stages]
     if missing:
@@ -908,6 +946,11 @@ def _verify_lifecycle(manifest: dict, problems: list[str]) -> list[dict]:
     the record is what was true when the run started, not what today's layout would allow) and
     never silently upgraded to a pass. The recorded verdict itself is under the T1 digest, so it
     cannot be edited into a permission after the fact.
+
+    A recorded *refusal* is a pass of this row, not a failure: the gate did its job, and saying
+    otherwise would make deleting the record the cheap fix. It is only a pass when the record
+    corroborates it as the terminal state (:func:`refused_at_pre_make`); a refusal next to
+    training stages, or one with no recorded refusal behind it, is still a failure.
     """
     recorded = (manifest.get("declaration") or {}).get("lifecycle")
     if not recorded:
@@ -919,8 +962,16 @@ def _verify_lifecycle(manifest: dict, problems: list[str]) -> list[dict]:
             )
         ]
     if recorded.get("allowed") is not True:
-        problems.append(f"lifecycle: the launch was refused ({recorded.get('reason')})")
-        return [_row("记录完整", "失败", f"lifecycle refused the launch: {recorded.get('reason')}")]
+        if refused_at_pre_make(manifest) is None:
+            problems.append(f"lifecycle: the launch was refused ({recorded.get('reason')})")
+            return [_row("记录完整", "失败", f"lifecycle refused the launch: {recorded.get('reason')}")]
+        return [
+            _row(
+                "记录完整",
+                "通过",
+                f"the directory refused this launch, as the record says: {recorded.get('reason')}",
+            )
+        ]
     if recorded.get("status") not in recipe_lifecycle.STATUSES:
         problems.append(f"lifecycle: recorded status {recorded.get('status')!r} is not a status")
         return [_row("记录完整", "失败", f"lifecycle recorded status {recorded.get('status')!r}")]
@@ -930,8 +981,8 @@ def _verify_lifecycle(manifest: dict, problems: list[str]) -> list[dict]:
             _row(
                 "记录完整",
                 "通过",
-                f"line {recorded.get('line')} was {recorded.get('status')} at revision"
-                f" {recorded.get('directory_revision')}, and the directory has not changed since",
+                f"line {recorded.get('line')} was {recorded.get('status')}, and the directory has"
+                " not changed since",
             )
         ]
     return [

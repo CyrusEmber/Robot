@@ -12,9 +12,11 @@ what the launcher refuses, what it records, and whether the record it produces f
 matches, field for field, the lifecycle verdict the trainer's T0 carries for the same task --
 which is what "the two entries cannot answer differently" has to mean in practice.
 
-The comparison is only meaningful if both sides are produced for the same directory. The
-launcher reads the configured one; the trainer's ``begin`` reads it too, through the same
-module, so a case that relocates the directory (``RL_RECIPE_DIR``) moves both or neither.
+The comparison is only meaningful if both sides are produced for the same directory: the
+launcher reads this checkout's ``versions/``, and the trainer's ``begin`` reads it through the
+same module, so a relocation moves both or neither. The retired case uses the line the
+directory really retired (``lizard/parkour``): a line is never retired to make a test pass
+(2.1a), and the refusal must not promise a successor that the index does not register.
 """
 
 from __future__ import annotations
@@ -32,9 +34,10 @@ if str(_REPO) not in sys.path:
 from rl_exp.tools import launch_recipe  # noqa: E402
 from rl_exp.tools.runrecord import lifecycle  # noqa: E402
 from rl_exp.tools.runrecord import manifest as M  # noqa: E402
-from rl_exp.tools.verify import lifecycle_entry_fixture as fixture_entry  # noqa: E402
 
 TASK = "Lizard-Rough-v14"
+RETIRED_TASK = "Lizard-Parkour-Climb-v1"
+RETIRED_LINE = "lizard/parkour"
 
 
 def main() -> int:
@@ -43,7 +46,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp = pathlib.Path(tmp_dir)
         problems.extend(_happy_path())
-        problems.extend(_refusals(tmp))
+        problems.extend(_refusals())
         problems.extend(_cross_check(tmp))
     if problems:
         for problem in problems:
@@ -78,33 +81,32 @@ def _happy_path() -> list[str]:
     return problems
 
 
-def _refusals(tmp: pathlib.Path) -> list[str]:
-    """What the launcher must not let through, including a fixture directory that is retired."""
+def _refusals() -> list[str]:
+    """What the launcher must not let through, on the line the directory really retired."""
     problems: list[str] = []
     invented = launch_recipe.plan("Lizard-Invented-v99", argv=["launch_recipe.py"])
     if invented["allowed"] or "not in the recipe map" not in invented["reason"]:
         problems.append(f"an unregistered task must be refused: {invented.get('reason')!r}")
 
-    fixture = tmp / "retired"
-    fixture_entry.build(
-        fixture, retire="lizard/main", announce=None, notice_until=None, today=None, successor=None
-    )
-    os.environ[lifecycle.INDEX_DIR_ENV] = str(fixture)
-    try:
-        record = launch_recipe.plan(TASK, argv=["launch_recipe.py", "--task", TASK])
-        if record["allowed"] or "successor" not in record["reason"]:
-            problems.append(f"a retired line must refuse the launch: {record.get('reason')!r}")
-        if record["lifecycle"]["status"] != "retired":
-            problems.append(f"the refusal must carry the status it read: {record.get('lifecycle')!r}")
-        # and the fixture is what was judged, not this checkout
-        if record["lifecycle"]["directory_sha256"] == lifecycle.read_index(_REPO)["digests"]:
-            problems.append("the fixture directory must be the one judged")
-    finally:
-        os.environ.pop(lifecycle.INDEX_DIR_ENV, None)
+    retired = launch_recipe.plan(RETIRED_TASK, argv=["launch_recipe.py", "--task", RETIRED_TASK])
+    if retired["allowed"]:
+        problems.append(f"the retired line must refuse the launch: {retired.get('reason')!r}")
+    if retired["lifecycle"]["status"] != "retired" or retired["lifecycle"]["line"] != RETIRED_LINE:
+        problems.append(f"the refusal must carry the identity it read: {retired.get('lifecycle')!r}")
+    if "retired line" not in retired["reason"]:
+        problems.append(f"the refusal must say the line is retired: {retired.get('reason')!r}")
+    if "successor" in retired["reason"]:
+        problems.append(
+            f"the index registers no successor for {RETIRED_LINE}, so the refusal must not promise one:"
+            f" {retired['reason']!r}"
+        )
+    # this checkout's directory is what was judged: no fixture stands in for it
+    if retired["lifecycle"]["directory_sha256"] != lifecycle.read_index(_REPO)["digests"]:
+        problems.append("the checkout's own directory must be the one judged")
     return problems
 
 
-FIELDS = ("operation", "task", "recipe", "line", "status", "directory_revision", "directory_sha256")
+FIELDS = ("operation", "task", "recipe", "line", "status", "directory_sha256")
 
 
 def _compare(launcher: dict, trainer: dict) -> list[str]:

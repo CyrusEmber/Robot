@@ -1,23 +1,25 @@
 diff --git a/scripts/reinforcement_learning/rsl_rl/train.py b/scripts/reinforcement_learning/rsl_rl/train.py
 --- a/scripts/reinforcement_learning/rsl_rl/train.py
 +++ b/scripts/reinforcement_learning/rsl_rl/train.py
-@@ -231,6 +231,27 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
+@@ -231,6 +231,29 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
          # set the log directory for the environment (works for all environment types)
          env_cfg.log_dir = log_dir
  
 +        # Run manifest T0 (ARCH_PLAN 1.2): what this run declares BEFORE anything is
-+        # built -- recipe / asset lock / code provenance / requested resume. ImportError
-+        # (no rl_exp package) only warns, as the curriculum-state hooks do: recording
-+        # must never break training, but it must also never go missing silently.
++        # built -- recipe / asset lock / code provenance / requested resume. This one is the
++        # gate, not only a recorder: if it cannot be imported the lifecycle question has no
++        # answer, and an unknown permission is not a permission. So the launch refuses here
++        # instead of training unrecorded. (The curriculum-state hooks below warn instead: they
++        # record, they do not decide whether this run may start.)
 +        try:
 +            from rl_exp.tools.runrecord import manifest as run_manifest
 +        except ImportError as exc:
-+            run_manifest = None
-+            print(f"[WARN] run manifest unavailable ({exc}); this run will not record what it was")
++            print(f"[FATAL] run manifest unavailable ({exc}); refusing to launch unrecorded", flush=True)
++            os._exit(2)
 +        try:
 +            run_context = run_manifest.begin(
 +                log_dir=log_dir, task=args_cli.task, argv=sys.argv, env_cfg=env_cfg, agent_cfg=agent_cfg
-+            ) if run_manifest else None
++            )
 +        except RuntimeError as err:
 +            # A refusal must be observable by whoever started this process. Raising alone is not
 +            # enough: the sim app is already up, its teardown runs on the way out and the process

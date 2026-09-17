@@ -436,7 +436,20 @@ def main() -> int:
             "pre_make" in refused.get("stages", {}),
             "the refusal left no evidence on disk",
         )
-        check("dirty/refusal-verify-blocks", M.main(["--verify", str(dirty_dir)]) != 0, "a refused launch verified clean")
+        # a refusal is a terminal state: verify must not report it as drift (that would make
+        # deleting the evidence the cheap fix), and must not read clean either -- nothing about
+        # a trained run is claimed here.
+        refused_rows, refused_blocking = M.verify(dirty_dir)
+        check(
+            "dirty/refusal-verify-is-not-drift",
+            not refused_blocking and any("refused at T0" in row["detail"] for row in refused_rows),
+            f"{refused_blocking} {[row['detail'] for row in refused_rows[:3]]}",
+        )
+        check(
+            "dirty/refusal-verify-is-not-clean",
+            M.main(["--verify", str(dirty_dir)]) != 0,
+            "a refused launch verified clean",
+        )
 
         os.environ[M.DIRTY_OVERRIDE_ENV] = "offline test: must run in whatever tree it finds"
         try:

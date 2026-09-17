@@ -4,23 +4,24 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 # -*- coding: utf-8 -*-
-"""The entry-side run (ARCH_PLAN 2.3 C4 / L02, L03, L05): a real process, not a mock.
+"""The entry-side run (ARCH_PLAN 2.3 C4 / L02, L03): a real process, not a mock.
 
 The offline suite proves the decision table and the wiring; it cannot prove that a *trainer
-process* consults them before it builds anything, and 2.2's whole point is that the answer must
-not depend on which entry was used. So this tool drives the real entries against a fixture
-directory (2.1a forbids retiring a real line to get one) and judges what came out:
+process* consults them before it builds anything. So this tool drives the real entries against
+the real retired line -- ``lizard/parkour`` (``Lizard-Parkour-Climb-v1``), retired because its
+env cannot be constructed -- and judges what came out:
 
-``launcher``   the new launcher refuses in-process, without starting the trainer at all
-``trainer``    the old trainer refuses *and leaves its T0 refusal* on disk -- the refusal is evidence
-``tuning``     the tuning entry (``run_ablation``), which shells out to that trainer, is killed by it
-``announce``   a due retirement announcement warns and proceeds, and the warning reaches the record
-``moved``      a launch judged against one directory keeps that verdict when the directory moves on
+``launcher``   the launcher refuses in-process, without starting the trainer at all: exit 2,
+               the identity it judged recorded, and no run directory
+``trainer``    the old trainer refuses *and leaves its T0 refusal* on disk, which ``--verify``
+               then reads as a refusal and not as a run that died on the way to T1
 
-Only ``launcher`` can run without the sim app; the others start it and belong in the run window.
+Only ``launcher`` can run without the sim app; ``trainer`` starts it and belongs in the run
+window. A retired line is never *produced* for a test (2.1a): both tracks use the line the
+directory already retired.
 
     python rl_exp\\tools\\verify\\lifecycle_entry_run.py --track launcher
-    python rl_exp\\tools\\verify\\lifecycle_entry_run.py --track all --task Lizard-Rough-v14
+    python rl_exp\\tools\\verify\\lifecycle_entry_run.py --track trainer --task Lizard-Parkour-Climb-v1
 """
 
 from __future__ import annotations
@@ -39,12 +40,12 @@ for _path in (str(_REPO), str(_REPO / "rl_exp" / "tools" / "verify"), str(_REPO 
         sys.path.insert(0, _path)
 
 import host_paths  # noqa: E402
-from rl_exp.tools.runrecord import lifecycle  # noqa: E402
-from rl_exp.tools.runrecord import manifest as M  #: E402
-from rl_exp.tools.verify import lifecycle_entry_fixture as fixture_entry  # noqa: E402
+from rl_exp.tools.runrecord import manifest as M  # noqa: E402
 
 TRAINER = "scripts/reinforcement_learning/rsl_rl/train.py"
 REFUSAL = "refused to start"
+RETIRED_TASK = "Lizard-Parkour-Climb-v1"
+RETIRED_LINE = "lizard/parkour"
 
 
 def _run(command: list[str], *, cwd: pathlib.Path, environment: dict) -> subprocess.CompletedProcess:
@@ -53,16 +54,15 @@ def _run(command: list[str], *, cwd: pathlib.Path, environment: dict) -> subproc
     return subprocess.run(command, cwd=str(cwd), env=environment, capture_output=True, text=True, timeout=1800)
 
 
-def _environment(python: str, index_root: pathlib.Path) -> dict:
-    """The child's environment: the fixture directory is the whole point of the run.
+def _environment() -> dict:
+    """The child's environment.
 
     ``RL_ALLOW_DIRTY_TREE`` is set because these tracks run while the repository is being
-    changed: the lifecycle answer is what they are about, and a dirty tree would refuse every
-    launch for a reason that has nothing to do with what is under test.
+    changed: the lifecycle answer is what they are about, and a dirty tree would otherwise be a
+    second refusal standing in front of the one under test.
     """
     return {
         **os.environ,
-        lifecycle.INDEX_DIR_ENV: str(index_root),
         "RL_ALLOW_DIRTY_TREE": "lifecycle entry run: the tree is dirty by definition here",
         "PYTHONUNBUFFERED": "1",
     }
@@ -79,155 +79,91 @@ def _newest_run_dir(experiment_name: str, root: pathlib.Path) -> pathlib.Path | 
     return runs[-1] if runs else None
 
 
+def _refusal_problems(label: str, record: dict) -> list[str]:
+    """What the refusal itself must say, whichever entry produced it.
+
+    The reason has to name the retired line, and it must not promise a successor: the index
+    registers none for ``lizard/parkour``, and a message that points at a line which does not
+    exist is worse than no message.
+    """
+    problems: list[str] = []
+    if record.get("allowed") is not False:
+        problems.append(f"{label}: the launch must be refused, got allowed={record.get('allowed')!r}")
+    # the identity lives where the entry that produced it put it: the launcher nests it under
+    # ``identity`` (and repeats the decision under ``lifecycle``), the trainer's record is the
+    # T0 declaration. Reading only one shape would judge the record's layout, not its content.
+    identity = record.get("identity") or record.get("lifecycle") or record
+    if identity.get("line") != RETIRED_LINE or identity.get("status") != "retired":
+        problems.append(f"{label}: the refusal must carry the identity it read, got {identity!r}")
+    reason = record.get("reason") or ""
+    if "retired line" not in reason:
+        problems.append(f"{label}: the refusal must say the line is retired, got {reason!r}")
+    if "successor" in reason:
+        problems.append(f"{label}: the refusal promises a successor the index does not register: {reason!r}")
+    return problems
+
+
 def track_launcher(args, python: str, out: pathlib.Path) -> list[str]:
     """The new entry refuses before starting anything -- provable without the sim app."""
-    fixture = out / "fixture_launcher"
-    fixture_entry.build(fixture, retire=args.line, announce=None, notice_until=None, today=None, successor=None)
-    environment = _environment(python, fixture)
     before = _newest_run_dir(args.experiment, _isaac_root())
+    record_path = out / "launcher_record.json"
     result = _run(
-        [python, "rl_exp/tools/launch_recipe.py", "--task", args.task, "--launch", "--num_envs", "64"],
+        [
+            python,
+            "rl_exp/tools/launch_recipe.py",
+            "--task",
+            args.task,
+            "--launch",
+            "--num_envs",
+            "64",
+            "--record",
+            str(record_path),
+        ],
         cwd=_REPO,
-        environment=environment,
+        environment=_environment(),
     )
     problems: list[str] = []
     if result.returncode != 2:
         problems.append(f"launcher: exit {result.returncode}, expected 2 (refusal)")
     if "refused:" not in result.stderr:
         problems.append(f"launcher: no refusal line in stderr: {result.stderr.strip()[:200]!r}")
-    if "successor" not in result.stderr:
-        problems.append("launcher: the refusal must say where new work belongs")
+    if not record_path.is_file():
+        problems.append("launcher: no launch record was written, so the verdict cannot be read")
+        return problems
+    problems.extend(_refusal_problems("launcher", json.loads(record_path.read_text(encoding="utf-8"))))
     if _newest_run_dir(args.experiment, _isaac_root()) != before:
         problems.append("launcher: a refusal must not start the trainer (a run directory appeared)")
-    print(f"[entry-run] launcher: {result.stderr.strip().splitlines()[:1]}")
+    print(f"[entry-run] launcher: exit {result.returncode}, {result.stderr.strip().splitlines()[:1]}")
     return problems
 
 
 def track_trainer(args, python: str, out: pathlib.Path) -> list[str]:
-    """The old trainer refuses, and the refusal is on disk: a refused launch is not nothing."""
-    fixture = out / "fixture_trainer"
-    fixture_entry.build(fixture, retire=args.line, announce=None, notice_until=None, today=None, successor=None)
-    environment = _environment(python, fixture)
-    result = _run(_trainer_command(python, args, iterations=1), cwd=_isaac_root(), environment=environment)
+    """The trainer refuses, the refusal is on disk, and ``--verify`` reads it as a refusal."""
+    before = _newest_run_dir(args.experiment, _isaac_root())
+    result = _run(_trainer_command(python, args, iterations=1), cwd=_isaac_root(), environment=_environment())
     problems: list[str] = []
-    if result.returncode == 0:
-        problems.append("trainer: a retired line must not launch")
-    if REFUSAL not in result.stdout and REFUSAL not in result.stderr:
+    if result.returncode != 2:
+        problems.append(
+            f"trainer: exit {result.returncode}, expected 2 -- a refusal must be observable to a"
+            " CI job or a sweep scheduler (a raise alone exits 0 here: the sim app teardown)"
+        )
+    if REFUSAL not in (result.stdout + result.stderr):
         problems.append(f"trainer: no refusal in the output: {(result.stdout + result.stderr)[-300:]!r}")
     run_dir = _newest_run_dir(args.experiment, _isaac_root())
-    if run_dir is None:
-        problems.append("trainer: the refusal must leave its T0 on disk")
-    else:
-        written = json.loads((run_dir / M.MANIFEST_NAME).read_text(encoding="utf-8"))
-        verdict = (written.get("declaration") or {}).get("lifecycle") or {}
-        if verdict.get("allowed") is not False:
-            problems.append(f"trainer: T0 does not record the refusal: {verdict!r}")
-        if not written.get("failures"):
-            problems.append("trainer: the refusal is not in the record's failures")
-        print(f"[entry-run] trainer: refused, T0 at {run_dir.name} (allowed={verdict.get('allowed')})")
-    return problems
-
-
-def track_tuning(args, python: str, out: pathlib.Path) -> list[str]:
-    """The tuning entry trains through that same trainer, so it must die the same way."""
-    fixture = out / "fixture_tuning"
-    fixture_entry.build(fixture, retire=args.line, announce=None, notice_until=None, today=None, successor=None)
-    spec = out / "spec.yaml"
-    spec.write_text(
-        "runs:\n"
-        f"  - tag: refuse\n    task: {args.task}\n    seed: 42\n    max_iterations: 1\n"
-        "    eval_checkpoints: []\n    eval_modes: []\n    overrides: []\n",
-        encoding="utf-8",
-    )
-    result = _run(
-        [python, "ablation_harness/run_ablation.py", "--spec", str(spec), "--python", python],
-        cwd=_REPO,
-        environment=_environment(python, fixture),
-    )
-    problems: list[str] = []
-    if result.returncode == 0:
-        problems.append("tuning: the sweep must fail when its run refuses to start")
-    if REFUSAL not in result.stdout and REFUSAL not in result.stderr:
-        problems.append("tuning: the child's refusal must surface (no refusal found in the sweep output)")
-    print(f"[entry-run] tuning: exit {result.returncode}")
-    return problems
-
-
-def track_announce(args, python: str, out: pathlib.Path) -> list[str]:
-    """A due announcement is a warning, not a wall: it proceeds and it is recorded."""
-    fixture = out / "fixture_announce"
-    fixture_entry.build(
-        fixture,
-        retire=None,
-        announce=args.line,
-        notice_until=(args.today or "2026-01-01"),
-        today=_day(args.today or "2026-01-01"),
-        successor=None,
-    )
-    result = _run(
-        _trainer_command(python, args, iterations=2), cwd=_isaac_root(), environment=_environment(python, fixture)
-    )
-    problems: list[str] = []
-    if result.returncode != 0:
-        problems.append(f"announce: a due announcement must not block the launch (exit {result.returncode})")
-    run_dir = _newest_run_dir(args.experiment, _isaac_root())
-    if run_dir is None:
-        problems.append("announce: no run directory to read the record from")
+    if run_dir is None or run_dir == before:
+        problems.append("trainer: the refusal must leave its T0 on disk (a refused launch is evidence)")
         return problems
     written = json.loads((run_dir / M.MANIFEST_NAME).read_text(encoding="utf-8"))
-    verdict = (written.get("declaration") or {}).get("lifecycle") or {}
-    if verdict.get("retirement_due") is not True or not verdict.get("warn"):
-        problems.append(f"announce: the overdue announcement must be recorded as a warning: {verdict!r}")
-    print(f"[entry-run] announce: exit 0, warn={verdict.get('warn')!r}")
+    problems.extend(_refusal_problems("trainer", (written.get("declaration") or {}).get("lifecycle") or {}))
+    if not written.get("failures"):
+        problems.append("trainer: the refusal is not in the record's failures")
+    rows, blocking = M.verify(run_dir)
+    if blocking:
+        problems.append(f"trainer: --verify must not report a refused launch as broken: {blocking}")
+    if not any("refused at T0" in row.get("detail", "") for row in rows):
+        problems.append(f"trainer: --verify must say the launch was refused: {[row['detail'] for row in rows]}")
+    print(f"[entry-run] trainer: exit {result.returncode}, refusal recorded at {run_dir.name}")
     return problems
-
-
-def track_moved(args, python: str, out: pathlib.Path) -> list[str]:
-    """L05: the directory moving on does not rewrite what the run was started under."""
-    first, second = out / "fixture_moved_a", out / "fixture_moved_b"
-    fixture_entry.build(first, retire=None, announce=None, notice_until=None, today=None, successor=None, bump=1)
-    result = _run(
-        _trainer_command(python, args, iterations=1), cwd=_isaac_root(), environment=_environment(python, first)
-    )
-    problems: list[str] = []
-    if result.returncode != 0:
-        problems.append(f"moved: the first launch must succeed (exit {result.returncode})")
-        return problems
-    run_dir = _newest_run_dir(args.experiment, _isaac_root())
-    if run_dir is None:
-        problems.append("moved: no run directory")
-        return problems
-    recorded = json.loads((run_dir / M.MANIFEST_NAME).read_text(encoding="utf-8"))
-    digest = ((recorded.get("declaration") or {}).get("lifecycle") or {}).get("directory_sha256")
-
-    # the directory is revised *after* the launch: the recorded verdict stands, and today's
-    # directory is not re-applied to it (hard constraint 6)
-    fixture_entry.build(second, retire=None, announce=None, notice_until=None, today=None, successor=None, bump=2)
-    os.environ[lifecycle.INDEX_DIR_ENV] = str(second)
-    try:
-        rows, blocking = M.verify(run_dir)
-    finally:
-        os.environ.pop(lifecycle.INDEX_DIR_ENV, None)
-    lifecycle_rows = [row for row in rows if "line" in row.get("detail", "")]
-    # only the directory's own rows decide this track: a short run legitimately leaves other
-    # claims unknown (no checkpoint yet, rebuild not attempted), and letting those block would
-    # make this judgement about everything except what it is about
-    lifecycle_blocking = [item for item in blocking if "line " in item or "lifecycle" in item]
-    if lifecycle_blocking:
-        problems.append(f"moved: a moved directory must not block the record: {lifecycle_blocking}")
-    if not any("changed since this launch" in row.get("detail", "") for row in rows):
-        problems.append(f"moved: the moved directory must be reported: {[row['detail'] for row in lifecycle_rows]}")
-    still = json.loads((run_dir / M.MANIFEST_NAME).read_text(encoding="utf-8"))
-    if ((still.get("declaration") or {}).get("lifecycle") or {}).get("directory_sha256") != digest:
-        problems.append("moved: the record was rewritten when the directory moved")
-    print(f"[entry-run] moved: record kept its directory digest, verify reported the move")
-    return problems
-
-
-def _day(text: str):
-    import datetime as _dt
-
-    return _dt.date.fromisoformat(text)
 
 
 def _isaac_root() -> pathlib.Path:
@@ -256,9 +192,6 @@ def _trainer_command(python: str, args, *, iterations: int) -> list[str]:
 TRACKS = {
     "launcher": track_launcher,
     "trainer": track_trainer,
-    "tuning": track_tuning,
-    "announce": track_announce,
-    "moved": track_moved,
 }
 NO_SIM = ("launcher",)
 
@@ -266,10 +199,8 @@ NO_SIM = ("launcher",)
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--track", default="launcher", choices=[*TRACKS, "all"])
-    parser.add_argument("--task", default="Lizard-Rough-v14", help="task id the launch uses")
-    parser.add_argument("--line", default="lizard/main", help="line the fixture retires/announces")
+    parser.add_argument("--task", default=RETIRED_TASK, help="the retired line's task id")
     parser.add_argument("--num_envs", type=int, default=64)
-    parser.add_argument("--today", default=None, help="date for a due announcement (ISO)")
     parser.add_argument("--experiment", default=None, help="log directory name (default: read off the task)")
     parser.add_argument("--report", type=pathlib.Path, default=None, help="write the report here")
     parser.add_argument("--python", default=None, help="interpreter (default: paths.yaml's)")
@@ -286,7 +217,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"[entry-run] {name}: {'no sim app needed' if name in NO_SIM else 'starts the sim app'}")
         return 0
 
-    report: dict = {"task": args.task, "line": args.line, "python": python, "tracks": {}}
+    report: dict = {"task": args.task, "line": RETIRED_LINE, "python": python, "tracks": {}}
     problems: list[str] = []
     with tempfile.TemporaryDirectory(prefix="entry_run_") as tmp:
         out = pathlib.Path(tmp)

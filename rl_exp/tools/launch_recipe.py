@@ -13,9 +13,10 @@ directory, then config, then the gate, then the run -- and its own record of wha
 phase C's cross-check can compare the two entries for the same directory instead of trusting one.
 
 Until the new builder (2.4 B1/B2) can compose a config from a recipe spec, the training half is
-still the fork trainer, started here with the directory pinned (``RL_RECIPE_DIR``) so the run's
-T0 binds the *same* directory this launcher judged. ``--launch`` is that hand-off; everything
-before it is real and runs without the sim app (``--check``, the default).
+still the fork trainer. The hand-off passes no directory override: both entries read this
+checkout's ``versions/``, so the run's T0 binds the *same* directory this launcher judged.
+``--launch`` is that hand-off; everything before it is real and runs without the sim app
+(``--check``, the default).
 
     python rl_exp\\tools\\launch_recipe.py --task Lizard-Rough-v14 --num_envs 64
     python rl_exp\\tools\\launch_recipe.py --task Lizard-Rough-v14 --resume --load_run <dir> --launch
@@ -47,7 +48,6 @@ PASSTHROUGH = (
     "--load_run",
     "--checkpoint",
     "--drop_curriculum_state",
-    "--allow_retired_resume",
 )
 
 
@@ -77,7 +77,7 @@ def plan(
 
     Args:
         task: the gym task id to launch.
-        argv: the command line; the two lifecycle flags are read from it (one reader, as in the
+        argv: the command line; the curriculum flag is read from it (one reader, as in the
             trainer).
         num_envs: override for the declared env count.
         seed: override for the declared seed.
@@ -85,8 +85,8 @@ def plan(
         resume: whether this is a resume (which the lifecycle table treats differently).
         load_run: the run selector, as the trainer's agent config carries it.
         checkpoint: the checkpoint selector.
-        root: repository root whose ``rl_exp/versions`` is read, defaulting to the configured
-            directory (``RL_RECIPE_DIR`` or this checkout).
+        root: repository root whose ``rl_exp/versions`` is read, defaulting to this checkout
+            (tests pass a synthetic tree).
 
     Returns:
         The launch record: the directory identity, what was built, the config-side binding, the
@@ -98,7 +98,6 @@ def plan(
     record: dict = {
         "task": task,
         "argv": list(argv or []),
-        "directory_revision": index.get("revision"),
         "directory_sha256": index.get("digests"),
         "identity": identity,
     }
@@ -138,13 +137,10 @@ def plan(
         agent_cfg.load_checkpoint = checkpoint
 
     record["golden"] = manifest.recipe_ref(env_cfg)
-    log_root = pathlib.Path(os.path.abspath(os.path.join("logs", "rsl_rl", agent_cfg.experiment_name)))
     verdict, evidence = lifecycle.startup_check(
         task=task,
         argv=record["argv"],
         agent_cfg=agent_cfg,
-        log_dir=None,
-        log_root=log_root,
         declared_line=record["golden"].get("params_line"),
         root=root,
     )
@@ -161,7 +157,6 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--load_run", default=None)
     parser.add_argument("--checkpoint", default=None)
     parser.add_argument("--drop_curriculum_state", action="store_true", default=False)
-    parser.add_argument("--allow_retired_resume", action="store_true", default=False)
     parser.add_argument("--record", type=pathlib.Path, default=None, help="write the launch record here")
     parser.add_argument("--launch", action="store_true", default=False,
                         help="hand off to the trainer (the sim app runs; the check above runs first)")
@@ -195,9 +190,8 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     command = [str(args.python), "scripts/reinforcement_learning/rsl_rl/train.py", "--task", args.task]
     command += [token for flag in PASSTHROUGH for token in _passthrough(args, flag)]
-    environment = {**os.environ, lifecycle.INDEX_DIR_ENV: str(lifecycle.index_root())}
     print(f"[launcher] training half is still the fork trainer: {' '.join(command)}")
-    return subprocess.call(command, cwd=str(isaac_root), env=environment)
+    return subprocess.call(command, cwd=str(isaac_root))
 
 
 def _passthrough(args, flag: str) -> list[str]:
