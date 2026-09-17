@@ -1,0 +1,2 @@
+run_id,protocol,task,tag,mode,seed,git_rev_lizard,git_rev_isaaclab,timestamp,success_rate,fall_rate,lin_mae_mps,ang_mae_radps,energy_per_m_j,stop_overshoot_mps,recovery_mean_s,never_recovered
+Lizard-Rough-v14_850_nominal_seed123_proto-v1,Locomotion-Eval-v1,Lizard-Rough-v14,850,nominal,123,f349495,28a37cecd,2026-09-17T16:26:44,0.2476,0.0,0.8374,0.1726,10744.2285,0.0281,,

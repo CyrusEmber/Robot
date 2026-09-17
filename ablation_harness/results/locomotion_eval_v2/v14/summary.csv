@@ -3,3 +3,7 @@ Lizard-Rough-v14_3150_nominal_seed123,Locomotion-Eval-v2,Lizard-Rough-v14,3150,n
 Lizard-Rough-v14_850_nominal_seed123,Locomotion-Eval-v2,Lizard-Rough-v14,850,nominal,123,c5f56ed,28a37cecd,2026-09-15T20:13:06,0.2476,0.0,0.8374,0.1726,10744.2285,0.0281,,
 Lizard-Rough-v14_1150_nominal_seed123,Locomotion-Eval-v2,Lizard-Rough-v14,1150,nominal,123,cee0adb,28a37cecd,2026-09-15T20:15:07,0.2771,0.0,0.8394,0.1742,10981.2412,0.0206,,
 Lizard-Rough-v14_1300_nominal_seed123,Locomotion-Eval-v2,Lizard-Rough-v14,1300,nominal,123,cee0adb,28a37cecd,2026-09-15T20:17:07,0.1186,1.0,1.1524,0.9123,11404.9883,0.0,,
+Lizard-Rough-v14_850rec_nominal_seed123,Locomotion-Eval-v2,Lizard-Rough-v14,850rec,nominal,123,f349495,28a37cecd,2026-09-17T16:18:59,0.2476,0.0,0.8374,0.1726,10744.2285,0.0281,,
+Lizard-Rough-v14_850recA_nominal_seed123,Locomotion-Eval-v2,Lizard-Rough-v14,850recA,nominal,123,f349495,28a37cecd,2026-09-17T16:22:51,0.2476,0.0,0.8374,0.1726,10744.2285,0.0281,,
+Lizard-Rough-v14_1150_nominal_seed123_ckpt1150,Locomotion-Eval-v2,Lizard-Rough-v14,1150,nominal,123,f349495,28a37cecd,2026-09-17T16:24:40,0.2771,0.0,0.8394,0.1742,10981.2412,0.0206,,
+Lizard-Rough-v14_850_nominal_seed123_suite-roughb016,Locomotion-Eval-v2,Lizard-Rough-v14,850,nominal,123,f349495,28a37cecd,2026-09-17T16:30:18,0.2473,0.0,0.8374,0.1727,10813.7695,0.0283,,

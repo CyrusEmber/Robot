@@ -630,7 +630,9 @@ def main():
         "agent_cfg": {
             "digest": cfg_snapshot.digest(agent_snap),
             "snapshot": agent_snap,
-            "clip_actions": agent_cfg.clip_actions,
+            # None is a value here (the wrapper applies no clipping), so it is written as such
+            # rather than left empty -- an empty slot in this format means "not recorded"
+            "clip_actions": agent_cfg.clip_actions if agent_cfg.clip_actions is not None else "none",
         },
         "suite": _suite_reference(protocol, env_cfg),
         "eval_protocol": _protocol_reference(protocol),

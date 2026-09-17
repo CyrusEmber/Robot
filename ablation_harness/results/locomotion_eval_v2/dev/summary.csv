@@ -1,0 +1,2 @@
+run_id,protocol,task,tag,mode,seed,git_rev_lizard,git_rev_isaaclab,timestamp,success_rate,fall_rate,lin_mae_mps,ang_mae_radps,energy_per_m_j,stop_overshoot_mps,recovery_mean_s,never_recovered
+Lizard-Velocity-Rough_devnolock_nominal_seed123_assets-unknown,Locomotion-Eval-v2,Lizard-Velocity-Rough-v0,devnolock,nominal,123,f349495,28a37cecd,2026-09-17T16:31:37,0.2927,0.0,0.8332,0.1715,4259.1006,0.0016,,
