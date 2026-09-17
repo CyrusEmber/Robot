@@ -119,7 +119,7 @@
 
 **1.2 会话记录（启动声明 + 构造证据 + 训练就绪核验）**
 
-**1.2a（2026-09-15 落地；`rl_exp/tools/runrecord/manifest.py`，套件 `[26]`，训练侧补丁 `fork_patches/train_run_manifest.patch` 已应用）**：四个调用点（T0 在 `gym.make` 前 / 环境构造后核验 / runner 后装 save 钩子 / `learn` 前冻结）＋ ImportError 仅告警，逻辑全在仓内模块（补丁只留调用）。要点：
+**1.2a（2026-09-15 落地；`rl_exp/tools/runrecord/manifest.py`，套件 `[26]`，训练侧补丁 `fork_patches/train_run_manifest.patch` 已应用）**：四个调用点（T0 在 `gym.make` 前 / 环境构造后核验 / runner 后装 save 钩子 / `learn` 前冻结）＋ ImportError 的处置（原"仅告警"已于 2026-09-17 **有意反转**为 `[FATAL]` + `os._exit(2)` 拒绝启动，见 §1.3 第 1 条），逻辑全在仓内模块（补丁只留调用）。要点：
 
 - **manifest 自身走 `cfg_snapshot` 落盘**：agent cfg 的 `MISSING`（`stochastic`/`init_noise_std`/`obs_groups` 就是未设值）首版直接 `json.dumps` 就抛 `TypeError`；改为一处序列化，MISSING/浮点/路径/地址全按同一套规则。
 - **T0 立即落盘**（`gym.make` 中途挂掉也要留启动证据）；**T1 摘要可重算**：`t1_digest(manifest)` 在冻结与校验两侧共用，手改 manifest 无法留下匹配摘要。
@@ -157,7 +157,7 @@
 | 全部带 c_k | `common_step_counter` | 仅 joint SIR 路径回填 | 解耦：有 c_k 就恢复 |
 | 其它课程 term | 任何 `ManagerTermBase` | 仅 WARN | 注册表未登记 **且任务声明要求恢复 ⇒ 硬失败** |
 
-1. **补丁 ImportError** 现 WARN 后继续 → 对声明要求课程恢复的任务改硬失败（声明 `REQUIRES_CURRICULUM_STATE`（`ClassVar[bool]`）放任务 cfg 侧，读 `type(env_cfg)` 不依赖 rl_exp 导入；**已落地**），其它任务透传。保存 hook 安装失败同样只在声明任务上终止。
+1. **补丁 ImportError** 现 WARN 后继续 → 对声明要求课程恢复的任务改硬失败（声明 `REQUIRES_CURRICULUM_STATE`（`ClassVar[bool]`）放任务 cfg 侧，读 `type(env_cfg)` 不依赖 rl_exp 导入；**已落地**），其它任务透传。保存 hook 安装失败同样只在声明任务上终止。**2026-09-17 追加（有意反转 §1.2a 的"记录不打断训练"）**：`manifest` 自身不可用（`rl_exp` 缺失或模块内导入失败）⇒ 门禁与记录器同体缺失，判**拒绝启动**（`[FATAL] … refusing to launch unrecorded` + `os._exit(2)`），不是 WARN 后继续；代价是该路径**不留记录**、只有 stderr。
 2. **`--weights_only` 正名**：实测只丢课程状态，rsl_rl **仍加载 model + optimizer**（`_peek_lr` 读 optimizer 学习率即证）→ 新增 `--drop_curriculum_state`，旧名保留为别名 + 弃用提示（不改公开行为）；`PLAN.md` #11 措辞同步。**已落地**：CLI 与 Python 入口（`apply_resume_state`/`freeze`）双名并存，显式给出互相矛盾的取值时明确报错。
 3. **多 GPU 不在保证范围**：状态只从 rank 0 写；manifest 记 `distributed`/rank；README 与本文各写一句。**已落地**：非 0 rank 拒绝恢复、不装保存 hook，T1 记 `runner_is_distributed`/`runner_gpu_global_rank` 与 `multi_gpu_resume_verified: false`。
 

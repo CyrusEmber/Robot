@@ -1193,6 +1193,14 @@ resume 拒绝、save 守卫、`train.py` 的导入失败守卫、manifest 记录
 | `moved` 档 | 收回离线面（`verify/rev-moved-is-reachable`、`dirty/refusal-verify-is-not-drift`、`test_lifecycle_gate.py` 的 verify 组） |
 | fork 补丁一致性 | `git apply --check --reverse` 两个补丁均成功 ⇒ 删除 `--allow_retired_resume` 参数块与 ImportError 改 FATAL 后，补丁链与 fork 树仍逐字节一致 |
 
+> **2026-09-17 补记（L02 入口侧重跑；追加，不改上文）**：上表 `trainer` 档标"保留档位（真跑窗口执行）"，而本节结论行又写"L02…**通过**（三档各自真跑）" —— 两者对不上：前者是收缩**删掉 `tuning` 档、把 ImportError 改 `[FATAL]`、并改掉拒绝文案之后**的实情，后者是从收缩前那一节抄来的旧口径。现按 `ARCH_PLAN.md` §2.3 对 L02 的**原始两档定义**重跑，两档跑的都是收缩**之后**的代码：
+>
+> - `--track launcher --task Lizard-Parkour-Climb-v1` ⇒ 退出码 **2**、stderr `[launcher] refused: retired line: refusing new_train; retirement stops new work on this line`、**未新建 run 目录**（拒绝发生在 spawn 之前）；
+> - `--track trainer`（同 task）⇒ 退出码 **2**、拒绝留在 `logs/rsl_rl/lizard_parkour_climb_v1/2026-09-17_17-02-16`：`stages` 只有 `pre_make`、`declaration.lifecycle.allowed=false`、`status=retired`、`failures=["refused to start: retired line: refusing new_train; retirement stops new work on this line"]`；`manifest --verify` **无 blocking**，逐行读作 "launch refused at T0, no training started"，训练后才有的断言一律记 not applicable；
+> - 两档同跑 `LIFECYCLE_ENTRY_RUN_OK`（`lifecycle_entry_run.py` 的档表见 `TRACKS`；`--report` 落在 `%TEMP%`，本条目摘出实际值）。
+>
+> ⇒ **L02 通过 = 上述两档**，"三档"含已删的 `tuning` 档，**作废**；上文 `trainer` 档"真跑窗口执行"与结论行的"三档"一并按本条为准。L03 的缺状态 resume 真跑臂**仍未跑**（工作树里 `--track resume` 已起草但未提交、未跑，按 `PLAN.md` #23 记在账上）。
+
 ### 边界
 - **不再有"提示期 / 生效日"机制**：退休生效 = 目录显式修订；旧线不会被自动退休，也不存在运行期硬截止日。若要给某条线留迁移期，写进 `reason` 与人读的文档，不用机器判定条件表达。
 - **`eval`/`export`/`rebuild`/`load_ckpt` 不经过这张表**：它们不受退休影响，但也**没有被这层覆盖**（原表把"允许"当成已接线，是误读）。将来若某入口要受管，届时连同它的调用点一起加。
