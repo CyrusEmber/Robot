@@ -41,7 +41,25 @@ FROZEN = {
     "rl_exp/versions/cfg_baselines.json": "b18a517c43ddef5f79609dc4dea94080ad8a15926a778835bb0aa8a079c95c03",
     "rl_exp/versions/lizard/main/cfg_lock.json": "4326bd0bbf0b0b263fd071d9f3f2b1cc0a51d5137d30050567917eaa6b92a12b",
     "rl_exp/versions/lizard/parkour/cfg_lock.json": "6c60a9263323547856f4984ee4e373893260f8c99ec88e0a116a17d7cbb4c20a",
+    # Frozen 2026-09-17 at rev ed4d35b, the commit that landed the line: the baseline lock was
+    # written *after* 020e6fb, so it entered the table later than the other three (B0 addendum).
+    # It is the lock of the line that trains next, and until it was here "this line's golden
+    # moved" had no digest guard at all -- the hole the record had listed as A-side debt.
+    "rl_exp/versions/lizard/baseline/cfg_lock.json": "61d32e8dd47d3827def1dde7f4899962367d0eb6f7e2dac432f6a1edd4c11b61",
 }
+
+FROZEN_REVS: dict[str, str] = {
+    "rl_exp/versions/cfg_baselines.json": "020e6fb",
+    "rl_exp/versions/lizard/main/cfg_lock.json": "020e6fb",
+    "rl_exp/versions/lizard/parkour/cfg_lock.json": "020e6fb",
+    "rl_exp/versions/lizard/baseline/cfg_lock.json": "ed4d35b",
+}
+"""Which revision each frozen file's bytes are from, for the banner only.
+
+Separate from :data:`FROZEN` because :func:`check` is a pure function of digests and its self-test
+falsifies it as one; this table adds no rule, just an honest provenance line (one file was frozen
+later than the others, and a banner claiming 020e6fb for all four would be wrong).
+"""
 
 
 def check(frozen: dict[str, str], root: pathlib.Path) -> list[str]:
@@ -102,6 +120,10 @@ def main(argv: list[str] | None = None) -> int:
         return self_test()
 
     problems = check(FROZEN, _REPO)
+    for rel in sorted(set(FROZEN) ^ set(FROZEN_REVS)):
+        # a provenance entry for a file nobody checks (or the reverse) is a table that describes
+        # something other than what is enforced -- one rename away from a banner that lies
+        problems.append(f"{rel}: frozen and FROZEN_REVS disagree about which files are covered")
     for problem in problems:
         print(f"  DRIFT: {problem}")
     if problems:
@@ -111,7 +133,8 @@ def main(argv: list[str] | None = None) -> int:
         print("  against -- and an expectation the new builder can regenerate by itself proves nothing.")
         print("GOLDEN_FROZEN_DRIFT")
         return 1
-    print(f"GOLDEN_FROZEN_OK ({len(FROZEN)} baseline file(s) unchanged since rev 020e6fb)")
+    revs = ", ".join(f"{rev} x{list(FROZEN_REVS.values()).count(rev)}" for rev in dict.fromkeys(FROZEN_REVS.values()))
+    print(f"GOLDEN_FROZEN_OK ({len(FROZEN)} baseline file(s) unchanged, frozen at: {revs})")
     return 0
 
 
