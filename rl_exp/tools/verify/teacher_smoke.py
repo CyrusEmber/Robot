@@ -28,7 +28,7 @@ from rl_exp.tasks.teacher_env_cfg import (
 )
 from rl_exp.tasks import obs_protocol
 
-# the v2 policy width as approved in the protocol record (versions/lizard/obs_protocol_anchors.json)
+# the v2 policy width as approved in the protocol record (versions/obs_protocol_anchors.json)
 EXPECTED_POLICY_DIM = obs_protocol.dims_for("Lizard-Rough-Play-v2")["policy"]
 
 cfg = LizardRoughTeacherEnvCfg_PLAY()

@@ -4,7 +4,7 @@
 > 被版本之外的系统依赖，故享家族级 SSOT（与 REWARDS.md 平级）。
 > **数值真源（2026-09-16 变更）**：布局与维度的**声明面**已迁到
 > `versions/obs_protocols.json`（`rl_exp/tasks/obs_protocol.py` 是唯一读者），已审摘要与
-> 分组宽度在 `versions/lizard/obs_protocol_anchors.json`，闸门 `check_obs_protocol.py`
+> 分组宽度在 `versions/obs_protocol_anchors.json`，闸门 `check_obs_protocol.py`
 > 同时对冻结 golden 与实构 cfg 两侧断言。`check_obs_layout.py`、`test_cfg_snapshot.py`、
 > `teacher_smoke_runner.py`、`teacher_smoke*.py`、`parkour_smoke.py` 里的顺序/脚序/宽度
 > 副本已改为消费该声明。**装配事实仍在代码**（`teacher_env_cfg.py` 含

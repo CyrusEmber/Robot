@@ -1,6 +1,6 @@
 {
  "format": 1,
- "note": "Observation protocol declaration (ARCH_PLAN Step 3.1a). Protocols are keyed by the first 12 hex of their content digest over 'groups' in recorded order; the gate recomputes it and the approved digests live in versions/lizard/obs_protocol_anchors.json.",
+ "note": "Observation protocol declaration (ARCH_PLAN Step 3.1a). Protocols are keyed by the first 12 hex of their content digest over 'groups' in recorded order; the gate recomputes it and the approved digests live in versions/obs_protocol_anchors.json.",
  "protocols": {
   "1d87d5c6b546": {
    "digest": "1d87d5c6b5463bc836b5754bbb24c9a49dd7453f67c075a1e61f2805da36165d",

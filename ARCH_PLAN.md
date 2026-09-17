@@ -420,7 +420,7 @@
 | 件 | 内容 | 类型 |
 |---|---|---|
 | 3.1a | 声明模块 `rl_exp/tasks/obs_protocol.py`：每协议身份一条（版本串、组序、项序、维度、脚本序、clip/scale/噪声、部署标志、内容摘要） | 离线 |
-| 3.1a′ | **摘要锚点** `versions/lizard/obs_protocol_anchors.json`：每协议身份一条**已审** sha256。改锚点须带 reason 且**禁止自动更新**（照 `check_cfg_lock` 纪律）；同版本被静默改写即红 —— 自动重算摘要只会得到新值，不会自行拒绝 | 离线 |
+| 3.1a′ | **摘要锚点** `versions/obs_protocol_anchors.json`（与声明同层、全仓一份）：每协议身份一条**已审** sha256 + 已审宽度及其摘要。改锚点须带 reason 且**禁止自动更新**（照 `check_cfg_lock` 纪律）；同版本被静默改写即红 —— 自动重算摘要只会得到新值，不会自行拒绝 | 离线 |
 | 3.1b | 静态门 `check_obs_protocol.py`：按 0a 的三条覆盖条件（任务键集、引用存在、未引用历史协议须登记用途）＋ 构造后 cfg 的组名与项序比对；构造失败记红不记跳过 | 离线 |
 | 3.1c | 消重复源：`check_obs_layout.py:45-59` 字面量、`test_cfg_snapshot.py:66` 的镜像、`teacher_networks.py:21` 与 `teacher_smoke_runner.py:31` 脚本序、`teacher_smoke_runner.py` 的 90/208/83 维度，全部改为消费声明 | 离线 |
 | 3.1d | `manifest.py:174` 的 `obs_layout_digest`（现注释自认 stand-in）改接协议身份＋摘要 | 离线，**实测计入出口**：未接 = 未通过，不许只记"待挂" |

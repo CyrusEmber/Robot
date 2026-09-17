@@ -184,7 +184,7 @@ def record(clusters: dict[str, list[str]], facts: dict[str, dict]) -> dict:
         "note": (
             "Observation protocol declaration (ARCH_PLAN Step 3.1a). Protocols are keyed by the "
             "first 12 hex of their content digest over 'groups' in recorded order; the gate "
-            "recomputes it and the approved digests live in versions/lizard/obs_protocol_anchors.json."
+            "recomputes it and the approved digests live in versions/obs_protocol_anchors.json."
         ),
         "protocols": dict(sorted(protocols.items())),
         "tasks": dict(sorted(tasks.items())),

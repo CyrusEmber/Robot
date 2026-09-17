@@ -21,7 +21,7 @@ claim, and a disagreement in either is red.
 
 Keyed by content, not by name: a protocol's key is the first 12 hex of the digest over its own
 ``groups``, recomputed here. An edit that leaves the key alone is red immediately; the reviewed
-digests live in ``versions/lizard/obs_protocol_anchors.json``, which this gate reads and never
+digests live in ``versions/obs_protocol_anchors.json``, which this gate reads and never
 rewrites (approving a protocol is a separate, deliberate act -- auto-recomputing an anchor
 would approve whatever was just written).
 
@@ -43,7 +43,7 @@ import obs_protocol_inventory as inv  # noqa: E402
 
 _REPO = pathlib.Path(__file__).resolve().parents[3]
 DECLARATION = _REPO / "rl_exp" / "versions" / "obs_protocols.json"
-ANCHORS = _REPO / "rl_exp" / "versions" / "lizard" / "obs_protocol_anchors.json"
+ANCHORS = _REPO / "rl_exp" / "versions" / "obs_protocol_anchors.json"
 FORMAT_VERSION = 1
 _ORDERED_FIELDS = ("terms", "dropped_terms", "clip", "scale", "noise")
 

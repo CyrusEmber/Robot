@@ -26,7 +26,7 @@ import json
 import pathlib
 
 DECLARATION = pathlib.Path(__file__).resolve().parents[2] / "rl_exp" / "versions" / "obs_protocols.json"
-ANCHORS = pathlib.Path(__file__).resolve().parents[2] / "rl_exp" / "versions" / "lizard" / "obs_protocol_anchors.json"
+ANCHORS = pathlib.Path(__file__).resolve().parents[2] / "rl_exp" / "versions" / "obs_protocol_anchors.json"
 _FOOT_SUFFIX = "_foot_ring"
 
 
