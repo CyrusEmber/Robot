@@ -56,9 +56,12 @@ FROZEN = {
 
 FROZEN_REVS: dict[str, str] = {
     "rl_exp/versions/cfg_baselines.json": "020e6fb",
-    "rl_exp/versions/lizard/main/cfg_lock.json": "020e6fb",
+    # bbedd96 is the re-anchor's own commit: the column moved there, so that is the revision these
+    # bytes are from (020e6fb remains true for the content they describe -- the snapshots did not
+    # move, see the B0 addendum).
+    "rl_exp/versions/lizard/main/cfg_lock.json": "bbedd96",
     "rl_exp/versions/lizard/parkour/cfg_lock.json": "020e6fb",
-    "rl_exp/versions/lizard/baseline/cfg_lock.json": "ed4d35b",
+    "rl_exp/versions/lizard/baseline/cfg_lock.json": "bbedd96",
 }
 """Which revision each frozen file's bytes are from, for the banner only.
 
