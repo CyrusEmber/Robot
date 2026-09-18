@@ -78,10 +78,9 @@ FROZEN_REVS: dict[str, str] = {
     # snapshots they carry are still 020e6fb's (B0 addenda ② and ③).
     "rl_exp/versions/lizard/main/cfg_lock.json": "27ca424",
     "rl_exp/versions/lizard/parkour/cfg_lock.json": "020e6fb",
-    # v1.1's bytes are written but not committed, so there is no rev to name yet; the previous SHA
-    # would be a lie in the banner (it describes bytes that no longer exist). Pinned with the same
-    # follow-up commit that the second re-baseline used (B0 addendum ②, last row).
-    "rl_exp/versions/lizard/baseline/cfg_lock.json": "v1.1 (pending commit)",
+    # v1.1's bytes landed in 1ba6157, the same two-step shape the second re-baseline used (B0
+    # addendum ②, last row): the new digest first, then this line to the revision it came from.
+    "rl_exp/versions/lizard/baseline/cfg_lock.json": "1ba6157",
 }
 """Which revision each frozen file's bytes are from, for the banner only.
 
