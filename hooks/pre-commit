@@ -10,9 +10,10 @@ cd "$REPO" || exit 1
 
 # Only gate commits that touch recipe-relevant files; pure prose commits
 # pass. Version-record markdown counts as recipe-relevant: the doc gate must
-# run on the commits that could break it.
+# run on the commits that could break it. Patch archives and this hook itself
+# count too -- re-pinning a fork patch is exactly the change the pin gate reads.
 STAGED=$(git diff --cached --name-only --diff-filter=ACMR)
-echo "$STAGED" | grep -qE '^(rl_exp|ablation_harness)/.*\.(py|yaml|yml|json|urdf|usda|usd)$|^rl_exp/versions/' || exit 0
+echo "$STAGED" | grep -qE '^(rl_exp|ablation_harness)/.*\.(py|yaml|yml|json|urdf|usda|usd|patch)$|^rl_exp/versions/|^hooks/' || exit 0
 
 # Python: the venv is recorded in paths.yaml (or RL_PYTHON) and reported by
 # host_paths.py -- a stdlib-only query, so whatever python is on PATH can ask
@@ -24,6 +25,23 @@ if command -v python >/dev/null 2>&1; then
 fi
 HAVE_VENV=1
 { [ -n "$PY" ] && [ -f "$PY" ]; } || { PY=python; HAVE_VENV=0; }
+
+# The fork tree carries DR semantics no recipe of ours covers (PLAN.md #19), and the
+# IsaacLab internals we lean on are not public API. Needs the tree: a machine with none
+# recorded in paths.yaml skips with a WARN (run_offline_checks.bat still runs the suite).
+TREE=""
+if command -v python >/dev/null 2>&1; then
+  TREE=$(python ablation_harness/host_paths.py --root 2>/dev/null)
+fi
+if [ -n "$TREE" ] && [ -d "$TREE" ]; then
+  echo "[pre-commit] framework_pin_check --strict --self-test"
+  "$PY" rl_exp/tools/verify/framework_pin_check.py --strict --self-test || {
+    echo "[pre-commit] FAIL: the fork tree no longer provides what the stack relies on, or its DR semantics moved (PLAN.md #19)."
+    exit 1
+  }
+else
+  echo "[pre-commit] WARN: no IsaacLab tree recorded (paths.yaml) -- skipping framework_pin_check"
+fi
 
 echo "[pre-commit] check_dr_parity --strict"
 "$PY" rl_exp/tools/verify/check_dr_parity.py --strict || {

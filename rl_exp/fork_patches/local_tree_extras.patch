@@ -1,3 +1,10 @@
+# Pinned on purpose, not an accident: the first hunk empties isaaclab.bat (49 lines -> 0).
+# The bat is abandoned -- training and eval call `python scripts\...` directly -- so the
+# empty file is the frozen state (PLAN.md #20).
+# The velocity_env_cfg.py hunks carry DR semantics no recipe of ours covers (mode/tempo of
+# both push events). They are pinned OUTSIDE this archive by
+# framework_pin_check.FORK_DR_SEMANTICS, so re-pinning them here is a gated change: the
+# tree plus the archive moving together still has to answer to that constant (PLAN.md #19).
 diff --git a/isaaclab.bat b/isaaclab.bat
 index 131c75e16..e69de29bb 100644
 --- a/isaaclab.bat

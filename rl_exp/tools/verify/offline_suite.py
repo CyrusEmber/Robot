@@ -56,8 +56,8 @@ class Check(NamedTuple):
 # Positions are run-local: retirement may remove entries. Historical [i/N]
 # references belong to the commit where they were recorded.
 CHECKS: list[Check] = [
-    Check("framework pin check (IsaacLab internals + pinned SHA)",
-          [f"{_V}/framework_pin_check.py"], contract=("rl_exp/tasks/teacher_env_cfg.py",)),
+    Check("framework pin check (IsaacLab internals + pinned SHA + fork DR semantics)",
+          [f"{_V}/framework_pin_check.py", "--self-test"], contract=("rl_exp/tasks/teacher_env_cfg.py",)),
     Check("freeze contracts (DR/wiring + robot block parity, DR lists, PLAY coverage, asset contract + locks)",
           [f"{_V}/check_dr_parity.py", "--strict"], contract=("rl_exp/tasks/teacher_env_cfg.py",)),
     Check("recovery vectorization parity",
