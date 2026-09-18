@@ -567,6 +567,16 @@ ValueError: curriculum state in the checkpoint does not fit this task: runtime.n
 | 一处自陈失误 | 首版重指脚本按 `read_text()` 的字符串算 sha256，而机器 `core.autocrlf=true`（工作树 CRLF）⇒ 表里先填的摘要是 LF 视图的哈希，`[35]` 当场红（`GOLDEN_FROZEN_DRIFT`）。文件本身没坏：读-写往返保住 CRLF，只有 26 行被替换。已按**磁盘字节**重算并复查 |
 | `FROZEN_REVS` | 与摘要分两次提交：先落新摘要（本批），再另一次提交把 rev 钉到本批的提交号 —— 该列只喂 banner，但"这份字节来自哪个 rev"必须是真话 |
 
+### B0 追加③：家族 8 条开发态配方翻表触发的合法重锚（2026-09-18）
+
+| 项 | 值 |
+|---|---|
+| 触发 | 片 4a 把这 8 个任务的注册表与身份映射入口从 `lizard_env_cfg` / `rough_env_cfg` / `curriculum_env_cfg` / `curriculum_rough_env_cfg` 改指 `recipe_tasks` 的同名生成类；golden 那列随即指向旧模块 ⇒ `[41]` 立刻在这一列上具名报红 8 条（**这正是 2026-09-18 那条断言的用途**：翻表不再能把锁留在旧形状上） |
+| 与①②的区别 | ② 是"26 条教师条目搬一行"；③ 是同一动作在**家族 8 条**上（含 2 条来自已删文件的模块名） |
+| 逐字段证据 | 递归逐叶 diff：`main/cfg_lock.json` **8 个叶**变了、**全部且只有** `env_cfg_class`；`digest`/`snapshot`/`version`/`agent_cfg_class` 逐条相等；`git diff --numstat` = `8 8`。**独立交叉核对**：新值长度差之和 = **42**，与该文件字节差（2,581,748 → 2,581,706）**相等** ⇒ 没有第二个字节被动过 |
+| 摘要 | `8a004fab…bf76`（2,581,748 B）→ `1643a755…7dc8`（2,581,706 B） |
+| 处置 | 同②：同一次改动里改 `FROZEN` 一行摘要 + 本条记录 + 理由；**未跑 `--update`**、未重生成任何 `snapshot` |
+
 ### 边界与阻塞（不得据本片宣称通过）
 
 - **门 1 的时点限定**：上表门 1 是 **A0 落地前**的实跑（当时线键仍是 `lizard`）。A0 落地后 `[24]` 独立红于 `lizard: 32 task(s) declare this line … but no such line exists ['lizard/baseline','lizard/main','lizard/parkour']`（`params_line` 收尾在 A0 清单里）⇒ **切到新布局后必须重跑门 1**，本片不以 A0 前的绿替代。
@@ -1532,6 +1542,45 @@ rough 的训练 cfg 读到 PLAY 的 5×5 网格，`10 → 5`硬 A 的字段比�
 
 **边界（本片不得宣称）**：注册表与 `recipes.json` 仍指类路径（训练入口未切）；4 个类体未删；这 4 条**无
 `diff.json`**（`[41]` 按预期打印 `no difference declaration (hard A only)`）；家族 obs 宽度仍未实测（旧账）。
+
+### 追加③（2026-09-18）：家族四配方翻表 + 类体退役（片 4 / 共 5 片）
+
+**性质**：**追加**条目，片 0–3 的收尾：把训练入口切到声明路径，并删掉随之退役的类体。
+
+**落地**（4 处）：
+
+| 件 | 内容 |
+|---|---|
+| 两处字符串 | `tasks/__init__.py` 8 条 + `recipes.json` 8 条 `env_cfg_entry` → `recipe_tasks:<同名>`；脚本逐条断言"该生成类确实存在"后再写（8 条映射条目改后仍 `line`/`agent_entry`/`legacy_task_version` 不变，且只有这 8 个叶变） |
+| 6 个类体 | `LizardRoughEnvCfg(_PLAY)`、`LizardCurriculumFlatEnvCfg(_PLAY)`、`LizardCurriculumRoughEnvCfg(_PLAY)` 删除；`curriculum_rough_env_cfg.py` **整个文件删除**（删后只剩 docstring + import）。`LizardFlatEnvCfg(_PLAY)` **保留** —— 它是四个配方声明的 `base`（家族接线） |
+| 引用面 | `position_check.py` 的 import 改指 `recipe_tasks`；`test_recipe_map_gate.py` 的两处 fixture 串同步；`check_dr_parity.py` 的注释（"family line stays inline until its own recipe line is migrated"）改为"已声明，且本模块的接线就是它们声明的 base" |
+| 冻结件 | `main/cfg_lock.json` 8 条 `env_cfg_class` 定点搬一行 + `[35]` 重锚（见 B0 追加③） |
+
+**检查与结果**
+
+| 项 | 结果 |
+|---|---|
+| `[24]` 翻表**后** | **通过**：`CFG_LOCK_OK (36 tasks, 3 line(s))` —— 生成类重建出的 cfg 与 golden **digest 相同** ⇒ "换的是入口，不是内容" |
+| `[41]` | **通过**：`RECIPE_BUILD_OK (34 task(s) field-identical to the frozen golden; 322 declared difference(s))` |
+| `[35]` | **通过**：`GOLDEN_FROZEN_OK`（见 B0 追加③） |
+| 全量套件 | **通过**：`ALL_OFFLINE_CHECKS_PASSED (43/43)` |
+| 翻表现场 | `[41]` 在那 8 条上**具名报红**（`the golden names …lizard_env_cfg:LizardFlatEnvCfg… while the recipe map declares …recipe_tasks:…`）⇒ 昨天加的断言正是这一步的守卫，金标准不会停在旧形状上 |
+
+**反证**（比片 0–3 时更强：那时类路径还在、golden 可由任一表达式满足；现在声明是**唯一**表达式）
+
+| 输入 | 结果 |
+|---|---|
+| 从 `_V0_ROUGH_DELTA` 拿掉 `v0_rough_terrain` | `[41]` **rc=1**，且**恰好 4 条**（`Rough` 与 `Curriculum-Rough` 各 train/play）具名报两处字段差：`scene.terrain.terrain_type` `"generator" → "plane"`、`scene.terrain.terrain_generator` `{TerrainGenerator} → null` —— 用该元素的两条配方、两种 kind 一个不多一个不少 |
+| 逐字节复原（sha256 相同） | rc=0 · `RECIPE_BUILD_OK (34 task(s) …)` |
+
+**边界**：parkour 2 条仍走类路径（退役线，且它是拒绝路径的**唯一活体夹具**，见 §「2.4 收尾」前的
+L02 记录）；这 4 条仍**无 `diff.json`**；家族 obs 宽度仍未实测（旧账，属 Step 3.1 那一支）。
+
+**提交窗口的实情（记录在案）**：本片收口时（上表 43/43 那次）树是干净的；随后另有一批**他人的未提交
+改动**落在 baseline 线（`recipe.py` 的 `baseline_no_dr` 发现 `reset_robot_joints` 不能删、改为钉住，
+并新增 `tools\verify\reset_check.py`）。那批使 `[24]`/`[41]` 在**恰好 2 条 baseline 条目**上红，字段就是
+它动的那一处（`events.reset_robot_joints`：`null → reset_joints_by_scale`），**与本片的家族面无关**；
+它需要自己的 baseline 重锚（`--update --reason` + `[35]`）。本片提交按路径限定，未扫入该批任何文件。
 
 ### 生成方式，与它带来的**限制**
 

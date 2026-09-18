@@ -3,49 +3,49 @@
   "recipes": {
     "flat-v0@1": {
       "line": "lizard/main",
-      "env_cfg_entry": "rl_exp.tasks.lizard_env_cfg:LizardFlatEnvCfg",
+      "env_cfg_entry": "rl_exp.tasks.recipe_tasks:LizardFlatEnvCfg",
       "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardFlatPPORunnerCfg",
       "legacy_task_version": null
     },
     "flat-play-v0@1": {
       "line": "lizard/main",
-      "env_cfg_entry": "rl_exp.tasks.lizard_env_cfg:LizardFlatEnvCfg_PLAY",
+      "env_cfg_entry": "rl_exp.tasks.recipe_tasks:LizardFlatEnvCfg_PLAY",
       "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardFlatPPORunnerCfg",
       "legacy_task_version": null
     },
     "curriculum-flat-v0@1": {
       "line": "lizard/main",
-      "env_cfg_entry": "rl_exp.tasks.curriculum_env_cfg:LizardCurriculumFlatEnvCfg",
+      "env_cfg_entry": "rl_exp.tasks.recipe_tasks:LizardCurriculumFlatEnvCfg",
       "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardCurriculumFlatPPORunnerCfg",
       "legacy_task_version": null
     },
     "curriculum-flat-play-v0@1": {
       "line": "lizard/main",
-      "env_cfg_entry": "rl_exp.tasks.curriculum_env_cfg:LizardCurriculumFlatEnvCfg_PLAY",
+      "env_cfg_entry": "rl_exp.tasks.recipe_tasks:LizardCurriculumFlatEnvCfg_PLAY",
       "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardCurriculumFlatPPORunnerCfg",
       "legacy_task_version": null
     },
     "curriculum-rough-v0@1": {
       "line": "lizard/main",
-      "env_cfg_entry": "rl_exp.tasks.curriculum_rough_env_cfg:LizardCurriculumRoughEnvCfg",
+      "env_cfg_entry": "rl_exp.tasks.recipe_tasks:LizardCurriculumRoughEnvCfg",
       "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardCurriculumRoughPPORunnerCfg",
       "legacy_task_version": null
     },
     "curriculum-rough-play-v0@1": {
       "line": "lizard/main",
-      "env_cfg_entry": "rl_exp.tasks.curriculum_rough_env_cfg:LizardCurriculumRoughEnvCfg_PLAY",
+      "env_cfg_entry": "rl_exp.tasks.recipe_tasks:LizardCurriculumRoughEnvCfg_PLAY",
       "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardCurriculumRoughPPORunnerCfg",
       "legacy_task_version": null
     },
     "rough-v0@1": {
       "line": "lizard/main",
-      "env_cfg_entry": "rl_exp.tasks.rough_env_cfg:LizardRoughEnvCfg",
+      "env_cfg_entry": "rl_exp.tasks.recipe_tasks:LizardRoughEnvCfg",
       "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardRoughPPORunnerCfg",
       "legacy_task_version": null
     },
     "rough-play-v0@1": {
       "line": "lizard/main",
-      "env_cfg_entry": "rl_exp.tasks.rough_env_cfg:LizardRoughEnvCfg_PLAY",
+      "env_cfg_entry": "rl_exp.tasks.recipe_tasks:LizardRoughEnvCfg_PLAY",
       "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardRoughPPORunnerCfg",
       "legacy_task_version": null
     },

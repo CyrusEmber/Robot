@@ -52,7 +52,7 @@ from rl_exp.tools.runrecord import binding  # noqa: E402
 # record's second B0 addendum), so the frozen numbers below changed while nothing they describe did.
 FROZEN = {
     "rl_exp/versions/cfg_baselines.json": "b18a517c43ddef5f79609dc4dea94080ad8a15926a778835bb0aa8a079c95c03",
-    "rl_exp/versions/lizard/main/cfg_lock.json": "8a004fabc1572d7018204409c59cd20afc1b39c5857e5ac3bcb7fc8ff3e4bf76",
+    "rl_exp/versions/lizard/main/cfg_lock.json": "1643a7554b315d8d097078d46a4c893f3f70ed626b179a0f0dab631311417dc8",
     "rl_exp/versions/lizard/parkour/cfg_lock.json": "6c60a9263323547856f4984ee4e373893260f8c99ec88e0a116a17d7cbb4c20a",
     # Frozen 2026-09-17 at rev ed4d35b, the commit that landed the line: the baseline lock was
     # written *after* 020e6fb, so it entered the table later than the other three (B0 addendum).

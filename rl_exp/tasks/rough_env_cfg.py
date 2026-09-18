@@ -69,51 +69,5 @@ LIZARD_ROUGH_TERRAINS_CFG = TerrainGeneratorCfg(
 )
 
 
-@configclass
-class LizardRoughEnvCfg(LizardFlatEnvCfg):
-    """26-joint lizard on stock rough terrain, perceptive (height scan in obs)."""
-
-    def __post_init__(self):
-        super().__post_init__()
-
-        # undo the flat conversion: lizard-scaled rough terrain + generator
-        self.scene.terrain.terrain_type = "generator"
-        self.scene.terrain.terrain_generator = LIZARD_ROUGH_TERRAINS_CFG
-        self.scene.terrain.max_init_terrain_level = 5
-
-        # height scanner: bodies live under the importer's Geometry scope
-        # (flattened USD: /Robot/Geometry/base_link); anymal assumes /Robot/base.
-        # Pattern covers the full leg span (feet at |x| up to ~1.4 m) but
-        # sparser than stock (0.2 m resolution -> 15x9 = 135 points).
-        self.scene.height_scanner = RayCasterCfg(
-            prim_path="{ENV_REGEX_NS}/Robot/Geometry/base_link",
-            offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 20.0)),
-            ray_alignment="yaw",
-            pattern_cfg=patterns.GridPatternCfg(resolution=0.2, size=[2.8, 1.6]),
-            debug_vis=False,
-            mesh_prim_paths=["/World/ground"],
-        )
-        # the base class set update_period on the STOCK scanner object; this
-        # replacement lost it -> re-apply policy-rate cadence (50 Hz, matches
-        # the teacher snapshot; update_period 0 would raycast at 200 Hz sim rate)
-        self.scene.height_scanner.update_period = self.decimation * self.sim.dt
-        self.observations.policy.height_scan = ObsTerm(
-            func=mdp.height_scan,
-            params={"sensor_cfg": SceneEntityCfg("height_scanner")},
-            noise=Unoise(n_min=-0.1, n_max=0.1),
-            clip=(-1.0, 1.0),
-        )
-
-        # terrain difficulty curriculum (stock)
-        self.curriculum.terrain_levels = CurrTerm(func=mdp.terrain_levels_vel)
 
 
-@configclass
-class LizardRoughEnvCfg_PLAY(LizardRoughEnvCfg):
-    """Play variant: smaller terrain grid, curriculum off, randomization off."""
-
-    def __post_init__(self):
-        super().__post_init__()
-
-        # deterministic evaluation: shared PLAY wiring (single source, see play_utils)
-        apply_play_wiring(self)

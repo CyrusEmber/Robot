@@ -97,8 +97,10 @@ ALLOWLIST: set[str] = {
     "self.events.sample_ring_noise = EventTerm(",  # v12: per-episode extero corruption state
     # stage B (ARCH_PLAN.md 2.4, B1): the teacher's base-contact narrowing moved into
     # components.terminations, so this literal line now exists on the family side only. Semantics
-    # are unchanged and golden-verified (ACCEPTANCE.md "B1 · 组件库切片 2": 36 tasks CFG_LOCK_OK);
-    # the family line stays inline until its own recipe line is migrated.
+    # are unchanged and golden-verified (ACCEPTANCE.md "B1 · 组件库切片 2": 36 tasks CFG_LOCK_OK).
+    # 2026-09-18: the family's four dev-state recipes are declared now, but this module's wiring is
+    # what they declare as their base -- it stays inline, and this comparison keeps reading it
+    # side by side with the teacher's components.
     'self.terminations.base_contact.params["sensor_cfg"] = SceneEntityCfg(',
 }
 

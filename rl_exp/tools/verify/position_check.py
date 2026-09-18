@@ -25,9 +25,7 @@ import torch
 
 import isaaclab_tasks  # noqa: F401
 from rl_exp.tasks.lizard_env_cfg import LizardFlatEnvCfg_PLAY
-from rl_exp.tasks.curriculum_rough_env_cfg import (
-    LizardCurriculumRoughEnvCfg_PLAY,
-)
+from rl_exp.tasks.recipe_tasks import LizardCurriculumRoughEnvCfg_PLAY
 
 variant = _VARIANT
 cfg = LizardCurriculumRoughEnvCfg_PLAY() if variant == "rough" else LizardFlatEnvCfg_PLAY()

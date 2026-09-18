@@ -82,46 +82,5 @@ def _make_stages(spine_scale: float) -> dict[str, StagedCurriculumTermCfg]:
     }
 
 
-@configclass
-class LizardCurriculumFlatEnvCfg(LizardFlatEnvCfg):
-    """26-joint lizard on flat ground with staged bone/speed/turning curricula."""
-
-    def __post_init__(self):
-        super().__post_init__()
-
-        params = _load_params(self.params_version)
-        action_params = params["action"]
-
-        # split the single joint action term (keeps the tree-order action layout)
-        self.actions = LizardCurriculumActionsCfg()
-        self.actions.joint_pos_legs.scale = action_params["legs_scale"]
-        self.actions.joint_pos_legs.use_default_offset = action_params["use_default_offset"]
-        self.actions.joint_pos_spine.use_default_offset = action_params["use_default_offset"]
-
-        # staged curricula replace the flat task's fixed command ranges
-        for term_name, term_cfg in _make_stages(action_params["spine_scale"]).items():
-            setattr(self.curriculum, term_name, term_cfg)
-
-        # initial command ranges mirror stage 0 (avoids one off-spec resample)
-        self.commands.base_velocity.ranges.lin_vel_x = (0.0, 1.0)
-        self.commands.base_velocity.ranges.ang_vel_z = (-0.5, 0.5)
 
 
-@configclass
-class LizardCurriculumFlatEnvCfg_PLAY(LizardCurriculumFlatEnvCfg):
-    """Play variant: curricula off, spine live, final-stage command ranges."""
-
-    def __post_init__(self):
-        super().__post_init__()
-        params = _load_params(self.params_version)
-
-        # deterministic-eval scene settings (shared PLAY wiring, see play_utils)
-        apply_play_wiring(self)
-
-        # curricula off: final stage everywhere (spine live, full ranges)
-        self.curriculum.bone_curriculum = None
-        self.curriculum.speed_curriculum = None
-        self.curriculum.turn_curriculum = None
-        self.actions.joint_pos_spine.scale = params["action"]["spine_scale"]
-        self.commands.base_velocity.ranges.lin_vel_x = (1.0, 3.0)
-        self.commands.base_velocity.ranges.ang_vel_z = (-2.0, 2.0)

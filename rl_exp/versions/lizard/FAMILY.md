@@ -207,3 +207,11 @@ v8 转正 180° 后轴值翻转（X/Y 分量取反），且**腿名自 v8 起等
 身份核验，名字不一致会让跨路径续训被拒）。配方表是唯一真源 ——"这个版本是什么"= 有序元素
 表 + 逐条差异声明，而不是某个 `__post_init__` 的残留；版本子类一旦重新出现，
 `[41]` 立即具名报红（一个配方两个表达式 = 总有一个没人跑）。
+
+**开发态配方走同一张表（2026-09-18）**：`flat-v0` / `rough-v0` / `curriculum-flat-v0` /
+`curriculum-rough-v0` 四条声明在 `lizard/main` 的**同一张配方表**上（表键 = 身份映射的配方键去掉
+`@1`），`params_version: None`（⇒ 读**开发态** yaml，与映射的 `legacy_task_version: null` 一致），
+base 是**家族接线** `LizardFlatEnvCfg`（不是 teacher 接线，见 `recipe.recipe_base` —— 两者共用这条线
+与同一份 dev yaml）。它们服务的注册任务就是上表那 8 个 `Lizard-Velocity-*-v0` ⇒ **调试态的 env 与冻结
+配方走同一条机制**；`rough_env_cfg.py` / `curriculum_env_cfg.py` 的类体与 `curriculum_rough_env_cfg.py`
+整个文件随之退役（只留调参常量与辅助类）。

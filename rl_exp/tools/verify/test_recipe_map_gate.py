@@ -83,11 +83,11 @@ CASES: list[tuple[str, dict, dict, str | None]] = [
     # -- shapes that must stay green ------------------------------------------------
     ("matching map", CLEAN, REGISTERED, None),
     ("v0 family: no declared version while the id says v0",
-     _doc({"rough-v0@1": _entry(env_cfg_entry="rl_exp.tasks.rough_env_cfg:LizardRoughEnvCfg",
+     _doc({"rough-v0@1": _entry(env_cfg_entry="rl_exp.tasks.recipe_tasks:LizardRoughEnvCfg",
                                 agent_entry="rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardRoughPPORunnerCfg",
                                 legacy_task_version=None)},
           {"Lizard-Velocity-Rough-v0": "rough-v0@1"}),
-     {"Lizard-Velocity-Rough-v0": {"env_cfg_entry_point": "rl_exp.tasks.rough_env_cfg:LizardRoughEnvCfg",
+     {"Lizard-Velocity-Rough-v0": {"env_cfg_entry_point": "rl_exp.tasks.recipe_tasks:LizardRoughEnvCfg",
                                    "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardRoughPPORunnerCfg"}},
      None),
 ]
