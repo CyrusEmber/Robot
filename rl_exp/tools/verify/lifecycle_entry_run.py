@@ -329,7 +329,16 @@ def main(argv: list[str] | None = None) -> int:
             print(f"[entry-run] {name}: {'no sim app needed' if name in NO_SIM else 'starts the sim app'}")
         return 0
 
-    report: dict = {"task": args.task, "line": RETIRED_LINE, "python": python, "tracks": {}}
+    # Each track runs a different subject (the lifeline tracks the retired fixture, `resume` the
+    # declared task), so the report names them per track instead of printing one of the two as if
+    # it were the run's task.
+    report: dict = {
+        "tracks_run": tracks,
+        "lifeline": {"task": args.task, "line": RETIRED_LINE},
+        "resume": {"task": args.resume_task},
+        "python": python,
+        "tracks": {},
+    }
     problems: list[str] = []
     with tempfile.TemporaryDirectory(prefix="entry_run_") as tmp:
         out = pathlib.Path(tmp)
