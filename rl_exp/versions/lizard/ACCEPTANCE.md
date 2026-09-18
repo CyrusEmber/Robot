@@ -1499,6 +1499,40 @@ main 线的 delta 有**三个写者**，不是两个：**元素集合**（同一
 | 覆盖边界 | 只覆盖**已声明配方**（26 个任务条目）。v0 家族 8 个与 parkour 2 个任务的条目不在 `recipe.LINES` 里，它们的类仍活在自己的模块（`lizard_env_cfg`/`rough_env_cfg`/`curriculum_*`/`parkour_env_cfg`），`[41]` 的循环到不了 —— 若哪天它们也走声明路径，自动进入本断言 |
 | 旁证 | 全量套件 `ALL_OFFLINE_CHECKS_PASSED`（42/42，当日套件条目数；并行批次同期在重排 `--self-test` 接线） |
 
+### 追加②（2026-09-18）：家族开发态配方上声明路径（片 0–3 / 共 5 片）
+
+**性质**：**追加**条目。上一条把**已声明**的 26 条吃进 `[41]`；本条处理剩下的 10 条里的家族 8 条
+（`Lizard-Velocity-{Flat,Rough,Curriculum-Flat,Curriculum-Rough}-v0` + 各自 PLAY）。parkour 2 条不动
+（退役线，且它是拒绝路径的唯一活体夹具）。本片只落**声明**：注册表仍指类路径，类体未删（翻表与删体是片 4）。
+
+**机制的两处扩展**（`recipe.py`，皆默认值 = 旧行为，故 26 条不受影响）：
+
+| 扩展 | 为什么必须 |
+|---|---|
+| 配方条目可**显式声明 `params_version`**（默认 = 表键） | 这 4 条**没有冻结版本**：映射写 `legacy_task_version: null`、类上 `params_version = None`、参数读**开发态 yaml**。表键原来直接当字段值用 ⇒ 只能硬造一个假版本号（golden 与映射随即互相矛盾）。改后键降为**句柄**、版本成为声明的**事实**。参数侧免费：`_doc(cfg)` = `recipe_params.load(cfg.params_line, cfg.params_version)`（`recipe.py:55`），`None` 即 dev yaml |
+| **base 按配方解析**（默认 = 线 base） | 这 4 条与 teacher 共用线 `lizard/main`（它们的 `params_line` 就是它、读同一份 dev yaml），但**根接线不同**：family 用 `LizardFlatEnvCfg`。按线给 base 就只能另起一条线，而另起线需要自己的 `<line>_params.yaml` ⇒ **同一套机器参数两份 SSOT** |
+
+**落子**：新增 10 个元素（6 train + 4 play）与 3 个 delta 元组；`flat-v0` 元素为空（它**就是**那个根，
+同 teacher 线 v1 的形状）。**tuning 值仍留在原模块**，只搬装配：`rough_env_cfg.LIZARD_ROUGH_TERRAINS_CFG`、
+`curriculum_env_cfg.LizardCurriculumActionsCfg` / `_make_stages(spine_scale)`；元素里不重述任何阈值。
+
+| 项 | 结果 |
+|---|---|
+| 硬 A（`[41]`） | **通过**：`RECIPE_BUILD_OK (34 task(s) field-identical to the frozen golden; 322 declared difference(s))` —— 26 → 34，**多出来的 8 条逐字段一致**（这就是"搬运未改语义"的证明） |
+| `[24]` | **通过**：`CFG_LOCK_OK (36 tasks, 3 line(s))`（类路径一侧仍未变，两条路径同对一份 golden ⇒ 漂移双向可抓） |
+| 全量套件 | **通过**：`ALL_OFFLINE_CHECKS_PASSED (43/43)` |
+| 钉数 | `EXPECTED_COMPARED["lizard/main"]` 24 → 32（+8 = 4 配方 × 2 kind） |
+| 独立复核 | 对 8 个任务比 `recipe.build()` vs 仍注册的类路径快照：8/8 逐字段相同 |
+
+**发现（1 条，值得单记）**：`configclass` 在构造时给每个成员**deepcopy 自己那一份**，而元素跑在构造**之后**
+⇒ 元素里直接赋**模块级 cfg 单例**，会让后续 `apply_play_wiring` 的**就地**改写污染同进程所有 cfg（实测症状：
+rough 的训练 cfg 读到 PLAY 的 5×5 网格，`10 → 5`硬 A 的字段比对当场抓到）。修法 = 元素内 `deepcopy`。
+危害面已量化收口：`apply_play_wiring` 唯一的共享对象就地写就是 `terrain_generator.num_rows/num_cols`
+（`play_utils.py:63-64`），`_make_stages` 每次返回新对象 ⇒ **片 4 删掉类路径那份独立副本后，这仍是唯一一处**。
+
+**边界（本片不得宣称）**：注册表与 `recipes.json` 仍指类路径（训练入口未切）；4 个类体未删；这 4 条**无
+`diff.json`**（`[41]` 按预期打印 `no difference declaration (hard A only)`）；家族 obs 宽度仍未实测（旧账）。
+
 ### 生成方式，与它带来的**限制**
 
 路径是**派生**的（量母版 → 重放元素 → 残差按所有权表分类），**理由是手写的**；生成器用完即删，不留在仓里。这带来一个必须写下来的限制：**派生错误会同时出现在文件与闸门两侧**——两边互相印证不等于正确。独立边界只剩硬 A（冻结 golden 钉住字段面）。已做的抽查：分组数与条数与独立量测一致；每组理由都能追到该版 `PLAN.md`；人眼过了 v14（2 组）、v3/v5/v11/v12（分组与计数）、baseline（9 组）。

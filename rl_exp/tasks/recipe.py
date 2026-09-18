@@ -23,18 +23,24 @@ not moved yet" would pass every check it was asked to pass.
 from __future__ import annotations
 
 import pathlib
+from copy import deepcopy
 from typing import ClassVar
 
 import isaaclab.sim as sim_utils
 import isaaclab_tasks.manager_based.locomotion.velocity.mdp as mdp
 from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets import ArticulationCfg
+from isaaclab.managers import CurriculumTermCfg as CurrTerm
 from isaaclab.managers import EventTermCfg as EventTerm
+from isaaclab.managers import ObservationTermCfg as ObsTerm
 from isaaclab.managers import RewardTermCfg as RewTerm
 from isaaclab.managers import SceneEntityCfg
+from isaaclab.sensors import RayCasterCfg, patterns
 from isaaclab.utils.configclass import configclass
+from isaaclab.utils.noise import UniformNoiseCfg as Unoise
 
 from rl_exp.tasks import baseline_env_cfg, baseline_mdp, components, recipe_params, teacher_mdp
+from rl_exp.tasks import curriculum_env_cfg, lizard_env_cfg, rough_env_cfg
 from rl_exp.tasks import curriculum_state as cstate
 from rl_exp.tasks import teacher_env_cfg
 from rl_exp.tasks.play_utils import apply_play_wiring
@@ -412,6 +418,116 @@ def play_drops_joint_sir_curriculum(cfg) -> None:
     setattr(cfg.curriculum, teacher_mdp.JOINT_SIR_TERM, None)
 
 
+# --- the family's dev-state envs (flat/rough x plain/curriculum, no frozen version) -----------
+# The four envs the teacher line was snapshot from: they read the *live* dev yaml
+# (``params_version = None``, so the recipe table states None rather than borrowing a version token
+# from the handle), and they share one wiring root -- ``LizardFlatEnvCfg``, the family's flat stack.
+# So the base these four declare is that root and not the line's teacher wiring, exactly as
+# :func:`recipe_base` allows; ``flat-v0``, which that root *is*, declares no elements at all, the
+# same shape the teacher line's v1 has (its delta is empty because the teacher wiring is v1).
+def v0_rough_terrain(cfg) -> None:
+    """Undo the flat conversion: the lizard-scaled rough terrain generator.
+
+    Read from :mod:`rl_exp.tasks.rough_env_cfg` rather than restated here -- the generator is one
+    object, and a copy of its six sub-terrain blocks would be a second answer to "how rough".
+
+    Deep-copied, and not for tidiness: the class path is handed its own copy by ``configclass``'s
+    post-init sweep, which an element runs *after* -- so assigning the module object would share it,
+    and the PLAY wiring's ``num_rows = num_cols = 5`` would then rewrite it for every later cfg in
+    the process (measured: the rough training cfg read the play grid).
+    """
+    cfg.scene.terrain.terrain_type = "generator"
+    cfg.scene.terrain.terrain_generator = deepcopy(rough_env_cfg.LIZARD_ROUGH_TERRAINS_CFG)
+    cfg.scene.terrain.max_init_terrain_level = 5
+
+
+def v0_rough_height_scanner(cfg) -> None:
+    """The perceptive height scanner (up to 135 points) and its policy.
+
+    Bodies live under the importer's Geometry scope (flattened USD: /Robot/Geometry/base_link);
+    stock anymal assumes /Robot/base, so the prim path is written out. The base class set
+    ``update_period`` on the STOCK scanner object; this replacement lost it, so the policy-rate
+    cadence (50 Hz, the teacher snapshot's) is re-applied here -- 0 would raycast at the sim rate.
+    """
+    cfg.scene.height_scanner = RayCasterCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/Geometry/base_link",
+        offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 20.0)),
+        ray_alignment="yaw",
+        pattern_cfg=patterns.GridPatternCfg(resolution=0.2, size=[2.8, 1.6]),
+        debug_vis=False,
+        mesh_prim_paths=["/World/ground"],
+    )
+    cfg.scene.height_scanner.update_period = cfg.decimation * cfg.sim.dt
+    cfg.observations.policy.height_scan = ObsTerm(
+        func=mdp.height_scan,
+        params={"sensor_cfg": SceneEntityCfg("height_scanner")},
+        noise=Unoise(n_min=-0.1, n_max=0.1),
+        clip=(-1.0, 1.0),
+    )
+
+
+def v0_rough_terrain_curriculum(cfg) -> None:
+    """The stock terrain difficulty curriculum the flat wiring dropped (``terrain_levels``)."""
+    cfg.curriculum.terrain_levels = CurrTerm(func=mdp.terrain_levels_vel)
+
+
+def v0_curriculum_actions(cfg) -> None:
+    """Split the single joint action term into legs + spine, so the spine scale can be gated.
+
+    The term cfg comes from :mod:`rl_exp.tasks.curriculum_env_cfg` -- the split's joint patterns
+    are that module's, and the flat task's single ``joint_pos`` term is replaced by it wholesale
+    (legs ordered before spine keeps the concatenated layout identical to the tree order).
+    """
+    action_params = _doc(cfg)["action"]
+    cfg.actions = curriculum_env_cfg.LizardCurriculumActionsCfg()
+    cfg.actions.joint_pos_legs.scale = action_params["legs_scale"]
+    cfg.actions.joint_pos_legs.use_default_offset = action_params["use_default_offset"]
+    cfg.actions.joint_pos_spine.use_default_offset = action_params["use_default_offset"]
+
+
+def v0_curriculum_stages(cfg) -> None:
+    """The three staged curricula (bone/speed/turning) that replace the fixed command ranges.
+
+    The stage lists stay in ``curriculum_env_cfg._make_stages``: they are the tunables, and a
+    transcription here would be a second copy of every threshold and sustain time.
+    """
+    for term_name, term_cfg in curriculum_env_cfg._make_stages(_doc(cfg)["action"]["spine_scale"]).items():
+        setattr(cfg.curriculum, term_name, term_cfg)
+
+
+def v0_curriculum_stage0_ranges(cfg) -> None:
+    """Initial command ranges mirror stage 0 (avoids one off-spec resample)."""
+    cfg.commands.base_velocity.ranges.lin_vel_x = (0.0, 1.0)
+    cfg.commands.base_velocity.ranges.ang_vel_z = (-0.5, 0.5)
+
+
+def play_drops_staged_curricula(cfg) -> None:
+    """Evaluation determinism: the staged curricula would widen the ranges and hand the spine to the
+    policy mid-run, so a replay must keep the stage it started in."""
+    cfg.curriculum.bone_curriculum = None
+    cfg.curriculum.speed_curriculum = None
+    cfg.curriculum.turn_curriculum = None
+
+
+def play_unlocks_spine(cfg) -> None:
+    """The final stage's spine: stage 0 locks it at the rest pose (scale 0), and an evaluation runs
+    where the policy drives it at this recipe's ``spine_scale``."""
+    cfg.actions.joint_pos_spine.scale = _doc(cfg)["action"]["spine_scale"]
+
+
+def play_pins_final_ranges(cfg) -> None:
+    """The final stage's command window, which the dropped curricula can no longer climb to."""
+    cfg.commands.base_velocity.ranges.lin_vel_x = (1.0, 3.0)
+    cfg.commands.base_velocity.ranges.ang_vel_z = (-2.0, 2.0)
+
+
+def play_drops_terrain_levels(cfg) -> None:
+    """Deterministic evaluation: the stock level walk reassigns spawn origins per episode from the
+    measured success rate, so a replay must keep the terrain assignment it started with. The flat
+    dev envs need no such element -- their flat wiring already removed the term."""
+    cfg.curriculum.terrain_levels = None
+
+
 # --- the baseline line (flat-ground walking baseline, no ancestry in the teacher line) --------
 # Its recipes have no upstream mother (``base.json`` is a lineage root), so "what the recipe is"
 # is exactly "what it writes on top of the framework stock cfg" -- which is why the same element
@@ -604,6 +720,16 @@ ELEMENTS: dict[str, object] = {
     "play_pins_full_command_range": play_pins_full_command_range,
     "play_drops_sir_terrain_curriculum": play_drops_sir_terrain_curriculum,
     "play_drops_joint_sir_curriculum": play_drops_joint_sir_curriculum,
+    "v0_rough_terrain": v0_rough_terrain,
+    "v0_rough_height_scanner": v0_rough_height_scanner,
+    "v0_rough_terrain_curriculum": v0_rough_terrain_curriculum,
+    "v0_curriculum_actions": v0_curriculum_actions,
+    "v0_curriculum_stages": v0_curriculum_stages,
+    "v0_curriculum_stage0_ranges": v0_curriculum_stage0_ranges,
+    "play_drops_staged_curricula": play_drops_staged_curricula,
+    "play_unlocks_spine": play_unlocks_spine,
+    "play_pins_final_ranges": play_pins_final_ranges,
+    "play_drops_terrain_levels": play_drops_terrain_levels,
     "baseline_robot": baseline_robot,
     "baseline_actions": baseline_actions,
     "baseline_flat_ground": baseline_flat_ground,
@@ -655,6 +781,26 @@ range to the curriculum's (-1, 5) where the frozen PLAY recipe says (0, 3)."""
 _JOINT_SIR_PLAY: tuple[str, ...] = ("play_drops_joint_sir_curriculum",)
 """v11/v12 replace the row SIR with the joint one, so their PLAY guard is the joint term."""
 
+# The family's dev-state envs: the flat root plus the three deltas its own class files declare.
+# `flat-v0` is the root itself (nothing to add), `rough-v0` adds the rough terrain stack,
+# `curriculum-flat-v0` the staged curricula, `curriculum-rough-v0` both -- and each delta is stated
+# once, as the class bodies state it once (curriculum_rough_env_cfg.py copies curriculum_env_cfg's
+# block, it does not extend it).
+_V0_ROUGH_DELTA: tuple[str, ...] = (
+    "v0_rough_terrain",
+    "v0_rough_height_scanner",
+    "v0_rough_terrain_curriculum",
+)
+_V0_CURRICULUM_DELTA: tuple[str, ...] = (
+    "v0_curriculum_actions",
+    "v0_curriculum_stages",
+    "v0_curriculum_stage0_ranges",
+)
+_V0_CURRICULUM_PLAY: tuple[str, ...] = ("play_drops_staged_curricula", "play_unlocks_spine", "play_pins_final_ranges")
+"""Both curriculum PLAY bodies state the same three things after the shared PLAY wiring: the staged
+terms off, the final stage's spine live, and its command window. Only the rough one has a terrain
+curriculum left to drop, which its own body says too."""
+
 RECIPES: dict[str, dict] = {
     "v1": {"elements": (), "play_elements": (), "declares": (False, False), "pins_full_range": (False, False), "train": "Lizard-Rough-v1", "play": "Lizard-Rough-Play-v1"},
     "v2": {"elements": (), "play_elements": (), "declares": (False, False), "pins_full_range": (False, False), "train": "Lizard-Rough-v2", "play": "Lizard-Rough-Play-v2"},
@@ -677,6 +823,17 @@ RECIPES: dict[str, dict] = {
     "v12": {"elements": _V12_DELTA, "play_elements": _JOINT_SIR_PLAY, "declares": (True, False), "pins_full_range": (False, False), "train": "Lizard-Rough-v12", "play": "Lizard-Rough-Play-v12"},
     "v13": {"elements": _V13_DELTA, "play_elements": _SIR_PLAY, "declares": (True, False), "pins_full_range": (False, False), "train": "Lizard-Rough-v13", "play": "Lizard-Rough-Play-v13"},
     "v14": {"elements": _V14_DELTA, "play_elements": _SIR_PLAY, "declares": (True, False), "pins_full_range": (False, False), "train": "Lizard-Rough-v14", "play": "Lizard-Rough-Play-v14"},
+    # The four v0-family dev-state envs (lizard_env_cfg / rough_env_cfg / curriculum_env_cfg /
+    # curriculum_rough_env_cfg). They state their own base -- the family flat wiring, not this
+    # line's teacher wiring -- and their own params_version: None, because they read the live dev
+    # yaml and record no version, which is the one fact their handles ("v0") must not overrule.
+    # `declares`/`pins_full_range` are stated False rather than left out: neither class states
+    # them, so False is the answer the class path already gives, and a statement that is not
+    # written down is the gap this table exists to close.
+    "flat-v0": {"elements": (), "play_elements": (), "base": lizard_env_cfg.LizardFlatEnvCfg, "params_version": None, "declares": (False, False), "pins_full_range": (False, False), "train": "Lizard-Velocity-Flat-v0", "play": "Lizard-Velocity-Flat-Play-v0"},
+    "rough-v0": {"elements": _V0_ROUGH_DELTA, "play_elements": (), "base": lizard_env_cfg.LizardFlatEnvCfg, "params_version": None, "declares": (False, False), "pins_full_range": (False, False), "train": "Lizard-Velocity-Rough-v0", "play": "Lizard-Velocity-Rough-Play-v0"},
+    "curriculum-flat-v0": {"elements": _V0_CURRICULUM_DELTA, "play_elements": _V0_CURRICULUM_PLAY, "base": lizard_env_cfg.LizardFlatEnvCfg, "params_version": None, "declares": (False, False), "pins_full_range": (False, False), "train": "Lizard-Velocity-Curriculum-Flat-v0", "play": "Lizard-Velocity-Curriculum-Flat-Play-v0"},
+    "curriculum-rough-v0": {"elements": (*_V0_ROUGH_DELTA, *_V0_CURRICULUM_DELTA), "play_elements": ("play_drops_terrain_levels", *_V0_CURRICULUM_PLAY), "base": lizard_env_cfg.LizardFlatEnvCfg, "params_version": None, "declares": (False, False), "pins_full_range": (False, False), "train": "Lizard-Velocity-Curriculum-Rough-v0", "play": "Lizard-Velocity-Curriculum-Rough-Play-v0"},
 }
 
 MAIN_LINE = "lizard/main"
@@ -786,6 +943,39 @@ def _stated(version: str, key: str, *, play: bool, line: str) -> bool | None:
     return None if stated is None else bool(stated[1 if play else 0])
 
 
+def declared_params_version(version: str, *, line: str = MAIN_LINE):
+    """The ``params_version`` this recipe carries: the table key, unless the recipe states its own.
+
+    The key is a *handle* -- what the table is keyed by and what gates iterate -- and the field value
+    is a separate fact, because "a recipe with no frozen version" is a real thing here. The family's
+    four dev-state envs read the live yaml and record no version at all (``legacy_task_version:
+    null`` in the identity map, ``params_version`` written as ``None`` on the class since they
+    existed). Reading the version off the key would have forced a version token they do not have,
+    which the golden and the identity map would then disagree with.
+
+    Args:
+        version: recipe version, a key of this line's recipe table.
+        line: family-relative line handle, a key of :data:`LINES`.
+
+    Returns:
+        The declared ``params_version`` (a version string, or ``None`` for a dev-state recipe).
+    """
+    return LINES[line]["recipes"][version].get("params_version", version)
+
+
+def recipe_base(version: str, *, line: str = MAIN_LINE):
+    """The shared wiring this recipe is built on: the line's, unless the recipe names its own.
+
+    Two roots share one line. The teacher recipes build on the teacher wiring, and the family's
+    dev-state envs on the family wiring -- same robot stack, same dev yaml (their ``params_line`` is
+    this line), different constructor. A base per *line* would have forced the family envs onto a
+    second line, and a second line needs its own ``<line>_params.yaml``: two SSOTs for one set of
+    numbers, which is exactly what :mod:`rl_exp.tasks.recipe_params` exists to prevent.
+    """
+    entry = LINES[line]["recipes"][version]
+    return entry.get("base") or LINES[line]["base"]
+
+
 # The ClassVars a version class used to state about its recipe, and the accessor that now reads
 # each of them from the recipe table. One list, so "which statements must move off the class
 # bodies" has a single answer -- and so a name that has not moved yet shows up as a gap rather
@@ -806,7 +996,7 @@ def _wired_class(version: str, *, play: bool, line: str):
     and keeps the statement out of the snapshot. The class name is the shared wiring's, so nothing
     that records ``type(cfg).__name__`` moves.
     """
-    base = LINES[line]["base"]
+    base = recipe_base(version, line=line)
     stated: dict[str, bool] = {}
     for classvar, accessor in CLASSVAR_STATEMENTS:
         value = accessor(version, play=play, line=line)
@@ -835,7 +1025,7 @@ def base_cfg(version: str, *, line: str = MAIN_LINE, play: bool = False):
     recipe's statement for the same reason ``build`` does -- otherwise the statement itself would
     read as a field changed by nobody.
     """
-    return _wired_class(version, play=play, line=line)(params_version=version)
+    return _wired_class(version, play=play, line=line)(params_version=declared_params_version(version, line=line))
 
 
 def apply_into(cfg, version: str, *, play: bool = False, line: str = MAIN_LINE, trace: list | None = None):
@@ -910,7 +1100,7 @@ def recipe_class(version: str, *, play: bool = False, line: str = MAIN_LINE, nam
             f"recipe {version!r} on {line}: its delta is not declared yet (declared: {declared(line)}),"
             " so a class for it would have to guess the missing part"
         )
-    base = LINES[line]["base"]
+    base = recipe_base(version, line=line)
 
     def __post_init__(self):
         """The shared wiring's own construction, then this recipe's declared steps.
@@ -923,7 +1113,7 @@ def recipe_class(version: str, *, play: bool = False, line: str = MAIN_LINE, nam
         apply_into(self, version, play=play, line=line)
 
     namespace: dict = {
-        "params_version": version,
+        "params_version": declared_params_version(version, line=line),
         "__post_init__": __post_init__,
         "__doc__": f"{line}/{version}{'/play' if play else ''}, built from its declared elements.",
     }

@@ -66,7 +66,7 @@ DIFF_NAME = "diff.json"
 """The difference declaration's filename inside a recipe's version directory (``ARCH_PLAN`` 2.4 B4)."""
 
 EXPECTED_COMPARED: dict[str, int] = {
-    "lizard/main": 24,
+    "lizard/main": 32,
     "lizard/baseline": 2,
 }
 """How many recipe/task pairs this gate compares, per line, pinned.
@@ -590,10 +590,11 @@ def main(argv: list[str] | None = None) -> int:
                 except Exception as err:  # noqa: BLE001 - a build that fails is the finding
                     problems.append(f"{task_id}: build failed: {type(err).__name__}: {err}")
                     continue
-                if getattr(built, "params_version", None) != version:
+                declared_version = recipe.declared_params_version(version, line=line_key)
+                if getattr(built, "params_version", None) != declared_version:
                     problems.append(
                         f"{task_id}: built cfg carries params_version={getattr(built, 'params_version', None)!r}"
-                        f" while the recipe is {version!r}"
+                        f" while the recipe declares {declared_version!r}"
                     )
                 # The retired comparison, asked the other way round. It used to require "the recipe
                 # table == the version subclass"; the subclasses are deleted (PLAN.md #22 step 3), so
