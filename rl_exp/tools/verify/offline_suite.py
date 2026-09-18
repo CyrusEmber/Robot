@@ -140,7 +140,7 @@ CHECKS: list[Check] = [
           [f"{_V}/check_terrain_split_source.py"], contract=("rl_exp/tasks/terrain_map.py",)),
     Check("split-probe wait (a foreign import must still land the patch; install() imports nothing)",
           [f"{_V}/check_split_probe_wait.py"], contract=("rl_exp/tools/verify/terrain_split_probe.py",)),
-    Check("record binding primitives have one home (no second file digest / revision spelling; detector self-tested)",
+    Check    ("record binding primitives have one home (no second file digest / revision spelling / rsl_rl identity; detector self-tested)",
           [f"{_V}/check_record_bindings.py"], contract=("rl_exp/tools/runrecord/binding.py",)),
 ]
 

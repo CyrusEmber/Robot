@@ -15,7 +15,7 @@ strings in the two records of one run and nothing could reconcile them. The prim
 of that, in the shape of ``check_terrain_split_source.py``: a **paste detector**, not a
 semantics check, and its ceiling is stated below rather than implied.
 
-Three signatures, read off the syntax tree -- so a comment or docstring may quote the old lines
+Four signatures, read off the syntax tree -- so a comment or docstring may quote the old lines
 without tripping it (this file does), while the same text as code cannot hide behind a
 ``# noqa``:
 
@@ -28,14 +28,20 @@ without tripping it (this file does), while the same text as code cannot hide be
   expression, or a ``rev-parse`` asked for ``--short``.
 * **a caller choosing a revision spelling** -- ``git_rev(..., short=<anything but False>)``:
   drift #2 exactly, one layer up from a second implementation.
+* **a second spelling of the rsl_rl identity** -- an interpolated string whose literal starts
+  ``source:`` or ``installed:``. ``provenance.rsl_rl_id`` spells that identity for the
+  framework-combination key a baseline is selected by, and drift #3 was the eval record naming
+  the same dependency another way (a distribution version) so the two records of one run could
+  not be reconciled; a re-spelled identity is how that comes back.
 
 **The ceiling, honestly stated** (PLAN.md #27's own warning about paste detectors): this decides
-*which side of* ``binding`` *a line sits on*, not whether the record it feeds is right. A
-duplicate in a shape none of the three signatures reaches -- text decoded and then hashed,
+*which side of* a home *a line sits on*, not whether the record it feeds is right. A duplicate
+in a shape none of the four signatures reaches -- text decoded and then hashed,
 ``hashlib.file_digest`` composed from a helper, a revision fetched through another library or an
-environment variable -- is invisible here. The other direction is held where it can be decided:
-the values are read back by ``test_eval_record.py`` and ``test_run_manifest.py``, so a second
-*rule* cannot be consumed even when this scan cannot see it written.
+environment variable, an identity assembled by ``str.join`` or a lookup table -- is invisible
+here. The other direction is held where it can be decided: the values are read back by
+``test_eval_record.py`` and ``test_run_manifest.py``, so a second *rule* cannot be consumed even
+when this scan cannot see it written.
 """
 
 from __future__ import annotations
@@ -48,7 +54,12 @@ import warnings
 
 _REPO = pathlib.Path(__file__).resolve().parents[3]
 HOME = _REPO / "rl_exp" / "tools" / "runrecord" / "binding.py"
+#: The one home of the identity spelling, exempt alongside :data:`HOME`: it is where the recorded
+#: spelling is chosen, so the scan can only be pointed at a second one elsewhere.
+IDENTITY_HOME = _REPO / "rl_exp" / "tools" / "runrecord" / "provenance.py"
 ROOTS = ("rl_exp", "ablation_harness")
+#: Prefixes that mean "this is an rsl_rl identity" -- the spelling ``rsl_rl_id`` owns.
+IDENTITY_PREFIXES = ("source:", "installed:")
 
 
 def call_name(node: ast.AST) -> str:
@@ -135,6 +146,30 @@ def rev_findings(tree: ast.AST) -> list[str]:
     return found
 
 
+def identity_spelling(tree: ast.AST) -> list[str]:
+    """Every place an rsl_rl identity string is spelled again.
+
+    An f-string is the shape a second spelling takes (``f"source:{rev}"``); a plain literal is
+    prose or a docstring example and is left alone, the same split the other signatures make.
+    """
+    found: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.JoinedStr):
+            continue
+        for part in node.values:
+            literal = part.value if isinstance(part, ast.Constant) and isinstance(part.value, str) else ""
+            if literal.startswith(IDENTITY_PREFIXES):
+                found.append(f"line {node.lineno}: an rsl_rl identity is spelled here ({literal!r}...)")
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Call) and call_name(node) == "format"):
+            continue
+        receiver = getattr(getattr(node, "func", None), "value", None)
+        literal = receiver.value if isinstance(receiver, ast.Constant) and isinstance(receiver.value, str) else ""
+        if literal.startswith(IDENTITY_PREFIXES):
+            found.append(f"line {node.lineno}: an rsl_rl identity is spelled here ({literal!r}...)")
+    return found
+
+
 def module_level(tree: ast.Module) -> ast.Module:
     """The statements that run at import time, as a scope of their own.
 
@@ -158,7 +193,7 @@ def problems_in(source: str) -> list[str]:
     scopes: list[ast.AST] = [module_level(tree)]
     scopes += [node for node in ast.walk(tree) if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))]
     found = [hit for scope in scopes if (hit := hashes_a_file(scope))]
-    return found + rev_findings(tree)
+    return found + rev_findings(tree) + identity_spelling(tree)
 
 
 #: Fabricated sources: each duplicate the detector exists for, and each neighbour it must leave
@@ -207,6 +242,22 @@ _FIXTURES: list[tuple[str, str, bool]] = [
         "def f(tree, spec):\n    return bool(git(tree, 'rev-parse', '--verify', spec))\n",
         False,
     ),
+    ("a second spelling of the rsl_rl identity", "def f(state):\n    return f\"source:{state.rev}\"\n", True),
+    (
+        "the same identity, composed by a format call",
+        "def f(state):\n    return 'installed:{0}'.format(state.version)\n",
+        True,
+    ),
+    (
+        "another prefix is another fact",
+        "def f(state):\n    return f\"distribution:{state.version}\"\n",
+        False,
+    ),
+    (
+        "a docstring quoting the spelling is prose",
+        "def f(state):\n    '''Records 'source:<rev>' as the identity.'''\n    return state.rev\n",
+        False,
+    ),
 ]
 
 
@@ -220,14 +271,14 @@ def self_test() -> list[str]:
     return problems
 
 
-def scan(roots: list[pathlib.Path], home: pathlib.Path | None) -> tuple[int, list[tuple[str, list[str]]]]:
+def scan(roots: list[pathlib.Path], homes: tuple[pathlib.Path, ...]) -> tuple[int, list[tuple[str, list[str]]]]:
     """Findings per file under ``roots``, plus how many files were read."""
     scanned = 0
     findings: list[tuple[str, list[str]]] = []
     for root in roots:
         files = [root] if root.is_file() else sorted(root.rglob("*.py"))
         for path in files:
-            if path.suffix != ".py" or (home is not None and path.resolve() == home.resolve()):
+            if path.suffix != ".py" or any(path.resolve() == home.resolve() for home in homes):
                 continue
             scanned += 1
             hits = problems_in(path.read_text(encoding="utf-8", errors="replace"))
@@ -248,14 +299,14 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="scan this path instead of the repo roots (repeatable; for the falsification run)",
     )
-    parser.add_argument("--home", default=None, help="the exempt file (default: the repo's binding.py)")
+    parser.add_argument("--home", default=None, help="exempt this file instead of the repo's two homes")
     args = parser.parse_args(argv)
 
     roots = [pathlib.Path(root) for root in args.root] if args.root else [_REPO / root for root in ROOTS]
-    home = pathlib.Path(args.home) if args.home else HOME
+    homes = (pathlib.Path(args.home),) if args.home else (HOME, IDENTITY_HOME)
 
     self_test_problems = self_test()
-    scanned, findings = scan(roots, home)
+    scanned, findings = scan(roots, homes)
     for problem in self_test_problems:
         print(f"  self-test: {problem}")
     for path, hits in findings:
@@ -264,10 +315,11 @@ def main(argv: list[str] | None = None) -> int:
     if self_test_problems or findings:
         print(
             f"RECORD_BINDING_SINGLE_SOURCE_VIOLATED ({len(self_test_problems)} self-test, "
-            f"{len(findings)} file(s)): the file digest and the revision spelling belong in {home}"
+            f"{len(findings)} file(s)): the file digest, the revision spelling and the rsl_rl "
+            f"identity belong in {', '.join(str(home) for home in homes)}"
         )
         return 1
-    print(f"record binding primitives: one home ({home}), {scanned} file(s) clean")
+    print(f"record binding primitives: one home ({', '.join(str(home) for home in homes)}), {scanned} file(s) clean")
     print("RECORD_BINDING_SINGLE_SOURCE_OK")
     return 0
 

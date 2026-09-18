@@ -211,8 +211,36 @@ def _obs_reference(task: str) -> dict:
     return {"identity": identity, "digest": approved, "note": note}
 
 
+def _rsl_rl_id() -> str:
+    """The rsl_rl identity, spelled by the one rule that spells it (PLAN.md #27 ③).
+
+    ``runtime.rsl_rl_version`` is the distribution version and stays its own fact; it cannot be
+    reconciled with a training record, which binds the *combination key* -- and that key's
+    ``rsl_rl=`` component comes from ``provenance.rsl_rl_id()`` (``source:<rev>`` when editable,
+    ``installed:<version>`` otherwise). Recording the same function's output here is what makes
+    the two records of one run comparable at all.
+
+    Deliberately *not* in ``record.ALWAYS``: requiring it retroactively would read the recorded
+    batch of eval records as incomplete, and an addition cannot be allowed to do that (the same
+    call the derived acceptance metrics make, see ACCEPTANCE).
+    """
+    try:
+        from rl_exp.tools.runrecord import provenance
+
+        return provenance.rsl_rl_id() or record.UNKNOWN
+    except Exception:  # a broken tree must degrade to 'unknown', never to no record
+        return record.UNKNOWN
+
+
 def _assets_reference(env_cfg) -> dict:
-    """Declared asset lock digest vs the *actual* files: pass / fail / unknown."""
+    """Declared asset lock digest vs the *actual* files: pass / fail / unknown.
+
+    ``declared_digest`` is the lock's ``manifest_sha256`` -- the digest of the asset manifest,
+    which is the fact the training record binds (``declaration.assets.manifest_sha256``). It used
+    to fall back to the lock *file's* own hash, which is a different fact wearing the same name:
+    a lock without a manifest digest then read as a bound one, and the eval record claimed a
+    binding it did not have (PLAN.md #27 ④). Unknown is the honest value.
+    """
     from rl_exp.tools.runrecord import manifest as manifest_mod
 
     version = getattr(env_cfg, "params_version", None)
@@ -224,7 +252,7 @@ def _assets_reference(env_cfg) -> dict:
     else:
         verdict = "fail" if changed else "pass"
     return {
-        "declared_digest": manifest_sha or ref.get("lock_sha256") or record.UNKNOWN,
+        "declared_digest": manifest_sha or record.UNKNOWN,
         "lock": ref.get("lock"),
         "file_count": ref.get("file_count"),
         "manifest_sha256": manifest_sha or record.UNKNOWN,
@@ -248,6 +276,7 @@ def _runtime_reference(env_cfg, mbenv) -> dict:
         "num_envs": int(getattr(mbenv, "num_envs", -1)),
         "num_envs_declared": int(getattr(env_cfg.scene, "num_envs", -1)),
         "rsl_rl_version": _package_version("rsl-rl-lib"),
+        "rsl_rl_id": _rsl_rl_id(),
         "sim_version": _package_version("isaacsim"),
         "git_rev_lizard": _git_rev(_LIZARD_ROOT) if _LIZARD_ROOT != _ISAAC_GIT_ROOT else record.UNKNOWN,
         "git_rev_isaaclab": _git_rev(_ISAAC_ROOT),
