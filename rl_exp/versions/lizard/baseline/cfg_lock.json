@@ -7,7 +7,7 @@
  "entries": {
   "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Baseline-Flat-Play-v1": {
    "version": "v1",
-   "env_cfg_class": "rl_exp.tasks.baseline_env_cfg:BaselineFlatEnvCfg_PLAY",
+   "env_cfg_class": "rl_exp.tasks.recipe_tasks:BaselineFlatEnvCfg_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardBaselinePPORunnerCfg",
    "digest": "0521c389ca980c1adccc8dbdf2ebec75450c8aaa95f7aabb5682a78ea2c65bbb",
    "snapshot": {
@@ -1532,7 +1532,7 @@
   },
   "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Baseline-Flat-v1": {
    "version": "v1",
-   "env_cfg_class": "rl_exp.tasks.baseline_env_cfg:BaselineFlatEnvCfg",
+   "env_cfg_class": "rl_exp.tasks.recipe_tasks:BaselineFlatEnvCfg",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardBaselinePPORunnerCfg",
    "digest": "a67ea21389428d6a98b25dc9832e49e737d1a7f5c661777e3857ac516b015576",
    "snapshot": {

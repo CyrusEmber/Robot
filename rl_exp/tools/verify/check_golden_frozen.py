@@ -37,15 +37,21 @@ _REPO = pathlib.Path(__file__).resolve().parents[3]
 #
 # One such edit already happened: A0 moved the main line into versions/lizard/main/ and this
 # path followed it (reason and the digest-unchanged proof are in the record's B0 addendum).
+#
+# A second one, 2026-09-17: the version subclass bodies were deleted (PLAN.md #22 step 3), so the
+# two locks' `env_cfg_class` column -- which records the entry the registry resolves, and had named
+# those classes since well before the deletion -- was repointed to the generated classes one line at
+# a time. 24 lines in main, 2 in baseline, no other leaf moved (the per-field diff is in the
+# record's second B0 addendum), so the frozen numbers below changed while nothing they describe did.
 FROZEN = {
     "rl_exp/versions/cfg_baselines.json": "b18a517c43ddef5f79609dc4dea94080ad8a15926a778835bb0aa8a079c95c03",
-    "rl_exp/versions/lizard/main/cfg_lock.json": "4326bd0bbf0b0b263fd071d9f3f2b1cc0a51d5137d30050567917eaa6b92a12b",
+    "rl_exp/versions/lizard/main/cfg_lock.json": "8a004fabc1572d7018204409c59cd20afc1b39c5857e5ac3bcb7fc8ff3e4bf76",
     "rl_exp/versions/lizard/parkour/cfg_lock.json": "6c60a9263323547856f4984ee4e373893260f8c99ec88e0a116a17d7cbb4c20a",
     # Frozen 2026-09-17 at rev ed4d35b, the commit that landed the line: the baseline lock was
     # written *after* 020e6fb, so it entered the table later than the other three (B0 addendum).
     # It is the lock of the line that trains next, and until it was here "this line's golden
     # moved" had no digest guard at all -- the hole the record had listed as A-side debt.
-    "rl_exp/versions/lizard/baseline/cfg_lock.json": "61d32e8dd47d3827def1dde7f4899962367d0eb6f7e2dac432f6a1edd4c11b61",
+    "rl_exp/versions/lizard/baseline/cfg_lock.json": "9523583b42917c123638cfedbddc09391ea2c4cb15e16587e4d247690735c682",
 }
 
 FROZEN_REVS: dict[str, str] = {

@@ -4,7 +4,7 @@
  "entries": {
   "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-Play-v1": {
    "version": "v1",
-   "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V1_PLAY",
+   "env_cfg_class": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V1_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherPPORunnerCfg",
    "digest": "b103726ab73ff20710e6d8ba7745cf5f2a74b2bd0967a580f1329e964a929e36",
    "snapshot": {
@@ -2100,7 +2100,7 @@
   },
   "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-Play-v10": {
    "version": "v10",
-   "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V10_PLAY",
+   "env_cfg_class": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V10_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV10PPORunnerCfg",
    "digest": "ba901e0e5222b7926f9ed25ca1a8fd765a38bd384c41bd0e8c3be32fab54b047",
    "snapshot": {
@@ -5138,7 +5138,7 @@
   },
   "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-Play-v11": {
    "version": "v11",
-   "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V11_PLAY",
+   "env_cfg_class": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V11_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV11PPORunnerCfg",
    "digest": "cd18e965f8f410c632bcb449c5daa5207eeeb2856b238b26673e93717af16e54",
    "snapshot": {
@@ -9314,7 +9314,7 @@
   },
   "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-Play-v12": {
    "version": "v12",
-   "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V12_PLAY",
+   "env_cfg_class": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V12_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV12PPORunnerCfg",
    "digest": "6b6677093f624c65540061a8fa3cb39f0655fe586c8922e99c01bf4abb41c2d4",
    "snapshot": {
@@ -13701,7 +13701,7 @@
   },
   "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-Play-v13": {
    "version": "v13",
-   "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V13_PLAY",
+   "env_cfg_class": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V13_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV13PPORunnerCfg",
    "digest": "98c0eb0c0b9fc79a0de30d64f9da113f3be360745bcfe57c83ff329f288c3034",
    "snapshot": {
@@ -16740,7 +16740,7 @@
   },
   "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-Play-v14": {
    "version": "v14",
-   "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V14_PLAY",
+   "env_cfg_class": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V14_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV14PPORunnerCfg",
    "digest": "6d82285386cbb7cf9566a5d79ee7fcb39738cf1390d3ed37c1ca42854d052891",
    "snapshot": {
@@ -19839,7 +19839,7 @@
   },
   "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-Play-v2": {
    "version": "v2",
-   "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V2_PLAY",
+   "env_cfg_class": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V2_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV2PPORunnerCfg",
    "digest": "fc399b6cf51d6755f621562079362dc6920e81d7cf183b92f9162d40df49ea05",
    "snapshot": {
@@ -22148,7 +22148,7 @@
   },
   "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-Play-v3": {
    "version": "v3",
-   "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V3_PLAY",
+   "env_cfg_class": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V3_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV3PPORunnerCfg",
    "digest": "12f2478e6659ddaaf48111faa1b9d89ede34b676532fd892f2f308c8ac0f82d4",
    "snapshot": {
@@ -25064,7 +25064,7 @@
   },
   "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-Play-v4": {
    "version": "v4",
-   "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V4_PLAY",
+   "env_cfg_class": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V4_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV4PPORunnerCfg",
    "digest": "4e14ba0e3358288b72f62fc7e7a9b2cf4933c0ad88ee052e97dfc750decb6d1d",
    "snapshot": {
@@ -27980,7 +27980,7 @@
   },
   "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-Play-v5": {
    "version": "v5",
-   "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V5_PLAY",
+   "env_cfg_class": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V5_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV5PPORunnerCfg",
    "digest": "3fd37fcfcff3de8e995676659c8bd3553d8c79ace4787414b353ed2147972f76",
    "snapshot": {
@@ -31026,7 +31026,7 @@
   },
   "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-Play-v6": {
    "version": "v6",
-   "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V6_PLAY",
+   "env_cfg_class": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V6_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV6PPORunnerCfg",
    "digest": "41a8b3f7d3ad3d2fc616e900fa2d46ae666b8a5140dac0be092a55b86adc8da0",
    "snapshot": {
@@ -34072,7 +34072,7 @@
   },
   "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-Play-v8": {
    "version": "v8",
-   "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V8_PLAY",
+   "env_cfg_class": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V8_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV8PPORunnerCfg",
    "digest": "55fe6b7bc9afa2a78ae869c13ee87c4ca5454e28eee7e3800ebd5c743b67525a",
    "snapshot": {
@@ -37118,7 +37118,7 @@
   },
   "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-v1": {
    "version": "v1",
-   "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V1",
+   "env_cfg_class": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V1",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherPPORunnerCfg",
    "digest": "5cf672d73a472ce1607711cbd88e42bd12cc35506f6d3d5b89f850c0a43ee831",
    "snapshot": {
@@ -39742,7 +39742,7 @@
   },
   "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-v10": {
    "version": "v10",
-   "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V10",
+   "env_cfg_class": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V10",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV10PPORunnerCfg",
    "digest": "f56c4a1d5c5d7d451e71f2aabf0bd7a9e5bf80927af37953fe14aac121bfd285",
    "snapshot": {
@@ -43327,7 +43327,7 @@
   },
   "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-v11": {
    "version": "v11",
-   "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V11",
+   "env_cfg_class": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V11",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV11PPORunnerCfg",
    "digest": "7d5a9bf90a10c6f883e6280671db43f26a81c14cc14aac18eac2ff38db748fab",
    "snapshot": {
@@ -48063,7 +48063,7 @@
   },
   "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-v12": {
    "version": "v12",
-   "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V12",
+   "env_cfg_class": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V12",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV12PPORunnerCfg",
    "digest": "e7412506fb355231c7f76219698552f1c510d0678f4a5a2ebe8e91dbcc916538",
    "snapshot": {
@@ -53086,7 +53086,7 @@
   },
   "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-v13": {
    "version": "v13",
-   "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V13",
+   "env_cfg_class": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V13",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV13PPORunnerCfg",
    "digest": "a2298d9a049fe429ee331c28ba8562b07227c826c91280514000b61131f8e95d",
    "snapshot": {
@@ -56672,7 +56672,7 @@
   },
   "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-v14": {
    "version": "v14",
-   "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V14",
+   "env_cfg_class": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V14",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV14PPORunnerCfg",
    "digest": "3c6439cea8e28b7191dee91e39510bc5ee08bf3f774291d4d9c6c07c3dad7b77",
    "snapshot": {
@@ -60318,7 +60318,7 @@
   },
   "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-v2": {
    "version": "v2",
-   "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V2",
+   "env_cfg_class": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V2",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV2PPORunnerCfg",
    "digest": "2cdebd7f0fc997bdfc0a496c5604f48a2f8087df0671b1919b951dec9afd7080",
    "snapshot": {
@@ -63155,7 +63155,7 @@
   },
   "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-v3": {
    "version": "v3",
-   "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V3",
+   "env_cfg_class": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V3",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV3PPORunnerCfg",
    "digest": "7151fe087e74e48ff9265f891141b74447f76ade118339859bd44928b854db84",
    "snapshot": {
@@ -66665,7 +66665,7 @@
   },
   "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-v4": {
    "version": "v4",
-   "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V4",
+   "env_cfg_class": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V4",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV4PPORunnerCfg",
    "digest": "62a3cd20218a67ed27904de86d6dd6dc119ce573c5e5ca7dd5912612853c54f2",
    "snapshot": {
@@ -70175,7 +70175,7 @@
   },
   "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-v5": {
    "version": "v5",
-   "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V5",
+   "env_cfg_class": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V5",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV5PPORunnerCfg",
    "digest": "d7e06c72ac907412ee712d4bf965e065de04cc0629e41c074b4077a4d0154199",
    "snapshot": {
@@ -73768,7 +73768,7 @@
   },
   "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-v6": {
    "version": "v6",
-   "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V6",
+   "env_cfg_class": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V6",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV6PPORunnerCfg",
    "digest": "fc37a2c6d348930cb3f909aac13d3bf7a2e15fd8d9fcd8d692e06dee56238272",
    "snapshot": {
@@ -77361,7 +77361,7 @@
   },
   "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Rough-v8": {
    "version": "v8",
-   "env_cfg_class": "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V8",
+   "env_cfg_class": "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V8",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV8PPORunnerCfg",
    "digest": "5eee2f191b864e0900c3f7dd94122c6f1dc3fb04601bbc77780b9065aa50c965",
    "snapshot": {

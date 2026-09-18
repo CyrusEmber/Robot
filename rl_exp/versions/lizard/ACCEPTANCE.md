@@ -555,6 +555,18 @@ ValueError: curriculum state in the checkpoint does not fit this task: runtime.n
 | 处置 | 按本闸门声明的合法路径：同一次改动里改 `FROZEN` 表路径 + 补本条记录，**未改任何摘要值** |
 | 残留 | 锁文件内部 `note` 仍写 `line 'lizard'`（改名收尾属 A0 清单），不影响条目内容，也不影响硬 A 的比较对象 |
 
+### B0 追加②：版本类体删除触发的合法重锚（2026-09-17）
+
+| 项 | 值 |
+|---|---|
+| 触发 | PLAN.md #22 step 2a：`env_cfg_class` 列记的是**注册表解析出的入口**，而注册表自 `2f67f4c` 起已解析 `recipe_tasks` ⇒ 列值为 `rl_exp.tasks.teacher_env_cfg:<类名>` 的 26 条（main 24 + baseline 2）在 step 3 删类之后指向不存在的类。本次把它**定点搬一行**到 `rl_exp.tasks.recipe_tasks:<同名>` |
+| 与重锚①的区别 | ① 是"搬家：内容零变化、摘要不变"；本条**改了一个列**，两份文件摘要随之改变（这是必须记在案的那种重锚） |
+| 逐字段证据 | 对两份锁做**递归 diff**（新旧 JSON 逐叶比较）：main **24 条**、baseline **2 条**，**全部且只有** `env_cfg_class` 一个叶变了；`digest`/`snapshot`/`version`/`agent_cfg_class` 逐条相等；`git diff --numstat` = `24 24` / `2 2`（一行一条，无其它行被触碰）。新列值逐个验证是 `recipe_tasks` 里真实存在的生成类 |
+| 摘要 | main `8a004fab…bf76`（2,581,748 B，= 重锚前 2,581,820 − 72：24×3 字符）；baseline `9523583b…c682`（88,704 B）；其余两份基线未动 |
+| 处置 | 按本闸门声明的合法路径：同一次改动里改 `FROZEN` 两行摘要 + 本条记录 + 理由（`check_golden_frozen.py` 表头注释）。**未跑 `--update`**、未重生成任何 `snapshot` |
+| 一处自陈失误 | 首版重指脚本按 `read_text()` 的字符串算 sha256，而机器 `core.autocrlf=true`（工作树 CRLF）⇒ 表里先填的摘要是 LF 视图的哈希，`[35]` 当场红（`GOLDEN_FROZEN_DRIFT`）。文件本身没坏：读-写往返保住 CRLF，只有 26 行被替换。已按**磁盘字节**重算并复查 |
+| `FROZEN_REVS` | 与摘要分两次提交：先落新摘要（本批），再另一次提交把 rev 钉到本批的提交号 —— 该列只喂 banner，但"这份字节来自哪个 rev"必须是真话 |
+
 ### 边界与阻塞（不得据本片宣称通过）
 
 - **门 1 的时点限定**：上表门 1 是 **A0 落地前**的实跑（当时线键仍是 `lizard`）。A0 落地后 `[24]` 独立红于 `lizard: 32 task(s) declare this line … but no such line exists ['lizard/baseline','lizard/main','lizard/parkour']`（`params_line` 收尾在 A0 清单里）⇒ **切到新布局后必须重跑门 1**，本片不以 A0 前的绿替代。
@@ -1398,6 +1410,77 @@ main 线的 delta 有**三个写者**，不是两个：**元素集合**（同一
 | 硬 A / 硬 B | **通过**：`RECIPE_BUILD_OK (26 task(s) field-identical to the frozen golden; 322 declared difference(s) against their own base)` |
 | **反证（三条新分支各自打红后回滚）** | ① 路径放进别的作者组 ⇒ "while the elements that moved it are none"；② 空组 ⇒ "declares no path -- empty groups read as coverage"；③ `wiring` 认领组件拥有的路径 ⇒ "a component owns a name in that path -- name the component" |
 | 旁证 | `[24]` `CFG_LOCK_OK (36 tasks)` · `[37]` `COMPONENT_OWNERSHIP_OK` · `[31]` `check_recipe_map` 通过 |
+
+## 2.4 收尾 · 版本类体删除 + 硬 A 保真比较退役（PLAN.md #22，2026-09-17）
+
+**性质**：**追加**条目，`PLAN.md` 台账 #22 的四步。注册表自 `2f67f4c` 起已指 `recipe_tasks`
+的生成类 ⇒ 版本子类运行期无人引用；本批把它们删掉，让"加版本 = 加元素 + 表行"成为事实，
+并把随之失去第二侧的保真比较**反向**成"重复路径复活"探针（不是跳过，理由见发现②）。
+
+### 前提
+
+| 项 | 值 |
+|---|---|
+| 项目 rev | 起点 `8f6ed6f`（step 1 已提交）；本批在其上，工作树另有并行批次已提交的文档改动（无冲突面） |
+| 命令 | `rl_exp\tools\verify\run_offline_checks.bat`；单跑 `check_recipe_build.py`、`_b3_remove_version_classes.py`、`check_golden_frozen.py` |
+| 设备 / env 数 / seed | 不适用（离线；构造 cfg，不 `gym.make`、不起 sim） |
+| 容差 | 无（字段逐叶比对；摘要与字节相等） |
+
+### 落地
+
+| 步 | 件 | 内容 |
+|---|---|---|
+| 1（`8f6ed6f`） | 11 个闸门/测试/探针 | 版本类的解析源改到 `recipe_tasks`（类名逐字相同）；`check_obs_layout` 拆两个句柄：版本类走 `_recipe_mod`，`TEACHER_TERRAINS_CFG*` payload 常量仍走 `_env_cfg_mod` |
+| 3 | 新增 `tools\verify\_b3_remove_version_classes.py`（一次性，AST 按名定位，decorator 行一并算入） | 删 24 个 teacher 版本类（V1/V2/V3/V4/V5/V6/V8/V10/V11/V12/V13/V14 × train/play）+ baseline 的 `BaselineFlatEnvCfg`/`_PLAY`；**keeper 检查**：共享接线（`LizardRoughTeacherEnvCfg`/`_PLAY`、`BaselineWiringCfg`）与 `ring_pattern`/`RingPatternCfg`/payload 常量/`TEACHER_PRIVILEGED_SPEC` 缺一个即**拒跑**（它们夹在删除区之间）。净变化 `-970 / +19` 行 |
+| 2a | 两份 `cfg_lock.json` | 26 条 `env_cfg_class`（main 24 + baseline 2）定点搬到 `rl_exp.tasks.recipe_tasks:<同名>`；**未跑 `--update`**、未重生成任何 `snapshot`（逐字段证据见 B0 追加②） |
+| 4 | `check_recipe_build.py` | "表 == 类"保真比较反向为 `resurrected_class()` 探针：某配方的版本子类重新出现即具名报红；`classvar_gaps`/`EXPECTED_GAPS`/两处台账循环随其生产者（版本类）一并退役 |
+
+### 检查与结果
+
+| 项 | 结果 |
+|---|---|
+| 全量套件 | **通过**：`ALL_OFFLINE_CHECKS_PASSED (47/47)` |
+| `[24]` 删类**后** | **通过**：`CFG_LOCK_OK (36 tasks, 3 line(s))` —— 与删类前**同一句**：36 个任务构造出的 cfg 与冻结 `snapshot` 逐字段一致 ⇒ "删的是类，不是行为"（用户点名的第 4 条验收） |
+| `[41]` | **通过**：`RECIPE_BUILD_OK (26 task(s) field-identical to the frozen golden; 322 declared difference(s) against their own base)` |
+| `[35]` | **通过**：`GOLDEN_FROZEN_OK (4 baseline file(s) unchanged, frozen at: 020e6fb x3, ed4d35b x1)` + `--self-test` `GOLDEN_FROZEN_SELFTEST_OK` |
+| `[21]` | **通过**：`CONFIGCLASS_FIELDS_OK`（39 类；规则修正见发现①） |
+| 旁证 | `[37]` `COMPONENT_OWNERSHIP_OK` · `[8]` `OBS_LAYOUT_OK` · `[2]` `PARITY_OK` · `[14]` pxr-clean · `[31]/[32]` 身份映射与其反证 —— 全绿 |
+
+### 反证
+
+| 编号 | 输入 | 结果 |
+|---|---|---|
+| 删类当场（step 4 的触发器） | 三处类体删净后跑 `[41]` | **按预期红**：对每个配方/kind **逐条具名**报 `no class in rl_exp.tasks.teacher_env_cfg builds params_version='vN' … the class path this recipe replaces is gone -- retire this comparison deliberately if intended`（"找不到"是红，不是跳过） |
+| 硬 A 仍有牙齿（用户点名） | 卸掉 `_V14_DELTA` 里的 `v14_head_load` | **FIRED**：rc=1 + 两条具名 FAIL（`1 declared env path(s) no longer differ from the base` / `… is attributed to 'v14_head_load' while the elements that moved it are none`）；**逐字节复原**（sha256 `fe49e3d2…` 相同）后 rc=0 · `RECIPE_BUILD_OK`。脚本 `%TEMP%\falsify_b3_element.py` |
+| `[21]` 规则修正的反证 | 给 `_check_play_inheritance` 补一例（PLAY 行 `value` 改成 `v99`） | **FIRES**；反证集 6 → 7 例，双双打红（`CONFIGCLASS_FIELDS_GATE_FALSIFIABLE`） |
+| 重锚自证 | 新旧锁 JSON **递归逐叶** diff + `git diff --numstat` | 26 个叶全部且只有 `env_cfg_class`；`24/24`、`2/2` 行 —— 无其它行被触碰 |
+
+### 执行中发现（三条，都不是"删类造成的回归"，而是一条被删类揭出来的旧假设）
+
+1. **`[21]` 的"PLAY 不得改线"规则依赖旧类形状**：它取 **MRO 里最近的祖先类**作对照，而声明
+   路径的 PLAY 类父级是共享接线（默认 `v2`）⇒ 删掉版本类后 11 个 PLAY 变体假红。改为**按名配对**
+   （`X_PLAY` 对 `X`，即同一配方的 train 类；MRO 父类降为回退，服务非声明路径的类），并补一条反证
+   —— 改规则而不带反证，正是规则退化成装饰的方式。
+2. **`v4` 的 `REQUIRES_CURRICULUM_STATE`：类体"未声明"、配方表写 `False`**，两者是**同一答案**：
+   `[41]` 的保真比较按 `bool(getattr(cls, name, False))` 比，四个读者（resume 拒绝 / save 守卫 /
+   trainer 导入失败守卫 / manifest）也全走 `getattr(..., False)`。`test_resume_state` 里钉
+   `not hasattr(V4, …)` 的那条断言因此改为断言**语义**而不是某一侧的**形状**。**同一事实也是台账可以
+   退役的理由**：共享接线上的 `ClassVar` 由生成类继承，配方级的只能经 `CLASSVAR_STATEMENTS` 加，
+   "无家可归"在单一路径下不再可表达。
+3. **我自己的一处失误（已修，记在案）**：重指脚本按 `read_text()` 的**字符串**算 sha256，而本机
+   `core.autocrlf=true`（工作树 CRLF）⇒ 表里先填的是 LF 视图的哈希，`[35]` 当场红。文件本身没坏
+   （读-写往返保住 CRLF，只有 26 行被替换），按**磁盘字节**重算后复查通过。
+
+### 边界（不得据本段宣称）
+
+- **`--vs-upstream` 的归因列不在本批修复范围**：它读的是**本次构造**的 entry，不是 golden 里那列 ⇒
+  改 golden 修不了它；该归因在翻表（`2f67f4c`）当天就已退化（本轮由用户纠正过我一次）。逐路径作者的
+  替代来源是各配方的 `diff.json`（`format: 4`，本轮 12 条齐）。
+- **未做**：v15 未实施（`v15\PLAN.md` 的待实施件已按"加元素 + 表行"改写）；agent（PPO）侧不在本批；
+  `[41]` 的复活探针只覆盖**已声明配方**（v0 家族 8 个与 parkour 2 个任务的类本来就在
+  `lizard_env_cfg`/`rough_env_cfg`/`parkour_env_cfg`，本批未动）。
+- 生成类的名字清单唯一来源 = `versions\recipes.json`；`recipe_tasks` 不写第二份。
+- 本批**未**重生成任何 `snapshot`，也未跑 `--update` ⇒ 硬 A 的比较对象仍是整改前冻结的那份。
 
 ### 生成方式，与它带来的**限制**
 

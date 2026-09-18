@@ -378,8 +378,8 @@ TEACHER_PRIVILEGED_SPEC: dict[str, set[str]] = {
         "base_external_wrench",
     },
     # v3 keeps the v2 privileged-term set (priv 83); its recipe differences are
-    # structural (obs groups / foot rings / rewards / DR), wired in
-    # LizardRoughTeacherEnvCfg_V3
+    # structural (obs groups / foot rings / rewards / DR), wired in the recipe's
+    # declared elements (rl_exp.tasks.recipe)
     "v3": {
         "foot_contact_forces",
         "foot_contact_normals",
@@ -389,8 +389,8 @@ TEACHER_PRIVILEGED_SPEC: dict[str, set[str]] = {
     },
     # v4 also keeps the v2/v3 privileged-term set (priv 83); its recipe
     # differences are terrain-only (rubble re-scaled for the real sole size)
-    # plus the v3.6.1 collision-stack headroom removal, both wired in
-    # LizardRoughTeacherEnvCfg_V4
+    # plus the v3.6.1 collision-stack headroom removal, both wired in the
+    # recipe's declared elements (rl_exp.tasks.recipe)
     "v4": {
         "foot_contact_forces",
         "foot_contact_normals",
@@ -399,8 +399,8 @@ TEACHER_PRIVILEGED_SPEC: dict[str, set[str]] = {
         "base_external_wrench",
     },
     # v5 also keeps the v2 privileged-term set (priv 83); its recipe
-    # differences are reward-side only (anti-collapse package wired in
-    # LizardRoughTeacherEnvCfg_V5 on top of the v4 terrain)
+    # differences are reward-side only (anti-collapse package wired in the
+    # recipe's declared elements on top of the v4 terrain)
     "v5": {
         "foot_contact_forces",
         "foot_contact_normals",
@@ -430,8 +430,8 @@ TEACHER_PRIVILEGED_SPEC: dict[str, set[str]] = {
         "base_external_wrench",
     },
     # v10 keeps the v2-v8 privileged-term set (priv 83); its only recipe
-    # difference is the tilt termination removal (wired in
-    # LizardRoughTeacherEnvCfg_V10), spec unchanged. v9 is reserved for the
+    # difference is the tilt termination removal (wired in the recipe's
+    # declared elements), spec unchanged. v9 is reserved for the
     # leg-break protocol line and does not exist yet.
     "v10": {
         "foot_contact_forces",
@@ -486,19 +486,19 @@ TEACHER_PRIVILEGED_SPEC: dict[str, set[str]] = {
 class LizardRoughTeacherEnvCfg(LocomotionVelocityRoughEnvCfg):
     """Teacher: perceptive + privileged actor, baseline rewards (latest recipe).
 
-    Frozen task ids use the per-version subclasses (_V1/_V2/_V3), never this
-    class, so bumping ``params_version`` here cannot retroactively change an
-    old recipe.
+    Frozen task ids never use this class: each is built from its declared recipe
+    (``rl_exp.tasks.recipe``, materialized as a class in ``rl_exp.tasks.recipe_tasks``),
+    so bumping ``params_version`` here cannot retroactively change an old recipe.
 
     Privileged obs per Miki et al. 2022 table + two legacy extras (true base
     velocity, per-body mass); full layout table in FAMILY.md. Obs dim 308.
 
     ``params_version`` is a plain class attribute (NOT a configclass field, so
-    it is never deep-copied): the latest recipe lives here, and per-version
-    subclasses below override it for working-tree reproducibility -- running
-    an old task id must always rebuild the old recipe, never silently pick
-    up code drift from newer versions. Which incremental terms a version
-    includes is governed by ``TEACHER_PRIVILEGED_SPEC`` above.
+    it is never deep-copied): the latest recipe lives here, and every declared recipe
+    stamps its own value for working-tree reproducibility -- running an old task id
+    must always rebuild the old recipe, never silently pick up code drift from newer
+    versions. Which incremental terms a version includes is governed by
+    ``TEACHER_PRIVILEGED_SPEC`` above.
     """
 
     # declared owner: the recipe line every gate routes by (ClassVar so this statement
@@ -749,50 +749,12 @@ class LizardRoughTeacherEnvCfg_PLAY(LizardRoughTeacherEnvCfg):
         apply_play_wiring(self)
 
 
-@configclass
-class LizardRoughTeacherEnvCfg_V2(LizardRoughTeacherEnvCfg):
-    """v2 recipe, reproducible from the working tree (obs 308).
-
-    Same pinning discipline as v1/v3: the task id must rebuild the v2 recipe
-    even after the base class moves on to a newer params_version (the base is
-    the "latest" pointer, not a frozen entry).
-    """
-
-    params_version = "v2"
 
 
-@configclass
-class LizardRoughTeacherEnvCfg_V2_PLAY(LizardRoughTeacherEnvCfg_V2):
-    """v2 play variant: obs 308, no randomization, curriculum off."""
-
-    def __post_init__(self):
-        super().__post_init__()
-
-        # deterministic evaluation: shared PLAY wiring (single source, see play_utils)
-        apply_play_wiring(self)
 
 
-@configclass
-class LizardRoughTeacherEnvCfg_V1(LizardRoughTeacherEnvCfg):
-    """v1 recipe, reproducible from the working tree (obs 266).
-
-    The one-line override is the whole point of the spec structure:
-    TEACHER_PRIVILEGED_SPEC["v1"] = set() makes the base class strip every
-    incremental term, so this class needs no hand-maintained stripping list.
-    """
-
-    params_version = "v1"
 
 
-@configclass
-class LizardRoughTeacherEnvCfg_V1_PLAY(LizardRoughTeacherEnvCfg_V1):
-    """v1 play variant: obs 266, no randomization, curriculum off."""
-
-    def __post_init__(self):
-        super().__post_init__()
-
-        # deterministic evaluation: shared PLAY wiring (single source, see play_utils)
-        apply_play_wiring(self)
 
 
 # --- v3: paper-alignment layer (three obs groups + foot rings + D1-D4 package) ---
@@ -844,798 +806,51 @@ class RingPatternCfg(patterns.PatternBaseCfg):
     """Ray direction (straight down)."""
 
 
-@configclass
-class LizardRoughTeacherEnvCfg_V3(LizardRoughTeacherEnvCfg):
-    """v3 recipe: paper-aligned teacher (obs 381 = proprio 90 / extero 208 / priv 83).
-
-    Differences vs v2 (versions/lizard/v3/PLAN.md):
-    * extero = 4 per-foot ring scanners (52 points/foot, yaw-aligned) replacing
-      the 135-point base grid scan; obs delivered as THREE named groups
-      (proprio/extero/priv) -- the model-side contract (teacher_networks.py)
-    * D1 tilt termination; D2 anti-drag r_fc replaces the feet_air_time reward;
-      D3 c_k penalty curriculum; D4 reset-mode c_k-scaled DR (mass/com/inertia/
-      gains/joint params -- friction stays startup so the foot_friction_truth
-      obs cache keeps its startup-only semantics, F3 deviation note)
-    * v3.4 terrain: Miki-aligned (stairs to 0.55 m + stepping stones), teacher
-      snapshot only -- family and v1/v2 generators untouched
-    """
-
-    params_version = "v3"
-
-    def __post_init__(self):
-        super().__post_init__()
-        # v3.4 terrain payload (Miki-aligned) and v3.5 spawn row (the easiest one, so stock
-        # terrain_levels_vel climbs from the bottom) are declared in
-        # components.TERRAIN_BY_RECIPE; the base class writes the block once.
-
-        # --- v3.6.1: PhysX contact buffer headroom ---
-        # belly contact is now persistent by design (base_contact termination
-        # removed; a flat-belly robot is not tilted, so tilt does not fire
-        # either) and the v3 terrain adds stepping-stone contact pairs. The
-        # stock 2**26 collision stack overflows at 4096 envs and PhysX drops
-        # contacts silently -> nondeterministic physics. 2**28 gives 4x
-        # headroom; v1/v2 frozen cfgs keep the stock value.
-        self.sim.physics.default.gpu_collision_stack_size = 2**28
-
-        # --- v3.6: staged speed curriculum replaces the (-1, 1) paper override ---
-        # v1 replay showed foot-pad creeping is the optimum at a 1 m/s command
-        # cap; the range climbs -1..2 -> 5 gated by success_rate >= 0.8 sustained
-        # 120 s, so stages the robot cannot track are never applied (user decision
-        # 2026-09-01). Stage 0 also seeds the cfg range so the first resamples
-        # already match the curriculum; the range itself is declared in
-        # components.COMMAND_RANGE.
-        self.curriculum.speed_curriculum = StagedCurriculumTermCfg(
-            func=StagedCurriculumTerm,
-            stages=[
-                StageCfg(command_ranges={"lin_vel_x": (-1.0, 2.0)}, metric_threshold=0.8, sustain_s=120.0),
-                StageCfg(command_ranges={"lin_vel_x": (-1.0, 3.0)}, metric_threshold=0.8, sustain_s=120.0),
-                StageCfg(command_ranges={"lin_vel_x": (-1.0, 4.0)}, metric_threshold=0.8, sustain_s=120.0),
-                StageCfg(command_ranges={"lin_vel_x": (-1.0, 5.0)}),
-            ],
-        )
-
-        # --- v3.6: belly-contact termination removed (executes D0-6) ---
-        # (the whole termination set is owned by components.terminations, which resolves it by
-        # version; the v3.6 rationale lives there)
-
-        params = _load_params(self.params_version)
-        v3 = params["v3"]
-        ring = v3["foot_ring"]
-        rfc = v3["r_fc"]
-        ck = v3["curriculum_ck"]
-
-        # --- C1/C2: per-foot ring casters replace the base height scanner ---
-        # (built once in the base class by components.height_sensing, which resolves the
-        # sensing form by version; `ring` below is still the yaml geometry for the obs
-        # terms and for the priv foot_contact_normals / r_fc raycasts)
-
-        # --- obs restructure: single flat policy group -> three named groups ---
-        # (owned by components.observations, which also holds the group's attribute order --
-        # that order is the term concat order and the network's reshape contract)
-
-        # --- D1: tilt termination (built by components.terminations) ---
-
-        # --- D2: anti-drag foot clearance replaces the feet_air_time reward ---
-        # (the feet_air_time OBS term stays in the priv group)
-        self.rewards.feet_air_time = None
-        self.rewards.foot_clearance = RewTerm(
-            func=teacher_mdp.FootClearanceReward,
-            weight=rfc["weight"],
-            params={
-                "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
-                "clearance": rfc["clearance"],
-                "contact_threshold": rfc["contact_threshold"],
-                "mesh_prim_path": "/World/ground",
-                "max_distance": rfc["max_distance"],
-                "start_offset": rfc["start_offset"],
-            },
-        )
-
-        # --- D3/D4: c_k schedule + in-place func swaps (names stay stable so
-        # PLAY wiring / DR event list keep matching; loop form keeps these
-        # recipe-layer swaps out of the family-vs-teacher wiring parity text
-        # check, which guards the BASE wiring freeze, not version recipes) ---
-        self.events.init_ck = EventTerm(
-            func=teacher_mdp.init_ck,
-            mode="startup",
-            params={
-                "c0": ck["c0"],
-                "decay": ck["decay"],
-                "steps_per_iteration": ck["steps_per_iteration"],
-            },
-        )
-        for name, func in (
-            ("dof_acc_l2", teacher_mdp.joint_acc_l2_ck),
-            ("dof_torques_l2", teacher_mdp.joint_torques_l2_ck),
-            ("ang_vel_xy_l2", teacher_mdp.ang_vel_xy_l2_ck),
-        ):
-            getattr(self.rewards, name).func = func
-        # base_com lives inside a preset wrapper; .default is the physx branch
-        com_term = self.events.base_com.default
-        com_term.func = teacher_mdp.randomize_rigid_body_com_ck
-        com_term.mode = "reset"
-        for name, func in (
-            ("add_base_mass", teacher_mdp.randomize_rigid_body_mass_ck),
-            ("randomize_limb_mass", teacher_mdp.randomize_rigid_body_mass_ck),
-            ("randomize_inertia", teacher_mdp.randomize_rigid_body_inertia_ck),
-            ("randomize_actuator_gains", teacher_mdp.randomize_actuator_gains_ck),
-            ("randomize_joint_params", teacher_mdp.randomize_joint_parameters_ck),
-        ):
-            term = getattr(self.events, name)
-            term.func = func
-            term.mode = "reset"
 
 
-@configclass
-class LizardRoughTeacherEnvCfg_V3_PLAY(LizardRoughTeacherEnvCfg_V3):
-    """v3 play variant: obs 381, no randomization, curriculum off."""
-
-    # no curriculum here to widen the range mid-evaluation: let components.commands pin the
-    # full forward range instead of the curriculum-gated one
-    PLAY_PINS_COMMAND_RANGE: ClassVar[bool] = True
-
-    def __post_init__(self):
-        super().__post_init__()
-
-        # deterministic evaluation: shared PLAY wiring (single source, see play_utils)
-        apply_play_wiring(self)
-
-        # v3.6: eval determinism -- the staged speed curriculum would widen
-        # command ranges mid-eval on a good policy, so drop the curriculum term
-        # (the pinned range is stated by PLAY_PINS_COMMAND_RANGE above)
-        self.curriculum.speed_curriculum = None
 
 
-@configclass
-class LizardRoughTeacherEnvCfg_V4(LizardRoughTeacherEnvCfg_V3):
-    """v4 recipe: v3 with the rubble re-scaled for the real 0.46 x 0.51 m soles.
-
-    Differences vs v3 (versions/lizard/v4/PLAN.md):
-    * random_rough: pitch 0.3 -> 0.5 m (>= sole width 0.46 m: one bump per
-      foot, no bridging), heights (0.06, 0.2)/step 0.04 -> (0.10, 0.35)/step
-      0.02 (5 -> 14 levels; top 0.35 m ~ 37% stand height)
-    * v3.6.1 collision-stack headroom removed: the 2**28 override may have
-      masked the real cause of the v3.6.1 contact overflow (flat soles lying
-      flush on a fine heightfield = maximal contact-pair count). v4 re-tests
-      the stock 2**26 with the coarser terrain
-    """
-
-    params_version = "v4"
-
-    def __post_init__(self):
-        super().__post_init__()
-        # v4's terrain payload (coarser rubble for the real soles) is declared in
-        # components.TERRAIN_BY_RECIPE; the base class writes the block once.
-        # v4: drop the v3.6.1 PhysX headroom -- re-test the stock 2**26 with
-        # the coarser terrain. WARNING (user decision 2026-09-02): INSPECT THE
-        # TERRAIN BEFORE LAUNCHING TRAINING/TESTS. If the overflow comes back
-        # (PhysX drops contacts silently -> nondeterministic physics), the
-        # root cause is contact density (flat soles on a fine heightfield),
-        # NOT buffer size -- do NOT re-raise the stack; simplify the contact
-        # geometry (coarser sole collision / terrain) instead.
-        self.sim.physics.default.gpu_collision_stack_size = 2**26
 
 
-@configclass
-class LizardRoughTeacherEnvCfg_V4_PLAY(LizardRoughTeacherEnvCfg_V4):
-    """v4 play variant: obs 381, no randomization, curriculum off."""
-
-    # no curriculum here to widen the range mid-evaluation: let components.commands pin the
-    # full forward range instead of the curriculum-gated one
-    PLAY_PINS_COMMAND_RANGE: ClassVar[bool] = True
-
-    def __post_init__(self):
-        super().__post_init__()
-
-        # deterministic evaluation: shared PLAY wiring (single source, see play_utils)
-        apply_play_wiring(self)
-
-        # v3.6: eval determinism -- the staged speed curriculum would widen
-        # command ranges mid-eval on a good policy, so drop the curriculum term
-        # (the pinned range is stated by PLAY_PINS_COMMAND_RANGE above)
-        self.curriculum.speed_curriculum = None
 
 
-@configclass
-class LizardRoughTeacherEnvCfg_V5(LizardRoughTeacherEnvCfg_V4):
-    """v5 recipe: reward-side anti-collapse package + SIR terrain curriculum.
-
-    v3/v4 trained to a foot-pad creeping optimum (15555 iters, success_rate
-    pinned at the standstill freeload baseline, terrain levels frozen at 1.27,
-    foot_clearance reward never above 5e-5). Root causes closed here
-    (versions/lizard/v5/PLAN.md, user decision 2026-09-03):
-    * r_fc weight sign flipped positive->negative (it shipped as a REWARD for
-      low-hanging swing feet; the v5 yaml copy carries the fix, so the frozen
-      v3/v4 recipes keep their original behavior)
-    * r_slip (feet_slide_ck): contact-foot sliding penalty, c_k-scaled -- the
-      paper's only direct anti-creeping term, dropped from v3 by an erratum
-    * r_co narrowed to thigh/shank (HFE/KFE links), c_k-scaled; the base body
-      moves to a dedicated continuous belly-force penalty (constant weight:
-      lying flat must never become free as c_k anneals), HAA/spine exempt
-      (user decision)
-    * linear tracking track_lin_vel_xy_lin (Cheng et al. 2023 Eq. 2 form)
-      replaces track_lin_vel_xy_yaw_frame_exp: standing scores 0, reversal
-      scores negative -- the exp kernel let |v_cmd| < 0.5 stand still for half
-      the command distribution
-    * commands forward-only lin_vel_x (0, 3) with the staged speed curriculum
-      removed (it was pinned at stage 0 by the freeloaded success_rate anyway)
-    * v5.3: SIR terrain curriculum (Lee et al. 2020 Alg. S1) replaces stock
-      terrain_levels_vel -- spawn traffic redistributed per measured success
-      band on the fixed 8-type grid (v4 types + flat bootstrap column)
-    Obs/network contract unchanged: three groups 90/208/83 = 381.
-    """
-
-    params_version = "v5"
-
-    # ARCH_PLAN 1.3 (S09): this recipe's resume must continue its curriculum (the SIR
-    # term below + the c_k clock). Declared on the CLASS, inherited by v6..v14, and
-    # overridden to False by every ``*_PLAY`` variant. The train.py call site reads it
-    # off ``type(env_cfg)`` -- an object it already holds -- so the declaration still
-    # holds when ``rl_exp.tasks.curriculum_state`` cannot be imported.
-    #
-    # A ``ClassVar`` on purpose: it states something ABOUT the recipe (its resume
-    # contract), so it is not recipe data. ``configclass`` copies it onto the instance
-    # like any other class member, which is why the cfg snapshot excludes ClassVars
-    # (format 2, reviewed baseline) -- without that filter, changing the declaration
-    # would look like changing the configuration. It stays visible in ``to_dict()``
-    # (upstream ``class_to_dict`` walks the instance namespace); that dump is a
-    # per-run artifact, not a comparison surface.
-    REQUIRES_CURRICULUM_STATE: ClassVar[bool] = True
-
-    def __post_init__(self):
-        super().__post_init__()
-        params = _load_params(self.params_version)
-        v5 = params["v5"]
-        base_name = params["robot"]["base_body_name"]
-
-        # commands: forward-only ambition range from this recipe's yaml, and no staged speed
-        # curriculum (stage 0's (-1, 2) window kept a 50% standstill-freeload band under the exp
-        # kernel; the linear kernel below needs no range gating). The range is declared in
-        # components.COMMAND_RANGE.
-        self.curriculum.speed_curriculum = None
-
-        # --- v5.3: SIR particle terrain curriculum (Lee et al. 2020 Alg. S1,
-        # discrete adaptation; plan versions/lizard/v5/PLAN.md) ---
-        # grid = v4 + one flat type; rows = difficulty particles, envs respawn
-        # per reset on the type's particle set. The v3.5 "spawn at easiest
-        # row" prerequisite dies here: SIR samples uniformly at start (paper
-        # line 1) -- the payload and that uniform spawn are declared in
-        # components.TERRAIN_BY_RECIPE.
-        sir = v5["terrain_curriculum"]
-        self.curriculum.terrain_levels = teacher_mdp.SIRTerrainCurriculumCfg(
-            func=teacher_mdp.SpawnWeightSIRTerrainCurriculum,
-            command_name="base_velocity",
-            band=tuple(sir["band"]),
-            eval_every=int(sir["eval_every"]),
-            n_traj_min=int(sir["n_traj_min"]),
-            p_transition=float(sir["p_transition"]),
-            p_replay=float(sir["p_replay"]),
-            success_ratio=float(sir["success_ratio"]),
-            soft_edge=float(sir["soft_edge"]),
-            steps_per_iteration=int(sir["steps_per_iteration"]),
-        )
-
-        # linear velocity tracking: EP-style normalized kernel replaces the exp
-        self.rewards.track_lin_vel_xy_exp = None
-        self.rewards.track_lin_vel_xy_lin = RewTerm(
-            func=teacher_mdp.track_lin_vel_xy_lin,
-            weight=v5["track_goal_vel"]["weight"],
-            params={
-                "command_name": "base_velocity",
-                "min_speed": v5["track_goal_vel"]["min_speed"],
-            },
-        )
-
-        # r_slip: contact-foot sliding penalty, c_k-scaled (paper S7). Both cfgs
-        # must be explicit params so the manager resolves body_ids (a defaulted
-        # SceneEntityCfg stays unresolved and indexes with body_ids=None).
-        self.rewards.feet_slide = RewTerm(
-            func=teacher_mdp.feet_slide_ck,
-            weight=v5["r_slip"]["weight"],
-            params={
-                "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
-                "asset_cfg": SceneEntityCfg("robot", body_names=".*_foot"),
-            },
-        )
-
-        # r_co: legs-only + c_k (paper r_co penalizes thigh/shank). The body
-        # list itself comes from the v5 yaml names section (base_class wiring).
-        self.rewards.undesired_contacts.func = teacher_mdp.undesired_contacts_ck
-
-        # belly: continuous force-proportional penalty, constant weight
-        self.rewards.belly_contact_force = RewTerm(
-            func=teacher_mdp.belly_contact_force,
-            weight=v5["belly_contact_force"]["weight"],
-            params={
-                "sensor_cfg": SceneEntityCfg("contact_forces", body_names=[base_name]),
-                "force_scale": v5["belly_contact_force"]["force_scale"],
-            },
-        )
 
         # r_fc sign fix rides the V3 wiring: foot_clearance.weight is read from
         # THIS version's yaml at V3.__post_init__ time (params_version="v5"),
         # and the v5 yaml copy carries weight: -0.003.
 
 
-@configclass
-class LizardRoughTeacherEnvCfg_V5_PLAY(LizardRoughTeacherEnvCfg_V5):
-    """v5 play variant: obs 381, no randomization, no curriculum.
-
-    The speed curriculum is already absent in v5 and the command range is the
-    fixed (0, 3) ambition window, so PLAY needs only the shared wiring. The
-    SIR terrain curriculum is dropped too: replay keeps its initial terrain
-    assignment (fixed grid, no traffic redistribution mid-eval).
-    """
-
-    # PLAY resumes no curriculum (it wires none): explicit override of V5 (ARCH_PLAN 1.3)
-    REQUIRES_CURRICULUM_STATE: ClassVar[bool] = False
-
-    def __post_init__(self):
-        super().__post_init__()
-
-        # deterministic evaluation: shared PLAY wiring (single source, see play_utils)
-        apply_play_wiring(self)
-
-        # v5.3: SIR would reassign spawn origins per episode based on replay
-        # outcomes -- deterministic eval must not roam
-        self.curriculum.terrain_levels = None
 
 
-@configclass
-class LizardRoughTeacherEnvCfg_V6(LizardRoughTeacherEnvCfg_V5):
-    """v6 recipe: asset axis correction + spine/tail unlock, reward/obs unchanged.
-
-    The v5 first run walked sideways (crab-walk): the lizard URDF's long axis
-    was Y (neck at +y, legs sprawling along x) while the velocity task pays
-    for motion along base +X -- so the policy strafed along its own right
-    side, exactly as rewarded (trainLinVelXY tracked it as healthy progress).
-    v6 regenerates the shared asset with the body rigidly rotated -90 deg
-    about Z (blend SSOT via blender/rotate_rig.py; generate_urdf AXIS_MAP
-    rotated with it; locks refreshed tree-wide in the same commit). The
-    version yaml stays byte-identical to v5 (versioning.mdc §A -- trained v5
-    is immutable, asset fix opens v6).
-
-    v6.1 action-space change (user decision 2026-09-07): the whole spine term
-    (rear + neck + tail, 10 joints) unlocks at the yaml ``spine_scale`` --
-    v1-v5 hardcoded 0.0 left the spine/tail policy-frozen and passively
-    wobbling under PD 150/10. Obs groups (90/208/83) and the 26-dim action
-    layout are unchanged; only the spine channels become live.
-    """
-
-    params_version = "v6"
-
-    def __post_init__(self):
-        super().__post_init__()
-        # spine_scale comes from THIS version's yaml (0.25), so v1-v5 keep the
-        # class-default 0.0 and their recipes rebuild unchanged
-        params = _load_params(self.params_version)
-        self.actions.joint_pos_spine.scale = params["action"]["spine_scale"]
 
 
-@configclass
-class LizardRoughTeacherEnvCfg_V6_PLAY(LizardRoughTeacherEnvCfg_V6):
-    """v6 play variant: same as v5 PLAY (no randomization, no curriculum)."""
-
-    REQUIRES_CURRICULUM_STATE: ClassVar[bool] = False
-
-    def __post_init__(self):
-        super().__post_init__()
-
-        # deterministic evaluation: shared PLAY wiring (single source, see play_utils)
-        apply_play_wiring(self)
-
-        # SIR reassigns spawn origins per episode -- deterministic eval must not roam
-        self.curriculum.terrain_levels = None
 
 
-@configclass
-class LizardRoughTeacherEnvCfg_V8(LizardRoughTeacherEnvCfg_V6):
-    """v8 recipe: anatomy-correct asset (flip + rename), reward/obs unchanged.
-
-    The v6 first run walked tail-first (probe: displacement solidly along base
-    +X under forward commands, yet the GUI showed the head trailing): the rig's
-    bone names were 180 deg off the model's anatomy -- the "neck1-3" chain is
-    the tail (build_rig.py ``antenna_tip``), the "tail_yaw/tail_pitch" chain
-    carries the sphere HEAD (``sphere_tip``), and the leg names were
-    front/rear + left/right swapped. v6 rotated the NAME-head onto task +X,
-    which is anatomically the tail, so the policy walked exactly as paid --
-    tail-first. v8 regenerates the shared asset with a further +180 deg Z
-    rotation (net +90 from the pre-v6 blend: sphere head -y -> +x, antenna
-    tail -> -x) and renames all 26 joints to anatomy
-    (blender/rename_flip_v8.py; generate_urdf AXIS_MAP flipped with it;
-    every version yaml migrated in the same commit). Reward/obs/action
-    structure stays byte-identical to v6.2 -- only joint NAMES and the asset
-    orientation change, so the 90/208/83 obs groups and the 26-dim action
-    layout are unchanged.
-    """
-
-    params_version = "v8"
 
 
-@configclass
-class LizardRoughTeacherEnvCfg_V8_PLAY(LizardRoughTeacherEnvCfg_V8):
-    """v8 play variant: same as v6 PLAY (no randomization, no curriculum)."""
-
-    REQUIRES_CURRICULUM_STATE: ClassVar[bool] = False
-
-    def __post_init__(self):
-        super().__post_init__()
-
-        # deterministic evaluation: shared PLAY wiring (single source, see play_utils)
-        apply_play_wiring(self)
-
-        # SIR reassigns spawn origins per episode -- deterministic eval must not roam
-        self.curriculum.terrain_levels = None
 
 
-@configclass
-class LizardRoughTeacherEnvCfg_V10(LizardRoughTeacherEnvCfg_V8):
-    """v10 recipe: tilt termination removed (single-variable fix).
-
-    Diagnosis (2026-09-09; v8.1 killed at iter 7700): ``Episode_Termination/
-    tilt`` sat at 0.60 (v8.1) / 0.76 (v6) -- the v3 ``tilt_terminate`` pg_z
-    limit (instantaneous total tilt > 53 deg, no dwell window) killed
-    legitimate pitch (terrain slopes <= 26 deg, vaulting, spine articulation)
-    as "falls". Most episodes truncated early, SIR success_rate pinned at
-    0.019 (success requires surviving to timeout), terrain curriculum and
-    velocity learning starved. v10 deletes the term entirely so fallen states
-    stay in the rollout data: the belly_contact_force penalty (-0.5/step)
-    plus zero tracking supplies the get-up gradient, and the 2 m tail +
-    sprawled legs carry the ground righting apparatus (lizards self-right in
-    seconds). Only time_out terminates. Everything else is byte-identical to
-    v8.1. Pre-registered counter-hack (v10 yaml): sustained belly contact
-    with high tracking -> raise the belly_contact_force weight.
-    """
-
-    params_version = "v10"
-
-    def __post_init__(self):
-        super().__post_init__()
         # D1 removal is yaml-driven (v10.tilt_terminate: null) and owned by
         # components.terminations, which reads the same flag in the single writer.
 
 
-@configclass
-class LizardRoughTeacherEnvCfg_V10_PLAY(LizardRoughTeacherEnvCfg_V10):
-    """v10 play variant: same as v8 PLAY (no randomization, no curriculum)."""
-
-    REQUIRES_CURRICULUM_STATE: ClassVar[bool] = False
-
-    def __post_init__(self):
-        super().__post_init__()
-
-        # deterministic evaluation: shared PLAY wiring (single source, see play_utils)
-        apply_play_wiring(self)
-
-        # SIR reassigns spawn origins per episode -- deterministic eval must not roam
-        self.curriculum.terrain_levels = None
 
 
-@configclass
-class LizardRoughTeacherEnvCfg_V11(LizardRoughTeacherEnvCfg_V10):
-    """v11 recipe: joint particle terrain curriculum (plan versions/lizard/v11/PLAN.md).
-
-    Replaces the v5 scalar-row SIR with the joint (terrain param combo,
-    velocity bucket) particle filter over a frozen param-sampled grid
-    (param_grid_terrain.py; every combination becomes one sub-terrain with
-    single-value ranges, so the stock difficulty interpolation is a no-op --
-    the fix for the diagonal problem). Measurement returns to the paper's
-    per-state-transition Tr (Lee et al. 2020 Eq. 2/3/7) -- family PLAN
-    ledger #15 option a; velocity enters the particle (repo extension: the
-    paper samples commands randomly and keeps them out). lin_vel_x now
-    comes from the particle via ParticleVelocityCommand, with mid-episode
-    resampling disabled so a whole episode keeps one pairing (reset order:
-    curriculum compute at :369 precedes command resample at :394). All
-    difficulty levels and curriculum knobs live in the v11 yaml section
-    (SSOT). The v5 SpawnWeightSIRTerrainCurriculum stays frozen for v1-v10
-    reproducibility.
-    """
-
-    params_version = "v11"
-
-    def __post_init__(self):
-        super().__post_init__()
-        params = _load_params(self.params_version)
-        v11 = params["v11"]
-
-        # v11 terrain: the param-sampled grid, built from this recipe's own grid section (the
-        # builder sets curriculum=True itself) -- declared in components.TERRAIN_BY_RECIPE.
-
-        # v11 curriculum: joint SIR replaces the v5 row SIR (setattr via the
-        # module constant -- the command term and check_obs_layout look the
-        # term up by the same name; v11.1)
-        self.curriculum.terrain_levels = None
-        sir = v11["terrain_curriculum"]
-        setattr(
-            self.curriculum,
-            teacher_mdp.JOINT_SIR_TERM,
-            teacher_mdp.JointSIRTerrainCurriculumCfg(
-                func=teacher_mdp.JointSIRTerrainCurriculum,
-                command_name="base_velocity",
-                band=tuple(sir["band"]),
-                velocity_buckets=tuple(v11["velocity_buckets"]),
-                particles_per_type=int(sir["particles_per_type"]),
-                eval_every=int(sir["eval_every"]),
-                n_traj_min=int(sir["n_traj_min"]),
-                p_transition=float(sir["p_transition"]),
-                p_replay=float(sir["p_replay"]),
-                maintain_mass=float(sir["maintain_mass"]),
-                steps_per_iteration=int(sir["steps_per_iteration"]),
-            ),
-        )
 
         # v11 command: the particle-sourced term -- a field-by-field copy of the v5-wired term
         # (whose ranges already carry the yaml narrowing) -- is declared in
         # components.COMMAND_RANGE.
 
 
-@configclass
-class LizardRoughTeacherEnvCfg_V11_PLAY(LizardRoughTeacherEnvCfg_V11):
-    """v11 play variant: no randomization, no curriculum.
-
-    The ParticleVelocityCommand term stays (obs/command contract unchanged):
-    with the joint SIR dropped its lin_vel_x falls back to the (0, 3)
-    uniform range sample, matching the v10 PLAY behavior.
-    """
-
-    REQUIRES_CURRICULUM_STATE: ClassVar[bool] = False
-
-    def __post_init__(self):
-        super().__post_init__()
-
-        # deterministic evaluation: shared PLAY wiring (single source, see play_utils)
-        apply_play_wiring(self)
-
-        # the joint SIR reassigns spawn origins + velocities per episode --
-        # deterministic eval must not roam (the command term then takes its
-        # range fallback)
-        setattr(self.curriculum, teacher_mdp.JOINT_SIR_TERM, None)
 
 
-@configclass
-class LizardRoughTeacherEnvCfg_V12(LizardRoughTeacherEnvCfg_V11):
-    """v12 recipe: Miki et al. 2022 S8 reset/observation robustness package.
-
-    The audit against the paper's S8 randomization list (user request
-    2026-09-10, versions/lizard/v12/PLAN.md) found three gaps on top of v11;
-    all knobs live in the v12 yaml section:
-
-    * joint initial position AND velocity randomization at reset -- the stock
-      ``reset_robot_joints`` scales the default pose, which is all-zero for
-      this sprawled rig, so it has been a silent no-op; replaced by three
-      ``reset_joints_by_offset`` terms (legs / feet / spine, soft-limit
-      clamped)
-    * base pose/velocity reset ranges moved to the yaml (the values are the
-      stock base-cfg ones the teacher line already inherited -- pose x/y
-      +-0.5 m, yaw +-3.14 rad, 6-axis velocity +-0.5 -- now tunable)
-    * occasional foot-friction dips (``FootFrictionDipTerm``, p_dip 0.1 ->
-      static [0.05, 0.3]); the privileged ``foot_friction`` obs cache is
-      updated in the same call
-    * height-ring noise model on the actor exteroception
-      (``sample_ring_noise`` + ``NoisyFootRing``): conditions nominal/offset/
-      noisy at 60/30/10 per episode (redrawn midway), per-foot per-episode
-      bias w, per-foot per-step eps_f, per-point per-step eps_p, intermittent
-      outliers, amplitudes x c_k
-
-    Deliberate deviations (user decision 2026-09-10: no student
-    distillation): the noise rides the TEACHER actor -- the paper corrupts
-    only the student's height samples; the priv group stays clean. The
-    r_slip weight returns to -0.003 (v8.1's -0.03 was never probed at this
-    recipe). Obs groups / dims unchanged: 90/208/83 = 381.
-
-    p_dip / joint offsets / sigmas are estimates -> ablation knobs (paper
-    gives no numbers for the reset offsets; its z noise vector is per-leg
-    and not printed in full -- one sigma set serves all feet here).
-    """
-
-    params_version = "v12"
-
-    def __post_init__(self):
-        super().__post_init__()
-        params = _load_params(self.params_version)
-        v12 = params["v12"]
-        rr = v12["reset_randomization"]
-        hn = v12["height_noise"]
-
-        # --- joint initial state randomization (paper S8) ---
-        # the stock scale-type term is a no-op on the all-zero default pose
-        self.events.reset_robot_joints = None
-        for name, patterns, key in (
-            ("reset_joints_legs", [".*_haa_joint", ".*_hfe_joint", ".*_kfe_joint"], "legs"),
-            ("reset_joints_feet", [".*_foot_joint"], "feet"),
-            ("reset_joints_spine", ["chest_.*", "neck_.*", "tail[0-9]_.*"], "spine"),
-        ):
-            setattr(
-                self.events,
-                name,
-                EventTerm(
-                    func=mdp.reset_joints_by_offset,
-                    mode="reset",
-                    params={
-                        "asset_cfg": SceneEntityCfg("robot", joint_names=patterns),
-                        "position_range": tuple(rr["joints"][key]),
-                        "velocity_range": tuple(rr["joint_velocity"]),
-                    },
-                ),
-            )
-
-        # --- base pose/velocity reset ranges from the yaml ---
-        # (stock values inherited until now; exposed for tuning)
-        self.events.reset_base.params["pose_range"] = {a: tuple(r) for a, r in rr["base_pose_range"].items()}
-        self.events.reset_base.params["velocity_range"] = {a: tuple(r) for a, r in rr["base_velocity_range"].items()}
-
-        # --- occasional foot-friction dips (paper S8) ---
-        self.events.foot_friction_dip = EventTerm(
-            func=teacher_mdp.FootFrictionDipTerm,
-            mode="reset",
-            params={
-                "asset_cfg": SceneEntityCfg("robot", body_names=".*_foot"),
-                "static_friction_range": tuple(rr["friction_dip"]["static"]),
-                "dynamic_ratio_range": tuple(rr["friction_dip"]["dynamic_ratio"]),
-                "p_dip": float(rr["friction_dip"]["p_dip"]),
-            },
-        )
-
-        # --- height-ring noise (paper S8) on the actor extero group ---
-        # reset event owns the per-episode state; the four extero terms' func and parameters are
-        # set by components.observations -- names, order and dims (208) stay the contract
-        self.events.sample_ring_noise = EventTerm(
-            func=teacher_mdp.sample_ring_noise,
-            mode="reset",
-            params={"ratios": tuple(hn["ratios"])},
-        )
 
 
-@configclass
-class LizardRoughTeacherEnvCfg_V12_PLAY(LizardRoughTeacherEnvCfg_V12):
-    """v12 play variant: no randomization, no curriculum, clean extero.
-
-    ``apply_play_wiring`` nulls ``sample_ring_noise`` and ``foot_friction_dip``
-    (shared DR list) -- ``NoisyFootRing`` then returns clean scans. The joint
-    offset terms and the base pose/velocity ranges stay, matching the stock
-    ``reset_base`` handling: PLAY randomization is seeded, not zeroed.
-    """
-
-    REQUIRES_CURRICULUM_STATE: ClassVar[bool] = False
-
-    def __post_init__(self):
-        super().__post_init__()
-
-        # deterministic evaluation: shared PLAY wiring (single source, see play_utils)
-        apply_play_wiring(self)
-
-        # the joint SIR reassigns spawn origins + velocities per episode --
-        # deterministic eval must not roam (the command term then takes its
-        # range fallback)
-        setattr(self.curriculum, teacher_mdp.JOINT_SIR_TERM, None)
 
 
-@configclass
-class LizardRoughTeacherEnvCfg_V13(LizardRoughTeacherEnvCfg_V10):
-    """v13 recipe: symmetric Miki tracking kernel (single-variable fix).
-
-    v10 diagnosis (2026-09-11, ``DIAGNOSE.md`` + ``NOTES.md``) pinned three
-    holes in the v5 EP kernel ``track_lin_vel_xy_lin``: it scores only the
-    velocity projection onto the command axis, so overspeed is free (clamp at
-    ``speed_c``; measured +48..54 percent at 0.3 m/s command while the ledger
-    read 1.47/1.5), lateral drift is invisible (constant ~20 deg crab,
-    body-relative sideslip 0.16..0.39 m/s against a heading rotation of at
-    most 9 deg), and zero command carries no stop gradient (standing scores 0
-    regardless of motion -- the 10 s zero-command run kept drifting).
-
-    v13 swaps the kernel for the Miki et al. 2022 symmetric form
-    ``exp(-||v_cmd - v_yaw||^2 / 0.25)`` on the full 2D error -- one kernel
-    closes all three holes, including the stop objective (a stationary base at
-    zero command earns the full weight). Everything else (obs 381, DR,
-    terrain, terminations, curriculum) is byte-identical to v10.
-
-    RISK (pre-registered, v13 yaml): the v3/v4 runs collapsed to a
-    foot-pad-creeping optimum under the OLD exp kernel because standing
-    freeloaded residual credit. The rest of the v5 anti-collapse package
-    (r_fc sign fix, r_slip x10, belly -0.5) stays wired, so the freeloading
-    gap that killed v3/v4 no longer exists; if the creep recurs anyway
-    (feet_slide ledger worse than v10's, rear-foot duty collapsing, low-speed
-    success_rate regressing), the version is scrapped and the rollback line
-    is v10. Deliberate deviation from the paper: weight stays 1.5 (not 0.75)
-    to keep the tracking ceiling and penalty ratios identical to v10.
-    """
-
-    params_version = "v13"
-
-    def __post_init__(self):
-        super().__post_init__()
-        v13 = _load_params(self.params_version)["v13"]["track_goal_vel"]
-        self.rewards.track_lin_vel_xy_lin = None
-        self.rewards.track_lin_vel_xy_miki = RewTerm(
-            func=teacher_mdp.track_lin_vel_xy_miki,
-            weight=v13["weight"],
-            params={
-                "command_name": "base_velocity",
-                "sigma_sq": v13["sigma_sq"],
-            },
-        )
 
 
-@configclass
-class LizardRoughTeacherEnvCfg_V13_PLAY(LizardRoughTeacherEnvCfg_V13):
-    """v13 play variant: same as v10 PLAY (no randomization, no curriculum)."""
-
-    REQUIRES_CURRICULUM_STATE: ClassVar[bool] = False
-
-    def __post_init__(self):
-        super().__post_init__()
-
-        # deterministic evaluation: shared PLAY wiring (single source, see play_utils)
-        apply_play_wiring(self)
-
-        # SIR reassigns spawn origins per episode -- deterministic eval must not roam
-        self.curriculum.terrain_levels = None
 
 
-@configclass
-class LizardRoughTeacherEnvCfg_V14(LizardRoughTeacherEnvCfg_V13):
-    """v14 recipe: roll-over fall gate + head-load penalty (v14.3).
-
-    v10 deleted the v3 tilt termination because it killed legitimate pitch
-    (instantaneous total tilt > 53 deg: 0.60 of episodes in v8.1, 0.76 in v6,
-    success_rate pinned at 0.019 -- see versions/lizard/v10/NOTES.md). v14 stops
-    exactly one pose: rolled onto a side or its back -- the ZYX roll of the base
-    quaternion past ``roll_limit_deg``, sustained for ``dwell_s``. Pitch alone
-    never fires (nose-up vaults, stair climbing) and the roll is yaw-invariant,
-    so heading changes are free.
-
-    v14.3 (user decision 2026-09-15): the front-plant termination is gone. Head
-    load-bearing is penalized per step instead (:func:`teacher_mdp.head_load_penalty`
-    -- vertical contact force through the neck chain, proportional, no threshold,
-    no attitude gate), so a head-planted pose costs reward but keeps its rollout
-    data, and the "sustained nose-down attitude on a slope" false-positive
-    surface disappears along with the termination.
-
-    v14.4 (user decision 2026-09-15): the roll moved off projected gravity onto
-    the base quaternion, so it is monotone over the whole turn. The old ``|sin|``
-    form came back down past 110 deg, and v14.0-v14.3 protected that belly-up
-    family plus back-down falls for a "get-up gradient" the teacher recipe has no
-    objective for -- a downed pose is a crash to cut, not data to keep. Belly-down
-    prone sits at roll ~ 0 and is invisible to this axis (kept, like base contact,
-    which has been penalty-only since v3.6). Everything else is byte-identical to
-    v13.
-
-    Pre-registered tripwire (v14 yaml + NOTES): Episode_Termination/roll_over
-    must stay low (the v3 gate ate 0.60-0.76 of episodes); if it climbs there
-    while low-speed success_rate stalls, the limit is too tight and the rollback
-    line is v13.
-    """
-
-    params_version = "v14"
-
-    def __post_init__(self):
-        super().__post_init__()
-        v14 = _load_params(self.params_version)["v14"]
-        # the v14 fall gate (roll_over) is owned by components.terminations
-        head_load = v14["head_load"]
-        self.rewards.head_load_penalty = RewTerm(
-            func=teacher_mdp.head_load_penalty,
-            weight=head_load["weight"],
-            params={
-                "sensor_cfg": SceneEntityCfg(
-                    "contact_forces", body_names=tuple(head_load["head_body_names"])
-                ),
-                "force_scale": head_load["force_scale"],
-            },
-        )
 
 
-@configclass
-class LizardRoughTeacherEnvCfg_V14_PLAY(LizardRoughTeacherEnvCfg_V14):
-    """v14 play variant: same as v13 PLAY (no randomization, no curriculum)."""
-
-    REQUIRES_CURRICULUM_STATE: ClassVar[bool] = False
-
-    def __post_init__(self):
-        super().__post_init__()
-
-        # deterministic evaluation: shared PLAY wiring (single source, see play_utils)
-        apply_play_wiring(self)
-
-        # SIR reassigns spawn origins per episode -- deterministic eval must not roam
-        self.curriculum.terrain_levels = None

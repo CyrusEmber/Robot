@@ -7,7 +7,7 @@
 """Structural components of the teacher recipes: one writer per component (``ARCH_PLAN`` 2.4).
 
 A structural piece used to be written wherever a version first needed it: the base class
-built the height scanner, then ``LizardRoughTeacherEnvCfg_V3`` set that very field to ``None``
+built the height scanner, then the v3 recipe set that very field to ``None``
 and hung four per-foot casters next to it. Two writers for one piece means the final state is
 whatever the MRO ran last -- invisible from either site.
 

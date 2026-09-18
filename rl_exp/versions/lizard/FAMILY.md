@@ -197,3 +197,13 @@ v8 转正 180° 后轴值翻转（X/Y 分量取反），且**腿名自 v8 起等
 存量 v0–v4 = 创始主线，裸编号不迁移。
 本家族特有机制 = [OBS.md](OBS.md) 的 `TEACHER_PRIVILEGED_SPEC` 剥离纪律
 （已发布 term 实现永不改语义）。
+
+**本家族的结构变更机制（2026-09-17 起：注册表已切到声明路径）**：加一个版本 =
+在 `rl_exp/tasks/recipe.py` 加元素函数并填**配方表一行**（`elements`/`play_elements`/
+`declares`/`pins_full_range`/`train`/`play`）+ 在 `versions/recipes.json` 登记配方键与两个
+入口 + `tasks/__init__.py` 注册任务 id（`env_cfg_entry_point` 指 `recipe_tasks:<类名>`）。
+**不再新建版本类，也不再改 `teacher_env_cfg.py`**：可注册的类由 `tasks/recipe_tasks.py`
+按声明生成，并且**沿用被替换类的名字**（ckpt 载荷记 `type(cfg).__name__` 并参与 resume
+身份核验，名字不一致会让跨路径续训被拒）。配方表是唯一真源 ——"这个版本是什么"= 有序元素
+表 + 逐条差异声明，而不是某个 `__post_init__` 的残留；版本子类一旦重新出现，
+`[41]` 立即具名报红（一个配方两个表达式 = 总有一个没人跑）。

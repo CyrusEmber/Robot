@@ -173,15 +173,28 @@ def _check_branch(rows: dict[str, dict], problems: list[str]) -> None:
 
 
 def _check_play_inheritance(rows: dict[str, dict], problems: list[str]) -> None:
-    """PLAY variants must inherit, not redefine, the params line."""
+    """PLAY variants must not retarget the params line they belong to.
+
+    The counterpart is the same recipe's train class -- by name, ``X_PLAY`` against ``X``. It used
+    to be the MRO parent, because ``V14_PLAY`` extended ``V14``; the generated classes come off the
+    shared wiring instead, whose own default is some other recipe, so an MRO answer would compare
+    two unrelated things and redden every PLAY variant of the line. The MRO parent stays as the
+    fallback for a class the declaration did not make (a framework or family class).
+    """
     for name, p in rows.items():
         if not name.endswith("_PLAY"):
             continue
-        parent = next((c for c in type(p["instance"]).__mro__[1:] if c.__name__ in rows), None)
-        if parent is not None and rows[parent.__name__]["value"] != p["value"]:
+        train_name = name[: -len("_PLAY")]
+        counterpart = rows.get(train_name)
+        if counterpart is None:
+            parent = next((c for c in type(p["instance"]).__mro__[1:] if c.__name__ in rows), None)
+            if parent is None:
+                continue
+            train_name, counterpart = parent.__name__, rows[parent.__name__]
+        if counterpart["value"] != p["value"]:
             problems.append(
-                f"{name}: params_version {p['value']!r} != parent {parent.__name__} "
-                f"{rows[parent.__name__]['value']!r} (a PLAY variant must not retarget the line)"
+                f"{name}: params_version {p['value']!r} != {train_name} "
+                f"{counterpart['value']!r} (a PLAY variant must not retarget the line)"
             )
 
 

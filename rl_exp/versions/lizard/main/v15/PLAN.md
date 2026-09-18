@@ -89,15 +89,18 @@ python scripts\reinforcement_learning\rsl_rl\train.py --task Lizard-Rough-v15 --
 
 ## 待实施件（代码，本 PLAN 定稿后按序做）
 
-1. `teacher_env_cfg.py`：`LizardRoughTeacherEnvCfg_V15(LizardRoughTeacherEnvCfg_V14)` +
-   `_V15_PLAY`（PLAY 须 `apply_play_wiring` + `setattr(self.curriculum, JOINT_SIR_TERM, None)`）
-2. `rl_exp/tasks/__init__.py`：注册 `Lizard-Rough-v15` / `Lizard-Rough-Play-v15`
-3. `agents/rsl_rl_ppo_cfg.py`：`LizardTeacherV15PPORunnerCfg`
+1. `recipe.py`：v15 的元素函数 + 配方表一行（`elements` = v14 那条 delta 链 + v15 的改动；
+   `play_elements` = `_JOINT_SIR_PLAY`；`declares`/`pins_full_range` 按本版声明；
+   `train`/`play` 填任务 id），并加 `main\v15\diff.json`（硬 B：对母版 v14 的逐条差异 + 元素归属）。
+   **不再新建版本类**（2026-09-17 起注册表走声明路径，可注册的类由 `recipe_tasks` 按名字生成）
+2. `rl_exp/versions/recipes.json`：登记配方键与两个 `env_cfg_entry`（指 `recipe_tasks:<类名>`）
+3. `rl_exp/tasks/__init__.py`：注册 `Lizard-Rough-v15` / `Lizard-Rough-Play-v15`
+4. `agents/rsl_rl_ppo_cfg.py`：`LizardTeacherV15PPORunnerCfg`
    （`experiment_name = "lizard_rough_teacher_v15"`）
-4. `teacher_smoke_runner.py`：`SMOKE_SPEC["v15"]` 行 + 薄壳 `teacher_smoke_v15.py`
-5. `check_dr_parity.py` 白名单：新接线的 term 行（`curriculum.joint_sir` / `commands.base_velocity`）
-6. 离线套件：`run_offline_checks.bat` 跑绿（含 v11 联合 SIR 闸、v14 摔倒闸、版本文档闸）
-7. 冻结前 `cfg_lock --update --line lizard --reason "v15 初稿"` + tag `<family>-v15`
+5. `teacher_smoke_runner.py`：`SMOKE_SPEC["v15"]` 行 + 薄壳 `teacher_smoke_v15.py`
+6. `check_dr_parity.py` 白名单：新接线的 term 行（`curriculum.joint_sir` / `commands.base_velocity`）
+7. 离线套件：`run_offline_checks.bat` 跑绿（含 v11 联合 SIR 闸、v14 摔倒闸、版本文档闸）
+8. 冻结前 `cfg_lock --update --line lizard/main --reason "v15 初稿"` + tag `<family>-v15`
 
 ## 已知风险 / 回滚线
 

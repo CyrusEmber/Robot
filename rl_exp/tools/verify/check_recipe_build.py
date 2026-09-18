@@ -35,15 +35,15 @@ that one contains the other.
 ``ClassVar`` is the one thing a *field* comparison cannot see: a statement about a recipe is not
 recipe data, so the snapshot (format 2) leaves it out and no diff will ever report it. Those
 statements live in the recipe table (``recipe.CLASSVAR_STATEMENTS``, one list) and the declaration
-path stamps them onto the class it hands back, so both paths answer the same. This gate holds the
-transition: for as long as the version class bodies exist, each one has to state exactly what the
-table states -- unstated in the table is a failure too, since the table is what the declaration
-path stamps from. Neither value is decided here; the point is that no third answer can appear.
+path stamps them onto the class it hands back.
 
-A ClassVar with no home in the table and no way to be carried is printed on every run rather than
-being tolerated silently -- that is what ``EXPECTED_GAPS`` is for, and it is empty: every
-statement the class bodies make now has a table entry, so a new gap means a new statement somebody
-added, not housekeeping.
+This gate used to hold the transition: for as long as the version class bodies existed, each one
+had to state exactly what the table stated. Those bodies are gone (PLAN.md #22 step 3), so there is
+nothing left to compare against -- and the comparison is not silently dropped: a recipe whose
+version subclass reappears now fails by name, because a recipe with two expressions is a recipe
+whose two expressions can disagree. What the deleted comparison also carried -- "no ClassVar goes
+without a home" -- needs no replacement: a ClassVar on the shared wiring is inherited by the
+generated class, and a per-recipe one can only be added through the table now.
 """
 
 from __future__ import annotations
@@ -107,18 +107,6 @@ EXPECTED_DIFFS: dict[tuple[str, str], int] = {
 }
 """Recipe -> how many paths its difference declaration lists (``diff.json`` next to the recipe)."""
 
-EXPECTED_GAPS: dict[str, tuple[str, str]] = {}
-"""Gaps this gate tolerates, keyed by ClassVar name: why, and when it must be gone.
-
-A gap whose name is not in this table is a failure: a *new* ClassVar the declaration cannot carry
-is exactly the kind of silent divergence the table exists to make somebody notice. Printing every
-gap on every run is how a real one becomes wallpaper -- the due column is what makes it a debt.
-
-Empty, and that is the point: the last entry (``PLAY_PINS_COMMAND_RANGE``) left when the recipe
-table started stating it, so the declaration path now carries every statement the version class
-bodies make. A new entry here is a real gap, not a housekeeping step.
-"""
-
 
 def frozen_entries(line_key: str, cache: dict[str, dict]) -> tuple[dict, str | None]:
     """The frozen golden entries of the line a recipe declares it belongs to.
@@ -140,24 +128,36 @@ def frozen_entries(line_key: str, cache: dict[str, dict]) -> tuple[dict, str | N
     return entries, error
 
 
-def classvar_gaps(cls, built) -> list[tuple[str, object, object]]:
-    """ClassVars ``cls`` states that the built cfg's class does not, as ``(name, stated, carried)``.
+def resurrected_class(version: str, *, play: bool, line: str) -> type | None:
+    """A class in the line's wiring module that still builds ``version``: the duplicate is back.
 
-    Compared class to class, never through a constructed instance: the point of the check is that
-    the declaration path carries no class of its own, so ``type(built)`` is the shared base and a
-    name only the version class annotates shows up here. The names come from the snapshot's own
-    ``ClassVar`` filter, so "left out of the golden" and "reported here" are one rule, not two.
-
-    Names, not rendered strings: the ledger that decides which gaps are tolerated is keyed by
-    what the gap *is*, so a statement that changes value (True -> False) stays the same debt.
+    This gate used to compare the recipe table against the version subclass the recipe replaced.
+    Those subclasses were deleted (PLAN.md #22 step 3), so the comparison has no second side left --
+    and instead of dropping the question, it is asked the other way round: if a class like that
+    exists again, one recipe has two expressions again, and two expressions is how this migration's
+    whole failure mode starts (a field written by a path nobody ran). Constructed and read through
+    ``params_version``, which is a field, not a class attribute (1.0's finding).
     """
-    out: list[tuple[str, object, object]] = []
-    for name in cs._class_var_names(cls):
-        stated = getattr(cls, name, "not stated")
-        carried = getattr(type(built), name, "not stated")
-        if carried != stated:
-            out.append((name, stated, carried))
-    return out
+    module_name = recipe.LINES[line]["base"].__module__
+    module = importlib.import_module(module_name)
+    base = recipe.LINES[line]["base"]
+    # The line's shared wiring, both halves: the module keeps a PLAY sibling beside the base class,
+    # and that sibling resolves to *some* version's recipe by default. It is what a recipe is built
+    # on, not an expression of one, so it is not what this probe looks for -- the probe is about a
+    # recipe class coming back, and those carry the name the registry generated.
+    sibling = getattr(module, f"{base.__name__}_PLAY", None)
+    wiring = {base, sibling} if isinstance(sibling, type) else {base}
+    for value in vars(module).values():
+        if not isinstance(value, type) or value in wiring:
+            continue
+        if getattr(value, "__module__", None) != module_name:
+            continue
+        if value.__name__.endswith("_PLAY") is not bool(play):
+            continue
+        instance = _probe(value)
+        if instance is not None and getattr(instance, "params_version", None) == version:
+            return value
+    return None
 
 
 def attribution(version: str, *, play: bool, paths: list[str], line: str = recipe.MAIN_LINE) -> None:
@@ -226,51 +226,6 @@ def _probe(cls) -> object | None:
         except Exception:  # noqa: BLE001 - a class that cannot be built is not a candidate
             _PROBE[cls] = None
     return _PROBE[cls]
-
-
-def replaced_class(version: str, *, play: bool, line: str) -> tuple[type | None, str | None]:
-    """The version subclass a recipe replaces, found by scanning the line's wiring module.
-
-    Matching is by constructing each candidate and reading its ``params_version``: that value is a
-    *field* on these configclasses (1.0's finding), so the class attribute is not the version a
-    class builds. Discovered rather than looked up, because after the entry switch the identity map
-    names the generated class and a name table here would be the second hand-copied mapping this
-    migration exists to remove.
-
-    Two classes can build the same version -- the line's "latest" class and the pinned ``_V<N>`` one
-    are the same recipe by construction -- so a name carrying the version token wins when there is
-    exactly one of those; anything else that is ambiguous is a failure, never a guess.
-    """
-    module_name = recipe.LINES[line]["base"].__module__
-    module = importlib.import_module(module_name)
-    base = recipe.LINES[line]["base"]
-    candidates: list[type] = []
-    for value in vars(module).values():
-        if not isinstance(value, type) or value is base:
-            continue
-        if getattr(value, "__module__", None) != module_name:
-            continue
-        if value.__name__.endswith("_PLAY") is not bool(play):
-            continue
-        instance = _probe(value)
-        if instance is not None and getattr(instance, "params_version", None) == version:
-            candidates.append(value)
-    pinned = [cls for cls in candidates if f"_V{version.lstrip(chr(118))}" in cls.__name__]
-    if len(pinned) == 1:
-        return pinned[0], None
-    if len(pinned) > 1:
-        return None, f"{len(pinned)} classes name {version} (play={play}): {sorted(c.__name__ for c in pinned)}"
-    if len(candidates) == 1:
-        return candidates[0], None
-    if not candidates:
-        return None, (
-            f"no class in {module_name} builds params_version={version!r} (play={play}): the class"
-            " path this recipe replaces is gone -- retire this comparison deliberately if intended"
-        )
-    return None, (
-        f"{len(candidates)} classes build params_version={version!r} (play={play}) and none names"
-        f" {version}: {sorted(c.__name__ for c in candidates)}"
-    )
 
 
 def declared_diff(line_key: str, version: str) -> tuple[dict | None, str | None]:
@@ -562,7 +517,6 @@ def hard_b(line_key: str, version: str, declared: dict, paths: list[str]) -> int
 def main(argv: list[str] | None = None) -> int:
     """Gate entry point: build each declared recipe and compare it against the frozen golden."""
     problems: list[str] = []
-    gaps: dict[str, dict] = {}
     attribution_problems: list[str] = []
     mapping = lock.recipe_map()
     try:
@@ -620,51 +574,36 @@ def main(argv: list[str] | None = None) -> int:
                         f"{task_id}: built cfg carries params_version={getattr(built, 'params_version', None)!r}"
                         f" while the recipe is {version!r}"
                     )
-                # the class path: the version subclass this recipe replaces, found by scanning the
-                # line's own wiring module. Not by the identity map: after the entry switch that map
-                # names the generated class, so resolving through it would compare the declaration
-                # with itself and quietly retire this gate; and a table of class names here would be
-                # the second hand-copied mapping this whole migration is about.
-                cls, why = replaced_class(version, play=play, line=line_key)
-                if cls is None:
-                    problems.append(f"{line_key}/{version}/{kind}: {why}")
-                else:
-                    for name, stated, carried in classvar_gaps(cls, built):
-                        gaps.setdefault(name, {"values": set(), "recipes": []})
-                        gaps[name]["values"].add(f"{stated!r} != {carried!r}")
-                        gaps[name]["recipes"].append(f"{version}/{kind}")
-                    # Every ClassVar a version class states about its recipe has to be stated by
-                    # the table instead, and agree with it -- two answers to "what does this recipe
-                    # state" is one answer too many, and the one that loses is whichever path
-                    # nobody ran. Unstated in the table is a failure: the table is what the
-                    # declaration path stamps from, so it cannot be silent. The pairing lives in
-                    # ``recipe.CLASSVAR_STATEMENTS``, so "which statements have moved off the
-                    # class bodies" has one answer instead of one list per checker.
-                    for classvar, accessor in recipe.CLASSVAR_STATEMENTS:
-                        stated_in_table = accessor(version, play=play, line=line_key)
-                        stated_in_class = bool(getattr(cls, classvar, False))
-                        if stated_in_table is None:
-                            problems.append(
-                                f"{line_key}/{version}/{kind}: the recipe states no {classvar}, so"
-                                f" the declaration path cannot carry it -- state it (the class path"
-                                f" states {stated_in_class})"
-                            )
-                        elif stated_in_table != stated_in_class:
-                            problems.append(
-                                f"{line_key}/{version}/{kind}: the recipe states {classvar}="
-                                f"{stated_in_table} while {getattr(cls, '__name__', cls)} states"
-                                f" {stated_in_class} -- the two paths would answer differently"
-                            )
+                # The retired comparison, asked the other way round. It used to require "the recipe
+                # table == the version subclass"; the subclasses are deleted (PLAN.md #22 step 3), so
+                # what is left to check is that none comes back. A recipe with two expressions is one
+                # whose second expression nobody runs -- which is where every silent divergence in
+                # this migration started. Not a "nothing to compare" skip: a missing class was the
+                # old failure, a reappearing one is this one.
+                duplicate = resurrected_class(version, play=play, line=line_key)
+                if duplicate is not None:
+                    problems.append(
+                        f"{line_key}/{version}/{kind}: {duplicate.__name__} builds this recipe again --"
+                        " a recipe has one expression (its declared elements); the class path was"
+                        " deleted on purpose (PLAN.md #22 step 3)"
+                    )
                 attribution(version, play=play, paths=attribution_problems, line=line_key)
                 # The switch's safety: the class a registry entry can point at has to build the
                 # same config build() does, or "the declaration path became the training entry"
-                # would change the run without changing the declaration. Constructed under the
-                # class path's own name, because a checkpoint payload records
-                # ``type(cfg).__name__``: same name, so a resume may cross the two paths.
+                # would change the run without changing the declaration. Constructed under the name
+                # the identity map declares for this task -- not one derived here -- because a
+                # checkpoint payload records ``type(cfg).__name__`` and a resume compares it: the
+                # name has to be the map's, or a run started under one path cannot be resumed under
+                # the other. A map that names no entry is a failure of its own.
+                declared_entry = mapping.get("recipes", {}).get(recipe_key or "", {}).get("env_cfg_entry")
+                declared_name = declared_entry.split(":")[-1] if isinstance(declared_entry, str) else None
+                if not declared_name:
+                    problems.append(
+                        f"{task_id}: the recipe map names no env cfg entry for it -- there is nothing"
+                        " for a registry to point at"
+                    )
                 try:
-                    from_class = recipe.recipe_class(
-                        version, play=play, line=line_key, name=getattr(cls, "__name__", None)
-                    )()
+                    from_class = recipe.recipe_class(version, play=play, line=line_key, name=declared_name)()
                 except Exception as err:  # noqa: BLE001 - a class that cannot be built is the finding
                     problems.append(
                         f"{line_key}/{version}/{kind}: recipe_class failed to build: {type(err).__name__}: {err}"
@@ -724,16 +663,6 @@ def main(argv: list[str] | None = None) -> int:
                 f"{key[0]}/{key[1]}: declared {actual} difference path(s), expected {expected}:"
                 " the difference list is not the one this pin was written for"
             )
-    for name, seen in sorted(gaps.items()):
-        if name not in EXPECTED_GAPS:
-            problems.append(
-                f"classvar the declaration cannot carry, and the ledger does not know it: {name}"
-                f" -- in {', '.join(seen['recipes'])}"
-            )
-    for name in sorted(set(EXPECTED_GAPS) - set(gaps)):
-        # an entry nobody owes any more is a line that hides the next one
-        problems.append(f"the ledger still lists {name}, which is no longer a gap (drop the entry)")
-
     for problem in problems:
         print(f"  FAIL {problem}")
     for line_key in sorted(recipe.LINES):
@@ -750,16 +679,6 @@ def main(argv: list[str] | None = None) -> int:
             # whole line). Printed because "no declaration" and "declared, and it matches" read the
             # same in a green run otherwise.
             print(f"  {line_key}: no difference declaration (hard A only): {undeclared_diffs}")
-    # one line per gap class, not one per recipe: eighteen identical lines are a line to skip,
-    # and the recipes that share a gap share it for the same reason
-    for name, seen in sorted(gaps.items()):
-        if name not in EXPECTED_GAPS:
-            continue
-        print(
-            f"  classvar the declaration cannot carry: {name}"
-            f" ({', '.join(sorted(seen['values']))}) -- in {', '.join(seen['recipes'])}"
-            f"\n    why: {EXPECTED_GAPS[name][0]}\n    due: {EXPECTED_GAPS[name][1]}"
-        )
     if problems:
         print("RECIPE_BUILD_FAILED")
         return 1
