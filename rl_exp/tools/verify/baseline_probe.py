@@ -162,6 +162,21 @@ def main() -> int:
     reward_halves: dict[str, list[torch.Tensor]] = {}
     joint_means = {"|q|": [], "|qd|": [], "|tau|": [], "at_limit_low": [], "at_limit_high": []}
     torque_rows: list[torch.Tensor] = []  # per-joint |tau| over the whole rollout, not one frame
+    # --- standing: the zero-action rollout is the only one here that measures the asset and the
+    # PD rather than a policy. Height says whether it holds itself up, the per-body load says what
+    # carries it, per-joint |qd|/|tau| say with which joints -- and whether any of them is dead.
+    # Skipped under --random-actions: a falling robot's numbers describe the fall, not the stance.
+    standing = not args_cli.random_actions
+    joint_names = list(robot.joint_names)
+    body_names = list(robot.body_names)
+    contact_sensor = unwrapped.scene.sensors.get("contact_forces")
+    load_readable = (contact_sensor is not None
+                     and contact_sensor.data.net_forces_w.torch.shape[1] == len(body_names))
+    spawn_z = robot.data.root_pos_w.torch[:, 2].mean().item()
+    z_rows: list[torch.Tensor] = []
+    tilt_rows: list[torch.Tensor] = []
+    load_rows: list[torch.Tensor] = []
+    qd_rows: list[torch.Tensor] = []
     reward_names = list(getattr(unwrapped.reward_manager, "_term_names", []))
     act_dim = unwrapped.action_manager.total_action_dim
     soft_limits = robot.data.soft_joint_pos_limits.torch
@@ -194,6 +209,17 @@ def main() -> int:
         joint_means["at_limit_low"].append(at_limit_low.float().mean().reshape(1))
         joint_means["at_limit_high"].append(at_limit_high.float().mean().reshape(1))
         torque_rows.append(robot.data.applied_torque.torch.abs().mean(dim=0).clone())
+        if standing:
+            z_rows.append(robot.data.root_pos_w.torch[:, 2].mean().reshape(1))
+            # tilt from the projected gravity: it is a unit vector, so the angle to straight down
+            # (0, 0, -1) is acos(-gz) -- the same quantity the fall criteria read, no euler detour
+            tilt_rows.append(
+                torch.acos((-robot.data.projected_gravity_b.torch[:, 2]).clamp(-1.0, 1.0))
+                .mean().rad2deg().reshape(1)
+            )
+            qd_rows.append(robot.data.joint_vel.torch.abs().amax(dim=0).clone())
+            if load_readable:
+                load_rows.append(contact_sensor.data.net_forces_w.torch[:, :, 2].mean(dim=0).clone())
         for name in reward_names:
             value = term_values(unwrapped.reward_manager, name)
             if value is None:
@@ -232,6 +258,34 @@ def main() -> int:
         print(f"  mean|a| {action_abs.mean().item():.4f}  p95 {torch.quantile(action_abs.flatten(), 0.95).item():.4f}  max {action_abs.max().item():.4f}")
         print(f"  mean|da| {stacked[-1].mean().item():.4f}  (adjacent-step diff)")
         print(f"  per-dim mean|a| commanded dims: {(action_abs.mean(dim=0) > 1e-4).sum().item()}/{act_dim}")
+    if standing and z_rows:
+        print("[probe] standing under zero action (asset and PD, not policy)")
+        z = torch.cat(z_rows)
+        tilt = torch.cat(tilt_rows)
+        print(f"  base z mean {z.mean().item():.4f} min {z.min().item():.4f} (spawn {spawn_z:.4f}) m   "
+              f"tilt mean {tilt.mean().item():.2f} max {tilt.max().item():.2f} deg")
+        # per env, not over the whole batch: body_mass is (num_envs, num_bodies), so a bare sum
+        # divides the load by num_envs and reads the closure as ~1/num_envs
+        weight = robot.data.body_mass.torch[0].sum().item() * 9.81
+        if load_readable:
+            load = torch.stack(load_rows).mean(dim=0)
+            carriers = ", ".join(f"{body_names[i]} {load[i].item():.1f}"
+                                 for i in torch.argsort(load, descending=True).tolist()
+                                 if load[i].item() > 1.0)
+            feet = [i for i, name in enumerate(body_names) if name.endswith("_foot")]
+            print(f"  load per body [N] (>1 N): {carriers or 'none'}")
+            print(f"  total/(m*g) {load.sum().item() / weight:.4f}  (feet only "
+                  f"{load[feet].sum().item() / weight:.4f})")
+        else:
+            shape = None if contact_sensor is None else tuple(contact_sensor.data.net_forces_w.torch.shape)
+            print(f"  load per body: no contact_forces sensor covering every body (shape {shape}, "
+                  f"{len(body_names)} bodies) -- contact attribution is unavailable")
+        qd = torch.stack(qd_rows).mean(dim=0)
+        top = torch.argsort(qd, descending=True)[:5].tolist()
+        print(f"  per-joint mean |qd| [rad/s], top 5: "
+              + ", ".join(f"{joint_names[i]} {qd[i].item():.3f}" for i in top))
+        idle = [joint_names[i] for i in torch.nonzero(qd < 1e-3).flatten().tolist()]
+        print(f"  joints that never moved (mean |qd| < 1e-3 rad/s): {idle or 'none'}")
     if joint_means["|tau|"]:
         stacked_means = {key: torch.cat(values) for key, values in joint_means.items()}
         print("[probe] joint diagnostics (mean over the rollout)")
