@@ -63,10 +63,10 @@ FROZEN = {
 
 FROZEN_REVS: dict[str, str] = {
     "rl_exp/versions/cfg_baselines.json": "020e6fb",
-    # bbedd96 is the re-anchor's own commit: the column moved there, so that is the revision these
-    # bytes are from (020e6fb remains true for the content they describe -- the snapshots did not
-    # move, see the B0 addendum).
-    "rl_exp/versions/lizard/main/cfg_lock.json": "bbedd96",
+    # The entry column moved twice: bbedd96 (the teacher line's 26 entries) and 27ca424 (the family
+    # line's 8). These bytes are the later one's, so that is the revision they are from; the
+    # snapshots they carry are still 020e6fb's (B0 addenda ② and ③).
+    "rl_exp/versions/lizard/main/cfg_lock.json": "27ca424",
     "rl_exp/versions/lizard/parkour/cfg_lock.json": "020e6fb",
     "rl_exp/versions/lizard/baseline/cfg_lock.json": "bbedd96",
 }
