@@ -154,19 +154,24 @@ def default_jobs() -> int:
 #
 # Two different questions, two different mechanisms -- they are not substitutes:
 #
-# * ``PER_CHECK_BUDGET_S`` / ``SERIAL_BUDGET_S`` are **cost** control. Cost is measured
-#   under load (a wave of six import bursts), so a breach is only ever a *suspect*: it is
-#   re-measured with the machine quiet before anything is blamed, first per check (alone)
-#   and then, if the total is the problem, the whole list at ``--jobs 1``. Raising a budget
-#   is never the response to a load false alarm -- it is allowed only once the quiet number
-#   is over budget too *and* the coverage that caused it is worth its price, in the same
-#   commit as that check.
+# * ``MAX_CHECKS`` (count) and ``PER_CHECK_BUDGET_S`` (one check) are the per-run gates, and
+#   both are load-free: a count is an integer, and a check over its budget is re-run alone
+#   before anything is blamed. Count is the lever that matters -- a check is a process that
+#   pays an interpreter + torch import before its first assertion, so 42 of them is most of
+#   what the suite costs, and a ratchet on the count cannot be fooled by a busy machine.
+# * ``SERIAL_BUDGET_S`` is the *total*, and it is not a per-run gate: the only honest way to
+#   measure a total is one check at a time (``--confirm-cost``), so it is ratified on demand
+#   -- before a release, or when the count ratchet moves. The wave sum a normal run prints
+#   adds every check's cost to six-way contention, so it is reported and decides nothing:
+#   gating on it either fires on a busy machine or buys a three-minute confirmation for
+#   nothing, and both of those teach the next person to raise the number.
 # * ``PER_CHECK_TIMEOUT_S`` is not cost control, it is "the suite has to end": budgets are
 #   evaluated after the fact, so they cannot save you from a check that never returns.
 #   Deliberately far above the cost budget, so that a slow check is reported as cost, not
 #   killed as a hang.
 PER_CHECK_BUDGET_S = 25.0
-SERIAL_BUDGET_S = 205.0  # initial ratchet: reported 178 s wave + 15% headroom
+MAX_CHECKS = 42  # ratchet: today's count. Add one -> remove or merge one, or raise this here.
+SERIAL_BUDGET_S = 205.0  # the total; --confirm-cost is what measures it
 SOLO_RECHECKS = 3  # breaching checks re-run alone, worst first, before they are suspect
 PER_CHECK_TIMEOUT_S = 180.0
 _DRAIN_TIMEOUT_S = 30.0  # bounded read after a kill, so a survivor cannot block the report
@@ -284,6 +289,21 @@ def run_checks(
     return sorted(failures), time.time() - started_at, skipped, timings
 
 
+def _count_problem(total: int) -> str | None:
+    """The ratchet that keeps the suite from growing without a deliberate edit.
+
+    A count is a load-free integer, which is why the per-run gate lives here rather than on a
+    number that moves with the weather on the machine.
+    """
+    if total <= MAX_CHECKS:
+        return None
+    return (
+        f"the suite grew to {total} checks (ratchet {MAX_CHECKS}): fold the new assertion into the "
+        f"gate that already pays the same import, or retire a check whose contract is gone; raise "
+        f"MAX_CHECKS here only once that has been tried"
+    )
+
+
 def _per_check_cost(
     timings: list[tuple[int, str, float]],
     interpreter: str,
@@ -334,10 +354,10 @@ def _budget_has_slack(measured: float) -> bool:
 
 
 def _quiet_serial(interpreter: str) -> tuple[float, list[str]]:
-    """Re-measure the whole list one check at a time, the way a cost number has to be taken."""
+    """The total, measured the only way a total can be: one check at a time (opt-in audit)."""
     print(
-        f"  the wave total is over budget -- re-measuring all {len(CHECKS)} checks at --jobs 1 "
-        f"before blaming any of them (a wave number is a suspect, not a cost)",
+        f"  auditing the total: re-measuring all {len(CHECKS)} checks at --jobs 1 (a wave number "
+        f"is not a measurement of a total)",
         flush=True,
     )
     failures, _, _, quiet = run_checks(interpreter, 1, CHECKS)
@@ -384,6 +404,8 @@ def self_test() -> int:
         problems.append("the total verdict does not separate a busy machine from a real regression")
     if not _budget_has_slack(SERIAL_BUDGET_S * 0.79) or _budget_has_slack(SERIAL_BUDGET_S * 0.8):
         problems.append("the budget ratchet does not warn at the >20% slack boundary")
+    if _count_problem(MAX_CHECKS) is not None or not _count_problem(MAX_CHECKS + 1):
+        problems.append("the count ratchet does not hold at MAX_CHECKS and fire above it")
 
     # Timeout: the suite has to end even when a check never returns -- including the case that
     # hangs a naive pipe read, a child that outlives the check that started it.
@@ -431,6 +453,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--verbose", action="store_true", help="print each check's full output, not its verdict")
     parser.add_argument("--list", action="store_true", help="print the check list and exit")
     parser.add_argument("--self-test", action="store_true", help="test this runner instead of the repo")
+    parser.add_argument(
+        "--confirm-cost",
+        action="store_true",
+        help="audit the TOTAL (re-runs every check at --jobs 1, minutes): the only honest total",
+    )
     args = parser.parse_args(argv)
 
     if args.list:
@@ -453,38 +480,29 @@ def main(argv: list[str] | None = None) -> int:
         print(f"OFFLINE_CHECK_FAILED ({total} check(s): {len(failures)} failed, {skipped} skipped, {seconds:.1f}s, jobs={args.jobs})")
         return 1
     breaches, wave_serial = _per_check_cost(timings, args.python)
+    problems = [p for p in (_count_problem(total),) if p]
+    for index, label, alone in breaches:
+        problems.append(f"[{index}/{total}] {label}: {alone:.1f}s alone > {PER_CHECK_BUDGET_S:g}s per check")
     quiet_serial = None
-    quiet_problems: list[str] = []
-    if wave_serial > SERIAL_BUDGET_S:
+    if args.confirm_cost:
         quiet_serial, quiet_problems = _quiet_serial(args.python)
-    if quiet_problems or breaches or (quiet_serial is not None and _total_verdict(wave_serial, quiet_serial) == "regression"):
-        for problem in quiet_problems:
-            print(f"  {problem}")
-        for index, label, alone in breaches:
-            print(f"  [{index}/{total}] {label}: {alone:.1f}s alone > {PER_CHECK_BUDGET_S:g}s per check")
-        if quiet_serial is not None and _total_verdict(wave_serial, quiet_serial) == "regression":
-            print(f"  serial {quiet_serial:.0f}s quiet > {SERIAL_BUDGET_S:g}s budget (wave {wave_serial:.0f}s)")
-        print(
-            "OFFLINE_SUITE_COST_REGRESSION (confirmed with the machine quiet). Make the check "
-            "cheaper -- one process per check, no re-reading frozen data per cfg, no interpreter "
-            "children -- or, if the coverage that caused it is worth the price, raise the budget "
-            "in the same commit as that check; see rl_exp/tools/verify/OFFLINE_CHECKS.md"
-        )
+        problems += quiet_problems
+        if _total_verdict(wave_serial, quiet_serial) == "regression":
+            problems.append(
+                f"quiet total {quiet_serial:.0f}s > ratified {SERIAL_BUDGET_S:g}s: the suite did get "
+                f"more expensive -- make it cheaper, or re-ratify this number in the same commit"
+            )
+        elif _budget_has_slack(quiet_serial):
+            print(f"  quiet total {quiet_serial:.0f}s is >20% below the ratified {SERIAL_BUDGET_S:g}s: tighten it")
+    if problems:
+        for problem in problems:
+            print(f"  FAIL {problem}")
+        print("OFFLINE_SUITE_COST_REGRESSION (see rl_exp/tools/verify/OFFLINE_CHECKS.md)")
         return 1
-    if quiet_serial is not None:
-        print(
-            f"  wave total {wave_serial:.0f}s was over budget under load; {quiet_serial:.0f}s quiet is "
-            f"within {SERIAL_BUDGET_S:g}s -- no change, and no reason to touch the budget"
-        )
-    measured = wave_serial if quiet_serial is None else quiet_serial
-    if _budget_has_slack(measured):
-        print(
-            f"  BUDGET_RATCHET_WARNING: measured {measured:.1f}s is >20% below "
-            f"{SERIAL_BUDGET_S:g}s budget; confirm on a quiet host and tighten the budget"
-        )
     print(
         f"ALL_OFFLINE_CHECKS_PASSED ({total}/{total} in {seconds:.1f}s, "
-        f"wave {wave_serial:.0f}s{'' if quiet_serial is None else f', quiet {quiet_serial:.0f}s'}, jobs={args.jobs})"
+        f"wave {wave_serial:.0f}s/informational"
+        f"{'' if quiet_serial is None else f', quiet {quiet_serial:.0f}s'}, jobs={args.jobs})"
     )
     return 0
 
