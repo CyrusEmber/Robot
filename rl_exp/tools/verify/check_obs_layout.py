@@ -21,6 +21,7 @@ sys.path.insert(0, str(_REPO))
 from rl_exp.tasks import teacher_mdp  # noqa: E402
 from rl_exp.tasks import obs_protocol  # noqa: E402
 from isaaclab.envs.mdp.events import reset_joints_by_offset  # noqa: E402
+from rl_exp.tasks import recipe_tasks as _recipe_mod  # noqa: E402
 from rl_exp.tasks import teacher_env_cfg as _env_cfg_mod  # noqa: E402
 from rl_exp.tasks.agents import rsl_rl_ppo_cfg as _ppo_mod  # noqa: E402
 
@@ -50,16 +51,19 @@ _SEGMENT_CLASSES: tuple[str, ...] = (
     "LizardRoughTeacherEnvCfg_V12_PLAY",
 )
 
-LizardRoughTeacherEnvCfg_V1 = _resolve(_env_cfg_mod, "LizardRoughTeacherEnvCfg_V1")
-LizardRoughTeacherEnvCfg_V2 = _resolve(_env_cfg_mod, "LizardRoughTeacherEnvCfg_V2")
-LizardRoughTeacherEnvCfg_V3 = _resolve(_env_cfg_mod, "LizardRoughTeacherEnvCfg_V3")
-LizardRoughTeacherEnvCfg_V4 = _resolve(_env_cfg_mod, "LizardRoughTeacherEnvCfg_V4")
-LizardRoughTeacherEnvCfg_V5 = _resolve(_env_cfg_mod, "LizardRoughTeacherEnvCfg_V5")
-LizardRoughTeacherEnvCfg_V5_PLAY = _resolve(_env_cfg_mod, "LizardRoughTeacherEnvCfg_V5_PLAY")
-LizardRoughTeacherEnvCfg_V11 = _resolve(_env_cfg_mod, "LizardRoughTeacherEnvCfg_V11")
-LizardRoughTeacherEnvCfg_V11_PLAY = _resolve(_env_cfg_mod, "LizardRoughTeacherEnvCfg_V11_PLAY")
-LizardRoughTeacherEnvCfg_V12 = _resolve(_env_cfg_mod, "LizardRoughTeacherEnvCfg_V12")
-LizardRoughTeacherEnvCfg_V12_PLAY = _resolve(_env_cfg_mod, "LizardRoughTeacherEnvCfg_V12_PLAY")
+# the recipes are built by their declaration (``recipe_tasks`` generates one class per declared
+# recipe, under the name the class it replaced carried); the terrain payload constants below are
+# still module-level facts of the teacher cfg, not recipes, so they keep their own handle.
+LizardRoughTeacherEnvCfg_V1 = _resolve(_recipe_mod, "LizardRoughTeacherEnvCfg_V1")
+LizardRoughTeacherEnvCfg_V2 = _resolve(_recipe_mod, "LizardRoughTeacherEnvCfg_V2")
+LizardRoughTeacherEnvCfg_V3 = _resolve(_recipe_mod, "LizardRoughTeacherEnvCfg_V3")
+LizardRoughTeacherEnvCfg_V4 = _resolve(_recipe_mod, "LizardRoughTeacherEnvCfg_V4")
+LizardRoughTeacherEnvCfg_V5 = _resolve(_recipe_mod, "LizardRoughTeacherEnvCfg_V5")
+LizardRoughTeacherEnvCfg_V5_PLAY = _resolve(_recipe_mod, "LizardRoughTeacherEnvCfg_V5_PLAY")
+LizardRoughTeacherEnvCfg_V11 = _resolve(_recipe_mod, "LizardRoughTeacherEnvCfg_V11")
+LizardRoughTeacherEnvCfg_V11_PLAY = _resolve(_recipe_mod, "LizardRoughTeacherEnvCfg_V11_PLAY")
+LizardRoughTeacherEnvCfg_V12 = _resolve(_recipe_mod, "LizardRoughTeacherEnvCfg_V12")
+LizardRoughTeacherEnvCfg_V12_PLAY = _resolve(_recipe_mod, "LizardRoughTeacherEnvCfg_V12_PLAY")
 TEACHER_TERRAINS_CFG_V4 = _resolve(_env_cfg_mod, "TEACHER_TERRAINS_CFG_V4")
 TEACHER_TERRAINS_CFG_V5 = _resolve(_env_cfg_mod, "TEACHER_TERRAINS_CFG_V5")
 LizardTeacherV3PPORunnerCfg = _resolve(_ppo_mod, "LizardTeacherV3PPORunnerCfg")
@@ -144,7 +148,7 @@ def main() -> int:
     # surprise: this file holds a segment per recipe and constructs each class below. Saying so
     # and stopping is the honest answer -- the remaining segments did NOT run, and must not be
     # reported as if they had.
-    obsolete = [name for name in _SEGMENT_CLASSES if _resolve(_env_cfg_mod, name) is None]
+    obsolete = [name for name in _SEGMENT_CLASSES if _resolve(_recipe_mod, name) is None]
     if obsolete:
         for problem in problems:
             print(f"  DRIFT: {problem}")
