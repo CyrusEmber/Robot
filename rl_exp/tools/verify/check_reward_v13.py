@@ -21,7 +21,7 @@ _REPO = pathlib.Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_REPO))
 
 from rl_exp.tasks import teacher_mdp  # noqa: E402
-from rl_exp.tasks.teacher_env_cfg import (  # noqa: E402
+from rl_exp.tasks.recipe_tasks import (  # noqa: E402
     LizardRoughTeacherEnvCfg_V5,
     LizardRoughTeacherEnvCfg_V10,
     LizardRoughTeacherEnvCfg_V10_PLAY,

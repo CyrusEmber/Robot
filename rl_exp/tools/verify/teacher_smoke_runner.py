@@ -278,7 +278,9 @@ def main(ver: str) -> int:
     import torch
 
     import isaaclab_tasks  # noqa: F401
-    from rl_exp.tasks import teacher_env_cfg
+    # the version classes are the generated ones in recipe_tasks (one per declared recipe,
+    # each carrying the name its version subclass had); the runner resolves them by name
+    from rl_exp.tasks import recipe_tasks as teacher_env_cfg
 
     _run_play(ver, spec, gym, torch, teacher_env_cfg)
     _run_train(ver, spec, gym, torch, teacher_env_cfg)

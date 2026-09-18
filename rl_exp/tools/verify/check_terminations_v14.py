@@ -34,7 +34,7 @@ sys.path.insert(0, str(_REPO))
 from isaaclab.utils.math import quat_apply_inverse, quat_from_euler_xyz  # noqa: E402
 
 from rl_exp.tasks import teacher_mdp  # noqa: E402
-from rl_exp.tasks.teacher_env_cfg import (  # noqa: E402
+from rl_exp.tasks.recipe_tasks import (  # noqa: E402
     LizardRoughTeacherEnvCfg_V13,
     LizardRoughTeacherEnvCfg_V13_PLAY,
     LizardRoughTeacherEnvCfg_V14,

@@ -28,7 +28,7 @@ from rl_exp.tools.runrecord import manifest as M  # noqa: E402
 from rl_exp.tools.runrecord import provenance as prov  # noqa: E402
 from rl_exp.tasks import curriculum_state as cstate  # noqa: E402
 from rl_exp.tasks.agents.rsl_rl_ppo_cfg import LizardTeacherV14PPORunnerCfg  # noqa: E402
-from rl_exp.tasks.teacher_env_cfg import LizardRoughTeacherEnvCfg_V14  # noqa: E402
+from rl_exp.tasks.recipe_tasks import LizardRoughTeacherEnvCfg_V14  # noqa: E402
 
 PROBLEMS: list[str] = []
 TASK = "Lizard-Rough-v14"

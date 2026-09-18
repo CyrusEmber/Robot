@@ -41,7 +41,7 @@ import torch  # noqa: E402
 
 import isaaclab_tasks  # noqa: F401, E402
 
-from rl_exp.tasks.baseline_env_cfg import BaselineFlatEnvCfg  # noqa: E402
+from rl_exp.tasks.recipe_tasks import BaselineFlatEnvCfg  # noqa: E402
 
 PROBLEMS: list[str] = []
 EXPECTED_COMMAND = (0.5, 0.0, 0.0)

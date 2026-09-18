@@ -54,7 +54,7 @@ import torch
 import isaaclab_tasks  # noqa: F401
 from isaaclab.utils.math import quat_apply_inverse
 
-from rl_exp.tasks.teacher_env_cfg import LizardRoughTeacherEnvCfg_V8_PLAY
+from rl_exp.tasks.recipe_tasks import LizardRoughTeacherEnvCfg_V8_PLAY
 
 INJECT_RAD = 0.3
 SETTLE_STEPS = 40

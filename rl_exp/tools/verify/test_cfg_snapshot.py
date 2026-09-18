@@ -39,7 +39,7 @@ sys.path.insert(0, "rl_exp/tools/verify")
 import cfg_snapshot as cs  # noqa: E402
 from rl_exp.tasks.agents.rsl_rl_ppo_cfg import LizardTeacherV14PPORunnerCfg  # noqa: E402
 from rl_exp.tasks import obs_protocol  # noqa: E402
-from rl_exp.tasks.teacher_env_cfg import (  # noqa: E402
+from rl_exp.tasks.recipe_tasks import (  # noqa: E402
     LizardRoughTeacherEnvCfg_V13,
     LizardRoughTeacherEnvCfg_V14,
 )

@@ -72,7 +72,7 @@ from rl_exp.tasks.curriculum_state import (  # noqa: E402
     wired_terms,
 )
 from rl_exp.tasks.param_grid_terrain import build_param_grid_terrain_cfg  # noqa: E402
-from rl_exp.tasks.teacher_env_cfg import (  # noqa: E402
+from rl_exp.tasks.recipe_tasks import (  # noqa: E402
     LizardRoughTeacherEnvCfg_V4,
     LizardRoughTeacherEnvCfg_V5,
     LizardRoughTeacherEnvCfg_V13_PLAY,
@@ -909,9 +909,13 @@ def test_declaration_is_checked_against_wiring_and_each_save() -> None:
 
 def test_declaration_is_class_level_and_off_in_play() -> None:
     assert getattr(LizardRoughTeacherEnvCfg_V5, REQUIRES_CURRICULUM_STATE) is True
-    assert getattr(LizardRoughTeacherEnvCfg_V14, REQUIRES_CURRICULUM_STATE) is True  # inherited
+    assert getattr(LizardRoughTeacherEnvCfg_V14, REQUIRES_CURRICULUM_STATE) is True  # stamped per recipe
     assert getattr(LizardRoughTeacherEnvCfg_V13_PLAY, REQUIRES_CURRICULUM_STATE) is False
-    assert not hasattr(LizardRoughTeacherEnvCfg_V4, REQUIRES_CURRICULUM_STATE)  # v4 has no SIR term
+    # v4 has no SIR term, so it must not claim to require one. The declaration path states False
+    # where the version subclass said nothing at all, and the two are one answer: all four readers
+    # (resume refusal, save guard, the trainer's import guard, the manifest) go through
+    # ``getattr(..., False)``, and check_recipe_build compares them as bools for the same reason.
+    assert getattr(LizardRoughTeacherEnvCfg_V4, REQUIRES_CURRICULUM_STATE, False) is False
 
     # not config data: the cfg snapshot (the recipe golden and every run manifest's
     # cfg digest) excludes ClassVars, so changing the declaration cannot look like

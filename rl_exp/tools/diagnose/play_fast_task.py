@@ -27,7 +27,7 @@ FAST_VX = (1.0, 3.0)
 
 def register():
     """Called by play.py --external_callback; registers the task, consumes no args."""
-    from rl_exp.tasks.teacher_env_cfg import LizardRoughTeacherEnvCfg_V8_PLAY
+    from rl_exp.tasks.recipe_tasks import LizardRoughTeacherEnvCfg_V8_PLAY
     from rl_exp.tasks.agents.rsl_rl_ppo_cfg import LizardTeacherV8PPORunnerCfg
 
     @configclass

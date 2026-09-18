@@ -42,7 +42,7 @@ from isaaclab_tasks.utils import load_cfg_from_registry
 from rsl_rl.runners import OnPolicyRunner
 from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper, handle_deprecated_rsl_rl_cfg
 
-from rl_exp.tasks.teacher_env_cfg import LizardRoughTeacherEnvCfg_V8_PLAY
+from rl_exp.tasks.recipe_tasks import LizardRoughTeacherEnvCfg_V8_PLAY
 
 RUN_GLOB = os.path.join("logs", "rsl_rl", "lizard_rough_teacher_v8", "*")
 

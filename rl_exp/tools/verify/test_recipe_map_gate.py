@@ -27,7 +27,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 from check_recipe_map import bind, load, registered, validate  # noqa: E402
 
-ENV_V14 = "rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V14"
+ENV_V14 = "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V14"
 AGENT_V14 = "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV14PPORunnerCfg"
 LINE = "lizard/main"
 TASK = "Lizard-Rough-v14"
@@ -55,7 +55,7 @@ CASES: list[tuple[str, dict, dict, str | None]] = [
     ("mapping points at a recipe that does not exist", _doc({"teacher-v14@1": _entry()}, {TASK: "teacher-v13@1"}),
      REGISTERED, "which no recipe defines"),
     ("env entry redirected away from the registration",
-     _doc({"teacher-v14@1": _entry(env_cfg_entry="rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V13")},
+     _doc({"teacher-v14@1": _entry(env_cfg_entry="rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V13")},
           {TASK: "teacher-v14@1"}), REGISTERED, "must not be redirected silently"),
     ("agent entry redirected away from the registration",
      _doc({"teacher-v14@1": _entry(agent_entry="rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV13PPORunnerCfg")},
