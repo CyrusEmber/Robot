@@ -15,7 +15,10 @@
    "digest": "287479dc40c730de7b59824620882369ef7a5809330d18878d77c1229a85bcb8",
    "label": "",
    "purpose": "",
-   "dims": {}
+   "dims": {
+    "policy": 90
+   },
+   "dims_digest": "b386c7ae913377f794c74e2c1e364207bb68ceae66d148d5a854e361ed85c00c"
   },
   "4d4a26c4c8a2": {
    "digest": "4d4a26c4c8a2b02355ad2c98226a5e0d3f5283a0d18aed0ec095c50459f70d6e",
@@ -50,7 +53,10 @@
    "digest": "a25a8c39001b9aad8ef56c49e6ff77134973afe45dc5277968e1f94275f67bd9",
    "label": "",
    "purpose": "",
-   "dims": {}
+   "dims": {
+    "policy": 90
+   },
+   "dims_digest": "b386c7ae913377f794c74e2c1e364207bb68ceae66d148d5a854e361ed85c00c"
   },
   "c71114b0c0fd": {
    "digest": "c71114b0c0fdfcffb7859a0389830d740273cf392ef44da91639f8ae7f5a4a52",
@@ -83,13 +89,19 @@
    "digest": "fa849f7f2d7c4e144d29955806722b9adbd580b006790b73f5cb7c5ca7c7fd82",
    "label": "",
    "purpose": "",
-   "dims": {}
+   "dims": {
+    "policy": 225
+   },
+   "dims_digest": "d6029fb799541058b44ff8adce2d1d164a1f34aeb270184cfeab7477bcad030a"
   },
   "fdef56347528": {
    "digest": "fdef56347528a58fee8c6384c959de61c0c63057f418f877a324b6ddb9154393",
    "label": "",
    "purpose": "",
-   "dims": {}
+   "dims": {
+    "policy": 225
+   },
+   "dims_digest": "d6029fb799541058b44ff8adce2d1d164a1f34aeb270184cfeab7477bcad030a"
   }
  }
 }

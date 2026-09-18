@@ -1594,6 +1594,23 @@ L02 记录）；这 4 条仍**无 `diff.json`**；家族 obs 宽度仍未实测�
 它动的那一处（`events.reset_robot_joints`：`null → reset_joints_by_scale`），**与本片的家族面无关**；
 它需要自己的 baseline 重锚（`--update --reason` + `[35]`）。本片提交按路径限定，未扫入该批任何文件。
 
+## 3.1e 补账 · 家族 8 条协议的宽度实测与批准（2026-09-18）
+
+**性质**：**追加**条目。§3.1e 的边界行留了一条旧账 ——"v0 家族宽度仍无人量过"；本条把它关掉。
+
+| 项 | 内容 |
+|---|---|
+| 缺口（先说清是什么） | `versions/obs_protocols.json` 里 8 条家族任务**都已声明**（协议摘要 + `line`），但 train/play 共 4 个协议在 `versions/obs_protocol_anchors.json` 里是 **`"dims": {}` 且无 `dims_digest`** —— 该文件自己的口径：**"empty = no real run has asserted them yet"**。别的协议都非空 ⇒ 缺的是**一次真跑断言**，不是推导 |
+| 实测 | `obs_protocol_live.py --headless --tasks`（8 条家族任务，2 envs）⇒ `OBS_PROTOCOL_LIVE_OK (8 task(s), 8 warning(s))`、**0 problem**。宽度：flat / curriculum-flat 两族（train 与 play 各有自己的协议）= `policy=90`；rough / curriculum-rough 两族 = `policy=225`。当时四行都带 `(unapproved)` 标记 |
+| 批准（人工面） | 按该文件的规矩（闸门只读不写：*a new or edited protocol stays red until a human writes its digest here*）：写入 4 个协议的 `dims` + `dims_digest`，后者由**闸门自己的** `check_obs_protocol.dims_digest` 算出、不手抄。写入前先证**序列化不动点**（整文件重排不动一个字节），以免"批个宽度"顺手改动别的字节 |
+| 事后复核 | 静态闸门 `OBS_PROTOCOL_GATE_OK`（declaration matches the goldens）；其反证 **38 例全 `ok`**（含 `dims/*` 五例：原地改宽度、缺 `dims_digest`、未知组名、`True` 当宽度、半填）；**复跑实测**：同 4 条任务显示 `policy=90 / 225` 且**不再带 `(unapproved)`** ⇒ 批准值 == 实测值 |
+| 改动面 | `versions/obs_protocol_anchors.json` 4 条（`git diff --numstat` = `16 4`，全是这 4 条的 `dims`/`dims_digest`）+ 本条 |
+| 旁证 | 全量套件 `ALL_OFFLINE_CHECKS_PASSED (44/44)` |
+
+**边界**：本条只关"家族宽度未实测"这一项。§3.1a 的两条敞口**不变**：① 协议 `digest` 只覆盖 `groups`，
+宽度靠 `dims_digest` 自钉；② "生成 + 人工审批"仍是社会控制（重生成 + 重批可以不留"有人看过"的痕迹，
+既有先例 = golden 的 `--update --reason`）。家族 4 条仍**无 `diff.json`**（硬 A only）。
+
 ### 生成方式，与它带来的**限制**
 
 路径是**派生**的（量母版 → 重放元素 → 残差按所有权表分类），**理由是手写的**；生成器用完即删，不留在仓里。这带来一个必须写下来的限制：**派生错误会同时出现在文件与闸门两侧**——两边互相印证不等于正确。独立边界只剩硬 A（冻结 golden 钉住字段面）。已做的抽查：分组数与条数与独立量测一致；每组理由都能追到该版 `PLAN.md`；人眼过了 v14（2 组）、v3/v5/v11/v12（分组与计数）、baseline（9 组）。
