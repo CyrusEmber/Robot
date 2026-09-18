@@ -25,7 +25,7 @@ cfg's identity, which is how the curriculum finds its record without touching th
 
 from __future__ import annotations
 
-import importlib.util
+import builtins
 import pathlib
 import sys
 
@@ -43,9 +43,11 @@ _PENDING: dict[int, list[tuple[int, float, str]]] = {}
 _INSTALLED = False
 #: The module holding the class under watch. Importing it is *not* free: it pulls
 #: ``isaaclab.terrains.utils`` -> ``from pxr import UsdGeom`` (pip usd-core), which must not
-#: reach ``sys.modules`` before Kit starts (P001/P003) -- see :class:`_PatchWhenImported`.
+#: reach ``sys.modules`` before Kit starts (P001/P003) -- see :func:`_patch_when_imported`.
 _GENERATOR_MODULE = "isaaclab.terrains.terrain_generator"
 _PATCHED = False
+#: Is the generator module being waited for (see :func:`_patch_when_imported`)?
+_WATCHING = False
 #: At most this many records are kept. A process builds one env (one cfg) at a time and the
 #: consumer reads the record right after, so the cap only ever evicts a cfg that is long gone --
 #: without it, a sweep that builds envs in one process grows this table without bound. Ceiling:
@@ -100,7 +102,7 @@ def _patch() -> None:
 
     The class is taken from ``sys.modules`` rather than imported here, because every caller
     either already imported it or is running from inside that import (see
-    :class:`_PatchWhenImported`).
+    :func:`_patch_when_imported`).
     """
     global _PATCHED
     if _PATCHED:
@@ -165,42 +167,57 @@ def _patch() -> None:
     _PATCHED = True
 
 
-class _PatchWhenImported:
-    """Apply :func:`_patch` the first time the generator module is imported.
+def _generator_class():
+    """The watched class, or ``None`` while the module is still being imported.
 
-    ``install()`` is called from an env cfg's ``__post_init__`` -- during hydra compose,
-    **before** Kit starts -- and importing ``TerrainGenerator`` there pulls
-    ``isaaclab.terrains.utils`` -> ``from pxr import UsdGeom`` (pip usd-core) into
-    ``sys.modules`` pre-kit, which is what kills Kit at boot (P001/P003). The framework
-    imports that module when it builds the terrain, after Kit is up, and the patch only has
-    to be in place by then, so the import is waited for instead of forced early.
+    A module sits in ``sys.modules`` before its body finishes, so presence is not readiness --
+    patching a half-executed module raises ``AttributeError``.
     """
+    return getattr(sys.modules.get(_GENERATOR_MODULE), "TerrainGenerator", None)
 
-    def __init__(self, fullname: str) -> None:
-        self._fullname = fullname
 
-    def find_spec(self, fullname, path=None, target=None):
-        if fullname != self._fullname:
-            return None
-        sys.meta_path.remove(self)  # one shot: resolve again, without us in front
-        spec = importlib.util.find_spec(fullname)
-        original_exec = spec.loader.exec_module
+def _patch_when_imported() -> None:
+    """Apply :func:`_patch` the first time the generator module lands in ``sys.modules``.
 
-        def exec_module(module):
-            original_exec(module)
+    ``install()`` is called from an env cfg's ``__post_init__`` -- during hydra compose, **before**
+    Kit has finished starting -- and importing ``TerrainGenerator`` there pulls
+    ``isaaclab.terrains.utils`` -> ``from pxr import UsdGeom`` (pip usd-core) into ``sys.modules``,
+    which is what kills Kit at boot (P001/P003). The framework imports that module when it builds
+    the terrain, after Kit is up, and the patch only has to be in place by then, so the import is
+    waited for here instead of forced early.
+
+    The wait is spent on ``builtins.__import__``, which every python-level import goes through. A
+    ``sys.meta_path`` finder cannot be used for it: the machinery stops at the first finder that
+    answers, Kit keeps one of its own ahead of anything we insert, and the module then arrives
+    without our hook ever being asked -- measured 2026-09-18, the patch never landed and every
+    param-grid trainer run refused with "the probe was not installed".
+    """
+    global _WATCHING
+    if _generator_class() is not None:
+        _patch()
+        return
+    if _WATCHING:  # one watcher is enough, however many callers install
+        return
+    _WATCHING = True
+    real_import = builtins.__import__
+
+    def watching_import(name, globals=None, locals=None, fromlist=(), level=0):
+        module = real_import(name, globals, locals, fromlist, level)
+        if _generator_class() is not None:
+            builtins.__import__ = real_import  # one shot: nothing left to wait for
             _patch()
+        return module
 
-        spec.loader.exec_module = exec_module
-        return spec
+    builtins.__import__ = watching_import
 
 
 def install() -> None:
-    """Wrap the generator's two call points once per process (idempotent).
+    """Wrap the generator's four call points once per process (idempotent).
 
     Called where a param-grid terrain cfg is built, i.e. before any env constructs a
     generator from it -- the generation happens inside ``TerrainGenerator.__init__``, so
-    wrapping an instance afterwards would be too late. The wrapping itself is deferred past
-    the pre-kit window (P001/P003) by :class:`_PatchWhenImported`; the invariant is unchanged,
+    wrapping an instance afterwards would be too late. The wrapping itself is deferred past the
+    pre-kit window (P001/P003) by :func:`_patch_when_imported`; the invariant is unchanged,
     because that module cannot be reached before it is imported, and importing it is what
     applies the patch.
     """
@@ -208,10 +225,10 @@ def install() -> None:
     if _INSTALLED:
         return
     _INSTALLED = True
-    if _GENERATOR_MODULE in sys.modules:  # already imported: post-kit, or a caller paid it
+    if _generator_class() is not None:  # already imported: a caller paid it
         _patch()
     else:
-        sys.meta_path.insert(0, _PatchWhenImported(_GENERATOR_MODULE))
+        _patch_when_imported()
 
 
 def _drain_leftovers(cfg) -> dict:

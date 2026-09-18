@@ -117,6 +117,8 @@ CHECKS: list[tuple[str, list[str]]] = [
      [f"{_V}/check_terrain_split_source.py"]),
     ("pxr leak gate falsifier (a poisoned construction must still be judged a leak)",
      [f"{_V}/test_pxr_leak_gate.py"]),
+    ("split-probe wait (a foreign import must still land the patch; install() imports nothing)",
+     [f"{_V}/check_split_probe_wait.py"]),
 ]
 
 
