@@ -34,6 +34,10 @@ metadata:
 ```
 
 - 输出每个子地形的 z std / p2p / **foot-plate relief**（0.5 m cell 内高差 ≈ 一块脚掌跨到的高度差，抓"太平整"的核心指标）。
+- 每行末尾的 **geometry digest**（vertices + faces + origin）是离线预览的回归基线：同 version/difficulty/seed
+  两次跑必须完全一致，跨版本只有改过的子地形该变——该变不变、或全表都变，都先查代码再开训。
+- 它**不是**真跑所站地形的证据：真跑路径不播种全局 RNG（`random_rough`/`stepping_stones` 走 numpy、
+  `boxes` 走 torch），同一 cfg 两次几何不同 ⇒ 实际几何的核验是另一条腿（归档实际产物）。
 - 与上一版对比就再跑一次 `--version <上一版>`（预期：只有改过的子地形有差异，其他行应一致——不一致 = 隔离性破了，先查代码）。
 - `--difficulty 1.0` 默认最难课程排（0.0 = 最易排）。
 - 渲染图自动存 `_tmp_terrain_previews/`（git 已忽略），逐张打开目视。
