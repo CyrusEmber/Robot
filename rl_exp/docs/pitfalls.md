@@ -53,10 +53,11 @@ Flat 任务能跑：`lizard_env_cfg` 的 import 链不经过 `RayCaster`。
 ### 检测方法（one-liner）
 
 ```bash
-python -c "import sys; import rl_exp.tasks.teacher_env_cfg; print('PXR LEAKED' if 'pxr' in sys.modules else 'CLEAN')"
+python rl_exp\tools\verify\check_pxr_leak.py
 ```
 
-干净时输出 `CLEAN`。任何 env cfg / mdp 模块改动后跑一次。
+干净时输出 `OK (resolved task cfg chain is pxr-clean: N tasks constructed)`。任何 env cfg / mdp
+模块改动、或 cfg 构造期行为改动后跑一次（该闸门构造注册任务的 cfg，覆盖 import 面与构造面）。
 
 ## P002 课程 gate 恒读 0（metrics buffer 记完即清）
 
@@ -155,8 +156,71 @@ sys.modules；对应的 `commands_cfg` 模块无毒。凡"类定义需要基类"
 
 ### 检测方法
 
-`run_offline_checks.bat` 现含 check_pxr_leak.py。手工单跑：
+`run_offline_checks.bat` 的 `[14]` 就是 `check_pxr_leak.py`（2026-09-18 起改为**构造**注册任务，见 P004）。手工单跑：
 
 ```bash
-python -c "import sys; import rl_exp.tasks.teacher_env_cfg; print('PXR LEAKED' if 'pxr' in sys.modules else 'CLEAN')"
+python rl_exp\tools\verify\check_pxr_leak.py
 ```
+
+## P004 Kit 启动期 pxr 泄漏：cfg **构造期**的副作用（闸门看不见的那一半）
+
+**日期**: 2026-09-18
+**影响**: 真实训练入口（`train.py --task Lizard-Rough-v14` 等 teacher 系）在 hydra compose 期就把 pip usd-core pxr 拉进 `sys.modules`；与 P001/P003 同族，崩哪个扩展取决于 Kit 启动顺序。
+
+### 关键点（与 P001/P003 的差别）
+
+前两条都在**模块 import 面**（顶层 import 了谁）。这条在**构造面**：cfg 是 pre-Kit 构造的
+（`load_cfg_from_registry` → `cfg_cls()`），而它描述的 env 是 post-Kit 才建的 —— 任何"只在
+后半段才该做"的事一旦落进 `__post_init__`，就踩同一条坑。所以**只 import 模块的闸门永远
+看不见它**：旧版 `[14]` 只 import teacher/lizard/agents 三个模块，一直是绿的。
+
+### 根因链（实测栈，2026-09-18）
+
+```
+train.py:414 main()
+→ isaaclab_tasks/utils/hydra.py:484 wrapper → register_task → parse_cfg.py:120 load_cfg_from_registry   cfg = cfg_cls()
+→ rl_exp.tasks.recipe_tasks 的生成类（入口已切到这里）
+→ recipe.py:922 __post_init__ → base.__post_init__(self)
+→ teacher_env_cfg.py:591 components.terrain(...)
+→ components.py:277 terrain_split_probe.install()
+→ terrain_split_probe.py  install() 内 `from isaaclab.terrains import TerrainGenerator`
+→ isaaclab/terrains/terrain_generator.py:22 from .utils import ...
+→ isaaclab/terrains/utils.py:14 from pxr import UsdGeom   ← pip usd-core pxr 进 sys.modules
+```
+
+探针必须在 `TerrainGenerator` 被构造**之前**装好（生成发生在 `TerrainGenerator.__init__` 内），
+而 `install()` 是 cfg 构造期（pre-Kit）被调用的 —— 于是"装补丁"这件事本身成了毒 import。
+
+**与 C2 入口切换无关**：旧入口（版本类）的 `__post_init__` 是同一段代码，同样会漏；引入
+时间点是探针落地（ARCH_PLAN 3.3d）。入口切换只让"闸门按模块名单走"这件事显得更可疑。
+
+### 修复
+
+- `terrain_split_probe.install()`：pre-Kit 不再主动 import 生成器模块，改登记一个
+  `sys.meta_path` 钩子（`_PatchWhenImported`），等框架真正 import
+  `isaaclab.terrains.terrain_generator`（Kit 已起、建地形时）再打补丁；模块已在
+  `sys.modules` 就立即补。不变式不变：补丁仍在任何 generator 构造之前到位。
+- 闸门 `check_pxr_leak.py` 改成**跟着 registry 的解析结果走**：遍历已注册任务，按
+  `env_cfg_entry_point` / `rsl_rl_cfg_entry_point` **构造**（不 `gym.make`），再断言 `pxr`
+  不在 `sys.modules`。入口以后再换、构造期再加副作用，它都跟得上。
+
+### 通用规则
+
+**cfg 构造期（pre-Kit）只准放纯数据工作。** 需要 sim / 地形 / USD 的符号，要么字符串懒
+解析，要么推迟到 post-Kit 的调用点。判据不是"顶层 import 干净"，而是"**构造一个 cfg 不会
+拉 pxr**"。
+
+### 检测方法
+
+```bash
+python rl_exp\tools\verify\check_pxr_leak.py
+```
+
+判据刻意只有一比特（pxr 进没进 `sys.modules`）—— 毒源已经换过两次名字（P001 ray_caster / P003
+commands / P004 terrains），任何"毒模块名单"都会腐烂。失败时另打**首个毒族请求 + 调用栈 + 构造期
+新引入的运行时模块**，所以诊断不必回查本文档。
+
+两条反证：
+- 套件 `[47]` `test_pxr_leak_gate.py`：注入一个 `__post_init__` 里 import `isaaclab.terrains` 的
+  cfg 形类，断言判据**必然判为泄漏**且归因能指回构造它的那一帧（防"只跑真链、其实什么都没判"）。
+- 端到端：把 `install()` 的延迟钩子换回直接 import ⇒ `[14]` 必红（构造面才是它测的面）。

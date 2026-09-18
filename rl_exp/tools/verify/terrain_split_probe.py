@@ -25,6 +25,7 @@ cfg's identity, which is how the curriculum finds its record without touching th
 
 from __future__ import annotations
 
+import importlib.util
 import pathlib
 import sys
 
@@ -40,6 +41,11 @@ _RECORDS: dict[int, dict] = {}
 #: cfg identity -> gets that have not been paired with an add yet, as (cfg id, difficulty, digest)
 _PENDING: dict[int, list[tuple[int, float, str]]] = {}
 _INSTALLED = False
+#: The module holding the class under watch. Importing it is *not* free: it pulls
+#: ``isaaclab.terrains.utils`` -> ``from pxr import UsdGeom`` (pip usd-core), which must not
+#: reach ``sys.modules`` before Kit starts (P001/P003) -- see :class:`_PatchWhenImported`.
+_GENERATOR_MODULE = "isaaclab.terrains.terrain_generator"
+_PATCHED = False
 #: At most this many records are kept. A process builds one env (one cfg) at a time and the
 #: consumer reads the record right after, so the cap only ever evicts a cfg that is long gone --
 #: without it, a sweep that builds envs in one process grows this table without bound. Ceiling:
@@ -89,17 +95,17 @@ def release(terrain) -> None:
         _PENDING.pop(id(cfg), None)
 
 
-def install() -> None:
-    """Wrap the generator's two call points once per process (idempotent).
+def _patch() -> None:
+    """Wrap the generator's four call points once (idempotent); the module must be imported.
 
-    Called where a param-grid terrain cfg is built, i.e. before any env constructs a
-    generator from it -- the generation happens inside ``TerrainGenerator.__init__``, so
-    wrapping an instance afterwards would be too late.
+    The class is taken from ``sys.modules`` rather than imported here, because every caller
+    either already imported it or is running from inside that import (see
+    :class:`_PatchWhenImported`).
     """
-    global _INSTALLED
-    if _INSTALLED:
+    global _PATCHED
+    if _PATCHED:
         return
-    from isaaclab.terrains import TerrainGenerator
+    TerrainGenerator = sys.modules[_GENERATOR_MODULE].TerrainGenerator
 
     original_get = TerrainGenerator._get_terrain_mesh
     original_add = TerrainGenerator._add_sub_terrain
@@ -156,7 +162,57 @@ def install() -> None:
     TerrainGenerator._add_sub_terrain = add_sub_terrain
     TerrainGenerator._generate_curriculum_terrains = generate_curriculum
     TerrainGenerator._generate_random_terrains = generate_random
+    _PATCHED = True
+
+
+class _PatchWhenImported:
+    """Apply :func:`_patch` the first time the generator module is imported.
+
+    ``install()`` is called from an env cfg's ``__post_init__`` -- during hydra compose,
+    **before** Kit starts -- and importing ``TerrainGenerator`` there pulls
+    ``isaaclab.terrains.utils`` -> ``from pxr import UsdGeom`` (pip usd-core) into
+    ``sys.modules`` pre-kit, which is what kills Kit at boot (P001/P003). The framework
+    imports that module when it builds the terrain, after Kit is up, and the patch only has
+    to be in place by then, so the import is waited for instead of forced early.
+    """
+
+    def __init__(self, fullname: str) -> None:
+        self._fullname = fullname
+
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname != self._fullname:
+            return None
+        sys.meta_path.remove(self)  # one shot: resolve again, without us in front
+        spec = importlib.util.find_spec(fullname)
+        original_exec = spec.loader.exec_module
+
+        def exec_module(module):
+            original_exec(module)
+            _patch()
+
+        spec.loader.exec_module = exec_module
+        return spec
+
+
+def install() -> None:
+    """Wrap the generator's two call points once per process (idempotent).
+
+    Called where a param-grid terrain cfg is built, i.e. before any env constructs a
+    generator from it -- the generation happens inside ``TerrainGenerator.__init__``, so
+    wrapping an instance afterwards would be too late. The wrapping itself is deferred past
+    the pre-kit window (P001/P003) by :class:`_PatchWhenImported`; the invariant is unchanged,
+    because that module cannot be reached before it is imported, and importing it is what
+    applies the patch.
+    """
+    global _INSTALLED
+    if _INSTALLED:
+        return
     _INSTALLED = True
+    if _GENERATOR_MODULE in sys.modules:  # already imported: post-kit, or a caller paid it
+        _patch()
+    else:
+        sys.meta_path.insert(0, _PatchWhenImported(_GENERATOR_MODULE))
+
 
 def _drain_leftovers(cfg) -> dict:
     """Record gets that never got their add, then forget them (they are per-generation)."""

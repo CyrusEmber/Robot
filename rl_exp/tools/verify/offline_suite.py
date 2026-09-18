@@ -60,7 +60,8 @@ CHECKS: list[tuple[str, list[str]]] = [
      [f"{_V}/test_joint_sir.py"]),
     ("version-record completeness (four-piece set / FAMILY row / FILEMAP row)", [f"{_V}/check_version_docs.py"]),
     ("v12 height-ring noise model (conditions / scopes / outliers / c_k / mid redraw)", [f"{_V}/test_v12_noise.py"]),
-    ("pre-kit pxr leak gate (P001/P003: env cfg import chain must stay pxr-clean)", [f"{_V}/check_pxr_leak.py"]),
+    ("pre-kit pxr leak gate (P001/P003/P004: registry-resolved env cfg construction must stay pxr-clean)",
+     [f"{_V}/check_pxr_leak.py"]),
     ("curriculum resume state (roundtrip / fingerprint / hard-abort / hook)", [f"{_V}/test_resume_state.py"]),
     ("tb_scalars record sampling (max_points / first+last / CLI resample)", [f"{_V}/test_dump_tb_sampling.py"]),
     ("v13 symmetric tracking kernel (miki wired / EP gone / v5+v10 frozen)", [f"{_V}/check_reward_v13.py"]),
@@ -114,6 +115,8 @@ CHECKS: list[tuple[str, list[str]]] = [
      [f"{_V}/test_terrain_map.py"]),
     ("terrain split rule has one home (no reintroduced copy; detector self-tested)",
      [f"{_V}/check_terrain_split_source.py"]),
+    ("pxr leak gate falsifier (a poisoned construction must still be judged a leak)",
+     [f"{_V}/test_pxr_leak_gate.py"]),
 ]
 
 
