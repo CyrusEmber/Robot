@@ -166,6 +166,115 @@ def track_trainer(args, python: str, out: pathlib.Path) -> list[str]:
     return problems
 
 
+def _newest_checkpoint(run_dir: pathlib.Path) -> pathlib.Path | None:
+    """The run's newest *real* checkpoint (never one of this tool's stripped copies).
+
+    A stripped copy is newer than the checkpoint it came from, so picking by time alone would
+    hand the next arm its own fixture -- and stripping a stripped file would look like a clean
+    control while proving nothing. The self-check in the track catches that, this is the fix.
+    """
+    files = sorted(
+        (path for path in run_dir.glob("model_*.pt") if not path.name.startswith("model_stripped")),
+        key=lambda path: path.stat().st_mtime,
+    )
+    return files[-1] if files else None
+
+
+def _strip_curriculum_state(source: pathlib.Path, destination: pathlib.Path) -> tuple[bool, bool]:
+    """Copy a checkpoint with its curriculum payload removed, and report what that did.
+
+    Returns:
+        ``(carried_state_before, carries_state_after)``. The first is the check that makes this
+        control honest: a source checkpoint that never had the state would let the arm below pass
+        while proving nothing -- the same vacuum the moved-directory control had.
+    """
+    import torch
+
+    from rl_exp.tasks.curriculum_state import STATE_KEY
+
+    checkpoint = torch.load(source, weights_only=False, map_location="cpu")
+    infos = checkpoint.get("infos") or {}
+    carried = STATE_KEY in infos
+    infos.pop(STATE_KEY, None)
+    checkpoint["infos"] = infos
+    torch.save(checkpoint, destination)
+    written = torch.load(destination, weights_only=False, map_location="cpu")
+    return carried, STATE_KEY in (written.get("infos") or {})
+
+
+def track_resume(args, python: str, out: pathlib.Path) -> list[str]:
+    """L03: a checkpoint without the state its task promises must be refused, not cold-started.
+
+    Three arms, and the middle one is why this cannot be done offline: the declaration, the save
+    guard and the resume refusal all have to hold in a real process, against a real checkpoint
+    whose payload was removed. The third arm is the control -- the same file with the explicit
+    opt-out -- so a red in the second arm is about the missing state and not about the command.
+    """
+    task = args.resume_task
+    experiments = _experiment_name(task)
+    root = _isaac_root()
+    logs = pathlib.Path(os.path.abspath(os.path.join(root, "logs", "rsl_rl", experiments)))
+    problems: list[str] = []
+
+    run_dir = None
+    for candidate in sorted((p for p in logs.iterdir() if p.is_dir()), key=lambda p: p.name, reverse=True) if logs.is_dir() else []:
+        if _newest_checkpoint(candidate) is not None:
+            run_dir = candidate
+            break
+    if run_dir is None:
+        # no checkpoint anywhere: make one (two iterations is enough -- the save hook writes the
+        # state at the end of training, and a run that never reaches the end writes nothing)
+        result = _run(
+            _trainer_command(python, args, iterations=args.resume_train_iters, task=task),
+            cwd=root,
+            environment=_environment(),
+        )
+        if result.returncode != 0:
+            return [f"resume: the source run failed (exit {result.returncode}): {result.stdout[-300:]!r}"]
+        run_dir = _newest_run_dir(experiments, root)
+    if run_dir is None:
+        return ["resume: no run directory to take a source checkpoint from"]
+    source = _newest_checkpoint(run_dir)
+    if source is None:
+        return [f"resume: {run_dir.name} has no checkpoint (a run shorter than the save interval writes none)"]
+
+    stripped = run_dir / "model_stripped_nostate.pt"
+    carried, carries = _strip_curriculum_state(source, stripped)
+    if not carried:
+        return [f"resume: {source.name} carries no curriculum state, so this arm would prove nothing"]
+    if carries:
+        return [f"resume: stripping did not remove the state from {stripped.name}"]
+
+    # arm 2: the stripped checkpoint, resumed as the task promises to be resumed
+    command = _trainer_command(python, args, iterations=1, task=task) + [
+        "--resume",
+        "--load_run",
+        run_dir.name,
+        "--checkpoint",
+        stripped.name,
+    ]
+    result = _run(command, cwd=root, environment=_environment())
+    output = result.stdout + result.stderr
+    if result.returncode == 0:
+        problems.append("resume: a checkpoint without the declared curriculum state must not resume")
+    if "no curriculum state" not in output and "cold-start" not in output:
+        problems.append(f"resume: the refusal must name the missing state, got {output[-300:]!r}")
+    if "WARN" in output and "cold" in output and "refus" not in output.lower():
+        problems.append("resume: the missing state was warned about instead of refused")
+    print(f"[entry-run] resume: stripped source refused (exit {result.returncode})")
+
+    # arm 3: the control -- the same file, with the explicit opt-out
+    control = _run(command + ["--drop_curriculum_state"], cwd=root, environment=_environment())
+    if control.returncode != 0:
+        problems.append(
+            f"resume: --drop_curriculum_state must let the same checkpoint through (exit {control.returncode})"
+        )
+    if "curriculum state" not in (control.stdout + control.stderr):
+        problems.append("resume: the opt-out arm must report what it dropped")
+    print(f"[entry-run] resume: opt-out arm exit {control.returncode}")
+    return problems
+
+
 def _isaac_root() -> pathlib.Path:
     root = host_paths.isaac_root()
     if root is None:
@@ -173,12 +282,12 @@ def _isaac_root() -> pathlib.Path:
     return root
 
 
-def _trainer_command(python: str, args, *, iterations: int) -> list[str]:
+def _trainer_command(python: str, args, *, iterations: int, task: str | None = None) -> list[str]:
     return [
         python,
         TRAINER,
         "--task",
-        args.task,
+        task or args.task,
         "--headless",
         "--num_envs",
         str(args.num_envs),
@@ -192,6 +301,7 @@ def _trainer_command(python: str, args, *, iterations: int) -> list[str]:
 TRACKS = {
     "launcher": track_launcher,
     "trainer": track_trainer,
+    "resume": track_resume,
 }
 NO_SIM = ("launcher",)
 
@@ -200,6 +310,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--track", default="launcher", choices=[*TRACKS, "all"])
     parser.add_argument("--task", default=RETIRED_TASK, help="the retired line's task id")
+    parser.add_argument("--resume-task", default="Lizard-Rough-v14", help="the declared task the resume arm uses")
+    parser.add_argument("--resume-train-iters", type=int, default=2, help="iterations for a missing source run")
     parser.add_argument("--num_envs", type=int, default=64)
     parser.add_argument("--experiment", default=None, help="log directory name (default: read off the task)")
     parser.add_argument("--report", type=pathlib.Path, default=None, help="write the report here")
