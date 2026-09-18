@@ -134,6 +134,53 @@ def test_column_of_refuses_a_missing_mapping() -> None:
         raise AssertionError(f"column {column} must raise, not answer")
 
 
+def _record_from_another_rule() -> dict:
+    """A sound-looking record whose mapping came from a *different* rule (the pre-3.3b copy).
+
+    The copy lands a column that sits exactly on a cumulative boundary in the lower sub-terrain
+    (``<=`` instead of the generator's epsilon'd ``<``), so its mapping is not the one rule's
+    output -- and every cell agrees with that mapping, which is why self-consistency alone
+    cannot refuse it.
+    """
+    cfg = _Cfg({"flat": 0.25, "stairs|0": 0.25, "stairs|1": 0.5}, num_rows=2, num_cols=8)
+    record = terrain_map.new_record(cfg, id(cfg))
+    shares = [float(sub.proportion) for sub in cfg.sub_terrains.values()]
+    total = sum(shares)
+    bounds, acc = [], 0.0
+    for share in shares:
+        acc += share / total
+        bounds.append(acc)
+    columns = [next(i for i, bound in enumerate(bounds) if col / cfg.num_cols <= bound) for col in range(cfg.num_cols)]
+    assert columns != list(record["columns"]), "this fixture must disagree with the one rule to prove anything"
+    record["columns"] = columns
+    for col, index in enumerate(columns):
+        for row in range(cfg.num_rows):
+            record["cells"].append({
+                "row": row, "col": col, "sub_terrain": record["sub_terrains"][index],
+                "difficulty": 0.5, "params": "sha256:x",
+            })
+    # internally consistent by construction: the cells were filled from this very mapping
+    assert not any("declared split says" in problem for problem in terrain_map.check(record)), \
+        "the fixture must be self-consistent, otherwise it tests the cell check instead"
+    return record
+
+
+def test_a_mapping_from_another_rule_is_refused() -> None:
+    """Self-consistency is not enough: the mapping has to be the one rule's output."""
+    problems = terrain_map.check(_record_from_another_rule())
+    assert any("does not come from the one split rule" in problem for problem in problems), \
+        f"a mapping another rule produced must be refused, got: {problems}"
+
+
+def test_a_mapping_without_proportions_is_refused() -> None:
+    """A record that cannot be re-derived from the rule is not consumable either."""
+    record = _record()
+    record["proportions"] = []
+    problems = terrain_map.check(record)
+    assert any("cannot be reproduced by the one rule" in problem for problem in problems), \
+        f"a declaration with nothing to reproduce it from must be refused, got: {problems}"
+
+
 def _main() -> None:
     tests = [fn for name, fn in sorted(globals().items()) if name.startswith("test_") and callable(fn)]
     for fn in tests:

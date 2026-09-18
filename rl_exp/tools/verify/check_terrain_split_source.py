@@ -18,6 +18,14 @@ Signature: the boundary epsilon applied to a column fraction (``col / num_cols +
 an epsilon next to a cumulative sum in the same file -- the second catches the line after a
 rename of either side. The detector is self-tested here, so a green run cannot mean "matcher
 broke".
+
+**Scope, honestly (PLAN.md #27 ②):** this is a paste detector, not a semantics check. A rule
+rewritten so that no literal survives -- ``1e-3``, a tolerance derived from the grid, a
+``searchsorted``/``floor`` boundary -- shares no token with the copy and is out of this scan's
+reach by construction. That direction is held where it can be decided: a record whose declared
+mapping is not ``terrain_map.column_split``'s output is refused by ``terrain_map.check`` at the
+consumption boundary (see ``test_terrain_map.py``), so a second *rule* cannot be consumed even
+though this scan cannot see it written.
 """
 
 from __future__ import annotations

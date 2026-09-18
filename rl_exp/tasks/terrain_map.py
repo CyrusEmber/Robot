@@ -18,8 +18,10 @@ curricula that need it must not pay a framework import to learn what a column is
 
 **Modes are not the same thing** (Step 3.3, "模式区分"): ``curriculum`` assigns a column to a
 sub-terrain, ``random`` samples a sub-terrain *per cell* and has no column mapping to
-declare. :func:`check` refuses a random-mode record that claims columns, and a curriculum
-record whose captured cells disagree with the declared split.
+declare. :func:`check` refuses a random-mode record that claims columns, a curriculum record
+whose captured cells disagree with the declared split, and a mapping that is not this rule's
+output -- the last one so that a reimplementation cannot be consumed even when it is
+perfectly self-consistent.
 """
 
 from __future__ import annotations
@@ -140,8 +142,9 @@ def check(record: dict) -> list[str]:
 
     Sanity refusals (Step 3.3c): an unknown sub-terrain, a pairing failure recorded as an
     anomaly, a missing cell, a duplicate cell, a row/column out of range, a random-mode
-    record claiming a column mapping, and a captured cell that disagrees with the declared
-    split. Returning a list (not raising) keeps a record with several problems readable.
+    record claiming a column mapping, a declared mapping that :func:`column_split` does not
+    reproduce, and a captured cell that disagrees with the declared split. Returning a list
+    (not raising) keeps a record with several problems readable.
     """
     problems: list[str] = [f"anomaly: {item}" for item in record.get("anomalies", [])]
     mode = record.get("mode")
@@ -153,6 +156,24 @@ def check(record: dict) -> list[str]:
         problems.append("random mode samples per cell: it must not declare a column mapping")
     if mode == MODE_CURRICULUM and not record.get("columns"):
         problems.append("curriculum mode must declare its column mapping")
+    # The mapping is not merely required to be self-consistent (the cell loop below tests that):
+    # it has to be *this rule's* output. A record whose columns came from another rule -- a
+    # reimplementation with a different tolerance, or the pre-3.3b copy without the boundary
+    # epsilon -- agrees with its own cells and would otherwise be consumed as if it were sound.
+    # Reproducing it here is what makes "one rule" a property of the record rather than a promise
+    # about the code that wrote it, and a static scan for copies cannot see a new rule at all.
+    if mode == MODE_CURRICULUM and record.get("columns") and num_cols > 0:
+        try:
+            by_rule = [int(index) for index in column_split(record.get("proportions") or [], num_cols)]
+        except SplitRecordError as err:
+            problems.append(f"the declared split cannot be reproduced by the one rule: {err}")
+        else:
+            declared = [int(index) for index in record["columns"]]
+            if by_rule != declared:
+                problems.append(
+                    f"the declared split does not come from the one split rule "
+                    f"(rule says {by_rule}, record says {declared})"
+                )
 
     seen: set[tuple[int, int]] = set()
     for cell in record.get("cells", []):
