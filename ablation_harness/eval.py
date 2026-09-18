@@ -132,17 +132,21 @@ _SUMMARY_COLUMNS = [
 
 
 def _git_rev(repo: pathlib.Path | None) -> str:
-    """Short commit id of the git repo at ``repo`` ('unknown' if not a repo)."""
+    """Commit id of the git repo at ``repo`` ('unknown' if not a repo).
+
+    One spelling for both records (PLAN.md #27 ①): this used to ask git for ``--short`` (~7
+    characters) while the run manifest recorded 12, so one commit read as two different strings
+    in the two records of the same run. The primitive and the length live in ``binding`` now,
+    so ``runtime.git_rev_lizard`` and ``code.repository.rev`` are the same string.
+    """
     if repo is None:
-        return "unknown"
+        return record.UNKNOWN
     try:
-        out = subprocess.run(
-            ["git", "-C", str(repo), "rev-parse", "--short", "HEAD"],
-            capture_output=True, text=True, timeout=10, check=False,
-        )
-        return out.stdout.strip() if out.returncode == 0 else "unknown"
-    except (OSError, subprocess.SubprocessError):
-        return "unknown"
+        from rl_exp.tools.runrecord import binding
+
+        return binding.git_rev(repo) or record.UNKNOWN
+    except Exception:  # a broken tree must degrade to 'unknown', never to no record
+        return record.UNKNOWN
 
 
 def _load_protocol(name: str) -> dict:

@@ -19,11 +19,9 @@ across machines.
 
 from __future__ import annotations
 
-import hashlib
 import importlib.util
 import os
 import pathlib
-import subprocess
 import sys
 from datetime import datetime
 
@@ -31,49 +29,26 @@ _REPO = pathlib.Path(__file__).resolve().parents[3]
 if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
+# The two primitives this module used to implement live in ``binding`` (PLAN.md #27 ①): one
+# function hashes a file, one abbreviates a revision, and both records call them. They are
+# re-exported under the names this package's callers (``manifest``, ``rebuild``, the golden
+# lock) and ``test_run_manifest.py`` already import, rather than re-implemented -- a second
+# implementation is what ``check_record_bindings.py`` fails on. ``hashlib`` and ``subprocess``
+# are no longer imported here for that reason.
+from rl_exp.tools.runrecord.binding import (  # noqa: E402
+    git_rev as rev,
+    git_run as git,
+    sha256_bytes,
+    sha256_file,
+)
 from rl_exp.tools.verify.cfg_snapshot import relativize  # noqa: E402
 
 UNTRACKED_CAP = 40
 
 
-def git(root: pathlib.Path | None, *args: str) -> str:
-    """Run git in ``root``; return stdout, or "" when git cannot answer."""
-    if root is None:
-        return ""
-    try:
-        return subprocess.run(
-            ["git", *args], capture_output=True, text=True, check=True, cwd=root
-        ).stdout.strip()
-    except (OSError, subprocess.CalledProcessError):
-        return ""
-
-
-def rev(root: pathlib.Path | None, short: int = 12) -> str:
-    """Revision of a work tree, or "" when it is not one."""
-    return git(root, "rev-parse", "HEAD")[:short]
-
-
 def now() -> str:
     """Local timestamp with offset, one format for every record this repo writes."""
     return datetime.now().astimezone().isoformat(timespec="seconds")
-
-
-def sha256_bytes(payload: bytes) -> str:
-    return hashlib.sha256(payload).hexdigest()
-
-
-def sha256_file(path: pathlib.Path | None, chunk: int = 1 << 20) -> str | None:
-    """Content hash of a file, or None when it cannot be read."""
-    if path is None:
-        return None
-    try:
-        digest = hashlib.sha256()
-        with open(path, "rb") as handle:
-            for block in iter(lambda: handle.read(chunk), b""):
-                digest.update(block)
-        return digest.hexdigest()
-    except OSError:
-        return None
 
 
 # untracked entries that are not code: logs, caches, scratch dirs. Recorded, but they

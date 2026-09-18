@@ -24,11 +24,18 @@ commit the golden came from, measured in the record's B0 section.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import pathlib
+import sys
 import tempfile
 
 _REPO = pathlib.Path(__file__).resolve().parents[3]
+# The file-digest primitive has one home (PLAN.md #27 ①): this gate hashes the frozen goldens
+# *with* it rather than spelling its own ``sha256(read_bytes())``, so the scan that keeps that
+# home single (``check_record_bindings.py``) does not have to carry an exception for it.
+if str(_REPO) not in sys.path:
+    sys.path.insert(0, str(_REPO))
+
+from rl_exp.tools.runrecord import binding  # noqa: E402
 
 # Frozen 2026-09-16 at rev 020e6fb, before any stage-B edit; see
 # rl_exp/versions/lizard/ACCEPTANCE.md section "B0 · 基线冻结". Re-baselining is legitimate -- it
@@ -87,9 +94,9 @@ def check(frozen: dict[str, str], root: pathlib.Path) -> list[str]:
         if not path.is_file():
             problems.append(f"{rel}: missing -- the baseline it carries is the point of the freeze")
             continue
-        actual = hashlib.sha256(path.read_bytes()).hexdigest()
+        actual = binding.sha256_file(path)
         if actual != expected:
-            problems.append(f"{rel}: {actual[:16]} != frozen {expected[:16]}")
+            problems.append(f"{rel}: {(actual or 'unreadable')[:16]} != frozen {expected[:16]}")
     return problems
 
 
@@ -100,7 +107,7 @@ def self_test() -> int:
         root = pathlib.Path(tmp)
         (root / "same.json").write_bytes(b"{}\n")
         (root / "moved.json").write_bytes(b"{}\n")
-        frozen = {name: hashlib.sha256((root / name).read_bytes()).hexdigest() for name in ("same.json",)}
+        frozen = {name: binding.sha256_file(root / name) for name in ("same.json",)}
         if check({**frozen, "absent.json": frozen["same.json"]}, root) != [
             "absent.json: missing -- the baseline it carries is the point of the freeze"
         ]:

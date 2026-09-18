@@ -27,6 +27,17 @@ import hashlib
 import json
 import os
 import pathlib
+import sys
+
+# The digest primitive (and the one revision spelling) live on the training side's runrecord
+# package, which is what this record binds against: PLAN.md #27 ①, one file hashes a file.
+# Reached by absolute path because the harness is invoked from IsaacLab and ``rl_exp`` is not
+# an installed package -- the same insert ``eval.py`` does for its other in-repo readers.
+_REPO = pathlib.Path(__file__).resolve().parents[1]
+if str(_REPO) not in sys.path:
+    sys.path.insert(0, str(_REPO))
+
+from rl_exp.tools.runrecord import binding  # noqa: E402
 
 RECORD_FORMAT = "eval-record-1"
 
@@ -110,15 +121,14 @@ def digest(obj) -> str:
 
 
 def file_sha256(path: pathlib.Path | str, chunk: int = 1 << 20) -> str | None:
-    """``sha256:`` digest of a file, or ``None`` when it cannot be read."""
-    try:
-        hasher = hashlib.sha256()
-        with open(path, "rb") as handle:
-            while block := handle.read(chunk):
-                hasher.update(block)
-    except OSError:
-        return None
-    return "sha256:" + hasher.hexdigest()
+    """``sha256:`` digest of a file, or ``None`` when it cannot be read.
+
+    The digest comes from the shared primitive (bare hex, ``binding.sha256_file``); the
+    ``sha256:`` prefix is this record format's own spelling and stays here, so moving the
+    primitive did not move any emitted value.
+    """
+    digest = binding.sha256_file(path, chunk)
+    return None if digest is None else "sha256:" + digest
 
 
 def checkpoint_digest(path: pathlib.Path | str) -> dict:

@@ -140,6 +140,8 @@ CHECKS: list[Check] = [
           [f"{_V}/check_terrain_split_source.py"], contract=("rl_exp/tasks/terrain_map.py",)),
     Check("split-probe wait (a foreign import must still land the patch; install() imports nothing)",
           [f"{_V}/check_split_probe_wait.py"], contract=("rl_exp/tools/verify/terrain_split_probe.py",)),
+    Check("record binding primitives have one home (no second file digest / revision spelling; detector self-tested)",
+          [f"{_V}/check_record_bindings.py"], contract=("rl_exp/tools/runrecord/binding.py",)),
 ]
 
 
@@ -157,7 +159,7 @@ def default_jobs() -> int:
 # * ``MAX_CHECKS`` (count) and ``PER_CHECK_BUDGET_S`` (one check) are the per-run gates, and
 #   both are load-free: a count is an integer, and a check over its budget is re-run alone
 #   before anything is blamed. Count is the lever that matters -- a check is a process that
-#   pays an interpreter + torch import before its first assertion, so 42 of them is most of
+#   pays an interpreter + torch import before its first assertion, so the whole list is most of
 #   what the suite costs, and a ratchet on the count cannot be fooled by a busy machine.
 # * ``SERIAL_BUDGET_S`` is the *total*, and it is not a per-run gate: the only honest way to
 #   measure a total is one check at a time (``--confirm-cost``), so it is ratified on demand
@@ -170,7 +172,7 @@ def default_jobs() -> int:
 #   Deliberately far above the cost budget, so that a slow check is reported as cost, not
 #   killed as a hang.
 PER_CHECK_BUDGET_S = 25.0
-MAX_CHECKS = 42  # ratchet: today's count. Add one -> remove or merge one, or raise this here.
+MAX_CHECKS = 43  # ratchet: today's count (42 + the record-binding scan). Add one -> remove or merge one, or raise this here.
 SERIAL_BUDGET_S = 205.0  # the total; --confirm-cost is what measures it
 SOLO_RECHECKS = 3  # breaching checks re-run alone, worst first, before they are suspect
 PER_CHECK_TIMEOUT_S = 180.0

@@ -34,7 +34,6 @@ Usage: python rl_exp\\tools\\verify\\check_dr_parity.py [--strict]
        python rl_exp\\tools\\verify\\check_dr_parity.py --update-locks
 """
 import argparse
-import hashlib
 import json
 import pathlib
 import re
@@ -44,6 +43,13 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from recipe_lines import RecipeLine, RecipeLineError, discover  # noqa: E402
 
 _REPO = pathlib.Path(__file__).resolve().parents[3]
+# The file-digest primitive has one home (PLAN.md #27 ①): the asset locks are hashed with it
+# rather than with a local ``sha256(read_bytes())``, so the scan that keeps that home single
+# (``check_record_bindings.py``) does not have to carry an exception for this gate.
+if str(_REPO) not in sys.path:
+    sys.path.insert(0, str(_REPO))
+
+from rl_exp.tools.runrecord import binding  # noqa: E402
 _EXP = _REPO / "rl_exp"
 _TASKS = _EXP / "tasks"
 _FAMILY = _TASKS / "lizard_env_cfg.py"
@@ -311,10 +317,21 @@ def _lock_files() -> list[str]:
 
 def _asset_hashes(yaml_path: pathlib.Path) -> dict[str, str]:
     """Global assets + that version's own frozen params yaml (post-freeze yaml
-    edits are contract breaks, not tweaks)."""
+    edits are contract breaks, not tweaks).
+
+    The digest comes from the one file-hash primitive (PLAN.md #27 ①); a listed file that
+    vanished while it was being hashed is a hard stop, because this dict is written straight
+    into an asset lock and a null digest there is worse than no lock at all.
+    """
     files = _lock_files()
     files.append(str(yaml_path.relative_to(_EXP)).replace("\\", "/"))
-    return {rel: hashlib.sha256((_EXP / rel).read_bytes()).hexdigest() for rel in files}
+    hashes: dict[str, str] = {}
+    for rel in files:
+        digest = binding.sha256_file(_EXP / rel)
+        if digest is None:
+            raise FileNotFoundError(f"asset lock: {rel} unreadable while hashing")
+        hashes[rel] = digest
+    return hashes
 
 
 def update_asset_locks() -> list[str]:
