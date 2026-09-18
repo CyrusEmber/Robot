@@ -676,13 +676,27 @@ def baseline_no_curriculum(cfg) -> None:
 
 
 def baseline_no_dr(cfg) -> None:
-    """Every event the framework base registers, named and removed.
+    """Every randomization event the framework base registers, named and removed -- except the one
+    that also happens to be the joint reset.
 
     Deleting the c_k clock alone would leave them at full strength -- and two of them (the
     interval wrench and the interval velocity push) are not c_k-gated at all, so they would never
     have annealed in the first place. ``reset_base`` must stay: it is what places the robot, and
     its own ranges are zeroed axis by axis (whatever axes the base declares) so the spawn is a
     deterministic pose rather than a hidden randomization.
+
+    ``reset_robot_joints`` stays too, pinned instead of randomized, because in this IsaacLab it is
+    the *only* writer of joint state at reset: ``InteractiveScene.reset(env_ids)`` calls
+    ``Articulation.reset(env_ids)``, which clears actuator state and the two wrench composers and
+    nothing else (``isaaclab_physx/assets/articulation/articulation.py``), so with this event gone
+    a respawned env keeps whatever joint positions and velocities the last episode ended with --
+    the robot is re-placed at the default height carrying a stale pose. The event's own numbers are
+    ``reset_joints_by_scale``'s, where ``rand*(upper-lower)+lower`` gives the bound exactly when both
+    ends are equal (``isaaclab/utils/math.py``): ``(1.0, 1.0)`` is the default pose, ``(0.0, 0.0)``
+    is zero velocity. So this term carries the reset, not randomization -- pinned, it does not
+    belong in the removal list, and a future wish to randomize the initial pose belongs in a term of
+    its own (the v12 line's ``reset_joints_by_offset`` package) rather than as a re-scaling here.
+    Verified empirically (and kept verified) by ``rl_exp/tools/verify/reset_check.py``.
     """
     for event_name in (
         "physics_material",  # ground friction buckets
@@ -690,9 +704,10 @@ def baseline_no_dr(cfg) -> None:
         "base_com",  # base CoM offset
         "base_external_force_torque",  # interval wrench, 4-8 s
         "push_robot",  # interval velocity push, 3-6 s
-        "reset_robot_joints",  # reset-state joint scaling
     ):
         setattr(cfg.events, event_name, None)
+    cfg.events.reset_robot_joints.params["position_range"] = (1.0, 1.0)
+    cfg.events.reset_robot_joints.params["velocity_range"] = (0.0, 0.0)
     reset_params = cfg.events.reset_base.params
     for range_key in ("pose_range", "velocity_range"):
         for axis in list(reset_params.get(range_key, {})):

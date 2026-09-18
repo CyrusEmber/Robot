@@ -290,3 +290,73 @@ python rl_exp\tools\verify\check_split_probe_wait.py      # 抢走导入后补�
 两条例行验证（都要真跑，离线测不到）：
 - `train.py --task Lizard-Rough-v14 --num_envs 64 --max_iterations 1` 必须跑完并写出 checkpoint；
 - 同一命令 `--num_envs 0` 必须 **RC=1**（失败可观测），而不是 0。
+
+## P006 "关掉随机化"顺手把关关节复位也关了（资产级 reset 不写关节状态）
+
+**日期**: 2026-09-18
+**影响**: baseline 线 v1 配方（`reset_robot_joints` 与其余五项一起置 None）。终止/超时的回合**不恢复
+关节位置与速度**：机器人被放回默认高度与姿态，但带着上一回合摔倒时的关节角与角速度继续跑。首回合
+之后的每个初始条件都被上一回合污染，而所有闸门全绿。
+
+### 症状
+
+无报错、无告警。配置读起来完全合理（"零 DR"意味着所有随机化事件置 None），启动探针也通过——它读的
+是 `data.default_joint_pos` **模板**：模板两边一样，写没写都一样，所以"没复位"和"复位正确"在配置与
+探针两侧长得完全一样。
+
+实测（`reset_check.py --task Lizard-Baseline-Flat-v1`，修复前）：
+
+```
+B excite 20 steps    excited envs 8/8  worst |dq| 0.4089 rad
+FAIL C/joint-pos-after-reset: worst 0.4089 rad (tail1_pitch_joint 0.4089, rl_haa_joint 0.3426, ...)
+FAIL C/joint-vel-after-reset: worst 9.3779 rad/s
+FAIL D/subset-back-at-default: worst 0.3395 rad
+```
+
+reset 前后偏差**一模一样**（0.4089 → 0.4089）：关节根本没被写过，不是写得不准。
+
+### 根因
+
+本框架（pin `28a37cec`）里 reset 的写入者是**事件**，不是资产：
+
+- `InteractiveScene.reset(env_ids)` → `Articulation.reset(env_ids)`
+  （`interactive_scene.py:599`）；
+- 而 `Articulation.reset()` 只做三件事：执行器内部状态、newton adapter、
+  两个 wrench composer（`isaaclab_physx/assets/articulation/articulation.py:222-246`）。
+  **没有任何关节状态写入**；
+- 关节位置/速度的唯一写入者是 reset 事件 `mdp.reset_joints_by_scale` /
+  `reset_joints_by_offset`（`envs/mdp/events.py:1924-2003`）。
+
+所以停掉 `reset_robot_joints` = 停掉关节复位。`reset_base` 只把 root 拉回默认位置/速度，替代不了它。
+
+**为什么容易一起删**：复位写入与随机化**共用同一个 term**（stock 那个 term 就是"缩放默认姿态"），
+"关 DR"的清单里于是混进一个不是随机化的东西。
+
+### 修复
+
+`baseline_no_dr` 不再置 None，改为**保留并钉死**：`position_range=(1.0, 1.0)`、
+`velocity_range=(0.0, 0.0)`。`sample_uniform` 是 `rand*(upper-lower)+lower`（`utils/math.py:1427`），
+上下界相等时结果**精确**等于该值，所以这是"写默认姿态 + 零速度"，不是"近似复位"。断言侧同步：
+`baseline_probe.py` 的 DR 名单去掉该项，改为断言"存在 + func 正确 + 钉死"，并补上
+`reset_base` 的逐轴范围检查（原来只查"term 存在"，不读数字）。
+
+固定范围要随机化初值时，应新增独立 term（如主线 v12 的 `reset_joints_by_offset` 包），
+**不要**回头改这个 term 的倍率——那会连复位一起改掉。
+
+### 通用规则
+
+**"关掉随机化"的清单要区分"随机化"与"复位本体"。** 一个 term 同时干两件事时，
+先问"把它删掉，仿真状态还回得去吗"。另：**配置门证明不了状态被写**——快照里没有"少了写入者"
+这个字段，只有 rollout 能看见。
+
+### 检测方法
+
+```bash
+# 平台契约（无版本名，任何线都能跑；先激励再 reset，否则测不出来）
+"E:/IsaacLab/env_isaaclab/Scripts/python.exe" rl_exp\tools\verify\reset_check.py --task Lizard-Baseline-Flat-v1
+```
+
+判据是 C（全量 reset 后实际 joint_pos/vel 回到默认）与 D（子集 reset 后，未被点名的 env **逐位不变**）。
+两者都带空转守卫：B/D 先确认关节真的离开了默认，否则"回到默认"与"没人动过"无法区分。
+配方侧另有 `baseline_probe.py` 的 `events/reset-joints-*` 三条（存在/func/钉死）。
+

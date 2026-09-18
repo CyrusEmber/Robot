@@ -3,6 +3,7 @@
 > 无上游母本 ⇒ 按 versioning.mdc §A 分线条款用**全量式 PLAN**。
 > 结果见 [NOTES.md](NOTES.md)；线路线（后续轮次如何逐项加回变量）见 [../PLAN.md](../PLAN.md)。
 > 第一轮只回答一个问题，**不预留任何第二臂**。
+> 修订：v1.1（2026-09-18，DR 关闭清单修正——`reset_robot_joints` 是复位本体而非随机化，见 §修订）
 
 ## 目的与假设
 
@@ -40,7 +41,7 @@
 | 奖励 | **7 项**（下表） | 满值口径见下 |
 | 终止 | `time_out` + `base_contact`（`base_link`，threshold 1.0） | 平地躺下 = 基座接触 ⇒ 直接终止；"存活"因此有定义，"趴着前滑"直接判负而非慢慢罚 |
 | 课程 | 全无：`terrain_levels` 置 None；阶段速度/地形课程属别线代码，本线不存在 | 见前提校正 2 |
-| DR | **全关**：`physics_material`/`add_base_mass`/`base_com`/`base_external_force_torque`/`push_robot`/`reset_robot_joints` 六项置 None；`reset_base` 保留但 `pose_range`/`velocity_range` 逐轴归零 | 显式逐项关闭；`reset_base` 是把机器人放下来所必需，但它自带的姿态/速度随机也必须归零 |
+| DR | **随机化全关**：`physics_material`/`add_base_mass`/`base_com`/`base_external_force_torque`/`push_robot` 五项置 None；`reset_base` 保留但 `pose_range`/`velocity_range` 逐轴归零；`reset_robot_joints` **保留并钉死**（`position_range=(1.0,1.0)`、`velocity_range=(0.0,0.0)`） | 显式逐项关闭；`reset_base` 是把机器人放下来所必需，但它自带的姿态/速度随机也必须归零；`reset_robot_joints` 不是随机化，它是本框架**唯一**的关节复位写入者（资产级 reset 只清执行器状态与外力矩），置 None 等于取消复位——见 §修订 v1.1 |
 | 资产 / PD / 动作接口 / sim | 冻结为既有线实际生效值：usda 共享、PD `800/40`·`200/12`·`400/20`、动作两组 `legs 0.5`（haa/hfe/kfe/foot）+ `spine 0.25`（chest/neck/tail）、`dt 0.005`×`decimation 4`（50 Hz）、`episode 20 s` | 这些是平台接口，不是本轮变量；改它们就无法回答"这副机器人"的问题 |
 | PPO | 框架 velocity 平地配方：`num_steps 24`、`max_iter 3000`、`save 50`、5 epochs、4 minibatch、lr `1e-3` adaptive(`desired_kl 0.01`)、`gamma 0.99`、`lam 0.95`、`entropy 0.005`、`clip 0.2`、`max_grad_norm 1.0`；`experiment_name=lizard_baseline_v1` | 不用 paper S1（那是 4096 env + 381 维三编码器的调参）；独立日志目录 |
 
@@ -59,6 +60,12 @@
 置 None 的槽位（**逐个点名**，不靠"忘了的就没有"）：`track_lin_vel_xy_exp`（被 miki 核
 替换）、`ang_vel_xy_l2`、`dof_acc_l2`、`feet_air_time`、`flat_orientation_l2`、
 `dof_pos_limits`。
+
+## 修订
+
+| 日期 | 版本 | 变更 + 原因 + 依据 |
+|---|---|---|
+| 2026-09-18 | v1.1 | DR 关闭清单修正：`reset_robot_joints` 不再置 None，保留并钉 `position_range=(1.0,1.0)`/`velocity_range=(0.0,0.0)`。**原因**：本框架资产级 reset 不写关节状态（`InteractiveScene.reset` → `Articulation.reset`，后者只清执行器状态与两个 wrench composer，`isaaclab_physx/assets/articulation/articulation.py:222-246`），`reset_joints_by_scale`/`by_offset` 是关节位置的**唯一**写入者（`envs/mdp/events.py:1924-2003`）⇒ 置 None 等于取消关节复位，终止/超时后的回合会带上上一回合的关节位置与速度（初始条件被历史污染），而所有静态闸门全绿。**依据**：`rl_exp/tools/verify/reset_check.py` 实测——修复前 C/D 红（reset 前后偏差同为 0.4089 rad、残余速度 9.38 rad/s），修复后全绿；teacher 线 `Lizard-Rough-v14` 同一探针全绿（不误报）。闸门侧 `baseline_probe.py` 的 DR 名单去掉该项，改为断言"存在 + func 正确 + 钉死"，并补 `reset_base` 逐轴范围检查。**用户拍板 2026-09-18**（P1：关闭 DR 时删除了正常关节复位） |
 
 ## 明确不做
 

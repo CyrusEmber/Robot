@@ -577,6 +577,18 @@ ValueError: curriculum state in the checkpoint does not fit this task: runtime.n
 | 摘要 | `8a004fab…bf76`（2,581,748 B）→ `1643a755…7dc8`（2,581,706 B） |
 | 处置 | 同②：同一次改动里改 `FROZEN` 一行摘要 + 本条记录 + 理由；**未跑 `--update`**、未重生成任何 `snapshot` |
 
+### B0 追加④：baseline v1.1 复原关节复位触发的合法重锚（2026-09-18）
+
+| 项 | 值 |
+|---|---|
+| 触发 | baseline 线 v1.1（`baseline/v1/PLAN.md` §修订）：`reset_robot_joints` 不再与其余五项随机化一起置 None，改为保留并钉 `position_range=(1.0,1.0)`/`velocity_range=(0.0,0.0)`。原因：本框架**资产级 reset 不写关节状态**（`InteractiveScene.reset` → `Articulation.reset` 只清执行器状态与两个 wrench composer，`isaaclab_physx/assets/articulation/articulation.py:222-246`），`reset_joints_by_scale` 是关节位置的**唯一**写入者（`envs/mdp/events.py:1924-2003`）⇒ 置 None 等于取消关节复位，终止/超时后的回合带上上一回合的关节位置与速度。机制、检测与通用规则见 `rl_exp/docs/pitfalls.md` P006 |
+| 与①②③的区别 | ①②③ 是**入口列/模块名的搬家与翻表**：配方内容一字未动，动的只是 golden 记的入口。本条是**配方内容真的变了**（一个事件从 `None` 变成带参数的 term）⇒ 这是"配方修订 ⇒ golden 必须重锚"的正例，而不是搬家 |
+| 逐字段证据 | 走唯一授权路径 `check_cfg_lock.py --update --line lizard/baseline --reason …`（锁头部 `reason`/`reason_at`/`reason_rev` 三行随之更新）。`git diff --numstat` = `51 7`：51 = 2 × 23（两条 entry 各一个 23 行的 `reset_robot_joints` 对象）+ 2（两条 `digest`，快照的派生值）+ 3（头部三行）；7 = 2 × 1（`reset_robot_joints: null`）+ 2 + 3。除这 7 处**无第三类叶**：`version`/`env_cfg_class`/`agent_cfg_class` 逐条未动，`snapshot` 内只有 `reset_robot_joints` 一个路径变化 |
+| 独立交叉核对 | 文件 85,645 → 86,567 B（LF 视图：`git cat-file -s HEAD:` 与去 CRLF 后的 `len`），差 **+922 B = 44 行**（= 51 − 7）× ~21 B/行；磁盘字节 88,704 → 89,670（3,103 行 CRLF）⇒ 没有第二个字节被动过 |
+| 摘要 | baseline `9523583b…c682` → `34e9acb1…9c94`；其余三份基线未动（`--update` 前跑 `check_cfg_lock.py --diff` 只报这两个 baseline 任务；`--diff` 命名空间里 `lizard/main`、`lizard/parkour` 无输出 ⇒ 嵌套 term 的原地修改未跨线泄漏） |
+| 处置 | 按本闸门声明的合法路径：同一次改动里改 `FROZEN` 一行摘要 + 本条记录 + 理由（`check_golden_frozen.py` 表头注释第三段）。**本次跑 `--update` 是正当的**——配方内容变更本来就是它的场景（与①②③"未跑 `--update`"相反，那三条改的只是入口列）。`FROZEN_REVS` 该行随后一次提交钉 rev（同②：未提交前不留旧 SHA，填 `v1.1 (pending commit)`） |
+| 端到端验证 | `reset_check.py --task Lizard-Baseline-Flat-v1`：修复前 C/D 红（reset 前后偏差**同为** 0.4089 rad、残余速度 9.3779 rad/s），修复后 `RESET_CHECK_OK`（8/8 项）；同一探针在 `Lizard-Rough-v14` 全绿 ⇒ 不误报。`baseline_probe.py` 改后 `BASELINE_PROBE_OK`（DR 名单去掉该项，改为断言存在 + func + 钉死，并补 `reset_base` 逐轴归零检查） |
+
 ### 边界与阻塞（不得据本片宣称通过）
 
 - **门 1 的时点限定**：上表门 1 是 **A0 落地前**的实跑（当时线键仍是 `lizard`）。A0 落地后 `[24]` 独立红于 `lizard: 32 task(s) declare this line … but no such line exists ['lizard/baseline','lizard/main','lizard/parkour']`（`params_line` 收尾在 A0 清单里）⇒ **切到新布局后必须重跑门 1**，本片不以 A0 前的绿替代。

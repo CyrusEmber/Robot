@@ -50,6 +50,15 @@ from rl_exp.tools.runrecord import binding  # noqa: E402
 # those classes since well before the deletion -- was repointed to the generated classes one line at
 # a time. 24 lines in main, 2 in baseline, no other leaf moved (the per-field diff is in the
 # record's second B0 addendum), so the frozen numbers below changed while nothing they describe did.
+#
+# A third one, 2026-09-18 (baseline v1.1): the baseline recipe kept `reset_robot_joints` -- pinned to
+# the default pose with zero velocity -- instead of removing it with the other randomization events.
+# That term is the only writer of joint state at reset in this framework (the asset-level reset
+# clears actuators and wrenches only), so removing it cancelled joint reset altogether. The
+# baseline-only `--update` changed 2 entries: `reset_robot_joints` null -> the pinned scale term
+# (2 x 23 lines) plus the two digests it feeds and the three reason fields; 51 inserted / 7 deleted
+# lines close exactly on that count. Per-field diff and the independent size cross-check are in the
+# record's third B0 addendum. Recipe change itself: baseline/v1/PLAN.md section '修订' (v1.1).
 FROZEN = {
     "rl_exp/versions/cfg_baselines.json": "b18a517c43ddef5f79609dc4dea94080ad8a15926a778835bb0aa8a079c95c03",
     "rl_exp/versions/lizard/main/cfg_lock.json": "1643a7554b315d8d097078d46a4c893f3f70ed626b179a0f0dab631311417dc8",
@@ -58,7 +67,8 @@ FROZEN = {
     # written *after* 020e6fb, so it entered the table later than the other three (B0 addendum).
     # It is the lock of the line that trains next, and until it was here "this line's golden
     # moved" had no digest guard at all -- the hole the record had listed as A-side debt.
-    "rl_exp/versions/lizard/baseline/cfg_lock.json": "9523583b42917c123638cfedbddc09391ea2c4cb15e16587e4d247690735c682",
+    # Re-baselined 2026-09-18 (baseline v1.1, see the comment above).
+    "rl_exp/versions/lizard/baseline/cfg_lock.json": "34e9acb101a7e26185df8ded0549e8cfdb6255be23fb9eea4d593e309f979c94",
 }
 
 FROZEN_REVS: dict[str, str] = {
@@ -68,7 +78,10 @@ FROZEN_REVS: dict[str, str] = {
     # snapshots they carry are still 020e6fb's (B0 addenda ② and ③).
     "rl_exp/versions/lizard/main/cfg_lock.json": "27ca424",
     "rl_exp/versions/lizard/parkour/cfg_lock.json": "020e6fb",
-    "rl_exp/versions/lizard/baseline/cfg_lock.json": "bbedd96",
+    # v1.1's bytes are written but not committed, so there is no rev to name yet; the previous SHA
+    # would be a lie in the banner (it describes bytes that no longer exist). Pinned with the same
+    # follow-up commit that the second re-baseline used (B0 addendum ②, last row).
+    "rl_exp/versions/lizard/baseline/cfg_lock.json": "v1.1 (pending commit)",
 }
 """Which revision each frozen file's bytes are from, for the banner only.
 
