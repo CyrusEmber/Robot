@@ -10,12 +10,14 @@ alwaysApply: false
 
 | 级 | 形态 | 例 |
 |---|---|---|
-| 配方版本 | `versions/<family>/vN/` 目录 + 任务 id + git tag | v0 / v1 / v2 / v3 |
+| 配方版本 | `versions/<family>/<line>/vN/` 目录 + 任务 id + git tag | v0 / v1 / v2 / v3 |
 | 文档修订 | 版本目录内 PLAN.md 的修订记录行号 | v3.1 / v3.1.2 |
 
 分层原则：**规则管行为（何时升版、怎么记录、升版流程），FAMILY.md 管事实（任务表/版本史/家族特有机制）**——会随版本增长的数据一律留在文档侧。本规则正文只写现在仍成立的句子：日期、事故名（如"vX 欠账"）、条目计数、示例版本号一律不进规则——理由与出处归 FAMILY/FILEMAP。
 
 **家族文档地图与时态判据**：FAMILY.md = 已成立的事实（现在时：任务表/版本史/当前状态/机体几何——"待/未/若"字头禁止入住，最多留挂账号指针）；PLAN.md = 意图（将来时：路线/备选路径/挂账）；契约面各有家族级 SSOT（obs 布局 = OBS.md，奖励语义 = REWARDS.md）；版本方案 = `vN\PLAN.md`；结果 = `vN\NOTES.md`；命令与摆位 = 仓根 README。判别法：一句话明天还必然为真 → 事实侧；靠行动才兑现 → 意图侧。同一事实不得两侧同时为真（意图兑现的瞬间 = 在 PLAN 关闭、在 FAMILY 出生）。
+
+**仓根层（跨家族的重整工作）**：`ARCH_PLAN.md` = 意图（要做的事 + 判据 + 不做），其**验收与推进状态唯一归属 = `versions/<family>/ACCEPTANCE.md`**。故 `ARCH_PLAN.md` 的标题/表头/出口列不得出现"已完成/已落地/待实现"，正文只写当时证据与实现形态；**通过率与计数（`[15]` 27/27、"11/11 绿"、"34/34 一致"）只进 ACCEPTANCE**，`FAMILY.md`/`PLAN.md`/`FILEMAP.md`/`HARNESS.md` 写覆盖面而不写通过数。挂账行里的优先级记号（🟡/🟢/🟠）是**意图**，可留。同理，**规则正文里的路径/形态必须能被磁盘验证**——规则写错比文档写错更贵（会被当规范执行）。
 
 **家族文档路径约定**：每家族一份 `FAMILY.md`，新家族放 `versions/<family>/FAMILY.md`（`versions/**` glob 自动覆盖，本规则无需改）。
 
@@ -47,18 +49,19 @@ alwaysApply: false
 
 **流程（家族无关，通用五步）**：
 
-1. `copy versions/<family>/vN versions/<family>/vN+1`（含 yaml），改新目录参数；
+1. `copy versions/<family>/<line>/vN versions/<family>/<line>/vN+1`（含 yaml），改新目录参数；
    runner cfg 逐版本化：`experiment_name = <family>_<场景>_vN`（一版本一日志目录，
    禁共用；存量目录不迁移）。**新线**（无上游母本可 copy）另做两件：`versions/lines.json`
    落生命周期记录（见本节分线条款）；`cfg_lock --update --line <线> --reason "<why>"`
-   建该线自己的配方锁（锁按线分文件，主线的锁路径 = `versions/<family>/cfg_lock.json`，
-   框架组合块全仓共用 `versions/cfg_baselines.json`）
-2. 写 `versions/<family>/vN+1/PLAN.md` 与 `NOTES.md`，并落 `base.json`（`{"base": "vN", "note": ""}`，血统根用 `null`）。base = 改配方那天眼红的**唯一母本快照**；对其他版本的决策引用只进 PLAN 散文，不进 base.json（一个 run 只有一棵代码树）。重基（废案迁移到新母本）= 改 base.json 的 base 字段并在 note 记一笔。base 按家族相对路径解析：主线写 `vN`；支线内裸 `vN` 先命中本线（parkour 的 v2 写 `v1` 指 `parkour/v1`，绝不落主线），跨线引用写全路径。**PLAN 每版必写**（变更少简短即可）：多变量设计（新 obs 布局 / 奖励包 / DR 协议 / 新支线 v1）用完整版——提案态载体，评审与决策记录所在，含修订记录节，冻结前定稿；单变量小改（一个 term 增删或 yaml 数值档，不涉 obs 布局与多 term 权衡）用**简短骨架**：目的/假设（≤3 行）/ diff 清单 / 验收 / 训练命令。NOTES **必含骨架**：目的 / 假设 / 相对上版 diff / 训练命令 / 结果回填 / 结论
+   建该线自己的配方锁（**一条线一个锁文件**，落点 = **线根目录**，即
+   `versions/<family>/<line>/cfg_lock.json`，与线 dev yaml 同级、不在 `vN/` 内；
+   `main` 也有自己的线根，不是家族根特例；框架组合块全仓共用 `versions/cfg_baselines.json`）
+2. 写 `versions/<family>/<line>/vN+1/PLAN.md` 与 `NOTES.md`，并落 `base.json`（`{"base": "vN", "note": ""}`，血统根用 `null`）。base = 改配方那天眼红的**唯一母本快照**；对其他版本的决策引用只进 PLAN 散文，不进 base.json（一个 run 只有一棵代码树）。重基（废案迁移到新母本）= 改 base.json 的 base 字段并在 note 记一笔。base 按家族相对路径解析：主线写 `vN`；支线内裸 `vN` 先命中本线（parkour 的 v2 写 `v1` 指 `parkour/v1`，绝不落主线），跨线引用写全路径。**PLAN 每版必写**（变更少简短即可）：多变量设计（新 obs 布局 / 奖励包 / DR 协议 / 新支线 v1）用完整版——提案态载体，评审与决策记录所在，含修订记录节，冻结前定稿；单变量小改（一个 term 增删或 yaml 数值档，不涉 obs 布局与多 term 权衡）用**简短骨架**：目的/假设（≤3 行）/ diff 清单 / 验收 / 训练命令。NOTES **必含骨架**：目的 / 假设 / 相对上版 diff / 训练命令 / 结果回填 / 结论
 3. 代码级结构变更（新 term）走版本差异机制 + 新任务 id 常驻注册（机制各家族自定义，见其 FAMILY.md）；纯参数变更（yaml-only）不需要新任务 id。**新任务 id 必须配 golden**：`cfg_lock --update --line <线> --reason "<what moved and why>"`（漏 `--line` 拒写——一次全量更新会把别条线的漂移并进同一条理由；漏 `--reason` 也拒写且不落盘）。**归属必须声明**：任务 cfg 类上挂 `params_line`（`ClassVar`，不进配方快照），线句柄 = 家族相对路径（`lizard` / `lizard/<line>`）；缺声明、指向不存在的线、或该线无锁文件，一律红。**冒烟脚本同理**：运行时契约核对集中在 `tools/verify/teacher_smoke_runner.py`，新版本 = 给其 `SMOKE_SPEC` 加一行 + 建薄壳 `teacher_smoke_vN.py`（调用 `main("vN")`）；**复制整份冒烟脚本造新版本 = 违规**（复制件无闸门，漏改一条断言永久静默）。表行与上一版逐字段人审，并按该版特有的一条断言做破坏测试确认咬得住。
 4. 训练 → 曲线导出（`rl_exp/tools/trainlog/dump_tb.py`）→ eval（`ablation_harness/eval.py`）→ 结果回填 NOTES.md
 5. 家族文档版本历史表加一行；git 侧 commit + tag `<family>-vN+1`（tag = 整树快照；commit/push 细节走 git-auto-sync skill）
 
-**机器闸门**：第 2/5 步可量化项（每版本目录四件套 PLAN/NOTES/yaml/asset_lock 锁自身 + **base.json 血统边合法** + FAMILY 版本史行 + FILEMAP 行）由 `rl_exp\tools\verify\check_version_docs.py` 看守——`run_offline_checks.bat` + pre-commit 均跑，漏记录与 DR 漂移同级红；tag 缺失仅 WARN（历史前缀可不统一）。线身份与生命周期另由 `check_recipe_registry.py` 看守（**发现到的线必须有记录**、退休须有证据与公告期），配方 golden 由 `check_cfg_lock.py` 看守（**一条线一个锁文件**、`--update` 必须带 `--line` 与 `--reason`、任务必须有 `params_line`），四份文件约定（yaml 命名 / 线目录 / 锁落点）由 `recipe_lines.py` 单点供应。纯约定没闸门 = 必然欠账。
+**机器闸门**：第 2/5 步可量化项（每版本目录四件套 PLAN/NOTES/yaml/asset_lock 锁自身 + **base.json 血统边合法** + FAMILY 版本史行 + FILEMAP 行）由 `rl_exp\tools\verify\check_version_docs.py` 看守——`run_offline_checks.bat` + pre-commit 均跑，漏记录与 DR 漂移同级红；tag 缺失仅 WARN（历史前缀可不统一）。线身份与生命周期另由 `check_recipe_registry.py` 看守（**发现到的线必须有记录**、退休须带 `retired_at` 与非空 `reason`、`successor` 必须存在且为 active 的另一条线；闸门**不读时钟**——退休是目录修订，不是日期到期），配方 golden 由 `check_cfg_lock.py` 看守（**一条线一个锁文件**、`--update` 必须带 `--line` 与 `--reason`、任务必须有 `params_line`），四份文件约定（yaml 命名 / 线目录 / 锁落点）由 `recipe_lines.py` 单点供应。纯约定没闸门 = 必然欠账。
 
 **红线**：已发布 term 的实现永不改语义（新版本只允许加 term）；冻结目录只读。
 
