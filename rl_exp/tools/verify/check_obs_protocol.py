@@ -337,7 +337,13 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--live", action="store_true", help="also build each registered cfg (needs isaaclab)")
     parser.add_argument("--only", nargs="*", default=[], help="check only these task ids")
+    parser.add_argument("--self-test", action="store_true", help="also falsify the detector in-process")
     args = parser.parse_args(argv)
+    if args.self_test:
+        import test_obs_protocol_gate as falsifier
+
+        if falsifier.main() != 0:
+            return 1
 
     document = load(DECLARATION)
     for key in ("_missing", "_unreadable"):
@@ -367,4 +373,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    # The in-process falsifier must import this instance, not execute a second copy.
+    sys.modules.setdefault("check_obs_protocol", sys.modules[__name__])
     sys.exit(main())

@@ -216,6 +216,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--env-yaml", type=pathlib.Path, help="a real params/env.yaml dump to compare against")
     ap.add_argument("--json", type=pathlib.Path, help="write the full observed field surface here")
+    ap.add_argument("--self-test", action="store_true", help="also falsify the detector in-process")
     args = ap.parse_args()
 
     problems: list[str] = []
@@ -272,6 +273,12 @@ def main() -> int:
             json.dump(surface, f, indent=2, ensure_ascii=False, default=str)
         print(f"  surface written: {args.json}")
 
+    if args.self_test:
+        import test_configclass_fields_gate as falsifier
+
+        if falsifier.main(rows) != 0:
+            problems.append("field-surface falsifier stayed silent")
+
     for p in problems:
         print(f"  DRIFT: {p}")
     if problems:
@@ -282,4 +289,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    # The in-process falsifier must import this instance, not execute a second copy.
+    sys.modules.setdefault("check_configclass_fields", sys.modules[__name__])
     raise SystemExit(main())

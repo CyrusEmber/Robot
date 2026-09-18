@@ -16,7 +16,7 @@ sys.path.insert(0, ".")
 sys.path.insert(0, "rl_exp/tools/verify")
 import check_configclass_fields as g
 
-rows = {name: g._probe(cls) for name, cls in g._cfg_classes().items()}
+rows: dict[str, dict] = {}
 TARGET = "LizardRoughTeacherEnvCfg_V14"
 PLAY_TARGET = "LizardRoughTeacherEnvCfg_V14_PLAY"
 
@@ -34,7 +34,11 @@ def _fires(mutate, checker, tag: str) -> bool:
     return bool(problems)
 
 
-def main() -> int:
+def main(probed_rows: dict[str, dict] | None = None) -> int:
+    global rows
+    rows = probed_rows if probed_rows is not None else {
+        name: g._probe(cls) for name, cls in g._cfg_classes().items()
+    }
     ok = all([
         _fires(lambda r: r[TARGET].update(in_to_dict=False), g._check_shape, "to_dict loss      "),
         _fires(lambda r: r[TARGET].update(in_instance_dict=False), g._check_shape, "instance loss    "),

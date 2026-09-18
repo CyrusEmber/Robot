@@ -250,7 +250,13 @@ def main(argv: list[str] | None = None) -> int:
         help="also build each declared env cfg entry point and compare its params_version "
         "(needs isaaclab importable; without it the structural half still runs)",
     )
+    parser.add_argument("--self-test", action="store_true", help="also falsify the detector in-process")
     args = parser.parse_args(argv)
+    if args.self_test:
+        import test_recipe_map_gate as falsifier
+
+        if falsifier.main() != 0:
+            return 1
     try:
         lines = discover()
     except RecipeLineError as err:
@@ -278,4 +284,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    # The in-process falsifier must import this instance, not execute a second copy.
+    sys.modules.setdefault("check_recipe_map", sys.modules[__name__])
     sys.exit(main())

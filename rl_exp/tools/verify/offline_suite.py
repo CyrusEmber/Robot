@@ -38,87 +38,108 @@ import subprocess
 import sys
 import threading
 import time
+from collections.abc import Sequence
+from typing import NamedTuple
 
 _REPO = pathlib.Path(__file__).resolve().parents[3]
 _V = "rl_exp/tools/verify"  # relative on purpose: every check expects the repo root as cwd
 
-# (label, argv after the interpreter). The order is the [i/N] numbering the version
-# records and ACCEPTANCE.md cite, so entries are appended, never reshuffled.
-CHECKS: list[tuple[str, list[str]]] = [
-    ("framework pin check (IsaacLab internals + pinned SHA)", [f"{_V}/framework_pin_check.py"]),
-    ("freeze contracts (DR/wiring + robot block parity, DR lists, PLAY coverage, asset contract + locks)",
-     [f"{_V}/check_dr_parity.py", "--strict"]),
-    ("recovery vectorization parity", [f"{_V}/test_recovery_parity.py"]),
-    ("staged curriculum offline test", [f"{_V}/test_staged_curriculum.py"]),
-    ("teacher split-encoder networks (forward/gradient/export/transfer)", [f"{_V}/test_teacher_networks.py"]),
-    ("student belief networks (GRU/gate/decoder/load_from_teacher)", [f"{_V}/test_student_networks.py"]),
-    ("v3 curriculum + ring pattern (c_k math, tilt predicate, geometry)", [f"{_V}/test_v3_curriculum.py"]),
-    ("obs layout gate (group names, term order, c_k step consistency)", [f"{_V}/check_obs_layout.py"]),
-    ("v5 anti-collapse rewards (linear tracking / slip / belly / c_k scaling)", [f"{_V}/test_v5_rewards.py"]),
-    ("v5.3 SIR terrain curriculum (band / resample / walk clamp / replay / throttle)", [f"{_V}/test_v5_terrain_sir.py"]),
-    ("v11 joint SIR terrain curriculum (param grid / Eq.2-3-7 / fallback / walk / command)",
-     [f"{_V}/test_joint_sir.py"]),
-    ("version-record completeness (four-piece set / FAMILY row / FILEMAP row)", [f"{_V}/check_version_docs.py"]),
-    ("v12 height-ring noise model (conditions / scopes / outliers / c_k / mid redraw)", [f"{_V}/test_v12_noise.py"]),
-    ("pre-kit pxr leak gate (P001/P003/P004: registry-resolved env cfg construction must stay pxr-clean)",
-     [f"{_V}/check_pxr_leak.py"]),
-    ("curriculum resume state (roundtrip / fingerprint / hard-abort / hook)", [f"{_V}/test_resume_state.py"]),
-    ("tb_scalars record sampling (max_points / first+last / CLI resample)", [f"{_V}/test_dump_tb_sampling.py"]),
-    ("v13 symmetric tracking kernel (miki wired / EP gone / v5+v10 frozen)", [f"{_V}/check_reward_v13.py"]),
-    ("v14 front-plant/roll fall gate (predicate / dwell / wiring / v13 frozen)", [f"{_V}/check_terminations_v14.py"]),
-    ("acceptance metrics (yaw frame / abs sideslip / per-frame MAE / kernel frame contract)",
-     [f"{_V}/test_acceptance_metrics.py"]),
-    ("eval frame contract v2 (terminal frame closes the fall window / v1 truncation)",
-     [f"{_V}/test_eval_frame_v2.py"]),
-    ("configclass field surface (params_version field vs to_dict vs own_fields)",
-     [f"{_V}/check_configclass_fields.py"]),
-    ("configclass field-surface gate falsifier (each drift must still fire)",
-     [f"{_V}/test_configclass_fields_gate.py"]),
-    ("config snapshot serializer (order / floats / identities / paths / digest)", [f"{_V}/test_cfg_snapshot.py"]),
-    ("recipe golden lock (per-line entries vs versions/<line>/cfg_lock.json, shared baselines)",
-     [f"{_V}/check_cfg_lock.py"]),
-    ("recipe golden gate falsifier (each drift must still fire)", [f"{_V}/test_cfg_lock_gate.py"]),
-    ("run manifest (T0/T1 record, checkpoint infos, external index, --verify)", [f"{_V}/test_run_manifest.py"]),
-    ("isolation rebuild gate (material capture/refusal, sources, missing-file negative test)",
-     [f"{_V}/test_rebuild_gate.py"]),
-    ("recipe line discovery (yaml/lock convention, refusals must fire)", [f"{_V}/test_recipe_lines.py"]),
-    ("recipe line lifecycle (identity / retirement evidence / binary status)",
-     [f"{_V}/check_recipe_registry.py"]),
-    ("recipe lifecycle gate falsifier (each refusal must still fire)", [f"{_V}/test_recipe_registry_gate.py"]),
-    ("recipe identity map (task id to recipe, revision to entries, vs registration + built configs)",
-     [f"{_V}/check_recipe_map.py", "--bind-config"]),
-    ("recipe map gate falsifier (each refusal must still fire)", [f"{_V}/test_recipe_map_gate.py"]),
-    ("suite banner hygiene (no bare redirects in echo lines; detector self-tested)",
-     [f"{_V}/check_suite_banners.py"]),
-    ("params loaders hand each caller its own document (cache must not alias cfgs)",
-     [f"{_V}/test_params_isolation.py"]),
-    ("stage B acceptance baseline is still the frozen one (golden locks pinned by digest)",
-     [f"{_V}/check_golden_frozen.py"]),
-    ("recipe lifecycle decision contract (verdicts / unknown status / refusal wording)",
-     [f"{_V}/recipe_lifecycle.py"]),
-    ("one writer per structural component (form per recipe version, no second writer)",
-     [f"{_V}/test_component_ownership.py"]),
-    ("suite shape (single list / entries exist / no undeclared interpreter children)",
-     [f"{_V}/check_suite_shape.py"]),
-    ("lifecycle startup gate (identity/status/curriculum flag; a refusal is a terminal record)",
-     [f"{_V}/test_lifecycle_gate.py"]),
-    ("launcher (directory-driven plan; its record must match the trainer's T0)",
-     [f"{_V}/test_launcher.py"]),
-    ("hard A: built recipes are field-for-field the frozen golden (declaration, no subclass)",
-     [f"{_V}/check_recipe_build.py"]),
-    ("obs protocol declaration (laid out as declared, self-consistent, digests approved)",
-     [f"{_V}/check_obs_protocol.py"]),
-    ("obs protocol gate falsifier (each drift must still fire)", [f"{_V}/test_obs_protocol_gate.py"]),
-    ("eval record format (three-state read / P04 substitutions / run-id reuse)",
-     [f"{_V}/test_eval_record.py"]),
-    ("terrain split rule and record (hand-computed split / pairing identity / sanity refusals)",
-     [f"{_V}/test_terrain_map.py"]),
-    ("terrain split rule has one home (no reintroduced copy; detector self-tested)",
-     [f"{_V}/check_terrain_split_source.py"]),
-    ("pxr leak gate falsifier (a poisoned construction must still be judged a leak)",
-     [f"{_V}/test_pxr_leak_gate.py"]),
-    ("split-probe wait (a foreign import must still land the patch; install() imports nothing)",
-     [f"{_V}/check_split_probe_wait.py"]),
+
+class Check(NamedTuple):
+    """One scheduled process and the repository artifacts whose contracts it guards."""
+
+    label: str
+    argv: list[str]
+    contract: tuple[str, ...]
+
+
+# Positions are run-local: retirement may remove entries. Historical [i/N]
+# references belong to the commit where they were recorded.
+CHECKS: list[Check] = [
+    Check("framework pin check (IsaacLab internals + pinned SHA)",
+          [f"{_V}/framework_pin_check.py"], contract=("rl_exp/tasks/teacher_env_cfg.py",)),
+    Check("freeze contracts (DR/wiring + robot block parity, DR lists, PLAY coverage, asset contract + locks)",
+          [f"{_V}/check_dr_parity.py", "--strict"], contract=("rl_exp/tasks/teacher_env_cfg.py",)),
+    Check("recovery vectorization parity",
+          [f"{_V}/test_recovery_parity.py"], contract=("ablation_harness/components/recovery.py",)),
+    Check("staged curriculum offline test",
+          [f"{_V}/test_staged_curriculum.py"], contract=("rl_exp/tasks/staged_curriculum.py",)),
+    Check("teacher split-encoder networks (forward/gradient/export/transfer)",
+          [f"{_V}/test_teacher_networks.py"], contract=("rl_exp/tasks/teacher_networks.py",)),
+    Check("student belief networks (GRU/gate/decoder/load_from_teacher)",
+          [f"{_V}/test_student_networks.py"], contract=("rl_exp/tasks/student_networks.py",)),
+    Check("v3 curriculum + ring pattern (c_k math, tilt predicate, geometry)",
+          [f"{_V}/test_v3_curriculum.py"], contract=("rl_exp/versions/lizard/main/v3/main_params.yaml",)),
+    Check("obs layout gate (group names, term order, c_k step consistency)",
+          [f"{_V}/check_obs_layout.py"], contract=("rl_exp/tasks/obs_protocol.py",)),
+    Check("v5 anti-collapse rewards (linear tracking / slip / belly / c_k scaling)",
+          [f"{_V}/test_v5_rewards.py"], contract=("rl_exp/versions/lizard/main/v5/main_params.yaml",)),
+    Check("v5.3 SIR terrain curriculum (band / resample / walk clamp / replay / throttle)",
+          [f"{_V}/test_v5_terrain_sir.py"], contract=("rl_exp/versions/lizard/main/v5/main_params.yaml",)),
+    Check("v11 joint SIR terrain curriculum (param grid / Eq.2-3-7 / fallback / walk / command)",
+          [f"{_V}/test_joint_sir.py"], contract=("rl_exp/versions/lizard/main/v11/main_params.yaml",)),
+    Check("version-record completeness (four-piece set / FAMILY row / FILEMAP row)",
+          [f"{_V}/check_version_docs.py"], contract=("rl_exp/versions/lizard/FAMILY.md",)),
+    Check("v12 height-ring noise model (conditions / scopes / outliers / c_k / mid redraw)",
+          [f"{_V}/test_v12_noise.py"], contract=("rl_exp/versions/lizard/main/v12/main_params.yaml",)),
+    Check("pre-kit pxr leak gate (P001/P003/P004: registry-resolved env cfg construction must stay pxr-clean)",
+          [f"{_V}/check_pxr_leak.py", "--self-test"], contract=("rl_exp/tasks/recipe_tasks.py",)),
+    Check("curriculum resume state (roundtrip / fingerprint / hard-abort / hook)",
+          [f"{_V}/test_resume_state.py"], contract=("rl_exp/tasks/curriculum_state.py",)),
+    Check("tb_scalars record sampling (max_points / first+last / CLI resample)",
+          [f"{_V}/test_dump_tb_sampling.py"], contract=("rl_exp/tools/trainlog/dump_tb.py",)),
+    Check("v13 symmetric tracking kernel (miki wired / EP gone / v5+v10 frozen)",
+          [f"{_V}/check_reward_v13.py"], contract=("rl_exp/versions/lizard/main/v13/main_params.yaml",)),
+    Check("v14 front-plant/roll fall gate (predicate / dwell / wiring / v13 frozen)",
+          [f"{_V}/check_terminations_v14.py"], contract=("rl_exp/versions/lizard/main/v14/main_params.yaml",)),
+    Check("acceptance metrics (yaw frame / abs sideslip / per-frame MAE / kernel frame contract)",
+          [f"{_V}/test_acceptance_metrics.py"], contract=("ablation_harness/metrics.py",)),
+    Check("eval frame contract v2 (terminal frame closes the fall window / v1 truncation)",
+          [f"{_V}/test_eval_frame_v2.py"], contract=("ablation_harness/protocols/locomotion_eval_v2.yaml",)),
+    Check("configclass field surface (params_version field vs to_dict vs own_fields)",
+          [f"{_V}/check_configclass_fields.py", "--self-test"], contract=("rl_exp/tasks/recipe_tasks.py",)),
+    Check("config snapshot serializer (order / floats / identities / paths / digest)",
+          [f"{_V}/test_cfg_snapshot.py"], contract=("rl_exp/tools/verify/cfg_snapshot.py",)),
+    Check("recipe golden lock (per-line entries vs versions/<line>/cfg_lock.json, shared baselines)",
+          [f"{_V}/check_cfg_lock.py", "--self-test"], contract=("rl_exp/versions/cfg_baselines.json",)),
+    Check("run manifest (T0/T1 record, checkpoint infos, external index, --verify)",
+          [f"{_V}/test_run_manifest.py"], contract=("rl_exp/tools/runrecord/manifest.py",)),
+    Check("isolation rebuild gate (material capture/refusal, sources, missing-file negative test)",
+          [f"{_V}/test_rebuild_gate.py"], contract=("rl_exp/tools/runrecord/rebuild.py",)),
+    Check("recipe line discovery (yaml/lock convention, refusals must fire)",
+          [f"{_V}/test_recipe_lines.py"], contract=("rl_exp/tools/verify/recipe_lines.py",)),
+    Check("recipe line lifecycle (identity / retirement evidence / binary status)",
+          [f"{_V}/check_recipe_registry.py", "--self-test"], contract=("rl_exp/versions/lines.json",)),
+    Check("recipe identity map (task id to recipe, revision to entries, vs registration + built configs)",
+          [f"{_V}/check_recipe_map.py", "--self-test", "--bind-config"], contract=("rl_exp/versions/recipes.json",)),
+    Check("suite banner hygiene (no bare redirects in echo lines; detector self-tested)",
+          [f"{_V}/check_suite_banners.py"], contract=("rl_exp/tools/verify/run_offline_checks.bat",)),
+    Check("params loaders hand each caller its own document (cache must not alias cfgs)",
+          [f"{_V}/test_params_isolation.py"], contract=("rl_exp/tasks/recipe_params.py",)),
+    Check("stage B acceptance baseline is still the frozen one (golden locks pinned by digest)",
+          [f"{_V}/check_golden_frozen.py"], contract=("rl_exp/versions/cfg_baselines.json",)),
+    Check("recipe lifecycle decision contract (verdicts / unknown status / refusal wording)",
+          [f"{_V}/recipe_lifecycle.py"], contract=("rl_exp/versions/lines.json",)),
+    Check("one writer per structural component (form per recipe version, no second writer)",
+          [f"{_V}/test_component_ownership.py"], contract=("rl_exp/tasks/components.py",)),
+    Check("suite shape (single list / entries exist / no undeclared interpreter children)",
+          [f"{_V}/check_suite_shape.py"], contract=("rl_exp/tools/verify/offline_suite.py",)),
+    Check("lifecycle startup gate (identity/status/curriculum flag; a refusal is a terminal record)",
+          [f"{_V}/test_lifecycle_gate.py"], contract=("rl_exp/tools/runrecord/lifecycle.py",)),
+    Check("launcher (directory-driven plan; its record must match the trainer's T0)",
+          [f"{_V}/test_launcher.py"], contract=("rl_exp/tools/launch_recipe.py",)),
+    Check("hard A: built recipes are field-for-field the frozen golden (declaration, no subclass)",
+          [f"{_V}/check_recipe_build.py"], contract=("rl_exp/tasks/recipe.py",)),
+    Check("obs protocol declaration (laid out as declared, self-consistent, digests approved)",
+          [f"{_V}/check_obs_protocol.py", "--self-test"], contract=("rl_exp/versions/obs_protocols.json",)),
+    Check("eval record format (three-state read / P04 substitutions / run-id reuse)",
+          [f"{_V}/test_eval_record.py"], contract=("ablation_harness/record.py",)),
+    Check("terrain split rule and record (hand-computed split / pairing identity / sanity refusals)",
+          [f"{_V}/test_terrain_map.py"], contract=("rl_exp/tasks/terrain_map.py",)),
+    Check("terrain split rule has one home (no reintroduced copy; detector self-tested)",
+          [f"{_V}/check_terrain_split_source.py"], contract=("rl_exp/tasks/terrain_map.py",)),
+    Check("split-probe wait (a foreign import must still land the patch; install() imports nothing)",
+          [f"{_V}/check_split_probe_wait.py"], contract=("rl_exp/tools/verify/terrain_split_probe.py",)),
 ]
 
 
@@ -145,7 +166,7 @@ def default_jobs() -> int:
 #   Deliberately far above the cost budget, so that a slow check is reported as cost, not
 #   killed as a hang.
 PER_CHECK_BUDGET_S = 25.0
-SERIAL_BUDGET_S = 400.0
+SERIAL_BUDGET_S = 205.0  # initial ratchet: reported 178 s wave + 15% headroom
 SOLO_RECHECKS = 3  # breaching checks re-run alone, worst first, before they are suspect
 PER_CHECK_TIMEOUT_S = 180.0
 _DRAIN_TIMEOUT_S = 30.0  # bounded read after a kill, so a survivor cannot block the report
@@ -223,7 +244,7 @@ def _verdict(output: str) -> str:
 
 
 def run_checks(
-    interpreter: str, jobs: int, checks: list[tuple[str, list[str]]], verbose: bool = False
+    interpreter: str, jobs: int, checks: Sequence[Check | tuple[str, list[str]]], verbose: bool = False
 ) -> tuple[list[tuple[int, str, int, str]], float, int, list[tuple[int, str, float]]]:
     """Run every check, at most ``jobs`` at a time, stopping the queue on the first failure.
 
@@ -243,7 +264,7 @@ def run_checks(
     with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, jobs)) as pool:
         pending = {
             pool.submit(_run_one, interpreter, argv, stop): (index, label)
-            for index, (label, argv) in enumerate(checks, start=1)
+            for index, (label, argv, *_) in enumerate(checks, start=1)
         }
         for future in concurrent.futures.as_completed(pending):
             index, label = pending[future]
@@ -266,7 +287,7 @@ def run_checks(
 def _per_check_cost(
     timings: list[tuple[int, str, float]],
     interpreter: str,
-    checks: list[tuple[str, list[str]]] | None = None,
+    checks: Sequence[Check | tuple[str, list[str]]] | None = None,
 ) -> tuple[list[tuple[int, str, float]], float]:
     """Which checks cost too much, and the wave's total.
 
@@ -305,6 +326,11 @@ def _total_verdict(wave_serial: float, quiet_serial: float) -> str:
     to silence that both hides the real signal and teaches the next person to raise it again.
     """
     return "regression" if quiet_serial > SERIAL_BUDGET_S else "load"
+
+
+def _budget_has_slack(measured: float) -> bool:
+    """Warn only when measured seconds are more than 20% below the budget."""
+    return measured < SERIAL_BUDGET_S * 0.8
 
 
 def _quiet_serial(interpreter: str) -> tuple[float, list[str]]:
@@ -354,8 +380,10 @@ def self_test() -> int:
     suspect, _ = _per_check_cost([(1, "quick", 999.0)], sys.executable, quick)
     if suspect:
         problems.append(f"a slow wave was blamed on the check instead of on the load: {suspect}")
-    if _total_verdict(500.0, 300.0) != "load" or _total_verdict(500.0, 420.0) != "regression":
+    if _total_verdict(500.0, SERIAL_BUDGET_S * 0.9) != "load" or _total_verdict(500.0, SERIAL_BUDGET_S * 1.1) != "regression":
         problems.append("the total verdict does not separate a busy machine from a real regression")
+    if not _budget_has_slack(SERIAL_BUDGET_S * 0.79) or _budget_has_slack(SERIAL_BUDGET_S * 0.8):
+        problems.append("the budget ratchet does not warn at the >20% slack boundary")
 
     # Timeout: the suite has to end even when a check never returns -- including the case that
     # hangs a naive pipe read, a child that outlives the check that started it.
@@ -406,7 +434,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.list:
-        for index, (label, argv_tail) in enumerate(CHECKS, start=1):
+        for index, (label, argv_tail, _) in enumerate(CHECKS, start=1):
             print(f"[{index}/{len(CHECKS)}] {' '.join(argv_tail)}  -- {label}")
         return 0
     if args.self_test:
@@ -447,6 +475,12 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"  wave total {wave_serial:.0f}s was over budget under load; {quiet_serial:.0f}s quiet is "
             f"within {SERIAL_BUDGET_S:g}s -- no change, and no reason to touch the budget"
+        )
+    measured = wave_serial if quiet_serial is None else quiet_serial
+    if _budget_has_slack(measured):
+        print(
+            f"  BUDGET_RATCHET_WARNING: measured {measured:.1f}s is >20% below "
+            f"{SERIAL_BUDGET_S:g}s budget; confirm on a quiet host and tighten the budget"
         )
     print(
         f"ALL_OFFLINE_CHECKS_PASSED ({total}/{total} in {seconds:.1f}s, "

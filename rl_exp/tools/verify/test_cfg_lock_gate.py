@@ -103,6 +103,7 @@ def _fires(name: str, keyword: str, line, entries: dict, current: dict, only: li
 
 
 def main() -> int:
+    PROBLEMS.clear()
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = pathlib.Path(tmp)
         lines = _tree(tmp_path / "versions")

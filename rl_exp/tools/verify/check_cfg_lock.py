@@ -619,6 +619,12 @@ def vs_upstream(current: dict, only: list[str]) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     args = sys.argv[1:] if argv is None else list(argv)
+    if "--self-test" in args:
+        if args != ["--self-test"]:
+            raise ValueError("--self-test must be used alone")
+        import test_cfg_lock_gate as falsifier
+
+        return falsifier.main()  # includes the real-tree read-only verification
     only: list[str] = []
     if "--tasks" in args:
         only = [t for t in args[args.index("--tasks") + 1].split(",") if t]
@@ -708,4 +714,6 @@ def _value_of(args: list[str], flag: str) -> str | None:
 
 
 if __name__ == "__main__":
+    # The in-process falsifier must import this instance, not execute a second copy.
+    sys.modules.setdefault("check_cfg_lock", sys.modules[__name__])
     raise SystemExit(main())

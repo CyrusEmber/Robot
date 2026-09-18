@@ -142,7 +142,14 @@ def load(path: pathlib.Path) -> dict:
 
 def main() -> int:
     """Gate entry point: discover the tree, read the index, print every problem."""
-    argparse.ArgumentParser(description=__doc__.splitlines()[0]).parse_args()
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--self-test", action="store_true", help="also falsify the detector in-process")
+    args = parser.parse_args()
+    if args.self_test:
+        import test_recipe_registry_gate as falsifier
+
+        if falsifier.main() != 0:
+            return 1
 
     try:
         lines = discover()
@@ -168,4 +175,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    # The in-process falsifier must import this instance, not execute a second copy.
+    sys.modules.setdefault("check_recipe_registry", sys.modules[__name__])
     sys.exit(main())

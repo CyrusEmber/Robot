@@ -6,7 +6,7 @@
 # -*- coding: utf-8 -*-
 """Offline-suite shape: one list, one process per check, no hidden interpreter children.
 
-Three rules, each of which the suite already broke for real (OFFLINE_CHECKS.md):
+Structural rules and their in-process falsifiers (OFFLINE_CHECKS.md):
 
 **One list.** The check list lived in the batch file, and adding a gate meant an entry
 there plus a banner line, so the two could disagree about what ran. The list is
@@ -23,6 +23,10 @@ clock.
 (``shape_problems``) so the self-test can falsify each one against fabricated input: a gate
 that quietly passes because it matched nothing has the same symptom as the rule it keeps.
 
+**Retirement and consolidation.** Every entry declares concrete protected artifacts;
+missing artifacts demand retirement or retargeting. A gate and its named falsifier cannot
+both consume a process without a reviewed process-boundary reason.
+
 Cost budgets are *not* here: they need timings, so the runner enforces them. This gate is
 static and stdlib-only on purpose -- it stays runnable when the venv is broken, which is
 exactly when the suite's shape is suspect.
@@ -35,6 +39,11 @@ from __future__ import annotations
 import pathlib
 import re
 import sys
+from collections.abc import Sequence
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from offline_suite import Check
 
 _HERE = pathlib.Path(__file__).resolve().parent
 _REPO = _HERE.parents[2]
@@ -48,6 +57,9 @@ SPAWN_ALLOWED: dict[str, tuple[int, str]] = {
     "test_cfg_snapshot.py": (1, "the digest must be identical from two PYTHONHASHSEED runs"),
     "test_dump_tb_sampling.py": (2, "the CLI resample path only exists in dump_tb.py's __main__"),
 }
+
+# A reason must explain why ordering the falsifier last cannot preserve coverage.
+FALSIFIER_PROCESS_ALLOWED: dict[str, str] = {}
 
 # an invocation of a check script by name, which is the second list this gate forbids
 _CHECK_INVOCATION = re.compile(r"(?:check|test)_\w+\.py")
@@ -93,7 +105,7 @@ def _bat_invocations(text: str) -> list[str]:
 
 
 def shape_problems(
-    checks: list[tuple[str, list[str]]],
+    checks: Sequence[Check | tuple[str, list[str]]],
     bat_text: str,
     present: set[str],
     spawn_counts: dict[str, int],
@@ -101,7 +113,7 @@ def shape_problems(
     """Every structural rule, as a pure function so each one can be falsified.
 
     Args:
-        checks: the runner's ``CHECKS`` (label, argv after the interpreter).
+        checks: the runner's ``CHECKS``, or label/argv pairs in detector fixtures.
         bat_text: the entry-point batch file's text.
         present: names of the check scripts that exist next to the runner.
         spawn_counts: script name -> how many interpreter children its text starts.
@@ -113,11 +125,11 @@ def shape_problems(
     if not checks:
         return ["the check list is empty -- a scan that finds nothing is not a clean scan"]
 
-    scripts = [pathlib.Path(argv[0]).name for _, argv in checks]
+    scripts = [pathlib.Path(argv[0]).name for _, argv, *_ in checks]
     duplicates = sorted({name for name in scripts if scripts.count(name) > 1})
     if duplicates:
         problems.append(f"the same script is checked twice: {duplicates} (its cost is paid twice)")
-    for _, argv in checks:
+    for _, argv, *_ in checks:
         if pathlib.Path(argv[0]).name not in present:
             problems.append(f"{argv[0]}: listed in CHECKS but not on disk -- the suite would fail here")
 
@@ -144,6 +156,53 @@ def shape_problems(
             )
         elif actual[name] != declared[name]:
             problems.append(f"{name}: spawns {actual[name]}x, declared {declared[name]}x -- declare the growth")
+    return problems
+
+
+def contract_problems(
+    checks: Sequence[Check],
+    live: set[str],
+    exceptions: dict[str, str] | None = None,
+) -> list[str]:
+    """Reject dead artifacts and separately scheduled in-process falsifiers.
+
+    Every declared artifact must exist; directories and a check's own script are
+    not sufficient evidence that a protected product still exists.
+
+    Args:
+        checks: Scheduled checks with explicit artifact contracts.
+        live: Repository-relative paths of existing files.
+        exceptions: Falsifier script names and process-boundary reasons; defaults
+            to :data:`FALSIFIER_PROCESS_ALLOWED`.
+
+    Returns:
+        One diagnostic per broken contract or process-boundary declaration.
+    """
+    exceptions = FALSIFIER_PROCESS_ALLOWED if exceptions is None else exceptions
+    scripts = {pathlib.Path(check[1][0]).name for check in checks}
+    problems: list[str] = []
+    paired = set()
+    for check in checks:
+        name = pathlib.Path(check[1][0]).name
+        contracts = getattr(check, "contract", ())
+        if not contracts:
+            problems.append(f"{name}: missing contract artifacts")
+        for artifact in contracts:
+            path = pathlib.PurePosixPath(artifact)
+            if (not artifact or path.is_absolute() or pathlib.PureWindowsPath(artifact).drive
+                    or "\\" in artifact or ".." in path.parts or artifact == check[1][0]):
+                problems.append(f"{name}: invalid contract artifact {artifact!r}")
+            elif artifact not in live:
+                problems.append(f"{name}: dead contract {artifact!r} -- retire or retarget this entry")
+        if name.startswith("test_") and name.endswith("_gate.py"):
+            gate = "check_" + name[5:-8] + ".py"
+            if gate in scripts:
+                paired.add(name)
+                if not exceptions.get(name, "").strip():
+                    problems.append(f"{name}: paired with {gate} -- merge into --self-test or explain process boundary")
+    for name in exceptions:
+        if name not in paired:
+            problems.append(f"{name}: stale process-boundary exception -- drop the entry")
     return problems
 
 
@@ -187,6 +246,26 @@ def self_test() -> list[str]:
         problems.append("an interpreter child that multiplied was not reported")
     if not fired([declared_check], _CLEAN_BAT, {declared_name}, {}, "drop the entry"):
         problems.append("a stale SPAWN_ALLOWED entry was not reported")
+    from offline_suite import Check
+
+    gate = Check("gate", ["check_example.py"], ("product.py",))
+    falsifier = Check("control", ["test_example_gate.py"], ("product.py",))
+    cases = [
+        ([gate], {"product.py"}, {}, None),
+        ([gate], set(), {}, "dead contract"),
+        ([gate._replace(contract=())], set(), {}, "missing contract"),
+        ([gate._replace(contract=("../product.py",))], set(), {}, "invalid contract"),
+        ([gate._replace(contract=("check_example.py",))], {"check_example.py"}, {}, "invalid contract"),
+        ([gate, falsifier], {"product.py"}, {}, "merge into --self-test"),
+        ([gate, falsifier], {"product.py"}, {"test_example_gate.py": " "}, "merge into --self-test"),
+        ([gate, falsifier], {"product.py"}, {"test_example_gate.py": "exit-code isolation"}, None),
+        ([gate], {"product.py"}, {"test_example_gate.py": "exit-code isolation"}, "stale"),
+        ([gate._replace(contract=("product.py", "removed.py"))], {"product.py"}, {}, "dead contract"),
+    ]
+    for checks, live, exceptions, expected in cases:
+        found = contract_problems(checks, live, exceptions)
+        if (found if expected is None else not any(expected in p for p in found)):
+            problems.append(f"contract self-test: expected {expected!r}, got {found}")
     return problems
 
 
@@ -197,7 +276,7 @@ def main() -> int:
     checks = offline_suite.CHECKS
     present = {
         pathlib.Path(argv[0]).name
-        for _, argv in checks
+        for _, argv, _ in checks
         if (_REPO / argv[0]).is_file()
     }
     counts = {
@@ -206,7 +285,11 @@ def main() -> int:
     }
     bat = SUITE.read_text(encoding="utf-8", errors="replace") if SUITE.is_file() else ""
 
-    problems = self_test() + shape_problems(checks, bat, present, counts)
+    live = {
+        artifact for check in checks for artifact in check.contract
+        if (_REPO / artifact).is_file()
+    }
+    problems = self_test() + shape_problems(checks, bat, present, counts) + contract_problems(checks, live)
     declared = sum(1 for name in counts if name in SPAWN_ALLOWED)
     print(f"  checks: {len(checks)} | interpreter children declared: {declared} | {SUITE.name}: 1 runner call")
     for problem in problems:
@@ -214,7 +297,7 @@ def main() -> int:
     if problems:
         print(f"suite shape: {len(problems)} problem(s)")
         return 1
-    print("SUITE_SHAPE_OK (one list, one process per check, no undeclared children)")
+    print("SUITE_SHAPE_OK (one list, live contracts, merged falsifiers, no undeclared children)")
     return 0
 
 

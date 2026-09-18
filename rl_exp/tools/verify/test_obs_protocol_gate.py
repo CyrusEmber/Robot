@@ -59,6 +59,7 @@ def task_of(document: dict, protocol: str) -> str:
 
 
 def main() -> int:
+    PROBLEMS.clear()
     # --- the real declaration is clean on both halves it can run offline ---------------
     check("real/self-consistent", g.check_self(DECLARED) == [], f"{g.check_self(DECLARED)}")
     check("real/anchors-approved", g.check_anchors(DECLARED, ANCHORED) == [], f"{g.check_anchors(DECLARED, ANCHORED)}")

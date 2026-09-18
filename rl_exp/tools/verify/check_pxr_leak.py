@@ -132,9 +132,18 @@ def main() -> int:
     if leaked():
         _report(watcher, before)
         return 1
+    if "--self-test" in sys.argv:
+        import test_pxr_leak_gate as falsifier
+
+        # Poison only after every real construction has proved clean. No real
+        # check may run afterwards: the import cannot be undone in this process.
+        if falsifier.main() != 0:
+            return 1
     print(f"check_pxr_leak: OK (resolved task cfg chain is pxr-clean: {len(specs)} tasks constructed)")
     return 0
 
 
 if __name__ == "__main__":
+    # The in-process falsifier must import this instance, not execute a second copy.
+    sys.modules.setdefault("check_pxr_leak", sys.modules[__name__])
     sys.exit(main())
