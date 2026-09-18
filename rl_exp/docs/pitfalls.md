@@ -196,10 +196,11 @@ train.py:414 main()
 
 ### 修复
 
-- `terrain_split_probe.install()`：pre-Kit 不再主动 import 生成器模块，改登记一个
-  `sys.meta_path` 钩子（`_PatchWhenImported`），等框架真正 import
-  `isaaclab.terrains.terrain_generator`（Kit 已起、建地形时）再打补丁；模块已在
-  `sys.modules` 就立即补。不变式不变：补丁仍在任何 generator 构造之前到位。
+- `terrain_split_probe.install()`：pre-Kit 不再主动 import 生成器模块，改把补丁**挂到
+  `builtins.__import__` 上等**（`_patch_when_imported`）：每次 python 级 import 返回后检查
+  生成器类是否已就绪（类在 = 模块执行完），就绪即打补丁并摘掉自己；模块已就绪则立即补。
+  不变式不变：补丁仍在任何 generator 构造之前到位。（早先用的是 `sys.meta_path` 钩子，
+  被 Kit 的 finder 抢走 —— 见 P005。）
 - 闸门 `check_pxr_leak.py` 改成**跟着 registry 的解析结果走**：遍历已注册任务，按
   `env_cfg_entry_point` / `rsl_rl_cfg_entry_point` **构造**（不 `gym.make`），再断言 `pxr`
   不在 `sys.modules`。入口以后再换、构造期再加副作用，它都跟得上。
@@ -223,4 +224,69 @@ commands / P004 terrains），任何"毒模块名单"都会腐烂。失败时另
 两条反证：
 - 套件 `[47]` `test_pxr_leak_gate.py`：注入一个 `__post_init__` 里 import `isaaclab.terrains` 的
   cfg 形类，断言判据**必然判为泄漏**且归因能指回构造它的那一帧（防"只跑真链、其实什么都没判"）。
-- 端到端：把 `install()` 的延迟钩子换回直接 import ⇒ `[14]` 必红（构造面才是它测的面）。
+- 端到端：把 `install()` 的延迟等待换回直接 import ⇒ `[14]` 必红（构造面才是它测的面）。
+
+## P005 延迟等待被别人的 finder 抢走（补丁不落地，参数网格主线真跑全灭）
+
+### 症状
+
+`160240a` 之后，**每一个参数网格地形的主线任务真跑都死**，栈落在课程 term 构造时：
+
+```
+teacher_mdp.py:757 in __init__ → terrain_split_probe.record_for(terrain)
+terrain_map.SplitRecordError: no split record for this terrain:
+    the probe was not installed before the generator ran
+```
+
+而**同一个任务在离线/仪器路径下通过**：`terrain_split_env_run.py --task Lizard-Rough-v14`
+报 `mode=curriculum cells=200/200 anomalies=0`。离线套件全绿。
+
+### 根因
+
+补丁**从未落地**。训练进程内单独实测（只读 spy 包住 `record_for`，不改写任何状态）：
+
+```
+installed=True patched=False records=0  wrapped=TerrainGenerator._get_terrain_mesh
+generator_imported=True   meta_path[1]=_PatchWhenImported
+```
+
+`install()` 跑了、钩子还挂在 `sys.meta_path`、模块也导入了，但钩子**一次都没被问过**：导入机制
+在**第一个返回非 None spec 的 finder** 处停止，Kit 会把自己的 finder 插到 `sys.meta_path[0]`
+（我们 install 之后），它把这次导入接走。离线复现（无 sim，20 秒）：
+
+```
+installed=True patched=False hook queued=['_PatchWhenImported']
+after import: patched=False wrapped=TerrainGenerator._get_terrain_mesh
+VERDICT STOLEN IMPORT LEAVES THE PATCH UNLANDED
+```
+
+于是生成时 `_watched(cfg)` 静默成立但没人记，`_RECORDS` 为空 ⇒ 消费端拒绝。
+
+**为什么仪器测不出来**：`terrain_split_env_run.py` 提前 import 了 `isaaclab.terrains`，走的是
+"模块已就绪⇒立即 `_patch()`"分支，钩子那条路根本没被走。**仪器比真路更宽松，就等于没有仪器。**
+
+### 修复
+
+- 等待机制换成 `builtins.__import__`（`_patch_when_imported`）：每个 python 级 import 都过它，
+  **不赌在列表里的位置**；就绪判据是"生成器类已存在"（模块可能在 `sys.modules` 里但仍未执行完，
+  此时打补丁会 `AttributeError`），打完即摘。
+- 同一个坑的第二半：**异常穿过 `launch_simulation` 的 `finally: close_fn()` 时，sim teardown 自己
+  杀进程，退出码被改写成 0**（实测：只有一个 traceback、没有 `<module>` 帧、`os._exit`/`sys.exit`/
+  `atexit` 一个都没触发）。所以 `train.py` 的 `__main__` 包装器看不到它。修法是**在失败点离开**
+  （`_or_die(gym.make, ...)` / `_or_die(runner.learn, ...)`），与声明式拒绝的 `os._exit(2)` 同一惯例。
+
+### 通用规则
+
+**"等某人 import 我关心的事"不要用 `sys.meta_path` 插钩子**——那是竞态，任何后插的 finder 都能
+截胡，而失败是静默的（少记录、不报错）。用 `builtins.__import__`（必经之路）或直接推迟到调用点。
+另：**进程内可观测的状态要用真跑进程去读**，离线复现只证明机制，不证明它在 Kit 里也成立。
+
+### 检测方法
+
+```bash
+python rl_exp\tools\verify\check_split_probe_wait.py      # 抢走导入后补丁仍必须落地
+```
+
+两条例行验证（都要真跑，离线测不到）：
+- `train.py --task Lizard-Rough-v14 --num_envs 64 --max_iterations 1` 必须跑完并写出 checkpoint；
+- 同一命令 `--num_envs 0` 必须 **RC=1**（失败可观测），而不是 0。
