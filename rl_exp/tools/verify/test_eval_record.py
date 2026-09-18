@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Offline gate for the eval record format (`ARCH_PLAN` Step 3.2a/3.2e, no sim).
 
-Three things this file is here to prove:
+Four things this file is here to prove:
 
 1. The read side keeps Step 0c's four rules apart -- no ``record_format`` is *legacy*
    (fields stay unknown), a format missing its required fields is *incomplete* (not legacy,
@@ -10,12 +10,16 @@ Three things this file is here to prove:
    binding, so a swapped input cannot be published under the old record's identity.
 3. The record module writes records without consuming the random stream: it must not import
    torch, numpy or random at all (3.2d's offline half).
+4. The write-time substitution evidence (``record.substitution_evidence``, PLAN.md #27 A3) keeps
+   "compared, nothing confirmed" apart from "could not be compared", counts only *proven* moves,
+   and stores the values it compared instead of re-reading a baseline that may have moved since.
 
 The negative direction is built in: every substitution asserts both that the digest moved and
 that the two records read as ``not_comparable``, and the untouched pair as ``comparable``.
 """
 
 import ast
+import json
 import pathlib
 import sys
 import tempfile
@@ -189,6 +193,148 @@ def test_p04_each_substitution_moves_its_own_binding() -> None:
         assert verdict["verdict"] == "not_comparable", f"{path}: a swapped input must not stay comparable"
         assert list(verdict["differences"]) == [path], \
             f"{path}: exactly that binding must be named: {verdict['differences']}"
+
+
+#: The baseline reference a variant run writes into its evidence: the base run id kept *before*
+#: the ``--variant`` suffix is appended (``eval.py``), in its own protocol dir and group.
+_BASELINE_REF = {
+    "run_id": "Lizard-Rough-v14_ckpt_nominal_seed123",
+    "path": "results/locomotion_eval_v2/v1/Lizard-Rough-v14_ckpt_nominal_seed123/record.json",
+}
+
+
+def _evidence(candidate: dict, baseline: dict | None, reason: str = "") -> dict:
+    """The write-time evidence for one candidate/baseline pair, the way `eval.py` asks for it."""
+    return record.substitution_evidence(candidate, baseline, baseline_ref=dict(_BASELINE_REF), reason=reason)
+
+
+def test_confirmed_substitutions_are_named_and_valued() -> None:
+    """A moved binding with a value on both sides is proven; the values that proved it are stored."""
+    base = _record()
+    variant = _record()
+    variant["suite"]["digest"] = "sha256:other-suite"
+    variant["assets"]["declared_digest"] = "sha256:other-assets"
+    evidence = _evidence(variant, base)
+    assert evidence["comparison"] == "compared", f"a complete pair is compared: {evidence}"
+    assert evidence["substitutions"] == ["suite", "assets"], \
+        f"both moved bindings must be named, in BINDINGS order: {evidence['substitutions']}"
+    assert evidence["unproven"] == [], f"both sides carry a value: nothing is unproven: {evidence['unproven']}"
+    assert evidence["reason"] == "", "a comparison that ran has no excuse to give"
+    assert evidence["baseline"] == _BASELINE_REF, "the reference that was looked up is recorded"
+    assert evidence["bindings"]["suite.digest"] == {"candidate": "sha256:other-suite", "baseline": "sha256:suite"}, \
+        f"the compared values are stored, not just the verdict: {evidence['bindings']['suite.digest']}"
+    assert set(record.compare(base, variant)["differences"]) == {"suite.digest", "assets.declared_digest"}, \
+        "the pair really does differ on exactly those two bindings"
+
+
+def test_obs_protocol_bindings_report_as_one_category() -> None:
+    """A layout swap moves two bindings but is one substitution -- naming it twice overstates it."""
+    base = _record()
+    variant = _record()
+    variant["obs_protocol"]["identity"] = "proto-main-b"
+    variant["obs_protocol"]["digest"] = "sha256:other-obs"
+    evidence = _evidence(variant, base)
+    assert evidence["substitutions"] == ["obs_protocol"], \
+        f"the two obs bindings are one category: {evidence['substitutions']}"
+    assert list(record.compare(base, variant)["differences"]) == ["obs_protocol.identity", "obs_protocol.digest"], \
+        "both bindings do move -- the merge is this derivation's job, not compare()'s"
+
+
+def test_an_unproven_side_is_not_a_substitution() -> None:
+    """compare() counts unknown-vs-known as a difference; a difference is not proof."""
+    base = _record()
+    base["assets"]["declared_digest"] = record.UNKNOWN
+    evidence = _evidence(_record(), base)
+    assert evidence["comparison"] == "compared", "the pair is still compared, one side is just short of evidence"
+    assert evidence["substitutions"] == [], f"nothing proven moved, so nothing is claimed: {evidence}"
+    assert [entry["path"] for entry in evidence["unproven"]] == ["assets.declared_digest"], \
+        f"the undecidable binding must be named: {evidence['unproven']}"
+    assert record.UNKNOWN in evidence["unproven"][0]["reason"], \
+        f"and it must say why: {evidence['unproven'][0]['reason']}"
+    assert "assets.declared_digest" in record.compare(base, _record())["differences"], \
+        "compare() does call it a difference -- which is exactly why its keys are not the substitutions"
+
+    # the mirror image, and an absent field: a zero-action baseline carries no checkpoint digest,
+    # so a checkpoint candidate differs from it without that proving a *swap* of one
+    known = _record()
+    known["assets"]["declared_digest"] = record.UNKNOWN
+    unknown = _record()
+    unknown["assets"]["declared_digest"] = record.UNKNOWN
+    assert _evidence(unknown, known)["substitutions"] == [], "unknown on both sides is equal, not a swap"
+    assert [entry["path"] for entry in _evidence(_ckpt_record("sha256:cpp"), _record())["unproven"]] == \
+        ["checkpoint.sha256"], "a binding the baseline never carried is undecidable, not substituted"
+
+
+def test_an_unreadable_baseline_reads_unknown_with_its_reason() -> None:
+    """A legacy or incomplete baseline decides nothing, and the evidence says which it was."""
+    legacy = _evidence(_record(), {"task": "Lizard-Rough-v14", "seed": 123})
+    assert legacy["comparison"] == record.UNKNOWN, "a legacy baseline cannot decide a substitution"
+    assert "legacy" in legacy["reason"], f"the reason must name what the baseline is: {legacy['reason']}"
+    assert legacy["substitutions"] == [] and legacy["unproven"] == [], "nothing was compared, nothing is claimed"
+    assert legacy["bindings"]["suite.digest"]["candidate"] == "sha256:suite", \
+        "the values this run used are still recorded when the comparison falls through"
+
+    short = _evidence(_record(), _record(complete=False))
+    assert short["comparison"] == record.UNKNOWN and "incomplete" in short["reason"], short
+    assert "suite.digest" in short["reason"], f"the missing baseline field must be named: {short['reason']}"
+
+
+def test_a_missing_baseline_reads_unknown_with_a_reason() -> None:
+    """No readable baseline there is `unknown` + why -- never a search, and not "the first run"."""
+    reason = "a pre-format run sits at results/.../Lizard-Rough-v14_ckpt_nominal_seed123 (results, no record)"
+    evidence = _evidence(_record(), None, reason=reason)
+    assert evidence["comparison"] == record.UNKNOWN and evidence["reason"] == reason, \
+        f"the caller's reason must travel with the verdict: {evidence}"
+    assert evidence["baseline"] == _BASELINE_REF, "and so must the reference that was looked at"
+    assert evidence["substitutions"] == [] and evidence["unproven"] == [], "no comparison happened"
+    assert evidence["bindings"]["suite.digest"] == {"candidate": "sha256:suite", "baseline": None}, \
+        "the baseline side is empty, never a fabricated value"
+
+
+def test_an_empty_substitution_list_is_not_an_unknown_comparison() -> None:
+    """`substitutions: []` means "compared, nothing confirmed" -- the unknown case must not read alike."""
+    compared = _evidence(_record(), _record())
+    assert compared["comparison"] == "compared" and compared["reason"] == "", compared
+    assert compared["substitutions"] == [], "nothing moved, so the list is empty"
+    unreachable = _evidence(_record(), None, reason="nothing at results/locomotion_eval_v2/...")
+    assert unreachable["substitutions"] == [], "the list is empty in both cases, so it cannot carry the verdict"
+    assert unreachable["comparison"] == record.UNKNOWN and unreachable["reason"], \
+        "the discriminator has to be `comparison` plus the reason"
+
+
+def test_stored_evidence_is_not_re_derived_from_a_later_baseline() -> None:
+    """The evidence is a snapshot: a baseline rewritten afterwards cannot rewrite this run's story.
+
+    The failure this pins is the one that takes a year to show up (PLAN.md #27): a baseline
+    replaced by ``--overwrite`` while an old record still points at that path. The stored bindings
+    are what was compared, so a reader never has to trust -- or re-interpret -- the live one.
+    """
+    candidate = _record()
+    candidate["suite"]["digest"] = "sha256:other-suite"
+    stored = _evidence(candidate, _record())
+    assert stored["substitutions"] == ["suite"], stored["substitutions"]
+    assert stored["bindings"]["suite.digest"]["baseline"] == "sha256:suite", "the baseline as it was"
+
+    moved = _record()
+    moved["suite"]["digest"] = "sha256:third-suite"
+    assert _evidence(candidate, moved)["bindings"]["suite.digest"]["baseline"] == "sha256:third-suite", \
+        "the live baseline would say something else now -- re-deriving would change the verdict"
+    assert json.loads(json.dumps(stored)) == stored, "and the evidence survives the record's own JSON round trip"
+    assert stored["bindings"]["suite.digest"]["baseline"] == "sha256:suite", \
+        "the stored evidence keeps the values it was written with"
+
+
+def test_the_evidence_is_not_a_field_the_format_requires() -> None:
+    """A new key may not join ALWAYS: that would read the already-recorded eval records as incomplete."""
+    assert "substitutions" not in record.ALWAYS, \
+        "requiring it retroactively reads recorded batches as incomplete (the metrics.derived call)"
+    plain = _record()
+    assert "substitutions" not in plain, "a run that attempted no comparison carries no key at all"
+    plain["substitutions"] = _evidence(plain, _record())
+    assert record.read_state(plain)["state"] == "complete" and record.missing(plain) == [], \
+        "carrying the evidence must not change how the record reads"
+    assert record.compare(plain, _record())["differences"] == {}, \
+        "the evidence is about the comparison; it is not one of the bindings compared"
 
 
 def test_run_id_reuse_is_refused_unless_comparable() -> None:

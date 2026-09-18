@@ -608,6 +608,33 @@ def _occupied_refusal(out_dir: pathlib.Path, rec: dict) -> str | None:
     return record.overwrite_refusal(previous, rec)
 
 
+def _baseline_evidence(base_run_id: str, rec: dict) -> dict:
+    """What ``rec`` swapped against the run at ``base_run_id``, or why that could not be decided.
+
+    The lookup is exactly the run this identity was derived from -- same protocol directory, same
+    campaign group (:func:`_run_dir`), same base run id, no variant suffix -- and it stops there:
+    a missing or unreadable record is recorded as ``unknown`` **with the reason**, and no similar
+    directory is searched for a stand-in. Absence must not read as "this was the first run":
+    variant runs like ``…suite-roughb016`` have an unsuffixed neighbour holding only ``eval.json``,
+    which is mechanically uncomparable (PLAN.md #27 A3's baseline rule).
+    """
+    out_dir = _run_dir(base_run_id)
+    path = out_dir / "record.json"
+    ref = {"run_id": base_run_id, "path": str(path)}
+    if not path.is_file():
+        reason = (
+            f"a pre-format run sits at {out_dir} (results, no record): its bindings cannot be read"
+            if (out_dir / "eval.json").is_file()
+            else f"nothing at {out_dir}"
+        )
+    else:
+        try:
+            return record.substitution_evidence(rec, record.load(path), baseline_ref=ref)
+        except (OSError, json.JSONDecodeError) as err:
+            reason = f"{path} is unreadable ({err})"
+    return record.substitution_evidence(rec, None, baseline_ref=ref, reason=reason)
+
+
 def _guard_writes(out_dir: pathlib.Path, rec: dict, run_id: str) -> None:
     """Refuse an occupied run_id and an incomplete record before anything is written.
 
@@ -730,6 +757,10 @@ def main():
     # strip only the gym API suffix of family ids ("-v0" at the very end);
     # teacher recipe versions ("-v1"/"-v2") are part of the run identity
     run_id = f"{re.sub(r'-v0$', '', args_cli.task)}_{tag}_{args_cli.mode}_seed{args_cli.seed}"
+    # kept as a value *before* the variant suffix is appended (PLAN.md #27 A3): the baseline a
+    # variant run is compared against is the run its identity came from, and splitting the final
+    # string back apart to recover it would be guessing at it
+    base_run_id = run_id
     if args_cli.variant:  # a swapped input gets its own identity, not the base run's
         run_id = f"{run_id}_{args_cli.variant}"
     rec["run"] = {
@@ -794,6 +825,13 @@ def main():
         },
     }
     rec["perturbation"] = _perturbation_reference(protocol, push)
+
+    # the mechanical half of the --variant label (PLAN.md #27 A3): every binding now exists, so
+    # what this run swapped against the run its identity was derived from is read off the two
+    # records **here** and stored -- a later reader never re-derives it against a baseline that
+    # has since been rewritten. No key at all when no comparison was attempted (the base run).
+    if args_cli.variant:
+        rec["substitutions"] = _baseline_evidence(base_run_id, rec)
 
     # every binding now exists, so an occupied run_id or an incomplete record is refused here
     # rather than after the rollout (a mistyped --variant must not cost two minutes)

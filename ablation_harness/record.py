@@ -103,6 +103,18 @@ BINDINGS = (
     "obs_protocol.digest",
 )
 
+#: Which *category* of substitution a moved binding is reported as. The two obs-protocol bindings
+#: share one category: a layout swap moves both, and naming it twice would report one swap as two
+#: (PLAN.md #27 A3).
+SUBSTITUTION_CATEGORY = {
+    "checkpoint.sha256": "checkpoint",
+    "suite.digest": "suite",
+    "assets.declared_digest": "assets",
+    "eval_protocol.digest": "protocol",
+    "obs_protocol.identity": "obs_protocol",
+    "obs_protocol.digest": "obs_protocol",
+}
+
 #: Value written for a fact that could not be established. Deliberately a string, not
 #: ``null``: an empty slot reads like "not recorded", which is the thing Step 0c refuses.
 UNKNOWN = "unknown"
@@ -269,6 +281,103 @@ def compare(a: dict, b: dict) -> dict:
             "unproven": unproven,
         }
     return {"verdict": "comparable", "reason": "", "differences": {}, "unproven": []}
+
+
+def _value(record: dict | None, path: str):
+    """One binding's value, with an absent field read as absent instead of fabricated."""
+    value = get(record, path)
+    return None if value is _MISSING else value
+
+
+def _unproven_reason(candidate, baseline) -> str | None:
+    """Why a pair of binding values proves nothing, or ``None`` when both sides carry a value.
+
+    A recorded :data:`UNKNOWN` is not a value, and neither is an absent field: both are evidence
+    that is not there, so neither may be read as a substitution (compare's ``differences`` counts
+    unknown-vs-known as a difference, which is exactly why it is not reused as the proof).
+    """
+    if candidate == UNKNOWN and baseline == UNKNOWN:
+        return "unknown on both sides: equal, but unproven"
+    if candidate == UNKNOWN:
+        return "the candidate value is unknown"
+    if baseline == UNKNOWN:
+        return "the baseline value is unknown"
+    if candidate is None:
+        return "the candidate record does not carry this binding"
+    if baseline is None:
+        return "the baseline record does not carry this binding"
+    return None
+
+
+def substitution_evidence(candidate: dict, baseline: dict | None, *, baseline_ref: dict, reason: str = "") -> dict:
+    """What ``candidate`` swapped against its baseline, as evidence taken **at write time**.
+
+    The ``--variant`` suffix on a run id is free text a human typed, so the substitution story is
+    read off the records instead: :func:`compare` decides whether two records are the same
+    measurement, and this says *what moved* when they are not.
+
+    Three things are kept apart, because collapsing them loses exactly the distinction that
+    matters (PLAN.md #27 A3):
+
+    * ``substitutions`` -- the categories **proven** to have moved: categories of bindings whose
+      values differ on both sides and neither of which reads :data:`UNKNOWN`. The two
+      obs-protocol bindings are one category (:data:`SUBSTITUTION_CATEGORY`), so one layout swap
+      is not reported as two substitutions. An **empty list only ever means "compared, and no
+      substitution was confirmed"** -- it is never a claim that the comparison succeeded;
+      ``comparison`` carries that, and it reads :data:`UNKNOWN` whenever the baseline was absent,
+      unreadable, legacy or incomplete.
+    * ``unproven`` -- one ``{"path", "reason"}`` per binding that could not be decided. This is
+      why :func:`compare`'s ``differences`` is not reused as the substitution list: it also holds
+      unknown-vs-known entries, so taking its keys would read "the evidence was filled in later"
+      as a substitution and "cannot be decided" as "no substitution".
+    * ``baseline`` / ``bindings`` -- the reference that was looked up, and the values that were on
+      the table when the comparison ran (candidate and baseline, per binding). A later reader must
+      never re-interpret this run against the baseline *as it is now*: a baseline rewritten by
+      ``--overwrite`` would otherwise silently rewrite this run's history.
+
+    ``baseline_ref`` is the reference that was *looked for* (run id and path) and is recorded even
+    when nothing was found, so an ``unknown`` always comes with where and why. ``baseline=None``
+    means no readable record was there: this function derives, it does not search, and a missing
+    baseline is not "the first run" -- it is missing evidence.
+
+    Deliberately **not** in :data:`ALWAYS`, the same call ``runtime.rsl_rl_id`` and the derived
+    acceptance metrics make: a new required field would read every already-recorded eval record as
+    *incomplete*, and an addition may not retroactively invalidate history. A run that attempted
+    no comparison (the base run itself) carries no ``substitutions`` key at all -- absence means
+    "nothing was compared", never "nothing was substituted".
+    """
+    evidence = {
+        "comparison": UNKNOWN,
+        "baseline": dict(baseline_ref),
+        "reason": reason,
+        "substitutions": [],
+        "unproven": [],
+        "bindings": {path: {"candidate": _value(candidate, path), "baseline": _value(baseline, path)} for path in BINDINGS},
+    }
+    if baseline is None:
+        return evidence
+    for label, side in (("baseline", baseline), ("candidate", candidate)):
+        state = read_state(side)
+        if state["state"] != "complete":
+            absent = f" (missing {', '.join(state['missing'])})" if state["missing"] else ""
+            evidence["reason"] = f"the {label} record is {state['state']}{absent}: {state['note']}"
+            return evidence
+    evidence["comparison"] = "compared"
+    substitutions: list[str] = []
+    for path in BINDINGS:
+        left = evidence["bindings"][path]["baseline"]
+        right = evidence["bindings"][path]["candidate"]
+        if left == right and left != UNKNOWN:
+            continue
+        why = _unproven_reason(right, left)
+        if why is not None:
+            evidence["unproven"].append({"path": path, "reason": why})
+            continue
+        category = SUBSTITUTION_CATEGORY[path]
+        if category not in substitutions:
+            substitutions.append(category)
+    evidence["substitutions"] = substitutions
+    return evidence
 
 
 def legacy_run() -> dict:
