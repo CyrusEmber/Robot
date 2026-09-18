@@ -563,6 +563,27 @@ def main(argv: list[str] | None = None) -> int:
                         f"{task_id}: the frozen golden has no entry for combination {combo_key!r}"
                     )
                     continue
+                # What the identity map declares this task's entry to be. Read here because two
+                # checks use it: the golden's own record of it (below) and the class built under it.
+                declared_entry = mapping.get("recipes", {}).get(recipe_key or "", {}).get("env_cfg_entry")
+                declared_name = declared_entry.split(":")[-1] if isinstance(declared_entry, str) else None
+                if not declared_name:
+                    problems.append(
+                        f"{task_id}: the recipe map names no env cfg entry for it -- there is nothing"
+                        " for a registry to point at"
+                    )
+                # The golden records which class produced its entry, and until now nothing compared
+                # that column: it is written from the registry and read by no gate, which is exactly
+                # how it sat on the deleted version subclasses from the entry switch (2f67f4c) until
+                # PLAN.md #22 step 2a. Held against the identity map rather than the registry -- [31]
+                # binds the two byte for byte, so one comparison covers both -- because a golden that
+                # names a class which does not produce it is a comparison against the wrong thing.
+                claimed_class = stored.get("env_cfg_class")
+                if claimed_class != declared_entry:
+                    problems.append(
+                        f"{task_id}: the golden names {claimed_class!r} as this entry's class while"
+                        f" the recipe map declares {declared_entry!r}"
+                    )
 
                 try:
                     built = recipe.build(version, play=play, line=line_key)
@@ -594,14 +615,7 @@ def main(argv: list[str] | None = None) -> int:
                 # the identity map declares for this task -- not one derived here -- because a
                 # checkpoint payload records ``type(cfg).__name__`` and a resume compares it: the
                 # name has to be the map's, or a run started under one path cannot be resumed under
-                # the other. A map that names no entry is a failure of its own.
-                declared_entry = mapping.get("recipes", {}).get(recipe_key or "", {}).get("env_cfg_entry")
-                declared_name = declared_entry.split(":")[-1] if isinstance(declared_entry, str) else None
-                if not declared_name:
-                    problems.append(
-                        f"{task_id}: the recipe map names no env cfg entry for it -- there is nothing"
-                        " for a registry to point at"
-                    )
+                # the other.
                 try:
                     from_class = recipe.recipe_class(version, play=play, line=line_key, name=declared_name)()
                 except Exception as err:  # noqa: BLE001 - a class that cannot be built is the finding

@@ -1482,6 +1482,23 @@ main 线的 delta 有**三个写者**，不是两个：**元素集合**（同一
 - 生成类的名字清单唯一来源 = `versions\recipes.json`；`recipe_tasks` 不写第二份。
 - 本批**未**重生成任何 `snapshot`，也未跑 `--update` ⇒ 硬 A 的比较对象仍是整改前冻结的那份。
 
+### 追加（2026-09-18）：golden 的 `env_cfg_class` 从"散文"变成被看守的事实
+
+**触发**：复核时点出 —— 上表 step 2a 的 26 处搬移只被**一次性脚本**证明过，而**没有任何闸门
+比较这一列**。实测（见下）该列可以在指向**已删除的类**时让全部闸门保持绿：`[24]` 的
+`verify_entries` 只比 `digest`／`snapshot` 自洽／`version`／配方映射／条目键白名单，`env_cfg_class`
+在 `_ENTRY_KEYS` 里只是"允许出现的键"；全仓唯一读它的是 `manifest.recipe_ref`，按**类名后缀**
+匹配 golden。于是它自 `2f67f4c`（入口切到 `recipe_tasks`）起在版本类名字上停了 24 小时以上
+无人报红 —— 这正是 step 2a 存在的理由，也正是它必须先被看守才谈得上"语义不变"。
+
+| 项 | 内容 |
+|---|---|
+| 落点 | `[41]`（`check_recipe_build.py`）的逐任务循环内；**不是** `[24]` —— 本批执行时 `check_cfg_lock.py` 与它的反证正被另一批（`--self-test` 接线）占用工作树。等价性：断言拿的是 `recipes.json` 的 `env_cfg_entry`，而 `[31]` 已把身份映射与注册表**逐字**绑死，故"golden 列 == 身份映射"= "golden 列 == 注册表解析出的入口" |
+| 断言 | 每个已声明配方/kind：`stored["env_cfg_class"]` 必须**等于**身份映射为该任务声明的入口，否则具名报红；映射没声明入口同样报红 |
+| 反证（一次跑完，含"洞"本身的证据） | 把 `main` 里 v14 那行搬回 `rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V14`：`[41]` **rc=1** → `FAIL Lizard-Rough-v14: the golden names 'rl_exp.tasks.teacher_env_cfg:LizardRoughTeacherEnvCfg_V14' as this entry's class while the recipe map declares 'rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V14'`，而**同一份文件 `[24]` rc=0 `CFG_LOCK_OK`** ⇒ 洞是真的、断言真的补上了它；逐字节复原（sha256 `8a004fab…` = 重锚后摘要）后两者皆绿。脚本 `%TEMP%\falsify_golden_class.py` |
+| 覆盖边界 | 只覆盖**已声明配方**（26 个任务条目）。v0 家族 8 个与 parkour 2 个任务的条目不在 `recipe.LINES` 里，它们的类仍活在自己的模块（`lizard_env_cfg`/`rough_env_cfg`/`curriculum_*`/`parkour_env_cfg`），`[41]` 的循环到不了 —— 若哪天它们也走声明路径，自动进入本断言 |
+| 旁证 | 全量套件 `ALL_OFFLINE_CHECKS_PASSED`（42/42，当日套件条目数；并行批次同期在重排 `--self-test` 接线） |
+
 ### 生成方式，与它带来的**限制**
 
 路径是**派生**的（量母版 → 重放元素 → 残差按所有权表分类），**理由是手写的**；生成器用完即删，不留在仓里。这带来一个必须写下来的限制：**派生错误会同时出现在文件与闸门两侧**——两边互相印证不等于正确。独立边界只剩硬 A（冻结 golden 钉住字段面）。已做的抽查：分组数与条数与独立量测一致；每组理由都能追到该版 `PLAN.md`；人眼过了 v14（2 组）、v3/v5/v11/v12（分组与计数）、baseline（9 组）。
