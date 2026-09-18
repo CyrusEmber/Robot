@@ -1,7 +1,7 @@
 diff --git a/scripts/reinforcement_learning/rsl_rl/train.py b/scripts/reinforcement_learning/rsl_rl/train.py
 --- a/scripts/reinforcement_learning/rsl_rl/train.py
 +++ b/scripts/reinforcement_learning/rsl_rl/train.py
-@@ -144,6 +144,25 @@ if version.parse(installed_version) < version.parse(RSL_RL_VERSION):
+@@ -144,6 +144,30 @@ if version.parse(installed_version) < version.parse(RSL_RL_VERSION):
      exit(1)
  
  
@@ -14,6 +14,11 @@ diff --git a/scripts/reinforcement_learning/rsl_rl/train.py b/scripts/reinforcem
 +    python-level exit hook (``os._exit``, ``sys.exit``, ``atexit``) ever running, so the
 +    ``__main__`` handler below never saw it. Leaving from the failure site is the only place the
 +    code survives.
++
++    ponytail: only the two calls this file makes inside the ``launch_simulation`` body are guarded,
++    so an exception raised anywhere else in that body still leaves exit code 0. Ceiling: the next
++    caller added there has to remember this. Upgrade path: move the body into a function that
++    wraps its own run in this guard, so there is one place to remember.
 +    """
 +    try:
 +        return call(*args, **kwargs)
@@ -27,7 +32,7 @@ diff --git a/scripts/reinforcement_learning/rsl_rl/train.py b/scripts/reinforcem
  @hydra_task_config(args_cli.task, args_cli.agent)
  def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agent_cfg: RslRlBaseRunnerCfg):
      """Train with RSL-RL agent."""
-@@ -222,8 +241,33 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
+@@ -222,8 +246,33 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
          # set the log directory for the environment (works for all environment types)
          env_cfg.log_dir = log_dir
  
@@ -62,7 +67,7 @@ diff --git a/scripts/reinforcement_learning/rsl_rl/train.py b/scripts/reinforcem
  
          # convert to single-agent instance if required by the RL algorithm
          if isinstance(env.unwrapped.cfg, DirectMARLEnvCfg):
-@@ -231,6 +275,11 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
+@@ -231,6 +280,11 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
  
              env = multi_agent_to_single_agent(env)
  
@@ -74,7 +79,7 @@ diff --git a/scripts/reinforcement_learning/rsl_rl/train.py b/scripts/reinforcem
          # save resume path before creating a new log_dir
          # Restore the curriculum state (registered SIR term state + the c_k clock) BEFORE the wrapper:
          # RslRlVecEnvWrapper.__init__ runs the first full reset, and that reset is what makes the SIR
-@@ -341,13 +390,37 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
+@@ -341,13 +395,37 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
              # load previously trained model
              runner.load(resume_path)
  
@@ -113,7 +118,7 @@ diff --git a/scripts/reinforcement_learning/rsl_rl/train.py b/scripts/reinforcem
              print(f"Training time: {round(time.time() - start_time, 2)} seconds")
              # close the simulator
              env.close()
-@@ -356,4 +429,12 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
+@@ -356,4 +434,12 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
  
  
  if __name__ == "__main__":
