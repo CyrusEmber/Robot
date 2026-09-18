@@ -53,8 +53,12 @@ DR_EVENTS = (
     "base_com",
     "base_external_force_torque",
     "push_robot",
-    "reset_robot_joints",
 )
+# `reset_robot_joints` is deliberately NOT above: it is not randomization to be removed but the
+# joint reset itself -- in this IsaacLab it is the only writer of joint state at reset, since
+# `Articulation.reset` clears actuator state and wrenches only. The recipe keeps it and pins its
+# ranges instead, so it is asserted as "kept and pinned" below. That the write actually lands is
+# a rollout question, not a config question: `reset_check.py` proves it.
 
 
 def check(name: str, ok: bool, detail: str = "") -> None:
@@ -95,6 +99,31 @@ def main() -> int:
         check(f"events/{event_name}-off", event is None, f"{event!r} is still wired")
     reset_base = getattr(unwrapped.cfg.events, "reset_base", None)
     check("events/reset_base-kept", reset_base is not None, "no reset event: nothing places the robot")
+    # the joint reset must be kept AND pinned: kept, because a respawned env otherwise keeps the
+    # joint state it fell with; pinned, because the stock ranges scale the default pose by 0.5-1.5
+    reset_joints = getattr(unwrapped.cfg.events, "reset_robot_joints", None)
+    check("events/reset-joints-kept", reset_joints is not None,
+          "no joint reset event: every episode after the first starts from the previous one's pose")
+    if reset_joints is not None:
+        func_name = getattr(reset_joints.func, "__name__", None)
+        check("events/reset-joints-is-the-reset", func_name == "reset_joints_by_scale",
+              f"func is {func_name!r}, not the default-pose writer this probe asserts on")
+        pinned = (tuple(reset_joints.params.get("position_range", ())) == (1.0, 1.0)
+                  and tuple(reset_joints.params.get("velocity_range", ())) == (0.0, 0.0))
+        check("events/reset-joints-pinned", pinned,
+              f"position_range {reset_joints.params.get('position_range')} / "
+              f"velocity_range {reset_joints.params.get('velocity_range')}: anything but (1,1)/(0,0) "
+              "randomizes the spawn (equal bounds are exact under rand*(b-a)+a)")
+    # reset_base places the robot: its own ranges must be zero on every axis it declares, not
+    # merely present -- the probe used to check the term exists and never read its numbers
+    base_nonzero = {
+        f"{key}.{axis}": rng
+        for key in ("pose_range", "velocity_range")
+        for axis, rng in (reset_base.params.get(key, {}) if reset_base is not None else {}).items()
+        if tuple(rng) != (0.0, 0.0)
+    }
+    check("events/reset-base-ranges-zero", not base_nonzero,
+          f"the spawn is still randomized: {base_nonzero}")
 
     obs, _ = env.reset()
     robot = unwrapped.scene["robot"]
@@ -131,7 +160,8 @@ def main() -> int:
     term_counts = {"time_out": 0, "fall": 0}
     reward_sums: dict[str, torch.Tensor] = {}
     reward_halves: dict[str, list[torch.Tensor]] = {}
-    joint_means = {"|q|": [], "|qd|": [], "|tau|": [], "at_limit": []}
+    joint_means = {"|q|": [], "|qd|": [], "|tau|": [], "at_limit_low": [], "at_limit_high": []}
+    torque_rows: list[torch.Tensor] = []  # per-joint |tau| over the whole rollout, not one frame
     reward_names = list(getattr(unwrapped.reward_manager, "_term_names", []))
     act_dim = unwrapped.action_manager.total_action_dim
     soft_limits = robot.data.soft_joint_pos_limits.torch
@@ -153,11 +183,17 @@ def main() -> int:
         last_action = action.clone()
         term_counts["time_out"] += int((trunc & ~term).sum())
         term_counts["fall"] += int((term & ~trunc).sum())
-        near_limit = (robot.data.joint_pos.torch - soft_limits[..., 0]).abs() / span
+        # both ends, not just the lower one: the old expression took .abs() of a gap that is
+        # already non-negative and compared it to the lower limit alone, so a joint pinned at
+        # its upper limit read as free
+        at_limit_low = (robot.data.joint_pos.torch - soft_limits[..., 0]) / span < 0.05
+        at_limit_high = (soft_limits[..., 1] - robot.data.joint_pos.torch) / span < 0.05
         joint_means["|q|"].append(robot.data.joint_pos.torch.abs().mean().reshape(1))
         joint_means["|qd|"].append(robot.data.joint_vel.torch.abs().mean().reshape(1))
         joint_means["|tau|"].append(robot.data.applied_torque.torch.abs().mean().reshape(1))
-        joint_means["at_limit"].append((near_limit < 0.05).float().mean().reshape(1))
+        joint_means["at_limit_low"].append(at_limit_low.float().mean().reshape(1))
+        joint_means["at_limit_high"].append(at_limit_high.float().mean().reshape(1))
+        torque_rows.append(robot.data.applied_torque.torch.abs().mean(dim=0).clone())
         for name in reward_names:
             value = term_values(unwrapped.reward_manager, name)
             if value is None:
@@ -203,13 +239,16 @@ def main() -> int:
             f"  |q| {stacked_means['|q|'].mean().item():.4f} rad   "
             f"|qd| {stacked_means['|qd|'].mean().item():.4f} rad/s   "
             f"|tau| {stacked_means['|tau|'].mean().item():.4f} N.m   "
-            f"near-limit {stacked_means['at_limit'].mean().item() * 100:.2f}%"
+            f"near-limit low {stacked_means['at_limit_low'].mean().item() * 100:.2f}%  "
+            f"high {stacked_means['at_limit_high'].mean().item() * 100:.2f}%"
         )
         # a joint that is never loaded is a wiring or limit symptom, not a policy property;
-        # worth naming here so a silent dead joint cannot hide behind an average
-        torque_per_joint = robot.data.applied_torque.torch.abs().mean(dim=0)
+        # worth naming here so a silent dead joint cannot hide behind an average.
+        # Over the whole rollout: a single frame catches a moment of unload -- or the frame right
+        # after a reset, when nothing has been commanded yet -- and reads it as "this joint is dead"
+        torque_per_joint = torch.stack(torque_rows).mean(dim=0)
         quiet = [robot.joint_names[i] for i in torch.nonzero(torque_per_joint < 1e-3).flatten().tolist()]
-        print(f"  joints with ~zero mean |tau| ({len(quiet)}): {quiet if quiet else 'none'}")
+        print(f"  joints with ~zero mean |tau| over the rollout ({len(quiet)}): {quiet if quiet else 'none'}")
     if dt is not None:
         print(f"[probe] control dt {dt:.4f} s")
 
