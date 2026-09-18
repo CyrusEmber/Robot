@@ -15,6 +15,11 @@ Stdlib only, and no torch/sim/RNG import: this module defines a format and reads
 a record can be inspected on a machine that cannot start the simulator, and writing a record
 can never consume the random stream the numbers are supposed to describe.
 
+The write-side lookup that feeds the substitution evidence (:func:`run_dir` /
+:func:`baseline_evidence`) lives here for that same reason: ``eval.py`` parses ``argv`` and
+starts the simulator at import time, so a rule left there is unreachable to an offline test
+(PLAN.md #27 ③).
+
 The format version is independent of the eval protocol version: a protocol bump (timeline,
 thresholds, terrain, DR, metric definitions, sampled frame) is a new ``locomotion_eval_vN``;
 adding a provenance field is not, and would otherwise force a protocol version for a change
@@ -378,6 +383,45 @@ def substitution_evidence(candidate: dict, baseline: dict | None, *, baseline_re
             substitutions.append(category)
     evidence["substitutions"] = substitutions
     return evidence
+
+
+def run_dir(results_root: pathlib.Path | str, protocol: str, group: str | None, run_id: str) -> pathlib.Path:
+    """Where one run's artifacts live: results root, protocol directory, campaign group, run id."""
+    return pathlib.Path(results_root) / protocol / (group or "") / run_id
+
+
+def baseline_evidence(
+    candidate: dict, results_root: pathlib.Path | str, *, protocol: str, group: str | None, base_run_id: str
+) -> dict:
+    """What ``candidate`` swapped against the run at ``base_run_id``, or why that could not be decided.
+
+    The lookup is exactly the run this identity was derived from -- same protocol directory, same
+    campaign group (:func:`run_dir`), same base run id, no variant suffix -- and it stops there: a
+    missing or unreadable record is recorded as ``unknown`` **with the reason**, and no similar
+    directory is searched for a stand-in. Absence must not read as "this was the first run": variant
+    runs like ``…suite-roughb016`` have an unsuffixed neighbour holding only ``eval.json``, which is
+    mechanically uncomparable (PLAN.md #27 A3's baseline rule).
+
+    Lives here rather than in ``eval.py`` because that module parses ``argv`` and launches the
+    simulator at import time: with the layout rule and the three reason branches in a plain
+    function, they are reachable offline, and a mistyped protocol/group/run id shows up as a
+    baseline that is always missing instead of as a silently unreviewed record.
+    """
+    out_dir = run_dir(results_root, protocol, group, base_run_id)
+    path = out_dir / "record.json"
+    ref = {"run_id": base_run_id, "path": str(path)}
+    if not path.is_file():
+        reason = (
+            f"a pre-format run sits at {out_dir} (results, no record): its bindings cannot be read"
+            if (out_dir / "eval.json").is_file()
+            else f"nothing at {out_dir}"
+        )
+    else:
+        try:
+            return substitution_evidence(candidate, load(path), baseline_ref=ref)
+        except (OSError, json.JSONDecodeError) as err:
+            reason = f"{path} is unreadable ({err})"
+    return substitution_evidence(candidate, None, baseline_ref=ref, reason=reason)
 
 
 def legacy_run() -> dict:

@@ -82,6 +82,7 @@ from components.dr_controller import apply_eval_mode  # noqa: E402
 from components import recovery as recovery_mod  # noqa: E402
 
 _HARNESS_DIR = pathlib.Path(__file__).resolve().parent
+_RESULTS_ROOT = _HARNESS_DIR / "results"
 
 
 def _git_root(path: pathlib.Path | None) -> pathlib.Path | None:
@@ -585,7 +586,7 @@ def _analyze(rollout: dict, protocol: dict, tilt_cos_min: float, clearance_min: 
 
 def _run_dir(run_id: str) -> pathlib.Path:
     """Where this run's artifacts live: protocol dir, optional campaign group, run_id."""
-    return _HARNESS_DIR / "results" / args_cli.protocol / (args_cli.group or "") / run_id
+    return record.run_dir(_RESULTS_ROOT, args_cli.protocol, args_cli.group, run_id)
 
 
 def _occupied_refusal(out_dir: pathlib.Path, rec: dict) -> str | None:
@@ -609,30 +610,11 @@ def _occupied_refusal(out_dir: pathlib.Path, rec: dict) -> str | None:
 
 
 def _baseline_evidence(base_run_id: str, rec: dict) -> dict:
-    """What ``rec`` swapped against the run at ``base_run_id``, or why that could not be decided.
-
-    The lookup is exactly the run this identity was derived from -- same protocol directory, same
-    campaign group (:func:`_run_dir`), same base run id, no variant suffix -- and it stops there:
-    a missing or unreadable record is recorded as ``unknown`` **with the reason**, and no similar
-    directory is searched for a stand-in. Absence must not read as "this was the first run":
-    variant runs like ``…suite-roughb016`` have an unsuffixed neighbour holding only ``eval.json``,
-    which is mechanically uncomparable (PLAN.md #27 A3's baseline rule).
-    """
-    out_dir = _run_dir(base_run_id)
-    path = out_dir / "record.json"
-    ref = {"run_id": base_run_id, "path": str(path)}
-    if not path.is_file():
-        reason = (
-            f"a pre-format run sits at {out_dir} (results, no record): its bindings cannot be read"
-            if (out_dir / "eval.json").is_file()
-            else f"nothing at {out_dir}"
-        )
-    else:
-        try:
-            return record.substitution_evidence(rec, record.load(path), baseline_ref=ref)
-        except (OSError, json.JSONDecodeError) as err:
-            reason = f"{path} is unreadable ({err})"
-    return record.substitution_evidence(rec, None, baseline_ref=ref, reason=reason)
+    """The A3 ledger for this ``--variant`` run: the lookup and its three reasons live in
+    :func:`record.baseline_evidence`, which stays reachable without a simulator."""
+    return record.baseline_evidence(
+        rec, _RESULTS_ROOT, protocol=args_cli.protocol, group=args_cli.group, base_run_id=base_run_id
+    )
 
 
 def _guard_writes(out_dir: pathlib.Path, rec: dict, run_id: str) -> None:

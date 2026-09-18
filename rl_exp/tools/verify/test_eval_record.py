@@ -13,6 +13,9 @@ Four things this file is here to prove:
 4. The write-time substitution evidence (``record.substitution_evidence``, PLAN.md #27 A3) keeps
    "compared, nothing confirmed" apart from "could not be compared", counts only *proven* moves,
    and stores the values it compared instead of re-reading a baseline that may have moved since.
+5. The lookup that feeds it (``record.baseline_evidence``) is offline-reachable: the layout rule
+   and all three refusal reasons are asserted here, including the one success path that a broken
+   path composition would otherwise hide behind "always unknown".
 
 The negative direction is built in: every substitution asserts both that the digest moved and
 that the two records read as ``not_comparable``, and the untouched pair as ``comparable``.
@@ -289,6 +292,78 @@ def test_a_missing_baseline_reads_unknown_with_a_reason() -> None:
     assert evidence["substitutions"] == [] and evidence["unproven"] == [], "no comparison happened"
     assert evidence["bindings"]["suite.digest"] == {"candidate": "sha256:suite", "baseline": None}, \
         "the baseline side is empty, never a fabricated value"
+
+
+#: The three values ``eval.py`` hands the lookup: protocol directory, campaign group, base run id.
+#: A path composed wrongly reads as a *missing* baseline here, which is why the success case below
+#: exists -- the three refusal reasons alone cannot tell a right lookup from a broken one.
+_LOOKUP = {"protocol": "locomotion_eval_v2", "group": "v1", "base_run_id": "Lizard-Rough-v14_ckpt"}
+
+
+def _baseline_dir(scratch: str) -> pathlib.Path:
+    """The run directory the lookup must resolve, laid out like the harness' results tree."""
+    return (pathlib.Path(scratch) / "results" / _LOOKUP["protocol"] / _LOOKUP["group"]
+            / _LOOKUP["base_run_id"])
+
+
+def _lookup(scratch: str, candidate: dict) -> dict:
+    """The write side's lookup, asked exactly as ``eval.py`` asks it."""
+    return record.baseline_evidence(candidate, pathlib.Path(scratch) / "results", **_LOOKUP)
+
+
+def test_baseline_lookup_reads_the_neighbouring_run() -> None:
+    """The success path: protocol + group + base run id land on a record that compares.
+
+    The campaign group is part of the path, so a lookup that ignored it (or dropped the protocol
+    directory) reads as an absent baseline here rather than passing as a comparison.
+    """
+    with tempfile.TemporaryDirectory() as scratch:
+        base = _record()
+        base["suite"]["digest"] = "sha256:base-suite"
+        path = _baseline_dir(scratch)
+        path.mkdir(parents=True)
+        (path / "record.json").write_text(json.dumps(base), encoding="utf-8")
+        candidate = _record()
+        candidate["suite"]["digest"] = "sha256:candidate-suite"
+        evidence = _lookup(scratch, candidate)
+        assert evidence["comparison"] == "compared", \
+            f"a readable neighbour must be compared, not reported missing: {evidence}"
+        assert evidence["substitutions"] == ["suite"], evidence["substitutions"]
+        assert evidence["baseline"] == {"run_id": _LOOKUP["base_run_id"], "path": str(path / "record.json")}, \
+            "the reference that was read is recorded, so a moved results root shows up in the record"
+
+
+def test_baseline_lookup_names_a_preformat_neighbour() -> None:
+    """A directory with results but no record (25 of 31 run dirs) is unknown with *that* reason."""
+    with tempfile.TemporaryDirectory() as scratch:
+        path = _baseline_dir(scratch)
+        path.mkdir(parents=True)
+        (path / "eval.json").write_text("{}", encoding="utf-8")
+        evidence = _lookup(scratch, _record())
+        assert evidence["comparison"] == record.UNKNOWN, evidence
+        assert evidence["reason"] == \
+            f"a pre-format run sits at {path} (results, no record): its bindings cannot be read", \
+            evidence["reason"]
+        assert evidence["substitutions"] == [] and evidence["unproven"] == [], "nothing was compared"
+
+
+def test_baseline_lookup_names_an_absent_run() -> None:
+    """Nothing there at all is a named absence -- never "this was the first run"."""
+    with tempfile.TemporaryDirectory() as scratch:
+        evidence = _lookup(scratch, _record())
+        assert evidence["reason"] == f"nothing at {_baseline_dir(scratch)}", evidence["reason"]
+        assert evidence["comparison"] == record.UNKNOWN, evidence
+
+
+def test_baseline_lookup_names_an_unreadable_record() -> None:
+    """A truncated record is a refusal with a reason; the parser's own wording is not pinned."""
+    with tempfile.TemporaryDirectory() as scratch:
+        path = _baseline_dir(scratch)
+        path.mkdir(parents=True)
+        (path / "record.json").write_text('{"record_format": ', encoding="utf-8")
+        evidence = _lookup(scratch, _record())
+        assert evidence["comparison"] == record.UNKNOWN, evidence
+        assert evidence["reason"].startswith(f"{path / 'record.json'} is unreadable ("), evidence["reason"]
 
 
 def test_an_empty_substitution_list_is_not_an_unknown_comparison() -> None:
