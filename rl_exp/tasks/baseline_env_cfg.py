@@ -113,7 +113,7 @@ class BaselineWiringCfg(LocomotionVelocityRoughEnvCfg):
     and it is deliberately *empty*: the framework stock ``LocomotionVelocityRoughEnvCfg`` plus the
     two members every gate routes by. ``BaselineFlatEnvCfg`` was once the only thing here -- the
     whole recipe, inlined. It is a declaration now
-    (``rl_exp.tasks.recipe``), so "what v1 is" is readable as an ordered element list instead of
+    (``rl_exp.tasks.baseline_recipe``), so "what v1 is" is readable as an ordered element list instead of
     as the residue of one ``__post_init__``.
 
     The identity members are the point, not decoration: a base class that did not declare

@@ -297,9 +297,9 @@ class LizardBaselinePPORunnerCfg(RslRlOnPolicyRunnerCfg):
     model, both of which were tuned for 4096 envs with a 381-dim, three-group observation.
     Reusing them here would describe a different recipe than the one being recorded.
 
-    ``obs_normalization`` is off rather than merely reset: normalization statistics are
-    training state, and this line starts from a random policy with no state inherited
-    from anywhere. One version, one log dir (versioning.mdc A).
+    ``obs_normalization`` is off by this first recipe's choice. Starting from scratch
+    does not require disabling normalization: fresh statistics would also be new state.
+    One version, one log dir (versioning.mdc A).
     """
 
     num_steps_per_env = 24

@@ -11,9 +11,8 @@ shared file that three other versions have already mutated. Depending on it at r
 would put an unknowable amount of someone else's in-flight work inside "the baseline
 recipe", which is exactly what this line was created to stop.
 
-A copy drifts, so ``test_baseline_mdp.py`` asserts these agree numerically with the
-originals over random inputs. That test imports ``teacher_mdp`` on purpose: a test-only
-import catches drift without putting the shared file on the training path.
+``test_baseline_mdp.py`` pins this line's mathematical and sensor/frame contracts.
+It does not import the teacher: intentional changes to main must not redefine this line.
 """
 
 import torch
@@ -50,10 +49,9 @@ def track_lin_vel_xy_miki(
 ) -> torch.Tensor:
     """Linear-velocity tracking in the yaw-aligned gravity frame.
 
-    The frame is the point: the error is taken against the commanded direction, so
-    walking fast in whatever direction the robot happens to be facing does not earn
-    tracking credit. With a fixed forward command that is the quantity "walk forward at
-    0.5 m/s" actually means.
+    Forward is relative to the current yaw, not a fixed world heading. A robot moving
+    along its own heading at the commanded speed earns full linear tracking credit;
+    yaw drift is reported separately by the baseline evaluator.
 
     Args:
         env: the manager-based env.
