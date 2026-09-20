@@ -157,9 +157,9 @@
 | 全部带 c_k | `common_step_counter` | 仅 joint SIR 路径回填 | 解耦：有 c_k 就恢复 |
 | 其它课程 term | 任何 `ManagerTermBase` | 仅 WARN | 注册表未登记 **且任务声明要求恢复 ⇒ 硬失败** |
 
-1. **补丁 ImportError** 现 WARN 后继续 → 对声明要求课程恢复的任务改硬失败（声明 `REQUIRES_CURRICULUM_STATE`（`ClassVar[bool]`）放任务 cfg 侧，读 `type(env_cfg)` 不依赖 rl_exp 导入；**已落地**），其它任务透传。保存 hook 安装失败同样只在声明任务上终止。**2026-09-17 追加（有意反转 §1.2a 的"记录不打断训练"）**：`manifest` 自身不可用（`rl_exp` 缺失或模块内导入失败）⇒ 门禁与记录器同体缺失，判**拒绝启动**（`[FATAL] … refusing to launch unrecorded` + `os._exit(2)`），不是 WARN 后继续；代价是该路径**不留记录**、只有 stderr。
-2. **`--weights_only` 正名**：实测只丢课程状态，rsl_rl **仍加载 model + optimizer**（`_peek_lr` 读 optimizer 学习率即证）→ 新增 `--drop_curriculum_state`，旧名保留为别名 + 弃用提示（不改公开行为）；`PLAN.md` #11 措辞同步。**已落地**：CLI 与 Python 入口（`apply_resume_state`/`freeze`）双名并存，显式给出互相矛盾的取值时明确报错。
-3. **多 GPU 不在保证范围**：状态只从 rank 0 写；manifest 记 `distributed`/rank；README 与本文各写一句。**已落地**：非 0 rank 拒绝恢复、不装保存 hook，T1 记 `runner_is_distributed`/`runner_gpu_global_rank` 与 `multi_gpu_resume_verified: false`。
+1. **补丁 ImportError** 现 WARN 后继续 → 对声明要求课程恢复的任务改硬失败（声明 `REQUIRES_CURRICULUM_STATE`（`ClassVar[bool]`）放任务 cfg 侧，读 `type(env_cfg)` 不依赖 rl_exp 导入），其它任务透传。保存 hook 安装失败同样只在声明任务上终止。**2026-09-17 追加（有意反转 §1.2a 的"记录不打断训练"）**：`manifest` 自身不可用（`rl_exp` 缺失或模块内导入失败）⇒ 门禁与记录器同体缺失，判**拒绝启动**（`[FATAL] … refusing to launch unrecorded` + `os._exit(2)`），不是 WARN 后继续；代价是该路径**不留记录**、只有 stderr。
+2. **`--weights_only` 正名**：实测只丢课程状态，rsl_rl **仍加载 model + optimizer**（`_peek_lr` 读 optimizer 学习率即证）→ 新增 `--drop_curriculum_state`，旧名保留为别名 + 弃用提示（不改公开行为）；`PLAN.md` #11 措辞同步。**实现形态**：CLI 与 Python 入口（`apply_resume_state`/`freeze`）双名并存，显式给出互相矛盾的取值时明确报错。
+3. **多 GPU 不在保证范围**：状态只从 rank 0 写；manifest 记 `distributed`/rank；README 与本文各写一句。**实现形态**：非 0 rank 拒绝恢复、不装保存 hook，T1 记 `runner_is_distributed`/`runner_gpu_global_rank` 与 `multi_gpu_resume_verified: false`。
 
 **1.3a 载荷与接口验收（2026-09-15，离线；证据见 `versions/lizard/ACCEPTANCE.md` §1.3a）**
 
@@ -191,8 +191,8 @@
 **1.4a A/B 层执行口径（2026-09-15，离线；证据见 `versions/lizard/ACCEPTANCE.md` §1.4a）**
 
 - A 层执行 S01–S10；joint SIR 保留旧字段的回归覆盖（槽字段集缺失即失败）。通过只声明载荷与回填正确。
-- B 层对两种 SIR 使用真实生产更新函数，在相同设备/dtype 下给原对象和恢复对象相同统计输入，每次调用前恢复相同测试 RNG 状态。分别覆盖流量不足、正常权重更新、全带外回退、随机游走与 replay；particles/weights/history/统计清零及下一调度时点精确一致。fixture 必须实际触发目标分支；只运行 collect/apply 不算 B 层。**已落地**：五例分支夹具各先断言分支签名（含 `_fallback_weights`/`_walk` 探针），再过生产入口 `term(env, ids)`（含节流与重生）；`[15]` 26/26，7 例闸门反证全 FIRED。
-- c_k-only 在迭代边界前、边界及边界后比较 counter 和按保存参数计算的 c_k（float64，绝对误差不超过 1e-12）。**已落地**：值取自载荷保存参数独立重算，边界处确实变化。测试可控制 RNG，但不新增生产 RNG 恢复保证，也不改冻结 term 的演算语义。
+- B 层对两种 SIR 使用真实生产更新函数，在相同设备/dtype 下给原对象和恢复对象相同统计输入，每次调用前恢复相同测试 RNG 状态。分别覆盖流量不足、正常权重更新、全带外回退、随机游走与 replay；particles/weights/history/统计清零及下一调度时点精确一致。fixture 必须实际触发目标分支；只运行 collect/apply 不算 B 层。**实现形态**：五例分支夹具各先断言分支签名（含 `_fallback_weights`/`_walk` 探针），再过生产入口 `term(env, ids)`（含节流与重生）；`[15]` 26/26，7 例闸门反证全 FIRED。
+- c_k-only 在迭代边界前、边界及边界后比较 counter 和按保存参数计算的 c_k（float64，绝对误差不超过 1e-12）。**实现形态**：值取自载荷保存参数独立重算，边界处确实变化。测试可控制 RNG，但不新增生产 RNG 恢复保证，也不改冻结 term 的演算语义。
 
 **1.4b C 层真实恢复（2026-09-15 真跑，证据见 `versions/lizard/ACCEPTANCE.md` §1.4b）**
 
@@ -200,9 +200,9 @@
 
 **观察方式（执行时定型）**：观察点必须落在**真实 trainer 进程**里——另写一套"逐行对齐 train.py"的流程会与 trainer 分叉，只能当辅助。实际做法：`tools/verify/cstate_observer.py` 经 `sitecustomize`（`PYTHONPATH` 注入）在真进程内**只包装读取** `apply_resume_state` / `OnPolicyRunner.load` / `learn`（单次调用跑满，**不循环 `learn(1)`**：rsl_rl 以 `start_it + n` 计数且每次收尾保存并关 writer）/ `env.step` / `alg.update` / 两个 SIR 的更新函数；`tools/verify/check_c_layer.py` 判据（含 `--resave`）。臂共 15 个：3 源 + 6 短路径（`--max_iterations 1`，给 P0/P1/P2 与 load 后模型/optimizer 对比）+ 6 主证据（`--max_iterations 84`）.
 
-1. **准备真实源 checkpoint**：训练至少 2 个课程评估块并确认发生更新；c_k-only 至少 2 个 PPO iteration。保存时 counter>0，至少一个声明状态字段不同于冷初始化（如 history 长度或统计），禁止手工造值伪装训练产物。条件未达到则本次 fixture 不合格，记录未知。**已落地**：源落 20 it（v14/v12 各 4/3 次真实更新、v3 counter=480），ckpt 从**实际索引**读（`model_<最后完成迭代>`，20 it 的末件是 `model_19.pt`），并按"至少一个持久字段 ≠ 冷初始化"用**同任务 drop 臂的 P1 冷样本**对照（v14 差 3 项 / v12 差 11 项）。
-2. **新进程恢复**：结束源进程后分别启动正常 resume 和显式 drop 两个进程，使用同一 checkpoint。在 apply 前、apply 后且首次 reset 前、首次 reset 后、首次课程更新后采样证据。**已落地**：P0/P1 由 `apply_resume_state` 包装采样，P2 在首次 `env.step` 前采（首次 full reset 由 `RslRlVecEnvWrapper.__init__` 完成），P3 在每个真实更新后采；c_k-only 线无 term 故无 P3。
-3. **运行长度**：SIR 令 B=eval_every×steps_per_iteration，H=ceil(episode_length_s/(sim.dt×decimation))；恢复后至少运行 `max(2B, 2H)` 次 env.step，向上取整到完整 PPO iteration，并观测至少 2 次真实课程更新。c_k-only 至少 `max(2×steps_per_iteration, 2H)` 次 env.step。未观测到要求的事件不能仅按步数判通过。**已落地**：B=240、H=1000 ⇒ 84 it = 2016 步（≥2000），单次 `learn()`；主证据每臂观测到 ≥2 次更新（v14 8、v12 9、drop 各 8）。
+1. **准备真实源 checkpoint**：训练至少 2 个课程评估块并确认发生更新；c_k-only 至少 2 个 PPO iteration。保存时 counter>0，至少一个声明状态字段不同于冷初始化（如 history 长度或统计），禁止手工造值伪装训练产物。条件未达到则本次 fixture 不合格，记录未知。**实现形态**：源落 20 it（v14/v12 各 4/3 次真实更新、v3 counter=480），ckpt 从**实际索引**读（`model_<最后完成迭代>`，20 it 的末件是 `model_19.pt`），并按"至少一个持久字段 ≠ 冷初始化"用**同任务 drop 臂的 P1 冷样本**对照（v14 差 3 项 / v12 差 11 项）。
+2. **新进程恢复**：结束源进程后分别启动正常 resume 和显式 drop 两个进程，使用同一 checkpoint。在 apply 前、apply 后且首次 reset 前、首次 reset 后、首次课程更新后采样证据。**实现形态**：P0/P1 由 `apply_resume_state` 包装采样，P2 在首次 `env.step` 前采（首次 full reset 由 `RslRlVecEnvWrapper.__init__` 完成），P3 在每个真实更新后采；c_k-only 线无 term 故无 P3。
+3. **运行长度**：SIR 令 B=eval_every×steps_per_iteration，H=ceil(episode_length_s/(sim.dt×decimation))；恢复后至少运行 `max(2B, 2H)` 次 env.step，向上取整到完整 PPO iteration，并观测至少 2 次真实课程更新。c_k-only 至少 `max(2×steps_per_iteration, 2H)` 次 env.step。未观测到要求的事件不能仅按步数判通过。**实现形态**：B=240、H=1000 ⇒ 84 it = 2016 步（≥2000），单次 `learn()`；主证据每臂观测到 ≥2 次更新（v14 8、v12 9、drop 各 8）。
 
 | 检查 | 通过阈值/事件 |
 |---|---|
