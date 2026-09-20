@@ -86,7 +86,7 @@ def fall_flags(
     dwell-terminated episode whose bad run is exactly ``sustain_steps`` long
     measures as no-fall if its terminal frame is missing (that is the
     Locomotion-Eval-v1 vs v2 difference -- see
-    ``protocols/locomotion_eval_v2.yaml``).
+    ``protocols/locomotion_eval_v2.yaml``; the current protocol is v3).
 
     Args:
         tilt_cos: (T, N) cos of the tilt angle = -projected_gravity_b[:, 2].

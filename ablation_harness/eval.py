@@ -12,7 +12,7 @@ plus one row into the protocol's summary.csv.
 
 Usage (from E:\\IsaacLab):
     python ablation_harness\\eval.py --task Lizard-Rough-v2 --checkpoint <model.pt> ^
-        --protocol locomotion_eval_v2 --mode nominal --seed 123
+        --protocol locomotion_eval_v3 --mode nominal --seed 123
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ from isaaclab.app import AppLauncher
 parser = argparse.ArgumentParser(description="Locomotion eval harness runner.")
 parser.add_argument("--task", type=str, required=True, help="Registered TRAIN task id (not -Play).")
 parser.add_argument("--checkpoint", type=str, default=None, help="Policy checkpoint; omit for a zero-action smoke run.")
-parser.add_argument("--protocol", type=str, default="locomotion_eval_v2", help="Protocol name under protocols/.")
+parser.add_argument("--protocol", type=str, default="locomotion_eval_v3", help="Protocol name under protocols/.")
 parser.add_argument("--mode", type=str, default="nominal", choices=["nominal", "robust"])
 parser.add_argument("--seed", type=int, default=123, help="Eval seed (pins DR realizations and resets).")
 parser.add_argument("--envs_per_terrain", type=int, default=None,
@@ -122,6 +122,7 @@ if _LIZARD_ROOT is not None and str(_LIZARD_ROOT) not in sys.path:
     sys.path.insert(0, str(_LIZARD_ROOT))
 _SUITE_REGISTRY = {
     "lizard_suite_v1": (suites.LIZARD_SUITE_V1_NAMES, suites.lizard_suite_v1),
+    "lizard_suite_v2": (suites.LIZARD_SUITE_V2_NAMES, suites.lizard_suite_v2),
 }
 # summary.csv columns (protocol-wide, machine-readable single line per run)
 _SUMMARY_COLUMNS = [
@@ -385,7 +386,7 @@ def _rollout(wrapper, mbenv, robot, policy, player, cmd_term, scanner, center_ra
     frame the reward and the terminations actually saw. v1 sampled the pre-step
     state instead -- one ``step_dt`` early, and blind to each episode's terminal
     frame, which the auto-reset inside ``step()`` overwrites before it can be
-    read (see ``protocols/locomotion_eval_v2.yaml`` for why that last frame
+    read (see ``protocols/locomotion_eval_v3.yaml`` for why that last frame
     matters to the fall window).
     """
     series = {
@@ -700,12 +701,19 @@ def _persist(result: dict, segments: list, recovery: dict | None, run_id: str, t
 
 
 def main():
-    from rl_exp.tools.verify import cfg_snapshot
+    from rl_exp.tasks.terrain_geometry import seed_rngs
+    from rl_exp.tools.verify import cfg_snapshot, terrain_split_probe
 
     protocol = _load_protocol(args_cli.protocol)
     terrain_names = _SUITE_REGISTRY[protocol["suite"]][0]
 
     env_cfg, agent_cfg = _prepare_env(protocol)
+    # The suite's ground is pinned by the suite's own seed, not by --seed: every eval of every
+    # run has to stand on the same terrain, which needs the global streams the terrain functions
+    # draw from (the generator seeds only its own local rng). Without this the rough columns are
+    # a different terrain in every eval (PLAN.md #18 ①).
+    seed_rngs(suites.SUITE_SEED)
+    terrain_split_probe.install()
     gym_env = gym.make(args_cli.task, cfg=env_cfg)
     mbenv = gym_env.unwrapped
     wrapper = RslRlVecEnvWrapper(gym_env, clip_actions=agent_cfg.clip_actions)
@@ -735,6 +743,10 @@ def main():
         "assets": _assets_reference(env_cfg),
         "runtime": _runtime_reference(env_cfg, mbenv),
     }
+    # what this run actually stood on: the per-cell geometry digests, captured where the
+    # generator handed the mesh over (PLAN.md #18 ⑤b). A rebuild is a different claim -- this is
+    # the ground itself, so a later reader can tell two suites apart without re-running them.
+    rec["suite"]["geometry_digest"] = terrain_split_probe.record_for(mbenv.scene.terrain)["geometry_digest"]
     tag = args_cli.tag or ("ckpt" if args_cli.checkpoint else "random")
     # strip only the gym API suffix of family ids ("-v0" at the very end);
     # teacher recipe versions ("-v1"/"-v2") are part of the run identity

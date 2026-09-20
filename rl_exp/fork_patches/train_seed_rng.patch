@@ -1,0 +1,23 @@
+# The terrain functions draw from the global numpy/torch streams while the generator seeds only
+# its own local rng (terrain_generator.py:148), so the ground a run stands on is pinned HERE --
+# before gym.make -- and not by the upstream configure_seed call, which happens after the runner
+# (i.e. after the terrain exists). Without this, two runs of one cfg stand on different ground
+# (rl_exp/versions/lizard/PLAN.md #18 item 2). Applies last: the hunks name lines of the fully
+# patched file.
+diff --git a/scripts/reinforcement_learning/rsl_rl/train.py b/scripts/reinforcement_learning/rsl_rl/train.py
+index 6f61259..591a628 100644
+--- a/scripts/reinforcement_learning/rsl_rl/train.py
++++ b/scripts/reinforcement_learning/rsl_rl/train.py
+@@ -185,6 +185,12 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
+         # set the environment seed
+         # note: certain randomizations occur in the environment initialization so we set the seed here
+         env_cfg.seed = agent_cfg.seed
++        # The terrain functions draw from the global numpy/torch streams, while the generator
++        # seeds only its own local rng (terrain_generator.py:148) -- so the ground has to be
++        # pinned HERE, before the env is built below. The upstream `configure_seed` call further
++        # down happens after the runner, i.e. after the terrain already exists; measured
++        # 2026-09-18: two runs of one cfg stood on different ground (rl_exp PLAN.md #18 ②).
++        configure_seed(env_cfg.seed)
+         # For distributed training, launch_simulation() already resolved the
+         # correct per-rank device; only apply a CLI --device override for
+         # non-distributed runs (the default "cuda:0" would clobber the

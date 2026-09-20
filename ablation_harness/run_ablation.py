@@ -14,7 +14,7 @@ variants enter via registered task ids or hydra override strings.
 Usage (from the project repo root; the only machine fact left to name is the
 IsaacLab tree -- ``paths.yaml`` or ``RL_ISAAC_ROOT``, see paths.example.yaml):
     python ablation_harness\\run_ablation.py --spec ablation_harness\\specs\\<name>.yaml
-    python ablation_harness\\run_ablation.py --summarize --protocol locomotion_eval_v2
+    python ablation_harness\\run_ablation.py --summarize --protocol locomotion_eval_v3
     python ablation_harness\\run_ablation.py --by-terrain --group v1
 
 Train/eval subprocesses run under the interpreter recorded in ``paths.yaml``
@@ -240,7 +240,7 @@ def main():
     parser.add_argument("--summarize", action="store_true", help="Print the protocol summary table.")
     parser.add_argument("--by-terrain", action="store_true",
                         help="Write terrains.csv (run x terrain, long) and print terrain x run pivots.")
-    parser.add_argument("--protocol", type=str, default="locomotion_eval_v2")
+    parser.add_argument("--protocol", type=str, default="locomotion_eval_v3")
     parser.add_argument("--group", type=str, default=None,
                         help="Restrict --summarize/--by-terrain to one campaign folder under the protocol.")
     parser.add_argument("--device", type=str, default=None)

@@ -32,12 +32,10 @@ Usage:
   python rl_exp\\tools\\verify\\terrain_preflight.py --self-test        # falsify the digest
 """
 import argparse
-import hashlib
 import pathlib
 import sys
 
 import numpy as np
-import torch
 import trimesh
 
 _REPO = pathlib.Path(__file__).resolve().parents[3]
@@ -48,6 +46,8 @@ import matplotlib  # noqa: E402
 matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt  # noqa: E402
+
+from rl_exp.tasks.terrain_geometry import geometry_digest, seed_rngs  # noqa: E402
 
 from rl_exp.tasks.teacher_env_cfg import (  # noqa: E402
     TEACHER_TERRAINS_CFG,
@@ -71,43 +71,13 @@ _FOOT_CELL = 0.5  # m, ~= sole width (0.46) -- relief under one foot plate
 _RANDOM_SUB_TERRAINS = ("random_rough", "stepping_stones", "boxes")
 
 
-def seed_rngs(seed):
-    """Seed both global RNGs the terrain functions draw from.
-
-    ``TerrainGenerator`` builds its own local rng on purpose (terrain_generator.py:148) and
-    never touches the global ones, so without this a sub-terrain is a function of process
-    history rather than of ``cfg.seed``: measured, two builds of the same cfg disagree
-    (PLAN.md #18). Numpy covers the height-field terrains, torch covers ``boxes``.
-    """
-    np.random.seed(int(seed))
-    torch.manual_seed(int(seed))
-
-
-def geometry_digest(mesh, origin) -> str:
-    """sha256 over the geometry: vertices, faces and the terrain origin.
-
-    Arrays are cast to a fixed dtype and byte order before hashing, so the digest does not
-    depend on the platform's float default or endianness; values are compared at that
-    precision. The origin is carried in because the generators use it to place a patch rather
-    than to shape it -- dropping it would let two different placements hash alike.
-    """
-    digest = hashlib.sha256()
-    for name, array, cast in (("vertices", np.asarray(mesh.vertices), "<f8"),
-                              ("faces", np.asarray(mesh.faces), "<i8"),
-                              ("origin", np.asarray(origin), "<f8")):
-        canonical = np.ascontiguousarray(array, dtype=cast)
-        digest.update(f"{name} {canonical.dtype.str} {canonical.shape} ".encode())
-        digest.update(canonical.tobytes())
-    return "sha256:" + digest.hexdigest()
-
-
 def build_sub_terrain(gen_cfg, sub_cfg, difficulty, seed):
     """Materialize one sub-terrain the way TerrainGenerator would (injection
     included, but on a copy -- the module-level teacher cfgs stay frozen).
 
     The global RNGs are seeded per sub-terrain, which the real generator does not do: the
     preview trades the run's stream order for a digest that depends on (version, difficulty,
-    seed, name) alone. Returns the mesh and the origin the generator places it at.
+    seed, name) alone. Returns the raw mesh list, the origin and the joined mesh (for stats).
     """
     sub = sub_cfg.copy()
     sub.size = tuple(gen_cfg.size)
@@ -119,7 +89,7 @@ def build_sub_terrain(gen_cfg, sub_cfg, difficulty, seed):
     sub.seed = int(seed)
     seed_rngs(seed)
     meshes, origin = sub.function(sub.difficulty, sub)
-    return trimesh.util.concatenate(meshes), origin
+    return meshes, origin, trimesh.util.concatenate(meshes)
 
 
 def stats(mesh):
@@ -184,8 +154,8 @@ def self_test() -> list[str]:
         return ["no global-RNG sub-terrain in the v5 cfg: this self-test would guard nothing"]
 
     def digest_of(name: str, seed: int) -> str:
-        mesh, origin = build_sub_terrain(gen, gen.sub_terrains[name], 1.0, seed)
-        return geometry_digest(mesh, origin)
+        meshes, origin, _ = build_sub_terrain(gen, gen.sub_terrains[name], 1.0, seed)
+        return geometry_digest(meshes, origin)
 
     for index, name in enumerate(names):
         first = digest_of(name, 7)
@@ -247,10 +217,10 @@ def main():
     print(f"{'sub-terrain':<20} {'z std':>7} {'z p2p':>7} {'relief mean':>12} "
           f"{'relief p95':>11} {'relief max':>11}  geometry digest")
     for name, sub_cfg in gen_cfg.sub_terrains.items():
-        mesh, origin = build_sub_terrain(gen_cfg, sub_cfg, args.difficulty, args.seed)
+        meshes, origin, mesh = build_sub_terrain(gen_cfg, sub_cfg, args.difficulty, args.seed)
         s = stats(mesh)
         print(f"{name:<20} {s['std']:>7.3f} {s['p2p']:>7.3f} {s['relief_mean']:>12.3f} "
-              f"{s['relief_p95']:>11.3f} {s['relief_max']:>11.3f}  {geometry_digest(mesh, origin)}")
+              f"{s['relief_p95']:>11.3f} {s['relief_max']:>11.3f}  {geometry_digest(meshes, origin)}")
         render(mesh, name, out_dir, args.version, args.difficulty)
     print(f"previews: {out_dir}\\{args.version}_*.png")
     print("digest covers vertices + faces + origin, and follows (version, difficulty, seed, name): "

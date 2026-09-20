@@ -26,6 +26,7 @@ cfg's identity, which is how the curriculum finds its record without touching th
 from __future__ import annotations
 
 import builtins
+import hashlib
 import pathlib
 import sys
 
@@ -34,6 +35,7 @@ if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
 from rl_exp.tasks import terrain_map  # noqa: E402
+from rl_exp.tasks.terrain_geometry import geometry_digest  # noqa: E402
 
 #: cfg identity -> record. Keyed by the object the generator was built with, which is the
 #: same object the curriculum can reach at ``env.scene.terrain.cfg.terrain_generator``.
@@ -97,6 +99,25 @@ def release(terrain) -> None:
         _PENDING.pop(id(cfg), None)
 
 
+def _announce(cfg) -> None:
+    """Record and print one line per generation: the ground a real run actually stood on.
+
+    The per-cell digests are captured where the generator hands the mesh over, so this is the
+    geometry that was built, not a rebuild of it (PLAN.md #18 ⑤b). One line goes to the run's
+    log -- the digests are small, the meshes are not, so the log carries the identity and not
+    the material.
+    """
+    record = _RECORDS.get(id(cfg))
+    if record is None or not record["cells"]:
+        return
+    cells = sorted(record["cells"], key=lambda cell: (cell["row"], cell["col"]))
+    lines = [f"{cell['row']},{cell['col']}:{cell.get('geometry') or 'none'}" for cell in cells]
+    combined = hashlib.sha256("\n".join(lines).encode()).hexdigest()
+    record["geometry_digest"] = "sha256:" + combined
+    print(f"[TERRAIN_GEOMETRY] cells={len(cells)} hashed={sum(1 for c in cells if c.get('geometry'))} "
+          f"anomalies={len(record['anomalies'])} digest=sha256:{combined[:32]}", flush=True)
+
+
 def _patch() -> None:
     """Wrap the generator's four call points once (idempotent); the module must be imported.
 
@@ -121,11 +142,15 @@ def _patch() -> None:
 
     def generate_curriculum(self):
         _start_generation(self.cfg)
-        return original_curriculum(self)
+        result = original_curriculum(self)
+        _announce(self.cfg)
+        return result
 
     def generate_random(self):
         _start_generation(self.cfg)
-        return original_random(self)
+        result = original_random(self)
+        _announce(self.cfg)
+        return result
 
     def get_terrain_mesh(self, difficulty, cfg):
         if _watched(self.cfg):
@@ -151,12 +176,18 @@ def _patch() -> None:
                 record["anomalies"].append(f"cell ({row}, {col}): {reason}")
             else:
                 _, difficulty, params = pending.pop(index)
+                try:
+                    geometry = geometry_digest(mesh, origin)
+                except AttributeError as err:  # a shape this digest does not know: say so, do not guess
+                    geometry = None
+                    record["anomalies"].append(f"cell ({row}, {col}): geometry is not hashable ({err})")
                 record["cells"].append({
                     "row": int(row),
                     "col": int(col),
                     "sub_terrain": _name_of(self.cfg, sub_terrain_cfg),
                     "difficulty": difficulty,
                     "params": params,
+                    "geometry": geometry,
                 })
         return original_add(self, mesh, origin, row, col, sub_terrain_cfg)
 

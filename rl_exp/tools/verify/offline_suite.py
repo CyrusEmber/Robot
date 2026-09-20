@@ -80,6 +80,8 @@ CHECKS: list[Check] = [
           [f"{_V}/test_joint_sir.py"], contract=("rl_exp/versions/lizard/main/v11/main_params.yaml",)),
     Check("terrain preview digest (geometry-carrying / order-independent / follows the seed)",
           [f"{_V}/terrain_preflight.py", "--self-test"], contract=("rl_exp/tasks/teacher_env_cfg.py",)),
+    Check("terrain geometry (real generation hashes / the seed pins it / the suite is rough)",
+          [f"{_V}/test_terrain_geometry.py"], contract=("ablation_harness/suites.py",)),
     Check("version-record completeness (four-piece set / FAMILY row / FILEMAP row)",
           [f"{_V}/check_version_docs.py"], contract=("rl_exp/versions/lizard/FAMILY.md",)),
     Check("v12 height-ring noise model (conditions / scopes / outliers / c_k / mid redraw)",
@@ -174,7 +176,7 @@ def default_jobs() -> int:
 #   Deliberately far above the cost budget, so that a slow check is reported as cost, not
 #   killed as a hang.
 PER_CHECK_BUDGET_S = 25.0
-MAX_CHECKS = 44  # ratchet: today's count (42 + the record-binding scan + the terrain digest). Add one -> remove or merge one, or raise this here.
+MAX_CHECKS = 45  # ratchet: today's count (42 + the record-binding scan + the two terrain checks). Add one -> remove or merge one, or raise this here.
 SERIAL_BUDGET_S = 205.0  # the total; --confirm-cost is what measures it
 SOLO_RECHECKS = 3  # breaching checks re-run alone, worst first, before they are suspect
 PER_CHECK_TIMEOUT_S = 180.0
