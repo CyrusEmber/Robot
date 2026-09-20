@@ -1,0 +1,39 @@
+{
+  "name": "Baseline-Flat-v2",
+  "version": 2,
+  "supersedes": "baseline_flat_v1.json",
+  "episode_length_s": 20.0,
+  "command_mps_radps": [0.5, 0.0, 0.0],
+  "terrain": "plane",
+  "displacement_frame": "initial_yaw",
+  "tracking_frame": "current_yaw",
+  "post_failure_velocity": "zero",
+  "terminal_frame": "post_physics_pre_reset",
+  "why_v2": [
+    "v1 judged forward speed and survival only, so a policy that drags its head on the floor while shuffling its feet passed all three gates: the same rollout measured forward_mae 0.0199, displacement +9.46 m, survival 1.000, while neck_pitch carried 82-94 N (47-49% of body weight) with its collision mesh 5.2 cm below the floor and one hind foot at 0.002 duty.",
+    "The quantities needed were already pinned elsewhere in this repo, and the v1 protocol simply did not read them: the geometric fall predicate (metrics.fall_flags: tilt <= 40 deg or clearance below threshold, sustained), the v10 DIAGNOSE.md non-foot carrier criterion (chest/neck normal force > 10% of body weight sustained > 0.5 s), and the collision-mesh reading that separates 'resting on' from 'through the floor'.",
+    "Every threshold below is therefore a repo precedent, not a new opinion. The pre-train probe (rl_exp/tools/verify/baseline_probe.py) measures the same quantities through the same functions (rl_exp/tools/diagnose/diag_metrics.py), so a standard set before training is re-measured at acceptance instead of being replaced by a weaker one."
+  ],
+  "gates": {
+    "forward_mae_mps_lt": 0.15,
+    "forward_displacement_m_gt": 8.0,
+    "first_episode_timeout_fraction_gt": 0.9,
+    "tilt_cos_min": 0.766,
+    "tilt_sustain_s": 0.5,
+    "non_foot_load_fraction_lt": 0.1,
+    "non_foot_load_sustain_s": 0.5,
+    "non_foot_mesh_min_z_gt": 0.0
+  },
+  "report_only": [
+    "lateral_speed_abs_mps",
+    "yaw_offset_abs_rad",
+    "head_tail_contact_force_n",
+    "first_episode_frame_fraction",
+    "foot_duty",
+    "foot_load_fraction",
+    "feet_down_mean",
+    "tilt_max_deg",
+    "non_foot_mesh_min_z_m",
+    "non_foot_load_fraction"
+  ]
+}

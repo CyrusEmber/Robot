@@ -17,6 +17,7 @@ criterion: it depends on joint scale, default pose and gait).
 """
 
 import argparse
+import pathlib
 
 from isaaclab.app import AppLauncher
 
@@ -41,6 +42,10 @@ import torch  # noqa: E402
 
 import isaaclab_tasks  # noqa: F401, E402
 
+from rl_exp.tools.diagnose.diag_metrics import (  # noqa: E402
+    MESH_CHECK_BODIES, body_load_n, collision_mesh_dir, foot_ids, mesh_bbox_corners, mesh_min_z,
+    tilt_cos,
+)
 from rl_exp.tools.verify.baseline_runtime import (  # noqa: E402
     joint_reset_errors, material_errors, resolve_task_cfg, termination_errors,
 )
@@ -178,9 +183,14 @@ def main() -> int:
     load_readable = (contact_sensor is not None
                      and contact_sensor.data.net_forces_w.torch.shape[1] == len(body_names))
     spawn_z = robot.data.root_pos_w.torch[:, 2].mean().item()
+    mesh_present = [name for name in MESH_CHECK_BODIES if name in body_names]
+    mesh_ids = [body_names.index(name) for name in mesh_present]
+    mesh_corners = torch.stack([mesh_bbox_corners(collision_mesh_dir() / f"{name}_collision.obj")
+                                for name in mesh_present]).to(unwrapped.device) if mesh_present else None
     z_rows: list[torch.Tensor] = []
     tilt_rows: list[torch.Tensor] = []
     load_rows: list[torch.Tensor] = []
+    mesh_rows: list[torch.Tensor] = []
     qd_rows: list[torch.Tensor] = []
     reward_names = list(getattr(unwrapped.reward_manager, "_term_names", []))
     act_dim = unwrapped.action_manager.total_action_dim
@@ -216,15 +226,18 @@ def main() -> int:
         torque_rows.append(robot.data.applied_torque.torch.abs().mean(dim=0).clone())
         if standing:
             z_rows.append(robot.data.root_pos_w.torch[:, 2].mean().reshape(1))
-            # tilt from the projected gravity: it is a unit vector, so the angle to straight down
-            # (0, 0, -1) is acos(-gz) -- the same quantity the fall criteria read, no euler detour
+            # the angle to straight down is acos of the same quantity the fall criteria read
+            # (shared with the fixed-window evaluator, so both judge the same scale)
             tilt_rows.append(
-                torch.acos((-robot.data.projected_gravity_b.torch[:, 2]).clamp(-1.0, 1.0))
-                .mean().rad2deg().reshape(1)
+                tilt_cos(robot.data.projected_gravity_b.torch).acos().mean().rad2deg().reshape(1)
             )
             qd_rows.append(robot.data.joint_vel.torch.abs().amax(dim=0).clone())
             if load_readable:
-                load_rows.append(contact_sensor.data.net_forces_w.torch[:, :, 2].mean(dim=0).clone())
+                load_rows.append(contact_sensor.data.net_forces_w.torch.clone())
+                mesh_rows.append(
+                    mesh_min_z(robot.data.body_pos_w.torch, robot.data.body_quat_w.torch,
+                               mesh_ids, mesh_corners)
+                )
         for name in reward_names:
             value = term_values(unwrapped.reward_manager, name)
             if value is None:
@@ -274,18 +287,33 @@ def main() -> int:
         # divides the load by num_envs and reads the closure as ~1/num_envs
         weight = robot.data.body_mass.torch[0].sum().item() * 9.81
         if load_readable:
-            load = torch.stack(load_rows).mean(dim=0)
+            load = body_load_n(torch.cat(load_rows))
             carriers = ", ".join(f"{body_names[i]} {load[i].item():.1f}"
                                  for i in torch.argsort(load, descending=True).tolist()
                                  if load[i].item() > 1.0)
-            feet = [i for i, name in enumerate(body_names) if name.endswith("_foot")]
+            feet = foot_ids(body_names)
             print(f"  load per body [N] (>1 N): {carriers or 'none'}")
             print(f"  total/(m*g) {load.sum().item() / weight:.4f}  (feet only "
                   f"{load[feet].sum().item() / weight:.4f})")
+            heaviest_non_foot = max((load[i].item() for i in range(len(body_names)) if i not in feet),
+                                    default=0.0)
+            check("load/no-non-foot-carrier", heaviest_non_foot <= 1.0,
+                  f"a non-foot body carries {heaviest_non_foot:.1f} N "
+                  "(head/neck/tail/belly must not take the robot's weight)")
         else:
             shape = None if contact_sensor is None else tuple(contact_sensor.data.net_forces_w.torch.shape)
             print(f"  load per body: no contact_forces sensor covering every body (shape {shape}, "
                   f"{len(body_names)} bodies) -- contact attribution is unavailable")
+        if mesh_corners is not None:
+            mesh_z = torch.cat(mesh_rows).min(dim=0).values
+            lowest = ", ".join(f"{name} {mesh_z[i].item():+.3f}" for i, name in enumerate(mesh_present))
+            print(f"  non-foot mesh lowest world z [m] (min over rollout): {lowest}")
+            check("load/no-non-foot-mesh-through-floor", bool((mesh_z > 0.0).all()),
+                  "a non-foot collision mesh reached z <= 0: the body is on, or through, the floor")
+        else:
+            check("load/mesh-bodies-present", False,
+                  f"none of {MESH_CHECK_BODIES} is a body of this asset"
+                  f" (bodies: {body_names})")
         qd = torch.stack(qd_rows).mean(dim=0)
         top = torch.argsort(qd, descending=True)[:5].tolist()
         print(f"  per-joint mean |qd| [rad/s], top 5: "

@@ -167,6 +167,83 @@ def test_no_hand_rolled_quat_yaw():
     )
 
 
+V2_PROTOCOL = json.loads((_REPO / "ablation_harness/protocols/baseline_flat_v2.json").read_text())
+
+
+def drag_window(protocol: dict, *, neck_fraction: float, mesh_z: float = -0.052, tilt_cos_value: float = 0.9,
+                steps: int = 20, speed: float = 0.5) -> dict:
+    """A rollout that tracks the command perfectly while the neck carries the robot.
+
+    Everything the v1 gates look at is nominal: 0.5 m/s forward, 10 m of travel, no failure.
+    The v2 gates read the rest -- non-foot carrier, tilt, collision mesh through the floor.
+    """
+    window = BaselineWindow(torch.zeros(1, 3), torch.zeros(1), steps=steps, protocol=protocol)
+    feet = torch.tensor([[True, False, True, True]])
+    for step in range(steps):
+        travel = (step + 1) * speed
+        window.add(pos=torch.tensor([[travel, 0.0, 0.0]]), yaw=torch.zeros(1),
+                   velocity_yaw=torch.tensor([[speed, 0.0, 0.0]]), head_tail_force=torch.zeros(1),
+                   terminated=torch.tensor([False]), timeout=torch.tensor([step == steps - 1]),
+                   tilt_cos=torch.tensor([tilt_cos_value]),
+                   non_foot_fraction=torch.tensor([[0.01, neck_fraction, 0.0]]),
+                   mesh_min_z=torch.tensor([[0.5, mesh_z, 0.5]]), foot_contact=feet,
+                   foot_fraction=torch.tensor([[0.3, 0.0, 0.3, 0.3]]))
+    return window.result()
+
+
+def test_v2_catches_what_v1_passed():
+    """The neck-dragging rollout must fail v2 on the axes v1 never read, and pass nothing extra."""
+    dragging = drag_window(V2_PROTOCOL, neck_fraction=0.48)
+    assert dragging["verdict"] == "fail"
+    assert dragging["gates"]["tracking"] and dragging["gates"]["displacement"] \
+        and dragging["gates"]["survival"], "the v1 axes really are nominal in this rollout"
+    assert not dragging["gates"]["no_non_foot_carrier"], "48% of body weight on the neck must not pass"
+    assert not dragging["gates"]["no_mesh_through_floor"], "a mesh 5 cm below ground must not pass"
+    assert dragging["gates"]["attitude"], "26 deg of tilt is inside the fall predicate, not a gate hit"
+    assert drag_window(PROTOCOL, neck_fraction=0.48)["verdict"] == "pass", \
+        "the v1 protocol is the thing that passed this; that is the gap v2 closes"
+    clean = drag_window(V2_PROTOCOL, neck_fraction=0.02, mesh_z=0.4, tilt_cos_value=0.999)
+    assert clean["verdict"] == "pass", clean["gates"]
+
+
+def test_v2_sustain_filter_and_unmeasured_refusal():
+    """A one-frame spike is contact noise; a gate with no measurement is refused, not passed."""
+    window = BaselineWindow(torch.zeros(1, 3), torch.zeros(1), steps=1000, protocol=V2_PROTOCOL)
+    for step in range(1000):
+        window.add(pos=torch.tensor([[0.5 * (step + 1) * 0.02, 0.0, 0.0]]), yaw=torch.zeros(1),
+                   velocity_yaw=torch.tensor([[0.5, 0.0, 0.0]]), head_tail_force=torch.zeros(1),
+                   terminated=torch.tensor([False]), timeout=torch.tensor([step == 999]),
+                   tilt_cos=torch.tensor([0.1 if step == 5 else 0.999]),
+                   non_foot_fraction=torch.tensor([[0.9 if step == 5 else 0.01, 0.0, 0.0]]),
+                   mesh_min_z=torch.tensor([[0.5, 0.5, 0.5]]),
+                   foot_contact=torch.ones(1, 4, dtype=torch.bool),
+                   foot_fraction=torch.full((1, 4), 0.25))
+    assert window.result()["gates"]["attitude"], "one tilted frame is a bump, not a fall"
+    assert window.result()["gates"]["no_non_foot_carrier"], "one loaded frame is a bump, not a carrier"
+    silent = BaselineWindow(torch.zeros(1, 3), torch.zeros(1), steps=20, protocol=V2_PROTOCOL)
+    try:
+        silent.result()
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("a partial window must not score")
+
+
+def test_v2_refuses_a_gate_it_could_not_measure():
+    """Unmeasured is unknown, and unknown is not a pass."""
+    window = BaselineWindow(torch.zeros(1, 3), torch.zeros(1), steps=2, protocol=V2_PROTOCOL)
+    for step in range(2):
+        window.add(pos=torch.tensor([[0.5 * (step + 1), 0.0, 0.0]]), yaw=torch.zeros(1),
+                   velocity_yaw=torch.tensor([[0.5, 0.0, 0.0]]), head_tail_force=torch.zeros(1),
+                   terminated=torch.tensor([False]), timeout=torch.tensor([step == 1]))
+    try:
+        window.result()
+    except ValueError as err:
+        assert "never measured" in str(err), err
+    else:
+        raise AssertionError("scoring a v2 window with no tilt/carrier/mesh readings must be refused")
+
+
 def test_termination_injection_is_independent_of_wiring():
     forces = torch.zeros(2, 3, 2, 3)
     clock = torch.zeros(2)

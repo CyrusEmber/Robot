@@ -20,8 +20,21 @@ v14.2). Every function here is sim-free so the offline gate can test it.
 
 from __future__ import annotations
 
+import pathlib
+
 import torch
-from isaaclab.utils.math import quat_apply_inverse, yaw_quat
+from isaaclab.utils.math import quat_apply, quat_apply_inverse, yaw_quat
+
+# Bodies whose collision mesh must stay above the floor: chest, neck and the three tail links.
+# The baseline line's own pre-train standard says the belly, head chain and tail carry no load
+# ("不趴地、不拿尾巴当第五支撑"), so the meshes are what a load reading is checked against --
+# a body can be loaded while standing, or loaded because it is grinding through the ground.
+MESH_CHECK_BODIES = ["chest_pitch", "neck_pitch", "tail1_pitch", "tail2_pitch", "tail3_pitch"]
+
+
+def collision_mesh_dir() -> pathlib.Path:
+    """Directory of the collision meshes the bbox reader consumes (``rl_exp/meshes/collision``)."""
+    return pathlib.Path(__file__).resolve().parents[2] / "meshes" / "collision"
 
 
 def yaw_frame_lin_vel(quat_w: torch.Tensor, lin_vel_w: torch.Tensor) -> torch.Tensor:
@@ -74,3 +87,102 @@ def sideslip_abs_mean(vel_yaw_y: torch.Tensor) -> float:
         Mean absolute lateral speed [m/s].
     """
     return round(vel_yaw_y.abs().mean().item(), 3) if vel_yaw_y.numel() else 0.0
+
+
+def tilt_cos(projected_gravity_b: torch.Tensor) -> torch.Tensor:
+    """Cosine of the base tilt angle, shape (N,).
+
+    The same quantity ``metrics.fall_flags`` gates on (``tilt_cos < tilt_cos_min``
+    means tilted over), so measuring it anywhere else is a second opinion: the
+    projected gravity is a unit vector, giving ``acos(-g_z)`` without an euler detour.
+
+    Args:
+        projected_gravity_b: gravity in the base frame, shape (N, 3).
+    Returns:
+        Shape (N,), 1.0 = perfectly upright.
+    """
+    return (-projected_gravity_b[:, 2]).clamp(-1.0, 1.0)
+
+
+def foot_ids(body_names: list[str]) -> list[int]:
+    """Indices of the foot bodies in a sensor's body order.
+
+    Args:
+        body_names: sensor body names, in sensor order.
+    Returns:
+        Indices whose name ends with ``_foot``.
+    """
+    return [i for i, name in enumerate(body_names) if name.endswith("_foot")]
+
+
+def body_load_n(net_forces_w: torch.Tensor) -> torch.Tensor:
+    """Mean normal contact force per body [N], shape (num_bodies,).
+
+    ``net_forces_w`` only answers "this body takes force", not "what it touches"
+    -- pair it with :func:`mesh_min_z` before calling a load "standing".
+
+    Args:
+        net_forces_w: ``(..., num_bodies, 3)`` contact sensor history -- a live
+            frame ``(num_envs, num_bodies, 3)`` or a stacked ``(T, num_envs, ...)``
+            session both work: every leading dimension is averaged over.
+    Returns:
+        Per-body mean of the vertical component [N].
+    """
+    vertical = net_forces_w[..., 2]
+    return vertical.reshape(-1, vertical.shape[-1]).mean(dim=0)
+
+
+def load_fraction(load_n: torch.Tensor, weight_n: float) -> torch.Tensor:
+    """Per-body load as a fraction of body weight, shape (num_bodies,).
+
+    Args:
+        load_n: per-body mean normal force [N], shape (num_bodies,).
+        weight_n: body weight ``mass * g`` [N].
+    """
+    return load_n / weight_n
+
+
+def mesh_bbox_corners(obj_path) -> torch.Tensor:
+    """Bounding-box corners of a collision mesh in its link frame, shape (8, 3) [m].
+
+    Args:
+        obj_path: path to the ``<body>_collision.obj`` mesh.
+    """
+    lo = [float("inf")] * 3
+    hi = [float("-inf")] * 3
+    with open(obj_path, encoding="utf-8") as handle:
+        for line in handle:
+            if line.startswith("v "):
+                for i, x in enumerate(line.split()[1:4]):
+                    value = float(x)
+                    lo[i] = min(lo[i], value)
+                    hi[i] = max(hi[i], value)
+    return torch.tensor(
+        [[a, b, c] for a in (lo[0], hi[0]) for b in (lo[1], hi[1]) for c in (lo[2], hi[2])],
+        dtype=torch.float32,
+    )
+
+
+def mesh_min_z(body_pos_w: torch.Tensor, body_quat_w: torch.Tensor,
+               ids: list[int], corners: torch.Tensor) -> torch.Tensor:
+    """Lowest world z of the selected bodies' collision meshes, shape (N,) [m].
+
+    Contact force says a body is loaded; it does not say what it is loaded
+    against. The body origin is not enough either (a mesh can sit above its own
+    origin), so the bbox corners are rotated by the live pose and the minimum
+    world z is read: ground is z=0, so a negative value is mesh through the floor.
+
+    Args:
+        body_pos_w: (N, num_bodies, 3) world positions.
+        body_quat_w: (N, num_bodies, 4) world orientations, xyzw.
+        ids: body column indices to measure.
+        corners: (len(ids), K, 3) link-frame bbox corners.
+    """
+    k = corners.shape[1]
+    n, nb = body_pos_w.shape[0], len(ids)
+    pos = body_pos_w[:, ids][:, :, None, :].expand(n, nb, k, 3).reshape(-1, 3)
+    quat = body_quat_w[:, ids][:, :, None, :].expand(n, nb, k, 4).reshape(-1, 4)
+    pts = corners[None].expand(n, nb, k, 3).reshape(-1, 3)
+    world = pos + quat_apply(quat, pts)
+    return world.reshape(n, nb, k, 3)[..., 2].min(dim=-1).values
+

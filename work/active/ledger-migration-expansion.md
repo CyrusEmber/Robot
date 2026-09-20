@@ -4,7 +4,7 @@ title: 扩大迁移：HARNESS → PLAN → ACCEPTANCE 的逐段分流
 scope: ablation_harness, rl_exp/versions/lizard, rl_exp/tools/verify
 status: open
 landing: ablation_harness/HARNESS.md, rl_exp/versions/lizard/PLAN.md, rl_exp/versions/lizard/ACCEPTANCE.md
-next: 开**批 1 = HARNESS**：逐项确认状态、机制落点、可执行关闭条件，迁成事项文件，**同一变更内删除旧正文、原行只留 id 与指针**，然后按下面四项走查验收（批 0 已完成：见"批 0 落地"）。批 2 = PLAN、批 3 = ACCEPTANCE 保持不动
+next: 开**批 2 = PLAN**：拆开"部分完成、部分待做"的混合事项再迁（**不借迁移顺带实现功能**），同一变更内删除旧正文、原行只留 id 与指针，然后按四项走查验收（批 0 / 批 1 已完成，见"批次进度"）。批 3 = ACCEPTANCE 保持不动
 close_when: 三批各自验收通过并留下记录即关。每批的验收（主判据，人工走查）= **可定位 / 可执行 / 可关闭 / 无约束遗漏**；走查必须真的沿"下一步 → 观测 → 分支结论"走一遍，"确认后可关"式措辞即使过格式检查也判该批不通过。某批不通过则该批重做，不推进下一批
 ---
 
@@ -13,12 +13,17 @@ close_when: 三批各自验收通过并留下记录即关。每批的验收（�
 试点（三个事项）已通过：`acceptance/records/2026-09-20-ledger-pilot.md`。本项管**剩下的大文档**，按
 "分流压力从小到大"分批，一批不通过就不动下一批。
 
-## 批 0 落地（2026-09-20，已完成）
+## 批次进度
 
-规则各自回了机制，提案文件删除：**发现命令与三条不变式** → `AGENTS.md`；**事项字段、状态词表、
-引用分型、关闭动作、预算上限与"工具不做决定"** → `check_work_docs.py` 的模块文档 + 闸门断言；
-**验收记录五节（适用范围 / 验收条件 / 结果 / 证据引用 / 未覆盖边界）** → 同闸门；
-**迁移权威性、四项验收、待决项纪律** → 本项。不再有第二处规则源。
+- **批 0（2026-09-20 完成）**：规则各自回了机制 —— 事项字段、状态词表、引用分型、关闭动作、预算上限、
+  "工具不做决定"、验收记录五节 → `check_work_docs.py`（模块文档即格式规范 + 闸门断言）；
+  发现命令与三条不变式 → `AGENTS.md`；迁移权威性、验收四项、待决项纪律 → 本项；提案文件删除。
+- **批 1（2026-09-20 完成）**：`HARNESS.md` 26315 → **6017** 字节。挂账 6 行全部收成指针
+  （3 个新活跃事项、1 个新关闭项、2 个既有指针）；**版本历史与修订记录是同批版本的两份日志** ⇒ 一起删除，
+  正文归 `git log -p`；记录格式一节压缩并逐条**点名执行者**；`升级触发` 里"协议 v2 出现时/落地时"
+  的将来时改为现行规则（依据：`eval.py` 的 `--protocol` 默认值已是 v3）。走查四项逐产物通过，
+  证据与缺口见 `acceptance/records/2026-09-20-harness-migration.md`。
+- **批 2 = PLAN / 批 3 = ACCEPTANCE**：未开。
 
 ## 每批的硬约束
 
@@ -48,7 +53,11 @@ close_when: 三批各自验收通过并留下记录即关。每批的验收（�
 
 ## 已知的待决项（迁到哪一批就在哪一批裁决）
 
-- `HARNESS.md` 内部矛盾：一处说当前评测协议是 v2、一处说 v3 ⇒ 批 1 裁决。
+- **批 1 留下的三条历史事实没有家**（只在旧版本史里写过，已原样保存在
+  `acceptance/records/2026-09-20-harness-migration.md`）：v1 训练总时 25.735 h / 单次停顿 7.2 h 的时间预算依据；
+  "记录链源头在机器本地会被清理 ⇒ 记录必须入库"的理由；"别把调用路径的父目录当配置"的教训。
+  归位（v1 目录 NOTES / `rl_exp/docs/pitfalls.md` / 某条记录）待裁决。
+- `HARNESS.md` 内部矛盾已随批 1 消解（`eval.py` 默认协议 = v3，跨协议禁混表改为现行规则）。
 - `tasks/components.py`、`tasks/lizard_env_cfg.py`、`tools/verify/teacher_smoke.py` 三处注释仍指向
   FAMILY 的 obs 布局表（该表归 `OBS.md`）⇒ 属代码文件，另行安排。
 - `check_pxr_leak.py` / `check_split_probe_wait.py` 的 docstring 里 `docs/pitfalls.md` 路径陈旧 ⇒ 同上。

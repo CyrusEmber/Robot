@@ -18,7 +18,7 @@ import sys
 
 _REPO = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_REPO))
-PROTOCOL_PATH = pathlib.Path(__file__).resolve().parent / "protocols" / "baseline_flat_v1.json"
+PROTOCOL_PATH = pathlib.Path(__file__).resolve().parent / "protocols" / "baseline_flat_v2.json"
 
 
 def yaw_of(quat: torch.Tensor) -> torch.Tensor:
@@ -45,6 +45,10 @@ def run(args) -> dict:
 
     from ablation_harness import record
     from ablation_harness.baseline_metrics import BaselineWindow
+    from rl_exp.tools.diagnose.diag_metrics import (
+        MESH_CHECK_BODIES, body_load_n, collision_mesh_dir, foot_ids, mesh_bbox_corners, mesh_min_z,
+        tilt_cos,
+    )
     from rl_exp.tools.runrecord import provenance
     from rl_exp.tools.verify import cfg_snapshot
     from rl_exp.tools.verify.baseline_runtime import joint_reset_errors, resolve_task_cfg
@@ -99,14 +103,33 @@ def run(args) -> dict:
         load_ids = [i for i, name in enumerate(names) if any(word in name.lower() for word in ("head", "neck", "tail"))]
         if not load_ids:
             raise RuntimeError("no head/neck/tail sensor bodies resolved: cannot report auxiliary support")
+        feet = foot_ids(names)
+        if not feet:
+            raise RuntimeError("no foot bodies resolved: cannot attribute standing to the legs")
+        non_foot = [i for i in range(len(names)) if i not in feet]
+        mesh_present = [name for name in MESH_CHECK_BODIES if name in names]
+        mesh_ids = [names.index(name) for name in mesh_present]
+        if not mesh_present:
+            raise RuntimeError(f"none of {MESH_CHECK_BODIES} is a body of this asset: cannot check the floor")
+        mesh_corners = torch.stack([mesh_bbox_corners(collision_mesh_dir() / f"{name}_collision.obj")
+                                    for name in mesh_present]).to(live.device)
+        weight_n = float(robot.data.body_mass.torch[0].sum().item() * 9.81)
 
         def snapshot():
             q = yaw_quat(robot.data.root_quat_w.torch)
+            forces = sensor.data.net_forces_w.torch
+            load = body_load_n(forces) / weight_n
             return {
                 "pos": robot.data.root_pos_w.torch.clone(),
                 "yaw": yaw_of(robot.data.root_quat_w.torch),
                 "velocity_yaw": quat_apply_inverse(q, robot.data.root_lin_vel_w.torch).clone(),
-                "head_tail_force": sensor.data.net_forces_w.torch[:, load_ids].norm(dim=-1).sum(dim=-1).clone(),
+                "head_tail_force": forces[:, load_ids].norm(dim=-1).sum(dim=-1).clone(),
+                "tilt_cos": tilt_cos(robot.data.projected_gravity_b.torch).clone(),
+                "non_foot_fraction": load[non_foot].clone(),
+                "mesh_min_z": mesh_min_z(robot.data.body_pos_w.torch, robot.data.body_quat_w.torch,
+                                         mesh_ids, mesh_corners).clone(),
+                "foot_contact": (forces[:, feet, 2] > 1.0).clone(),
+                "foot_fraction": load[feet].clone(),
             }
 
         first = snapshot()
@@ -152,6 +175,9 @@ def run(args) -> dict:
             "timestamp": provenance.now(), "code": sources,
             "policy_mode": args.policy_mode if checkpoint else "zero_action", "checkpoint": checkpoint,
             "terminal_frames_captured": captured, "head_tail_sensor_bodies": [names[i] for i in load_ids],
+            "foot_bodies": [names[i] for i in feet],
+            "non_foot_bodies": [names[i] for i in non_foot],
+            "mesh_check_bodies": mesh_present, "body_weight_n": weight_n,
             "env_cfg": cfg_snapshot.snapshot(cfg), "agent_cfg": cfg_snapshot.snapshot(agent_cfg),
             **result,
         }
