@@ -1,0 +1,4 @@
+{
+  "base": "flat-v0",
+  "note": "the staged-curriculum dev-state env on flat ground (family curriculum_env_cfg) built on the family flat root: base.json names `flat-v0` because that root IS the wiring these four recipes share, so the declared difference is the curriculum delta alone"
+}

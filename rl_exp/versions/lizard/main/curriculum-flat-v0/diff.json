@@ -1,0 +1,40 @@
+{
+  "format": 4,
+  "recipe": "curriculum-flat-v0@1",
+  "line": "lizard/main",
+  "note": "Hard B, lineage reading: base.json names this recipe's mother, so the declared difference is against that recipe -- not against the framework stock cfg, which would bury this version's own delta in everything its ancestors wrote. Env paths are grouped by who wrote them: the element set that touched the path (several elements can touch one path in sequence), a version-resolved component, or wiring -- the shared wiring reading this recipe's own document. params_version is filtered as identity: it says which recipe this is, and it is what makes the two recipes different at all.",
+  "env": {
+    "allowed": {
+      "v0_curriculum_actions": {
+        "paths": [
+          "actions.joint_pos",
+          "actions.joint_pos_legs",
+          "actions.joint_pos_spine"
+        ],
+        "why": "the deployed legs/spine split replaces the flat root's single joint_pos term, so the spine can be gated; the spine scale comes from the dev yaml"
+      },
+      "v0_curriculum_stage0_ranges": {
+        "paths": [
+          "commands.base_velocity.ranges.ang_vel_z.__tuple__[0]",
+          "commands.base_velocity.ranges.ang_vel_z.__tuple__[1]",
+          "commands.base_velocity.ranges.lin_vel_x.__tuple__[0]",
+          "commands.base_velocity.ranges.lin_vel_x.__tuple__[1]"
+        ],
+        "why": "the initial command ranges mirror stage 0, so a fresh env is not resampled off-spec in its first episode"
+      },
+      "v0_curriculum_stages": {
+        "paths": [
+          "curriculum.bone_curriculum",
+          "curriculum.speed_curriculum",
+          "curriculum.turn_curriculum"
+        ],
+        "why": "the three staged curricula (bone/speed/turning) that replace the fixed command ranges; the stage lists stay in curriculum_env_cfg"
+      }
+    }
+  },
+  "agent": {
+    "allowed": {
+      "experiment_name": "one recipe, one log directory (versioning.mdc A): lizard_curriculum_flat against the flat root's lizard_flat"
+    }
+  }
+}

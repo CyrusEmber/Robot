@@ -1,0 +1,4 @@
+{
+  "base": "flat-v0",
+  "note": "both dev-state deltas at once on the family flat root (family curriculum_rough_env_cfg): base.json names `flat-v0` because that root IS the wiring these four recipes share, and the rough stack and the staged curricula are disjoint element sets, so their union is the whole declared difference"
+}

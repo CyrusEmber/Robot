@@ -104,6 +104,13 @@ EXPECTED_DIFFS: dict[tuple[str, str], int] = {
     ("lizard/main", "v12"): 40,
     ("lizard/main", "v13"): 3,
     ("lizard/main", "v14"): 3,
+    # The family's three dev-state deltas against the root they all build on (``flat-v0``): the
+    # rough stack, the staged curricula, and both. ``flat-v0`` itself is absent for the same reason
+    # ``v1`` is -- it IS the root, so a line-root reading would restate the family wiring as one
+    # recipe's delta, and there is no mother recipe to read it against.
+    ("lizard/main", "rough-v0"): 6,
+    ("lizard/main", "curriculum-flat-v0"): 11,
+    ("lizard/main", "curriculum-rough-v0"): 16,
 }
 """Recipe -> how many paths its difference declaration lists (``diff.json`` next to the recipe)."""
 
