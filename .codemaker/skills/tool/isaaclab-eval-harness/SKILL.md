@@ -15,7 +15,7 @@ description: >
 # IsaacLab Eval Harness（消融与统一评测）
 
 评测/消融代码在 `<REPO>\ablation_harness\`（真身就在本仓，IsaacLab 树内不放副本也不挂 junction）。机器本地路径——IsaacLab 源码树与 venv 解释器——登记在仓根 `paths.yaml`（模板 `paths.example.yaml`），唯一读者 `ablation_harness\host_paths.py`；换机器只改这一个文件，自检 `python ablation_harness\host_paths.py --check`。本 skill 是设计契约与使用手册；
-**协议唯一真源是 `ablation_harness\protocols\locomotion_eval_v2.yaml`（当前；v1 冻结封存），
+**协议唯一真源是 `ablation_harness\protocols\locomotion_eval_v3.yaml`（当前；v1/v2 冻结封存），
 本 skill 只述要点不复制全文（防漂移）**。改协议/指标口径前先读"版本纪律"节。
 
 ## 核心理念（为什么这么设计）
@@ -38,7 +38,7 @@ description: >
 │                          # framework_pin_check 五处共用，CLI 参数 > 环境变量 > yaml > 向上探测
 ├─ eval.py                 # runner: task + checkpoint + protocol + mode → 跑分
 ├─ run_ablation.py         # spec yaml → train+eval 调度, 断点续跑, 汇总表
-├─ protocols\locomotion_eval_v2.yaml  # 协议契约（当前，冻结只读，改动 = 新建 vN）；v1 封存
+├─ protocols\locomotion_eval_v3.yaml  # 协议契约（当前，冻结只读，改动 = 新建 vN）；v1/v2 封存
 ├─ suites.py              # 地形套件（机器人尺度相关，单文件）：新机器人 = 新 suite 函数
 │                         # + 注册 eval.py 的 _SUITE_REGISTRY（三锁纪律见实现要点）
 ├─ components\             # command_player / dr_controller / recovery（纯函数，通用）
@@ -54,11 +54,13 @@ description: >
 
 harness 与机器人无关；**机器人相关只有 suites.py 一个文件 + 协议里的 suite 引用**。
 
-## 协议要点（当前 v2）
+## 协议要点（当前 v3）
 
 **本 skill 不复制协议数值——复制处即漂移处**（曾有文档抄 266 维 obs 被 v2 打脸）。
-全文即契约，30 秒读完：`protocols\locomotion_eval_v2.yaml`（命令时间线、robust push、
-suite 布局、指标口径、采样帧定义全在里面）。**v2 相对 v1 只有一处语义变更 = 采样帧**：
+全文即契约，30 秒读完：`protocols\locomotion_eval_v3.yaml`（命令时间线、robust push、
+suite 布局、指标口径、采样帧定义全在里面）。**v3 相对 v2 只换套件**：`lizard_suite_v2` 的
+rough_a/rough_b 是真起伏（v2 用单值 `noise_range`，`np.random.choice` 退化成常量 ⇒ 那两列
+实为均匀抬升平板，2026-09-18 实测后封存）。**v2 相对 v1 只有一处语义变更 = 采样帧**：
 v1 采 step 之前的 obs 帧且丢失 auto-reset 覆盖掉的终止帧，v2 采 step 之后、reset 之前的
 reward 帧并把终止帧抓回来（少了它，门闸恰好满 25 帧收局的 episode 只有 24 个异常帧 →
 fall 漏记）。**v1 为首个机器人尺度实例**，新机器人可另起协议或在同协议下换 suite——语义变了
@@ -93,7 +95,7 @@ seed 保住），`-Play` 的 DR 预先全关，robust 会静默退化成 nominal
 ```bat
 :: 单点评估（nominal / robust）；--group 让一次 campaign 单独成目录 + 专属 summary.csv
 python ablation_harness\eval.py --task <Robot>-<Task>-vN --checkpoint <model.pt> ^
-  --protocol locomotion_eval_v2 --mode nominal --seed 123 --group v2
+  --protocol locomotion_eval_v3 --mode nominal --seed 123 --group v3
 
 :: 消融调度（spec yaml：N 个 run 顺序 train+eval，断点续跑；spec 顶层 group: 透传 --group）+ 汇总表
 python ablation_harness\run_ablation.py --spec ablation_harness\specs\<name>.yaml
@@ -105,11 +107,11 @@ python ablation_harness\run_ablation.py --by-terrain --group v1
 :: （eval.json / summary.csv / terrains.csv / tb_scalars.csv），图和 HTML 秒级可再生 ──
 :: A. 单文件 HTML 汇总报告（默认）：训练曲线（竖线自动标已评测 ckpt）+ 评测图 +
 ::    summary 表 + rev 溯源 + iteration↔墙上时间（排消融预算先看，迭代耗时不等长）
-python ablation_harness\plot_eval.py --protocol locomotion_eval_v2 --group v2 ^
+python ablation_harness\plot_eval.py --protocol locomotion_eval_v3 --group v3 ^
   --report <robot>_exp\versions\<family>\<vN>
 :: B. 散图 PNG：只有贴图进工单 / POPO / PPT 时才需要（那些地方不收 HTML）；训练侧
 ::    曲线单独出图用 <robot>_exp\tools\trainlog\plot_tb.py
-python ablation_harness\plot_eval.py --protocol locomotion_eval_v2 --group v2 ^
+python ablation_harness\plot_eval.py --protocol locomotion_eval_v3 --group v3 ^
   --out_dir <robot>_exp\versions\<family>\<vN>\plots --prefix <vN>_eval_
 :: 地形预检图不在此列（见 isaaclab-pretrain-check）
 ```
@@ -152,7 +154,7 @@ eval_checkpoints/eval_modes/eval_seed/overrides。**tag 不可互为后缀**（�
   sub-terrain → 按累计比例**确定性**分配，列 j 恰好 = 第 j 种地形（dict 插入序）。
   随机模式（curriculum=False）逐格采样会漏类型——suite 绝不能用。再叠
   `difficulty_range=(1.0,1.0)` + 单值参数范围（`slope_range=(θ,θ)` 等）双锁，seed 钉死实现
-- **目录键用协议文件名**（`results/locomotion_eval_v2/`）；协议显示名只在 JSON/CSV
+- **目录键用协议文件名**（`results/locomotion_eval_v3/`）；协议显示名只在 JSON/CSV
   元数据里。`--group <name>` 再套一层 campaign 目录，**行只落该组的 `summary.csv`**
   （协议根表不混装）；summarize 缺省汇总"协议根 + 各组"，`--summarize --group v1` 只看一组
 - 命令注入：直写 `term.vel_command_b`（play.py 键盘回退同款），并关 `heading_command`/

@@ -183,6 +183,8 @@
 | `tools\runrecord\rebuild.py` | **恢复演练工具（ARCH_PLAN 1.5，按需，非所有 run 的强制入口）**：`--capture <run_dir> <dest>` 按 T1 声明取材（干净代码按 rev 可取回、脏树 diff 与未跟踪代码**必须**有 `--archive` 落点，否则**拒采且不写材料**，只留拒采记录 —— `PLAN.md` #18 变成闸门）+ ckpt 与 run 记录拷贝并逐文件摘要；`--check <dest> --root <重建位置>` 查：scope（重建了什么 / 复用了哪些依赖，`--root` 落在原树内 ⇒ "只换配置"不算材料恢复演练）、材料摘要、**只对 `--rebuilt-module` 声明为重建的材料**做来源判定（默认 `rl_exp`；落回 `--original` 原树或落在重建位置与 `--dep` 之外即失败；声明复用的依赖只记录不断言）、资产锁解析位置、配方从重建代码再推导、ckpt `infos` 回指本记录 T1、原目录可读性只作信息行（不做系统级访问切断）；`--maintest` 删一个必需载荷必须失败、还原必须通过。不起仿真，只到"配置与加载级" |
 | `tools\verify\test_rebuild_gate.py` | 上者离线验证（31 项，复用 `test_run_manifest._record` 造 run 记录）：漂移脏树拒采、无归档拒采、带归档落盘且摘要一致、未跟踪代码内容缺失拒采、材料完好/来源/载荷绑定三行、落回原树或未声明位置判失败、复用依赖不断言而 `--rebuilt-module` 声明后必判、未给 `--original` 记未知、原目录可读只作信息、只换配置不算演练、删载荷必失败+还原必通过、被改载荷与冻结后被改记录均不得通过、拒采记未知（退 2）而失败记阻塞（退 1） |
 | `fork_patches\train_run_manifest.patch` | 训练侧四个调用点（T0 在 `gym.make` 前 / 构造后核验 / runner 后装 save 钩子 / `learn` 前冻结）。**依赖 `train_curriculum_resume.patch` 先应用**：其 save 钩子装在课程钩子之后（外层写文件哈希），且 T1 的 `resume` 段直接记录该补丁产出的 `drop_curriculum_state` 与 `curriculum_resume` 结果（S10：manifest 不自行反推恢复结果）。两个补丁的插入点互不重叠，`git apply --check --reverse` 各自幂等，setup.bat 按文件名顺序应用 |
+| `fork_patches\play_keyboard.patch` | play.py 键盘回退（诊断/目视用），单点 |
+| `fork_patches\train_seed_rng.patch` | 训练侧一行：`configure_seed(env_cfg.seed)` 提到 `gym.make` **之前**（紧接 `env_cfg.seed = agent_cfg.seed`）。上游那次 `configure_seed` 在 runner 之后 = 地形已建好，而地形函数抽的是 numpy/torch **全局**流（生成器只播自己的 local rng，`terrain_generator.py:148`）⇒ 不钉在这里，同一 cfg 两次运行站在不同地面上（`PLAN.md` #18 ②）。**按文件名序最后应用**，故 hunk 行号指"全部补丁打完后"的文件；与其它 train.py 补丁的插入点不重叠 |
 | `tools\diagnose\debug_pose.py` | reset 后立即 dump 全部腿关节轴心世界坐标 |
 | `tools\diagnose\diag_metrics.py` | **验收量测纯函数**（no sim，torch）：`yaw_frame_lin_vel`（= 奖励核同帧）、`forward_error`（签名/abs 均值误差 + 逐帧 MAE）、`sideslip_abs_mean`（`mean|vel_yaw_y|`）；诊断工具与离线闸共用，防"验收与奖励不同坐标系"复发 |
 | `tools\verify\test_acceptance_metrics.py` | 验收量测离线闸（no sim，5 例）：核满分/超速/欠速/侧滑降分、yaw 不变性（同相对运动同奖励）、**混俯仰不误报欠速**（体坐标在 45° 俯仰下假阴 −29% → 旧实现必失败，作回归证据）、**左右交替侧滑必判不通过**（签名均值 ≈0 会放行）、快慢交替由逐帧 MAE 暴露 |
@@ -211,14 +213,15 @@
 | `run_ablation.py` | 消融调度器：spec yaml → 串行 train+eval → 汇总表，断点续跑；`--by-terrain` 出逐地形长表+pivot |
 | `plot_eval.py` | 评测可视化（读组目录 eval.json，不起仿真）：`--report <版本目录>` → 单文件 HTML 汇总报告（训练曲线+评测图+summary 表+rev 溯源，**默认选它**）；`--out_dir` → 散图 PNG（只需贴图进工单时用）。两者均不入库 |
 | `metrics.py` | 指标库：tracking/success/energy（PD 反解 τ）/fall 几何判定/completion |
-| `suites.py` | 固定地形套件（9 地形确定性三锁：curriculum+等比例+单值难度+seed） |
+| `suites.py` | 固定地形套件（9 地形确定性三锁：curriculum+等比例+单值难度+seed）。**`lizard_suite_v1` 的 rough 两列是均匀平板**（见下）⇒ `lizard_suite_v2`：rough_a/b 改真起伏，配协议 v3 |
 | `components\command_player.py` | 命令时间线播放器（协议 yaml 是唯一真源） |
 | `components\dr_controller.py` | nominal/robust 模式的 DR 开关变换 |
 | `components\recovery.py` | recovery push：冲击注入 + 恢复计时（只统计冲击时仍在第一局的 env） |
 | `protocols\locomotion_eval_v1.yaml` | **评测协议契约（冻结封存）**：早于 v2 的采样帧口径（step 前 = obs 帧，终止帧丢失） |
-| `protocols\locomotion_eval_v2.yaml` | **评测协议契约（当前）**：时间线/阈值/suite/DR 同 v1，唯一变更 = 帧定义（step 后 = reward 帧，含 hook 抓到的终止帧）。改动 = 新建 v3；**v1/v2 结果不得混表** |
+| `protocols\locomotion_eval_v2.yaml` | **评测协议契约（冻结封存）**：时间线/阈值/suite/DR 同 v1，唯一变更 = 帧定义（step 后 = reward 帧，含 hook 抓到的终止帧）。其 `lizard_suite_v1` 的 rough 两列实为均匀抬升平板（`noise_range` 单值 ⇒ `np.random.choice` 退化），2026-09-18 实测后封存 |
+| `protocols\locomotion_eval_v3.yaml` | **评测协议契约（当前）**：时间线/阈值/DR/metrics 全同 v2，只换套件 `lizard_suite_v2`（rough_a/b 改成真起伏 —— `noise_range (0.02,0.06)/(0.08,0.16)` + `noise_step` + `downsampled_scale=0.5`）。三键差异（`name`/`version`/`suite`）由 `tools\verify\test_terrain_geometry.py` 断言看守；改动 = 新建 v4；**v1/v2/v3 任一不得混表** |
 | `specs\example_baseline.yaml` | 消融 spec 示例 |
-| `results\locomotion_eval_v1\` | v1 跑分落盘（记录即数据，随仓提交；**冻结不迁移**，不与 v2 混表）。campaign 分组：`--group v1` → `locomotion_eval_v1\v1\<run_id>\` + 组内专属 `summary.csv`（全局指标）+ `terrains.csv`（逐地形长表，`--by-terrain` 生成）；`--summarize [--group v1]` 看单组或汇总。v2 结果同构落 `results\locomotion_eval_v2\` |
+| `results\locomotion_eval_v1\` | v1 跑分落盘（记录即数据，随仓提交；**冻结不迁移**，不与 v2 混表）。campaign 分组：`--group v1` → `locomotion_eval_v1\v1\<run_id>\` + 组内专属 `summary.csv`（全局指标）+ `terrains.csv`（逐地形长表，`--by-terrain` 生成）；`--summarize [--group v1]` 看单组或汇总。v2/v3 结果同构落 `results\locomotion_eval_v2\`、`results\locomotion_eval_v3\` |
 
 ## .codemaker\skills\tool\ —— AI 开发技能（方法论）
 
