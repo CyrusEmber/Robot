@@ -1611,6 +1611,38 @@ L02 记录）；这 4 条仍**无 `diff.json`**；家族 obs 宽度仍未实测�
 宽度靠 `dims_digest` 自钉；② "生成 + 人工审批"仍是社会控制（重生成 + 重批可以不留"有人看过"的痕迹，
 既有先例 = golden 的 `--update --reason`）。家族 4 条仍**无 `diff.json`**（硬 A only）。
 
+### §3.1a 追加（2026-09-18）：批准的宽度必须交代"谁断言的"
+
+**性质**：**追加**条目，处理该节第 10 条敞口（原文："生成 + 人工审批仍是社会控制（敞口，未修）……
+重新生成 + 重批可以不留'有人看过'的痕迹。既有先例是 golden 的 `--update --reason`"）。
+
+| 项 | 内容 |
+|---|---|
+| 先纠正上一条的措辞 | 该节列的两条里，① "`digest` 只覆盖 `groups`" **不是洞**：宽度由 `dims_digest` 自钉，且反证在跑（`dims/in-place-edit` 原地改宽度 ⇒ 红、`dims/no-approved-digest` 缺摘要 ⇒ 红）。它是**分工**——协议身份只该由布局决定（否则"同布局不同宽度"无法表达）。本条只修 ② |
+| 修法（对齐先例，不假装能证明"有人看过"） | 每条**带已批宽度**的协议必须带非空 `evidence`：**指明**那次实测/那条记录；带 `evidence` 而无宽度 = 红（与"要么全填要么全空"同精神）。规则落在 `check_obs_protocol.check_anchors`；反证 **6 → 8 例**（新增 `dims/no-evidence`、`dims/evidence-without-widths`，两者皆 FIRES）；文件 `note` 同步写明该义务 |
+| 数据 | 11 条带宽度协议全部补 `evidence`（无一条可省）：4 条家族引 2026-09-18 那次真跑（`OBS_PROTOCOL_LIVE_OK`、8 任务 0 problem）+ 本节；7 条教师侧引该文件 note 的 2026-09-16 重批（"diff 仅表示形式"）——**只引仓里已有的记录，不补造历史**。家族 4 条原为空的 `label` 顺带补齐 |
+| 证据 | `OBS_PROTOCOL_GATE_OK`（`protocols: 11 | tasks: 36`）· 反证 8/8 FIRES · 全量套件 `ALL_OFFLINE_CHECKS_PASSED (45/45)` |
+
+**边界**：这是"**留下可跟的痕迹**"，不是"证明有人看过"——机制上仍可自洽地重生成 + 重批。它把 golden
+先例（`--update --reason`）的**强度**搬到这一面，并在文件里写明义务；更强的东西（签名/审批人身份）本轮不做。
+
+### 硬 B 追加（2026-09-18）：家族三条配方的差异声明
+
+**性质**：**追加**条目，补上"家族 4 条配方无 `diff.json`"这一项（4 条里 3 条可声明，1 条按先例不声明）。
+
+| 项 | 内容 |
+|---|---|
+| 母版怎么定 | 按本仓既有决定（B4 段："`v1` 不假装"）：**根配方没有可用母版就不写声明**。`flat-v0` 的 base 就是家族接线本身 ⇒ 与 `v1` 同类，保持硬 A-only（闸门打印），**不写 stock 相对声明**（那会把整条线的遗产写成它一条的 delta）。其余三条的母版 = `flat-v0`（家族接线根，也是它们的 base） |
+| 落子 | `versions/lizard/main/{rough-v0,curriculum-flat-v0,curriculum-rough-v0}/base.json`（`{"base": "flat-v0", …}`）+ `diff.json`（`format: 4`，按**作者集合**分组）：路径数 **6 / 11 / 16**（各含 1 条 agent `experiment_name`）。`EXPECTED_DIFFS` 钉三条 |
+| 作者面（本批的实质） | 每个 env 路径**恰好一个 `_V0_*` 元素**认领；`wiring`、`components.X` 一次都没用上 ⇒ 家族这条线的 delta 完全由元素表达，正是"配方 = 声明"想要的样子 |
+| 目录合法性 | `recipe_lines.discover()` 只把 `v\d+` 当版本、**其它子目录忽略**（不是报错）；`declared_diff()` 按 `line.root / <handle> / diff.json` 拼路径 ⇒ 新目录既不被当版本、也不被当线（`check_version_docs` 仍绿） |
+| 证据 | `RECIPE_BUILD_OK (34 task(s) field-identical to the frozen golden; **355** declared difference(s))` = 322 + 6 + 11 + 16；`flat-v0`（且只有它，家族侧）仍在 hard A-only 行里；全量套件 `ALL_OFFLINE_CHECKS_PASSED (45/45)` |
+| 反证（4 条，各自逐字节复原） | ① 把一条声明路径挪进别的作者组 ⇒ `empty groups read as coverage` + `… is attributed to 'v0_rough_terrain' while the elements that moved it are ['v0_rough_terrain_curriculum'] -- the list and the element list have drifted apart`；② 声明一条**不产出差异**的路径 ⇒ `1 declared env path(s) no longer differ from the base` + `… while the elements that moved it are none`；③ 删一条声明行 ⇒ `1 env field(s) differ from mother flat-v0 without being declared` + `declared 15 difference path(s), expected 16`；④ 删 `EXPECTED_DIFFS` 钉 ⇒ `has a difference declaration that no EXPECTED_DIFFS entry pins -- an unchecked declaration reads as a checked one` |
+
+**边界**：`flat-v0` 仍 hard A-only（与 `v1` 同类，**不是缺口**）；三条声明写的是**路径集合**，它们读
+dev yaml ⇒ 改某个值不动声明，改**形状**（新键/新差异）才动——若某条声明路径因此**不再有差异**，它按
+`no longer differ` 红，那正是想要的。
+
 ### 生成方式，与它带来的**限制**
 
 路径是**派生**的（量母版 → 重放元素 → 残差按所有权表分类），**理由是手写的**；生成器用完即删，不留在仓里。这带来一个必须写下来的限制：**派生错误会同时出现在文件与闸门两侧**——两边互相印证不等于正确。独立边界只剩硬 A（冻结 golden 钉住字段面）。已做的抽查：分组数与条数与独立量测一致；每组理由都能追到该版 `PLAN.md`；人眼过了 v14（2 组）、v3/v5/v11/v12（分组与计数）、baseline（9 组）。
