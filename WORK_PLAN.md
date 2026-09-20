@@ -29,11 +29,13 @@
 ```
 work/active/<id>.md                             # 一个未完成事项 = 一份文件
 work/closed/<year>/<id>.md                      # 关闭即离开默认集；文件本身是身份记录
-rl_exp/versions/lizard/acceptance/records/<日期-对象-主题>.md   # 验收证据，扁平一层
+acceptance/records/<日期-对象-主题>.md                    # 验收证据，扁平一层（仓根，与 work/ 对称）
 rl_exp/tools/verify/check_work_docs.py          # 列举 / 定位 / 检查
 ```
 
-不新增 `WORK.md`、`INDEX.md`、`ids.json`、`policy.json`。各文件职责：
+不新增 `WORK.md`、`INDEX.md`、`ids.json`、`policy.json`。`records/` 取**仓根**（与 `work/` 对称）：
+它的对象跨家族（评测台 / 记录格式 / 归档），归某一条线所有是错的——`ACCEPTANCE.md` 落在 lizard 家族里
+只是"当时只有一条线"的历史结果。各文件职责：
 
 | 文件 | 保留 | 移出 |
 |---|---|---|
@@ -220,8 +222,10 @@ records/2026-09-20-runrecord-isolated-rebuild.md           # Runrecord：隔离�
 **试点验收**：活跃发现正确、关闭项默认消失；**已登记规则移进归档后必红**；引用/身份/预算破坏测试均被检出；
 报告默认入口大小、活跃总量、单项最大值（三项分开报，见上条条款）。
 
-**迁移前基线（测量输出，2026-09-20，单位字节）**：由 `Get-ChildItem -Path <下表完整路径> | Select Name,Length`
-输出，路径即表内所写，可逐条复测：
+**迁移前基线（测量输出，2026-09-20，单位字节）**：已落记录
+`acceptance/records/2026-09-20-doc-read-cost-baseline.md`（含计数口径、步骤、通过标准、before 读数、
+两条路径的对比与未覆盖边界）。下表是其中的静态体积，由
+`Get-ChildItem -Path <下表完整路径> | Select Name,Length` 输出，路径即表内所写，可逐条复测：
 
 | 路径（相对仓根） | 字节 |
 |---|---|
