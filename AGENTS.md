@@ -11,6 +11,16 @@ When reviewing a solution, do not just agree or optimize for the implementation.
 
 Be direct, critical, and practical. Help avoid shallow thinking, over-engineering, hidden dependencies, and long-term maintainability problems.
 
+## Where the work lives
+
+- **在办事项** = `work/active/*.md`，一项一文件；证据 = `acceptance/records/`。
+  列举：`python rl_exp/tools/verify/check_work_docs.py --list`（会说明已迁移多少项）；
+  定位一条：`--locate <关键词>`；查形状：`check_work_docs.py`。
+- **已关闭** = `work/closed/<year>/`，不在默认读取链上：靠检索找，不靠通读。
+- 旧的总账式文档正在往这两棵树里分流。分流期间**工具只列它覆盖的部分**，别把它的输出当成完整待办。
+- **按任务取用，不要整份通读**：`FILEMAP.md`（目录职责 / 入口 / 闸门）与
+  `FAMILY.md`（家族事实 / 版本史）都按节查；某个子系统的事实归它自己的文档。
+
 ## Before work
 
 - Show a plan before any code or file changes.

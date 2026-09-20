@@ -13,7 +13,9 @@ cd "$REPO" || exit 1
 # run on the commits that could break it. Patch archives and this hook itself
 # count too -- re-pinning a fork patch is exactly the change the pin gate reads.
 STAGED=$(git diff --cached --name-only --diff-filter=ACMR)
-echo "$STAGED" | grep -qE '^(rl_exp|ablation_harness)/.*\.(py|yaml|yml|json|urdf|usda|usd|patch)$|^rl_exp/versions/|^hooks/' || exit 0
+# work/ counts too: an item edit is the only thing that can break the ledger gate, and
+# nothing else in this hook reads that tree.
+echo "$STAGED" | grep -qE '^(rl_exp|ablation_harness)/.*\.(py|yaml|yml|json|urdf|usda|usd|patch)$|^rl_exp/versions/|^hooks/|^work/' || exit 0
 
 # Python: the venv is recorded in paths.yaml (or RL_PYTHON) and reported by
 # host_paths.py -- a stdlib-only query, so whatever python is on PATH can ask
@@ -54,6 +56,14 @@ echo "[pre-commit] check_dr_parity --strict"
 echo "[pre-commit] check_version_docs"
 "$PY" rl_exp/tools/verify/check_version_docs.py || {
   echo "[pre-commit] FAIL: version records (versioning.mdc A-2/A-5): four-piece set, FAMILY row, FILEMAP row."
+  exit 1
+}
+
+# stdlib-only, runs with any python: the work ledger's shape (required fields, status
+# vocabulary, landing/evidence existing, one home per id, active-set budget).
+echo "[pre-commit] check_work_docs"
+"$PY" rl_exp/tools/verify/check_work_docs.py || {
+  echo "[pre-commit] FAIL: work-ledger shape (see above). Fix the item, not the gate."
   exit 1
 }
 

@@ -84,6 +84,8 @@ CHECKS: list[Check] = [
           [f"{_V}/test_terrain_geometry.py"], contract=("ablation_harness/suites.py",)),
     Check("version-record completeness (four-piece set / FAMILY row / FILEMAP row / no verdict readouts outside the ledger)",
           [f"{_V}/check_version_docs.py", "--self-test"], contract=("rl_exp/versions/lizard/FAMILY.md",)),
+    Check("work-ledger shape (required fields / status vocabulary / landing + evidence exist / one home per id / active-set budget)",
+          [f"{_V}/check_work_docs.py", "--self-test"], contract=("AGENTS.md",)),
     Check("v12 height-ring noise model (conditions / scopes / outliers / c_k / mid redraw)",
           [f"{_V}/test_v12_noise.py"], contract=("rl_exp/versions/lizard/main/v12/main_params.yaml",)),
     Check("pre-kit pxr leak gate (P001/P003/P004: registry-resolved env cfg construction must stay pxr-clean)",
@@ -180,7 +182,7 @@ def default_jobs() -> int:
 #   Deliberately far above the cost budget, so that a slow check is reported as cost, not
 #   killed as a hang.
 PER_CHECK_BUDGET_S = 25.0
-MAX_CHECKS = 46  # ratchet: today's count (42 + the record-binding scan + the two terrain checks + the baseline isolation check). Add one -> remove or merge one, or raise this here.
+MAX_CHECKS = 47  # ratchet: today's count (46 + the work-ledger shape gate; stdlib-only, ~0.1s, its own object of record). Add one -> remove or merge one, or raise this here.
 SERIAL_BUDGET_S = 175.0  # the total; --confirm-cost measures it (160s on 2026-09-18, 45 checks; 140s and 154s on 2026-09-20, 46 checks -- neither reading has moved the constant)
 SOLO_RECHECKS = 3  # breaching checks re-run alone, worst first, before they are suspect
 PER_CHECK_TIMEOUT_S = 180.0
