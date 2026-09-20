@@ -1899,6 +1899,59 @@ the baseline's closure`；字节复原后 rc 0 `BASELINE_ISOLATION_OK`。
 本批 commit：`recipe_factory.py` · `baseline_recipe.py` · `recipe_tasks.py` · `recipe.py`（元素表去重）·
 `check_configclass_fields.py` + `test_configclass_fields_gate.py` · `test_baseline_isolation.py` · 本节。
 
+
+## 追加（2026-09-20）摘要对 EOL 敏感 · 仓库缺 EOL 声明（已修）
+
+**性质**：**追加**条目，修一条**非本批**的既有缺陷 —— 由上一节的 worktree 验证暴露出来的，不是那一节
+自己造成的。
+
+**症状**：干净 checkout 下 `[2] check_dr_parity --strict` 报 4 条 asset-lock 漂移（`baseline/v1`、
+`main/v9`、`main/v11`、`main/v12` 的 `*_params.yaml`）；把**同一个 commit** 以 `core.autocrlf=false`
+checkout 则报 ~770 条（18 套锁 × 43 文件，几乎全漂）；`[35]` 的 4 条冻结摘要同理。
+
+**根因（不是锁算错，是仓库没有 EOL 政策）**：`.gitattributes` 此前只钉 `*.patch text eol=lf`（同一课
+的历史教训，注里写得清清楚楚）。实测 `git ls-files --eol`：**索引 527 个文本文件全是 LF**，工作树却是
+`207 lf / 311 crlf / 9 mixed` —— 同一份 blob，每台机器 checkout 出不同字节。而所有摘要
+（`binding.sha256_file`）都是对**工作树字节**取的，于是锁记录的是"这台机器的行尾"。文本类里
+`.obj`（每套锁 40 条、共 720 条条目）全 CRLF，`.usda`/`.urdf`/14 个 `*_params.yaml` 全 CRLF；二进制的
+`.stl` 有 54 个恰好含 `0D0A` —— 正是"文本按 LF、二进制按字节"这条政策的缺口。
+
+**改法**（原生机制优先：不新增启发式、不改摘要函数）：
+
+1. `.gitattributes` 增 `* text=auto eol=lf` + `*.bat`/`*.cmd text eol=crlf` + `*.stl`/`*.blend`/`*.pt -text`；
+   工作树按政策重物化 —— `checkout-index` 不套属性转换，故用"删后 `git checkout --`"，覆盖被摘要的文本类
+   233 个文件（0 残留、无空文件）。
+2. **写手也要钉 LF**（否则重录一次又是平台相关）：`check_cfg_lock.py` 的两处（line lock 与
+   `cfg_baselines.json`）与 `check_dr_parity.py` 的 `--update-locks` 改为 `newline="\n"`。
+3. 重录 18 套 asset-lock 与 `[35]` 的 4 条 FROZEN。
+
+**关键性质**：**索引没变一个字节** —— `git status` 对那 233 个文件仍报 unchanged（EOL 是 checkout 形态，
+不是内容），所以这次重录只是把"锁到的字节"对齐到"每台机器现在都会 checkout 出的那种"，不是改历史。
+
+**验证**（同一 commit `7acc84f`，两个真实 worktree）：
+
+| checkout | 结果 |
+|---|---|
+| 默认（`core.autocrlf=true`）| `46/46`，`[2] PARITY_OK`、`[34] GOLDEN_FROZEN_OK` |
+| `core.autocrlf=false` | `46/46`，同上 |
+
+且两个 worktree 的关键文件字节**逐条相同**（`main_params.yaml` / `.obj` / `main/cfg_lock.json` /
+`asset_lock.json` 均 0 CRLF；`run_offline_checks.bat` 两侧都 29 CRLF）。原症状（4 条与 ~770 条）在两种
+checkout 下都不再出现。写手修复的直接证据：删掉 parkour 锁再跑一次 `--update-locks`，新写的锁
+**0 CRLF / 88 LF**。
+
+**成本口径补测**：同日 `--confirm-cost`（46 条）quiet **154s**（wave 205s），落在 ratified `SERIAL_BUDGET_S
+= 175s` 内且未越过收紧线 `0.8 × 175 = 140` ⇒ 常量不动。同一批的另一次读数是 140s：两次相差 10%，
+说明"安静主机"在不同时刻不等价，单次读数不足以支撑收紧（口径与两次读数均记在 `OFFLINE_CHECKS.md`）。
+
+**边界**：① 非被摘要类（`.py`/`.md`/`.csv`/`.log` 等）在本机仍是旧行尾，随下次 checkout 归一，本次只保证
+被摘要的类（`.obj`/`.usda`/`.urdf`/`.yaml`/`.json`）与 `.bat` 的两侧一致；② 政策让"工作树与索引一致"，
+不改任何已存 blob，跨平台一致性来自 checkout 而非重写历史；③ 本条的绿只证"摘要可移植"，不证资产本身
+未被改动 —— 资产是否被改动仍由锁的内容判断（本次 18 套锁里除行尾外无一字节变化）。
+
+**提交归属**：`.gitattributes` · 18 套 `asset_lock.json` · `check_golden_frozen.py`（4 条 FROZEN + 原因）·
+`check_cfg_lock.py` / `check_dr_parity.py`（写手钉 LF）· `OFFLINE_CHECKS.md` + `offline_suite.py`（成本读数）。
+
 ## 追加（2026-09-20）基线线收口 · 固定窗口评测入口 + 开训前工具真跑
 
 **性质**：**追加**条目，清上一节的"遗留"两项（`--confirm-cost` 串行复核、`FILEMAP` 的两行），
