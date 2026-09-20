@@ -59,16 +59,24 @@ from rl_exp.tools.runrecord import binding  # noqa: E402
 # (2 x 23 lines) plus the two digests it feeds and the three reason fields; 51 inserted / 7 deleted
 # lines close exactly on that count. Per-field diff and the independent size cross-check are in the
 # record's third B0 addendum. Recipe change itself: baseline/v1/PLAN.md section '修订' (v1.1).
+# A fourth one, 2026-09-20 (end-of-line policy): all four digests below changed while **not one
+# stored byte did** -- `git status` reports these files unchanged, because the change was the
+# *checkout form*. `.gitattributes` now declares `* text=auto eol=lf` (it had pinned only
+# `*.patch`); the working tree held 311 CRLF / 207 LF / 9 mixed files over an all-LF index, so a
+# digest taken from it read as drift on any other checkout -- this gate's four files on an LF
+# machine, and `[2]`'s asset locks 4 files here and ~770 there. Re-recorded from the LF form every
+# checkout now produces, which is what makes the freeze portable. The `FROZEN_REVS` entries below
+# still name the revisions the *content* came from: the blobs are the same objects.
 FROZEN = {
-    "rl_exp/versions/cfg_baselines.json": "b18a517c43ddef5f79609dc4dea94080ad8a15926a778835bb0aa8a079c95c03",
-    "rl_exp/versions/lizard/main/cfg_lock.json": "1643a7554b315d8d097078d46a4c893f3f70ed626b179a0f0dab631311417dc8",
-    "rl_exp/versions/lizard/parkour/cfg_lock.json": "6c60a9263323547856f4984ee4e373893260f8c99ec88e0a116a17d7cbb4c20a",
+    "rl_exp/versions/cfg_baselines.json": "af9c01304d3a85f701d4989128b001c82f3a005a6ac2aa1d39e70a8b927606e4",
+    "rl_exp/versions/lizard/main/cfg_lock.json": "0af2bfe082ebfdc1ba86129759d6d058f11588857b61f07e10e4e266dc74ea52",
+    "rl_exp/versions/lizard/parkour/cfg_lock.json": "350ecdfc6e1b256e81cfde759edc88b739e20e4a42e3c4852c7cbdfe4600edce",
     # Frozen 2026-09-17 at rev ed4d35b, the commit that landed the line: the baseline lock was
     # written *after* 020e6fb, so it entered the table later than the other three (B0 addendum).
     # It is the lock of the line that trains next, and until it was here "this line's golden
     # moved" had no digest guard at all -- the hole the record had listed as A-side debt.
     # Re-baselined 2026-09-18 (baseline v1.1, see the comment above).
-    "rl_exp/versions/lizard/baseline/cfg_lock.json": "34e9acb101a7e26185df8ded0549e8cfdb6255be23fb9eea4d593e309f979c94",
+    "rl_exp/versions/lizard/baseline/cfg_lock.json": "a84f19acb7428e544f7385fc74ad5cad51840bc7f8af3d05eb6d6f5f80731929",
 }
 
 FROZEN_REVS: dict[str, str] = {

@@ -523,7 +523,11 @@ def update(line: RecipeLine, current: dict, reason: str | None) -> int:
         "entries": dict(sorted(entries.items())),
     }
     line.lock_path.parent.mkdir(parents=True, exist_ok=True)
-    line.lock_path.write_text(json.dumps(line_lock, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    # Written LF, not the platform's line ending: this file is digested by [35], and a digest
+    # taken from a CRLF write on Windows would read as drift on the LF checkout every machine
+    # gets (.gitattributes). `write_text` translates ``\n`` unless told not to.
+    line.lock_path.write_text(
+        json.dumps(line_lock, indent=1, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
     print(
         f"  entries written: {cs.relativize(str(line.lock_path))} "
         f"({line.lock_path.stat().st_size / 1024:.0f} KiB, {len(line_lock['entries'])} entries)"
@@ -549,7 +553,8 @@ def update(line: RecipeLine, current: dict, reason: str | None) -> int:
         "baselines": dict(sorted(baselines.items())),
     }
     BASELINES_PATH.parent.mkdir(parents=True, exist_ok=True)
-    BASELINES_PATH.write_text(json.dumps(shared, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    BASELINES_PATH.write_text(  # LF, like the line locks: [35] digests this file
+        json.dumps(shared, indent=1, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
     print(f"  combination baseline CREATED: {cs.relativize(str(BASELINES_PATH))} ({len(baselines)} total)")
     print("  note: every other line now needs its own entries for this combination (--update --line ...)")
     if baselines[key]["created_dirty"]:

@@ -361,7 +361,7 @@ def update_asset_locks() -> list[str]:
             "files": current,
         }
         (vdir / "asset_lock.json").write_text(
-            json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
         print(f"  locked {vdir.relative_to(_VERSIONS)}")
     return problems
 

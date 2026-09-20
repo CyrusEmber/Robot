@@ -3,3 +3,20 @@
 # makes hunks fail to match a LF tree, which would show up as "neither applied nor
 # appliable" instead of the drift it is meant to be, so the archives stay LF everywhere.
 *.patch text eol=lf
+
+# One canonical byte form for the whole repository, for the same reason, generalized: every
+# digest in this repo is taken over the *working tree's* bytes, so a file checked out with the
+# line endings of one machine reads as edited on another. Measured 2026-09-20 on a CRLF working
+# tree: the asset locks ([2]) reported 4 files changed that nobody touched, and the same commit
+# checked out with `core.autocrlf=false` reported ~770 -- 18 locks x 43 files, i.e. essentially
+# all of them (`git ls-files --eol`: index all LF, working tree 311 crlf / 207 lf / 9 mixed).
+# The index is already LF, so declaring this changes no stored byte: it only stops the checkout
+# from inventing a second form. Text is LF; binaries keep their bytes (`text=auto` detects them,
+# and `.stl` says so explicitly because 54 of the 720 locked copies happen to contain 0x0D0A,
+# where a text policy would be a lie); `.bat`/`.cmd` stay CRLF because cmd.exe reads them.
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.stl -text
+*.blend -text
+*.pt -text
