@@ -177,7 +177,7 @@ def default_jobs() -> int:
 #   killed as a hang.
 PER_CHECK_BUDGET_S = 25.0
 MAX_CHECKS = 45  # ratchet: today's count (42 + the record-binding scan + the two terrain checks). Add one -> remove or merge one, or raise this here.
-SERIAL_BUDGET_S = 205.0  # the total; --confirm-cost is what measures it
+SERIAL_BUDGET_S = 175.0  # the total; --confirm-cost is what measures it (measured 160s on 2026-09-18, 45 checks)
 SOLO_RECHECKS = 3  # breaching checks re-run alone, worst first, before they are suspect
 PER_CHECK_TIMEOUT_S = 180.0
 _DRAIN_TIMEOUT_S = 30.0  # bounded read after a kill, so a survivor cannot block the report
