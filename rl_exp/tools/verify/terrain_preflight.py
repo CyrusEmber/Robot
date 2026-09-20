@@ -47,7 +47,7 @@ matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt  # noqa: E402
 
-from rl_exp.tasks.terrain_geometry import geometry_digest, seed_rngs  # noqa: E402
+from rl_exp.tasks.terrain_geometry import foot_relief, geometry_digest, seed_rngs, stats  # noqa: E402,F401
 
 from rl_exp.tasks.teacher_env_cfg import (  # noqa: E402
     TEACHER_TERRAINS_CFG,
@@ -65,8 +65,6 @@ _CFG_BY_VERSION = {
     # v5.3: v4 grid + flat bootstrap column (SIR terrain curriculum)
     "v5": TEACHER_TERRAINS_CFG_V5,
 }
-_FOOT_CELL = 0.5  # m, ~= sole width (0.46) -- relief under one foot plate
-
 #: Sub-terrains whose geometry comes from a global RNG, and which therefore pin the seeding.
 _RANDOM_SUB_TERRAINS = ("random_rough", "stepping_stones", "boxes")
 
@@ -90,29 +88,6 @@ def build_sub_terrain(gen_cfg, sub_cfg, difficulty, seed):
     seed_rngs(seed)
     meshes, origin = sub.function(sub.difficulty, sub)
     return meshes, origin, trimesh.util.concatenate(meshes)
-
-
-def stats(mesh):
-    v = np.asarray(mesh.vertices)
-    z = v[:, 2]
-    ix = np.floor(v[:, 0] / _FOOT_CELL).astype(int)
-    iy = np.floor(v[:, 1] / _FOOT_CELL).astype(int)
-    ix -= ix.min()  # shift to non-negative -- floor() on centered meshes goes
-    iy -= iy.min()  # negative and would collide the packed key below
-    key = ix.astype(np.int64) * (iy.max() + 1) + iy
-    bins = np.unique(key)
-    zmax = np.full(key.max() + 1, -np.inf)
-    zmin = np.full(key.max() + 1, np.inf)
-    np.maximum.at(zmax, key, z)
-    np.minimum.at(zmin, key, z)
-    relief = (zmax - zmin)[bins]  # height range inside one 0.5 m foot cell
-    return {
-        "std": z.std(),
-        "p2p": z.max() - z.min(),
-        "relief_mean": relief.mean(),
-        "relief_p95": np.percentile(relief, 95),
-        "relief_max": relief.max(),
-    }
 
 
 def render(mesh, name, out_dir, version, difficulty):
@@ -219,8 +194,15 @@ def main():
     for name, sub_cfg in gen_cfg.sub_terrains.items():
         meshes, origin, mesh = build_sub_terrain(gen_cfg, sub_cfg, args.difficulty, args.seed)
         s = stats(mesh)
-        print(f"{name:<20} {s['std']:>7.3f} {s['p2p']:>7.3f} {s['relief_mean']:>12.3f} "
-              f"{s['relief_p95']:>11.3f} {s['relief_max']:>11.3f}  {geometry_digest(meshes, origin)}")
+        # relief is a vertex measure: a column meshed coarsely (a staircase, a gap) hides the
+        # surface between its corners, and printing that spread as bumpiness would be a number
+        # nobody should act on -- so the column says so instead
+        if foot_relief(mesh) is None:
+            relief_cols = f"{'n/a':>12} {'n/a':>11} {'n/a':>11}"
+        else:
+            relief_cols = f"{s['relief_mean']:>12.3f} {s['relief_p95']:>11.3f} {s['relief_max']:>11.3f}"
+        print(f"{name:<20} {s['std']:>7.3f} {s['p2p']:>7.3f} {relief_cols}  "
+              f"{geometry_digest(meshes, origin)}")
         render(mesh, name, out_dir, args.version, args.difficulty)
     print(f"previews: {out_dir}\\{args.version}_*.png")
     print("digest covers vertices + faces + origin, and follows (version, difficulty, seed, name): "

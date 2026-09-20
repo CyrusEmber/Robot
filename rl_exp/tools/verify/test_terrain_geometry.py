@@ -10,7 +10,11 @@ Three claims, each aimed at a failure that would otherwise show up as "two runs 
    ``noise_range`` collapsed the sampler to a constant plate, so a "rough" column measured
    nothing. v1 stays as it is -- results were taken on it -- and v2 is the fix.
 3. The column layout is unchanged between v1 and v2, so the two are readable side by side.
+4. The ground a real run archived is reproducible from what the archive names, and the relief of
+   its rough columns is real -- the check that turns "the suite is rough" from a claim about code
+   into a claim about the ground a run stood on (PLAN.md #18 ①/⑤b).
 """
+import json
 import pathlib
 import sys
 
@@ -23,10 +27,15 @@ import isaaclab.terrains as terrain_gen  # noqa: E402
 from isaaclab.terrains import TerrainGeneratorCfg  # noqa: E402
 
 from ablation_harness import suites  # noqa: E402
-from rl_exp.tasks.terrain_geometry import seed_rngs  # noqa: E402
+from rl_exp.tasks.terrain_geometry import foot_relief, seed_rngs  # noqa: E402
 from rl_exp.tools.verify import terrain_preflight, terrain_split_probe  # noqa: E402
 
 _SEED = 7
+
+#: One real v3 run's archived ground: written by ``eval.py`` at the end of the rollout, committed
+#: with the run's other records. Regenerating from it is what makes the archive checkable.
+_V3_EVIDENCE = (_REPO / "ablation_harness" / "results" / "locomotion_eval_v3" / "smoke"
+                / "Lizard-Rough-v14_zeroaction-evidence_nominal_seed123" / "terrain" / "geometry.json")
 
 
 def _cfg() -> TerrainGeneratorCfg:
@@ -99,7 +108,9 @@ def test_eval_suite_rough_columns_are_rough() -> None:
 
     def relief(generator, name: str) -> float:
         _, _, mesh = terrain_preflight.build_sub_terrain(generator, generator.sub_terrains[name], 1.0, 123)
-        return terrain_preflight.stats(mesh)["relief_p95"]
+        measured = foot_relief(mesh)
+        assert measured is not None, f"{name}: a height-field column is densely meshed and must measure"
+        return measured
 
     for name in ("rough_a", "rough_b"):
         v2 = relief(suites._LIZARD_SUITE_V2_GENERATOR, name)
@@ -108,6 +119,41 @@ def test_eval_suite_rough_columns_are_rough() -> None:
         assert v1 == 0.0, f"{name}: v1's constant plate is frozen -- do not 'fix' v1 in place (relief_p95={v1})"
     assert relief(suites._LIZARD_SUITE_V2_GENERATOR, "rough_b") > relief(suites._LIZARD_SUITE_V2_GENERATOR, "rough_a"), \
         "rough_b must stay the harder of the two, as its amplitude says"
+
+
+def test_the_archived_ground_of_a_real_run_regenerates() -> None:
+    """A real run's archived terrain verifies offline, and its rough columns are rough.
+
+    This is the ⑤b half that does not need a simulator: the file a run wrote says what generated
+    it (suite + seed), so regenerating from that and comparing cell by cell is a real check on
+    the archived ground rather than a read-back of it. It also carries the relief inside one foot
+    cell, which is the claim #18 ① is about -- a column named "rough" has to show it.
+
+    Ceiling: this verifies the *evidence*, not the bytes. If the framework's terrain code changes,
+    the regenerated digest moves and the comparison below fails against the archived file -- the
+    archive pins what the ground was, it does not resurrect it.
+    """
+    artifact = json.loads(_V3_EVIDENCE.read_text(encoding="utf-8"))
+    identity = artifact["identity"]
+    seed_rngs(identity["seed"])
+    regenerated = terrain_split_probe.generate_record(getattr(suites, identity["suite"])().terrain_generator)
+    assert regenerated["geometry_digest"] == artifact["geometry_digest"], (
+        f"the archived ground ({identity}) must regenerate: {artifact['geometry_digest']} != "
+        f"{regenerated['geometry_digest']}"
+    )
+    archived = {(cell["row"], cell["col"]): cell for cell in artifact["cells"]}
+    assert len(archived) == len(artifact["cells"]) > 0, "the archive must carry unique cells"
+    for cell in regenerated["cells"]:
+        assert archived[(cell["row"], cell["col"])]["geometry"] == cell["geometry"], \
+            f"cell ({cell['row']}, {cell['col']}) drifted from the archived one"
+
+    relief = {cell["sub_terrain"]: cell["relief"] for cell in artifact["cells"]}
+    assert relief["rough_a"] > 0.02, f"a rough column must vary inside a footprint: {relief}"
+    assert relief["rough_b"] > relief["rough_a"], f"the harder rough column must be bumpier: {relief}"
+    # the gate, not a missing value: a staircase and a plane are meshed with faces far bigger than
+    # a foot cell, and a vertex measure there reads the corners of one face (see foot_relief)
+    assert relief["stairs_20cm"] is None, f"a coarse column must not report a relief: {relief}"
+    assert relief["flat"] is None, f"two 16 m triangles are not a measurement: {relief}"
 
 
 def test_protocol_v3_differs_from_v2_only_where_it_says() -> None:

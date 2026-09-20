@@ -80,7 +80,7 @@ CHECKS: list[Check] = [
           [f"{_V}/test_joint_sir.py"], contract=("rl_exp/versions/lizard/main/v11/main_params.yaml",)),
     Check("terrain preview digest (geometry-carrying / order-independent / follows the seed)",
           [f"{_V}/terrain_preflight.py", "--self-test"], contract=("rl_exp/tasks/teacher_env_cfg.py",)),
-    Check("terrain geometry (real generation hashes / the seed pins it / the suite is rough)",
+    Check("terrain geometry (real generation hashes / the seed pins it / the suite is rough / a real run's archived ground regenerates)",
           [f"{_V}/test_terrain_geometry.py"], contract=("ablation_harness/suites.py",)),
     Check("version-record completeness (four-piece set / FAMILY row / FILEMAP row)",
           [f"{_V}/check_version_docs.py"], contract=("rl_exp/versions/lizard/FAMILY.md",)),

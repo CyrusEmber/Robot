@@ -646,13 +646,15 @@ def _atomic_write_json(path: pathlib.Path, payload) -> None:
     The record is read back by later runs (the refusal compares against it), so a half-written
     one would make the *next* run fail on garbage instead of on a decision.
     """
+    path.parent.mkdir(parents=True, exist_ok=True)  # terrain/ sits one level below the run dir
     tmp = path.with_name(path.name + ".tmp")
     with open(tmp, "w", encoding="utf-8") as handle:
         json.dump(payload, handle, indent=2, ensure_ascii=False)
     os.replace(tmp, path)
 
 
-def _persist(result: dict, segments: list, recovery: dict | None, run_id: str, tag: str, rec: dict):
+def _persist(result: dict, segments: list, recovery: dict | None, run_id: str, tag: str, rec: dict,
+             terrain_evidence: dict | None = None):
     """record.json + eval.json + one summary.csv row (same run_id overwritten).
 
     Run uniqueness (Step 3.2c) is decided **before anything is written**: a run_id that already
@@ -668,6 +670,11 @@ def _persist(result: dict, segments: list, recovery: dict | None, run_id: str, t
     out_dir.mkdir(parents=True, exist_ok=True)
     _atomic_write_json(out_dir / "record.json", rec)
     _atomic_write_json(out_dir / "eval.json", result)
+    if terrain_evidence is not None:
+        # the archived ground (PLAN.md #18 ⑤b): per-cell digests and relief, plus what produced
+        # them -- a suite name and a seed are enough to regenerate it, which is how the offline
+        # check verifies this file instead of trusting it
+        _atomic_write_json(out_dir / "terrain" / "geometry.json", terrain_evidence)
 
     row = {c: "" for c in _SUMMARY_COLUMNS}
     row.update({
@@ -701,7 +708,7 @@ def _persist(result: dict, segments: list, recovery: dict | None, run_id: str, t
 
 
 def main():
-    from rl_exp.tasks.terrain_geometry import seed_rngs
+    from rl_exp.tasks.terrain_geometry import evidence, seed_rngs
     from rl_exp.tools.verify import cfg_snapshot, terrain_split_probe
 
     protocol = _load_protocol(args_cli.protocol)
@@ -746,7 +753,10 @@ def main():
     # what this run actually stood on: the per-cell geometry digests, captured where the
     # generator handed the mesh over (PLAN.md #18 ⑤b). A rebuild is a different claim -- this is
     # the ground itself, so a later reader can tell two suites apart without re-running them.
-    rec["suite"]["geometry_digest"] = terrain_split_probe.record_for(mbenv.scene.terrain)["geometry_digest"]
+    # The cells also carry their relief, which is the number that says whether a column the
+    # protocol calls "rough" is rough for this robot's foot.
+    terrain_record = terrain_split_probe.record_for(mbenv.scene.terrain)
+    rec["suite"]["geometry_digest"] = terrain_record["geometry_digest"]
     tag = args_cli.tag or ("ckpt" if args_cli.checkpoint else "random")
     # strip only the gym API suffix of family ids ("-v0" at the very end);
     # teacher recipe versions ("-v1"/"-v2") are part of the run identity
@@ -840,7 +850,11 @@ def main():
         policy_label, num_steps, step_dt, device, push,
     )
 
-    _persist(result, segments, recovery, run_id, tag, rec)
+    _persist(result, segments, recovery, run_id, tag, rec,
+             terrain_evidence=evidence(terrain_record, identity={
+                 "suite": protocol["suite"], "seed": suites.SUITE_SEED,
+                 "task": args_cli.task, "protocol": args_cli.protocol, "mode": args_cli.mode,
+             }))
 
     print(f"[EVAL] protocol={result['protocol']} mode={result['mode']} run_id={run_id}")
     # v2 hook liveness: it captures one frame per reset the rollout caused, so 0 means the

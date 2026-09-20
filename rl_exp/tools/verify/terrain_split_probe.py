@@ -35,7 +35,7 @@ if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
 from rl_exp.tasks import terrain_map  # noqa: E402
-from rl_exp.tasks.terrain_geometry import geometry_digest  # noqa: E402
+from rl_exp.tasks.terrain_geometry import foot_relief, geometry_digest  # noqa: E402
 
 #: cfg identity -> record. Keyed by the object the generator was built with, which is the
 #: same object the curriculum can reach at ``env.scene.terrain.cfg.terrain_generator``.
@@ -114,8 +114,14 @@ def _announce(cfg) -> None:
     lines = [f"{cell['row']},{cell['col']}:{cell.get('geometry') or 'none'}" for cell in cells]
     combined = hashlib.sha256("\n".join(lines).encode()).hexdigest()
     record["geometry_digest"] = "sha256:" + combined
+    bumpy = max((cell for cell in cells if cell.get("relief") is not None),
+                key=lambda cell: cell["relief"], default=None)
+    relief_max = f"{bumpy['relief']:.4f}@{bumpy['sub_terrain']}" if bumpy else "none"
+    unmeasurable = sum(1 for cell in cells if cell.get("relief") is None)
     print(f"[TERRAIN_GEOMETRY] cells={len(cells)} hashed={sum(1 for c in cells if c.get('geometry'))} "
-          f"anomalies={len(record['anomalies'])} digest=sha256:{combined[:32]}", flush=True)
+          f"anomalies={len(record['anomalies'])} "
+          f"relief_max={relief_max} relief_unmeasurable={unmeasurable} digest=sha256:{combined[:32]}",
+          flush=True)
 
 
 def _patch() -> None:
@@ -178,8 +184,9 @@ def _patch() -> None:
                 _, difficulty, params = pending.pop(index)
                 try:
                     geometry = geometry_digest(mesh, origin)
+                    relief = foot_relief(mesh)
                 except AttributeError as err:  # a shape this digest does not know: say so, do not guess
-                    geometry = None
+                    geometry, relief = None, None
                     record["anomalies"].append(f"cell ({row}, {col}): geometry is not hashable ({err})")
                 record["cells"].append({
                     "row": int(row),
@@ -188,6 +195,7 @@ def _patch() -> None:
                     "difficulty": difficulty,
                     "params": params,
                     "geometry": geometry,
+                    "relief": relief,
                 })
         return original_add(self, mesh, origin, row, col, sub_terrain_cfg)
 

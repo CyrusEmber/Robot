@@ -286,6 +286,13 @@ def _payload_item(run_dir: pathlib.Path, stage: pathlib.Path, digests: dict, pro
     for extra in (M.MANIFEST_NAME, M.INDEX_NAME):
         if (run_dir / extra).is_file():
             _stage_file(run_dir / extra, f"run/{extra}", stage, digests)
+    # the ground the run stood on (PLAN.md #18 ⑤b): evaluated runs write it next to their other
+    # records. Captured here so ``--check`` re-hashes it like any other material -- what the
+    # regeneration check adds is that the file's own suite+seed reproduce it, which is a claim
+    # about the ground rather than about the copy
+    ground = run_dir / "terrain" / "geometry.json"
+    if ground.is_file():
+        _stage_file(ground, "run/terrain/geometry.json", stage, digests)
     params = run_dir / "params"
     if params.is_dir():
         for path in sorted(params.rglob("*")):
