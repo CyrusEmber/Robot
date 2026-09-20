@@ -25,7 +25,7 @@ metadata:
 ### 第 1 步：定位版本
 
 - 训练版本 vN → 参数与文档在 `<robot>_exp/versions/<family>/<vN>/`（NOTES/PLAN）。
-- 地形生成器配置在该家族基座 env cfg（读其 FAMILY.md 代码地图定位当前版本所用 cfg）。
+- 地形生成器配置在该家族基座 env cfg（`<robot>_exp\tasks\`；任务 id 与配方版本的对应见该机器人 `FAMILY.md` 任务注册表，真源是 `versions/recipes.json`）。
 
 ### 第 2 步：离线统计（无 sim，秒级）
 

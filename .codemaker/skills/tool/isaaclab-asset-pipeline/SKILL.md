@@ -14,7 +14,7 @@ description: >
 
 机器人物理资产管线：Blender 站姿 SSOT → URDF（几何 SSOT）→ USD（训练用）。
 方法论通用；**每机器人一个 `<robot>_exp\` 目录**（convert_urdf.py / blender\ /
-meshes\ / 验证脚本都在里面，实例清单读该机器人的 FAMILY.md）。
+meshes\ / 验证脚本都在里面；目录与脚本清单见该机器人的仓根 `FILEMAP.md`）。
 本项目实例：lizard → `E:\IsaacLab\rl_exp\`。
 
 **改了 URDF 或 PD 参数后必须重跑 convert**，env 引用的 USD 才更新（`force_usd_conversion`
@@ -49,7 +49,7 @@ meshes\ / 验证脚本都在里面，实例清单读该机器人的 FAMILY.md）
 | 站姿对称 | exp 目录的 debug_pose 类脚本（每腿 pivot 世界坐标） |
 | 肉眼终验 | GUI 观察脚本（如 `tools\verify\view_terrain.py --viz kit --task <任意 PLAY 任务>`）——开 Isaac Sim 窗口看站立/穿模/地形 |
 
-具体脚本名读该机器人 FAMILY.md。标准顺序：convert → 关节数 → position_check（数据）
+具体脚本名见该机器人的仓根 `FILEMAP.md`（入口与闸门清单）。标准顺序：convert → 关节数 → position_check（数据）
 → view_terrain（肉眼）。
 
 ## 核心坑（症状 → 根因）

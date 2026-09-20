@@ -26,7 +26,7 @@ description: >
 | 位置 | 内容 |
 |---|---|
 | `<robot>_params.yaml` | 参数 SSOT（开发态）：关节序/PD/action scale/命令范围/DR 段 |
-| `FAMILY.md` | **家族总文档 = 实例事实唯一真源**：任务注册表（任务 id→参数版本）、版本历史、代码地图、验证脚本清单 |
+| `FAMILY.md` | 家族事实与版本史：线/支线身份、任务注册表（任务 id→配方版本，速查）、版本史与教训、机体几何。**目录职责与闸门/入口清单在仓根 `FILEMAP.md`，obs 布局在同目录 `OBS.md`** |
 | `PLAN.md` | 训练计划 SSOT（决策/挂账/验收） |
 | `versions\<family>\vN\` | 冻结参数副本 + NOTES.md + tb_scalars.csv |
 | `tasks\` | **完整任务包**（自有代码 100% 自包含）：`__init__.py`（gym 注册表）、env cfg 家族、`agents\`（runner cfg）、`staged_curriculum.py`（课程组件） |
@@ -39,7 +39,8 @@ entry_point 用 `<robot>_exp.tasks.<模块>:<类>` 字符串。fork 源码树只
 `<robot>_exp.pth`**（一行：IsaacLab 根路径）——新环境/新机器要重建。
 脚本里 import 任务 cfg 用 `<robot>_exp.tasks.xxx`（包内互引可用相对 import）。
 
-**动手前先读目标机器人的 FAMILY.md**——任务注册表、参数版本、验证脚本都在那里。
+**动手前先读目标机器人 `FAMILY.md` 的「线」「任务注册表」「开新版本流程」三节**
+（不必整份读；目录职责、脚本与闸门清单在仓根 `FILEMAP.md`）。
 本项目实例：lizard → `E:\IsaacLab\rl_exp\`。
 
 框架侧路径（与机器人无关）：
@@ -195,7 +196,7 @@ StagedCurriculumTermCfg(func=StagedCurriculumTerm, stages=[...],
   基类 wire 全部 term 后按 spec 剥离本版本不含的；③ 每旧版本一行子类
   （override `params_version`）+ 任务 id 常驻注册。**纪律：已发布 term
   实现永不改语义，新版本只加 term**；git tag 作整树快照兜底。
-  （实例结构见该家族 FAMILY.md「版本差异结构」段）
+  （实例结构见该家族 `OBS.md`「版本差异结构」段）
 - **runner experiment_name 按任务族隔离**：共用名字 → log 目录/checkpoint 互相污染
   （`get_checkpoint_path` 取最新 run 可能取错族）。同一 py 文件重复类名静默遮蔽，py_compile
   不报——建 runner cfg 后读一遍文件确认无重名。

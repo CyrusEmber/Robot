@@ -3,17 +3,16 @@
 26 关节蜥蜴机器人（72 kg，16 腿关节 + 10 脊柱关节）Isaac Lab 强化学习
 训练 + 评测 + 版本管理包。内容：
 
-> **文件逐个说明见 [FILEMAP.md](FILEMAP.md)（新协作者/下一个 AI 必读）**
+> **目录职责、关键入口与闸门清单见 [FILEMAP.md](FILEMAP.md)（按需查阅，不必整份读）**；
+> 工作与 IsaacLab 守则见 [AGENTS.md](AGENTS.md)。
 
-- `rl_exp/` — 任务包（gym 注册、env cfg、参数版本 versions/lizard/main/vN、
-  Blender 资产管线、工具脚本）。入口文档（家族之家 `rl_exp/versions/lizard/`）：
-  - `rl_exp/versions/lizard/FAMILY.md` — 家族总文档（任务表 / 版本历史 / obs 布局）
-  - `rl_exp/versions/lizard/PLAN.md` — 训练计划与挂账
+- `rl_exp/` — 任务包（gym 注册、env cfg、参数版本 `versions/lizard/<line>/vN`、Blender 资产管线、
+  工具脚本）。家族事实与版本史在 `rl_exp/versions/lizard/FAMILY.md`（按节查阅）；训练意图与挂账
+  在同目录 `PLAN.md`。
 - `ablation_harness/` — 评测系统（固定地形套件、nominal/robust 双模式、
-  版本化协议 Locomotion-Eval-v1、消融调度器）
-- `.codemaker/skills/tool/` — 5 份 AI 辅助开发 skill（isaaclab-task-creator /
-  isaaclab-asset-pipeline / isaaclab-eval-harness / isaaclab-train-probe /
-  git-auto-sync），方法论与项目约定；新机器接线方式见下文"AI 开发环境"节
+  版本化协议、消融调度器）；子系统事实与规则见其 `HARNESS.md`。
+- `.codemaker/skills/tool/` — 本项目 AI 辅助开发 skill（任务创建 / 资产管线 / 评测 /
+  训练巡检 / git 纪律）；新机器接线方式见下文"AI 开发环境"节
 
 ## 架构概览
 
@@ -239,7 +238,8 @@ python scripts\reinforcement_learning\rsl_rl\train.py --task Lizard-Rough-v2 --m
 ```
 
 历史版本复现：任务 id 常驻注册（如 `Lizard-Rough-v1` = v1 配方 obs 266），
-机制见 `rl_exp/FAMILY.md`。
+机制见 `rl_exp/versions/lizard/FAMILY.md`「任务注册表」，真源是 `rl_exp/tasks/recipe.py`
+的配方表与 `versions/recipes.json`。
 
 **续训（`--resume`）**：课程状态（SIR 粒子/权重/统计 + c_k 时钟）随 checkpoint 内嵌存取，
 恢复前逐项核验（任务/env 数/载荷版本/slot/指纹），核验通过才回填；声明了课程契约的任务

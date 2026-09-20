@@ -268,6 +268,19 @@ records/2026-09-20-runrecord-isolated-rebuild.md           # Runrecord：隔离�
 
 基线只用于对比，不设通过标准——通过标准是上面"实际成效验证"的 ② 与 ③。
 
+**首轮第一件（已完成 2026-09-20）**：`FILEMAP.md` 85821 → **20393** 字节（删逐文件登记行、
+版本状态/判决/验收结论，保留目录职责、入口与闸门清单、不直观布局、每版本一行身份）；
+`FAMILY.md` 28401 → **18762** 字节（删"当前状态"总览与巨型版本行的读数，保留线/任务注册表/
+版本史行与教训/几何备忘/镜像约定/结构变更机制）；`README.md` 撤掉"FILEMAP 必读"（那是 85 KB
+那一跳的源头）、删掉抄来的目录表、修正 `rl_exp/FAMILY.md` 旧路径；`task-creator`/`pretrain-check`/
+`asset-pipeline` 三份 skill 的 FAMILY 指针改为按节读，并修 4 处失效章节名。**闸门 46/46 绿**
+（含 `VERSION_DOCS_OK`，18 个版本目录登记行与 FAMILY 版本史行全部保留，闸门零改动）。
+
+**本轮遗留（未动，留给后续）**：三处**代码注释**仍指向 FAMILY 的 obs 布局表（`tasks\components.py`、
+`tasks\lizard_env_cfg.py`、`tools\verify\teacher_smoke.py`），该表早已归 `OBS.md`；以及
+`HARNESS.md` 内部对"当前协议是 v2 还是 v3"自相矛盾（该文件的分流批次里一并裁决）。
+`check_pxr_leak.py` / `check_split_probe_wait.py` 的 docstring 里 `docs\pitfalls.md` 路径同样陈旧。
+
 迁移后二次验收：活跃总量 ≤ 预算；抽查若干关闭项，确认"规则有落点或明确取消"（人评审）；
 **现有版本完整性闸门保留不动**——`check_version_docs.py` 的 `FILEMAP` 检查本就以版本目录为 key，
 首轮**不取消** `FAMILY` 版本表（其 `| v14 |` 行与四件套检查是硬闸门，`FAMILY.md` 只压缩长描述、

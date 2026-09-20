@@ -23,7 +23,7 @@
   真值速度 6（`base_lin_vel_true/base_ang_vel_true`；论文中 body velocity 在
   proprio 里）与逐 body 质量 27（`body_mass`；属 RMA/Lee 2020 系特权，非 Miki）。
   保留理由：超集特权只抬高 teacher 上限，student 蒸馏结构不变；跑出问题
-  再回归论文血统。全表见 FAMILY.md「Teacher 特权 obs 布局」节
+  再回归论文血统。全表见 OBS.md（obs 契约 SSOT）
 - 完整 obs 布局（尾部从后往前）: wrench 6 | thigh_shank 8 | friction 4 |
   normals 12 | forces 12 | mass 27 | air 4 | contact 4 | true_vel 6 |
   scan 135 | proprio 90（lin3+ang3+grav3+cmd3+jpos26+jvel26+act26）
