@@ -11,6 +11,7 @@
 |---|---|
 | `README.md` | 仓说明：内容物 + 自装 Isaac Lab 要求 + 新机器摆位（`setup.bat` 一键版 + 手工五步；含 `paths.yaml` 主机路径登记） |
 | `setup.bat` | **新机器摆位一键脚本**（README 五步的自动化 + 幂等版）：写 venv `.pth`、建 `config\lizard\` 并拷入 fork shim、逐个应用 `fork_patches\*.patch`（`git apply --check --reverse` 判已打则跳过，否则打；打不上 `[FAIL]` 非零退出——补丁漏打/坏掉不再静默）、按本机生成 `paths.yaml`、设 `core.hooksPath`。成功判定看**结果**（文件在不在 / git 退出码）不看残留 ERRORLEVEL；纯 ASCII（`.bat` 按控制台代码页读，非 ASCII 会带崩解析） |
+| `WORK_PLAN.md` | **工作集账本整改提案（临时件，2026-09-20）**：默认读取成本随活跃工作增长而非随历史累积。三层 = 活跃事项 `work/active/` + 关闭归档 `work/closed/<year>/` + 验收记录 `acceptance/records/`（扁平、文件名即索引），工具 `tools\verify\check_work_docs.py`（列举/定位/检查）。**通过后内容移入 `work/active/`，本文件删除**；实施前不进入默认读取链 |
 | `AGENTS.md` | agent 工作守则（对抗性审查四问 / 先计划后动手 / 沟通语气）+ IsaacLab 官方守则（API 命名/工具链/commit 规范）；与 `ponytail.mdc` 重复的条目刻意不写 |
 | `FILEMAP.md` | 本文件 |
 | `paths.example.yaml` | **主机路径模板**：`isaac_root`（IsaacLab 源码树，持 `scripts/` 与 `logs/`）+ `python`（装了 isaaclab/rsl_rl 的 venv 解释器）。每台机器 copy 成 `paths.yaml`（已进 `.gitignore`，机器本地事实不入库），由 `ablation_harness\host_paths.py` 单点读取。优先级：命令行 > `RL_ISAAC_ROOT`/`RL_PYTHON` > `paths.yaml` > 向上探测 |
