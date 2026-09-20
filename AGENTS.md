@@ -146,6 +146,10 @@ See `tools/changelog/test/integration/` for worked examples that double as integ
 ## Git
 
 Commit/push/branch/PR discipline lives in the `git-auto-sync` skill (`.codemaker/skills/tool/git-auto-sync/SKILL.md`) — run it at iteration close, before any commit or push.
+**Stage only what this iteration touched**: `git add -A` / `git add .` sweeps another session's work-in-progress
+into your commit (measured 2026-09-20: a doc migration landed inside two unrelated functional commits, losing
+attribution and coarsening rollback). Read `git status` first, add paths one by one, and leave anything whose
+owner you cannot name exactly where it is.
 
 ## File headers and copyright
 

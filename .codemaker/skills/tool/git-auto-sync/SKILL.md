@@ -49,6 +49,9 @@ commit 内容要向用户汇报；推送失败报告原因，绝不强推。
   不留死分支（main 落后活跃分支 = 分叉未回卷，发现即合）。真走了
   PR/分支流程时，迭代反馈优先加新 commit 不 amend（免 force push，
   reviewer 可逐条核对）
+- **暂存纪律：只 add 本次迭代涉及的文件**。`git add -A` / `git add .` 会把工作树里**别人的在办改动**
+  一起提交 —— 2026-09-20 实测过一次：另一会话的文档迁移被扫进两条功能提交，归属丢失、回滚粒度变粗、
+  review 里看到的是两件事。提交前先 `git status`，逐路径 `git add`；不确定属于谁的，就别 add。
 - **禁 AI 署名**：commit 不带 Co-Authored-By 等 AI 归属行
 - **空提交禁令**：status 干净就报告"无改动"，不造空 commit
 
@@ -57,8 +60,11 @@ commit 内容要向用户汇报；推送失败报告原因，绝不强推。
 适用于一切冻结语义的版本（训练配方 vN、评测协议 vN、数据集版本）：
 
 ```
-git add -A && git commit -m "Freeze vN: <摘要>" && git tag vN && git push --tags
+git add <本次冻结涉及的文件...> && git commit -m "Freeze vN: <摘要>" && git tag vN && git push --tags
 ```
+
+**冻结提交只包含该版本的文件集**：不要用 `git add -A` 收尾 —— 工作树里别的东西（并行会话的在办改动、
+另一个开发者的 WIP）不归这次冻结，见"提交粒度"里的暂存纪律。
 
 - 复现 = `git checkout vN -- <冻结目录>`
 - 锚点之后的结果回填是正常提交，**不重打 tag**——tag 只钉冻结那一刻
