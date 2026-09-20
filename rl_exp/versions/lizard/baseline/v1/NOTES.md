@@ -112,6 +112,48 @@ checkpoint，因此不能替代训练验收。**训练结果仍见下方"结果�
 **离线套件**：`run_offline_checks.bat` **46/46** 通过；`--confirm-cost` quiet 合计 **140s**（如实记在
 `rl_exp\tools\verify\OFFLINE_CHECKS.md`，常量 175s 本轮不动）。
 
+## 验收工具缺陷（2026-09-20 发现并修复，属本版范围）
+
+**症状**：`baseline_eval.py` 首次接真实 checkpoint（`model_5850.pt`）时判 `fail`，但三条门槛里
+**只有位移轴红**，且是 `−9.456 m`；同一份报告里 `forward_mae_mps = 0.0199`（速度误差极小）、
+64/64 env 位移整齐同为 −9.45、`yaw_offset_abs_rad` **恰好 0.0**。位移与速度在同一帧里互斥。
+
+**根因**：`baseline_eval.py:91` 用 `2 * atan2(q[:, 3], q[:, 0])` 取 yaw——那是 **(w, x, y, z)** 读法。
+本仓 IsaacLab 的四元数是 **(x, y, z, w)**（`isaaclab/utils/math.py:577/601/651` 明文；`main/v10/DIAGNOSE.md`
+也钉过），`yaw_quat` 输出 `x = y = 0` ⇒ `atan2(w, 0)` 恒 π/2 ⇒ **yaw 恒 π**。后果两条：
+
+1. `distance = delta·(cos π, sin π) = −Δx_world`：报出的"前向位移"**不再是初始朝向轴**，与初始朝向
+   无关，本配方下等价于"必须往世界 −x 走"——门槛要求被反过来了。
+2. `yaw_offset_abs_rad` 恒 0（两侧都是同一个坏值），**该诊断没有信息量**，不能用它推断 yaw 没变。
+
+速度轴走的是 `quat_apply_inverse(yaw_quat(q), v_w)`（库路径，自洽），**未受影响**。
+
+**为什么 46 项离线检查没抓住**：`test_baseline_contract.py::test_fixed_window` 自己造 `yaw` **标量**
+喂进 `BaselineWindow`，从不经过 quat→yaw 那一行；此前真实路径只用随机/零动作 checkpoint 跑过，
+位移都是 ~0，符号翻转不可见。这正是本文档上一节自己写下的"证据边界"。
+
+**修法**（单一真相，不新增模块）：`baseline_metrics.py` 的投影不动；`baseline_eval.py` 的 yaw 改由
+**库**给出（`euler_xyz_from_quat(quat)[2]`，与 `yaw_quat` 同一公式，和奖励核同一帧定义），并把该调用
+提成模块级 `yaw_of()` 供离线测试走同一接缝。回归两条：
+`test_eval_forward_axis_is_the_training_frame`（投影必须等于奖励核的算子、且俯仰不影响 yaw）、
+`test_eval_scores_equal_relative_motion_equally`（同相对运动、不同朝向，必须同分），
+另加源码守卫 `test_no_hand_rolled_quat_yaw`（除白名单外，禁止手写 quaternion→yaw）。三条**修前全红**
+（`yaw_of` 恒 π），修后全绿；整离线套件 **46/46**，quiet **165s**（文档常量 175s 不动）。
+
+**同 ckpt 同 seed 重跑对照**（`..._reframe/eval.json`）：位移 `−9.456 → +9.456 m`，
+`forward_mae_mps` 与 `first_episode_timeout_fraction` **逐位不变** ⇒ 缺陷只影响位移轴 + yaw 诊断。
+修法与回归随后提交为 `2a07c88`，并打 tag `lizard-baseline-v1`（**补打**：开训前该打的锚点当时缺失，
+`check_version_docs` 一直在报；锚点钉在"冻结配方 + 已修验收工具"的那个提交上）。
+
+**作废报告**：`ablation_harness/results/baseline_flat_v1/v1/Lizard-Baseline-Flat-v1_5850_deterministic_seed123_void_wxyz_bug/eval.json`
+（目录名已标 `void`）是本次缺陷的产物（`fail`），**不得**作为验收记录引用；有效记录见下节。
+
+**跨线发现（不属本版范围，未改）**：`rl_exp/tasks/parkour_mdp.py:28 _yaw_from_quat` 是同一类错误——
+docstring 写 `(x, y, z, w)`，算的是 `(w, x, y, z)` 分支。数值实测：真 yaw `[0, π/2, π]` → 它返回
+`[π, π, π]`（恒 π，与转向无关）。该函数被 `PositionCommand` 用了 4 处（目标采样 `abs_dir = base_yaw + rel_dir`
+与 `heading_err`），parkour 线有训练 run（`logs/rsl_rl/lizard_parkour_climb_v1`），故其记录的含义可能受影响。
+已在守卫的白名单里**显式登记为已知坏**（不掩盖），处理方式留 parkour 线自己定。
+
 ## 训练命令
 
 ```bat
@@ -121,21 +163,41 @@ python scripts\reinforcement_learning\rsl_rl\train.py --task Lizard-Baseline-Fla
 开训前：`check_cfg_lock.py --update --line lizard/baseline --reason "..."` 建本线 golden，
 并打 tag `lizard-baseline-v1`。工作树必须干净（脏树开训被 `run_manifest.begin` 硬拒）。
 
-## 结果回填
-
-（待第一跑：`rl_exp\tools\trainlog\dump_tb.py` 导曲线 → 固定窗口验收 → 本表回填）
+## 结果回填（首跑，2026-09-20）
 
 | 项 | 值 |
 |---|---|
-| run id | 待 |
-| 训练量 | 待 |
-| 跟踪误差（`mean|v_x − 0.5|`） | 待 |
-| 固定窗口前向位移 | 待 |
-| 存活率（`time_out` 占比） | 待 |
-| 侧向 / yaw 误差 | 待 |
+| run id | `lizard_baseline_v1/2026-09-20_12-23-09` |
+| checkpoint | `model_5850.pt`（sha256 `b6e67533…`），15000 iter 计划中取于 **5850/15000（38.6%）** |
+| 评测报告 | `ablation_harness/results/baseline_flat_v1/v1/Lizard-Baseline-Flat-v1_5850_deterministic_seed123_rev2a07c88/eval.json`（64 env，确定性，seed 123，20 s 首回合） |
+| provenance | `code.repository.rev = 2a07c881bc0b`（修复提交）、`dirty = True`、`untracked_count = 1`。脏的两项都**不在配方代码里**：报告自身写下的未跟踪结果目录，以及另一处并行会话在改的 `WORK_PLAN.md`（非本次改动）。`ablation_harness/baseline_eval.py` 与 `rl_exp/tasks/baseline_mdp.py` 在提交点与工作树逐位一致 ⇒ 记录可用 `git checkout 2a07c88` 复原 |
+| 跟踪误差（`mean\|v_x − 0.5\|`） | **0.0199 m/s**（门槛 < 0.15 ✓） |
+| 固定窗口前向位移 | **+9.456 m**（门槛 > 8 ✓；64/64 env 存活满窗） |
+| 存活率（`time_out` 占比） | **1.000**（门槛 > 0.9 ✓；`base_contact` 终止 0 次） |
+| 侧向 / yaw 误差 | 0.0217 m/s / 0.194 rad（诊断，非门槛） |
+| 分类判定 | 三项全过 ⇒ `pass` |
+
+**训练期读数（过程监控，不作为验收）**：`error_vel_xy` 0.509 → 0.220(100) → 0.126(499) → 0.105(999)
+→ 0.080(1999) → 0.0755(4999) → 0.0758(5789)；`mean_episode_length` 满 1000、`time_out` 1.000、
+`base_contact` 0.000；`Policy/mean_std` 0.999 → 0.031。**lr 自 ~2000 iter 起触底 1e-5（adaptive KL），
+此后曲线全平**（窗口 1000 的 Δ 在 ±0.1%）⇒ 后 9200 iter 预计空转，是否提前停训由使用者定。
+
+训练期 `error_vel_xy`(0.0758) 与固定窗口 `forward_mae_mps`(0.0199) 的差**不是矛盾**：前者含随机动作
+采样（`mean_std` 0.031）、全场次与复位后各回合；后者是确定性策略的**首回合**。两者口径不同，各自
+服务的目的不同（过程监控 vs 冻结协议）。
 
 ## 结论
 
-（待训练结果。2026-09-20 已完成的只是**开训前工具链**：探针（两模式）、复位契约、固定窗口评测
-入口、离线套件 46/46 —— 全是"工具与接线按声明工作 + 随机策略不会判成通过"的冒烟，**不含训练
-checkpoint**，因此**不构成**对"这副机器人能否学会持续行走"的回答。该问题仍待第一跑回填。）
+**回答本版的问题：能。** 平地 + 固定 `(0.5, 0, 0)`、零课程、零 DR 下，随机策略起训到 5850 iter，
+在冻结协议的三条硬门槛上**全过**（跟踪 0.0199 m/s、前向位移 +9.456 m、存活 1.000），且位移与
+速度互相独立地佐证"确实在往前走"，不是站桩刷分（`track_lin_vel_xy_miki` 1.488/1.5 对应
+`exp(-e²/0.25) ⇒ e≈0.09`，与速度误差一致）。
+
+**结论的边界（照实写）**：单 seed、单 checkpoint、单次 64-env 首回合、无 DR / 无扰动；本版**不**回答
+速度泛化、鲁棒性、地形适应性——那些是后续轮次要逐项加回的变量（见 `../PLAN.md`）。
+`baseline/v1` 的"工具链"部分在开训前已完成（探针两模式、复位契约、固定窗口入口、离线套件）；
+本轮补上的是**首跑 + 一次验收工具缺陷的修复**，缺陷与回归见上节。
+
+**遗留**：① `robot.base_init_height: 1.1` 与自然站高 0.938 差 16 cm（每回合一次落地冲击，属资产线决策）；
+② 踝关节站姿下仅 2% 行程（若步态需踝主动承重，需资产线单独看）；③ parkour 线同款 yaw 缺陷（已登记，未改）。
+
