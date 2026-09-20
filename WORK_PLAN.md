@@ -276,6 +276,15 @@ records/2026-09-20-runrecord-isolated-rebuild.md           # Runrecord：隔离�
 `asset-pipeline` 三份 skill 的 FAMILY 指针改为按节读，并修 4 处失效章节名。**闸门 46/46 绿**
 （含 `VERSION_DOCS_OK`，18 个版本目录登记行与 FAMILY 版本史行全部保留，闸门零改动）。
 
+**首轮第二件（已完成 2026-09-20）**：`check_work_docs.py`（`--list` / `--locate` / `--check`，
+stdlib、只读、反证 14 例）进离线套件（棘轮 46→47，实测 0.2s）与 pre-commit（新增 `work/` 触发）；
+`work/active/` 两项 + `work/closed/2026/` 一项迁完，**HARNESS 挂账 #5 / #6 / #3-⑤b 的正文在同一变更内删除、
+原行只留 id 与指针**。after 读数与人工审查见 `acceptance/records/2026-09-20-ledger-pilot.md`：
+同一任务读取 108947 → **14397** 字节（−86.7%，**附带收益，不作判据**）；三项人工审查 =
+**可定位 ✓**（一次 `--locate` 命中，工具自称覆盖范围）/ **可执行 ✓**（审查真走一遍时发现 #6 的
+"查 cfg 是否声明 visualizer"只查本仓会得假结论 —— 框架基座 cfg 在 `<ROOT>`，已补进该事项 `next`）/
+**可关闭 ✓**（两项的关闭条件都是可执行动作 + 分支处理，无"确认后可关"式措辞）。
+
 **本轮遗留（未动，留给后续）**：三处**代码注释**仍指向 FAMILY 的 obs 布局表（`tasks\components.py`、
 `tasks\lizard_env_cfg.py`、`tools\verify\teacher_smoke.py`），该表早已归 `OBS.md`；以及
 `HARNESS.md` 内部对"当前协议是 v2 还是 v3"自相矛盾（该文件的分流批次里一并裁决）。

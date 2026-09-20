@@ -4,7 +4,7 @@ title: `--headless` 已弃用而本仓仍在用（HARNESS 挂账 #6）
 scope: ablation_harness
 status: open
 landing: ablation_harness/run_ablation.py#83, ablation_harness/run_ablation.py#115, README.md#223, .codemaker/skills/tool/isaaclab-task-creator/references/runtime_facts.md
-next: 先做证据分级，再决定删或留：① 查用到的 task cfg 是否声明 visualizer（**声明 ≠ 行为**，只算第一步）；② 核该声明在配置解析后是否真的启用；③ 核 `--viz none` 是否影响 `run_ablation.py` 这条调用链（透传之后有没有别的覆盖）。把三步结论按"已核到行为 / 仅读到声明"写进本项，再执行下面的关闭动作
+next: 先做证据分级，再决定删或留：① 查 **task cfg 整条继承链**是否声明 visualizer —— 本仓 `rl_exp/tasks/` 的 cfg 加上它继承的**框架侧基座 cfg**（在 `<ROOT>`，不在本仓；2026-09-20 实测本仓零声明，只查本仓会得到"没有 visualizer"的假结论，只算第一步）；② 核该声明在配置解析后是否真的启用；③ 核 `--viz none` 是否影响 `run_ablation.py` 这条调用链（透传之后有没有别的覆盖）。把三步结论按"已核到行为 / 仅读到声明"写进本项，再执行下面的关闭动作
 close_when: 执行者按 ①→②→③ 做完后观察启动行为——带与不带 `--headless` 各起一次同 task 训练命令，比对启动日志与 visualizer 相关输出。行为等价 ⇒ 删除两处透传并同步 README / skill / vN NOTES 的命令示例，观测 = 命令仍能起训且不再出现弃用告警；行为不等价（例如启用 visualizer 的 task 需 `--viz none` 才真 headless）⇒ 保留透传，并在本项写明保留理由与必须用 `--viz none` 的场合。两种终局都以 ① 的观测为准，写回本项后即关
 ---
 
