@@ -37,7 +37,7 @@
 | 地形 | `plane`，`terrain_generator=None`，无 `height_scanner` | 平地是问题本身；扫描器在平面上扫的是常数 |
 | 命令 | **固定点** `(0.5, 0, 0)`；`heading_command=False`；`rel_standing_envs=0` | 0.5 m/s ≈ 0.25 体长/s（躯干约 2 m）；固定点让速度课程失去对象 |
 | 观测 | 单组 `policy` = 7 项 proprio，**90 维**（3+3+3+3+26+26+26）；`height_scan=None`；`enable_corruption=False` | 复用框架 velocity 任务的 proprio 组定义，逐维与既有线 proprio 相同；观测噪声也是随机化，显式关 |
-| 网络 | MLP `[256,128,128]` elu，单组，`obs_normalization=False` | 归一化统计是训练状态，本线不从任何地方继承状态 |
+| 网络 | MLP `[256,128,128]` elu，单组，`obs_normalization=False` | 首版配方选择；从头训练并不要求关闭归一化，新建统计也不等于继承状态 |
 | 奖励 | **7 项**（下表） | 满值口径见下 |
 | 终止 | `time_out` + `base_contact`（`base_link`，threshold 1.0） | 平地躺下 = 基座接触 ⇒ 直接终止；"存活"因此有定义，"趴着前滑"直接判负而非慢慢罚 |
 | 课程 | 全无：`terrain_levels` 置 None；阶段速度/地形课程属别线代码，本线不存在 | 见前提校正 2 |
@@ -87,7 +87,25 @@
 | 位移 | 固定 20 s 内前向净位移 | `> 8 m`（**注意**：10 m 是"指令距离"，不是实际位移上界） |
 | 存活 | `time_out` 占比 | `> 0.9` |
 
-补充报告项（不作通过门槛）：**侧向误差**与 **yaw 误差**（只沿 x 达标不算通过）。
+补充报告项（不作通过门槛）：**侧向速度绝对值**、相对初始朝向的 **yaw 偏移绝对值**、
+头/颈/尾净接触力。用户确认 2026-09-20：只保留上述三项硬门槛，不以这些报告项追加隐含拒绝条件。
+
+### 固定窗口的可执行口径（2026-09-20）
+
+专用入口 `ablation_harness/baseline_eval.py`，协议 `ablation_harness/protocols/baseline_flat_v1.json`。
+保留任务自身 plane，不使用 `locomotion_eval_v1/v2/v3` 的套件或命令时间线。每 env 只计首回合：
+
+- 采样为物理步后、自动 reset 前，终止帧计入；首回合结束后冻结位置，不累计重生后的位移。
+- 跟踪使用**当前 yaw 对齐重力系**的前向速度，逐帧取绝对误差；首回合结束后剩余时间按
+  速度 0（每帧误差 0.5 m/s）计入，分母始终为完整 20 s。终止前均值不得替代此值。
+- 位移为首回合终点减起点，投影到**初始 yaw** 的前向轴 [m]，跨 env 求均值。
+- 存活率为首回合在完整 20 s 截止帧以纯 timeout 结束的 env 比例；同时失败与超时判失败。
+- 侧向/yaw/头尾接触诊断只统计首回合实际帧，同时报告有效帧占比；不把失败后的虚构姿态写进诊断。
+- `--policy_mode deterministic` 与 `sampled` 分文件报告；后者只采样已加载策略分布，不更新网络或统计。
+  无 checkpoint 的零动作运行标 `smoke_only`，不能作为训练验收通过。
+
+例：`python ablation_harness/baseline_eval.py --headless --checkpoint <model.pt> --output <new-report.json>`。
+每份报告保留协议及摘要、配置快照、checkpoint 摘要、seed、逐 env 指标；已存在输出拒绝覆盖。
 
 诊断项（**不给通过门槛**，只作判断依据）：
 
@@ -115,12 +133,17 @@
 
 - 命令：逐步读 `command_manager.get_term("base_velocity").command`，全 env 恒为
   `(0.5, 0, 0)`，且无 env 被"站立"掩码清零、`ang_vel_z` 未被 heading 重写
-- 事件：7 个 DR 事件全为 None；跨 env 比对基座质量/地面摩擦一致（无随机化残留）
+- 事件：五个 DR 事件全为 None；复位事件保留且范围钉死；读取实际关节位置/速度与
+  默认值比较，跨 env 比对质量及机器人碰撞 shape 的实际摩擦/恢复系数。plane 是共享地面，
+  不声称有独立的逐 env 地面材质读取。缺少材质读取接口不得静默通过。
 - 观测：组名与维数（`policy=90`）、有限性
 - 奖励：短 rollout 内**逐项量级**（均值/极值），供风险 1 判断
-- 终止：`base_contact`/`time_out` 均在场
+- 终止：通过实际 manager 注入接触历史与回合时钟，验证 `base_contact`/`time_out` 的触发与
+  env 隔离，再恢复状态。它验证接线，不替代物理跌倒试验。
 
-探针全绿后才开训。**先 1 个 seed 跑通**，用于查明显故障；跑通后再加种子验证重复性。
+探针及 `reset_check.py` 的全量/子集复位检查全绿后才开训；后者先激励关节再复位，避免
+初始姿态本来正确导致空验证。探针只排除所测故障。**先 1 个 seed 跑通**，用于查明显故障；
+跑通后再加种子验证重复性。
 
 ## 修订记录
 

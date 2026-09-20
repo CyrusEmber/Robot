@@ -1899,6 +1899,57 @@ the baseline's closure`；字节复原后 rc 0 `BASELINE_ISOLATION_OK`。
 本批 commit：`recipe_factory.py` · `baseline_recipe.py` · `recipe_tasks.py` · `recipe.py`（元素表去重）·
 `check_configclass_fields.py` + `test_configclass_fields_gate.py` · `test_baseline_isolation.py` · 本节。
 
+## 追加（2026-09-20）基线线收口 · 固定窗口评测入口 + 开训前工具真跑
+
+**性质**：**追加**条目，清上一节的"遗留"两项（`--confirm-cost` 串行复核、`FILEMAP` 的两行），
+并把基线线的开训前工具链在**真实 Kit** 上重跑。改动面 = 新增
+`ablation_harness/baseline_eval.py` + `baseline_metrics.py` + `protocols/baseline_flat_v1.json`、
+`rl_exp/tools/verify/baseline_runtime.py` + `test_baseline_contract.py` + `test_baseline_mdp.py`；
+改 `baseline_probe.py`、`baseline_mdp.py`/`rsl_rl_ppo_cfg.py`/`baseline_env_cfg.py`（口径）、
+`offline_suite.py` + `OFFLINE_CHECKS.md`（45 → **46** 条）、`FILEMAP.md`、`baseline/*` 与 `v1/NOTES.md`。
+
+### 落地
+
+| 件 | 内容 |
+|---|---|
+| 固定窗口评分 | 协议 `baseline_flat_v1.json`（20 s、命令固定、`plane`）+ `BaselineWindow`：每 env 只计**首回合**、终止帧计入；首回合结束后**冻结位置**（重生位移不计）、剩余帧按速度 0 补账（分母恒为完整 20 s）；位移投到**初始 yaw**；存活率只认纯 `time_out`；同时失败+超时判失败 |
+| 分报告 | `deterministic` / `sampled` 分文件（`--output` 已存在即拒写），零动作标 `smoke_only`，不得当训练验收 |
+| 探针加齿 | 三项**真实**检查取代声明侧检查：实际关节复位（读活值比默认）、live 逐 shape 摩擦（缺读取接口 = 失败而非静默通过）、终止注入（接触历史与回合时钟注进**活的管理器**再还原） |
+| 接触注入目标 | 取 `sensor.body_names.index("base_link")`，**独立于被检查的 term**——`base_contact` 若错绑到脚，注 `base_link` 就不触发 ⇒ 报错而不是跟着一起错 |
+| 套件 | `[21]` 换成 `test_baseline_contract.py`（一个进程跑四段：baseline mdp + 三组 baseline 断言 + acceptance metrics）+ 新增 `[33]` `test_baseline_isolation.py` ⇒ **46** |
+
+### 结果（真实 Kit + 离线套件）
+
+| 运行 | 结果 |
+|---|---|
+| 探针 `--headless` / `--random-actions` | rc 0 / rc 0，各 **26 项全 ok**；激励面 `mean\|a\| 0.4998`、`mean\|da\| 0.6679`、commanded dims **26/26** |
+| `reset_check.py --task Lizard-Baseline-Flat-v1` | rc 0，A–D **八条全 ok**（激励 8/8、worst \|dq\| 0.3986 rad、suppressed respawns **0**、子集复位后未命名 env 逐位未变） |
+| 评测三跑 | 零动作 `zero_action`/`smoke_only`、随机 `deterministic`/`fail`、随机 `sampled`/`fail` —— **没有一次被判成通过** |
+| 全量套件 | **46/46**（`ALL_OFFLINE_CHECKS_PASSED`）；`--confirm-cost` quiet **140s** |
+
+### 边界（不得据本节宣称）
+
+- 以上全是**工具冒烟**：没有任何训练 checkpoint 进过这些路径，"这副机器人能否学会持续行走"仍
+  **待**（`baseline/v1/NOTES.md` 结果表）。
+- "首回合失败后不累计重生位移"**未被真实跑触发**——三跑首回合都活满 1000 步
+  （`first_episode_frame_fraction 1.0`）；它只有离线反例证过（第 3 步失败后逐帧喂 1000 m 假位移，
+  位移仍为 2 m）。
+- 探针的终止注入验证**接线与阈值**，不替代物理跌倒试验；探针只排除所测故障。
+- `[21]` 的可见横幅是末段 `test_acceptance_metrics: 5 passed`（`main()` 把它放在最后），`BASELINE_CONTRACT_OK`
+  只在套件输出里露一次：**"某段被静默跳过"这件事没有钉子**（`main()` 按 `globals()` 前缀收集，改名即掉）。
+  本轮按现状记录，未加钉。
+- `SERIAL_BUDGET_S` **不动**：实测 140s 与 `0.8 × 175 = 140` 恰好相等 ⇒ 工具不报 tighten 提示，但富余
+  25% 略宽于口径自称的 20%；只记测量，收紧另起一笔。
+- 本节的评测报告与日志落在 `_tmp_*`（`.gitignore` 内），**不进仓**；引用的随机 checkpoint 已随本轮
+  清理删除，故这些报告**不可复跑**——它们只是工具冒烟，不是可引用的验收记录。
+
+### 提交归属
+
+本批 commit：`baseline_eval.py` · `baseline_metrics.py` · `protocols/baseline_flat_v1.json` ·
+`baseline_runtime.py` · `test_baseline_contract.py` · `test_baseline_mdp.py` · `baseline_probe.py` ·
+`offline_suite.py` + `OFFLINE_CHECKS.md` · `FILEMAP.md` · `baseline/*` + `v1/NOTES.md` ·
+`baseline_mdp.py`/`baseline_env_cfg.py`/`rsl_rl_ppo_cfg.py` 口径 · 本节。
+
 
 
 

@@ -13,7 +13,8 @@
 1. 若能学会，跟踪误差与固定窗口前向位移会同步改善，而不是只有奖励上升（奖励可以靠
    站着不动刷，位移不能）。
 2. 平地 + 零 DR + 零课程下，任何失败都只能归因到三种之一：配方太朴素、机器人动力学
-   限制、或实现缺陷（由启动探针排除第三种）。
+   限制、或实现缺陷（启动探针只排除已覆盖的故障，不能整体排除第三种）。多 seed 失败也
+   不能区分共享的优化障碍与资产限制；结论必须限定到配方、预算和证据范围。
 
 ## 相对上版 diff
 
@@ -71,6 +72,46 @@
 问题而非接线问题。**遗留**：踝关节在站姿下只有 2% 行程——摆动相可用即可，但若步态需要踝主动承重
 发力，这一条要在资产线单独看。
 
+## 最终验证（2026-09-20）：工具冒烟，**不是**训练验收
+
+**这一节证明的是工具与接线按声明工作，以及"随机策略不会被判成通过"；它不包含任何训练
+checkpoint，因此不能替代训练验收。**训练结果仍见下方"结果回填"表（**待**）。
+
+**探针重跑（真实 Kit，两个模式都跑）**
+
+| 运行 | 结果 |
+|---|---|
+| `baseline_probe.py --task Lizard-Baseline-Flat-v1 --headless` | rc 0，**26 项检查全 ok**；含本轮新增的三项真实检查：`events/actual-joint-reset`（读实际关节位置/速度与默认值比，不是读声明）、`events/live-materials-uniform`（读 live 逐 shape 摩擦/恢复系数）、`terminations/contact-and-timeout-behavior`（把接触历史与回合时钟**注进活的管理器**再还原） |
+| 同上 `--random-actions` | rc 0，26 项全 ok；`mean\|a\| 0.4998` / `mean\|da\| 0.6679` / commanded dims **26/26**；60 步内 fall 0、time_out 0 |
+
+接触注入的目标由 `baseline_runtime.termination_errors` 按 `sensor.body_names.index("base_link")`
+**独立于配置**选取——若 `base_contact` 被错绑到脚，注进 `base_link` 就不会触发，探针报错而不是
+跟着配置一起错（反例：`test_baseline_contract.py::test_termination_injection_is_independent_of_wiring`
+把 term 绑到脚即红）。它验证**接线与阈值**，不替代物理跌倒试验。
+
+**复位契约重跑**：`reset_check.py --task Lizard-Baseline-Flat-v1 --headless` → rc 0，A–D 八条断言
+全 ok（激励 8/8 env、worst |dq| 0.3986 rad、suppressed respawns **0**；子集复位 env [0,1] 后，
+**未被命名的 env 逐位未变**）。先激励再复位，是为了不让"初始姿态本来就对"把空验证伪装成通过。
+
+**固定窗口评测入口（三份报告分开落盘，互不覆盖）**
+
+| 报告 | `policy_mode` | 判定 |
+|---|---|---|
+| 零动作（无 checkpoint） | `zero_action` | `smoke_only` |
+| 随机 checkpoint / 确定性 | `deterministic` | `fail` |
+| 随机 checkpoint / 采样 | `sampled` | `fail` |
+
+三个都**没有被误判为训练通过**；确定性/采样分文件（`--output` 已存在即拒绝写）是"采样只多一个
+分布抽样、不得与确定性混表"的落点。
+
+**证据的边界（照实写）**：这三跑的首回合**都活满 1000 步**（`first_episode_frame_fraction 1.0`），
+所以"首回合失败后不累计重生位移"这条**没有被真实跑触发**——真实证据只到"随机策略三项门槛全不过"。
+该条只有**离线反例**证过：`test_baseline_contract.py::test_fixed_window` 在第 3 步注入失败，之后每步
+喂 1000 m 的假重生位移，位移仍为 2 m（= 3 × 0.5）。要真实触发它，需要一个会摔的 checkpoint。
+
+**离线套件**：`run_offline_checks.bat` **46/46** 通过；`--confirm-cost` quiet 合计 **140s**（如实记在
+`rl_exp\tools\verify\OFFLINE_CHECKS.md`，常量 175s 本轮不动）。
+
 ## 训练命令
 
 ```bat
@@ -95,4 +136,6 @@ python scripts\reinforcement_learning\rsl_rl\train.py --task Lizard-Baseline-Fla
 
 ## 结论
 
-（待）
+（待训练结果。2026-09-20 已完成的只是**开训前工具链**：探针（两模式）、复位契约、固定窗口评测
+入口、离线套件 46/46 —— 全是"工具与接线按声明工作 + 随机策略不会判成通过"的冒烟，**不含训练
+checkpoint**，因此**不构成**对"这副机器人能否学会持续行走"的回答。该问题仍待第一跑回填。）
