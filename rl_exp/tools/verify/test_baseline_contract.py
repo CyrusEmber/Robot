@@ -6,7 +6,9 @@
 
 import ast
 import json
+import math
 import pathlib
+import re
 import sys
 from types import SimpleNamespace as NS
 
@@ -86,6 +88,83 @@ def test_probe_registered_entry():
     }
     exec(compile(module, "<probe setup>", "exec"), namespace)
     assert namespace["main"]() is selected, "probe ignored the requested registered entry"
+
+
+def score_along_heading(yaw: float, *, steps: int = 20, speed: float = 0.5) -> dict:
+    """A robot travelling at ``speed`` along its own heading for the whole window."""
+    from ablation_harness.baseline_eval import yaw_of
+    from isaaclab.utils.math import quat_from_euler_xyz
+
+    quat = quat_from_euler_xyz(torch.zeros(1), torch.full((1,), 0.35), torch.tensor([yaw]))
+    start_yaw = yaw_of(quat)
+    window = BaselineWindow(torch.zeros(1, 3), start_yaw, steps=steps, protocol=PROTOCOL)
+    for step in range(steps):
+        travel = (step + 1) * speed
+        pos = torch.tensor([[travel * math.cos(yaw), travel * math.sin(yaw), 0.0]])
+        window.add(pos=pos, yaw=start_yaw, velocity_yaw=torch.tensor([[speed, 0.0, 0.0]]),
+                   head_tail_force=torch.zeros(1), terminated=torch.tensor([False]),
+                   timeout=torch.tensor([step == steps - 1]))
+    return window.result()
+
+
+def test_eval_forward_axis_is_the_training_frame():
+    """The evaluator's forward axis must be the operator the reward kernel uses, not a re-derivation."""
+    from ablation_harness.baseline_eval import yaw_of
+    from isaaclab.utils.math import quat_apply_inverse, quat_from_euler_xyz, wrap_to_pi, yaw_quat
+
+    yaws = torch.tensor([0.0, math.pi / 2, math.pi, -2.0])
+    quat = quat_from_euler_xyz(torch.zeros(4), torch.full((4,), 0.35), yaws)
+    assert torch.allclose(wrap_to_pi(yaw_of(quat) - yaws), torch.zeros(4), atol=1e-5), \
+        "yaw must survive a pitched base, unchanged"
+    delta = torch.stack((10.0 * yaws.cos(), 10.0 * yaws.sin(), torch.zeros(4)), dim=-1)
+    kernel_axis = quat_apply_inverse(yaw_quat(quat), delta)[:, 0]
+    eval_axis = delta[:, 0] * yaw_of(quat).cos() + delta[:, 1] * yaw_of(quat).sin()
+    assert torch.allclose(eval_axis, kernel_axis, atol=1e-4), \
+        "the evaluator's projection must agree with the reward frame's operator"
+    assert torch.allclose(eval_axis, torch.full((4,), 10.0), atol=1e-4), \
+        "travelling along its own heading is forward, at every heading"
+
+
+def test_eval_scores_equal_relative_motion_equally():
+    """Same motion, different heading: the fixed window must not care which way it faces."""
+    for yaw in (0.0, 1.2, -1.2, math.pi):
+        result = score_along_heading(yaw)
+        assert abs(result["metrics"]["forward_displacement_m"] - 10.0) < 1e-3, \
+            f"yaw {yaw}: forward displacement must not depend on the heading"
+        assert result["metrics"]["forward_mae_mps"] < 1e-6, f"yaw {yaw}: motion is exactly on command"
+        assert result["verdict"] == "pass", f"yaw {yaw}: a perfectly tracked walk must pass"
+
+
+# A hand-rolled yaw that reads the quaternion as (w, x, y, z) silently returns ~pi on (x, y, z, w)
+# data, which flips the sign of every forward-displacement gate. Both spellings below are that bug.
+_WXYZ_YAW = (
+    re.compile(r"\[:\s*,\s*3\]\s*,\s*\w+\[:\s*,\s*0\]"),
+    re.compile(r"\[:\s*,\s*0\]\s*\*\s*\w+\[:\s*,\s*3\]"),
+)
+_YAW_EXTRACTIONS_ALLOWED = {
+    # kept on purpose: the wrong branch the diagnostics display next to the library's answer
+    "rl_exp/tools/diagnose/diagnose_support.py": "对照 that proves the wrong branch wrong (see its comment)",
+    # known bad, another line, needs its own decision: its docstring claims (x, y, z, w) and its
+    # math is the (w, x, y, z) branch. Recorded here so the debt stays visible instead of silent.
+    "rl_exp/tasks/parkour_mdp.py": "parkour line's _yaw_from_quat: same bug class, pending decision",
+}
+
+
+def test_no_hand_rolled_quat_yaw():
+    """Only the library may turn a quaternion into an angle; a second opinion is a second truth."""
+    offenders = []
+    for root in ("rl_exp", "ablation_harness"):
+        for path in sorted((_REPO / root).rglob("*.py")):
+            key = path.relative_to(_REPO).as_posix()
+            if key == "rl_exp/tools/verify/test_baseline_contract.py" or key in _YAW_EXTRACTIONS_ALLOWED:
+                continue
+            text = path.read_text(encoding="utf-8")
+            if any(pattern.search(text) for pattern in _WXYZ_YAW):
+                offenders.append(key)
+    assert not offenders, (
+        "hand-rolled quaternion yaw found; call yaw_quat / euler_xyz_from_quat instead: "
+        f"{offenders}"
+    )
 
 
 def test_termination_injection_is_independent_of_wiring():

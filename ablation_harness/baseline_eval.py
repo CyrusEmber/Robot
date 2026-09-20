@@ -8,6 +8,8 @@ Run with IsaacLab Python after Kit initialization by this entry point. A missing
 checkpoint selects zero actions for evaluator smoke tests, never a trained-policy pass.
 """
 
+from __future__ import annotations
+
 import argparse
 import importlib.metadata
 import json
@@ -17,6 +19,18 @@ import sys
 _REPO = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_REPO))
 PROTOCOL_PATH = pathlib.Path(__file__).resolve().parent / "protocols" / "baseline_flat_v1.json"
+
+
+def yaw_of(quat: torch.Tensor) -> torch.Tensor:
+    """Yaw [rad] of a world-frame orientation in the library's (x, y, z, w) layout.
+
+    One source of truth for the frame the evaluator reports in: ``yaw_quat`` + its yaw are
+    what the reward kernel projects into (``rl_exp.tasks.baseline_mdp.track_lin_vel_xy_miki``),
+    so the evaluator must not re-derive the angle by hand.
+    """
+    from isaaclab.utils.math import euler_xyz_from_quat
+
+    return euler_xyz_from_quat(quat)[2]
 
 
 def run(args) -> dict:
@@ -88,10 +102,9 @@ def run(args) -> dict:
 
         def snapshot():
             q = yaw_quat(robot.data.root_quat_w.torch)
-            yaw = 2 * torch.atan2(q[:, 3], q[:, 0])
             return {
                 "pos": robot.data.root_pos_w.torch.clone(),
-                "yaw": yaw.clone(),
+                "yaw": yaw_of(robot.data.root_quat_w.torch),
                 "velocity_yaw": quat_apply_inverse(q, robot.data.root_lin_vel_w.torch).clone(),
                 "head_tail_force": sensor.data.net_forces_w.torch[:, load_ids].norm(dim=-1).sum(dim=-1).clone(),
             }
