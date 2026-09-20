@@ -25,6 +25,12 @@ a field. This gate pins the observed surface so that stops being a source-code
 guess, and fails if the surface drifts.
 
 No sim: constructs configs only, same footing as ``check_obs_layout.py``.
+
+Which classes it is about is part of the claim: every configclass a *registered task* resolves to
+-- resolved name by name through the identity map, because ``recipe_tasks`` builds them on demand
+-- plus the wiring classes that carry the field. The exports are cross-checked against the map in
+both directions, so a registered task whose class this gate stopped seeing is red rather than
+quietly absent.
 """
 
 import argparse
@@ -43,15 +49,88 @@ import yaml  # noqa: E402
 import rl_exp.tasks as _tasks_pkg  # noqa: E402
 
 TARGET = "params_version"
+TASKS_MODULE = "rl_exp.tasks.recipe_tasks"
+RECIPES_JSON = _REPO / "rl_exp" / "versions" / "recipes.json"
 
 
-def _cfg_classes() -> dict[str, type]:
-    """Every configclass in ``rl_exp.tasks`` carrying ``params_version``, by name.
+def _declared_entries() -> list[tuple[str, str]]:
+    """``(module, class name)`` for every task the identity map registers, in map order.
 
-    Detected through ``__dataclass_fields__`` / ``__configclass_own_fields__``, never
-    through ``getattr(cls, ...)``: ``_process_mutable_types`` turns every member into
-    ``field(default_factory=...)`` (:475) and ``dataclass()`` drops those from the class
-    namespace (:115), so most config values are unreadable as class attributes.
+    Read from ``versions/recipes.json`` rather than from the module under test, and not from the
+    module's own export list: what that module exports is a *claim*, and a claim verified against
+    the code that makes it is not verified. The map is the published copy -- ``check_recipe_map``
+    binds it to the registry -- so comparing the two is a real cross-check, and one that survives
+    the export list losing a name (the failure a gate reading only ``__all__`` cannot see).
+    """
+    document = json.loads(RECIPES_JSON.read_text(encoding="utf-8"))
+    out: list[tuple[str, str]] = []
+    for recipe_key in (document.get("tasks") or {}).values():
+        entry = (document.get("recipes") or {}).get(recipe_key) or {}
+        module, _, name = str(entry.get("env_cfg_entry") or "").partition(":")
+        if module and name:
+            out.append((module, name))
+    return out
+
+
+def _carries_target(obj) -> bool:
+    """Is ``obj`` a configclass carrying ``params_version``? (Detected through the field surface,
+    never through ``getattr(cls, ...)``: ``configclass`` erases those class attributes.)"""
+    return inspect.isclass(obj) and (
+        TARGET in getattr(obj, "__dataclass_fields__", {})
+        or TARGET in getattr(obj, "__configclass_own_fields__", ())
+    )
+
+
+def _check_registry_exports(declared: list[tuple[str, str]], problems: list[str]) -> None:
+    """This module's exports must be exactly the entries the identity map gives it.
+
+    Both directions, because the two failures differ: an export with no entry is a name nothing can
+    reach, and an entry with no export is a *registered task this gate would silently stop
+    checking* -- the subject set shrinking, which is the one failure a gate cannot notice about
+    itself. A name two tasks both claim is a third: the export list is a set, so the second one
+    disappears without a trace.
+    """
+    declared_here = [name for module, name in declared if module == TASKS_MODULE]
+    try:
+        from rl_exp.tasks import recipe_tasks
+    except Exception as exc:  # noqa: BLE001 - report, never mask a gate
+        problems.append(f"{TASKS_MODULE} cannot be imported: {type(exc).__name__}: {exc}")
+        return
+    exported = set(getattr(recipe_tasks, "__all__", ()))
+    missing = sorted(set(declared_here) - exported)
+    if missing:
+        problems.append(
+            f"{TASKS_MODULE} does not export {missing} -- the identity map declares those tasks and"
+            f" this gate would not be checking their classes"
+        )
+    extra = sorted(exported - set(declared_here))
+    if extra:
+        problems.append(f"{TASKS_MODULE} exports {extra}, which no registered task names")
+    duplicates = sorted({name for name in declared_here if declared_here.count(name) > 1})
+    if duplicates:
+        problems.append(
+            f"two registered tasks share a class name {duplicates} -- one of them has no class of"
+            f" its own, and the export list can only carry one"
+        )
+
+
+def _cfg_classes(declared: list[tuple[str, str]], problems: list[str]) -> dict[str, type]:
+    """Every configclass a registered task resolves to, plus the wiring classes, by name.
+
+    Two sources, because the tree has two kinds of class and neither covers the other:
+
+    * the **wiring and framework** classes, found by walking each module's namespace;
+    * the **classes the identity map declares**, resolved one at a time through ``recipe_tasks``.
+
+    The second is not optional. ``recipe_tasks`` builds one line's classes on demand (module
+    ``__getattr__``, so that resolving a baseline task does not import the main line), so a
+    namespace walk sees only the classes someone already asked for -- the subject set would shrink
+    to the wiring classes, and this gate would keep passing while checking less. A declared entry
+    that does not resolve is therefore a problem, never a skip, and a resolved class that carries
+    no ``params_version`` is a problem too: filtering it out is exactly the silent shrinkage.
+
+    Where a name is both (``LizardFlatEnvCfg`` is a wiring class and a registered task's class),
+    the registry's wins: it is the one a run builds, and the one a field-surface claim is about.
     """
     found: dict[str, type] = {}
     modules = sorted(m.name for m in pkgutil.iter_modules(_tasks_pkg.__path__))
@@ -62,16 +141,23 @@ def _cfg_classes() -> dict[str, type]:
             print(f"  SKIP module {mod_name}: {type(exc).__name__}: {exc}")
             continue
         for name, obj in vars(module).items():
-            if (
-                inspect.isclass(obj)
-                and obj.__module__.startswith("rl_exp.tasks")
-                and obj.__qualname__ == name  # skip re-exports
-                and (
-                    TARGET in getattr(obj, "__dataclass_fields__", {})
-                    or TARGET in getattr(obj, "__configclass_own_fields__", ())
-                )
-            ):
-                found[name] = obj
+            if _carries_target(obj) and obj.__module__.startswith("rl_exp.tasks") and obj.__qualname__ == name:
+                found[name] = obj  # skip re-exports: __qualname__ == name
+    try:
+        from rl_exp.tasks import recipe_tasks
+    except Exception as exc:  # noqa: BLE001 - report, never mask a gate
+        problems.append(f"{TASKS_MODULE} cannot be imported, so no registered class can be resolved: {exc}")
+    else:
+        for name in sorted(set(n for module, n in declared if module == TASKS_MODULE)):
+            try:
+                obj = getattr(recipe_tasks, name)
+            except AttributeError as exc:  # a declared entry that does not resolve is red
+                problems.append(f"{TASKS_MODULE}:{name} is declared by the identity map but does not resolve: {exc}")
+                continue
+            if not _carries_target(obj):
+                problems.append(f"{TASKS_MODULE}:{name}: a registered env cfg without {TARGET} as a field")
+                continue
+            found[name] = obj
     return dict(sorted(found.items()))
 
 
@@ -220,7 +306,9 @@ def main() -> int:
     args = ap.parse_args()
 
     problems: list[str] = []
-    rows = {name: _probe(cls) for name, cls in _cfg_classes().items()}
+    declared = _declared_entries()
+    _check_registry_exports(declared, problems)
+    rows = {name: _probe(cls) for name, cls in _cfg_classes(declared, problems).items()}
 
     print(f"  configclasses carrying {TARGET}: {len(rows)}")
     print("  name  value  field  own  instdict  to_dict  cls_attr  fields  own_fields  to_dict_keys")

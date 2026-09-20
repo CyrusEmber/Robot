@@ -37,8 +37,18 @@ def _fires(mutate, checker, tag: str) -> bool:
 def main(probed_rows: dict[str, dict] | None = None) -> int:
     global rows
     rows = probed_rows if probed_rows is not None else {
-        name: g._probe(cls) for name, cls in g._cfg_classes().items()
+        name: g._probe(cls) for name, cls in g._cfg_classes(g._declared_entries(), []).items()
     }
+    # The subject set is part of what this control asserts. If the gate stops seeing the class the
+    # mutations are applied to, every case below would still "fire" on a dict it then KeyErrors out
+    # of -- a bare KeyError is not a verdict, and a control that crashes is indistinguishable from
+    # a control that passed. Say which target went missing instead.
+    absent = [name for name in (TARGET, PLAY_TARGET) if name not in rows]
+    if absent:
+        print(f"  the gate no longer probes {absent} -- it is a registered task's class, so the")
+        print("  subject set shrank; the cases below would test a mutation no assertion covers")
+        print("CONFIGCLASS_FIELDS_GATE_SILENT")
+        return 1
     ok = all([
         _fires(lambda r: r[TARGET].update(in_to_dict=False), g._check_shape, "to_dict loss      "),
         _fires(lambda r: r[TARGET].update(in_instance_dict=False), g._check_shape, "instance loss    "),

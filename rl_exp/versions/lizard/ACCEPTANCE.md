@@ -1817,6 +1817,90 @@ PATCH UNLANDED`。详见 `docs/pitfalls.md` P005。
 `6b5e1ee`（修复 + 闸门 + 归档重钉）· `ab49089`（报告主语）· `6176189`（P005 文档）· `5dd2e96`（出口守卫天花板）。
 
 
+## 追加（2026-09-20）基线线独立化收尾 · 闸门主体集合不再靠命名空间
+
+**性质**：**追加**条目。`versions/lizard/baseline/PLAN.md` §与其它线的边界 写着"本线不 import 其它线的
+cfg 或 mdp"——本节把它从一句话变成机器可查的契约，并收掉随之暴露的四条敞口（2026-09-20 评审提出）。
+
+| 件 | 作用 |
+|---|---|
+| `tasks\recipe_factory.py`（新） | 构类机制**一处家**：`__post_init__` 链 + ClassVar 注解 + `configclass`，主线与基线共用 |
+| `tasks\baseline_recipe.py`（新） | 基线的 10 个元素 + `BASELINE_RECIPES` + **本线自己的** `recipe_class`，不 import 主线 |
+| `tasks\recipe_tasks.py` | 解析改为**按名、按需**（模块 `__getattr__`），并按 `recipes.json` 的 `line` 分发到"本线自己的构造器" |
+| `tasks\recipe.py` | 元素表改为 `**baseline_recipe.ELEMENTS` 合并（基线元素只存一份，不再第二份 name→函数表） |
+
+### 四条 [P1] 的落点与实测
+
+**① 类身份：缓存不被批量生成覆盖。** 原 `generate()` 为**所有**线建类再 `globals().update()`，于是
+"先解析基线、再解析主线"会把基线类换成由 `recipe.recipe_class` 造的另一个对象。改法不是 `setdefault`
+（那只防覆盖，不消灭第二条构造路径），而是把批量生成整个删掉：`class_for()` 只建**被请求的那一个**类，
+且基线线由 `baseline_recipe.recipe_class` 建（`_LINES_BUILT_ELSEWHERE`）。`__getattr__` 只在名字缺席时
+被调用 ⇒ 首建即定。实测（`test_baseline_isolation.py` 三阶段）：`blocked` 阶段两名字各解析一次、二次读
+同一对象、注册表字符串与模块属性同一对象；`baseline→main` 阶段主线解析后基线两名字 `is` 不变；
+`fresh module` **反序**阶段用看门器包住 `recipe.recipe_class`，断言它**一次都没接到基线线的活**
+（`built == [("lizard/main", …)]`）。
+
+**② `[23]` 主体集合不得静默缩水。** 该闸门原本只扫 `vars(module)`；惰性化后生成类不再落在命名空间里
+⇒ 主体从 39 掉到 7、反证器 `KeyError`。改法：保留扫描，再**逐个 `getattr` 身份映射声明的入口**
+（解不出记红、**落不进** `SKIP module`；解出但无 `params_version` 字段也记红），同名时注册表解析出的类
+胜出；另加**双向核对**：`recipe_tasks.__all__` 与 `recipes.json` 筛出的本模块入口逐名比对（缺名、多名、
+两名共占一个类名都红）。反证器改为：目标行缺失时打印"它仍是一个注册任务的类 ⇒ 主体集合缩了"并返回 1，
+不再裸 `KeyError` 代替诊断。实测 **39 类**、`CONFIGCLASS_FIELDS_OK`、7 条反证全 FIRES。
+
+**③ 隔离封锁器自证。** 手写 6 个禁名只能挡住想得到的 import。改为**默认拒绝** `rl_exp.tasks.*`、显式
+放行 10 个模块并**逐条写允许理由**；白名单不从本次观测自动生成，而是与"实际加载集"**相等**断言（用了
+不需要的权限即红）。自证走真实 `importlib.import_module("rl_exp.tasks.recipe")` 并匹配**封锁器专属异常
+类** `Blocked`（不是任意 `ImportError` —— 依赖缺失也是 `ImportError`）。入口断言：`__all__` 34 名全可
+解析、`import *` 成功、parkour 两名**不被本模块认领**而其注册入口照旧解析（`ParkourClimbEnvCfg v1`；
+入口过滤用 `partition(":")` 精确比模块名）。**反证（评审点名的那条）**：临时给 `baseline_recipe.py` 加
+`teacher_mdp` ⇒ **rc 1**、`Blocked: BASELINE_ISOLATION_BLOCKED: rl_exp.tasks.teacher_mdp is not part of
+the baseline's closure`；字节复原后 rc 0 `BASELINE_ISOLATION_OK`。
+
+**④ 条数棘轮。** 新增独立检查有理由：它断言"解析基线任务不导入主线"，在任何已 import 过主线的进程里
+**不可测**（`rl_exp.tasks.recipe` 已在 `sys.modules`，封锁器无从失效）—— 进程边界即被测对象。净增 1
+（并发批次把 `test_acceptance_metrics.py` 那条与基线三份断言合并进 `test_baseline_contract.py`）。
+`MAX_CHECKS` 45→46、条目与 §6 看守行**随并发批次的 `offline_suite.py` / `OFFLINE_CHECKS.md` 提交**
+（本批不持有这两个文件；工作树里已就位）。
+
+**小去重两处**（评审补的隐患）：`baseline_recipe.ELEMENTS` 原本只收 `elements` ⇒ 将来加 PLAY 专属元素必
+`KeyError`，现同时收 `play_elements`；`params_version` 改为读表 `entry.get("params_version", version)`
+（保留显式 `None` 的语义）。
+
+### 独立验证
+
+| 场景 | 结果 |
+|---|---|
+| 干净 worktree（`03b4ee2` + 本批 7 个源文件，**无**并发批次任何文件） | **45/45**（`[23] CONFIGCLASS_FIELDS_OK`、`[39] RECIPE_BUILD_OK` 34 任务逐字段同 golden） |
+| 主树（本批 + 并发批次） | **46/46、零跳过**；`[40]` 硬 A 本批**第一次真被验过**：34 任务逐字段同 golden、355 条差异声明 |
+
+### 边界（不得据本节宣称）
+
+- 本节只证"基线任务的解析不拉主线、且类身份与导入顺序无关"，不证基线配方本身能训、能达标。
+- 白名单的理由是人工审查产物；`= 实际加载集` 只挡**死权限**，挡不住"新加的模块恰好也被放行"。
+- 干净 worktree 那次是**内容级**验证（复制文件进树），不是 `git checkout` 出来的独立克隆。
+
+### 观察（非本批，留给资产锁的维护者）
+
+干净 checkout 下 `[2] check_dr_parity --strict` 报 4 条 asset-lock 漂移（`baseline/v1`、`main/v9`、
+`main/v11`、`main/v12` 的 `*_params.yaml`）：这四个文件在主树干是 **LF**、checkout 得 **CRLF**，而锁按
+主树字节记录；换 `core.autocrlf=false` checkout 则反过来 770 条漂移（锁多数按 CRLF 记录）。即锁摘要
+**对 EOL 敏感**。本批未改这些文件，改用"按主机字节覆盖这四个文件"对齐环境后复核。
+
+### 遗留
+
+- `--confirm-cost` 串行复核（并把 `SERIAL_BUDGET_S` 口径里的"45 条"改为 46）**待树静**：并发写手在场时
+  串行计时测的是 CPU 争用，不是成本。
+- `FILEMAP.md` 两行（`recipe_factory.py` / `baseline_recipe.py`）与 `recipe_tasks.py` 旧行（"为每条已声明
+  配方生成一个类" → 按需）随并发批次；`baseline_env_cfg.py` 指向 `rl_exp.tasks.baseline_recipe` 的一行
+  docstring 已在并发批次的 diff 中。
+
+### 提交归属
+
+本批 commit：`recipe_factory.py` · `baseline_recipe.py` · `recipe_tasks.py` · `recipe.py`（元素表去重）·
+`check_configclass_fields.py` + `test_configclass_fields_gate.py` · `test_baseline_isolation.py` · 本节。
+
+
+
 
 
 
