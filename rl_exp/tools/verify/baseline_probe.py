@@ -41,7 +41,9 @@ import torch  # noqa: E402
 
 import isaaclab_tasks  # noqa: F401, E402
 
-from rl_exp.tasks.recipe_tasks import BaselineFlatEnvCfg  # noqa: E402
+from rl_exp.tools.verify.baseline_runtime import (  # noqa: E402
+    joint_reset_errors, material_errors, resolve_task_cfg, termination_errors,
+)
 
 PROBLEMS: list[str] = []
 EXPECTED_COMMAND = (0.5, 0.0, 0.0)
@@ -85,7 +87,7 @@ def term_values(manager, name: str):
 
 
 def main() -> int:
-    cfg = BaselineFlatEnvCfg()
+    cfg = resolve_task_cfg(args_cli.task)
     cfg.scene.num_envs = args_cli.num_envs
     env = gym.make(args_cli.task, cfg=cfg)
     unwrapped = env.unwrapped
@@ -133,12 +135,14 @@ def main() -> int:
         bool((masses == masses[0]).all()),
         f"base body mass differs across envs (tolerance 0 expected): {masses[:, 0][:4]}",
     )
-    default_pos = robot.data.default_joint_pos.torch
-    check(
-        "events/no-joint-reset-randomization",
-        bool((default_pos == default_pos[0]).all()),
-        "default joint positions differ across envs",
-    )
+    errors = joint_reset_errors(robot)
+    check("events/actual-joint-reset", not errors, "; ".join(errors))
+    errors = material_errors(robot)
+    check("events/live-materials-uniform", not errors, "; ".join(errors))
+    errors = termination_errors(unwrapped)
+    check("terminations/contact-and-timeout-behavior", not errors, "; ".join(errors))
+    # Clear the diagnostic injection before any rollout observations are collected.
+    obs, _ = env.reset()
 
     # --- command: read the tensor the env issues, not the config -------------------
     print("[probe] command")
@@ -157,6 +161,7 @@ def main() -> int:
 
     command_stable = True
     action_rows = []
+    action_deltas = []
     term_counts = {"time_out": 0, "fall": 0}
     reward_sums: dict[str, torch.Tensor] = {}
     reward_halves: dict[str, list[torch.Tensor]] = {}
@@ -192,9 +197,9 @@ def main() -> int:
         if not torch.allclose(cmd_term.command[:, :3], expected, atol=1e-6):
             command_stable = False
         action = unwrapped.action_manager.action
-        action_rows.append(action.abs())
+        action_rows.append(action.abs().clone())
         if last_action is not None:
-            action_rows.append((action - last_action).abs())
+            action_deltas.append((action - last_action).abs().clone())
         last_action = action.clone()
         term_counts["time_out"] += int((trunc & ~term).sum())
         term_counts["fall"] += int((term & ~trunc).sum())
@@ -253,11 +258,12 @@ def main() -> int:
         print(f"  {name:28s} {per_step:+.6f}")
     if action_rows:
         stacked = torch.stack(action_rows)
-        action_abs = unwrapped.action_manager.action.abs()
+        action_abs = stacked
         print("[probe] action diagnostics (reference for 'is it moving at all')")
         print(f"  mean|a| {action_abs.mean().item():.4f}  p95 {torch.quantile(action_abs.flatten(), 0.95).item():.4f}  max {action_abs.max().item():.4f}")
-        print(f"  mean|da| {stacked[-1].mean().item():.4f}  (adjacent-step diff)")
-        print(f"  per-dim mean|a| commanded dims: {(action_abs.mean(dim=0) > 1e-4).sum().item()}/{act_dim}")
+        if action_deltas:
+            print(f"  mean|da| {torch.stack(action_deltas).mean().item():.4f}  (adjacent-step diff)")
+        print(f"  per-dim mean|a| commanded dims: {(action_abs.mean(dim=(0, 1)) > 1e-4).sum().item()}/{act_dim}")
     if standing and z_rows:
         print("[probe] standing under zero action (asset and PD, not policy)")
         z = torch.cat(z_rows)

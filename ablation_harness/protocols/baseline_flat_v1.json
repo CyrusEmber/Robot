@@ -1,0 +1,17 @@
+{
+  "name": "Baseline-Flat-v1",
+  "version": 1,
+  "episode_length_s": 20.0,
+  "command_mps_radps": [0.5, 0.0, 0.0],
+  "terrain": "plane",
+  "displacement_frame": "initial_yaw",
+  "tracking_frame": "current_yaw",
+  "post_failure_velocity": "zero",
+  "terminal_frame": "post_physics_pre_reset",
+  "gates": {
+    "forward_mae_mps_lt": 0.15,
+    "forward_displacement_m_gt": 8.0,
+    "first_episode_timeout_fraction_gt": 0.9
+  },
+  "report_only": ["lateral_speed_abs_mps", "yaw_offset_abs_rad", "head_tail_contact_force_n"]
+}

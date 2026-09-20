@@ -96,8 +96,10 @@ CHECKS: list[Check] = [
           [f"{_V}/check_reward_v13.py"], contract=("rl_exp/versions/lizard/main/v13/main_params.yaml",)),
     Check("v14 front-plant/roll fall gate (predicate / dwell / wiring / v13 frozen)",
           [f"{_V}/check_terminations_v14.py"], contract=("rl_exp/versions/lizard/main/v14/main_params.yaml",)),
-    Check("acceptance metrics (yaw frame / abs sideslip / per-frame MAE / kernel frame contract)",
-          [f"{_V}/test_acceptance_metrics.py"], contract=("ablation_harness/metrics.py",)),
+    Check("acceptance metrics + baseline (isolation / reward kernels / fixed window / live-check helpers)",
+          [f"{_V}/test_baseline_contract.py"],
+          contract=("ablation_harness/metrics.py", "ablation_harness/baseline_metrics.py",
+                    "rl_exp/tasks/baseline_recipe.py", "rl_exp/tools/verify/baseline_runtime.py")),
     Check("eval frame contract v2 (terminal frame closes the fall window / v1 truncation)",
           [f"{_V}/test_eval_frame_v2.py"], contract=("ablation_harness/protocols/locomotion_eval_v2.yaml",)),
     Check("configclass field surface (params_version field vs to_dict vs own_fields)",
@@ -120,6 +122,8 @@ CHECKS: list[Check] = [
           [f"{_V}/check_suite_banners.py"], contract=("rl_exp/tools/verify/run_offline_checks.bat",)),
     Check("params loaders hand each caller its own document (cache must not alias cfgs)",
           [f"{_V}/test_params_isolation.py"], contract=("rl_exp/tasks/recipe_params.py",)),
+    Check("baseline line resolves without the main line (blocked imports / order-independent classes)",
+          [f"{_V}/test_baseline_isolation.py"], contract=("rl_exp/tasks/baseline_recipe.py",)),
     Check("stage B acceptance baseline is still the frozen one (golden locks pinned by digest)",
           [f"{_V}/check_golden_frozen.py"], contract=("rl_exp/versions/cfg_baselines.json",)),
     Check("recipe lifecycle decision contract (verdicts / unknown status / refusal wording)",
@@ -176,7 +180,7 @@ def default_jobs() -> int:
 #   Deliberately far above the cost budget, so that a slow check is reported as cost, not
 #   killed as a hang.
 PER_CHECK_BUDGET_S = 25.0
-MAX_CHECKS = 45  # ratchet: today's count (42 + the record-binding scan + the two terrain checks). Add one -> remove or merge one, or raise this here.
+MAX_CHECKS = 46  # ratchet: today's count (42 + the record-binding scan + the two terrain checks + the baseline isolation check). Add one -> remove or merge one, or raise this here.
 SERIAL_BUDGET_S = 175.0  # the total; --confirm-cost is what measures it (measured 160s on 2026-09-18, 45 checks)
 SOLO_RECHECKS = 3  # breaching checks re-run alone, worst first, before they are suspect
 PER_CHECK_TIMEOUT_S = 180.0
