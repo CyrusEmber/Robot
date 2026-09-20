@@ -843,10 +843,16 @@ def main():
     _persist(result, segments, recovery, run_id, tag, rec)
 
     print(f"[EVAL] protocol={result['protocol']} mode={result['mode']} run_id={run_id}")
-    # v2 hook liveness: it must capture one frame per early-ended episode, so 0
-    # here means the private _reset_idx hook went stale on an IsaacLab bump
+    # v2 hook liveness: it captures one frame per reset the rollout caused, so 0 means the
+    # private _reset_idx hook went stale on an IsaacLab bump. ``dones`` is
+    # ``truncated | terminated`` (termination_manager.py:104), and time_out fires on the last
+    # step -- so *every* surviving env resets there and the two numbers are whole-run counts,
+    # not early-only ones: printing the total as "early done" reads as "72/72 envs fell over
+    # mid-episode" when the truth was none (measured 2026-09-20).
+    resets_in_rollout = (rollout["first_done"] < num_steps).sum().item()
+    early_terminations = (rollout["first_done"] < num_steps - 1).sum().item()
     print(f"[EVAL] terminal frames captured={rollout['terminal_frames']} "
-          f"early_done_envs={(rollout['first_done'] < num_steps).sum().item()}")
+          f"resets_in_rollout={resets_in_rollout} early_terminations={early_terminations}")
     print(f"[EVAL] success={result['global']['success_rate']:.3f} fall={result['global']['fall_rate']:.3f} "
           f"lin_mae={result['global']['lin_mae_mps']:.3f} energy_per_m={result['global']['energy_per_m_j']:.1f}")
     if recovery is not None:
