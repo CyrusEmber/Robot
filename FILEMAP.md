@@ -107,6 +107,7 @@
 
 | 文件 | 作用 |
 |---|---|
+| `blender\source\lizard.blend` | **原始 DCC 源件**（26,314,025 B，sha256 `8F2DCF8B9F798094F0D3E6EC1397633B83702071AB83FEFC08FB521EED511FE9`，2026-09-20 自 `E:\IsaacLab\model\` 收入）：原始网格 + 3 张内嵌 PNG 贴图，压缩格式与站姿件相同（zstd 帧，非"未压缩"）。**管线不读它** —— `generate_urdf.py`/`fix_bones.py`/`rotate_rig.py`/`rename_flip_v8.py` 一律以 `lizard_stance.blend` 为输入；它只在"从原始模型重做几何/绑定/重烘焙贴图"时才用得上。同目录的 `lizard.glb`（26.5 MB）**未入库**：它是这份 blend 的**导出件**（`generator: Khronos glTF Blender I/O v4.0.43`，场景名 `convert`），不是上游交付 |
 | `blender\lizard_stance.blend` | **站姿 SSOT**（232KB）：自然站姿摆好、骨位已 fix |
 | `blender\fix_bones.py` | Blender：把骨骼 head/tail 对齐到关节球网格（v6 起世界↔臂架显式转换 + foot 桩外展轴 Y） |
 | `blender\rotate_rig.py` | Blender（v6，一次性）：整体刚体旋转 R_z(-90°) 头 +Y→+X（27 骨 + 36 锚点 1e-6 自检；不烘焙——transform_apply 过 bone-roll 有浮点漂移，旋转保留为臂架对象变换） |
