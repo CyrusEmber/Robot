@@ -20,7 +20,7 @@
 | `paths.example.yaml` | 主机路径模板（`isaac_root` + `python`）；每台机器 copy 成 `paths.yaml`（不入库） |
 | `README.md` / `AGENTS.md` | 仓定位与摆位步骤 / 工作与 IsaacLab 守则 |
 | `ARCH_PLAN.md` | 架构改造的判据与实现形态（**只写当时证据，不写当前状态**）；加粗状态词与"覆盖文档里的闸门判词"由 `check_version_docs.py` 扫 |
-| `WORK_PLAN.md` | 工作集账本整改提案（临时件，不在默认读取链）：活跃事项 + 关闭归档 + 验收 `acceptance\records\` |
+| `work\` | 在办事项（`active\`，一项一文件）与关闭归档（`closed\<year>\`）；形状闸 `check_work_docs.py`，发现命令见 `AGENTS.md` |
 | `FILEMAP.md` | 本文件 = 目录导航（见文首边界） |
 | `rl_exp\` | 任务包（自包含核心）；`import rl_exp` 经 venv `.pth` 可达 |
 | `rl_exp\tasks\` | gym 任务包 = 训练代码本体：家族线 + `parkour` / `baseline` 支线；注册表在 `__init__.py` |

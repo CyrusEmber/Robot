@@ -18,6 +18,31 @@ Three modes, one implementation of the item format:
 * ``--locate KEY`` -- the files whose id, title or body matches KEY, with line numbers.
 * ``--check`` (default) -- the shape gates below, each printing what it saw.
 
+An item is front matter plus a free body::
+
+    ---
+    id: <matches the file name>
+    title: <one line>
+    scope: <path(s) that exist -- a range, never a word from a list>
+    status: <open/in_progress/blocked/done/cancelled/superseded>
+    landing: <path[#anchor], ...>          # where the rule lives, or will live
+    next: <the action to take>             # active items only
+    close_when: <who checks what, observes what, and what each outcome means>
+    depends_on: <an active item id, or a live mechanism path>
+    evidence: <acceptance/records/<stem>[#anchor]>
+    outcome: <what happened>               # closed items only
+    superseded_by: <item id or mechanism path>   # when status is superseded
+    ---
+
+The body states the current situation only: no superseded states, no copy of a number or a
+digest whose owner is elsewhere, no restatement of a rule that lives in a mechanism.
+
+Closing an item is a move, not a rewrite: the file goes to ``closed/<year>/``, keeps its id,
+drops ``next`` and gains ``outcome``; unfinished work becomes its own active item. Evidence
+goes to ``acceptance/records/<date>-<object>-<topic>.md``, which carries five sections in
+order -- 适用范围 / 验收条件 / 结果 / 证据引用 / 未覆盖边界 -- so a reader can see where the
+record's authority stops.
+
 The ledger is a document set, not a database: there is no id registry, and the tool does
 not pretend to own one. Uniqueness is only ever checked over the files that exist right
 now, and a cancelled item stays in the closed tree as the record of the decision.
@@ -45,6 +70,12 @@ import tempfile
 _REPO = pathlib.Path(__file__).resolve().parents[3]
 _ACTIVE = _REPO / "work" / "active"
 _CLOSED = _REPO / "work" / "closed"
+_RECORDS = _REPO / "acceptance" / "records"
+
+#: Sections every acceptance record carries, in this order. The record is evidence, so the
+#: points it does NOT cover are part of it: a reader has to see where its authority stops.
+_RECORD_SECTIONS = ("适用范围", "验收条件", "结果", "证据引用", "未覆盖边界")
+_RECORD_NAME = re.compile(r"\d{4}-\d{2}-\d{2}-[a-z0-9-]+\.md")
 
 #: The only statuses an item may carry.
 _STATUS = ("open", "in_progress", "blocked", "done", "cancelled", "superseded")
@@ -205,6 +236,28 @@ def _tally(items: list[Item], problems: list[str]) -> int:
                 "point at the record that holds it instead of copying it"
             )
 
+    records = sorted(_RECORDS.glob("*.md")) if _RECORDS.is_dir() else []
+    for record in records:
+        if not _RECORD_NAME.fullmatch(record.name):
+            problems.append(
+                f"{_rel(record)}: a record is named <date>-<object>-<topic>.md, lower case"
+            )
+        headings = [
+            line.split("## ", 1)[1].strip()
+            for line in record.read_text(encoding="utf-8").splitlines()
+            if line.startswith("## ")
+        ]
+        present: list[str] = []
+        for heading in headings:
+            section = next((s for s in _RECORD_SECTIONS if heading.startswith(s)), None)
+            if section is not None and section not in present:
+                present.append(section)
+        if present != list(_RECORD_SECTIONS):
+            problems.append(
+                f"{_rel(record)}: sections must be {' / '.join(_RECORD_SECTIONS)} in that order "
+                f"(found {present or 'none'}) -- the record has to say where its authority stops"
+            )
+
     total = sum(i.path.stat().st_size for i in active)
     if total > BUDGET_BYTES:
         ranked = sorted(active, key=lambda i: -i.path.stat().st_size)[:3]
@@ -216,7 +269,7 @@ def _tally(items: list[Item], problems: list[str]) -> int:
         )
     print(
         f"  items: {len(active)} active / {len(closed)} closed "
-        f"| active bytes {total}/{BUDGET_BYTES}"
+        f"| active bytes {total}/{BUDGET_BYTES} | records {len(records)}"
     )
     return 1 if problems else 0
 
@@ -280,15 +333,20 @@ def self_test() -> int:
     """Falsifiers: each gate must fire on the fixture that trips it, and only there."""
     problems: list[str] = []
     with tempfile.TemporaryDirectory() as tmp:
-        global _REPO, _ACTIVE, _CLOSED, BUDGET_BYTES
-        saved = (_REPO, _ACTIVE, _CLOSED, BUDGET_BYTES)
+        global _REPO, _ACTIVE, _CLOSED, _RECORDS, BUDGET_BYTES
+        saved = (_REPO, _ACTIVE, _CLOSED, _RECORDS, BUDGET_BYTES)
         root = pathlib.Path(tmp)
         (root / "work" / "active").mkdir(parents=True)
         (root / "work" / "closed" / "2026").mkdir(parents=True)
         (root / "notes").mkdir()
         (root / "notes" / "rule.md").write_text("anchor\n", encoding="utf-8")
         (root / "acceptance" / "records").mkdir(parents=True)
-        (root / "acceptance" / "records" / "2026-09-20-good.md").write_text("x", encoding="utf-8")
+        good_record = "".join(f"## {s}\n\nbody\n\n" for s in _RECORD_SECTIONS)
+        (root / "acceptance" / "records" / "2026-09-20-good.md").write_text(good_record, encoding="utf-8")
+        (root / "acceptance" / "records" / "2026-09-20-partial.md").write_text(
+            "## 适用范围\n\nonly this one\n", encoding="utf-8"
+        )
+        (root / "acceptance" / "records" / "Bad_Name.md").write_text(good_record, encoding="utf-8")
 
         def item(name: str, text: str, closed: bool = False) -> None:
             folder = root / "work" / ("closed/2026" if closed else "active")
@@ -351,6 +409,7 @@ def self_test() -> int:
         item("broken", "---\nid: broken\ntitle: unterminated\n")
 
         _REPO, _ACTIVE, _CLOSED = root, root / "work" / "active", root / "work" / "closed"
+        _RECORDS = root / "acceptance" / "records"
         items, detected = _items()
         _tally(items, detected)
         for expected in (
@@ -365,6 +424,8 @@ def self_test() -> int:
             "front matter is never closed",
             "already used",
             "some/invented/word does not exist",
+            "2026-09-20-partial.md: sections must be",
+            "Bad_Name.md: a record is named",
         ):
             if not any(expected in p for p in detected):
                 problems.append(f"falsifier did not fire: {expected!r}")
@@ -384,12 +445,12 @@ def self_test() -> int:
             problems.append("falsifier did not fire: the active-set budget")
         if not any("will not cancel" in p for p in budget_problems):
             problems.append("the budget message does not say the tool decides nothing")
-        _REPO, _ACTIVE, _CLOSED, BUDGET_BYTES = saved
+        _REPO, _ACTIVE, _CLOSED, _RECORDS, BUDGET_BYTES = saved
 
     for problem in problems:
         print(f"  FALSIFIER: {problem}")
     print(
-        "WORK_DOCS_SELF_TEST_OK (14 fixtures)"
+        "WORK_DOCS_SELF_TEST_OK (14 item + 3 record fixtures)"
         if not problems
         else f"WORK_DOCS_SELF_TEST_DRIFT ({len(problems)})"
     )
