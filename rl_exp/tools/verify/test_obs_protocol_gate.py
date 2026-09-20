@@ -123,6 +123,16 @@ def main() -> int:
     unapproved["protocols"][dimmed].pop("dims_digest")
     fires("dims/no-approved-digest", "without a re-approval", g.check_anchors(DECLARED, unapproved))
 
+    # an approved width has to say what asserted it: the digest is recomputable, the citation is not
+    uncited = copy_of(ANCHORED)
+    uncited["protocols"][dimmed].pop("evidence")
+    fires("dims/no-evidence", "cite no evidence", g.check_anchors(DECLARED, uncited))
+
+    cited_void = copy_of(ANCHORED)
+    cited_void["protocols"][dimmed]["dims"] = {}
+    cited_void["protocols"][dimmed].pop("dims_digest")
+    fires("dims/evidence-without-widths", "nothing to cite", g.check_anchors(DECLARED, cited_void))
+
     stray = copy_of(ANCHORED)
     stray["protocols"][dimmed]["dims"]["invented_group"] = 5
     fires("dims/unknown-group", "does not carry live", g.check_anchors(DECLARED, stray))

@@ -160,6 +160,18 @@ def check_anchors(document: dict, anchors: dict) -> list[str]:
                     f"{key}: approved dims digest {anchor.get('dims_digest')!r} != recomputed "
                     f"{dims_digest(dims)!r} -- a width was edited without a re-approval"
                 )
+            # An approved width has to say what asserted it. The digest half is self-consistent by
+            # construction -- a regeneration recomputes it -- so what a regeneration cannot write is
+            # a line naming the run or the record behind the numbers. That is the same level of
+            # control the golden re-baseline has (``--update --reason``): it does not prove a human
+            # read anything, it makes the act deliberate and leaves something to follow.
+            if not str(anchor.get("evidence") or "").strip():
+                out.append(
+                    f"{key}: approved widths cite no evidence -- name the run or the record that"
+                    " asserted them (a regeneration can recompute the digest; it cannot cite)"
+                )
+        elif isinstance(dims, dict) and anchor.get("evidence"):
+            out.append(f"{key}: evidence on a protocol with no approved widths -- nothing to cite")
     for key in sorted(set(approved) - set(document.get("protocols") or {})):
         out.append(f"{key}: anchor for a protocol the declaration does not define")
     return out
