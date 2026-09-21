@@ -52,17 +52,38 @@
 | 未喂 tilt 时 `_require` 永不触发 | `tilt_violation` 恒有长度 | 门倾角而没采集时静默通过 |
 | （外加）`feet_down_mean` | 老实现把逐帧脚数再除以有效帧数 | 实测 0.05，正确值 1.0 |
 
-**"原生崩溃、无异常栈"不成立（重要更正）**：复现时用捕获式日志 + `faulthandler`（全线程 +
-180 s 周期栈转储）跑同一路径，两次都拿到**完整 Python 栈**——第一次是上表第 1 行的 `IndexError`，
-第二次是判定侧设备不一致（`start_pos` 在 cuda、帧在 cpu）。原判断"死在第 5 处累加之后的原生退出"
-只是**观察位置**：当时没有保留标准输出，把"异常没有落在屏幕上"读成了"没有异常"。
+**"原生崩溃、无异常栈"不成立（重要更正）**：异常一直到达了 Python，吞掉它的是 `app.close()` ——
+Kit 关闭时直接结束进程，解释器来不及打印栈。证据：把同一次 `run()` 包进显式 `except`，立刻得到完整
+`RuntimeError: The size of tensor a (23) must match the size of tensor b (16) at non-singleton dimension 2`；
+而 `-X faulthandler` 全程**没有原生栈**（不是段错误）。此前两次读到的"无异常栈"，是"没有把栈打出来"，
+不是"没有异常"（前两次的异常是：载荷被平均成 1-D 后的 `IndexError`；判定侧 cuda/cpu 设备混用）。
+**已修**：`main()` 在 `finally: app.close()` 之前先打印栈并 flush ⇒ 失败不再表现为静默退出。
+
+**另补四项记录校验（评审提出，此前缺失）**：
+
+| 校验 | 不满足时的行为 |
+|---|---|
+| `steps × step_dt` 必须等于协议窗口 | `invalid`：`the window is 20 steps x 0.04 s = 0.8 s, but the protocol declares 20 s` |
+| `start_pos` 形状 `(N,3)`、`start_yaw` 形状 `(N,)`、两者有限 | `invalid`，逐项点名 |
+| `body_weight_n` 存在且为正 | `invalid`（没有体重就换不出牛顿） |
+| 逐帧命令落在协议声明的 box 内 | `invalid`：记录属于另一个协议 |
+
+回归：`test_window_length_must_equal_the_protocol_window`、
+`test_the_initial_state_is_checked_for_shape_and_finiteness`、
+`test_a_record_is_refused_under_a_protocol_it_was_not_collected_for`。
 
 **三态结论与离线复判可用（条件 1、2）**：同一份记录不重跑物理地判两遍协议——
 
 | 协议 | 判定 | 说明 |
 |---|---|---|
 | `baseline_flat_v1` | `pass`（3/3） | v1 只读速度/位移/存活 ⇒ 拖颈蹭行照过 |
-| `baseline_flat_v2` | `pass`（6/6） | **本轮的意外结果**，见下节 |
+| `baseline_flat_v2` | `pass`（6/6） | **判的是 v1 策略**，与训练 v2 无关（见下） |
+
+**归属必须写清**：这份报告的任务是 `Lizard-Baseline-Flat-Play-v1`、checkpoint 是
+`lizard_baseline_v1/.../model_5850.pt` ⇒ 它说的只是"**v1 策略**在 v2 口径下通过"。它**不是**关于
+训练 v2 的结论（v2 尚未开训），也不是 v2 协议能否胜任的结论——那份协议当时还判不了 v2
+（入口拒绝 `params_version != "v1"`、采集要求命令恒为 0.5 m/s、判定只有绝对门槛）。
+v2 口径已由 v3 取代，见 `2026-09-21-baseline-eval-v2-support-and-protocol-v3.md`。
 
 其余真跑样本：零动作 = `smoke_only`（脚 duty 0.987–0.991、非足载荷 0 N、网格最低 +0.54 m ——
 "正常样本"）；`model_0.pt` = `fail`；`model_0.pt`+sampled（64 env）= `fail`。

@@ -1,30 +1,36 @@
 ---
 id: baseline-eval-protocol-gap
-title: 固定窗口验收口径漏判"拖颈蹭行"（v2 判 pass，口径待拍板）
-scope: ablation_harness, rl_exp/tools/verify
+title: 验收侧对训练 v2 的支持与口径（协议 v3）
+scope: ablation_harness, rl_exp/tools/verify, rl_exp/versions/lizard/baseline
 status: in_progress
-landing: ablation_harness/protocols/baseline_flat_v2.json, ablation_harness/baseline_metrics.py, rl_exp/tools/diagnose/diag_metrics.py, rl_exp/tools/verify/baseline_probe.py, rl_exp/versions/lizard/baseline/v1/NOTES.md
-next: ① 拍板口径：把验收门槛改读**探针原口径**（逐 body 全窗时均 > 1 N 即红；非足网格逐帧 > 0），还是保留现有（≥10% 体重连续 0.5 s、> −0.01 m）——两侧证据已在验收记录里（正常样本 0 N/+0.54 m 通过；异常样本 87.2 N/−4.6 mm、随机策略 −7.7 mm 判红）；② 按拍板结果改协议并**重判同一份 `eval.frames.pt`**（不重跑物理）；③ 据此改判 `rl_exp/versions/lizard/baseline/v1/NOTES.md` 的结论与结果表，并把旧报告标为被取代（保留原义）
-close_when: 执行者观察到 v2（或其后继协议）报告把该策略判 fail，且失败项指向非足承重与网格入地；同时 v1 三条门槛仍全对（用同一份记录复判即可）。**判 pass 不算关闭**：那说明口径或采集有误，先修口径，不得放宽门槛
+landing: ablation_harness/protocols/baseline_flat_v3.json, ablation_harness/baseline_eval.py, ablation_harness/baseline_metrics.py, rl_exp/versions/lizard/baseline/v2/PLAN.md, rl_exp/versions/lizard/baseline/v1/NOTES.md
+next: ① v2 首跑后按 v3 出报告（`--task ...-Play-v2 --protocol baseline_flat_v3.json`），确认 `verdict` 属于 `pass`/`fail` 且两条相对门槛与接触轴各有区分度（不是全绿也不是全红）；② 据此回填 `baseline/v2/NOTES.md` 并改判 `baseline/v1/NOTES.md` 的结论与结果表（v1 记录保持原义、不重打标签）；③ 若 0.2 / 0.8 这两个本版新定阈值在首跑上无区分度 ⇒ 回到"独立依据 + 正常/异常样本"再定，不得按首跑结果平移
+close_when: 执行者观察到 v2 首跑的报告：`verdict ∈ {pass, fail}`，每条门槛都有"能过"与"能红"两侧证据，并已回填 v2 NOTES、改判 v1 NOTES 的旧结论。仅"能跑出报告"不结项；"把旧 v1 拖颈样本判红"**也不是**结项条件——它是异常回归样本，不设定阈值
 depends_on: eval-protocol-before-training
-evidence: acceptance/records/2026-09-21-baseline-eval-measurement-contract.md
+evidence: acceptance/records/2026-09-21-baseline-eval-v2-support-and-protocol-v3.md
 ---
 
 ## 问题与本次范围
 
-v1 只读前向速度与存活，于是"用脖子蹭地承重、后脚几乎不落地"的策略三条门槛全过。v2 增加了姿态、
-非足承重、网格入地三条判据，并把量提到 `diag_metrics` 供探针与验收器共用。**不改奖励、不重训、不改资产。**
+v1 只读前向速度与存活 ⇒ 拖颈蹭行的策略三条门槛全过；v2 协议补了姿态/承重/网格三条，却**判不了它要判的那版**：
+入口拒绝 `params_version != "v1"`、采集要求命令恒为 0.5 m/s、判定只有绝对门槛与固定 8 m 位移。于是
+"v2 协议判 v1 策略"看起来像结论，其实是两件无关的事拼在一起（事实更正见验收记录）。
+
+本项把验收侧补齐到能判训练 v2：协议按 `recipe_version` 绑定配方、命令按 box 采集与校验（逐帧记录实际
+下发命令）、跟踪与位移改**相对口径**、头链轴改成与**训练终止同判据**的接触判据、非足网格降为诊断。
+阈值只许来自"仓库先例 + 本版新定 + 两侧样本验证"，**不许由"让某个旧样本变红"反推**。
 
 ## 当前状态
 
-仿真内报告已产出（`ablation_harness/results/baseline_flat_v2/collector-check/`），结论是
-**v2 判 pass**——按本项 `close_when` 的规则，这不是关闭条件，而是"口径有误"的证据。原因已量化：
-`neck_pitch` 全窗时均 87.2 N（体重 12.3%）、66.2% 的帧超 10% 体重，但**最长连续超阈 0.22 s**，
-败给 0.5 s 持续判据；网格 −4.63 mm 在 −0.01 m 允许值之内。这两条门槛均**弱于开训前探针的口径**
-（探针：任一非足 body 时均 > 1 N 即红；网格逐帧 > 0）——探针口径下本策略两侧都红。
-采集侧已被独立复核（同一记录对 v1/v2 两协议复判、量与诊断器一致），所以现在缺的是**拍板**，不是数据。
+协议 `baseline_flat_v3.json`、`--protocol` 入参与 recipe 绑定、命令 box 采集/校验、两条相对门槛、接触轴与
+网格降级均已落地并通过闸门（离线套件 47/47；本轮新增 7 条回归）。真跑已证明**管路通**：
+`Lizard-Baseline-Flat-Play-v2`（零动作）跑完，22 维动作、命令区间采样（均值 2.088）、期望位移 41.76 m、
+两条相对门槛按预期判红、接触轴绿、`verdict = smoke_only`、报告与记录落盘 ⇒ **但这不是 v2 的性能结论**。
+
+v1 那份记录不能在 v3 下复判（命令 0.5 落在 1–3 box 之外 ⇒ `invalid`）：接触轴的回归是合成记录，v1 记录
+本身仍只在 v1/v2 口径下有判定。当前缺的是 v2 首跑，见 `next`。
 
 ## 未覆盖边界
 
-阈值本身要有独立依据与正常／异常样本验证（本项只把两侧样本摆出来，不自行改阈值）；
-脚 duty 等仍只作诊断；单 seed、单资产。v1 及其历史记录保持原义，不与 v2 混表。
+不覆盖奖励与训练侧终止实现（归 `baseline-v2-recipe`）；不覆盖启动闸门（归 `eval-protocol-before-training`）；
+脚 duty 等仍只作诊断；单资产、单 seed。
