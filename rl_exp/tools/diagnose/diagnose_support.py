@@ -157,6 +157,20 @@ MESH_DIR = _REPO_ROOT / "rl_exp" / "meshes" / "collision"
 TAIL_PITCH_JOINTS = ["tail1_pitch_joint", "tail2_pitch_joint", "tail3_pitch_joint"]
 
 
+def mesh_vertices(body: str) -> torch.Tensor:
+    """碰撞网格顶点（link 系）—— 碰撞体是 convexHull，最低点必在其顶点上。
+
+    2026-09-21 加：此前用下面的 AABB 角点读"入地深度"，那是**上界**而非真值——link 系里角点与最低
+    顶点同高，但机身一旋转，角点就不再是形体上的点，世界系里可以比任何真实顶点更低。
+    """
+    return diag_metrics.mesh_vertices(MESH_DIR / f"{body}_collision.obj")
+
+
+def _pad_clouds(clouds: list[torch.Tensor]) -> torch.Tensor:
+    """补齐全宽后 stack（唯一实现见 `diag_metrics.pad_point_clouds`）。"""
+    return diag_metrics.pad_point_clouds(clouds)
+
+
 def mesh_bbox_corners(body: str) -> torch.Tensor:
     """读 `meshes/collision/<body>_collision.obj` 的 bbox，返回 (8,3) link 系角点 [m]。"""
     path = MESH_DIR / f"{body}_collision.obj"
@@ -844,10 +858,13 @@ def main():
         # 全 body 名单：接触力张量的第二维按 articulation body 顺序排列（承重闭环的归因基准）
         "body_names": list(robot.body_names),
         "sensor_ids": sensor_ids,
-        # 承重几何复核：碰撞网格角点表（link 系）+ 尾 pitch 关节（看尾巴是否被折下来撑地）
+        # 承重几何复核：碰撞网格**顶点**表（link 系）+ 尾 pitch 关节（看尾巴是否被折下来撑地）
+        # 顶点而不是 AABB 角点：碰撞体是 convexHull，最低点必在顶点上；AABB 角点在机身旋转后
+        # 不再是形体上的点，会把"入地深度"读大（2026-09-21 修正，见 diag_metrics.mesh_vertices）
         "mesh_z_ids": mesh_ids,
         "mesh_names": list(mesh_names),
-        "mesh_corners": torch.stack([mesh_bbox_corners(n) for n in mesh_names]).to(device),
+        # 各 body 顶点数不同 ⇒ 按最大宽度补齐（空位用 +inf，不改 min 的结果）
+        "mesh_corners": _pad_clouds([mesh_vertices(n) for n in mesh_names]).to(device),
         "tail_joint_ids": tail_joint_ids,
     }
 

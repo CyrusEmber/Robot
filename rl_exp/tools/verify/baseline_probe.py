@@ -43,8 +43,8 @@ import torch  # noqa: E402
 import isaaclab_tasks  # noqa: F401, E402
 
 from rl_exp.tools.diagnose.diag_metrics import (  # noqa: E402
-    MESH_CHECK_BODIES, body_load_n, collision_mesh_dir, foot_ids, mesh_bbox_corners, mesh_min_z,
-    tilt_cos,
+    MESH_CHECK_BODIES, body_load_n, collision_mesh_dir, foot_ids, mesh_min_z, mesh_vertices,
+    pad_point_clouds, tilt_cos,
 )
 from rl_exp.tools.verify.baseline_runtime import (  # noqa: E402
     joint_reset_errors, material_errors, resolve_task_cfg, termination_errors,
@@ -185,8 +185,8 @@ def main() -> int:
     spawn_z = robot.data.root_pos_w.torch[:, 2].mean().item()
     mesh_present = [name for name in MESH_CHECK_BODIES if name in body_names]
     mesh_ids = [body_names.index(name) for name in mesh_present]
-    mesh_corners = torch.stack([mesh_bbox_corners(collision_mesh_dir() / f"{name}_collision.obj")
-                                for name in mesh_present]).to(unwrapped.device) if mesh_present else None
+    mesh_corners = pad_point_clouds([mesh_vertices(collision_mesh_dir() / f"{name}_collision.obj")
+                                     for name in mesh_present]).to(unwrapped.device) if mesh_present else None
     z_rows: list[torch.Tensor] = []
     tilt_rows: list[torch.Tensor] = []
     load_rows: list[torch.Tensor] = []

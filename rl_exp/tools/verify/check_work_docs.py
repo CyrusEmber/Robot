@@ -103,19 +103,15 @@ _CLOSED_ONLY = ("outcome",)
 #: 4638. 4096 leaves room for the ~25 items the two sessions are heading for and still expires
 #: around 4 KB, where the remedy is to narrow the view -- never to cancel an item.
 LIST_BYTES = 4096
-#: Total bytes of ``work/active/``. **Not a read budget and not a token budget**: nobody reads
-#: the sum, items are read on demand. It is a backlog alarm, and its value is set as roughly
-#: 2.5x the measured working steady state (8 items = 20643 bytes, ~2.6 KB per item) so it stays
-#: quiet during ordinary work and speaks up around twenty open items -- at that point the
-#: backlog itself is the problem, not the bytes. Raise it by hand with a reason written here,
-#: never from inside a run.
-BUDGET_BYTES = 48000
-#: Total bytes of ``work/active/``. A growth alarm, **not** the default read cost (items are
-#: read on demand): it fires before the ledger turns into another file nobody can afford to
-#: read. Raised 24000 -> 48000 on 2026-09-21 because two sessions share it and ~25 items at the
-#: measured ~2 KB each is ordinary work, not bloat. Raise it by hand with a reason, never from
-#: inside a run.
-BUDGET_BYTES = 48000
+#: Total bytes of ``work/active/``. A backlog alarm, **not** the default read cost (items are read
+#: on demand) and not a token budget: nobody reads the sum. It stays quiet during ordinary work
+#: and speaks up when the backlog itself is the problem. Raised 24000 -> 48000 on 2026-09-21
+#: (two sessions share this ledger; ~25 items at the measured ~2 KB each is ordinary work, not
+#: bloat), then 48000 -> 52000 the same day because the migration tail added items that carry
+#: pinned white-lists -- measured 48434 bytes over 23 items, biggest contributor 4915, and
+#: trimming further would have deleted the very pinning information those items exist to hold.
+#: Raise it by hand with a reason written here, never from inside a run.
+BUDGET_BYTES = 52000
 
 _SHA = re.compile(r"\bsha256:[0-9a-fA-F]{8,}")
 

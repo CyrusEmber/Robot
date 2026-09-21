@@ -10,7 +10,8 @@
   "post_failure_velocity": "zero",
   "terminal_frame": "post_physics_pre_reset",
   "why_v2": [
-    "v1 judged forward speed and survival only, so a policy that drags its head on the floor while shuffling its feet passed all three gates: the same rollout measured forward_mae 0.0199, displacement +9.46 m, survival 1.000, while neck_pitch carried 82-94 N (47-49% of body weight) with its collision mesh 5.2 cm below the floor and one hind foot at 0.002 duty.",
+    "v1 judged forward speed and survival only, so a policy that drags its head on the floor while shuffling its feet passed all three gates: the same rollout measured forward_mae 0.0199, displacement +9.46 m, survival 1.000, while neck_pitch carried 82-90 N (11.6-12.8% of body weight) with one hind foot at 0.002 duty and the head scraping the floor.",
+    "Geometry caveat, measured 2026-09-21: the contact shapes are convex hulls, so ground clearance must be read from mesh VERTICES. AABB corners read -0.052 m for the same frames and are an upper bound about ten times too deep -- a box corner is not a point of the body once the body rotates. The vertex reading is -0.005 m, which is the steady overlap this solver tolerates (shape contact offsets 3.5-14.7 mm, rest offset 0.0), so the gate below is written as 'not deeper than the solver permits' rather than '> 0', which no walking robot can satisfy.",
     "The quantities needed were already pinned elsewhere in this repo, and the v1 protocol simply did not read them: the geometric fall predicate (metrics.fall_flags: tilt <= 40 deg or clearance below threshold, sustained), the v10 DIAGNOSE.md non-foot carrier criterion (chest/neck normal force > 10% of body weight sustained > 0.5 s), and the collision-mesh reading that separates 'resting on' from 'through the floor'.",
     "Every threshold below is therefore a repo precedent, not a new opinion. The pre-train probe (rl_exp/tools/verify/baseline_probe.py) measures the same quantities through the same functions (rl_exp/tools/diagnose/diag_metrics.py), so a standard set before training is re-measured at acceptance instead of being replaced by a weaker one."
   ],
@@ -22,7 +23,7 @@
     "tilt_sustain_s": 0.5,
     "non_foot_load_fraction_lt": 0.1,
     "non_foot_load_sustain_s": 0.5,
-    "non_foot_mesh_min_z_gt": 0.0
+    "non_foot_mesh_min_z_gt": -0.01
   },
   "report_only": [
     "lateral_speed_abs_mps",

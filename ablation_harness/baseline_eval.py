@@ -46,8 +46,8 @@ def run(args) -> dict:
     from ablation_harness import record
     from ablation_harness.baseline_metrics import BaselineWindow
     from rl_exp.tools.diagnose.diag_metrics import (
-        MESH_CHECK_BODIES, body_load_n, collision_mesh_dir, foot_ids, mesh_bbox_corners, mesh_min_z,
-        tilt_cos,
+        MESH_CHECK_BODIES, body_load_n, collision_mesh_dir, foot_ids, mesh_min_z, mesh_vertices,
+        pad_point_clouds, tilt_cos,
     )
     from rl_exp.tools.runrecord import provenance
     from rl_exp.tools.verify import cfg_snapshot
@@ -111,8 +111,8 @@ def run(args) -> dict:
         mesh_ids = [names.index(name) for name in mesh_present]
         if not mesh_present:
             raise RuntimeError(f"none of {MESH_CHECK_BODIES} is a body of this asset: cannot check the floor")
-        mesh_corners = torch.stack([mesh_bbox_corners(collision_mesh_dir() / f"{name}_collision.obj")
-                                    for name in mesh_present]).to(live.device)
+        mesh_corners = pad_point_clouds([mesh_vertices(collision_mesh_dir() / f"{name}_collision.obj")
+                                        for name in mesh_present]).to(live.device)
         weight_n = float(robot.data.body_mass.torch[0].sum().item() * 9.81)
 
         def snapshot():
@@ -126,7 +126,10 @@ def run(args) -> dict:
                 "head_tail_force": forces[:, load_ids].norm(dim=-1).sum(dim=-1).clone(),
                 "tilt_cos": tilt_cos(robot.data.projected_gravity_b.torch).clone(),
                 "non_foot_fraction": load[non_foot].clone(),
-                "mesh_min_z": mesh_min_z(robot.data.body_pos_w.torch, robot.data.body_quat_w.torch,
+                # clone(): mesh_min_z indexes and expands; the live warp-backed view does not
+                # survive that on this backend (the diagnose tool only ever feeds it plain tensors).
+                "mesh_min_z": mesh_min_z(robot.data.body_pos_w.torch.clone(),
+                                         robot.data.body_quat_w.torch.clone(),
                                          mesh_ids, mesh_corners).clone(),
                 "foot_contact": (forces[:, feet, 2] > 1.0).clone(),
                 "foot_fraction": load[feet].clone(),

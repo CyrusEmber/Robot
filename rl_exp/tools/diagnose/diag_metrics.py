@@ -163,6 +163,47 @@ def mesh_bbox_corners(obj_path) -> torch.Tensor:
     )
 
 
+def mesh_vertices(obj_path) -> torch.Tensor:
+    """Every vertex of a collision mesh in its link frame, shape (V, 3) [m].
+
+    The collision shape is the mesh's convex hull (``physics:approximation = "convexHull"`` in the
+    asset), so its lowest point is one of these vertices: feeding them to :func:`mesh_min_z` gives
+    the real ground clearance.
+
+    :func:`mesh_bbox_corners` is only a proxy of that and it *over-estimates* penetration: in the
+    link frame the box's lowest corner sits at the same height as the lowest vertex, but once the
+    body is rotated the corner is no longer a point of the body at all, so in the world frame it
+    can lie below every real surface. Use this one when the number is meant to mean "through the
+    floor"; keep the corners only where a loose upper bound is enough.
+
+    Args:
+        obj_path: path to the ``<body>_collision.obj`` mesh.
+    """
+    points = []
+    with open(obj_path, encoding="utf-8") as handle:
+        for line in handle:
+            if line.startswith("v "):
+                points.append([float(x) for x in line.split()[1:4]])
+    return torch.tensor(points, dtype=torch.float32)
+
+
+def pad_point_clouds(clouds: list[torch.Tensor]) -> torch.Tensor:
+    """Stack point clouds of different lengths into (B, max_len, 3), padding rows with +inf.
+
+    A min over points is unaffected by +inf rows, so clouds with different vertex counts can be
+    measured in one call. Filling with zeros would not be safe: a padded row of zeros is a real
+    coordinate and would drag the minimum down.
+
+    Args:
+        clouds: one ``(V_i, 3)`` tensor per body.
+    """
+    width = max(cloud.shape[0] for cloud in clouds)
+    padded = torch.full((len(clouds), width, 3), float("inf"), dtype=clouds[0].dtype)
+    for i, cloud in enumerate(clouds):
+        padded[i, : cloud.shape[0]] = cloud
+    return padded
+
+
 def mesh_min_z(body_pos_w: torch.Tensor, body_quat_w: torch.Tensor,
                ids: list[int], corners: torch.Tensor) -> torch.Tensor:
     """Lowest world z of the selected bodies' collision meshes, shape (N,) [m].
