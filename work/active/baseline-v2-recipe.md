@@ -5,7 +5,7 @@ scope: rl_exp/versions/lizard/baseline, rl_exp/tasks
 status: in_progress
 landing: rl_exp/versions/lizard/baseline/v2/baseline_params.yaml, rl_exp/versions/lizard/baseline/v2/PLAN.md, rl_exp/tasks/baseline_recipe.py, rl_exp/tasks/baseline_mdp.py, rl_exp/tasks/agents/rsl_rl_ppo_cfg.py, rl_exp/versions/recipes.json
 next: ① 冻结本版验收协议 = 用 `baseline_flat_v3.json`（命令 box + 相对门槛 + 接触轴；几何门槛已降为诊断——实测它放过颈部入地 7.7 mm 的策略）。v3 已落地并跑通 **v2 管路**（零动作，`results/baseline_flat_v3/v2-recipe-smoke/`），仍差"协议与启动闸门绑定"（见 `eval-protocol-before-training`）；② 探针断言新接口（命令落在区间且逐 env 采样、动作 22 维、脚关节无动作权）并真跑；③ 以上齐了才开训，训后按 v3 验收并回填 `baseline/v2/NOTES.md`
-close_when: 两次真跑留证后关闭——(a) 探针在新任务上按新断言通过，且旧断言在 v2 上会红；(b) v2 训完后按冻结协议产出报告并回填 NOTES 的结果表与结论。若开训发生在冻结之前，保持 open 并记"提前开训"这一事实，不得事后改协议迁就结果
+close_when: 两次真跑留证后关闭——(a) 探针在新任务上按新断言通过，且旧断言在 v2 上会红；(b) v2 训完后按 v3 产出报告并回填 NOTES 的结果表与结论。**排序事实（2026-09-21，用户定）**：开训早于**启动闸门**、但不早于协议（v3 于 `1183b2f` 冻结在前）⇒ 记"闸门后补"，不得事后改协议迁就结果；探针复测若跳过，要在这里写明"未做"
 depends_on: baseline-eval-protocol-gap, eval-protocol-before-training
 evidence: acceptance/records/2026-09-20-baseline-flat-eval-protocol.md
 ---
