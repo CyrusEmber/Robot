@@ -109,27 +109,27 @@
 
 | 目录 | 身份 |
 |---|---|
-| `rl_exp\versions\lizard\main\v0\` | 全量 DR 原始配方（对照基准；复现走 git 历史） |
-| `rl_exp\versions\lizard\main\v1\` | v0 仅 DR 段收窄；obs 266，常驻注册的可复现点 |
-| `rl_exp\versions\lizard\main\v2\` | v1 + 特权 obs 论文对齐补全（266→308） |
-| `rl_exp\versions\lizard\main\v3\` | 三编码器 + 脚环 extero 208 + tilt/r_fc/c_k/DR-reset 趴窝修复包 + Miki 地形 `TEACHER_TERRAINS_CFG_V3`（仅 v3 用） |
-| `rl_exp\versions\lizard\main\v4\` | 碎石地重定标：`TEACHER_TERRAINS_CFG_V4` random_rough 间距 0.3→0.5 m + 噪声；yaml 与 v3 逐字相同 |
-| `rl_exp\versions\lizard\main\v5\` | 反划脚奖励包：r_fc 符号修正 + r_slip + 肚皮受力罚 + EP 线性跟踪核 + 命令 (0,3) 无速度课程 |
-| `rl_exp\versions\lizard\main\v6\` | 资产前向轴转正 R_z(-90°) + 脊柱/尾动作解锁（`joint_pos_spine` 0→0.25）；"倒走"归因记录在此 |
-| `rl_exp\versions\lizard\main\v7\` | ghost 断腿鲁棒性方案：截肢近似 DR + `damage_flags` 4 维进 actor obs（90→94）+ 断腿接触罚豁免 |
-| `rl_exp\versions\lizard\main\v8\` | 资产**解剖学**转正（净 +90°，球头→+X）+ 全关节重命名（rear→chest、tail→neck、腿序换正）；布局硬闸由它而来 |
-| `rl_exp\versions\lizard\main\v9\` | 断腿方案自 v7 迁入并重基 v8 |
-| `rl_exp\versions\lizard\main\v10\` | tilt 终止改为可关（`v10.tilt_terminate` 为 null 即不终）；v11/v12 的基座 |
-| `rl_exp\versions\lizard\main\v11\` | 联合粒子地形课程：参数组合网格地形 + `JointSIRTerrainCurriculum`（Lee 2020 逐步 Tr）+ `ParticleVelocityCommand` 桶命令 |
-| `rl_exp\versions\lizard\main\v12\` | Miki S8 鲁棒性包：关节 offset 复位随机 + 基座范围 yaml 化 + 摩擦偶发调低 + teacher 侧高度环噪声 |
-| `rl_exp\versions\lizard\main\v13\` | 换回 Miki 对称跟踪核 `track_lin_vel_xy_miki`（全 2D 误差，闭合超速/横向/停车盲区） |
-| `rl_exp\versions\lizard\main\v14\` | 终止项只留**翻覆**（`roll_over_trigger` 四元数 roll + per-env dwell）+ 头承重罚 `head_load_penalty` |
-| `rl_exp\versions\lizard\main\v15\` | 地形课程换 joint SIR（参数格 combo × 速度桶）；obs/动作/奖励/终止/DR/资产逐字段同 v14 |
-| `rl_exp\versions\lizard\parkour\` | 支线路线层：Parkour in the Wild（跑/爬/跳多专家蒸馏 + RL 微调）的组件映射 / 偏差声明 / 决策记录；`parkour_params.yaml` = 开发态参数 |
-| `rl_exp\versions\lizard\parkour\v1\` | 支线版本包：位置任务 / probe gate / 专家表 / 蒸馏微调方案；`base.json` = 支线血统根（null） |
-| `rl_exp\versions\lizard\baseline\` | 支线路线层：能力基线（平地 + 固定命令 + 零课程 + 零 DR）；`baseline_params.yaml` **没有** `domain_randomization` 段（缺席是设计，不是遗漏） |
-| `rl_exp\versions\lizard\baseline\v1\` | 支线版本包：全量式方案 SSOT（配方逐项 + 依据 + 前提校正 + 验收与探针） |
-| `rl_exp\versions\lizard\baseline\v2\` | 支线第二版版本包：同线只加两个变量（命令窗口 `1.0–3.0 m/s`、脚板去动作权限 26→22 维），配方元素与 v1 相同、差异全在 `baseline_params.yaml` |
+| `rl_exp\versions\lizard\main\v0\` | 冻结配方（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
+| `rl_exp\versions\lizard\main\v1\` | 冻结配方（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
+| `rl_exp\versions\lizard\main\v2\` | 冻结配方（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
+| `rl_exp\versions\lizard\main\v3\` | 冻结配方（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
+| `rl_exp\versions\lizard\main\v4\` | 冻结配方（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
+| `rl_exp\versions\lizard\main\v5\` | 冻结配方（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
+| `rl_exp\versions\lizard\main\v6\` | 冻结配方（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
+| `rl_exp\versions\lizard\main\v7\` | 冻结配方（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
+| `rl_exp\versions\lizard\main\v8\` | 冻结配方（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
+| `rl_exp\versions\lizard\main\v9\` | 冻结配方（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
+| `rl_exp\versions\lizard\main\v10\` | 冻结配方（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
+| `rl_exp\versions\lizard\main\v11\` | 冻结配方（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
+| `rl_exp\versions\lizard\main\v12\` | 冻结配方（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
+| `rl_exp\versions\lizard\main\v13\` | 冻结配方（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
+| `rl_exp\versions\lizard\main\v14\` | 冻结配方（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
+| `rl_exp\versions\lizard\main\v15\` | 冻结配方（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
+| `rl_exp\versions\lizard\parkour\` | 支线版本包（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
+| `rl_exp\versions\lizard\parkour\v1\` | 支线版本包（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
+| `rl_exp\versions\lizard\baseline\` | 支线版本包（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
+| `rl_exp\versions\lizard\baseline\v1\` | 支线版本包（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
+| `rl_exp\versions\lizard\baseline\v2\` | 支线版本包（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
 | `<线>\vN\PLAN.md` | 版本级计划（目的 / 假设 / 决策点 / 验收线）；结果回填走 NOTES |
 | `<线>\vN\NOTES.md` | 版本文档：目的 / 参数 diff / 训练命令 / 结果回填 |
 | `<线>\vN\<line>_params.yaml` | 冻结参数副本：跑冻结版只读这份，资产内容由 `asset_lock.json` 钉 |
