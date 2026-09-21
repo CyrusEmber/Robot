@@ -14,9 +14,20 @@ much of it was migrated, and everything else is found by search.
 
 Three modes, one implementation of the item format:
 
-* ``--list`` -- one line per active item, after a line naming the scope it covers.
+* ``--list [KEY]`` -- one line per active item (id / status / scope / title), after a line naming
+  the scope it covers; ``KEY`` narrows the view. The list is for *choosing* an item, so the action
+  and the close condition stay in the file and are fetched with ``--locate`` -- a shortened second
+  copy here would be one more thing to keep in step.
 * ``--locate KEY`` -- the files whose id, title or body matches KEY, with line numbers.
 * ``--check`` (default) -- the shape gates below, each printing what it saw.
+
+What each measurement is for -- three different things, not one budget:
+
+| 对象 | 用途 |
+|---|---|
+| ``--list`` 实际输出 | **默认发现成本**（未选事项前付的那一笔；闸门直接量这几行） |
+| 单个事项文件的字节数 | **选中后的阅读成本**（按需读，不设上限） |
+| ``work/active/`` 总量 | **积压与膨胀警报**，不是 token 预算（没人读这个和） |
 
 An item is front matter plus a free body::
 
@@ -85,15 +96,20 @@ _COMMON = ("id", "title", "scope", "status", "landing")
 _ACTIVE_ONLY = ("next", "close_when")
 #: Fields a closed item adds.
 _CLOSED_ONLY = ("outcome",)
-#: Bytes of one item's ``next``. This is the number that matters: the default reader pays for
-#: ``--list``, one line per item, and nothing reads every item file. Measured 2026-09-21: the
-#: list output was 4638 bytes for 8 items, longest line 763 -- so this cap is where the
-#: default read cost actually lives.
-#: **Temporary ceiling at 700, target 400.** Two items belonging to another session measured
-#: 485 and 629 bytes; the number is set where the tree currently stands and must ratchet down to
-#: 400 in the change that trims them (tracked in work/active/ledger-migration-expansion.md).
-#: Raising it again needs the same kind of note, not a quiet edit.
-NEXT_BYTES = 700
+#: Bytes of the ``--list`` output. **This is the default discovery cost** -- what someone pays
+#: before deciding which item to open -- so it is measured directly, over the exact lines
+#: ``--list`` prints, rather than proxied by any one field's length. Measured 2026-09-21: 1434
+#: bytes for 8 items (179 per line) once the list stopped carrying ``next``; before that it was
+#: 4638. 4096 leaves room for the ~25 items the two sessions are heading for and still expires
+#: around 4 KB, where the remedy is to narrow the view -- never to cancel an item.
+LIST_BYTES = 4096
+#: Total bytes of ``work/active/``. **Not a read budget and not a token budget**: nobody reads
+#: the sum, items are read on demand. It is a backlog alarm, and its value is set as roughly
+#: 2.5x the measured working steady state (8 items = 20643 bytes, ~2.6 KB per item) so it stays
+#: quiet during ordinary work and speaks up around twenty open items -- at that point the
+#: backlog itself is the problem, not the bytes. Raise it by hand with a reason written here,
+#: never from inside a run.
+BUDGET_BYTES = 48000
 #: Total bytes of ``work/active/``. A growth alarm, **not** the default read cost (items are
 #: read on demand): it fires before the ledger turns into another file nobody can afford to
 #: read. Raised 24000 -> 48000 on 2026-09-21 because two sessions share it and ~25 items at the
@@ -196,13 +212,9 @@ def _tally(items: list[Item], problems: list[str]) -> int:
         for field in wanted:
             if not item.fields.get(field):
                 problems.append(f"{_rel(item.path)}: '{field}' is missing or empty")
-        if not item.closed and len(item.fields.get("next", "").encode("utf-8")) > NEXT_BYTES:
-            problems.append(
-                f"{_rel(item.path)}: 'next' is {len(item.fields['next'].encode('utf-8'))} bytes, "
-                f"over the {NEXT_BYTES}-byte line budget -- a reader who lists the ledger reads "
-                "this line for every item, so the action has to fit on it (the detail belongs in "
-                "the body)"
-            )
+        # ``next`` is deliberately not length-capped: the list does not print it, and trimming it
+        # would trade the field's executability for a shorter line nobody reads. The default cost
+        # is the list itself -- see LIST_BYTES below.
         if item.closed and item.fields.get("next"):
             problems.append(
                 f"{_rel(item.path)}: a closed item keeps 'next' ({item.fields['next']!r}) -- "
@@ -278,6 +290,15 @@ def _tally(items: list[Item], problems: list[str]) -> int:
                 f"(found {present or 'none'}) -- the record has to say where its authority stops"
             )
 
+    list_bytes = len("\n".join(_list_lines(items)).encode("utf-8"))
+    if list_bytes > LIST_BYTES:
+        problems.append(
+            f"`--list` prints {list_bytes} bytes, over the {LIST_BYTES}-byte default-discovery "
+            "budget: narrow the view (`--list <关键词>`) or close what is finished. This is a "
+            "discovery-cost alarm: not a reason to cancel, close or archive anything, and not a "
+            "reason to shorten `next`."
+        )
+
     total = sum(i.path.stat().st_size for i in active)
     if total > BUDGET_BYTES:
         ranked = sorted(active, key=lambda i: -i.path.stat().st_size)[:3]
@@ -294,18 +315,39 @@ def _tally(items: list[Item], problems: list[str]) -> int:
     return 1 if problems else 0
 
 
-def _list() -> int:
+def _list_lines(items: list[Item], needle: str | None = None) -> list[str]:
+    """The exact lines ``--list`` prints. The cap is measured on these, not on any one field.
+
+    The list exists to let a reader *choose* an item, so it carries id, status, scope and title.
+    The action and the close condition stay in the file and are fetched with ``--locate``: a
+    second, shortened copy of them here would be one more thing to keep in step.
+    """
+    active = sorted((i for i in items if not i.closed), key=lambda i: i.id)
+    if needle:
+        low = needle.lower()
+        active = [
+            i
+            for i in active
+            if low in (i.id + i.fields.get("title", "") + i.fields.get("scope", "")).lower()
+        ]
+    head = f"范围：已迁移 {len(active)} 项"
+    head += f"（过滤 {needle!r}）" if needle else ""
+    head += "（work/active/；原文档里的挂账尚未迁移的不在此列）"
+    lines = [head] + [
+        f"  {i.id}  [{i.fields.get('status', '')}]  {i.fields.get('scope', '')}"
+        f"  {i.fields.get('title', '')}"
+        for i in active
+    ]
+    if not needle:
+        lines.append("  （next 与关闭条件不进列表：用 `--locate <关键词>` 取）")
+    return lines
+
+
+def _list(needle: str | None = None) -> int:
     """Print the items in flight, saying out loud how much of the ledger that covers."""
     items, problems = _items()
-    active = sorted((i for i in items if not i.closed), key=lambda i: i.id)
-    print(
-        f"范围：已迁移 {len(active)} 项（work/active/；原文档里的挂账尚未迁移的不在此列）"
-    )
-    for item in active:
-        print(
-            f"  {item.id}  [{item.fields.get('status', '')}]  {item.fields.get('scope', '')}"
-            f"  next: {item.fields.get('next', '')}"
-        )
+    for line in _list_lines(items, needle):
+        print(line)
     for problem in problems:
         print(f"  DRIFT: {problem}")
     return 1 if problems else 0
@@ -353,8 +395,8 @@ def self_test() -> int:
     """Falsifiers: each gate must fire on the fixture that trips it, and only there."""
     problems: list[str] = []
     with tempfile.TemporaryDirectory() as tmp:
-        global _REPO, _ACTIVE, _CLOSED, _RECORDS, BUDGET_BYTES
-        saved = (_REPO, _ACTIVE, _CLOSED, _RECORDS, BUDGET_BYTES)
+        global _REPO, _ACTIVE, _CLOSED, _RECORDS, BUDGET_BYTES, LIST_BYTES
+        saved = (_REPO, _ACTIVE, _CLOSED, _RECORDS, BUDGET_BYTES, LIST_BYTES)
         root = pathlib.Path(tmp)
         (root / "work" / "active").mkdir(parents=True)
         (root / "work" / "closed" / "2026").mkdir(parents=True)
@@ -419,12 +461,6 @@ def self_test() -> int:
             closed=True,
         )
         item("dup-a", _GOOD.format(id="dup-a", title="x", status="open"))
-        item(
-            "long-next",
-            _GOOD.format(id="long-next", title="x", status="open").replace(
-                "next: do the next thing", "next: " + "x" * (NEXT_BYTES + 1)
-            ),
-        )
         item("dup-b", _GOOD.format(id="dup-a", title="x", status="open"))
         item(
             "bad-scope",
@@ -450,7 +486,6 @@ def self_test() -> int:
             "front matter is never closed",
             "already used",
             "some/invented/word does not exist",
-            "byte line budget",
             "2026-09-20-partial.md: sections must be",
             "Bad_Name.md: a record is named",
         ):
@@ -472,12 +507,22 @@ def self_test() -> int:
             problems.append("falsifier did not fire: the active-set budget")
         if not any("will not cancel" in p for p in budget_problems):
             problems.append("the budget message does not say the tool decides nothing")
-        _REPO, _ACTIVE, _CLOSED, _RECORDS, BUDGET_BYTES = saved
+
+        saved_list = LIST_BYTES
+        LIST_BYTES = 10
+        list_problems: list[str] = []
+        _tally(_items()[0], list_problems)
+        LIST_BYTES = saved_list
+        if not any("default-discovery budget" in p for p in list_problems):
+            problems.append("falsifier did not fire: the --list discovery budget")
+        if not any("not a reason to cancel" in p for p in list_problems):
+            problems.append("the --list budget message does not refuse to justify a cancellation")
+        _REPO, _ACTIVE, _CLOSED, _RECORDS, BUDGET_BYTES, LIST_BYTES = saved
 
     for problem in problems:
         print(f"  FALSIFIER: {problem}")
     print(
-        "WORK_DOCS_SELF_TEST_OK (15 item + 3 record fixtures)"
+        "WORK_DOCS_SELF_TEST_OK (14 item + 3 record fixtures)"
         if not problems
         else f"WORK_DOCS_SELF_TEST_DRIFT ({len(problems)})"
     )
@@ -486,14 +531,20 @@ def self_test() -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--list", action="store_true", help="print the items in flight")
+    parser.add_argument(
+        "--list",
+        nargs="?",
+        const="",
+        metavar="KEY",
+        help="print the items in flight, optionally filtered by KEY",
+    )
     parser.add_argument("--locate", metavar="KEY", help="print the item files matching KEY")
     parser.add_argument("--self-test", action="store_true", help="run the falsifiers")
     args = parser.parse_args(argv)
     if args.self_test:
         return self_test()
-    if args.list:
-        return _list()
+    if args.list is not None:
+        return _list(args.list or None)
     if args.locate:
         return _locate(args.locate)
     items, problems = _items()
