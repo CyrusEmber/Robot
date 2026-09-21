@@ -4,7 +4,7 @@ title: 扩大迁移：HARNESS → PLAN → ACCEPTANCE 的逐段分流
 scope: ablation_harness, rl_exp/versions/lizard, rl_exp/tools/verify
 status: open
 landing: ablation_harness/HARNESS.md, rl_exp/versions/lizard/PLAN.md, rl_exp/versions/lizard/ACCEPTANCE.md
-next: 开**批 2 = PLAN**：拆开"部分完成、部分待做"的混合事项再迁（**不借迁移顺带实现功能**），同一变更内删除旧正文、原行只留 id 与指针，然后按四项走查验收（批 0 / 批 1 已完成，见"批次进度"）。批 3 = ACCEPTANCE 保持不动
+next: 开**批 3 = ACCEPTANCE**：它是唯一没动过的大件（约 236 KB），且**不是纯验收**——按四分流推进：① 证据 → `acceptance/records/`（五节）；② 仍有效的约束 → 机制（参数进配置、口径进实现与测试、不变式进断言）；③ 待决 → 事项；④ 决策解释 → 随记录留。**保留历史证据及其适用边界，不把历史局部通过升级成当前整体结论**；同一变更内建新删旧。批 1 批 2 已完成，见"批次进度"
 close_when: 三批各自验收通过并留下记录即关。每批的验收（主判据，人工走查）= **可定位 / 可执行 / 可关闭 / 无约束遗漏**；走查必须真的沿"下一步 → 观测 → 分支结论"走一遍，"确认后可关"式措辞即使过格式检查也判该批不通过。某批不通过则该批重做，不推进下一批
 ---
 
@@ -23,7 +23,11 @@ close_when: 三批各自验收通过并留下记录即关。每批的验收（�
   正文归 `git log -p`；记录格式一节压缩并逐条**点名执行者**；`升级触发` 里"协议 v2 出现时/落地时"
   的将来时改为现行规则（依据：`eval.py` 的 `--protocol` 默认值已是 v3）。走查四项逐产物通过，
   证据与缺口见 `acceptance/records/2026-09-20-harness-migration.md`。
-- **批 2 = PLAN / 批 3 = ACCEPTANCE**：未开。
+- **批 2（2026-09-21 完成）**：`PLAN.md` 46551 → **9042** 字节，挂账表清空（只留 #7，它是指向 §3 的指针）。
+  17 行活跃 → 15 个事项、11 行已结案 → 5 个关闭项；读数全部留在 `ACCEPTANCE.md` 与运行产物里，
+  删前逐条验证过它有家。走查如实记下 5 处需人拍板、1 处指向本仓不存在的 C++ 层、2 处候选未定真因；
+  见 `acceptance/records/2026-09-21-plan-migration.md`。
+- **批 3 = ACCEPTANCE**：未开（约 236 KB，四分流 + 历史适用边界）。
 
 ## 每批的硬约束
 
