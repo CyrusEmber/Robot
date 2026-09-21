@@ -7,7 +7,7 @@
 > 评测台是共享测量仪器：服务所有机器人家族（换家族后仍在），**不进任何家族的配方版本管理**
 > （versioning.mdc「范围边界」）。修订纪律沿用 versioning.mdc B 节（vN.M.K + 版本号开头的 commit
 > message），**编号独立于家族配方版本**（冻结 tag：家族叫 `lizard-vN`，这里叫 `harness-vN`）。
-> 仓根 `PLAN.md` 挂账 #12 只留指针。
+> 家族侧对应项 = `work/active/isaac-root-parameterisation.md`（原 `versions/lizard/PLAN.md` 挂账 #12）。
 
 ## 当前状态
 

@@ -9,7 +9,7 @@
 > `teacher_smoke_runner.py`、`teacher_smoke*.py`、`parkour_smoke.py` 里的顺序/脚序/宽度
 > 副本已改为消费该声明。**装配事实仍在代码**（`teacher_env_cfg.py` 含
 > `TEACHER_PRIVILEGED_SPEC`）；本文只做语义镜像（约定同 REWARDS.md）。
-> 时态纪律：只收已成立事实；"待补/待改"住 PLAN.md 挂账（摩擦/外力真值 = 挂账 #4）。
+> 时态纪律：只收已成立事实；"待补/待改"住事项（摩擦/外力真值 → `work/active/phase2-obs-fidelity.md`）。
 
 ## 演进总表
 
