@@ -80,7 +80,11 @@ FROZEN = {
     # version, so the lock carries four entries instead of two. Nothing in v1's two entries moved
     # -- the re-baseline was reviewed as a diff against the previous digest, and this line is the
     # record of it (acceptance/records/2026-09-21-baseline-cfg-lock-rebaseline.md).
-    "rl_exp/versions/lizard/baseline/cfg_lock.json": "c012501dbb0e6483076ed428085dbf897ed30ed212e34fef23f5cc421bcce2c0",
+    # Re-baselined again the same day (the fourth re-anchor): v2's head-chain guard became a
+    # *contact* criterion -- params load_n 1.0 / dwell_s 0.0 instead of load_fraction_of_weight 0.1
+    # / dwell_s 0.5. The per-field diff was three fields across the two v2 tasks, v1's two entries
+    # still byte-identical. Same record, second section.
+    "rl_exp/versions/lizard/baseline/cfg_lock.json": "c20eb597be577118be6147b71f9e355f75d50b30d644604e511413bb6fa6b055",
 }
 
 FROZEN_REVS: dict[str, str] = {

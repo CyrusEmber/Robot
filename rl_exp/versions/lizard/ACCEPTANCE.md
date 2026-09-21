@@ -55,7 +55,7 @@
 | eval 记录（3.2）、地形映射（3.3）、记录写侧的评审修正 | `acceptance/records/2026-09-17-lizard-eval-record-and-terrain-map.md` |
 | 主线真跑收口、L03 真跑臂（arm2/arm3）、`[48]` 等待机制闸 | `acceptance/records/2026-09-18-lizard-mainline-run-closeout-l03.md` |
 | 基线线独立化收尾、摘要对 EOL 敏感（已修）、固定窗口评测入口 | `acceptance/records/2026-09-20-lizard-baseline-line-eol-and-fixed-window-eval.md` |
-| 冻结基线第三次重锚：baseline `cfg_lock.json`（v2 落地；v1 两条任务逐字段未变） | `acceptance/records/2026-09-21-baseline-cfg-lock-rebaseline.md` |
+| 冻结基线第三次与第四次重锚：baseline `cfg_lock.json`（v2 落地；v2 头链终止改判据；v1 两条任务两轮均逐字段未变） | `acceptance/records/2026-09-21-baseline-cfg-lock-rebaseline.md` |
 | 地形产物一致（几何 digest / 起伏 / 再生核验） | `acceptance/records/2026-09-20-lizard-terrain-artifacts.md` |
 
 **本表的范围**：只列**从本文迁出去的主题证据**（分流时 12 条，之后随新主题增行），**不是**验收记录的总

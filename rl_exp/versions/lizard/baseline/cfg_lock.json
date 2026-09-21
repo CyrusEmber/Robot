@@ -1,9 +1,9 @@
 {
  "lock_format": 3,
  "note": "recipe golden of line 'lizard/baseline': entry keys are '<combination>|<task id>' and a training run never adds one",
- "reason": "v2 third variable: guarded contact termination (chest/neck above 10% of body weight for 0.5 s ends the episode)",
- "reason_at": "2026-09-21T15:15:09+08:00",
- "reason_rev": "3918a6ddc037",
+ "reason": "v2 head-chain guard is a contact criterion now: load_n 1.0 N with dwell_s 0 (was 10% of body weight held 0.5 s, which contact chatter defeated). v1 resolution unchanged",
+ "reason_at": "2026-09-21T17:02:50+08:00",
+ "reason_rev": "3325cf4ee988",
  "entries": {
   "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Baseline-Flat-Play-v1": {
    "version": "v1",
@@ -1556,7 +1556,7 @@
    "version": "v2",
    "env_cfg_class": "rl_exp.tasks.recipe_tasks:BaselineFlatV2EnvCfg_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardBaselineV2PPORunnerCfg",
-   "digest": "768e9d7bc3c8b56a2873088838d2854b96488b7974e6219de56eb905ab84e225",
+   "digest": "c37aa3acefc2a62f1209b3f41379c40af12776644d4e153c62c8941aa3635a66",
    "snapshot": {
     "env": {
      "viewer": {
@@ -2892,8 +2892,8 @@
          },
          "preserve_order": false
         },
-        "load_fraction_of_weight": 0.1,
-        "dwell_s": 0.5
+        "load_n": 1.0,
+        "dwell_s": 0.0
        },
        "time_out": false
       }
@@ -4698,7 +4698,7 @@
    "version": "v2",
    "env_cfg_class": "rl_exp.tasks.recipe_tasks:BaselineFlatV2EnvCfg",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardBaselineV2PPORunnerCfg",
-   "digest": "34a49f1bbb8d6442a4c2ae622e32d877d854091233aefb7ee5ad83036b8d560e",
+   "digest": "37d1060686b693c54ddf95b668857a11a2d095a147c01406f41760bb90f4b3f6",
    "snapshot": {
     "env": {
      "viewer": {
@@ -6034,8 +6034,8 @@
          },
          "preserve_order": false
         },
-        "load_fraction_of_weight": 0.1,
-        "dwell_s": 0.5
+        "load_n": 1.0,
+        "dwell_s": 0.0
        },
        "time_out": false
       }

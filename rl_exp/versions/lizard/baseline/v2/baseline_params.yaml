@@ -170,16 +170,19 @@ rewards:
 # a per-env dwell term is more machinery than a plane needs.
 terminations:
   base_contact_threshold: 1.0
-  # v2's third variable: the head chain may not be used as a support. A chest/neck normal force
-  # above 10% of body weight (706 N -> 70.6 N) held for 0.5 s ends the episode. The numbers are
-  # the reading this repo already applies to a rollout (v10 DIAGNOSE.md); v1's failure mode was
-  # exactly this -- neck_pitch carrying 82-90 N, 11.6-12.8% of body weight, while the head
-  # scraped the floor -- and it cost nothing then. A transient stays legal: a landing loads every
-  # body for a frame.
+  # v2's third variable: the head chain may not touch the ground. Flat ground gives it nothing to
+  # step over, so any vertical reaction on chest/neck above 1 N -- the same "in contact" number
+  # `base_contact` uses, and the one the evaluator reads a rollout with -- ends the episode, on the
+  # first frame it happens (`dwell_s: 0`).
+  #
+  # An earlier draft waited for 10% of body weight held 0.5 s (the v10 DIAGNOSE.md reading): that is
+  # a *weight-bearing* criterion, and contact chatter defeats it. v1's checkpoint pressed 87.2 N
+  # (12.3% of body weight) on two thirds of its frames and still never held it for more than 0.22 s,
+  # so it would have trained straight through that guard. On a plane, "touching" is the honest line.
   contact_load_guard:
     body_names: ["chest_.*", "neck_.*"]
-    load_fraction_of_weight: 0.10
-    dwell_s: 0.5
+    load_n: 1.0
+    dwell_s: 0.0
 
 # Terms needing a physical scale. force_scale = nominal body weight (72 kg x 9.81 ~
 # 706 N): a flat belly carries ~1.0 per step at weight -0.5.

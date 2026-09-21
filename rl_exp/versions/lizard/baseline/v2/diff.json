@@ -21,7 +21,7 @@
         "paths": [
           "terminations.head_load_contact"
         ],
-        "why": "v2's third variable: the head chain may not be used as a support. The element builds this dwell term only where the yaml declares `contact_load_guard`, so v1 resolves without it -- chest or neck above 10% of body weight for 0.5 s ends the episode. Those numbers are the reading this repo already applies to a rollout (v10 DIAGNOSE.md), and v1's failure was exactly that pose, which cost nothing then"
+        "why": "v2's third variable: the head chain may not touch the ground. The element builds this dwell term only where the yaml declares `contact_load_guard`, so v1 resolves without it -- a chest or neck vertical reaction above 1 N ends the episode on the frame it happens (dwell 0). Flat ground gives the head nothing to step over, and the 1 N is the same 'in contact' threshold `base_contact` uses. An earlier draft's 10%-of-body-weight-sustained-0.5 s reading is defeated by contact chatter: the rollout it was written for pressed 87.2 N on two thirds of its frames but never held it 0.5 s, so v1's failure pose would have trained straight through it"
       }
     }
   },

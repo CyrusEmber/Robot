@@ -43,39 +43,40 @@ def test_belly_uses_sensor_ids_and_force_scale():
 
 
 def test_contact_load_dwell_term():
-    """The guard fires on a *held* load, not on a landing transient, and only on its own bodies."""
+    """Touching the ground is the end of the episode, and only the guarded bodies count."""
     forces = torch.zeros(1, 3, 3)
     stub = NS(
-        step_dt=0.02, num_envs=1,
-        scene={"robot": NS(data=NS(body_mass=NS(torch=torch.tensor([[10.0]]))), device=torch.device("cpu")),
-               "contact_forces": NS(data=NS(net_forces_w=NS(torch=forces)))},
+        step_dt=0.02, num_envs=1, device=torch.device("cpu"),
+        scene={"contact_forces": NS(data=NS(net_forces_w=NS(torch=forces)))},
     )
     cfg = NS(params={"sensor_cfg": NS(name="contact_forces", body_ids=[1])})
     term = mdp.ContactLoadDwellTerm(cfg, stub)
-    weight_n = 10.0 * 9.81
-    load = dict(sensor_cfg=cfg.params["sensor_cfg"], load_fraction_of_weight=0.1, dwell_s=0.5)
+    load = dict(sensor_cfg=cfg.params["sensor_cfg"], load_n=1.0, dwell_s=0.0)
+
     def force(newtons: float) -> None:
         forces.zero_()
         forces[:, 1, 2] = newtons
-    dwell_steps = int(round(0.5 / 0.02))
 
-    force(0.5 * weight_n)  # a frame of full weight: a landing, not a support
-    assert not term(env=stub, **load).item()
-    force(0.0)
-    assert not term(env=stub, **load).item(), "the counter must reset when the load clears"
-
-    force(0.2 * weight_n)  # 20% of body weight, held
-    fired = [term(env=stub, **load).item() for _ in range(dwell_steps)]
-    assert not any(fired[:-1]), "must not fire before the dwell window elapses"
-    assert fired[-1], "must fire once the load has been held for dwell_s"
-
+    force(0.5)
+    assert not term(env=stub, **load).item(), "below the contact threshold is not a press"
+    force(87.2)  # the load v1's neck actually carried
+    assert term(env=stub, **load).item(), "one frame of pressing ends the episode"
     term.reset(torch.tensor([0]))
-    force(0.2 * weight_n)
-    assert not term(env=stub, **load).item(), "reset must clear the counter"
+    force(87.2)
+    assert term(env=stub, **load).item(), "reset must clear the counter, not the criterion"
 
     forces.zero_()
-    forces[:, 0, 2] = 5.0 * weight_n  # a body the guard does not name
-    assert not any(term(env=stub, **load).item() for _ in range(dwell_steps + 1))
+    forces[:, 0, 2] = 500.0  # a body the guard does not name
+    assert not any(term(env=stub, **load).item() for _ in range(5))
+    forces[:, 1, 0] = 500.0  # a lateral self-contact on a guarded body is not a floor press
+    assert not term(env=stub, **load).item()
+
+    held = dict(load, dwell_s=0.5)
+    forces.zero_()
+    force(87.2)
+    fired = [term(env=stub, **held).item() for _ in range(int(round(0.5 / 0.02)))]
+    assert not any(fired[:-1]), "a dwell window must not fire before it elapses"
+    assert fired[-1], "a dwell window must fire once it elapses"
 
 
 def main():

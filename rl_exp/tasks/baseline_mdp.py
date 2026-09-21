@@ -22,18 +22,23 @@ from isaaclab.utils.math import quat_apply_inverse, yaw_quat
 
 
 class ContactLoadDwellTerm(ManagerTermBase):
-    """Terminate once the guarded bodies carry more than a fraction of body weight for ``dwell_s``.
+    """Terminate once a guarded body presses the ground for ``dwell_s``.
 
-    A threshold on its own is not a gait criterion: every body takes a load for a frame when the
-    robot lands. What the dwell window separates is a body used as a *support* -- that pose
-    persists, and v1's trained checkpoint is the case in point (``neck_pitch`` carried 82-90 N,
-    11.6-12.8% of the 706 N body weight, while the head scraped the floor). The criterion and its
-    numbers
-    are the ones this repo already applies when reading a rollout (v10 ``DIAGNOSE.md``: chest or
-    neck normal force above 10% of body weight, sustained 0.5 s); here they end the episode
-    instead of only being reported.
+    On flat ground the head chain has no business touching the floor at all, so the criterion is
+    *contact*, not weight-bearing: a vertical reaction above ``load_n`` newtons ends the episode,
+    with ``dwell_s`` defaulting to 0 -- the first frame it presses. The 1 N threshold is the same
+    one this file's ``base_contact`` termination uses and the one the evaluator calls "in contact"
+    when it reads a rollout, so "touch" means one thing on this line. v1's trained checkpoint is
+    the case the guard exists for: ``neck_pitch`` carried 82-90 N (11.6-12.8% of the 706 N body
+    weight) while the head scraped the floor, and nothing stopped it. An earlier draft waited for
+    10% of body weight held 0.5 s, which contact chatter defeats -- the same rollout never held it
+    for more than 0.22 s while sitting above the threshold on two thirds of its frames.
 
-    The counter clears when the load clears and on every episode reset -- ``TerminationManager``
+    Only the vertical component is read. A floor contact pushes up, while the self-contacts a
+    flailing fresh policy produces are mostly lateral, and this term has no contact-pair filter to
+    separate them with -- that separation is a diagnose-side job, not a training-side one.
+
+    The counter clears when the press clears and on every episode reset -- ``TerminationManager``
     calls ``reset(env_ids)`` on stateful terms, the same contract ``teacher_mdp.RollOverTerm``
     relies on (this module keeps its own copy: intentional changes to main must not redefine this
     line).
@@ -41,17 +46,15 @@ class ContactLoadDwellTerm(ManagerTermBase):
 
     def __init__(self, cfg: TerminationTermCfg, env):
         super().__init__(cfg, env)
-        robot = env.scene["robot"]
-        self._ids = torch.tensor(cfg.params["sensor_cfg"].body_ids, dtype=torch.long, device=robot.device)
-        # body weight from the masses, not from a measured contact sum: a transient reads high
-        self._weight_n = float(robot.data.body_mass.torch[0].sum().item() * 9.81)
-        self._steps = torch.zeros(env.num_envs, dtype=torch.long, device=robot.device)
+        ids = cfg.params["sensor_cfg"].body_ids
+        self._ids = torch.tensor(ids, dtype=torch.long, device=env.device)
+        self._steps = torch.zeros(env.num_envs, dtype=torch.long, device=env.device)
 
-    def __call__(self, env, sensor_cfg: SceneEntityCfg, load_fraction_of_weight: float = 0.1,
-                 dwell_s: float = 0.5) -> torch.Tensor:
+    def __call__(self, env, sensor_cfg: SceneEntityCfg, load_n: float = 1.0,
+                 dwell_s: float = 0.0) -> torch.Tensor:
         forces = env.scene[sensor_cfg.name].data.net_forces_w.torch[:, self._ids, 2]
-        loaded = (forces > load_fraction_of_weight * self._weight_n).any(dim=1)
-        self._steps = torch.where(loaded, self._steps + 1, torch.zeros_like(self._steps))
+        pressed = (forces > load_n).any(dim=1)
+        self._steps = torch.where(pressed, self._steps + 1, torch.zeros_like(self._steps))
         return self._steps >= max(1, int(round(dwell_s / env.step_dt)))
 
     def reset(self, env_ids=None) -> None:
