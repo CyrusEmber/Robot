@@ -144,7 +144,7 @@ def _code_item(name: str, recorded: dict, archive: pathlib.Path | None, run_id: 
     A clean source is brought back by revision. A dirty source is not: only its diff
     digest was recorded, so the content itself has to be *stored* somewhere the rebuild
     can read later -- that is what ``--archive`` names. Without it the capture refuses,
-    because hashing a diff does not make it retrievable (PLAN.md #18).
+    because hashing a diff does not make it retrievable (work/active/verified-rebuild-rating.md).
     """
     keep = ("rev", "dirty", "diff_sha256", "diff_lines", "untracked_in_code_root", "mode")
     item = {"retrieval": "none", "recorded": {key: recorded.get(key) for key in keep}}
@@ -180,13 +180,13 @@ def _code_item(name: str, recorded: dict, archive: pathlib.Path | None, run_id: 
             refusals.append(
                 f"{name}: the run worked in a dirty tree, the recorded diff "
                 f"{str(recorded.get('diff_sha256'))[:8]} no longer matches the live tree {live_sha[:8]}, "
-                f"and the diff content was never stored (PLAN.md #18)"
+                f"and the diff content was never stored (work/active/verified-rebuild-rating.md)"
             )
             return item
         if diff_path is None:
             refusals.append(
                 f"{name}: dirty tree ({recorded.get('diff_lines')} diff lines) and no archive location "
-                f"for its content (PLAN.md #18); pass --archive"
+                f"for its content (work/active/verified-rebuild-rating.md); pass --archive"
             )
             return item
         _write_text(diff_path, live)
@@ -196,7 +196,7 @@ def _code_item(name: str, recorded: dict, archive: pathlib.Path | None, run_id: 
 
     for relative in recorded.get("untracked_in_code_root") or []:
         if stored is None:
-            refusals.append(f"{name}: untracked code {relative} has no archive location (PLAN.md #18)")
+            refusals.append(f"{name}: untracked code {relative} has no archive location (work/active/verified-rebuild-rating.md)")
             return item
         held = stored / "untracked" / name / relative
         if not held.exists():
@@ -286,7 +286,7 @@ def _payload_item(run_dir: pathlib.Path, stage: pathlib.Path, digests: dict, pro
     for extra in (M.MANIFEST_NAME, M.INDEX_NAME):
         if (run_dir / extra).is_file():
             _stage_file(run_dir / extra, f"run/{extra}", stage, digests)
-    # the ground the run stood on (PLAN.md #18 ⑤b): evaluated runs write it next to their other
+    # the ground the run stood on (work/active/verified-rebuild-rating.md ⑤b): evaluated runs write it next to their other
     # records. Captured here so ``--check`` re-hashes it like any other material -- what the
     # regeneration check adds is that the file's own suite+seed reproduce it, which is a claim
     # about the ground rather than about the copy
@@ -310,7 +310,7 @@ def capture(run_dir: pathlib.Path, dest: pathlib.Path, archive: pathlib.Path | N
         run_dir: the run directory holding ``run_manifest.json``.
         dest: where the material goes; also where the refusal record goes.
         archive: a location for content a revision cannot restore (dirty diffs, untracked
-            code). Without it such a run is refused -- that is PLAN.md #18 as a gate.
+            code). Without it such a run is refused -- that is work/active/verified-rebuild-rating.md as a gate.
 
     Returns:
         ``(record, problems)``: the material record as written (``verdict`` is one of

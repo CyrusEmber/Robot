@@ -10,7 +10,7 @@ Four things this file is here to prove:
    binding, so a swapped input cannot be published under the old record's identity.
 3. The record module writes records without consuming the random stream: it must not import
    torch, numpy or random at all (3.2d's offline half).
-4. The write-time substitution evidence (``record.substitution_evidence``, PLAN.md #27 A3) keeps
+4. The write-time substitution evidence (``record.substitution_evidence``, work/active/record-variant-and-snapshot-specs.md A3) keeps
    "compared, nothing confirmed" apart from "could not be compared", counts only *proven* moves,
    and stores the values it compared instead of re-reading a baseline that may have moved since.
 5. The lookup that feeds it (``record.baseline_evidence``) is offline-reachable: the layout rule
@@ -380,7 +380,7 @@ def test_an_empty_substitution_list_is_not_an_unknown_comparison() -> None:
 def test_stored_evidence_is_not_re_derived_from_a_later_baseline() -> None:
     """The evidence is a snapshot: a baseline rewritten afterwards cannot rewrite this run's story.
 
-    The failure this pins is the one that takes a year to show up (PLAN.md #27): a baseline
+    The failure this pins is the one that takes a year to show up (work/active/record-variant-and-snapshot-specs.md): a baseline
     replaced by ``--overwrite`` while an old record still points at that path. The stored bindings
     are what was compared, so a reader never has to trust -- or re-interpret -- the live one.
     """

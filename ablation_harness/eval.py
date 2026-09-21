@@ -136,7 +136,7 @@ _SUMMARY_COLUMNS = [
 def _git_rev(repo: pathlib.Path | None) -> str:
     """Commit id of the git repo at ``repo`` ('unknown' if not a repo).
 
-    One spelling for both records (PLAN.md #27 ①): this used to ask git for ``--short`` (~7
+    One spelling for both records (work/active/record-variant-and-snapshot-specs.md ①): this used to ask git for ``--short`` (~7
     characters) while the run manifest recorded 12, so one commit read as two different strings
     in the two records of the same run. The primitive and the length live in ``binding`` now,
     so ``runtime.git_rev_lizard`` and ``code.repository.rev`` are the same string.
@@ -214,7 +214,7 @@ def _obs_reference(task: str) -> dict:
 
 
 def _rsl_rl_id() -> str:
-    """The rsl_rl identity, spelled by the one rule that spells it (PLAN.md #27 ③).
+    """The rsl_rl identity, spelled by the one rule that spells it (work/active/record-variant-and-snapshot-specs.md ③).
 
     ``runtime.rsl_rl_version`` is the distribution version and stays its own fact; it cannot be
     reconciled with a training record, which binds the *combination key* -- and that key's
@@ -241,7 +241,7 @@ def _assets_reference(env_cfg) -> dict:
     which is the fact the training record binds (``declaration.assets.manifest_sha256``). It used
     to fall back to the lock *file's* own hash, which is a different fact wearing the same name:
     a lock without a manifest digest then read as a bound one, and the eval record claimed a
-    binding it did not have (PLAN.md #27 ④). Unknown is the honest value.
+    binding it did not have (work/active/record-variant-and-snapshot-specs.md ④). Unknown is the honest value.
     """
     from rl_exp.tools.runrecord import manifest as manifest_mod
 
@@ -671,7 +671,7 @@ def _persist(result: dict, segments: list, recovery: dict | None, run_id: str, t
     _atomic_write_json(out_dir / "record.json", rec)
     _atomic_write_json(out_dir / "eval.json", result)
     if terrain_evidence is not None:
-        # the archived ground (PLAN.md #18 ⑤b): per-cell digests and relief, plus what produced
+        # the archived ground (work/active/verified-rebuild-rating.md ⑤b): per-cell digests and relief, plus what produced
         # them -- a suite name and a seed are enough to regenerate it, which is how the offline
         # check verifies this file instead of trusting it
         _atomic_write_json(out_dir / "terrain" / "geometry.json", terrain_evidence)
@@ -718,7 +718,7 @@ def main():
     # The suite's ground is pinned by the suite's own seed, not by --seed: every eval of every
     # run has to stand on the same terrain, which needs the global streams the terrain functions
     # draw from (the generator seeds only its own local rng). Without this the rough columns are
-    # a different terrain in every eval (PLAN.md #18 ①).
+    # a different terrain in every eval (work/active/verified-rebuild-rating.md ①).
     seed_rngs(suites.SUITE_SEED)
     terrain_split_probe.install()
     gym_env = gym.make(args_cli.task, cfg=env_cfg)
@@ -751,7 +751,7 @@ def main():
         "runtime": _runtime_reference(env_cfg, mbenv),
     }
     # what this run actually stood on: the per-cell geometry digests, captured where the
-    # generator handed the mesh over (PLAN.md #18 ⑤b). A rebuild is a different claim -- this is
+    # generator handed the mesh over (work/active/verified-rebuild-rating.md ⑤b). A rebuild is a different claim -- this is
     # the ground itself, so a later reader can tell two suites apart without re-running them.
     # The cells also carry their relief, which is the number that says whether a column the
     # protocol calls "rough" is rough for this robot's foot.
@@ -761,7 +761,7 @@ def main():
     # strip only the gym API suffix of family ids ("-v0" at the very end);
     # teacher recipe versions ("-v1"/"-v2") are part of the run identity
     run_id = f"{re.sub(r'-v0$', '', args_cli.task)}_{tag}_{args_cli.mode}_seed{args_cli.seed}"
-    # kept as a value *before* the variant suffix is appended (PLAN.md #27 A3): the baseline a
+    # kept as a value *before* the variant suffix is appended (work/active/record-variant-and-snapshot-specs.md A3): the baseline a
     # variant run is compared against is the run its identity came from, and splitting the final
     # string back apart to recover it would be guessing at it
     base_run_id = run_id
@@ -830,7 +830,7 @@ def main():
     }
     rec["perturbation"] = _perturbation_reference(protocol, push)
 
-    # the mechanical half of the --variant label (PLAN.md #27 A3): every binding now exists, so
+    # the mechanical half of the --variant label (work/active/record-variant-and-snapshot-specs.md A3): every binding now exists, so
     # what this run swapped against the run its identity was derived from is read off the two
     # records **here** and stored -- a later reader never re-derives it against a baseline that
     # has since been rewritten. No key at all when no comparison was attempted (the base run).

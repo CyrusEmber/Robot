@@ -4,7 +4,7 @@
 The per-term layout is DERIVED from the live observation manager (term order +
 dims), never hardcoded by slice index: adding/renaming a term in v3 cannot
 make this script silently read the wrong columns. The printed LAYOUT line is
-the machine view of the obs layout; FAMILY.md's table is the human view --
+the machine view of the obs layout; rl_exp/versions/lizard/OBS.md's table is the human view --
 compare them when either changes.
 
 Expected total dim is pinned per recipe version (versions/lizard/vN/NOTES.md).
@@ -52,7 +52,7 @@ for name, dim in zip(term_names, term_dims):
 assert cursor == obs.shape[-1], f"layout sum {cursor} != obs dim {obs.shape[-1]}"
 assert cursor == EXPECTED_POLICY_DIM, (
     f"policy obs {cursor} != expected {EXPECTED_POLICY_DIM}; if the layout changed "
-    f"intentionally, bump EXPECTED_POLICY_DIM and FAMILY.md together"
+    f"intentionally, bump EXPECTED_POLICY_DIM and rl_exp/versions/lizard/OBS.md together"
 )
 print("LAYOUT " + " | ".join(f"{n}:{a}-{b}" for n, a, b in layout))
 

@@ -103,7 +103,7 @@ def _announce(cfg) -> None:
     """Record and print one line per generation: the ground a real run actually stood on.
 
     The per-cell digests are captured where the generator hands the mesh over, so this is the
-    geometry that was built, not a rebuild of it (PLAN.md #18 ⑤b). One line goes to the run's
+    geometry that was built, not a rebuild of it (work/active/verified-rebuild-rating.md ⑤b). One line goes to the run's
     log -- the digests are small, the meshes are not, so the log carries the identity and not
     the material.
     """

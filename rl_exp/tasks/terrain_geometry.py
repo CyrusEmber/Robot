@@ -22,7 +22,7 @@ import numpy as np
 
 #: ~= the sole width (0.46 m): the cell one foot plate covers. Relief below this scale is what
 #: the robot feels as bumpiness, so a "rough" terrain has to show it *inside* a cell, not just
-#: across the map (PLAN.md #18 ①).
+#: across the map (work/active/verified-rebuild-rating.md ①).
 _FOOT_CELL = 0.5
 
 #: A cell is measured only when no face of the mesh is bigger than the cell. Inside one

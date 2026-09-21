@@ -18,7 +18,7 @@ can never consume the random stream the numbers are supposed to describe.
 The write-side lookup that feeds the substitution evidence (:func:`run_dir` /
 :func:`baseline_evidence`) lives here for that same reason: ``eval.py`` parses ``argv`` and
 starts the simulator at import time, so a rule left there is unreachable to an offline test
-(PLAN.md #27 ③).
+(work/active/record-variant-and-snapshot-specs.md ③).
 
 The format version is independent of the eval protocol version: a protocol bump (timeline,
 thresholds, terrain, DR, metric definitions, sampled frame) is a new ``locomotion_eval_vN``;
@@ -35,7 +35,7 @@ import pathlib
 import sys
 
 # The digest primitive (and the one revision spelling) live on the training side's runrecord
-# package, which is what this record binds against: PLAN.md #27 ①, one file hashes a file.
+# package, which is what this record binds against: work/active/record-variant-and-snapshot-specs.md ①, one file hashes a file.
 # Reached by absolute path because the harness is invoked from IsaacLab and ``rl_exp`` is not
 # an installed package -- the same insert ``eval.py`` does for its other in-repo readers.
 _REPO = pathlib.Path(__file__).resolve().parents[1]
@@ -110,7 +110,7 @@ BINDINGS = (
 
 #: Which *category* of substitution a moved binding is reported as. The two obs-protocol bindings
 #: share one category: a layout swap moves both, and naming it twice would report one swap as two
-#: (PLAN.md #27 A3).
+#: (work/active/record-variant-and-snapshot-specs.md A3).
 SUBSTITUTION_CATEGORY = {
     "checkpoint.sha256": "checkpoint",
     "suite.digest": "suite",
@@ -322,7 +322,7 @@ def substitution_evidence(candidate: dict, baseline: dict | None, *, baseline_re
     measurement, and this says *what moved* when they are not.
 
     Three things are kept apart, because collapsing them loses exactly the distinction that
-    matters (PLAN.md #27 A3):
+    matters (work/active/record-variant-and-snapshot-specs.md A3):
 
     * ``substitutions`` -- the categories **proven** to have moved: categories of bindings whose
       values differ on both sides and neither of which reads :data:`UNKNOWN`. The two
@@ -400,7 +400,7 @@ def baseline_evidence(
     missing or unreadable record is recorded as ``unknown`` **with the reason**, and no similar
     directory is searched for a stand-in. Absence must not read as "this was the first run": variant
     runs like ``…suite-roughb016`` have an unsuffixed neighbour holding only ``eval.json``, which is
-    mechanically uncomparable (PLAN.md #27 A3's baseline rule).
+    mechanically uncomparable (work/active/record-variant-and-snapshot-specs.md A3's baseline rule).
 
     Lives here rather than in ``eval.py`` because that module parses ``argv`` and launches the
     simulator at import time: with the layout rule and the three reason branches in a plain

@@ -4,15 +4,15 @@
 Three claims, each aimed at a failure that would otherwise show up as "two runs disagree":
 
 1. A real generation can be hashed, and two generations of the same ground hash alike when the
-   global streams are seeded first -- the property PLAN.md #18 ②/⑤b rests on. Unseeded they
+   global streams are seeded first -- the property work/active/verified-rebuild-rating.md ②/⑤b rests on. Unseeded they
    differ, which is what makes the seeding load-bearing rather than decorative.
-2. The eval suite's rough columns are actually rough (PLAN.md #18 ①): v1's single-value
+2. The eval suite's rough columns are actually rough (work/active/verified-rebuild-rating.md ①): v1's single-value
    ``noise_range`` collapsed the sampler to a constant plate, so a "rough" column measured
    nothing. v1 stays as it is -- results were taken on it -- and v2 is the fix.
 3. The column layout is unchanged between v1 and v2, so the two are readable side by side.
 4. The ground a real run archived is reproducible from what the archive names, and the relief of
    its rough columns is real -- the check that turns "the suite is rough" from a claim about code
-   into a claim about the ground a run stood on (PLAN.md #18 ①/⑤b).
+   into a claim about the ground a run stood on (work/active/verified-rebuild-rating.md ①/⑤b).
 """
 import json
 import pathlib
@@ -82,7 +82,7 @@ def test_the_seed_is_what_pins_the_ground() -> None:
     """Same seed, same ground -- and without the seed, the same cfg does not repeat.
 
     The second half is the falsifier: neuter :func:`seed_rngs` and this check goes red, which is
-    the whole reason a real run's terrain is not reproducible today (PLAN.md #18 ②).
+    the whole reason a real run's terrain is not reproducible today (work/active/verified-rebuild-rating.md ②).
     """
     first, second = _generate(_SEED), _generate(_SEED)
     assert first["geometry_digest"] == second["geometry_digest"], \
@@ -102,7 +102,7 @@ def test_eval_suite_rough_columns_are_rough() -> None:
 
     ``relief_p95`` is the surface's height range inside one 0.5 m cell -- the sole-sized metric
     the preflight uses. It is exactly zero on v1's rough columns, because a single-value
-    ``noise_range`` leaves ``np.random.choice`` one height to choose from (PLAN.md #18 ①).
+    ``noise_range`` leaves ``np.random.choice`` one height to choose from (work/active/verified-rebuild-rating.md ①).
     """
     assert suites.LIZARD_SUITE_V2_NAMES == suites.LIZARD_SUITE_V1_NAMES, "the columns must line up"
 

@@ -28,7 +28,7 @@ no list of poison modules to stay true (the poison has moved twice already: P001
 ``ray_caster``, P003 ``envs.mdp.commands``, P004 ``isaaclab.terrains``). Everything else this
 file prints is evidence for whoever has to fix it: the import that requested the poison family
 and the stack that asked for it, so the offender is named here instead of being looked up in
-``docs/pitfalls.md``. The window is watched rather than asserted over because the first
+``rl_exp/docs/pitfalls.md``. The window is watched rather than asserted over because the first
 request is what carries the stack; ``test_pxr_leak_gate.py`` pins that the judgement and the
 attribution still fire on a poisoned construction.
 

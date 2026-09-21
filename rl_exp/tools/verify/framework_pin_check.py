@@ -108,7 +108,7 @@ RSL_RL_NEEDLES = [
 
 
 #: The one fork file whose DR semantics we inherit without a recipe covering them
-#: (PLAN.md #19). ``force_range``/``torque_range`` are deliberately NOT pinned: our
+#: (work/closed/2026/fork-tree-dr-semantics-and-hygiene.md). ``force_range``/``torque_range`` are deliberately NOT pinned: our
 #: recipes assign them explicitly, so their fork values never reach an experiment.
 DR_EVENT_FILE = (
     "source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/velocity_env_cfg.py"
@@ -152,26 +152,26 @@ def check_fork_dr_semantics(root: pathlib.Path, failures: list[str]) -> None:
     """The DR the fork tree injects behind our back must not move silently.
 
     Two push events in :data:`DR_EVENT_FILE` carry their ``mode``/``interval_range_s`` from
-    the fork tree, not from our recipes (PLAN.md #19): they decide every run's random kicks
+    the fork tree, not from our recipes (work/closed/2026/fork-tree-dr-semantics-and-hygiene.md): they decide every run's random kicks
     and are otherwise visible only as a golden diff. Read by assignment target, so a comment
     or a different event cannot satisfy the pin.
     """
     path = root / DR_EVENT_FILE
     if not path.is_file():
-        failures.append(f"{DR_EVENT_FILE}: file gone (fork DR semantics, PLAN.md #19)")
+        failures.append(f"{DR_EVENT_FILE}: file gone (fork DR semantics, work/closed/2026/fork-tree-dr-semantics-and-hygiene.md)")
         return
     terms = _event_term_keywords(path)
     for name, expected in FORK_DR_SEMANTICS.items():
         fields = terms.get(name)
         if fields is None:
-            failures.append(f"{DR_EVENT_FILE}: event term '{name}' is gone (PLAN.md #19)")
+            failures.append(f"{DR_EVENT_FILE}: event term '{name}' is gone (work/closed/2026/fork-tree-dr-semantics-and-hygiene.md)")
             continue
         for field, want in expected.items():
             got = fields.get(field)
             if got != want:
                 failures.append(
                     f"{DR_EVENT_FILE}: {name}.{field} is {got!r}, frozen at {want!r} "
-                    "(fork DR semantics, PLAN.md #19)"
+                    "(fork DR semantics, work/closed/2026/fork-tree-dr-semantics-and-hygiene.md)"
                 )
 
 

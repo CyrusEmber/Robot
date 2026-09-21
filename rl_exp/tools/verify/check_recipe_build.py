@@ -38,7 +38,7 @@ statements live in the recipe table (``recipe.CLASSVAR_STATEMENTS``, one list) a
 path stamps them onto the class it hands back.
 
 This gate used to hold the transition: for as long as the version class bodies existed, each one
-had to state exactly what the table stated. Those bodies are gone (PLAN.md #22 step 3), so there is
+had to state exactly what the table stated. Those bodies are gone (work/closed/2026/recipe-registry-and-diff-declaration.md step 3), so there is
 nothing left to compare against -- and the comparison is not silently dropped: a recipe whose
 version subclass reappears now fails by name, because a recipe with two expressions is a recipe
 whose two expressions can disagree. What the deleted comparison also carried -- "no ClassVar goes
@@ -139,7 +139,7 @@ def resurrected_class(version: str, *, play: bool, line: str) -> type | None:
     """A class in the line's wiring module that still builds ``version``: the duplicate is back.
 
     This gate used to compare the recipe table against the version subclass the recipe replaced.
-    Those subclasses were deleted (PLAN.md #22 step 3), so the comparison has no second side left --
+    Those subclasses were deleted (work/closed/2026/recipe-registry-and-diff-declaration.md step 3), so the comparison has no second side left --
     and instead of dropping the question, it is asked the other way round: if a class like that
     exists again, one recipe has two expressions again, and two expressions is how this migration's
     whole failure mode starts (a field written by a path nobody ran). Constructed and read through
@@ -582,7 +582,7 @@ def main(argv: list[str] | None = None) -> int:
                 # The golden records which class produced its entry, and until now nothing compared
                 # that column: it is written from the registry and read by no gate, which is exactly
                 # how it sat on the deleted version subclasses from the entry switch (2f67f4c) until
-                # PLAN.md #22 step 2a. Held against the identity map rather than the registry -- [31]
+                # work/closed/2026/recipe-registry-and-diff-declaration.md step 2a. Held against the identity map rather than the registry -- [31]
                 # binds the two byte for byte, so one comparison covers both -- because a golden that
                 # names a class which does not produce it is a comparison against the wrong thing.
                 claimed_class = stored.get("env_cfg_class")
@@ -604,7 +604,7 @@ def main(argv: list[str] | None = None) -> int:
                         f" while the recipe declares {declared_version!r}"
                     )
                 # The retired comparison, asked the other way round. It used to require "the recipe
-                # table == the version subclass"; the subclasses are deleted (PLAN.md #22 step 3), so
+                # table == the version subclass"; the subclasses are deleted (work/closed/2026/recipe-registry-and-diff-declaration.md step 3), so
                 # what is left to check is that none comes back. A recipe with two expressions is one
                 # whose second expression nobody runs -- which is where every silent divergence in
                 # this migration started. Not a "nothing to compare" skip: a missing class was the
@@ -614,7 +614,7 @@ def main(argv: list[str] | None = None) -> int:
                     problems.append(
                         f"{line_key}/{version}/{kind}: {duplicate.__name__} builds this recipe again --"
                         " a recipe has one expression (its declared elements); the class path was"
-                        " deleted on purpose (PLAN.md #22 step 3)"
+                        " deleted on purpose (work/closed/2026/recipe-registry-and-diff-declaration.md step 3)"
                     )
                 attribution(version, play=play, paths=attribution_problems, line=line_key)
                 # The switch's safety: the class a registry entry can point at has to build the

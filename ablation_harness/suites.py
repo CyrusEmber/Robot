@@ -22,7 +22,7 @@ column-per-type, fixed difficulty, pinned seed. Key determinism tricks
   :func:`rl_exp.tasks.terrain_geometry.seed_rngs` right before ``gym.make``. v1 got away with it
   by accident: its ``rough`` columns pinned their amplitude to a single value, which collapses
   the internal ``np.random.choice`` to a constant. v2 gives them a range, so the seed is doing
-  real work (PLAN.md #18).
+  real work (work/active/verified-rebuild-rating.md).
 
 Lizard scale: 3.6 m body, ~2.8 m foot span, 16 m tiles (matches the training
 terrain tile size so the policy sees familiar-sized features).

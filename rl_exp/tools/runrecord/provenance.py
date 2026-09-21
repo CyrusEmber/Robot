@@ -29,7 +29,7 @@ _REPO = pathlib.Path(__file__).resolve().parents[3]
 if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
-# The two primitives this module used to implement live in ``binding`` (PLAN.md #27 ①): one
+# The two primitives this module used to implement live in ``binding`` (work/active/record-variant-and-snapshot-specs.md ①): one
 # function hashes a file, one abbreviates a revision, and both records call them. They are
 # re-exported under the names this package's callers (``manifest``, ``rebuild``, the golden
 # lock) and ``test_run_manifest.py`` already import, rather than re-implemented -- a second

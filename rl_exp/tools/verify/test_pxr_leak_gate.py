@@ -10,7 +10,7 @@ The gate is two halves that fail independently, so both are pinned here:
 * the **attribution** -- the failing window must name the import that requested the poison
   and carry the stack of the construction that asked for it. The judgement alone tells you a
   leak happened, not which ``__post_init__`` did it, and looking that up by hand is what
-  ``docs/pitfalls.md`` P004 cost the last time.
+  ``rl_exp/docs/pitfalls.md`` P004 cost the last time.
 
 The poisoned half runs last on purpose: importing pxr is one-way in a process, and this whole
 check is one process (each check is).

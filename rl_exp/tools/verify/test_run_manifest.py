@@ -345,7 +345,7 @@ def main() -> int:
         check(
             "verify/untracked-code-unrecoverable",
             M.main(["--verify", str(dirty)]) == 2
-            and any("PLAN.md #18" in row["detail"] for row in dirty_rows)
+            and any("work/active/verified-rebuild-rating.md" in row["detail"] for row in dirty_rows)
             and not any(row["result"] == "失败" for row in dirty_rows),
             f"{[r for r in dirty_rows if r['level'] == '可重建']}",
         )

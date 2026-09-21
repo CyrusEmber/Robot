@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 # -*- coding: utf-8 -*-
-"""ARCH_PLAN 2.4 / PLAN.md #22 step 3: delete the version subclass bodies.
+"""ARCH_PLAN 2.4 / work/closed/2026/recipe-registry-and-diff-declaration.md step 3: delete the version subclass bodies.
 
 The registry has resolved env cfgs through ``recipe_tasks`` since the entry switch, and every
 gate now reads the generated classes, so the version subclasses are dead code -- but dead code

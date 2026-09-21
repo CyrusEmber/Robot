@@ -491,7 +491,7 @@ class LizardRoughTeacherEnvCfg(LocomotionVelocityRoughEnvCfg):
     so bumping ``params_version`` here cannot retroactively change an old recipe.
 
     Privileged obs per Miki et al. 2022 table + two legacy extras (true base
-    velocity, per-body mass); full layout table in FAMILY.md. Obs dim 308.
+    velocity, per-body mass); full obs layout table in rl_exp/versions/lizard/OBS.md. Obs dim 308.
 
     ``params_version`` is a plain class attribute (NOT a configclass field, so
     it is never deep-copied): the latest recipe lives here, and every declared recipe

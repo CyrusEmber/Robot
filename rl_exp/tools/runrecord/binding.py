@@ -6,7 +6,7 @@
 # -*- coding: utf-8 -*-
 """The binding primitives: how a record names the bytes and the commit it depended on.
 
-PLAN.md #27 ①. The run manifest (``rl_exp/tools/runrecord/manifest.py``) and the eval
+work/active/record-variant-and-snapshot-specs.md ①. The run manifest (``rl_exp/tools/runrecord/manifest.py``) and the eval
 record (``ablation_harness/record.py``) describe one run in two files, and they used to spell
 the shared half twice:
 
@@ -36,7 +36,7 @@ REV_LENGTH = 12
 """Characters a recorded revision carries.
 
 One number, one spelling: the manifest has always recorded this many, and the eval record now
-records the same string for the same commit (PLAN.md #27 ①). It is *not* ``git --short`` -- that
+records the same string for the same commit (work/active/record-variant-and-snapshot-specs.md ①). It is *not* ``git --short`` -- that
 length belongs to git and moves as the object database grows.
 """
 

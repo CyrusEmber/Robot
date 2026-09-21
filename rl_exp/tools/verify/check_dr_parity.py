@@ -43,7 +43,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from recipe_lines import RecipeLine, RecipeLineError, discover  # noqa: E402
 
 _REPO = pathlib.Path(__file__).resolve().parents[3]
-# The file-digest primitive has one home (PLAN.md #27 ①): the asset locks are hashed with it
+# The file-digest primitive has one home (work/active/record-variant-and-snapshot-specs.md ①): the asset locks are hashed with it
 # rather than with a local ``sha256(read_bytes())``, so the scan that keeps that home single
 # (``check_record_bindings.py``) does not have to carry an exception for this gate.
 if str(_REPO) not in sys.path:
@@ -321,7 +321,7 @@ def _asset_hashes(yaml_path: pathlib.Path) -> dict[str, str]:
     """Global assets + that version's own frozen params yaml (post-freeze yaml
     edits are contract breaks, not tweaks).
 
-    The digest comes from the one file-hash primitive (PLAN.md #27 ①); a listed file that
+    The digest comes from the one file-hash primitive (work/active/record-variant-and-snapshot-specs.md ①); a listed file that
     vanished while it was being hashed is a hard stop, because this dict is written straight
     into an asset lock and a null digest there is worse than no lock at all.
     """

@@ -24,7 +24,7 @@ generator builds a local rng and leaves the global ones alone, while these
 functions draw from the global streams (numpy for the height-field terrains
 and the random boxes, torch for ``boxes`` heights -- mesh_terrains.py:348),
 so a real run's geometry also depends on the process history. Archiving the
-actual run's geometry is a different item (PLAN.md #18 ⑤b).
+actual run's geometry is a different item (work/active/verified-rebuild-rating.md ⑤b).
 
 Usage:
   python rl_exp\\tools\\verify\\terrain_preflight.py                     # v4 (default)
@@ -117,7 +117,7 @@ def self_test() -> list[str]:
     The order case is what the seeding earns. Unchecked, a second build of the same sub-terrain
     continues the global stream where the first left it and hashes differently -- which is
     exactly what a real run does today, since the generator seeds only its own local rng
-    (PLAN.md #18). Drop :func:`seed_rngs` and this test goes red.
+    (work/active/verified-rebuild-rating.md). Drop :func:`seed_rngs` and this test goes red.
 
     Returns:
         One problem per case that behaved unlike the geometry says.

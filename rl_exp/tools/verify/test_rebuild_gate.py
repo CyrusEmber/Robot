@@ -121,7 +121,7 @@ def main() -> int:
         record, _ = R.capture(run, root / "dest_noarch")
         check(
             "capture/refuse-without-archive",
-            record["verdict"] == "refused" and any("PLAN.md #18" in line for line in record["refusals"]),
+            record["verdict"] == "refused" and any("work/active/verified-rebuild-rating.md" in line for line in record["refusals"]),
             f"{record['verdict']} {record['refusals'][:2]}",
         )
 

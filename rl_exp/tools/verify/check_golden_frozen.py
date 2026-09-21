@@ -29,7 +29,7 @@ import sys
 import tempfile
 
 _REPO = pathlib.Path(__file__).resolve().parents[3]
-# The file-digest primitive has one home (PLAN.md #27 ①): this gate hashes the frozen goldens
+# The file-digest primitive has one home (work/active/record-variant-and-snapshot-specs.md ①): this gate hashes the frozen goldens
 # *with* it rather than spelling its own ``sha256(read_bytes())``, so the scan that keeps that
 # home single (``check_record_bindings.py``) does not have to carry an exception for it.
 if str(_REPO) not in sys.path:
@@ -45,7 +45,7 @@ from rl_exp.tools.runrecord import binding  # noqa: E402
 # One such edit already happened: A0 moved the main line into versions/lizard/main/ and this
 # path followed it (reason and the digest-unchanged proof are in the record's B0 addendum).
 #
-# A second one, 2026-09-17: the version subclass bodies were deleted (PLAN.md #22 step 3), so the
+# A second one, 2026-09-17: the version subclass bodies were deleted (work/closed/2026/recipe-registry-and-diff-declaration.md step 3), so the
 # two locks' `env_cfg_class` column -- which records the entry the registry resolves, and had named
 # those classes since well before the deletion -- was repointed to the generated classes one line at
 # a time. 24 lines in main, 2 in baseline, no other leaf moved (the per-field diff is in the

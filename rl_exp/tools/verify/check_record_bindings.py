@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 # -*- coding: utf-8 -*-
-"""One home for the record's binding primitives (PLAN.md #27 ①, the gate that keeps it one).
+"""One home for the record's binding primitives (work/active/record-variant-and-snapshot-specs.md ①, the gate that keeps it one).
 
 ``rl_exp/tools/runrecord/manifest.py`` and ``ablation_harness/record.py`` write two files that
 describe one run, and before #27 each of them spelled the shared half itself: two file-hash
@@ -34,7 +34,7 @@ without tripping it (this file does), while the same text as code cannot hide be
   the same dependency another way (a distribution version) so the two records of one run could
   not be reconciled; a re-spelled identity is how that comes back.
 
-**The ceiling, honestly stated** (PLAN.md #27's own warning about paste detectors): this decides
+**The ceiling, honestly stated** (work/active/record-variant-and-snapshot-specs.md's own warning about paste detectors): this decides
 *which side of* a home *a line sits on*, not whether the record it feeds is right. A duplicate
 in a shape none of the four signatures reaches -- text decoded and then hashed,
 ``hashlib.file_digest`` composed from a helper, a revision fetched through another library or an

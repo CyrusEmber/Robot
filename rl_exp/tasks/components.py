@@ -455,7 +455,7 @@ def _teacher_terms(params: dict) -> dict[str, ObsTerm]:
         ),
         # privilege 4 (v2, Miki et al. 2022 table completion): contact force vectors, contact
         # normals, per-foot friction, thigh/shank contact flags, persistent external wrench --
-        # see the FAMILY.md obs layout table
+        # see rl_exp/versions/lizard/OBS.md (the obs layout SSOT)
         "foot_contact_forces": ObsTerm(
             func=teacher_mdp.foot_contact_forces,
             params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot")},

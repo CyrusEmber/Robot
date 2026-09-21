@@ -1002,7 +1002,7 @@ def _verify_code(manifest: dict, problems: list[str]) -> list[dict]:
     A moved revision is not a failure: the record names the revision, so the code is
     reachable (``git checkout <rev>``). What *is* a problem is a run whose code included
     uncommitted changes: the record hashes the diff but does not contain it, so nothing
-    can bring that code back -- which is exactly the archive gap (PLAN.md #18).
+    can bring that code back -- which is exactly the archive gap (work/active/verified-rebuild-rating.md).
     """
     recorded = manifest.get("code", {})
     fresh = prov.code_sources()
@@ -1031,7 +1031,7 @@ def _verify_code(manifest: dict, problems: list[str]) -> list[dict]:
                     f"{name}: the run had {len(code_in_untracked)} untracked code file(s) "
                     f"(e.g. {code_in_untracked[:2]}); this record hashes them and stops there -- whether the "
                     f"content was kept is asserted by the 1.5 drill material (rebuild --capture --archive), "
-                    f"not by the run record (PLAN.md #18).{ignored}",
+                    f"not by the run record (work/active/verified-rebuild-rating.md).{ignored}",
                 )
             )
         elif dirty_then and diff_moved:
@@ -1042,7 +1042,7 @@ def _verify_code(manifest: dict, problems: list[str]) -> list[dict]:
                     f"{name}: the run worked in a dirty tree and that diff no longer matches "
                     f"(recorded {str(before.get('diff_sha256'))[:8]} -> {str(after.get('diff_sha256'))[:8]}); "
                     f"uncommitted code is hashed, not stored here -- the 1.5 drill material is where that is "
-                    f"asserted (PLAN.md #18).{ignored}",
+                    f"asserted (work/active/verified-rebuild-rating.md).{ignored}",
                 )
             )
         elif moved:

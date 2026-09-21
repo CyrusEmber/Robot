@@ -109,7 +109,7 @@ def self_test() -> int:
     cases = [
         # the two quotes this scan was written for, verbatim from before they were split
         (
-            "PLAN.md #24 as it read before",
+            "work/closed/2026/recipe-registry-and-diff-declaration.md as it read before",
             "**本次独立复核**：`[41]` 单跑 `RECIPE_BUILD_OK (26 task(s) field-identical to the frozen golden; "
             "322 declared difference(s) against their own base)`；反证重打一次",
             1,
