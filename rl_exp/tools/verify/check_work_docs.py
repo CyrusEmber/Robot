@@ -85,8 +85,21 @@ _COMMON = ("id", "title", "scope", "status", "landing")
 _ACTIVE_ONLY = ("next", "close_when")
 #: Fields a closed item adds.
 _CLOSED_ONLY = ("outcome",)
-#: Total bytes of ``work/active/``. Raise it by hand with a reason, never from inside a run.
-BUDGET_BYTES = 24000
+#: Bytes of one item's ``next``. This is the number that matters: the default reader pays for
+#: ``--list``, one line per item, and nothing reads every item file. Measured 2026-09-21: the
+#: list output was 4638 bytes for 8 items, longest line 763 -- so this cap is where the
+#: default read cost actually lives.
+#: **Temporary ceiling at 700, target 400.** Two items belonging to another session measured
+#: 485 and 629 bytes; the number is set where the tree currently stands and must ratchet down to
+#: 400 in the change that trims them (tracked in work/active/ledger-migration-expansion.md).
+#: Raising it again needs the same kind of note, not a quiet edit.
+NEXT_BYTES = 700
+#: Total bytes of ``work/active/``. A growth alarm, **not** the default read cost (items are
+#: read on demand): it fires before the ledger turns into another file nobody can afford to
+#: read. Raised 24000 -> 48000 on 2026-09-21 because two sessions share it and ~25 items at the
+#: measured ~2 KB each is ordinary work, not bloat. Raise it by hand with a reason, never from
+#: inside a run.
+BUDGET_BYTES = 48000
 
 _SHA = re.compile(r"\bsha256:[0-9a-fA-F]{8,}")
 
@@ -183,6 +196,13 @@ def _tally(items: list[Item], problems: list[str]) -> int:
         for field in wanted:
             if not item.fields.get(field):
                 problems.append(f"{_rel(item.path)}: '{field}' is missing or empty")
+        if not item.closed and len(item.fields.get("next", "").encode("utf-8")) > NEXT_BYTES:
+            problems.append(
+                f"{_rel(item.path)}: 'next' is {len(item.fields['next'].encode('utf-8'))} bytes, "
+                f"over the {NEXT_BYTES}-byte line budget -- a reader who lists the ledger reads "
+                "this line for every item, so the action has to fit on it (the detail belongs in "
+                "the body)"
+            )
         if item.closed and item.fields.get("next"):
             problems.append(
                 f"{_rel(item.path)}: a closed item keeps 'next' ({item.fields['next']!r}) -- "
@@ -399,6 +419,12 @@ def self_test() -> int:
             closed=True,
         )
         item("dup-a", _GOOD.format(id="dup-a", title="x", status="open"))
+        item(
+            "long-next",
+            _GOOD.format(id="long-next", title="x", status="open").replace(
+                "next: do the next thing", "next: " + "x" * (NEXT_BYTES + 1)
+            ),
+        )
         item("dup-b", _GOOD.format(id="dup-a", title="x", status="open"))
         item(
             "bad-scope",
@@ -424,6 +450,7 @@ def self_test() -> int:
             "front matter is never closed",
             "already used",
             "some/invented/word does not exist",
+            "byte line budget",
             "2026-09-20-partial.md: sections must be",
             "Bad_Name.md: a record is named",
         ):
@@ -450,7 +477,7 @@ def self_test() -> int:
     for problem in problems:
         print(f"  FALSIFIER: {problem}")
     print(
-        "WORK_DOCS_SELF_TEST_OK (14 item + 3 record fixtures)"
+        "WORK_DOCS_SELF_TEST_OK (15 item + 3 record fixtures)"
         if not problems
         else f"WORK_DOCS_SELF_TEST_DRIFT ({len(problems)})"
     )
