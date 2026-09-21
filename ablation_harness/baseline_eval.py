@@ -4,8 +4,13 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Evaluate baseline's first episode on its own plane for exactly 20 s.
 
-Run with IsaacLab Python after Kit initialization by this entry point. A missing
-checkpoint selects zero actions for evaluator smoke tests, never a trained-policy pass.
+The protocol is an input, not a constant: ``--protocol`` names the frozen file this rollout is
+collected and judged under, and the report records its digest. A protocol that declares a different
+recipe version than the task resolves, or a command box the recipe does not sample, is refused --
+the point of separating collection from judgement is that a verdict can always name the ruler.
+
+Run with IsaacLab Python after Kit initialization by this entry point. A missing checkpoint selects
+zero actions for evaluator smoke tests, never a trained-policy pass.
 """
 
 from __future__ import annotations
@@ -15,10 +20,10 @@ import importlib.metadata
 import json
 import pathlib
 import sys
+import traceback
 
 _REPO = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_REPO))
-PROTOCOL_PATH = pathlib.Path(__file__).resolve().parent / "protocols" / "baseline_flat_v2.json"
 
 
 def yaw_of(quat: torch.Tensor) -> torch.Tensor:
@@ -52,10 +57,13 @@ def run(args) -> dict:
     from rl_exp.tools.verify import cfg_snapshot
     from rl_exp.tools.verify.baseline_runtime import joint_reset_errors, resolve_task_cfg
 
-    protocol = json.loads(PROTOCOL_PATH.read_text(encoding="utf-8"))
+    protocol_path = pathlib.Path(args.protocol)
+    protocol = json.loads(protocol_path.read_text(encoding="utf-8"))
     cfg = resolve_task_cfg(args.task)
-    if cfg.params_version != "v1":
-        raise ValueError("Baseline-Flat-v1 protocol only accepts baseline/v1")
+    judged = protocol.get("recipe_version", "v1")
+    if cfg.params_version != judged:
+        raise ValueError(f"this protocol judges baseline/{judged}, but the task resolves "
+                         f"params_version={cfg.params_version}")
     if cfg.scene.terrain.terrain_type != "plane" or cfg.scene.terrain.terrain_generator is not None:
         raise ValueError("baseline evaluation requires the recipe's plane, without a suite swap")
     if cfg.episode_length_s != protocol["episode_length_s"]:
@@ -160,13 +168,19 @@ def run(args) -> dict:
             original_reset(env_ids)
 
         live._reset_idx = capture_reset
-        expected = torch.tensor(protocol["command_mps_radps"], device=live.device).expand(live.num_envs, -1)
+        # The protocol declares a box, not necessarily a point: v1/v2 held the command constant,
+        # v2's recipe samples 1-3 m/s on the framework's own window. Both read through the same
+        # accessor, and every frame's issued command is checked against it and recorded.
+        box = baseline_metrics.command_box(protocol)
+        low = torch.tensor([low for low, _ in box], device=live.device)
+        high = torch.tensor([high for _, high in box], device=live.device)
         torch.manual_seed(args.seed)
         try:
             for _ in range(steps):
                 command = live.command_manager.get_command("base_velocity")
-                if not torch.allclose(command, expected, atol=1e-6, rtol=0):
-                    raise RuntimeError("issued command differs from the fixed baseline protocol")
+                if bool((command < low - 1e-6).any() or (command > high + 1e-6).any()):
+                    raise RuntimeError(f"issued command leaves the protocol's box {box}: "
+                                       f"{command[0].tolist()}")
                 with torch.no_grad():
                     obs, _, _, _ = wrapper.step(policy(obs))
                 frame = snapshot()
@@ -204,7 +218,8 @@ def run(args) -> dict:
             baseline_frames.save(frames_path, artifact)
         return {
             "report_format": "baseline-eval-2", "protocol": protocol,
-            "protocol_digest": record.file_sha256(PROTOCOL_PATH),
+            "protocol_path": str(protocol_path),
+            "protocol_digest": record.file_sha256(protocol_path),
             "task": args.task, "seed": args.seed, "num_envs": live.num_envs,
             "timestamp": provenance.now(), "code": sources,
             "policy_mode": args.policy_mode if checkpoint else "zero_action", "checkpoint": checkpoint,
@@ -226,6 +241,8 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--task", default="Lizard-Baseline-Flat-Play-v1")
+    parser.add_argument("--protocol", type=pathlib.Path, required=True,
+                        help="frozen protocol under protocols/; the report records its digest")
     parser.add_argument("--checkpoint")
     parser.add_argument("--policy_mode", choices=("deterministic", "sampled"), default="deterministic")
     parser.add_argument("--num_envs", type=int, default=16)
@@ -235,6 +252,8 @@ def main() -> None:
     args = parser.parse_args()
     if args.num_envs < 1:
         parser.error("--num_envs must be positive")
+    if not args.protocol.is_file():
+        parser.error(f"--protocol {args.protocol} does not exist")
     if args.output.exists():
         parser.error("output already exists; choose a new report path")
     app = AppLauncher(args).app
@@ -246,6 +265,13 @@ def main() -> None:
         with args.output.open("x", encoding="utf-8") as handle:
             handle.write(payload)
         print(json.dumps({"verdict": result["verdict"], **result["metrics"]}, indent=2))
+    except BaseException:
+        # app.close() ends the process, so a traceback raised past it never reaches the terminal:
+        # every failed run would look like a silent exit with no report. Report first, then re-raise.
+        traceback.print_exc()
+        sys.stdout.flush()
+        sys.stderr.flush()
+        raise
     finally:
         app.close()
 

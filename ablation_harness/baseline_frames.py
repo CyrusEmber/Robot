@@ -49,9 +49,10 @@ COLUMNS: dict[str, tuple[str, str, str]] = {
 AXIS_KINDS = (BODIES, FEET)
 FORMAT = "baseline-frames-1"
 
-# Meta the judge cannot reconstruct from the frames: the episode's initial state. Frame 0 is
-# already one control step in, so every displacement and yaw drift is measured from here.
-REQUIRED_META = ("start_pos", "start_yaw")
+# Meta the judge cannot reconstruct from the frames: the episode's initial state, and the body
+# weight a per-body contact fraction has to be converted with when a protocol gates in newtons.
+# Frame 0 is already one control step in, so every displacement and yaw drift is measured from here.
+REQUIRED_META = ("start_pos", "start_yaw", "body_weight_n")
 
 
 class FramesContractError(ValueError):

@@ -1,0 +1,49 @@
+{
+  "name": "Baseline-Flat-v3",
+  "version": 3,
+  "supersedes": "baseline_flat_v2.json",
+  "recipe_version": "v2",
+  "episode_length_s": 20.0,
+  "terrain": "plane",
+  "command": {
+    "mode": "range",
+    "lin_vel_x": [1.0, 3.0],
+    "lin_vel_y": [0.0, 0.0],
+    "ang_vel_z": [0.0, 0.0],
+    "resample_s": 10.0,
+    "why": "v2's recipe samples 1-3 m/s on the framework's 10 s window, so the protocol declares a BOX, not a point, and every frame's issued command is recorded and checked against it. v1/v2's protocol wrote a single fixed vector (`command_mps_radps`); both spellings read through one accessor, but a record whose command leaves the declared box is refused rather than scored."
+  },
+  "displacement_frame": "initial_yaw",
+  "tracking_frame": "current_yaw",
+  "post_failure_velocity": "zero",
+  "terminal_frame": "post_physics_pre_reset",
+  "why_v3": [
+    "v2 was used to judge a v1-trained policy and could not judge the recipe it was written for: the evaluator refused any recipe whose params_version was not v1, the collector demanded a command constant of 0.5 m/s, and the judge scored absolute speed error against a fixed 8 m displacement -- none of which describes a 1-3 m/s task. So the report exists and says nothing about trained v2.",
+    "Two axes are now relative, as the version PLAN always said they would be. Tracking is the per-frame |v_fwd - v_cmd| / v_cmd averaged over the window, so hitting the band matters rather than hitting one number; the post-failure frames are charged 1.0 (the robot is not tracking anything at all there). Displacement is measured against the distance the issued commands asked for, summed over the whole declared window -- the denominator stays the full 20 s on purpose, so a policy that stops after 5 s fails on distance rather than being forgiven by a shorter denominator.",
+    "The head-chain axis is a CONTACT criterion, because that is now the training termination (v2.3: a chest/neck vertical reaction above 1 N ends the episode). One line, one meaning of 'touching the ground'. An earlier v2 protocol wrote '>= 10% of body weight held 0.5 s' -- a weight-bearing reading that contact chatter defeats (the v1 rollout sat above it on 66% of its frames and still never held it 0.5 s). Both samples are kept as regressions: the v1 drag record must stay red on this axis, and a zero-action rollout that keeps its head up (measured 0 N, clearance +0.54 m) must stay green.",
+    "The mesh-ground clearance is reported per body, not gated. v2 gated it at -0.01 m, a number calibrated from one measured rollout's steady overlap, and a 64-env random sample sits 7.7 mm inside the floor while passing it. Ground contact is what the contact axis is for; 'how deep' is a diagnostic, and the drift-versus-penetration question belongs to the diagnose tool (see work/active/floor-contact-attribution.md).",
+    "Both sameness claims are tested against samples, not fitted to one. The v1 drag record is an ANOMALY sample (it must fail), the zero-action rollout is a NORMAL sample (it must pass every axis but tracking/survival), and neither set the thresholds for the other."
+  ],
+  "gates": {
+    "forward_mae_norm_lt": 0.2,
+    "displacement_frac_gt": 0.8,
+    "first_episode_timeout_fraction_gt": 0.9,
+    "tilt_cos_min": 0.766,
+    "tilt_sustain_s": 0.5,
+    "non_foot_contact_load_n_gt": 1.0
+  },
+  "report_only": [
+    "forward_mae_mps",
+    "lateral_speed_abs_mps",
+    "yaw_offset_abs_rad",
+    "head_tail_contact_force_n",
+    "first_episode_frame_fraction",
+    "foot_duty",
+    "foot_load_fraction",
+    "feet_down_mean",
+    "tilt_max_deg",
+    "non_foot_load_fraction",
+    "non_foot_contact_load_n",
+    "non_foot_mesh_min_z_m"
+  ]
+}

@@ -21,6 +21,8 @@ from rl_exp.tools.verify.baseline_runtime import joint_reset_errors, material_er
 
 PROTOCOL = json.loads((_REPO / "ablation_harness/protocols/baseline_flat_v1.json").read_text())
 V2_PROTOCOL = json.loads((_REPO / "ablation_harness/protocols/baseline_flat_v2.json").read_text())
+V3_PROTOCOL = json.loads((_REPO / "ablation_harness/protocols/baseline_flat_v3.json").read_text())
+BODY_WEIGHT_N = 706.32  # 72 kg x 9.81, the figure every baseline report carries
 
 # The axis labels a test record carries: a per-body reading has to name its bodies.
 AXES = {
@@ -54,17 +56,21 @@ def build(protocol: dict, steps: int, *, num_envs: int = 1, series: dict | None 
     """Collect a synthetic window through the real contract.
 
     ``series`` overrides a column per frame (``f(step) -> tensor``). The defaults are a clean run:
-    walking exactly on the command for the whole window, feet down, nothing loaded that should not
+    walking exactly on the command the protocol declares (the middle of its box, so a fixed and a
+    ranged protocol both get a run that is on command), feet down, nothing loaded that should not
     be, a timeout on the last frame. ``start_pos``/``start_yaw`` are the episode's initial state.
     """
-    speed = float(protocol["command_mps_radps"][0])
-    recorder = baseline_frames.BaselineFrames(
-        num_envs=num_envs, step_dt=protocol["episode_length_s"] / steps, axes=AXES)
+    box = baseline_metrics.command_box(protocol)
+    forward = (box[0][0] + box[0][1]) / 2.0
+    step_dt = protocol["episode_length_s"] / steps
+    recorder = baseline_frames.BaselineFrames(num_envs=num_envs, step_dt=step_dt, axes=AXES)
     for step in range(steps):
         frame = default_frame(num_envs)
-        frame["pos"][:] = torch.tensor([(step + 1) * speed, 0.0, 0.0])
-        frame["velocity_yaw"][:] = torch.tensor([speed, 0.0, 0.0])
-        frame["command_world"][:] = torch.tensor([speed, 0.0, 0.0])
+        # Metres, not frame counts: one step of a 100-frame window is 0.2 s, so a robot on command
+        # at 2 m/s really has moved 0.4 m by frame 1.
+        frame["pos"][:] = torch.tensor([(step + 1) * forward * step_dt, 0.0, 0.0])
+        frame["velocity_yaw"][:] = torch.tensor([forward, 0.0, 0.0])
+        frame["command_world"][:] = torch.tensor([forward, 0.0, 0.0])
         frame["tilt_cos"][:] = 1.0
         frame["mesh_min_z"][:] = 0.5
         frame["foot_contact"][:] = 1.0
@@ -74,7 +80,7 @@ def build(protocol: dict, steps: int, *, num_envs: int = 1, series: dict | None 
             frame[name] = override(step)
         recorder.add(**frame)
     return recorder.artifact(
-        protocol=protocol,
+        protocol=protocol, body_weight_n=BODY_WEIGHT_N,
         start_pos=torch.zeros(num_envs, 3) if start_pos is None else start_pos,
         start_yaw=torch.zeros(num_envs) if start_yaw is None else start_yaw)
 
@@ -153,6 +159,130 @@ def test_v2_refuses_a_gate_it_could_not_measure():
     assert result["verdict"] == "invalid"
     assert any("never measured" in reason for reason in result["invalid_reasons"]), result["invalid_reasons"]
     assert all(value is None for value in result["gates"].values()), result["gates"]
+
+
+# --- the record's own length and initial state: asked for by review, neither was checked -------
+
+def test_window_length_must_equal_the_protocol_window():
+    """1000 frames of a 20 s protocol is a 20 s window; of a 40 s protocol it is half of one."""
+    artifact = build(PROTOCOL, 20)
+    artifact["meta"]["step_dt"] = 0.04  # 20 x 0.04 = 0.8 s, not the protocol's 20 s
+    result = baseline_metrics.judge(artifact)
+    assert result["verdict"] == "invalid", result["gates"]
+    assert any("the protocol declares 20 s" in reason for reason in result["invalid_reasons"]), \
+        result["invalid_reasons"]
+    assert all(value is None for value in result["gates"].values())
+
+
+def test_the_initial_state_is_checked_for_shape_and_finiteness():
+    wrong = build(PROTOCOL, 20)
+    wrong["meta"]["start_pos"] = torch.zeros(3)
+    result = baseline_metrics.judge(wrong)
+    assert result["verdict"] == "invalid"
+    assert any("start_pos has shape" in reason for reason in result["invalid_reasons"]), result["invalid_reasons"]
+
+    broken = build(PROTOCOL, 20)
+    broken["meta"]["start_yaw"] = torch.tensor([float("nan")])
+    result = baseline_metrics.judge(broken)
+    assert result["verdict"] == "invalid"
+    assert any("start_yaw is not finite" in reason for reason in result["invalid_reasons"]), \
+        result["invalid_reasons"]
+
+    weightless = build(PROTOCOL, 20)
+    del weightless["meta"]["body_weight_n"]
+    assert baseline_metrics.judge(weightless)["verdict"] == "invalid", "no weight, no newtons"
+
+
+def test_a_record_is_refused_under_a_protocol_it_was_not_collected_for():
+    """The v1 drag record was collected at a constant 0.5 m/s; v3 asks for 1-3 m/s."""
+    artifact = build(PROTOCOL, 20)  # command 0.5, inside v1's degenerate box
+    artifact["protocol"] = V3_PROTOCOL
+    result = baseline_metrics.judge(artifact)
+    assert result["verdict"] == "invalid", result["gates"]
+    assert any("different command protocol" in reason for reason in result["invalid_reasons"]), \
+        result["invalid_reasons"]
+
+
+# --- v3's two relative axes and its contact axis -----------------------------------------------
+
+def test_v3_normalized_tracking_scores_the_band_not_one_number():
+    """Holding the band it was given is the question a 1-3 m/s task asks."""
+    dt = V3_PROTOCOL["episode_length_s"] / 100
+    on_band = baseline_metrics.judge(build(V3_PROTOCOL, 100))          # commands 2.0, walks 2.0
+    assert on_band["gates"]["tracking"], on_band["metrics"]
+    assert on_band["metrics"]["forward_mae_norm"] < 1e-6, on_band["metrics"]
+    assert abs(on_band["metrics"]["forward_mae_mps"]) < 1e-6, on_band["metrics"]
+    assert on_band["verdict"] == "pass", (on_band["gates"], on_band["metrics"])
+
+    # A robot nailing the absolute 2.0 m/s while the command alternates 1.0 and 3.0: half the
+    # frames are 1.0 m/s off, half are 1 m/s over on a 3 m/s ask (1/3) -- the normalized error
+    # says it is off the band, which the mean absolute error cannot.
+    def command(step):
+        return torch.tensor([[1.0 if step % 2 else 3.0, 0.0, 0.0]])
+
+    def velocity(step):
+        return torch.tensor([[2.0, 0.0, 0.0]])
+
+    wandering = baseline_metrics.judge(build(V3_PROTOCOL, 100, series={
+        "pos": lambda step: torch.tensor([[(step + 1) * 2.0 * dt, 0.0, 0.0]]),
+        "command_world": command, "velocity_yaw": velocity,
+    }))
+    assert not wandering["gates"]["tracking"], wandering["metrics"]
+    assert abs(wandering["metrics"]["forward_mae_norm"] - (1.0 + 1.0 / 3.0) / 2.0) < 1e-6, \
+        wandering["metrics"]
+
+
+def test_v3_displacement_is_measured_against_the_distance_asked_for():
+    """A policy that covers half the distance its commands asked for fails; the full 20 s is the ask."""
+    dt = V3_PROTOCOL["episode_length_s"] / 100
+    short = baseline_metrics.judge(build(V3_PROTOCOL, 100, series={
+        "pos": lambda step: torch.tensor([[(step + 1) * 1.0 * dt, 0.0, 0.0]]),  # 1.0 of the 2.0 asked
+        "velocity_yaw": lambda step: torch.tensor([[1.0, 0.0, 0.0]]),
+    }))
+    assert not short["gates"]["displacement"], short["metrics"]
+    assert abs(short["metrics"]["displacement_frac"] - 0.5) < 1e-5, short["metrics"]
+    assert not short["gates"]["tracking"], "walking at half the issued speed is off band too"
+    on_band = baseline_metrics.judge(build(V3_PROTOCOL, 100))
+    assert abs(on_band["metrics"]["displacement_frac"] - 1.0) < 1e-5, on_band["metrics"]
+
+
+def test_v3_head_chain_contact_is_the_training_termination_criterion():
+    """Same predicate as the training termination: a chest/neck reaction above 1 N on any frame."""
+    clean = baseline_metrics.judge(build(V3_PROTOCOL, 100))
+    assert clean["gates"]["no_non_foot_contact"], clean["metrics"]
+    assert clean["metrics"]["non_foot_contact_load_n_max"] == 0.0, clean["metrics"]
+
+    # 1 N / 706.32 N of body weight is the limit; the v1 drag record's neck is 87.2 N.
+    touching = baseline_metrics.judge(build(V3_PROTOCOL, 100, series={
+        "non_foot_fraction": lambda step: torch.tensor([[0.0, 1.5 / BODY_WEIGHT_N]]),
+    }))
+    assert not touching["gates"]["no_non_foot_contact"], touching["metrics"]
+    assert abs(touching["metrics"]["non_foot_contact_load_n_max"] - 1.5) < 1e-3, touching["metrics"]
+    assert touching["diagnostics"]["non_foot_contact_frames"][1] == 100, touching["diagnostics"]
+
+    legitimate = baseline_metrics.judge(build(V3_PROTOCOL, 100, series={
+        "non_foot_fraction": lambda step: torch.tensor([[0.0, 0.9 / BODY_WEIGHT_N]]),
+    }))
+    assert legitimate["gates"]["no_non_foot_contact"], "below the contact limit is not contact"
+
+
+def test_v3_keeps_the_two_samples_apart():
+    """A kept anomaly sample must stay red and a clean run green: neither sets the other's numbers."""
+    dragging = baseline_metrics.judge(build(V3_PROTOCOL, 1000, series={
+        "non_foot_fraction": lambda step: torch.tensor([[0.0, 87.2 / BODY_WEIGHT_N]]),
+        "mesh_min_z": lambda step: torch.tensor([[0.18, -0.0046]]),
+        "tilt_cos": lambda step: torch.tensor([0.9]),
+        "foot_contact": lambda step: torch.tensor([[1.0, 0.0]]),
+        "foot_fraction": lambda step: torch.tensor([[0.3, 0.0]]),
+    }))
+    assert dragging["verdict"] == "fail", dragging["gates"]
+    assert dragging["gates"]["no_non_foot_contact"] is False, "87.2 N on the neck is a support"
+    assert dragging["metrics"]["non_foot_contact_load_n_max"] > 87.0
+    assert abs(dragging["metrics"]["non_foot_mesh_min_z_m"] + 0.0046) < 1e-6, \
+        "the mesh reading is reported even where the protocol does not gate it"
+    clean = baseline_metrics.judge(build(V3_PROTOCOL, 1000))
+    assert clean["verdict"] == "pass", (clean["gates"], clean["metrics"])
+    assert clean["metrics"]["non_foot_mesh_min_z_m"] == 0.5
 
 
 # --- what the window measures ------------------------------------------------------------------
@@ -325,16 +455,25 @@ def test_respawn_frames_are_not_scored():
 
 
 def test_tracking_follows_the_command_issued_each_frame():
-    """A range command has to be judged against what was issued, not a constant in the protocol."""
-    artifact = build(V2_PROTOCOL, 20, series={
-        "pos": lambda step: torch.tensor([[(step + 1) * 1.0, 0.0, 0.0]]),
-        "velocity_yaw": lambda step: torch.tensor([[1.0, 0.0, 0.0]]),
-        "command_world": lambda step: torch.tensor([[1.0, 0.0, 0.0]]),
+    """A range command is judged against what was issued that frame, not against a constant."""
+    def command(step):
+        return torch.tensor([[1.0 + 0.5 * (step % 3), 0.0, 0.0]])
+
+    dt = V3_PROTOCOL["episode_length_s"] / 30
+    artifact = build(V3_PROTOCOL, 30, series={
+        "command_world": command, "velocity_yaw": command,
+        "pos": lambda step: torch.tensor([[(step + 1) * 1.5 * dt, 0.0, 0.0]]),
     })
     result = baseline_metrics.judge(artifact)
-    assert result["metrics"]["forward_mae_mps"] < 1e-6, "walking at the issued command is exactly on command"
-    assert abs(result["metrics"]["command_mps_mean"] - 1.0) < 1e-6, result["metrics"]
-    assert result["gates"]["displacement"], "20 s at 1 m/s is 20 m"
+    assert result["metrics"]["forward_mae_norm"] < 1e-6, "matching each frame's own command is on band"
+    assert abs(result["metrics"]["command_mps_mean"] - 1.5) < 1e-6, result["metrics"]
+    assert result["gates"]["tracking"] and result["gates"]["displacement"], result["gates"]
+
+    lagging = baseline_metrics.judge(build(V3_PROTOCOL, 30, series={
+        "command_world": command, "velocity_yaw": lambda step: torch.tensor([[2.5, 0.0, 0.0]]),
+    }))
+    assert not lagging["gates"]["tracking"], lagging["metrics"]
+    assert lagging["metrics"]["forward_mae_norm"] > 0.2, lagging["metrics"]
 
 
 def test_the_tilt_readout_is_the_worst_posture():

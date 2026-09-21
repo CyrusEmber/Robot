@@ -38,9 +38,16 @@ _BASE_GATES = ("tracking", "displacement", "survival")
 
 # gate -> (column, threshold key, sustain key or None, "min" or "max")
 # ``min``: the metric must stay at or above the threshold, so a breach is being below it.
+#
+# Two head-chain axes are declared here because the protocol family has two generations: v1/v2 gate
+# a *weight-bearing* reading (a fraction of body weight held for a dwell), v3 gates *contact* (above
+# 1 N on any frame), which is the criterion v2's training termination uses. A protocol declaring one
+# gets that gate; a protocol declaring both would get both, which is a deliberate possibility, not an
+# accident. The mesh-clearance gate exists for the same reason: v2 declared it, v3 reports it only.
 _GATED = {
     "attitude": ("tilt_cos", "tilt_cos_min", "tilt_sustain_s", "min"),
     "no_non_foot_carrier": ("non_foot_fraction", "non_foot_load_fraction_lt", "non_foot_load_sustain_s", "max"),
+    "no_non_foot_contact": ("non_foot_fraction", "non_foot_contact_load_n_gt", None, "max"),
     "no_mesh_through_floor": ("mesh_min_z", "non_foot_mesh_min_z_gt", None, "min"),
 }
 
@@ -50,6 +57,22 @@ def gate_names(protocol: dict) -> list[str]:
     return list(_BASE_GATES) + [
         name for name, (_, key, _, _) in _GATED.items() if key in protocol["gates"]
     ]
+
+
+def command_box(protocol: dict) -> list[tuple[float, float]]:
+    """The command bounds the protocol declares, ``[(lo, hi)]`` for x, y and yaw rate.
+
+    Two spellings, one reader. v1/v2 wrote a single fixed vector (``command_mps_radps``) because
+    their recipes held the command constant; v3 writes a box (``command``) because v2's recipe
+    samples 1-3 m/s on the framework's own resampling window. A record whose issued command leaves
+    the declared box belongs to a different protocol and is refused instead of scored.
+    """
+    if "command" in protocol:
+        spec = protocol["command"]
+        keys = ("lin_vel_x", "lin_vel_y", "ang_vel_z")
+        return [(float(spec[key][0]), float(spec[key][1])) for key in keys]
+    fixed = [float(value) for value in protocol["command_mps_radps"]]
+    return [(value, value) for value in fixed]
 
 
 def _alive(terminated: torch.Tensor, timeout: torch.Tensor) -> torch.Tensor:
@@ -91,7 +114,30 @@ def _contract_reasons(artifact: dict) -> list[str]:
     if missing:
         return [f"the record is missing {missing}: frame 0 is already one step in, so the episode's "
                 "initial state cannot be recovered from it"]
+    step_dt = meta.get("step_dt")
     reasons = []
+    # The window's length is a property of the record AND of the protocol, and the verdict is only
+    # meaningful where the two agree: 1000 frames of a 20 s protocol is a 20 s window, 1000 frames
+    # of a 40 s protocol is half of one.
+    if not step_dt:
+        reasons.append(f"the record does not say what its control step was: step_dt={step_dt}")
+    else:
+        declared_s = float(protocol["episode_length_s"])
+        if abs(steps * step_dt - declared_s) > 1e-6:
+            reasons.append(f"the window is {steps} steps x {step_dt:g} s = {steps * step_dt:g} s, but the "
+                           f"protocol declares {declared_s:g} s")
+    for name in ("start_pos", "start_yaw"):
+        value = torch.as_tensor(meta[name], dtype=torch.float32)
+        want = (num_envs, 3) if name == "start_pos" else (num_envs,)
+        if tuple(value.shape) != want:
+            reasons.append(f"{name} has shape {tuple(value.shape)}, the contract says {want} "
+                           "(one initial state per env)")
+        elif not bool(torch.isfinite(value).all()):
+            reasons.append(f"{name} is not finite")
+    weight = meta.get("body_weight_n")
+    if weight is None or not (float(weight) > 0.0):
+        reasons.append(f"body_weight_n is {weight}: a per-body contact reading cannot be expressed in "
+                       "newtons without it")
     for name in _BASE_COLUMNS:
         if name not in frames:
             reasons.append(f"the record has no {name}: it is not a baseline fixed-window record")
@@ -123,7 +169,34 @@ def _contract_reasons(artifact: dict) -> list[str]:
             expected = (steps, num_envs, len(labels))
         if tuple(tensor.shape) != expected:
             reasons.append(f"{name} has shape {tuple(tensor.shape)}, the contract says {expected} ({meaning})")
-    return reasons
+    if reasons:
+        return reasons
+    return _command_reasons(protocol, frames)
+
+
+def _command_reasons(protocol: dict, frames: dict) -> list[str]:
+    """Refuse a record whose issued command is not inside the protocol's declared box.
+
+    This is the guard against judging a rollout under the wrong protocol: the v1 drag record was
+    collected with a constant 0.5 m/s command, and scoring it under a 1-3 m/s protocol would answer
+    a question nobody asked.
+    """
+    box = command_box(protocol)
+    command = frames["command_world"]
+    labels = ("x", "y", "yaw rate")
+    outside = []
+    for index, (low, high) in enumerate(box):
+        component = command[:, :, index]
+        bad = (component < low - 1e-6) | (component > high + 1e-6)
+        if bool(bad.any()):
+            where = int(bad.nonzero()[0][0])
+            outside.append(f"{labels[index]}: {component.reshape(-1).min().item():g}.."
+                           f"{component.reshape(-1).max().item():g} outside [{low:g}, {high:g}] "
+                           f"(first at frame {where})")
+    if not outside:
+        return []
+    return [f"the issued command leaves the declared box ({'; '.join(outside)}): this record was "
+            "collected under a different command protocol"]
 
 
 def _data_reasons(artifact: dict, alive: torch.Tensor) -> list[str]:
@@ -138,6 +211,11 @@ def _data_reasons(artifact: dict, alive: torch.Tensor) -> list[str]:
     empty = int((alive.sum(dim=0) == 0).sum())
     if empty:
         reasons.append(f"{empty} env(s) never contributed a frame inside their first episode")
+    if "forward_mae_norm_lt" in protocol["gates"]:
+        low = command_box(protocol)[0][0]
+        if abs(low) < 1e-6:
+            reasons.append("the declared command box includes 0 m/s, where a normalized tracking "
+                           "error is undefined")
     return reasons
 
 
@@ -183,11 +261,27 @@ def _score(artifact: dict, alive: torch.Tensor) -> dict:
         "first_episode_timeout_fraction": survived.to(torch.float32).mean().item(),
         "command_mps_mean": episode_mean(command).mean().item(),
     }
-    passed = {
-        "tracking": measured["forward_mae_mps"] < thresholds["forward_mae_mps_lt"],
-        "displacement": measured["forward_displacement_m"] > thresholds["forward_displacement_m_gt"],
-        "survival": measured["first_episode_timeout_fraction"] > thresholds["first_episode_timeout_fraction_gt"],
-    }
+    # An absolute MAE asks "did it hold this number"; a normalized one asks "did it hold the band
+    # it was given", which is the only question a 1-3 m/s task can answer. Frames after the end
+    # score 1.0 -- standing still while commanded to move is the worst normalized error there is.
+    if "forward_mae_norm_lt" in thresholds:
+        norm_error = torch.where(alive, (frames["velocity_yaw"][:, :, 0] - command).abs()
+                                 / command.clamp_min(1e-6), 1.0)
+        measured["forward_mae_norm"] = (norm_error.sum(dim=0) / steps).mean().item()
+        passed = {"tracking": measured["forward_mae_norm"] < thresholds["forward_mae_norm_lt"]}
+    else:
+        passed = {"tracking": measured["forward_mae_mps"] < thresholds["forward_mae_mps_lt"]}
+    # Same idea for distance: against what the issued commands asked for, over the whole declared
+    # window -- a shorter denominator would forgive a policy that stopped after five seconds.
+    expected_m = (command * dt).sum(dim=0)
+    measured["expected_displacement_m"] = expected_m.mean().item()
+    if "displacement_frac_gt" in thresholds:
+        measured["displacement_frac"] = (displacement / expected_m.clamp_min(1e-6)).mean().item()
+        passed["displacement"] = measured["displacement_frac"] > thresholds["displacement_frac_gt"]
+    else:
+        passed["displacement"] = measured["forward_displacement_m"] > thresholds["forward_displacement_m_gt"]
+    passed["survival"] = (measured["first_episode_timeout_fraction"]
+                          > thresholds["first_episode_timeout_fraction_gt"])
     yaw_drift = torch.atan2(torch.sin(frames["yaw"] - start_yaw), torch.cos(frames["yaw"] - start_yaw)).abs()
     diagnostics = {
         "lateral_speed_abs_mps": episode_mean(frames["velocity_yaw"][:, :, 1].abs()).mean().item(),
@@ -204,22 +298,40 @@ def _score(artifact: dict, alive: torch.Tensor) -> dict:
         breach = (frames["tilt_cos"] < thresholds["tilt_cos_min"]) & alive
         passed["attitude"] = not bool(_sustained(breach, dt, thresholds["tilt_sustain_s"]).any())
 
-    # -- a non-foot body carrying the robot ----------------------------------------
-    if "non_foot_load_fraction_lt" in thresholds:
+    # -- per-body readings: always reported, gated only where the protocol says so ---
+    # The record carries these whatever the protocol does with them, so a protocol that only
+    # reports them (v3 does that for the mesh) still produces the reading rather than a blank.
+    if "non_foot_fraction" in frames:
         fractions = frames["non_foot_fraction"]
-        breach = (fractions >= thresholds["non_foot_load_fraction_lt"]).any(dim=-1) & alive
-        passed["no_non_foot_carrier"] = not bool(
-            _sustained(breach, dt, thresholds["non_foot_load_sustain_s"]).any())
-        peak = _keep(fractions, alive, 0.0).amax(dim=(0, 1))
-        measured["non_foot_load_fraction_max"] = peak.max().item()
-        diagnostics["non_foot_load_fraction"] = peak.tolist()
+        weight_n = float(artifact["meta"]["body_weight_n"])
+        load_n = _keep(fractions, alive, 0.0) * weight_n
+        peak_fraction = _keep(fractions, alive, 0.0).amax(dim=(0, 1))
+        measured["non_foot_load_fraction_max"] = peak_fraction.max().item()
+        measured["non_foot_contact_load_n_max"] = load_n.amax().item()
+        diagnostics["non_foot_load_fraction"] = peak_fraction.tolist()
+        diagnostics["non_foot_contact_load_n"] = load_n.amax(dim=(0, 1)).tolist()
 
-    # -- a collision mesh through the floor ----------------------------------------
-    if "non_foot_mesh_min_z_gt" in thresholds:
+        # v3: contact is the criterion, because it is the training termination's criterion -- one
+        # frame above the limit is already a body using the ground as support.
+        if "non_foot_contact_load_n_gt" in thresholds:
+            limit = thresholds["non_foot_contact_load_n_gt"] / weight_n  # the column is a fraction
+            breach = (fractions > limit + 1e-9) & alive.unsqueeze(-1)
+            passed["no_non_foot_contact"] = not bool(breach.any())
+            # Per body, summed over envs and the window: "how much of this rollout was this body
+            # using the ground for", which is the next thing a reviewer asks when the gate trips.
+            diagnostics["non_foot_contact_frames"] = breach.sum(dim=(0, 1)).tolist()
+        # v1/v2: the same reading, gated as weight-bearing sustained for a dwell.
+        if "non_foot_load_fraction_lt" in thresholds:
+            breach = (fractions >= thresholds["non_foot_load_fraction_lt"]).any(dim=-1) & alive
+            passed["no_non_foot_carrier"] = not bool(
+                _sustained(breach, dt, thresholds["non_foot_load_sustain_s"]).any())
+
+    if "mesh_min_z" in frames:
         clearance = _keep(frames["mesh_min_z"], alive, float("inf")).amin(dim=0)  # (N, B)
         measured["non_foot_mesh_min_z_m"] = clearance.min().item()
         diagnostics["non_foot_mesh_min_z_m"] = clearance.amin(dim=0).tolist()
-        passed["no_mesh_through_floor"] = bool((clearance > thresholds["non_foot_mesh_min_z_gt"]).all())
+        if "non_foot_mesh_min_z_gt" in thresholds:
+            passed["no_mesh_through_floor"] = bool((clearance > thresholds["non_foot_mesh_min_z_gt"]).all())
 
     # -- per-foot readings are diagnostics: a gait is described, not gated, here ----
     if "foot_contact" in frames:
