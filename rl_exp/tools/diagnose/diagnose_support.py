@@ -171,22 +171,6 @@ def _pad_clouds(clouds: list[torch.Tensor]) -> torch.Tensor:
     return diag_metrics.pad_point_clouds(clouds)
 
 
-def mesh_bbox_corners(body: str) -> torch.Tensor:
-    """读 `meshes/collision/<body>_collision.obj` 的 bbox，返回 (8,3) link 系角点 [m]。"""
-    path = MESH_DIR / f"{body}_collision.obj"
-    lo = [float("inf")] * 3
-    hi = [float("-inf")] * 3
-    with open(path, encoding="utf-8") as f:
-        for line in f:
-            if line.startswith("v "):
-                for i, x in enumerate(line.split()[1:4]):
-                    v = float(x)
-                    lo[i] = min(lo[i], v)
-                    hi[i] = max(hi[i], v)
-    return torch.tensor([[a, b, c] for a in (lo[0], hi[0]) for b in (lo[1], hi[1])
-                         for c in (lo[2], hi[2])], dtype=torch.float32)
-
-
 def build_terrain(heights: list[float]) -> tuple[TerrainImporterCfg, list[str]]:
     """单级台阶网格：flat + 每 height 的 up(坑底出生爬上)/down(台面出生走下) 两列。"""
 

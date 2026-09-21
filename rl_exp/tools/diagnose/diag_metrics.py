@@ -142,27 +142,6 @@ def load_fraction(load_n: torch.Tensor, weight_n: float) -> torch.Tensor:
     return load_n / weight_n
 
 
-def mesh_bbox_corners(obj_path) -> torch.Tensor:
-    """Bounding-box corners of a collision mesh in its link frame, shape (8, 3) [m].
-
-    Args:
-        obj_path: path to the ``<body>_collision.obj`` mesh.
-    """
-    lo = [float("inf")] * 3
-    hi = [float("-inf")] * 3
-    with open(obj_path, encoding="utf-8") as handle:
-        for line in handle:
-            if line.startswith("v "):
-                for i, x in enumerate(line.split()[1:4]):
-                    value = float(x)
-                    lo[i] = min(lo[i], value)
-                    hi[i] = max(hi[i], value)
-    return torch.tensor(
-        [[a, b, c] for a in (lo[0], hi[0]) for b in (lo[1], hi[1]) for c in (lo[2], hi[2])],
-        dtype=torch.float32,
-    )
-
-
 def mesh_vertices(obj_path) -> torch.Tensor:
     """Every vertex of a collision mesh in its link frame, shape (V, 3) [m].
 
@@ -170,11 +149,10 @@ def mesh_vertices(obj_path) -> torch.Tensor:
     asset), so its lowest point is one of these vertices: feeding them to :func:`mesh_min_z` gives
     the real ground clearance.
 
-    :func:`mesh_bbox_corners` is only a proxy of that and it *over-estimates* penetration: in the
-    link frame the box's lowest corner sits at the same height as the lowest vertex, but once the
-    body is rotated the corner is no longer a point of the body at all, so in the world frame it
-    can lie below every real surface. Use this one when the number is meant to mean "through the
-    floor"; keep the corners only where a loose upper bound is enough.
+    A bounding-box-corner reading of the same mesh over-states penetration by about ten times
+    (measured 2026-09-21 on a dragging neck: -0.052 m from corners, -0.005 m from vertices). In the
+    link frame a box corner sits at the lowest vertex's height, but once the body rotates the corner
+    is no longer a point of the body at all. That version was deleted rather than kept as an option.
 
     Args:
         obj_path: path to the ``<body>_collision.obj`` mesh.
