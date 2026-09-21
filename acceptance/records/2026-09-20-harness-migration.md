@@ -41,9 +41,7 @@
 ① v1 训练总时 25.735 h，其中 `it=11438` 单次停顿 7.2 h（做消融的时间预算依据）；
 ② "记录链的源头（tfevents）在机器本地且会被清理 ⇒ 记录必须入库"（v1.5.2 的理由）；
 ③ "别把调用路径的父目录当配置"（v1.5.1 的 provenance 串位教训）。
-**已归位（2026-09-21）**：① → `rl_exp/versions/lizard/main/v1/NOTES.md`「时间预算」节；② → `rl_exp/docs/pitfalls.md` P007；③ → 同文件 P008。本记录不再持有正文。
-**没有替它们决定去处**：三条原文保留在本记录，归位（v1 目录的 NOTES / `rl_exp/docs/pitfalls.md` /
-某条记录）留作待决项。
+**已归位（2026-09-21）**：① → `rl_exp/versions/lizard/main/v1/NOTES.md`「时间预算」节；② → `rl_exp/docs/pitfalls.md` P007；③ → 同文件 P008。**本记录不再持有正文，也不再有"去处待决"这一状态**（归位动作由 `work/closed/2026/historical-facts-homing.md` 收口，上面 ①②③ 三行只作摘要留痕）。
 
 **预算**：搬完 `work/active/` 为 19265 / 24000 字节（80%）。注意其中约 5 KB 是**另一位开发者**
 同期开的两个事项与一条记录（`baseline-eval-protocol-gap`、`eval-protocol-before-training`、

@@ -21,30 +21,64 @@
   主题 → 现行记录表 + 旧路径表。
 - **追加序的替代**：记录各自的「适用范围」写明它承载哪些旧节、作废了哪些旧读数；**9 处节间矛盾**
   以记录内前向指针保留（未在迁移中"调和"成一句新结论）。这九条已逐条核过 —— 见下「九条前向指针核验」。
-- **无损核对（可独立复验，源 commit 已固定）**：源 = `84593a7:rl_exp/versions/lizard/ACCEPTANCE.md`
-  （分流前最后一版，234,656 字节）。比对只取**机械可提取的唯一标记**，对源与 `acceptance/records/*.md`
-  逐类求集合差；2026-09-21 复跑结果：
+- **无损核对（可独立复验；源与目标两侧都固定）**：源 = `84593a7:rl_exp/versions/lizard/ACCEPTANCE.md`
+  （分流前最后一版，234,656 字节）。**目标侧语料 = 本记录实际迁出去的那些文档**：分流时路由表的 12 条主题
+  记录 + 路由文件 `rl_exp/versions/lizard/ACCEPTANCE.md` = **13 文件**。路由表在 2026-09-21 之后又加了一行
+  `2026-09-21-baseline-cfg-lock-rebaseline.md`（→ 14 文件，该记录尚未入库），**本节读数按 13 文件版**。
+  **迁移审计记录不入语料**，包括本报告自己 —— 它引用原文示例，混进来会把"记录里也有一份"当成"搬过去了"。
+  比对只取**机械可提取的唯一标记**，对源与目标语料逐类求集合差；2026-09-21（13 文件版）结果：
 
-  | 类别 | 源 | 记录 | 缺失 |
+  | 类别 | 源 | 目标语料 | 缺失 |
   |---|---|---|---|
   | `sha256:` 摘要 | 3 | 3 | **0** |
   | `[N]` 运行编号 | 32 | 32 | **0** |
-  | `N/M` 比率 | 37 | 41 | **0** |
-  | `0.x` 小数 | 25 | 35 | **0** |
+  | `N/M` 比率 | 37 | 40 | **0** |
+  | `0.x` 小数 | 25 | 25 | **0** |
   | 时间戳 | 1 | 1 | **0** |
 
-  复现方式（**无附加产物**：比对命令本身就是审阅对象；当时用的临时脚本未入库，已删）：
+  **目标版本怎么钉**：目标里有被并行批次改过的文件（`ACCEPTANCE.md` 现在就脏着），**commit 钉不住**，
+  所以钉**逐文件 blob 摘要 + 一个合并摘要**：
+  - 合并摘要规则（可复跑）：文件集合按**仓内相对路径（POSIX 正斜杠）的 UTF-8 字节序**升序；每份贡献
+    `路径 + \0 + 内容 + \0`，两者都按 UTF-8 字节；顺序拼接后取 `sha256`。
+  - 13 文件版 = `949f2a27749e8bd9fcbbda8f3f5f41f5a498bfa74284cd02080ed263011bbfcf`；
+    14 文件版（含 `2026-09-21-baseline-cfg-lock-rebaseline.md`，未入库）=
+    `ae97feb35e534675dc81e092f755938c298bfd7906aa4a5b0300cbf5b6f177b1`。
+  - 逐文件 `git hash-object` 前 12 位（13 文件版，按路径字节序，最后一项是路由文件）：
+    `2a680532e11f` `78b3e1f47e6b` `c1af8a5ce5aa` `9c1b73d3dfe1` `c6b84aca66e3` `cfdc9fe03206`
+    `65063e4a6282` `df24fe424ca7` `a6e69578ccce` `32188a8ae8c4` `bb865245d9a9` `72f87723f4ef`
+    `cd3c8a73abfc`。
+  - **摘要是一次性锚**：任一份被改（含并行批次）即失效 ⇒ 重跑本节并更新摘要，别把旧值当真。
+  - 上一版本节用的是"`acceptance/records/*.md` 全量 + 路由文件"（当时 20 文件），五类读数里
+    `N/M` 41、`0.x` 35 是把迁移审计记录算进去的结果；收窄语料后为 40 / 25，**缺失仍全为 0**。
+
+  复现方式（**无附加产物**：比对命令本身就是审阅对象；临时脚本未入库）：
 
   ```
   git show 84593a7:rl_exp/versions/lizard/ACCEPTANCE.md > src.md
-  # 与 acceptance/records/*.md 逐类求差，五类正则：
+  # 目标语料 = 下面 13 条，逐个 cat 后与源逐类求差，五类正则：
   #  sha256:[0-9a-f]{8,} | \[\d+\] | \b\d+/\d+\b | \b0\.\d+\b | \d{4}-\d{2}-\d{2}[ T]\d{2}
+  #  acceptance/records/2026-09-15-lizard-resume-payload-chain.md
+  #  acceptance/records/2026-09-16-lizard-builder-hard-a.md
+  #  acceptance/records/2026-09-16-lizard-component-library-b1.md
+  #  acceptance/records/2026-09-16-lizard-frozen-baseline-reanchors.md
+  #  acceptance/records/2026-09-16-lizard-layout-migration-lifecycle.md
+  #  acceptance/records/2026-09-16-lizard-obs-protocol-gate.md
+  #  acceptance/records/2026-09-17-lizard-entry-switch-and-declaration-gap.md
+  #  acceptance/records/2026-09-17-lizard-eval-record-and-terrain-map.md
+  #  acceptance/records/2026-09-17-lizard-hard-b-difference-declarations.md
+  #  acceptance/records/2026-09-18-lizard-mainline-run-closeout-l03.md
+  #  acceptance/records/2026-09-20-lizard-baseline-line-eol-and-fixed-window-eval.md
+  #  acceptance/records/2026-09-20-lizard-terrain-artifacts.md
+  #  rl_exp/versions/lizard/ACCEPTANCE.md
   ```
 
   **逐行核对（2026-09-21 补齐）**：迁移时报的"机械类之外有 187 行不逐字命中"是**人工过一遍**的结论，
   没有留下产物（当时的临时脚本已删）⇒ 独立核只能重做那一步。现把它改成一条**规则**，谁在仓根跑一次
-  都得同一组数。语料 = `acceptance/records/*.md` + **现行 `ACCEPTANCE.md`**（抬头的通则/用法与路由表
-  留在本文、不搬进记录，须算合法落点）。`norm(s)`：只留 `[0-9A-Za-z]` 与 CJK —— 丢 markdown 记号、
+  都得同一组数。语料 = **上面那 13 个文件**（12 条主题记录 + 路由文件 `ACCEPTANCE.md`；抬头的通则/用法
+  与路由表留在本文、不搬进记录，须算合法落点）。**迁移审计记录与报告自己不入语料** —— 它们引用原文示例，
+  会把"记录里也有一份"当成"搬过去了"。2026-09-21 复跑：13 文件版与旧的全量语料（20 文件）在**四个类上
+  得到同一组行号**（逐类集合差为空），所以下表行号对两版都成立；判据按 13 文件版。
+  `norm(s)`：只留 `[0-9A-Za-z]` 与 CJK —— 丢 markdown 记号、
   空白与**全部标点**（含 `""` 与 `「」` 互换，记录常把直引号写成直角引号）。逐行四分类，互斥且穷尽
   原文 1541 条非空行：
 
@@ -86,9 +120,16 @@
   ```python
   import re, subprocess, pathlib
   SRC = "84593a7:rl_exp/versions/lizard/ACCEPTANCE.md"
+  THEME12 = ["2026-09-15-lizard-resume-payload-chain", "2026-09-16-lizard-layout-migration-lifecycle",
+             "2026-09-16-lizard-component-library-b1", "2026-09-16-lizard-frozen-baseline-reanchors",
+             "2026-09-16-lizard-builder-hard-a", "2026-09-17-lizard-hard-b-difference-declarations",
+             "2026-09-17-lizard-entry-switch-and-declaration-gap", "2026-09-16-lizard-obs-protocol-gate",
+             "2026-09-17-lizard-eval-record-and-terrain-map", "2026-09-18-lizard-mainline-run-closeout-l03",
+             "2026-09-20-lizard-baseline-line-eol-and-fixed-window-eval", "2026-09-20-lizard-terrain-artifacts"]
+  # 语料 = 12 条主题记录 + 路由文件；迁移审计记录与报告自己不入语料（理由见上）
+  files = [f"acceptance/records/{n}.md" for n in THEME12] + ["rl_exp/versions/lizard/ACCEPTANCE.md"]
   src = subprocess.run(["git","show",SRC], capture_output=True, check=True).stdout.decode("utf-8")
-  corpus = {p.name: p.read_text(encoding="utf-8") for p in pathlib.Path("acceptance/records").glob("*.md")}
-  corpus["ACCEPTANCE.md"] = pathlib.Path("rl_exp/versions/lizard/ACCEPTANCE.md").read_text(encoding="utf-8")
+  corpus = {f: pathlib.Path(f).read_text(encoding="utf-8") for f in files}
   norm = lambda s: "".join(re.findall(r"[0-9A-Za-z\u4e00-\u9fff]+", s))
   exact = {l.strip() for t in corpus.values() for l in t.splitlines()}
   nrm   = {norm(l) for t in corpus.values() for l in t.splitlines() if norm(l)}
@@ -132,33 +173,36 @@ are kept as forward pointers inside records"，没有任何地方把它们列出
 （名字对不对、跟过去能否看到作废声明）；**不对矛盾本身表态** —— 谁对谁错是人的决定，本轮不调和、
 不改写、不新建指向。
 
-| # | 指针所在 | 指向 | 判 |
+**复核方法（2026-09-21 重跑，可复现）**：对每条指名目标的**字面文件名**做存在性检查（`acceptance/records/`
+19 份逐名枚举），再在目标记录里找它点名的**节标题**。「核验结果」一栏的语义：`resolves` = 目标记录存在
+且真的写着那件事；`open` = **这件事的工作未闭合**（不是链接无法解析）——两者都不表示矛盾已被调和。
+
+| # | 指针所在 | 指向 | 核验结果 |
 |---|---|---|---|
-| 1 | `2026-09-16-lizard-builder-hard-a.md`「适用范围」末条（L21–28） | `2026-09-17-lizard-entry-switch-and-declaration-gap.md` 的「收掉最后一条声明缺口」 | **broken** |
-| 2 | `2026-09-16-lizard-component-library-b1.md`「适用范围」（L30–31） | "上面那条记录" = `2026-09-16-lizard-frozen-baseline-reanchors.md` | resolves |
-| 3 | `2026-09-16-lizard-frozen-baseline-reanchors.md`「适用范围」第 1 条（L17–18） | `2026-09-17-lizard-entry-switch-and-declaration-gap.md`（`硬 B 只覆盖 env cfg` 的作废方） | **broken** |
-| 4 | `2026-09-16-lizard-layout-migration-lifecycle.md`「适用范围」第 1 条（L18） | `2026-09-17-lizard-entry-switch-and-declaration-gap.md` 的「生命周期收缩」 | **broken** |
-| 5 | `2026-09-16-lizard-layout-migration-lifecycle.md`「适用范围」第 2 条（L20） | 同上（入口侧读数：L02 通过、parkour 退休） | **broken** |
-| 6 | `2026-09-16-lizard-layout-migration-lifecycle.md`「适用范围」第 4 条（L23–25） | `2026-09-16-lizard-frozen-baseline-reanchors.md` 的「B0 追加②/③」 | resolves |
-| 7 | `2026-09-16-lizard-obs-protocol-gate.md`「适用范围」第 3 条（L22–25） | "`2026-09-16-lizard-layout-migration-lifecycle.md` **之后**的入口批次" | **ambiguous** |
+| 1 | `2026-09-16-lizard-builder-hard-a.md`「适用范围」末条（L21–28） | `2026-09-17-lizard-entry-switch-and-declaration-gap.md` 的「收掉最后一条声明缺口」 | resolves（该节 L219） |
+| 2 | `2026-09-16-lizard-component-library-b1.md`「适用范围」（L30–31） | "上面那条记录" = `2026-09-16-lizard-frozen-baseline-reanchors.md` | resolves（该节 L127） |
+| 3 | `2026-09-16-lizard-frozen-baseline-reanchors.md`「适用范围」第 1 条（L17–18） | `2026-09-17-lizard-hard-b-difference-declarations.md`（`硬 B 只覆盖 env cfg` 的作废方） | resolves（该记录 L17–19 就是作废声明） |
+| 4 | `2026-09-16-lizard-layout-migration-lifecycle.md`「适用范围」第 1 条（L18） | `2026-09-17-lizard-entry-switch-and-declaration-gap.md` 的「生命周期收缩」 | resolves（该节 L137） |
+| 5 | `2026-09-16-lizard-layout-migration-lifecycle.md`「适用范围」第 2 条（L20） | 同上（入口侧读数：L02 通过、parkour 退休） | resolves（「入口切换」节 L100） |
+| 6 | `2026-09-16-lizard-layout-migration-lifecycle.md`「适用范围」第 4 条（L23–25） | `2026-09-16-lizard-frozen-baseline-reanchors.md` 的「B0 追加②/③」 | resolves（L93 / L105） |
+| 7 | `2026-09-16-lizard-obs-protocol-gate.md`「适用范围」第 3 条（L22–25） | "`2026-09-16-lizard-layout-migration-lifecycle.md` **之后**的入口批次" | **open（不是指针错）** —— 那个批次没做过；现状与入口见 `work/active/obs-three-tables-merge.md` |
 | 8 | `2026-09-17-lizard-entry-switch-and-declaration-gap.md`「适用范围」第 3 条（L23–28） | `2026-09-16-lizard-builder-hard-a.md`（ClassVar 两条读法的另一半） | resolves |
 | 9 | `2026-09-17-lizard-hard-b-difference-declarations.md`「适用范围」第 1 条（L17–19） | `2026-09-16-lizard-frozen-baseline-reanchors.md`（`硬 A 前置未满足`） | resolves |
 
-- **broken ×4（#1 #3 #4 #5）**：四处都写成 `2026-09-17-lizard-entry-switch-and-declaration-gap.md`，而**该文件名在
-  任何历史里都不存在** —— `git log --all --name-only --diff-filter=AD` 查不到这个路径，`37e5df6` 落的
-  文件就叫 `2026-09-17-lizard-entry-switch-and-declaration-gap.md`。四处想指的内容确实在那份记录里
-  （#1 → `### 收掉最后一条声明缺口`；#4 → `### 生命周期收缩：删掉未接线的一半判定机件`；#5 → 该记录
-  「入口切换」的边界与 L02 补记）。**#3 还多错一层**：`硬 B 只覆盖 env cfg` 的作废方按本文抬头是
-  `2026-09-17-lizard-hard-b-difference-declarations.md`，不是入口切换记录。**未修**（改名属人的决定）。
-- **ambiguous ×1（#7）**：指的不是记录，而是"某记录**之后**的入口批次"；跟过去落在
-  `2026-09-16-lizard-layout-migration-lifecycle.md`，那份记录**没有**作废或闭合这句话（其「未覆盖边界」
-  仍把它记为开项）⇒ 读者到不了"作废声明"。**缺的是**：该动作最终落在哪份记录、有没有落地。
-- **resolves ×4（#2 #6 #8 #9）**：指名的记录都在，目标节也真的写着这件事（#2 → frozen 记录
-  `### B0 结论文更新：B3 前置**已解锁**`；#6 → `### B0 追加②`/`③`；#8 → hard-a 记录「适用范围」第 3 条，
-  两边各持一半、都声明未在同一句区分；#9 → frozen 记录「适用范围」第 1 条明写`硬 A 前置未满足`被判
-  `自此失效`）。
-- 附注：`ACCEPTANCE.md` 抬头「通读口径」用的是**正确文件名**（`…entry-switch-and-declaration-gap.md`），
-  所以 dangling 只出现在三份记录里 —— 同一份文档在本文与记录里被叫了两个名字。
+- **更正：上一版判的 `broken ×4`（#1 #3 #4 #5）不成立，原结论作废（原文保留在上一版里）**。上一版写
+  "四处都写成 `…entry-switch-and-declaration-gap.md`，而该文件名在任何历史里都不存在"，同时又在下一句
+  写"内容实际落在 `…entry-switch-and-declaration-gap.md`" —— 两处是**同一个串**。重跑：`acceptance/records/`
+  19 份逐名枚举只有这一个文件名，近似的第二名不存在；`git log --all --name-only --diff-filter=AD` 亦然。
+  那条结论来自**与预期名比较**而不是**与文件系统比较**。**#3 的"还多错一层"同样不成立**：frozen 记录
+  L17–18 指的就是 hard-B 记录（上一版表里 #3 的"指向"一栏抄错了文件名）。
+- **复核后的分布：8 resolves / 1 open / 0 broken / 0 dangling。**
+- **#7 保留为唯一未闭合项，但改判性质**：它指的不是一份记录，而是"某记录**之后**的入口批次"，该批次
+  **从未做过**，所以两侧都没有作废声明可到 —— `…layout-migration-lifecycle.md` 没收它，真正的现状在
+  `2026-09-16-lizard-builder-hard-a.md:266`「**obs 三表合口未做**：条件已满足（用户已定"要合"），但落地
+  须在 builder 改动静下来之后、一次落」。**这不是指针写错，是这件事仍开着**，且它当前**没有** `work/`
+  事项承载（见「未覆盖边界」）。
+- 附注：`ACCEPTANCE.md` 抬头与三份记录用的是**同一个**文件名；上一版"同一份文档被叫了两个名字"的说法一并作废。
+- **本次只做复核与更正，不改任何记录里的指向文字**（九条指针本身没坏，坏的是上一版的判词）。
 
 ## 证据引用
 
@@ -188,16 +232,17 @@ are kept as forward pointers inside records"，没有任何地方把它们列出
   **不证明**"某个读数被抄写时抄对了" —— 后者只有读记录里那条读数本身、或对着当日 commit 复跑才成立。
   这两层也不等于此后新增记录被同样核过。
 - 原文的「本文用法」里"未闭合项无对应挂账行"那份清单（如 `社会控制`、`静默跳过`、`不可复跑`、
-  `首回合失败`）现在分散在各记录的「未覆盖边界」里；**要问"还剩什么没做"仍要同时翻三处**
-  （PLAN / HARNESS / 各记录），这个代价没有降低，只是位置更明确了。
+  `首回合失败`）现在分散在各记录的「未覆盖边界」里；**要问"还剩什么没做"要翻三处，且 `work/` 目前
+  并没有覆盖全部未闭合项**（已知例：obs 三张手抄表合口只活在 `2026-09-16-lizard-builder-hard-a.md` 的
+  未覆盖边界里，已另立 `work/active/obs-three-tables-merge.md` 承接；清单里其余几条尚未逐条核过是否
+  都进了 `work/`）。这个代价没有降低，只是位置更明确了；在逐项承接完成前**不得**宣称"未闭合项都在
+  `work/` 里"。
 - 记录总量比原文**更大**（236719 → 约 297 KB）：每条自带适用范围与未覆盖边界。省的是默认读取
   （原文不再被通读），**不是磁盘**。
 - 迁移未替人决的事：归档位置替代仍"需用户确认"；9 处矛盾保留为指针、未调和 —— **矛盾本身仍由人定，
-  本轮只核指针**。九条已逐条核过（表在「结果」节）：**4 条 resolves、1 条 ambiguous、4 条 broken**。
-  broken 的四处写成 `2026-09-17-lizard-entry-switch-and-declaration-gap.md`，**该文件名在全部历史里都不存在**
-  （`git log --all --name-only --diff-filter=AD` 无此路径），内容实际落在
-  `2026-09-17-lizard-entry-switch-and-declaration-gap.md`；ambiguous 的那一条指向"某记录之后的入口
-  批次"，跟过去落在的记录里记的是开项、不是作废声明。**本记录不修这四条指针**（改名与调和不属迁移）；
-  dangling 只在三份记录内，`ACCEPTANCE.md` 抬头用的是正确文件名。
+  本轮只核指针**。九条已逐条核过（表在「结果」节「核验结果」栏）：**8 resolves、1 open、0 broken**。
+  上一版记的"4 条 broken"**已作废**（复核证明九条目标都存在；上一版把同一个文件名同时当成"不存在"与
+  "实际落点"）。`open` 那一条（#7）指的不是链接坏了，而是**那件事没做过**：现状与入口见
+  `work/active/obs-three-tables-merge.md`。**本记录不改任何记录里的指向文字**（指针本身没坏）。
 - 两处格式已在「证据引用」节写明具体差异（见该节末条）；逐行无损核对的方法、行号与命令也在
   「结果」节，`187 行`那一步已由可复跑规则替代。

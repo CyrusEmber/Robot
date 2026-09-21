@@ -57,16 +57,19 @@ close_when: 三批各自验收通过并留下记录即关。每批的验收（�
 判据段存在，语义靠评审） / 文档体积等于 token 节省 / 单次对照可外推全仓 / AI 实际会读归档。
 前几项需要评审，闸门只能让"便宜路径 = 正确路径"。
 
-## 未做完的动作已另立活跃事项（关闭规则：动作不随事项一起关闭）
+## 未做完的动作已另立事项（关闭规则：动作不随事项一起关闭）
 
-- 三段历史事实归位 → `work/active/historical-facts-homing.md`
-- 代码注释与 docstring 的旧指针（五处） → `work/active/stale-doc-pointers-in-code.md`
-- FAMILY 版本史行与 FILEMAP 版本目录行的身份重叠 → `work/active/family-filemap-identity-overlap.md`
+- 三段历史事实归位 → `work/closed/2026/historical-facts-homing.md`（**已关**，2026-09-21）
+- 代码与配置里的旧指针 → `work/active/stale-doc-pointers-in-code.md`（**活跃**；2026-09-21 按实测重写为
+  「1 处硬错 + 7 处旧编号」，本项正文里"五处硬错"的旧口径随之作废）
+- 版本身份重叠（FAMILY 版本史行 vs FILEMAP 版本目录行） → `work/closed/2026/family-filemap-identity-overlap.md`
+  （**已关**，2026-09-21）
 - 两个阈值的职责与取值理由写在闸门常量旁（`--list` 输出 = 默认发现成本；活跃总量 = 积压警报），
   不在本项留副本。
 - 迁走后仍需人拍板的决定（五处）与待查事实（一处：本仓不存在的 C++ 层）已在批 2 的记录与对应活跃事项里，
   见 `acceptance/records/2026-09-21-plan-migration.md`；`HARNESS.md` 的内部矛盾已随批 1 消解
-  （`eval.py` 的 `--protocol` 默认值 = v3）。
+  （`eval.py` 的 `--protocol` 默认值 = v3）。**注意路径会随事项关闭而变**：本表给的是 2026-09-21 的位置，
+  事项关闭后查 `work/closed/<年>/`。
 
 ## 未覆盖边界
 
