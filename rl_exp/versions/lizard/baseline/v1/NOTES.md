@@ -162,8 +162,19 @@ python scripts\reinforcement_learning\rsl_rl\train.py --task Lizard-Baseline-Fla
 开训前：`check_cfg_lock.py --update --line lizard/baseline --reason "..."` 建本线 golden，
 并打 tag `lizard-baseline-v1`。工作树必须干净（脏树开训被 `run_manifest.begin` 硬拒）。
 
-**实跑**：命令行、覆盖参数、seed 与 checkpoint 以运行记录为准（`rl_exp/tools/runrecord/manifest.py`
-的 T0/T1），本节不复述；run 与结果见下节。
+**实跑**：`logs/rsl_rl/lizard_baseline_v1/2026-09-20_12-23-09`（相对 IsaacLab 根；根由 `paths.yaml`
+解析，模板 `paths.example.yaml`）。**同名 run 有 5 个**（`2026-09-17_17-02-03`、`17-15-12`、
+`2026-09-18_18-31-08`、`2026-09-20_12-20-22`、`12-23-09`）：只写 `lizard_baseline_v1` 指向的是目录，
+不是那一次跑。
+
+**这一次的记录是半截的，照实写**（`python -m rl_exp.tools.runrecord.manifest --verify <run 目录>`
+报 3 条 BLOCKING）：`pre_make` 阶段崩于 `AttributeError: 'NoneType' object has no attribute 'strip'`
+⇒ 无 T1、`stages` 只到 `env_constructed`、**没有 argv、没有 repo rev**，`checkpoints.json` 119 条的
+`t1_sha256` 全为 `null`。仍在的是 `params/env.yaml` + `params/agent.yaml`（配方与 seed 的实际值）和
+`git/IsaacLab.diff`；结果的可复现锚是评测报告自带的那行 provenance（`rev = 2a07c881bc0b`），**不是**
+这次 run 的记录。同日同机制的 teacher run（14:45 起）记录完整 ⇒ 这是 2026-09-20 12 点那次代码状态的
+产物，不是机制的常态；baseline 线此后没再起过 run，**下一次启动（v2）是第一次复验**，见
+`work/active/baseline-pre-make-record-check.md`。
 
 ## 结果回填（首跑，2026-09-20）
 
