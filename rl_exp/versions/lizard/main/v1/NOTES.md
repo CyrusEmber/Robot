@@ -127,3 +127,11 @@
   `handle_deprecated_rsl_rl_cfg` 迁移，rsl-rl 5.4.2 拒绝 legacy `stochastic` 字段
   → checkpoint 路径直接 `TypeError`（08-31 冒烟是零动作策略，从未走过该路径）。
   已修 `ablation_harness\eval.py` `_prepare_env`（harness v1.1）。
+
+## 时间预算（消融排期依据；2026-09-21 自查补记）
+
+- 本次训练：**总墙钟 25.735 h**（14000 iters），其中 `it=11438` 处**单次停顿 7.2 h**（非训练本身）。
+- 用法：估算消融前先按此量级排期 —— 一条 14k-iter 跑约 26 h，且**含一次数小时的停顿**，
+  按"纯算力时间"估算会低估约 30%。
+- 来源：原 `ablation_harness/HARNESS.md` 版本史 v1.4.1 行。批 1 删除那份版本史时它失去了唯一副本，
+  于 2026-09-21 归位到此（事实未改，只是换了家）。
