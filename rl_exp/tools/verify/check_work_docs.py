@@ -45,6 +45,16 @@ An item is front matter plus a free body::
     superseded_by: <item id or mechanism path>   # when status is superseded
     ---
 
+``status`` describes the work, not today: ``active`` means "not closed yet", which is **not** the
+same as "being executed now". ``open`` = there is an unfinished action that could start and has
+not; ``in_progress`` = it is being executed; ``blocked`` = unfinished, waiting on a decision, a
+schedule slot or a prerequisite, and it names **who lifts what**. A human's decision is still an
+action -- waiting on the user is ``blocked``, and "not this round" is not a cancellation. Close
+when there is neither an unfinished action nor a pending question: ``done`` if it was finished,
+``cancelled`` with its reason if it was decided against, ``superseded`` pointing at the item or
+mechanism that took it over. Nothing closes to get under a byte budget, and "nobody is touching
+it today" is not a close condition.
+
 The body states the current situation only: no superseded states, no copy of a number or a
 digest whose owner is elsewhere, no restatement of a rule that lives in a mechanism.
 
@@ -102,7 +112,8 @@ _CLOSED_ONLY = ("outcome",)
 #: bytes for 8 items (179 per line) once the list stopped carrying ``next``; before that it was
 #: 4638. 4096 leaves room for the ~25 items the two sessions are heading for and still expires
 #: around 4 KB, where the remedy is to narrow the view -- never to cancel an item.
-LIST_BYTES = 4096
+#: Raised 4096 -> 5120 on 2026-09-21 with the active-set budget above (27 items, 4234 bytes).
+LIST_BYTES = 5120
 #: Total bytes of ``work/active/``. A backlog alarm, **not** the default read cost (items are read
 #: on demand) and not a token budget: nobody reads the sum. It stays quiet during ordinary work
 #: and speaks up when the backlog itself is the problem. Raised 24000 -> 48000 on 2026-09-21
@@ -110,8 +121,17 @@ LIST_BYTES = 4096
 #: bloat), then 48000 -> 52000 the same day because the migration tail added items that carry
 #: pinned white-lists -- measured 48434 bytes over 23 items, biggest contributor 4915, and
 #: trimming further would have deleted the very pinning information those items exist to hold.
+#: Raised 52000 -> 56000 on 2026-09-21: the cfg-lock volume question landed as a 26th item on a
+#: ledger already at 99% -- measured 51625 bytes over the previous 25, and measured 53873 over 26.
+#: That item holds a "do not do this" verdict and the conditions that would reverse it, so a trim
+#: deletes the thing it exists to hold; the ``--list`` alarm was instead brought back under its own
+#: budget by shortening that item's line, not by raising LIST_BYTES.
+#: Raised 4096 -> 5120 and 56000 -> 64000 on 2026-09-21: the eval-pipeline restructure split one
+#: item into an umbrella plus a widened trust item plus a tightened attribution item (27 active,
+#: measured 59228 bytes; --list 4234). The owner decided this round follows the work, not the
+#: budget, and the three items each hold verdicts and measurements that a trim would delete.
 #: Raise it by hand with a reason written here, never from inside a run.
-BUDGET_BYTES = 52000
+BUDGET_BYTES = 64000
 
 _SHA = re.compile(r"\bsha256:[0-9a-fA-F]{8,}")
 
