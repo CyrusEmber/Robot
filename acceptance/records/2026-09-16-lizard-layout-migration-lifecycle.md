@@ -15,9 +15,9 @@
 
 - §2.1 的 **L06 行与「时钟无关性」一条**在 2026-09-17 被判**作废**（弃用声明层删除 ⇒ 闸门无时钟，
   反证集由 23+1 例变为 16 例）；L01/L05 行的规则仍有效（`index:` 打印的字段少了 `revision`，该字段同轮删除）。
-  作废它的**生命周期收缩**节正文归 `2026-09-17-lizard-hard-b-entry-switch.md`，本记录只留作废声明。
+  作废它的**生命周期收缩**节正文归 `2026-09-17-lizard-entry-switch-and-declaration-gap.md`，本记录只留作废声明。
 - §2.1 / §2.1b 的「L02/L03/L04 与 L05/L06 的入口侧未跑 ⇒ 未知」是**当日**口径；入口侧的后续读数
-  （含 L02 通过、parkour 退休）归 `2026-09-17-lizard-hard-b-entry-switch.md`，以那一条为准。
+  （含 L02 通过、parkour 退休）归 `2026-09-17-lizard-entry-switch-and-declaration-gap.md`，以那一条为准。
 - §2.4 的两段「回填」是同一动作的前后两稿：`### 回填（执行后）` 为空标题，`### 回填（执行后，2026-09-16）`
   是实稿；本记录只留实稿，不保留空标题。
 - §2.4 收尾 的 step 2a（26 条 `env_cfg_class` 定点搬移）**逐字段证据在 B0 追加②**，该子节按主题归
@@ -101,7 +101,7 @@ A0 会触碰 16 个冻结物，所以先落"允许变化清单"**再执行** —
 | L06 迁移生效（离线半边） | `python rl_exp\tools\verify\test_recipe_registry_gate.py` | **通过**：23 例反证 + 1 例时钟无关性全部着火。提示期（`active` + 声明 + 条件未满足）判绿、`retired` 且条件已满足判绿、提前退休判红、到期仍 `active` 判红、自由文本条件判红。"提示期放行结果与无声明 `active` 逐项相同"需入口侧 ⇒ **未知** |
 | 反证先行 | 同上 | 每条拒绝都由合成树 + 合成索引驱动，未触碰真实索引；`retire_not_before` 为 revision 型时同一索引在两个不同日期判据一致（无时钟依赖） |
 
-> **2026-09-17 收缩**：上表 L06 行与"时钟无关性"一条**作废**（弃用声明层删除 ⇒ 闸门无时钟，反证集由 23+1 例变为 16 例；作废它的「生命周期收缩」节正文归 `2026-09-17-lizard-hard-b-entry-switch.md`）。L01/L05 行的规则仍有效（`index:` 打印的字段少了 `revision`，规则未变 —— 该字段同轮删除）。
+> **2026-09-17 收缩**：上表 L06 行与"时钟无关性"一条**作废**（弃用声明层删除 ⇒ 闸门无时钟，反证集由 23+1 例变为 16 例；作废它的「生命周期收缩」节正文归 `2026-09-17-lizard-entry-switch-and-declaration-gap.md`）。L01/L05 行的规则仍有效（`index:` 打印的字段少了 `revision`，规则未变 —— 该字段同轮删除）。
 
 **§2.1 结论与边界**：
 
@@ -307,7 +307,7 @@ rough 的训练 cfg 读到 PLAY 的 5×5 网格，`10 → 5` 硬 A 的字段比�
 | 逐字节复原（sha256 相同） | rc=0 · `RECIPE_BUILD_OK (34 task(s) …)` |
 
 **边界**：parkour 2 条仍走类路径（退役线，且它是拒绝路径的**唯一活体夹具**，见
-`2026-09-17-lizard-hard-b-entry-switch.md` 的 L02 记录）；这 4 条仍**无 `diff.json`**；
+`2026-09-17-lizard-entry-switch-and-declaration-gap.md` 的 L02 记录）；这 4 条仍**无 `diff.json`**；
 家族 obs 宽度仍未实测（旧账，属 Step 3.1 那一支，后由
 `2026-09-16-lizard-obs-protocol-gate.md` 的 §3.1e 补账关掉）。
 
@@ -351,7 +351,7 @@ rough 的训练 cfg 读到 PLAY 的 5×5 网格，`10 → 5` 硬 A 的字段比�
   不在 `[41]` 循环里（后由追加②/③把家族 8 条纳入，**parkour 2 条仍在外**）。
 - **家族面未闭合项（仍开着）**：
   - 家族 4 条（`rough-v0` / `curriculum-flat-v0` / `curriculum-rough-v0` / `flat-v0`）在翻表时仍**无 `diff.json`**；
-    其中三条后由 `2026-09-17-lizard-hard-b-entry-switch.md` 的「硬 B 追加（2026-09-18）」补上，
+    其中三条后由 `2026-09-17-lizard-entry-switch-and-declaration-gap.md` 的「硬 B 追加（2026-09-18）」补上，
     `flat-v0` 按先例保持 hard A-only。
   - **家族 obs 宽度未实测**（旧账），后由 `2026-09-16-lizard-obs-protocol-gate.md` 的 §3.1e 补账关掉；
     在本次读数当日仍为开项。

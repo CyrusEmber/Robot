@@ -15,7 +15,7 @@
 - **`硬 A 前置未满足`（§B0 · 等价性验证的结论）被判`自此失效`** —— 作废它的是本记录末尾的
   「B0 结论文更新：B3 前置**已解锁**」小节（原文保留作留痕，以该小节为准）。这是本次 ACCEPTANCE
   分流里两条已知作废之一（另一条是 `硬 B 只覆盖 env cfg`，见
-  `2026-09-17-lizard-hard-b-entry-switch.md`）。
+  `2026-09-17-lizard-hard-b-difference-declarations.md`）。
 - **四次重锚的性质不同，读的时候别混**：
   - **追加①** 是"搬家：内容零变化、摘要不变"（只改 `FROZEN` 表的**路径**）。
   - **追加②③** 是"改了一个列"（`env_cfg_class`）⇒ 摘要随之改变，但**配方内容一字未动**，**未跑 `--update`**。
@@ -26,7 +26,7 @@
 **与其它记录的关系**：
 
 - `FROZEN` 表的第 4 项（baseline 线的锁）由
-  `2026-09-17-lizard-hard-b-entry-switch.md` 的「B4 · 硬 B 加齿」③ 加入 —— 在那之前 baseline 锁
+  `2026-09-17-lizard-entry-switch-and-declaration-gap.md` 的「B4 · 硬 B 加齿」③ 加入 —— 在那之前 baseline 锁
   **没有摘要看守**；本记录的 §B0 只钉 3 份文件。
 - 重锚②③ 的触发动作（版本类体删除、家族四配方翻表）的证据在
   `2026-09-16-lizard-layout-migration-lifecycle.md`。
@@ -174,7 +174,7 @@
     `FROZEN_REVS` 该行在提交前填 `v1.1 (pending commit)`。
 - **未闭合项（仍开着）**：
   - `baseline` 线的锁在本记录成文时**不在 `[35]` 的 FROZEN 表里** ⇒ "这条线的 golden 被移动"当时
-    **没有摘要看守**；由 `acceptance/records/2026-09-17-lizard-hard-b-entry-switch.md` 的
+    **没有摘要看守**；由 `acceptance/records/2026-09-17-lizard-entry-switch-and-declaration-gap.md` 的
     「B4 · 硬 B 加齿」③ 补上（该记录同时记着这是"最值钱"的一条债）。
   - A 带遗留项（`baseline` 线落点未跟踪、36 vs 34 计数差异、参数加载读模块）在本记录内**未收口**。
 - **口径边界**：历史 `[N]` 是当次运行编号而非闸门身份；`GOLDEN_FROZEN_OK` 一类横幅的

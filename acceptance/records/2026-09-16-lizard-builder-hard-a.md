@@ -19,10 +19,10 @@
   在 v5 一节落地为**打印**形态（`[41]` 每次运行都打印，不判红），到收尾一节升级为**台账**
   （`EXPECTED_GAPS` 按 ClassVar 名给理由 + 到期）——以收尾一节为准。
 - **ClassVar 缺口的两条读法不能混**（本记录与
-  `2026-09-17-lizard-hard-b-entry-switch.md` 各有一半，两条都未在同一句里区分）：
+  `2026-09-17-lizard-entry-switch-and-declaration-gap.md` 各有一半，两条都未在同一句里区分）：
   - 本记录 v6–v14 一节的边界写着「**ClassVar 真缺口未修**，且现在覆盖 v5–v14 全部 18 个任务」
     —— 那是**读取侧**（`REQUIRES_CURRICULUM_STATE` 的四个读者走 `getattr(type(cfg), …)`）。
-  - `2026-09-17-lizard-hard-b-entry-switch.md` 的「收掉最后一条声明缺口」一节写着
+  - `2026-09-17-lizard-entry-switch-and-declaration-gap.md` 的「收掉最后一条声明缺口」一节写着
     「**输出里不再有任何 ClassVar 缺口行**」—— 那说的是**台账打印**（`EXPECTED_GAPS` 清空），
     **不是**读取侧缺口被修。
   ⇒ 两句都对，指的不是同一件事；读"ClassVar 到底修没修"必须同时看这两条。
@@ -247,7 +247,7 @@ classvar the declaration cannot carry: REQUIRES_CURRICULUM_STATE: False != 'not 
 - obs 三表 vs `obs_protocols.json` 的合口条件：见
   `acceptance/records/2026-09-16-lizard-obs-protocol-gate.md`（§3.1 第 11 条）。
 - 逐元素归属的替代来源（翻表后）：各配方的 `rl_exp/versions/lizard/main/vN/diff.json`，
-  见 `acceptance/records/2026-09-17-lizard-hard-b-entry-switch.md`。
+  见 `acceptance/records/2026-09-17-lizard-entry-switch-and-declaration-gap.md`。
 - 提交：`3360642`（v5 起的元素化批次）；套件整跑 `offline_suite.py` → `43/43`。
 
 ## 未覆盖边界
