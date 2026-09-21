@@ -9,7 +9,7 @@ import pathlib
 import isaaclab.sim as sim_utils
 from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets import ArticulationCfg
-from isaaclab.managers import RewardTermCfg as RewTerm, SceneEntityCfg
+from isaaclab.managers import RewardTermCfg as RewTerm, SceneEntityCfg, TerminationTermCfg as DoneTerm
 
 from rl_exp.tasks import baseline_env_cfg, baseline_mdp, recipe_params
 from rl_exp.tasks.play_utils import apply_play_wiring
@@ -158,12 +158,28 @@ def baseline_rewards(cfg) -> None:
 
 
 def baseline_base_contact(cfg) -> None:
-    """On flat ground base contact means the robot is down, so "survival" has a definition and
-    belly-sliding forward -- which the tracking term would pay for -- is a failure."""
+    """Down means the episode is over: base contact is the framework term, and any *guarded* body
+    the yaml names is added as a dwell term of this line's own.
+
+    v1 declares only ``base_link``, so its resolved cfg is untouched by the guard path existing.
+    v2 also guards the head chain (chest/neck) at 10% of body weight for 0.5 s -- the reading this
+    repo already applies when diagnosing a rollout, enforced during training instead of only
+    reported after it."""
+    terminations = _doc(cfg)["terminations"]
     cfg.terminations.base_contact.params["sensor_cfg"] = SceneEntityCfg(
         "contact_forces", body_names=[_doc(cfg)["robot"]["base_body_name"]]
     )
-    cfg.terminations.base_contact.params["threshold"] = _doc(cfg)["terminations"]["base_contact_threshold"]
+    cfg.terminations.base_contact.params["threshold"] = terminations["base_contact_threshold"]
+    guard = terminations.get("contact_load_guard")
+    if guard:
+        cfg.terminations.head_load_contact = DoneTerm(
+            func=baseline_mdp.ContactLoadDwellTerm,
+            params={
+                "sensor_cfg": SceneEntityCfg("contact_forces", body_names=guard["body_names"]),
+                "load_fraction_of_weight": guard["load_fraction_of_weight"],
+                "dwell_s": guard["dwell_s"],
+            },
+        )
 
 
 def baseline_no_curriculum(cfg) -> None:

@@ -17,8 +17,48 @@ It does not import the teacher: intentional changes to main must not redefine th
 
 import torch
 
-from isaaclab.managers import SceneEntityCfg
+from isaaclab.managers import ManagerTermBase, SceneEntityCfg, TerminationTermCfg
 from isaaclab.utils.math import quat_apply_inverse, yaw_quat
+
+
+class ContactLoadDwellTerm(ManagerTermBase):
+    """Terminate once the guarded bodies carry more than a fraction of body weight for ``dwell_s``.
+
+    A threshold on its own is not a gait criterion: every body takes a load for a frame when the
+    robot lands. What the dwell window separates is a body used as a *support* -- that pose
+    persists, and v1's trained checkpoint is the case in point (``neck_pitch`` carried 82-90 N,
+    11.6-12.8% of the 706 N body weight, while the head scraped the floor). The criterion and its
+    numbers
+    are the ones this repo already applies when reading a rollout (v10 ``DIAGNOSE.md``: chest or
+    neck normal force above 10% of body weight, sustained 0.5 s); here they end the episode
+    instead of only being reported.
+
+    The counter clears when the load clears and on every episode reset -- ``TerminationManager``
+    calls ``reset(env_ids)`` on stateful terms, the same contract ``teacher_mdp.RollOverTerm``
+    relies on (this module keeps its own copy: intentional changes to main must not redefine this
+    line).
+    """
+
+    def __init__(self, cfg: TerminationTermCfg, env):
+        super().__init__(cfg, env)
+        robot = env.scene["robot"]
+        self._ids = torch.tensor(cfg.params["sensor_cfg"].body_ids, dtype=torch.long, device=robot.device)
+        # body weight from the masses, not from a measured contact sum: a transient reads high
+        self._weight_n = float(robot.data.body_mass.torch[0].sum().item() * 9.81)
+        self._steps = torch.zeros(env.num_envs, dtype=torch.long, device=robot.device)
+
+    def __call__(self, env, sensor_cfg: SceneEntityCfg, load_fraction_of_weight: float = 0.1,
+                 dwell_s: float = 0.5) -> torch.Tensor:
+        forces = env.scene[sensor_cfg.name].data.net_forces_w.torch[:, self._ids, 2]
+        loaded = (forces > load_fraction_of_weight * self._weight_n).any(dim=1)
+        self._steps = torch.where(loaded, self._steps + 1, torch.zeros_like(self._steps))
+        return self._steps >= max(1, int(round(dwell_s / env.step_dt)))
+
+    def reset(self, env_ids=None) -> None:
+        if env_ids is None:
+            self._steps.zero_()
+        else:
+            self._steps[env_ids] = 0
 
 
 def miki_tracking_kernel(

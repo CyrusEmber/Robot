@@ -42,6 +42,42 @@ def test_belly_uses_sensor_ids_and_force_scale():
     assert mdp.belly_contact_force(env, cfg, 6.0).item() == 2.0
 
 
+def test_contact_load_dwell_term():
+    """The guard fires on a *held* load, not on a landing transient, and only on its own bodies."""
+    forces = torch.zeros(1, 3, 3)
+    stub = NS(
+        step_dt=0.02, num_envs=1,
+        scene={"robot": NS(data=NS(body_mass=NS(torch=torch.tensor([[10.0]]))), device=torch.device("cpu")),
+               "contact_forces": NS(data=NS(net_forces_w=NS(torch=forces)))},
+    )
+    cfg = NS(params={"sensor_cfg": NS(name="contact_forces", body_ids=[1])})
+    term = mdp.ContactLoadDwellTerm(cfg, stub)
+    weight_n = 10.0 * 9.81
+    load = dict(sensor_cfg=cfg.params["sensor_cfg"], load_fraction_of_weight=0.1, dwell_s=0.5)
+    def force(newtons: float) -> None:
+        forces.zero_()
+        forces[:, 1, 2] = newtons
+    dwell_steps = int(round(0.5 / 0.02))
+
+    force(0.5 * weight_n)  # a frame of full weight: a landing, not a support
+    assert not term(env=stub, **load).item()
+    force(0.0)
+    assert not term(env=stub, **load).item(), "the counter must reset when the load clears"
+
+    force(0.2 * weight_n)  # 20% of body weight, held
+    fired = [term(env=stub, **load).item() for _ in range(dwell_steps)]
+    assert not any(fired[:-1]), "must not fire before the dwell window elapses"
+    assert fired[-1], "must fire once the load has been held for dwell_s"
+
+    term.reset(torch.tensor([0]))
+    force(0.2 * weight_n)
+    assert not term(env=stub, **load).item(), "reset must clear the counter"
+
+    forces.zero_()
+    forces[:, 0, 2] = 5.0 * weight_n  # a body the guard does not name
+    assert not any(term(env=stub, **load).item() for _ in range(dwell_steps + 1))
+
+
 def main():
     for name, test in sorted(globals().copy().items()):
         if name.startswith("test_"):

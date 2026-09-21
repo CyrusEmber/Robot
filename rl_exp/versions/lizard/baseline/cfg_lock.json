@@ -1,9 +1,9 @@
 {
  "lock_format": 3,
  "note": "recipe golden of line 'lizard/baseline': entry keys are '<combination>|<task id>' and a training run never adds one",
- "reason": "v2 gets its own runner cfg: separate log directory (one version, one log dir) and max_iterations declared as intended instead of overridden at launch",
- "reason_at": "2026-09-21T15:08:35+08:00",
- "reason_rev": "9124463c06a4",
+ "reason": "v2 third variable: guarded contact termination (chest/neck above 10% of body weight for 0.5 s ends the episode)",
+ "reason_at": "2026-09-21T15:15:09+08:00",
+ "reason_rev": "3918a6ddc037",
  "entries": {
   "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard-Baseline-Flat-Play-v1": {
    "version": "v1",
@@ -1556,7 +1556,7 @@
    "version": "v2",
    "env_cfg_class": "rl_exp.tasks.recipe_tasks:BaselineFlatV2EnvCfg_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardBaselineV2PPORunnerCfg",
-   "digest": "b81d509958a0b153110fab3a555593fb4870293aae470f3097a7a41f784558de",
+   "digest": "768e9d7bc3c8b56a2873088838d2854b96488b7974e6219de56eb905ab84e225",
    "snapshot": {
     "env": {
      "viewer": {
@@ -2845,6 +2845,55 @@
          "preserve_order": false
         },
         "threshold": 1.0
+       },
+       "time_out": false
+      },
+      "head_load_contact": {
+       "func": {
+        "__type__": "rl_exp.tasks.baseline_mdp.ContactLoadDwellTerm"
+       },
+       "params": {
+        "sensor_cfg": {
+         "name": "contact_forces",
+         "joint_names": null,
+         "joint_ids": {
+          "__slice__": [
+           null,
+           null,
+           null
+          ]
+         },
+         "fixed_tendon_names": null,
+         "fixed_tendon_ids": {
+          "__slice__": [
+           null,
+           null,
+           null
+          ]
+         },
+         "body_names": [
+          "chest_.*",
+          "neck_.*"
+         ],
+         "body_ids": {
+          "__slice__": [
+           null,
+           null,
+           null
+          ]
+         },
+         "object_collection_names": null,
+         "object_collection_ids": {
+          "__slice__": [
+           null,
+           null,
+           null
+          ]
+         },
+         "preserve_order": false
+        },
+        "load_fraction_of_weight": 0.1,
+        "dwell_s": 0.5
        },
        "time_out": false
       }
@@ -4649,7 +4698,7 @@
    "version": "v2",
    "env_cfg_class": "rl_exp.tasks.recipe_tasks:BaselineFlatV2EnvCfg",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardBaselineV2PPORunnerCfg",
-   "digest": "5ccbd94858ab6356475b85eead2c0cb4d6d59ff5c10b2b32d5eeff5237bd77d1",
+   "digest": "34a49f1bbb8d6442a4c2ae622e32d877d854091233aefb7ee5ad83036b8d560e",
    "snapshot": {
     "env": {
      "viewer": {
@@ -5938,6 +5987,55 @@
          "preserve_order": false
         },
         "threshold": 1.0
+       },
+       "time_out": false
+      },
+      "head_load_contact": {
+       "func": {
+        "__type__": "rl_exp.tasks.baseline_mdp.ContactLoadDwellTerm"
+       },
+       "params": {
+        "sensor_cfg": {
+         "name": "contact_forces",
+         "joint_names": null,
+         "joint_ids": {
+          "__slice__": [
+           null,
+           null,
+           null
+          ]
+         },
+         "fixed_tendon_names": null,
+         "fixed_tendon_ids": {
+          "__slice__": [
+           null,
+           null,
+           null
+          ]
+         },
+         "body_names": [
+          "chest_.*",
+          "neck_.*"
+         ],
+         "body_ids": {
+          "__slice__": [
+           null,
+           null,
+           null
+          ]
+         },
+         "object_collection_names": null,
+         "object_collection_ids": {
+          "__slice__": [
+           null,
+           null,
+           null
+          ]
+         },
+         "preserve_order": false
+        },
+        "load_fraction_of_weight": 0.1,
+        "dwell_s": 0.5
        },
        "time_out": false
       }

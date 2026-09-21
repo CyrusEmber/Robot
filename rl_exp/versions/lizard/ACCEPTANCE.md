@@ -17,15 +17,19 @@
   被作废的旧句保留作留痕。**某主题的前后作废关系写在该记录自己的「适用范围」里**（含它作废了哪条旧读数）。
 - **记录的形状由 `rl_exp/tools/verify/check_work_docs.py` 的模块 docstring 看守**：五节按序 ——
   适用范围 / 验收条件 / 结果 / 证据引用 / 未覆盖边界。记录的「未覆盖边界」＝ 该主题"不得据此宣称"的边界。
-- **未闭合项的读法**：意图侧台账 = `versions/lizard/PLAN.md` §5 挂账清单（带优先级记号与结案日）；
-  评测台侧 = `ablation_harness/HARNESS.md` 的「未做」列；**验收侧开着的项写在各记录的「未覆盖边界」里**
-  （如 `社会控制`、`静默跳过`、`不可复跑`、`首回合失败` 等无对应挂账行）⇒ 问"还剩什么没做"要同时翻三处。
+- **未闭合项的读法**：意图侧 = `work/active/*.md` 与 `work/closed/<年>/`（挂账已整体迁进 `work/`，
+  `versions/lizard/PLAN.md` §5 只剩「原行 → 事项」映射表）；评测台侧 = `ablation_harness/HARNESS.md` 的
+  挂账节（正文已迁 `work/`，本表只留 id 与指针）；**验收侧开着的项写在各记录的「未覆盖边界」里**
+  （如 `社会控制`、`静默跳过`、`不可复跑`、`首回合失败` 等无对应挂账行）。**注意 `work/` 尚未覆盖全部
+  未闭合项**（已知例：obs 三张手抄表合口曾只活在记录里，2026-09-21 才另立
+  `work/active/obs-three-tables-merge.md`）⇒ 在逐项承接完成前，**不得**说"未闭合项都在 `work/` 里"。
 
 ### 读本文必知的通读口径（实测，截至 2026-09-20）
 
 1. **历史记录里的 `[N]` 是当次运行编号，不是闸门身份**（`OFFLINE_CHECKS.md` §1：新条目追加、旧条目退役、
    历史记录按当时的 commit 解读，新记录同时引用脚本名）⇒ **别跨节按编号追**。套件总条目数另受
-   `MAX_CHECKS` 棘轮管（45 → 46 于 2026-09-20）⇒ 各节的成功行读数**只在当日 commit 上成立**。
+   `MAX_CHECKS` 棘轮管（45 → 46 于 2026-09-20；**当前值以 `rl_exp/tools/verify/offline_suite.py` 的
+   常量为准，本文不复制**）⇒ 各节的成功行读数**只在当日 commit 上成立**。
 2. **「已修」与「仍是缺口」并存**：`ClassVar 真缺口未修`（读取侧，
    `2026-09-16-lizard-builder-hard-a.md`）与 `不再有任何 ClassVar 缺口行`（台账打印，
    `2026-09-17-lizard-entry-switch-and-declaration-gap.md`）两处都未在同一句区分 —— 两句都对，指的不是同一件事。
@@ -51,7 +55,15 @@
 | eval 记录（3.2）、地形映射（3.3）、记录写侧的评审修正 | `acceptance/records/2026-09-17-lizard-eval-record-and-terrain-map.md` |
 | 主线真跑收口、L03 真跑臂（arm2/arm3）、`[48]` 等待机制闸 | `acceptance/records/2026-09-18-lizard-mainline-run-closeout-l03.md` |
 | 基线线独立化收尾、摘要对 EOL 敏感（已修）、固定窗口评测入口 | `acceptance/records/2026-09-20-lizard-baseline-line-eol-and-fixed-window-eval.md` |
+| 冻结基线第三次重锚：baseline `cfg_lock.json`（v2 落地；v1 两条任务逐字段未变） | `acceptance/records/2026-09-21-baseline-cfg-lock-rebaseline.md` |
 | 地形产物一致（几何 digest / 起伏 / 再生核验） | `acceptance/records/2026-09-20-lizard-terrain-artifacts.md` |
+
+**本表的范围**：只列**从本文迁出去的主题证据**（分流时 12 条，之后随新主题增行），**不是**验收记录的总
+目录。挂账已迁进 `work/`；**迁移审计记录**（`2026-09-20-doc-read-cost-baseline`、`2026-09-20-ledger-pilot`、
+`2026-09-20-harness-migration`、`2026-09-21-plan-migration`、`2026-09-21-acceptance-ledger-split`、
+`2026-09-20-baseline-flat-eval-protocol`）不在此表，入口是引用它们的事项 —— 前五份经
+`work/closed/2026/ledger-migration-expansion.md`，最后一份经 `work/active/baseline-v2-recipe.md` 等
+（另见 `FAMILY.md` 与 `baseline/v2/PLAN.md`）。要找"某份记录为什么存在"，走 `work/` 的 `evidence` 字段。
 
 ## 旧路径说明（找旧节 → 去记录）
 

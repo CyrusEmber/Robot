@@ -81,7 +81,7 @@
     "meshes/visual/tail2_pitch_visual.stl": "ba62fea0de326ac1627764ffc69d2491ae7c3e9b9e71e75e45887d02229061fd",
     "meshes/visual/tail3_pitch_visual.obj": "7cbda6e464bfd99559e319818149ef69d830cf6297f227b4d54a2f75b8f4ea12",
     "meshes/visual/tail3_pitch_visual.stl": "41ab3ebd51d21067f2b3b9b6f37d27b265ab01a06dc7609d0f6196f91addc783",
-    "versions/lizard/baseline/v2/baseline_params.yaml": "443ae7eb0f380c6d1647be289bb9dd01e991c55d7163753a7a217c10f9687bdb",
+    "versions/lizard/baseline/v2/baseline_params.yaml": "264db3aec0f256eee2c929b4253e57094b5f4351cc4d757a5ccc0af7252bec0e",
     "versions/lizard/lizard.urdf": "ab39b44587316d3349c489ef3e968fdd4a4aacb02086320b48f4937a14a58320"
   },
   "note": "asset sha256 pinned at freeze; refresh with --update-locks only in a commit that intentionally retires assets (see check_dr_parity.py)"

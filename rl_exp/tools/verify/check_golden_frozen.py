@@ -76,7 +76,11 @@ FROZEN = {
     # It is the lock of the line that trains next, and until it was here "this line's golden
     # moved" had no digest guard at all -- the hole the record had listed as A-side debt.
     # Re-baselined 2026-09-18 (baseline v1.1, see the comment above).
-    "rl_exp/versions/lizard/baseline/cfg_lock.json": "a84f19acb7428e544f7385fc74ad5cad51840bc7f8af3d05eb6d6f5f80731929",
+    # Re-baselined 2026-09-21 (baseline v2, the third re-anchor): the line gained its second
+    # version, so the lock carries four entries instead of two. Nothing in v1's two entries moved
+    # -- the re-baseline was reviewed as a diff against the previous digest, and this line is the
+    # record of it (acceptance/records/2026-09-21-baseline-cfg-lock-rebaseline.md).
+    "rl_exp/versions/lizard/baseline/cfg_lock.json": "c012501dbb0e6483076ed428085dbf897ed30ed212e34fef23f5cc421bcce2c0",
 }
 
 FROZEN_REVS: dict[str, str] = {

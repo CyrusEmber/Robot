@@ -93,7 +93,7 @@ EXPECTED_DIFFS: dict[tuple[str, str], int] = {
     # reading has nothing to measure against. That is printed below, not papered over with a stock
     # reading that would restate the whole line's heritage as v1's own delta.
     ("lizard/baseline", "v1"): 76,
-    ("lizard/baseline", "v2"): 4,
+    ("lizard/baseline", "v2"): 5,
     ("lizard/main", "v2"): 6,
     ("lizard/main", "v3"): 59,
     ("lizard/main", "v4"): 6,

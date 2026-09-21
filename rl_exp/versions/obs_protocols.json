@@ -832,6 +832,16 @@
    "version": "v1",
    "line": "lizard/baseline"
   },
+  "Lizard-Baseline-Flat-Play-v2": {
+   "protocol": "a25a8c39001b",
+   "version": "v2",
+   "line": "lizard/baseline"
+  },
+  "Lizard-Baseline-Flat-v2": {
+   "protocol": "a25a8c39001b",
+   "version": "v2",
+   "line": "lizard/baseline"
+  },
   "Lizard-Parkour-Climb-Play-v1": {
    "protocol": "d8de5bc507a7",
    "version": "v1",
