@@ -2,9 +2,9 @@
 id: ledger-migration-expansion
 title: 扩大迁移：HARNESS → PLAN → ACCEPTANCE 的逐段分流
 scope: ablation_harness, rl_exp/versions/lizard, rl_exp/tools/verify
-status: open
+status: done
 landing: ablation_harness/HARNESS.md, rl_exp/versions/lizard/PLAN.md, rl_exp/versions/lizard/ACCEPTANCE.md
-next: 开**批 3 = ACCEPTANCE**：它是唯一没动过的大件（约 236 KB），且**不是纯验收**——按四分流推进：① 证据 → `acceptance/records/`（五节）；② 仍有效的约束 → 机制（参数进配置、口径进实现与测试、不变式进断言）；③ 待决 → 事项；④ 决策解释 → 随记录留。**保留历史证据及其适用边界，不把历史局部通过升级成当前整体结论**；同一变更内建新删旧。批 1 批 2 已完成，见"批次进度"
+outcome: 三批各自验收通过并留下记录。批 0 = 规则各自回机制（闸门模块文档、`AGENTS.md`、本项）并删除提案文件；批 1 = `HARNESS.md` 26315 → 6017 字节（挂账 6 行全成指针，版本史与修订记录同批删除）；批 2 = `PLAN.md` 46551 → 9042 字节（17 行活跃 → 15 事项、11 行结案 → 5 关闭项）；批 3 = `ACCEPTANCE.md` 236719 → 7736 字节（12 条主题记录 + 路由表替代追加序）。三批四项走查均通过；缺口如实留（5 处需人拍板、1 处指向本仓不存在的 C++ 层、三段只在版本史里写过的历史事实归位未定）。
 close_when: 三批各自验收通过并留下记录即关。每批的验收（主判据，人工走查）= **可定位 / 可执行 / 可关闭 / 无约束遗漏**；走查必须真的沿"下一步 → 观测 → 分支结论"走一遍，"确认后可关"式措辞即使过格式检查也判该批不通过。某批不通过则该批重做，不推进下一批
 ---
 
