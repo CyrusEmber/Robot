@@ -166,19 +166,23 @@ def mesh_vertices(obj_path) -> torch.Tensor:
 
 
 def pad_point_clouds(clouds: list[torch.Tensor]) -> torch.Tensor:
-    """Stack point clouds of different lengths into (B, max_len, 3), padding rows with +inf.
+    """Stack point clouds of different lengths into (B, max_len, 3) by repeating each cloud's first vertex.
 
-    A min over points is unaffected by +inf rows, so clouds with different vertex counts can be
-    measured in one call. Filling with zeros would not be safe: a padded row of zeros is a real
-    coordinate and would drag the minimum down.
+    The padding has to survive being rotated by the body's pose, and the obvious fills do not.
+    ``+inf`` becomes NaN -- :func:`quat_apply` forms cross products and ``inf - inf`` is NaN, which
+    propagates through the min and poisons every body narrower than the widest one (measured
+    2026-09-21: the shorter collision meshes read NaN, and a NaN clearance fails a gate by
+    accident). Zeros are no safer: a padded zero is a real coordinate that drags the minimum below
+    the mesh. A repeated vertex is already a point of the body, so it cannot move its minimum.
 
     Args:
         clouds: one ``(V_i, 3)`` tensor per body.
     """
     width = max(cloud.shape[0] for cloud in clouds)
-    padded = torch.full((len(clouds), width, 3), float("inf"), dtype=clouds[0].dtype)
+    padded = torch.empty((len(clouds), width, 3), dtype=clouds[0].dtype)
     for i, cloud in enumerate(clouds):
         padded[i, : cloud.shape[0]] = cloud
+        padded[i, cloud.shape[0]:] = cloud[0]
     return padded
 
 
@@ -186,16 +190,17 @@ def mesh_min_z(body_pos_w: torch.Tensor, body_quat_w: torch.Tensor,
                ids: list[int], corners: torch.Tensor) -> torch.Tensor:
     """Lowest world z of the selected bodies' collision meshes, shape (N,) [m].
 
-    Contact force says a body is loaded; it does not say what it is loaded
-    against. The body origin is not enough either (a mesh can sit above its own
-    origin), so the bbox corners are rotated by the live pose and the minimum
-    world z is read: ground is z=0, so a negative value is mesh through the floor.
+    Contact force says a body is loaded; it does not say what it is loaded against. The body origin
+    is not enough either (a mesh can sit above its own origin), so the mesh points are rotated by
+    the live pose and the minimum world z is read: ground is z=0, so a negative value is mesh
+    through the floor.
 
     Args:
         body_pos_w: (N, num_bodies, 3) world positions.
         body_quat_w: (N, num_bodies, 4) world orientations, xyzw.
         ids: body column indices to measure.
-        corners: (len(ids), K, 3) link-frame bbox corners.
+        corners: (len(ids), K, 3) link-frame points of those bodies -- a collision mesh's vertices,
+            padded to a common K by :func:`pad_point_clouds`.
     """
     k = corners.shape[1]
     n, nb = body_pos_w.shape[0], len(ids)

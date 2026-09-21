@@ -25,7 +25,8 @@ platform_width > size - 2*border 使金字塔台阶退化为恰好一级台阶�
              （策略零命令 69.6–72.8 N；零动作 0 N），配合窗口 Δv_z 排除竖直动量项。
              阈值盲区实例：`belly_gt10n_frac`(>10 N) 与 `neck_support_frac`(>10% 体重)
              对 9.86% 的尾尖全部读作 0；且尾不在 SPINE_BODIES 里。
-  撑地 vs 自碰 = 碰撞网格角点的世界最低 z（`mesh_min_z()`，地面 z=0）：`net_forces_w` 只给
+  撑地 vs 自碰 = 碰撞网格顶点的世界最低 z（`mesh_min_z()`，地面 z=0；2026-09-21 从 bbox 角点
+             换成顶点，角点在旋转后会低报）：`net_forces_w` 只给
              "这个 body 受力"不给"它在碰谁"，且 body 原点 z 会被网格偏置骗（tail3_pitch 的
              网格最低点在其原点**上方** 0.103 m）。实测策略窗口尾尖网格 z=−0.131 m（入地）、
              零动作 +0.348 m（离地）→ 尾巴是策略主动折下来当第五支撑腿用的。
@@ -149,10 +150,10 @@ LOAD_BODIES = ["base_link", "chest_pitch", "neck_pitch",
 
 # 承重几何复核（2026-09-14 补）：接触力只给"这个 body 受力"，不给"它在碰谁"。
 # body 原点 z 会被网格自身偏置骗（tail3_pitch 的碰撞网格最低点在其原点**上方** 0.103 m），
-# 所以取碰撞网格 bbox 的 8 个角点按 body 位姿投到世界系，看最低 z。地面 z=0。
+# 所以取碰撞网格的顶点按 body 位姿投到世界系，看最低 z。地面 z=0。
 # 只对可能压地的非足 body 建表；URDF 里这些 link 的 collision origin/scale 均为 identity。
-MESH_BBOX_BODIES = ["base_link", "chest_pitch", "neck_pitch",
-                    "tail1_pitch", "tail2_pitch", "tail3_pitch"]
+MESH_POINT_BODIES = ["base_link", "chest_pitch", "neck_pitch",
+                     "tail1_pitch", "tail2_pitch", "tail3_pitch"]
 MESH_DIR = _REPO_ROOT / "rl_exp" / "meshes" / "collision"
 TAIL_PITCH_JOINTS = ["tail1_pitch_joint", "tail2_pitch_joint", "tail3_pitch_joint"]
 
@@ -356,21 +357,17 @@ def stack(series: dict, key: str) -> torch.Tensor:
 
 def mesh_min_z(body_pos_w: torch.Tensor, body_quat_w: torch.Tensor,
                ids: torch.Tensor, corners: torch.Tensor) -> torch.Tensor:
-    """碰撞网格角点的世界最低 z [m]（地面 z=0；负值=穿地）。
+    """碰撞网格顶点的世界最低 z [m]（地面 z=0；负值=穿地）。
+
+    唯一实现在 `diag_metrics.mesh_min_z`：验收器、开训前探针与本诊断器读同一行代码。
 
     Args:
         body_pos_w: (N, n_bodies, 3) 世界位置。
         body_quat_w: (N, n_bodies, 4) 世界姿态（xyzw）。
         ids: 取哪几个 body 的列下标。
-        corners: (len(ids), K, 3) 各 body 的 link 系 bbox 角点。
+        corners: (len(ids), K, 3) 各 body 的 link 系顶点（`_pad_clouds` 补齐到同宽）。
     """
-    k = corners.shape[1]
-    n, nb = body_pos_w.shape[0], len(ids)
-    pos = body_pos_w[:, ids][:, :, None, :].expand(n, nb, k, 3).reshape(-1, 3)
-    quat = body_quat_w[:, ids][:, :, None, :].expand(n, nb, k, 4).reshape(-1, 4)
-    pts = corners[None].expand(n, nb, k, 3).reshape(-1, 3)
-    world = pos + quat_apply(quat, pts)
-    return world.reshape(n, nb, k, 3)[..., 2].min(dim=-1).values
+    return diag_metrics.mesh_min_z(body_pos_w, body_quat_w, ids, corners)
 
 
 def load_closure(fz_body: torch.Tensor, body_names: list[str], weight_n: float,
@@ -809,7 +806,7 @@ def main():
 
     spine_ids, _ = robot.find_bodies(SPINE_BODIES, preserve_order=True)
     foot_ids, foot_names = robot.find_bodies([".*_foot"], preserve_order=True)
-    mesh_ids, mesh_names = robot.find_bodies(MESH_BBOX_BODIES, preserve_order=True)
+    mesh_ids, mesh_names = robot.find_bodies(MESH_POINT_BODIES, preserve_order=True)
     tail_joint_ids, _ = robot.find_joints(TAIL_PITCH_JOINTS, preserve_order=True)
     sensor_ids = {
         "spine": contact.find_sensors(SPINE_BODIES, preserve_order=True)[0],

@@ -2,7 +2,7 @@
 # All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
-"""Offline regressions for baseline fixed-window scoring and startup checks."""
+"""Offline regressions for baseline fixed-window collection, judgement, and startup checks."""
 
 import ast
 import json
@@ -15,24 +15,147 @@ from types import SimpleNamespace as NS
 _REPO = pathlib.Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_REPO))
 import torch
-from ablation_harness.baseline_metrics import BaselineWindow
+from ablation_harness import baseline_frames, baseline_metrics
+from rl_exp.tools.diagnose.diag_metrics import mesh_min_z, pad_point_clouds
 from rl_exp.tools.verify.baseline_runtime import joint_reset_errors, material_errors, termination_errors
 
 PROTOCOL = json.loads((_REPO / "ablation_harness/protocols/baseline_flat_v1.json").read_text())
+V2_PROTOCOL = json.loads((_REPO / "ablation_harness/protocols/baseline_flat_v2.json").read_text())
+
+# The axis labels a test record carries: a per-body reading has to name its bodies.
+AXES = {
+    "non_foot_fraction": ["chest_pitch", "neck_pitch"],
+    "mesh_min_z": ["chest_pitch", "neck_pitch"],
+    "foot_contact": ["rr_foot", "rl_foot"],
+    "foot_fraction": ["rr_foot", "rl_foot"],
+}
+
+
+def expect(exception, fn, *args, **kwargs):
+    """Call ``fn`` and return the exception it must raise."""
+    try:
+        fn(*args, **kwargs)
+    except exception as err:
+        return err
+    raise AssertionError(f"{getattr(fn, '__name__', fn)} must raise {exception.__name__}")
+
+
+def default_frame(num_envs: int) -> dict:
+    """One all-zero frame, shaped as the contract prescribes."""
+    frame = {}
+    for name, (kind, _, _) in baseline_frames.COLUMNS.items():
+        width = len(AXES[name]) if name in AXES else (3 if kind == "vec3" else 0)
+        frame[name] = torch.zeros(num_envs, width) if width else torch.zeros(num_envs)
+    return frame
+
+
+def build(protocol: dict, steps: int, *, num_envs: int = 1, series: dict | None = None,
+          start_pos: torch.Tensor | None = None, start_yaw: torch.Tensor | None = None) -> dict:
+    """Collect a synthetic window through the real contract.
+
+    ``series`` overrides a column per frame (``f(step) -> tensor``). The defaults are a clean run:
+    walking exactly on the command for the whole window, feet down, nothing loaded that should not
+    be, a timeout on the last frame. ``start_pos``/``start_yaw`` are the episode's initial state.
+    """
+    speed = float(protocol["command_mps_radps"][0])
+    recorder = baseline_frames.BaselineFrames(
+        num_envs=num_envs, step_dt=protocol["episode_length_s"] / steps, axes=AXES)
+    for step in range(steps):
+        frame = default_frame(num_envs)
+        frame["pos"][:] = torch.tensor([(step + 1) * speed, 0.0, 0.0])
+        frame["velocity_yaw"][:] = torch.tensor([speed, 0.0, 0.0])
+        frame["command_world"][:] = torch.tensor([speed, 0.0, 0.0])
+        frame["tilt_cos"][:] = 1.0
+        frame["mesh_min_z"][:] = 0.5
+        frame["foot_contact"][:] = 1.0
+        frame["foot_fraction"][:] = 0.25
+        frame["timeout"][:] = 1.0 if step == steps - 1 else 0.0
+        for name, override in (series or {}).items():
+            frame[name] = override(step)
+        recorder.add(**frame)
+    return recorder.artifact(
+        protocol=protocol,
+        start_pos=torch.zeros(num_envs, 3) if start_pos is None else start_pos,
+        start_yaw=torch.zeros(num_envs) if start_yaw is None else start_yaw)
+
+
+def truncated(artifact: dict, frames_kept: int) -> dict:
+    """The same window with its frames cut short, as a crash mid-collection would leave it."""
+    cut = dict(artifact)
+    cut["frames"] = {name: values[:frames_kept] for name, values in artifact["frames"].items()}
+    return cut
 
 
 def score(fail_at=None, *, simultaneous=False, yaw=0.0):
-    window = BaselineWindow(torch.zeros(1, 3), torch.tensor([yaw]), steps=20, protocol=PROTOCOL)
-    for step in range(20):
+    def position(step):
         # After failure deliberately supply huge respawn displacements: none may count.
         distance = (step + 1) * 0.5 if fail_at is None or step <= fail_at else 1000.0
-        y = torch.tensor([yaw])
-        pos = torch.stack((distance * y.cos(), distance * y.sin(), torch.zeros(1)), dim=-1)
-        window.add(pos=pos, yaw=y, velocity_yaw=torch.tensor([[0.5, 0.0, 0.0]]),
-                   head_tail_force=torch.zeros(1), terminated=torch.tensor([step == fail_at]),
-                   timeout=torch.tensor([step == 19 or (simultaneous and step == fail_at)]))
-    return window.result()
+        return torch.tensor([[distance * math.cos(yaw), distance * math.sin(yaw), 0.0]])
 
+    return baseline_metrics.judge(build(PROTOCOL, 20, series={
+        "pos": position,
+        "yaw": lambda step: torch.tensor([yaw]),
+        "terminated": lambda step: torch.tensor([1.0 if step == fail_at else 0.0]),
+        "timeout": lambda step: torch.tensor([1.0 if step == 19 or (simultaneous and step == fail_at) else 0.0]),
+    }, start_yaw=torch.tensor([yaw])))
+
+
+# --- the collector's contract ------------------------------------------------------------------
+
+def test_collector_refuses_frames_that_do_not_fit_the_contract():
+    recorder = baseline_frames.BaselineFrames(num_envs=2, step_dt=0.02, axes=AXES)
+    frame = default_frame(2)
+    recorder.add(**frame)
+    assert recorder.count == 1
+    del frame["tilt_cos"]
+    err = expect(baseline_frames.FramesContractError, recorder.add, **frame)
+    assert "tilt_cos" in str(err), err
+    frame["tilt_cos"] = torch.zeros(2)
+    frame["foot_contact"] = torch.zeros(2, 3)
+    err = expect(baseline_frames.FramesContractError, recorder.add, **frame)
+    assert "foot_contact" in str(err) and "shape" in str(err), err
+    frame["foot_contact"] = torch.zeros(2, 2)
+    frame["undeclared"] = torch.zeros(2)
+    err = expect(baseline_frames.FramesContractError, recorder.add, **frame)
+    assert "undeclared" in str(err), err
+
+
+def test_axis_labels_must_agree_with_the_values():
+    """A per-body reading whose labels do not fit its values cannot say which body it measured."""
+    artifact = build(V2_PROTOCOL, 20)
+    artifact["axes"]["non_foot_fraction"] = ["chest_pitch"]
+    result = baseline_metrics.judge(artifact)
+    assert result["verdict"] == "invalid", result["gates"]
+    assert any("axis labels" in reason for reason in result["invalid_reasons"]), result["invalid_reasons"]
+
+
+def test_a_cut_short_window_is_invalid_not_an_exception():
+    result = baseline_metrics.judge(truncated(build(PROTOCOL, 20), 5))
+    assert result["verdict"] == "invalid"
+    assert any("5 of 20 frames" in reason for reason in result["invalid_reasons"]), result["invalid_reasons"]
+    assert all(value is None for value in result["gates"].values()), "no gate may be judged from half a window"
+
+
+def test_non_finite_measurement_is_invalid():
+    artifact = build(V2_PROTOCOL, 20)
+    artifact["frames"]["mesh_min_z"][7, 0, 0] = float("nan")
+    result = baseline_metrics.judge(artifact)
+    assert result["verdict"] == "invalid"
+    assert any("mesh_min_z" in reason and "non-finite" in reason
+               for reason in result["invalid_reasons"]), result["invalid_reasons"]
+
+
+def test_v2_refuses_a_gate_it_could_not_measure():
+    """Unmeasured is unknown, and unknown is not a pass."""
+    artifact = build(V2_PROTOCOL, 20)
+    del artifact["frames"]["tilt_cos"]
+    result = baseline_metrics.judge(artifact)
+    assert result["verdict"] == "invalid"
+    assert any("never measured" in reason for reason in result["invalid_reasons"]), result["invalid_reasons"]
+    assert all(value is None for value in result["gates"].values()), result["gates"]
+
+
+# --- what the window measures ------------------------------------------------------------------
 
 def test_fixed_window():
     assert score()["verdict"] == "pass"
@@ -42,13 +165,6 @@ def test_fixed_window():
     assert abs(failed["metrics"]["forward_mae_mps"] - 0.4) < 1e-6
     assert failed["metrics"]["first_episode_timeout_fraction"] == 0
     assert score(19, simultaneous=True)["metrics"]["first_episode_timeout_fraction"] == 0
-    window = BaselineWindow(torch.zeros(1, 3), torch.zeros(1), steps=20, protocol=PROTOCOL)
-    try:
-        window.result()
-    except ValueError:
-        pass
-    else:
-        raise AssertionError("partial windows must not pass")
 
 
 def test_actual_reset_and_material():
@@ -97,14 +213,13 @@ def score_along_heading(yaw: float, *, steps: int = 20, speed: float = 0.5) -> d
 
     quat = quat_from_euler_xyz(torch.zeros(1), torch.full((1,), 0.35), torch.tensor([yaw]))
     start_yaw = yaw_of(quat)
-    window = BaselineWindow(torch.zeros(1, 3), start_yaw, steps=steps, protocol=PROTOCOL)
-    for step in range(steps):
+
+    def position(step):
         travel = (step + 1) * speed
-        pos = torch.tensor([[travel * math.cos(yaw), travel * math.sin(yaw), 0.0]])
-        window.add(pos=pos, yaw=start_yaw, velocity_yaw=torch.tensor([[speed, 0.0, 0.0]]),
-                   head_tail_force=torch.zeros(1), terminated=torch.tensor([False]),
-                   timeout=torch.tensor([step == steps - 1]))
-    return window.result()
+        return torch.tensor([[travel * math.cos(yaw), travel * math.sin(yaw), 0.0]])
+
+    return baseline_metrics.judge(build(PROTOCOL, steps, series={
+        "pos": position, "yaw": lambda step: start_yaw.clone()}, start_yaw=start_yaw))
 
 
 def test_eval_forward_axis_is_the_training_frame():
@@ -144,7 +259,7 @@ _WXYZ_YAW = (
 _YAW_EXTRACTIONS_ALLOWED = {
     # kept on purpose: the wrong branch the diagnostics display next to the library's answer
     "rl_exp/tools/diagnose/diagnose_support.py": "对照 that proves the wrong branch wrong (see its comment)",
-    # known bad, another line, needs its own decision: its docstring claims (x, y, z, w) and its
+    # known bad, another line, needs its own decision: its docstring claims (x, y, z, w) while its
     # math is the (w, x, y, z) branch. Recorded here so the debt stays visible instead of silent.
     "rl_exp/tasks/parkour_mdp.py": "parkour line's _yaw_from_quat: same bug class, pending decision",
 }
@@ -167,32 +282,98 @@ def test_no_hand_rolled_quat_yaw():
     )
 
 
-V2_PROTOCOL = json.loads((_REPO / "ablation_harness/protocols/baseline_flat_v2.json").read_text())
+# --- per-env, per-frame readings: every case below was measured live on 2026-09-21 -------------
+
+def test_loads_are_measured_per_env():
+    """The old reader averaged over envs, so 0.2 on one and 0 on the other read as a passing 0.1."""
+    artifact = build(V2_PROTOCOL, 20, num_envs=2, series={
+        "non_foot_fraction": lambda step: torch.tensor([[0.2, 0.0], [0.0, 0.0]]),
+    })
+    result = baseline_metrics.judge(artifact)
+    assert abs(result["metrics"]["non_foot_load_fraction_max"] - 0.2) < 1e-6, result["metrics"]
+    assert result["gates"]["no_non_foot_carrier"] is False, "20% of body weight must not be diluted by env 1"
+    assert abs(result["diagnostics"]["non_foot_load_fraction"][0] - 0.2) < 1e-6, result["diagnostics"]
 
 
-def drag_window(protocol: dict, *, neck_fraction: float, mesh_z: float = -0.052, tilt_cos_value: float = 0.9,
-                steps: int = 20, speed: float = 0.5) -> dict:
-    """A rollout that tracks the command perfectly while the neck carries the robot.
+def test_foot_duty_counts_contact_frames():
+    """bool + bool stays bool: the old accumulator could only report 0 or 1, never a duty cycle."""
+    artifact = build(V2_PROTOCOL, 20, num_envs=2, series={
+        "foot_contact": lambda step: torch.tensor([[1.0, 0.0], [1.0, 1.0]] if step < 15
+                                                   else [[0.0, 1.0], [0.0, 1.0]]),
+    })
+    diagnostics = baseline_metrics.judge(artifact)["diagnostics"]
+    assert [round(duty, 3) for duty in diagnostics["foot_duty"]] == [0.75, 0.625], diagnostics
+    # env 0 has one foot down every frame; env 1 has both for 15 of 20 frames ((15*2 + 5)/20 = 1.75).
+    assert abs(diagnostics["feet_down_mean"] - 1.375) < 1e-6, diagnostics
 
-    Everything the v1 gates look at is nominal: 0.5 m/s forward, 10 m of travel, no failure.
-    The v2 gates read the rest -- non-foot carrier, tilt, collision mesh through the floor.
-    """
-    window = BaselineWindow(torch.zeros(1, 3), torch.zeros(1), steps=steps, protocol=protocol)
-    feet = torch.tensor([[True, False, True, True]])
-    for step in range(steps):
-        travel = (step + 1) * speed
-        window.add(pos=torch.tensor([[travel, 0.0, 0.0]]), yaw=torch.zeros(1),
-                   velocity_yaw=torch.tensor([[speed, 0.0, 0.0]]), head_tail_force=torch.zeros(1),
-                   terminated=torch.tensor([False]), timeout=torch.tensor([step == steps - 1]),
-                   tilt_cos=torch.tensor([tilt_cos_value]),
-                   non_foot_fraction=torch.tensor([[0.01, neck_fraction, 0.0]]),
-                   mesh_min_z=torch.tensor([[0.5, mesh_z, 0.5]]), foot_contact=feet,
-                   foot_fraction=torch.tensor([[0.3, 0.0, 0.3, 0.3]]))
-    return window.result()
+
+def test_respawn_frames_are_not_scored():
+    """After env 0 dies its frames belong to another rollout: not its posture, not its position."""
+    artifact = build(V2_PROTOCOL, 20, num_envs=2, series={
+        "terminated": lambda step: torch.tensor([1.0 if step == 5 else 0.0, 0.0]),
+        "mesh_min_z": lambda step: (torch.tensor([[-9.0, 0.5], [0.5, 0.5]]) if step > 5
+                                    else torch.full((2, 2), 0.5)),
+        "non_foot_fraction": lambda step: (torch.tensor([[0.9, 0.0], [0.0, 0.0]]) if step > 5
+                                           else torch.zeros(2, 2)),
+    })
+    result = baseline_metrics.judge(artifact)
+    assert result["gates"]["no_mesh_through_floor"], "a respawn 9 m under the floor is not env 0's posture"
+    assert result["gates"]["no_non_foot_carrier"], "nor is it env 0's load"
+    assert result["per_env"]["survived"] == [False, True], result["per_env"]
+    assert abs(result["per_env"]["forward_displacement_m"][0] - 3.0) < 1e-5, \
+        "env 0's displacement froze at its last frame"
+
+
+def test_tracking_follows_the_command_issued_each_frame():
+    """A range command has to be judged against what was issued, not a constant in the protocol."""
+    artifact = build(V2_PROTOCOL, 20, series={
+        "pos": lambda step: torch.tensor([[(step + 1) * 1.0, 0.0, 0.0]]),
+        "velocity_yaw": lambda step: torch.tensor([[1.0, 0.0, 0.0]]),
+        "command_world": lambda step: torch.tensor([[1.0, 0.0, 0.0]]),
+    })
+    result = baseline_metrics.judge(artifact)
+    assert result["metrics"]["forward_mae_mps"] < 1e-6, "walking at the issued command is exactly on command"
+    assert abs(result["metrics"]["command_mps_mean"] - 1.0) < 1e-6, result["metrics"]
+    assert result["gates"]["displacement"], "20 s at 1 m/s is 20 m"
+
+
+def test_the_tilt_readout_is_the_worst_posture():
+    """The largest cosine is the most upright frame; the reported figure must be the episode's worst."""
+    artifact = build(V2_PROTOCOL, 1000, series={
+        "tilt_cos": lambda step: torch.tensor([0.999 if step % 3 else 0.9]),
+    })
+    result = baseline_metrics.judge(artifact)
+    assert result["gates"]["attitude"], "no breach lasts the 0.5 s dwell"
+    assert abs(result["diagnostics"]["tilt_max_deg"] - math.degrees(math.acos(0.9))) < 0.05, result["diagnostics"]
+
+
+def test_mesh_reading_survives_uneven_vertex_counts():
+    """+inf padding became NaN inside quat_apply, so every mesh narrower than the widest read NaN."""
+    clouds = [torch.rand(3, 3) * 0.1, torch.rand(7, 3) * 0.1]
+    padded = pad_point_clouds(clouds)
+    assert torch.isfinite(padded).all(), "padding must be a real point, not a poison value"
+    pos = torch.zeros(2, 2, 3)
+    quat = torch.tensor([0.3, 0.2, 0.1, 0.9])
+    quat = quat / torch.linalg.norm(quat)
+    quat = quat.expand(2, 2, 4)
+    together = mesh_min_z(pos, quat, [0, 1], padded)
+    assert torch.isfinite(together).all(), together
+    for index, cloud in enumerate(clouds):
+        alone = mesh_min_z(pos[:, index:index + 1], quat[:, index:index + 1], [0], cloud[None])
+        assert torch.allclose(together[:, index], alone[:, 0]), "padding moved the minimum"
 
 
 def test_v2_catches_what_v1_passed():
     """The neck-dragging rollout must fail v2 on the axes v1 never read, and pass nothing extra."""
+    def drag_window(protocol, *, neck_fraction, mesh_z=-0.052, tilt_cos_value=0.9):
+        return baseline_metrics.judge(build(protocol, 20, series={
+            "tilt_cos": lambda step: torch.tensor([tilt_cos_value]),
+            "non_foot_fraction": lambda step: torch.tensor([[0.01, neck_fraction]]),
+            "mesh_min_z": lambda step: torch.tensor([[0.5, mesh_z]]),
+            "foot_contact": lambda step: torch.tensor([[1.0, 0.0]]),
+            "foot_fraction": lambda step: torch.tensor([[0.3, 0.0]]),
+        }))
+
     dragging = drag_window(V2_PROTOCOL, neck_fraction=0.48)
     assert dragging["verdict"] == "fail"
     assert dragging["gates"]["tracking"] and dragging["gates"]["displacement"] \
@@ -206,42 +387,18 @@ def test_v2_catches_what_v1_passed():
     assert clean["verdict"] == "pass", clean["gates"]
 
 
-def test_v2_sustain_filter_and_unmeasured_refusal():
-    """A one-frame spike is contact noise; a gate with no measurement is refused, not passed."""
-    window = BaselineWindow(torch.zeros(1, 3), torch.zeros(1), steps=1000, protocol=V2_PROTOCOL)
-    for step in range(1000):
-        window.add(pos=torch.tensor([[0.5 * (step + 1) * 0.02, 0.0, 0.0]]), yaw=torch.zeros(1),
-                   velocity_yaw=torch.tensor([[0.5, 0.0, 0.0]]), head_tail_force=torch.zeros(1),
-                   terminated=torch.tensor([False]), timeout=torch.tensor([step == 999]),
-                   tilt_cos=torch.tensor([0.1 if step == 5 else 0.999]),
-                   non_foot_fraction=torch.tensor([[0.9 if step == 5 else 0.01, 0.0, 0.0]]),
-                   mesh_min_z=torch.tensor([[0.5, 0.5, 0.5]]),
-                   foot_contact=torch.ones(1, 4, dtype=torch.bool),
-                   foot_fraction=torch.full((1, 4), 0.25))
-    assert window.result()["gates"]["attitude"], "one tilted frame is a bump, not a fall"
-    assert window.result()["gates"]["no_non_foot_carrier"], "one loaded frame is a bump, not a carrier"
-    silent = BaselineWindow(torch.zeros(1, 3), torch.zeros(1), steps=20, protocol=V2_PROTOCOL)
-    try:
-        silent.result()
-    except ValueError:
-        pass
-    else:
-        raise AssertionError("a partial window must not score")
-
-
-def test_v2_refuses_a_gate_it_could_not_measure():
-    """Unmeasured is unknown, and unknown is not a pass."""
-    window = BaselineWindow(torch.zeros(1, 3), torch.zeros(1), steps=2, protocol=V2_PROTOCOL)
-    for step in range(2):
-        window.add(pos=torch.tensor([[0.5 * (step + 1), 0.0, 0.0]]), yaw=torch.zeros(1),
-                   velocity_yaw=torch.tensor([[0.5, 0.0, 0.0]]), head_tail_force=torch.zeros(1),
-                   terminated=torch.tensor([False]), timeout=torch.tensor([step == 1]))
-    try:
-        window.result()
-    except ValueError as err:
-        assert "never measured" in str(err), err
-    else:
-        raise AssertionError("scoring a v2 window with no tilt/carrier/mesh readings must be refused")
+def test_v2_sustain_filter_ignores_a_single_frame():
+    """A one-frame spike is contact noise; a sustained one is the gate."""
+    single = baseline_metrics.judge(build(V2_PROTOCOL, 1000, series={
+        "tilt_cos": lambda step: torch.tensor([0.1 if step == 5 else 0.999]),
+        "non_foot_fraction": lambda step: torch.tensor([[0.9 if step == 5 else 0.01, 0.0]]),
+    }))
+    assert single["gates"]["attitude"], "one tilted frame is a bump, not a fall"
+    assert single["gates"]["no_non_foot_carrier"], "one loaded frame is a bump, not a carrier"
+    held = baseline_metrics.judge(build(V2_PROTOCOL, 1000, series={
+        "non_foot_fraction": lambda step: torch.tensor([[0.9 if step >= 5 else 0.01, 0.0]]),
+    }))
+    assert not held["gates"]["no_non_foot_carrier"], "a body loaded for the rest of the window is a carrier"
 
 
 def test_termination_injection_is_independent_of_wiring():

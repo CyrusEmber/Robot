@@ -43,11 +43,10 @@ def run(args) -> dict:
     from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper, handle_deprecated_rsl_rl_cfg
     from rsl_rl.runners import OnPolicyRunner
 
-    from ablation_harness import record
-    from ablation_harness.baseline_metrics import BaselineWindow
+    from ablation_harness import baseline_frames, baseline_metrics, record
     from rl_exp.tools.diagnose.diag_metrics import (
-        MESH_CHECK_BODIES, body_load_n, collision_mesh_dir, foot_ids, mesh_min_z, mesh_vertices,
-        pad_point_clouds, tilt_cos,
+        MESH_CHECK_BODIES, collision_mesh_dir, foot_ids, mesh_min_z, mesh_vertices, pad_point_clouds,
+        tilt_cos,
     )
     from rl_exp.tools.runrecord import provenance
     from rl_exp.tools.verify import cfg_snapshot
@@ -114,33 +113,44 @@ def run(args) -> dict:
         mesh_corners = pad_point_clouds([mesh_vertices(collision_mesh_dir() / f"{name}_collision.obj")
                                         for name in mesh_present]).to(live.device)
         weight_n = float(robot.data.body_mass.torch[0].sum().item() * 9.81)
+        recorder = baseline_frames.BaselineFrames(
+            num_envs=live.num_envs, step_dt=live.step_dt,
+            axes={"non_foot_fraction": [names[i] for i in non_foot], "mesh_min_z": mesh_present,
+                  "foot_contact": [names[i] for i in feet], "foot_fraction": [names[i] for i in feet]})
 
         def snapshot():
             q = yaw_quat(robot.data.root_quat_w.torch)
             forces = sensor.data.net_forces_w.torch
-            load = body_load_n(forces) / weight_n
+            load = forces[:, :, 2] / weight_n  # (N, num_bodies): per env, per body
             return {
                 "pos": robot.data.root_pos_w.torch.clone(),
                 "yaw": yaw_of(robot.data.root_quat_w.torch),
                 "velocity_yaw": quat_apply_inverse(q, robot.data.root_lin_vel_w.torch).clone(),
+                "command_world": live.command_manager.get_command("base_velocity").clone(),
                 "head_tail_force": forces[:, load_ids].norm(dim=-1).sum(dim=-1).clone(),
                 "tilt_cos": tilt_cos(robot.data.projected_gravity_b.torch).clone(),
-                "non_foot_fraction": load[non_foot].clone(),
+                "non_foot_fraction": load[:, non_foot].clone(),
                 # clone(): mesh_min_z indexes and expands; the live warp-backed view does not
                 # survive that on this backend (the diagnose tool only ever feeds it plain tensors).
                 "mesh_min_z": mesh_min_z(robot.data.body_pos_w.torch.clone(),
                                          robot.data.body_quat_w.torch.clone(),
                                          mesh_ids, mesh_corners).clone(),
-                "foot_contact": (forces[:, feet, 2] > 1.0).clone(),
-                "foot_fraction": load[feet].clone(),
+                # float, not bool: a duty cycle is a count of contact frames, and bool + bool is
+                # still bool -- the accumulator would saturate at one frame per env.
+                "foot_contact": (forces[:, feet, 2] > 1.0).to(torch.float32).clone(),
+                "foot_fraction": load[:, feet].clone(),
             }
 
+        # The episode's initial state: frame 0 is already one control step in, so displacement and
+        # yaw drift are measured from here, and the record carries it (per env: the spawn poses
+        # differ, so one env's origin cannot speak for the others).
         first = snapshot()
-        window = BaselineWindow(first["pos"], first["yaw"], steps=steps, protocol=protocol)
+        start = {"start_pos": first["pos"].clone(), "start_yaw": first["yaw"].clone()}
         original_reset = live._reset_idx
         terminal = {}
         pending = None
         captured = 0
+        contract_error = None
 
         def capture_reset(env_ids):
             nonlocal pending, captured
@@ -164,15 +174,36 @@ def run(args) -> dict:
                     for key in frame:
                         frame[key][pending] = terminal[key][pending]
                     pending = None
-                window.add(**frame, terminated=live.termination_manager.terminated.clone(),
-                           timeout=live.termination_manager.time_outs.clone())
+                try:
+                    recorder.add(**frame, terminated=live.termination_manager.terminated.clone(),
+                                 timeout=live.termination_manager.time_outs.clone())
+                except baseline_frames.FramesContractError as err:
+                    # A mis-shaped sample is a bug on this side, but "no report at all" hides it:
+                    # the run still lands a report, and that report says its verdict is invalid.
+                    contract_error = err
+                    break
         finally:
             live._reset_idx = original_reset
-        result = window.result()
-        if checkpoint is None:
+        artifact = None
+        if contract_error is not None:
+            result = {
+                "verdict": "invalid", "invalid_reasons": [f"collection contract: {contract_error}"],
+                "gates": {name: None for name in baseline_metrics.gate_names(protocol)},
+                "metrics": {}, "diagnostics": {}, "per_env": {}, "axes": recorder.axes,
+            }
+        else:
+            artifact = recorder.artifact(
+                protocol=protocol, **start, task=args.task, seed=args.seed, num_envs=live.num_envs,
+                checkpoint=checkpoint, policy_mode=args.policy_mode if checkpoint else "zero_action",
+                body_weight_n=weight_n)
+            result = baseline_metrics.judge(artifact)
+        if checkpoint is None and result["verdict"] in ("pass", "fail"):
             result["verdict"] = "smoke_only"
+        frames_path = args.output.with_name(args.output.stem + ".frames.pt")
+        if artifact is not None:
+            baseline_frames.save(frames_path, artifact)
         return {
-            "report_format": "baseline-eval-1", "protocol": protocol,
+            "report_format": "baseline-eval-2", "protocol": protocol,
             "protocol_digest": record.file_sha256(PROTOCOL_PATH),
             "task": args.task, "seed": args.seed, "num_envs": live.num_envs,
             "timestamp": provenance.now(), "code": sources,
@@ -181,6 +212,8 @@ def run(args) -> dict:
             "foot_bodies": [names[i] for i in feet],
             "non_foot_bodies": [names[i] for i in non_foot],
             "mesh_check_bodies": mesh_present, "body_weight_n": weight_n,
+            "frames_path": str(frames_path) if artifact is not None else None,
+            "frames_sha256": record.file_sha256(frames_path) if artifact is not None else None,
             "env_cfg": cfg_snapshot.snapshot(cfg), "agent_cfg": cfg_snapshot.snapshot(agent_cfg),
             **result,
         }
