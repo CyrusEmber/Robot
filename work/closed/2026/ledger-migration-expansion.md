@@ -27,7 +27,9 @@ close_when: 三批各自验收通过并留下记录即关。每批的验收（�
   17 行活跃 → 15 个事项、11 行已结案 → 5 个关闭项；读数全部留在 `ACCEPTANCE.md` 与运行产物里，
   删前逐条验证过它有家。走查如实记下 5 处需人拍板、1 处指向本仓不存在的 C++ 层、2 处候选未定真因；
   见 `acceptance/records/2026-09-21-plan-migration.md`。
-- **批 3 = ACCEPTANCE**：未开（约 236 KB，四分流 + 历史适用边界）。
+- **批 3（2026-09-21 完成）**：`ACCEPTANCE.md` 236719 → **7736** 字节；50 节 → 12 条主题记录，
+  原文只留路由表（**路由表取代"同一主题以最后一个提到它的节"**），每节的"不得据本节宣称"进对应记录的
+  「未覆盖边界」；见 `acceptance/records/2026-09-21-acceptance-ledger-split.md`。
 
 ## 每批的硬约束
 
@@ -55,21 +57,16 @@ close_when: 三批各自验收通过并留下记录即关。每批的验收（�
 判据段存在，语义靠评审） / 文档体积等于 token 节省 / 单次对照可外推全仓 / AI 实际会读归档。
 前几项需要评审，闸门只能让"便宜路径 = 正确路径"。
 
-## 已知的待决项（迁到哪一批就在哪一批裁决）
+## 未做完的动作已另立活跃事项（关闭规则：动作不随事项一起关闭）
 
-- **默认发现成本直接由 `--list` 输出来卡**（2026-09-21 改）：不再用 `next` 长度代理，列表只印
-  id / 状态 / 范围 / 标题，`next` 与关闭条件留给 `--locate`，`next` 不再设长度上限（不拿可执行性
-  换短行）。超额时闸门提示**收窄查询范围**，明确不构成取消/关闭/归档事项的理由。三个测量各有分工
-  （列表输出 / 单项读取 / 活跃总量警报）写在闸门模块文档里。
-- **批 1 留下的三条历史事实没有家**（只在旧版本史里写过，已原样保存在
-  `acceptance/records/2026-09-20-harness-migration.md`）：v1 训练总时 25.735 h / 单次停顿 7.2 h 的时间预算依据；
-  "记录链源头在机器本地会被清理 ⇒ 记录必须入库"的理由；"别把调用路径的父目录当配置"的教训。
-  归位（v1 目录 NOTES / `rl_exp/docs/pitfalls.md` / 某条记录）待裁决。
-- `HARNESS.md` 内部矛盾已随批 1 消解（`eval.py` 默认协议 = v3，跨协议禁混表改为现行规则）。
-- `tasks/components.py`、`tasks/lizard_env_cfg.py`、`tools/verify/teacher_smoke.py` 三处注释仍指向
-  FAMILY 的 obs 布局表（该表归 `OBS.md`）⇒ 属代码文件，另行安排。
-- `check_pxr_leak.py` / `check_split_probe_wait.py` 的 docstring 里 `docs/pitfalls.md` 路径陈旧 ⇒ 同上。
-- FAMILY 版本史行与 FILEMAP 版本目录行都带版本身份（重叠约 70%）⇒ 批 2 裁决。
+- 三段历史事实归位 → `work/active/historical-facts-homing.md`
+- 代码注释与 docstring 的旧指针（五处） → `work/active/stale-doc-pointers-in-code.md`
+- FAMILY 版本史行与 FILEMAP 版本目录行的身份重叠 → `work/active/family-filemap-identity-overlap.md`
+- 两个阈值的职责与取值理由写在闸门常量旁（`--list` 输出 = 默认发现成本；活跃总量 = 积压警报），
+  不在本项留副本。
+- 迁走后仍需人拍板的决定（五处）与待查事实（一处：本仓不存在的 C++ 层）已在批 2 的记录与对应活跃事项里，
+  见 `acceptance/records/2026-09-21-plan-migration.md`；`HARNESS.md` 的内部矛盾已随批 1 消解
+  （`eval.py` 的 `--protocol` 默认值 = v3）。
 
 ## 未覆盖边界
 

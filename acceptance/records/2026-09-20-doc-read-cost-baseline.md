@@ -4,7 +4,7 @@
 
 只覆盖一类任务：**定位一个未完成事项，并报出它的状态、规则落点、关闭条件**。
 本记录只管试点的**附带收益**口径（读取成本对照）；试点主目标（事项**可定位 / 可执行 / 可关闭**）
-与后续各批的同一验收四项见 `work/active/ledger-migration-expansion.md`，
+与后续各批的同一验收四项见 `work/closed/2026/ledger-migration-expansion.md`，
 同一口径的 after 读数与人工审查见 `acceptance/records/2026-09-20-ledger-pilot.md`。
 代表任务 = `ablation_harness/HARNESS.md` 挂账 **#6**（`--headless` 已弃用而本仓仍在用）。
 适用时点：2026-09-20 的文档结构（`work/` 与 `acceptance/records/` 尚未启用）。
@@ -68,7 +68,7 @@
 - 关键行：`README.md:6`（FILEMAP 必读声明）、`HARNESS.md:73`（事项 #6 原文）、
   `run_ablation.py:83`/`:115`（透传点）。
 - 相关：`acceptance/records/2026-09-20-ledger-pilot.md`（同口径的 after 读数与人工审查）、
-  `work/active/ledger-migration-expansion.md`（对后续各批的同一验收四项）。
+  `work/closed/2026/ledger-migration-expansion.md`（对后续各批的同一验收四项）。
 
 ## 未覆盖边界
 

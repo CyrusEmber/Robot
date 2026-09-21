@@ -5,11 +5,11 @@
 本记录 = `2026-09-20-doc-read-cost-baseline.md` 定的同一任务（定位一个未完成事项，报出状态、
 规则落点、关闭条件）在**迁移后**的同口径重做，加上三个试点事项的**人工审查**结果。
 **读取成本是附带收益**；主判据是事项是否**可定位 / 可执行 / 可关闭**（验收四项与后续各批的同一口径
-见 `work/active/ledger-migration-expansion.md`）。
+见 `work/closed/2026/ledger-migration-expansion.md`）。
 不外推其它任务类型，也不外推全仓。
 
 **本试点于 2026-09-20 收尾**：三项质量判据通过（走查真抓出 #6 的框架继承链遗漏并已修）。
-**扩大迁移不在本项范围内**，另开独立事项 `work/active/ledger-migration-expansion.md`（批 1 HARNESS →
+**扩大迁移不在本项范围内**，另开独立事项 `work/closed/2026/ledger-migration-expansion.md`（批 1 HARNESS →
 批 2 PLAN → 批 3 ACCEPTANCE，一批一验收），本记录不再追加范围。
 
 ## 验收条件
