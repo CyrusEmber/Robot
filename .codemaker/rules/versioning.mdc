@@ -50,20 +50,22 @@ alwaysApply: false
 **流程（家族无关，通用五步）**：
 
 1. `copy versions/<family>/<line>/vN versions/<family>/<line>/vN+1`（含 yaml），改新目录参数；
+   **copy 后重置正文**：`NOTES.md` 只留骨架、`PLAN.md` 按本版重写——继承上版的差异段 / 结果表 /
+   修订历史就是给自己造第二份会失真的副本，而完整差异只有 `diff.json` 一份；
    runner cfg 逐版本化：`experiment_name = <family>_<场景>_vN`（一版本一日志目录，
    禁共用；存量目录不迁移）。**新线**（无上游母本可 copy）另做两件：`versions/lines.json`
    落生命周期记录（见本节分线条款）；`cfg_lock --update --line <线> --reason "<why>"`
    建该线自己的配方锁（**一条线一个锁文件**，落点 = **线根目录**，即
    `versions/<family>/<line>/cfg_lock.json`，与线 dev yaml 同级、不在 `vN/` 内；
    `main` 也有自己的线根，不是家族根特例；框架组合块全仓共用 `versions/cfg_baselines.json`）
-2. 写 `versions/<family>/<line>/vN+1/PLAN.md` 与 `NOTES.md`，并落 `base.json`（`{"base": "vN", "note": ""}`，血统根用 `null`）。base = 改配方那天眼红的**唯一母本快照**；对其他版本的决策引用只进 PLAN 散文，不进 base.json（一个 run 只有一棵代码树）。重基（废案迁移到新母本）= 改 base.json 的 base 字段并在 note 记一笔。base 按家族相对路径解析：主线写 `vN`；支线内裸 `vN` 先命中本线（parkour 的 v2 写 `v1` 指 `parkour/v1`，绝不落主线），跨线引用写全路径。**PLAN 每版必写**（变更少简短即可）：多变量设计（新 obs 布局 / 奖励包 / DR 协议 / 新支线 v1）用完整版——提案态载体，评审与决策记录所在，含修订记录节，冻结前定稿；单变量小改（一个 term 增删或 yaml 数值档，不涉 obs 布局与多 term 权衡）用**简短骨架**：目的/假设（≤3 行）/ diff 清单 / 验收 / 训练命令。NOTES **必含骨架**：目的 / 假设 / 相对上版 diff / 训练命令 / 结果回填 / 结论
+2. 写 `versions/<family>/<line>/vN+1/PLAN.md` 与 `NOTES.md`，并落 `base.json`（`{"base": "vN", "note": ""}`，血统根用 `null`）。base = 改配方那天眼红的**唯一母本快照**；对其他版本的决策引用只进 PLAN 散文，不进 base.json（一个 run 只有一棵代码树）。重基（废案迁移到新母本）= 改 base.json 的 base 字段并在 note 记一笔。base 按家族相对路径解析：主线写 `vN`；支线内裸 `vN` 先命中本线（parkour 的 v2 写 `v1` 指 `parkour/v1`，绝不落主线），跨线引用写全路径。**PLAN 每版必写**（变更少简短即可）：多变量设计（新 obs 布局 / 奖励包 / DR 协议 / 新支线 v1）用完整版——提案态载体，评审与决策记录所在，含修订记录节，冻结前定稿；单变量小改（一个 term 增删或 yaml 数值档，不涉 obs 布局与多 term 权衡）用**简短骨架**：目的/假设（≤3 行）/ 差异清单（指向 `diff.json`，不复述逐项路径）/ 验收 / 启动方案（计划命令）。NOTES **必含骨架**：设计的引用（目的/假设见 PLAN，不复制判据）/ **本版重点变化（≤2 句阅读提示，不作完整性承诺）**+ 差异声明链接（完整差异与逐项理由以 `diff.json` 为准）/ 实际执行与偏离（计划命令归 PLAN；实跑命令、覆盖参数、seed、checkpoint 引具体 run，正文归运行记录）/ 结果回填 / 结论
 3. 代码级结构变更（新 term）走版本差异机制 + 新任务 id 常驻注册（机制各家族自定义，见其 FAMILY.md）；纯参数变更（yaml-only）不需要新任务 id。**新任务 id 必须配 golden**：`cfg_lock --update --line <线> --reason "<what moved and why>"`（漏 `--line` 拒写——一次全量更新会把别条线的漂移并进同一条理由；漏 `--reason` 也拒写且不落盘）。**归属必须声明**：任务 cfg 类上挂 `params_line`（`ClassVar`，不进配方快照），线句柄 = 家族相对路径（`lizard` / `lizard/<line>`）；缺声明、指向不存在的线、或该线无锁文件，一律红。**冒烟脚本同理**：运行时契约核对集中在 `tools/verify/teacher_smoke_runner.py`，新版本 = 给其 `SMOKE_SPEC` 加一行 + 建薄壳 `teacher_smoke_vN.py`（调用 `main("vN")`）；**复制整份冒烟脚本造新版本 = 违规**（复制件无闸门，漏改一条断言永久静默）。表行与上一版逐字段人审，并按该版特有的一条断言做破坏测试确认咬得住。
 4. 训练 → 曲线导出（`rl_exp/tools/trainlog/dump_tb.py`）→ eval（`ablation_harness/eval.py`）→ 结果回填 NOTES.md
 5. 家族文档版本历史表加一行；git 侧 commit + tag `<family>-vN+1`（tag = 整树快照；commit/push 细节走 git-auto-sync skill）
 
 **机器闸门**：第 2/5 步可量化项（每版本目录四件套 PLAN/NOTES/yaml/asset_lock 锁自身 + **base.json 血统边合法** + FAMILY 版本史行 + FILEMAP 行）由 `rl_exp\tools\verify\check_version_docs.py` 看守——`run_offline_checks.bat` + pre-commit 均跑，漏记录与 DR 漂移同级红；tag 缺失仅 WARN（历史前缀可不统一）。线身份与生命周期另由 `check_recipe_registry.py` 看守（**发现到的线必须有记录**、退休须带 `retired_at` 与非空 `reason`、`successor` 必须存在且为 active 的另一条线；闸门**不读时钟**——退休是目录修订，不是日期到期），配方 golden 由 `check_cfg_lock.py` 看守（**一条线一个锁文件**、`--update` 必须带 `--line` 与 `--reason`、任务必须有 `params_line`），四份文件约定（yaml 命名 / 线目录 / 锁落点）由 `recipe_lines.py` 单点供应。纯约定没闸门 = 必然欠账。
 
-**红线**：已发布 term 的实现永不改语义（新版本只允许加 term）；冻结目录只读。
+**红线**：已发布 term 的实现永不改语义（新版本只允许加 term）；冻结目录只读；**配方锁正文（`versions/**/cfg_lock.json`）是闸门产物、不是阅读对象**——取用与判定只走 `check_cfg_lock.py` 的输出（`--diff` / `--vs-upstream` / `--self-test`），改动只走 `--update --line <线> --reason`；逐字读正文、手改正文、把正文抄进文档或事项都算绕开闸门（结论与实测归 evidence 记录，事项只留落点引用）。
 
 ## B. 修订既有版本（文档级 vN.M.K）
 
@@ -82,6 +84,7 @@ alwaysApply: false
 3. 决策来源分级标记：`用户拍板：<日期>`（用户明示）与 `review 定案`（AI 推断获默认通过）不可混写。
 4. **单一真身守卫**：动笔前确认目标文件是唯一权威副本（git status 无同名未跟踪分叉、无旧路径残留）；发现分叉先合并再删副本，禁止在陈旧副本上继续修订。
 5. **修订号 ↔ commit 绑定**：commit message 以版本号开头（初稿 `vN:`，修订 `vN.M.K:`）；commit 闭环/孤儿/amend 纪律走 git-auto-sync skill。
+6. **差异集合变了 ⇒ 改声明，不改摘要**：修订动了 `diff.json` 的 allowed 集合，或动了 `base.json` 的比较基线时，改的是 `diff.json`；变化的**含义**改向（同一路径上方向或幅度反转）还要人工复核 `why`、`base.json.note` 与 NOTES 的重点摘要——闸门只比对条数与路径，`why` 的语义漂移无自动判据。历史版本已写下的漂移段**豁免，不清零**（冻结记录不改写）。
 
 **当前计划同步——状态跃迁才做，内容修订不做**：`versions/<family>/PLAN.md` 头部更新行、`FAMILY.md` 当前状态、`FILEMAP.md` versions 行记的是**状态**（活跃版本/提案中/训练中），不是方案内容。方案细节修订（vN.M.K）不动这三处；只在状态跃迁时同步：
 
