@@ -96,7 +96,8 @@ FROZEN_REVS: dict[str, str] = {
     "rl_exp/versions/lizard/parkour/cfg_lock.json": "020e6fb",
     # v1.1's bytes landed in 1ba6157, the same two-step shape the second re-baseline used (B0
     # addendum ②, last row): the new digest first, then this line to the revision it came from.
-    "rl_exp/versions/lizard/baseline/cfg_lock.json": "1ba6157",
+    # The fourth re-anchor took the same two steps: 817d64e carries the head-chain contact guard.
+    "rl_exp/versions/lizard/baseline/cfg_lock.json": "817d64e",
 }
 """Which revision each frozen file's bytes are from, for the banner only.
 
