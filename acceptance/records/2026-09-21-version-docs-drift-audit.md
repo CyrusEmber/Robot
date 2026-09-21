@@ -57,7 +57,8 @@
 - 闸门侧：`rl_exp/tools/verify/check_recipe_build.py:88`（`EXPECTED_DIFFS` 只钉条数）、
   `check_version_docs.py:222`（只判四件套存在）、`check_work_docs.py`（记录五节 / 事项形状 / 台账预算）。
 - 相关事项：`work/closed/2026/version-doc-single-owner.md`（治理动作，已关闭；读数见
-  `acceptance/records/2026-09-21-version-doc-read-cost.md`）、`work/active/ledger-inbound-reference-scan.md`。
+  `acceptance/records/2026-09-21-version-doc-read-cost.md`）、
+  `work/closed/2026/ledger-inbound-reference-scan.md`（入站引用扫描，已收）。
 
 ## 未覆盖边界
 

@@ -48,9 +48,10 @@
 且与"冻结历史不改写"冲突。**重议触发保留**：再开两个新版本后若仍出现全量句失真（清单已由 `diff.json`
 承担却仍在 NOTES 里复述），把闸门议题重新提出。
 
-**新发现的缺口（已另立事项）**：**实跑命令行在四份文件里都不存在**——A 侧也只能引"运行记录"，而 run
-记录的落点在 log dir 目录外，读者沿链接走不到。故 §A-2 的"实跑引 run"目前在读者侧是死链，见
-`work/active/run-record-reachability.md`。
+**新发现的缺口（已收，读数另存）**：**实跑命令行在四份文件里都不存在**——A 侧也只能引"运行记录"，而 run
+记录的落点在 log dir 目录外，读者沿链接走不到。故 §A-2 的"实跑引 run"当时在读者侧是死链，裁决与实测见
+`work/closed/2026/run-record-reachability.md` 与 `acceptance/records/2026-09-21-baseline-v1-run-record-gap.md`
+（结论：引用给"路径 + 时间戳"；`baseline/v1` 那次 run 的记录**半截**，无 argv/无 repo rev）。
 
 ## 证据引用
 
@@ -60,7 +61,9 @@
 - 口径来源：`acceptance/records/2026-09-20-doc-read-cost-baseline.md`（计数单位与"入口必读整份"约定）。
 - 规则侧：`.codemaker/rules/versioning.mdc` §A 步骤 1/2、§B 第 6 条。
 - 相关事项：`work/closed/2026/version-doc-single-owner.md`（本记录即其关闭读数）、
-  `work/active/run-record-reachability.md`、`work/active/ledger-inbound-reference-scan.md`。
+  `work/closed/2026/run-record-reachability.md`（读数暴露的缺链，已收）、
+  `work/closed/2026/ledger-inbound-reference-scan.md`（入站引用扫描，已收）、
+  `work/active/baseline-pre-make-record-check.md`（下一次 baseline 启动复验）。
 
 ## 未覆盖边界
 

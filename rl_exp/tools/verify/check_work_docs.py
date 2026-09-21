@@ -21,6 +21,14 @@ Three modes, one implementation of the item format:
 * ``--locate KEY`` -- the files whose id, title or body matches KEY, with line numbers.
 * ``--check`` (default) -- the shape gates below, each printing what it saw.
 
+Prose pointers are reported, not gated. ``--check`` also scans documents for
+``work/active/<id>.md``-style references that no longer resolve -- closing an item moves the
+file, so every document that named the old path has to be found and the live one updated. The
+scan prints the path that resolves instead, as a ``HINT``, and never changes the exit code:
+whether a given line is a live pointer to update or a dated trace to leave alone is not
+decidable from the text. Frozen records (``rl_exp/versions/**``) are not read at all -- they
+keep the tree they were written with on purpose (see ``_a0_paths.py``).
+
 What each measurement is for -- three different things, not one budget:
 
 | 对象 | 用途 |
@@ -134,6 +142,20 @@ LIST_BYTES = 5120
 BUDGET_BYTES = 64000
 
 _SHA = re.compile(r"\bsha256:[0-9a-fA-F]{8,}")
+#: A prose reference to a ledger file, spelled the way a document writes it. Placeholders
+#: (``work/closed/<year>/<id>.md``) do not match, which is what keeps this file's own format
+#: description out of its own scan.
+_REF = re.compile(r"work/(?:active|closed/\d{4})/([a-z0-9-]+)\.md")
+#: Reference scopes that are dated traces rather than live pointers, so the scan skips them:
+#: A0's frozen records keep the paths they were written with, and rewriting them to match
+#: today's layout stops them being evidence of anything.
+_FROZEN_REFS = ("rl_exp/versions",)
+#: What the pointer scan reads, and the size past which a file is a dump rather than prose.
+#: Documents only: code spells ledger paths as data (a migration tool's replacement rules) or as
+#: fixtures (a gate's own self-test literals), where "does this pointer resolve" has no meaning.
+#: The self-test pins that boundary rather than leaving it to intention.
+_REF_SUFFIXES = (".md",)
+_REF_MAX_BYTES = 512_000
 
 
 class Item:
@@ -392,6 +414,42 @@ def _locate(key: str) -> int:
     return 1 if problems else 0
 
 
+def _inbound_hints(items: list[Item]) -> list[str]:
+    """Prose pointers to ledger files that no longer resolve where they say.
+
+    The front matter is already gated (``depends_on`` / ``evidence`` / ``landing``); prose is
+    not, and closing an item is a move, so any document naming ``work/active/<id>.md`` keeps
+    pointing at a path that is gone.
+
+    Both verdicts stay hints. ``moved`` and ``dangling`` are what the text can support; whether
+    a line is a live pointer to update or a dated trace to leave alone needs a human, and a gate
+    that guessed would either force a rewrite of history or bless a real break. Frozen records
+    are not read (``_FROZEN_REFS``), and the item files themselves are covered by ``_tally``.
+    """
+    where = {i.id: _rel(i.path) for i in items}
+    hints: list[str] = []
+    for path in sorted(_REPO.rglob("*")):
+        if path.suffix not in _REF_SUFFIXES or not path.is_file():
+            continue
+        rel = _rel(path)
+        if rel.startswith(_FROZEN_REFS) or "__pycache__" in path.parts or ".git" in path.parts:
+            continue
+        try:
+            if path.stat().st_size > _REF_MAX_BYTES:
+                continue
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        for number, line in enumerate(text.splitlines(), 1):
+            for match in _REF.finditer(line):
+                ref, name = match.group(0), match.group(1)
+                if (_REPO / ref).exists():
+                    continue
+                verdict = f"now lives at {where[name]}" if name in where else "is on disk under no path"
+                hints.append(f"{rel}:{number}: {ref} -- that id {verdict}")
+    return hints
+
+
 _GOOD = """\
 ---
 id: {id}
@@ -425,6 +483,18 @@ def self_test() -> int:
             "## 适用范围\n\nonly this one\n", encoding="utf-8"
         )
         (root / "acceptance" / "records" / "Bad_Name.md").write_text(good_record, encoding="utf-8")
+        (root / "notes" / "pointers.md").write_text(
+            "see work/active/good.md\n"
+            "see work/active/gone.md\n"
+            "see work/active/nowhere.md\n"
+            "placeholder work/closed/<year>/<id>.md\n",
+            encoding="utf-8",
+        )
+        (root / "notes" / "tool.py").write_text("# see work/active/nowhere.md\n", encoding="utf-8")
+        (root / "rl_exp" / "versions" / "lizard" / "v1").mkdir(parents=True)
+        (root / "rl_exp" / "versions" / "lizard" / "v1" / "NOTES.md").write_text(
+            "see work/active/nowhere.md\n", encoding="utf-8"
+        )
 
         def item(name: str, text: str, closed: bool = False) -> None:
             folder = root / "work" / ("closed/2026" if closed else "active")
@@ -533,12 +603,28 @@ def self_test() -> int:
             problems.append("falsifier did not fire: the --list discovery budget")
         if not any("not a reason to cancel" in p for p in list_problems):
             problems.append("the --list budget message does not refuse to justify a cancellation")
+
+        pointers = _inbound_hints(items)
+        for expected in (
+            "notes/pointers.md:2: work/active/gone.md -- that id now lives at work/closed/2026/gone.md",
+            "notes/pointers.md:3: work/active/nowhere.md -- that id is on disk under no path",
+        ):
+            if not any(expected in hint for hint in pointers):
+                problems.append(f"falsifier did not fire: {expected!r}")
+        if any("notes/tool.py" in hint for hint in pointers):
+            problems.append("the pointer scan read code, where a path is data or a fixture")
+        if any("work/active/good.md" in hint for hint in pointers):
+            problems.append("the pointer scan blamed a reference that resolves")
+        if any("rl_exp/versions" in hint for hint in pointers):
+            problems.append("the pointer scan read a frozen record")
+        if any("placeholder" in hint for hint in pointers):
+            problems.append("the pointer scan matched a placeholder path")
         _REPO, _ACTIVE, _CLOSED, _RECORDS, BUDGET_BYTES, LIST_BYTES = saved
 
     for problem in problems:
         print(f"  FALSIFIER: {problem}")
     print(
-        "WORK_DOCS_SELF_TEST_OK (14 item + 3 record fixtures)"
+        "WORK_DOCS_SELF_TEST_OK (14 item + 3 record + 3 pointer fixtures)"
         if not problems
         else f"WORK_DOCS_SELF_TEST_DRIFT ({len(problems)})"
     )
@@ -567,6 +653,15 @@ def main(argv: list[str] | None = None) -> int:
     code = _tally(items, problems)
     for problem in problems:
         print(f"  DRIFT: {problem}")
+    hints = _inbound_hints(items)
+    for hint in hints:
+        print(f"  HINT: {hint}")
+    if hints:
+        print(
+            f"  {len(hints)} prose pointer(s) above name a path that is not there: update the "
+            "live pointer, leave the dated trace -- this tool does not decide which, which is "
+            "why it is a HINT and not DRIFT"
+        )
     print(
         f"WORK_DOCS_OK ({len(items)} item file(s))"
         if code == 0
