@@ -331,3 +331,21 @@ class LizardBaselinePPORunnerCfg(RslRlOnPolicyRunnerCfg):
         desired_kl=0.01,
         max_grad_norm=1.0,
     )
+
+
+@configclass
+class LizardBaselineV2PPORunnerCfg(LizardBaselinePPORunnerCfg):
+    """Runner cfg for `Lizard-Baseline-Flat-v2` (1-3 m/s window, 22-dim action).
+
+    The same PPO recipe as v1 on purpose -- the hyperparameters are not a variable this round
+    adds -- with two changes that are about the *record*, not the algorithm:
+
+    * its own ``experiment_name``: one version, one log directory (versioning.mdc A), so a v2
+      run cannot land among v1's.
+    * ``max_iterations`` stated as what is actually intended. v1 declared 3000 and its run was
+      launched with 15000 by a CLI override, which left the recorded run unreproducible from its
+      own NOTES. A wider command window earns a larger budget, declared here instead.
+    """
+
+    max_iterations = 10000
+    experiment_name = "lizard_baseline_v2"

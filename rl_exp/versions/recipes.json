@@ -216,6 +216,18 @@
       "env_cfg_entry": "rl_exp.tasks.recipe_tasks:BaselineFlatEnvCfg_PLAY",
       "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardBaselinePPORunnerCfg",
       "legacy_task_version": "v1"
+    },
+    "baseline-flat-v2@1": {
+      "line": "lizard/baseline",
+      "env_cfg_entry": "rl_exp.tasks.recipe_tasks:BaselineFlatV2EnvCfg",
+      "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardBaselineV2PPORunnerCfg",
+      "legacy_task_version": "v2"
+    },
+    "baseline-flat-play-v2@1": {
+      "line": "lizard/baseline",
+      "env_cfg_entry": "rl_exp.tasks.recipe_tasks:BaselineFlatV2EnvCfg_PLAY",
+      "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardBaselineV2PPORunnerCfg",
+      "legacy_task_version": "v2"
     }
   },
   "tasks": {
@@ -254,6 +266,8 @@
     "Lizard-Parkour-Climb-v1": "climb-v1@1",
     "Lizard-Parkour-Climb-Play-v1": "climb-play-v1@1",
     "Lizard-Baseline-Flat-v1": "baseline-flat-v1@1",
-    "Lizard-Baseline-Flat-Play-v1": "baseline-flat-play-v1@1"
+    "Lizard-Baseline-Flat-Play-v1": "baseline-flat-play-v1@1",
+    "Lizard-Baseline-Flat-v2": "baseline-flat-v2@1",
+    "Lizard-Baseline-Flat-Play-v2": "baseline-flat-play-v2@1"
   }
 }

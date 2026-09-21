@@ -1,0 +1,4 @@
+{
+  "base": "v1",
+  "note": "v2's single mother is v1: the same recipe elements in the same order, with the two new variables declared as parameters (the speed window in `commands`, the joints each action group drives in `action`). The lineage edge is what makes the declared difference readable -- diff.json states it path by path against v1 rather than against the framework stock cfg, which would bury these two deltas inside everything v1 already wrote."
+}

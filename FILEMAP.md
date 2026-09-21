@@ -129,6 +129,7 @@
 | `rl_exp\versions\lizard\parkour\v1\` | 支线版本包：位置任务 / probe gate / 专家表 / 蒸馏微调方案；`base.json` = 支线血统根（null） |
 | `rl_exp\versions\lizard\baseline\` | 支线路线层：能力基线（平地 + 固定命令 + 零课程 + 零 DR）；`baseline_params.yaml` **没有** `domain_randomization` 段（缺席是设计，不是遗漏） |
 | `rl_exp\versions\lizard\baseline\v1\` | 支线版本包：全量式方案 SSOT（配方逐项 + 依据 + 前提校正 + 验收与探针） |
+| `rl_exp\versions\lizard\baseline\v2\` | 支线第二版版本包：同线只加两个变量（命令窗口 `1.0–3.0 m/s`、脚板去动作权限 26→22 维），配方元素与 v1 相同、差异全在 `baseline_params.yaml` |
 | `<线>\vN\PLAN.md` | 版本级计划（目的 / 假设 / 决策点 / 验收线）；结果回填走 NOTES |
 | `<线>\vN\NOTES.md` | 版本文档：目的 / 参数 diff / 训练命令 / 结果回填 |
 | `<线>\vN\<line>_params.yaml` | 冻结参数副本：跑冻结版只读这份，资产内容由 `asset_lock.json` 钉 |

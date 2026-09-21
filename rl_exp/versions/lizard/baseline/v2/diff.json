@@ -1,0 +1,28 @@
+{
+  "format": 4,
+  "recipe": "baseline-flat-v2@1",
+  "line": "lizard/baseline",
+  "note": "Hard B, lineage reading: base.json names v1 as this recipe's mother, so the declared difference is against v1 -- the same element list and the same wiring, with the two new variables expressed as parameters. params_version is filtered as identity: it says which recipe this is, and it is what makes the two recipes different at all.",
+  "env": {
+    "allowed": {
+      "baseline_fixed_command": {
+        "paths": [
+          "commands.base_velocity.ranges.lin_vel_x"
+        ],
+        "why": "v2's first variable: the command window opens from the fixed point 0.5 to 1.0-3.0 m/s, sampled by the framework's own 10 s resampling window. lin_vel_y and ang_vel_z stay at zero, and both rewrite switches stay off, so the added variable is speed and nothing else"
+      },
+      "wiring": {
+        "paths": [
+          "actions.joint_pos_legs.joint_names[]"
+        ],
+        "why": "v2's second variable lives in this recipe's own document rather than in a new element: the shared wiring reads `action.joints`, and this document leaves the blade joints out, so the group drives haa/hfe/kfe (22 dims instead of 26). The joints keep their PD and their actuator group -- this removes the shortcut, not the degree of freedom: v1's trained checkpoint shuffled the blades while one hind foot stayed at 0.002 duty"
+      }
+    }
+  },
+  "agent": {
+    "allowed": {
+      "experiment_name": "one version, one log directory (versioning.mdc A): v2 states lizard_baseline_v2 so a run cannot land in v1's directory",
+      "max_iterations": "declared as intended (10000) rather than left at v1's 3000 that its run overrode by CLI to 15000 -- the recorded run has to be reproducible from its own NOTES"
+    }
+  }
+}

@@ -390,3 +390,26 @@ gym.register(
         "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardBaselinePPORunnerCfg",
     },
 )
+
+# v2 (versions/lizard/baseline/v2/PLAN.md): the speed window opens to 1-3 m/s and the blade
+# joints lose command authority. Same runner cfg: the PPO hyperparameters are not a variable
+# this round adds.
+gym.register(
+    id="Lizard-Baseline-Flat-v2",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": "rl_exp.tasks.recipe_tasks:BaselineFlatV2EnvCfg",
+        "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardBaselineV2PPORunnerCfg",
+    },
+)
+
+gym.register(
+    id="Lizard-Baseline-Flat-Play-v2",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": "rl_exp.tasks.recipe_tasks:BaselineFlatV2EnvCfg_PLAY",
+        "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardBaselineV2PPORunnerCfg",
+    },
+)

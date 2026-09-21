@@ -69,13 +69,20 @@ def baseline_robot(cfg) -> None:
 
 def baseline_actions(cfg) -> None:
     """The deployed two-group split, frozen: a baseline training against a different action
-    interface cannot answer a question about this robot as deployed."""
+    interface cannot answer a question about this robot as deployed.
+
+    Which joints each group drives is a parameter, but its *absence* is not an accident: a yaml
+    without ``action.joints`` keeps the class default (v1 does, because v1 is frozen). A version
+    that wants a narrower interface declares it -- v2 drops the blade joints so the feet keep
+    their PD but lose command authority."""
     action_params = _doc(cfg)["action"]
     cfg.actions = baseline_env_cfg.BaselineActionsCfg()
-    for term_name in ("joint_pos_legs", "joint_pos_spine"):
+    for term_name, group in (("joint_pos_legs", "legs"), ("joint_pos_spine", "spine")):
         term = getattr(cfg.actions, term_name)
         term.scale = action_params[f"{term_name.removeprefix('joint_pos_')}_scale"]
         term.use_default_offset = action_params["use_default_offset"]
+        if "joints" in action_params:
+            term.joint_names = list(action_params["joints"][group])
 
 
 def baseline_flat_ground(cfg) -> None:
@@ -234,6 +241,30 @@ BASELINE_RECIPES: dict[str, dict] = {
         "pins_full_range": (False, False),
         "train": "Lizard-Baseline-Flat-v1",
         "play": "Lizard-Baseline-Flat-Play-v1",
+    },
+    "v2": {
+        # The same elements as v1 on purpose: both of v2's new variables are parameters -- the
+        # speed window in ``commands`` and the joints each action group drives in ``action`` --
+        # so the difference between the two versions is readable in one yaml instead of living
+        # in a second code path that a later reader has to diff by eye.
+        "elements": (
+            "baseline_robot",
+            "baseline_actions",
+            "baseline_flat_ground",
+            "baseline_proprio_obs",
+            "baseline_timing",
+            "baseline_fixed_command",
+            "baseline_rewards",
+            "baseline_base_contact",
+            "baseline_no_curriculum",
+            "baseline_no_dr",
+        ),
+        "play_elements": (),
+        "pins": ("baseline_timing",),
+        "declares": (False, False),
+        "pins_full_range": (False, False),
+        "train": "Lizard-Baseline-Flat-v2",
+        "play": "Lizard-Baseline-Flat-Play-v2",
     },
 }
 
