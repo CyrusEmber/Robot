@@ -3,7 +3,8 @@
 > 无上游母本 ⇒ 按 versioning.mdc §A 分线条款用**全量式 PLAN**。
 > 结果见 [NOTES.md](NOTES.md)；线路线（后续轮次如何逐项加回变量）见 [../PLAN.md](../PLAN.md)。
 > 第一轮只回答一个问题，**不预留任何第二臂**。
-> 修订：v1.1（2026-09-18，DR 关闭清单修正——`reset_robot_joints` 是复位本体而非随机化，见 §修订）
+> 修订：v1.2（2026-09-21，NOTES 形态修订——差异段改声明链接、命令段分计划与实跑，配方与 `diff.json`
+> 未动）；v1.1（2026-09-18，DR 关闭清单修正——`reset_robot_joints` 是复位本体而非随机化）。依据均见 §修订
 
 ## 目的与假设
 
@@ -66,6 +67,7 @@
 | 日期 | 版本 | 变更 + 原因 + 依据 |
 |---|---|---|
 | 2026-09-18 | v1.1 | DR 关闭清单修正：`reset_robot_joints` 不再置 None，保留并钉 `position_range=(1.0,1.0)`/`velocity_range=(0.0,0.0)`。**原因**：本框架资产级 reset 不写关节状态（`InteractiveScene.reset` → `Articulation.reset`，后者只清执行器状态与两个 wrench composer，`isaaclab_physx/assets/articulation/articulation.py:222-246`），`reset_joints_by_scale`/`by_offset` 是关节位置的**唯一**写入者（`envs/mdp/events.py:1924-2003`）⇒ 置 None 等于取消关节复位，终止/超时后的回合会带上上一回合的关节位置与速度（初始条件被历史污染），而所有静态闸门全绿。**依据**：`rl_exp/tools/verify/reset_check.py` 实测——修复前 C/D 红（reset 前后偏差同为 0.4089 rad、残余速度 9.38 rad/s），修复后全绿；teacher 线 `Lizard-Rough-v14` 同一探针全绿（不误报）。闸门侧 `baseline_probe.py` 的 DR 名单去掉该项，改为断言"存在 + func 正确 + 钉死"，并补 `reset_base` 逐轴范围检查。**用户拍板 2026-09-18**（P1：关闭 DR 时删除了正常关节复位） |
+| 2026-09-21 | v1.2 | **记录性修订，不改方案实质**：`NOTES.md` 的十项手写差异清单改为「阅读提示 + [`diff.json`](diff.json) 链接」，命令段拆成「计划」与「实跑（引运行记录）」；配方、`diff.json`、结果表逐字未动。**原因**：手写清单是全量句，修订只补他处时会静默失真，声明的唯一维护位置是 `diff.json`。**依据**：`acceptance/records/2026-09-21-version-docs-drift-audit.md`；`.codemaker/rules/versioning.mdc` §A 步骤 1/2、§B 第 6 条。**用户拍板 2026-09-21**（试点靶选定；本版已冻结，按记录性修订记账） |
 
 ## 明确不做
 

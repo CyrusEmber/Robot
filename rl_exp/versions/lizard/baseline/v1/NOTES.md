@@ -1,7 +1,9 @@
 # baseline/v1 结果
 
-> 骨架（versioning.mdc §A）：目的 / 假设 / 相对上版 diff / 训练命令 / 结果回填 / 结论。
+> 骨架（versioning.mdc §A）：设计的引用 / 本版重点变化 / 实际执行与偏离 / 结果回填 / 结论。
 > 配方与验收定义见 [PLAN.md](PLAN.md)；线路线见 [../PLAN.md](../PLAN.md)。
+> 修订：v1.2（2026-09-21，**记录性修订**——差异段改为声明链接、命令段区分计划与实跑；配方、
+> `diff.json`、结果表未动），依据见 PLAN.md §修订。**用户拍板 2026-09-21**。
 
 ## 目的
 
@@ -16,22 +18,17 @@
    限制、或实现缺陷（启动探针只排除已覆盖的故障，不能整体排除第三种）。多 seed 失败也
    不能区分共享的优化障碍与资产限制；结论必须限定到配方、预算和证据范围。
 
-## 相对上版 diff
+## 本版重点变化（阅读提示）
 
-**无上游母本**（`base.json` 为 `null`）：本线是从框架基类 `LocomotionVelocityRoughEnvCfg`
-直接重写的全新配方，不与任何既有版本做逐项 diff。相对"既有粗糙地形线"的方向性差异：
+**无上游母本**（`base.json` 为 `null`）⇒ 比较对象是框架 stock 配方，逐项路径与理由见
+[diff.json](diff.json)；本段只作阅读提示，**不作完整性承诺**，也不再维护第二份清单。
 
-- 地形：粗糙 → **平面**；移除 `height_scanner` 与 `height_scan` obs
-- 观测：381 维三组 → **90 维单组 proprio**；脚环 208 与特权 83 全去
-- 网络：`SplitEncoderModel` 三编码器 + 归一化 → **普通 MLP**，归一化关闭
-- 命令：连续 `x∈[0,3]` + `heading_command` + 速度课程 → **固定点 `(0.5, 0, 0)`** +
-  `heading_command=False` + `rel_standing_envs=0`
-- 课程：地形课程 + 阶段速度课程 + c_k 时钟 → **全无**
-- DR：10 项（含 2 项非 c_k 门控的 interval 扰动）→ **全关**
-- 奖励：15 槽位 → **7 项**
-- 终止：`time_out` + `roll_over` → `time_out` + **`base_contact`**
-- 资产 / PD / 动作拆分 / sim 时序：**冻结为既有线的实际生效值，不改**
-- PPO：paper S1（三编码器调参）→ 框架 velocity 任务默认平地配方，独立 `experiment_name`
+一句话：地形由粗糙转**平面**（去 `height_scanner` 与 `height_scan` obs）、观测由 381 维三组收到 **90 维
+单组 proprio**、命令收成**固定点 `(0.5, 0, 0)`**、课程与 DR **全关**、奖励 15 槽位收到 **7 项**、
+终止改为 `time_out` + `base_contact`。
+
+**不变量**（不在差异段里，故在此点名）：资产 / PD / 动作接口 / sim 时序沿用既有线的实际生效值；
+PPO 用框架 velocity 平地配方，独立 `experiment_name`。
 
 ## 开训前实测（2026-09-18，v1.1 修复之后）
 
@@ -154,7 +151,9 @@ docstring 写 `(x, y, z, w)`，算的是 `(w, x, y, z)` 分支。数值实测：
 与 `heading_err`），parkour 线有训练 run（`logs/rsl_rl/lizard_parkour_climb_v1`），故其记录的含义可能受影响。
 已在守卫的白名单里**显式登记为已知坏**（不掩盖），处理方式留 parkour 线自己定。
 
-## 训练命令
+## 命令（计划 vs 实跑）
+
+**计划（启动方案）**
 
 ```bat
 python scripts\reinforcement_learning\rsl_rl\train.py --task Lizard-Baseline-Flat-v1 --num_envs 4096
@@ -162,6 +161,9 @@ python scripts\reinforcement_learning\rsl_rl\train.py --task Lizard-Baseline-Fla
 
 开训前：`check_cfg_lock.py --update --line lizard/baseline --reason "..."` 建本线 golden，
 并打 tag `lizard-baseline-v1`。工作树必须干净（脏树开训被 `run_manifest.begin` 硬拒）。
+
+**实跑**：命令行、覆盖参数、seed 与 checkpoint 以运行记录为准（`rl_exp/tools/runrecord/manifest.py`
+的 T0/T1），本节不复述；run 与结果见下节。
 
 ## 结果回填（首跑，2026-09-20）
 
