@@ -27,6 +27,13 @@ rl_exp/versions/**/plots/
 #   dump_tb.py --csv_in <vN/tb_scalars.full.csv> --out <vN/tb_scalars.csv> --max_points 150
 rl_exp/versions/**/tb_scalars.full.csv
 
+# diagnostic products: rl_exp/tools/diagnose/out/<label>/ holds per-case json +
+# summary.md + run logs (layout documented in tools/diagnose/diagnose_support.py)
+# and, for long runs, png/video. Products like the plots above -- the durable
+# evidence is the numbers written into the record plus the command that
+# regenerates them, never the dump itself.
+rl_exp/tools/diagnose/out/
+
 # blender autosave backups
 *.blend1
 
