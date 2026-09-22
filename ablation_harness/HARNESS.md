@@ -26,6 +26,12 @@
 - **部署形态**：仓根独立目录，全部自定位。机器本地事实（IsaacLab 树 + venv 解释器）登记在仓根
   `paths.yaml`（模板 `paths.example.yaml`），唯一读者 `host_paths.py`；`E:\IsaacLab\ablation_harness`
   junction 已废，原机可 `rmdir` 摘链接。
+- **同目录但不是测量仪器**：`video_matrix.py`（录像矩阵）与 `results/` 里的记录无关 —— 它按
+  `--speeds` × `--terrains` 任意组合录 mp4 + `matrix.json`，用来**看**策略在不同速度/地面上怎么走，
+  **不产 verdict、不写 `results/<协议>/`**。它的命令由评测侧注入，可以落在配方命令区间之外（那种格子
+  记 `in_recipe_box: false`），其位移/均速只作"这段片子是否靠谱"的自查，**不得引用进任何验收表**；
+  地形挡位取本仓套件的单列板（`plane` 走配方自己的地）。断言折在 `test_terrain_geometry.py` 里，
+  因为那道闸门已经付过 `suites` 的 import —— 单立一项会顶过离线套件的数量棘轮。
 
 ## 记录格式（`record_format`，独立于 eval 协议版本）
 

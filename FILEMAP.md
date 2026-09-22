@@ -49,6 +49,7 @@
 | `rl_exp\tools\verify\offline_suite.py` | **离线清单的唯一来源 + 并行调度器**（fail-fast、每项独立进程与 temp、全绿才打一行判词，字面见 runner 末行）。改 tasks 或 harness 后、commit 前必跑；规则见 `OFFLINE_CHECKS.md` |
 | `ablation_harness\eval.py` | 统一评测 runner：task + checkpoint + 协议 + 模式 → `eval.json`（另写 `terrain\geometry.json`） |
 | `ablation_harness\run_ablation.py` | 消融调度：spec yaml → 串行 train + eval → 汇总表，断点续跑；`--by-terrain` 出逐地形长表 |
+| `ablation_harness\video_matrix.py` | 录像矩阵（**相机，不是判官**）：`--speeds` × `--terrains` 想怎么组合都行，默认最高速 × 配方平地 → 每格一段 mp4 + `matrix.json`（命令区间 / 是否在配方区间内 / 帧数 / 峰值与净位移 / 复位 / 相机）；地形挡位取套件命名列（单列板）；**不产 verdict、不写 `results/`**，产物落 `ablation_harness\videos\`（gitignore） |
 | `rl_exp\tools\launch_recipe.py` | 新启动器：目录 → 身份 → 配置侧绑定 → golden 对比 → 生命周期判定 → 记录；默认只检查（不起 sim），`--launch` 交回 fork trainer |
 | `ablation_harness\protocols\locomotion_eval_v*.yaml` | 评测协议契约（时间线 / 帧定义 / 阈值 / 套件 / DR）：v1/v2 冻结封存，v3 换真起伏套件 `lizard_suite_v2`；**改动 = 新建 v4，v1/v2/v3 不得混表**。套件定义在 `ablation_harness\suites.py` |
 | `rl_exp\tools\runrecord\` | 运行记录层（**训练路径实际调用**，不是人手跑的入口）：`manifest.py` T0/T1 记录 + `--verify` 两维度 / `lifecycle.py` 启动生命周期判定（退休线拒新训与续训）/ `binding.py` 摘要与 rev 拼写的唯一家（stdlib 栈底）/ `provenance.py` 代码来源规则 / `rebuild.py` 恢复演练（按需） |

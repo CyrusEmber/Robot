@@ -116,6 +116,18 @@ python ablation_harness\plot_eval.py --protocol locomotion_eval_v3 --group v3 ^
 :: 地形预检图不在此列（见 isaaclab-pretrain-check）
 ```
 
+**录像看策略怎么走（相机，不是判分）**：`ablation_harness\video_matrix.py` —— 不同速度挡 × 不同地形挡
+各录一段 mp4，用来"看"，**不产 verdict、不写 `results/<协议>/`**，其位移等数字只作自查、不得引用进验收表。
+挡位想怎么组合都行，默认最高速 × 配方自己的平地；地形挡位取套件命名列（`plane` + `suites.LIZARD_SUITE_V2_NAMES`
+九列，单列板、seeded）。相机默认跟随机器人（`--follow`：eye/lookat 是相对机器人根位的偏移；
+`--no-follow` 才是固定世界点，而固定机位下 3 m/s 的机器人几秒就出画）。产物落 `ablation_harness\videos\`
+（gitignore，与 `diagnose/out/` 同待遇）：每格 `<速度>mps_<地形>.mp4` + 一份 `matrix.json` 记条件。
+
+```bat
+python ablation_harness\video_matrix.py --checkpoint <model.pt> ^
+  --speeds 1,2,3 --terrains plane,rough_b --seconds 5 --out_dir ablation_harness\videos\<标签>
+```
+
 ## 组件热插拔（spec 的组织方式，**永远不动家族代码**）
 
 三级入口，从轻到重：
