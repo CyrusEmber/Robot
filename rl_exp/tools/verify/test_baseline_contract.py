@@ -582,6 +582,7 @@ def test_termination_injection_is_independent_of_wiring():
 #
 # prints the digests to paste after deliberately publishing a new id.
 V4_PROTOCOL = json.loads((_REPO / "ablation_harness/protocols/baseline_flat_v4.json").read_text())
+LIZARD2_PROTOCOL = json.loads((_REPO / "ablation_harness/protocols/lizard2_flat_v1.json").read_text())
 _SEMANTICS_PATH = _REPO / "ablation_harness" / "judge_semantics.json"
 _STEP_DT = 0.02  # every fixture below runs the protocol's 20 s window in 1000 steps
 
@@ -759,6 +760,160 @@ _FIXTURES = {
     "loco_energy": _fixture_loco_energy,
     "loco_completion": _fixture_loco_completion,
 }
+
+
+def _fixture_banded(kw):
+    """A commanded sweep over the declared bands, with the velocity, position and gait it produces.
+
+    One fixture for the four banded criteria, because they read one window. ``segments`` is the
+    command schedule (``[[speed, frames], ...]``); ``spoil`` cuts the velocity inside one band while
+    the command keeps asking for it; ``creep`` moves the robot while the command is zero;
+    ``stop_after`` stops the robot while the command keeps being issued; ``load_fraction`` /
+    ``load_frames`` put that fraction of body weight on both non-foot bodies; ``swing_feet`` /
+    ``air_frames`` give that many feet a swing of that length; ``zero_env`` holds one env at a zero
+    command for the whole window; ``protocol_patch`` edits a parameter of a copy of the protocol.
+    """
+    protocol = json.loads(json.dumps(LIZARD2_PROTOCOL))
+    for gate, params in (kw.get("protocol_patch") or {}).items():
+        protocol["criteria"][gate]["params"].update(params)
+    steps, num_envs = 200, 2
+    dt = protocol["episode_length_s"] / steps
+    speeds = [speed for speed, frames in kw["segments"] for _ in range(frames)]
+    speeds += [0.0] * max(0, steps - len(speeds))
+    spoil, factor = kw.get("spoil"), kw.get("spoil_factor", 0.5)
+    creep, stop_after = kw.get("creep", 0.0), kw.get("stop_after")
+    zero_env, swing = kw.get("zero_env"), kw.get("swing_feet", 0)
+    air = kw.get("air_frames", 8)
+    load_fraction, load_frames = kw.get("load_fraction", 0.0), kw.get("load_frames", 0)
+
+    def commanded(env, step):
+        return 0.0 if env == zero_env else speeds[step]
+
+    def velocity(env, step):
+        speed = commanded(env, step)
+        if spoil is not None and spoil[0] <= speed < spoil[1]:
+            speed *= factor
+        return creep if speed == 0.0 else speed
+
+    forward = [0.0] * num_envs
+    positions = []
+    for step in range(steps):
+        for env in range(num_envs):
+            if stop_after is None or step < stop_after:
+                forward[env] += velocity(env, step) * dt
+        positions.append(torch.tensor([[value, 0.0, 0.0] for value in forward], dtype=torch.float32))
+
+    def swinging(step, foot):
+        return swing > foot and step % (2 * air) < air
+
+    def contact(step):
+        return torch.tensor([[0.0 if swinging(step, foot) else 1.0 for foot in range(2)]
+                             for _ in range(num_envs)], dtype=torch.float32)
+
+    def fraction(step):
+        planted = 0.25
+        return torch.tensor([[0.0 if swinging(step, foot) else planted for foot in range(2)]
+                             for _ in range(num_envs)], dtype=torch.float32)
+
+    def non_foot(step):
+        loaded = load_fraction if 10 <= step < 10 + load_frames else 0.0
+        return torch.full((num_envs, 2), loaded)
+
+    return protocol, build(protocol, steps, num_envs=num_envs, series={
+        "command_world": lambda step: torch.tensor([[commanded(env, step), 0.0, 0.0]
+                                                    for env in range(num_envs)]),
+        "velocity_yaw": lambda step: torch.tensor([[velocity(env, step), 0.0, 0.0]
+                                                   for env in range(num_envs)]),
+        "pos": lambda step: positions[step],
+        "foot_contact": contact,
+        "foot_fraction": fraction,
+        "non_foot_fraction": non_foot,
+    })
+
+
+# Registered next to its definition rather than in the table above: the table is built at import
+# time, before this function exists. One home per fixture still holds -- there is exactly one line
+# that binds the name "banded" to a fixture.
+_FIXTURES["banded"] = _fixture_banded
+
+
+def test_banded_tracking_judges_each_band_and_the_zero_band_in_absolute_units():
+    """A range command is judged band by band: the spoilt band fails while the others stay clean."""
+    sweep = {"segments": [[0.0, 50], [0.5, 50], [1.5, 50], [2.5, 50]]}
+    clean = baseline_metrics.judge(_fixture_banded(sweep)[1])
+    assert clean["judge"]["id"] == baseline_metrics.BANDED_JUDGE_ID, clean["judge"]
+    assert clean["gates"]["tracking"] and clean["gates"]["displacement"], clean["gates"]
+    assert clean["metrics"]["tracking_band_frames"] == {"0-0.1mps": 100, "0.1-1mps": 100,
+                                                       "1-2mps": 100, "2-3mps": 100}, \
+        clean["metrics"]["tracking_band_frames"]
+
+    spoiled = baseline_metrics.judge(_fixture_banded({**sweep, "spoil": (1.0, 2.0)})[1])
+    assert not spoiled["gates"]["tracking"], spoiled["metrics"]["tracking_band_reasons"]
+    assert spoiled["metrics"]["tracking_band_error"]["1-2mps"] == 0.5, spoiled["metrics"]
+    assert spoiled["metrics"]["tracking_band_error"]["0.1-1mps"] == 0.0, "another band moved too"
+
+    creeping = baseline_metrics.judge(_fixture_banded({**sweep, "creep": 0.4})[1])
+    assert not creeping["gates"]["tracking"], creeping["metrics"]["tracking_band_reasons"]
+    assert any("0-0.1mps" in reason for reason in creeping["metrics"]["tracking_band_reasons"]), \
+        creeping["metrics"]["tracking_band_reasons"]
+
+
+def test_banded_a_band_nothing_was_commanded_into_is_not_a_pass():
+    """Two ways to measure nothing: a declared band with no frames, and frames in no band."""
+    uncovered = baseline_metrics.judge(_fixture_banded({"segments": [[0.5, 100], [1.5, 100]]})[1])
+    assert not uncovered["gates"]["tracking"], uncovered["gates"]
+    assert uncovered["metrics"]["tracking_band_frames"]["2-3mps"] == 0
+    assert any("measured nothing" in reason for reason in uncovered["metrics"]["tracking_band_reasons"])
+
+    holed = baseline_metrics.judge(_fixture_banded({
+        "segments": [[0.5, 100], [1.5, 100]],
+        "protocol_patch": {"tracking": {"bands": [[0.0, 0.1], [0.1, 1.0]]}}})[1])
+    assert holed["metrics"]["tracking_unclaimed_frames"] == 200, holed["metrics"]
+    assert not holed["gates"]["tracking"], holed["gates"]
+
+
+def test_banded_displacement_sums_over_the_band_before_dividing():
+    """Stopping mid-window keeps the command in the denominator: the ratio falls, the window stays."""
+    sweep = {"segments": [[0.0, 50], [0.5, 50], [1.5, 50], [2.5, 50]]}
+    clean = baseline_metrics.judge(_fixture_banded(sweep)[1])
+    assert abs(clean["metrics"]["displacement_band_ratio"]["1-2mps"] - 1.0) < 1e-6, clean["metrics"]
+    stopped = baseline_metrics.judge(_fixture_banded({**sweep, "stop_after": 150})[1])
+    assert not stopped["gates"]["displacement"], stopped["metrics"]["displacement_band_reasons"]
+    assert abs(stopped["metrics"]["displacement_band_ratio"]["2-3mps"]) < 1e-6, stopped["metrics"]
+    assert abs(stopped["metrics"]["displacement_band_ratio"]["0.1-1mps"] - 1.0) < 1e-6, \
+        "a band the robot did walk must not be charged for a later one"
+
+
+def test_non_foot_load_sum_catches_two_bodies_under_the_single_body_fraction():
+    """Two bodies at 4% carry 8% between them: the single-body criterion sees neither, the sum does."""
+    loaded = {"segments": [[0.5, 200]], "load_fraction": 0.04, "load_frames": 6}
+    result = baseline_metrics.judge(_fixture_banded(loaded)[1])
+    assert result["gates"]["no_non_foot_carrier"], "the fraction is 0.05 and no body reached it"
+    assert not result["gates"]["no_non_foot_load_sum"], result["metrics"]
+    assert abs(result["metrics"]["non_foot_load_sum_max"] - 0.08) < 1e-6, result["metrics"]
+
+    lighter = baseline_metrics.judge(_fixture_banded({**loaded, "load_fraction": 0.03})[1])
+    assert lighter["gates"]["no_non_foot_load_sum"], lighter["metrics"]
+    briefer = baseline_metrics.judge(_fixture_banded({**loaded, "load_frames": 4})[1])
+    assert briefer["gates"]["no_non_foot_load_sum"], f"0.4 s is under the 0.5 s dwell: {briefer['metrics']}"
+
+
+def test_gait_needs_the_declared_feet_a_long_enough_swing_and_a_landing():
+    """A gait is a sequence: two feet swinging 0.8 s and loading on landing pass, one foot does not."""
+    sweep = {"segments": [[0.0, 50], [0.5, 50], [1.5, 50], [2.5, 50]], "swing_feet": 2, "air_frames": 8}
+    two = baseline_metrics.judge(_fixture_banded(sweep)[1])
+    assert two["gates"]["gait"], two["metrics"]
+    assert two["metrics"]["gait_swing_feet_least"] == 2, two["metrics"]
+
+    one = baseline_metrics.judge(_fixture_banded({**sweep, "swing_feet": 1})[1])
+    assert not one["gates"]["gait"], one["metrics"]
+
+    brief = baseline_metrics.judge(_fixture_banded({
+        **sweep, "air_frames": 1, "protocol_patch": {"gait": {"min_air_time_s": 0.2}}})[1])
+    assert not brief["gates"]["gait"], f"a 0.1 s swing is not a 0.2 s step: {brief['metrics']}"
+
+    standing = baseline_metrics.judge(_fixture_banded({**sweep, "zero_env": 1})[1])
+    assert standing["gates"]["gait"], "an env commanded to stand is not asked for a gait"
 
 
 def frozen_digests(spec: dict) -> dict:

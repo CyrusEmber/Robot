@@ -57,6 +57,7 @@ GATE_ORDER = (
     "no_non_foot_contact",
     "no_non_foot_carrier",
     "no_non_foot_load_sum",
+    "gait",
     "no_mesh_through_floor",
 )
 
@@ -98,14 +99,23 @@ CRITERION_KINDS = {
     # stalls in the top one looks the same as a run that is uniformly mediocre, and those are
     # different failures. The bands are part of the criterion, not a reporting detail.
     "tracking_banded_v1": {
-        "params": ("threshold", "floor_mps", "zero_band_mps", "zero_abs_mps", "bands"), "columns": ()},
+        "params": ("threshold", "floor_mps", "zero_band_mps", "zero_abs_mps", "bands"),
+        "columns": ("command_world", "velocity_yaw")},
     "displacement_banded_v1": {
-        "params": ("threshold", "zero_band_mps", "zero_abs_m", "bands"), "columns": ()},
+        "params": ("threshold", "zero_band_mps", "zero_abs_m", "bands"),
+        "columns": ("command_world", "pos")},
     # The single-body criterion reads each body against the fraction *before* the dwell, so bodies
     # taking turns under the fraction accumulate into one sustained reading there. Two bodies at 4%
     # under a 5% threshold are invisible to it while carrying 8% between them; here the load is
     # summed over the bodies first.
     "non_foot_load_sum_v1": {"params": ("fraction_sum", "sustain_s"), "columns": ("non_foot_fraction",)},
+    # A gait is a sequence, not a level: the criterion is "enough feet completed a swing", judged on
+    # the frames the command actually asked to move. No height term, deliberately -- the record
+    # carries contact and load per foot, and a lift threshold would gate a quantity no run measured,
+    # which this module refuses everywhere else and would be no different for being convenient here.
+    "gait_swing_v1": {
+        "params": ("min_swing_feet", "min_air_time_s", "min_landing_load", "band_mps"),
+        "columns": ("command_world", "foot_contact", "foot_fraction")},
 }
 
 #: Which reader may read which kinds. The protocol's ``judge`` is a binding, not a label: a criterion
@@ -117,7 +127,8 @@ JUDGE_KINDS = {
                "non_foot_contact_v1", "non_foot_carrier_v1", "mesh_clearance_v1"),
     BANDED_JUDGE_ID: ("tracking_v1", "displacement_v1", "survival_v1", "sustained_tilt_v1",
                       "non_foot_contact_v1", "non_foot_carrier_v1", "mesh_clearance_v1",
-                      "tracking_banded_v1", "displacement_banded_v1", "non_foot_load_sum_v1"),
+                      "tracking_banded_v1", "displacement_banded_v1", "non_foot_load_sum_v1",
+                      "gait_swing_v1"),
 }
 
 
@@ -189,6 +200,182 @@ def _gate_mesh_clearance_v1(frames: dict, alive: torch.Tensor, dt: float, measur
     return bool((clearance > params["threshold_m"]).all())
 
 
+def _band_masks(command: torch.Tensor, params: dict):
+    """``[[(lo, hi), mask], ...]`` over the commanded speed, plus the frames no band claims.
+
+    Bands are ``[lo, hi)`` and the highest is closed at its top, so a frame belongs to exactly one
+    band AND the declared maximum lands inside the window -- an exact maximum would otherwise pass
+    through every band and read as a hole in the declaration. A frame outside every band is such a
+    hole: the callers fail on it, because dropping a frame is the silent pass this module keeps
+    refusing.
+    """
+    bands = [(float(lo), float(hi)) for lo, hi in params["bands"]]
+    masks, claimed = [], torch.zeros_like(command, dtype=torch.bool)
+    for index, (lo, hi) in enumerate(bands):
+        top = index == len(bands) - 1
+        mask = (command >= lo) & (command <= hi if top else command < hi)
+        masks.append(((lo, hi), mask))
+        claimed |= mask
+    return masks, ~claimed
+
+
+def _band_label(band: tuple[float, float]) -> str:
+    """The band as a report key, so a failure names the band a reader has to look at."""
+    return f"{band[0]:g}-{band[1]:g}mps"
+
+
+def _gate_tracking_banded_v1(frames: dict, alive: torch.Tensor, dt: float, measured: dict, meta: dict,
+                             params: dict) -> bool:
+    """Per-band forward-speed error, with the zero-command band judged on absolute speed.
+
+    One mean cannot tell "walked in the low band, stalled in the top one" from "uniformly mediocre",
+    so the bands are the criterion. Inside a relative band the reading is the mean of
+    ``|v_fwd - v_cmd| / max(v_cmd, floor_mps)``; the ``floor_mps`` is what makes a frame commanded
+    near zero divided by something real instead of by a 1e-6 epsilon. Frames outside the first
+    episode are charged the full error (a policy that stopped early keeps scoring), while the zero
+    band is read on ``alive`` frames only -- otherwise a fallen robot would collect "stood still"
+    credit. A band with no frames inside the episode is not a pass: it is a run whose command
+    schedule never covered the declared window.
+    """
+    command = frames["command_world"][:, :, 0]
+    forward = frames["velocity_yaw"][:, :, 0]
+    zero_band = float(params["zero_band_mps"])
+    relative = torch.where(alive, (forward - command).abs() / command.clamp_min(params["floor_mps"]),
+                           torch.ones_like(forward))
+    masks, unclaimed = _band_masks(command, params)
+    counts, readings, reasons = {}, {}, []
+    for band, mask in masks:
+        label = _band_label(band)
+        inside = mask & alive
+        counts[label] = int(inside.sum())
+        if counts[label] == 0:
+            reasons.append(f"{label} measured nothing")
+            continue
+        if band[0] < zero_band < band[1]:
+            reasons.append(f"{label} straddles the zero-command boundary at {zero_band:g}")
+            continue
+        if band[1] <= zero_band:
+            worst = float(_keep(forward.abs(), inside, 0.0).max())
+            readings[label] = worst
+            if worst > params["zero_abs_mps"]:
+                reasons.append(f"{label} moved at {worst:.3f} m/s with no command (limit "
+                               f"{params['zero_abs_mps']})")
+            continue
+        mean_error = float(relative[mask].mean())
+        readings[label] = mean_error
+        if not mean_error < params["threshold"]:
+            reasons.append(f"{label} error {mean_error:.3f} is not below {params['threshold']}")
+    measured["tracking_band_frames"] = counts
+    measured["tracking_band_error"] = readings
+    measured["tracking_unclaimed_frames"] = int(unclaimed.sum())
+    if int(unclaimed.sum()):
+        reasons.append(f"{int(unclaimed.sum())} frame(s) fall outside every declared band")
+    measured["tracking_band_reasons"] = reasons
+    return not reasons
+
+
+def _gate_displacement_banded_v1(frames: dict, alive: torch.Tensor, dt: float, measured: dict,
+                                 meta: dict, params: dict) -> bool:
+    """Distance travelled per band, summed before dividing, with the zero band in absolute metres.
+
+    The order is the criterion: the commanded distance keeps entering the denominator on frames after
+    the episode ended (the command is still issued while the robot no longer moves), so a policy that
+    stopped early is pulled down by its own denominator instead of having the rest of the window cut
+    away. The numerator counts per-frame forward travel in the episode's initial-yaw frame -- an
+    increment, not a position difference, so a respawn's jump cannot enter it.
+    """
+    command = frames["command_world"][:, :, 0]
+    zero_band = float(params["zero_band_mps"])
+    start, yaw = meta["start_pos"], meta["start_yaw"]
+    heading = torch.stack([torch.cos(yaw), torch.sin(yaw), torch.zeros_like(yaw)], dim=-1)  # (N, 3)
+    position = frames["pos"]
+    travel = torch.zeros_like(command)
+    travel[0] = (position[0] - start).mul(heading).sum(dim=-1)
+    travel[1:] = (position[1:] - position[:-1]).mul(heading).sum(dim=-1)
+    masks, unclaimed = _band_masks(command, params)
+    counts, readings, reasons = {}, {}, []
+    for band, mask in masks:
+        label = _band_label(band)
+        inside = mask & alive
+        counts[label] = int(inside.sum())
+        if counts[label] == 0:
+            reasons.append(f"{label} measured nothing")
+            continue
+        if band[0] < zero_band < band[1]:
+            reasons.append(f"{label} straddles the zero-command boundary at {zero_band:g}")
+            continue
+        if band[1] <= zero_band:
+            net = float(travel.masked_fill(~inside, 0.0).sum())
+            readings[label] = net
+            if abs(net) > params["zero_abs_m"]:
+                reasons.append(f"{label} drifted {net:+.3f} m with no command (limit "
+                               f"{params['zero_abs_m']})")
+            continue
+        # Summed over the band's frames, then divided: the command of every frame in the band counts,
+        # including the frames after the episode ended, which is what makes stopping early visible.
+        commanded = float((command[mask] * dt).sum())
+        actual = float(travel.masked_fill(~(mask & alive), 0.0).sum())
+        ratio = actual / commanded if commanded > 0.0 else 0.0
+        readings[label] = ratio
+        if not ratio > params["threshold"]:
+            reasons.append(f"{label} travelled {ratio:.3f} of the commanded distance, not above "
+                           f"{params['threshold']}")
+    measured["displacement_band_frames"] = counts
+    measured["displacement_band_ratio"] = readings
+    if int(unclaimed.sum()):
+        reasons.append(f"{int(unclaimed.sum())} frame(s) fall outside every declared band")
+    measured["displacement_band_reasons"] = reasons
+    return not reasons
+
+
+def _gate_non_foot_load_sum_v1(frames: dict, alive: torch.Tensor, dt: float, measured: dict,
+                               meta: dict, params: dict) -> bool:
+    """The SUM of every non-foot body's vertical load, aggregated before the dwell.
+
+    ``non_foot_carrier_v1`` collapses the bodies with ``any`` before the dwell, so bodies taking
+    turns under the fraction accumulate there; this one sums them first, which is what catches two
+    bodies at 4% each carrying 8% of the weight between them. Both are pass conditions because they
+    answer different questions, and neither is the other's approximation.
+    """
+    total = _keep(frames["non_foot_fraction"], alive, 0.0).sum(dim=-1)  # (T, N)
+    breach = (total >= params["fraction_sum"]) & alive
+    measured["non_foot_load_sum_max"] = float(total.max())
+    return not bool(_sustained(breach, dt, params["sustain_s"]).any())
+
+
+def _gate_gait_swing_v1(frames: dict, alive: torch.Tensor, dt: float, measured: dict, meta: dict,
+                        params: dict) -> bool:
+    """At least ``min_swing_feet`` feet complete a swing, on the frames the command asks to move.
+
+    A swing is a run of frames in which that foot carries no load. It counts only if the run lasts
+    ``min_air_time_s`` and the foot carries at least ``min_landing_load`` on the frame it comes back
+    down on, so contact chatter cannot pass for a step -- ``feet_air_time`` alone is fooled by it.
+
+    Judged per env, over the envs this window asked to move: four feet planted while standing is not
+    a gait failure, so an env commanded below ``band_mps`` throughout is excluded (the zero-command
+    bands of the tracking criteria are what judge it). A window that asked no env to move failed to
+    measure a gait at all, which is not a pass.
+    """
+    command = frames["command_world"][:, :, 0]
+    moving = (command >= params["band_mps"]) & alive  # (T, N)
+    contact = frames["foot_contact"] > 0.0  # (T, N, F)
+    swing = (~contact) & moving.unsqueeze(-1)
+    runs = _run_lengths(swing.reshape(swing.shape[0], -1)).reshape(swing.shape) * dt
+    landed = torch.zeros_like(swing)
+    # the swing ended on a frame still asked to move (the foot-load half of the condition below)
+    landed[1:] = swing[:-1] & moving[1:].unsqueeze(-1) & ~swing[1:]
+    so_far = torch.zeros_like(runs)
+    so_far[1:] = runs[:-1]  # the finished run's length, read on the landing frame
+    completes = landed & (so_far >= params["min_air_time_s"]) & (frames["foot_fraction"] >= params["min_landing_load"])
+    feet = completes.any(dim=0).sum(dim=-1)  # (N,) feet that completed a swing, per env
+    requested = moving.any(dim=0)  # (N,) envs this window asked to move
+    measured["gait_envs_request_swing_feet_mean"] = float(feet.to(torch.float32).mean())
+    if not bool(requested.any()):
+        return False
+    measured["gait_swing_feet_least"] = int(feet[requested].min())
+    return bool((feet[requested] >= params["min_swing_feet"]).all())
+
+
 #: kind -> the function that decides it. One dispatch table, so a protocol names a criterion and the
 #: judge has exactly one place to look it up.
 CRITERIA = {
@@ -199,6 +386,10 @@ CRITERIA = {
     "non_foot_contact_v1": _gate_non_foot_contact_v1,
     "non_foot_carrier_v1": _gate_non_foot_carrier_v1,
     "mesh_clearance_v1": _gate_mesh_clearance_v1,
+    "tracking_banded_v1": _gate_tracking_banded_v1,
+    "displacement_banded_v1": _gate_displacement_banded_v1,
+    "non_foot_load_sum_v1": _gate_non_foot_load_sum_v1,
+    "gait_swing_v1": _gate_gait_swing_v1,
 }
 
 
@@ -244,7 +435,33 @@ def _criteria_plan(protocol: dict) -> tuple[dict, list[str]]:
         reasons.extend(param_reasons)
         if not param_reasons:
             plan[gate] = (kind, params)
+    reasons.extend(_judge_reasons(protocol, plan))
     return plan, reasons
+
+
+def reader_id(protocol: dict) -> str:
+    """Which reader a declared protocol names, or the first one by default.
+
+    ``judge`` is a binding, not a label: a protocol that declares criteria no reader implements, or
+    names a reader that does not cover the kinds it used, is refused rather than judged by whichever
+    reader happens to be reached first. Naming no reader means the reader that read every protocol
+    before the banded kinds existed -- v4 declares no ``judge`` and keeps its identity that way.
+    """
+    return str(protocol.get("judge") or JUDGE_ID)
+
+
+def _judge_reasons(protocol: dict, plan: dict) -> list[str]:
+    """Why the named reader cannot read this plan, or nothing."""
+    reader = reader_id(protocol)
+    if reader not in JUDGE_KINDS:
+        return [f"the protocol names judge {reader!r}, which this module does not implement "
+                f"({sorted(JUDGE_KINDS)})"]
+    covered = set(JUDGE_KINDS[reader])
+    uncovered = sorted({kind for kind, _ in plan.values()} - covered)
+    if uncovered:
+        return [f"judge {reader!r} does not cover {uncovered}: a kind is reachable only through a "
+                "reader that lists it, so a new criterion needs a new id and not just a new name"]
+    return []
 
 
 #: Legacy threshold key -> the criterion it stands for, and the keys it consumes. Spelled out rather
@@ -343,7 +560,7 @@ def semantics_surface() -> dict:
 def judge_identity(protocol: dict) -> dict:
     """Which reader decided (or would decide) this protocol, and which protocol was read."""
     _, origin, _ = judge_plan(protocol)
-    reader = {"declared": JUDGE_ID, "legacy": LEGACY_JUDGE_ID}.get(origin, "unresolved")
+    reader = {"declared": reader_id(protocol), "legacy": LEGACY_JUDGE_ID}.get(origin, "unresolved")
     return {
         "id": reader,
         "origin": origin,
@@ -517,7 +734,9 @@ def _data_reasons(artifact: dict, alive: torch.Tensor) -> list[str]:
     if empty:
         reasons.append(f"{empty} env(s) never contributed a frame inside their first episode")
     tracking = plan.get("tracking")
-    if tracking is not None and tracking[1]["normalized"]:
+    # Only the absolute/fraction-of-command kind normalizes: the banded kind carries a floor_mps and a
+    # zero-command band precisely so that a box including 0 m/s stays readable.
+    if tracking is not None and tracking[0] == "tracking_v1" and tracking[1]["normalized"]:
         low = command_box(protocol)[0][0]
         if abs(low) < 1e-6:
             reasons.append("the declared command box includes 0 m/s, where a normalized tracking "
@@ -568,7 +787,11 @@ def _score(artifact: dict, alive: torch.Tensor) -> dict:
         "first_episode_timeout_fraction": survived.to(torch.float32).mean().item(),
         "command_mps_mean": episode_mean(command).mean().item(),
     }
-    passed: dict[str, bool] = {}
+    # Every gate the protocol declares, undecided until its ``decide`` call runs below. It starts
+    # from the PLAN rather than empty because the verdict is ``all(passed.values())``: a declared gate
+    # that no ``decide`` call reaches would otherwise be invisible to the verdict, which is the one
+    # way a criterion can be written down and then not judged at all.
+    passed: dict[str, bool | None] = {gate: None for gate in plan}
 
     def decide(gate: str) -> None:
         """The one place a verdict comes from: the gate's declared kind decides it."""
@@ -579,7 +802,7 @@ def _score(artifact: dict, alive: torch.Tensor) -> dict:
     # it was given", which is the only question a 1-3 m/s task can answer. Frames after the end
     # score 1.0 -- standing still while commanded to move is the worst normalized error there is.
     tracking = plan.get("tracking")
-    if tracking is not None and tracking[1]["normalized"]:
+    if tracking is not None and tracking[0] == "tracking_v1" and tracking[1]["normalized"]:
         norm_error = torch.where(alive, (frames["velocity_yaw"][:, :, 0] - command).abs()
                                  / command.clamp_min(1e-6), 1.0)
         measured["forward_mae_norm"] = (norm_error.sum(dim=0) / steps).mean().item()
@@ -590,7 +813,8 @@ def _score(artifact: dict, alive: torch.Tensor) -> dict:
     expected_m = (command * dt).sum(dim=0)
     measured["expected_displacement_m"] = expected_m.mean().item()
     displacement_gate = plan.get("displacement")
-    if displacement_gate is not None and displacement_gate[1]["normalized"]:
+    if displacement_gate is not None and displacement_gate[0] == "displacement_v1" \
+            and displacement_gate[1]["normalized"]:
         measured["displacement_frac"] = (displacement / expected_m.clamp_min(1e-6)).mean().item()
     if "displacement" in plan:
         decide("displacement")
@@ -636,6 +860,12 @@ def _score(artifact: dict, alive: torch.Tensor) -> dict:
         # v1/v2: the same reading, gated as weight-bearing sustained for a dwell.
         if "no_non_foot_carrier" in plan:
             decide("no_non_foot_carrier")
+        # Summed over the non-foot bodies before the dwell: the same recording, the other question.
+        if "no_non_foot_load_sum" in plan:
+            decide("no_non_foot_load_sum")
+        # A gait, on the frames the command asked to move.
+        if "gait" in plan:
+            decide("gait")
 
     if "mesh_min_z" in frames:
         clearance = _keep(frames["mesh_min_z"], alive, float("inf")).amin(dim=0)  # (N, B)
@@ -653,9 +883,14 @@ def _score(artifact: dict, alive: torch.Tensor) -> dict:
     if "foot_fraction" in frames:
         diagnostics["foot_load_fraction"] = episode_mean(frames["foot_fraction"]).mean(dim=0).tolist()
 
+    # A declared criterion that no ``decide`` call reached is not a pass and not a policy failure: the
+    # declaration and the reader disagree, so the record cannot be judged at all.
+    undecided = sorted(gate for gate, value in passed.items() if value is None)
     return {
-        "verdict": "pass" if all(passed.values()) else "fail",
-        "invalid_reasons": [],
+        "verdict": "invalid" if undecided else ("pass" if all(passed.values()) else "fail"),
+        "invalid_reasons": [] if not undecided else [
+            f"the protocol declares {undecided}, which this reader never decides: a criterion that is "
+            "written down but not judged would read as a pass"],
         "metrics": measured,
         "gates": passed,
         "diagnostics": diagnostics,
