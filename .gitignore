@@ -39,6 +39,14 @@ rl_exp/tools/diagnose/out/
 # and the durable evidence is the numbers written into the record, never the clip itself
 ablation_harness/videos/
 
+# model checkpoints and raw frame tensors (*.pt): a checkpoint's identity is its entry in the
+# run's checkpoints.json (file sha256 + the run's T1 digest + the payload digest written into
+# the file's own infos), and the frames are an intermediate the record path regenerates, so the
+# file is not the record. Ignoring them also keeps the tree honest: provenance counts ANY
+# untracked file as dirty (rl_exp/tools/runrecord/provenance.py:115), so an artifact nobody
+# means to commit would refuse a training launch over nothing.
+*.pt
+
 # blender autosave backups
 *.blend1
 
