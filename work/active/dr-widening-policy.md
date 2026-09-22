@@ -35,5 +35,5 @@ close_when: ① 用户给出放宽口径（含"不接课程"这一选）后，�
 ## 未覆盖边界
 
 本项不裁"lizard2 哪一版加 DR"（那是版本计划的事），也不动 `lines.json` 的行状态 —— `lizard/main`
-仍记 `active`，它上面还有在办事项；真要退休是另一条家族级事项。旧线 13 份冻结 `main_params.yaml`
+已随家族退役，决定见 `acceptance/records/2026-09-22-lizard-family-retirement.md`。旧线 13 份冻结 `main_params.yaml`
 里那句已过时的 `resume is not reconstructed` 按"冻结记录不改"保留，不在本项处理范围。

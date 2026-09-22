@@ -1,5 +1,7 @@
 # v12 NOTES — Miki S8 复位/观测鲁棒性包
 
+> **冻结语义变更声明（2026-09-22 补记）**：2026-09-16 评审后的修复已进入共用 `JointSIRTerrainCurriculum`，golden 随之重生成，当前实现已不同于原冻结语义。仓内记录为 v11 仅 6-iter 冒烟、v12 无 run，未发现正式训练结果需要重判；既有冒烟只证明当时版本。变更依据、当前机制与未验证边界见 `acceptance/records/2026-09-22-lizard-family-retirement.md`。
+
 > 方案与决策见 [PLAN.md](PLAN.md)；本文件只回填训练事实。骨架按
 > versioning.mdc §A（目的/假设/diff/命令/结果/结论）。
 

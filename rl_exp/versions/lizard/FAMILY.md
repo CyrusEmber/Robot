@@ -1,5 +1,7 @@
 # Lizard 训练家族总文档
 
+> **家族已退役（2026-09-22）**：用户因机体设计缺陷决定退役整个 lizard 家族，覆盖 main / baseline / parkour。路线许可归 `rl_exp/versions/lines.json`；parkour 保留原退役日期与原因。历史代码、参数、锁与结果保留，停止新训与续训。决定与证据边界见 `acceptance/records/2026-09-22-lizard-family-retirement.md`。
+
 > 一个版本 = 一代训练配方（参数冻结副本 + 版本文档 + 训练记录）。代码共享继承，
 > 参数严格按版本隔离：跑 v1 只读 `versions/lizard/main/v1/main_params.yaml`，v2 读 v2 的，
 > 开发态参数的修改永远不影响已冻结版本。
@@ -77,7 +79,7 @@ vN 编号只是句柄，不是顺序契约——重基（v7→v9 迁 v8、v10 �
 | main/v12 | 2026-09-10 | Miki S8 鲁棒性包（提案，代码实施同日）：关节初值/速度 reset 随机（offset 型三组，替换 stock 对全零默认 no-op 的 scale 型）+ 基座姿态/速度范围 yaml 化 + 足底摩擦偶发调低（p_dip 0.1 → [0.05,0.3]，特权 obs 缓存同调用更新）+ teacher 侧高度环噪声（工况 60/30/10，幅度 × c_k，中途重抽；无学生蒸馏）+ r_slip 回 −0.003。obs 契约不变 | （训练后补） |
 | main/v13 | 2026-09-14 | 换回 Miki 对称跟踪核（单变量，base = v10）：`track_lin_vel_xy_miki` = `exp(−‖v_cmd−v_yaw‖²/0.25)`（全 2D 误差、yaw 帧、无 min_speed → cmd=0 站立拿满分），替掉 EP 线性核（超速饱和中性/横向投影不可见/零命令无梯度三盲区，v10 判决实证）。weight 保 1.5 不随 paper 0.75（= 纯核形状消融）。闸 `check_reward_v13.py`；v13.1/v13.2 验收口径三修与换帧见 `v13/NOTES.md` | 风险预注册：v3/v4 exp 核趴窝病历，判废线 = v10 |
 | main/v14 | 2026-09-14（v14.3/v14.4 09-15） | 加回摔倒闸，三次改形后 = v14.4：终止项 = `roll_over_trigger`（基座四元数 ZYX roll，`\|roll\| > 70°`，单调覆盖整圈含肚朝上；`\|pitch\| > 80°` 护栏；per-env dwell 0.5 s）+ 头承重改**惩罚** `head_load_penalty`（头链 contact_forces 世界系 +z 力 relu 求和 / 706 N，权重 -1.0，无阈值/无姿态门控/不做 c_k 缩放）。前栽不收局，趴地接触不管。闸 `check_terminations_v14.py` | **"留肚朝上供起身梯度"不成立** —— Miki 配方没有起身目标，倒了就是翻车（用户拍板）；`\|sin\|` 形判据在 110° 后回落会放过一整族，已废 |
-| main/v15 | 2026-09-16 | 地形课程换 **joint SIR**（base = v14，提案态未实施）：v5 行 SIR（只调难度行、类型维度不可调）→ v11 机制的**联合粒子 SIR**，粒子 = (类型**内部**参数档 combo, 速度桶)，**类型份额固定、不跨类型**（env→type 初始化锁定 `teacher_mdp.py:1150`）；`build_param_grid_terrain_cfg` 参数格（默认 57 combo + flat = 58 类型 / 4×120）+ `ParticleVelocityCommand`（buckets 0.5…3.0 + jitter）+ `Curriculum/joint_sir/{tr_mean, particle_entropy}`（判读量；`frontier_max_v` 冷启动即满值 3.0，**不作能力进度**）；obs/动作/奖励/终止/DR/资产逐字段同 v14。v15.3 重规划（评分换 yaw 帧跟踪误差、Tr 分母改固定窗口、冷启动改显式 `anchor_combo`、每块一次局部扩展；**取消**硬解锁 / 85% 锚集 / 掌握判据）见 `v15/PLAN.md` | **首跑该课程线**（v11 仅 6-iter 冒烟、v12 无 run ⇒ 均不作基线）；本版拟在**老框架**下训练而项目并行迁新框架 ⇒ 前置门：开训前打 tag、进程不得重启、训练结束前不得 `cfg_lock --update`；机制评审 5 条已核证，修复落共享实现后**共用 term 的 v11/v12 golden 已随之重生成**（需偏差声明或 v15 专用变体，待拍板） |
+| main/v15 | 2026-09-16 | joint SIR 提案已于 2026-09-22 随家族退役取消，未冻结、未实施；原方案与评审历史见 `main/v15/PLAN.md` | 取消与证据边界见 `acceptance/records/2026-09-22-lizard-family-retirement.md`；共享 term 语义变更入口见 `main/v11/NOTES.md`、`main/v12/NOTES.md` |
 | parkour/v1 | 2026-09-04 | 支线初稿（未冻结未训练）：跑/爬/跳多专家蒸馏 + RL 微调（PITW 配方）；血统 = 支线根（`base.json` null，与主线 vN 无配方血缘）；参数冻结副本 `parkour/v1/parkour_params.yaml` | （训练后补） |
 | baseline/v1 | 2026-09-16 | 支线初稿（未冻结未训练）：**平地 + 固定 `0.5,0,0` + 零课程 + 零 DR** 的能力基线；血统 = 支线根（`base.json` null）；配方代码自包含（只依赖框架基类与框架 mdp + 本线 `baseline_mdp.py` 的两个核副本），不 import 任何其它线的 cfg/mdp；观测 90 维单组 proprio + 普通 MLP；参数冻结副本 `baseline/v1/baseline_params.yaml` | （训练后补） |
 | baseline/v2 | 2026-09-21 | 支线第二版（未冻结未训练）：v1 的结论是**没学会**（拖颈蹭行过掉了只有速度与存活的口径，见 `acceptance/records/2026-09-20-baseline-flat-eval-protocol.md`），故本版只加三个变量——命令窗口 `1.0–3.0 m/s`（框架 10 s 重采样）、脚板关节失去动作权限（动作 26 → 22 维，保留 PD 与 `feet` 执行器组）、头链承重终止（`chest_.*`/`neck_.*` > 10% 体重持续 0.5 s，dwell 项 `ContactLoadDwellTerm` 自持）；配方元素列表与 v1 相同，差异全在 yaml；四件套见 `baseline/v2/` | （训练后补） |

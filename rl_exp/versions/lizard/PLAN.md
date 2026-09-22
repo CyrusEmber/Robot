@@ -11,11 +11,7 @@
 > 命令与摆位 → 仓根 README。时态判据见 `.codemaker/rules/versioning.mdc`
 > 分层原则（FAMILY=已成立事实，PLAN=靠行动兑现的意图）。
 >
-> 更新: 2026-09-16（**v15 起草（提案态）**——地形课程换 joint SIR：参数格 combo ×
-> 速度桶替 v5 行 SIR，方案 SSOT = `v15\PLAN.md`；该版拟在**老框架**下训练、项目并行
-> 迁新框架（`ARCH_PLAN.md` Step 2），前置门与代码件清单见挂账 #21）。
-> 更早的更新行与体例演进不在此复述（`git log -p`）——本节按 `versioning.mdc:84` 只留
-> 当前版本态，方案细节一律归各 `vN\PLAN.md`。
+> 更新：2026-09-22，整个 lizard 家族因机体设计缺陷退役；本路线图保留为历史设计，停止新训与续训，v15 提案取消。决定与保留事项见 `acceptance/records/2026-09-22-lizard-family-retirement.md`。
 
 ## 1. 目标
 
@@ -118,7 +114,7 @@ success_rate 0.31，课程全卡 stage 0，地形等级 0.1/9。
 | #16 | `v7-ghost-leg-implementation` | v7 实施排期与前置门 |
 | #17 | `v3-reproduction-anchor` | v3 复现锚缺失（补 tag 或改 commit 锚） |
 | #18 | `verified-rebuild-rating` | 「已验证重建」评级（① 半；② 半已收） |
-| #21 | `v15-joint-sir-draft` | v15 joint SIR 起草、前置门、4 项待拍板 |
+| #21 | `work/closed/2026/v15-joint-sir-draft.md` | v15 joint SIR 提案已随家族退役取消 |
 | #26 | `work/closed/2026/distillation-export-checks.md` | Step 3.4 蒸馏与导出校验（**已取消** 2026-09-22：当前不做蒸馏） |
 | #27 | `record-variant-and-snapshot-specs` | A1 `--variant` 语法 + B1 快照外置 |
 | #28 | `work/closed/2026/parkour-yaw-reinterpretation.md` | parkour 记录是否重解释（**已裁决** 2026-09-22：该线从未训练，无可重解释） |

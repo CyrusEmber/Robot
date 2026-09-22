@@ -1,5 +1,7 @@
 # v15 NOTES —— joint SIR 地形课程（参数格 combo × 速度桶），base = v14
 
+> **已取消（2026-09-22）**：用户因机体设计缺陷退役整个 lizard 家族，本提案未冻结、未实施、未训练。以下设计与命令保留为历史，不再是开训安排；证据边界见 `acceptance/records/2026-09-22-lizard-family-retirement.md`。
+
 - 目的/假设: v5 行 SIR 只调难度行、类型维度不可调（v14 的 `terrain_levels` 全程
   3.7–5.3 微动、eval 侧 gap_40cm completion 0.109 vs 其余 0.78–0.91）。v15 假设：
   把**类型内部**的参数档做成课程轴（每 combo 一个单值 sub-terrain）+ 命令按速度桶取样，
