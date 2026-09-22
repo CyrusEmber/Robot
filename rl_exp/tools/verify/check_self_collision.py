@@ -133,6 +133,72 @@ def fk(joints: dict, link: str, q: dict[str, float]) -> np.ndarray:
     return transform
 
 
+def read_obj_faces(path: pathlib.Path) -> tuple[np.ndarray, np.ndarray]:
+    """Vertices and (0-based) triangles of an OBJ, for the mesh-level confirmation step."""
+    vertices, faces = [], []
+    for line in path.read_text().splitlines():
+        if line.startswith("v "):
+            vertices.append(list(map(float, line.split()[1:4])))
+        elif line.startswith("f "):
+            faces.append([int(tok.split("/")[0]) - 1 for tok in line.split()[1:4]])
+    return np.array(vertices), np.array(faces, dtype=int)
+
+
+def mesh_gap(points_a: np.ndarray, verts_b: np.ndarray, faces_b: np.ndarray) -> float:
+    """Signed mesh-level gap: negative when a point of A is inside B's surface.
+
+    Point-to-triangle distance, sign by the nearest triangle's own normal (the winding of these
+    generated meshes is outward). It is the quantity the hull margin only approximates: the hulls
+    over-approximate a concave link, so a positive hull margin can still be a real clearance and a
+    negative one can be a hull artefact -- which is exactly why the flagged poses are re-checked here
+    (review 2026-09-22).
+    """
+    tri = verts_b[faces_b]
+    best = float("inf")
+    for point in points_a:
+        edge1, edge2 = tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0]
+        rel = point - tri[:, 0]
+        d00 = np.einsum("ij,ij->i", edge1, edge1)
+        d01 = np.einsum("ij,ij->i", edge1, edge2)
+        d11 = np.einsum("ij,ij->i", edge2, edge2)
+        d20 = np.einsum("ij,ij->i", rel, edge1)
+        d21 = np.einsum("ij,ij->i", rel, edge2)
+        denom = d00 * d11 - d01 * d01
+        denom[denom == 0] = 1e-12
+        v = (d11 * d20 - d01 * d21) / denom
+        w = (d00 * d21 - d01 * d20) / denom
+        u = 1.0 - v - w
+        # closest point on each triangle: inside the face, or on the nearest edge (barycentric clamp)
+        clamp_v = np.clip(v, 0.0, 1.0)
+        clamp_w = np.clip(w, 0.0, 1.0)
+        clamp_u = np.clip(u, 0.0, 1.0)
+        total = clamp_u + clamp_v + clamp_w
+        clamp_u, clamp_v, clamp_w = clamp_u / total, clamp_v / total, clamp_w / total
+        closest = (clamp_u[:, None] * tri[:, 0] + clamp_v[:, None] * tri[:, 1]
+                   + clamp_w[:, None] * tri[:, 2])
+        distance = np.linalg.norm(point - closest, axis=1)
+        index = int(np.argmin(distance))
+        normal = np.cross(edge1[index], edge2[index])
+        norm = np.linalg.norm(normal)
+        sign = -1.0 if norm > 0 and np.dot(point - tri[index, 0], normal / norm) < 0 else 1.0
+        best = min(best, sign * float(distance[index]))
+    return best
+
+
+def confirm(joints: dict, links: dict, q: dict, pairs: list[tuple[str, str]], tops: int = 6) -> list[dict]:
+    """Re-check the worst pairs of one pose against the real meshes, not their hulls."""
+    placed = {name: fk(joints, name, q) for name in links}
+    out = []
+    for a, b in pairs:
+        va, fa = read_obj_faces(links[a]["collision"])
+        vb, fb = read_obj_faces(links[b]["collision"])
+        pa = (placed[a][:3, :3] @ va.T).T + placed[a][:3, 3]
+        pb = (placed[b][:3, :3] @ vb.T).T + placed[b][:3, 3]
+        gap = max(mesh_gap(pa, vb, fb), mesh_gap(pb, va, fa))
+        out.append({"pair": [a, b], "mesh_gap_mm": gap * 1000.0, "pose": dict(q)})
+    return sorted(out, key=lambda row: row["mesh_gap_mm"])[:tops]
+
+
 def jointed_pair(joints: dict, a: str, b: str) -> bool:
     return any({spec["parent"], spec["child"]} == {a, b} for spec in joints.values())
 
@@ -272,9 +338,48 @@ def main() -> int:
               + " ".join(f"{k}={v:+.2f}" for k, v in sorted(hit["pose"].items())))
     kinds = sorted({h["kind"] for h in overlaps})
     print(f"  by kind: {kinds or 'none'}")
+    if overlaps:
+        flagged_poses = []
+        for hit in sorted(overlaps, key=lambda h: -h["penetration_mm"]):
+            if hit["pose"] not in flagged_poses:
+                flagged_poses.append(hit["pose"])
+            if len(flagged_poses) == 3:
+                break
+        print("\n=== mesh-level confirmation of the flagged poses (hull margin -> real meshes) ===")
+        print("  the hull number is a containment margin against hull planes; this is point-to-triangle")
+        print("  against the collision meshes themselves, signed by the nearest triangle's normal")
+        for q_flagged in flagged_poses:
+            flagged = sorted({tuple(hit["pair"]) for hit in overlaps if hit["pose"] == q_flagged})
+            print("  pose " + " ".join(f"{k}={v:+.2f}" for k, v in sorted(q_flagged.items())))
+            for row in confirm(joints, links, q_flagged, [tuple(p) for p in flagged], tops=4):
+                print(f"    {row['pair']} mesh_gap {row['mesh_gap_mm']:+9.2f} mm")
+
+        # every candidate, not just the deepest three: the hull screen over-approximates concave links,
+        # so the number that decides anything is how many of the candidates survive the mesh check
+        confirmed = []
+        for hit in overlaps:
+            key = (tuple(hit["pose"].items()), tuple(hit["pair"]))
+            rows = confirm(joints, links, hit["pose"], [tuple(hit["pair"])], tops=1)
+            if rows and rows[0]["mesh_gap_mm"] < 0.0:
+                confirmed.append({"pair": hit["pair"], "pose": hit["pose"],
+                                  "mesh_gap_mm": rows[0]["mesh_gap_mm"],
+                                  "hull_margin_mm": -hit["penetration_mm"]})
+        print(f"\nconfirmed at mesh level: {len(confirmed)} of {len(overlaps)} candidate(s)")
+        for hit in sorted(confirmed, key=lambda h: h["mesh_gap_mm"])[:8]:
+            print(f"  CONFIRMED {hit['mesh_gap_mm']:+8.2f} mm {hit['pair']} at "
+                  + " ".join(f"{k}={v:+.2f}" for k, v in sorted(hit["pose"].items())))
+        if not confirmed:
+            print("  (all candidates were hull artefacts: the real meshes stay apart)")
+        print("  the pair set itself is family-dependent: the pivot-region rule counts joints, and a"
+              " family with an inserted joint has one more step between the same two roles, so the two"
+              " families' checked sets are not identical -- the reports carry the pair lists for a"
+              " matched comparison")
+        globals()["_CONFIRMED"] = confirmed
     if args.json:
         pathlib.Path(args.json).write_text(json.dumps(
-            {"family": args.family, "poses": len(poses), "worst": worst, "overlaps": overlaps},
+            {"family": args.family, "poses": len(sweep_poses(joints)),
+             "worst": worst, "overlaps": overlaps, "confirmed": globals().get("_CONFIRMED", []),
+             "pairs": [list(p) for p in pairs], "movable": movable},
             ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
         print(f"report written: {args.json}")
 
