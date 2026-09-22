@@ -22,7 +22,12 @@
   （v4 起）与 `LEGACY_JUDGE_ID`（v1–v3，按声明身份白名单进入），身份→语义用例的冻结表在
   `judge_semantics.json`，由 `test_baseline_contract.py` 看守；无 `criteria` 且身份不在白名单 ⇒ 拒判，
   不回落。**v4 与 v3 判同一份记录必须得出同一结论**（迁移证明，有回归）。
-- **代码基线**：v1.8.0 —— 几何测量的唯一家 `rl_exp/tasks/terrain_geometry.py`；记录格式见下一节。
+- **代码基线**：v1.9.0 —— 几何测量的唯一家 `rl_exp/tasks/terrain_geometry.py`；记录格式见下一节。
+  **版本纪律**：往 `ablation_harness/` 加模块、或改测量语义 ⇒ minor bump，并打 `harness-vN.M.K` 锚点
+  （复现 = `git checkout harness-vN.M.K -- ablation_harness/`；已推的 tag 不改指不改名，内容错了开新
+  版本号，不去改旧的）。v1.9.0 = v1.8.0（判据身份化 + 套件锁 + 同表条件面）加 `video_matrix.py`（见下）。
+  **敞口**：v1.9.0 还没有锚点 —— 加模块那笔提交没声明版本，这一格登记在
+  `work/active/harness-version-anchor-missing.md`，由落下一笔的人补。
 - **部署形态**：仓根独立目录，全部自定位。机器本地事实（IsaacLab 树 + venv 解释器）登记在仓根
   `paths.yaml`（模板 `paths.example.yaml`），唯一读者 `host_paths.py`；`E:\IsaacLab\ablation_harness`
   junction 已废，原机可 `rmdir` 摘链接。
