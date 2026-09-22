@@ -4,7 +4,7 @@ title: harness v1.9.0 没有锚点：加模块那笔没有声明版本
 scope: ablation_harness
 status: open
 landing: ablation_harness/HARNESS.md
-next: 补一次版本声明并打锚点 —— 声明提交按仓规写成 `harness-v1.9.0: ...`，随后 `git tag harness-v1.9.0 <该提交>` 且 `git push origin harness-v1.9.0`（tag 用轻量形态，照 `lizard2-main-v1` 的先例）。锚点该指"记录该版本的那笔"，而不是随机某一笔。
+next: 补一次版本声明并打锚点 —— 声明提交按仓规写成 `harness-v1.9.0: ...`，随后 `git tag harness-v1.9.0 <该提交>` 且 `git push origin harness-v1.9.0`（tag 用轻量形态，先例取 `lizard2-main-v1.5`；原先例的裸标签 `lizard2-main-v1` 已于 2026-09-22 删除，因为它指的那笔提交里配方还没出现——名字与状态对不上）。锚点该指"记录该版本的那笔"，而不是随机某一笔。
 close_when: `git ls-remote --tags origin` 里出现 `harness-v1.9.0`，且它指向的那笔提交的主题是这次版本声明；`HARNESS.md` 的「代码基线」与之一致
 ---
 
