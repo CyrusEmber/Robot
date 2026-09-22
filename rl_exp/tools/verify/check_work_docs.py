@@ -146,8 +146,21 @@ LIST_BYTES = 5120
 #: item into an umbrella plus a widened trust item plus a tightened attribution item (27 active,
 #: measured 59228 bytes; --list 4234). The owner decided this round follows the work, not the
 #: budget, and the three items each hold verdicts and measurements that a trim would delete.
+#: Raised 64000 -> 68000 on 2026-09-22: the lizard2 family landing is a new family, not a version --
+#: it opened one item of its own and closed the superseded plan item, measured 65740 bytes over 29
+#: active (the new item is ~1.5 KB and its evidence is
+#: acceptance/records/2026-09-22-lizard2-family-landing.md). The three biggest contributors
+#: (stale-doc-pointers-in-code 4915, baseline-eval-measurement-trust 3423, baseline-eval-protocol-gap
+#: 3214) hold verdicts and readings a trim would delete, so the owner raised the ceiling by hand rather
+#: than shave the actions out of the new items.
+#: Raised 68000 -> 74000 on 2026-09-22: the eval criteria/suite-lock change landed as mechanism plus a
+#: 2.7 KB item holding its two unfinished actions (v4's geometry fingerprint needs a real Kit run; the
+#: locomotion judge id still has no frozen case table) -- measured 70280 bytes over 30 active, biggest
+#: contributors unchanged. The item exists because those two are *actions*, not verdicts: folding them
+#: into a closed item, or into another item's ``next``, would put them outside the default read chain,
+#: and the owner chose to raise the ceiling rather than hide two open ends.
 #: Raise it by hand with a reason written here, never from inside a run.
-BUDGET_BYTES = 64000
+BUDGET_BYTES = 74000
 
 _SHA = re.compile(r"\bsha256:[0-9a-fA-F]{8,}")
 #: A prose reference to a ledger file, spelled the way a document writes it. Placeholders
