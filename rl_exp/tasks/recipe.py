@@ -273,7 +273,8 @@ def v11_joint_sir_curriculum(cfg) -> None:
     that can be skipped. The replacement is installed under ``teacher_mdp.JOINT_SIR_TERM`` rather
     than ``terrain_levels``: the command term and ``check_obs_layout`` look the term up by that
     same name (v11.1). Measurement returns to the paper's per-state-transition Tr (Lee et al. 2020
-    Eq. 2/3/7, family PLAN ledger #15 option a); velocity enters the particle as a repo extension.
+    Eq. 2/3/7, option a of work/closed/2026/sir-criterion-and-obs-layout.md); velocity enters the
+    particle as a repo extension.
     The param-sampled terrain and the particle-sourced command term are structural and declared in
     ``components.TERRAIN_BY_RECIPE`` / ``components.COMMAND_RANGE``.
     """

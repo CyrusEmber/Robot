@@ -75,7 +75,7 @@ grep 源码树符号 + 比对已验证 commit `28a37ce`），再跑 `run_offline
 
 | 时机 | 脚本 | 预期输出（判读） |
 |---|---|---|
-| teacher env 改动后 | `tools\verify\teacher_smoke.py` | `OBS_SHAPE (2, 308)`（v2；v1 为 266）；`LAYOUT` 行按 term 名给出切片（与 FAMILY.md 布局表对账）；`ACTION_DIM 26`；`MASS_SUM ≈ 总质量`；`FOOT_FORCES_Z` 合计≈全重；`OBS_FINITE True` |
+| teacher env 改动后 | `tools\verify\teacher_smoke.py` | `OBS_SHAPE (2, 308)`（v2；v1 为 266）；`LAYOUT` 行按 term 名给出切片（obs 契约按 `rl_exp/versions/lizard/OBS.md` 对账，`FAMILY.md` 只指路）；`ACTION_DIM 26`；`MASS_SUM ≈ 总质量`；`FOOT_FORCES_Z` 合计≈全重；`OBS_FINITE True` |
 | 家族 env 改动后 | `tools\verify\smoke_test.py` | `OBS_DIM` 匹配布局；`STEPPED_OK True` |
 | 资产/站姿/初始高度改动后 | `tools\verify\position_check.py`（`--rough` 切粗糙地形） | `JOINT_COUNT 26`；base z 轨迹沉降稳定不穿地不悬空；四脚 `force_z` 合计 ≈ 总重×9.8（全重落脚=站姿自洽）；`nan_free True` |
 | 几何/命名疑虑 | `tools\verify\pose_check.py` | 各 body 相对 base 坐标符合设计（头在前、四脚对称、尾在后） |

@@ -11,7 +11,7 @@ splits that into three things, all of which this module does **without a simulat
     content digest that goes with it. decision (user, 2026-09-15): material
     that cannot be brought back is a **refusal**, not a footnote. A refusd capture writes
     no material at all, only the refusal record, so nothing downstream can mistake a gap
-    for a rebuild. That is ``PLAN.md`` #18 turned into a gate: to capture a run whose code
+    for a rebuild. That is ① of ``work/active/verified-rebuild-rating.md`` turned into a gate: to capture a run whose code
     was dirty or untracked, you must name where that content lives (``--archive``).
 ``--check <dest> --root <rebuild_root>``
     Run inside the rebuilt tree. Checks the materials the drill says it rebuilt: the material

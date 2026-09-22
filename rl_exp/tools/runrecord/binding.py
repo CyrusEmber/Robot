@@ -84,7 +84,9 @@ def git_rev(root: pathlib.Path | None, *, short: bool | int = False) -> str:
         short: ``False`` (the default) is the recorded spelling -- :data:`REV_LENGTH`
             characters. ``True`` asks git for its own abbreviation and an ``int`` for exactly
             that many characters; both are escape hatches, and a *record* must not reach for
-            either, because the point of #27 ② is that one commit has one string per run.
+            either, because the point of ② in
+            ``work/active/record-variant-and-snapshot-specs.md`` is that one commit has one
+            string per run.
     """
     if short is True:
         return git_run(root, "rev-parse", "--short", "HEAD")

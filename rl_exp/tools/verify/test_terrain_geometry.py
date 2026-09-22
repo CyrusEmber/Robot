@@ -128,7 +128,7 @@ def test_the_archived_ground_of_a_real_run_regenerates() -> None:
     This is the ⑤b half that does not need a simulator: the file a run wrote says what generated
     it (suite + seed), so regenerating from that and comparing cell by cell is a real check on
     the archived ground rather than a read-back of it. It also carries the relief inside one foot
-    cell, which is the claim #18 ① is about -- a column named "rough" has to show it.
+    cell, which is the claim ① of ``work/active/verified-rebuild-rating.md`` is about -- a column named "rough" has to show it.
 
     Ceiling: this verifies the *evidence*, not the bytes. If the framework's terrain code changes,
     the regenerated digest moves and the comparison below fails against the archived file -- the

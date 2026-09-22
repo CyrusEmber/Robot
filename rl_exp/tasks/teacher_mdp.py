@@ -875,7 +875,7 @@ class SpawnWeightSIRTerrainCurriculum(ManagerTermBase):
 # (terrain param combo, velocity bucket) over a frozen param-sampled grid
 # (param_grid_terrain.py builds the grid; sub-terrain names encode the combo).
 # Measurement returns to the paper's per-state-transition Tr (Eq. 2/3/7),
-# replacing the v5.5 binary terminal proxy (family PLAN ledger #15, option a).
+# replacing the v5.5 binary terminal proxy (work/closed/2026/sir-criterion-and-obs-layout.md, option a).
 # Extensions beyond the paper (attribution, v11 PLAN section 9): velocity in
 # the particle (the paper samples commands randomly and keeps them out), the
 # frozen param grid, the band-empty directional fallback (cold start = all

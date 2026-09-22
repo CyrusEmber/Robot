@@ -7,7 +7,7 @@
 """One home for the record's binding primitives (work/active/record-variant-and-snapshot-specs.md ①, the gate that keeps it one).
 
 ``rl_exp/tools/runrecord/manifest.py`` and ``ablation_harness/record.py`` write two files that
-describe one run, and before #27 each of them spelled the shared half itself: two file-hash
+describe one run, and before that item's ① gate each of them spelled the shared half itself: two file-hash
 implementations (bare hex on one side, ``sha256:`` + hex on the other) and two commit
 abbreviations (``[:12]`` here against ``git --short`` there), so one commit read as *two*
 strings in the two records of one run and nothing could reconcile them. The primitives live in
