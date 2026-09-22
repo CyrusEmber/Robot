@@ -1,0 +1,90 @@
+{
+  "definition": {
+    "digest": "sha256 over each mesh's vertices (<f8) and faces (<i8, both contiguous) plus the origin",
+    "relief": "height range inside one 0.5 m cell [m], reported as relief_p95; null when the mesh's faces are larger than the cell (0.5 m), see terrain_geometry.foot_relief",
+    "module": "rl_exp.tasks.terrain_geometry"
+  },
+  "identity": {
+    "suite": "lizard_suite_v2",
+    "seed": 123,
+    "task": "Lizard-Rough-v14",
+    "protocol": "locomotion_eval_v4",
+    "mode": "nominal"
+  },
+  "geometry_digest": "sha256:1fc13fa2f96a83734aa4471c504af7da4fbd5a2f9276ac7339f689c729d2c9de",
+  "anomalies": [],
+  "cells": [
+    {
+      "row": 0,
+      "col": 0,
+      "sub_terrain": "flat",
+      "difficulty": 1.0,
+      "geometry": "sha256:266d03957405312fd50a7d392556d2a4acce6866fdc5f851d0f57827b7694d33",
+      "relief": null
+    },
+    {
+      "row": 0,
+      "col": 1,
+      "sub_terrain": "slope_5deg",
+      "difficulty": 1.0,
+      "geometry": "sha256:f39e3b337350b89bb597833129f7d730e631829849c4a5affa3c69b4317c485a",
+      "relief": 0.05500000715255737
+    },
+    {
+      "row": 0,
+      "col": 2,
+      "sub_terrain": "slope_10deg",
+      "difficulty": 1.0,
+      "geometry": "sha256:6644c32f3664db921875ac74f34f79539e618aa01a02926d2107956e7a4743fa",
+      "relief": 0.11000001430511475
+    },
+    {
+      "row": 0,
+      "col": 3,
+      "sub_terrain": "stairs_10cm",
+      "difficulty": 1.0,
+      "geometry": "sha256:fe351eed4aed07cf3739c6e2c69bbe456adf753644fc2e842ab7d09fbb5fcb9b",
+      "relief": null
+    },
+    {
+      "row": 0,
+      "col": 4,
+      "sub_terrain": "stairs_20cm",
+      "difficulty": 1.0,
+      "geometry": "sha256:b3a42a53d557862eafa02ba963e68111994f8268d32c8d8ea35dcaf6f3963d0e",
+      "relief": null
+    },
+    {
+      "row": 0,
+      "col": 5,
+      "sub_terrain": "rough_a",
+      "difficulty": 1.0,
+      "geometry": "sha256:ce5eab9209960d09f27460a1ea6e261e31d6328c15206f6356074d786fa57c34",
+      "relief": 0.029999997466802597
+    },
+    {
+      "row": 0,
+      "col": 6,
+      "sub_terrain": "rough_b",
+      "difficulty": 1.0,
+      "geometry": "sha256:b808daa2717fad12b3065bc9630c33584561c804b38cd51d31da906297477288",
+      "relief": 0.05999999940395355
+    },
+    {
+      "row": 0,
+      "col": 7,
+      "sub_terrain": "gap_20cm",
+      "difficulty": 1.0,
+      "geometry": "sha256:a57654aa71e95f0acf4fd0330226a91f533ca18ed0b3337dae626448fa02a8ba",
+      "relief": null
+    },
+    {
+      "row": 0,
+      "col": 8,
+      "sub_terrain": "gap_40cm",
+      "difficulty": 1.0,
+      "geometry": "sha256:18118c4f78a5c6a22967ffad668680c78335ac30bc7985d67a7eabf68911ac8b",
+      "relief": null
+    }
+  ]
+}
