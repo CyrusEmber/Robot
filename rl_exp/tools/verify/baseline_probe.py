@@ -18,6 +18,7 @@ criterion: it depends on joint scale, default pose and gait).
 
 import argparse
 import pathlib
+import re
 
 from isaaclab.app import AppLauncher
 
@@ -32,6 +33,14 @@ parser.add_argument(
     "joint diagnostics are meaningless without excitation, but the robot then falls, so the "
     "reward magnitudes are no longer nominal. Run both ways.",
 )
+parser.add_argument(
+    "--head-press",
+    action="store_true",
+    help="after the standing rollout, lower the base until the head chain is --press-depth m below "
+    "the ground and watch whether the recipe's head-contact termination fires (and at what force)",
+)
+parser.add_argument("--press-depth", type=float, default=0.05,
+                    help="how far below the ground to push the lowest head-chain mesh point [m]")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 app_launcher = AppLauncher(args_cli)
@@ -41,6 +50,7 @@ import gymnasium as gym  # noqa: E402
 import torch  # noqa: E402
 
 import isaaclab_tasks  # noqa: F401, E402
+from isaaclab.utils.math import quat_apply  # noqa: E402
 
 from rl_exp.tools.diagnose.diag_metrics import (  # noqa: E402
     MESH_CHECK_BODIES, body_load_n, collision_mesh_dir, foot_ids, mesh_min_z, mesh_vertices,
@@ -49,6 +59,7 @@ from rl_exp.tools.diagnose.diag_metrics import (  # noqa: E402
 from rl_exp.tools.verify.baseline_runtime import (  # noqa: E402
     joint_reset_errors, material_errors, resolve_task_cfg, termination_errors,
 )
+from rl_exp.tasks import obs_protocol, recipe_params  # noqa: E402
 
 PROBLEMS: list[str] = []
 EXPECTED_COMMAND = (0.5, 0.0, 0.0)
@@ -98,6 +109,19 @@ def main() -> int:
     unwrapped = env.unwrapped
     num_envs = args_cli.num_envs
     dt = getattr(unwrapped, "step_dt", None)
+
+    # --- the expectations come from the task's OWN document, not from this file -------------
+    # A probe that hardcodes one line's fixed command and one line's obs width cannot check any
+    # other line, and the version-driven values are the point: this line's window is a RANGE and
+    # its obs is width-derived (review 2026-09-22).
+    params = recipe_params.load(cfg.params_line, cfg.params_version)
+    command_ranges = params["commands"]
+    body_patterns = params.get("names", {})
+    approved_dims = obs_protocol.recorded_dims(args_cli.task)
+    print(f"[probe] task {args_cli.task} -> line {cfg.params_line} {cfg.params_version}")
+    print(f"  command ranges lin_vel_x {command_ranges['lin_vel_x']} lin_vel_y {command_ranges['lin_vel_y']} "
+          f"ang_vel_z {command_ranges['ang_vel_z']}")
+    print(f"  approved obs widths for this asset: {approved_dims}")
 
     # --- events: the randomization must be off, by name and in effect --------------
     print("[probe] events")
@@ -152,15 +176,27 @@ def main() -> int:
     # --- command: read the tensor the env issues, not the config -------------------
     print("[probe] command")
     cmd_term = unwrapped.command_manager.get_term("base_velocity")
-    expected = torch.tensor(EXPECTED_COMMAND, device=unwrapped.device).expand(num_envs, 3)
     observed = cmd_term.command[:, :3]
-    check(
-        "command/issued-at-reset",
-        bool(torch.allclose(observed, expected, atol=1e-6)),
-        f"issued {observed[0].tolist()} != {EXPECTED_COMMAND}",
-    )
-    standing = getattr(cmd_term, "is_standing_env", None)
-    check("command/no-standing-envs", standing is None or not bool(standing.any()), f"{standing}")
+    tol = 1e-6
+    for axis, column in (("lin_vel_x", 0), ("lin_vel_y", 1), ("ang_vel_z", 2)):
+        lo, hi = command_ranges[axis]
+        values = observed[:, column]
+        if abs(hi - lo) < tol:
+            check(f"command/{axis}-fixed-at-{lo:g}", bool((values - lo).abs().max() < tol),
+                  f"issued {values[:4].tolist()} != {lo}")
+        else:
+            inside = bool(((values >= lo - tol) & (values <= hi + tol)).all())
+            check(f"command/{axis}-inside-{lo:g}-to-{hi:g}", inside,
+                  f"issued {values[:4].tolist()} leaves the declared range")
+            if inside and axis == "lin_vel_x":
+                spread = float(values.max() - values.min())
+                check("command/sampled-per-env", spread > 1e-9,
+                      f"every env got the same command ({float(values[0]):+.3f}); a range that is not "
+                      "sampled per env is a fixed command wearing a range's clothes")
+                print(f"  issued x range: min {float(values.min()):+.3f} max {float(values.max()):+.3f} "
+                      f"spread {spread:.3f} m/s over {num_envs} envs")
+    standing_envs = getattr(cmd_term, "is_standing_env", None)
+    check("command/no-standing-envs", standing_envs is None or not bool(standing_envs.any()), f"{standing_envs}")
     heading = getattr(cmd_term, "is_heading_env", None)
     check("command/no-heading-envs", heading is None or not bool(heading.any()), f"{heading}")
 
@@ -204,8 +240,14 @@ def main() -> int:
             actions = torch.zeros(num_envs, act_dim, device=unwrapped.device)
         with torch.inference_mode():
             obs, rew, term, trunc, _ = env.step(actions)
-        if not torch.allclose(cmd_term.command[:, :3], expected, atol=1e-6):
-            command_stable = False
+        # the issued command must stay inside the declared box for the whole rollout: the box is the
+        # document's, not a fixed point (a range that drifts outside its own declaration is worse
+        # than a fixed command, because the evaluator grades against the declaration)
+        for axis, column in (("lin_vel_x", 0), ("lin_vel_y", 1), ("ang_vel_z", 2)):
+            low, high = command_ranges[axis]
+            value = cmd_term.command[:, column]
+            if not bool(((value >= low - 1e-6) & (value <= high + 1e-6)).all()):
+                command_stable = False
         action = unwrapped.action_manager.action
         action_rows.append(action.abs().clone())
         if last_action is not None:
@@ -254,14 +296,51 @@ def main() -> int:
     groups = obs if isinstance(obs, dict) else {"policy": obs}
     check("obs/single-policy-group", sorted(groups) == ["policy"], f"{sorted(groups)}")
     policy = groups.get("policy")
-    check("obs/policy-90-dims", policy is not None and policy.shape[-1] == 90, f"{tuple(policy.shape) if policy is not None else None}")
+    live_width = None if policy is None else int(policy.shape[-1])
+    if approved_dims and "policy" in approved_dims:
+        check(f"obs/policy-{approved_dims['policy']}-dims-as-approved", live_width == approved_dims["policy"],
+              f"live {live_width} vs approved {approved_dims['policy']} "
+              f"({obs_protocol.protocol_for(args_cli.task)})")
+    else:
+        check("obs/policy-width-approved", False,
+              f"{args_cli.task}: this asset has no approved obs widths "
+              "(obs_protocol_live.py --tasks <id> --pin measures them)")
     check("obs/finite", bool(torch.isfinite(policy).all()), "non-finite observation")
+
+    # --- action interface: every joint needs exactly one channel ---------------------
+    print("[probe] actions")
+    am = unwrapped.action_manager
+    channelled: dict[str, int] = {}
+    joint_to_action: dict[str, tuple[int, float]] = {}
+    offset = 0
+    for term_name in am.active_terms:
+        term = am.get_term(term_name)
+        scale = term._scale
+        scale = float(scale) if not hasattr(scale, "reshape") else float(scale.reshape(-1)[0])
+        print(f"  term {term_name}: {len(term._joint_names)} joints, scale {scale}")
+        for position, joint in enumerate(term._joint_names):
+            channelled[joint] = channelled.get(joint, 0) + 1
+            joint_to_action[joint] = (offset + position, scale)
+        offset += len(term._joint_names)
+    missing = sorted(set(joint_names) - set(channelled))
+    doubled = sorted(joint for joint, count in channelled.items() if count > 1)
+    check("actions/every-joint-channelled", not missing, f"no action term carries {missing}")
+    check("actions/no-joint-in-two-terms", not doubled, f"carried twice: {doubled}")
+    check("actions/dim-matches-mapping", am.total_action_dim == len(channelled),
+          f"dim {am.total_action_dim} vs {len(channelled)} channelled joints")
 
     # --- terminations -------------------------------------------------------------
     print("[probe] terminations")
     termination_names = set(getattr(unwrapped.termination_manager, "_term_names", []))
-    for needed in ("base_contact", "time_out"):
+    # the document is the expectation: every contact-gate threshold it declares has to be a live
+    # term, and time_out is the framework's own
+    expected_terms = {"time_out"} | {key[: -len("_threshold")] for key in params["terminations"]
+                                     if key.endswith("_threshold")}
+    for needed in sorted(expected_terms):
         check(f"terminations/{needed}-present", needed in termination_names, f"{sorted(termination_names)}")
+    unexpected = sorted(termination_names - expected_terms)
+    print(f"  declared by the yaml: {sorted(expected_terms)} | live: {sorted(termination_names)}"
+          + (f" | extra live terms: {unexpected}" if unexpected else ""))
     print(f"  info episodes over {args_cli.steps} steps: {term_counts}")
 
     # --- diagnostics (printed, not asserted) --------------------------------------
@@ -339,6 +418,89 @@ def main() -> int:
         print(f"  joints with ~zero mean |tau| over the rollout ({len(quiet)}): {quiet if quiet else 'none'}")
     if dt is not None:
         print(f"[probe] control dt {dt:.4f} s")
+
+    # --- the head-contact gate: observe it firing, do not assume it -----------------
+    # A termination that was never seen to fire is a claim about a threshold, not a measurement of
+    # one (review 2026-09-22). This lowers the base until the lowest head-chain collision mesh point
+    # is --press-depth m below the ground, then watches the termination and the contact force.
+    if args_cli.head_press:
+        print("[probe] head-contact gate (pressed)")
+        patterns = body_patterns.get("head_contact_body_names") or []
+        matched = [name for name in body_names
+                   if any(re.fullmatch(pattern, name) for pattern in patterns)]
+        collider = collision_mesh_dir()
+        head_bodies = [name for name in matched if (collider / f"{name}_collision.obj").is_file()]
+        # A contact gate can only act through a collider. A pattern that matches a link without one is
+        # a dead entry that reads like coverage -- the same defect this repo already carries in the
+        # reward's `.*_kfe` (review 2026-09-22). Naming it here is what keeps it from being inherited.
+        dead = sorted(set(matched) - set(head_bodies))
+        check("head/press-bodies-resolved", bool(head_bodies),
+              f"the yaml's head patterns {patterns} match no body with a collision mesh")
+        check("head/no-collider-less-pattern", not dead,
+              f"the head patterns match {dead}, which has no collision mesh: their contact force is "
+              "structurally zero, so that part of the guard can never fire")
+        threshold = params["terminations"].get("head_contact_threshold")
+        if head_bodies and threshold is not None:
+            env.reset()
+            for _ in range(max(5, args_cli.steps // 4)):
+                env.step(torch.zeros((num_envs, unwrapped.action_manager.total_action_dim), device=unwrapped.device))
+            corners = pad_point_clouds([mesh_vertices(collision_mesh_dir() / f"{name}_collision.obj")
+                                        for name in head_bodies]).to(unwrapped.device)
+            ids = [body_names.index(name) for name in head_bodies]
+            def head_floor() -> float:
+                """Lowest world z of the head chain's collision meshes, over all envs."""
+                pose = robot.data.body_pos_w.torch[:, ids].unsqueeze(2)
+                orientation = robot.data.body_quat_w.torch[:, ids].unsqueeze(2).expand(-1, -1, corners.shape[1], -1)
+                world = pose + quat_apply(orientation, corners.unsqueeze(0).expand(num_envs, -1, -1, -1))
+                return float(world[..., 2].min())
+            drop = head_floor() + args_cli.press_depth  # positive while the head hangs above the floor
+            if drop > 0.0:
+                posed = robot.data.root_state_w.torch.clone()
+                posed[:, 2] -= drop
+                robot.write_root_pose_to_sim(posed[:, :7])
+                robot.write_root_velocity_to_sim(torch.zeros((num_envs, 6), device=unwrapped.device))
+                print(f"  lowered the base by {drop:.3f} m so the lowest head-chain point sits "
+                      f"{args_cli.press_depth:.3f} m below the ground")
+            fired_at, peak_force, steps_to_fire = None, 0.0, 0
+            zero_action = torch.zeros((num_envs, unwrapped.action_manager.total_action_dim),
+                                      device=unwrapped.device)
+            # Lowering the base alone lands the robot on its FEET -- the legs are longer than the neck
+            # is forward, so the head never reaches the floor (measured: 0.00 N with the head nominally
+            # 5 cm under it). The press therefore also drives the head chain toward its limits, which
+            # is what actually puts the head on the ground.
+            press_action = zero_action.clone()
+            chain = [name for name in joint_names if name.startswith(("chest_", "neck_"))]
+            for joint in chain:
+                index_scale = joint_to_action.get(joint)
+                if index_scale is None:
+                    continue
+                index, scale = index_scale
+                if scale > 0:
+                    low = float(robot.data.joint_pos_limits.torch[0, joint_names.index(joint), 0])
+                    press_action[0, index] = low / scale
+            manager = unwrapped.termination_manager
+            head_index = (manager._term_names.index("head_contact")
+                          if "head_contact" in manager._term_names else None)
+            for step in range(args_cli.steps):
+                env.step(zero_action)
+                if contact_sensor is not None:
+                    peak_force = max(peak_force, contact_sensor.data.net_forces_w.torch[:, ids, :]
+                                     .norm(dim=-1).max().item())
+                dones = getattr(manager, "_term_dones", None)
+                fired = bool(dones[:, head_index].any()) if (dones is not None and head_index is not None) else False
+                if fired:
+                    fired_at, steps_to_fire = step, step
+                    break
+            print(f"  head bodies: {head_bodies} | yaml threshold {threshold} N | "
+                  f"peak head contact force seen: {peak_force:.2f} N")
+            if fired_at is None:
+                check("head/fires-when-pressed", False,
+                      f"the head sat {-args_cli.press_depth:.2f} m below the ground for {args_cli.steps} "
+                      f"steps and head_contact never fired (peak force {peak_force:.2f} N)")
+            else:
+                check("head/fires-when-pressed", True)
+                print(f"  head_contact fired after {steps_to_fire} pressed steps; peak head force "
+                      f"{peak_force:.2f} N vs threshold {threshold} N")
 
     env.close()
     if PROBLEMS:

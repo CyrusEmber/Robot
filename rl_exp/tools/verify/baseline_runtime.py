@@ -5,14 +5,24 @@
 """Runtime checks shared by the baseline probe and its fixed-window evaluation."""
 
 
-def resolve_task_cfg(task: str):
-    """Resolve the requested registered config; never substitute a hardcoded class."""
+def resolve_task_cfg(task: str, require_line: str | None = None):
+    """Resolve the requested registered config; never substitute a hardcoded class.
+
+    The test is "this task is a recipe task" -- it declares its params line -- and NOT "this task
+    belongs to the one historical line the probe was first written for": every line has the same
+    runtime interface, and a hardcoded line key silently made the probe useless for any other family
+    (review 2026-09-22). A caller that really needs one line (the fixed-window evaluation pins the
+    baseline line for comparability) passes ``require_line`` and says so at its own call site.
+    """
     import gymnasium as gym
     from isaaclab.utils.string import string_to_callable
 
     cfg = string_to_callable(gym.spec(task).kwargs["env_cfg_entry_point"])()
-    if getattr(cfg, "params_line", None) != "lizard/baseline":
-        raise ValueError(f"{task} is not a baseline task")
+    line = getattr(cfg, "params_line", None)
+    if not line:
+        raise ValueError(f"{task} declares no params_line: not a recipe task")
+    if require_line is not None and line != require_line:
+        raise ValueError(f"{task} is on line {line!r}, not {require_line!r}")
     return cfg
 
 

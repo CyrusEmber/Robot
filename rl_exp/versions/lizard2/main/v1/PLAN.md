@@ -78,10 +78,17 @@
    冻结时同时要：新增 `tracking_banded_v1` / `displacement_banded_v1` 两个种类（各带反例测试，
    仓库规则：非平凡逻辑要留一条能挂掉的检查）、给新种类一个自己的 judge id
    （`baseline_metrics.JUDGE_ID` 随判决走）、把 `non_foot_carrier_v1` 的 `fraction`/`sustain_s` 定死。
-2. **启动探针按本版接口复测**：命令落在 `[0.0, 3.0]` 且逐 env 采样、`lin_vel_y`/`ang_vel_z` 恒 0、
-   `heading_command`/`rel_standing_envs` 未改写下发值、动作维数 30 且**每个关节恰被一个动作项覆盖**、
-   观测 102 维（组名/宽度/有限性）。`baseline_probe.py` 现硬编码 `(0.5,0,0)` 与 90 维，需按本版改造后复测
-   （放宽断言不算复测）。
+2. **启动探针按本版接口复测（已改造并跑过一次，见下）**：`baseline_probe.py` 不再硬编码任何一条线的期望——
+   命令框、观测宽度、终止集合都取自**任务自己的参数文档**（`recipe_params.load(cfg.params_line, cfg.params_version)`、
+   `obs_protocol.recorded_dims(task)`），`resolve_task_cfg` 也不再只认 `lizard/baseline` 一条线。
+   在 `Lizard2-Flat-Play-v1` 上实测通过：命令逐 env 落在 `[0.0, 3.0]`（8 envs，spread 2.5 m/s）、
+   `lin_vel_y`/`ang_vel_z` 恒 0、无 standing/heading env、obs `policy=102`（与批准宽度一致）、
+   30 个关节各恰好一个动作通道且维数一致、终止集合＝yaml 声明的 `base_contact`+`head_contact`+`time_out`。
+   **仍差两件**（探针现在会自己报出来）：① `names.head_contact_body_names` 的 `chest_.*`/`neck_.*`
+   命中了 `chest_yaw`/`neck_yaw` 两个**没有碰撞网格**的连杆（接触力结构性为零 ⇒ 那部分守卫永不触发）——
+   要收窄成 `chest_pitch`/`neck_pitch` 并重钉 golden/lock；② `--head-press`（压头观测守卫触发）**还没给出可信读数**：
+   只降机体时机器人先落在脚上（头部 0.00 N），驱动头链后终止标志在**零接触力**下立即置位 ⇒ 该读数不可信，
+   守卫触发仍未真正观测到。零动作落地姿态目视也还没做。
 3. **落地姿态目视**：本版是 plane，目视只需确认零动作站姿与脚掌接触正常（碎石/地形那两条不适用）。
 4. **执行器响应曲线（已跑，见风险第 1 条与 `2026-09-22-lizard2-actuator-capability.md` 修正版）**，两层都记读数：
    - **unloaded**：`cfg.sim.gravity=(0,0,0)`（真无载），**只驱动一个**指定关节、其余保持起始参考姿态，
