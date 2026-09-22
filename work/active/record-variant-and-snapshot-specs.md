@@ -11,4 +11,4 @@ close_when: 执行者按 B1 → A1 实施并各留一次观测：B1 = 一次真 
 
 ## 未覆盖边界
 
-A1/B1 是记录体系剩下未实施的两件（①②已闭、⑤a 离线回归已落）；真跑核对是另一条活跃事项，`depends_on` 指向它——没真跑核过的格式不往上叠。两条小敞口保留：`--variant` 命名靠人；`record.json` 体积主要被 `env_cfg` 快照占据（升级路径 = 内容寻址快照）。单源扫描闸的分工归 `check_record_bindings.py` 与 `terrain_map.check`，导出侧协议校验归 `distillation-export-checks`，本项都不动。
+A1/B1 是记录体系剩下未实施的两件（①②已闭、⑤a 离线回归已落）；真跑核对是另一条活跃事项，`depends_on` 指向它——没真跑核过的格式不往上叠。两条小敞口保留：`--variant` 命名靠人；`record.json` 体积主要被 `env_cfg` 快照占据（升级路径 = 内容寻址快照）。单源扫描闸的分工归 `check_record_bindings.py` 与 `terrain_map.check`，导出侧协议校验**已随 `work/closed/2026/distillation-export-checks.md` 取消**（用户 2026-09-22：当前不做蒸馏），本项都不动。

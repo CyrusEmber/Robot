@@ -477,6 +477,8 @@
 
 **3.4 蒸馏与导出：本轮不执行**。待做两项：导出前协议校验（`teacher_networks.py:176-243` 的 flat/分段与 ONNX/JIT 路径）、蒸馏数据 manifest＋分片哈希（Phase 2 建）。P05/P06/P07 标"未执行"，不得通过。现存冲突记敞口：冻结 yaml `obs_layout` 与协议声明**不同形**（yaml 写 `joint_pos_rel`，代码 term 是 `joint_pos`），它是 UE 侧契约，本轮不动导出。
 
+> **2026-09-22 用户裁决：取消**——当前不做蒸馏，两件校验随之不作要求（登记项关闭：`work/closed/2026/distillation-export-checks.md`，含重启时必须先核的三条前置事实）。P05/P06/P07 仍是"未执行/未知"，不得读成通过；`obs_layout` 命名敞口照旧留在上面这句里。
+
 **挂账**：`PLAN.md` 新增一条（蒸馏数据与导出校验），`HARNESS.md` 挂账节新增一条（记录格式读者接线与真跑不变性对拍）。
 
 **执行顺序**

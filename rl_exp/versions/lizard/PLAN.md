@@ -119,9 +119,9 @@ success_rate 0.31，课程全卡 stage 0，地形等级 0.1/9。
 | #17 | `v3-reproduction-anchor` | v3 复现锚缺失（补 tag 或改 commit 锚） |
 | #18 | `verified-rebuild-rating` | 「已验证重建」评级（① 半；② 半已收） |
 | #21 | `v15-joint-sir-draft` | v15 joint SIR 起草、前置门、4 项待拍板 |
-| #26 | `distillation-export-checks` | Step 3.4 蒸馏与导出校验（登记项，非排期） |
+| #26 | `work/closed/2026/distillation-export-checks.md` | Step 3.4 蒸馏与导出校验（**已取消** 2026-09-22：当前不做蒸馏） |
 | #27 | `record-variant-and-snapshot-specs` | A1 `--variant` 语法 + B1 快照外置 |
-| #28 | `parkour-yaw-reinterpretation` | parkour 记录是否重解释（待拍板） |
+| #28 | `work/closed/2026/parkour-yaw-reinterpretation.md` | parkour 记录是否重解释（**已裁决** 2026-09-22：该线从未训练，无可重解释） |
 
 | # | 事项 | 优先级 |
 |---|---|---|
