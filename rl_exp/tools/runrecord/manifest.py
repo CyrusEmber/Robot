@@ -453,22 +453,35 @@ def dirty_tree_refusal(ctx: RunContext) -> str | None:
     is *expected* to carry the fork patches uncommitted, so refusing on it would refuse
     every launch and train people to set the override as a habit. Both stay recorded.
 
+    Scoped again, inside the repository, to the changes a run actually read: prose does not count.
+    The ledger, the records and the plans are ``.md`` and no declaration digests one, so a document
+    edited while a run is in flight cannot change what the run did -- and the rebuild gate already
+    reads a record this way (it archives code-root dirt and ignores the rest). ``dirty`` stays the
+    recorded fact; the refusal is about ``changed_non_prose``. A provenance that predates that split
+    carries no field and stays strict.
+
     Args:
         ctx: the run context whose T0 has just been written.
 
     Returns:
-        The refusal message, or None when the tree is clean or the override carries a reason.
+        The refusal message, or None when nothing a run read is dirty, or the override carries a
+        reason.
     """
     source = (ctx.manifest.get("code") or {}).get("repository") or {}
     if not source.get("dirty"):
         return None
     if os.environ.get(DIRTY_OVERRIDE_ENV, "").strip():
         return None
+    blocking = source.get("changed_non_prose")
+    if blocking is not None and not blocking:
+        return None
+    named = f" ({', '.join(blocking[:3])})" if blocking else ""
     return (
         f"the project tree is dirty (rev {source.get('rev', '?')}, "
-        f"{source.get('diff_lines', '?')} diff line(s), {source.get('untracked_count', '?')} untracked): "
-        f"no revision restores it, so this run's rebuildable claim could never be proven. Commit first, "
-        f'or state the reason explicitly: {DIRTY_OVERRIDE_ENV}="<why this dirty tree must run>"'
+        f"{source.get('diff_lines', '?')} diff line(s), {source.get('untracked_count', '?')} untracked)"
+        f"{named}: no revision restores it, so this run's rebuildable claim could never be proven. "
+        f"Commit first, or state the reason explicitly: {DIRTY_OVERRIDE_ENV}="
+        f'"<why this dirty tree must run>"'
     )
 
 

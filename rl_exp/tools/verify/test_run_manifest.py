@@ -499,6 +499,49 @@ def main() -> int:
             is None,
             "the IsaacLab tree (expected to carry uncommitted fork patches) blocked a launch",
         )
+
+        # --- what counts as dirty: prose does not -----------------------------------------
+        # The ledger and the records are prose; no declaration digests one, so a document edited
+        # while a run is in flight cannot change what the run did. A launch must not be refused
+        # over it -- with two sessions in the tree, refusing over a note would teach people to set
+        # the override as a habit, which is the failure this exemption exists to avoid.
+        def refusal(paths: list[str], prose: list[str]) -> str | None:
+            source = json.loads(json.dumps(_clean_sources()))
+            source["repository"].update(dirty=True, diff_lines=3, untracked_count=len(paths),
+                                        changed_paths=paths, changed_non_prose=prose)
+            return M.dirty_tree_refusal(types.SimpleNamespace(manifest={"code": source}))
+
+        check(
+            "dirty/prose-only-does-not-block",
+            refusal(["work/active/freeze-maintenance-simplification.md"], []) is None,
+            "an edited work item refused a launch",
+        )
+        dirty_code = refusal([".gitignore", "rl_exp/tasks/lizard2_recipe.py", "work/active/x.md"],
+                             [".gitignore", "rl_exp/tasks/lizard2_recipe.py"])
+        check(
+            "dirty/code-dirt-still-blocks",
+            dirty_code is not None and "lizard2_recipe.py" in dirty_code,
+            f"code dirt must refuse and name it: {dirty_code}",
+        )
+        check(
+            "dirty/a-lock-file-is-not-prose",
+            refusal(["rl_exp/versions/lizard2/main/cfg_lock.json"],
+                    ["rl_exp/versions/lizard2/main/cfg_lock.json"]) is not None,
+            "a changed golden lock must refuse: it is what the run's declaration points back at",
+        )
+        strict = json.loads(json.dumps(_clean_sources()))
+        strict["repository"].update(dirty=True, diff_lines=17, untracked_count=2)
+        check(
+            "dirty/a-provenance-without-the-split-stays-strict",
+            M.dirty_tree_refusal(types.SimpleNamespace(manifest={"code": strict})) is not None,
+            "a record that predates the prose split must still refuse",
+        )
+        check(
+            "dirty/prose-is-by-extension",
+            prov.split_prose(["a/b.md", "a/b.MD", "a/b.yaml", "docs/"]) == (["a/b.md", "a/b.MD"],
+                                                                          ["a/b.yaml", "docs/"]),
+            f"{prov.split_prose(['a/b.md', 'a/b.MD', 'a/b.yaml', 'docs/'])}",
+        )
     finally:
         prov.code_sources = real_sources
         shutil.rmtree(root, ignore_errors=True)

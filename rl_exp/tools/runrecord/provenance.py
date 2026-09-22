@@ -86,6 +86,43 @@ def split_untracked(untracked: list[str], root: pathlib.Path | None, code_root: 
     return inside, outside
 
 
+def split_prose(changed: list[str]) -> tuple[list[str], list[str]]:
+    """Split changed paths into the prose and the rest.
+
+    Prose is the ledger, the records and the plans -- all ``.md``, and nothing a run reads. A run's
+    rebuildable claim is about the code, the configs and the assets its declaration digests, so a
+    document edited while a run is in flight changes none of them; refusing over it would turn
+    "commit your notes before you train" into a habit and teach people to set the override, which is
+    the same failure mode the IsaacLab tree is exempted for. The cut is by extension on purpose:
+    it cannot be widened by adding a directory, and no config, lock or asset is a ``.md``.
+
+    Args:
+        changed: paths git reports as changed, tracked or untracked.
+
+    Returns:
+        ``(prose, blocking)``: only the second group can change what a run read.
+    """
+    prose = [path for path in changed if path.lower().endswith(".md")]
+    blocking = [path for path in changed if not path.lower().endswith(".md")]
+    return prose, blocking
+
+
+def _changed_paths(root: pathlib.Path) -> list[str]:
+    """Every path git reports as changed, tracked or untracked, as one flat sorted list.
+
+    Two raw name lists rather than one parsed status listing: these come back NUL-separated and
+    unprefixed, so a path with spaces, a rename, or a status column the git helper strips needs no
+    care at all. (A first version sliced the status listing at a fixed offset and lost the first
+    character of every modified path, because the helper hands back stripped lines.)
+    """
+    names: list[str] = []
+    for args in (("diff", "--name-only", "-z", "HEAD"),
+                 ("ls-files", "--others", "--exclude-standard", "-z")):
+        names.extend(field for field in git(root, *args).split("\0") if field.strip())
+    return sorted(set(name.strip() for name in names))
+
+
+
 def git_state(root: pathlib.Path | None, label: str, code_root: pathlib.Path | None = None) -> dict:
     """Provenance of one git work tree.
 
@@ -107,6 +144,8 @@ def git_state(root: pathlib.Path | None, label: str, code_root: pathlib.Path | N
     status_lines = porcelain.splitlines()
     untracked = sorted(line.split(" ", 1)[1] for line in status_lines if line.startswith("? "))
     in_code, outside = split_untracked(untracked, root, code_root)
+    changed = _changed_paths(root)
+    prose, blocking = split_prose(changed)
     diff = git(root, "diff", "HEAD")
     return {
         "available": True,
@@ -116,6 +155,12 @@ def git_state(root: pathlib.Path | None, label: str, code_root: pathlib.Path | N
         "status_porcelain_sha256": sha256_bytes(porcelain.encode("utf-8")),
         "diff_sha256": sha256_bytes(diff.encode("utf-8")),
         "diff_lines": len(diff.splitlines()),
+        "changed_paths": changed[:UNTRACKED_CAP],
+        # What the launch gate refuses on: the changed paths that are not prose. ``dirty`` stays the
+        # whole truth about the tree, so a record whose only dirt was a document says so and is not
+        # refused for it (2026-09-22; the rebuild gate already read it this way).
+        "changed_non_prose": blocking[:UNTRACKED_CAP],
+        "changed_prose_count": len(prose),
         "untracked_count": len(untracked),
         "untracked": untracked[:UNTRACKED_CAP],
         "untracked_in_code_root": in_code,
