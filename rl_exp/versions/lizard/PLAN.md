@@ -109,7 +109,7 @@ success_rate 0.31，课程全卡 stage 0，地形等级 0.1/9。
 |---|---|---|
 | #4/#5 | `phase2-obs-fidelity` | 特权真值 term 的 event 缓存 + 三噪声模型移植 |
 | #6 | `deployment-delay-injection-dr` | 延迟注入 DR（落点待拍板） |
-| #8 | `teacher-snapshot-asset-sync` | 资产换代时同步 teacher 快照（同步仍人工） |
+| #8 | `teacher-snapshot-asset-sync` | 资产换代时同步 teacher 快照：矩阵已测出教师侧资产派生字面量四条闸门全不覆盖（补闸门另立 `teacher-literal-parity-gate`） |
 | #9 | `staged-curriculum-metric-wiring` | staged 课程 `Curriculum/*/metric` 恒 0 |
 | #11 | `dr-widening-policy` | **已改挂 lizard2** 家族（DR 放宽轴 + 续训状态层与多 GPU 边界）；本线的 c_k 只作参照 |
 | #12 | `isaac-root-parameterisation` | G3 收尾：三处参数化核认 + 删 junction |
