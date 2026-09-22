@@ -1,0 +1,4 @@
+{
+  "base": null,
+  "note": "Line root: lizard2/main has no upstream recipe, so this version names no parent snapshot. A lineage root can therefore only be compared against the framework stock cfg, and that is what this recipe IS: what it writes on top of the stock cfg, path by path -- see diff.json. Values borrowed from another line are data, not lineage."
+}

@@ -413,3 +413,27 @@ gym.register(
         "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardBaselineV2PPORunnerCfg",
     },
 )
+
+# lizard2 (2026-09-22): a separate family, not a lizard version -- it has its own USD asset and a
+# 30-joint skeleton (a co-located hip pivot per leg), so its task ids are its own and no lizard
+# checkpoint can be replayed on it. Lineage and the measurement that justified it:
+# work/active/baseline-v3-new-skeleton.md and the record it points at.
+gym.register(
+    id="Lizard2-Flat-v1",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": "rl_exp.tasks.recipe_tasks:Lizard2FlatEnvCfg",
+        "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:Lizard2PPORunnerCfg",
+    },
+)
+
+gym.register(
+    id="Lizard2-Flat-Play-v1",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": "rl_exp.tasks.recipe_tasks:Lizard2FlatEnvCfg_PLAY",
+        "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:Lizard2PPORunnerCfg",
+    },
+)

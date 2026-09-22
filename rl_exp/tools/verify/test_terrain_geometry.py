@@ -15,6 +15,7 @@ Three claims, each aimed at a failure that would otherwise show up as "two runs 
    into a claim about the ground a run stood on (work/active/verified-rebuild-rating.md ①/⑤b).
 """
 import json
+import math
 import pathlib
 import sys
 
@@ -169,6 +170,77 @@ def test_protocol_v3_differs_from_v2_only_where_it_says() -> None:
     assert v3["suite"] == "lizard_suite_v2", v3["suite"]
     moved = sorted(key for key in set(v2) | set(v3) if v2.get(key) != v3.get(key))
     assert moved == ["name", "suite", "version"], f"v3 must move only what it documents: {moved}"
+
+
+def test_video_matrix_gears_resolve_against_the_suite() -> None:
+    """The video matrix picks its ground off this same suite, so its gears are pinned here.
+
+    ``ablation_harness/video_matrix.py`` shoots a clip per speed x terrain cell. Its terrain gears
+    are the suite's column names, and one gear must narrow the frozen generator to *that one*
+    column without editing the frozen definition in place -- a mutation would silently leave the
+    next gear with fewer columns, and every later clip would face the wrong ground.
+
+    The rest is the part that decides *what* gets shot: which strings are gears and which are
+    typos, out-of-box speeds being labelled rather than refused, the chase-camera offsets riding
+    the robot's spawn frame, and the module importing no simulator at its top level (P003: a heavy
+    import before ``AppLauncher`` poisons Kit's USD stack for the whole run -- importing this
+    module through ``suites`` is what that rule is about).
+    """
+    from ablation_harness import video_matrix
+
+    # a heavy module bound at module level is the regression; the import itself is the symptom
+    for name, value in vars(video_matrix).items():
+        root = getattr(value, "__name__", "").split(".")[0]
+        assert root not in ("torch", "isaaclab", "gymnasium", "rsl_rl", "imageio"), \
+            f"video_matrix imported {name} at module level, before Kit is up"
+
+    assert video_matrix.parse_speeds("1.5,3") == [1.5, 3.0]
+    assert video_matrix.parse_speeds("0.5") == [0.5], "a below-the-box gear is a diagnostic, not a typo"
+    for bad, why in (("fast", "takes comma-separated numbers"), ("nan", "NaN"), (" , ", "empty")):
+        try:
+            video_matrix.parse_speeds(bad)
+        except SystemExit as exc:
+            assert why in str(exc), (bad, str(exc))
+        else:
+            raise AssertionError(f"parse_speeds({bad!r}) was accepted")
+
+    assert video_matrix.parse_terrains("plane") == ["plane"]
+    assert video_matrix.parse_terrains(",".join(["plane", *suites.LIZARD_SUITE_V2_NAMES]))[1:] == \
+        suites.LIZARD_SUITE_V2_NAMES, "every frozen column must be reachable as a terrain gear"
+    try:
+        video_matrix.parse_terrains("plane,tilted")
+    except SystemExit as exc:
+        assert "tilted" in str(exc) and "slope_10deg" in str(exc), str(exc)
+    else:
+        raise AssertionError("an unknown terrain gear was accepted")
+
+    frozen_before = dict(suites._LIZARD_SUITE_V2_GENERATOR.sub_terrains)
+    board = video_matrix.gear_terrain("rough_b", None)
+    assert list(board.terrain_generator.sub_terrains) == ["rough_b"], board.terrain_generator.sub_terrains
+    assert (board.terrain_generator.num_rows, board.terrain_generator.num_cols) == (1, 1)
+    assert board.terrain_generator.seed == suites.SUITE_SEED, "a gear must be the seeded board"
+    assert dict(suites._LIZARD_SUITE_V2_GENERATOR.sub_terrains) == frozen_before, \
+        "narrowing a gear edited the frozen suite in place: the next gear would get fewer columns"
+    plane = object()
+    assert video_matrix.gear_terrain("plane", plane) is plane, \
+        "plane must be the recipe's own ground, not the suite's flat column"
+
+    box = [1.0, 3.0]
+    assert video_matrix.in_recipe_box(1.0, box) and video_matrix.in_recipe_box(3.0, box)
+    assert not video_matrix.in_recipe_box(0.5, box), "an out-of-box gear must read as out of box"
+
+    assert video_matrix.cells([1.5, 3.0], ["plane", "rough_b"]) == [
+        {"speed": 1.5, "terrain": "plane"}, {"speed": 1.5, "terrain": "rough_b"},
+        {"speed": 3.0, "terrain": "plane"}, {"speed": 3.0, "terrain": "rough_b"},
+    ], "speeds outer, every combination once: the manifest order is the shooting order"
+
+    eye, aim = video_matrix.follow_view((10.0, -2.0, 0.5), 0.0, (-4.0, -3.0, 2.2), (1.5, 0.0, 0.3))
+    assert eye == (6.0, -5.0, 2.7) and aim == (11.5, -2.0, 0.8), (eye, aim)
+    turned, aimed = video_matrix.follow_view((0.0, 0.0, 0.5), math.pi / 2, (-4.0, -3.0, 2.2), (1.5, 0.0, 0.3))
+    assert abs(turned[0] - 3.0) < 1e-9 and abs(turned[1] + 4.0) < 1e-9, turned
+    assert abs(aimed[0]) < 1e-9 and abs(aimed[1] - 1.5) < 1e-9, aimed
+    assert turned[2] == 0.5 + 2.2 and aimed[2] == 0.5 + 0.3, "height must stay an offset"
+    print("  ok video matrix: gears resolve off the suite, one column per gear, camera rides the root")
 
 
 def _main() -> None:

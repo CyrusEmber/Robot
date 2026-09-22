@@ -3,11 +3,21 @@ import bmesh
 import os
 import shutil
 import struct
+import sys
 from mathutils import Vector
 
+# Which robot to emit. Default keeps the lizard line's asset exactly as it is; `--robot lizard2`
+# emits the new family's asset (co-located hip pivot + the stride axis moved to the hip). Blender
+# passes script arguments after a bare `--`, so the call is
+#   blender.exe --background --python generate_urdf.py -- --robot lizard2
+ROBOT = "lizard"
+if "--" in sys.argv:
+    _argv = sys.argv[sys.argv.index("--") + 1:]
+    for _i, _a in enumerate(_argv):
+        if _a == "--robot" and _i + 1 < len(_argv):
+            ROBOT = _argv[_i + 1]
+
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-_BLEND_IN = os.path.join(_SCRIPT_DIR, "lizard_stance.blend")
-OUT_DIR = os.path.join(_SCRIPT_DIR, "..", "lizard_urdf")
 TOTAL_MASS = 72.0
 MICRO_MASS = 0.05
 SHELL_FACTOR = 1.4
@@ -29,6 +39,26 @@ AXIS_MAP = {
     "kfe": ("-1 0 0", -1.6, 1.6, 150, 8),
     "foot": ("0 1 0", -0.5, 0.5, 30, 6),
 }
+
+# lizard2 (2026-09-22): the vertical axis belonged at the hip all along (a sprawled leg strides by
+# sweeping the femur in the horizontal plane). Here it moves to a NEW co-located hip joint and the
+# knee joint takes the fore-aft hinge; `haa` keeps the elevation axis. Measured consequence on the
+# lizard geometry: the hip sweep is the only fore-aft DoF (0.148 m per 0.3 rad at the plate centre,
+# vs 15 mm before), and the knee hinge lifts the foot instead of twisting it.
+_HIP_AXIS = ("0 0 1", -0.6, 0.6, 120, 8)
+AXIS_MAP_LIZARD2 = dict(AXIS_MAP, hip=_HIP_AXIS, hfe=("-1 0 0", -1.2, 1.2, 150, 8))
+
+# `micro_budget`: meshless links that came out of the solid-mass budget in the reference asset.
+# lizard2's hip pivots must NOT change any solid link's mass, so its budget is fixed to the
+# reference arithmetic (72 - 5 * 0.05) and the four new micro links simply add 0.2 kg of total mass.
+ROBOT_SPECS = {
+    "lizard": {"axes": AXIS_MAP, "blend": "lizard_stance.blend", "hip_joint": False, "micro_budget": None},
+    "lizard2": {"axes": AXIS_MAP_LIZARD2, "blend": "lizard_stance.blend", "hip_joint": True, "micro_budget": 5},
+}
+SPEC = ROBOT_SPECS[ROBOT]
+AXIS_MAP = SPEC["axes"]
+_BLEND_IN = os.path.join(_SCRIPT_DIR, SPEC["blend"])
+OUT_DIR = os.path.join(_SCRIPT_DIR, "..", "%s_urdf" % ROBOT)
 
 BALL_MESHES = {
     "Roundcube.001", "Roundcube.017", "Roundcube.025", "Roundcube.018", "Roundcube.019",
@@ -121,8 +151,29 @@ for link, bone in bones.items():
         entry["aabb_max"] = Vector((0.005, 0.005, 0.005))
     link_data[link] = entry
 
+if SPEC["hip_joint"]:
+    # Co-located hip pivot: same origin as the leg's haa, meshless, inserted as haa's parent, so the
+    # URDF carries a revolute whose origin is 0 relative to its parent -- the second hip DoF the leg
+    # was missing. The .blend stays untouched: this pivot is a rigging decision the generator owns.
+    rebuilt = {}
+    for link, entry in link_data.items():
+        if link.endswith("_haa"):
+            hip = link[:-4] + "_hip"
+            rebuilt[hip] = {"parent": entry["parent"], "origin": entry["origin"].copy(),
+                            "has_collision": False, "area": 0.0,
+                            "aabb_min": Vector((-0.005, -0.005, -0.005)),
+                            "aabb_max": Vector((0.005, 0.005, 0.005))}
+            entry = dict(entry)
+            entry["parent"] = hip
+        rebuilt[link] = entry
+    link_data = rebuilt
+
 micro_count = sum(1 for e in link_data.values() if e["area"] == 0.0)
-solid_budget = TOTAL_MASS - micro_count * MICRO_MASS
+# lizard: micro links come out of the solid budget (arithmetic unchanged). lizard2: the budget is
+# frozen to the REFERENCE micro count so every pre-existing link keeps its exact mass, and the new
+# hip pivots only add their own MICRO_MASS to the total (72.0 -> 72.2 kg).
+_budget_micros = micro_count if SPEC["micro_budget"] is None else SPEC["micro_budget"]
+solid_budget = TOTAL_MASS - _budget_micros * MICRO_MASS
 total_area = sum(e["area"] for e in link_data.values())
 for entry in link_data.values():
     entry["mass"] = MICRO_MASS if entry["area"] == 0.0 else solid_budget * entry["area"] / total_area
@@ -184,7 +235,7 @@ for link, entry in link_data.items():
     xml.append('  </joint>')
 
 xml.append('</robot>')
-urdf_path = os.path.join(OUT_DIR, "lizard.urdf")
+urdf_path = os.path.join(OUT_DIR, "%s.urdf" % ROBOT)
 with open(urdf_path, "w") as f:
     f.write("\n".join(xml) + "\n")
 

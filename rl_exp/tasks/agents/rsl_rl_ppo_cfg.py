@@ -349,3 +349,25 @@ class LizardBaselineV2PPORunnerCfg(LizardBaselinePPORunnerCfg):
 
     max_iterations = 10000
     experiment_name = "lizard_baseline_v2"
+
+
+@configclass
+class Lizard2PPORunnerCfg(LizardBaselinePPORunnerCfg):
+    """Runner cfg for `Lizard2-Flat-v1` (new family: 30-joint skeleton, 0-2 m/s command window).
+
+    The same PPO recipe as the baseline line's v1 on purpose -- the algorithm is not a variable this
+    family's baseline adds -- with the two record-level changes that pattern already carries:
+
+    * its own ``experiment_name``: one version, one log directory (versioning.mdc A), so a lizard2 run
+      cannot land among another line's.
+    * ``max_iterations`` stated as what is actually intended, so the recorded run is reproducible
+      from its own NOTES. Same budget as the other line's v2: a command *range* (two commands per
+      20 s episode) plus a skeleton whose learning curve is unknown.
+
+    It inherits from the baseline line's runner, so a PPO hyperparameter edit there moves this family
+    too -- accepted because the two are meant to be the same recipe, and the dependency is a code
+    import, visible in the edit rather than discovered later.
+    """
+
+    max_iterations = 10000
+    experiment_name = "lizard2_v1"

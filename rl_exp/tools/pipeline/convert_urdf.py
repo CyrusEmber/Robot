@@ -1,11 +1,13 @@
-"""Convert lizard.urdf (SSOT) into USD for Isaac Lab training.
+"""Convert a robot's URDF (SSOT) into USD for Isaac Lab training.
 
-Reads joint drive gains from lizard_params.yaml so the USD drive matches
-the actuator config used in training. Output lands in {rl_exp}/assets/,
-matching robot.usd_path in lizard_params.yaml.
+Reads joint drive gains from `versions/<robot>/main/main_params.yaml` so the USD drive matches the
+actuator config used in training. Output lands in `{rl_exp}/assets/<robot>/<robot>.usda`, matching
+`robot.usd_path` in that line's params. `--robot` defaults to lizard, so the original invocation is
+unchanged; a new family passes its own name.
 
 Usage (from {rl_exp}/tools/pipeline):
     E:\\IsaacLab\\env_isaaclab\\Scripts\\python.exe convert_urdf.py --headless
+    E:\\IsaacLab\\env_isaaclab\\Scripts\\python.exe convert_urdf.py --headless --robot lizard2
 """
 
 import argparse
@@ -13,9 +15,13 @@ import pathlib
 
 from isaaclab.app import AppLauncher
 
-parser = argparse.ArgumentParser(description="Convert lizard.urdf (SSOT) into USD.")
+parser = argparse.ArgumentParser(description="Convert a robot's URDF (SSOT) into USD.")
+parser.add_argument("--robot", default="lizard",
+                    help="family name; picks versions/<robot>/<robot>.urdf, that line's params yaml "
+                         "and assets/<robot>/<robot>.usda")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
+ROBOT = args_cli.robot
 
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
@@ -29,17 +35,17 @@ EXP_DIR = pathlib.Path(__file__).resolve().parents[2]
 
 
 def main():
-    with open(EXP_DIR / "versions" / "lizard" / "main" / "main_params.yaml", encoding="utf-8") as f:
+    with open(EXP_DIR / "versions" / ROBOT / "main" / "main_params.yaml", encoding="utf-8") as f:
         params = yaml.safe_load(f)
 
-    urdf_path = str(EXP_DIR / "versions" / "lizard" / "lizard.urdf")
+    urdf_path = str(EXP_DIR / "versions" / ROBOT / ("%s.urdf" % ROBOT))
     dest_path = str(EXP_DIR / "assets")
     legs_params = params["actuators"]["legs"]
 
     urdf_converter_cfg = UrdfConverterCfg(
         asset_path=urdf_path,
         usd_dir=dest_path,
-        usd_file_name="lizard/lizard.usda",
+        usd_file_name="%s/%s.usda" % (ROBOT, ROBOT),
         fix_base=False,
         # keep {leg}_FOOT as separate bodies: contact rewards need them
         merge_fixed_joints=False,

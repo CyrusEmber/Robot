@@ -111,7 +111,7 @@ success_rate 0.31，课程全卡 stage 0，地形等级 0.1/9。
 | #6 | `deployment-delay-injection-dr` | 延迟注入 DR（落点待拍板） |
 | #8 | `teacher-snapshot-asset-sync` | 资产换代时同步 teacher 快照（同步仍人工） |
 | #9 | `staged-curriculum-metric-wiring` | staged 课程 `Curriculum/*/metric` 恒 0 |
-| #11 | `dr-widening-policy` | DR 放宽策略未定案 + 多 GPU 续训不在保证范围 |
+| #11 | `dr-widening-policy` | **已改挂 lizard2** 家族（DR 放宽轴 + 续训状态层与多 GPU 边界）；本线的 c_k 只作参照 |
 | #12 | `isaac-root-parameterisation` | G3 收尾：三处参数化核认 + 删 junction |
 | #13 | `work/closed/2026/v5-terrain-eyeball-question.md` | 目视 / preflight 难度矛盾（已由 SIR 课程回应） |
 | #14 | `work/closed/2026/version-expression-architecture.md` | 版本表达架构（`ARCH_PLAN.md` 承接） |

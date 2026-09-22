@@ -38,13 +38,16 @@ import json
 import pathlib
 
 _MODULE = "rl_exp.tasks.recipe_tasks"
-_LINES_BUILT_ELSEWHERE = {"lizard/baseline"}
+_LINES_BUILT_ELSEWHERE = {"lizard/baseline", "lizard2/main"}
 """Lines whose classes their own module builds, so resolving one never imports the main line.
 
 The baseline line is the case: its recipe code is independent by contract (``baseline/PLAN.md``
 §与其它线的边界), and ``baseline_recipe.recipe_class`` is what makes that true at import time.
 Its key is the same string ``baseline_env_cfg._LINE_KEY`` and the identity map's ``line`` field
 carry; ``test_baseline_isolation.py`` asserts this table has no entry no declared task claims.
+
+The lizard2 family's main line joins it for the same reason and by the same shape: its declaration
+module (``lizard2_recipe``) imports no other line, so its constructor is the one that builds it.
 """
 
 _RECIPES_JSON = pathlib.Path(__file__).resolve().parents[1] / "versions" / "recipes.json"
@@ -103,6 +106,14 @@ def _builder(line: str):
         The line's recipe table and a ``(version, *, play, name) -> type`` constructor.
     """
     if line in _LINES_BUILT_ELSEWHERE:
+        if line == "lizard2/main":
+            from rl_exp.tasks import lizard2_recipe
+
+            def build_lizard2(version: str, *, play: bool, name: str) -> type:
+                return lizard2_recipe.recipe_class(version, play=play, name=name)
+
+            return lizard2_recipe.LIZARD2_RECIPES, build_lizard2
+
         from rl_exp.tasks import baseline_recipe
 
         def build_baseline(version: str, *, play: bool, name: str) -> type:

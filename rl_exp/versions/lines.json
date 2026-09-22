@@ -18,6 +18,12 @@
       "successor": null,
       "retired_at": null,
       "reason": null
+    },
+    "lizard2/main": {
+      "status": "active",
+      "successor": null,
+      "retired_at": null,
+      "reason": null
     }
   }
 }

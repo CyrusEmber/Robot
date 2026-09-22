@@ -6,6 +6,7 @@ geometry xforms, robot falls through the floor). The old pipeline used OBJ
 successfully, so we convert. Usage: python convert_stl_to_obj.py
 """
 
+import argparse
 import pathlib
 import re
 import struct
@@ -13,8 +14,19 @@ import sys
 
 # file lives at rl_exp/tools/pipeline/ -> exp root is parents[2]
 EXP_DIR = pathlib.Path(__file__).resolve().parents[2]
-MESH_DIR = EXP_DIR / "meshes"
-URDF_PATH = EXP_DIR / "versions" / "lizard" / "lizard.urdf"
+
+# Where each robot's STL meshes and URDF sit. lizard = the legacy in-place layout: the converted
+# OBJ set is the shared `rl_exp/meshes` tree the asset lock pins, and the URDF already lives in
+# versions/. lizard2 = the generator's staging dir, because a family whose geometry is byte-identical
+# does not get a second copy of the mesh tree (its URDF is copied into versions/ afterwards, with
+# the mesh references rewritten -- see the family's NOTES).
+ROBOTS = {
+    "lizard": (EXP_DIR / "meshes", EXP_DIR / "versions" / "lizard" / "lizard.urdf"),
+    "lizard2": (EXP_DIR / "lizard2_urdf" / "meshes", EXP_DIR / "lizard2_urdf" / "lizard2.urdf"),
+}
+_parser = argparse.ArgumentParser(description="Convert one robot's staged STL meshes to OBJ.")
+_parser.add_argument("--robot", default="lizard", choices=sorted(ROBOTS))
+MESH_DIR, URDF_PATH = ROBOTS[_parser.parse_args().robot]
 
 
 def parse_stl(path):

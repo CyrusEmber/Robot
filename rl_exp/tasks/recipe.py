@@ -44,6 +44,7 @@ from rl_exp.tasks.recipe_factory import make_class
 from rl_exp.tasks import curriculum_env_cfg, lizard_env_cfg, rough_env_cfg
 from rl_exp.tasks import curriculum_state as cstate
 from rl_exp.tasks import teacher_env_cfg
+from rl_exp.tasks import lizard2_env_cfg, lizard2_recipe
 from rl_exp.tasks.play_utils import apply_play_wiring
 from rl_exp.tasks.staged_curriculum import StageCfg, StagedCurriculumTerm, StagedCurriculumTermCfg
 
@@ -569,6 +570,9 @@ ELEMENTS: dict[str, object] = {
     # a baseline task does not import this one. They enter here through it: one name -> function
     # mapping per element, never two copies to keep in step.
     **baseline_recipe.ELEMENTS,
+    # Same extension point for the lizard2 family's own line: it exports its element map the same way,
+    # so a new family joins this table without this module knowing any of its element names.
+    **lizard2_recipe.ELEMENTS,
 }
 
 # What each recipe is: the ordered elements it applies on top of the shared wiring (and, for its
@@ -674,11 +678,20 @@ BASELINE_LINE = "lizard/baseline"
 # "how it differs from that stock cfg" -- which is what hard B asks a new recipe to declare.
 BASELINE_RECIPES = baseline_recipe.BASELINE_RECIPES
 
+# The lizard2 family's main line: a new family (its own USD asset, its own 30-joint skeleton) with
+# the baseline line's shape -- flat ground, one version, a declaration module of its own that this
+# one does not import for anything but the table. The line is registered so a task id can resolve a
+# class; it is not frozen (no version directory, no frozen yaml, no golden), which is what
+# ``check_recipe_build`` reports until the line is frozen.
+LIZARD2_LINE = "lizard2/main"
+LIZARD2_RECIPES = lizard2_recipe.LIZARD2_RECIPES
+
 # Line -> its shared wiring and its recipe table. Keyed by the same family-relative handle the
 # recipe map and the golden locks use, so "which line is this" has one answer everywhere.
 LINES: dict[str, dict] = {
     MAIN_LINE: {"base": teacher_env_cfg.LizardRoughTeacherEnvCfg, "recipes": RECIPES},
     BASELINE_LINE: {"base": baseline_env_cfg.BaselineWiringCfg, "recipes": BASELINE_RECIPES},
+    LIZARD2_LINE: {"base": lizard2_env_cfg.Lizard2WiringCfg, "recipes": LIZARD2_RECIPES},
 }
 
 

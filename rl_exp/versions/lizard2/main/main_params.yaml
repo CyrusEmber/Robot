@@ -1,0 +1,190 @@
+# main_params.yaml — SSOT of the lizard2 main line (versions/lizard2/main/).
+# Frozen copies live in versions/lizard2/main/vN/main_params.yaml; a versioned task always reads
+# its own copy, never this file.
+#
+# WHAT THIS FAMILY IS: the same lizard body, same meshes, same spine — with the leg chain re-cut so
+# that a stride axis exists at all. Measured cause (acceptance/records/2026-09-21-lizard-leg-axis-kinematics.md):
+# in `lizard/` the only vertical-axis leg joint sat at the femur's DISTAL end, so a sprawled leg —
+# whose stride is a horizontal sweep of the femur about a vertical HIP axis — could not stride: every
+# leg joint moved the foot in the y-z plane, and the one joint with an x component had 0.049 m of
+# leverage (15 mm per 0.3 rad). lizard2 adds one co-located hip pivot per leg (`*_hip`, axis +Z,
+# meshless, same origin as `*_haa`, 0.05 kg each) and gives `*_hfe` the fore-aft hinge a knee should
+# have. Geometry, meshes and the mass of every pre-existing link are unchanged (verified by diffing
+# the generated URDF against lizard's: masses identical, only the 4 hip links are new, total
+# 72.0 -> 72.2 kg). Action/obs width grows with the joint count (26 -> 30), and no checkpoint from
+# any other family can be replayed here.
+#
+# This line exists to answer one question: can this robot learn to walk forward on flat ground,
+# starting from a random policy, now that the stride axis exists? So the recipe states what it has,
+# and just as deliberately, what it has NOT:
+#
+#   absent by design -> no terrain generator, no height scanner, no foot-ring sensors, no privileged
+#   observation group, no c_k clock, no terrain curriculum, no staged speed curriculum, no domain
+#   randomization, no push/external-wrench events.
+
+robot:
+  name: lizard2
+  usd_path: assets/lizard2/lizard2.usda
+  base_body_name: base_link
+  base_init_height: 1.1
+
+# ground-truth joint order = the new URDF's revolute order, EXTRACTED from
+# versions/lizard2/lizard2.urdf rather than transcribed: each leg's hip pivot sits immediately
+# before its haa.
+joint_order:
+  - chest_yaw
+  - chest_pitch
+  - neck_yaw
+  - neck_pitch
+  - rf_hip
+  - rf_haa
+  - rf_hfe
+  - rf_kfe
+  - rf_foot
+  - lf_hip
+  - lf_haa
+  - lf_hfe
+  - lf_kfe
+  - lf_foot
+  - tail1_yaw
+  - tail1_pitch
+  - tail2_yaw
+  - tail2_pitch
+  - tail3_yaw
+  - tail3_pitch
+  - rr_hip
+  - rr_haa
+  - rr_hfe
+  - rr_kfe
+  - rr_foot
+  - rl_hip
+  - rl_haa
+  - rl_hfe
+  - rl_kfe
+  - rl_foot
+
+# regex pattern -> default angle (rad). Zero pose IS the natural stance (baked into the URDF joint
+# origins): thigh sprawled out-down, shank vertical, blade flat. The hip pivot adds no offset — the
+# stance geometry is the same pose, it just now has a joint that can sweep it.
+default_joint_pos:
+  ".*_hip_joint": 0.0
+  ".*_haa_joint": 0.0
+  ".*_hfe_joint": 0.0
+  ".*_kfe_joint": 0.0
+  ".*_foot_joint": 0.0
+  "chest_.*": 0.0
+  "tail[0-9]_.*": 0.0
+  "neck.*_.*": 0.0
+
+# ImplicitActuatorCfg groups: PD runs inside the physics solver at 200 Hz (sampled 50 Hz explicit
+# torque PD is unstable on the low-inertia spine joints). The hip pivot joins the legs group: it is
+# the stride joint, so it carries leg-grade authority.
+actuators:
+  legs:
+    joint_patterns:
+      - ".*_hip_joint"
+      - ".*_haa_joint"
+      - ".*_hfe_joint"
+      - ".*_kfe_joint"
+    stiffness: 800.0
+    damping: 40.0
+    effort_limit: 180.0
+    velocity_limit: 10.0
+    armature: 0.0
+  feet:
+    joint_patterns:
+      - ".*_foot_joint"
+    stiffness: 200.0
+    damping: 12.0
+    effort_limit: 70.0
+    velocity_limit: 6.0
+    armature: 0.0
+  spine:
+    joint_patterns:
+      - "chest_.*"
+      - "tail[0-9]_.*"
+      - "neck.*_yaw_joint"
+      - "neck.*_pitch_joint"
+    stiffness: 400.0
+    damping: 20.0
+    effort_limit: 80.0
+    velocity_limit: 4.0
+    armature: 0.0
+
+# frozen action interface: two groups, 30 dims total (legs 20 including the hip pivots and the blade
+# joints, spine 10). The blade joints KEEP their authority: v2's "blade loses authority" experiment
+# belongs to the other family and is not carried here -- a family's own v1 is its baseline, and the
+# only difference from the lizard baseline recipe is the skeleton plus the command range below.
+action:
+  legs_scale: 0.5
+  spine_scale: 0.25
+  use_default_offset: true
+
+sim:
+  dt: 0.005
+  decimation: 4
+  episode_length_s: 20.0
+
+# body name patterns for reward/termination terms. Carried verbatim from the lizard baseline recipe,
+# INCLUDING the `.*_kfe` pattern the collision census showed can never fire (that plate link carries
+# no collision mesh): fixing it here would add a second change to the family's baseline. It is
+# tracked instead as a known inherited quirk in the version NOTES and in
+# work/active/asset-leg-axis-capability-mismatch.md.
+names:
+  foot_body_names:
+    - ".*_foot"
+  undesired_contact_body_names:
+    - ".*_hfe"
+    - ".*_kfe"
+  # The head guard's bodies: the front chain that carries the ball head, i.e. everything ahead of the
+  # leg roots. On a flat plane any of it touching the ground means the robot is down face-first, and
+  # the sibling line's v1 failure was exactly this pose (neck_pitch bearing 82-90 N). Patterns, like
+  # the lists above, so the asset-side role is what is named rather than a link spelling.
+  head_contact_body_names:
+    - "chest_.*"
+    - "neck_.*"
+
+# A RANGE, not a point (the one deliberate recipe difference from the lizard baseline, decided
+# 2026-09-22): forward 0-2 m/s, sampled on the framework's own 10 s window, so a 20 s episode holds
+# two commands and the transition is graded. The two switches below are off explicitly because either
+# would rewrite the issued command at runtime, and the startup probe reads the issued tensor rather
+# than trusting these values:
+#   heading_command=True would rewrite ang_vel_z from a heading error;
+#   rel_standing_envs>0 would zero the command for that fraction of envs, i.e. they would be asked to
+#     stand still and would score the tracking reward for free.
+commands:
+  lin_vel_x: [0.0, 2.0]
+  lin_vel_y: [0.0, 0.0]
+  ang_vel_z: [0.0, 0.0]
+  heading_command: false
+  rel_standing_envs: 0.0
+
+# Seven terms, weights verbatim from the lizard baseline recipe (the teacher's c_k=1 values, used from
+# step one: this line has no c_k clock). Rationale per term and the two things this table is NOT are
+# argued in versions/lizard/baseline/v1/baseline_params.yaml and not repeated here.
+rewards:
+  track_lin_vel_xy_miki: 1.5
+  track_ang_vel_z_exp: 0.5
+  lin_vel_z_l2: -2.0
+  action_rate_l2: -0.01
+  dof_torques_l2: -1.0e-5
+  undesired_contacts: -1.0
+  belly_contact_force: -0.5
+
+# Fall detection. base_contact carried verbatim: on flat ground base contact means the robot is down.
+# Added 2026-09-22 (same revision as the head guard below): the FRONT chain is a second way to be
+# down -- the sibling line's v1 lost its run to a policy that bore weight on its neck (neck_pitch
+# 82-90 N = 11.6-12.8% of body weight), and on a plane that pose has no rescue value.
+terminations:
+  base_contact_threshold: 1.0
+  # Same "contact" value as base_contact on purpose: one number to reason about, and the framework's
+  # own history-max instead of an added dwell -- a face-plant is an instantaneous event.
+  head_contact_threshold: 1.0
+
+# Terms needing a physical scale. force_scale = nominal body weight: 706.0 is 72 x 9.81, kept from
+# the lizard baseline even though lizard2's total mass is 72.2 kg (the 0.28% is far below this term's
+# calibration; changing it here would be a second variable for no gain).
+params:
+  belly_force_scale: 706.0
+  miki_sigma_sq: 0.25
+  track_std: 0.5

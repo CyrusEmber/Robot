@@ -34,6 +34,11 @@ rl_exp/versions/**/tb_scalars.full.csv
 # regenerates them, never the dump itself.
 rl_exp/tools/diagnose/out/
 
+# video-matrix clips (ablation_harness/video_matrix.py): mp4 + matrix.json, same treatment as
+# the diagnose dumps above -- regenerable in one command from a checkpoint plus a gear list,
+# and the durable evidence is the numbers written into the record, never the clip itself
+ablation_harness/videos/
+
 # blender autosave backups
 *.blend1
 
