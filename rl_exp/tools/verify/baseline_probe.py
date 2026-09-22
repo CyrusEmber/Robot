@@ -17,6 +17,8 @@ criterion: it depends on joint scale, default pose and gait).
 """
 
 import argparse
+import math
+import os
 import pathlib
 import re
 
@@ -36,11 +38,19 @@ parser.add_argument(
 parser.add_argument(
     "--head-press",
     action="store_true",
-    help="after the standing rollout, lower the base until the head chain is --press-depth m below "
-    "the ground and watch whether the recipe's head-contact termination fires (and at what force)",
+    help="press the head chain onto the floor -- and first leave it standing as the control -- to "
+    "watch whether the recipe's head-contact termination fires and at what force. Both readings "
+    "are taken before anything resets",
 )
 parser.add_argument("--press-depth", type=float, default=0.05,
                     help="how far below the ground to push the lowest head-chain mesh point [m]")
+parser.add_argument(
+    "--shot",
+    action="store_true",
+    help="save rendered frames of the zero-action rollout (needs --enable_cameras): the numbers can "
+    "say the feet are on the floor, not whether the stance is the robot the recipe describes",
+)
+parser.add_argument("--shot-dir", default="_tmp_zero_action_shots", help="frame output dir (git-ignored)")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 app_launcher = AppLauncher(args_cli)
@@ -50,7 +60,7 @@ import gymnasium as gym  # noqa: E402
 import torch  # noqa: E402
 
 import isaaclab_tasks  # noqa: F401, E402
-from isaaclab.utils.math import quat_apply  # noqa: E402
+from isaaclab.utils.math import quat_apply, quat_from_euler_xyz  # noqa: E402
 
 from rl_exp.tools.diagnose.diag_metrics import (  # noqa: E402
     MESH_CHECK_BODIES, body_load_n, collision_mesh_dir, foot_ids, mesh_min_z, mesh_vertices,
@@ -102,10 +112,264 @@ def term_values(manager, name: str):
     return None
 
 
+def head_contact_max(contact_sensor, ids, *, history: bool = False, env_mask=None) -> float:
+    """Largest head-chain contact force in the sensor right now [N].
+
+    ``history`` selects the same quantity ``illegal_contact`` reads -- the maximum over the sensor's
+    own window, which is what a threshold on that term actually gates. ``env_mask`` skips envs whose
+    buffers no longer describe this episode.
+    """
+    forces = (contact_sensor.data.net_forces_w_history.torch if history
+              else contact_sensor.data.net_forces_w.torch)
+    if env_mask is not None:
+        forces = forces[env_mask]
+    if forces.shape[0] == 0:
+        return 0.0
+    selected = forces.index_select(-2, torch.tensor(ids, device=forces.device))
+    return float(selected.norm(dim=-1).max())
+
+
+def mesh_floor(robot, ids, corners, num_envs) -> float:
+    """Lowest world z of the given bodies' collision meshes, over all envs [m]."""
+    pose = robot.data.body_pos_w.torch[:, ids].unsqueeze(2)
+    orientation = robot.data.body_quat_w.torch[:, ids].unsqueeze(2).expand(-1, -1, corners.shape[1], -1)
+    world = pose + quat_apply(orientation, corners.unsqueeze(0).expand(num_envs, -1, -1, -1))
+    return float(world[..., 2].min())
+
+
+def place_root(unwrapped, robot, pitch_rad: float, height: float) -> None:
+    """Put the base at ``height`` pitched about y (positive = nose down) and stop it.
+
+    The press is a pose, not a joint command: the head chain cannot reach the floor while the robot
+    stands on its feet -- at the extreme head pose the chin's lowest mesh point is 0.478 m up
+    (measured 2026-09-22), and lowering the base only makes the FEET penetrate and the solver stand
+    the robot back up on them. The poses that do put the chin on the floor are the face-plants this
+    gate exists for, which is why the press is one of those.
+    """
+    count, device = unwrapped.num_envs, unwrapped.device
+    zeros = torch.zeros(count, device=device)
+    quat = quat_from_euler_xyz(zeros, torch.full((count,), pitch_rad, device=device), zeros)
+    pose = torch.cat([unwrapped.scene.env_origins + torch.tensor([0.0, 0.0, height], device=device),
+                      quat], dim=-1)
+    robot.write_root_pose_to_sim(pose)
+    robot.write_root_velocity_to_sim(torch.zeros((count, 6), device=device))
+    robot.update(unwrapped.physics_dt)  # refresh the body poses so the meshes can be measured
+
+
+def head_press_action(unwrapped, robot, joint_names, end: int) -> torch.Tensor:
+    """The deployed action that holds the head chain at one end of its range.
+
+    Built through the action interface, not by writing sim targets: the interface is what carries the
+    group scale and the default-pose offset, and it is how the recipe commands this robot -- the
+    first version of this experiment built a `press_action` and then stepped `zero_action`, so it
+    measured nothing (review 2026-09-22).
+    """
+    manager = unwrapped.action_manager
+    action = torch.zeros((unwrapped.num_envs, manager.total_action_dim), device=unwrapped.device)
+    offset = 0
+    for term_name in manager.active_terms:
+        term = manager.get_term(term_name)
+        scale = float(torch.as_tensor(term._scale).reshape(-1)[0])
+        default = robot.data.default_joint_pos.torch if getattr(term, "use_default_offset", False) else None
+        for position, name in enumerate(term._joint_names):
+            if not name.startswith(("chest_", "neck_")):
+                continue
+            joint = joint_names.index(name)
+            target = robot.data.joint_pos_limits.torch[0, joint, end]
+            base = 0.0 if default is None else default[:, joint]
+            action[:, offset + position] = (target - base) / scale
+        offset += len(term._joint_names)
+    return action
+
+
+def write_frame(path: pathlib.Path, frame) -> pathlib.Path:
+    """Save one RGB frame with whichever image writer this runtime ships."""
+    try:
+        from PIL import Image
+
+        Image.fromarray(frame).save(path)
+    except ImportError:
+        import matplotlib.image as mpimg
+
+        mpimg.imsave(path, frame)
+    return path
+
+
+def run_head_press(env, unwrapped, robot, body_names, joint_names, contact_sensor, body_patterns,
+                   params, num_envs) -> None:
+    """Two runs of one instrument: the head standing (must) and pressed (must fire).
+
+    Either run alone proves nothing -- "it fired" can be a gate wired to the feet, and "it stayed
+    quiet" can be a gate wired to a link that never touches anything. The pair is what says the guard
+    reads the head chain. The firing frame's force is read at the instant the term is computed, from
+    the term's own window: ``env.step`` resets the terminated envs before it returns and a reset
+    zeroes the sensor's buffers, so a force read afterwards belongs to the NEXT episode (measured
+    2026-09-22: the guard read as firing at 0.00 N).
+
+    What this is NOT: a threshold calibration. The head cannot reach the floor while the robot stands
+    on its feet (its lowest mesh point is 0.478 m up at the extreme head pose), and a nose-down robot
+    is placed with its chin deep in the floor, so the force read is the solver's response to that
+    placement. It establishes that the guard fires when the declared bodies are loaded and that it
+    stays silent while they are not -- a press gentle enough to cross the 1 N threshold from below is
+    still owed.
+    """
+    print("[probe] head-contact gate (standing vs pressed)")
+    patterns = body_patterns.get("head_contact_body_names") or []
+    matched = [name for name in body_names
+               if any(re.fullmatch(pattern, name) for pattern in patterns)]
+    collider = collision_mesh_dir()
+    head_bodies = [name for name in matched if (collider / f"{name}_collision.obj").is_file()]
+    # A contact gate can only act through a collider. A pattern that matches a link without one is
+    # a dead entry that reads like coverage -- the same defect this repo already carries in the
+    # reward's `.*_kfe` (review 2026-09-22). Naming it here is what keeps it from being inherited.
+    # It is reported, not a precondition for the experiment below: the pitch links carry colliders.
+    dead = sorted(set(matched) - set(head_bodies))
+    check("head/press-bodies-resolved", bool(head_bodies),
+          f"the yaml's head patterns {patterns} match no body with a collision mesh")
+    check("head/no-collider-less-pattern", not dead,
+          f"the head patterns match {dead}, which has no collision mesh: their contact force is "
+          "structurally zero, so that part of the guard can never fire")
+    threshold = params["terminations"].get("head_contact_threshold")
+    if not head_bodies or threshold is None or contact_sensor is None:
+        print("  no head collider, no declared threshold or no contact sensor: the experiment "
+              "cannot run")
+        return
+    ids = [body_names.index(name) for name in head_bodies]
+    corners = pad_point_clouds([mesh_vertices(collider / f"{name}_collision.obj")
+                                for name in head_bodies]).to(unwrapped.device)
+    foot_corners = pad_point_clouds([mesh_vertices(collider / f"{name}_collision.obj")
+                                     for name in body_names if name.endswith("_foot")]).to(unwrapped.device)
+    foot_ids = [body_names.index(name) for name in body_names if name.endswith("_foot")]
+    zero = torch.zeros((num_envs, unwrapped.action_manager.total_action_dim), device=unwrapped.device)
+    manager = unwrapped.termination_manager
+    settle = max(5, args_cli.steps // 4)
+
+    # --- control: standing on its feet, head up, through the same loop ----------------
+    env.reset()
+    for _ in range(settle):
+        with torch.inference_mode():
+            env.step(zero)
+    quiet_peak, quiet_fired = 0.0, False
+    for _ in range(args_cli.steps):
+        with torch.inference_mode():
+            obs, rew, term, trunc, _ = env.step(zero)
+        # a reset env's buffers describe the next episode, so only the survivors are read
+        quiet_peak = max(quiet_peak, head_contact_max(contact_sensor, ids, env_mask=~(term | trunc)))
+        quiet_fired |= bool(manager.get_term("head_contact").any())
+    check("head/quiet-when-standing", not quiet_fired,
+          f"head_contact fired during {args_cli.steps} unpressed steps (peak head force "
+          f"{quiet_peak:.2f} N): the guard is reading something other than the head chain")
+    print(f"  control (standing, head up): peak head force {quiet_peak:.2f} N, guard fired {quiet_fired}")
+
+    # --- pressed: head chain to its lower limits, then the base descends -----------------
+    # Which nose-down angle to press at is measured, not assumed: the chin's mesh floor and the
+    # feet's are read at each candidate pose, and the angle that leaves the feet clearest is the one
+    # used -- so the reading is the chin's, not the feet's.
+    env.reset()
+    for _ in range(settle):
+        with torch.inference_mode():
+            env.step(zero)
+    ref_z = float(robot.data.root_pos_w.torch[0, 2])
+    press = head_press_action(unwrapped, robot, joint_names, end=0)
+    for _ in range(settle):
+        with torch.inference_mode():
+            env.step(press)
+    floors = {}
+    for degrees in (30, 45, 60, 75, 90):
+        place_root(unwrapped, robot, math.radians(degrees), ref_z)
+        chin = mesh_floor(robot, ids, corners, num_envs)
+        feet = mesh_floor(robot, foot_ids, foot_corners, num_envs)
+        floors[degrees] = (chin, feet)
+        print(f"    nose-down {degrees:2d} deg: chin mesh floor {chin:+.3f} m, feet {feet:+.3f} m "
+              f"(clearance once the chin is {args_cli.press_depth * 1000:.0f} mm under: "
+              f"{feet - chin - args_cli.press_depth:+.3f} m)")
+    degrees = max(floors, key=lambda value: floors[value][1] - floors[value][0])
+    chin_ref = floors[degrees][0]
+    print(f"  pressing at {degrees} deg nose-down, base closing on the floor from z {ref_z:.3f} m in "
+          f"{args_cli.press_depth * 1000:.0f} mm steps (each stage holds {max(1, args_cli.steps // 5)} steps)")
+    record: dict[str, float] = {}
+    original = unwrapped._reset_idx
+
+    def capture(env_ids):
+        """The last moment before the reset, where the force, the pose and the term are one frame.
+
+        The pose is read here rather than before the step: a pose written but not yet stepped is not
+        what the link view returns, so a depth read right after the write describes a pose the robot
+        is not in (measured 2026-09-22: readings 0.2 m off, in the wrong sign).
+        """
+        record.update(force=head_contact_max(contact_sensor, ids),
+                      window=head_contact_max(contact_sensor, ids, history=True),
+                      depth=-mesh_floor(robot, ids, corners, num_envs),
+                      head=bool(manager.get_term("head_contact").any()),
+                      base=bool(manager.get_term("base_contact").any()))
+        return original(env_ids)
+
+    # A staircase of absolute base heights, not of depths off the mesh proxy: the proxy's lowest
+    # point is not where the collider touches (the asset's collision meshes are convex-hull
+    # approximations, and the robot reached the floor with the proxy still reading millimetres of
+    # clearance -- measured 2026-09-22). The base therefore descends by fixed steps until something
+    # touches, and what the mesh proxy says is reported beside the force, never used to aim.
+    stages = 5
+    stage_steps = max(1, args_cli.steps // stages)
+    unwrapped._reset_idx = capture
+    fired, masks = None, None
+    try:
+        for stage in range(stages):
+            height = ref_z - args_cli.press_depth * (stage + 1)
+            place_root(unwrapped, robot, math.radians(degrees), height)
+            stage_peak = 0.0
+            for _ in range(stage_steps):
+                with torch.inference_mode():
+                    obs, rew, term, trunc, _ = env.step(press)
+                stage_peak = max(stage_peak, head_contact_max(contact_sensor, ids, env_mask=~(term | trunc)))
+                if record:
+                    # some term ended the episode and the env is already respawned: the press is over
+                    fired, masks = stage, (bool(term.any()), bool(trunc.any()))
+                    stage_peak = max(stage_peak, record["force"])
+                    break
+            print(f"    base z {height:.3f} m: peak head force {stage_peak:8.2f} N"
+                  f"{'   <- the episode ended here' if record else ''}")
+            if fired is not None:
+                break
+    finally:
+        unwrapped._reset_idx = original
+    window = contact_sensor.data.net_forces_w_history.torch.shape[1]
+    print(f"  head bodies: {head_bodies} | yaml threshold {threshold} N | chin mesh floor at the "
+          f"reference pose {chin_ref:+.3f} m")
+    if fired is None:
+        check("head/fires-when-pressed", False,
+              f"the base closed {args_cli.press_depth * stages * 1000:.0f} mm on the floor at "
+              f"{degrees} deg nose-down and head_contact never fired")
+        return
+    print(f"  the episode ended at stage {fired} (base z {ref_z - args_cli.press_depth * (fired + 1):.3f} m, "
+          f"chin {record['depth'] * 1000:+.1f} mm into the floor by the mesh proxy): the terms returned "
+          f"terminated={masks[0]} truncated={masks[1]} | base_contact among them: {bool(record['base'])}")
+    check("head/fires-when-pressed", bool(record["head"]),
+          f"the press ended at stage {fired} by another term (base_contact among them: "
+          f"{bool(record['base'])}), without head_contact firing")
+    if record["head"]:
+        print(f"  head_contact fired: {record['force']:.2f} N in that frame, {record['window']:.2f} N "
+              f"as the maximum over the {window}-frame window the term reads")
+        check("head/fires-above-threshold", record["window"] > float(threshold),
+              f"the guard fired with its own window maximum at {record['window']:.2f} N, below the "
+              f"declared {threshold} N: it is not reading the bodies it declares")
+        # The force has to be explained by the declared bodies being at the floor. Without this the
+        # probe passes on a reading nobody can account for: measured 2026-09-22, the guard fired with
+        # 1.1 kN on the declared bodies while their own collision meshes read 0.72 m ABOVE the floor,
+        # so the trigger was still unobserved -- and that is what this check says.
+        check("head/fires-with-the-head-at-the-floor", record["depth"] > -args_cli.press_depth,
+              f"the guard fired while the head's own collision mesh read {-record['depth'] * 1000:.0f} mm "
+              "above the floor: the force is not explained by the declared bodies reaching the ground, "
+              "so this is not an observed trigger")
+
+
 def main() -> int:
+    if args_cli.shot and not (args_cli.enable_cameras or os.environ.get("ENABLE_CAMERAS") == "1"):
+        print("--shot needs --enable_cameras: without the renderer there is nothing to save")
+        return 2
     cfg = resolve_task_cfg(args_cli.task)
     cfg.scene.num_envs = args_cli.num_envs
-    env = gym.make(args_cli.task, cfg=cfg)
+    env = gym.make(args_cli.task, cfg=cfg, render_mode="rgb_array" if args_cli.shot else None)
     unwrapped = env.unwrapped
     num_envs = args_cli.num_envs
     dt = getattr(unwrapped, "step_dt", None)
@@ -228,6 +492,14 @@ def main() -> int:
     load_rows: list[torch.Tensor] = []
     mesh_rows: list[torch.Tensor] = []
     qd_rows: list[torch.Tensor] = []
+    # A sequence, not one frame: a single still cannot show whether the stance holds. Six frames
+    # across the rollout are enough for a reader to see the feet, the floor line and any drift.
+    shots: list[tuple[int, object]] = []
+    shot_dir = pathlib.Path(args_cli.shot_dir)
+    shot_every = max(1, args_cli.steps // 6)
+    if args_cli.shot:
+        shot_dir = shot_dir.resolve()
+        shot_dir.mkdir(exist_ok=True)
     reward_names = list(getattr(unwrapped.reward_manager, "_term_names", []))
     act_dim = unwrapped.action_manager.total_action_dim
     soft_limits = robot.data.soft_joint_pos_limits.torch
@@ -240,6 +512,8 @@ def main() -> int:
             actions = torch.zeros(num_envs, act_dim, device=unwrapped.device)
         with torch.inference_mode():
             obs, rew, term, trunc, _ = env.step(actions)
+        if args_cli.shot and standing and step % shot_every == 0:
+            shots.append((step, unwrapped.render()))
         # the issued command must stay inside the declared box for the whole rollout: the box is the
         # document's, not a fixed point (a range that drifts outside its own declaration is worse
         # than a fixed command, because the evaluator grades against the declaration)
@@ -290,6 +564,11 @@ def main() -> int:
             halves[half] = halves[half] + value
 
     check("command/issued-stable-over-rollout", command_stable, "the issued command changed during the rollout")
+    if shots:
+        written = [write_frame(shot_dir / f"{args_cli.task}_{step:03d}.png", frame)
+                   for step, frame in shots]
+        print(f"[probe] zero-action frames ({len(written)}): "
+              f"{', '.join(path.name for path in written)} in {shot_dir}")
 
     # --- observations -------------------------------------------------------------
     print("[probe] observations")
@@ -311,17 +590,13 @@ def main() -> int:
     print("[probe] actions")
     am = unwrapped.action_manager
     channelled: dict[str, int] = {}
-    joint_to_action: dict[str, tuple[int, float]] = {}
-    offset = 0
     for term_name in am.active_terms:
         term = am.get_term(term_name)
         scale = term._scale
         scale = float(scale) if not hasattr(scale, "reshape") else float(scale.reshape(-1)[0])
         print(f"  term {term_name}: {len(term._joint_names)} joints, scale {scale}")
-        for position, joint in enumerate(term._joint_names):
+        for joint in term._joint_names:
             channelled[joint] = channelled.get(joint, 0) + 1
-            joint_to_action[joint] = (offset + position, scale)
-        offset += len(term._joint_names)
     missing = sorted(set(joint_names) - set(channelled))
     doubled = sorted(joint for joint, count in channelled.items() if count > 1)
     check("actions/every-joint-channelled", not missing, f"no action term carries {missing}")
@@ -332,15 +607,19 @@ def main() -> int:
     # --- terminations -------------------------------------------------------------
     print("[probe] terminations")
     termination_names = set(getattr(unwrapped.termination_manager, "_term_names", []))
-    # the document is the expectation: every contact-gate threshold it declares has to be a live
-    # term, and time_out is the framework's own
-    expected_terms = {"time_out"} | {key[: -len("_threshold")] for key in params["terminations"]
-                                     if key.endswith("_threshold")}
+    # The document is the expectation and NAMES the live set: a term may take a threshold, a dwell, a
+    # speed limit. Deriving names from a `_threshold` suffix would miss any term whose parameters are
+    # shaped differently, and asserting only "the declared ones are present" let an extra live term
+    # print and pass -- a term nobody declared is a term nobody grades (review 2026-09-22).
+    declared_terms = set(params["terminations"].get("terms") or [])
+    expected_terms = declared_terms | {"time_out"}
     for needed in sorted(expected_terms):
-        check(f"terminations/{needed}-present", needed in termination_names, f"{sorted(termination_names)}")
-    unexpected = sorted(termination_names - expected_terms)
-    print(f"  declared by the yaml: {sorted(expected_terms)} | live: {sorted(termination_names)}"
-          + (f" | extra live terms: {unexpected}" if unexpected else ""))
+        check(f"terminations/{needed}-declared-and-live", needed in termination_names,
+              f"the yaml's terminations.terms declares it, the env has {sorted(termination_names)}")
+    extra = sorted(termination_names - expected_terms)
+    check("terminations/no-undeclared-term", not extra,
+          f"{extra} end the episode but the yaml's terminations.terms does not name them")
+    print(f"  declared: {sorted(declared_terms)} + time_out | live: {sorted(termination_names)}")
     print(f"  info episodes over {args_cli.steps} steps: {term_counts}")
 
     # --- diagnostics (printed, not asserted) --------------------------------------
@@ -421,86 +700,10 @@ def main() -> int:
 
     # --- the head-contact gate: observe it firing, do not assume it -----------------
     # A termination that was never seen to fire is a claim about a threshold, not a measurement of
-    # one (review 2026-09-22). This lowers the base until the lowest head-chain collision mesh point
-    # is --press-depth m below the ground, then watches the termination and the contact force.
+    # one (review 2026-09-22).
     if args_cli.head_press:
-        print("[probe] head-contact gate (pressed)")
-        patterns = body_patterns.get("head_contact_body_names") or []
-        matched = [name for name in body_names
-                   if any(re.fullmatch(pattern, name) for pattern in patterns)]
-        collider = collision_mesh_dir()
-        head_bodies = [name for name in matched if (collider / f"{name}_collision.obj").is_file()]
-        # A contact gate can only act through a collider. A pattern that matches a link without one is
-        # a dead entry that reads like coverage -- the same defect this repo already carries in the
-        # reward's `.*_kfe` (review 2026-09-22). Naming it here is what keeps it from being inherited.
-        dead = sorted(set(matched) - set(head_bodies))
-        check("head/press-bodies-resolved", bool(head_bodies),
-              f"the yaml's head patterns {patterns} match no body with a collision mesh")
-        check("head/no-collider-less-pattern", not dead,
-              f"the head patterns match {dead}, which has no collision mesh: their contact force is "
-              "structurally zero, so that part of the guard can never fire")
-        threshold = params["terminations"].get("head_contact_threshold")
-        if head_bodies and threshold is not None:
-            env.reset()
-            for _ in range(max(5, args_cli.steps // 4)):
-                env.step(torch.zeros((num_envs, unwrapped.action_manager.total_action_dim), device=unwrapped.device))
-            corners = pad_point_clouds([mesh_vertices(collision_mesh_dir() / f"{name}_collision.obj")
-                                        for name in head_bodies]).to(unwrapped.device)
-            ids = [body_names.index(name) for name in head_bodies]
-            def head_floor() -> float:
-                """Lowest world z of the head chain's collision meshes, over all envs."""
-                pose = robot.data.body_pos_w.torch[:, ids].unsqueeze(2)
-                orientation = robot.data.body_quat_w.torch[:, ids].unsqueeze(2).expand(-1, -1, corners.shape[1], -1)
-                world = pose + quat_apply(orientation, corners.unsqueeze(0).expand(num_envs, -1, -1, -1))
-                return float(world[..., 2].min())
-            drop = head_floor() + args_cli.press_depth  # positive while the head hangs above the floor
-            if drop > 0.0:
-                posed = robot.data.root_state_w.torch.clone()
-                posed[:, 2] -= drop
-                robot.write_root_pose_to_sim(posed[:, :7])
-                robot.write_root_velocity_to_sim(torch.zeros((num_envs, 6), device=unwrapped.device))
-                print(f"  lowered the base by {drop:.3f} m so the lowest head-chain point sits "
-                      f"{args_cli.press_depth:.3f} m below the ground")
-            fired_at, peak_force, steps_to_fire = None, 0.0, 0
-            zero_action = torch.zeros((num_envs, unwrapped.action_manager.total_action_dim),
-                                      device=unwrapped.device)
-            # Lowering the base alone lands the robot on its FEET -- the legs are longer than the neck
-            # is forward, so the head never reaches the floor (measured: 0.00 N with the head nominally
-            # 5 cm under it). The press therefore also drives the head chain toward its limits, which
-            # is what actually puts the head on the ground.
-            press_action = zero_action.clone()
-            chain = [name for name in joint_names if name.startswith(("chest_", "neck_"))]
-            for joint in chain:
-                index_scale = joint_to_action.get(joint)
-                if index_scale is None:
-                    continue
-                index, scale = index_scale
-                if scale > 0:
-                    low = float(robot.data.joint_pos_limits.torch[0, joint_names.index(joint), 0])
-                    press_action[0, index] = low / scale
-            manager = unwrapped.termination_manager
-            head_index = (manager._term_names.index("head_contact")
-                          if "head_contact" in manager._term_names else None)
-            for step in range(args_cli.steps):
-                env.step(zero_action)
-                if contact_sensor is not None:
-                    peak_force = max(peak_force, contact_sensor.data.net_forces_w.torch[:, ids, :]
-                                     .norm(dim=-1).max().item())
-                dones = getattr(manager, "_term_dones", None)
-                fired = bool(dones[:, head_index].any()) if (dones is not None and head_index is not None) else False
-                if fired:
-                    fired_at, steps_to_fire = step, step
-                    break
-            print(f"  head bodies: {head_bodies} | yaml threshold {threshold} N | "
-                  f"peak head contact force seen: {peak_force:.2f} N")
-            if fired_at is None:
-                check("head/fires-when-pressed", False,
-                      f"the head sat {-args_cli.press_depth:.2f} m below the ground for {args_cli.steps} "
-                      f"steps and head_contact never fired (peak force {peak_force:.2f} N)")
-            else:
-                check("head/fires-when-pressed", True)
-                print(f"  head_contact fired after {steps_to_fire} pressed steps; peak head force "
-                      f"{peak_force:.2f} N vs threshold {threshold} N")
+        run_head_press(env, unwrapped, robot, body_names, joint_names, contact_sensor, body_patterns,
+                       params, num_envs)
 
     env.close()
     if PROBLEMS:
