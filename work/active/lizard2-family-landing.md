@@ -4,10 +4,10 @@ title: lizard2 家族落成：两处契约声明 + diff 论证 + 开训前检查
 scope: rl_exp/versions/lizard2, rl_exp/tasks, rl_exp/tools/pipeline, rl_exp/tools/verify, ablation_harness
 status: open
 landing: rl_exp/versions/lizard2/main/v1/PLAN.md, rl_exp/versions/lizard2/main/main_params.yaml, rl_exp/tools/pipeline/emit_diff_declaration.py, rl_exp/tools/verify/check_recipe_build.py
-next: ① 冻结本线评测协议（PLAN 硬前置 1）：新增四个判据种类 `tracking_banded_v1`/`displacement_banded_v1`/`non_foot_load_sum_v1`/`gait_swing_v1`（各带反例与自己的 judge id），并按正常/异常样本 + 噪声标定 `non_foot_carrier_v1`/总量那条的阈值，接启动闸门"协议缺失或摘要不符即拒绝"；② 执行器能力曲线实测（硬前置 4）：层一悬空正弦跟踪（0.5/1.0/1.5/2.0 Hz，记超调/稳定时间/饱和占比/时间步敏感性）+ 层二承重协调运动；先测运行时真正生效的限幅（`velocity_limit` 被本 fork 丢弃）；③ 自碰撞检查（硬前置 5）：交叠/有符号穿透 + 相邻关节允许重叠，粗网格找反例 + 覆盖实际动作轨迹；④ `baseline_probe.py` 按 v1 接口改造后复测 + 零动作落地姿态目视；⑤ 开训前打 tag `lizard2-main-v1`。
+next: ① **等 owner 决策**：执行器能力曲线实测把 0–3 的上界判为超出这条关节轨迹（0.5 Hz 就 163 N·m、干净跟踪只到 0.5 Hz、按步幅约 1.1 m/s；见 `2026-09-22-lizard2-actuator-capability.md`）——改窗口 / 改执行器（effort 180→更高或降 Kd）/ 接受并重述问题，三选一；同一记录的处置选择还有自碰撞（新族 24 判定、最坏 164.7 mm 把脚板折进躯干，训练期 `enabled_self_collisions=False` 不惩罚）。② 冻结本线评测协议（硬前置 1）：新增 `tracking_banded_v1`/`displacement_banded_v1`/`non_foot_load_sum_v1`/`gait_swing_v1`（各带反例与自己的 judge id），并按正常/异常样本标定 `non_foot_carrier_v1` 与总量那条，接启动闸门"协议缺失或摘要不符即拒绝"；③ `baseline_probe.py` 按 v1 接口改造后复测（命令 `[0.0,3.0]` 逐 env / 横向与转向恒 0 / 10 s 重采样 / 动作 30 维全覆盖 / 102 维 / 未改写下发命令）+ 零动作落地姿态目视；④ 头守卫触发未观测过（1.0 N 是类比继承），要么用一条"逐渐下压"的指令测它，要么在边界里一直标明。已完成：计数钉、obs 声明与 102 宽度实测、`diff.json` 理由、PLAN 写满、命令窗口 0–3、**自碰撞扫描**、**执行器能力曲线**。
 close_when: 离线套件全绿、硬前置 1-5 完成（协议冻结、能力曲线、自碰撞、探针、目视）、`diff.json` 理由有据、tag 已打 ⇒ 可开训；若明示暂不开训，则完成到 ④ 并记"未开训"这一事实即可关闭——未做的动作不许留在已关闭项里。
 depends_on: asset-leg-axis-capability-mismatch
-evidence: acceptance/records/2026-09-22-lizard2-family-landing, acceptance/records/2026-09-22-family-landing-decoupled, acceptance/records/2026-09-22-lizard2-stride-at-load, acceptance/records/2026-09-22-lizard2-declarations-and-plan
+evidence: acceptance/records/2026-09-22-lizard2-family-landing, acceptance/records/2026-09-22-family-landing-decoupled, acceptance/records/2026-09-22-lizard2-stride-at-load, acceptance/records/2026-09-22-lizard2-declarations-and-plan, acceptance/records/2026-09-22-lizard2-self-collision-sweep, acceptance/records/2026-09-22-lizard2-actuator-capability
 ---
 
 ## 问题与本次范围
