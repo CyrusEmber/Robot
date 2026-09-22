@@ -29,9 +29,22 @@ from rl_exp.tools.runrecord import provenance as prov  # noqa: E402
 from rl_exp.tasks import curriculum_state as cstate  # noqa: E402
 from rl_exp.tasks.agents.rsl_rl_ppo_cfg import LizardTeacherV14PPORunnerCfg  # noqa: E402
 from rl_exp.tasks.recipe_tasks import LizardRoughTeacherEnvCfg_V14  # noqa: E402
+from test_lifecycle_gate import active_index  # noqa: E402
 
 PROBLEMS: list[str] = []
 TASK = "Lizard-Rough-v14"
+
+
+def _begin(**kwargs):
+    """Record against an isolated active-line index, independent of real retirement.
+
+    Keep the real identity resolver and startup judge. Only the fixture's directory
+    grants permission; its recorded digests belong to the fixture files, not the
+    retired production index. Retirement refusals are covered by test_lifecycle_gate.
+    """
+    with tempfile.TemporaryDirectory(prefix="manifest_index_") as tmp:
+        with active_index(pathlib.Path(tmp)):
+            return M.begin(**kwargs)
 
 
 def check(name: str, ok: bool, detail: str = "") -> None:
@@ -99,7 +112,7 @@ def _record(
     agent = LizardTeacherV14PPORunnerCfg()
     env = _StubEnv(cfg, num_envs)
     runner = _StubRunner(lr=agent.algorithm.learning_rate if runner_lr is None else runner_lr)
-    ctx = M.begin(log_dir=tmp, task=TASK, argv=["train.py", "--task", TASK], env_cfg=cfg, agent_cfg=agent)
+    ctx = _begin(log_dir=tmp, task=TASK, argv=["train.py", "--task", TASK], env_cfg=cfg, agent_cfg=agent)
     M.hook_runner_save(runner, ctx)
     if save_early:
         runner.save(tmp / "model_0.pt")
@@ -421,7 +434,7 @@ def main() -> int:
         agent_dirty = LizardTeacherV14PPORunnerCfg()
         saved_override = os.environ.pop(M.DIRTY_OVERRIDE_ENV, None)
         try:
-            M.begin(log_dir=dirty_dir, task=TASK, argv=["train.py"], env_cfg=cfg_dirty, agent_cfg=agent_dirty)
+            _begin(log_dir=dirty_dir, task=TASK, argv=["train.py"], env_cfg=cfg_dirty, agent_cfg=agent_dirty)
             check("dirty/refused", False, "a dirty project tree was accepted without a stated reason")
         except RuntimeError as err:
             check("dirty/refused", M.DIRTY_OVERRIDE_ENV in str(err) and "dirty" in str(err), f"{err}")
@@ -453,7 +466,7 @@ def main() -> int:
 
         os.environ[M.DIRTY_OVERRIDE_ENV] = "offline test: must run in whatever tree it finds"
         try:
-            ctx_dirty = M.begin(
+            ctx_dirty = _begin(
                 log_dir=dirty_dir, task=TASK, argv=["train.py"], env_cfg=cfg_dirty, agent_cfg=agent_dirty
             )
             check(

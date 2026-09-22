@@ -31,6 +31,9 @@ import os
 import pathlib
 import sys
 import tempfile
+import shutil
+from contextlib import contextmanager
+from unittest.mock import patch
 
 _REPO = pathlib.Path(__file__).resolve().parents[3]
 if str(_REPO) not in sys.path:
@@ -98,6 +101,25 @@ def _active_tree(tmp: pathlib.Path) -> pathlib.Path:
     return _tree(tmp, lines={MAIN: _entry(), SIDE: _entry()}, recipes={MAIN_RECIPE: MAIN, SIDE_RECIPE: SIDE})
 
 
+@contextmanager
+def active_index(tmp: pathlib.Path):
+    """Give recording tests an active fixture without changing the real directory.
+
+    Preserve real recipe declarations and read/hash the fixture files on each call.
+    Explicit roots still resolve normally, including real retirement refusal cases.
+    """
+    root = tmp / "active_index"
+    versions = root / "rl_exp" / "versions"
+    versions.mkdir(parents=True)
+    lines = json.loads(lifecycle.LINES_PATH.read_text(encoding="utf-8"))
+    lines["lines"][MAIN] = _entry()
+    (versions / "lines.json").write_text(json.dumps(lines), encoding="utf-8")
+    shutil.copyfile(lifecycle.RECIPES_PATH, versions / "recipes.json")
+    read = lifecycle.read_index
+    with patch.object(lifecycle, "read_index", side_effect=lambda root_arg=None: read(root_arg or root)):
+        yield
+
+
 def _retired_tree(tmp: pathlib.Path, key: str) -> pathlib.Path:
     return _tree(tmp / key, lines={MAIN: _retired(), SIDE: _entry()}, recipes={MAIN_RECIPE: MAIN, SIDE_RECIPE: SIDE})
 
@@ -126,7 +148,8 @@ def main() -> int:
         failures.extend(_identity_cases(tmp))
         failures.extend(_retired_cases(tmp))
         failures.extend(_flag_cases(tmp))
-        failures.extend(_trainer_cases(tmp))
+        with active_index(tmp):
+            failures.extend(_trainer_cases(tmp))
 
     if failures:
         for failure in failures:

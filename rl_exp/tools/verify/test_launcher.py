@@ -13,8 +13,8 @@ matches, field for field, the lifecycle verdict the trainer's T0 carries for the
 which is what "the two entries cannot answer differently" has to mean in practice.
 
 The comparison is only meaningful if both sides are produced for the same directory: the
-launcher reads this checkout's ``versions/``, and the trainer's ``begin`` reads it through the
-same module, so a relocation moves both or neither. The retired case uses the line the
+launcher and trainer read an isolated active-line fixture through the same module;
+both hash its actual files. The retired case uses the line the
 directory really retired (``lizard/parkour``): a line is never retired to make a test pass
 (2.1a), and the refusal must not promise a successor that the index does not register.
 """
@@ -34,6 +34,7 @@ if str(_REPO) not in sys.path:
 from rl_exp.tools import launch_recipe  # noqa: E402
 from rl_exp.tools.runrecord import lifecycle  # noqa: E402
 from rl_exp.tools.runrecord import manifest as M  # noqa: E402
+from test_lifecycle_gate import active_index  # noqa: E402
 
 TASK = "Lizard-Rough-v14"
 RETIRED_TASK = "Lizard-Parkour-Climb-v1"
@@ -45,9 +46,10 @@ def main() -> int:
     problems: list[str] = []
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp = pathlib.Path(tmp_dir)
-        problems.extend(_happy_path())
         problems.extend(_refusals())
-        problems.extend(_cross_check(tmp))
+        with active_index(tmp):
+            problems.extend(_happy_path())
+            problems.extend(_cross_check(tmp))
     if problems:
         for problem in problems:
             print(f"FAIL {problem}")
