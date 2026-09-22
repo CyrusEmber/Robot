@@ -182,7 +182,10 @@ def protocol_ref(task_id: str | None) -> dict:
     return {
         "obs_protocol": key,
         "obs_protocol_digest": entry.get("digest"),
-        "obs_protocol_dims": entry.get("dims") or {},
+        # the widths of the body THIS run loaded: the anchors hold one map per asset (a 30-joint
+        # body and a 26-joint body share a layout but not a width), and a record is read back per
+        # run, so it carries the numbers that run was held to
+        "obs_protocol_dims": obs_protocol.recorded_dims(task_id) or {},
         # which articulation order the obs and the action indexed during this run: a pinned,
         # measured fact, so a checkpoint can be traced to the order it was trained under
         "runtime_joint_order_digest": obs_protocol.joint_order_digest(task_id),

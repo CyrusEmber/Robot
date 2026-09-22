@@ -65,11 +65,6 @@ def main() -> int:
         check("ok/side-line-own-yaml", lines["lizard/parkour"].dev_yaml.name == "parkour_params.yaml")
         check("ok/main-line-own-yaml", lines["lizard/main"].dev_yaml.name == "main_params.yaml")
         check(
-            "ok/main-line-is-main",
-            lines["lizard/main"].is_main_line and not lines["lizard/parkour"].is_main_line,
-            "is_main_line got the wrong line -- a side line would be handed the robot contract",
-        )
-        check(
             "ok/lock-is-per-line",
             lines["lizard/main"].lock_path.name == "cfg_lock.json"
             and lines["lizard/main"].lock_path.parent != lines["lizard/parkour"].lock_path.parent,

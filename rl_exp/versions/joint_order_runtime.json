@@ -34,6 +34,44 @@
         "lf_foot",
         "tail3_pitch"
       ]
+    },
+    "assets/lizard2/lizard2.usda": {
+      "measured_at": "2026-09-22",
+      "measured_on": "Lizard2-Flat-Play-v1",
+      "body_count": 31,
+      "joint_order": [
+        "chest_yaw",
+        "tail1_yaw",
+        "rr_hip",
+        "rl_hip",
+        "chest_pitch",
+        "tail1_pitch",
+        "rr_haa",
+        "rl_haa",
+        "neck_yaw",
+        "rf_hip",
+        "lf_hip",
+        "tail2_yaw",
+        "rr_hfe",
+        "rl_hfe",
+        "neck_pitch",
+        "rf_haa",
+        "lf_haa",
+        "tail2_pitch",
+        "rr_kfe",
+        "rl_kfe",
+        "rf_hfe",
+        "lf_hfe",
+        "tail3_yaw",
+        "rr_foot",
+        "rl_foot",
+        "rf_kfe",
+        "lf_kfe",
+        "tail3_pitch",
+        "rf_foot",
+        "lf_foot"
+      ],
+      "reason": "first measurement of the new family's asset: 30 joints, the 4 hip axes inserted at the leg roots (lizard2 v1 landing 2026-09-22); the articulation order is a checkpoint-identity fact and had to be written down before any training can be traced"
     }
   }
 }

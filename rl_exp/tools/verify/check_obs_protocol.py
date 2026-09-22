@@ -33,8 +33,10 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import pathlib
+import re
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
@@ -45,7 +47,7 @@ _REPO = pathlib.Path(__file__).resolve().parents[3]
 DECLARATION = _REPO / "rl_exp" / "versions" / "obs_protocols.json"
 ANCHORS = _REPO / "rl_exp" / "versions" / "obs_protocol_anchors.json"
 LINES = _REPO / "rl_exp" / "versions" / "lines.json"
-RUNTIME_ORDERS = _REPO / "rl_exp" / "versions" / "lizard" / "joint_order_runtime.json"
+RUNTIME_ORDERS = _REPO / "rl_exp" / "versions" / "joint_order_runtime.json"
 EXPORT = _REPO / "rl_exp" / "ue" / "lizard_ue.json"
 FORMAT_VERSION = 1
 _ORDERED_FIELDS = ("terms", "dropped_terms", "clip", "scale", "noise")
@@ -57,37 +59,54 @@ def content_digest(groups) -> str:
 
 
 def dims_digest(dims) -> str:
-    """The digest over a protocol's approved widths, key order irrelevant (keys are group names).
+    """The digest over a protocol's approved widths, per asset, with key order irrelevant.
 
     The protocol digest covers the layout, not the widths, so without this an approved width
     edited in place would change nothing a check can see: the widths are read by the smoke runs
     (real-run only) and recorded in manifests, and nothing compared them to an approved value.
+
+    The map is ``{asset: {group: width}}``: an approved width is a fact about the protocol
+    INSTANTIATED on an asset (a 30-joint body builds a wider joint vector than a 26-joint one
+    under the same layout), so the digest covers both levels.
     """
-    return hashlib.sha256(inv.canonical(dict(sorted((dims or {}).items()))).encode("utf-8")).hexdigest()
+    return hashlib.sha256(
+        inv.canonical({
+            asset: dict(sorted((body or {}).items())) for asset, body in sorted((dims or {}).items())
+        }).encode("utf-8")
+    ).hexdigest()
 
 
 def check_dims(key: str, groups: dict, dims) -> list[str]:
-    """Structural rules for an approved width map: real groups, positive ints, all or nothing.
+    """Structural rules for an approved width map: real assets, real groups, positive ints, all or nothing.
 
     All-or-nothing because a partial map is ambiguous to read: an absent group reads as "not
-    measured" and as "zero" at the same time, and the two mean different things to a caller.
+    measured" and as "zero" at the same time, and the two mean different things to a caller. The
+    asset level carries the same rule for the same reason (an approved asset with one group
+    missing is a half-measured asset, not a measurement of the others).
     """
     out: list[str] = []
     if dims is None:
         return out
     if not isinstance(dims, dict):
-        return [f"{key}: dims must be an object"]
+        return [f"{key}: dims must be an object keyed by asset"]
     live = {group for group, body in groups.items() if not body.get("dropped")}
-    unknown = sorted(set(dims) - live)
-    if unknown:
-        out.append(f"{key}: dims name group(s) this protocol does not carry live: {unknown}")
-    missing = sorted(live - set(dims))
-    if dims and missing:
-        out.append(f"{key}: dims must be all or nothing -- no width for {missing}")
-    for group, value in sorted(dims.items()):
-        # bool is an int in Python, and `True` as a width is a typo, not a measurement
-        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
-            out.append(f"{key}: dims[{group!r}] = {value!r} is not a positive integer")
+    for asset, body in sorted(dims.items()):
+        if not (isinstance(asset, str) and asset.startswith("assets/") and asset.endswith(".usda")):
+            out.append(f"{key}: dims key {asset!r} is not an asset path (assets/<family>/<family>.usda)")
+            continue
+        if not isinstance(body, dict):
+            out.append(f"{key}: dims[{asset!r}] must be an object of group -> width")
+            continue
+        unknown = sorted(set(body) - live)
+        if unknown:
+            out.append(f"{key}: dims[{asset!r}] names group(s) this protocol does not carry live: {unknown}")
+        missing = sorted(live - set(body))
+        if missing:
+            out.append(f"{key}: dims[{asset!r}] must be all or nothing -- no width for {missing}")
+        for group, value in sorted(body.items()):
+            # bool is an int in Python, and `True` as a width is a typo, not a measurement
+            if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+                out.append(f"{key}: dims[{asset!r}][{group!r}] = {value!r} is not a positive integer")
     return out
 
 
@@ -128,6 +147,62 @@ def check_self(document: dict) -> list[str]:
     return out
 
 
+_READER: dict = {}
+
+
+def _runtime_reader():
+    """``rl_exp.tasks.obs_protocol`` -- THE resolver, loaded without importing its package.
+
+    Loaded by file location rather than ``import rl_exp.tasks.obs_protocol``: the package's
+    ``__init__`` pulls the task tree (and gymnasium with it), which this gate must not need -- it is
+    the offline half of the contract and has to stay runnable without the framework installed. The
+    file itself is stdlib-only, and it is the SAME file the runtime uses, which is the point: the
+    gate's own regex for ``usd_path`` was a second resolver, and it missed a trailing comment the
+    runtime read fine.
+    """
+    if "module" not in _READER:
+        path = _REPO / "rl_exp" / "tasks" / "obs_protocol.py"
+        spec = importlib.util.spec_from_file_location("_obs_protocol_reader", path)
+        module = importlib.util.module_from_spec(spec) if spec and spec.loader else None
+        if module is not None:
+            try:
+                spec.loader.exec_module(module)
+            except Exception:  # noqa: BLE001 - any failure here means "cannot resolve", reported below
+                module = None
+        _READER["module"] = module
+    return _READER["module"]
+
+
+def assets_on_protocol(key: str, document: dict) -> tuple[set[str], list[str]]:
+    """``(assets, unresolved task ids)`` for one protocol's declared tasks.
+
+    Resolved through the RUNTIME reader (``rl_exp.tasks.obs_protocol.usd_path_for_route``) on purpose:
+    a second, "similar" resolver here is how a check ends up measuring a set of assets the env build
+    never loads -- the gate's regex missed a trailing ``# comment`` while the runtime read the yaml
+    normally, so coverage concluded from the gate's view was a set nobody trains on. One reader, two
+    callers.
+
+    A task that cannot be resolved is returned, never dropped: the whole point of this function is to
+    bound the set of bodies a protocol's tasks load, and a task that vanishes from that set makes the
+    bound weaker while still looking checked.
+    """
+    reader = _runtime_reader()
+    assets: set[str] = set()
+    unresolved: list[str] = []
+    for task_id, route in sorted((document.get("tasks") or {}).items()):
+        if not isinstance(route, dict) or route.get("protocol") != key:
+            continue
+        if reader is None:
+            unresolved.append(f"{task_id} (the runtime reader could not be loaded)")
+            continue
+        asset = reader.usd_path_for_route(route.get("line"), route.get("version"))
+        if asset is None:
+            unresolved.append(task_id)
+        else:
+            assets.add(asset)
+    return assets, unresolved
+
+
 def check_anchors(document: dict, anchors: dict) -> list[str]:
     """Reviewed digests: every protocol approved, an unreferenced one still has a purpose, and
     the approved widths consistent with themselves and with the protocol they belong to."""
@@ -154,6 +229,49 @@ def check_anchors(document: dict, anchors: dict) -> list[str]:
             out.append(f"{key}: no task references this protocol and its anchor states no purpose")
         dims = anchor.get("dims")
         out.extend(check_dims(key, groups if isinstance(groups, dict) else {}, dims))
+        # Every asset a declared task of this protocol loads must carry a COMPLETE width map. Three
+        # shapes are the same failure ("a width nobody approved, on a body somebody trains"):
+        # no dims at all, no entry for this asset, and an entry missing a live group. They are
+        # spelled out separately because the fix differs (measure / add the asset / fill the group),
+        # and the earlier version only ran these rules when dims was a non-empty dict -- so deleting
+        # the map, or emptying one asset's entry, passed every check there was.
+        loaded, unresolved = assets_on_protocol(key, document)
+        for task_id in unresolved:
+            out.append(
+                f"{key}: declared task {task_id} does not resolve to an asset (its recipe document or"
+                " robot.usd_path is unreadable) -- an unresolvable task silently shrinks this protocol's"
+                " coverage, so it is a refusal here, not a skip"
+            )
+        if loaded:
+            live_groups = {group for group, body in (groups or {}).items() if not body.get("dropped")}
+            if not isinstance(dims, dict) or not dims:
+                out.append(
+                    f"{key}: no approved widths at all, but declared task(s) load {sorted(loaded)} --"
+                    " measure them once (obs_protocol_live.py --tasks <id> --pin) and record them here"
+                )
+            else:
+                for asset in sorted(set(dims) - loaded):
+                    out.append(
+                        f"{key}: dims approved for {asset!r}, which no task on this protocol loads"
+                        f" (tasks load {sorted(loaded)}) -- a width belongs to the body it was measured on"
+                    )
+                for asset in sorted(loaded - set(dims)):
+                    out.append(
+                        f"{key}: {asset!r} is loaded by declared task(s) of this protocol but has no approved"
+                        " width -- measure it once (obs_protocol_live.py --tasks <id> --pin) and record the"
+                        " numbers here, so a width nobody approved cannot be trained against"
+                    )
+                for asset in sorted(loaded & set(dims)):
+                    body = dims[asset]
+                    if not isinstance(body, dict):
+                        continue  # check_dims already said so
+                    missing = sorted(live_groups - set(body))
+                    if missing:
+                        out.append(
+                            f"{key}: dims[{asset!r}] has no width for {missing} -- an empty or partial"
+                            " table is not an approval, and a group with no approved number reads as"
+                            " 'measured' to every caller that trusts this map"
+                        )
         if isinstance(dims, dict) and dims:
             if anchor.get("dims_digest") != dims_digest(dims):
                 out.append(

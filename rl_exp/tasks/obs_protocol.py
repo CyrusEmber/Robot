@@ -50,25 +50,28 @@ def declaration() -> dict:
         raise ProtocolError(f"cannot read {DECLARATION}: {err}") from err
 
 
-RUNTIME_ORDERS = (
-    pathlib.Path(__file__).resolve().parents[2] / "rl_exp" / "versions" / "lizard" / "joint_order_runtime.json"
-)
+RUNTIME_ORDERS = pathlib.Path(__file__).resolve().parents[2] / "rl_exp" / "versions" / "joint_order_runtime.json"
+"""The measured articulation order, keyed by ASSET, so it sits with the other registries at
+``versions/`` rather than inside one family's directory: the fact belongs to the body a recipe
+loads, and the second family to land (lizard2) had to write its order into a file named after the
+first one (moved 2026-09-22)."""
 
 
-def _params_document(task_id: str) -> tuple[dict, pathlib.Path] | None:
-    """The recipe's parameters document and its path, or ``None`` when it cannot be found.
+def _document_for_route(line: str, version: str | None) -> tuple[dict, pathlib.Path] | None:
+    """The recipe's parameters document for a line/version route, or ``None``.
 
-    Addressed by the declaration's own route (line + version), not by guessing the file's name
-    from the task id: a rename must not silently resolve to no document.
+    Addressed by the route's own line and version, not by guessing a filename from a task id: a
+    rename must not silently resolve to no document. Shared by the runtime reader
+    (:func:`usd_path`) and the offline gate, so "which asset does this task load" has one answer --
+    the two asking it differently is how a coverage check ends up measuring a set the runtime never
+    loads.
     """
-    route = task_route(task_id)
-    line = route.get("line")
     if not isinstance(line, str) or not line:
         return None
     line_dir = DECLARATION.parent / line
     basename = f"{line_dir.name}_params.yaml"
-    version = route.get("version")
-    candidates = [line_dir / basename] if version is None else [line_dir / version / basename, line_dir / basename]
+    candidates = [line_dir / basename] if not isinstance(version, str) else [
+        line_dir / version / basename, line_dir / basename]
     path = next((candidate for candidate in candidates if candidate.is_file()), None)
     if path is None:
         return None
@@ -80,13 +83,25 @@ def _params_document(task_id: str) -> tuple[dict, pathlib.Path] | None:
         return None
 
 
-def usd_path(task_id: str) -> str | None:
-    """The asset a task's recipe loads, or ``None`` when the document does not say."""
-    found = _params_document(task_id)
+def _params_document(task_id: str) -> tuple[dict, pathlib.Path] | None:
+    """The recipe's parameters document and its path, or ``None`` when it cannot be found."""
+    route = task_route(task_id)
+    return _document_for_route(route.get("line"), route.get("version"))
+
+
+def usd_path_for_route(line: str, version: str | None) -> str | None:
+    """The asset a line/version's recipe loads, or ``None`` when the document does not say."""
+    found = _document_for_route(line, version)
     if found is None:
         return None
     asset = ((found[0].get("robot") or {}) if isinstance(found[0], dict) else {}).get("usd_path")
     return asset if isinstance(asset, str) and asset else None
+
+
+def usd_path(task_id: str) -> str | None:
+    """The asset a task's recipe loads, or ``None`` when the document does not say."""
+    route = task_route(task_id)
+    return usd_path_for_route(route.get("line"), route.get("version"))
 
 
 def runtime_joint_order_for_asset(asset: str) -> list[str] | None:
@@ -222,14 +237,24 @@ def anchors() -> dict:
 
 
 def recorded_dims(task_id: str) -> dict[str, int] | None:
-    """The approved per-group widths, or ``None`` when no real run has asserted them yet.
+    """The approved per-group widths FOR THIS TASK'S ASSET, or ``None`` when unapproved.
+
+    Keyed by the asset, not by the protocol: a protocol identity is the layout (groups, term
+    order, clip/scale/noise) and says nothing about how wide a joint vector is, so two assets
+    with different joint counts legitimately share one protocol while building different widths
+    (lizard 26 joints / policy 90, lizard2 30 joints / policy 102 -- measured 2026-09-22). Keyed
+    per protocol, the second one would be compared against the first one's number forever. This
+    is the same reasoning as :func:`runtime_joint_order_for_asset`: the fact belongs to the asset
+    a recipe loads.
 
     ``None`` and ``{}`` mean different things -- unmeasured versus measured-and-empty -- so the
     caller can tell "nobody has looked" from "there is nothing there".
     """
     key = protocol_for(task_id)
     entry = (anchors().get("protocols") or {}).get(key)
-    dims = entry.get("dims") if isinstance(entry, dict) else None
+    by_asset = (entry or {}).get("dims") if isinstance(entry, dict) else None
+    asset = usd_path(task_id)
+    dims = (by_asset or {}).get(asset) if isinstance(by_asset, dict) and asset else None
     return dict(dims) if isinstance(dims, dict) and dims else None
 
 
@@ -237,12 +262,15 @@ def dims_for(task_id: str) -> dict[str, int]:
     """The approved per-group widths a smoke assertion may compare against.
 
     Raises:
-        ProtocolError: this protocol has no measured widths. Asserting against an invented
+        ProtocolError: this task's asset has no approved widths. Asserting against an invented
             width is worse than not asserting: it fails the tree for being right.
     """
     dims = recorded_dims(task_id)
     if dims is None:
-        raise ProtocolError(f"{task_id}: no approved dims for this protocol; a real run has to measure them first")
+        raise ProtocolError(
+            f"{task_id}: no approved dims for this protocol on {usd_path(task_id)!r}; a real run "
+            "has to measure them first"
+        )
     return dims
 
 

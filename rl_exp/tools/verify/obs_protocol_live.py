@@ -54,7 +54,7 @@ def _base(joint_name: str) -> str:
 
 PARSER_EPILOGUE = (
     "  The runtime joint order is not the recipe's joint_order: this script compares the live"
-    " articulation against the measured order pinned in versions/lizard/joint_order_runtime.json,"
+    " articulation against the measured order pinned in versions/joint_order_runtime.json,"
     " and only reports the recipe's own order (URDF tree order) as a warning."
 )
 

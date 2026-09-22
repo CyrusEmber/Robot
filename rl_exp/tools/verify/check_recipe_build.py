@@ -68,6 +68,7 @@ DIFF_NAME = "diff.json"
 EXPECTED_COMPARED: dict[str, int] = {
     "lizard/main": 32,
     "lizard/baseline": 4,
+    "lizard2/main": 2,
 }
 """How many recipe/task pairs this gate compares, per line, pinned.
 
@@ -82,6 +83,7 @@ deliberate change updates them in the same commit that changes the recipes.
 EXPECTED_PENDING: dict[str, tuple[str, ...]] = {
     "lizard/main": (),
     "lizard/baseline": (),
+    "lizard2/main": (),
 }
 """Versions whose delta is not declared yet, per line. Printed, and red when the list is not this one."""
 
@@ -112,6 +114,14 @@ EXPECTED_DIFFS: dict[tuple[str, str], int] = {
     ("lizard/main", "rough-v0"): 6,
     ("lizard/main", "curriculum-flat-v0"): 11,
     ("lizard/main", "curriculum-rough-v0"): 16,
+    # lizard2/main v1 is a LINEAGE ROOT (``base.json`` is null) exactly like the baseline line's v1,
+    # so its declared difference is against the framework stock cfg and the count belongs to that
+    # reading: the whole family wiring shows up as this one recipe's delta. 108 = 65 env paths +
+    # 43 agent leaves (the gate counts both halves); it was 107 before 2026-09-22's pre-training
+    # revision added the head-contact termination. Pinned at freeze (2026-09-22) -- the declaration is
+    # computed from the recipe itself, so this count is the only thing that can notice the day the
+    # computation loses a group.
+    ("lizard2/main", "v1"): 108,
 }
 """Recipe -> how many paths its difference declaration lists (``diff.json`` next to the recipe)."""
 

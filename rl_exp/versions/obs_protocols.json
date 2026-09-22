@@ -827,14 +827,14 @@
    "version": "v1",
    "line": "lizard/baseline"
   },
-  "Lizard-Baseline-Flat-v1": {
-   "protocol": "a25a8c39001b",
-   "version": "v1",
-   "line": "lizard/baseline"
-  },
   "Lizard-Baseline-Flat-Play-v2": {
    "protocol": "a25a8c39001b",
    "version": "v2",
+   "line": "lizard/baseline"
+  },
+  "Lizard-Baseline-Flat-v1": {
+   "protocol": "a25a8c39001b",
+   "version": "v1",
    "line": "lizard/baseline"
   },
   "Lizard-Baseline-Flat-v2": {
@@ -1011,6 +1011,16 @@
    "protocol": "fdef56347528",
    "version": null,
    "line": "lizard/main"
+  },
+  "Lizard2-Flat-Play-v1": {
+   "protocol": "a25a8c39001b",
+   "version": "v1",
+   "line": "lizard2/main"
+  },
+  "Lizard2-Flat-v1": {
+   "protocol": "a25a8c39001b",
+   "version": "v1",
+   "line": "lizard2/main"
   }
  }
 }

@@ -3,35 +3,43 @@
 
 Six checks, all machine-readable, all fail under --strict:
 
-1. teacher-vs-family DR wiring: extracts every ``self.<manager>.<term>`` wiring
-   line from the family and teacher cfg files and reports the symmetric
-   difference. The teacher snapshot deliberately duplicates the DR wiring
-   (freeze discipline: no family imports) -- intentional divergence is fine,
-   but it must be REVIEWED, never accidental.
+1. teacher-vs-family DR wiring, PER DECLARED SUBJECT: extracts every ``self.<manager>.<term>``
+   wiring line from each pair named in ``versions/freeze_parity.json`` and reports the symmetric
+   difference. The teacher snapshot deliberately duplicates the DR wiring (freeze discipline: no
+   family imports) -- intentional divergence is fine, but it must be REVIEWED, never accidental.
+   Which files form a pair, and which divergences were reviewed, are both declared there: this
+   module holds no family name of its own.
 2. DR event list sync: ``play_utils.DR_EVENT_NAMES`` (PLAY variants) must equal
    ``dr_controller._DR_EVENT_NAMES`` (eval modes). Two physical copies exist by
    design (the harness stays robot-agnostic); this check makes drift loud.
 3. PLAY wiring coverage: every ``*_PLAY`` cfg class must call
    ``apply_play_wiring`` -- the block that hand-copies drifted twice historically.
-4. robot block parity: the ``ArticulationCfg(...)`` literal in the family and
-   teacher cfg files (spawn props, init_state, limits) is a hand-copied freeze
-   that check 1 does not see; symmetric line diff, reviewed diffs go to
-   ROBOT_BLOCK_ALLOWLIST.
-5. asset contract: the text USD (lizard.usda) must still provide every prim
-   path and name the cfgs hardcode -- Geometry scope + base_link (scanner
-   ``Robot/Geometry/base_link``), every ``joint_order`` entry as ``<name>_joint``,
-   and every body-name pattern in the dev AND frozen version yamls matching at
-   least one link. Catches asset regeneration that renames/drops prims.
-6. asset lock: ``versions/lizard/vN/asset_lock.json`` pins sha256 of versions/lizard/lizard.urdf,
+4. robot block parity, per declared subject: the ``ArticulationCfg(...)`` literal in the two files
+   (spawn props, init_state, limits) is a hand-copied freeze that check 1 does not see; symmetric
+   line diff, reviewed diffs go to that subject's ``robot_block_allowlist``.
+5. asset contract: every ACTIVE line's yaml (``versions/lines.json`` status, not a name rule) is
+   checked against the asset IT names -- the usda must still provide the Geometry scope, every
+   ``base_body_name`` and ``joint_order`` entry, and every body-name list the yaml DECLARES must
+   match a link. Only declared keys are asserted: a line is not required to carry the old family's
+   recipe shape, and a line that declares no ``usd_path`` has no asset contract to check.
+   Catches asset regeneration that renames/drops prims.
+6. asset lock: each ``versions/<line>/vN/asset_lock.json`` pins sha256 of its family's urdf,
    the compiled usda, every mesh under ``meshes/**``, and the version's OWN
    frozen yaml. Frozen yamls pin the usd PATH, not its CONTENT, so an in-place
    asset regeneration silently breaks working-tree reproduction of every
    resident teacher task id; this check makes that a reviewed commit
    (refresh locks with --update-locks in the same change that retires assets;
-   --update-locks only rewrites versions whose lock actually changed).
+   --update-locks only rewrites versions whose lock actually changed, and --family
+   keeps a caller that is landing one family from rewriting the rest).
 
-Usage: python rl_exp\\tools\\verify\\check_dr_parity.py [--strict]
-       python rl_exp\\tools\\verify\\check_dr_parity.py --update-locks
+Usage: python rl_exp\\tools\\verify\\check_dr_parity.py [--strict] [--self-test]
+       python rl_exp\\tools\\verify\\check_dr_parity.py --update-locks [--family <name>]
+
+``--self-test`` runs the falsifiers in-process before the real checks (``test_declare_family``):
+they demonstrate that a tree with exactly ONE family can be landed, that the tool writes only that
+family's subtree and fails on any failed step, that the subject declaration refuses an empty or
+unreadable one, and that the asset contract no longer demands the old family's keys. A gate whose
+failure modes were never demonstrated is not a gate.
 """
 import argparse
 import json
@@ -41,6 +49,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from recipe_lines import RecipeLine, RecipeLineError, discover  # noqa: E402
+import check_recipe_registry  # noqa: E402 - owns the lifecycle index's shape
 
 _REPO = pathlib.Path(__file__).resolve().parents[3]
 # The file-digest primitive has one home (work/active/record-variant-and-snapshot-specs.md ①): the asset locks are hashed with it
@@ -52,63 +61,50 @@ if str(_REPO) not in sys.path:
 from rl_exp.tools.runrecord import binding  # noqa: E402
 _EXP = _REPO / "rl_exp"
 _TASKS = _EXP / "tasks"
-_FAMILY = _TASKS / "lizard_env_cfg.py"
-_TEACHER = _TASKS / "teacher_env_cfg.py"
 _PLAY_UTILS = _TASKS / "play_utils.py"
 _DR_CONTROLLER = _REPO / "ablation_harness" / "components" / "dr_controller.py"
 _VERSIONS = _EXP / "versions"
+_LINES = _VERSIONS / "lines.json"
+# Which files are compared against each other is a DECLARATION, not a constant here: the freeze
+# discipline makes the teacher snapshot a hand copy of a family cfg, and only the pair's owner knows
+# which pair that is. Hard-coding lizard's two filenames made this gate unable to serve any other
+# family and unable to notice a pair that moved (review 2026-09-22).
+SUBJECTS_PATH = _VERSIONS / "freeze_parity.json"
 
-# wiring lines that only exist on one side BY DESIGN (reviewed divergences)
-ALLOWLIST: set[str] = {
-    # v3 recipe (versions/lizard/v3/PLAN.md): teacher-only terms absent from
-    # the family baseline by design -- the v3 anti-collapse package
-    "self.events.init_ck = EventTerm(",  # D3 c_k schedule stash (startup)
-    "self.rewards.feet_air_time = None",  # D2: replaced by foot_clearance
-    "self.rewards.foot_clearance = RewTerm(",  # D2 anti-drag r_fc
-    "self.terminations.tilt = DoneTerm(",  # D1 tilt termination
-    "self.terminations.base_contact = None",  # v3.6: belly contact penalty-only (D0-6)
-    # v5 recipe (versions/lizard/v5/PLAN.md): reward anti-collapse package on
-    # the teacher line only -- the family baseline keeps the stock reward set
-    "self.rewards.track_lin_vel_xy_exp = None",  # v5: exp kernel replaced (freeloads at standstill)
-    "self.rewards.track_lin_vel_xy_lin = RewTerm(",  # v5: EP-style normalized linear tracking
-    "self.rewards.feet_slide = RewTerm(",  # v5: r_slip, contact-foot sliding penalty (x c_k)
-    "self.rewards.undesired_contacts.func = teacher_mdp.undesired_contacts_ck",  # v5: r_co x c_k
-    "self.rewards.belly_contact_force = RewTerm(",  # v5: continuous belly-contact force penalty
-    # v10 recipe (versions/lizard/v10/NOTES.md): the tilt termination is
-    # deleted on the teacher line only -- the family baseline never had it
-    "self.terminations.tilt = None",  # v10: D1 removal (fall -> reward ledger, no term)
-    # v13 recipe (versions/lizard/v13/NOTES.md): symmetric Miki tracking
-    # kernel swaps out the EP linear kernel on the teacher line only
-    "self.rewards.track_lin_vel_xy_lin = None",  # v13: EP kernel removed (single-variable swap)
-    "self.rewards.track_lin_vel_xy_miki = RewTerm(",  # v13: exp(-||v_cmd - v_yaw||^2/sigma_sq)
-    # v14 recipe (versions/lizard/v14/NOTES.md): roll-over gate + head-load
-    # penalty on the teacher line only (family baseline never had a tilt term;
-    # v14.3 replaced the front-plant termination with a reward penalty)
-    "self.terminations.roll_over = DoneTerm(",  # v14.3: pitch-invariant |sin(roll)| + dwell
-    "self.rewards.head_load_penalty = RewTerm(",  # v14.3: head weight-bearing, penalized per step
-    # v12 recipe (versions/lizard/v12/PLAN.md): Miki S8 reset/observation
-    # robustness package, teacher line only. The three reset_joints_* terms
-    # are wired via a setattr loop (V3 convention), so only these lines
-    # appear; the reset-base dict lines replace the stock zero-range dict.
-    "self.events.reset_robot_joints = None",  # v12: scale term is a no-op on zero defaults
-    'self.events.reset_base.params["pose_range"] = {a: tuple(r) for a, r in rr["base_pose_range"].items()}',
-    'self.events.reset_base.params["velocity_range"] = {a: tuple(r) for a, r in rr["base_velocity_range"].items()}',
-    "self.events.foot_friction_dip = EventTerm(",  # v12: occasional low-friction feet
-    "self.events.sample_ring_noise = EventTerm(",  # v12: per-episode extero corruption state
-    # stage B (ARCH_PLAN.md 2.4, B1): the teacher's base-contact narrowing moved into
-    # components.terminations, so this literal line now exists on the family side only. Semantics
-    # are unchanged and golden-verified (ACCEPTANCE.md "B1 · 组件库切片 2": 36 tasks CFG_LOCK_OK).
-    # 2026-09-18: the family's four dev-state recipes are declared now, but this module's wiring is
-    # what they declare as their base -- it stays inline, and this comparison keeps reading it
-    # side by side with the teacher's components.
-    'self.terminations.base_contact.params["sensor_cfg"] = SceneEntityCfg(',
-}
-
-# ArticulationCfg block lines that only exist on one side BY DESIGN
-ROBOT_BLOCK_ALLOWLIST: set[str] = set()
-
-# PLAY classes that legitimately skip apply_play_wiring (reviewed exceptions)
+# PLAY classes that legitimately skip apply_play_wiring (reviewed exceptions), keyed by class name
 PLAY_WIRING_ALLOWLIST: set[str] = set()
+
+
+def load_subjects() -> tuple[list[dict], list[str]]:
+    """The declared parity subjects, as ``(subjects, problems)``.
+
+    A subject names a line and the two cfg files whose hand-copied content must stay in sync, plus
+    the divergences already reviewed (exact line -> why). Everything is checked here: a subject whose
+    files are missing, or a tree with no subject at all, is a problem rather than a silent pass --
+    "nothing was compared" must never print the same as "everything agreed".
+    """
+    problems: list[str] = []
+    try:
+        document = json.loads(SUBJECTS_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as err:
+        return [], [f"{SUBJECTS_PATH}: unreadable or not JSON ({err}) -- the parity subjects are a"
+                    " declaration, so a missing one is a refusal, not a default"]
+    subjects = document.get("subjects")
+    if not isinstance(subjects, list) or not subjects:
+        return [], [f"{SUBJECTS_PATH}: no subjects declared -- nothing would be compared"]
+    for subject in subjects:
+        if not isinstance(subject, dict) or not subject.get("line"):
+            problems.append(f"{SUBJECTS_PATH}: a subject without a 'line' handle")
+            continue
+        for key in ("family_cfg", "teacher_cfg"):
+            rel = subject.get(key)
+            if not isinstance(rel, str) or not (_REPO / rel).is_file():
+                problems.append(f"{SUBJECTS_PATH}: subject {subject['line']!r} {key} missing: {rel}")
+        for key in ("wiring_allowlist", "robot_block_allowlist"):
+            if not isinstance(subject.get(key), dict):
+                problems.append(f"{SUBJECTS_PATH}: subject {subject['line']!r} {key} must be an"
+                                " object mapping the exact line to its reason")
+    return subjects, problems
 
 
 def wiring_lines(path: pathlib.Path) -> list[str]:
@@ -130,15 +126,22 @@ def _extract_name_list(path: pathlib.Path, var_name: str) -> list[str]:
 
 
 def check_wiring_parity() -> list[str]:
-    problems = []
-    fam = [l for l in wiring_lines(_FAMILY) if l not in ALLOWLIST]
-    tea = [l for l in wiring_lines(_TEACHER) if l not in ALLOWLIST]
-    fam_set, tea_set = set(fam), set(tea)
-    for line in sorted(fam_set - tea_set):
-        problems.append(f"family-only wiring line: {line}")
-    for line in sorted(tea_set - fam_set):
-        problems.append(f"teacher-only wiring line: {line}")
-    print(f"  family wiring lines: {len(fam_set)} | teacher wiring lines: {len(tea_set)}")
+    """Each declared subject: the symmetric wiring difference of its two files, allowlist applied."""
+    subjects, problems = load_subjects()
+    for subject in subjects:
+        if not subject.get("family_cfg") or not subject.get("teacher_cfg"):
+            continue
+        allow = set(subject.get("wiring_allowlist") or {})
+        sides = {}
+        for key in ("family_cfg", "teacher_cfg"):
+            lines = [l for l in wiring_lines(_REPO / subject[key]) if l not in allow]
+            sides[key] = set(lines)
+        for key, label in (("family_cfg", "family-only"), ("teacher_cfg", "teacher-only")):
+            counterpart = sides["teacher_cfg" if key == "family_cfg" else "family_cfg"]
+            for line in sorted(sides[key] - counterpart):
+                problems.append(f"[{subject['line']}] {label} wiring line: {line}")
+        print(f"  {subject['line']}: family {len(sides['family_cfg'])} lines | teacher"
+              f" {len(sides['teacher_cfg'])} lines | allowlisted {len(allow)}")
     return problems
 
 
@@ -207,15 +210,21 @@ def _articulation_block(path: pathlib.Path) -> list[str]:
 
 
 def check_robot_block_parity() -> list[str]:
-    fam = [l for l in _articulation_block(_FAMILY) if l not in ROBOT_BLOCK_ALLOWLIST]
-    tea = [l for l in _articulation_block(_TEACHER) if l not in ROBOT_BLOCK_ALLOWLIST]
-    fam_set, tea_set = set(fam), set(tea)
-    problems = []
-    for line in sorted(fam_set - tea_set):
-        problems.append(f"family-only robot line: {line}")
-    for line in sorted(tea_set - fam_set):
-        problems.append(f"teacher-only robot line: {line}")
-    print(f"  family robot block: {len(fam_set)} lines | teacher: {len(tea_set)} lines")
+    """Each declared subject: the symmetric ArticulationCfg difference of its two files."""
+    subjects, problems = load_subjects()
+    for subject in subjects:
+        if not subject.get("family_cfg") or not subject.get("teacher_cfg"):
+            continue
+        allow = set(subject.get("robot_block_allowlist") or {})
+        sides = {}
+        for key in ("family_cfg", "teacher_cfg"):
+            sides[key] = set(l for l in _articulation_block(_REPO / subject[key]) if l not in allow)
+        for key, label in (("family_cfg", "family-only"), ("teacher_cfg", "teacher-only")):
+            counterpart = sides["teacher_cfg" if key == "family_cfg" else "family_cfg"]
+            for line in sorted(sides[key] - counterpart):
+                problems.append(f"[{subject['line']}] {label} robot line: {line}")
+        print(f"  {subject['line']}: family block {len(sides['family_cfg'])} lines | teacher"
+              f" {len(sides['teacher_cfg'])} lines")
     return problems
 
 
@@ -224,15 +233,20 @@ def _yaml_scalar(text: str, key: str) -> str:
     return match.group(1).strip() if match else ""
 
 
-def _yaml_block_list(text: str, key: str) -> list[str]:
-    """Items of a block-style list under ``key:`` at ANY indent (lists like
-    foot_body_names nest under ``names:`` -- a col-0 anchor made the body
-    pattern check silently run zero times). A missing key is a hard error:
-    silent empty == the bug this helper used to have."""
-    match = re.search(rf"^[ \t]*{key}:\n((?:[ \t]+- .+\n?)+)", text, re.M)
-    if match is None:
-        raise RuntimeError(f"yaml block list '{key}:' not found (yaml restructured?)")
-    return [item.strip().strip("\"'") for item in re.findall(r"[ \t]+- (.+)", match.group(1))]
+def _declared_block_lists(text: str) -> dict[str, list[str]]:
+    """Every block-style list the yaml DECLARES, as ``{key: items}``.
+
+    Discovered rather than fixed: the previous version asserted a hard-coded trio
+    (``foot_body_names`` / ``limb_body_names`` / ``undesired_contact_body_names``), so a line that
+    randomizes nothing was forced to carry a block it never reads -- a requirement inferred from
+    "this is a main line", i.e. from the shape of the OLD family's recipe rather than from anything
+    the line says about itself (review 2026-09-22). What a line declares is what gets checked;
+    what it does not declare is not its contract.
+    """
+    out: dict[str, list[str]] = {}
+    for match in re.finditer(r"^[ \t]*([A-Za-z_]\w*):\n((?:[ \t]+- .+\n?)+)", text, re.M):
+        out[match.group(1)] = [item.strip().strip("\"'") for item in re.findall(r"[ \t]+- (.+)", match.group(2))]
+    return out
 
 
 def _recipe_lines(problems: list[str]) -> list[RecipeLine]:
@@ -250,20 +264,47 @@ def _recipe_lines(problems: list[str]) -> list[RecipeLine]:
         return []
 
 
-def _version_yamls(problems: list[str]) -> dict[str, pathlib.Path]:
-    """Main-line yamls, keyed the way records are (``lizard/dev``, ``lizard/v14``).
+def _active_lines(problems: list[str]) -> set[str]:
+    """Line keys ``versions/lines.json`` declares ``active`` -- a status, not a name rule.
 
-    Main-line-only on purpose: the asset CONTRACT asserts the usda against
-    ``joint_order`` and the body-name lists, which a side line's different recipe schema
-    does not carry (``lizard/parkour``). Every line is still covered by the asset LOCK.
+    The asset contract is a claim about a LIVE asset; a retired line's frozen yaml describes the
+    asset of its own date, so checking it against today's usda yields findings nobody can act on.
+    Retirement is a declaration in the lifecycle index (``check_recipe_registry`` owns its shape),
+    which is why it is read from there: the previous filter inferred "carries the robot contract"
+    from the line being named ``main`` (review 2026-09-22).
     """
+    document = check_recipe_registry.load(_LINES)
+    lines = document.get("lines") or {}
+    for key in ("_missing", "_unreadable"):
+        if lines.get(key):
+            problems.append(f"{_LINES.name} is not usable: {lines[key]}")
+            return set()
+    active = {k for k, v in lines.items() if isinstance(v, dict) and v.get("status") == "active"}
+    if not active:
+        problems.append(f"{_LINES.name} declares no active line -- the asset contract would check nothing")
+    return active
+
+
+def _version_yamls(problems: list[str]) -> dict[str, pathlib.Path]:
+    """Active lines' yamls, keyed the way records are (``lizard/main/dev``, ``lizard/main/v14``).
+
+    Every ACTIVE line, not just ``main``: the contract below asserts only what each yaml declares
+    (``usd_path`` present, ``joint_order`` matching the usda, every declared body-name list matching
+    a link), so a side line with a different schema is checked on its own terms instead of being
+    skipped by a rule about its name -- or forced to adopt the main line's keys.
+    """
+    active = _active_lines(problems)
     yamls: dict[str, pathlib.Path] = {}
+    skipped = []
     for line in _recipe_lines(problems):
-        if not line.is_main_line:
+        if line.key not in active:
+            skipped.append(line.key)
             continue
         yamls[f"{line.key}/dev"] = line.dev_yaml
         for version, path in line.versions.items():
             yamls[f"{line.key}/{version}"] = path
+    if skipped:
+        print(f"  not active (status in {_LINES.name}): {sorted(skipped)}")
     return yamls
 
 
@@ -275,9 +316,15 @@ def _recipe_yamls(problems: list[str]) -> list[pathlib.Path]:
 def check_asset_contract() -> list[str]:
     problems = []
     yamls = _version_yamls(problems)
+    counts = {"asset": 0, "joint_order": 0, "body_lists": 0, "no_asset": 0}
     for tag, path in yamls.items():
         text = path.read_text(encoding="utf-8")
-        usda_path = _EXP / _yaml_scalar(text, "usd_path")
+        usd_rel = _yaml_scalar(text, "usd_path")
+        if not usd_rel:
+            counts["no_asset"] += 1  # declares no asset: nothing here is its contract
+            continue
+        counts["asset"] += 1
+        usda_path = _EXP / usd_rel
         if not usda_path.exists():
             problems.append(f"{tag}: usd_path missing on disk: {usda_path}")
             continue
@@ -287,29 +334,41 @@ def check_asset_contract() -> list[str]:
         if 'def Scope "Geometry"' not in usda:
             problems.append(f"{tag}: no Geometry scope in {usda_path.name} "
                             f"(cfgs hardcode prim path Robot/Geometry/base_link)")
-        if _yaml_scalar(text, "base_body_name") not in links:
-            problems.append(f"{tag}: base_body_name not a link in usda")
-        order = _yaml_block_list(text, "joint_order")
-        for name in order:
-            if f"{name}_joint" not in joints:
-                problems.append(f"{tag}: joint_order entry missing in usda: {name}_joint")
-        if len(joints) != len(order):
-            problems.append(f"{tag}: usda has {len(joints)} joints, yaml joint_order has {len(order)}")
-        for key in ("foot_body_names", "limb_body_names", "undesired_contact_body_names"):
-            for pattern in _yaml_block_list(text, key):
+        base_body = _yaml_scalar(text, "base_body_name")
+        if base_body and base_body not in links:
+            problems.append(f"{tag}: base_body_name not a link in usda: {base_body}")
+        lists = _declared_block_lists(text)
+        order = lists.get("joint_order")
+        if order is not None:
+            counts["joint_order"] += 1
+            for name in order:
+                if f"{name}_joint" not in joints:
+                    problems.append(f"{tag}: joint_order entry missing in usda: {name}_joint")
+            if len(joints) != len(order):
+                problems.append(f"{tag}: usda has {len(joints)} joints, yaml joint_order has {len(order)}")
+        for key, patterns in lists.items():
+            if not key.endswith("body_names"):
+                continue
+            counts["body_lists"] += 1
+            for pattern in patterns:
                 if not any(re.search(pattern, link) for link in links):
                     problems.append(f"{tag}: body pattern matches no link: {key}={pattern}")
-    print(f"  yamls checked: {len(yamls)}")
+    print(f"  yamls checked: {len(yamls)} ({counts['asset']} declare an asset, {counts['no_asset']} do not;"
+          f" {counts['joint_order']} declare joint_order, {counts['body_lists']} declare body-name lists)")
     return problems
 
 
-# global asset artifacts pinned by versions/lizard/vN/asset_lock.json (paths
-# relative to rl_exp); each version's lock additionally pins its OWN frozen yaml
-def _lock_files() -> list[str]:
-    """urdf + compiled usda + every source mesh under meshes/** (meshes are the
-    regeneration upstream of both; usda embeds copies but a mesh-only rebuild
-    must still go loud)."""
-    files = ["versions/lizard/lizard.urdf", "assets/lizard/lizard.usda"]
+# asset artifacts pinned by a version's asset_lock.json (paths relative to rl_exp); each version's
+# lock additionally pins its OWN frozen yaml
+def _lock_files(family: str) -> list[str]:
+    """That family's urdf + compiled usda + every source mesh under meshes/** (meshes are the
+    regeneration upstream of both; usda embeds copies but a mesh-only rebuild must still go loud).
+
+    The mesh tree is shared on purpose: a family whose geometry is unchanged (lizard2 adds joints,
+    not meshes) reads the same source files, and a family that changes geometry has to put its own
+    tree there, which this list then picks up for both.
+    """
+    files = [f"versions/{family}/{family}.urdf", f"assets/{family}/{family}.usda"]
     files += sorted(
         str(p.relative_to(_EXP)).replace("\\", "/")
         for p in (_EXP / "meshes").rglob("*") if p.is_file()
@@ -325,7 +384,7 @@ def _asset_hashes(yaml_path: pathlib.Path) -> dict[str, str]:
     vanished while it was being hashed is a hard stop, because this dict is written straight
     into an asset lock and a null digest there is worse than no lock at all.
     """
-    files = _lock_files()
+    files = _lock_files(yaml_path.relative_to(_VERSIONS).parts[0])
     files.append(str(yaml_path.relative_to(_EXP)).replace("\\", "/"))
     hashes: dict[str, str] = {}
     for rel in files:
@@ -336,15 +395,25 @@ def _asset_hashes(yaml_path: pathlib.Path) -> dict[str, str]:
     return hashes
 
 
-def update_asset_locks() -> list[str]:
+def update_asset_locks(family: str | None = None) -> list[str]:
     """Rewrite every version lock that actually changed; return discovery problems.
+
+    ``family`` scopes the write to one family's versions and reports the count it left alone,
+    so a caller landing a NEW family can hand the tool a scope it cannot step outside of --
+    instead of running the whole-tree rewrite and then trying to detect the collateral from
+    the output ("the second run is always clean" is not a guard). ``None`` keeps the historical
+    whole-tree behaviour, which is what an intentional asset retirement wants.
 
     Discovery problems are returned rather than raised so ``--update-locks`` can refuse
     loudly instead of printing ``LOCKS_UPDATED`` over a tree it only half understood.
     """
     problems: list[str] = []
+    out_of_scope = 0
     for yaml_path in _recipe_yamls(problems):
         vdir = yaml_path.parent
+        if family is not None and vdir.relative_to(_VERSIONS).parts[0] != family:
+            out_of_scope += 1
+            continue
         current = _asset_hashes(yaml_path)
         lock = vdir / "asset_lock.json"
         if lock.exists():
@@ -363,6 +432,8 @@ def update_asset_locks() -> list[str]:
         (vdir / "asset_lock.json").write_text(
             json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
         print(f"  locked {vdir.relative_to(_VERSIONS)}")
+    if family is not None:
+        print(f"  scope: {family} only -- {out_of_scope} other version(s) not read, not written")
     return problems
 
 
@@ -390,11 +461,23 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--strict", action="store_true")
     parser.add_argument("--update-locks", action="store_true",
-                        help="write versions/lizard/vN/asset_lock.json from current assets and exit")
+                        help="write versions/<line>/vN/asset_lock.json from current assets and exit")
+    parser.add_argument("--family", default=None,
+                        help="with --update-locks: restrict the rewrite to this family's versions "
+                             "(a new family must not be able to touch a landed family's locks)")
+    parser.add_argument("--self-test", action="store_true",
+                        help="also falsify the detector in-process (declared subjects, declared asset "
+                             "contract keys, and the family-landing tool's write scope)")
     args = parser.parse_args()
 
+    if args.self_test:
+        import test_declare_family as falsifier
+
+        if falsifier.main() != 0:
+            return 1
+
     if args.update_locks:
-        problems = update_asset_locks()
+        problems = update_asset_locks(args.family)
         if problems:
             for p in problems:
                 print(f"  DRIFT: {p}")

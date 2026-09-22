@@ -76,20 +76,6 @@ class RecipeLine:
         """Recipe golden lock of this line (one file per line, never shared)."""
         return self.root / "cfg_lock.json"
 
-    @property
-    def is_main_line(self) -> bool:
-        """True for the line that carries the robot contract (``main``), False otherwise.
-
-        Side lines carry a different recipe schema -- ``lizard/parkour`` has no
-        ``joint_order``/body-name lists -- so checks that assert the robot contract use
-        this to stay main-line-only, while checks about *assets and records* cover every
-        line. Was ``"/" not in self.key``, which only worked while the main line was the
-        family directory itself: once it moved to ``main/``, every side line's key also
-        has no slash, so that test would have handed ``parkour`` and ``baseline`` to the
-        robot-contract assertions as if they were the main line.
-        """
-        return self.name == "main"
-
 
 def _is_version_dir(path: pathlib.Path) -> bool:
     return path.is_dir() and _VERSION_DIR.fullmatch(path.name) is not None
@@ -102,11 +88,12 @@ def _line_roots(family_dir: pathlib.Path) -> list[pathlib.Path]:
     nesting would make ``"lizard/parkour"`` ambiguous with ``"lizard/parkour/x"``.
 
     The family directory itself is no longer a line. It used to be the main line, which
-    made this discovery asymmetric and left ``is_main_line`` to be inferred from the shape
-    of a key; once the main line moved into ``main/`` that asymmetry described nothing, and
-    the family directory -- which holds only assets and family-level records -- would have
-    been read as a line with no parameter SSOT. The second condition keeps a brand-new line
-    visible before its first version is frozen: without it that line's parameters would be
+    made this discovery asymmetric and left "which line carries the robot contract" to be
+    inferred from the shape of a key; once the main line moved into ``main/`` that
+    asymmetry described nothing, and the family directory -- which holds only assets and
+    family-level records -- would have been read as a line with no parameter SSOT. The
+    second condition keeps a brand-new line visible before its first version is frozen:
+    without it that line's parameters would be
     a silent skip, which is the failure this module exists to prevent.
     """
     roots: list[pathlib.Path] = []

@@ -1,15 +1,17 @@
 {
  "format": 1,
- "note": "Approved observation protocol digests (ARCH_PLAN Step 3.1a). Re-approved 2026-09-16 when clip/scale/noise values entered the record; the diff against the previous approval was verified to be representation only (no term, order, dropped or flag change). The gate reads this file and never rewrites it: a new or edited protocol stays red until a human writes its digest here. A protocol no task references must state a purpose. dims are the approved per-group widths (empty = no real run has asserted them yet). dims_digest pins the approved widths; a width may only change with a re-approval. Every protocol carrying widths must also cite what asserted them (``evidence``): the digest is recomputable, the citation is not, and a re-approval that cites nothing leaves no trace a reader can follow -- the same level of control as the golden's ``--update --reason``.",
+ "note": "Approved observation protocol digests (ARCH_PLAN Step 3.1a). Re-approved 2026-09-16 when clip/scale/noise values entered the record; the diff against the previous approval was verified to be representation only (no term, order, dropped or flag change). The gate reads this file and never rewrites it: a new or edited protocol stays red until a human writes its digest here. A protocol no task references must state a purpose. dims are the approved per-group widths KEYED BY THE ASSET they were measured on ({assets/<family>/<family>.usda: {group: width}}): one protocol can be instantiated on two bodies of different joint counts and then legitimately carry two widths (lizard 26 joints / policy 90 vs lizard2 30 joints / policy 102, measured 2026-09-22), and a map keyed by protocol alone would compare one body against the other body's number forever. Empty = no real run has asserted them.. dims_digest pins the approved widths; a width may only change with a re-approval. Every protocol carrying widths must also cite what asserted them (``evidence``): the digest is recomputable, the citation is not, and a re-approval that cites nothing leaves no trace a reader can follow -- the same level of control as the golden's ``--update --reason``.",
  "protocols": {
   "1d87d5c6b546": {
    "digest": "1d87d5c6b5463bc836b5754bbb24c9a49dd7453f67c075a1e61f2805da36165d",
    "label": "Lizard-Rough-v2 layout",
    "purpose": "",
    "dims": {
-    "policy": 308
+    "assets/lizard/lizard.usda": {
+     "policy": 308
+    }
    },
-   "dims_digest": "47fd1c1c28a3eb1becc9ae86fccb0d546363e44755ac327519b53113ffe34f09",
+   "dims_digest": "31cb6a25e2d0bea20e9bb639650dc2bbcd4a970cc31ade713915d58b0555a5c6",
    "evidence": "approved 2026-09-16: re-approval as clip/scale/noise entered the record, diff verified representation-only (anchors note + ACCEPTANCE.md section 3.1a)"
   },
   "287479dc40c7": {
@@ -17,9 +19,11 @@
    "label": "Lizard-Velocity-Flat-v0 / -Curriculum-Flat-v0 layout",
    "purpose": "",
    "dims": {
-    "policy": 90
+    "assets/lizard/lizard.usda": {
+     "policy": 90
+    }
    },
-   "dims_digest": "b386c7ae913377f794c74e2c1e364207bb68ceae66d148d5a854e361ed85c00c",
+   "dims_digest": "b549f0402bf3f0b62b8c53f4f0dd7e683164b57d73d066bcd19b1bd034e62c21",
    "evidence": "measured 2026-09-18: obs_protocol_live.py --headless over the 8 family tasks (OBS_PROTOCOL_LIVE_OK, 0 problems), approved by hand; ACCEPTANCE.md section '3.1e 补账 · 家族 8 条协议的宽度实测与批准'"
   },
   "4d4a26c4c8a2": {
@@ -27,9 +31,11 @@
    "label": "Lizard-Parkour-Climb-v1 layout",
    "purpose": "",
    "dims": {
-    "policy": 278
+    "assets/lizard/lizard.usda": {
+     "policy": 278
+    }
    },
-   "dims_digest": "2ddee16f6c375b12460b1ecbcac5eae2f826521b6c5c2c62062aaeb8b405b984",
+   "dims_digest": "8474f182b89ab729ff47f51b435de5da15270d1c130927618cb78b4a482da97f",
    "evidence": "approved 2026-09-16: re-approval as clip/scale/noise entered the record, diff verified representation-only (anchors note + ACCEPTANCE.md section 3.1a)"
   },
   "583eaf23b9d1": {
@@ -37,9 +43,11 @@
    "label": "Lizard-Rough-v1 layout",
    "purpose": "",
    "dims": {
-    "policy": 266
+    "assets/lizard/lizard.usda": {
+     "policy": 266
+    }
    },
-   "dims_digest": "a4fcb3a5bd982e93784afa7905a35b9763127124405997be1eb1bde6a44e3ce6",
+   "dims_digest": "2b7f56e595b093c06b5565654c60a528d90f2b230c24b6189be4bae8197ea9c4",
    "evidence": "approved 2026-09-16: re-approval as clip/scale/noise entered the record, diff verified representation-only (anchors note + ACCEPTANCE.md section 3.1a)"
   },
   "6cd53ec273dc": {
@@ -47,11 +55,13 @@
    "label": "Lizard-Rough-Play-v12 layout",
    "purpose": "",
    "dims": {
-    "proprio": 90,
-    "extero": 208,
-    "priv": 83
+    "assets/lizard/lizard.usda": {
+     "proprio": 90,
+     "extero": 208,
+     "priv": 83
+    }
    },
-   "dims_digest": "30059d45eaa1af554943f513abd31ef95554ef2291cf186e8bb4df39851b4a2d",
+   "dims_digest": "83836512757e9f0bf535f7393a84e8ce3d9e595184fc3a2a3d7a258763632f32",
    "evidence": "approved 2026-09-16: re-approval as clip/scale/noise entered the record, diff verified representation-only (anchors note + ACCEPTANCE.md section 3.1a)"
   },
   "a25a8c39001b": {
@@ -59,19 +69,26 @@
    "label": "Lizard-Velocity-Flat-Play-v0 / -Curriculum-Flat-Play-v0 layout",
    "purpose": "",
    "dims": {
-    "policy": 90
+    "assets/lizard/lizard.usda": {
+     "policy": 90
+    },
+    "assets/lizard2/lizard2.usda": {
+     "policy": 102
+    }
    },
-   "dims_digest": "b386c7ae913377f794c74e2c1e364207bb68ceae66d148d5a854e361ed85c00c",
-   "evidence": "measured 2026-09-18: obs_protocol_live.py --headless over the 8 family tasks (OBS_PROTOCOL_LIVE_OK, 0 problems), approved by hand; ACCEPTANCE.md section '3.1e 补账 · 家族 8 条协议的宽度实测与批准'"
+   "dims_digest": "766268f50f74f690d9c9d18931cfc73be06238463da85999faa965cfbeeea237",
+   "evidence": "measured 2026-09-18: obs_protocol_live.py --headless over the 8 family tasks (OBS_PROTOCOL_LIVE_OK, 0 problems), approved by hand; ACCEPTANCE.md section '3.1e 补账 · 家族 8 条协议的宽度实测与批准' | 2026-09-22 lizard2: policy=102 measured on assets/lizard2/lizard2.usda by `obs_protocol_live.py --viz none --tasks Lizard2-Flat-v1 Lizard2-Flat-Play-v1 --pin` (OBS_PROTOCOL_LIVE_OK, both tasks policy=102, bodies=31; the same protocol's lizard widths are 90 because the layout does not fix a joint count -- 26 joints vs 30)"
   },
   "c71114b0c0fd": {
    "digest": "c71114b0c0fdfcffb7859a0389830d740273cf392ef44da91639f8ae7f5a4a52",
    "label": "Lizard-Rough-Play-v1 layout",
    "purpose": "",
    "dims": {
-    "policy": 266
+    "assets/lizard/lizard.usda": {
+     "policy": 266
+    }
    },
-   "dims_digest": "a4fcb3a5bd982e93784afa7905a35b9763127124405997be1eb1bde6a44e3ce6",
+   "dims_digest": "2b7f56e595b093c06b5565654c60a528d90f2b230c24b6189be4bae8197ea9c4",
    "evidence": "approved 2026-09-16: re-approval as clip/scale/noise entered the record, diff verified representation-only (anchors note + ACCEPTANCE.md section 3.1a)"
   },
   "cf66ed6422c8": {
@@ -79,9 +96,11 @@
    "label": "Lizard-Rough-Play-v2 layout",
    "purpose": "",
    "dims": {
-    "policy": 308
+    "assets/lizard/lizard.usda": {
+     "policy": 308
+    }
    },
-   "dims_digest": "47fd1c1c28a3eb1becc9ae86fccb0d546363e44755ac327519b53113ffe34f09",
+   "dims_digest": "31cb6a25e2d0bea20e9bb639650dc2bbcd4a970cc31ade713915d58b0555a5c6",
    "evidence": "approved 2026-09-16: re-approval as clip/scale/noise entered the record, diff verified representation-only (anchors note + ACCEPTANCE.md section 3.1a)"
   },
   "d8de5bc507a7": {
@@ -89,9 +108,11 @@
    "label": "Lizard-Parkour-Climb-Play-v1 layout",
    "purpose": "",
    "dims": {
-    "policy": 278
+    "assets/lizard/lizard.usda": {
+     "policy": 278
+    }
    },
-   "dims_digest": "2ddee16f6c375b12460b1ecbcac5eae2f826521b6c5c2c62062aaeb8b405b984",
+   "dims_digest": "8474f182b89ab729ff47f51b435de5da15270d1c130927618cb78b4a482da97f",
    "evidence": "approved 2026-09-16: re-approval as clip/scale/noise entered the record, diff verified representation-only (anchors note + ACCEPTANCE.md section 3.1a)"
   },
   "fa849f7f2d7c": {
@@ -99,9 +120,11 @@
    "label": "Lizard-Velocity-Rough-Play-v0 / -Curriculum-Rough-Play-v0 layout",
    "purpose": "",
    "dims": {
-    "policy": 225
+    "assets/lizard/lizard.usda": {
+     "policy": 225
+    }
    },
-   "dims_digest": "d6029fb799541058b44ff8adce2d1d164a1f34aeb270184cfeab7477bcad030a",
+   "dims_digest": "f9725f512071fd052cddf5a5596565e580ec6fe64eba329307a1a607af4c73a9",
    "evidence": "measured 2026-09-18: obs_protocol_live.py --headless over the 8 family tasks (OBS_PROTOCOL_LIVE_OK, 0 problems), approved by hand; ACCEPTANCE.md section '3.1e 补账 · 家族 8 条协议的宽度实测与批准'"
   },
   "fdef56347528": {
@@ -109,9 +132,11 @@
    "label": "Lizard-Velocity-Rough-v0 / -Curriculum-Rough-v0 layout",
    "purpose": "",
    "dims": {
-    "policy": 225
+    "assets/lizard/lizard.usda": {
+     "policy": 225
+    }
    },
-   "dims_digest": "d6029fb799541058b44ff8adce2d1d164a1f34aeb270184cfeab7477bcad030a",
+   "dims_digest": "f9725f512071fd052cddf5a5596565e580ec6fe64eba329307a1a607af4c73a9",
    "evidence": "measured 2026-09-18: obs_protocol_live.py --headless over the 8 family tasks (OBS_PROTOCOL_LIVE_OK, 0 problems), approved by hand; ACCEPTANCE.md section '3.1e 补账 · 家族 8 条协议的宽度实测与批准'"
   }
  }

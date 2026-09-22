@@ -29,7 +29,7 @@ OUTPUT_DIR = EXP_DIR / "ue"
 # The measured articulation order (what the obs and the action index) lives in the protocol
 # record. Read as a data file rather than through rl_exp.tasks.obs_protocol: importing that
 # package drags in the training stack, and this exporter runs on a deployment box.
-RUNTIME_ORDER_PATH = EXP_DIR / "versions" / "lizard" / "joint_order_runtime.json"
+RUNTIME_ORDER_PATH = EXP_DIR / "versions" / "joint_order_runtime.json"
 
 
 def runtime_joint_order(asset):

@@ -1,0 +1,35 @@
+{
+  "format": 1,
+  "note": "Freeze-parity subjects: pairs of hand-copied cfg files that must stay in review-locked sync, because the freeze discipline forbids one importing the other. This file is the DECLARATION of which pairs exist and which divergences are reviewed -- the gate (rl_exp/tools/verify/check_dr_parity.py) holds no family name of its own, so a new family declares its own subject here and an existing one cannot be special-cased in code. Each allowlist maps the exact normalized line to the reason it exists on one side only; a line that appears in neither file is inert (declared, not enforced).",
+  "subjects": [
+    {
+      "line": "lizard/main",
+      "family_cfg": "rl_exp/tasks/lizard_env_cfg.py",
+      "teacher_cfg": "rl_exp/tasks/teacher_env_cfg.py",
+      "wiring_allowlist": {
+        "self.events.init_ck = EventTerm(": "v3 recipe (versions/lizard/main/v3/PLAN.md): D3 c_k schedule stash (startup); the v3 anti-collapse package is teacher-only by design",
+        "self.rewards.feet_air_time = None": "v3 D2: replaced by foot_clearance",
+        "self.rewards.foot_clearance = RewTerm(": "v3 D2 anti-drag r_fc",
+        "self.terminations.tilt = DoneTerm(": "v3 D1 tilt termination",
+        "self.terminations.base_contact = None": "v3.6: belly contact penalty-only (D0-6)",
+        "self.rewards.track_lin_vel_xy_exp = None": "v5 recipe (versions/lizard/main/v5/PLAN.md): exp kernel replaced (freeloads at standstill)",
+        "self.rewards.track_lin_vel_xy_lin = RewTerm(": "v5: EP-style normalized linear tracking",
+        "self.rewards.feet_slide = RewTerm(": "v5: r_slip, contact-foot sliding penalty (x c_k)",
+        "self.rewards.undesired_contacts.func = teacher_mdp.undesired_contacts_ck": "v5: r_co x c_k",
+        "self.rewards.belly_contact_force = RewTerm(": "v5: continuous belly-contact force penalty",
+        "self.terminations.tilt = None": "v10 recipe (versions/lizard/main/v10/NOTES.md): D1 removal (fall -> reward ledger, no term)",
+        "self.rewards.track_lin_vel_xy_lin = None": "v13 recipe (versions/lizard/main/v13/NOTES.md): EP kernel removed (single-variable swap)",
+        "self.rewards.track_lin_vel_xy_miki = RewTerm(": "v13: exp(-||v_cmd - v_yaw||^2/sigma_sq), symmetric Miki tracking",
+        "self.terminations.roll_over = DoneTerm(": "v14 recipe (versions/lizard/main/v14/NOTES.md): pitch-invariant |sin(roll)| + dwell (v14.3 replaced the front-plant termination)",
+        "self.rewards.head_load_penalty = RewTerm(": "v14.3: head weight-bearing, penalized per step",
+        "self.events.reset_robot_joints = None": "v12 recipe (versions/lizard/main/v12/PLAN.md): Miki S8 reset/observation robustness, teacher line only; the scale term is a no-op on zero defaults",
+        "self.events.reset_base.params[\"pose_range\"] = {a: tuple(r) for a, r in rr[\"base_pose_range\"].items()}": "v12: reset-base pose range replaces the stock zero-range dict",
+        "self.events.reset_base.params[\"velocity_range\"] = {a: tuple(r) for a, r in rr[\"base_velocity_range\"].items()}": "v12: reset-base velocity range replaces the stock zero-range dict",
+        "self.events.foot_friction_dip = EventTerm(": "v12: occasional low-friction feet",
+        "self.events.sample_ring_noise = EventTerm(": "v12: per-episode extero corruption state",
+        "self.terminations.base_contact.params[\"sensor_cfg\"] = SceneEntityCfg(": "stage B (ARCH_PLAN.md 2.4, B1): the teacher's base-contact narrowing moved into components.terminations, so this literal line now exists on the family side only; semantics unchanged and golden-verified (ACCEPTANCE.md \"B1 component slice 2\": 36 tasks CFG_LOCK_OK)"
+      },
+      "robot_block_allowlist": {}
+    }
+  ]
+}

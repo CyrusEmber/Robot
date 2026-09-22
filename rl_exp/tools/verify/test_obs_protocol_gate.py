@@ -112,11 +112,20 @@ def main() -> int:
     )
 
     # --- the approved widths are pinned by their own digest --------------------------
+    # dims is ``{asset: {group: width}}``: an approved width belongs to the body it was measured
+    # on, so both levels are exercised here.
+    def _dims(key: str) -> dict:
+        return ANCHORED["protocols"][key]["dims"]
+
+    def _first_asset(key: str) -> str:
+        return sorted(_dims(key))[0]
+
     dimmed = sorted(key for key, entry in ANCHORED["protocols"].items() if entry.get("dims"))[0]
 
     edited = copy_of(ANCHORED)
-    first_group = sorted(edited["protocols"][dimmed]["dims"])[0]
-    edited["protocols"][dimmed]["dims"][first_group] += 1
+    asset = _first_asset(dimmed)
+    first_group = sorted(_dims(dimmed)[asset])[0]
+    edited["protocols"][dimmed]["dims"][asset][first_group] += 1
     fires("dims/in-place-edit", "without a re-approval", g.check_anchors(DECLARED, edited))
 
     unapproved = copy_of(ANCHORED)
@@ -134,19 +143,76 @@ def main() -> int:
     fires("dims/evidence-without-widths", "nothing to cite", g.check_anchors(DECLARED, cited_void))
 
     stray = copy_of(ANCHORED)
-    stray["protocols"][dimmed]["dims"]["invented_group"] = 5
+    stray["protocols"][dimmed]["dims"][asset]["invented_group"] = 5
     fires("dims/unknown-group", "does not carry live", g.check_anchors(DECLARED, stray))
 
     typed = copy_of(ANCHORED)
-    typed["protocols"][dimmed]["dims"][first_group] = True
+    typed["protocols"][dimmed]["dims"][asset][first_group] = True
     fires("dims/bool-is-not-a-width", "not a positive integer", g.check_anchors(DECLARED, typed))
 
+    # the asset level is the new half: a width approved for a body no task on the protocol loads,
+    # and an entry that is not an asset path at all
+    ghost_body = copy_of(ANCHORED)
+    ghost_body["protocols"][dimmed]["dims"]["assets/nobody/nobody.usda"] = {"policy": 7}
+    ghost_body["protocols"][dimmed]["dims_digest"] = g.dims_digest(ghost_body["protocols"][dimmed]["dims"])
+    fired = g.check_anchors(DECLARED, ghost_body)
+    check("dims/asset-no-task-loads-it", any("no task on this protocol loads" in line for line in fired), f"{fired}")
+
+    bad_key = copy_of(ANCHORED)
+    bad_key["protocols"][dimmed]["dims"] = {"lizard.usda": {"policy": 7}}
+    bad_key["protocols"][dimmed]["dims_digest"] = g.dims_digest(bad_key["protocols"][dimmed]["dims"])
+    fired = g.check_anchors(DECLARED, bad_key)
+    check("dims/key-is-not-an-asset-path", any("is not an asset path" in line for line in fired), f"{fired}")
+
+    # the other direction: a task whose own body has NO approved width while other assets on the
+    # same protocol still have theirs. This used to be invisible offline -- the live tool only
+    # PRINTS "(unapproved)" -- so a family could train against a width no human ever approved.
+    unmeasured = copy_of(ANCHORED)
+    loaded_assets, unresolved = g.assets_on_protocol(dimmed, DECLARED)
+    check("dims/protocol-resolves-its-assets", bool(loaded_assets) and not unresolved,
+          f"loaded={sorted(loaded_assets)} unresolved={unresolved}")
+    two_asset = sorted(key for key, entry in ANCHORED["protocols"].items()
+                       if len(g.assets_on_protocol(key, DECLARED)[0]) > 1)
+    check("dims/a-two-asset-protocol-exists", bool(two_asset), "no protocol is loaded by two assets")
+    if two_asset:
+        key2 = two_asset[0]
+        assets2 = sorted(g.assets_on_protocol(key2, DECLARED)[0])
+        unmeasured["protocols"][key2]["dims"].pop(assets2[-1])
+        unmeasured["protocols"][key2]["dims_digest"] = g.dims_digest(unmeasured["protocols"][key2]["dims"])
+        fired = g.check_anchors(DECLARED, unmeasured)
+        check("dims/task-body-has-no-width", any("has no approved" in line for line in fired), f"{fired}")
+        # the same protocol with the whole map gone: the other shape of the same failure
+        gone = copy_of(ANCHORED)
+        gone["protocols"][key2].pop("dims")
+        fired = g.check_anchors(DECLARED, gone)
+        check("dims/whole-map-absent", any("no approved widths at all" in line for line in fired), f"{fired}")
+
+    if loaded_assets:
+        emptied = copy_of(ANCHORED)
+        asset = sorted(loaded_assets)[-1]
+        emptied["protocols"][dimmed]["dims"][asset] = {}
+        emptied["protocols"][dimmed]["dims_digest"] = g.dims_digest(emptied["protocols"][dimmed]["dims"])
+        fired = g.check_anchors(DECLARED, emptied)
+        check("dims/empty-asset-table", any("is not an approval" in line for line in fired), f"{fired}")
+
+    # a declared task the resolver cannot follow must be a refusal, not a smaller coverage set
+    drifting = copy_of(DECLARED)
+    victim = next(task for task, route in drifting["tasks"].items()
+                  if isinstance(route, dict) and route.get("protocol") == dimmed)
+    drifting["tasks"][victim] = {**drifting["tasks"][victim], "line": "no/such-line"}
+    fired = g.check_anchors(drifting, ANCHORED)
+    check("dims/unresolvable-task-refused", any("does not resolve to an asset" in line for line in fired), f"{fired}")
+
     # all-or-nothing needs a protocol that carries more than one width to be testable at all
-    multi = sorted(key for key, entry in ANCHORED["protocols"].items() if len(entry.get("dims") or {}) > 1)
+    multi = sorted(
+        key for key, entry in ANCHORED["protocols"].items()
+        if len((entry.get("dims") or {}).get(_first_asset(key), {})) > 1
+    )
     check("dims/a-multi-group-protocol-exists", bool(multi), "no multi-group width map to test the rule against")
     if multi:
         partial = copy_of(ANCHORED)
-        partial["protocols"][multi[0]]["dims"].pop(sorted(partial["protocols"][multi[0]]["dims"])[0])
+        inner = partial["protocols"][multi[0]]["dims"][_first_asset(multi[0])]
+        inner.pop(sorted(inner)[0])
         fires("dims/partial-map", "all or nothing", g.check_anchors(DECLARED, partial))
 
     # --- ordering: the case a dimension check would pass ------------------------------
