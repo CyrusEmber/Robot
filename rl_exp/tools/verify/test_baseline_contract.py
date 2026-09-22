@@ -5,6 +5,7 @@
 """Offline regressions for baseline fixed-window collection, judgement, and startup checks."""
 
 import ast
+import importlib
 import json
 import math
 import pathlib
@@ -12,10 +13,12 @@ import re
 import sys
 from types import SimpleNamespace as NS
 
+import yaml
+
 _REPO = pathlib.Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_REPO))
 import torch
-from ablation_harness import baseline_frames, baseline_metrics
+from ablation_harness import baseline_frames, baseline_metrics, loco_judge, metrics, record
 from rl_exp.tools.diagnose.diag_metrics import mesh_min_z, pad_point_clouds
 from rl_exp.tools.verify.baseline_runtime import joint_reset_errors, material_errors, termination_errors
 
@@ -561,7 +564,382 @@ def test_termination_injection_is_independent_of_wiring():
     assert termination_errors(env), "a contact term wired to a foot must fail the base injection"
 
 
+# --- the judge's criteria: kinds, boundaries, and the frozen case table -------------------------
+#
+# ablation_harness/judge_semantics.json pins each judge id to the cases that define it, and each
+# case to the verdict and gate outcomes it must produce. One frozen sample could not do this job: a
+# sample covers only the behaviour it happens to touch, so an edit outside that path would leave the
+# id unchanged while the semantics moved. The table is frozen by digest -- editing a block that
+# already shipped is red, so a changed criterion needs a NEW kind and a new id.
+#
+#     python rl_exp/tools/verify/test_baseline_contract.py --print-frozen
+#
+# prints the digests to paste after deliberately publishing a new id.
+V4_PROTOCOL = json.loads((_REPO / "ablation_harness/protocols/baseline_flat_v4.json").read_text())
+_SEMANTICS_PATH = _REPO / "ablation_harness" / "judge_semantics.json"
+_STEP_DT = 0.02  # every fixture below runs the protocol's 20 s window in 1000 steps
+
+
+def _fixture_plain(kw):
+    """A clean run on the command: every declared gate passes."""
+    return V4_PROTOCOL, build(V4_PROTOCOL, 1000, num_envs=2)
+
+
+def _fixture_tilt_hold(kw):
+    """The base tilted below the threshold for exactly ``seconds``, then upright."""
+    frames = max(1, int(round(kw["seconds"] / _STEP_DT)))
+
+    def tilt(step):
+        return torch.full((2,), 0.5 if step < frames else 1.0)
+
+    return V4_PROTOCOL, build(V4_PROTOCOL, 1000, num_envs=2, series={"tilt_cos": tilt})
+
+
+def _fixture_contact(kw):
+    """One frame with a non-foot body at (or just above) the declared load limit."""
+    # The criterion's own conversion, so "exactly at the limit" is exactly the same float.
+    limit = 1.0 / BODY_WEIGHT_N
+    fraction = limit if kw["fraction"] == "at_limit" else limit + 1e-3
+
+    def non_foot(step):
+        return torch.tensor([[fraction if step == 5 else 0.0, 0.0]] * 2)
+
+    return V4_PROTOCOL, build(V4_PROTOCOL, 1000, num_envs=2, series={"non_foot_fraction": non_foot})
+
+
+def _fixture_tracking_at_threshold(kw):
+    """Speed error and distance exactly at their thresholds (0.25 of the command, 0.75 of it).
+
+    Both numbers have to be exact in binary -- 1024 steps of a 20 s window, so the step is 5/256 s
+    and neither the commanded distance nor the measured one picks up a representation error. A
+    threshold case that lands on rounding tests the float, not the comparison. The distance is
+    summed over the window, which is why a 1000-step window cannot be used here: 1000 x 0.02 already
+    lands a few ulps off.
+    """
+    steps = 1024
+    dt = V4_PROTOCOL["episode_length_s"] / steps
+    protocol = json.loads(json.dumps(V4_PROTOCOL))
+    protocol["criteria"]["tracking"]["params"] = {"threshold": 0.25, "normalized": True}
+    protocol["criteria"]["displacement"]["params"] = {"threshold": 0.75, "normalized": True}
+
+    def velocity(step):
+        return torch.tensor([[1.5, 0.0, 0.0]] * 2)
+
+    def position(step):
+        return torch.tensor([[(step + 1) * 1.5 * dt, 0.0, 0.0]] * 2)
+
+    return protocol, build(protocol, steps, num_envs=2, series={"velocity_yaw": velocity, "pos": position})
+
+
+def _fixture_carrier_hold(kw):
+    """One body carrying at least the declared fraction for exactly ``seconds``."""
+    frames = max(1, int(round(kw["seconds"] / _STEP_DT)))
+
+    def non_foot(step):
+        return torch.tensor([[kw["fraction"] if step < frames else 0.0, 0.0]] * 2)
+
+    return V2_PROTOCOL, build(V2_PROTOCOL, 1000, num_envs=2, series={"non_foot_fraction": non_foot})
+
+
+def _fixture_carrier_alternating(kw):
+    """Two bodies taking turns for ``span_s``: each is loaded for single frames only.
+
+    This is the case the aggregation order decides. Body by body no run reaches two frames, so a
+    "one body held it" criterion would pass; the declared criterion merges the bodies first, so a
+    span at the declared dwell (0.5 s) is one sustained reading and the gate fails, while a span
+    just under it passes. ``test_carrier_aggregation_merges_bodies_before_time`` asserts the
+    per-body reading that makes the difference.
+    """
+    span = max(1, int(round(kw["span_s"] / _STEP_DT)))
+
+    def non_foot(step):
+        if step >= span:
+            return torch.zeros(2, 2)
+        row = [0.0, 0.0]
+        row[step % 2] = 0.9
+        return torch.tensor([row] * 2)
+
+    return V2_PROTOCOL, build(V2_PROTOCOL, 1000, num_envs=2, series={"non_foot_fraction": non_foot})
+
+
+def _fixture_mesh_at_threshold(kw):
+    """A body's lowest mesh vertex exactly at the declared floor."""
+    def mesh(step):
+        return torch.tensor([[-0.01, 0.5]] * 2)
+
+    return V2_PROTOCOL, build(V2_PROTOCOL, 1000, num_envs=2, series={"mesh_min_z": mesh})
+
+
+_LOCO_CACHE: dict = {}
+
+
+def _loco_protocol() -> dict:
+    """A fresh copy of the runnable locomotion protocol (v3; v4 is not unlocked until fingerprinted)."""
+    if "v3" not in _LOCO_CACHE:
+        _LOCO_CACHE["v3"] = _load_protocol_dict("locomotion_eval_v3.yaml")
+    return json.loads(json.dumps(_LOCO_CACHE["v3"]))
+
+
+def _fixture_loco_derivation(kw):
+    """The declared fall clause as the numbers the kernels are handed, overridden per case.
+
+    The floats are rounded to 9 decimals: ``cos`` comes from the platform's libm, and the last bits
+    of ``cos(radians(40))`` are not portable across machines. Rounding keeps the case stable
+    anywhere, at the cost of not seeing a change below 1e-9 -- the honest ceiling of a frozen
+    expectation that has to survive a machine swap.
+    """
+    protocol = _loco_protocol()
+    for key, value in kw.get("fall", {}).items():
+        protocol["metrics"]["fall"][key] = value
+    derived = loco_judge.derived_thresholds(protocol, stand_height_m=kw["stand_height_m"],
+                                           step_dt=kw["step_dt"])
+    return protocol, {"judge_id": loco_judge.JUDGE_ID,
+                      "tilt_cos_min": round(derived["tilt_cos_min"], 9),
+                      "clearance_min": round(derived["clearance_min"], 9),
+                      "sustain_steps": derived["sustain_steps"]}
+
+
+def _fixture_loco_fall(kw):
+    """The geometric fall predicate around the dwell, and the clearance branch beside it."""
+    steps, sustain = kw["window_steps"], kw["sustain_steps"]
+    tilt = torch.ones(steps, 1)
+    tilt[kw["bad_start"]:kw["bad_start"] + kw["bad_len"]] = 0.5  # below cos(40 deg) = 0.766
+    clearance = torch.full((steps, 1), kw["clearance"]) if "clearance" in kw else None
+    valid = torch.arange(steps).unsqueeze(1) <= kw["first_done"]
+    flag = metrics.fall_flags(tilt, clearance, 0.766044443118978, kw.get("clearance_min"),
+                              sustain, valid)
+    return _loco_protocol(), {"judge_id": loco_judge.JUDGE_ID, "fall": bool(flag[0])}
+
+
+def _fixture_loco_success(kw):
+    """Command success at the declared thresholds, which are strict on both axes."""
+    ok = metrics.success_mask(torch.tensor([[kw["lin_err"]]]), torch.tensor([[kw["ang_err"]]]), 0.5, 0.4)
+    return _loco_protocol(), {"judge_id": loco_judge.JUDGE_ID, "success": bool(ok[0, 0])}
+
+
+def _fixture_loco_energy(kw):
+    """Joint power from the implicit-PD reconstruction, against a hand-computed value.
+
+    The expectation is a hand calculation, so every input here is exact in binary: a case landing on
+    a rounding error would test the float rather than the formula (including the damping sign).
+    """
+    power = metrics.step_energy(
+        torch.tensor([[10.0, 20.0]]), torch.tensor([[1.0, 2.0]]),
+        torch.tensor([[0.5, -0.5]]), torch.tensor([[0.25, -0.25]]), torch.tensor([[1.0, -3.0]]),
+    )
+    return _loco_protocol(), {"judge_id": loco_judge.JUDGE_ID, "power_w": float(power[0])}
+
+
+def _fixture_loco_completion(kw):
+    """Completion over a 1 s window whose steps are exact in binary: the turn rate must not enter."""
+    steps, dt = 16, 0.0625
+    cmd = torch.tensor([[[kw["vx"], 0.0, kw["wz"]]]]).expand(steps, 1, 3).contiguous()
+    ratio = metrics.completion_ratio(torch.zeros(1, 3), torch.tensor([[kw["travelled"], 0.0, 0.0]]),
+                                     cmd, torch.ones(steps, 1, dtype=torch.bool), dt)
+    return _loco_protocol(), {"judge_id": loco_judge.JUDGE_ID, "completion": float(ratio[0])}
+
+
+_FIXTURES = {
+    "plain": _fixture_plain,
+    "tilt_hold": _fixture_tilt_hold,
+    "contact": _fixture_contact,
+    "tracking_at_threshold": _fixture_tracking_at_threshold,
+    "carrier_hold": _fixture_carrier_hold,
+    "carrier_alternating": _fixture_carrier_alternating,
+    "mesh_at_threshold": _fixture_mesh_at_threshold,
+    "loco_derivation": _fixture_loco_derivation,
+    "loco_fall": _fixture_loco_fall,
+    "loco_success": _fixture_loco_success,
+    "loco_energy": _fixture_loco_energy,
+    "loco_completion": _fixture_loco_completion,
+}
+
+
+def frozen_digests(spec: dict) -> dict:
+    """The digests that pin each id: its case block, and the semantics surface it can reach."""
+    out = {}
+    for judge_id, block in spec["ids"].items():
+        surface = importlib.import_module(block["module"]).semantics_surface()
+        pinned = {name: surface[name] for name in block["kinds"]}
+        block_without_digest = {key: value for key, value in block.items() if key != "frozen_sha256"}
+        out[judge_id] = {"kinds_sha256": record.digest(pinned),
+                         "frozen_sha256": record.digest(block_without_digest)}
+    return out
+
+
+def _matches(observed: dict, expected: dict, where: str = "") -> str | None:
+    """The first place an observation fails a (possibly nested) expectation, or ``None``."""
+    for key, want in expected.items():
+        got = observed.get(key)
+        spot = f"{where}{key}"
+        if isinstance(want, dict):
+            if not isinstance(got, dict):
+                return f"{spot}: expected a block, got {got!r}"
+            problem = _matches(got, want, where=f"{spot}.")
+            if problem is not None:
+                return problem
+        elif got != want:
+            return f"{spot}: {got!r}, not {want!r}"
+    return None
+
+
+def _drive_baseline(subject) -> dict:
+    """A baseline case's subject is a frames artifact; its observation is the verdict it earns."""
+    result = baseline_metrics.judge(subject)
+    return {"judge_id": result["judge"]["id"], "verdict": result["verdict"], "gates": result["gates"],
+            "invalid_reasons": result["invalid_reasons"]}
+
+
+def _drive_loco(subject) -> dict:
+    """A locomotion case builds its own observation: its kernels have no single verdict object."""
+    return subject
+
+
+_DRIVERS = {"baseline": _drive_baseline, "loco": _drive_loco}
+
+
+def test_judge_semantics_are_frozen_and_hold():
+    """Every id's cases, run against the id they are pinned to, must produce the frozen outcome."""
+    spec = json.loads(_SEMANTICS_PATH.read_text(encoding="utf-8"))
+    digests = frozen_digests(spec)
+    assert spec["ids"], "an empty table pins nothing"
+    for judge_id, block in spec["ids"].items():
+        module = importlib.import_module(block["module"])
+        assert getattr(module, block["constant"]) == judge_id, \
+            f"{judge_id}: {block['module']}.{block['constant']} says {getattr(module, block['constant'])!r}"
+        assert digests[judge_id]["kinds_sha256"] == block["kinds_sha256"], (
+            f"{judge_id}: the kind table it can reach changed. A published id keeps its kinds: a new "
+            "or reshaped criterion needs a new id, not a re-pin (spell the old kind out in the new one)")
+        assert digests[judge_id]["frozen_sha256"] == block["frozen_sha256"], (
+            f"{judge_id}: its case block changed in place. Publish a new id instead; the records that "
+            "already name this one point at the semantics it had")
+        protocol_name = _load_protocol_name(block["protocol_file"])
+        driver = _DRIVERS[block["driver"]]
+        for case_name, case in block["cases"].items():
+            protocol, subject = _FIXTURES[case["fixture"]](case["kw"])
+            assert protocol["name"] == protocol_name, \
+                f"{judge_id}/{case_name}: {protocol['name']} is not {protocol_name}"
+            observed = driver(subject)
+            assert observed["judge_id"] == judge_id, \
+                f"{case_name}: judged by {observed['judge_id']}, not {judge_id}"
+            problem = _matches(observed, case["expect"])
+            assert problem is None, f"{judge_id}/{case_name}: {problem} (observed {observed})"
+
+
+def _load_protocol_dict(file_name: str) -> dict:
+    """A protocol by file name; the two families spell theirs in JSON and YAML respectively."""
+    text = (_REPO / "ablation_harness" / "protocols" / file_name).read_text(encoding="utf-8")
+    return yaml.safe_load(text) if file_name.endswith((".yaml", ".yml")) else json.loads(text)
+
+
+def _load_protocol_name(file_name: str) -> str:
+    return _load_protocol_dict(file_name)["name"]
+
+
+def test_carrier_aggregation_merges_bodies_before_time():
+    """The declared order is "any body over the fraction, then the dwell", so taking turns counts.
+
+    Body by body the longest loaded run here is a single frame; merged across bodies it is the whole
+    span. A reader who wanted "one body held it alone" reads the same record to the opposite
+    verdict, which is why the order lives in the kind rather than in a protocol's spelling.
+    """
+    protocol, artifact = _fixture_carrier_alternating({"span_s": 0.5})
+    loaded = artifact["frames"]["non_foot_fraction"] >= protocol["gates"]["non_foot_load_fraction_lt"]
+    dwell = protocol["gates"]["non_foot_load_sustain_s"]
+    assert loaded.shape[-1] == 2 and bool(loaded.any()), loaded.shape
+    for body in range(loaded.shape[-1]):
+        alone = baseline_metrics._run_lengths(loaded[:, :, body]).max().item() * _STEP_DT
+        assert alone < dwell, f"body {body} alone holds it for {alone}s, at or above the {dwell}s dwell"
+    merged = baseline_metrics._run_lengths(loaded.any(dim=-1)).max().item() * _STEP_DT
+    assert merged >= dwell, merged
+    assert not baseline_metrics.judge(artifact)["gates"]["no_non_foot_carrier"]
+
+
+def test_v4_reproduces_v3_on_one_record():
+    """The migration proof: v4 renames the criteria and changes no number."""
+    artifact = build(V3_PROTOCOL, 1000, num_envs=2)
+    under_v3 = baseline_metrics.judge(artifact)
+    under_v4 = baseline_metrics.judge({**artifact, "protocol": V4_PROTOCOL})
+    assert under_v3["verdict"] == "pass", under_v3["gates"]
+    assert under_v4["verdict"] == under_v3["verdict"], (under_v4["invalid_reasons"], under_v3["invalid_reasons"])
+    assert under_v4["gates"] == under_v3["gates"], (under_v4["gates"], under_v3["gates"])
+    assert under_v4["metrics"] == under_v3["metrics"], "a rename must not move a measured number"
+
+
+def test_judge_identity_travels_with_the_verdict():
+    """A verdict names the reader that produced it, and legacy is a specific reader, not a shrug."""
+    assert baseline_metrics.judge(build(V4_PROTOCOL, 1000))["judge"] == {
+        "id": baseline_metrics.JUDGE_ID, "origin": "declared",
+        "protocol_name": "Baseline-Flat-v4", "protocol_version": 4}
+    for protocol in (PROTOCOL, V2_PROTOCOL, V3_PROTOCOL):
+        identity = baseline_metrics.judge(build(protocol, 1000))["judge"]
+        assert identity["id"] == baseline_metrics.LEGACY_JUDGE_ID, identity
+        assert identity["origin"] == "legacy" and identity["protocol_name"] == protocol["name"], identity
+
+
+def test_a_protocol_that_declares_nothing_readable_is_refused_not_defaulted():
+    """An unreadable criterion is invalid, never a silent fallback to older semantics."""
+    artifact = build(V4_PROTOCOL, 1000)
+
+    def judged(criteria):
+        protocol = json.loads(json.dumps(V4_PROTOCOL))
+        protocol["criteria"] = criteria
+        return baseline_metrics.judge({**artifact, "protocol": protocol})
+
+    base = V4_PROTOCOL["criteria"]
+    cases = {        "does not implement": {"tracking": {"kind": "tracking_v9", "params": {"threshold": 0.2, "normalized": True}}},
+        "does not accept": {"attitude": {"kind": "sustained_tilt_v1",
+                                        "params": {"threshold_cos": 0.766, "sustain_s": 0.5, "op": "lt"}}},
+        "is missing": {"attitude": {"kind": "sustained_tilt_v1", "params": {"threshold_cos": 0.766}}},
+        "not a known gate": {"no_such_axis": {"kind": "survival_v1", "params": {"threshold": 0.9}}},
+        "unset": {"attitude": {"kind": "sustained_tilt_v1",
+                              "params": {"threshold_cos": 0.766, "sustain_s": None}}},
+        "declares no gate": {},
+    }
+    for expected_reason, override in cases.items():
+        result = judged(override)
+        assert result["verdict"] == "invalid", (expected_reason, result["gates"])
+        assert any(expected_reason in reason for reason in result["invalid_reasons"]), \
+            (expected_reason, result["invalid_reasons"])
+    # The unmodified block still judges: the refusals above are about the block, not the record.
+    assert baseline_metrics.judge({**artifact, "protocol": V4_PROTOCOL})["verdict"] == "pass"
+    assert base["tracking"]["kind"] == "tracking_v1", "the base block is the one being perturbed above"
+
+
+def test_a_strays_protocol_without_criteria_is_refused_but_a_known_one_judges():
+    """The legacy reader is a whitelist by declared identity, not a fallback for anything old-looking."""
+    artifact = build(PROTOCOL, 1000)
+    stranger = {**artifact["protocol"], "name": "Baseline-Flat-v9", "version": 9}
+    result = baseline_metrics.judge({**artifact, "protocol": stranger})
+    assert result["verdict"] == "invalid", result["gates"]
+    assert any("declares no criteria" in reason for reason in result["invalid_reasons"]), result["invalid_reasons"]
+    assert result["judge"]["id"] == "unresolved", result["judge"]
+    assert baseline_metrics.judge(artifact)["verdict"] == "pass", "the known v1 protocol still judges"
+
+
+def test_the_legacy_reader_refuses_thresholds_it_cannot_read():
+    """An unknown key is not a gate: it is a protocol this reader cannot decide."""
+    unknown = json.loads(json.dumps(V2_PROTOCOL))
+    unknown["gates"]["some_new_axis_gt"] = 1.0
+    result = baseline_metrics.judge({**build(V2_PROTOCOL, 1000), "protocol": unknown})
+    assert result["verdict"] == "invalid" and any("no criterion for" in r for r in result["invalid_reasons"])
+
+    both = json.loads(json.dumps(V2_PROTOCOL))
+    both["gates"]["forward_mae_norm_lt"] = 0.2  # now it names an absolute and a normalized tracking error
+    result = baseline_metrics.judge({**build(V2_PROTOCOL, 1000), "protocol": both})
+    assert result["verdict"] == "invalid" and any("only one of them" in r for r in result["invalid_reasons"])
+
+    gap = json.loads(json.dumps(V2_PROTOCOL))
+    del gap["gates"]["tilt_sustain_s"]
+    result = baseline_metrics.judge({**build(V2_PROTOCOL, 1000), "protocol": gap})
+    assert result["verdict"] == "invalid" and any("names no tilt_sustain_s" in r for r in result["invalid_reasons"]), \
+        result["invalid_reasons"]
+
+
 def main():
+    if "--print-frozen" in sys.argv:
+        print(json.dumps(frozen_digests(json.loads(_SEMANTICS_PATH.read_text(encoding="utf-8"))), indent=2))
+        return
     # Import isolation has its own fresh-process suite entry.
     from rl_exp.tools.verify import test_baseline_mdp
 

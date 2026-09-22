@@ -16,9 +16,23 @@ Nothing here touches the simulator. The input is the record
 ``python -m ablation_harness.baseline_metrics <record> --protocol <other protocol>`` instead of
 another rollout -- and a changed verdict then has exactly one possible cause.
 
-A gate exists only when its threshold key is in the protocol, and then the column it reads is
-required: a protocol may not gate on a quantity the run never measured. That refusal is why the
-old single-file window could report 0 deg of tilt for a run that never measured tilt.
+A gate exists only when the protocol declares it, and then the column it reads is required: a
+protocol may not gate on a quantity the run never measured. That refusal is why the old single-file
+window could report 0 deg of tilt for a run that never measured tilt.
+
+**Where the criterion lives.** A criterion is a *named kind* plus that kind's closed parameter set
+(:data:`CRITERION_KINDS`), never a free combination of an operator, a unit, an aggregation and a
+threshold: a criterion assembled per protocol is a DSL, and what a reader needs a year later is a
+short list of names they can look up. So the comparison, its strictness, its unit conversion and its
+aggregation order are *inside* the kind -- ``non_foot_carrier_v1`` is "any body over the fraction,
+held for the dwell", and no protocol can reorder it into "this body held" by accident.
+
+**Two readers, declared apart.** :data:`JUDGE_ID` names the criteria reader;
+:data:`LEGACY_JUDGE_ID` names the threshold-key reader that judged ``Baseline-Flat-v1``/``v2``/``v3``.
+A protocol that declares no criteria is judged by the legacy reader only when its identity is one of
+:data:`LEGACY_PROTOCOLS`; anything else is refused rather than guessed at, so a new protocol file
+that loses a field fails instead of silently scoring under older semantics. Every verdict carries the
+judge identity that produced it, which is what makes a re-judged record attributable.
 """
 
 from __future__ import annotations
@@ -29,34 +43,287 @@ import pathlib
 
 import torch
 
-from ablation_harness import baseline_frames
+from ablation_harness import baseline_frames, record
 
 _BASE_COLUMNS = ("pos", "yaw", "velocity_yaw", "command_world", "terminated", "timeout")
 
-# The three gates the protocol names thresholds for by itself.
-_BASE_GATES = ("tracking", "displacement", "survival")
+#: The gates a protocol may declare, in reporting order. A name outside this set is refused: an
+#: unknown gate is a gate nobody reads.
+GATE_ORDER = (
+    "tracking",
+    "displacement",
+    "survival",
+    "attitude",
+    "no_non_foot_contact",
+    "no_non_foot_carrier",
+    "no_mesh_through_floor",
+)
 
-# gate -> (column, threshold key, sustain key or None, "min" or "max")
-# ``min``: the metric must stay at or above the threshold, so a breach is being below it.
-#
-# Two head-chain axes are declared here because the protocol family has two generations: v1/v2 gate
-# a *weight-bearing* reading (a fraction of body weight held for a dwell), v3 gates *contact* (above
-# 1 N on any frame), which is the criterion v2's training termination uses. A protocol declaring one
-# gets that gate; a protocol declaring both would get both, which is a deliberate possibility, not an
-# accident. The mesh-clearance gate exists for the same reason: v2 declared it, v3 reports it only.
-_GATED = {
-    "attitude": ("tilt_cos", "tilt_cos_min", "tilt_sustain_s", "min"),
-    "no_non_foot_carrier": ("non_foot_fraction", "non_foot_load_fraction_lt", "non_foot_load_sustain_s", "max"),
-    "no_non_foot_contact": ("non_foot_fraction", "non_foot_contact_load_n_gt", None, "max"),
-    "no_mesh_through_floor": ("mesh_min_z", "non_foot_mesh_min_z_gt", None, "min"),
+#: The identity of the criteria reader. Declared rather than derived from a file hash: a comment is
+#: not a semantic change, and a semantic change is exactly what this must make loud.
+#: ``rl_exp/tools/verify/check_judge_semantics.py`` freezes ``id -> kinds -> cases -> expectations``
+#: and refuses an in-place edit to a published id, so a changed criterion needs a new kind and a new
+#: id instead of an edit here.
+JUDGE_ID = "baseline-criteria-1"
+
+#: The identity of the pre-criteria reader. Spelled by mechanism, not by version: ``v1``/``v2``/``v3``
+#: are three declarations read by *one* implementation, and this names that implementation. Their
+#: protocol identity travels next to it, so "which thresholds" and "which reader" stay separable.
+LEGACY_JUDGE_ID = "legacy-baseline-threshold-keys-1"
+
+#: Protocols allowed to arrive without a ``criteria`` block, by declared identity (not by filename).
+LEGACY_PROTOCOLS = (("Baseline-Flat-v1", 1), ("Baseline-Flat-v2", 2), ("Baseline-Flat-v3", 3))
+
+#: kind -> {"params": exactly these, "columns": the record columns it reads}.
+#: The parameter set is closed in both directions: an extra key is refused (it would be a knob the
+#: kind ignores, i.e. a declaration that lies) and a missing one is refused (it would be a default
+#: nobody wrote down).
+CRITERION_KINDS = {
+    "tracking_v1": {"params": ("threshold", "normalized"), "columns": ()},
+    "displacement_v1": {"params": ("threshold", "normalized"), "columns": ()},
+    "survival_v1": {"params": ("threshold",), "columns": ()},
+    "sustained_tilt_v1": {"params": ("threshold_cos", "sustain_s"), "columns": ("tilt_cos",)},
+    "non_foot_contact_v1": {"params": ("limit_n", "eps"), "columns": ("non_foot_fraction",)},
+    "non_foot_carrier_v1": {"params": ("fraction", "sustain_s"), "columns": ("non_foot_fraction",)},
+    "mesh_clearance_v1": {"params": ("threshold_m",), "columns": ("mesh_min_z",)},
 }
 
 
+def _gate_tracking_v1(frames: dict, alive: torch.Tensor, dt: float, measured: dict, meta: dict,
+                      params: dict) -> bool:
+    """Absolute or band-relative forward speed error, strictly below the threshold."""
+    key = "forward_mae_norm" if params["normalized"] else "forward_mae_mps"
+    return measured[key] < params["threshold"]
+
+
+def _gate_displacement_v1(frames: dict, alive: torch.Tensor, dt: float, measured: dict, meta: dict,
+                          params: dict) -> bool:
+    """Distance travelled, strictly above the threshold (absolute meters, or the commanded fraction)."""
+    key = "displacement_frac" if params["normalized"] else "forward_displacement_m"
+    return measured[key] > params["threshold"]
+
+
+def _gate_survival_v1(frames: dict, alive: torch.Tensor, dt: float, measured: dict, meta: dict,
+                      params: dict) -> bool:
+    """Fraction of envs that reached the window's end without terminating, strictly above threshold."""
+    return measured["first_episode_timeout_fraction"] > params["threshold"]
+
+
+def _gate_sustained_tilt_v1(frames: dict, alive: torch.Tensor, dt: float, measured: dict, meta: dict,
+                            params: dict) -> bool:
+    """The worst posture of the episode, and only while it is sustained: ``cos(tilt) < threshold``."""
+    breach = (frames["tilt_cos"] < params["threshold_cos"]) & alive
+    return not bool(_sustained(breach, dt, params["sustain_s"]).any())
+
+
+def _non_foot_contact_breach(frames: dict, alive: torch.Tensor, meta: dict, params: dict) -> torch.Tensor:
+    """(T, N, B) bool: this body is above the load limit on this frame, inside the first episode.
+
+    Shared by the criterion that decides on it and the diagnostic that reports it, so the number a
+    reviewer reads and the number the verdict came from are one computation.
+    """
+    weight_n = float(meta["body_weight_n"])
+    limit = params["limit_n"] / weight_n  # the recorded column is a fraction of body weight
+    return (frames["non_foot_fraction"] > limit + params["eps"]) & alive.unsqueeze(-1)
+
+
+def _gate_non_foot_contact_v1(frames: dict, alive: torch.Tensor, dt: float, measured: dict, meta: dict,
+                              params: dict) -> bool:
+    """Any frame with a non-foot body above the load limit: the training termination's criterion.
+
+    ``eps`` is carried by the protocol rather than written here because the boundary case -- a body
+    sitting exactly at the limit -- is a decision, and a decision belongs in the frozen declaration.
+    """
+    return not bool(_non_foot_contact_breach(frames, alive, meta, params).any())
+
+
+def _gate_non_foot_carrier_v1(frames: dict, alive: torch.Tensor, dt: float, measured: dict, meta: dict,
+                              params: dict) -> bool:
+    """A *weight-bearing* contact held for a dwell, aggregated **across bodies before time**.
+
+    The order is the criterion, not an implementation detail: ``any(dim=-1)`` collapses the bodies
+    first, so bodies taking turns carrying the weight accumulate into one sustained reading. A
+    reader who wants "one body held it alone" needs a different kind, because that is a different
+    observation about the robot.
+    """
+    breach = (frames["non_foot_fraction"] >= params["fraction"]).any(dim=-1) & alive
+    return not bool(_sustained(breach, dt, params["sustain_s"]).any())
+
+
+def _gate_mesh_clearance_v1(frames: dict, alive: torch.Tensor, dt: float, measured: dict, meta: dict,
+                            params: dict) -> bool:
+    """Every body's lowest mesh vertex above the threshold on every frame: no dwell, no tolerance."""
+    clearance = _keep(frames["mesh_min_z"], alive, float("inf")).amin(dim=0)  # (N, B)
+    return bool((clearance > params["threshold_m"]).all())
+
+
+#: kind -> the function that decides it. One dispatch table, so a protocol names a criterion and the
+#: judge has exactly one place to look it up.
+CRITERIA = {
+    "tracking_v1": _gate_tracking_v1,
+    "displacement_v1": _gate_displacement_v1,
+    "survival_v1": _gate_survival_v1,
+    "sustained_tilt_v1": _gate_sustained_tilt_v1,
+    "non_foot_contact_v1": _gate_non_foot_contact_v1,
+    "non_foot_carrier_v1": _gate_non_foot_carrier_v1,
+    "mesh_clearance_v1": _gate_mesh_clearance_v1,
+}
+
+
+def _validate_params(gate: str, kind: str, params) -> tuple[dict, list[str]]:
+    """The kind's parameters, or why they are not a criterion this judge can read."""
+    if not isinstance(params, dict):
+        return {}, [f"{gate} ({kind}): params must be an object, got {type(params).__name__}"]
+    reasons = []
+    unknown = sorted(set(params) - set(CRITERION_KINDS[kind]["params"]))
+    if unknown:
+        reasons.append(f"{gate} ({kind}) carries {unknown}, which the kind does not accept")
+    missing = sorted(set(CRITERION_KINDS[kind]["params"]) - set(params))
+    if missing:
+        reasons.append(f"{gate} ({kind}) is missing {missing}")
+    if reasons:
+        return {}, reasons
+    blanks = sorted(name for name, value in params.items() if value is None)
+    if blanks:
+        return {}, [f"{gate} ({kind}) leaves {blanks} unset: a criterion with a missing number is "
+                    "not a weaker criterion, it is an unreadable one"]
+    return dict(params), []
+
+
+def _criteria_plan(protocol: dict) -> tuple[dict, list[str]]:
+    """The declared ``criteria`` block as ``gate -> (kind, params)``, or why it cannot be read."""
+    declared = protocol["criteria"]
+    if not isinstance(declared, dict) or not declared:
+        return {}, ["the criteria block is empty: a protocol that declares no gate decides nothing"]
+    plan, reasons = {}, []
+    for gate, spec in declared.items():
+        if gate not in GATE_ORDER:
+            reasons.append(f"the criteria block declares {gate}, which is not a known gate")
+            continue
+        if not isinstance(spec, dict) or set(spec) != {"kind", "params"}:
+            spelled = sorted(spec) if isinstance(spec, dict) else type(spec).__name__
+            reasons.append(f"{gate}: a criterion is {{kind, params}}, got {spelled}")
+            continue
+        kind = spec["kind"]
+        if kind not in CRITERION_KINDS:
+            reasons.append(f"{gate} declares kind {kind!r}, which this judge does not implement")
+            continue
+        params, param_reasons = _validate_params(gate, kind, spec["params"])
+        reasons.extend(param_reasons)
+        if not param_reasons:
+            plan[gate] = (kind, params)
+    return plan, reasons
+
+
+#: Legacy threshold key -> the criterion it stands for, and the keys it consumes. Spelled out rather
+#: than inferred from the key's name: a key this table does not know is refused, so a protocol that
+#: quietly gains a gate keeps failing loudly instead of having the gate ignored.
+_LEGACY_KEYS = {
+    "forward_mae_norm_lt": "tracking",
+    "forward_mae_mps_lt": "tracking",
+    "displacement_frac_gt": "displacement",
+    "forward_displacement_m_gt": "displacement",
+    "first_episode_timeout_fraction_gt": "survival",
+    "tilt_cos_min": "attitude",
+    "tilt_sustain_s": "attitude",
+    "non_foot_contact_load_n_gt": "no_non_foot_contact",
+    "non_foot_load_fraction_lt": "no_non_foot_carrier",
+    "non_foot_load_sustain_s": "no_non_foot_carrier",
+    "non_foot_mesh_min_z_gt": "no_mesh_through_floor",
+}
+
+
+def _legacy_plan(protocol: dict) -> tuple[dict, list[str]]:
+    """The threshold-key readings of ``v1``/``v2``/``v3`` as the criteria they always meant."""
+    t = protocol["gates"]
+    plan, reasons = {}, []
+
+    def pick(gate: str, kind: str, alternatives: dict, companions: dict):
+        spelled = {key: alternatives[key] for key in alternatives if key in t}
+        if len(spelled) > 1:
+            reasons.append(f"the thresholds name both {' and '.join(sorted(spelled))} for {gate}: "
+                           "only one of them is the criterion")
+            return
+        if not spelled:
+            return
+        params = dict(next(iter(spelled.values())))
+        for key, param in companions.items():
+            if key not in t:
+                reasons.append(f"{gate} names no {key}: the reading it gates cannot be measured "
+                               "without it, and a missing threshold is not a weaker criterion")
+                return
+            params[param] = t[key]
+        params, param_reasons = _validate_params(gate, kind, params)
+        reasons.extend(param_reasons)
+        if not param_reasons:
+            plan[gate] = (kind, params)
+
+    pick("tracking", "tracking_v1",
+         {"forward_mae_norm_lt": {"threshold": t.get("forward_mae_norm_lt"), "normalized": True},
+          "forward_mae_mps_lt": {"threshold": t.get("forward_mae_mps_lt"), "normalized": False}}, {})
+    pick("displacement", "displacement_v1",
+         {"displacement_frac_gt": {"threshold": t.get("displacement_frac_gt"), "normalized": True},
+          "forward_displacement_m_gt": {"threshold": t.get("forward_displacement_m_gt"), "normalized": False}}, {})
+    pick("survival", "survival_v1",
+         {"first_episode_timeout_fraction_gt": {"threshold": t.get("first_episode_timeout_fraction_gt")}}, {})
+    pick("attitude", "sustained_tilt_v1", {"tilt_cos_min": {"threshold_cos": t.get("tilt_cos_min")}},
+         {"tilt_sustain_s": "sustain_s"})
+    pick("no_non_foot_contact", "non_foot_contact_v1",
+         {"non_foot_contact_load_n_gt": {"limit_n": t.get("non_foot_contact_load_n_gt"), "eps": 1e-9}}, {})
+    pick("no_non_foot_carrier", "non_foot_carrier_v1",
+         {"non_foot_load_fraction_lt": {"fraction": t.get("non_foot_load_fraction_lt")}},
+         {"non_foot_load_sustain_s": "sustain_s"})
+    pick("no_mesh_through_floor", "mesh_clearance_v1",
+         {"non_foot_mesh_min_z_gt": {"threshold_m": t.get("non_foot_mesh_min_z_gt")}}, {})
+
+    leftover = sorted(set(t) - set(_LEGACY_KEYS))
+    if leftover:
+        reasons.append(f"the protocol gates on {leftover}, which this reader has no criterion for")
+    return plan, reasons
+
+
+def judge_plan(protocol: dict) -> tuple[dict, str, list[str]]:
+    """``(gate -> (kind, params), origin, reasons)`` -- how this protocol must be judged.
+
+    ``origin`` is ``declared`` (the protocol names its criteria), ``legacy`` (it is one of the
+    protocols allowed to arrive without them) or ``unresolved`` (neither -- refused, because judging
+    it would mean guessing which criterion was meant).
+    """
+    if "criteria" in protocol:
+        plan, reasons = _criteria_plan(protocol)
+        return plan, "declared", reasons
+    identity = (protocol.get("name"), protocol.get("version"))
+    if identity not in LEGACY_PROTOCOLS:
+        return {}, "unresolved", [
+            f"{identity[0]!r} v{identity[1]} declares no criteria and is not one of the protocols "
+            f"allowed to omit them ({[f'{n} v{v}' for n, v in LEGACY_PROTOCOLS]}): judging it would "
+            "guess at the criterion"
+        ]
+    plan, reasons = _legacy_plan(protocol)
+    return plan, "legacy", reasons
+
+
+def semantics_surface() -> dict:
+    """What this judge's criteria can reach, for the frozen case table to pin by digest."""
+    return CRITERION_KINDS
+
+
+def judge_identity(protocol: dict) -> dict:
+    """Which reader decided (or would decide) this protocol, and which protocol was read."""
+    _, origin, _ = judge_plan(protocol)
+    reader = {"declared": JUDGE_ID, "legacy": LEGACY_JUDGE_ID}.get(origin, "unresolved")
+    return {
+        "id": reader,
+        "origin": origin,
+        "protocol_name": protocol.get("name"),
+        "protocol_version": protocol.get("version"),
+    }
+
+
 def gate_names(protocol: dict) -> list[str]:
-    """The gates this protocol decides: the base three plus every gated column it names."""
-    return list(_BASE_GATES) + [
-        name for name, (_, key, _, _) in _GATED.items() if key in protocol["gates"]
-    ]
+    """The gates this protocol decides, in :data:`GATE_ORDER`; empty when it cannot be read."""
+    plan, _, _ = judge_plan(protocol)
+    return [gate for gate in GATE_ORDER if gate in plan]
 
 
 def command_box(protocol: dict) -> list[tuple[float, float]]:
@@ -115,7 +382,10 @@ def _contract_reasons(artifact: dict) -> list[str]:
         return [f"the record is missing {missing}: frame 0 is already one step in, so the episode's "
                 "initial state cannot be recovered from it"]
     step_dt = meta.get("step_dt")
-    reasons = []
+    # The protocol is read before the record is measured: a criterion this judge cannot resolve
+    # makes every number below unreadable, whatever shape they are in.
+    plan, _, plan_reasons = judge_plan(protocol)
+    reasons = list(plan_reasons)
     # The window's length is a property of the record AND of the protocol, and the verdict is only
     # meaningful where the two agree: 1000 frames of a 20 s protocol is a 20 s window, 1000 frames
     # of a 40 s protocol is half of one.
@@ -141,10 +411,11 @@ def _contract_reasons(artifact: dict) -> list[str]:
     for name in _BASE_COLUMNS:
         if name not in frames:
             reasons.append(f"the record has no {name}: it is not a baseline fixed-window record")
-    for gate, (column, key, _, _) in _GATED.items():
-        if key in protocol["gates"] and column not in frames:
-            reasons.append(f"the protocol gates {gate} on {column}, but the record never measured it: "
-                           "unmeasured is unknown, and unknown is not a pass")
+    for gate, (kind, _) in plan.items():
+        for column in CRITERION_KINDS[kind]["columns"]:
+            if column not in frames:
+                reasons.append(f"the protocol gates {gate} through {kind}, which reads {column}, but the "
+                               "record never measured it: unmeasured is unknown, and unknown is not a pass")
     if reasons:
         return reasons
     short = sorted(name for name in frames if len(frames[name]) != steps)
@@ -202,8 +473,10 @@ def _command_reasons(protocol: dict, frames: dict) -> list[str]:
 def _data_reasons(artifact: dict, alive: torch.Tensor) -> list[str]:
     """Why these numbers cannot support a verdict (empty when they can)."""
     protocol, frames = artifact["protocol"], artifact["frames"]
+    plan, _, _ = judge_plan(protocol)
     reasons = []
-    needed = list(_BASE_COLUMNS) + [col for col, key, _, _ in _GATED.values() if key in protocol["gates"]]
+    read = [column for kind, _ in plan.values() for column in CRITERION_KINDS[kind]["columns"]]
+    needed = list(_BASE_COLUMNS) + [name for name in read if name not in _BASE_COLUMNS]
     for name in needed:
         bad = int((~torch.isfinite(frames[name])).sum())
         if bad:
@@ -211,7 +484,8 @@ def _data_reasons(artifact: dict, alive: torch.Tensor) -> list[str]:
     empty = int((alive.sum(dim=0) == 0).sum())
     if empty:
         reasons.append(f"{empty} env(s) never contributed a frame inside their first episode")
-    if "forward_mae_norm_lt" in protocol["gates"]:
+    tracking = plan.get("tracking")
+    if tracking is not None and tracking[1]["normalized"]:
         low = command_box(protocol)[0][0]
         if abs(low) < 1e-6:
             reasons.append("the declared command box includes 0 m/s, where a normalized tracking "
@@ -223,7 +497,8 @@ def _score(artifact: dict, alive: torch.Tensor) -> dict:
     """The gates, the metrics behind them, and the per-env evidence."""
     protocol, frames, axes = artifact["protocol"], artifact["frames"], artifact.get("axes", {})
     steps, dt = artifact["meta"]["steps"], artifact["meta"]["step_dt"]
-    thresholds = protocol["gates"]
+    plan, _, _ = judge_plan(protocol)
+    reporting = set(protocol.get("report_only", ()))
     valid = alive.sum(dim=0)
     coverage = valid.clamp_min(1)
 
@@ -261,27 +536,34 @@ def _score(artifact: dict, alive: torch.Tensor) -> dict:
         "first_episode_timeout_fraction": survived.to(torch.float32).mean().item(),
         "command_mps_mean": episode_mean(command).mean().item(),
     }
+    passed: dict[str, bool] = {}
+
+    def decide(gate: str) -> None:
+        """The one place a verdict comes from: the gate's declared kind decides it."""
+        kind, params = plan[gate]
+        passed[gate] = CRITERIA[kind](frames, alive, dt, measured, artifact["meta"], params)
+
     # An absolute MAE asks "did it hold this number"; a normalized one asks "did it hold the band
     # it was given", which is the only question a 1-3 m/s task can answer. Frames after the end
     # score 1.0 -- standing still while commanded to move is the worst normalized error there is.
-    if "forward_mae_norm_lt" in thresholds:
+    tracking = plan.get("tracking")
+    if tracking is not None and tracking[1]["normalized"]:
         norm_error = torch.where(alive, (frames["velocity_yaw"][:, :, 0] - command).abs()
                                  / command.clamp_min(1e-6), 1.0)
         measured["forward_mae_norm"] = (norm_error.sum(dim=0) / steps).mean().item()
-        passed = {"tracking": measured["forward_mae_norm"] < thresholds["forward_mae_norm_lt"]}
-    else:
-        passed = {"tracking": measured["forward_mae_mps"] < thresholds["forward_mae_mps_lt"]}
+    if "tracking" in plan:
+        decide("tracking")
     # Same idea for distance: against what the issued commands asked for, over the whole declared
     # window -- a shorter denominator would forgive a policy that stopped after five seconds.
     expected_m = (command * dt).sum(dim=0)
     measured["expected_displacement_m"] = expected_m.mean().item()
-    if "displacement_frac_gt" in thresholds:
+    displacement_gate = plan.get("displacement")
+    if displacement_gate is not None and displacement_gate[1]["normalized"]:
         measured["displacement_frac"] = (displacement / expected_m.clamp_min(1e-6)).mean().item()
-        passed["displacement"] = measured["displacement_frac"] > thresholds["displacement_frac_gt"]
-    else:
-        passed["displacement"] = measured["forward_displacement_m"] > thresholds["forward_displacement_m_gt"]
-    passed["survival"] = (measured["first_episode_timeout_fraction"]
-                          > thresholds["first_episode_timeout_fraction_gt"])
+    if "displacement" in plan:
+        decide("displacement")
+    if "survival" in plan:
+        decide("survival")
     yaw_drift = torch.atan2(torch.sin(frames["yaw"] - start_yaw), torch.cos(frames["yaw"] - start_yaw)).abs()
     diagnostics = {
         "lateral_speed_abs_mps": episode_mean(frames["velocity_yaw"][:, :, 1].abs()).mean().item(),
@@ -291,12 +573,12 @@ def _score(artifact: dict, alive: torch.Tensor) -> dict:
     }
 
     # -- attitude: the WORST posture of the episode, and only while it is sustained --
-    if "tilt_cos_min" in thresholds:
+    if "attitude" in plan or "tilt_max_deg" in reporting:
         worst_cos = _keep(frames["tilt_cos"], alive, float("inf")).min(dim=0).values
         measured["tilt_max_deg"] = worst_cos.clamp(-1.0, 1.0).acos().max().rad2deg().item()
         diagnostics["tilt_max_deg"] = measured["tilt_max_deg"]
-        breach = (frames["tilt_cos"] < thresholds["tilt_cos_min"]) & alive
-        passed["attitude"] = not bool(_sustained(breach, dt, thresholds["tilt_sustain_s"]).any())
+    if "attitude" in plan:
+        decide("attitude")
 
     # -- per-body readings: always reported, gated only where the protocol says so ---
     # The record carries these whatever the protocol does with them, so a protocol that only
@@ -313,25 +595,22 @@ def _score(artifact: dict, alive: torch.Tensor) -> dict:
 
         # v3: contact is the criterion, because it is the training termination's criterion -- one
         # frame above the limit is already a body using the ground as support.
-        if "non_foot_contact_load_n_gt" in thresholds:
-            limit = thresholds["non_foot_contact_load_n_gt"] / weight_n  # the column is a fraction
-            breach = (fractions > limit + 1e-9) & alive.unsqueeze(-1)
-            passed["no_non_foot_contact"] = not bool(breach.any())
+        if "no_non_foot_contact" in plan:
+            decide("no_non_foot_contact")
             # Per body, summed over envs and the window: "how much of this rollout was this body
             # using the ground for", which is the next thing a reviewer asks when the gate trips.
+            breach = _non_foot_contact_breach(frames, alive, artifact["meta"], plan["no_non_foot_contact"][1])
             diagnostics["non_foot_contact_frames"] = breach.sum(dim=(0, 1)).tolist()
         # v1/v2: the same reading, gated as weight-bearing sustained for a dwell.
-        if "non_foot_load_fraction_lt" in thresholds:
-            breach = (fractions >= thresholds["non_foot_load_fraction_lt"]).any(dim=-1) & alive
-            passed["no_non_foot_carrier"] = not bool(
-                _sustained(breach, dt, thresholds["non_foot_load_sustain_s"]).any())
+        if "no_non_foot_carrier" in plan:
+            decide("no_non_foot_carrier")
 
     if "mesh_min_z" in frames:
         clearance = _keep(frames["mesh_min_z"], alive, float("inf")).amin(dim=0)  # (N, B)
         measured["non_foot_mesh_min_z_m"] = clearance.min().item()
         diagnostics["non_foot_mesh_min_z_m"] = clearance.amin(dim=0).tolist()
-        if "non_foot_mesh_min_z_gt" in thresholds:
-            passed["no_mesh_through_floor"] = bool((clearance > thresholds["non_foot_mesh_min_z_gt"]).all())
+        if "no_mesh_through_floor" in plan:
+            decide("no_mesh_through_floor")
 
     # -- per-foot readings are diagnostics: a gait is described, not gated, here ----
     if "foot_contact" in frames:
@@ -366,9 +645,12 @@ def judge(artifact: dict) -> dict:
             frames, their axis labels, the protocol, and the run's meta.
     Returns:
         ``verdict`` (``invalid`` / ``fail`` / ``pass``), ``invalid_reasons``, ``gates`` (``None``
-        where unjudged), ``metrics``, ``diagnostics`` and the per-env evidence.
+        where unjudged), ``metrics``, ``diagnostics``, the per-env evidence and ``judge`` -- the
+        identity of the reader that decided, so a re-judged record says *who* re-judged it.
     """
-    names = gate_names(artifact["protocol"])
+    protocol = artifact["protocol"]
+    names = gate_names(protocol)
+    identity = judge_identity(protocol)
     reasons = _contract_reasons(artifact)
     alive = None
     if not reasons:
@@ -379,17 +661,23 @@ def judge(artifact: dict) -> dict:
         return {
             "verdict": "invalid",
             "invalid_reasons": reasons,
+            "judge": identity,
             "gates": {name: None for name in names},
             "metrics": {},
             "diagnostics": {},
             "per_env": {},
             "axes": artifact.get("axes", {}),
         }
-    return _score(artifact, alive)
+    return {**_score(artifact, alive), "judge": identity}
 
 
 def main() -> None:
-    """Re-judge a saved record without re-running physics."""
+    """Re-judge a saved record without re-running physics.
+
+    The output names the judge and the protocol file it read. Re-judging is the one operation whose
+    whole point is that the criterion may differ from the run's own, so a verdict that did not say
+    which criterion produced it would be a number nobody could attribute.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("record", type=pathlib.Path, help="a baseline_frames record (.pt)")
     parser.add_argument("--protocol", type=pathlib.Path,
@@ -399,8 +687,10 @@ def main() -> None:
     if args.protocol:
         artifact["protocol"] = json.loads(args.protocol.read_text(encoding="utf-8"))
     result = judge(artifact)
-    print(json.dumps({key: value for key, value in result.items() if key != "axes"}, indent=2,
-                     ensure_ascii=False))
+    payload = {key: value for key, value in result.items() if key != "axes"}
+    payload["protocol_file"] = str(args.protocol) if args.protocol else "embedded in the record"
+    payload["protocol_digest"] = record.file_sha256(args.protocol) if args.protocol else None
+    print(json.dumps(payload, indent=2, ensure_ascii=False))
 
 
 if __name__ == "__main__":

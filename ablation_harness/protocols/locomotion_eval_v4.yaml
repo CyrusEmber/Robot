@@ -1,0 +1,84 @@
+# Locomotion-Eval-v4 -- frozen evaluation protocol contract.
+# 落库即冻结,只读。语义改动(时间线/阈值/地形/DR/指标口径/采样帧) = 新建 locomotion_eval_vN.yaml。
+# 详见 skill: E:\IsaacLab\.codemaker\skills\tool\isaaclab-eval-harness\SKILL.md
+#
+# 相对 v3 的唯一新增 = **套件指纹锁定(suite_expected)**,数值口径、时间线、DR、套件选择全部照抄 v3。
+#   v3 的协议文件只写 `suite: lizard_suite_v2`,而套件内容与 SUITE_SEED 住在 suites.py 里:
+#   协议摘要(eval_protocol.digest = 该 yaml 的 sha256)因此**不锁地形**,两个都自称 v3 的 run
+#   可以站在不同地面上,只能靠 record 里的 suite.digest / geometry_digest 事后发现。
+#   v4 把预期指纹写进协议本身,运行前核对,不匹配即拒跑:
+#     步骤一 cfg_digest 在 gym.make **之前**核(套件由本仓 suites.py 构造,可离线算)
+#     步骤二 geometry_digest 在地形生成后、rollout **之前**核(网格由引擎生成,只有生成后才有)
+#   三态而非二态:几何摘要不同 + **环境不同** ⇒ unknown(换引擎/换卡不是改协议),只有环境相同
+#   而几何不同才判 mismatch。否则一次机器迁移会被误报成协议变更。
+#
+# 未变(照抄 v3): 命令时间线 / 阈值 / DR 定义 / 各指标口径 / 采样帧 / 套件选择(lizard_suite_v2)。
+# v1/v2/v3 冻结不动,其记录不得与 v4 混表。
+
+name: Locomotion-Eval-v4
+version: 4
+supersedes: locomotion_eval_v3.yaml
+
+# episode 与命令时间线(命令脚本与指标切窗同源,永不分家)
+episode_length_s: 30.0
+command_timeline:
+  - {t: 0.0,  vx: 0.5, vy: 0.0, wz: 0.0}
+  - {t: 5.0,  vx: 1.0, vy: 0.0, wz: 0.0}
+  - {t: 10.0, vx: 1.5, vy: 0.0, wz: 0.0}
+  - {t: 15.0, vx: 1.0, vy: 0.0, wz: 0.5}
+  - {t: 20.0, vx: 1.0, vy: 0.0, wz: -0.5}
+  - {t: 25.0, vx: 0.0, vy: 0.0, wz: 0.0}   # stop 段 -> 停车超调指标
+
+modes: [nominal, robust]
+
+# robust: 固定 seed 的 DR(复用任务自带 DR cfg,跨 run 同一组实现值) + recovery push
+robust:
+  dr: fixed_seed
+  recovery_push:
+    t: 12.0          # 冲击时刻 [s]
+    kick_mps: 4.0    # 水平冲击幅值 [m/s], 72kg 蜥蜴尺度
+    direction: fixed_per_env   # 每 env 固定方向(eval seed 决定)
+
+# 指标口径(冻结,与 v3 逐字相同)
+metrics:
+  tracking_lin_threshold_mps: 0.5
+  tracking_ang_threshold_radps: 0.4
+  fall:
+    tilt_deg: 40.0
+    base_height_ratio: 0.6
+    sustain_s: 0.5
+  recovery:
+    threshold_mps: 0.25
+    sustain_s: 0.5
+  energy:
+    normalize: per_meter
+
+# 地形套件(suites.py 提供构造;列序 == LIZARD_SUITE_V2_NAMES)
+suite: lizard_suite_v2
+suite_layout:
+  num_rows: 1
+  num_cols: 9
+  envs_per_terrain: 8
+
+# 套件指纹(批注后只读)。cfg_digest 是本仓 suites.py 构造出的 importer cfg 的快照摘要,
+# 覆盖全部 sub_terrains 与 SUITE_SEED;geometry_digest 是**实际生成结果**的逐格摘要,
+# 覆盖生成器实现;geometry_env 是 geometry_digest 有效的那套环境,换环境 ⇒ unknown 而非 mismatch。
+# 三个值由 `eval.py --print-suite-fingerprint` 打印一次后**人工粘贴**(闸门不自动写:
+# 自动重算等于把它刚产生的值当成标准)。本块于 2026-09-22 在 RTX 3060 Ti 上真跑批注;
+# 其 geometry_digest 与既有 v3 记录逐字相同 —— 同套件同种子在不同协议版本下是同一块地面。
+suite_expected:
+  name: lizard_suite_v2
+  cfg_digest: c0d7173472837fe108562b10a382924b00130b9cc7625200b321ad0dd5ff5149
+  geometry_digest: sha256:1fc13fa2f96a83734aa4471c504af7da4fbd5a2f9276ac7339f689c729d2c9de
+  geometry_env:
+    sim_version: "6.0.0.1"
+    physx_version: "6.0.0.1"
+    numpy_version: "2.5.2"
+    warp_version: "1.13.0"
+    torch_version: "2.10.0+cu128"
+    gpu: "NVIDIA GeForce RTX 3060 Ti"
+    gpu_compute_capability: "8.6"
+    git_rev_isaaclab: "28a37cecdd43"
+
+# latency 注入尚未实现(PLAN.md 挂账 #6): robust 模式下 latency 指标记 N/A
+latency: not_available

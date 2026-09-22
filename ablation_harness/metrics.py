@@ -14,6 +14,27 @@ from __future__ import annotations
 
 import torch
 
+#: The identity of these kernels, spelled here and carried into every record that was scored with
+#: them. The locomotion side has no separate judge module -- ``eval.py`` calls these primitives and
+#: derives the thresholds itself -- so the criterion's identity has two halves and both are named:
+#: this one for the formulas below (the geometric fall predicate, the sustained-window rule, the
+#: energy integration, the completion ratio), and ``eval.py``'s ``DERIVATION_ID`` for the
+#: threshold arithmetic that feeds them. Bump a half when its formulas change; a reader comparing
+#: two numbers must be able to see they were not scored by the same rule.
+METRICS_ID = "loco-metrics-1"
+
+#: The kernels :data:`METRICS_ID` covers, so the id names a set rather than a promise.
+METRIC_KERNELS = (
+    "tracking_errors",
+    "success_mask",
+    "step_energy",
+    "fall_flags",
+    "sustained_any",
+    "completion_ratio",
+    "stop_overshoot",
+    "summarize_segment",
+)
+
 
 def tracking_errors(lin_vel_b: torch.Tensor, ang_vel_b: torch.Tensor, cmd: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     """Velocity tracking errors against the command.

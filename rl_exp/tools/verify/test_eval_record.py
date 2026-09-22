@@ -466,6 +466,72 @@ def test_record_module_cannot_consume_the_random_stream() -> None:
         assert token not in source, f"record.py must not reach for {token}"
 
 
+# --- the table's conditions (Step 3.2d): what may share one scoreboard ---------------------------
+#
+# The summary is what people read instead of the records, so it is where a row whose ground,
+# protocol, judge or assets moved would otherwise sit next to its neighbours as if comparable.
+
+
+def _twin(**overrides) -> dict:
+    """A second record of the same batch, with the named fields replaced."""
+    rec = _record()
+    rec["run"]["run_id"] = "Lizard-Rough-v14_zero_nominal_seed123"
+    for path, value in overrides.items():
+        section, _, field = path.partition(".")
+        rec[section][field] = value
+    return rec
+
+
+def test_a_scoreboard_may_compare_different_models():
+    """The checkpoint is the variable a table compares, so it is not a condition.
+
+    Conditions are deliberately not the binding set: requiring the checkpoint equal would refuse
+    every legitimate cross-model table, which is the one thing a scoreboard exists to show.
+    """
+    a, b = _record(), _twin()
+    a["checkpoint"] = {"sha256": "sha256:model-a"}
+    b["checkpoint"] = {"sha256": "sha256:model-b"}
+    assert record.conditions_conflict(a, b)["conflicts"] == {}, record.conditions_conflict(a, b)
+    assert record.compare(a, b)["verdict"] == "not_comparable", "the binding set still separates them"
+
+
+def test_a_moved_condition_keeps_two_rows_out_of_one_table():
+    a, b = _record(), _twin()
+    b["eval_protocol"]["digest"] = "sha256:other-protocol"
+    assert "eval_protocol.digest" in record.conditions_conflict(a, b)["conflicts"]
+    assert record.table_conflicts([a, b])["conflicts"], "the table report names the pair"
+
+
+def test_the_same_protocol_name_is_not_the_same_protocol():
+    """An identity can be re-approved under the same name while the layout moves: check both."""
+    a, b = _record(), _twin()
+    b["obs_protocol"]["identity"] = a["obs_protocol"]["identity"]
+    b["obs_protocol"]["digest"] = "sha256:obs-later"
+    assert "obs_protocol.digest" in record.conditions_conflict(a, b)["conflicts"]
+
+
+def test_a_cross_asset_row_is_allowed_only_when_it_says_so():
+    a, b = _record(), _twin()
+    b["assets"]["declared_digest"] = "sha256:other-assets"
+    refused = record.conditions_conflict(a, b)
+    assert "assets.declared_digest" in refused["conflicts"], refused
+    assert "declared_as" not in refused["conflicts"]["assets.declared_digest"], \
+        "an undeclared assets difference is a conflict like any other"
+    b["run"]["variant"] = "assets"
+    allowed = record.conditions_conflict(a, b)
+    assert allowed["conflicts"]["assets.declared_digest"]["declared_as"] == "assets", allowed
+
+
+def test_an_absent_fact_is_unproven_and_an_unreadable_row_is_named():
+    a, b = _record(), _twin()
+    a["judge"] = {"id": record.UNKNOWN}
+    b["judge"] = {"id": record.UNKNOWN}
+    found = record.conditions_conflict(a, b)
+    assert found["conflicts"] == {} and found["unproven"] == ["judge.id"], found
+    report = record.table_conflicts([_record(), _record(complete=False)])
+    assert report["unreadable"] and not report["conflicts"], report
+
+
 def _main() -> None:
     tests = [fn for name, fn in sorted(globals().items()) if name.startswith("test_") and callable(fn)]
     for fn in tests:

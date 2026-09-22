@@ -120,6 +120,35 @@ SUBSTITUTION_CATEGORY = {
     "obs_protocol.digest": "obs_protocol",
 }
 
+#: The fields that decide whether two rows may share one table. Deliberately **not**
+#: :data:`BINDINGS`: a binding set includes the checkpoint, which is the very variable a scoreboard
+#: compares -- requiring it equal would refuse every legitimate cross-model table. These are the
+#: *conditions* instead: if one moved, the two rows answer different questions.
+#:
+#: Enumerated field by field rather than by prefix (``suite.*``): a field added to the suite block
+#: later must be a deliberate decision to compare it, not a silent addition to a comparison nobody
+#: re-read. ``obs_protocol`` carries both identity and digest because equal identities do not imply
+#: equal layouts -- a protocol could be re-approved with the same name, and only the digest moves.
+CONDITIONS = (
+    "eval_protocol.digest",
+    "suite.name",
+    "suite.digest",
+    "suite.geometry_digest",
+    "suite.num_rows",
+    "suite.num_cols",
+    "suite.envs_per_terrain",
+    "suite.terrains",
+    "obs_protocol.identity",
+    "obs_protocol.digest",
+    "judge.id",
+)
+
+#: The one condition whose difference a table may still show -- if the row says so. An assets swap
+#: is a legitimate experiment, but a row whose assets moved is not a row measured under the same
+#: conditions as its neighbours, so it must carry the substitution it names (``run.variant``) or the
+#: table refuses it. Silence is what would let a cross-asset row read as a like-for-like one.
+CONDITIONS_WITH_DECLARATION = {"assets.declared_digest": "assets"}
+
 #: Value written for a fact that could not be established. Deliberately a string, not
 #: ``null``: an empty slot reads like "not recorded", which is the thing Step 0c refuses.
 UNKNOWN = "unknown"
@@ -292,6 +321,80 @@ def _value(record: dict | None, path: str):
     """One binding's value, with an absent field read as absent instead of fabricated."""
     value = get(record, path)
     return None if value is _MISSING else value
+
+
+def _declares(a: dict, b: dict, variant: str) -> bool:
+    """Whether either side names this substitution, i.e. the difference is on the record."""
+    for side in (a, b):
+        if variant in str(get(side, "run.variant") or ""):
+            return True
+    return False
+
+
+def conditions_conflict(a: dict, b: dict) -> dict:
+    """Why two records may not share one table: the conditions that moved, and the ones unproven.
+
+    Unknown on both sides is *not* a conflict -- equal absence is what two rows of one batch look
+    like when a fact was never recorded -- but it is reported as unproven, because a table built on
+    a missing value is a table built on nothing.
+
+    The one exception is :data:`CONDITIONS_WITH_DECLARATION`: a difference a row declares (an assets
+    swap, named by ``run.variant``) is carried through as ``declared_as`` instead of refused. The row
+    is then not a like-for-like row, and saying so is the whole condition for keeping it.
+    """
+    conflicts: dict[str, dict] = {}
+    unproven: list[str] = []
+    for path in CONDITIONS:
+        left, right = _value(a, path), _value(b, path)
+        if left is None and right is None:
+            continue
+        if left == right:
+            if left == UNKNOWN:
+                unproven.append(path)
+            continue
+        conflicts[path] = {"a": left, "b": right}
+        if left == UNKNOWN or right == UNKNOWN:
+            unproven.append(path)
+    for path, variant in CONDITIONS_WITH_DECLARATION.items():
+        left, right = _value(a, path), _value(b, path)
+        if left is None and right is None or left == right:
+            continue
+        entry = {"a": left, "b": right}
+        if _declares(a, b, variant):  # the difference is on the record, so the row may stay
+            entry["declared_as"] = variant
+        conflicts[path] = entry
+        if left == UNKNOWN or right == UNKNOWN:
+            unproven.append(path)
+    return {"conflicts": conflicts, "unproven": unproven}
+
+
+def table_conflicts(records: list[dict]) -> dict:
+    """Every pair of rows that may not share a table, plus the rows no table should carry.
+
+    Pairwise rather than against the first row: a table whose first row is the odd one out must not
+    be the only one reported. A record that is not ``complete`` is reported as ``unreadable`` rather
+    than skipped -- a table that dropped a row in silence is a table whose population nobody can
+    reconstruct later.
+    """
+    conflicts: dict[str, dict] = {}
+    unreadable: dict[str, str] = {}
+    for index, left in enumerate(records):
+        run_id = str(get(left, "run.run_id") or f"row{index}")
+        state = read_state(left)
+        if state["state"] != "complete":
+            unreadable[run_id] = f"{state['state']}: {state['note'] or state['missing']}"
+            continue
+        for right in records[index + 1:]:
+            if read_state(right)["state"] != "complete":
+                continue
+            found = conditions_conflict(left, right)
+            if not found["conflicts"] and not found["unproven"]:
+                continue
+            other = str(get(right, "run.run_id") or f"row{index + 1}")
+            entry = conflicts.setdefault(run_id, {"against": {}, "unproven": []})
+            entry["against"][other] = found["conflicts"]
+            entry["unproven"].extend(name for name in found["unproven"] if name not in entry["unproven"])
+    return {"conflicts": conflicts, "unreadable": unreadable}
 
 
 def _unproven_reason(candidate, baseline) -> str | None:

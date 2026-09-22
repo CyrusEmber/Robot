@@ -202,6 +202,7 @@ def run(args) -> dict:
         if contract_error is not None:
             result = {
                 "verdict": "invalid", "invalid_reasons": [f"collection contract: {contract_error}"],
+                "judge": baseline_metrics.judge_identity(protocol),
                 "gates": {name: None for name in baseline_metrics.gate_names(protocol)},
                 "metrics": {}, "diagnostics": {}, "per_env": {}, "axes": recorder.axes,
             }

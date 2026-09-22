@@ -1,0 +1,190 @@
+{
+  "format": "judge-semantics-1",
+  "why": [
+    "A judge id is only an identity if some case set is pinned to it. Freezing one sample would not do: a sample only covers the behaviour it happens to touch, so an edit outside that path would leave the id unchanged while the semantics moved.",
+    "So each id carries its own case list and its expectations. A published id's block is frozen by digest: editing its cases, its expectations or the kind table it can reach turns rl_exp/tools/verify/check_judge_semantics.py red. A new behaviour therefore needs a new kind and a new id -- `baseline_metrics.JUDGE_ID` or a new entry in LEGACY_PROTOCOLS -- instead of an edit that would leave old records pointing at a reader that no longer exists.",
+    "The gap this does not close, stated rather a case set only covers the cases written down. Behaviour inside a kind that no case exercises can still move without turning anything red. That is why the blocks below keep the boundary cases (equality at the threshold, the dwell length, the aggregation order across bodies) -- the places where an off-by-one is invisible in a passing rollout."
+  ],
+  "ids": {
+    "baseline-criteria-1": {
+      "module": "ablation_harness.baseline_metrics",
+      "constant": "JUDGE_ID",
+      "driver": "baseline",
+      "protocol_file": "baseline_flat_v4.json",
+      "kinds": [
+        "displacement_v1",
+        "mesh_clearance_v1",
+        "non_foot_carrier_v1",
+        "non_foot_contact_v1",
+        "survival_v1",
+        "sustained_tilt_v1",
+        "tracking_v1"
+      ],
+      "kinds_sha256": "sha256:84a31481056029775cc5f4708aef021cceec038c85d80c453a7e68b03e415908",
+      "frozen_sha256": "sha256:b06524f46df275652e2d79945ec8b32a4e050925221d4c19af6f4575e277e48f",
+      "cases": {
+        "straight_walk_passes_every_declared_gate": {
+          "fixture": "plain",
+          "kw": {},
+          "expect": {
+            "verdict": "pass",
+            "gates": {
+              "tracking": true,
+              "displacement": true,
+              "survival": true,
+              "attitude": true,
+              "no_non_foot_contact": true
+            }
+          }
+        },
+        "tilt_held_exactly_the_dwell_fails": {
+          "fixture": "tilt_hold",
+          "kw": {"seconds": 0.5},
+          "expect": {"verdict": "fail", "gates": {"attitude": false}}
+        },
+        "tilt_one_frame_short_of_the_dwell_passes": {
+          "fixture": "tilt_hold",
+          "kw": {"seconds": 0.48},
+          "expect": {"verdict": "pass", "gates": {"attitude": true}}
+        },
+        "contact_exactly_at_the_limit_is_not_contact": {
+          "fixture": "contact",
+          "kw": {"fraction": "at_limit"},
+          "expect": {"verdict": "pass", "gates": {"no_non_foot_contact": true}}
+        },
+        "contact_above_the_limit_on_one_frame_fails": {
+          "fixture": "contact",
+          "kw": {"fraction": "just_above_limit"},
+          "expect": {"verdict": "fail", "gates": {"no_non_foot_contact": false}}
+        },
+        "tracking_error_and_distance_exactly_at_their_thresholds_fail": {
+          "fixture": "tracking_at_threshold",
+          "kw": {},
+          "expect": {"verdict": "fail", "gates": {"tracking": false, "displacement": false}}
+        }
+      }
+    },
+    "legacy-baseline-threshold-keys-1": {
+      "module": "ablation_harness.baseline_metrics",
+      "constant": "LEGACY_JUDGE_ID",
+      "driver": "baseline",
+      "protocol_file": "baseline_flat_v2.json",
+      "kinds": [
+        "displacement_v1",
+        "mesh_clearance_v1",
+        "non_foot_carrier_v1",
+        "non_foot_contact_v1",
+        "survival_v1",
+        "sustained_tilt_v1",
+        "tracking_v1"
+      ],
+      "kinds_sha256": "sha256:84a31481056029775cc5f4708aef021cceec038c85d80c453a7e68b03e415908",
+      "frozen_sha256": "sha256:0a6d1919d07d0fbb510dec3befcc871c8564e6b9769bf193a19a5fe869201fc6",
+      "cases": {
+        "carrier_fraction_exactly_at_the_threshold_fails": {
+          "fixture": "carrier_hold",
+          "kw": {"fraction": 0.1, "seconds": 0.5},
+          "expect": {"verdict": "fail", "gates": {"no_non_foot_carrier": false}}
+        },
+        "carrier_bodies_taking_turns_accumulate_into_one_dwell": {
+          "fixture": "carrier_alternating",
+          "kw": {"span_s": 0.5},
+          "expect": {"verdict": "fail", "gates": {"no_non_foot_carrier": false}}
+        },
+        "carrier_alternating_bodies_short_of_the_dwell_pass": {
+          "fixture": "carrier_alternating",
+          "kw": {"span_s": 0.48},
+          "expect": {"verdict": "pass", "gates": {"no_non_foot_carrier": true}}
+        },
+        "mesh_exactly_at_the_declared_floor_fails": {
+          "fixture": "mesh_at_threshold",
+          "kw": {},
+          "expect": {"verdict": "fail", "gates": {"no_mesh_through_floor": false}}
+        }
+      }
+    },
+    "loco-metrics-1+loco-derivation-1": {
+      "module": "ablation_harness.loco_judge",
+      "constant": "JUDGE_ID",
+      "driver": "loco",
+      "protocol_file": "locomotion_eval_v3.yaml",
+      "kinds": ["derivation", "kernels"],
+      "kinds_sha256": "sha256:342b41432c45a2e07cc9a9c8d0c99afa944e2941e001e12a3ce39859d8c819c3",
+      "frozen_sha256": "sha256:d58e436a675b1e389b455964c487d7b51c53145ab5d9dd0bce95c34f6dc11d28",
+      "cases": {
+        "tilt_threshold_is_the_declared_angle": {
+          "fixture": "loco_derivation",
+          "kw": {"stand_height_m": 0.5, "step_dt": 0.02},
+          "expect": {"tilt_cos_min": 0.766044443}
+        },
+        "clearance_threshold_is_the_declared_fraction_of_stand_height": {
+          "fixture": "loco_derivation",
+          "kw": {"stand_height_m": 1.0, "step_dt": 0.02},
+          "expect": {"clearance_min": 0.6}
+        },
+        "dwell_rounds_to_the_nearest_step": {
+          "fixture": "loco_derivation",
+          "kw": {"stand_height_m": 0.5, "step_dt": 0.03, "fall": {"sustain_s": 0.5}},
+          "expect": {"sustain_steps": 17}
+        },
+        "dwell_never_rounds_down_to_zero_steps": {
+          "fixture": "loco_derivation",
+          "kw": {"stand_height_m": 0.5, "step_dt": 0.02, "fall": {"sustain_s": 0.005}},
+          "expect": {"sustain_steps": 1}
+        },
+        "fall_fires_at_exactly_the_dwell": {
+          "fixture": "loco_fall",
+          "kw": {"window_steps": 61, "sustain_steps": 25, "bad_start": 36, "bad_len": 25, "first_done": 60},
+          "expect": {"fall": true}
+        },
+        "fall_stays_quiet_one_step_short_of_the_dwell": {
+          "fixture": "loco_fall",
+          "kw": {"window_steps": 61, "sustain_steps": 25, "bad_start": 36, "bad_len": 24, "first_done": 60},
+          "expect": {"fall": false}
+        },
+        "fall_needs_a_window_at_least_as_long_as_the_dwell": {
+          "fixture": "loco_fall",
+          "kw": {"window_steps": 20, "sustain_steps": 25, "bad_start": 0, "bad_len": 20, "first_done": 19},
+          "expect": {"fall": false}
+        },
+        "clearance_branch_is_strict_at_the_threshold": {
+          "fixture": "loco_fall",
+          "kw": {"window_steps": 61, "sustain_steps": 25, "bad_start": 0, "bad_len": 0,
+                 "first_done": 60, "clearance": 0.3, "clearance_min": 0.3},
+          "expect": {"fall": false}
+        },
+        "clearance_branch_fires_below_the_threshold": {
+          "fixture": "loco_fall",
+          "kw": {"window_steps": 61, "sustain_steps": 25, "bad_start": 0, "bad_len": 0,
+                 "first_done": 60, "clearance": 0.29, "clearance_min": 0.3},
+          "expect": {"fall": true}
+        },
+        "success_is_strict_at_the_linear_threshold": {
+          "fixture": "loco_success",
+          "kw": {"lin_err": 0.5, "ang_err": 0.0},
+          "expect": {"success": false}
+        },
+        "success_just_inside_the_linear_threshold": {
+          "fixture": "loco_success",
+          "kw": {"lin_err": 0.4999999, "ang_err": 0.0},
+          "expect": {"success": true}
+        },
+        "success_is_strict_at_the_angular_threshold": {
+          "fixture": "loco_success",
+          "kw": {"lin_err": 0.0, "ang_err": 0.4},
+          "expect": {"success": false}
+        },
+        "power_is_the_hand_computed_implicit_pd_reconstruction": {
+          "fixture": "loco_energy",
+          "kw": {},
+          "expect": {"power_w": 4.5}
+        },
+        "turning_in_place_does_not_enter_the_commanded_distance": {
+          "fixture": "loco_completion",
+          "kw": {"vx": 1.0, "wz": 1.0, "travelled": 1.0},
+          "expect": {"completion": 1.0}
+        }
+      }
+    }
+  }
+}

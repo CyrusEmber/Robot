@@ -1,0 +1,63 @@
+{
+  "name": "Baseline-Flat-v4",
+  "version": 4,
+  "supersedes": "baseline_flat_v3.json",
+  "recipe_version": "v2",
+  "episode_length_s": 20.0,
+  "terrain": "plane",
+  "command": {
+    "mode": "range",
+    "lin_vel_x": [1.0, 3.0],
+    "lin_vel_y": [0.0, 0.0],
+    "ang_vel_z": [0.0, 0.0],
+    "resample_s": 10.0,
+    "why": "Unchanged from v3: v2's recipe samples 1-3 m/s on the framework's 10 s window, so the protocol declares a BOX and every frame's issued command is checked against it."
+  },
+  "displacement_frame": "initial_yaw",
+  "tracking_frame": "current_yaw",
+  "post_failure_velocity": "zero",
+  "terminal_frame": "post_physics_pre_reset",
+  "why_v4": [
+    "v4 changes no number. Every threshold below is v3's, and the migration proof is that judging one record under v3 and under v4 returns the same verdict and the same gate outcomes (checked by rl_exp/tools/verify/check_judge_semantics.py and test_baseline_contract.py).",
+    "What changes is where the criterion lives. v1-v3 named a *threshold key* and the reader inferred the comparison, its strictness, its unit conversion and its aggregation order from which key was present -- so 'the head-chain axis' meant one thing in one version and another in the next, and neither meaning was written down next to the number. v4 names a criterion kind and nothing else.",
+    "A kind owns its comparison, so no protocol can reorder an aggregation by accident: `non_foot_carrier_v1` is 'any body over the fraction, held for the dwell' and cannot be spelled as 'one body held it alone'. A protocol that wants the other observation needs a new kind and a new judge id, which is the point -- the reader's identity travels with the verdict (baseline_metrics.JUDGE_ID).",
+    "Why not a general expression language: an operator, a unit, an epsilon and an aggregation are four freedoms, and four freedoms multiply into a DSL nobody can review a year later. `CRITERION_KINDS` is a closed list of named criteria, each with exactly the parameters it needs -- unknown keys, missing keys and unknown kinds are all refused rather than defaulted.",
+    "`criteria` replaces `gates` as the gate declaration. A protocol that writes neither is refused unless its declared identity is one of baseline_metrics.LEGACY_PROTOCOLS: a new file that loses a field must fail loudly instead of silently scoring under older semantics, which is what a silent fallback would do."
+  ],
+  "criteria": {
+    "tracking": {
+      "kind": "tracking_v1",
+      "params": {"threshold": 0.2, "normalized": true}
+    },
+    "displacement": {
+      "kind": "displacement_v1",
+      "params": {"threshold": 0.8, "normalized": true}
+    },
+    "survival": {
+      "kind": "survival_v1",
+      "params": {"threshold": 0.9}
+    },
+    "attitude": {
+      "kind": "sustained_tilt_v1",
+      "params": {"threshold_cos": 0.766, "sustain_s": 0.5}
+    },
+    "no_non_foot_contact": {
+      "kind": "non_foot_contact_v1",
+      "params": {"limit_n": 1.0, "eps": 1e-09}
+    }
+  },
+  "report_only": [
+    "forward_mae_mps",
+    "lateral_speed_abs_mps",
+    "yaw_offset_abs_rad",
+    "head_tail_contact_force_n",
+    "first_episode_frame_fraction",
+    "foot_duty",
+    "foot_load_fraction",
+    "feet_down_mean",
+    "tilt_max_deg",
+    "non_foot_load_fraction",
+    "non_foot_contact_load_n",
+    "non_foot_mesh_min_z_m"
+  ]
+}

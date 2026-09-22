@@ -33,6 +33,7 @@ import subprocess
 import sys
 
 import host_paths
+import record  # sibling module: the record's condition vocabulary (ARCH_PLAN Step 3.2d)
 
 _HARNESS_DIR = pathlib.Path(__file__).absolute().parent
 # The IsaacLab tree used to be "_HARNESS_DIR.parent", which only held while the
@@ -156,16 +157,42 @@ def _summary_paths(protocol_dir: pathlib.Path, group: str | None) -> list[pathli
     return [protocol_dir / "summary.csv", *sorted(protocol_dir.glob("*/summary.csv"))]
 
 
-def _summarize(args_cli) -> None:
+def _condition_report(summary_path: pathlib.Path, rows: list[dict]) -> dict:
+    """Do the rows beside this summary share their conditions? Reads the records, not the table.
+
+    The check belongs at the table and not only in ``record.compare``: the summary is what people
+    read *instead of* the records, so it is exactly where a row whose ground, protocol, judge or
+    assets moved would otherwise sit next to its neighbours as if it were comparable. A run dir
+    whose record is absent or unreadable is reported too -- dropping it silently would publish a
+    population nobody can reconstruct.
+    """
+    records, no_record = [], []
+    for row in rows:
+        run_id = row.get("run_id") or "?"
+        path = summary_path.parent / run_id / "record.json"
+        if not path.is_file():
+            no_record.append(run_id)
+            continue
+        try:
+            records.append(record.load(path))
+        except (OSError, json.JSONDecodeError):
+            no_record.append(run_id)
+    return {**record.table_conflicts(records), "no_record": no_record}
+
+
+def _summarize(args_cli) -> int:
+    """Print the table, and refuse one whose rows were not measured under the same conditions."""
     protocol_dir = _HARNESS_DIR / "results" / args_cli.protocol
-    rows: list[dict] = []
+    rows_by_path: dict[pathlib.Path, list[dict]] = {}
     for path in _summary_paths(protocol_dir, args_cli.group):
-        if path.exists():
-            with open(path, encoding="utf-8") as f:
-                rows += list(csv.DictReader(f))
+        if not path.exists():
+            continue
+        with open(path, encoding="utf-8") as f:
+            rows_by_path[path] = list(csv.DictReader(f))
+    rows = [row for group_rows in rows_by_path.values() for row in group_rows]
     if not rows:
         print(f"[ABLATION] no results under {protocol_dir}")
-        return
+        return 0
     columns = [c for c in rows[0].keys() if c != "timestamp"]
     widths = {c: max(len(c), *(len(r.get(c, "")) for r in rows)) for c in columns}
     header = " | ".join(c.ljust(widths[c]) for c in columns)
@@ -174,6 +201,27 @@ def _summarize(args_cli) -> None:
     print(divider)
     for r in sorted(rows, key=lambda r: (r.get("mode", ""), r.get("run_id", ""))):
         print(" | ".join(str(r.get(c, "")).ljust(widths[c]) for c in columns))
+    problems = 0
+    for path, group_rows in rows_by_path.items():
+        report = _condition_report(path, group_rows)
+        if not report["conflicts"] and not report["no_record"]:
+            continue
+        problems += 1
+        for run_id, entry in sorted(report["conflicts"].items()):
+            for other, moved in sorted(entry["against"].items()):
+                undeclared = any("declared_as" not in values for values in moved.values())
+                print(f"[ABLATION] {path}: {run_id} vs {other}: "
+                      f"conditions {'differ' if undeclared else 'differ, declared'}:")
+                for name, values in sorted(moved.items()):
+                    tail = f" (declared as {values['declared_as']})" if "declared_as" in values else ""
+                    print(f"    {name}: {values['a']} -> {values['b']}{tail}")
+                if undeclared:
+                    print("    these rows answer different questions; give them their own table, or "
+                          "name the substitution with --variant")
+        for run_id in report["no_record"]:
+            print(f"[ABLATION] {path}: {run_id} has no readable record.json -- it cannot be certified "
+                  "as measured under these conditions")
+    return problems
 
 
 _TERRAIN_COLUMNS = ["run_id", "protocol", "task", "mode", "seed", "iteration",
@@ -252,15 +300,13 @@ def main():
     args_cli = parser.parse_args()
     args_cli.python = args_cli.python or host_paths.venv_python(_ISAAC_ROOT) or sys.executable
     if args_cli.summarize:
-        _summarize(args_cli)
-        return
+        sys.exit(_summarize(args_cli))
     if args_cli.by_terrain:
         _by_terrain(args_cli)
         return
     if args_cli.spec is None:
         parser.error("--spec, --summarize or --by-terrain is required")
-    failures = _sweep(args_cli)
-    _summarize(args_cli)
+    failures = _sweep(args_cli) + _summarize(args_cli)
     sys.exit(1 if failures else 0)
 
 

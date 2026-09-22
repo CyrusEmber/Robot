@@ -50,6 +50,11 @@ parser.add_argument("--overwrite", action="store_true",
                     help="Allow writing into an existing run_id that cannot be certified as this "
                          "same measurement: a differing record, a pre-format run (results but no "
                          "record), or an unreadable record file. Without it, all three are refused.")
+parser.add_argument("--print-suite-fingerprint", action="store_true",
+                    help="Build the suite, print the suite_expected block for this machine's engine "
+                         "and ground, and write nothing. The one path that approves a fingerprint, "
+                         "because a gate that filled in its own expectation would approve whatever "
+                         "the machine produced.")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 # a -Play cfg arrives with every DR event already nulled, which silently turns
@@ -74,9 +79,11 @@ from isaaclab.utils.string import string_to_callable  # noqa: E402
 import isaaclab_tasks  # noqa: F401, E402  (registers the gym tasks)
 
 import host_paths  # noqa: E402  (machine-local IsaacLab root, see paths.example.yaml)
+import loco_judge  # noqa: E402  (sibling module: the criterion's identity and derivation half)
 import metrics  # noqa: E402
 import record  # noqa: E402  (sibling module: the eval record format, ARCH_PLAN Step 3.2a)
 import suites  # noqa: E402
+import suite_lock  # noqa: E402  (sibling module: the suite fingerprint lock, ARCH_PLAN Step 3.3)
 from components.command_player import CommandPlayer  # noqa: E402
 from components.dr_controller import apply_eval_mode  # noqa: E402
 from components import recovery as recovery_mod  # noqa: E402
@@ -125,8 +132,11 @@ _SUITE_REGISTRY = {
     "lizard_suite_v2": (suites.LIZARD_SUITE_V2_NAMES, suites.lizard_suite_v2),
 }
 # summary.csv columns (protocol-wide, machine-readable single line per run)
+# ``variant`` is here so a row whose inputs were swapped says so in the table itself: a cross-asset
+# or cross-protocol row is a legitimate experiment, but it is not a like-for-like row, and the table
+# is where that has to be visible (record.CONDITIONS_WITH_DECLARATION).
 _SUMMARY_COLUMNS = [
-    "run_id", "protocol", "task", "tag", "mode", "seed",
+    "run_id", "protocol", "task", "tag", "mode", "seed", "variant",
     "git_rev_lizard", "git_rev_isaaclab", "timestamp",
     "success_rate", "fall_rate", "lin_mae_mps", "ang_mae_radps",
     "energy_per_m_j", "stop_overshoot_mps", "recovery_mean_s", "never_recovered",
@@ -196,6 +206,63 @@ def _suite_reference(protocol: dict, env_cfg) -> dict:
         "terrains": list(_SUITE_REGISTRY[protocol["suite"]][0]),
         "digest": cfg_snapshot.digest(cfg_snapshot.snapshot(env_cfg.scene.terrain)),
     }
+
+
+def _physx_version() -> str:
+    """The PhysX build the simulator runs, or 'unknown'.
+
+    Named in the geometry fingerprint because terrain meshes are generated *by the engine*: the same
+    suite config on a different solver build is not the same ground, so the engine has to be a
+    recorded fact rather than an assumption. Three spellings across Isaac Sim releases (the ext
+    cache's distribution, the extension's package, the runtime's own report); none answering is
+    'unknown' and never a guess, which is what keeps an unnamed engine from reading as a known one.
+    """
+    for name in ("isaacsim-extscache-physics", "omni.physx"):
+        version = _package_version(name)
+        if version != record.UNKNOWN:
+            return version
+    try:
+        import omni.physx
+
+        return str(omni.physx.get_physx_interface().get_physx_version())
+    except Exception:  # no extension, no app, or no such accessor -- all 'unknown'
+        return record.UNKNOWN
+
+
+def _geometry_env() -> dict:
+    """The environment a geometry digest is comparable in.
+
+    Recorded so a mismatch can be attributed: the same fingerprint differing on a different engine
+    or GPU stack is *unknown*, not a protocol change. Without this the two would be one red, and a
+    machine swap would read as a terrain edit.
+    """
+    gpu, capability = record.UNKNOWN, record.UNKNOWN
+    try:
+        if torch.cuda.is_available():
+            gpu = torch.cuda.get_device_name(0)
+            capability = ".".join(str(part) for part in torch.cuda.get_device_capability(0))
+    except Exception:
+        pass
+    return {
+        "sim_version": _package_version("isaacsim"),
+        "physx_version": _physx_version(),
+        "numpy_version": _package_version("numpy"),
+        "warp_version": _package_version("warp-lang"),
+        "torch_version": _package_version("torch"),
+        "gpu": gpu,
+        "gpu_compute_capability": capability,
+        "git_rev_isaaclab": _git_rev(_ISAAC_ROOT),
+    }
+
+
+def _print_suite_fingerprint(protocol: dict, cfg_digest: str, geometry_digest: str) -> None:
+    """The block to paste into ``suite_expected``: approving a fingerprint is a deliberate act.
+
+    This is the one path that writes nothing. A gate that filled in its own expectation would
+    approve whatever the machine happened to produce, which is the opposite of freezing it.
+    """
+    print(f"[EVAL] paste into protocols/{args_cli.protocol}.yaml under suite_expected:")
+    print(suite_lock.fingerprint_block(protocol, cfg_digest, geometry_digest, _geometry_env()))
 
 
 def _obs_reference(task: str) -> dict:
@@ -309,7 +376,7 @@ def _round(value, digits=4):
     return value
 
 
-def _prepare_env(protocol: dict) -> tuple[object, object]:
+def _prepare_env(protocol: dict) -> tuple[object, object, str]:
     """Env cfg from the gym registry (no hydra), suite swap, protocol timing, eval mode."""
     spec = gym.spec(args_cli.task)
     env_cfg = string_to_callable(spec.kwargs["env_cfg_entry_point"])()
@@ -331,7 +398,12 @@ def _prepare_env(protocol: dict) -> tuple[object, object]:
     if args_cli.device is not None:
         env_cfg.sim.device = args_cli.device
     apply_eval_mode(env_cfg, args_cli.mode)
-    return env_cfg, agent_cfg
+    # The suite as the harness built it, digestible before the simulator starts: the check that can
+    # refuse a wrong ground without paying for an app launch.
+    from rl_exp.tools.verify import cfg_snapshot
+
+    suite_cfg_digest = cfg_snapshot.digest(cfg_snapshot.snapshot(env_cfg.scene.terrain))
+    return env_cfg, agent_cfg, suite_cfg_digest
 
 
 def _make_policy(wrapper, mbenv, agent_cfg, device, rec: dict) -> tuple[object, str]:
@@ -680,6 +752,7 @@ def _persist(result: dict, segments: list, recovery: dict | None, run_id: str, t
     row.update({
         "run_id": run_id, "protocol": result["protocol"], "task": args_cli.task, "tag": tag,
         "mode": args_cli.mode, "seed": args_cli.seed, "timestamp": result["timestamp"],
+        "variant": args_cli.variant or "",
         "git_rev_lizard": result["git_rev_lizard"], "git_rev_isaaclab": result["git_rev_isaaclab"],
         "success_rate": _round(result["global"]["success_rate"]),
         "fall_rate": _round(result["global"]["fall_rate"]),
@@ -714,7 +787,13 @@ def main():
     protocol = _load_protocol(args_cli.protocol)
     terrain_names = _SUITE_REGISTRY[protocol["suite"]][0]
 
-    env_cfg, agent_cfg = _prepare_env(protocol)
+    env_cfg, agent_cfg, suite_cfg_digest = _prepare_env(protocol)
+    # Step one of the suite lock: the cfg is the harness' own declaration, so a mismatch is
+    # definitive and is answered before the simulator starts.
+    cfg_lock = suite_lock.compare(protocol, suite_cfg_digest, record.UNKNOWN, _geometry_env())
+    refusal = suite_lock.start_refusal(protocol, cfg_lock, stage="cfg")
+    if refusal is not None:
+        raise SystemExit(f"[EVAL] refused: {refusal}")
     # The suite's ground is pinned by the suite's own seed, not by --seed: every eval of every
     # run has to stand on the same terrain, which needs the global streams the terrain functions
     # draw from (the generator seeds only its own local rng). Without this the rough columns are
@@ -745,6 +824,7 @@ def main():
             "clip_actions": agent_cfg.clip_actions if agent_cfg.clip_actions is not None else "none",
         },
         "suite": _suite_reference(protocol, env_cfg),
+        "judge": loco_judge.judge_reference(),
         "eval_protocol": _protocol_reference(protocol),
         "obs_protocol": _obs_reference(args_cli.task),
         "assets": _assets_reference(env_cfg),
@@ -757,6 +837,26 @@ def main():
     # protocol calls "rough" is rough for this robot's foot.
     terrain_record = terrain_split_probe.record_for(mbenv.scene.terrain)
     rec["suite"]["geometry_digest"] = terrain_record["geometry_digest"]
+    # Step two of the suite lock: the ground itself, which only exists once the generator handed the
+    # meshes over. Refused here rather than after the rollout, so a run on the wrong ground costs a
+    # construction and not a measurement.
+    suite_lock_state = suite_lock.compare(protocol, suite_cfg_digest,
+                                         terrain_record["geometry_digest"], _geometry_env())
+    if args_cli.print_suite_fingerprint:
+        _print_suite_fingerprint(protocol, suite_cfg_digest, terrain_record["geometry_digest"])
+        # Return rather than exit: the module's own shutdown path closes the app, and a SystemExit
+        # here would skip it -- the failure mode this harness already paid for once, where Kit's
+        # shutdown swallowed the exit and the process hung with nothing to read.
+        return
+    refusal = suite_lock.start_refusal(protocol, suite_lock_state, stage="geometry")
+    if refusal is not None:
+        print(f"[EVAL] refused: {refusal}", file=sys.stderr, flush=True)
+        simulation_app.close()
+        raise SystemExit(1)
+    rec["suite"]["lock"] = {"verdict": suite_lock_state["verdict"], "cfg": suite_lock_state["cfg"],
+                            "geometry": suite_lock_state["geometry"]}
+    rec["suite"]["geometry_env"] = suite_lock_state["geometry_env"]
+    rec["suite"]["expected"] = suite_lock_state["declared"]
     tag = args_cli.tag or ("ckpt" if args_cli.checkpoint else "random")
     # strip only the gym API suffix of family ids ("-v0" at the very end);
     # teacher recipe versions ("-v1"/"-v2") are part of the run identity
@@ -783,9 +883,17 @@ def main():
     player = CommandPlayer(protocol["command_timeline"], mbenv.num_envs, device)
     cmd_term = mbenv.command_manager.get_term("base_velocity")
     fall_cfg = protocol["metrics"]["fall"]
-    tilt_cos_min = math.cos(math.radians(float(fall_cfg["tilt_deg"])))
-    clearance_min = float(fall_cfg["base_height_ratio"]) * float(env_cfg.scene.robot.init_state.pos[2])
-    sustain_steps = max(1, int(round(float(fall_cfg["sustain_s"]) / step_dt)))
+    # The declaration as the numbers `fall_flags` is handed. The arithmetic lives in loco_judge,
+    # where it is reachable without a simulator: it is half of this run's judge.id, and a dwell off
+    # by one step or a clearance measured from the wrong height is invisible in a passing rollout.
+    derived = loco_judge.derived_thresholds(
+        protocol,
+        stand_height_m=float(env_cfg.scene.robot.init_state.pos[2]),
+        step_dt=step_dt,
+    )
+    tilt_cos_min = derived["tilt_cos_min"]
+    clearance_min = derived["clearance_min"]
+    sustain_steps = derived["sustain_steps"]
 
     scanner = mbenv.scene.sensors.get("height_scanner", None)
     center_ray = None
