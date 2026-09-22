@@ -148,8 +148,13 @@ checkpoint，因此不能替代训练验收。**训练结果仍见下方"结果�
 **跨线发现（不属本版范围，未改）**：`rl_exp/tasks/parkour_mdp.py:28 _yaw_from_quat` 是同一类错误——
 docstring 写 `(x, y, z, w)`，算的是 `(w, x, y, z)` 分支。数值实测：真 yaw `[0, π/2, π]` → 它返回
 `[π, π, π]`（恒 π，与转向无关）。该函数被 `PositionCommand` 用了 4 处（目标采样 `abs_dir = base_yaw + rel_dir`
-与 `heading_err`），parkour 线有训练 run（`logs/rsl_rl/lizard_parkour_climb_v1`），故其记录的含义可能受影响。
-已在守卫的白名单里**显式登记为已知坏**（不掩盖），处理方式留 parkour 线自己定。
+与 `heading_err`）。已在守卫的白名单里**显式登记为已知坏**（不掩盖）。
+
+**2026-09-22 更正 + 裁决**：本句原写"parkour 线有训练 run（`logs/rsl_rl/lizard_parkour_climb_v1`）"，
+**不成立**——该目录下只有一个 run 目录（`2026-09-17_17-02-16`），其中只有 `run_manifest.json`，
+内容是**退休线拒启**（`lifecycle.allowed = false`、`failures` 一条、`stages` 止于 `pre_make`）：无 checkpoint、
+无 eval 记录，`ablation_harness/results/` 下也没有本线产物 ⇒ **该线没有读数需要重解释或作废**，
+其缺陷保持白名单登记、不修。裁决与理由见 `work/closed/2026/parkour-yaw-reinterpretation.md`。
 
 ## 命令（计划 vs 实跑）
 

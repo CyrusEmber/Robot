@@ -62,4 +62,12 @@ python scripts\reinforcement_learning\rsl_rl\play.py --task Lizard-Parkour-Climb
 
 ## 结论
 
-（待结果）
+**未训练，本线已退休**（2026-09-17）。唯一一条 log 目录是
+`logs/rsl_rl/lizard_parkour_climb_v1/2026-09-17_17-02-16`，其中只有 `run_manifest.json`：内容是
+**退休线拒启**（`lifecycle.allowed=false`、`failures` 一条、`stages` 止于 `pre_make`），**无 checkpoint、
+无 eval 记录**；`ablation_harness/results/` 下亦无本线产物。故本线**没有读数**需要重解释或作废。
+
+**M1 冒烟里唯一受取角缺陷影响的量**：`heading_error` 指标（`_yaw_from_quat` 对 xyzw 恒返回约 π）。
+上节"metrics 全活"只说该指标**跑得通**，**不可**当作正确读数引用；目标采样 `abs_dir = base_yaw + rel_dir`
+同样建在它上面。缺陷、裁决与理由见 `work/closed/2026/parkour-yaw-reinterpretation.md`，
+白名单登记见 `rl_exp/tools/verify/test_baseline_contract.py`（`_YAW_EXTRACTIONS_ALLOWED`，**保留**）。
