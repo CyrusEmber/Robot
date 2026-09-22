@@ -91,8 +91,8 @@
 - **主线就是家族本身**：`rl_exp\versions\<family>\<line>\vN\`。主线 = `versions\lizard\main\vN\`，支线多一层（`versions\lizard\parkour\v1\`、`versions\lizard\baseline\v1\`）。家族级文档（`FAMILY.md` / `PLAN.md` / `OBS.md` / `REWARDS.md` / `ACCEPTANCE.md`）落在 `versions\lizard\`，**不在 `main\` 里**。
 - **`versions\lizard\main\` 里不全是版本目录**：`rough-v0\`、`curriculum-flat-v0\`、`curriculum-rough-v0\` 是**配方 diff 目录**（`base.json` 指该配方的母本 + `diff.json` 声明相对母本的差异），既不是 `vN\` 也不受版本四件套闸门管辖；配方锁在 `main\cfg_lock.json`，开发态参数在 `main\main_params.yaml`。
 - **开发态参数与冻结参数是两份**：开发态 `versions\<family>\<line>\<line>_params.yaml`，冻结副本 `vN\<line>_params.yaml`；跑冻结版**永远不读**开发态（`recipe_params.frozen_only`）。`vN\asset_lock.json` 补"冻结 yaml 只钉路径不钉内容"这个洞（资产原地换代 → 常驻任务 id 复现被破坏）。
-- **机器件不是文档**：`versions\recipes.json`（配方身份映射，身份写出来不推出来）/ `obs_protocols.json`（obs 协议声明，key 就是自身内容摘要）/ `obs_protocol_anchors.json`（已审摘要与宽度，只读不写）/ `lines.json`（实验线生命周期，二值 `status`）/ `cfg_baselines.json`（框架组合基线，全仓一份）/ `<线>\cfg_lock.json`（配方 golden，**一线一份**，`--update --line` 只能写自己那份）。这些是闸门读的契约；`cfg_lock.json` **不写进 `vN\`**。
-- **`joint_order` 有两种，别混**：配方里的 `joint_order` = URDF 树序（`export_ue.py` 拿它断 URDF）；obs/action 真正按索引取值的是 `versions\lizard\joint_order_runtime.json` 的**实测序**（`--pin --reason` 才写），只有 `obs_protocol.py` 读它。UE 工件同时输出两者并注明用途，读它只有一处。
+- **机器件不是文档**：`versions\recipes.json`（配方身份映射，身份写出来不推出来）/ `obs_protocols.json`（obs 协议声明，key 就是自身内容摘要）/ `obs_protocol_anchors.json`（已审摘要与宽度，只读不写）/ `lines.json`（实验线生命周期，二值 `status`；资产契约只查 `active` 线）/ `cfg_baselines.json`（框架组合基线，全仓一份）/ `freeze_parity.json`（冻结期对拍对象：哪两个 cfg 文件互为手工副本 + 已审差异，闸门不认识任何家族名）/ `<线>\cfg_lock.json`（配方 golden，**一线一份**，`--update --line` 只能写自己那份）。这些是闸门读的契约；`cfg_lock.json` **不写进 `vN\`**。
+- **`joint_order` 有两种，别混**：配方里的 `joint_order` = URDF 树序（`export_ue.py` 拿它断 URDF）；obs/action 真正按索引取值的是 `versions\joint_order_runtime.json` 的**实测序**（**按资产键**，`--pin --reason` 才写），只有 `obs_protocol.py` 读它。UE 工件同时输出两者并注明用途，读它只有一处。
 - **记录与证据落点**：跑分 → `ablation_harness\results\<协议>\<group>\<run_id>\`（外加组内 `summary.csv` / `terrains.csv`）；真跑证据 → `rl_exp\versions\lizard\verify_logs\`；版本结果回填 → 各 `vN\NOTES.md`；验收记录 → `acceptance\records\`（通过数/通过率的唯一归属是 `rl_exp\versions\lizard\ACCEPTANCE.md`）；训练 log / ckpt 在 `<ROOT>\logs\`（不入库）。
 - **线之间的隔离是硬约束**：`tasks\recipe_factory.py` 是跨线共用的类构造器但**不 import 任何具体线**，每条线由自己的模块调它（`recipe_tasks.py` 按名按需生成可注册类，`_LINES_BUILT_ELSEWHERE`）；baseline 线刻意复制自己的奖励核而不共享 `teacher_mdp.py`。看守：`test_baseline_isolation.py`。
 - **生成的注册类名是 ckpt 载荷的一部分**：`recipe_tasks.py` 沿用被替换的版本类名（载荷记 `type(cfg).__name__` 并参与 resume 身份核验），改名会让跨路径续训被拒。
@@ -130,6 +130,8 @@
 | `rl_exp\versions\lizard\baseline\` | 支线版本包（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
 | `rl_exp\versions\lizard\baseline\v1\` | 支线版本包（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
 | `rl_exp\versions\lizard\baseline\v2\` | 支线版本包（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
+| `rl_exp\versions\lizard2\main\` | 版本线目录（身份与教训见 `versions\lizard2\FAMILY.md` 版本史；本表只给路径与冻结状态） |
+| `rl_exp\versions\lizard2\main\v1\` | 冻结配方（身份与教训见 `versions\lizard2\FAMILY.md` 版本史；本表只给路径与冻结状态） |
 | `<线>\vN\PLAN.md` | 版本级计划（目的 / 假设 / 决策点 / 验收线）；结果回填走 NOTES |
 | `<线>\vN\NOTES.md` | 版本文档：目的 / 参数 diff / 训练命令 / 结果回填 |
 | `<线>\vN\<line>_params.yaml` | 冻结参数副本：跑冻结版只读这份，资产内容由 `asset_lock.json` 钉 |
