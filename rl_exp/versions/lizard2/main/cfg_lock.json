@@ -1,15 +1,15 @@
 {
  "lock_format": 3,
  "note": "recipe golden of line 'lizard2/main': entry keys are '<combination>|<task id>' and a training run never adds one",
- "reason": "widen the command window 0-2 -> 0-3 m/s (owner's call, same day, pre-training): the window's top now matches the sibling line's 3.0 with headroom; the actuator-budget estimate says 3 m/s sits beyond the hip's 180 N.m, which hard precondition 2 measures rather than assumes",
- "reason_at": "2026-09-22T15:48:06+08:00",
- "reason_rev": "5a0b52d1bfbb",
+ "reason": "开训前修订：head_contact body 收窄为真有碰撞网格的两个连杆；terminations 显式点名生效集合",
+ "reason_at": "2026-09-22T17:17:37+08:00",
+ "reason_rev": "0c3ec25ac92c",
  "entries": {
   "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard2-Flat-Play-v1": {
    "version": "v1",
    "env_cfg_class": "rl_exp.tasks.recipe_tasks:Lizard2FlatEnvCfg_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:Lizard2PPORunnerCfg",
-   "digest": "c04dc2e794f3cabcb5427e550ccd1a0960a05620d7937a45901a24d782c6f1b8",
+   "digest": "bb4c9713a1e5cb8d25405d9ace2a94cedf2753e21a7879b4d995142a8725bdc1",
    "snapshot": {
     "env": {
      "viewer": {
@@ -1329,8 +1329,8 @@
           ]
          },
          "body_names": [
-          "chest_.*",
-          "neck_.*"
+          "chest_pitch",
+          "neck_pitch"
          ],
          "body_ids": {
           "__slice__": [
@@ -1607,7 +1607,7 @@
    "version": "v1",
    "env_cfg_class": "rl_exp.tasks.recipe_tasks:Lizard2FlatEnvCfg",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:Lizard2PPORunnerCfg",
-   "digest": "8be770274cb95eaf514d8e529f62da2625645122ef4eb1c2319031143b71a769",
+   "digest": "022a332a29e881673a49451e4becff3466313e0bef5082dc2dd2a57ea5feeb83",
    "snapshot": {
     "env": {
      "viewer": {
@@ -2927,8 +2927,8 @@
           ]
          },
          "body_names": [
-          "chest_.*",
-          "neck_.*"
+          "chest_pitch",
+          "neck_pitch"
          ],
          "body_ids": {
           "__slice__": [

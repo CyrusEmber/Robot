@@ -136,13 +136,14 @@ names:
   undesired_contact_body_names:
     - ".*_hfe"
     - ".*_kfe"
-  # The head guard's bodies: the front chain that carries the ball head, i.e. everything ahead of the
-  # leg roots. On a flat plane any of it touching the ground means the robot is down face-first, and
-  # the sibling line's v1 failure was exactly this pose (neck_pitch bearing 82-90 N). Patterns, like
-  # the lists above, so the asset-side role is what is named rather than a link spelling.
+  # The head guard's bodies: the front chain that carries the ball head. Named link by link, because
+  # the patterns this started as (`chest_.*`/`neck_.*`) also matched `chest_yaw`/`neck_yaw`, and those
+  # two links carry no collision mesh: their contact force is structurally zero, so half of the
+  # pattern could never fire (found by the startup probe's `head/no-collider-less-pattern`). The two
+  # named links are the ones the asset actually gives a collider to.
   head_contact_body_names:
-    - "chest_.*"
-    - "neck_.*"
+    - "chest_pitch"
+    - "neck_pitch"
 
 # A RANGE, not a point (the one deliberate recipe difference from the lizard baseline, decided
 # 2026-09-22, widened 0-2 -> 0-3 the same day by the owner so the window's top carries headroom past
@@ -177,6 +178,14 @@ rewards:
 # down -- the sibling line's v1 lost its run to a policy that bore weight on its neck (neck_pitch
 # 82-90 N = 11.6-12.8% of body weight), and on a plane that pose has no rescue value.
 terminations:
+  # The live set, named rather than derived: the startup probe asserts EQUALITY against this list
+  # plus the framework's own `time_out`, so a term that ends an episode without being named here, or
+  # is named here and absent, is a red. Naming is what lets a future term take a dwell, a speed limit
+  # or any other parameter shape without going unchecked -- a `_threshold` suffix convention would
+  # quietly skip it.
+  terms:
+    - base_contact
+    - head_contact
   base_contact_threshold: 1.0
   # Same "contact" value as base_contact on purpose: one number to reason about, and the framework's
   # own history-max instead of an added dwell -- a face-plant is an instantaneous event.
