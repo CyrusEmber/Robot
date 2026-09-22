@@ -159,8 +159,20 @@ LIST_BYTES = 5120
 #: contributors unchanged. The item exists because those two are *actions*, not verdicts: folding them
 #: into a closed item, or into another item's ``next``, would put them outside the default read chain,
 #: and the owner chose to raise the ceiling rather than hide two open ends.
+#: Raised 74000 -> 90000 on 2026-09-22: the lizard family retirement removed two items
+#: (v15-joint-sir-draft, distillation-export-checks, ~2.7 KB) and the same day added the lizard2
+#: landing's own item plus four more that each hold a decision or a located gap --
+#: lizard2-family-landing 6543, freeze-maintenance-simplification 3848, dr-widening-policy 3592,
+#: teacher-literal-parity-gate 2611, harness-version-anchor-missing 1579. Measured 73998 bytes
+#: over 29 active, i.e. 2 bytes of headroom: the ceiling had stopped being a ceiling and become a
+#: block on every commit, including ones that only touch closed items. 90000 buys about six items
+#: at the current 2551-byte average. The top three (lizard2-family-landing 6543,
+#: stale-doc-pointers-in-code 4915, freeze-maintenance-simplification 3848) hold unfinished actions
+#: and readings a trim would delete. This is the third raise in this ledger; if a fourth arrives
+#: soon the honest move is to merge or shave items rather than raise again, and any raise carries
+#: the same measured numbers as this one.
 #: Raise it by hand with a reason written here, never from inside a run.
-BUDGET_BYTES = 74000
+BUDGET_BYTES = 90000
 
 _SHA = re.compile(r"\bsha256:[0-9a-fA-F]{8,}")
 #: A prose reference to a ledger file, spelled the way a document writes it. Placeholders
