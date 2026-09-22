@@ -22,7 +22,7 @@
 | 挂账 #1 的未做半（跨协议对照 / 基线重跑 / rough 两列分布） | `work/active/runtime-acceptance-v3.md` |
 | 挂账 #2 的未做半（rsl_rl 身份 / `num_envs` 格子 / 资产 fail 路径） | `work/active/record-format-live-checks.md` |
 | 挂账 #3 ①②（套件粗糙列退化 + 训练侧未播种，已收） | `work/closed/2026/terrain-suite-v2-rng.md` |
-| 挂账 #4（两处规格偏离待拍板） | `work/active/archive-location-decision.md`（`blocked`） |
+| 挂账 #4（两处规格偏离，已裁决 2026-09-22） | `work/closed/2026/archive-location-decision.md`（`done`）；裁决见 `acceptance/records/2026-09-22-terrain-evidence-archive-and-verification.md` |
 | 挂账 #5 / #6 | 已经是指针，未动 |
 | 版本历史 + 修订记录（**同一批版本的两份日志**） | 删除；正文归 `git log -p ablation_harness/HARNESS.md` 与 commit message |
 | 记录格式一节 | 压缩：四条读侧规则 / 可比性 / 写侧硬门逐条**点名执行者**（`record.read_state`、`record.BINDINGS`、`_persist`、`test_eval_record.py`） |

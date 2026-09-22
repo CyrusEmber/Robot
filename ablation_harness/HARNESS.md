@@ -75,6 +75,6 @@ harness 代码高频变更 / 多机器人共用 / 再开新协议时 → 目录�
 | 1 | 运行时验收未跑完（跨协议对照 / 基线重跑 / rough 两列分布） | → `work/active/runtime-acceptance-v3.md` | 高 |
 | 2 | 记录格式的剩余真跑段（rsl_rl 身份 / num_envs 格子 / 资产 fail 路径待授权） | → `work/active/record-format-live-checks.md` | 中 |
 | 3 | 地形随机源两处缺口 + 几何证据归档（已收） | → `work/closed/2026/terrain-suite-v2-rng.md`、`work/closed/2026/terrain-evidence-18b.md` | — |
-| 4 | 地形证据归档位置与 `rebuild.py` 角色（待用户拍板） | → `work/active/archive-location-decision.md` | 中 |
+| 4 | 地形证据归档位置与 `rebuild.py` 角色（已裁决：运行目录 + 材料完整性） | → `work/closed/2026/archive-location-decision.md`；裁决见 `acceptance/records/2026-09-22-terrain-evidence-archive-and-verification.md` | — |
 | 5 | 诊断 run 与 campaign 表之间没有闸门 | → `work/active/diagnostic-run-gate.md` | 中 |
 | 6 | `--headless` 已弃用而本仓仍在用 | → `work/active/headless-flag-deprecation.md` | 低 |

@@ -72,10 +72,13 @@
 ## 未覆盖边界
 
 - **归档位置改了**：证据落运行目录 `terrain/geometry.json`，不是 `PLAN.md` 原文的
-  `rl_exp/archive/<run_id>/terrain/` —— 它由 suite+seed 可再生、随记录入库即"取回得来"，
-  `rl_exp/archive/` 仍留给"rev 取不回的内容"。**此替代需用户确认。**
+  `rl_exp/archive/<run_id>/terrain/`；`rl_exp/archive/` 仍留给"rev 取不回的内容"。
+  **此替代已由用户裁决确认（2026-09-22）**，裁决正文见
+  `acceptance/records/2026-09-22-terrain-evidence-archive-and-verification.md`。
+  该裁决同时改正了本条原先的理由：**suite+seed 可再生不等于历史证据可取回**，原始几何记录与
+  其版本身份仍必须保留（本条不再持有该理由）。
 - **"由 `rebuild.py` 核验"落地为**：`rebuild.py` 核**材料完整性**（`--check` 重算摘要），
-  **地形一致由再生判定**。
+  **地形一致由再生判定**（同一裁决 2026-09-22 确认）。
 - **重建评级（#18 ①"已验证重建"）不在本节**，仍单独排期；**历史 run 无归档 ⇒ 一条一律 `unknown`**。
 - **三条训练跑都是 `--max_iterations 1` 诊断跑**，**不是可引用的训练结果**。
 - **双跑 A/B 的干净树与含 `RL_ALLOW_DIRTY_TREE` 的臂不是同一条件**：反证臂 C 与评测 smoke 在脏树上跑，
