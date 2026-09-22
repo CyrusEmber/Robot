@@ -145,15 +145,16 @@ names:
     - "neck_.*"
 
 # A RANGE, not a point (the one deliberate recipe difference from the lizard baseline, decided
-# 2026-09-22): forward 0-2 m/s, sampled on the framework's own 10 s window, so a 20 s episode holds
-# two commands and the transition is graded. The two switches below are off explicitly because either
-# would rewrite the issued command at runtime, and the startup probe reads the issued tensor rather
-# than trusting these values:
+# 2026-09-22, widened 0-2 -> 0-3 the same day by the owner so the window's top carries headroom past
+# the sibling line's 3.0 m/s): forward 0-3 m/s, sampled on the framework's own 10 s window, so a 20 s
+# episode holds two commands and the transition is graded. The two switches below are off explicitly
+# because either would rewrite the issued command at runtime, and the startup probe reads the issued
+# tensor rather than trusting these values:
 #   heading_command=True would rewrite ang_vel_z from a heading error;
 #   rel_standing_envs>0 would zero the command for that fraction of envs, i.e. they would be asked to
 #     stand still and would score the tracking reward for free.
 commands:
-  lin_vel_x: [0.0, 2.0]
+  lin_vel_x: [0.0, 3.0]
   lin_vel_y: [0.0, 0.0]
   ang_vel_z: [0.0, 0.0]
   heading_command: false

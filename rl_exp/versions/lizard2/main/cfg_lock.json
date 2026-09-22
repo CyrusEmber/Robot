@@ -1,15 +1,15 @@
 {
  "lock_format": 3,
  "note": "recipe golden of line 'lizard2/main': entry keys are '<combination>|<task id>' and a training run never adds one",
- "reason": "add the head-contact termination (chest_.*/neck_.* > 1 N, the framework's illegal_contact, no dwell) beside base_contact: the sibling line's v1 lost its run to a neck-bearing policy, and this line's v1 is untrained, so this is a pre-training revision rather than a post-freeze edit",
- "reason_at": "2026-09-22T15:28:29+08:00",
- "reason_rev": "aa86af408e1e",
+ "reason": "widen the command window 0-2 -> 0-3 m/s (owner's call, same day, pre-training): the window's top now matches the sibling line's 3.0 with headroom; the actuator-budget estimate says 3 m/s sits beyond the hip's 180 N.m, which hard precondition 2 measures rather than assumes",
+ "reason_at": "2026-09-22T15:48:06+08:00",
+ "reason_rev": "5a0b52d1bfbb",
  "entries": {
   "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard2-Flat-Play-v1": {
    "version": "v1",
    "env_cfg_class": "rl_exp.tasks.recipe_tasks:Lizard2FlatEnvCfg_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:Lizard2PPORunnerCfg",
-   "digest": "9ffa9eacccdbde2f32bebec24f8f63d5e5be806b8587e318a2b0e827d04ae179",
+   "digest": "c04dc2e794f3cabcb5427e550ccd1a0960a05620d7937a45901a24d782c6f1b8",
    "snapshot": {
     "env": {
      "viewer": {
@@ -1378,7 +1378,7 @@
         "lin_vel_x": {
          "__tuple__": [
           0.0,
-          2.0
+          3.0
          ]
         },
         "lin_vel_y": {
@@ -1607,7 +1607,7 @@
    "version": "v1",
    "env_cfg_class": "rl_exp.tasks.recipe_tasks:Lizard2FlatEnvCfg",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:Lizard2PPORunnerCfg",
-   "digest": "6a86b9f2888418e8e3dfc2940049f8b0c36b47fd0a41f2234faa5d3fdae946f5",
+   "digest": "8be770274cb95eaf514d8e529f62da2625645122ef4eb1c2319031143b71a769",
    "snapshot": {
     "env": {
      "viewer": {
@@ -2976,7 +2976,7 @@
         "lin_vel_x": {
          "__tuple__": [
           0.0,
-          2.0
+          3.0
          ]
         },
         "lin_vel_y": {

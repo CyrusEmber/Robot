@@ -120,7 +120,7 @@
           "commands.base_velocity.ranges.lin_vel_y.__tuple__[1]",
           "commands.base_velocity.rel_standing_envs"
         ],
-        "why": "The command RANGE landed exactly as the yaml wrote it: lin_vel_x [0.0, 2.0] m/s with lin_vel_y and ang_vel_z fixed at 0.0 (a range, not a fixed speed). heading_command and rel_standing_envs are off explicitly because either can rewrite the issued command at runtime -- heading_command would recompute ang_vel_z from the heading error, and rel_standing_envs would zero a fraction of envs while they still collect tracking reward. The startup probe reads the issued tensor rather than trusting this element. (compared against the framework stock cfg, base.json = null: a lineage root)"
+        "why": "The command RANGE landed exactly as the yaml wrote it: lin_vel_x [0.0, 3.0] m/s with lin_vel_y and ang_vel_z fixed at 0.0 (a range, not a fixed speed; widened from 0-2 to 0-3 before training so the top carries headroom past the sibling line's 3.0). heading_command and rel_standing_envs are off explicitly because either can rewrite the issued command at runtime -- heading_command would recompute ang_vel_z from the heading error, and rel_standing_envs would zero a fraction of envs while they still collect tracking reward. The startup probe reads the issued tensor rather than trusting this element. Note for readers of the verdict: the actuator estimate puts 3 m/s beyond the hip's torque budget, so the top of this window is measured by the capability curve (plan hard precondition 4), not assumed reachable. (compared against the framework stock cfg, base.json = null: a lineage root)"
       }
     }
   },
@@ -183,7 +183,7 @@
       "lizard2_proprio_obs": "aaae20fdf357",
       "lizard2_rewards": "03475921db69",
       "lizard2_robot": "cd0323a4bacc",
-      "lizard2_velocity_command": "5c5ef57b4b66"
+      "lizard2_velocity_command": "d98d9463f952"
     },
     "agent": "220fbd251b37"
   }
