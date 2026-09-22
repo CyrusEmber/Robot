@@ -56,15 +56,22 @@ GATE_ORDER = (
     "attitude",
     "no_non_foot_contact",
     "no_non_foot_carrier",
+    "no_non_foot_load_sum",
     "no_mesh_through_floor",
 )
 
 #: The identity of the criteria reader. Declared rather than derived from a file hash: a comment is
 #: not a semantic change, and a semantic change is exactly what this must make loud.
-#: ``rl_exp/tools/verify/check_judge_semantics.py`` freezes ``id -> kinds -> cases -> expectations``
+#: ``rl_exp/tools/verify/test_baseline_contract.py`` freezes ``id -> kinds -> cases -> expectations``
 #: and refuses an in-place edit to a published id, so a changed criterion needs a new kind and a new
 #: id instead of an edit here.
 JUDGE_ID = "baseline-criteria-1"
+
+#: The identity of the reader that can read the banded criteria (they were added for the lizard2
+#: main line, whose command window is a 0-3 m/s range). A protocol names it in ``judge``; the reason
+#: is that the record's verdict carries the reader, and a record judged by the banded criteria must
+#: not be attributed to the reader that predates them.
+BANDED_JUDGE_ID = "baseline-criteria-banded-1"
 
 #: The identity of the pre-criteria reader. Spelled by mechanism, not by version: ``v1``/``v2``/``v3``
 #: are three declarations read by *one* implementation, and this names that implementation. Their
@@ -86,6 +93,31 @@ CRITERION_KINDS = {
     "non_foot_contact_v1": {"params": ("limit_n", "eps"), "columns": ("non_foot_fraction",)},
     "non_foot_carrier_v1": {"params": ("fraction", "sustain_s"), "columns": ("non_foot_fraction",)},
     "mesh_clearance_v1": {"params": ("threshold_m",), "columns": ("mesh_min_z",)},
+    # -- the banded criteria -------------------------------------------------------------------
+    # A range command cannot be judged by one mean: the mean of a run that walks in the low band and
+    # stalls in the top one looks the same as a run that is uniformly mediocre, and those are
+    # different failures. The bands are part of the criterion, not a reporting detail.
+    "tracking_banded_v1": {
+        "params": ("threshold", "floor_mps", "zero_band_mps", "zero_abs_mps", "bands"), "columns": ()},
+    "displacement_banded_v1": {
+        "params": ("threshold", "zero_band_mps", "zero_abs_m", "bands"), "columns": ()},
+    # The single-body criterion reads each body against the fraction *before* the dwell, so bodies
+    # taking turns under the fraction accumulate into one sustained reading there. Two bodies at 4%
+    # under a 5% threshold are invisible to it while carrying 8% between them; here the load is
+    # summed over the bodies first.
+    "non_foot_load_sum_v1": {"params": ("fraction_sum", "sustain_s"), "columns": ("non_foot_fraction",)},
+}
+
+#: Which reader may read which kinds. The protocol's ``judge`` is a binding, not a label: a criterion
+#: the named reader does not cover is refused, so a protocol cannot reach new semantics by naming an
+#: old reader. (Adding a kind here does not move a published id's digest: the freeze pins the subset
+#: of kinds each id *lists*, see ``test_baseline_contract.frozen_digests``.)
+JUDGE_KINDS = {
+    JUDGE_ID: ("tracking_v1", "displacement_v1", "survival_v1", "sustained_tilt_v1",
+               "non_foot_contact_v1", "non_foot_carrier_v1", "mesh_clearance_v1"),
+    BANDED_JUDGE_ID: ("tracking_v1", "displacement_v1", "survival_v1", "sustained_tilt_v1",
+                      "non_foot_contact_v1", "non_foot_carrier_v1", "mesh_clearance_v1",
+                      "tracking_banded_v1", "displacement_banded_v1", "non_foot_load_sum_v1"),
 }
 
 

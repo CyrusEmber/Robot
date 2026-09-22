@@ -329,11 +329,14 @@ def test_probe_registered_entry():
     module = ast.fix_missing_locations(ast.Module(body=[fn], type_ignores=[]))
     selected = NS(scene=NS(num_envs=1))
     wrong = NS(scene=NS(num_envs=1))
+    # The stub carries every argument the probe's *early* CLI guards read, because the AST prefix
+    # above stops at the `env = ...` line and those guards run before it: `shot` alone for now
+    # (its `and` short-circuits, so the renderer flag is never reached).
     namespace = {
-        "args_cli": NS(task="requested-play-task", num_envs=3),
+        "args_cli": NS(task="requested-play-task", num_envs=3, shot=False),
         "resolve_task_cfg": lambda task: selected if task == "requested-play-task" else None,
         "BaselineFlatEnvCfg": lambda: wrong,
-        "gym": NS(make=lambda task, cfg: NS()),
+        "gym": NS(make=lambda task, cfg, **kw: NS()),
     }
     exec(compile(module, "<probe setup>", "exec"), namespace)
     assert namespace["main"]() is selected, "probe ignored the requested registered entry"
