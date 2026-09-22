@@ -206,12 +206,13 @@ def run_head_press(env, unwrapped, robot, body_names, joint_names, contact_senso
     zeroes the sensor's buffers, so a force read afterwards belongs to the NEXT episode (measured
     2026-09-22: the guard read as firing at 0.00 N).
 
-    What this is NOT: a threshold calibration. The head cannot reach the floor while the robot stands
-    on its feet (its lowest mesh point is 0.478 m up at the extreme head pose), and a nose-down robot
-    is placed with its chin deep in the floor, so the force read is the solver's response to that
-    placement. It establishes that the guard fires when the declared bodies are loaded and that it
-    stays silent while they are not -- a press gentle enough to cross the 1 N threshold from below is
-    still owed.
+    What this is NOT: a threshold calibration, and it cannot become one. The head cannot reach the
+    floor while the robot stands on its feet (0.478 m of clearance at the extreme head pose), so the
+    press is a nose-down robot whose head is driven onto the floor; the contact is stiff enough that
+    1 N of it is about a micrometre of penetration, so the force jumps from zero to hundreds of N in
+    the single frame the chin arrives. The criterion's threshold is therefore a contact detector, and
+    what the pair of runs establishes is the thing that matters: silent while the head is clear,
+    firing in the frame it is not.
     """
     print("[probe] head-contact gate (standing vs pressed)")
     patterns = body_patterns.get("head_contact_body_names") or []
@@ -261,7 +262,7 @@ def run_head_press(env, unwrapped, robot, body_names, joint_names, contact_senso
           f"{quiet_peak:.2f} N): the guard is reading something other than the head chain")
     print(f"  control (standing, head up): peak head force {quiet_peak:.2f} N, guard fired {quiet_fired}")
 
-    # --- pressed: head chain to its lower limits, then the base descends -----------------
+    # --- pressed: head chain held at its lower limits, then the base descends -------------
     # Which nose-down angle to press at is measured, not assumed: the chin's mesh floor and the
     # feet's are read at each candidate pose, and the angle that leaves the feet clearest is the one
     # used -- so the reading is the chin's, not the feet's.
@@ -271,11 +272,27 @@ def run_head_press(env, unwrapped, robot, body_names, joint_names, contact_senso
             env.step(zero)
     ref_z = float(robot.data.root_pos_w.torch[0, 2])
     press = head_press_action(unwrapped, robot, joint_names, end=0)
+
+    # The head chain is HELD, not commanded: at its limits the drives saturate under the head's own
+    # weight and the chain retracts by ~0.3 m while the base is lowered -- six times the whole press,
+    # which is why a commanded pose never reached the floor while a written one did (measured
+    # 2026-09-22). With the chain pinned by joint state, the descent is a controlled press: the chin
+    # approaches the floor at press_depth per window and the force crosses the threshold from below.
+    chain_ids = [joint_names.index(name) for name in joint_names
+                 if name.startswith(("chest_", "neck_"))]
+    held = robot.data.default_joint_pos.torch[:, chain_ids].clone()
+    held[:] = robot.data.joint_pos_limits.torch[0][chain_ids, 0]
+    velocity = torch.zeros_like(held)
+
+    def hold_chain() -> None:
+        robot.write_joint_state_to_sim(held, velocity, joint_ids=chain_ids)
+
     for _ in range(settle):
         with torch.inference_mode():
             env.step(press)
     floors = {}
     for degrees in (30, 45, 60, 75, 90):
+        hold_chain()
         place_root(unwrapped, robot, math.radians(degrees), ref_z)
         chin = mesh_floor(robot, ids, corners, num_envs)
         feet = mesh_floor(robot, foot_ids, foot_corners, num_envs)
@@ -284,9 +301,9 @@ def run_head_press(env, unwrapped, robot, body_names, joint_names, contact_senso
               f"(clearance once the chin is {args_cli.press_depth * 1000:.0f} mm under: "
               f"{feet - chin - args_cli.press_depth:+.3f} m)")
     degrees = max(floors, key=lambda value: floors[value][1] - floors[value][0])
-    chin_ref = floors[degrees][0]
-    print(f"  pressing at {degrees} deg nose-down, base closing on the floor from z {ref_z:.3f} m in "
-          f"{args_cli.press_depth * 1000:.0f} mm steps (each stage holds {max(1, args_cli.steps // 5)} steps)")
+    hold_chain()
+    place_root(unwrapped, robot, math.radians(degrees), ref_z)
+    chin_ref = mesh_floor(robot, ids, corners, num_envs)
     record: dict[str, float] = {}
     original = unwrapped._reset_idx
 
@@ -304,48 +321,57 @@ def run_head_press(env, unwrapped, robot, body_names, joint_names, contact_senso
                       base=bool(manager.get_term("base_contact").any()))
         return original(env_ids)
 
-    # A staircase of absolute base heights, not of depths off the mesh proxy: the proxy's lowest
-    # point is not where the collider touches (the asset's collision meshes are convex-hull
-    # approximations, and the robot reached the floor with the proxy still reading millimetres of
-    # clearance -- measured 2026-09-22). The base therefore descends by fixed steps until something
-    # touches, and what the mesh proxy says is reported beside the force, never used to aim.
-    stages = 5
-    stage_steps = max(1, args_cli.steps // stages)
+    # The descent: start press_depth ABOVE the floor and close on it over the window, so the run has
+    # both halves -- frames with the chin clear of the floor and frames with it on it. Where the force
+    # crosses the threshold is a property of the contact model, not of the ramp (see the printout).
+    step_m = 2.0 * args_cli.press_depth / max(1, args_cli.steps)
+    touching = ref_z - chin_ref  # base height where the held chin's lowest mesh point is at the floor
+    start = touching + args_cli.press_depth
+    print(f"  pressing at {degrees} deg nose-down: the held chin sits {chin_ref:+.3f} m at base z "
+          f"{ref_z:.3f} m, so the base descends from {start:.3f} m (chin {args_cli.press_depth * 1000:.0f} "
+          f"mm clear) through {touching:.3f} m at {step_m * 1000:.2f} mm per step")
     unwrapped._reset_idx = capture
-    fired, masks = None, None
+    fired, masks, series = None, None, []
     try:
-        for stage in range(stages):
-            height = ref_z - args_cli.press_depth * (stage + 1)
-            place_root(unwrapped, robot, math.radians(degrees), height)
-            stage_peak = 0.0
-            for _ in range(stage_steps):
-                with torch.inference_mode():
-                    obs, rew, term, trunc, _ = env.step(press)
-                stage_peak = max(stage_peak, head_contact_max(contact_sensor, ids, env_mask=~(term | trunc)))
-                if record:
-                    # some term ended the episode and the env is already respawned: the press is over
-                    fired, masks = stage, (bool(term.any()), bool(trunc.any()))
-                    stage_peak = max(stage_peak, record["force"])
-                    break
-            print(f"    base z {height:.3f} m: peak head force {stage_peak:8.2f} N"
-                  f"{'   <- the episode ended here' if record else ''}")
-            if fired is not None:
+        for step in range(args_cli.steps):
+            hold_chain()
+            place_root(unwrapped, robot, math.radians(degrees), start - (step + 1) * step_m)
+            with torch.inference_mode():
+                obs, rew, term, trunc, _ = env.step(press)
+            force = head_contact_max(contact_sensor, ids, env_mask=~(term | trunc))
+            series.append(force if not record else record["force"])
+            if step % max(1, args_cli.steps // 8) == 0 or record:
+                print(f"    base z {start - (step + 1) * step_m:.3f} m: head force {series[-1]:8.2f} N"
+                      f"{'   <- the episode ended here' if record else ''}")
+            if record:
+                # some term ended the episode and the env is already respawned: the press is over
+                fired, masks = step, (bool(term.any()), bool(trunc.any()))
                 break
     finally:
         unwrapped._reset_idx = original
     window = contact_sensor.data.net_forces_w_history.torch.shape[1]
-    print(f"  head bodies: {head_bodies} | yaml threshold {threshold} N | chin mesh floor at the "
-          f"reference pose {chin_ref:+.3f} m")
+    clear = [value for value in series[:-1] if value <= float(threshold)]
+    print(f"  head bodies: {head_bodies} | yaml threshold {threshold} N | frames with the head force "
+          f"under the threshold before the one that ended the episode: {len(clear)}")
+    # The boundary, from both sides: the frames before the end had the head clear of the floor and the
+    # guard silent, and the end frame is the one the chin reached it. A run that fires on its first
+    # frame shows neither half. What it does NOT show is a force lingering near 1 N, because the
+    # contact is stiff: 1 N of this contact is ~1 um of penetration, so at any pose ramp the force
+    # jumps from zero to hundreds of N in one frame -- the threshold here is a contact detector, and
+    # its level is not what decides anything (measured 2026-09-22).
+    check("head/fires-only-on-contact", bool(clear),
+          "the guard fired on the first frame of the press: the run never showed the head clear of the "
+          "floor, so it does not show what the guard is firing on")
     if fired is None:
         check("head/fires-when-pressed", False,
-              f"the base closed {args_cli.press_depth * stages * 1000:.0f} mm on the floor at "
-              f"{degrees} deg nose-down and head_contact never fired")
+              f"the base closed {2 * args_cli.press_depth * 1000:.0f} mm on the floor at {degrees} deg "
+              f"nose-down and head_contact never fired")
         return
-    print(f"  the episode ended at stage {fired} (base z {ref_z - args_cli.press_depth * (fired + 1):.3f} m, "
+    print(f"  the episode ended at step {fired} (base z {start - (fired + 1) * step_m:.3f} m, "
           f"chin {record['depth'] * 1000:+.1f} mm into the floor by the mesh proxy): the terms returned "
           f"terminated={masks[0]} truncated={masks[1]} | base_contact among them: {bool(record['base'])}")
     check("head/fires-when-pressed", bool(record["head"]),
-          f"the press ended at stage {fired} by another term (base_contact among them: "
+          f"the press ended at step {fired} by another term (base_contact among them: "
           f"{bool(record['base'])}), without head_contact firing")
     if record["head"]:
         print(f"  head_contact fired: {record['force']:.2f} N in that frame, {record['window']:.2f} N "
