@@ -63,6 +63,10 @@ when there is neither an unfinished action nor a pending question: ``done`` if i
 mechanism that took it over. Nothing closes to get under a byte budget, and "nobody is touching
 it today" is not a close condition.
 
+Those three statuses *are* the close, so they are gated to the closed tree. A file carrying one
+of them in ``work/active/`` is either mid-move or drift: the move is the same change, and until
+it happens the list keeps advertising finished work as in flight.
+
 The body states the current situation only: no superseded states, no copy of a number or a
 digest whose owner is elsewhere, no restatement of a rule that lives in a mechanism.
 
@@ -108,6 +112,10 @@ _RECORD_NAME = re.compile(r"\d{4}-\d{2}-\d{2}-[a-z0-9-]+\.md")
 
 #: The only statuses an item may carry.
 _STATUS = ("open", "in_progress", "blocked", "done", "cancelled", "superseded")
+#: The subset that *is* the close: no unfinished action and no pending question left, so the
+#: item belongs in ``work/closed/<year>/``. Spelled out rather than sliced off ``_STATUS`` so
+#: reordering that tuple cannot silently move the boundary.
+_TERMINAL = ("done", "cancelled", "superseded")
 #: Fields every item has, active or closed.
 _COMMON = ("id", "title", "scope", "status", "landing")
 #: Fields an active item adds; a closed item must not keep "next" around.
@@ -240,6 +248,12 @@ def _tally(items: list[Item], problems: list[str]) -> int:
         if status and status not in _STATUS:
             problems.append(
                 f"{_rel(item.path)}: status '{status}' is not one of {'/'.join(_STATUS)}"
+            )
+        if not item.closed and status in _TERMINAL:
+            problems.append(
+                f"{_rel(item.path)}: status '{status}' is finished work sitting in work/active/ "
+                "-- closing is a move to work/closed/<year>/ (keep the id, drop 'next', add "
+                "'outcome'), and the list has to keep showing what is in flight"
             )
         if item.path.stem != item.id:
             problems.append(
@@ -509,6 +523,7 @@ def self_test() -> int:
             ),
         )
         item("bad-status", _GOOD.format(id="bad-status", title="x", status="done-ish"))
+        item("done-in-active", _GOOD.format(id="done-in-active", title="x", status="done"))
         item("name-mismatch", _GOOD.format(id="different", title="x", status="open"))
         item(
             "bad-landing",
@@ -563,6 +578,7 @@ def self_test() -> int:
         for expected in (
             "'close_when' is missing or empty",
             "status 'done-ish' is not one of",
+            "status 'done' is finished work sitting in work/active/",
             "does not match the file name",
             "notes/not-there.md does not exist",
             "closed item: depend on a live mechanism",
@@ -581,6 +597,13 @@ def self_test() -> int:
         blamed = [p for p in detected if "good.md" in p]
         if blamed:
             problems.append(f"a clean item was blamed: {blamed}")
+        # The location gate is about the directory, not the word: closed items carry the very
+        # same statuses, so it has to fire once, on the active fixture, and nowhere else.
+        moved = [p for p in detected if "is finished work sitting in work/active/" in p]
+        if len(moved) != 1 or "done-in-active.md" not in moved[0]:
+            problems.append(
+                f"the finished-work gate fired on {moved} instead of only done-in-active.md"
+            )
         if not detected:
             problems.append("nothing was flagged at all: the fixture tree is not being read")
 
@@ -624,7 +647,7 @@ def self_test() -> int:
     for problem in problems:
         print(f"  FALSIFIER: {problem}")
     print(
-        "WORK_DOCS_SELF_TEST_OK (14 item + 3 record + 3 pointer fixtures)"
+        "WORK_DOCS_SELF_TEST_OK (15 item + 3 record + 3 pointer fixtures)"
         if not problems
         else f"WORK_DOCS_SELF_TEST_DRIFT ({len(problems)})"
     )
