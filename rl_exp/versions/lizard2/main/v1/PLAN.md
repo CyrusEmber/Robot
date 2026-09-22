@@ -54,6 +54,7 @@
 
 | 日期 | 版本 | 变更 + 原因 + 依据 |
 |---|---|---|
+| 2026-09-22 | v1 | **启动探针的观测口径再修一轮**（评审：下压动作没真正下发、力在复位后取样、"终止集合一致"只查缺不查多且后缀推导不全）：压头改为经部署动作接口构造并真的 `env.step`；力/项值在 `_reset_idx` 包装里**复位前**同帧读取并打印 `terminated`/`truncated`；终止集合由 yaml `terminations.terms` 点名、探针按等号判；另加 `head/fires-with-the-head-at-the-floor`（力必须能由声明连杆贴地解释，否则判红）；`--shot` 出多帧供目视。结果：站立 0.00 N 不触发 / 压头触发 1080.29 N（同帧头部网格在地面下 724 mm）。依据：`acceptance/records/2026-09-22-lizard2-probe-observer-fixes.md` |
 | 2026-09-22 | v1 | **命令窗口加宽 0–2 → 0–3 m/s**（所有者指示，同日、开训前）：上界取与旧线相同的 3.0；随 `lin_vel_x` 把分带改为 `[[0.1,1.0],[1.0,2.0],[2.0,3.0]]`、硬前置 2 的区间改 `[0.0,3.0]`、风险第 1 条补 3 m/s 的估算（f≈2.73 Hz、τ≈277 N·m，**超 180 上限约 1.5×**）；cfg_lock golden 与 v1 asset_lock 重钉（`--reason` 记"开训前加宽"）。结论口径随之收紧：**"到不了 3 m/s"不能自动算策略失败**，先看硬前置 4 |
 | 2026-09-22 | v1 | **终止条件加一条**（所有者指示）：`head_contact` = `chest_.*`/`neck_.*` 接触力 > **1.0 N**（与 `base_contact` 同一个"接触"值）即终止——平地上"头颈/前胸触地"是第二条"倒下"的路，而旧线 v1 正是被"压着脖子走"拖垮的（neck_pitch 82–90 N、占体重 11.6–12.8%，且 66% 的帧压在 10% 体重之上却从未连续超过 0.22 s ⇒ dwell 型承重判据拦不住它，接触判据可以）。实现只用框架 `illegal_contact`（不加 dwell 核）；yaml 加 `names.head_contact_body_names` 与 `terminations.head_contact_threshold`，元素 `lizard2_base_contact` 更名 `lizard2_contact_gate` 并同时写两条终止；`diff.json` 的路径 64 → **65**、`EXPECTED_DIFFS` 107 → **108**、cfg_lock golden 与 v1 asset_lock 随之重钉（`--reason` 记"开训前修订"） |
 | 2026-09-22 | v1 | 验收节重写（评审 #3/#4）：① 判据点名 `CRITERION_KINDS` 种类 + 参数，而不是散文——散文让门槛含义漂移（v4 `why_v4`）；② 姿态判据方向修正：`sustained_tilt_v1` 是"超过阈值连续 ≥ 0.5 s 即跌倒"，活体实现是 `metrics.fall_flags` 的 `sustained_any`，且**任一 env 破线即不通过**，不是比例；③ 零命令口径/位移聚合顺序/失败后帧计入方式写死（旧实现 `clamp_min(1e-6)` 与"逐 env 先除后平均"在含零窗口上不稳定）；④ 非足承重按所有者决定：持续承重升门槛并作为通过条件，瞬时碰撞留诊断；⑤ 跟踪 0.25 定为预注册工程阈值并注明它不是从 0.2 推导的 |
@@ -78,17 +79,28 @@
    冻结时同时要：新增 `tracking_banded_v1` / `displacement_banded_v1` 两个种类（各带反例测试，
    仓库规则：非平凡逻辑要留一条能挂掉的检查）、给新种类一个自己的 judge id
    （`baseline_metrics.JUDGE_ID` 随判决走）、把 `non_foot_carrier_v1` 的 `fraction`/`sustain_s` 定死。
-2. **启动探针按本版接口复测（已改造并跑过一次，见下）**：`baseline_probe.py` 不再硬编码任何一条线的期望——
+2. **启动探针按本版接口复测（已改造；观测口径 2026-09-22 再修一轮，见
+   `acceptance/records/2026-09-22-lizard2-probe-observer-fixes.md`）**：`baseline_probe.py` 不再硬编码任何一条线的期望——
    命令框、观测宽度、终止集合都取自**任务自己的参数文档**（`recipe_params.load(cfg.params_line, cfg.params_version)`、
    `obs_protocol.recorded_dims(task)`），`resolve_task_cfg` 也不再只认 `lizard/baseline` 一条线。
    在 `Lizard2-Flat-Play-v1` 上实测通过：命令逐 env 落在 `[0.0, 3.0]`（8 envs，spread 2.5 m/s）、
    `lin_vel_y`/`ang_vel_z` 恒 0、无 standing/heading env、obs `policy=102`（与批准宽度一致）、
-   30 个关节各恰好一个动作通道且维数一致、终止集合＝yaml 声明的 `base_contact`+`head_contact`+`time_out`。
-   **仍差两件**（探针现在会自己报出来）：① `names.head_contact_body_names` 的 `chest_.*`/`neck_.*`
-   命中了 `chest_yaw`/`neck_yaw` 两个**没有碰撞网格**的连杆（接触力结构性为零 ⇒ 那部分守卫永不触发）——
-   要收窄成 `chest_pitch`/`neck_pitch` 并重钉 golden/lock；② `--head-press`（压头观测守卫触发）**还没给出可信读数**：
-   只降机体时机器人先落在脚上（头部 0.00 N），驱动头链后终止标志在**零接触力**下立即置位 ⇒ 该读数不可信，
-   守卫触发仍未真正观测到。零动作落地姿态目视也还没做。
+   30 个关节各恰好一个动作通道且维数一致。
+   - **终止集合改由 yaml 点名、探针按等号判**：`terminations.terms` 列出生效项（`base_contact`/`head_contact`），
+     生效集合 == 该列表 ∪ 框架自带 `time_out`，多与少都红；旧的 `*_threshold` 后缀推导覆盖不了 dwell / 速度闸
+     等其它参数形状的终止项。
+   - **压头与取样已按评审修**：压头经**部署动作接口**构造并真的下发（旧版构造了 `press_action` 却仍 `env.step(zero_action)`）；
+     力与终止项在 `_reset_idx` 包装里于**复位前**同帧读取——`env.step` 返回前会复位并清零接触传感器缓冲，
+     返回后读到的是**下一回合**的力（旧读数因此假报 0.00 N），并打印该步返回的 `terminated`/`truncated`。
+     对照（同一台仪器）：站立 40 步头部力峰 **0.00 N、守卫不触发**；压头下降则触发，触发帧 **1080.29 N**、
+     同帧传感器窗口最大同值、该帧头部网格在**地面下 724 mm**（几何能解释该力），返回 `terminated=True`、
+      `truncated=False`、`base_contact` 不在其中。**这不是阈值标定**（见「风险与挂账」第 9 条）。
+   - **死条目已清（单独一次清理）**：yaml 的 `head_contact_body_names` 由 `chest_.*`/`neck_.*` 收窄为
+     `chest_pitch`/`neck_pitch`——原模式同时命中的 `chest_yaw`/`neck_yaw` 没有碰撞网格，接触力结构性为零，
+     那半个守卫永不触发。golden 与 v1 asset_lock 随之重钉（差异恰好 2 条路径 × 2 个 task）。
+   - **零动作目视**：`--shot`（需 `--enable_cameras`）把零动作回合的多帧写到 `_tmp_zero_action_shots/`；
+     已看末帧 = 8 台平地站姿、四足平贴网格、无可见穿地。静态帧不证明动态稳定，动态侧仍以数值为准
+     （base z 均值 0.937 m、tilt 均值 0.43°、载荷全在四足）。
 3. **落地姿态目视**：本版是 plane，目视只需确认零动作站姿与脚掌接触正常（碎石/地形那两条不适用）。
 4. **执行器响应曲线（已跑，见风险第 1 条与 `2026-09-22-lizard2-actuator-capability.md` 修正版）**，两层都记读数：
    - **unloaded**：`cfg.sim.gravity=(0,0,0)`（真无载），**只驱动一个**指定关节、其余保持起始参考姿态，
@@ -199,3 +211,8 @@ python scripts\reinforcement_learning\rsl_rl\train.py --task Lizard2-Flat-v1 --n
    时间步敏感性**。`*_kfe` 无碰撞形状这件事要说清两层：**"没建碰撞形状"**（几何缺失）与
    **"惩罚列表保留了一个永不触发的条目"**（`undesired_contacts` 里的 `.*_kfe`）是两个问题，
    后者不能靠删条目了事——要么补碰撞形状，要么在 yaml 里说明为什么保留。
+9. **头守卫的触发已观测，但它是"存在性"而不是"阈值标定"**（2026-09-22）：机器人站在脚上时头部够不到地面
+   （极限头姿下头部网格最低点仍高出 0.478 m），而鼻子朝下的机体是把头**放进**地面 ⇒ 触发帧读到的是求解器
+   对该放置的响应（1080 N 级）。因此已证的只是"**声明的连杆承力 → 守卫触发；不承力 → 安静**"这一对照，
+   **尚未**从下方缓慢穿过 1 N 阈值。据此**不得**推断"阈值选得合适/不合适"，也不得据此调阈值；
+   要拿到阈值形状须另做温和下压（属硬前置 2 的余项，不是本版变量）。
