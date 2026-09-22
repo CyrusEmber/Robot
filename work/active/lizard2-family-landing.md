@@ -4,7 +4,7 @@ title: lizard2 家族落成：两处契约声明 + diff 论证 + 开训前检查
 scope: rl_exp/versions/lizard2, rl_exp/tasks, rl_exp/tools/pipeline, rl_exp/tools/verify, ablation_harness
 status: open
 landing: rl_exp/versions/lizard2/main/v1/PLAN.md, rl_exp/versions/lizard2/main/main_params.yaml, rl_exp/tools/pipeline/emit_diff_declaration.py, rl_exp/tools/verify/check_recipe_build.py
-next: ① 冻结本线评测协议（硬前置 1，**未动，是下一步**）：在 `baseline_metrics.CRITERION_KINDS` 上加 `tracking_banded_v1`/`displacement_banded_v1`/`non_foot_load_sum_v1`/`gait_swing_v1`（各带反例与自己的 judge id）、写 `protocols/lizard2_flat_v1.json`、接启动闸门"协议缺失或摘要不符即拒绝"、并按正常/异常样本标定阈值——需先读评审期新落的 `loco_judge.py`/`suite_lock.py`/`judge_semantics.json`，避免另造一套判据真源；② 探针（硬前置 2）**已改造并两次收口**，见 `acceptance/records/2026-09-22-lizard2-probe-observer-fixes.md`：压头经部署动作接口真的下发、力与项值在复位前同帧读取、终止集合由 yaml `terminations.terms` 点名且等号判、`head/no-collider-less-pattern` 的死条目已收窄成 `chest_pitch`/`neck_pitch`（单独一次清理 + 重钉 golden/lock）、零动作目视出帧（末帧已看：8 台平地站姿、四足平贴、无可见穿地）。**余项**：从下方缓慢穿过 1 N 阈值的"温和下压"（现在的读数只是"承力即触发"的存在性证明，不是阈值标定）；③ 头守卫触发**已观测**（站立 0.00 N 不触发 / 压头触发 1080.29 N，触发帧头部网格在地面下 724 mm，`terminated=True`、`base_contact` 不在其中）；④ **待 owner 判断（不是测量）**：自碰撞要不要开（筛选干净、无确认穿透；若开要重测站立/跟踪/行程）；⑤ 坏 tag `lizard2-main-v1` 留远端但**已标记无效**（正确锚点＝`v1.4`/`v1.5`），删否由 owner 定。已完成：计数钉、obs 声明与 102 宽度实测、`diff.json` 理由、PLAN 写满、命令窗口 0–3、执行器响应曲线、自碰撞筛选＋网格复核（记录均已按评审修正）。
+next: ① 冻结本线评测协议（硬前置 1）**不归本会话**：另一会话正在改 `ablation_harness/baseline_metrics.py`（未提交、已含 banded 三 kind + `JUDGE_KINDS` 白名单），按所有者指示本会话不碰 eval 侧；② 探针（硬前置 2）**已改造并两次收口**，见 `acceptance/records/2026-09-22-lizard2-probe-observer-fixes.md`：压头经部署动作接口真的下发、头链另**用关节状态钉住**（只下发动作时驱动饱和、链回缩 0.3 m）、力与项值在复位前同帧读取、终止集合由 yaml `terminations.terms` 点名且等号判、死条目（无碰撞网格的 yaw 连杆）单独清理并重钉 golden/lock、零动作出帧目视（末帧已看：8 台平地站姿、四足平贴、无可见穿地）；③ 头守卫触发（硬前置 5 的观测量）**已完成，边界两半齐全**：站立 0.00 N 静默 / 下巴离地 50 mm 起降、前 18 帧静默、触地那帧 1108.12 N 同帧触发（`terminated=True`、`base_contact` 不在其中）；实测接触刚度 ≈4×10⁶ N/m ⇒ 该阈值是**接触检测器**，"从下方穿过 1 N 的温和下压"**撤回**（不存在该读数）；④ **待 owner 判断（不是测量）**：自碰撞要不要开（筛选干净、无确认穿透；若开要重测站立/跟踪/行程）；⑤ 坏 tag `lizard2-main-v1` 留远端但**已标记无效**（正确锚点＝`v1.4`/`v1.5`），删否由 owner 定。已完成：计数钉、obs 声明与 102 宽度实测、`diff.json` 理由、PLAN 写满、命令窗口 0–3、执行器响应曲线、自碰撞筛选＋网格复核（记录均已按评审修正）。
 close_when: 离线套件全绿、硬前置 1-5 完成（协议冻结、能力曲线、自碰撞、探针、目视）、`diff.json` 理由有据、tag 已打 ⇒ 可开训；若明示暂不开训，则完成到 ④ 并记"未开训"这一事实即可关闭——未做的动作不许留在已关闭项里。
 depends_on: asset-leg-axis-capability-mismatch
 evidence: acceptance/records/2026-09-22-lizard2-family-landing, acceptance/records/2026-09-22-family-landing-decoupled, acceptance/records/2026-09-22-lizard2-stride-at-load, acceptance/records/2026-09-22-lizard2-declarations-and-plan, acceptance/records/2026-09-22-lizard2-self-collision-sweep, acceptance/records/2026-09-22-lizard2-actuator-capability, acceptance/records/2026-09-22-lizard2-probe-observer-fixes
@@ -26,9 +26,10 @@ evidence: acceptance/records/2026-09-22-lizard2-family-landing, acceptance/recor
   `check_joint_layout.py` 改为按资产推导腿部关节/力臂并新增弦长断言。
 - **声明与论证**：`EXPECTED_DIFFS` 等三处计数钉、obs 声明两任务 + 102 宽度按资产键实测批准（缺宽度/缺解析成静态红）、
   9 条 env + 43 条 agent 理由（再生成保留原文，值变化打 REVIEW 标记）。
-- **探针的观测口径收口**（2026-09-22，评审后）：压头真的下发、力/项值复位前同帧读、终止集合改为 yaml 点名 + 等号判、
-  死条目（无碰撞网格的 yaw 连杆）单独清理并重钉 golden/lock、零动作出帧供目视；读数与边界见 `evidence`
-  的 probe-observer-fixes 记录。
+- **探针的观测口径收口**（2026-09-22，评审后）：压头真的下发 + 头链用关节状态钉住、力/项值复位前同帧读、
+  终止集合改为 yaml 点名 + 等号判、死条目（无碰撞网格的 yaw 连杆）单独清理并重钉 golden/lock、零动作出帧供目视；
+  头守卫触发的**边界两半**已测（离地 18 帧静默 → 触地帧 1108.12 N 同帧触发），并由接触刚度（≈4×10⁶ N/m）
+  得出该阈值是**接触检测器**而非力门限。读数与边界见 `evidence` 的 probe-observer-fixes 记录。
 - **PLAN 写满**：硬前置 5 条、固定窗口、主轴 7 条判据（四个种类待新增）、非足承重两条判据、8 条风险与 4 条判废线；
   所有者的两条决定已落定。**终止条件 2026-09-22 加一条**：`head_contact`（`chest_.*`/`neck_.*` > 1.0 N，框架
   `illegal_contact`，不加 dwell）——旧线 v1 就是被"压着脖子走"拖垮的（66% 的帧压在 10% 体重之上、却从未连续
