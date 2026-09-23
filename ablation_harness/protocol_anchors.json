@@ -1,0 +1,18 @@
+{
+  "format": "protocol-anchors-1",
+  "why": [
+    "A protocol's numbers decide what counts as passing, and nothing used to notice them moving: the criteria table's digests cover kinds and cases, the suite lock covers the ground, and the migration proof compares one record's verdicts rather than the declared numbers -- so a threshold edit left the whole offline suite green (acceptance/records/2026-09-23-threshold-pilot.md).",
+    "This table pins the bytes of the protocols in use, so a moved number fails the gate until this table says the new bytes are the ones meant. The reason field is part of the entry because a digest can show that something moved and cannot show that anyone looked.",
+    "Editing this table is the approval act, and it is a human one: pasting the digest the gate prints is bookkeeping, not review. Clearing the gate afterwards says the file and the table agree -- never that the change was approved."
+  ],
+  "anchors": {
+    "protocols/baseline_flat_v4.json": {
+      "sha256": "4b069c593172391f573de8318f92753401ee644aea41143bc3d93cda99951de2",
+      "reason": "Frozen at the criteria-identity change: v4 renames the criteria and changes no number. A threshold edit belongs in a new protocol file, because old records carry this file's digest."
+    },
+    "protocols/lizard2_flat_v1.json": {
+      "sha256": "4078869f798d5db067f5c7adfb6370ab301b695eeb3e8d84dce587dd5fbba792",
+      "reason": "Frozen when the lizard2 line's protocol landed (banded criteria, judge baseline-criteria-banded-1). Its suite_expected pins the ground; the thresholds it reads were unguarded until this table."
+    }
+  }
+}

@@ -24,8 +24,10 @@ import yaml
 
 _REPO = pathlib.Path(__file__).absolute().parents[3]
 sys.path.insert(0, str(_REPO / "ablation_harness"))
+sys.path.insert(0, str(_REPO))
 from metrics import fall_flags  # noqa: E402
 import suite_lock  # noqa: E402
+from rl_exp.tools.runrecord import binding  # noqa: E402
 
 STEPS, SUSTAIN = 120, 25
 TILT_COS_MIN = 0.766044443118978  # cos(40 deg) = the protocol's tilt threshold
@@ -76,6 +78,7 @@ def main():
     test_fingerprint_block_round_trips()
     test_the_shipped_v4_protocol_is_fingerprinted_and_matches()
     test_a_digest_is_compared_without_its_algorithm_prefix()
+    test_protocol_anchors_match_the_files_they_pin()
 
     print("ALL_EVAL_FRAME_V2_TESTS_PASSED")
 
@@ -220,6 +223,39 @@ def test_a_digest_is_compared_without_its_algorithm_prefix():
     assert moved["verdict"] == suite_lock.MISMATCH, moved
     assert moved["geometry"]["actual"] == f"sha256:{'a' * 64}", moved["geometry"]
     print("  ok digests compare across spellings; the report keeps the spelling it read")
+
+
+def test_protocol_anchors_match_the_files_they_pin():
+    """A protocol's declared numbers have to move as a deliberate edit, not as a silent one.
+
+    The criteria table pins kinds and cases, the suite lock pins the ground, and the migration proof
+    compares one record's verdicts under two protocols -- none of them reads a protocol's declared
+    numbers, so a threshold could move with the whole offline suite still green
+    (acceptance/records/2026-09-23-threshold-pilot.md: v4's tracking threshold 0.2 -> 0.25, 47/47).
+
+    What this pin is: a change detector over the protocols in use. What it is not: an approval.
+    Pasting a digest into ``protocol_anchors.json`` is the deliberate act, and a green run afterwards
+    says the file and the table agree -- not that anyone reviewed the number that moved.
+    """
+    table = json.loads((_REPO / "ablation_harness" / "protocol_anchors.json").read_text(encoding="utf-8"))
+    harness = _REPO / "ablation_harness"
+    problems = []
+    for rel, entry in sorted(table["anchors"].items()):
+        assert entry.get("reason"), f"{rel}: an anchor without a reason records no review"
+        path = harness / rel
+        if not path.is_file():
+            problems.append(f"{rel}: anchored but not on disk -- retire this entry deliberately")
+            continue
+        actual = binding.sha256_file(path)
+        if actual != entry["sha256"]:
+            problems.append(
+                f"{rel}: the bytes moved since they were approved\n"
+                f"      table: {entry['sha256']}\n"
+                f"      disk:  {actual}\n"
+                f"      revert the edit, or approve the new bytes with a reason in protocol_anchors.json"
+            )
+    assert not problems, "\n".join(problems)
+    print(f"  ok {len(table['anchors'])} protocol(s) match the bytes their approval records")
 
 
 if __name__ == "__main__":
