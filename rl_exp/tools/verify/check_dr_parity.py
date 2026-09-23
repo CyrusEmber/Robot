@@ -27,7 +27,11 @@ Six checks, all machine-readable, all fail under --strict:
    the compiled usda, every mesh under ``meshes/**``, and the version's OWN
    frozen yaml. Frozen yamls pin the usd PATH, not its CONTENT, so an in-place
    asset regeneration silently breaks working-tree reproduction of every
-   resident teacher task id; this check makes that a reviewed commit
+   resident teacher task id; this check makes that a reviewed commit.
+   The comparison runs BOTH ways and over the lock set itself: a locked path that is no longer on
+   disk is a deletion the hashes cannot see (the path simply stops being hashed while the lock keeps
+   claiming it), and a lock sitting in a version directory no discovered version owns is read by
+   nobody. Both of those used to be silence.
    (refresh locks with --update-locks in the same change that retires assets;
    --update-locks only rewrites versions whose lock actually changed, and --family
    keeps a caller that is landing one family from rewriting the rest).
@@ -46,6 +50,7 @@ import json
 import pathlib
 import re
 import sys
+import tempfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from recipe_lines import RecipeLine, RecipeLineError, discover  # noqa: E402
@@ -437,9 +442,34 @@ def update_asset_locks(family: str | None = None) -> list[str]:
     return problems
 
 
+def _left_the_tree(recorded: dict[str, str], current: dict[str, str]) -> list[str]:
+    """Locked paths the current asset set no longer holds.
+
+    Hashing only what is on disk cannot see a deletion: the path stops being hashed, and the lock
+    keeps claiming a file that is gone. That was the one asset move this gate missed entirely.
+    """
+    return sorted(set(recorded) - set(current))
+
+
+def _unread_locks(root: pathlib.Path, checked: set[str]) -> list[str]:
+    """Locks under ``root`` whose version directory is not among the versions this check read.
+
+    Versions are enumerated by discovery, so a lock no discovered version owns is read by nobody --
+    and nothing reading it looks exactly like nothing wrong with it.
+    """
+    return sorted(
+        str(p.parent.relative_to(root)) for p in root.glob("*/*/*/asset_lock.json")
+        if str(p.parent.relative_to(root)) not in checked
+    )
+
+
 def check_asset_locks() -> list[str]:
     problems = []
     yamls = _recipe_yamls(problems)
+    checked = {str(y.parent.relative_to(_VERSIONS)) for y in yamls}
+    for vtag in _unread_locks(_VERSIONS, checked):
+        problems.append(f"{vtag}: has an asset_lock.json but no discovered version reads it -- "
+                        "nothing checks its contents; declare the version or drop the lock")
     for yaml_path in yamls:
         vdir = yaml_path.parent
         vtag = str(vdir.relative_to(_VERSIONS))
@@ -449,11 +479,37 @@ def check_asset_locks() -> list[str]:
             continue
         current = _asset_hashes(yaml_path)
         recorded = json.loads(lock.read_text(encoding="utf-8"))["files"]
+        for rel in _left_the_tree(recorded, current):
+            problems.append(f"{vtag}: locked file left the tree: {rel} (the lock still lists it; "
+                            "retire the asset with a deliberate --update-locks, or put the file back)")
         for rel, sha in current.items():
-            if recorded.get(rel) != sha:
+            if rel not in recorded:
+                problems.append(f"{vtag}: asset not in the lock: {rel} {sha[:8]} "
+                                "(refresh the lock deliberately with --update-locks)")
+            elif recorded[rel] != sha:
                 problems.append(f"{vtag}: asset changed since freeze: {rel} "
-                                f"{recorded.get(rel, '?')[:8]} -> {sha[:8]}")
+                                f"{recorded[rel][:8]} -> {sha[:8]}")
     print(f"  versions locked: {len(yamls)}")
+    return problems
+
+
+def _self_test_locks() -> list[str]:
+    """Falsify the two set comparisons: a locked deletion, and a lock nobody reads."""
+    problems = []
+    if _left_the_tree({"kept": "a", "gone": "b"}, {"kept": "a"}) != ["gone"]:
+        problems.append("a locked file that left the tree was not reported")
+    if _left_the_tree({"kept": "a"}, {"kept": "a"}):
+        problems.append("an unchanged lock read as a deletion")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = pathlib.Path(tmp)
+        vdir = root / "family" / "line" / "v1"
+        vdir.mkdir(parents=True)
+        (vdir / "asset_lock.json").write_text("{}", encoding="utf-8")
+        vtag = str(pathlib.Path("family") / "line" / "v1")
+        if _unread_locks(root, set()) != [vtag]:
+            problems.append(f"a lock no version reads was not reported: {_unread_locks(root, set())}")
+        if _unread_locks(root, {vtag}):
+            problems.append("a lock a version did read was reported as unread")
     return problems
 
 
@@ -467,13 +523,19 @@ def main() -> int:
                              "(a new family must not be able to touch a landed family's locks)")
     parser.add_argument("--self-test", action="store_true",
                         help="also falsify the detector in-process (declared subjects, declared asset "
-                             "contract keys, and the family-landing tool's write scope)")
+                             "contract keys, the lock set's two comparisons, and the family-landing "
+                             "tool's write scope)")
     args = parser.parse_args()
 
     if args.self_test:
         import test_declare_family as falsifier
 
         if falsifier.main() != 0:
+            return 1
+        lock_problems = _self_test_locks()
+        for problem in lock_problems:
+            print(f"  SELFTEST: {problem}")
+        if lock_problems:
             return 1
 
     if args.update_locks:
