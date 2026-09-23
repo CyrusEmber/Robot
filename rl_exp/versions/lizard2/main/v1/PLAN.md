@@ -54,6 +54,7 @@
 
 | 日期 | 版本 | 变更 + 原因 + 依据 |
 |---|---|---|
+| 2026-09-23 | v1 | **首次判决 + 尺子两处缺陷 + 一处只在 GPU 上才现形的 bug**（详见 `acceptance/records/2026-09-23-lizard2-v1-first-eval.md`）：① 分带位移闸门读 `meta["start_pos"]` 时假定设备——采集器透传的是 CUDA 张量而 `frames` 是 CPU 拷贝 ⇒ `RuntimeError: ... cuda:0 and cpu`，**这个冻结 judge 在 GPU 上一次判决都没跑出来过**，修正为 `.to(frames["pos"].device)` 并加 `meta_plain` 反例；② 零命令带在**命令阶跃那一帧**取样（15 段零命令全起于第 499 帧＝10 s 重采样边界，`\|v\|` 首帧 2.622），新增 `settle_s=1.5 s`（由实测减速度 ≈2.5 m/s² 与箱上界 3.0 m/s 反推），报告同时给 `tracking_band_unsettled_max`；③ 零命令带位移读数在**全部 env 上求和**却比米限值 ⇒ 读数随批量大小变（3.216 m/15 envs＝0.21 m 每 env，16 envs 下会读成约 0.2 m），改为读最差单个 env。三项均带反例；旧 reader 的语义块未动，其 fail 报告保留。判决：v1 读者 fail（仅零命令带），修正后 v2 读者 **pass 八条全过**，两次判决的帧数据逐位相同 ⇒ 差别只在尺子 |
 | 2026-09-22 | v1 | **启动探针的观测口径再修一轮**（评审：下压动作没真正下发、力在复位后取样、"终止集合一致"只查缺不查多且后缀推导不全）：压头改为经部署动作接口构造并真的 `env.step`，头链另用关节状态钉住；力/项值在 `_reset_idx` 包装里**复位前**同帧读取并打印 `terminated`/`truncated`；终止集合由 yaml `terminations.terms` 点名、探针按等号判；另加 `head/fires-with-the-head-at-the-floor`（力必须能由声明连杆贴地解释）与 `head/fires-only-on-contact`（前面必须有静默帧）；`--shot` 出多帧供目视。结果：站立 0.00 N 静默 / 压头离地 50 mm 起降，前 18 帧 0.00 N 静默、触地那帧 1108.12 N 同帧触发；接触刚度 ≈4×10⁶ N/m ⇒ 阈值是接触检测器，"温和下压穿过 1 N"据此撤回。依据：`acceptance/records/2026-09-22-lizard2-probe-observer-fixes.md` |
 | 2026-09-22 | v1 | **命令窗口加宽 0–2 → 0–3 m/s**（所有者指示，同日、开训前）：上界取与旧线相同的 3.0；随 `lin_vel_x` 把分带改为 `[[0.1,1.0],[1.0,2.0],[2.0,3.0]]`、硬前置 2 的区间改 `[0.0,3.0]`、风险第 1 条补 3 m/s 的估算（f≈2.73 Hz、τ≈277 N·m，**超 180 上限约 1.5×**）；cfg_lock golden 与 v1 asset_lock 重钉（`--reason` 记"开训前加宽"）。结论口径随之收紧：**"到不了 3 m/s"不能自动算策略失败**，先看硬前置 4 |
 | 2026-09-22 | v1 | **终止条件加一条**（所有者指示）：`head_contact` = `chest_.*`/`neck_.*` 接触力 > **1.0 N**（与 `base_contact` 同一个"接触"值）即终止——平地上"头颈/前胸触地"是第二条"倒下"的路，而旧线 v1 正是被"压着脖子走"拖垮的（neck_pitch 82–90 N、占体重 11.6–12.8%，且 66% 的帧压在 10% 体重之上却从未连续超过 0.22 s ⇒ dwell 型承重判据拦不住它，接触判据可以）。实现只用框架 `illegal_contact`（不加 dwell 核）；yaml 加 `names.head_contact_body_names` 与 `terminations.head_contact_threshold`，元素 `lizard2_base_contact` 更名 `lizard2_contact_gate` 并同时写两条终止；`diff.json` 的路径 64 → **65**、`EXPECTED_DIFFS` 107 → **108**、cfg_lock golden 与 v1 asset_lock 随之重钉（`--reason` 记"开训前修订"） |
@@ -73,18 +74,30 @@
 
 **硬前置（开训前必须完成，否则不得开训）**：
 
-1. **冻结本线的评测协议（已完成 2026-09-22，见 `acceptance/records/2026-09-22-lizard2-eval-protocol-freeze.md`）**：
-   协议落在 `ablation_harness/protocols/lizard2_flat_v1.json`（`Lizard2-Flat-v1` v1、`judge: baseline-criteria-banded-1`、
-   命令箱 `[0,3]`、20 s、plane、逐帧实际下发命令）；四个新 kind 各自带反例，新语义挂**新 judge id**并已入
-   `judge_semantics.json` 冻结块；`non_foot_carrier_v1` 的 `fraction 0.05`/`sustain_s 0.5` 定死并给标定依据
-   （正常样本＝探针零动作 40 步非足载荷 0.00 N；异常样本＝压头 1108 N；退役线故障量级 11.6–12.8% 体重 ⇒ 0.05 不贴故障值；
-   **缺"持续部分承重"这一档样本，未测**）。带＝`[[0,0.1],[0.1,1.0],[1.0,2.0],[2.0,3.0]]`，零命令带是**声明出来的带**。
-   **两处与正文的偏离**：① `gait_swing_v1` 去掉 `min_lift_m`——记录里没有足端高度列，而"闸门不许读没测过的量"是硬规则，
-   "落地后恢复承重"改由 `min_landing_load` 承担；② `min_swing_feet` 正文说由所有者冻结，本次会话先填 **2**（4 只脚的一半），
-   **待所有者确认**（改数只需改协议文件并重钉该 id 的摘要）。
-   **未完成**：正文要求的"协议不存在或摘要不符 ⇒ 拒绝开训"**启动闸门尚未存在**（`manifest.begin` 的拒绝集只有 lifecycle 与脏树），
-   形态归 `work/active/eval-protocol-before-training.md`，在此之前协议靠离线契约测试 + 评审保证；另外逐带判据要求每带在 `alive`
-   帧上被覆盖，而 `baseline_eval.py` 现在用环境自己的 10 s 重采样 ⇒ 零命令带的覆盖率依赖采样，评测器需按固定基命令序列下命令。
+1. **冻结本线的评测协议（已完成；2026-09-23 首次判决后又修了两处尺子缺陷）**：
+   现行协议 `ablation_harness/protocols/lizard2_flat_v2.json`（`Lizard2-Flat-v2` v2、`judge:
+   baseline-criteria-banded-settled-1`、命令箱 `[0,3]`、20 s、plane、逐帧实际下发命令）；v1 协议与
+   它那份 fail 报告保留（无 settle 读者的语义原样冻结）。带＝`[[0,0.1],[0.1,1.0],[1.0,2.0],[2.0,3.0]]`，
+   零命令带是**声明出来的带**；`non_foot_carrier_v1` 的 `fraction 0.05`/`sustain_s 0.5` 定死并给标定依据
+   （正常样本＝探针零动作 40 步非足载荷 0.00 N；异常样本＝压头 1108 N；退役线故障量级 11.6–12.8% 体重 ⇒
+   0.05 不贴故障值；**缺"持续部分承重"这一档样本，未测**）。
+   **首次判决（`model_13999`、256 envs、seed 123）：`pass`，八条全过**——零命令带 `|v|` 0.045（限 0.15）、
+   最差 env 漂移 0.155 m（限 0.3）、三个相对带误差 0.036/0.011/0.0063（限 0.25）、位移比 0.988–1.006、
+   存活 1.0、姿态 12.5°、非足载荷全 0、摆动脚数最少 3。判决书与两处缺陷见
+   `acceptance/records/2026-09-23-lizard2-v1-first-eval.md`。
+   **两处缺陷都是尺子的，不是策略的**：① 零命令带在**命令阶跃那一帧**取样（15 段零命令全起于第 499 帧
+   ＝10 s 重采样边界），新增 `settle_s=1.5 s`（由实测减速度 ≈2.5 m/s² 与箱上界 3.0 m/s 反推），报告同时
+   给出裁剪前的 `tracking_band_unsettled_max`；② 零命令带的位移读数在**全部 env 上求和**却去比米限值 ⇒
+   读数随批量大小变（16 envs 与 256 envs 不同），改为读最差单个 env 的米数。
+   **偏离与未完成**：(a) `gait_swing_v1` 去掉 `min_lift_m`——记录里没有足端高度列，而"闸门不许读没测过的量"
+   是硬规则，"落地后恢复承重"改由 `min_landing_load` 承担；(b) `min_swing_feet` 现填 **2**，正文说该数由所有者
+   冻结 ⇒ **待确认**（实测 4 足里最少 3 只完成摆动、均值 3.84，1 只脚 20 s 内一次完整摆动都没有，属产品判断）；
+   (c) 正文要求的"协议不存在或摘要不符 ⇒ 拒绝开训"**启动闸门尚未存在**（`manifest.begin` 的拒绝集只有
+   lifecycle 与脏树），形态归 `work/active/eval-protocol-before-training.md`；(d) `report_only` 声明 15 项、
+   报告实际产出 8 项（`foot_duty`/`foot_load_fraction`/`feet_down_mean`/`foot_yaw_deg`/`foot_slip_mps`/
+   `dof_torque_frac_of_limit` 无人计算），要么补计算要么收窄清单，**未修**；(e) 逐带判据要求每带在 `alive`
+   帧上被覆盖，而 `baseline_eval.py` 现在用环境自己的 10 s 重采样 ⇒ 零命令带的覆盖率依赖采样（本次 256 envs
+   下 15/256 个 env 落在该带，6370 帧）。
 2. **启动探针按本版接口复测（已改造；观测口径 2026-09-22 再修一轮，见
    `acceptance/records/2026-09-22-lizard2-probe-observer-fixes.md`）**：`baseline_probe.py` 不再硬编码任何一条线的期望——
    命令框、观测宽度、终止集合都取自**任务自己的参数文档**（`recipe_params.load(cfg.params_line, cfg.params_version)`、
@@ -187,8 +200,10 @@
 python scripts\reinforcement_learning\rsl_rl\train.py --task Lizard2-Flat-v1 --num_envs 4096
 ```
 
-开训前：打 tag `lizard2-main-v1`、`check_cfg_lock.py --update --line lizard2/main --reason "..."`（如参数有动）、
-工作树必须干净（脏树开训被硬拒）。**上述硬前置未完成前不得开训。**
+开训前：工作树必须干净（脏树开训被硬拒，文档脏不拒）、`check_cfg_lock.py --update --line lizard2/main --reason "..."`
+（如参数有动）、冻结状态打锚点 tag（本线现为 `lizard2-main-v1.6`；裸锚点 `lizard2-main-v1` 已于 2026-09-22 删除）。
+**上述硬前置未完成前不得开训**——本线 2026-09-22 的开训是在**第 1 条的启动闸门尚缺**的情况下按所有者决定启动的
+（`--max_iterations 14000`，其余硬前置均已完成）。
 
 ## 风险与挂账（预注册）
 

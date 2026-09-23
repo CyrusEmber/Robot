@@ -4,10 +4,11 @@ title: lizard2 家族落成：两处契约声明 + diff 论证 + 开训前检查
 scope: rl_exp/versions/lizard2, rl_exp/tasks, rl_exp/tools/pipeline, rl_exp/tools/verify, ablation_harness
 status: open
 landing: rl_exp/versions/lizard2/main/v1/PLAN.md, rl_exp/versions/lizard2/main/main_params.yaml, rl_exp/tools/pipeline/emit_diff_declaration.py, rl_exp/tools/verify/check_recipe_build.py
-next: ① 评测协议**已冻结**（2026-09-22 本会话）：`ablation_harness/protocols/lizard2_flat_v1.json`（`Lizard2-Flat-v1` v1、`judge: baseline-criteria-banded-1`、命令箱 0–3、20 s、plane）+ 四个新 kind（banded 跟踪/位移、载荷总量、步态摆动）+ 新 judge id 的冻结块（`judge_semantics.json`，`kinds_sha256` b1e9046f…/`frozen_sha256` 15484281…）+ 13 条反例 + 5 条行为单测；`BASELINE_CONTRACT_OK`、离线套件 47/47；记录 `acceptance/records/2026-09-22-lizard2-eval-protocol-freeze.md`。**余项（都写明归属）**：(a) 开训**启动闸门**（"协议缺失/摘要不符 ⇒ 拒训"）**未建**——`manifest.begin` 现只拒 lifecycle 与脏树，形态归 `work/active/eval-protocol-before-training.md`；(b) `min_swing_feet` 现填 **2**（4 脚的一半），正文说该数由所有者冻结 ⇒ 待确认；(c) `no_non_foot_carrier.fraction=0.05` 缺"持续部分承重"这一档标定样本；(d) 逐带判据要求每带在 `alive` 帧上被覆盖，而 `baseline_eval.py` 用环境自己的 10 s 重采样 ⇒ 零命令带覆盖率依赖采样，评测器需按固定基命令序列下命令。② 探针（硬前置 2）**已改造并两次收口**，见 `acceptance/records/2026-09-22-lizard2-probe-observer-fixes.md`：压头经部署动作接口真的下发、头链另**用关节状态钉住**（只下发动作时驱动饱和、链回缩 0.3 m）、力与项值在复位前同帧读取、终止集合由 yaml `terminations.terms` 点名且等号判、死条目（无碰撞网格的 yaw 连杆）单独清理并重钉 golden/lock、零动作出帧目视（末帧已看：8 台平地站姿、四足平贴、无可见穿地）；③ 头守卫触发（硬前置 5 的观测量）**已完成，边界两半齐全**：站立 0.00 N 静默 / 下巴离地 50 mm 起降、前 18 帧静默、触地那帧 1108.12 N 同帧触发（`terminated=True`、`base_contact` 不在其中）；实测接触刚度 ≈4×10⁶ N/m ⇒ 该阈值是**接触检测器**，"从下方穿过 1 N 的温和下压"**撤回**（不存在该读数）；④ **自碰撞：所有者 2026-09-22 决定本版不开**（0 条确认穿透、24/24 凸包过近似会造出假接触、按单变量留给下一版），理由与改判条件已入 PLAN 硬前置 5；⑤ tag 事实（2026-09-22 已核并**已处理**）：裸锚点 `lizard2-main-v1`（9c257e3，那笔提交里只有 3 份 record + 本事项、**不含任何配方**）已**本地与远端一并删除**（`git tag -d` + `git push origin :refs/tags/lizard2-main-v1`，结果 `- [deleted] lizard2-main-v1`）；它所指的提交仍在 main 历史里（`merge-base --is-ancestor 9c257e3 main` 通过），故这是**只摘标签**、不改历史。v1 的锚点现由 `lizard2-main-v1.4`=9dcbf12 / `-v1.5`=7387031 承担（仓规的 `[.minor]` 形态），`check_version_docs` 复查 `VERSION_DOCS_OK`。连带改动：`work/active/harness-version-anchor-missing.md` 里"照 `lizard2-main-v1` 的先例"已改为 `lizard2-main-v1.5`（原先例已不存在）。**开训前仍欠一颗新锚点**（本线的冻结状态已晚于 v1.5：头部守卫 body 收窄 + `terminations.terms` + 协议冻结）。
+next: ① 评测协议**已冻结且已出首次判决**（2026-09-22 冻结、2026-09-23 判决）：`ablation_harness/protocols/lizard2_flat_v2.json`（`Lizard2-Flat-v2` v2、`judge: baseline-criteria-banded-settled-1`、命令箱 0–3、20 s、plane、`settle_s 1.5`）+ 两种带 settle 的新 kind + 新 reader id 的冻结块 + 反例；首次判决 `pass` 八条全过（零命令带 `|v|` 0.045／最差 env 漂移 0.155 m／三带误差 0.006–0.036／位移比 0.988–1.006），记录 `acceptance/records/2026-09-23-lizard2-v1-first-eval.md`。**该轮修掉三处**：分带位移闸门假定 `meta` 的设备（GPU 上第一次判决直接 `RuntimeError ... cuda:0 and cpu`，冻结点从未在 GPU 上跑通过）、零命令带在命令阶跃那一帧取样、零命令带位移读数在全部 env 上求和却比米限值（读数随批量大小变）。**余项（都写明归属）**：(a) 开训**启动闸门**（"协议缺失/摘要不符 ⇒ 拒训"）**未建**——`manifest.begin` 现只拒 lifecycle 与脏树，形态归 `work/active/eval-protocol-before-training.md`；(b) `min_swing_feet` 现填 **2**，实测 4 足里最少 3 只完成摆动、1 只脚 20 s 内一次都没有 ⇒ 待所有者给产品口径；(c) `no_non_foot_carrier.fraction=0.05` 缺"持续部分承重"档标定样本；(d) 协议 `report_only` 声明 15 项、报告只产出 8 项（无人计算的 6 项列在判决记录里）⇒ 补计算或收窄清单，未修；(e) 逐带判据的零命令带覆盖率仍依赖环境的 10 s 重采样（本次 15/256 env 落进该带）。
+② 探针（硬前置 2）**已改造并两次收口**，见 `acceptance/records/2026-09-22-lizard2-probe-observer-fixes.md`：压头经部署动作接口真的下发、头链另**用关节状态钉住**（只下发动作时驱动饱和、链回缩 0.3 m）、力与项值在复位前同帧读取、终止集合由 yaml `terminations.terms` 点名且等号判、死条目（无碰撞网格的 yaw 连杆）单独清理并重钉 golden/lock、零动作出帧目视（末帧已看：8 台平地站姿、四足平贴、无可见穿地）；③ 头守卫触发（硬前置 5 的观测量）**已完成，边界两半齐全**：站立 0.00 N 静默 / 下巴离地 50 mm 起降、前 18 帧静默、触地那帧 1108.12 N 同帧触发（`terminated=True`、`base_contact` 不在其中）；实测接触刚度 ≈4×10⁶ N/m ⇒ 该阈值是**接触检测器**，"从下方穿过 1 N 的温和下压"**撤回**（不存在该读数）；④ **自碰撞：所有者 2026-09-22 决定本版不开**（0 条确认穿透、24/24 凸包过近似会造出假接触、按单变量留给下一版），理由与改判条件已入 PLAN 硬前置 5；⑤ tag 事实（2026-09-22 已核并**已处理**）：裸锚点 `lizard2-main-v1`（9c257e3，那笔提交里只有 3 份 record + 本事项、**不含任何配方**）已**本地与远端一并删除**（`git tag -d` + `git push origin :refs/tags/lizard2-main-v1`，结果 `- [deleted] lizard2-main-v1`）；它所指的提交仍在 main 历史里（`merge-base --is-ancestor 9c257e3 main` 通过），故这是**只摘标签**、不改历史。v1 的锚点现由 `lizard2-main-v1.4`=9dcbf12 / `-v1.5`=7387031 / `-v1.6`=24757e0 承担（仓规的 `[.minor]` 形态），`check_version_docs` 复查 `VERSION_DOCS_OK`。连带改动：`work/active/harness-version-anchor-missing.md` 里"照 `lizard2-main-v1` 的先例"已改为 `lizard2-main-v1.5`（原先例已不存在）。**开训后本线又晚于 `-v1.6` 两批改动**（判决那批还没打锚点）。
 close_when: 离线套件全绿、硬前置 1-5 完成（协议冻结、能力曲线、自碰撞、探针、目视）、`diff.json` 理由有据、tag 已打 ⇒ 可开训；若明示暂不开训，则完成到 ④ 并记"未开训"这一事实即可关闭——未做的动作不许留在已关闭项里。
 depends_on: asset-leg-axis-capability-mismatch
-evidence: acceptance/records/2026-09-22-lizard2-family-landing, acceptance/records/2026-09-22-family-landing-decoupled, acceptance/records/2026-09-22-lizard2-stride-at-load, acceptance/records/2026-09-22-lizard2-declarations-and-plan, acceptance/records/2026-09-22-lizard2-self-collision-sweep, acceptance/records/2026-09-22-lizard2-actuator-capability, acceptance/records/2026-09-22-lizard2-probe-observer-fixes
+evidence: acceptance/records/2026-09-23-lizard2-v1-first-eval, acceptance/records/2026-09-22-lizard2-family-landing, acceptance/records/2026-09-22-family-landing-decoupled, acceptance/records/2026-09-22-lizard2-stride-at-load, acceptance/records/2026-09-22-lizard2-declarations-and-plan, acceptance/records/2026-09-22-lizard2-self-collision-sweep, acceptance/records/2026-09-22-lizard2-actuator-capability, acceptance/records/2026-09-22-lizard2-probe-observer-fixes
 ---
 
 ## 问题与本次范围
@@ -34,11 +35,13 @@ evidence: acceptance/records/2026-09-22-lizard2-family-landing, acceptance/recor
   所有者的两条决定已落定。**终止条件 2026-09-22 加一条**：`head_contact`（`chest_.*`/`neck_.*` > 1.0 N，框架
   `illegal_contact`，不加 dwell）——旧线 v1 就是被"压着脖子走"拖垮的（66% 的帧压在 10% 体重之上、却从未连续
   超过 0.22 s，dwell 型承重判据拦不住，接触判据可以）；连带重钉 golden/v1 锁、路径 64→65、计数钉 107→108。
-  `v1` 未训练、无 tag。
+  `v1` 已于 2026-09-22 开训（`--max_iterations 14000`，4096 envs，跑满）并于 2026-09-23 出首次判决
+  （`model_13999`，256 envs/seed123：**pass 八条全过**）；锚点为 `lizard2-main-v1.6`。
 
 ## 未覆盖边界
 
-判据种类与协议文件**都还没写**（`baseline_metrics.py` 仍是旧归一）；执行器能力曲线与自碰撞检查**没跑过**，
-现在只有量级估算与风险声明；理由写的是"这版为什么这样"，不是"数值对不对"；
-obs 宽度**变了但两边都批准过**的那种只有活体重建能发现；行程是纯运动学读数；
-本轮套件的红在 `rl_exp/tools/verify/test_video_matrix.py`（非本项产物），只报告不处理。
+判定口径**已写、已冻结、已出判决**（记录见 `2026-09-23-lizard2-v1-first-eval`），但判决是**开训之后**做的，
+且那一轮改了尺子（两处缺陷 + 一处 GPU 专用 bug）；协议 `report_only` 的清单仍大于实际产物；
+执行器能力曲线与自碰撞检查有读数（硬前置 4/5），但都是**估算 + 静态姿态**口径，不是承重动态；
+理由写的是"这版为什么这样"，不是"数值对不对"；obs 宽度变化的活体重建只覆盖**声明过的键**；
+行程是纯运动学读数。本轮离线套件全绿。
