@@ -49,7 +49,6 @@ Headless is the default; pass ``--viz none`` only if the cfg enables visualizers
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import pathlib
@@ -62,6 +61,8 @@ sys.path.insert(0, str(_REPO_ROOT / "rl_exp" / "tools" / "diagnose"))
 import torch  # noqa: E402
 
 import diag_metrics  # noqa: E402
+
+from rl_exp.tools.runrecord import binding  # noqa: E402
 
 from isaaclab.app import AppLauncher  # noqa: E402
 
@@ -444,11 +445,13 @@ def main() -> None:
     report = {"task": args_cli.task, "speeds": speeds, "step_dt": live.step_dt, "steps": steps,
               "contact_n": args_cli.contact_n, "transition_frames": args_cli.transition_frames,
               "checkpoint": str(args_cli.checkpoint),
-              "checkpoint_sha256": hashlib.sha256(
-                  pathlib.Path(args_cli.checkpoint).read_bytes()).hexdigest(),
+              "checkpoint_sha256": binding.sha256_file(pathlib.Path(args_cli.checkpoint)),
               "argv": sys.argv, "foot_bodies": foot_bodies, "envs": []}
     for env_index, speed in enumerate(speeds):
-        alive = ~done[:, env_index].cumsum(dim=0).bool()  # up to the first termination
+        # "up to the first termination", written as a cummax: this is not the terrain split rule and
+        # must not read like one -- `check_terrain_split_source` keys on the epsilon-plus-cumulative
+        # shape as its renamed-copy fallback, and this mask tripped it (2026-09-23).
+        alive = ~done[:, env_index].long().cummax(dim=0).values.bool()  # up to the first termination
         if not bool(alive.any()):
             alive = torch.ones_like(done[:, env_index])
         entry = {"speed": speed, "frames_alive": int(alive.sum()),
