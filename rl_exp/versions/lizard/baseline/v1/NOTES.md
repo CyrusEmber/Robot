@@ -216,6 +216,13 @@ python scripts\reinforcement_learning\rsl_rl\train.py --task Lizard-Baseline-Fla
 `baseline/v1` 的"工具链"部分在开训前已完成（探针两模式、复位契约、固定窗口入口、离线套件）；
 本轮补上的是**首跑 + 一次验收工具缺陷的修复**，缺陷与回归见上节。
 
+**口径声明（2026-09-23 补，不改上文原义）**：上面这张"能"是**协议 v1 口径**下的判定（定点 0.5 m/s、
+绝对位移门槛 > 8 m）。协议 v3 起换成相对口径 + 1–3 m/s 命令 box ⇒ **这份记录不能在 v3 下复判**：它的命令
+恒 0.5、落在 box 之外，判定器返 `invalid`（`test_a_record_is_refused_under_a_protocol_it_was_not_collected_for`），
+**不是**判它失败。所以本结论的适用范围写死在 v1 协议上；它与"v2 协议判 v1 策略"那种拼出来的结论无关
+（那次的事实更正在 `acceptance/records/2026-09-21-baseline-eval-v2-support-and-protocol-v3.md`）。
+本线 v2 的判定另见 [../v2/NOTES.md](../v2/NOTES.md) 与 `acceptance/records/2026-09-23-baseline-v2-first-run.md`。
+
 **遗留**：① `robot.base_init_height: 1.1` 与自然站高 0.938 差 16 cm（每回合一次落地冲击，属资产线决策）；
 ② 踝关节站姿下仅 2% 行程（若步态需踝主动承重，需资产线单独看）；③ parkour 线同款 yaw 缺陷（已登记，未改）。
 

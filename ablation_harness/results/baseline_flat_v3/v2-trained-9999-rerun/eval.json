@@ -1,0 +1,1913 @@
+{
+  "report_format": "baseline-eval-2",
+  "protocol": {
+    "name": "Baseline-Flat-v3",
+    "version": 3,
+    "supersedes": "baseline_flat_v2.json",
+    "recipe_version": "v2",
+    "episode_length_s": 20.0,
+    "terrain": "plane",
+    "command": {
+      "mode": "range",
+      "lin_vel_x": [
+        1.0,
+        3.0
+      ],
+      "lin_vel_y": [
+        0.0,
+        0.0
+      ],
+      "ang_vel_z": [
+        0.0,
+        0.0
+      ],
+      "resample_s": 10.0,
+      "why": "v2's recipe samples 1-3 m/s on the framework's 10 s window, so the protocol declares a BOX, not a point, and every frame's issued command is recorded and checked against it. v1/v2's protocol wrote a single fixed vector (`command_mps_radps`); both spellings read through one accessor, but a record whose command leaves the declared box is refused rather than scored."
+    },
+    "displacement_frame": "initial_yaw",
+    "tracking_frame": "current_yaw",
+    "post_failure_velocity": "zero",
+    "terminal_frame": "post_physics_pre_reset",
+    "why_v3": [
+      "v2 was used to judge a v1-trained policy and could not judge the recipe it was written for: the evaluator refused any recipe whose params_version was not v1, the collector demanded a command constant of 0.5 m/s, and the judge scored absolute speed error against a fixed 8 m displacement -- none of which describes a 1-3 m/s task. So the report exists and says nothing about trained v2.",
+      "Two axes are now relative, as the version PLAN always said they would be. Tracking is the per-frame |v_fwd - v_cmd| / v_cmd averaged over the window, so hitting the band matters rather than hitting one number; the post-failure frames are charged 1.0 (the robot is not tracking anything at all there). Displacement is measured against the distance the issued commands asked for, summed over the whole declared window -- the denominator stays the full 20 s on purpose, so a policy that stops after 5 s fails on distance rather than being forgiven by a shorter denominator.",
+      "The head-chain axis is a CONTACT criterion, because that is now the training termination (v2.3: a chest/neck vertical reaction above 1 N ends the episode). One line, one meaning of 'touching the ground'. An earlier v2 protocol wrote '>= 10% of body weight held 0.5 s' -- a weight-bearing reading that contact chatter defeats (the v1 rollout sat above it on 66% of its frames and still never held it 0.5 s). Both samples are kept as regressions: the v1 drag record must stay red on this axis, and a zero-action rollout that keeps its head up (measured 0 N, clearance +0.54 m) must stay green.",
+      "The mesh-ground clearance is reported per body, not gated. v2 gated it at -0.01 m, a number calibrated from one measured rollout's steady overlap, and a 64-env random sample sits 7.7 mm inside the floor while passing it. Ground contact is what the contact axis is for; 'how deep' is a diagnostic, and the drift-versus-penetration question belongs to the diagnose tool (see work/active/floor-contact-attribution.md).",
+      "Both sameness claims are tested against samples, not fitted to one. The v1 drag record is an ANOMALY sample (it must fail), the zero-action rollout is a NORMAL sample (it must pass every axis but tracking/survival), and neither set the thresholds for the other."
+    ],
+    "gates": {
+      "forward_mae_norm_lt": 0.2,
+      "displacement_frac_gt": 0.8,
+      "first_episode_timeout_fraction_gt": 0.9,
+      "tilt_cos_min": 0.766,
+      "tilt_sustain_s": 0.5,
+      "non_foot_contact_load_n_gt": 1.0
+    },
+    "report_only": [
+      "forward_mae_mps",
+      "lateral_speed_abs_mps",
+      "yaw_offset_abs_rad",
+      "head_tail_contact_force_n",
+      "first_episode_frame_fraction",
+      "foot_duty",
+      "foot_load_fraction",
+      "feet_down_mean",
+      "tilt_max_deg",
+      "non_foot_load_fraction",
+      "non_foot_contact_load_n",
+      "non_foot_mesh_min_z_m"
+    ]
+  },
+  "protocol_path": "ablation_harness\\protocols\\baseline_flat_v3.json",
+  "protocol_digest": "sha256:a288b8982de12b265413262251c693ae2a4c00ea13da2eb8ff3c102c14690486",
+  "task": "Lizard-Baseline-Flat-Play-v2",
+  "seed": 123,
+  "num_envs": 16,
+  "timestamp": "2026-09-23T17:02:21+08:00",
+  "code": {
+    "repository": {
+      "available": true,
+      "root": "<REPO_ROOT>",
+      "rev": "d92edc72938c",
+      "dirty": true,
+      "status_porcelain_sha256": "8bbe89305e3e86efd3e913190d5f8932060b5a70d692ca40b7054f7e4909ff6d",
+      "diff_sha256": "f970327e742c55dcb096c94ed7a1e55c87c9d6fe467cc7d6a18e7cbc3fe0530d",
+      "diff_lines": 1426,
+      "changed_paths": [
+        "ablation_harness/baseline_eval.py",
+        "ablation_harness/baseline_frames.py",
+        "ablation_harness/baseline_metrics.py",
+        "ablation_harness/frame_semantics.json",
+        "ablation_harness/judge_semantics.json",
+        "acceptance/records/2026-09-23-baseline-frames-format-2-foot-reading.md",
+        "acceptance/records/2026-09-23-persist-before-judge-real-run.md",
+        "rl_exp/tools/verify/test_baseline_contract.py",
+        "work/active/baseline-eval-persist-before-judge.md",
+        "work/active/baseline-eval-pipeline-restructure.md",
+        "work/active/exit-status-swallowed-by-app-close.md",
+        "work/active/live-doc-ledger-numbers.md",
+        "work/active/lizard2-family-landing.md",
+        "work/closed/2026/baseline-eval-persist-before-judge.md"
+      ],
+      "changed_non_prose": [
+        "ablation_harness/baseline_eval.py",
+        "ablation_harness/baseline_frames.py",
+        "ablation_harness/baseline_metrics.py",
+        "ablation_harness/frame_semantics.json",
+        "ablation_harness/judge_semantics.json",
+        "rl_exp/tools/verify/test_baseline_contract.py"
+      ],
+      "changed_prose_count": 8,
+      "untracked_count": 5,
+      "untracked": [
+        "ablation_harness/frame_semantics.json",
+        "acceptance/records/2026-09-23-baseline-frames-format-2-foot-reading.md",
+        "acceptance/records/2026-09-23-persist-before-judge-real-run.md",
+        "work/active/live-doc-ledger-numbers.md",
+        "work/closed/2026/baseline-eval-persist-before-judge.md"
+      ],
+      "untracked_in_code_root": [
+        "ablation_harness/frame_semantics.json",
+        "acceptance/records/2026-09-23-baseline-frames-format-2-foot-reading.md",
+        "acceptance/records/2026-09-23-persist-before-judge-real-run.md",
+        "work/active/live-doc-ledger-numbers.md",
+        "work/closed/2026/baseline-eval-persist-before-judge.md"
+      ],
+      "untracked_outside_code_root": [],
+      "untracked_requires_archive": true
+    },
+    "isaaclab": {
+      "available": true,
+      "root": "<ISAAC_ROOT>",
+      "rev": "28a37cecdd43",
+      "dirty": true,
+      "status_porcelain_sha256": "c48b5f25794ceca2a3b0ff6ad125ade83ca8b2eabc1b75e353e5c529327f2753",
+      "diff_sha256": "8934638c9a560f6b7138fdc0a9948b0fde675f38c320b83b1223f6267fafbca2",
+      "diff_lines": 459,
+      "changed_paths": [
+        "IMG/上.png",
+        "IMG/侧.png",
+        "IMG/后.png",
+        "IMG/斜.png",
+        "IMG/正.png",
+        "_tmp_pngcheck/v1_episode_length.png",
+        "_tmp_pngcheck/v1_eval_terrains.png",
+        "_tmp_pngcheck/v1_eval_trend.png",
+        "_tmp_pngcheck/v1_progress.png",
+        "_tmp_pngcheck/v1_reward.png",
+        "_tmp_pngcheck/v1_termination.png",
+        "isaaclab.bat",
+        "model/lizard.blend",
+        "model/lizard.glb",
+        "rl_exp/versions/lizard/v1/report.html",
+        "scripts/reinforcement_learning/rsl_rl/play.py",
+        "scripts/reinforcement_learning/rsl_rl/train.py",
+        "source/isaaclab_tasks/isaaclab_tasks/direct/anymal_c/anymal_c_env.py",
+        "source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/config/spider/agents/rsl_rl_ppo_cfg.py",
+        "source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/config/spider/spider_env_cfg.py",
+        "source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/velocity_env_cfg.py"
+      ],
+      "changed_non_prose": [
+        "IMG/上.png",
+        "IMG/侧.png",
+        "IMG/后.png",
+        "IMG/斜.png",
+        "IMG/正.png",
+        "_tmp_pngcheck/v1_episode_length.png",
+        "_tmp_pngcheck/v1_eval_terrains.png",
+        "_tmp_pngcheck/v1_eval_trend.png",
+        "_tmp_pngcheck/v1_progress.png",
+        "_tmp_pngcheck/v1_reward.png",
+        "_tmp_pngcheck/v1_termination.png",
+        "isaaclab.bat",
+        "model/lizard.blend",
+        "model/lizard.glb",
+        "rl_exp/versions/lizard/v1/report.html",
+        "scripts/reinforcement_learning/rsl_rl/play.py",
+        "scripts/reinforcement_learning/rsl_rl/train.py",
+        "source/isaaclab_tasks/isaaclab_tasks/direct/anymal_c/anymal_c_env.py",
+        "source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/config/spider/agents/rsl_rl_ppo_cfg.py",
+        "source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/config/spider/spider_env_cfg.py",
+        "source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/velocity_env_cfg.py"
+      ],
+      "changed_prose_count": 0,
+      "untracked_count": 5,
+      "untracked": [
+        "IMG/",
+        "_tmp_pngcheck/",
+        "model/",
+        "rl_exp/",
+        "source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/config/spider/"
+      ],
+      "untracked_in_code_root": [
+        "source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/config/spider/"
+      ],
+      "untracked_outside_code_root": [
+        "IMG/",
+        "_tmp_pngcheck/",
+        "model/",
+        "rl_exp/"
+      ],
+      "untracked_requires_archive": true
+    },
+    "rsl_rl": {
+      "available": true,
+      "root": "<ISAAC_ROOT>",
+      "rev": "28a37cecdd43",
+      "dirty": true,
+      "status_porcelain_sha256": "c48b5f25794ceca2a3b0ff6ad125ade83ca8b2eabc1b75e353e5c529327f2753",
+      "diff_sha256": "8934638c9a560f6b7138fdc0a9948b0fde675f38c320b83b1223f6267fafbca2",
+      "diff_lines": 459,
+      "changed_paths": [
+        "IMG/上.png",
+        "IMG/侧.png",
+        "IMG/后.png",
+        "IMG/斜.png",
+        "IMG/正.png",
+        "_tmp_pngcheck/v1_episode_length.png",
+        "_tmp_pngcheck/v1_eval_terrains.png",
+        "_tmp_pngcheck/v1_eval_trend.png",
+        "_tmp_pngcheck/v1_progress.png",
+        "_tmp_pngcheck/v1_reward.png",
+        "_tmp_pngcheck/v1_termination.png",
+        "isaaclab.bat",
+        "model/lizard.blend",
+        "model/lizard.glb",
+        "rl_exp/versions/lizard/v1/report.html",
+        "scripts/reinforcement_learning/rsl_rl/play.py",
+        "scripts/reinforcement_learning/rsl_rl/train.py",
+        "source/isaaclab_tasks/isaaclab_tasks/direct/anymal_c/anymal_c_env.py",
+        "source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/config/spider/agents/rsl_rl_ppo_cfg.py",
+        "source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/config/spider/spider_env_cfg.py",
+        "source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/velocity_env_cfg.py"
+      ],
+      "changed_non_prose": [
+        "IMG/上.png",
+        "IMG/侧.png",
+        "IMG/后.png",
+        "IMG/斜.png",
+        "IMG/正.png",
+        "_tmp_pngcheck/v1_episode_length.png",
+        "_tmp_pngcheck/v1_eval_terrains.png",
+        "_tmp_pngcheck/v1_eval_trend.png",
+        "_tmp_pngcheck/v1_progress.png",
+        "_tmp_pngcheck/v1_reward.png",
+        "_tmp_pngcheck/v1_termination.png",
+        "isaaclab.bat",
+        "model/lizard.blend",
+        "model/lizard.glb",
+        "rl_exp/versions/lizard/v1/report.html",
+        "scripts/reinforcement_learning/rsl_rl/play.py",
+        "scripts/reinforcement_learning/rsl_rl/train.py",
+        "source/isaaclab_tasks/isaaclab_tasks/direct/anymal_c/anymal_c_env.py",
+        "source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/config/spider/agents/rsl_rl_ppo_cfg.py",
+        "source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/config/spider/spider_env_cfg.py",
+        "source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/velocity_env_cfg.py"
+      ],
+      "changed_prose_count": 0,
+      "untracked_count": 5,
+      "untracked": [
+        "IMG/",
+        "_tmp_pngcheck/",
+        "model/",
+        "rl_exp/",
+        "source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/config/spider/"
+      ],
+      "untracked_in_code_root": [],
+      "untracked_outside_code_root": [
+        "IMG/",
+        "_tmp_pngcheck/",
+        "model/",
+        "rl_exp/",
+        "source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/config/spider/"
+      ],
+      "untracked_requires_archive": false,
+      "mode": "editable/source",
+      "package_dir": "<ISAAC_ROOT>/env_isaaclab/Lib/site-packages/rsl_rl"
+    }
+  },
+  "policy_mode": "deterministic",
+  "checkpoint": {
+    "path": "E:\\IsaacLab\\logs\\rsl_rl\\lizard_baseline_v2\\2026-09-21_17-41-12\\model_9999.pt",
+    "resolved": "E:\\IsaacLab\\logs\\rsl_rl\\lizard_baseline_v2\\2026-09-21_17-41-12\\model_9999.pt",
+    "sha256": "sha256:3aa910f7cd3d1ddfbfeef00a00e01842d052d4ef6388104c7121ad4ecdbbc7c7",
+    "size": 1777269,
+    "mtime": 1790000998.282667
+  },
+  "terminal_frames_captured": 16,
+  "head_tail_sensor_bodies": [
+    "tail1_yaw",
+    "tail1_pitch",
+    "neck_yaw",
+    "tail2_yaw",
+    "neck_pitch",
+    "tail2_pitch",
+    "tail3_yaw",
+    "tail3_pitch"
+  ],
+  "foot_bodies": [
+    "rr_foot",
+    "rl_foot",
+    "rf_foot",
+    "lf_foot"
+  ],
+  "non_foot_bodies": [
+    "base_link",
+    "chest_yaw",
+    "tail1_yaw",
+    "rr_haa",
+    "rl_haa",
+    "chest_pitch",
+    "tail1_pitch",
+    "rr_hfe",
+    "rl_hfe",
+    "neck_yaw",
+    "rf_haa",
+    "lf_haa",
+    "tail2_yaw",
+    "rr_kfe",
+    "rl_kfe",
+    "neck_pitch",
+    "rf_hfe",
+    "lf_hfe",
+    "tail2_pitch",
+    "rf_kfe",
+    "lf_kfe",
+    "tail3_yaw",
+    "tail3_pitch"
+  ],
+  "mesh_check_bodies": [
+    "chest_pitch",
+    "neck_pitch",
+    "tail1_pitch",
+    "tail2_pitch",
+    "tail3_pitch"
+  ],
+  "body_weight_n": 706.3209729766846,
+  "frames_path": "ablation_harness\\results\\baseline_flat_v3\\v2-trained-9999-rerun\\eval.frames.pt",
+  "frames_sha256": "sha256:cecdeb702e560f8118830ded5278ed8633cc91856d17efe74e77e3e4d312c135",
+  "env_cfg": {
+    "viewer": {
+      "eye": {
+        "__tuple__": [
+          7.5,
+          7.5,
+          7.5
+        ]
+      },
+      "lookat": {
+        "__tuple__": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "cam_prim_path": "/OmniverseKit_Persp",
+      "resolution": {
+        "__tuple__": [
+          1280,
+          720
+        ]
+      },
+      "origin_type": "world",
+      "env_index": 0,
+      "asset_name": null,
+      "body_name": null
+    },
+    "sim": {
+      "device": "cuda:0",
+      "dt": 0.005,
+      "gravity": {
+        "__tuple__": [
+          0.0,
+          0.0,
+          -9.81
+        ]
+      },
+      "physics_prim_path": "/physicsScene",
+      "physics_material": {
+        "func": "isaaclab.sim.spawners.materials.physics_materials:spawn_rigid_body_material",
+        "static_friction": 1.0,
+        "dynamic_friction": 1.0,
+        "restitution": 0.0,
+        "compliant_contact_stiffness": null,
+        "compliant_contact_damping": null,
+        "friction_combine_mode": "multiply",
+        "restitution_combine_mode": "multiply"
+      },
+      "use_fabric": true,
+      "render_interval": 4,
+      "enable_scene_query_support": false,
+      "use_newton_actuators": false,
+      "physics": {
+        "class_type": "isaaclab_physx.physics.physx_manager:PhysxManager",
+        "solver_type": 1,
+        "solve_articulation_contact_last": false,
+        "min_position_iteration_count": 1,
+        "max_position_iteration_count": 255,
+        "min_velocity_iteration_count": 0,
+        "max_velocity_iteration_count": 255,
+        "enable_scene_query_support": false,
+        "enable_ccd": false,
+        "enable_stabilization": false,
+        "enable_external_forces_every_iteration": false,
+        "enable_enhanced_determinism": false,
+        "bounce_threshold_velocity": 0.5,
+        "friction_offset_threshold": 0.04,
+        "friction_correlation_distance": 0.025,
+        "gpu_max_rigid_contact_count": 8388608,
+        "gpu_max_rigid_patch_count": 327680,
+        "gpu_found_lost_pairs_capacity": 2097152,
+        "gpu_found_lost_aggregate_pairs_capacity": 33554432,
+        "gpu_total_aggregate_pairs_capacity": 2097152,
+        "gpu_collision_stack_size": 67108864,
+        "gpu_heap_capacity": 67108864,
+        "gpu_temp_buffer_capacity": 16777216,
+        "gpu_max_num_partitions": 8,
+        "gpu_max_soft_body_contacts": 1048576,
+        "gpu_max_particle_contacts": 1048576
+      },
+      "render": {
+        "enable_translucency": null,
+        "enable_reflections": null,
+        "enable_global_illumination": null,
+        "antialiasing_mode": null,
+        "enable_dlssg": null,
+        "enable_dl_denoiser": null,
+        "dlss_mode": null,
+        "enable_direct_lighting": null,
+        "samples_per_pixel": null,
+        "enable_shadows": null,
+        "enable_ambient_occlusion": null,
+        "dome_light_upper_lower_strategy": null,
+        "max_bounces": null,
+        "split_glass": null,
+        "split_clearcoat": null,
+        "split_rough_reflection": null,
+        "ambient_light_intensity": null,
+        "ambient_occlusion_denoiser_mode": null,
+        "view_tile_limit": null,
+        "carb_settings": null,
+        "rendering_mode": null
+      },
+      "create_stage_in_memory": false,
+      "logging_level": "WARNING",
+      "save_logs_to_file": true,
+      "log_dir": null,
+      "visualizer_cfgs": []
+    },
+    "ui_window_class_type": "isaaclab.envs.ui.manager_based_rl_env_window:ManagerBasedRLEnvWindow",
+    "seed": 123,
+    "decimation": 4,
+    "scene": {
+      "num_envs": 16,
+      "env_spacing": 2.5,
+      "lazy_sensor_update": true,
+      "replicate_physics": true,
+      "filter_collisions": true,
+      "clone_in_fabric": false,
+      "robot": {
+        "class_type": "isaaclab.assets.articulation.articulation:Articulation",
+        "prim_path": "/World/envs/env_.*/Robot",
+        "spawn": {
+          "func": "isaaclab.sim.spawners.from_files.from_files:spawn_from_usd",
+          "visible": true,
+          "semantic_tags": null,
+          "copy_from_source": true,
+          "spawn_path": "/World/envs/env_0/Robot",
+          "mass_props": null,
+          "deformable_props": null,
+          "rigid_props": {
+            "rigid_body_enabled": null,
+            "kinematic_enabled": null,
+            "disable_gravity": false,
+            "linear_damping": 0.0,
+            "angular_damping": 0.0,
+            "max_linear_velocity": 1000.0,
+            "max_angular_velocity": 1000.0,
+            "max_depenetration_velocity": 1.0,
+            "max_contact_impulse": null,
+            "enable_gyroscopic_forces": null,
+            "retain_accelerations": false,
+            "solver_position_iteration_count": null,
+            "solver_velocity_iteration_count": null,
+            "sleep_threshold": null,
+            "stabilization_threshold": null
+          },
+          "collision_props": null,
+          "activate_contact_sensors": true,
+          "scale": null,
+          "articulation_props": {
+            "articulation_enabled": null,
+            "fix_root_link": null,
+            "enabled_self_collisions": false,
+            "solver_position_iteration_count": 8,
+            "solver_velocity_iteration_count": 0,
+            "sleep_threshold": null,
+            "stabilization_threshold": null
+          },
+          "fixed_tendons_props": null,
+          "spatial_tendons_props": null,
+          "joint_drive_props": null,
+          "visual_material_path": "material",
+          "visual_material": null,
+          "physics_material_path": "material",
+          "physics_material": null,
+          "usd_path": "<REPO_ROOT>/rl_exp/assets/lizard/lizard.usda",
+          "variants": null
+        },
+        "init_state": {
+          "pos": {
+            "__tuple__": [
+              0.0,
+              0.0,
+              1.1
+            ]
+          },
+          "rot": {
+            "__tuple__": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ]
+          },
+          "lin_vel": {
+            "__tuple__": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "ang_vel": {
+            "__tuple__": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "joint_pos": {
+            ".*_haa_joint": 0.0,
+            ".*_hfe_joint": 0.0,
+            ".*_kfe_joint": 0.0,
+            ".*_foot_joint": 0.0,
+            "chest_.*": 0.0,
+            "tail[0-9]_.*": 0.0,
+            "neck.*_.*": 0.0
+          },
+          "joint_vel": {
+            ".*": 0.0
+          }
+        },
+        "collision_group": 0,
+        "debug_vis": false,
+        "disable_shape_checks": null,
+        "articulation_root_prim_path": null,
+        "soft_joint_pos_limit_factor": 0.95,
+        "actuators": {
+          "legs": {
+            "class_type": "isaaclab.actuators.actuator_pd:ImplicitActuator",
+            "joint_names_expr": [
+              ".*_haa_joint",
+              ".*_hfe_joint",
+              ".*_kfe_joint"
+            ],
+            "effort_limit": 180.0,
+            "velocity_limit": 10.0,
+            "effort_limit_sim": null,
+            "velocity_limit_sim": null,
+            "stiffness": 800.0,
+            "damping": 40.0,
+            "armature": 0.0,
+            "friction": null,
+            "dynamic_friction": null,
+            "viscous_friction": null
+          },
+          "feet": {
+            "class_type": "isaaclab.actuators.actuator_pd:ImplicitActuator",
+            "joint_names_expr": [
+              ".*_foot_joint"
+            ],
+            "effort_limit": 70.0,
+            "velocity_limit": 6.0,
+            "effort_limit_sim": null,
+            "velocity_limit_sim": null,
+            "stiffness": 200.0,
+            "damping": 12.0,
+            "armature": 0.0,
+            "friction": null,
+            "dynamic_friction": null,
+            "viscous_friction": null
+          },
+          "spine": {
+            "class_type": "isaaclab.actuators.actuator_pd:ImplicitActuator",
+            "joint_names_expr": [
+              "chest_.*",
+              "tail[0-9]_.*",
+              "neck.*_yaw_joint",
+              "neck.*_pitch_joint"
+            ],
+            "effort_limit": 80.0,
+            "velocity_limit": 4.0,
+            "effort_limit_sim": null,
+            "velocity_limit_sim": null,
+            "stiffness": 400.0,
+            "damping": 20.0,
+            "armature": 0.0,
+            "friction": null,
+            "dynamic_friction": null,
+            "viscous_friction": null
+          }
+        },
+        "actuator_value_resolution_debug_print": false
+      },
+      "terrain": {
+        "class_type": "isaaclab.terrains.terrain_importer:TerrainImporter",
+        "collision_group": -1,
+        "prim_path": "/World/ground",
+        "num_envs": 16,
+        "terrain_type": "plane",
+        "terrain_generator": null,
+        "usd_path": null,
+        "env_spacing": 2.5,
+        "use_terrain_origins": true,
+        "visual_material": {
+          "func": "isaaclab.sim.spawners.materials.visual_materials:spawn_from_mdl_file",
+          "mdl_path": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/IsaacLab/Materials/TilesMarbleSpiderWhiteBrickBondHoned/TilesMarbleSpiderWhiteBrickBondHoned.mdl",
+          "project_uvw": true,
+          "albedo_brightness": null,
+          "texture_scale": {
+            "__tuple__": [
+              0.25,
+              0.25
+            ]
+          }
+        },
+        "physics_material": {
+          "func": "isaaclab.sim.spawners.materials.physics_materials:spawn_rigid_body_material",
+          "static_friction": 1.0,
+          "dynamic_friction": 1.0,
+          "restitution": 0.0,
+          "compliant_contact_stiffness": null,
+          "compliant_contact_damping": null,
+          "friction_combine_mode": "multiply",
+          "restitution_combine_mode": "multiply"
+        },
+        "max_init_terrain_level": null,
+        "debug_vis": false
+      },
+      "height_scanner": null,
+      "contact_forces": {
+        "class_type": "isaaclab_physx.sensors.contact_sensor.contact_sensor:ContactSensor",
+        "prim_path": "/World/envs/env_.*/Robot/.*",
+        "update_period": 0.0,
+        "debug_vis": false,
+        "track_pose": false,
+        "track_contact_points": false,
+        "track_friction_forces": false,
+        "max_contact_data_count_per_prim": null,
+        "track_air_time": true,
+        "force_threshold": null,
+        "history_length": 3,
+        "filter_prim_paths_expr": [],
+        "visualizer_cfg": {
+          "prim_path": "/Visuals/ContactSensor",
+          "markers": {
+            "contact": {
+              "func": "isaaclab.sim.spawners.shapes.shapes:spawn_sphere",
+              "visible": true,
+              "semantic_tags": null,
+              "copy_from_source": true,
+              "spawn_path": null,
+              "mass_props": null,
+              "rigid_props": null,
+              "collision_props": null,
+              "activate_contact_sensors": false,
+              "visual_material_path": "material",
+              "visual_material": {
+                "func": "isaaclab.sim.spawners.materials.visual_materials:spawn_preview_surface",
+                "diffuse_color": {
+                  "__tuple__": [
+                    1.0,
+                    0.0,
+                    0.0
+                  ]
+                },
+                "emissive_color": {
+                  "__tuple__": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ]
+                },
+                "roughness": 0.5,
+                "metallic": 0.0,
+                "opacity": 1.0
+              },
+              "physics_material_path": "material",
+              "physics_material": null,
+              "radius": 0.02
+            },
+            "no_contact": {
+              "func": "isaaclab.sim.spawners.shapes.shapes:spawn_sphere",
+              "visible": false,
+              "semantic_tags": null,
+              "copy_from_source": true,
+              "spawn_path": null,
+              "mass_props": null,
+              "rigid_props": null,
+              "collision_props": null,
+              "activate_contact_sensors": false,
+              "visual_material_path": "material",
+              "visual_material": {
+                "func": "isaaclab.sim.spawners.materials.visual_materials:spawn_preview_surface",
+                "diffuse_color": {
+                  "__tuple__": [
+                    0.0,
+                    1.0,
+                    0.0
+                  ]
+                },
+                "emissive_color": {
+                  "__tuple__": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ]
+                },
+                "roughness": 0.5,
+                "metallic": 0.0,
+                "opacity": 1.0
+              },
+              "physics_material_path": "material",
+              "physics_material": null,
+              "radius": 0.02
+            }
+          }
+        }
+      },
+      "sky_light": {
+        "class_type": null,
+        "prim_path": "/World/skyLight",
+        "spawn": {
+          "func": "isaaclab.sim.spawners.lights.lights:spawn_light",
+          "visible": true,
+          "semantic_tags": null,
+          "copy_from_source": true,
+          "spawn_path": "/World/skyLight",
+          "prim_type": "DomeLight",
+          "color": {
+            "__tuple__": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          "enable_color_temperature": false,
+          "color_temperature": 6500.0,
+          "normalize": false,
+          "exposure": 0.0,
+          "intensity": 750.0,
+          "texture_file": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/Materials/Textures/Skies/PolyHaven/kloofendal_43d_clear_puresky_4k.hdr",
+          "texture_format": "automatic",
+          "visible_in_primary_ray": true
+        },
+        "init_state": {
+          "pos": {
+            "__tuple__": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "rot": {
+            "__tuple__": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ]
+          }
+        },
+        "collision_group": 0,
+        "debug_vis": false,
+        "disable_shape_checks": null
+      }
+    },
+    "recorders": {
+      "dataset_file_handler_class_type": {
+        "__type__": "isaaclab.utils.datasets.hdf5_dataset_file_handler.HDF5DatasetFileHandler"
+      },
+      "dataset_export_dir_path": "/tmp/isaaclab/logs",
+      "dataset_filename": "dataset",
+      "dataset_export_mode": 1,
+      "export_in_record_pre_reset": true,
+      "export_in_close": false,
+      "dataset_compression": true
+    },
+    "observations": {
+      "policy": {
+        "concatenate_terms": true,
+        "concatenate_dim": -1,
+        "enable_corruption": false,
+        "history_length": null,
+        "flatten_history_dim": true,
+        "base_lin_vel": {
+          "func": {
+            "__callable__": "isaaclab.envs.mdp.observations.base_lin_vel"
+          },
+          "params": {},
+          "modifiers": null,
+          "noise": {
+            "func": "isaaclab.utils.noise.noise_model:uniform_noise",
+            "operation": "add",
+            "n_min": -0.1,
+            "n_max": 0.1
+          },
+          "clip": null,
+          "scale": null,
+          "history_length": 0,
+          "flatten_history_dim": true
+        },
+        "base_ang_vel": {
+          "func": {
+            "__callable__": "isaaclab.envs.mdp.observations.base_ang_vel"
+          },
+          "params": {},
+          "modifiers": null,
+          "noise": {
+            "func": "isaaclab.utils.noise.noise_model:uniform_noise",
+            "operation": "add",
+            "n_min": -0.2,
+            "n_max": 0.2
+          },
+          "clip": null,
+          "scale": null,
+          "history_length": 0,
+          "flatten_history_dim": true
+        },
+        "projected_gravity": {
+          "func": {
+            "__callable__": "isaaclab.envs.mdp.observations.projected_gravity"
+          },
+          "params": {},
+          "modifiers": null,
+          "noise": {
+            "func": "isaaclab.utils.noise.noise_model:uniform_noise",
+            "operation": "add",
+            "n_min": -0.05,
+            "n_max": 0.05
+          },
+          "clip": null,
+          "scale": null,
+          "history_length": 0,
+          "flatten_history_dim": true
+        },
+        "velocity_commands": {
+          "func": {
+            "__callable__": "isaaclab.envs.mdp.observations.generated_commands"
+          },
+          "params": {
+            "command_name": "base_velocity"
+          },
+          "modifiers": null,
+          "noise": null,
+          "clip": null,
+          "scale": null,
+          "history_length": 0,
+          "flatten_history_dim": true
+        },
+        "joint_pos": {
+          "func": {
+            "__callable__": "isaaclab.envs.mdp.observations.joint_pos_rel"
+          },
+          "params": {},
+          "modifiers": null,
+          "noise": {
+            "func": "isaaclab.utils.noise.noise_model:uniform_noise",
+            "operation": "add",
+            "n_min": -0.01,
+            "n_max": 0.01
+          },
+          "clip": null,
+          "scale": null,
+          "history_length": 0,
+          "flatten_history_dim": true
+        },
+        "joint_vel": {
+          "func": {
+            "__callable__": "isaaclab.envs.mdp.observations.joint_vel_rel"
+          },
+          "params": {},
+          "modifiers": null,
+          "noise": {
+            "func": "isaaclab.utils.noise.noise_model:uniform_noise",
+            "operation": "add",
+            "n_min": -1.5,
+            "n_max": 1.5
+          },
+          "clip": null,
+          "scale": null,
+          "history_length": 0,
+          "flatten_history_dim": true
+        },
+        "actions": {
+          "func": {
+            "__callable__": "isaaclab.envs.mdp.observations.last_action"
+          },
+          "params": {},
+          "modifiers": null,
+          "noise": null,
+          "clip": null,
+          "scale": null,
+          "history_length": 0,
+          "flatten_history_dim": true
+        },
+        "height_scan": null
+      }
+    },
+    "actions": {
+      "joint_pos": null,
+      "joint_pos_legs": {
+        "class_type": "isaaclab.envs.mdp.actions.joint_actions:JointPositionAction",
+        "asset_name": "robot",
+        "debug_vis": false,
+        "clip": null,
+        "joint_names": [
+          ".*_haa_joint",
+          ".*_hfe_joint",
+          ".*_kfe_joint"
+        ],
+        "scale": 0.5,
+        "offset": 0.0,
+        "preserve_order": false,
+        "use_default_offset": true
+      },
+      "joint_pos_spine": {
+        "class_type": "isaaclab.envs.mdp.actions.joint_actions:JointPositionAction",
+        "asset_name": "robot",
+        "debug_vis": false,
+        "clip": null,
+        "joint_names": [
+          "chest_.*",
+          "neck_.*",
+          "tail[0-9]_.*"
+        ],
+        "scale": 0.25,
+        "offset": 0.0,
+        "preserve_order": false,
+        "use_default_offset": true
+      }
+    },
+    "events": {
+      "physics_material": null,
+      "add_base_mass": null,
+      "base_com": null,
+      "base_external_force_torque": null,
+      "reset_base": {
+        "func": {
+          "__callable__": "isaaclab.envs.mdp.events.reset_root_state_uniform"
+        },
+        "params": {
+          "pose_range": {
+            "x": {
+              "__tuple__": [
+                0.0,
+                0.0
+              ]
+            },
+            "y": {
+              "__tuple__": [
+                0.0,
+                0.0
+              ]
+            },
+            "yaw": {
+              "__tuple__": [
+                0.0,
+                0.0
+              ]
+            }
+          },
+          "velocity_range": {
+            "x": {
+              "__tuple__": [
+                0.0,
+                0.0
+              ]
+            },
+            "y": {
+              "__tuple__": [
+                0.0,
+                0.0
+              ]
+            },
+            "z": {
+              "__tuple__": [
+                0.0,
+                0.0
+              ]
+            },
+            "roll": {
+              "__tuple__": [
+                0.0,
+                0.0
+              ]
+            },
+            "pitch": {
+              "__tuple__": [
+                0.0,
+                0.0
+              ]
+            },
+            "yaw": {
+              "__tuple__": [
+                0.0,
+                0.0
+              ]
+            }
+          }
+        },
+        "mode": "reset",
+        "interval_range_s": null,
+        "is_global_time": false,
+        "min_step_count_between_reset": 0
+      },
+      "reset_robot_joints": {
+        "func": {
+          "__callable__": "isaaclab.envs.mdp.events.reset_joints_by_scale"
+        },
+        "params": {
+          "position_range": {
+            "__tuple__": [
+              1.0,
+              1.0
+            ]
+          },
+          "velocity_range": {
+            "__tuple__": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "mode": "reset",
+        "interval_range_s": null,
+        "is_global_time": false,
+        "min_step_count_between_reset": 0
+      },
+      "push_robot": null
+    },
+    "rerender_on_reset": false,
+    "num_rerenders_on_reset": 0,
+    "wait_for_textures": true,
+    "xr": null,
+    "teleop_devices": {
+      "devices": {}
+    },
+    "isaac_teleop": null,
+    "export_io_descriptors": false,
+    "log_dir": null,
+    "video_recorder": {
+      "class_type": {
+        "__type__": "isaaclab.envs.utils.video_recorder.VideoRecorder"
+      },
+      "env_render_mode": null,
+      "eye": {
+        "__tuple__": [
+          7.5,
+          7.5,
+          7.5
+        ]
+      },
+      "lookat": {
+        "__tuple__": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "backend_source": "visualizer",
+      "window_width": 1280,
+      "window_height": 720
+    },
+    "is_finite_horizon": false,
+    "episode_length_s": 20.0,
+    "rewards": {
+      "track_lin_vel_xy_exp": null,
+      "track_ang_vel_z_exp": {
+        "func": {
+          "__callable__": "isaaclab.envs.mdp.rewards.track_ang_vel_z_exp"
+        },
+        "params": {
+          "command_name": "base_velocity",
+          "std": 0.5
+        },
+        "weight": 0.5
+      },
+      "lin_vel_z_l2": {
+        "func": {
+          "__callable__": "isaaclab.envs.mdp.rewards.lin_vel_z_l2"
+        },
+        "params": {},
+        "weight": -2.0
+      },
+      "ang_vel_xy_l2": null,
+      "dof_torques_l2": {
+        "func": {
+          "__callable__": "isaaclab.envs.mdp.rewards.joint_torques_l2"
+        },
+        "params": {},
+        "weight": -1e-05
+      },
+      "dof_acc_l2": null,
+      "action_rate_l2": {
+        "func": {
+          "__callable__": "isaaclab.envs.mdp.rewards.action_rate_l2"
+        },
+        "params": {},
+        "weight": -0.01
+      },
+      "feet_air_time": null,
+      "undesired_contacts": {
+        "func": {
+          "__callable__": "isaaclab.envs.mdp.rewards.undesired_contacts"
+        },
+        "params": {
+          "sensor_cfg": {
+            "name": "contact_forces",
+            "joint_names": null,
+            "joint_ids": {
+              "__slice__": [
+                null,
+                null,
+                null
+              ]
+            },
+            "fixed_tendon_names": null,
+            "fixed_tendon_ids": {
+              "__slice__": [
+                null,
+                null,
+                null
+              ]
+            },
+            "body_names": [
+              ".*_hfe",
+              ".*_kfe"
+            ],
+            "body_ids": {
+              "__slice__": [
+                null,
+                null,
+                null
+              ]
+            },
+            "object_collection_names": null,
+            "object_collection_ids": {
+              "__slice__": [
+                null,
+                null,
+                null
+              ]
+            },
+            "preserve_order": false
+          },
+          "threshold": 1.0
+        },
+        "weight": -1.0
+      },
+      "flat_orientation_l2": null,
+      "dof_pos_limits": null,
+      "track_lin_vel_xy_miki": {
+        "func": {
+          "__callable__": "rl_exp.tasks.baseline_mdp.track_lin_vel_xy_miki"
+        },
+        "params": {
+          "command_name": "base_velocity",
+          "sigma_sq": 0.25
+        },
+        "weight": 1.5
+      },
+      "belly_contact_force": {
+        "func": {
+          "__callable__": "rl_exp.tasks.baseline_mdp.belly_contact_force"
+        },
+        "params": {
+          "sensor_cfg": {
+            "name": "contact_forces",
+            "joint_names": null,
+            "joint_ids": {
+              "__slice__": [
+                null,
+                null,
+                null
+              ]
+            },
+            "fixed_tendon_names": null,
+            "fixed_tendon_ids": {
+              "__slice__": [
+                null,
+                null,
+                null
+              ]
+            },
+            "body_names": [
+              "base_link"
+            ],
+            "body_ids": {
+              "__slice__": [
+                null,
+                null,
+                null
+              ]
+            },
+            "object_collection_names": null,
+            "object_collection_ids": {
+              "__slice__": [
+                null,
+                null,
+                null
+              ]
+            },
+            "preserve_order": false
+          },
+          "force_scale": 706.0
+        },
+        "weight": -0.5
+      }
+    },
+    "terminations": {
+      "time_out": {
+        "func": {
+          "__callable__": "isaaclab.envs.mdp.terminations.time_out"
+        },
+        "params": {},
+        "time_out": true
+      },
+      "base_contact": {
+        "func": {
+          "__callable__": "isaaclab.envs.mdp.terminations.illegal_contact"
+        },
+        "params": {
+          "sensor_cfg": {
+            "name": "contact_forces",
+            "joint_names": null,
+            "joint_ids": {
+              "__slice__": [
+                null,
+                null,
+                null
+              ]
+            },
+            "fixed_tendon_names": null,
+            "fixed_tendon_ids": {
+              "__slice__": [
+                null,
+                null,
+                null
+              ]
+            },
+            "body_names": [
+              "base_link"
+            ],
+            "body_ids": {
+              "__slice__": [
+                null,
+                null,
+                null
+              ]
+            },
+            "object_collection_names": null,
+            "object_collection_ids": {
+              "__slice__": [
+                null,
+                null,
+                null
+              ]
+            },
+            "preserve_order": false
+          },
+          "threshold": 1.0
+        },
+        "time_out": false
+      },
+      "head_load_contact": {
+        "func": {
+          "__type__": "rl_exp.tasks.baseline_mdp.ContactLoadDwellTerm"
+        },
+        "params": {
+          "sensor_cfg": {
+            "name": "contact_forces",
+            "joint_names": null,
+            "joint_ids": {
+              "__slice__": [
+                null,
+                null,
+                null
+              ]
+            },
+            "fixed_tendon_names": null,
+            "fixed_tendon_ids": {
+              "__slice__": [
+                null,
+                null,
+                null
+              ]
+            },
+            "body_names": [
+              "chest_.*",
+              "neck_.*"
+            ],
+            "body_ids": {
+              "__slice__": [
+                null,
+                null,
+                null
+              ]
+            },
+            "object_collection_names": null,
+            "object_collection_ids": {
+              "__slice__": [
+                null,
+                null,
+                null
+              ]
+            },
+            "preserve_order": false
+          },
+          "load_n": 1.0,
+          "dwell_s": 0.0
+        },
+        "time_out": false
+      }
+    },
+    "curriculum": {
+      "terrain_levels": null
+    },
+    "commands": {
+      "base_velocity": {
+        "class_type": "isaaclab.envs.mdp.commands.velocity_command:UniformVelocityCommand",
+        "resampling_time_range": {
+          "__tuple__": [
+            10.0,
+            10.0
+          ]
+        },
+        "debug_vis": true,
+        "cmd_kind": null,
+        "element_names": null,
+        "asset_name": "robot",
+        "heading_command": false,
+        "heading_control_stiffness": 0.5,
+        "rel_standing_envs": 0.0,
+        "rel_heading_envs": 1.0,
+        "ranges": {
+          "lin_vel_x": {
+            "__tuple__": [
+              1.0,
+              3.0
+            ]
+          },
+          "lin_vel_y": {
+            "__tuple__": [
+              0.0,
+              0.0
+            ]
+          },
+          "ang_vel_z": {
+            "__tuple__": [
+              0.0,
+              0.0
+            ]
+          },
+          "heading": {
+            "__tuple__": [
+              -3.141592653589793,
+              3.141592653589793
+            ]
+          }
+        },
+        "vel_xy_success_threshold": 0.5,
+        "vel_yaw_success_threshold": 0.4,
+        "goal_vel_visualizer_cfg": {
+          "prim_path": "/Visuals/Command/velocity_goal",
+          "markers": {
+            "arrow": {
+              "func": "isaaclab.sim.spawners.from_files.from_files:spawn_from_usd",
+              "visible": true,
+              "semantic_tags": null,
+              "copy_from_source": true,
+              "spawn_path": null,
+              "mass_props": null,
+              "deformable_props": null,
+              "rigid_props": null,
+              "collision_props": null,
+              "activate_contact_sensors": false,
+              "scale": {
+                "__tuple__": [
+                  0.5,
+                  0.5,
+                  0.5
+                ]
+              },
+              "articulation_props": null,
+              "fixed_tendons_props": null,
+              "spatial_tendons_props": null,
+              "joint_drive_props": null,
+              "visual_material_path": "material",
+              "visual_material": {
+                "func": "isaaclab.sim.spawners.materials.visual_materials:spawn_preview_surface",
+                "diffuse_color": {
+                  "__tuple__": [
+                    0.0,
+                    1.0,
+                    0.0
+                  ]
+                },
+                "emissive_color": {
+                  "__tuple__": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ]
+                },
+                "roughness": 0.5,
+                "metallic": 0.0,
+                "opacity": 1.0
+              },
+              "physics_material_path": "material",
+              "physics_material": null,
+              "usd_path": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/Props/UIElements/arrow_x.usd",
+              "variants": null
+            }
+          }
+        },
+        "current_vel_visualizer_cfg": {
+          "prim_path": "/Visuals/Command/velocity_current",
+          "markers": {
+            "arrow": {
+              "func": "isaaclab.sim.spawners.from_files.from_files:spawn_from_usd",
+              "visible": true,
+              "semantic_tags": null,
+              "copy_from_source": true,
+              "spawn_path": null,
+              "mass_props": null,
+              "deformable_props": null,
+              "rigid_props": null,
+              "collision_props": null,
+              "activate_contact_sensors": false,
+              "scale": {
+                "__tuple__": [
+                  0.5,
+                  0.5,
+                  0.5
+                ]
+              },
+              "articulation_props": null,
+              "fixed_tendons_props": null,
+              "spatial_tendons_props": null,
+              "joint_drive_props": null,
+              "visual_material_path": "material",
+              "visual_material": {
+                "func": "isaaclab.sim.spawners.materials.visual_materials:spawn_preview_surface",
+                "diffuse_color": {
+                  "__tuple__": [
+                    0.0,
+                    0.0,
+                    1.0
+                  ]
+                },
+                "emissive_color": {
+                  "__tuple__": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ]
+                },
+                "roughness": 0.5,
+                "metallic": 0.0,
+                "opacity": 1.0
+              },
+              "physics_material_path": "material",
+              "physics_material": null,
+              "usd_path": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/Props/UIElements/arrow_x.usd",
+              "variants": null
+            }
+          }
+        }
+      }
+    },
+    "params_version": "v2"
+  },
+  "agent_cfg": {
+    "seed": 42,
+    "device": "cuda:0",
+    "num_steps_per_env": 24,
+    "max_iterations": 10000,
+    "empirical_normalization": {
+      "__missing__": true
+    },
+    "obs_groups": {
+      "__missing__": true
+    },
+    "clip_actions": null,
+    "check_for_nan": true,
+    "save_interval": 50,
+    "experiment_name": "lizard_baseline_v2",
+    "run_name": "",
+    "logger": "tensorboard",
+    "neptune_project": "isaaclab",
+    "wandb_project": "isaaclab",
+    "resume": false,
+    "load_run": ".*",
+    "load_checkpoint": "model_.*.pt",
+    "class_name": "OnPolicyRunner",
+    "actor": {
+      "class_name": "MLPModel",
+      "hidden_dims": [
+        256,
+        128,
+        128
+      ],
+      "activation": "elu",
+      "obs_normalization": false,
+      "distribution_cfg": {
+        "class_name": "GaussianDistribution",
+        "init_std": 1.0,
+        "std_type": "scalar"
+      },
+      "stochastic": {
+        "__missing__": true
+      },
+      "init_noise_std": {
+        "__missing__": true
+      },
+      "noise_std_type": {
+        "__missing__": true
+      },
+      "state_dependent_std": {
+        "__missing__": true
+      }
+    },
+    "critic": {
+      "class_name": "MLPModel",
+      "hidden_dims": [
+        256,
+        128,
+        128
+      ],
+      "activation": "elu",
+      "obs_normalization": false,
+      "distribution_cfg": null,
+      "stochastic": {
+        "__missing__": true
+      },
+      "init_noise_std": {
+        "__missing__": true
+      },
+      "noise_std_type": {
+        "__missing__": true
+      },
+      "state_dependent_std": {
+        "__missing__": true
+      }
+    },
+    "algorithm": {
+      "class_name": "PPO",
+      "num_learning_epochs": 5,
+      "num_mini_batches": 4,
+      "learning_rate": 0.001,
+      "schedule": "adaptive",
+      "gamma": 0.99,
+      "lam": 0.95,
+      "entropy_coef": 0.005,
+      "desired_kl": 0.01,
+      "max_grad_norm": 1.0,
+      "optimizer": "adam",
+      "value_loss_coef": 1.0,
+      "use_clipped_value_loss": true,
+      "clip_param": 0.2,
+      "normalize_advantage_per_mini_batch": false,
+      "share_cnn_encoders": false,
+      "rnd_cfg": null,
+      "symmetry_cfg": null
+    },
+    "policy": {
+      "__missing__": true
+    }
+  },
+  "verdict": "pass",
+  "invalid_reasons": [],
+  "metrics": {
+    "forward_mae_mps": 0.08984073251485825,
+    "forward_displacement_m": 40.55875778198242,
+    "first_episode_timeout_fraction": 1.0,
+    "command_mps_mean": 2.088090658187866,
+    "forward_mae_norm": 0.04451004043221474,
+    "expected_displacement_m": 41.761810302734375,
+    "displacement_frac": 0.9710497856140137,
+    "tilt_max_deg": 13.603843688964844,
+    "non_foot_load_fraction_max": 0.0,
+    "non_foot_contact_load_n_max": 0.0,
+    "non_foot_mesh_min_z_m": 0.34221723675727844
+  },
+  "gates": {
+    "tracking": true,
+    "displacement": true,
+    "survival": true,
+    "attitude": true,
+    "no_non_foot_contact": true
+  },
+  "diagnostics": {
+    "lateral_speed_abs_mps": 0.026303503662347794,
+    "yaw_offset_abs_rad": 0.06389431655406952,
+    "head_tail_contact_force_n": 0.0,
+    "first_episode_frame_fraction": 1.0,
+    "tilt_max_deg": 13.603843688964844,
+    "foot_clearance_swing_m": [
+      0.14434316754341125,
+      0.13757698237895966,
+      0.17657016217708588,
+      0.14531585574150085
+    ],
+    "foot_slip_mps": [
+      1.8915295600891113,
+      1.8255362510681152,
+      2.1472854614257812,
+      2.072661876678467
+    ],
+    "foot_swing_frames": [
+      8040,
+      6943,
+      11175,
+      10661
+    ],
+    "foot_loaded_frames": [
+      7960,
+      9057,
+      4825,
+      5339
+    ],
+    "foot_ground_source": "declared (plane)",
+    "non_foot_load_fraction": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "non_foot_contact_load_n": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "non_foot_contact_frames": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "non_foot_mesh_min_z_m": [
+      0.514689028263092,
+      0.6828241348266602,
+      0.6152083873748779,
+      0.5462045669555664,
+      0.34221723675727844
+    ],
+    "foot_duty": [
+      0.4975000023841858,
+      0.5660624504089355,
+      0.30156251788139343,
+      0.3336874842643738
+    ],
+    "feet_down_mean": 1.698812484741211,
+    "foot_load_fraction": [
+      0.1600378304719925,
+      0.20295904576778412,
+      0.23946841061115265,
+      0.2423083484172821
+    ]
+  },
+  "report_groups": {
+    "task": [
+      "displacement_frac",
+      "expected_displacement_m",
+      "first_episode_timeout_fraction",
+      "forward_displacement_m",
+      "forward_mae_mps",
+      "forward_mae_norm",
+      "tilt_max_deg",
+      "tilt_max_deg"
+    ],
+    "measurement": [
+      "command_mps_mean",
+      "first_episode_frame_fraction",
+      "foot_ground_source",
+      "foot_loaded_frames",
+      "foot_swing_frames"
+    ],
+    "behaviour": [
+      "feet_down_mean",
+      "foot_clearance_swing_m",
+      "foot_duty",
+      "foot_load_fraction",
+      "foot_slip_mps",
+      "head_tail_contact_force_n",
+      "lateral_speed_abs_mps",
+      "non_foot_contact_frames",
+      "non_foot_contact_load_n",
+      "non_foot_load_fraction",
+      "non_foot_mesh_min_z_m",
+      "non_foot_mesh_min_z_m",
+      "yaw_offset_abs_rad"
+    ]
+  },
+  "per_env": {
+    "forward_mae_mps": [
+      0.07758414000272751,
+      0.09535302966833115,
+      0.0772370845079422,
+      0.09478697925806046,
+      0.07481362670660019,
+      0.07880589365959167,
+      0.10296016186475754,
+      0.08721734583377838,
+      0.09437277168035507,
+      0.08571258187294006,
+      0.064713254570961,
+      0.06893313676118851,
+      0.10447335988283157,
+      0.12715132534503937,
+      0.11484461277723312,
+      0.08849245309829712
+    ],
+    "forward_displacement_m": [
+      39.54560089111328,
+      37.08030700683594,
+      43.43433380126953,
+      44.52385330200195,
+      42.81618118286133,
+      43.06084060668945,
+      37.70863342285156,
+      36.78709411621094,
+      48.20198059082031,
+      47.96924591064453,
+      32.58293914794922,
+      34.57322692871094,
+      46.299156188964844,
+      39.01814270019531,
+      41.4218635559082,
+      33.916709899902344
+    ],
+    "survived": [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "valid_steps": [
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000
+    ]
+  },
+  "axes": {
+    "non_foot_fraction": [
+      "base_link",
+      "chest_yaw",
+      "tail1_yaw",
+      "rr_haa",
+      "rl_haa",
+      "chest_pitch",
+      "tail1_pitch",
+      "rr_hfe",
+      "rl_hfe",
+      "neck_yaw",
+      "rf_haa",
+      "lf_haa",
+      "tail2_yaw",
+      "rr_kfe",
+      "rl_kfe",
+      "neck_pitch",
+      "rf_hfe",
+      "lf_hfe",
+      "tail2_pitch",
+      "rf_kfe",
+      "lf_kfe",
+      "tail3_yaw",
+      "tail3_pitch"
+    ],
+    "mesh_min_z": [
+      "chest_pitch",
+      "neck_pitch",
+      "tail1_pitch",
+      "tail2_pitch",
+      "tail3_pitch"
+    ],
+    "foot_contact": [
+      "rr_foot",
+      "rl_foot",
+      "rf_foot",
+      "lf_foot"
+    ],
+    "foot_fraction": [
+      "rr_foot",
+      "rl_foot",
+      "rf_foot",
+      "lf_foot"
+    ],
+    "foot_lowest_point": [
+      "rr_foot",
+      "rl_foot",
+      "rf_foot",
+      "lf_foot"
+    ],
+    "foot_com_pos": [
+      "rr_foot",
+      "rl_foot",
+      "rf_foot",
+      "lf_foot"
+    ],
+    "foot_lin_vel": [
+      "rr_foot",
+      "rl_foot",
+      "rf_foot",
+      "lf_foot"
+    ],
+    "foot_ang_vel": [
+      "rr_foot",
+      "rl_foot",
+      "rf_foot",
+      "lf_foot"
+    ]
+  },
+  "judge": {
+    "id": "legacy-baseline-threshold-keys-1",
+    "origin": "legacy",
+    "protocol_name": "Baseline-Flat-v3",
+    "protocol_version": 3
+  }
+}
