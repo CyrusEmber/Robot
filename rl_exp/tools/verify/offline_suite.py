@@ -133,7 +133,7 @@ CHECKS: list[Check] = [
           [f"{_V}/test_params_isolation.py"], contract=("rl_exp/tasks/recipe_params.py",)),
     Check("baseline line resolves without the main line (blocked imports / order-independent classes)",
           [f"{_V}/test_baseline_isolation.py"], contract=("rl_exp/tasks/baseline_recipe.py",)),
-    Check("stage B acceptance baseline is still the frozen one (golden locks pinned by digest)",
+    Check("stage B acceptance baseline is still the frozen one (golden locks pinned by digest; every lock on disk covered)",
           [f"{_V}/check_golden_frozen.py"], contract=("rl_exp/versions/cfg_baselines.json",)),
     Check("recipe lifecycle decision contract (verdicts / unknown status / refusal wording)",
           [f"{_V}/recipe_lifecycle.py"], contract=("rl_exp/versions/lines.json",)),

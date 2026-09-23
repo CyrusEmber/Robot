@@ -85,6 +85,13 @@ FROZEN = {
     # / dwell_s 0.5. The per-field diff was three fields across the two v2 tasks, v1's two entries
     # still byte-identical. Same record, second section.
     "rl_exp/versions/lizard/baseline/cfg_lock.json": "c20eb597be577118be6147b71f9e355f75d50b30d644604e511413bb6fa6b055",
+    # Added 2026-09-22: the lizard2 line landed its lock and nothing here was required to notice --
+    # the second time a new line's golden arrived unguarded (until 2026-09-17 the baseline line's
+    # lock sat outside this table too, listed then as A-side debt). That repetition is why this
+    # entry comes with :func:`uncovered` below: the covered set is read off the tree now, so leaving
+    # a lock out has to be a deliberate edit rather than a silence. lizard2 v1 is untrained and
+    # untagged, so this freezes the bytes the line landed with.
+    "rl_exp/versions/lizard2/main/cfg_lock.json": "0d67afd05d66061b2557aca047393140fd855f3b315bff737cdc2965360c05ce",
 }
 
 FROZEN_REVS: dict[str, str] = {
@@ -98,6 +105,9 @@ FROZEN_REVS: dict[str, str] = {
     # addendum ②, last row): the new digest first, then this line to the revision it came from.
     # The fourth re-anchor took the same two steps: 817d64e carries the head-chain contact guard.
     "rl_exp/versions/lizard/baseline/cfg_lock.json": "817d64e",
+    # The lizard2 line's bytes landed in dfdc2ae (the pre-training revision that repointed the head
+    # guard); the digest above is that revision's bytes.
+    "rl_exp/versions/lizard2/main/cfg_lock.json": "dfdc2ae",
 }
 """Which revision each frozen file's bytes are from, for the banner only.
 
@@ -129,6 +139,38 @@ def check(frozen: dict[str, str], root: pathlib.Path) -> list[str]:
     return problems
 
 
+def subjects(root: pathlib.Path) -> list[str]:
+    """The files this gate must cover, read off ``root`` instead of declared.
+
+    A declared table can only list what someone remembered to add, so a lock that arrives with a new
+    line is covered by nothing and the gate stays green -- which has now happened twice (the baseline
+    line's lock until 2026-09-17, the lizard2 line's until 2026-09-22). Reading the set off the tree
+    inverts that default: a new lock is covered the moment it lands, and leaving one out is an edit
+    somebody has to make on purpose.
+
+    Args:
+        root: tree to read the subjects from.
+
+    Returns:
+        Repo-relative paths, sorted: the shared baseline file plus every line lock on disk.
+    """
+    patterns = ("rl_exp/versions/cfg_baselines.json", "rl_exp/versions/*/*/cfg_lock.json")
+    return sorted(p.relative_to(root).as_posix() for pattern in patterns for p in root.glob(pattern))
+
+
+def uncovered(root: pathlib.Path, frozen: dict[str, str]) -> list[str]:
+    """Subjects present under ``root`` that ``frozen`` does not cover.
+
+    Args:
+        root: tree to read the subjects from.
+        frozen: the declared subject -> digest table.
+
+    Returns:
+        One repo-relative path per uncovered subject; empty means the table covers the tree.
+    """
+    return [rel for rel in subjects(root) if rel not in frozen]
+
+
 def self_test() -> int:
     """Prove the comparison itself: a match passes, a changed byte and a deletion fail."""
     problems: list[str] = []
@@ -147,6 +189,13 @@ def self_test() -> int:
             problems.append(f"a changed baseline did not read as drift: {fired}")
         if check(frozen, root):
             problems.append("an unchanged baseline read as drift")
+        lock = root / "rl_exp" / "versions" / "family" / "line" / "cfg_lock.json"
+        lock.parent.mkdir(parents=True)
+        lock.write_bytes(b"{}\n")
+        if uncovered(root, frozen) != ["rl_exp/versions/family/line/cfg_lock.json"]:
+            problems.append(f"a lock nobody froze did not read as uncovered: {uncovered(root, frozen)}")
+        if uncovered(root, {rel: "digest" for rel in subjects(root)}):
+            problems.append("a table covering every subject read as uncovered")
     for problem in problems:
         print(f"  FAIL {problem}")
     if problems:
@@ -165,6 +214,14 @@ def main(argv: list[str] | None = None) -> int:
         return self_test()
 
     problems = check(FROZEN, _REPO)
+    for rel in uncovered(_REPO, FROZEN):
+        # a lock this table does not cover has no byte-level guard, and the table's silence about it
+        # is what made that invisible: the entry has to be added deliberately, or the exemption
+        # written down in the acceptance record.
+        problems.append(
+            f"{rel}: present but not frozen -- add its digest and a FROZEN_REVS entry, or state why"
+            " this one is exempt in the record"
+        )
     for rel in sorted(set(FROZEN) ^ set(FROZEN_REVS)):
         # a provenance entry for a file nobody checks (or the reverse) is a table that describes
         # something other than what is enforced -- one rename away from a banner that lies
