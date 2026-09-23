@@ -1,13 +1,11 @@
 ---
 id: lizard2-family-landing
-title: lizard2 家族落成：两处契约声明 + diff 论证 + 开训前检查
+title: lizard2 v1 步态验收缺口与 v2 配方决策
 scope: rl_exp/versions/lizard2, rl_exp/tasks, rl_exp/tools/pipeline, rl_exp/tools/verify, ablation_harness
 status: open
-landing: rl_exp/versions/lizard2/main/v1/PLAN.md, rl_exp/versions/lizard2/main/main_params.yaml, rl_exp/tools/pipeline/emit_diff_declaration.py, rl_exp/tools/verify/check_recipe_build.py
-next: ① 按正文「评测协议交付」确定产品口径、补标定样本并发布新协议；采集/指标/报告检查/固定命令机制只消费 work/active/baseline-eval-pipeline-restructure.md 的交付。三项行为量的**定义与诊断侧读数已可用**（驱动 `rl_exp/tools/diagnose/gait_probe.py`，口径数学在 `diag_metrics.py`；读数见 `acceptance/records/2026-09-23-lizard2-v1-gait-skate` 的 ⑤）⇒ 本项只需定口径与正常/异常标定样本。首次判决与步态问题见 evidence。开训协议闸门另归 work/active/eval-protocol-before-training.md。
-② 探针（硬前置 2）**已改造并两次收口**，见 `acceptance/records/2026-09-22-lizard2-probe-observer-fixes.md`：压头经部署动作接口真的下发、头链另**用关节状态钉住**（只下发动作时驱动饱和、链回缩 0.3 m）、力与项值在复位前同帧读取、终止集合由 yaml `terminations.terms` 点名且等号判、死条目（无碰撞网格的 yaw 连杆）单独清理并重钉 golden/lock、零动作出帧目视（末帧已看：8 台平地站姿、四足平贴、无可见穿地）；③ 头守卫触发（硬前置 5 的观测量）**已完成，边界两半齐全**：站立 0.00 N 静默 / 下巴离地 50 mm 起降、前 18 帧静默、触地那帧 1108.12 N 同帧触发（`terminated=True`、`base_contact` 不在其中）；实测接触刚度 ≈4×10⁶ N/m ⇒ 该阈值是**接触检测器**，"从下方穿过 1 N 的温和下压"**撤回**（不存在该读数）；④ **自碰撞：所有者 2026-09-22 决定本版不开**（0 条确认穿透、24/24 凸包过近似会造出假接触、按单变量留给下一版），理由与改判条件已入 PLAN 硬前置 5；⑤ tag 事实（2026-09-22 已核并**已处理**）：裸锚点 `lizard2-main-v1`（9c257e3，那笔提交里只有 3 份 record + 本事项、**不含任何配方**）已**本地与远端一并删除**（`git tag -d` + `git push origin :refs/tags/lizard2-main-v1`，结果 `- [deleted] lizard2-main-v1`）；它所指的提交仍在 main 历史里（`merge-base --is-ancestor 9c257e3 main` 通过），故这是**只摘标签**、不改历史。v1 的锚点现由 `lizard2-main-v1.4`=9dcbf12 / `-v1.5`=7387031 / `-v1.6`=24757e0 承担（仓规的 `[.minor]` 形态），`check_version_docs` 复查 `VERSION_DOCS_OK`。连带改动：`work/active/harness-version-anchor-missing.md` 里"照 `lizard2-main-v1` 的先例"已改为 `lizard2-main-v1.5`（原先例已不存在）。**开训后本线又晚于 `-v1.6` 两批改动**（判决那批还没打锚点）。
-close_when: 离线套件全绿、硬前置 1-5 完成（协议冻结、能力曲线、自碰撞、探针、目视）、`diff.json` 理由有据、tag 已打 ⇒ 可开训；若明示暂不开训，则完成到 ④ 并记"未开训"这一事实即可关闭——未做的动作不许留在已关闭项里。
-depends_on: asset-leg-axis-capability-mismatch
+landing: rl_exp/versions/lizard2/main/main_params.yaml, rl_exp/tasks/lizard2_recipe.py, rl_exp/tools/pipeline/emit_diff_declaration.py, rl_exp/tools/verify/check_recipe_build.py
+next: ① 决定无界动作输出的约束方式，并保证 train/play 一致；② 奖励项与权重按新配方裁决。v1 已训练并锚定，依版本规则，任何 reward/action 配方变更都进入 `lizard2/main/v2`，不能作为 v1 开训前修订。实测与撤回项见 `acceptance/records/2026-09-23-lizard2-v1-gait-skate.md`。
+close_when: 动作边界和奖励方案决定落入 v2 的 PLAN、参数与差异声明；新步态协议使用已核验的三项行为量并完成阈值标定；v2 通过配方构建与冻结前检查，形成可复现的训练候选。训练结果另按 v2 NOTES 回填。
 evidence: acceptance/records/2026-09-23-lizard2-v1-gait-skate, acceptance/records/2026-09-23-lizard2-v1-first-eval, acceptance/records/2026-09-22-lizard2-family-landing, acceptance/records/2026-09-22-family-landing-decoupled, acceptance/records/2026-09-22-lizard2-stride-at-load, acceptance/records/2026-09-22-lizard2-declarations-and-plan, acceptance/records/2026-09-22-lizard2-self-collision-sweep, acceptance/records/2026-09-22-lizard2-actuator-capability, acceptance/records/2026-09-22-lizard2-probe-observer-fixes
 ---
 
@@ -18,18 +16,25 @@ evidence: acceptance/records/2026-09-23-lizard2-v1-gait-skate, acceptance/record
 
 ## 评测协议交付
 
-**新协议版本、报告清单与产品阈值归本项；采集、指标和执行机制归 `work/active/baseline-eval-pipeline-restructure.md`。**
+**新协议版本、报告清单与产品阈值归本项；采集、指标和执行机制归 `work/closed/2026/baseline-eval-pipeline-restructure.md`（2026-09-23 已关闭）。**
 本项在机制可用后发布协议，不以机制总项关闭为前置；总项消费本节交付验收，不形成互等关闭的环。
 
-- 消费足端采集和指标能力，在新协议补回 `min_lift_m` 并声明实际实现的 `foot_slip_mps`；奖励调整与重训另议。
+- 消费足端采集和指标能力，在新协议定义并验收三项行为量：脚底相对地面的净空、足端相对机身的前后摆幅、承重地面接触点的切向速度。不得把足部刚体原点相对本次最低 z 的变化称为抬脚净空，也不得把足部刚体速度直接称为接触点滑移；接触点无法直接取得时，须记录采用的几何近似与有效样本。产品阈值和正常/异常标定样本进验收记录，再由新 reader 使用；奖励调整与重训另议。
 - 收窄新协议的 `report_only`：明确移除 `dof_torque_frac_of_limit`，关节力矩留作专项采集；未实现的
   `foot_yaw_deg` 也不进入新清单。其余名称逐项对照实现；严格完整性由新 reader 强制，冻结旧协议不改写。
-- 所有者确定 `min_swing_feet`、抬脚高度与滑移容限；阈值依据和对照样本只进验收记录，不在机制项再定一套。
+- 所有者确定摆动脚数量、脚底净空、前后摆幅与接触点滑移容限；定义、阈值依据和正常/异常对照样本只进验收记录，不在机制项再定一套。
 - 补齐 `no_non_foot_carrier` 的持续部分承重标定样本，再决定对应门槛，不用现有异常读数直接定允许值。
 - 在新协议声明固定命令序列、速度带、等待窗及覆盖要求，消费机制项的驱动与覆盖检查；新条件重新采集，
   不把旧随机重采样结果当成新场景证据。
 
 本节出口：新协议与新 reader 绑定、报告清单全有实现、产品口径有依据、固定场景真跑可验；原判决仍按原协议可复读。
+
+## 当前待决定
+
+1. **动作接口边界**（决定范围已按证据收窄，见步态记录 ⑦ 第 6–8 条与 ⑨）：位置 PD 下更远的参考本身就是产生驱动力的手段 ⇒ **"参考越限"不等于"接口有缺陷"，也不等于该裁剪**。最小核查的三问里两问已有读数：**(a) 关节是否贴限位** —— 贴住帧占比 ≤ 0.01、最长 4 帧（0.08 s），越限帧里同时贴住的比例多为 0（最坏 2.8 档 rr hip 27%）⇒ 没有"长期顶限位"；**(b) 投影回限位会少掉多少力矩** —— hip 9.4–121.0、hfe 0.4–101.2 N·m，相对 leg 组 `effort_limit` 180 N·m 最大两格达 56–67% ⇒ 裁剪会实质改变驱动，不是"一种饱和换同一种饱和"。**第三问未答且不在本仓**：**(c) 部署端是否接受限位外参考（或自行裁剪/拒绝）** —— 训练必须匹配真正的部署行为。⇒ 待决定的是：按 (c) 的答案与后续验收证据再定是否约束参考；**在那之前保留接口**，验收侧仍按要求单列"参考超出范围的部分"。
+2. **奖励变更归属**：`v1` 已训练并有结果锚点，依 `.codemaker/rules/versioning.mdc` §A/§B，修改 `feet_slide` / `foot_clearance` 属于已训配方变更，必须建立 `lizard2/main/v2`；不能按 v1 开训前修订处理。待决定的是是否加回两项、具体实现与权重，并在 v2 方案中给出对应验收。v1 的奖励与结果保持可复读。
+
+**lf（左前）异常已撤回**：不得再把一阶目标预测中的负净空解释为“目标要求入地”；摆动中段实测净空三档均高于 rf，符号翻转来自线性修正项。复核方法与撤回依据见步态记录 ⑧。后续读一阶预测须区分相位和瞬时修正量，不能把瞬时量当作姿态。
 
 ## 当前状态
 
@@ -47,7 +52,7 @@ evidence: acceptance/records/2026-09-23-lizard2-v1-gait-skate, acceptance/record
   头守卫触发的**边界两半**已测（离地 18 帧静默 → 触地帧 1108.12 N 同帧触发），并由接触刚度（≈4×10⁶ N/m）
   得出该阈值是**接触检测器**而非力门限。读数与边界见 `evidence` 的 probe-observer-fixes 记录。
 - **PLAN 写满**：硬前置 5 条、固定窗口、主轴 7 条判据（四个种类待新增）、非足承重两条判据、8 条风险与 4 条判废线；
-  所有者的两条决定已落定。**终止条件 2026-09-22 加一条**：`head_contact`（`chest_.*`/`neck_.*` > 1.0 N，框架
+  当前未决事项收敛为上列动作接口边界与奖励方案。**终止条件 2026-09-22 加一条**：`head_contact`（`chest_.*`/`neck_.*` > 1.0 N，框架
   `illegal_contact`，不加 dwell）——旧线 v1 就是被"压着脖子走"拖垮的（66% 的帧压在 10% 体重之上、却从未连续
   超过 0.22 s，dwell 型承重判据拦不住，接触判据可以）；连带重钉 golden/v1 锁、路径 64→65、计数钉 107→108。
   `v1` 已于 2026-09-22 开训（`--max_iterations 14000`，4096 envs，跑满）并于 2026-09-23 出首次判决
