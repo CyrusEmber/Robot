@@ -49,6 +49,7 @@ Headless is the default; pass ``--viz none`` only if the cfg enables visualizers
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import pathlib
@@ -72,6 +73,8 @@ parser.add_argument("--seconds", type=float, default=8.0)
 parser.add_argument("--seed", type=int, default=123)
 parser.add_argument("--contact_n", type=float, default=1.0,
                     help="per-foot vertical force above which the foot is called loaded [N]")
+parser.add_argument("--transition_frames", type=int, default=2,
+                    help="frames dropped at each end of a stance for the steady contact-speed reading")
 parser.add_argument("--out", type=pathlib.Path,
                     default=_REPO_ROOT / "rl_exp" / "tools" / "diagnose" / "out"
                     / "gait_probe" / "gait_probe.json")
@@ -132,7 +135,53 @@ def self_check() -> None:
     offset = torch.tensor([[[0.0, 0.0, -0.05]]])
     moved = diag_metrics.target_vertex_delta(jac, error, offset)
     assert torch.allclose(moved, torch.tensor([[[-0.005, 0.0, 0.1]]]), atol=1e-6), moved
-    print("[SELF-CHECK] geometry, contact-point velocity, yaw frame and target prediction agree")
+
+    # The summary itself, on a series whose answers are known by hand. One swing (frames 4-7) between
+    # two stances, and a contact speed that is 9 at each stance's two END frames and 1 in between, so
+    # a missing transition cut shows up as a median of 5.0 where the answer is 1.0 -- an exclusion
+    # nobody would notice in a real run, where both numbers look plausible.
+    series = {
+        "body": "test_foot",
+        "force": torch.tensor([1.0, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1]),
+        "sole_clearance_m": torch.tensor([0.001, 0.001, 0.001, 0.001,
+                                          0.005, 0.02, 0.03, 0.01,
+                                          0.001, 0.001, 0.001, 0.001]),
+        "sole_clearance_target_m": torch.tensor([0.001, 0.001, 0.001, 0.001,
+                                                 0.004, 0.015, 0.05, 0.008,
+                                                 0.001, 0.001, 0.001, 0.001]),
+        "contact_speed_horiz_mps": torch.tensor([9.0, 1, 1, 9, 0, 0, 0, 0, 9, 1, 1, 9]),
+        "foot_fore_aft_m": torch.tensor([0.0, 0.1, 0.2, 0.3, 0.30, 0.25, 0.20, 0.15,
+                                         0.4, 0.5, 0.6, 0.7]),
+        "joint_target_hip": torch.tensor([0.2, 0.2, 0.2, 0.2, 0.5, 0.5, 0.5, 0.5,
+                                          0.2, 0.2, 0.2, 0.2]),
+        "joint_actual_hip": torch.full((12,), 0.1),
+        "joint_target_hfe": torch.tensor([0.2, 0.2, 0.2, 0.2, 0.5, 0.5, 0.5, 0.5,
+                                          0.2, 0.2, 0.2, 0.2]),
+        "joint_actual_hfe": torch.full((12,), 0.1),
+        "joint_limits_hip": (-1.0, 1.0),
+        "joint_limits_hfe": (-1.0, 1.0),
+    }
+    summary = summarise(series, 0.5, transition_frames=1)
+    # Every ``p50`` here is ``torch.median``, i.e. the LOWER middle value on an even count, not the
+    # midpoint of the two -- worth knowing before reading any median in this probe's report. And the
+    # transition cut shows up in the p95, not the p50: with the edges the minority, a median votes
+    # for the middle frames either way, which is exactly why the p95 was the reading that needed it.
+    expected = {
+        "duty": 0.667, "swing_count": 1, "steady_frames": 4,
+        "sole_clearance_unloaded_p50_m": 0.01, "sole_clearance_unloaded_max_m": 0.03,
+        "swing_peak_clearance_p50_m": 0.03, "swing_peak_clearance_target_p50_m": 0.05,
+        "swing_peak_target_minus_actual_p50_m": 0.02,
+        "contact_speed_horiz_loaded_p50_mps": 1.0, "contact_speed_horiz_loaded_p95_mps": 9.0,
+        "contact_speed_horiz_steady_p50_mps": 1.0, "contact_speed_horiz_steady_p95_mps": 1.0,
+        "stance_fore_aft_drift_p50_m": 0.3,
+        "swing_fore_aft_excursion_p50_m": 0.15, "swing_forward_p50_m": -0.15,
+        "hip_target_p2p_rad": 0.3, "hip_err_p50_rad": 0.1, "hip_target_p2p_unloaded_rad": 0.0,
+        "hip_target_outside_range_frac": 0.0, "hip_target_margin_min_rad": 0.5,
+    }
+    for key, value in expected.items():
+        assert summary[key] == value, (key, summary[key], value)
+    print("[SELF-CHECK] geometry, contact-point velocity, yaw frame, target prediction and the "
+          "swing/stance summary all agree with the hand cases")
 
 
 def _runs(mask: torch.Tensor) -> list[tuple[int, int]]:
@@ -149,7 +198,7 @@ def _runs(mask: torch.Tensor) -> list[tuple[int, int]]:
     return spans
 
 
-def summarise(foot: dict, contact_n: float) -> dict:
+def summarise(foot: dict, contact_n: float, transition_frames: int = 2) -> dict:
     """Per-foot summary from the raw series of one env, plus the two joint readings for that leg."""
     force, clearance = foot["force"], foot["sole_clearance_m"]
     fore_aft, contact = foot["foot_fore_aft_m"], foot["contact_speed_horiz_mps"]
@@ -157,6 +206,14 @@ def summarise(foot: dict, contact_n: float) -> dict:
     unloaded = ~loaded
     swings = [(i, j) for i, j in _runs(unloaded) if j - i > 1]
     stances = [(i, j) for i, j in _runs(loaded) if j - i > 1]
+    # A p95 over every loaded frame mixes the touchdown and liftoff frames, where the foot is changing
+    # phase and its contact point moves fast for a real reason. Reading the same quantity with the
+    # ends of each stance dropped is what turns "the p95 contains transitions" into a number instead
+    # of an excuse; a stance too short to keep a middle frame contributes nothing here.
+    steady = torch.zeros_like(loaded)
+    for i, j in stances:
+        if j - i - 2 * transition_frames >= 1:
+            steady[i + transition_frames:j - transition_frames] = True
     # The cleanest comparison of target against actual: at the frame each swing lifts highest, does
     # the target agree it should be that high? The median over ALL unloaded frames cannot answer it,
     # because liftoff and touchdown are frames where the target legitimately asks for the floor.
@@ -186,6 +243,11 @@ def summarise(foot: dict, contact_n: float) -> dict:
                                                if bool(loaded.any()) else None),
         "contact_speed_horiz_loaded_p95_mps": (round(float(contact[loaded].quantile(0.95)), 4)
                                                if bool(loaded.any()) else None),
+        "contact_speed_horiz_steady_p50_mps": (round(float(contact[steady].median()), 4)
+                                               if bool(steady.any()) else None),
+        "contact_speed_horiz_steady_p95_mps": (round(float(contact[steady].quantile(0.95)), 4)
+                                               if bool(steady.any()) else None),
+        "steady_frames": int(steady.sum()),
         "contact_speed_horiz_unloaded_p50_mps": (round(float(contact[unloaded].median()), 4)
                                                  if bool(unloaded.any()) else None),
         "swing_count": len(swings),
@@ -206,6 +268,13 @@ def summarise(foot: dict, contact_n: float) -> dict:
         out[f"{joint}_err_p95_rad"] = round(float((target - actual).abs().quantile(0.95)), 4)
         out[f"{joint}_target_p2p_unloaded_rad"] = (round(float(
             target[unloaded].max() - target[unloaded].min()), 4) if bool(unloaded.any()) else None)
+        # Distance to the nearest stop, and how often the target is outside the range outright: a
+        # target beyond a limit is the policy asking for a pose this joint cannot reach.
+        low, high = foot[f"joint_limits_{joint}"]
+        out[f"{joint}_target_outside_range_frac"] = round(float(
+            ((target < low) | (target > high)).float().mean()), 3)
+        out[f"{joint}_target_margin_min_rad"] = round(
+            float(torch.minimum(target - low, high - target).min()), 4)
     return out
 
 
@@ -244,6 +313,9 @@ def main() -> None:
     for joint in ("hip", "hfe"):
         leg_joint_ids[joint] = {name.split("_")[0]: joint_names.index(f"{name.split('_')[0]}_{joint}_joint")
                                 for name in foot_bodies}
+    # Position limits, because "the target asks for the sole below the floor" has two very different
+    # readings: a pose the policy chose, or a target pressed against a stop it cannot pass.
+    pos_limits = robot.data.joint_pos_limits.torch[0]  # (J, 2); the same for every env
 
     command = torch.tensor([[speed, 0.0, 0.0] for speed in speeds], device=live.device)
     command_term = live.command_manager.get_term("base_velocity")
@@ -298,8 +370,15 @@ def main() -> None:
     target = torch.stack(joint_trace["target"])
     actual = torch.stack(joint_trace["actual"])
 
-    report = {"speeds": speeds, "step_dt": live.step_dt, "steps": steps,
-              "contact_n": args_cli.contact_n, "foot_bodies": foot_bodies, "envs": []}
+    # Identity, so a report cannot outlive the run that made it unnoticed: the checkpoint it was
+    # taken from, by digest, and the command line it was taken with. A crashed run leaves no report
+    # (the failure branch exits non-zero before writing), and this makes the surviving one traceable.
+    report = {"task": args_cli.task, "speeds": speeds, "step_dt": live.step_dt, "steps": steps,
+              "contact_n": args_cli.contact_n, "transition_frames": args_cli.transition_frames,
+              "checkpoint": str(args_cli.checkpoint),
+              "checkpoint_sha256": hashlib.sha256(
+                  pathlib.Path(args_cli.checkpoint).read_bytes()).hexdigest(),
+              "argv": sys.argv, "foot_bodies": foot_bodies, "envs": []}
     for env_index, speed in enumerate(speeds):
         alive = ~done[:, env_index].cumsum(dim=0).bool()  # up to the first termination
         if not bool(alive.any()):
@@ -317,7 +396,8 @@ def main() -> None:
                 column = leg_joint_ids[joint][leg]
                 row[f"joint_target_{joint}"] = target[alive, env_index, column]
                 row[f"joint_actual_{joint}"] = actual[alive, env_index, column]
-            entry["feet"].append(summarise(row, args_cli.contact_n))
+                row[f"joint_limits_{joint}"] = tuple(pos_limits[column].tolist())
+            entry["feet"].append(summarise(row, args_cli.contact_n, args_cli.transition_frames))
         entry["series"] = {key: [[round(float(x), 5) for x in values[alive, env_index, foot].tolist()]
                                  for foot in range(len(foot_bodies))]
                            for key, values in (("force", force), ("clearance", clearance),

@@ -1,0 +1,58 @@
+# lizard2 四条腿链不是左右镜像（2026-09-23）
+
+## 适用范围
+
+`rl_exp/versions/lizard2/lizard2.urdf` 四条腿链（`{l,r}{f,l}_{hip,haa,hfe,kfe,foot}_joint`）的
+`origin xyz` 与 `axis xyz` 左右成对比较。起因是步态补测发现左前腿（lf）的目标净空三档为负
+（读数在 `acceptance/records/2026-09-23-lizard2-v1-gait-skate.md` 的 ⑥），而"左右腿等价"是那次比较
+默认成立的前提——本记录只否则"镜像"的判据本身就没有出处。
+
+## 验收条件
+
+1. 镜像约定必须写死在记录里（本条：左腿 y 分量变号，x 前后与 z 上下都不变号），否则"差多少"没有基准。
+2. 比的是 URDF 的 `origin`/`axis`，**不是碰撞网格**——网格的镜像关系会被 link 原点/轴约定吸收
+   （读数 4 是一次实测教训）。
+3. 差异要**报到分量级**：同一对腿里 0.015 mm 与 14.4 mm 混成一个数就看不出"哪条链不对称"。
+4. 相关性不许写成因果：几何差与滑移速度不同量级时，只能推翻"左右可互为对照"这一默认假设。
+
+## 结果
+
+镜像约定：左腿的 y 分量变号后与右腿逐分量比较（z 上下、x 前后都不变号）。四腿的 `axis` 完全相同
+（hip `0 0 1`、haa/hfe/kfe `−1 0 0`、foot `0 1 0`），所以镜像关系只在 `origin` 上。
+
+| 关节 | lf ↔ rf（镜像后差）[mm] | rl ↔ rr（镜像后差）[mm] |
+|---|---|---|
+| hip | x **4.9** · y **3.9** · z 0.05 | x **6.1** · y **14.4** · z 0.04 |
+| haa | 0 · 0 · 0 | 0 · 0 · 0 |
+| hfe | x 0 · y 0.015 · z 0.008 | x 0 · y **5.9** · z **8.8** |
+| kfe | x 0.043 · y 0 · z 0 | x 0 · y **8.1** · z 0.12 |
+| foot | x 0.004 · y 0 · z 0 | x 0.002 · y **2.7** · z **0.8** |
+
+**读数**
+
+1. **前腿对（lf/rf）在 hfe/kfe/foot 上镜像到 0.02–0.04 mm**，属噪声级；只有 hip 原点差 ~5 mm。
+   ⇒ 就链条几何而言，lf 与 rf 是同一套腿，**不能**用它解释 lf 目标净空为负。这条把 lf 的成因推回
+   策略侧（或 hip 那 5 mm，量级不足以解释"要求入地"）。
+2. **后腿对（rl/rr）不是镜像**：hfe 差 5.9/8.8 mm、kfe 差 8.1 mm、hip 的 y 差 14.4 mm
+   ⇒ 后腿两条链在 0.6–1.4 cm 量级上不对称。
+3. **与步态读数的关系是相关性，不是因果**：rl 正是稳态接触点滑移最重的那条腿
+   （1.5 档稳态 p50 2.91 m/s，见步态记录 ⑤ 第 3 条），但它那条腿的几何差只有 0.8–1.4 cm，
+   解释不了 2.9 m/s 的接触点速度。⇒ 这条只推翻一个默认假设（"左右腿可互为对照"），不指认凶手。
+4. **一条方法的教训**：碰撞网格的镜像检查判不出来（`lf_haa` 在 y 上镜像，而同腿的 `foot`/`hfe`
+   都不镜像——镜像关系被 link 原点/轴约定吸收了）。判左右对称要看 URDF 的 origin/axis，不是网格。
+
+## 证据引用
+
+- URDF 文本：`rl_exp/versions/lizard2/lizard2.urdf`（四条腿各 5 个 joint 的 `origin`/`axis`）。
+- 复读：`python -c "import xml.etree.ElementTree as ET; t=ET.parse('rl_exp/versions/lizard2/lizard2.urdf'); [print(j.get('name'), j.find('origin').get('xyz'), (j.find('axis').get('xyz') if j.find('axis') is not None else '-')) for j in t.iter('joint') if j.get('name').startswith(('lf_','rf_','rl_','rr_'))]"`
+- 一次性网格镜像检查（未入仓，结论见读数 4）：`rl_exp/meshes/collision/*_collision.obj` 顶点集镜像比较。
+- 相关读数：`acceptance/records/2026-09-23-lizard2-v1-gait-skate.md` 的 ⑤/⑥。
+- 旁证（同一条腿在旧构型上也异常，但那是**载荷**不是链条几何）：
+  `rl_exp/versions/lizard/main/v10/NOTES.md:66`、`v10/DIAGNOSE.md:205`。
+
+## 未覆盖边界
+
+只比 `origin`/`axis`：不比质量、惯量与网格（家族落成记录已证共有 link 质量 0 变化，见
+`acceptance/records/2026-09-22-lizard2-family-landing.md:14,24`）；不判"哪侧合规"（需 CAD 设计意图）；
+不证因果（1.4 cm 的几何差与 2.9 m/s 的滑移不同量级）；不覆盖 USD 侧的最终几何（URDF 是生成源，
+USD 由它导出，两者的差异未复核）。
