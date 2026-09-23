@@ -106,19 +106,21 @@ E:\IsaacLab\env_isaaclab\Scripts\python.exe ablation_harness\baseline_eval.py --
 
 ## 未覆盖边界
 
-1. `report_only` 声明 15 项，报告实际产出 8 项：`foot_duty`、`foot_load_fraction`、`feet_down_mean`、
-   `foot_yaw_deg`、`foot_slip_mps`、`dof_torque_frac_of_limit` 无人计算（`non_foot_load_fraction`、
-   `non_foot_contact_load_n` 名字还对不上）。这与本模块到处在拒的"声明了却没人读"是同一类：
-   要么补计算、要么把清单收窄，**未修**。
+1. `report_only` 声明的清单里有 **3 项无人计算**：`foot_slip_mps`、`foot_yaw_deg`、
+   `dof_torque_frac_of_limit`（本行 2026-09-23 更正：初版列的 6 项里，`foot_duty`/`foot_load_fraction`/
+   `feet_down_mean` 其实**已算**，`baseline_metrics.py:955-960`，报告里有值）。这与本模块到处在拒的
+   "声明了却没人读"是同一类：要么补计算、要么把清单收窄，**未修**。
 2. 开训**启动闸门**不存在（`manifest.begin` 只拒 lifecycle 与脏树），形态归
    `work/active/eval-protocol-before-training.md`；因此"协议先于训练"这条纪律在本次是**靠人**执行的。
 3. run 的 `run_manifest.json` T0 `declaration` 为空（7 条 failure，含 `num_envs declared None != actual
    4096`）；查旧线 `lizard_baseline_v2` 的 run 同样如此 ⇒ 本机所有 run 的既有状态，非本次启动特有。
 4. 零命令带的覆盖率依赖环境的 10 s 重采样（本次 256 envs 里 15 个落进该带、6370 帧）；
    评测器按固定基命令序列下命令这件事没做。
-5. **八条判据里没有一条能看见"步态质量"**：判决之后所有者目视录像指出"垫着走（承重脚在滑、摆动脚只抬
-   2–8 cm）"，实测证实——而本协议的步态判据只读接触与承重，PLAN 验收要求的 `min_lift_m`（离地高度）
-   未实现、`report_only` 的 `foot_slip_mps` 无人计算。⇒ 这份 `pass` 只证明"不倒、方向对、位移对"，
-   **不证明会走路**。数值、本仓自己的对照标准与两处根因见
+5. **八条判据里没有一条能看见"步态质量"**：判决之后所有者目视录像指出"垫着走"，探针读数支持
+   "足部运动方式异常、值得追查"，**但不足以定性**（2026-09-23 更正：初版写"实测证实"，其实探针读的是
+   足端原点高度与刚体速度，非脚底净空与接触点速度，见步态记录"更正与撤回"）；而本协议的步态判据只读
+   接触与承重，PLAN 验收要求的 `min_lift_m`（离地高度）未实现、`report_only` 的 `foot_slip_mps`
+   无人计算。⇒ 这份 `pass` 只证明"不倒、方向对、位移对"，**不证明会走路**；成因（未发迈腿动作 /
+   执行器跟不上 / 靠脚板滚转或滑动推进）未区分。数值、来源与更正明细见
    `acceptance/records/2026-09-23-lizard2-v1-gait-skate.md`。
 6. `min_swing_feet` 现填 2，最终值待所有者；`no_non_foot_carrier.fraction=0.05` 仍缺"持续部分承重"档样本。

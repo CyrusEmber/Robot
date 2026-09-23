@@ -38,7 +38,9 @@
   `params_version v1`）；查旧线 `lizard_baseline_v2` 的 run 同样如此 ⇒ 本机所有 run 的既有状态、
   非本次启动特有，但**该 run 的声明面因此不可读**。
 - **偏离 3（判据交付不完整）**：PLAN 验收节的步态判据要求 `min_lift_m`（离地高度），交付的两种 K
-  **没有实现该项**；`report_only` 另声明了无人计算的 `foot_slip_mps` 等 6 项。见"结论"与
+  **没有实现该项**；`report_only` 另声明了无人计算的 `foot_slip_mps`/`foot_yaw_deg`/
+  `dof_torque_frac_of_limit` **3 项**（2026-09-23 更正：初版写"等 6 项"，其中 `foot_duty`/
+  `foot_load_fraction`/`feet_down_mean` 其实已算）。见"结论"与
   `acceptance/records/2026-09-23-lizard2-v1-gait-skate.md`。
 - 评测在训练**之后**做（协议先冻结、判决后修订一次），过程与两处尺子缺陷见
   `acceptance/records/2026-09-23-lizard2-v1-first-eval.md`。
@@ -51,14 +53,17 @@
 | checkpoint | `model_13999.pt`（sha256 与全量参数见该 run 目录的 `checkpoints.json`） |
 | 评测报告 | `ablation_harness/results/lizard2_flat_v2/v1/Lizard2-Flat-v1_13999_deterministic_seed123/eval.json`（**pass**，八条全过）；无 settle 读者的 v1 判决与被取代的中间报告在同根目录下并列保存 |
 | 训练读数 | 见 run 目录的 tfevents（巡检入口 `rl_exp/tools/trainlog/probe_run.py --exp lizard2_v1`）；数值的书面家见下"结论"引用的两份记录 |
-| 分类判定 | **未定**：判据侧 `pass`，步态实测**不合格** ⇒ 按"能力基线"记账，**不按"会走路"记账**（判定依据见两份记录） |
+| 分类判定 | **未定**：判据侧 `pass`，步态**症状目视成立、定量定性未完成**（探针读数不是脚底净空/接触点速度）⇒ 按"能力基线"记账，**不按"会走路"记账**（判定依据见两份记录） |
 
 ## 结论
 
 - **能成立**：新构型在平地 0–3 m/s 区间上不倒、不趴、不把非足部位当支撑、方向与位移对。
-- **不成立**：**步态质量**（承重脚在滑、摆动脚抬不起来）。根因两侧：奖励侧删了
-  `feet_slide`/`foot_clearance`（旧线预注册的取舍，现已到期），判据侧把 PLAN 验收要求的 `min_lift_m`
-  丢了 ⇒ 八条判据没有一条能看见它。**数值、对照标准与出处不复述，见
+- **不成立**：**步态质量未定**。目视症状（踮脚、不迈腿、不抬腿）成立，探针读数支持"足部运动方式
+  异常、值得追查"，但**不足以定性**——读的是足端原点相对自身最低点的高度与足端刚体速度，不是脚底
+  净空与接触点切向速度（2026-09-23 更正，原写"承重脚在滑、摆动脚抬不起来"）。可确认的是两侧缺口：
+  奖励侧删了 `feet_slide`/`foot_clearance`（旧线预注册的取舍，现已到期），判据侧把 PLAN 验收要求的
+  `min_lift_m` 丢了 ⇒ 八条判据没有一条能看见它；成因（未发迈腿动作 / 执行器跟不上 / 靠脚板滚转或
+  滑动推进）未区分。**数值、更正明细与下一次测量的最小集合不复述，见
   `acceptance/records/2026-09-23-lizard2-v1-gait-skate.md`**；判决侧的另一半见
   `acceptance/records/2026-09-23-lizard2-v1-first-eval.md`。
 - **边界**：1 个 seed、1 颗检查点、无 DR、无课程；`pass` 与"垫着滑"同出一份 20 s 窗口，故本版只能归因到
