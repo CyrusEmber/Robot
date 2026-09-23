@@ -3,7 +3,8 @@
   "why": [
     "A protocol's numbers decide what counts as passing, and nothing used to notice them moving: the criteria table's digests cover kinds and cases, the suite lock covers the ground, and the migration proof compares one record's verdicts rather than the declared numbers -- so a threshold edit left the whole offline suite green (acceptance/records/2026-09-23-threshold-pilot.md).",
     "This table pins the bytes of the protocols in use, so a moved number fails the gate until this table says the new bytes are the ones meant. The reason field is part of the entry because a digest can show that something moved and cannot show that anyone looked.",
-    "Editing this table is the approval act, and it is a human one: pasting the digest the gate prints is bookkeeping, not review. Clearing the gate afterwards says the file and the table agree -- never that the change was approved."
+    "Editing this table is the approval act, and it is a human one: pasting the digest the gate prints is bookkeeping, not review. Clearing the gate afterwards says the file and the table agree -- never that the change was approved.",
+    "Which protocols this table has to cover is read off protocols/ rather than declared here, because a list only holds what somebody remembered to add: the day after this table landed, 6de88a0 added lizard2_flat_v2.json and nothing said a word. The one exemption is a rule, not a second list -- the name+version pairs in baseline_metrics.LEGACY_PROTOCOLS are the protocols published before there was an anchor to carry."
   ],
   "anchors": {
     "protocols/baseline_flat_v4.json": {
@@ -13,6 +14,26 @@
     "protocols/lizard2_flat_v1.json": {
       "sha256": "4078869f798d5db067f5c7adfb6370ab301b695eeb3e8d84dce587dd5fbba792",
       "reason": "Frozen when the lizard2 line's protocol landed (banded criteria, judge baseline-criteria-banded-1). Its suite_expected pins the ground; the thresholds it reads were unguarded until this table."
+    },
+    "protocols/lizard2_flat_v2.json": {
+      "sha256": "c37851db0177205362b9dc455ab78d4eefa899189f5b8539b32b9c6720910946",
+      "reason": "Frozen with the two banded-criteria fixes and the settled reader (6de88a0). v1 stays anchored too: it keeps answering the records that name it."
+    },
+    "protocols/locomotion_eval_v4.yaml": {
+      "sha256": "f33328ddf66e03e81f32dd0b96ea015a8fadba0b6d266dd7c8e34c7a771b9176",
+      "reason": "The locomotion path's current protocol. Its suite_expected pins the ground a run was measured on; this pins the numbers it was judged by -- the same value the eval records already carry as eval_protocol.digest."
+    },
+    "protocols/locomotion_eval_v3.yaml": {
+      "sha256": "00f8c067932eacdf680f8104c452e98f1ce61973af042cd0f95db2e9818ec47f",
+      "reason": "Superseded by v4, kept so the records that name it stay readable."
+    },
+    "protocols/locomotion_eval_v2.yaml": {
+      "sha256": "4c13f5aaca2b77d2fc76e2ed5c76c87895a3a23e993d0a40b598064b45aada4d",
+      "reason": "Superseded by v4, kept so the records that name it stay readable."
+    },
+    "protocols/locomotion_eval_v1.yaml": {
+      "sha256": "5dcf491bbfee2485e47c493ff9e94383f0e297b9e3083093cb197fafc818bb0c",
+      "reason": "Superseded by v4, kept so the records that name it stay readable."
     }
   }
 }

@@ -26,6 +26,7 @@ _REPO = pathlib.Path(__file__).absolute().parents[3]
 sys.path.insert(0, str(_REPO / "ablation_harness"))
 sys.path.insert(0, str(_REPO))
 from metrics import fall_flags  # noqa: E402
+import baseline_metrics  # noqa: E402
 import suite_lock  # noqa: E402
 from rl_exp.tools.runrecord import binding  # noqa: E402
 
@@ -79,6 +80,7 @@ def main():
     test_the_shipped_v4_protocol_is_fingerprinted_and_matches()
     test_a_digest_is_compared_without_its_algorithm_prefix()
     test_protocol_anchors_match_the_files_they_pin()
+    test_every_protocol_is_anchored_or_declared_legacy()
 
     print("ALL_EVAL_FRAME_V2_TESTS_PASSED")
 
@@ -256,6 +258,49 @@ def test_protocol_anchors_match_the_files_they_pin():
             )
     assert not problems, "\n".join(problems)
     print(f"  ok {len(table['anchors'])} protocol(s) match the bytes their approval records")
+
+
+def _protocol_identity(path: pathlib.Path) -> tuple[str, int] | None:
+    """The ``(name, version)`` a protocol file declares, or ``None`` when it declares neither."""
+    text = path.read_text(encoding="utf-8")
+    block = json.loads(text) if path.suffix == ".json" else yaml.safe_load(text)
+    if not isinstance(block, dict):
+        return None
+    name, version = block.get("name"), block.get("version")
+    return (name, version) if isinstance(name, str) and isinstance(version, int) else None
+
+
+def test_every_protocol_is_anchored_or_declared_legacy():
+    """The subjects come off the tree, because a declaration only lists what somebody remembered.
+
+    On the day this rule was written a protocol had already landed unanchored -- ``6de88a0`` added
+    ``lizard2_flat_v2.json`` and nothing noticed, the same shape that let two golden locks go
+    unguarded (acceptance/records/2026-09-22-golden-subject-completeness.md). Reading the set off
+    ``protocols/`` is what makes a new protocol covered the moment it arrives. An exemption is a
+    *rule*, not a second list to maintain: the name+version pairs already declared in
+    ``baseline_metrics.LEGACY_PROTOCOLS`` are the protocols published before the anchor existed.
+    """
+    harness = _REPO / "ablation_harness"
+    table = json.loads((harness / "protocol_anchors.json").read_text(encoding="utf-8"))
+    anchored = set(table["anchors"])
+    problems, exempt = [], []
+    for path in sorted((harness / "protocols").iterdir()):
+        if path.suffix not in (".json", ".yaml"):
+            continue
+        rel = f"protocols/{path.name}"
+        if rel in anchored:
+            continue
+        identity = _protocol_identity(path)
+        if identity is not None and identity in baseline_metrics.LEGACY_PROTOCOLS:
+            exempt.append(rel)
+            continue
+        problems.append(
+            f"{rel}: on disk but neither anchored nor declared legacy -- a protocol nothing checks can"
+            " have its numbers moved with the suite green; add its digest and reason to"
+            " protocol_anchors.json, or make its case for being exempt"
+        )
+    assert not problems, "\n".join(problems)
+    print(f"  ok {len(anchored)} protocol(s) anchored, {len(exempt)} declared legacy, none uncovered")
 
 
 if __name__ == "__main__":
