@@ -26,6 +26,11 @@ apart:
   ``joint_target_*``/``joint_err_*``  ``*_hip_joint`` (the stride axis) and ``*_hfe_joint`` (the knee):
                             does the policy COMMAND a swing at all (target peak-to-peak), and does the
                             actuator follow it (|target - pos|)?
+  ``sole_clearance_target_m``  where the deepest vertex would sit if the joints reached their targets
+                            in this step, to first order (``body_link_jacobian_w`` times the joint
+                            target error). This is the reading that separates the last two
+                            explanations: same low clearance as the actual one means the TARGET holds
+                            the foot down, a higher one means the actuator does.
 
 What each reading separates (the record's question, nothing more):
 
@@ -115,7 +120,18 @@ def self_check() -> None:
     delta = diag_metrics.yaw_frame_offset(torch.tensor([[1.0, 2.0, 0.5]]), yaw90,
                                           torch.tensor([[[1.0, 3.0, 1.1]]]))
     assert torch.allclose(delta, torch.tensor([[[1.0, 0.0, 0.6]]]), atol=1e-6), delta
-    print("[SELF-CHECK] geometry, contact-point velocity and yaw frame agree with the hand cases")
+
+    # Target prediction: a joint whose world Jacobian lifts the sole by 1 m/rad, error 0.1 rad, and a
+    # point 0.05 m below the link origin turned by an angular row of 1 rad/rad. Both terms must count:
+    # the second one is what a toe roll does, and dropping it is the mistake being screened for.
+    jac = torch.zeros(1, 1, 6, 2)
+    jac[0, 0, 2, 0] = 1.0  # linear z from joint 0
+    jac[0, 0, 4, 1] = 1.0  # angular y from joint 1
+    error = torch.tensor([[[0.1, 0.1]]])  # (N, 1, J)
+    offset = torch.tensor([[[0.0, 0.0, -0.05]]])
+    moved = diag_metrics.target_vertex_delta(jac, error, offset)
+    assert torch.allclose(moved, torch.tensor([[[-0.005, 0.0, 0.1]]]), atol=1e-6), moved
+    print("[SELF-CHECK] geometry, contact-point velocity, yaw frame and target prediction agree")
 
 
 def _runs(mask: torch.Tensor) -> list[tuple[int, int]]:
@@ -140,13 +156,31 @@ def summarise(foot: dict, contact_n: float) -> dict:
     unloaded = ~loaded
     swings = [(i, j) for i, j in _runs(unloaded) if j - i > 1]
     stances = [(i, j) for i, j in _runs(loaded) if j - i > 1]
+    # The cleanest comparison of target against actual: at the frame each swing lifts highest, does
+    # the target agree it should be that high? The median over ALL unloaded frames cannot answer it,
+    # because liftoff and touchdown are frames where the target legitimately asks for the floor.
+    peaks, peaks_target = [], []
+    for i, j in swings:
+        peak = int(clearance[i:j].argmax())
+        peaks.append(float(clearance[i:j][peak]))
+        peaks_target.append(float(foot["sole_clearance_target_m"][i:j][peak]))
     clearance_unloaded = clearance[unloaded] if bool(unloaded.any()) else torch.zeros(1)
+    clearance_target_unloaded = (foot["sole_clearance_target_m"][unloaded] if bool(unloaded.any())
+                                 else torch.zeros(1))
     out = {
         "body": foot["body"],
         "duty": round(float(loaded.float().mean()), 3),
         "sole_clearance_min_m": round(float(clearance.min()), 4),
         "sole_clearance_unloaded_p50_m": round(float(clearance_unloaded.median()), 4),
         "sole_clearance_unloaded_max_m": round(float(clearance_unloaded.max()), 4),
+        "sole_clearance_target_unloaded_p50_m": round(float(clearance_target_unloaded.median()), 4),
+        "sole_clearance_target_minus_actual_p50_m": round(float(
+            (clearance_target_unloaded - clearance_unloaded).median()), 4),
+        "swing_peak_clearance_p50_m": round(float(torch.tensor(peaks).median()), 4) if peaks else None,
+        "swing_peak_clearance_target_p50_m": (round(float(torch.tensor(peaks_target).median()), 4)
+                                              if peaks_target else None),
+        "swing_peak_target_minus_actual_p50_m": (round(float(torch.tensor(
+            [p - a for p, a in zip(peaks_target, peaks)]).median()), 4) if peaks else None),
         "contact_speed_horiz_loaded_p50_mps": (round(float(contact[loaded].median()), 4)
                                                if bool(loaded.any()) else None),
         "contact_speed_horiz_loaded_p95_mps": (round(float(contact[loaded].quantile(0.95)), 4)
@@ -220,7 +254,8 @@ def main() -> None:
     steps = round(args_cli.seconds / live.step_dt)
     obs = wrapper.get_observations()
     trace: dict[str, list[torch.Tensor]] = {key: [] for key in
-                                            ("force", "clearance", "contact", "fore_aft", "done")}
+                                            ("force", "clearance", "clearance_target", "contact",
+                                             "fore_aft", "done")}
     joint_trace: dict[str, list[torch.Tensor]] = {key: [] for key in ("target", "actual")}
     for step in range(steps):
         command_term.vel_command_b[:] = command
@@ -238,6 +273,15 @@ def main() -> None:
         trace["contact"].append(contact_vel[..., :2].norm(dim=-1).clone())
         trace["fore_aft"].append(diag_metrics.yaw_frame_offset(
             data.root_pos_w.torch, data.root_quat_w.torch, pose)[:, robot_foot_ids, 0].clone())
+        # Where the sole would be if this step's joint targets were met, about the deepest vertex.
+        # The Jacobian's DoF axis leads with the six base columns; nothing commands the base, so they
+        # stay zero and the reading is "the joints met their targets, the base did not move".
+        joint_error = torch.cat(
+            [torch.zeros(pose.shape[0], 1, 6, device=pose.device),
+             (data.joint_pos_target.torch - data.joint_pos.torch).unsqueeze(1)], dim=-1)
+        trace["clearance_target"].append((lowest[..., 2] + diag_metrics.target_vertex_delta(
+            data.body_link_jacobian_w.torch[:, robot_foot_ids], joint_error,
+            lowest - pose[:, robot_foot_ids])[..., 2]).clone())
         trace["done"].append(live.termination_manager.dones.clone())
         joint_trace["target"].append(data.joint_pos_target.torch.clone())
         joint_trace["actual"].append(data.joint_pos.torch.clone())
@@ -246,6 +290,7 @@ def main() -> None:
 
     force = torch.stack(trace["force"])
     clearance = torch.stack(trace["clearance"])
+    clearance_target = torch.stack(trace["clearance_target"])
     contact = torch.stack(trace["contact"])
     fore_aft = torch.stack(trace["fore_aft"])
     done = torch.stack(trace["done"])
@@ -264,6 +309,7 @@ def main() -> None:
             leg = name.split("_")[0]
             row = {"body": name, "force": force[alive, env_index, foot],
                    "sole_clearance_m": clearance[alive, env_index, foot],
+                   "sole_clearance_target_m": clearance_target[alive, env_index, foot],
                    "contact_speed_horiz_mps": contact[alive, env_index, foot],
                    "foot_fore_aft_m": fore_aft[alive, env_index, foot]}
             for joint in ("hip", "hfe"):
@@ -274,7 +320,8 @@ def main() -> None:
         entry["series"] = {key: [[round(float(x), 5) for x in values[alive, env_index, foot].tolist()]
                                  for foot in range(len(foot_bodies))]
                            for key, values in (("force", force), ("clearance", clearance),
-                                               ("contact", contact), ("fore_aft", fore_aft))}
+                                               ("contact", contact), ("fore_aft", fore_aft),
+                                               ("clearance_target", clearance_target))}
         report["envs"].append(entry)
 
     args_cli.out.parent.mkdir(parents=True, exist_ok=True)

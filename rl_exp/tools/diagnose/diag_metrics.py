@@ -255,6 +255,32 @@ def contact_point_velocity(com_lin_vel_w: torch.Tensor, ang_vel_w: torch.Tensor,
     return com_lin_vel_w + torch.cross(ang_vel_w, point_pos_w - com_pos_w, dim=-1)
 
 
+def target_vertex_delta(jacobian_w: torch.Tensor, joint_error: torch.Tensor,
+                        offset_w: torch.Tensor) -> torch.Tensor:
+    """Where a body point goes if the joints reach their targets, to first order, (N, B, 3) [m].
+
+    The step that separates "the target itself holds the foot down" from "the actuator does": a
+    target error the Jacobian says would lift the sole, against a sole that stays low, is an actuator
+    that cannot follow; a target error that would not lift it either is a target that never asked for
+    height.
+
+    Args:
+        jacobian_w: (N, B, 6, J) world Jacobian of the bodies, as ``body_link_jacobian_w`` gives it.
+        joint_error: (N, 1, J) or (N, B, J) joint target minus actual position [rad], aligned with the
+            Jacobian's DoF axis -- leading base-DoF columns first, then joints in ``joint_names``
+            order, so a caller that has no base target pads those columns with zeros (the reading
+            then means "these joints met their targets and the base did not move").
+        offset_w: (N, B, 3) vector from the body's link origin to the point, in world [m].
+
+    ponytail: first order in the joint error, one step, no contact. It is a direction-and-order
+    reading, valid while that error stays small (measured here at 0.01-0.26 rad), not the pose the
+    target would settle into -- that would need the targets replayed through a solver, a different
+    instrument.
+    """
+    delta = (jacobian_w @ joint_error.unsqueeze(-1)).squeeze(-1)  # (N, B, 6)
+    return delta[..., :3] + torch.cross(delta[..., 3:], offset_w, dim=-1)
+
+
 def yaw_frame_offset(root_pos_w: torch.Tensor, root_quat_w: torch.Tensor,
                      body_pos_w: torch.Tensor) -> torch.Tensor:
     """Body positions relative to the root, in the yaw-aligned gravity frame, (N, B, 3) [m].
