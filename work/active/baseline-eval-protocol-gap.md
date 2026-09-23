@@ -6,7 +6,6 @@ status: in_progress
 landing: ablation_harness/protocols/baseline_flat_v3.json, ablation_harness/baseline_eval.py, ablation_harness/baseline_metrics.py, rl_exp/versions/lizard/baseline/v2/PLAN.md, rl_exp/versions/lizard/baseline/v1/NOTES.md
 next: ① v2 首跑后按 v3 出报告（`--task ...-Play-v2 --protocol baseline_flat_v3.json`），确认 `verdict` 属于 `pass`/`fail` 且两条相对门槛与接触轴各有区分度（不是全绿也不是全红）；② 据此回填 `baseline/v2/NOTES.md` 并改判 `baseline/v1/NOTES.md` 的结论与结果表（v1 记录保持原义、不重打标签）；③ 若 0.2 / 0.8 这两个本版新定阈值在首跑上无区分度 ⇒ 回到"独立依据 + 正常/异常样本"再定，不得按首跑结果平移
 close_when: 执行者观察到 v2 首跑的报告：`verdict ∈ {pass, fail}`，每条门槛都有"能过"与"能红"两侧证据，并已回填 v2 NOTES、改判 v1 NOTES 的旧结论。仅"能跑出报告"不结项；"把旧 v1 拖颈样本判红"**也不是**结项条件——它是异常回归样本，不设定阈值
-depends_on: eval-protocol-before-training
 evidence: acceptance/records/2026-09-21-baseline-eval-v2-support-and-protocol-v3.md
 ---
 
