@@ -103,36 +103,18 @@
 - **工具目录按类别分**：新脚本先决定属于 `verify\`（闸门 / 套件，进离线清单）还是 `diagnose\`（人看的读数）；一次性历史脚本进 `archive\`，不要留在主路径上。
 - **`teacher_mdp.py` 一个模块承载 v3–v13 的增量段**（v3 包 / v5 行 SIR / v11 联合粒子 / v12 噪声 / v13 跟踪核），按版本段落读；"只增不改"是纪律。
 
-## 版本目录（每目录一行；本表同时是 versioning.mdc A-5 的 FILEMAP 登记行）
+## 版本线与线目录（本表到此为止；版本目录不逐条登记）
 
-> 行里只写"这个版本是什么"（身份 / 版本级机制差异），不写进度与判决——那些归 `FAMILY.md` 版本史、各 `vN\NOTES.md` 与 `ACCEPTANCE.md`。
-> 新增版本 = 建 `versions\<family>\<line>\vN\`（四件套 + `base.json`）+ 补 FAMILY 版本史行 + 在本表加一行。
+> 版本**不再**在本表逐条登记（2026-09-23 起）：那一行只重复路径与一句同样的说明，读者要靠它选版也选不出来，
+> 而"这个版本是什么"归各 `versions\<family>\FAMILY.md` 的版本史。目录本身是否存在、四件套齐不齐，
+> 由 `check_version_docs.py` 的形态检查读目录来判，不靠一份手抄索引。
+> 新增版本 = 建 `versions\<family>\<line>\vN\`（四件套 + `base.json`）+ 补 FAMILY 版本史行；本表不加行。
 
 | 目录 | 身份 |
 |---|---|
-| `rl_exp\versions\lizard\main\v0\` | 冻结配方（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
-| `rl_exp\versions\lizard\main\v1\` | 冻结配方（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
-| `rl_exp\versions\lizard\main\v2\` | 冻结配方（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
-| `rl_exp\versions\lizard\main\v3\` | 冻结配方（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
-| `rl_exp\versions\lizard\main\v4\` | 冻结配方（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
-| `rl_exp\versions\lizard\main\v5\` | 冻结配方（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
-| `rl_exp\versions\lizard\main\v6\` | 冻结配方（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
-| `rl_exp\versions\lizard\main\v7\` | 冻结配方（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
-| `rl_exp\versions\lizard\main\v8\` | 冻结配方（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
-| `rl_exp\versions\lizard\main\v9\` | 冻结配方（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
-| `rl_exp\versions\lizard\main\v10\` | 冻结配方（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
-| `rl_exp\versions\lizard\main\v11\` | 冻结配方（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
-| `rl_exp\versions\lizard\main\v12\` | 冻结配方（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
-| `rl_exp\versions\lizard\main\v13\` | 冻结配方（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
-| `rl_exp\versions\lizard\main\v14\` | 冻结配方（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
-| `rl_exp\versions\lizard\main\v15\` | 冻结配方（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
 | `rl_exp\versions\lizard\parkour\` | 支线版本包（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
-| `rl_exp\versions\lizard\parkour\v1\` | 支线版本包（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
 | `rl_exp\versions\lizard\baseline\` | 支线版本包（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
-| `rl_exp\versions\lizard\baseline\v1\` | 支线版本包（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
-| `rl_exp\versions\lizard\baseline\v2\` | 支线版本包（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
 | `rl_exp\versions\lizard2\main\` | 版本线目录（身份与教训见 `versions\lizard2\FAMILY.md` 版本史；本表只给路径与冻结状态） |
-| `rl_exp\versions\lizard2\main\v1\` | 冻结配方（身份与教训见 `versions\lizard2\FAMILY.md` 版本史；本表只给路径与冻结状态） |
 | `<线>\vN\PLAN.md` | 版本级计划（目的 / 假设 / 决策点 / 验收线）；结果回填走 NOTES |
 | `<线>\vN\NOTES.md` | 版本文档：目的 / 参数 diff / 训练命令 / 结果回填 |
 | `<线>\vN\<line>_params.yaml` | 冻结参数副本：跑冻结版只读这份，资产内容由 `asset_lock.json` 钉 |

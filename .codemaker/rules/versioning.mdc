@@ -63,7 +63,7 @@ alwaysApply: false
 4. 训练 → 曲线导出（`rl_exp/tools/trainlog/dump_tb.py`）→ eval（`ablation_harness/eval.py`）→ 结果回填 NOTES.md
 5. 家族文档版本历史表加一行；git 侧 commit + tag `<family>-vN+1`（tag = 整树快照；commit/push 细节走 git-auto-sync skill）
 
-**机器闸门**：第 2/5 步可量化项（每版本目录四件套 PLAN/NOTES/yaml/asset_lock 锁自身 + **base.json 血统边合法** + FAMILY 版本史行 + FILEMAP 行）由 `rl_exp\tools\verify\check_version_docs.py` 看守——`run_offline_checks.bat` + pre-commit 均跑，漏记录与 DR 漂移同级红；tag 缺失仅 WARN（历史前缀可不统一）。线身份与生命周期另由 `check_recipe_registry.py` 看守（**发现到的线必须有记录**、退休须带 `retired_at` 与非空 `reason`、`successor` 必须存在且为 active 的另一条线；闸门**不读时钟**——退休是目录修订，不是日期到期），配方 golden 由 `check_cfg_lock.py` 看守（**一条线一个锁文件**、`--update` 必须带 `--line` 与 `--reason`、任务必须有 `params_line`），四份文件约定（yaml 命名 / 线目录 / 锁落点）由 `recipe_lines.py` 单点供应。纯约定没闸门 = 必然欠账。
+**机器闸门**：第 2/5 步可量化项（每版本目录四件套 PLAN/NOTES/yaml/asset_lock 锁自身 + **base.json 血统边合法** + FAMILY 版本史行）由 `rl_exp\tools\verify\check_version_docs.py` 看守——`run_offline_checks.bat` + pre-commit 均跑，漏记录与 DR 漂移同级红；tag 缺失仅 WARN（历史前缀可不统一）。线身份与生命周期另由 `check_recipe_registry.py` 看守（**发现到的线必须有记录**、退休须带 `retired_at` 与非空 `reason`、`successor` 必须存在且为 active 的另一条线；闸门**不读时钟**——退休是目录修订，不是日期到期），配方 golden 由 `check_cfg_lock.py` 看守（**一条线一个锁文件**、`--update` 必须带 `--line` 与 `--reason`、任务必须有 `params_line`），四份文件约定（yaml 命名 / 线目录 / 锁落点）由 `recipe_lines.py` 单点供应。纯约定没闸门 = 必然欠账。
 
 **红线**：已发布 term 的实现永不改语义（新版本只允许加 term）；冻结目录只读；**配方锁正文（`versions/**/cfg_lock.json`）是闸门产物、不是阅读对象**——取用与判定只走 `check_cfg_lock.py` 的输出（`--diff` / `--vs-upstream` / `--self-test`），改动只走 `--update --line <线> --reason`；逐字读正文、手改正文、把正文抄进文档或事项都算绕开闸门（结论与实测归 evidence 记录，事项只留落点引用）。
 
@@ -86,9 +86,9 @@ alwaysApply: false
 5. **修订号 ↔ commit 绑定**：commit message 以版本号开头（初稿 `vN:`，修订 `vN.M.K:`）；commit 闭环/孤儿/amend 纪律走 git-auto-sync skill。
 6. **差异集合变了 ⇒ 改声明，不改摘要**：修订动了 `diff.json` 的 allowed 集合，或动了 `base.json` 的比较基线时，改的是 `diff.json`；变化的**含义**改向（同一路径上方向或幅度反转）还要人工复核 `why`、`base.json.note` 与 NOTES 的重点摘要——闸门只比对条数与路径，`why` 的语义漂移无自动判据。历史版本已写下的漂移段**豁免，不清零**（冻结记录不改写）。
 
-**当前计划同步——状态跃迁才做，内容修订不做**：`versions/<family>/PLAN.md` 头部更新行、`FAMILY.md` 当前状态、`FILEMAP.md` versions 行记的是**状态**（活跃版本/提案中/训练中），不是方案内容。方案细节修订（vN.M.K）不动这三处；只在状态跃迁时同步：
+**当前计划同步——状态跃迁才做，内容修订不做**：`versions/<family>/PLAN.md` 头部更新行与 `FAMILY.md` 当前状态记的是**状态**（活跃版本/提案中/训练中），不是方案内容（`FILEMAP.md` 的逐版本行已于 2026-09-23 删除，理由见该文件对应节的说明）。方案细节修订（vN.M.K）不动这两处；只在状态跃迁时同步：
 
-| 事件 | 同步三处 |
+| 事件 | 同步两处 |
 |---|---|
 | vN 初稿建立 / 冻结 / 训练启动 / 结果回填 | ✅ |
 | vN.M / vN.M.K 修订 | ❌（状态行失真时顺手修，如"部分待拍板"已不真） |

@@ -9,11 +9,13 @@ Mechanizes versioning.mdc section A steps 2 and 5: every recipe version
 directory ships the four-piece set (PLAN.md, NOTES.md, <line>_params.yaml --
 named after its line, so a path names its owner, asset_lock.json locking its
 own yaml), the family FAMILY.md version-history
-table carries its row, and FILEMAP.md lists the directory. Ungated
+table carries its row and names what the version is. Ungated
 conventions were the root cause of the v10/v11 record debt (v11 NOTES.md
-missing at kickoff, FAMILY/FILEMAP lagging two versions), so the same drift
+missing at kickoff, FAMILY lagging two versions), so the same drift
 now turns red like any other freeze-contract violation. Which directories are
 discoverable at all is delegated to ``recipe_lines`` rather than counted here.
+FILEMAP.md used to need a per-version row too; that row is gone (2026-09-23) --
+see the note where the check stood.
 
 Known ceiling (warn, not fail): git tags. Legacy versions predate the tag
 discipline and prefix styles differ (v1/v2/v5 vs lizard-vN), so a missing
@@ -171,7 +173,6 @@ def main(show_tree: bool = "--tree" in sys.argv) -> int:
     problems: list[str] = []
     warnings: list[str] = []
     tags = _git_tags()
-    filemap_text = (_REPO / "FILEMAP.md").read_text(encoding="utf-8")
     families = sorted(p for p in _VERSIONS.iterdir() if p.is_dir())
 
     # Which directories are discoverable versions, and under which params filename, is
@@ -239,11 +240,11 @@ def main(show_tree: bool = "--tree" in sys.argv) -> int:
                 problems.append(
                     f"{family}/{rel}: no '| {rel} |' row in FAMILY.md version history (versioning.mdc A-5)"
                 )
-            filemap_key = family + "\\" + rel.replace("/", "\\") + "\\"
-            if filemap_key not in filemap_text:
-                problems.append(
-                    f"{family}/{rel}: no '{filemap_key}' row in FILEMAP.md (versioning.mdc A-5)"
-                )
+            # The FILEMAP per-version row is gone with its check (2026-09-23): it repeated the path
+            # and one boilerplate sentence, and the check only looked for the path as a substring --
+            # so a passing mention satisfied it, and the row carried no identity to pick a version by.
+            # The version's identity lives in the FAMILY row above; its existence is what the
+            # directory checks below already read.
             # line versions need the qualified prefix: bare "v1" would collide
             # with the main line's first generation
             leaf = rel.rsplit("/", 1)[-1]

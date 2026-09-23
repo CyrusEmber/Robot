@@ -22,8 +22,8 @@ What this script does, in order:
    declares ``null``), ``PLAN.md`` and ``NOTES.md`` skeletons whose section names are the ones
    versioning.mdc A-2 requires, each marked TODO.
 3. **Write ``versions/<family>/FAMILY.md``** when the family has no family document yet.
-4. **Print** (never write) the FAMILY.md version row and the FILEMAP.md directory rows a
-   human has to paste -- one of them is exactly what ``check_version_docs.py`` looks for.
+4. **Print** (never write) the FAMILY.md version row and the FILEMAP.md line row a human has to
+   paste -- the FAMILY row is exactly what ``check_version_docs.py`` looks for.
 5. **With ``--apply`` only**: call the lock/declaration generators --
    ``emit_diff_declaration.py`` (the version's own ``diff.json``, after the frozen yaml lands),
    ``check_cfg_lock.py --update --line <family>/<line> --reason <why>`` (a new line needs its
@@ -522,7 +522,8 @@ def family_md(target: Target, facts: dict, today: str) -> str:
 > **本文只收已成立的事实（现在时/过去时）**：任何"待/未/若"字头的内容住 [PLAN.md](PLAN.md)。
 > **继承机制按引用不复制**：升版五步、状态机、记录规范、PLAN/NOTES 必含骨架从
 > `.codemaker/rules/versioning.mdc` §A 继承，本文不复制规则正文；目录职责、闸门清单、
-> 版本目录登记行见仓根 `FILEMAP.md`（本文不重复）。
+> 版本目录**不再**逐条登记于仓根 `FILEMAP.md`（2026-09-23 起）；本文这张版本史表就是它的登记，
+> 路径与冻结状态由目录本身与 `check_version_docs` 的形态检查保证。
 
 ## 家族身份
 
@@ -561,15 +562,16 @@ def family_row(target: Target, today: str) -> str:
 
 
 def filemap_rows(target: Target) -> list[str]:
-    """The FILEMAP.md rows to paste; the version one is what the gate looks for.
+    """The FILEMAP.md row to paste: the line directory, which is the level FILEMAP indexes.
 
-    ``check_version_docs`` matches the literal ``<family>\\<line>\\<version>\\``, so the trailing
-    separator inside the code span is load-bearing.
+    Versions are no longer listed here (2026-09-23). The row that used to stand for a version
+    repeated its path and one boilerplate sentence, and the check behind it only looked for the
+    path as a substring -- a passing mention satisfied it. What a version *is* belongs in the
+    FAMILY row, and that the directory exists at all is what the shape checks read.
     """
     family_doc = f"`versions/{target.family}/FAMILY.md`"
     return [
         f"| `rl_exp\\versions\\{target.family}\\{target.line}\\` | 版本线目录（线根放开发态参数与配方锁；身份见 {family_doc} 版本史） |",
-        f"| `rl_exp\\versions\\{target.family}\\{target.line}\\{target.version}\\` | 冻结配方（身份与教训见 {family_doc} 版本史；本表只给路径与冻结状态） |",
     ]
 
 
@@ -729,7 +731,7 @@ def main(argv: list[str] | None = None) -> int:
     print("\n--- pasted by hand (this tool never edits a shared document)")
     print(f"FAMILY.md  versions/{target.family}/FAMILY.md -> 版本历史 表加一行:")
     print(f"  {family_row(target, today)}")
-    print("FILEMAP.md -> 版本目录 表加两行:")
+    print("FILEMAP.md -> 版本线目录 表加一行（版本目录不再逐条登记）:")
     for row in filemap_rows(target):
         print(f"  {row}")
     print(f"runner cfg (rl_exp/tasks/agents/rsl_rl_ppo_cfg.py): the class named by this line's recipe keys"
