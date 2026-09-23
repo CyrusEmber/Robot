@@ -11,6 +11,7 @@ import math
 import pathlib
 import re
 import sys
+import tempfile
 from types import SimpleNamespace as NS
 
 import yaml
@@ -27,13 +28,54 @@ V2_PROTOCOL = json.loads((_REPO / "ablation_harness/protocols/baseline_flat_v2.j
 V3_PROTOCOL = json.loads((_REPO / "ablation_harness/protocols/baseline_flat_v3.json").read_text())
 BODY_WEIGHT_N = 706.32  # 72 kg x 9.81, the figure every baseline report carries
 
-# The axis labels a test record carries: a per-body reading has to name its bodies.
+# The axis labels a test record carries: a per-body reading has to name its bodies, and the newest
+# format's per-foot vectors name their feet.
+FEET = ["rr_foot", "rl_foot"]
 AXES = {
     "non_foot_fraction": ["chest_pitch", "neck_pitch"],
     "mesh_min_z": ["chest_pitch", "neck_pitch"],
-    "foot_contact": ["rr_foot", "rl_foot"],
-    "foot_fraction": ["rr_foot", "rl_foot"],
+    "foot_contact": FEET,
+    "foot_fraction": FEET,
+    "foot_lowest_point": FEET,
+    "foot_com_pos": FEET,
+    "foot_lin_vel": FEET,
+    "foot_ang_vel": FEET,
 }
+
+# What the newest format demands on top of the first one's meta: where the ground came from, and
+# which asset's geometry the foot reading was taken off. Fixture values, not evidence.
+GROUND_SOURCE = {"kind": "plane", "z_m": 0.0, "normal": [0.0, 0.0, 1.0]}
+FOOT_GEOMETRY = {name: {"obj": f"{name}_collision.obj", "sha256": "sha256:" + "0" * 64, "vertices": 8}
+                 for name in FEET}
+
+
+def feet_walk(artifact: dict, *, lift_m: float = 0.06, slip_mps: float = 0.0, spin_rad_s: float = 0.0,
+              descend_mps: float = 0.0, period: int = 4) -> dict:
+    """Give a format-2 window a gait: every foot alternates stance with a swing clearing ``lift_m``.
+
+    The knobs are the three things the foot criteria have to tell apart -- a swing that lifts or does
+    not, a loaded foot moving tangentially (``slip_mps``) versus one only rotating about its contact
+    (``spin_rad_s``: the contact point moves while the body's velocity stays zero), and a foot coming
+    straight down (``descend_mps``), which is not sliding along the ground.
+    """
+    frames = artifact["frames"]
+    steps, envs, feet = frames["foot_contact"].shape
+    phase = (torch.arange(steps).view(-1, 1) + torch.arange(feet).view(1, -1)) % period
+    swing = (phase >= period // 2).view(steps, 1, feet).expand(steps, envs, feet)
+
+    contact = (~swing).to(torch.float32)
+    frames["foot_contact"] = contact
+    frames["foot_fraction"] = contact * 0.25
+    frames["foot_com_pos"] = torch.zeros(steps, envs, feet, 3)
+    frames["foot_lowest_point"] = torch.zeros(steps, envs, feet, 3)
+    frames["foot_lowest_point"][..., 0] = 0.02  # a 2 cm lever arm from the body's COM
+    frames["foot_lowest_point"][..., 2] = torch.where(swing, torch.full_like(contact, lift_m), 0.0)
+    frames["foot_lin_vel"] = torch.zeros(steps, envs, feet, 3)
+    frames["foot_lin_vel"][..., 0] = torch.where(swing, torch.zeros_like(contact), slip_mps)
+    frames["foot_lin_vel"][..., 2] = -descend_mps
+    frames["foot_ang_vel"] = torch.zeros(steps, envs, feet, 3)
+    frames["foot_ang_vel"][..., 2] = spin_rad_s  # yawing over the contact sweeps it sideways
+    return artifact
 
 
 def expect(exception, fn, *args, **kwargs):
@@ -45,30 +87,42 @@ def expect(exception, fn, *args, **kwargs):
     raise AssertionError(f"{getattr(fn, '__name__', fn)} must raise {exception.__name__}")
 
 
-def default_frame(num_envs: int) -> dict:
-    """One all-zero frame, shaped as the contract prescribes."""
+def default_frame(num_envs: int, columns: dict | None = None) -> dict:
+    """One all-zero frame, shaped as the declared columns prescribe."""
     frame = {}
-    for name, (kind, _, _) in baseline_frames.COLUMNS.items():
-        width = len(AXES[name]) if name in AXES else (3 if kind == "vec3" else 0)
-        frame[name] = torch.zeros(num_envs, width) if width else torch.zeros(num_envs)
+    for name, (kind, _, _) in (baseline_frames.COLUMNS if columns is None else columns).items():
+        if kind == baseline_frames.VEC3_FEET:
+            frame[name] = torch.zeros(num_envs, len(AXES[name]), 3)
+        elif name in AXES:
+            frame[name] = torch.zeros(num_envs, len(AXES[name]))
+        else:
+            frame[name] = torch.zeros(num_envs, 3) if kind == "vec3" else torch.zeros(num_envs)
     return frame
 
 
 def build(protocol: dict, steps: int, *, num_envs: int = 1, series: dict | None = None,
-          start_pos: torch.Tensor | None = None, start_yaw: torch.Tensor | None = None) -> dict:
+          start_pos: torch.Tensor | None = None, start_yaw: torch.Tensor | None = None,
+          fmt: str = baseline_frames.FORMAT) -> dict:
     """Collect a synthetic window through the real contract.
 
     ``series`` overrides a column per frame (``f(step) -> tensor``). The defaults are a clean run:
     walking exactly on the command the protocol declares (the middle of its box, so a fixed and a
     ranged protocol both get a run that is on command), feet down, nothing loaded that should not
     be, a timeout on the last frame. ``start_pos``/``start_yaw`` are the episode's initial state.
+    ``fmt`` writes the window under that format's declaration, which is how a record from an older
+    format gets built after a newer one exists.
     """
     box = baseline_metrics.command_box(protocol)
     forward = (box[0][0] + box[0][1]) / 2.0
     step_dt = protocol["episode_length_s"] / steps
-    recorder = baseline_frames.BaselineFrames(num_envs=num_envs, step_dt=step_dt, axes=AXES)
+    # Only the labels this format actually declares: the newest format's foot columns do not exist in
+    # the older one, and a collector names the axes of the format it writes.
+    declared = baseline_frames.format_spec(fmt)["columns"]
+    recorder = baseline_frames.BaselineFrames(
+        num_envs=num_envs, step_dt=step_dt,
+        axes={name: labels for name, labels in AXES.items() if name in declared}, fmt=fmt)
     for step in range(steps):
-        frame = default_frame(num_envs)
+        frame = default_frame(num_envs, recorder.columns)
         # Metres, not frame counts: one step of a 100-frame window is 0.2 s, so a robot on command
         # at 2 m/s really has moved 0.4 m by frame 1.
         frame["pos"][:] = torch.tensor([(step + 1) * forward * step_dt, 0.0, 0.0])
@@ -79,13 +133,19 @@ def build(protocol: dict, steps: int, *, num_envs: int = 1, series: dict | None 
         frame["foot_contact"][:] = 1.0
         frame["foot_fraction"][:] = 0.25
         frame["timeout"][:] = 1.0 if step == steps - 1 else 0.0
+        if "foot_lowest_point" in frame:
+            # A foot resting on the plane: its deepest mesh vertex sits at ground z, and the foot is
+            # neither lifting nor sliding -- the reading the newest format adds, at its zero point.
+            frame["foot_lowest_point"][..., 2] = 0.0
         for name, override in (series or {}).items():
             frame[name] = override(step)
         recorder.add(**frame)
     return recorder.artifact(
         protocol=protocol, body_weight_n=BODY_WEIGHT_N,
         start_pos=torch.zeros(num_envs, 3) if start_pos is None else start_pos,
-        start_yaw=torch.zeros(num_envs) if start_yaw is None else start_yaw)
+        start_yaw=torch.zeros(num_envs) if start_yaw is None else start_yaw,
+        # Handed to every format; only the newest one requires them.
+        ground_source=GROUND_SOURCE, foot_geometry=FOOT_GEOMETRY)
 
 
 def truncated(artifact: dict, frames_kept: int) -> dict:
@@ -152,6 +212,283 @@ def test_non_finite_measurement_is_invalid():
     assert result["verdict"] == "invalid"
     assert any("mesh_min_z" in reason and "non-finite" in reason
                for reason in result["invalid_reasons"]), result["invalid_reasons"]
+
+
+# --- the frame contract, by format -------------------------------------------------------------
+#
+# A record is read under the declaration its format names, so two things have to hold: the current
+# format's table may not move in place, and a record written under an older format stays readable as
+# what it was. The declaration is frozen by digest in ``frame_semantics.json``, and the fixture below
+# is what keeps that digest from being a digest of a table that had already drifted.
+
+_FRAMES_SEMANTICS_PATH = _REPO / "ablation_harness" / "frame_semantics.json"
+
+#: The first published format's columns, spelled out here instead of generated from
+#: ``baseline_frames.COLUMNS``: a fixture built from the live table follows an edit to it, so it
+#: could never notice that the records already on disk no longer line up with what they were read as.
+_OLD_FORMAT = "baseline-frames-1"
+_OLD_COLUMNS = {
+    "pos": "vec3", "yaw": "env", "velocity_yaw": "vec3", "command_world": "vec3",
+    "head_tail_force": "env", "tilt_cos": "env", "non_foot_fraction": "bodies",
+    "mesh_min_z": "bodies", "foot_contact": "feet", "foot_fraction": "feet",
+    "terminated": "env", "timeout": "env",
+}
+
+
+def frame_frozen_digests(spec: dict) -> dict:
+    """The digests that pin each format: the live declaration, and the stored block itself."""
+    out = {}
+    for fmt, block in spec["formats"].items():
+        stored = {key: value for key, value in block.items()
+                  if key not in ("columns_sha256", "frozen_sha256")}
+        out[fmt] = {"columns_sha256": record.digest(baseline_frames.format_spec(fmt)),
+                    "frozen_sha256": record.digest(stored)}
+    return out
+
+
+def test_frame_semantics_are_frozen():
+    """Every format's declaration is still the one its published name stands for."""
+    spec = json.loads(_FRAMES_SEMANTICS_PATH.read_text(encoding="utf-8"))
+    digests = frame_frozen_digests(spec)
+    assert spec["formats"], "an empty table pins nothing"
+    for fmt, block in spec["formats"].items():
+        module = importlib.import_module(block["module"])
+        assert getattr(module, block["constant"]) == fmt, \
+            f"{fmt}: {block['module']}.{block['constant']} says {getattr(module, block['constant'])!r}"
+        live = module.format_spec(fmt)
+        assert sorted(live["columns"]) == sorted(block["columns"]), (
+            f"{fmt}: its columns changed ({sorted(live['columns'])} against {sorted(block['columns'])}). "
+            "A published format keeps its columns: a new or renamed column is a new format name, and "
+            "this one stays readable as what it was")
+        for name, (kind, unit, meaning) in live["columns"].items():
+            assert list(block["columns"][name]) == [kind, unit, meaning], (
+                f"{fmt}/{name}: its declaration moved to {[kind, unit, meaning]}: a changed meaning, "
+                "unit or shape is a new format, not an edit")
+        assert list(live["axis_kinds"]) == block["axis_kinds"], f"{fmt}: its axis kinds changed"
+        assert list(live["required_meta"]) == block["required_meta"], f"{fmt}: its required meta changed"
+        assert digests[fmt]["columns_sha256"] == block["columns_sha256"], (
+            f"{fmt}: the live declaration no longer matches the digest it was published under. Paste "
+            f"{digests[fmt]['columns_sha256']} only if the move was approved, or restore the "
+            "declaration (`--print-frames-frozen` prints both)")
+        assert digests[fmt]["frozen_sha256"] == block["frozen_sha256"], (
+            f"{fmt}: this block changed in place. Paste {digests[fmt]['frozen_sha256']} only as a "
+            "deliberate re-pin: the records already naming this format point at the semantics it had")
+        for case in block["cases"]:
+            assert callable(globals().get(case)), \
+                f"{fmt}: {case} is the case that pins this format's refusals, and it is gone"
+
+
+def test_an_older_format_record_is_read_under_its_own_declaration():
+    """A record is judged by the format it names, not by the newest table this reader holds."""
+    assert {name: kind for name, (kind, _, _) in
+            baseline_frames.format_spec(_OLD_FORMAT)["columns"].items()} == _OLD_COLUMNS, (
+        "the oldest format's declaration moved: the records already written under it would be read "
+        "as columns they never had")
+    artifact = build(PROTOCOL, 20, fmt=_OLD_FORMAT)
+    assert artifact["format"] == _OLD_FORMAT, artifact["format"]
+    result = baseline_metrics.judge(artifact)
+    assert result["verdict"] == "pass", (result["invalid_reasons"], result["gates"])
+    assert not any("does not declare" in reason for reason in result["invalid_reasons"])
+
+
+def test_an_unknown_format_is_refused_not_read_as_the_newest():
+    """A format this reader does not know is unreadable, not silently judged as the newest one."""
+    artifact = build(PROTOCOL, 20)
+    artifact["format"] = "baseline-frames-99"
+    result = baseline_metrics.judge(artifact)
+    assert result["verdict"] == "invalid", result["gates"]
+    assert any("baseline-frames-99" in reason for reason in result["invalid_reasons"]), result["invalid_reasons"]
+    assert all(value is None for value in result["gates"].values()), "an unreadable record judges nothing"
+    assert result["metrics"] == {} and result["per_env"] == {}, "nor does it report numbers"
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = pathlib.Path(tmp) / "eval.frames.pt"
+        torch.save(artifact, path)
+        err = expect(baseline_frames.FramesContractError, baseline_frames.load, path)
+        assert "baseline-frames-99" in str(err), err
+
+
+def test_a_per_foot_vector_needs_one_point_per_foot():
+    """A foot reading is per foot: the newest format's axis-carrying vec3 has to fit its labels."""
+    recorder = baseline_frames.BaselineFrames(num_envs=2, step_dt=0.02, axes=AXES)
+    frame = default_frame(2, recorder.columns)
+    frame["foot_lin_vel"] = torch.zeros(2, 2)  # (N, F): the trailing vector is missing
+    err = expect(baseline_frames.FramesContractError, recorder.add, **frame)
+    assert "foot_lin_vel" in str(err) and "(2, 2, 3)" in str(err), err
+
+
+def test_the_newest_format_demands_where_its_foot_geometry_came_from():
+    """The provenance of the foot reading travels with the record, or the record is not judgeable."""
+    artifact = build(PROTOCOL, 20)
+    assert artifact["format"] == baseline_frames.FORMAT, artifact["format"]
+    assert sorted(artifact["meta"]["foot_geometry"]) == sorted(FEET), artifact["meta"]["foot_geometry"]
+    assert artifact["meta"]["ground_source"]["kind"] == "plane"
+
+    del artifact["meta"]["foot_geometry"]
+    result = baseline_metrics.judge(artifact)
+    assert result["verdict"] == "invalid", result["gates"]
+    assert any("foot_geometry" in reason for reason in result["invalid_reasons"]), result["invalid_reasons"]
+    assert all(value is None for value in result["gates"].values()), result["gates"]
+
+
+def test_a_new_format_does_not_move_an_old_records_verdict():
+    """Two formats, one policy: extra columns may not change what the same run is judged to be."""
+    old = baseline_metrics.judge(build(PROTOCOL, 20, fmt=_OLD_FORMAT))
+    new = baseline_metrics.judge(build(PROTOCOL, 20))
+    assert old["verdict"] == new["verdict"] == "pass", (old["invalid_reasons"], new["invalid_reasons"])
+    assert old["gates"] == new["gates"], (old["gates"], new["gates"])
+    assert old["metrics"] == new["metrics"], (old["metrics"], new["metrics"])
+    added = set(new["axes"]) - set(old["axes"])
+    assert added == {"foot_lowest_point", "foot_com_pos", "foot_lin_vel", "foot_ang_vel"}, added
+
+
+def test_a_saved_record_is_written_whole_and_never_over_one_that_exists():
+    """The record is the evidence: it lands in one piece, and a second collection takes a new path."""
+    artifact = build(PROTOCOL, 20)
+    with tempfile.TemporaryDirectory() as tmp:
+        path = pathlib.Path(tmp) / "eval.frames.pt"
+        baseline_frames.save(path, artifact)
+        assert baseline_frames.load(path)["format"] == artifact["format"]
+        assert baseline_frames.load(path)["meta"]["steps"] == 20
+        err = expect(FileExistsError, baseline_frames.save, path, artifact)
+        assert "already exists" in str(err), err
+        assert baseline_frames.load(path)["frames"].keys() == artifact["frames"].keys()
+
+        # A write that dies half way leaves nothing that could pass for a complete window.
+        half = pathlib.Path(tmp) / "half.frames.pt"
+
+        def dies(*args, **kwargs):
+            raise RuntimeError("no space left on device")
+
+        original, torch.save = torch.save, dies
+        try:
+            expect(RuntimeError, baseline_frames.save, half, artifact)
+        finally:
+            torch.save = original
+        assert not half.exists(), "a failed write must not leave a record behind"
+        assert not list(pathlib.Path(tmp).glob("half.frames.pt.*.tmp")), "the temp file has to go"
+
+
+def test_the_window_is_saved_before_it_is_judged():
+    """The one ordering a judge defect must not be able to undo, read off the real ``run``.
+
+    The offline half is :func:`test_a_judge_failure_names_the_record_to_retry_from`; this is the
+    half that cannot be exercised without a simulator, so it is read as the order of two calls
+    inside ``run`` rather than left to the next 20 s rollout to notice.
+    """
+    source = ast.parse((_REPO / "ablation_harness" / "baseline_eval.py").read_text(encoding="utf-8"))
+    run = next(node for node in source.body
+               if isinstance(node, ast.FunctionDef) and node.name == "run")
+    at = {"save": None, "judge": None}
+    for node in ast.walk(run):
+        if isinstance(node, ast.Call):
+            called = ast.unparse(node.func)
+            if called.endswith("baseline_frames.save"):
+                at["save"] = node.lineno
+            elif called.endswith("judged_or_recoverable"):
+                at["judge"] = node.lineno
+    assert at["save"] and at["judge"], f"run does not both save and judge: {at}"
+    assert at["save"] < at["judge"], (
+        f"the window is judged on line {at['judge']} before it is saved on line {at['save']}: a judge "
+        "defect would then cost a completed collection")
+
+
+def test_a_judge_failure_names_the_record_to_retry_from():
+    """A judge defect must not cost the window: the error names the file that re-judges it offline."""
+    from ablation_harness import baseline_eval
+
+    artifact = build(PROTOCOL, 20)
+    with tempfile.TemporaryDirectory() as tmp:
+        path = pathlib.Path(tmp) / "eval.frames.pt"
+        assert baseline_eval.judged_or_recoverable(artifact, path) == baseline_metrics.judge(artifact)
+
+        def dies(subject):
+            raise RuntimeError("Expected all tensors to be on the same device, but found cuda:0 and cpu")
+
+        original, baseline_metrics.judge = baseline_metrics.judge, dies
+        try:
+            err = expect(RuntimeError, baseline_eval.judged_or_recoverable, artifact, path)
+        finally:
+            baseline_metrics.judge = original
+        assert str(path) in str(err), err
+        assert "python -m ablation_harness.baseline_metrics" in str(err), err
+        assert isinstance(err.__cause__, RuntimeError), "the judge's own error has to stay reachable"
+
+
+# --- the foot criteria: what the gait kind cannot see -------------------------------------------
+
+def test_the_walk_reference_passes_both_foot_criteria():
+    result = baseline_metrics.judge(feet_walk(build(FOOTED_PROTOCOL, 20)))
+    assert result["verdict"] == "pass", (result["invalid_reasons"], result["gates"])
+    assert result["gates"]["foot_lift"] and result["gates"]["foot_slip"], result["gates"]
+    assert [round(v, 3) for v in result["diagnostics"]["foot_clearance_swing_m"]] == [0.06] * len(FEET), \
+        result["diagnostics"]
+    assert result["diagnostics"]["foot_swing_frames"] == [10] * len(FEET), result["diagnostics"]
+    assert result["report_groups"]["behaviour"].count("foot_slip_mps") == 1
+
+
+def test_a_swing_that_never_lifts_fails_the_lift_criterion():
+    result = baseline_metrics.judge(feet_walk(build(FOOTED_PROTOCOL, 20), lift_m=0.0))
+    assert result["verdict"] == "fail" and result["gates"]["foot_lift"] is False, result["gates"]
+    assert result["gates"]["foot_slip"] is True, "the slip reading is a different question"
+    assert result["metrics"]["foot_lift_feet_least"] == 0, result["metrics"]
+
+
+def test_a_loaded_foot_sliding_at_its_contact_point_fails_the_slip_criterion():
+    result = baseline_metrics.judge(feet_walk(build(FOOTED_PROTOCOL, 20), slip_mps=0.4))
+    assert result["verdict"] == "fail" and result["gates"]["foot_slip"] is False, result["gates"]
+    assert result["gates"]["foot_lift"] is True, "a sliding foot may still lift clear"
+    assert result["metrics"]["foot_slip_fraction_worst"] == 1.0, result["metrics"]
+    assert [round(v, 3) for v in result["diagnostics"]["foot_slip_mps"]] == [0.4] * len(FEET), result["diagnostics"]
+
+
+def test_a_foot_that_only_pivots_slips_at_the_point_while_its_body_does_not_move():
+    """The case a body-origin reading calls zero: omega x r moves the contact, not the body."""
+    artifact = feet_walk(build(FOOTED_PROTOCOL, 20), spin_rad_s=5.0)
+    assert float(artifact["frames"]["foot_lin_vel"].norm(dim=-1).max()) == 0.0, "the body is not moving"
+    result = baseline_metrics.judge(artifact)
+    assert result["gates"]["foot_slip"] is False, result["diagnostics"]["foot_slip_mps"]
+    assert result["diagnostics"]["foot_slip_mps"][0] > 0.09, result["diagnostics"]  # 5 rad/s x 0.02 m
+
+
+def test_a_foot_descending_onto_the_ground_is_not_sliding():
+    """Only the tangential part is slip: a foot landing at 2 m/s is not being dragged."""
+    result = baseline_metrics.judge(feet_walk(build(FOOTED_PROTOCOL, 20), descend_mps=2.0))
+    assert result["gates"]["foot_slip"] is True, result["diagnostics"]["foot_slip_mps"]
+
+
+def test_a_record_without_the_foot_columns_cannot_be_judged_by_the_foot_criteria():
+    """A criterion over a quantity the run never measured is invalid, never a fail."""
+    result = baseline_metrics.judge(build(FOOTED_PROTOCOL, 20, fmt=_OLD_FORMAT))
+    assert result["verdict"] == "invalid", result["gates"]
+    assert any("foot_lowest_point" in reason for reason in result["invalid_reasons"]), result["invalid_reasons"]
+    assert all(value is None for value in result["gates"].values()), result["gates"]
+
+
+def test_only_the_reader_that_declares_its_reports_can_be_asked_for_one_nobody_computes():
+    """The completeness check lands on the new id and leaves the published verdicts alone."""
+    undeclared = dict(FOOTED_PROTOCOL, report_only=["foot_yaw_deg", "foot_slip_mps"])
+    result = baseline_metrics.judge(feet_walk(build(undeclared, 20)))
+    assert result["verdict"] == "invalid", result["gates"]
+    assert any("foot_yaw_deg" in reason for reason in result["invalid_reasons"]), result["invalid_reasons"]
+
+    # The frozen family protocol declares items this judge does not compute, and its own reader keeps
+    # reading it: a published verdict is not invalidated by a later tightening of a *newer* reader.
+    frozen = json.loads((_REPO / "ablation_harness/protocols/lizard2_flat_v2.json").read_text())
+    assert set(frozen["report_only"]) - set(baseline_metrics.REPORT_ITEMS), "the list is fully implemented"
+    old = baseline_metrics.judge(feet_walk(build(frozen, 20)))
+    assert old["judge"]["id"] == baseline_metrics.BANDED_SETTLED_JUDGE_ID, old["judge"]
+    assert old["invalid_reasons"] == [], old["invalid_reasons"]
+    assert old["verdict"] in ("pass", "fail"), old["verdict"]
+
+
+def test_every_reader_this_module_implements_has_a_frozen_block():
+    """A reader without a block is a semantics change nobody pinned; the table is the gate."""
+    spec = json.loads(_SEMANTICS_PATH.read_text(encoding="utf-8"))
+    for judge_id, kinds in baseline_metrics.JUDGE_KINDS.items():
+        block = spec["ids"].get(judge_id)
+        assert block is not None, f"{judge_id} can be named by a protocol but nothing pins its kinds"
+        assert set(block["kinds"]) == set(kinds), (judge_id, block["kinds"], kinds)
 
 
 def test_v2_refuses_a_gate_it_could_not_measure():
@@ -286,6 +623,29 @@ def test_v3_keeps_the_two_samples_apart():
     clean = baseline_metrics.judge(build(V3_PROTOCOL, 1000))
     assert clean["verdict"] == "pass", (clean["gates"], clean["metrics"])
     assert clean["metrics"]["non_foot_mesh_min_z_m"] == 0.5
+
+
+def test_v3_the_two_axes_no_sample_ever_exercised_can_still_fail():
+    """Survival and attitude were only ever seen GREEN: assert the other side here.
+
+    Both of the line's real samples (a zero-action rollout and a random checkpoint) live out the
+    window and stay inside 40 deg, so those two gates only ever had a passing side -- and nothing in
+    this file ever asserted either of them as ``False``. A gate that can only pass is not a gate, so
+    the failing side is built the way the other three axes already are: synthetic windows at the
+    judge. An episode that never times out is a policy that fell, and 0.6 s held past cos(40 deg) is
+    the dwell the protocol names.
+    """
+    fell = baseline_metrics.judge(build(V3_PROTOCOL, 1000, series={
+        "timeout": lambda step: torch.tensor([0.0]),
+    }))
+    assert fell["gates"]["survival"] is False, fell["metrics"]
+    assert fell["verdict"] == "fail", fell["gates"]
+
+    held_past_the_dwell = baseline_metrics.judge(build(V3_PROTOCOL, 1000, series={
+        "tilt_cos": lambda step: torch.tensor([0.6 if step < 30 else 0.999]),
+    }))
+    assert held_past_the_dwell["gates"]["attitude"] is False, held_past_the_dwell["diagnostics"]
+    assert held_past_the_dwell["verdict"] == "fail", held_past_the_dwell["gates"]
 
 
 # --- what the window measures ------------------------------------------------------------------
@@ -589,6 +949,23 @@ LIZARD2_SETTLED_PROTOCOL = json.loads(
     (_REPO / "ablation_harness/protocols/lizard2_flat_v2.json").read_text())
 _SEMANTICS_PATH = _REPO / "ablation_harness" / "judge_semantics.json"
 _STEP_DT = 0.02  # every fixture below runs the protocol's 20 s window in 1000 steps
+
+#: The frozen criteria protocol with the foot criteria added, read by the reader that can read them.
+#: Its other criteria are reused as they are, so a foot case fails on a foot gate rather than on the
+#: window being unusual in some other way: the foot criteria exist next to the ones already there.
+FOOTED_PROTOCOL = {
+    **V4_PROTOCOL,
+    "judge": baseline_metrics.FOOTED_JUDGE_ID,
+    "criteria": {
+        **V4_PROTOCOL["criteria"],
+        "foot_lift": {"kind": "foot_lift_v1",
+                      "params": {"min_lift_m": 0.03, "band_mps": 0.5, "min_feet": 2}},
+        "foot_slip": {"kind": "foot_slip_v1",
+                      "params": {"max_slip_mps": 0.05, "min_load": 0.05, "max_slip_fraction": 0.02}},
+    },
+    "report_only": ["forward_mae_mps", "foot_slip_mps", "foot_clearance_swing_m", "foot_duty",
+                    "foot_swing_frames", "foot_ground_source"],
+}
 
 
 def _fixture_plain(kw):
@@ -1193,6 +1570,10 @@ def test_the_legacy_reader_refuses_thresholds_it_cannot_read():
 def main():
     if "--print-frozen" in sys.argv:
         print(json.dumps(frozen_digests(json.loads(_SEMANTICS_PATH.read_text(encoding="utf-8"))), indent=2))
+        return
+    if "--print-frames-frozen" in sys.argv:
+        print(json.dumps(frame_frozen_digests(
+            json.loads(_FRAMES_SEMANTICS_PATH.read_text(encoding="utf-8"))), indent=2))
         return
     # Import isolation has its own fresh-process suite entry.
     from rl_exp.tools.verify import test_baseline_mdp

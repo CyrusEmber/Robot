@@ -58,6 +58,8 @@ GATE_ORDER = (
     "no_non_foot_carrier",
     "no_non_foot_load_sum",
     "gait",
+    "foot_lift",
+    "foot_slip",
     "no_mesh_through_floor",
 )
 
@@ -87,8 +89,64 @@ BANDED_SETTLED_JUDGE_ID = "baseline-criteria-banded-settled-1"
 #: protocol identity travels next to it, so "which thresholds" and "which reader" stay separable.
 LEGACY_JUDGE_ID = "legacy-baseline-threshold-keys-1"
 
+#: The reader that can read the foot criteria. A new id rather than two more kinds on an old one:
+#: they read columns an earlier format does not carry, and a published id's case table is frozen.
+FOOTED_JUDGE_ID = "baseline-criteria-footed-1"
+
 #: Protocols allowed to arrive without a ``criteria`` block, by declared identity (not by filename).
 LEGACY_PROTOCOLS = (("Baseline-Flat-v1", 1), ("Baseline-Flat-v2", 2), ("Baseline-Flat-v3", 3))
+
+#: Every number this judge can report: name -> (group, unit, columns it reads, what it means).
+#: The declaration is the point. A report item is what a protocol lists in ``report_only``, and a name
+#: that nobody computes comes back as an absent number -- which reads like a quantity that happened to
+#: be unremarkable, not like a gap. So the items are declared where they are produced, with the
+#: columns they depend on and the group they answer for:
+#:   * ``measurement`` -- was the window measured at all, and over how many samples;
+#:   * ``task`` -- did the policy do what the command asked;
+#:   * ``behaviour`` -- how did it do it (a policy can track the command by dragging its chin).
+REPORT_ITEMS = {
+    # -- task performance -------------------------------------------------------------------------
+    "forward_mae_mps": ("task", "m/s", ("command_world", "velocity_yaw"), "mean forward speed error"),
+    "forward_mae_norm": ("task", "1", ("command_world", "velocity_yaw"), "that error over the command"),
+    "forward_displacement_m": ("task", "m", ("pos", "command_world"), "distance along the initial heading"),
+    "displacement_frac": ("task", "1", ("pos", "command_world"), "that distance over the asked one"),
+    "expected_displacement_m": ("task", "m", ("command_world",), "distance the commands asked for"),
+    "first_episode_timeout_fraction": ("task", "1", ("timeout",), "envs that survived the window"),
+    "tilt_max_deg": ("task", "deg", ("tilt_cos",), "worst posture of the episode"),
+    "tracking_band_error": ("task", "m/s", ("command_world", "velocity_yaw"), "per-band speed error"),
+    "displacement_band_ratio": ("task", "1", ("pos", "command_world"), "per-band distance ratio"),
+    # -- measurement validity ---------------------------------------------------------------------
+    "first_episode_frame_fraction": ("measurement", "1", ("timeout", "terminated"),
+                                     "share of the window inside the first episode"),
+    "command_mps_mean": ("measurement", "m/s", ("command_world",), "mean issued command"),
+    "tracking_band_frames": ("measurement", "frames", ("command_world",), "frames per band"),
+    "displacement_band_frames": ("measurement", "frames", ("command_world",), "frames per band"),
+    "tracking_unclaimed_frames": ("measurement", "frames", ("command_world",), "frames outside every band"),
+    "foot_ground_source": ("measurement", "text", ("ground_source",),
+                           "how the ground the clearance is read against was obtained"),
+    "foot_swing_frames": ("measurement", "frames", ("foot_contact",), "unloaded frames per foot"),
+    "foot_loaded_frames": ("measurement", "frames", ("foot_fraction",), "loaded frames per foot"),
+    # -- behaviour --------------------------------------------------------------------------------
+    "lateral_speed_abs_mps": ("behaviour", "m/s", ("velocity_yaw",), "mean sideways speed"),
+    "yaw_offset_abs_rad": ("behaviour", "rad", ("yaw",), "mean |yaw drift|"),
+    "head_tail_contact_force_n": ("behaviour", "N", ("head_tail_force",), "mean force on head/neck/tail"),
+    "non_foot_load_fraction": ("behaviour", "1", ("non_foot_fraction",), "peak non-foot load fraction"),
+    "non_foot_contact_load_n": ("behaviour", "N", ("non_foot_fraction",), "the same, in newtons"),
+    "non_foot_contact_frames": ("behaviour", "frames", ("non_foot_fraction",), "frames above the limit"),
+    "non_foot_mesh_min_z_m": ("behaviour", "m", ("mesh_min_z",), "lowest non-foot mesh point"),
+    "foot_duty": ("behaviour", "1", ("foot_contact",), "share of frames each foot carried load"),
+    "foot_load_fraction": ("behaviour", "1", ("foot_fraction",), "mean load fraction per foot"),
+    "feet_down_mean": ("behaviour", "1", ("foot_contact",), "feet carrying load per frame"),
+    "gait_swing_feet_least": ("behaviour", "feet", ("foot_contact", "foot_fraction"), "worst env's swings"),
+    "foot_clearance_swing_m": ("behaviour", "m", ("foot_lowest_point",),
+                               "peak clearance per foot while unloaded"),
+    "foot_slip_mps": ("behaviour", "m/s",
+                      ("foot_lowest_point", "foot_com_pos", "foot_lin_vel", "foot_ang_vel"),
+                      "mean tangential contact-point speed per foot while loaded"),
+    "foot_lift_peak_m": ("behaviour", "m", ("foot_lowest_point",), "highest clearance any foot reached"),
+    "foot_lift_feet_least": ("behaviour", "feet", ("foot_lowest_point",), "worst env's lifted feet"),
+    "foot_slip_fraction_worst": ("behaviour", "1", ("foot_lin_vel",), "worst foot's sliding share"),
+}
 
 #: kind -> {"params": exactly these, "columns": the record columns it reads}.
 #: The parameter set is closed in both directions: an extra key is refused (it would be a knob the
@@ -128,12 +186,22 @@ CRITERION_KINDS = {
     # summed over the bodies first.
     "non_foot_load_sum_v1": {"params": ("fraction_sum", "sustain_s"), "columns": ("non_foot_fraction",)},
     # A gait is a sequence, not a level: the criterion is "enough feet completed a swing", judged on
-    # the frames the command actually asked to move. No height term, deliberately -- the record
-    # carries contact and load per foot, and a lift threshold would gate a quantity no run measured,
-    # which this module refuses everywhere else and would be no different for being convenient here.
+    # the frames the command actually asked to move.
     "gait_swing_v1": {
         "params": ("min_swing_feet", "min_air_time_s", "min_landing_load", "band_mps"),
         "columns": ("command_world", "foot_contact", "foot_fraction")},
+    # -- the foot criteria: what the gait kind cannot see -------------------------------------------
+    # A completed swing says the foot left the ground and came back; it does not say the foot ever
+    # lifted clear, and it says nothing about a loaded foot that is sliding. Both read the contact
+    # candidate's own geometry and velocity rather than the body's: a foot that only rotates has a
+    # zero body velocity and a moving contact point (``foot_point_velocity``, shared with the probe).
+    # They exist as kinds now because format 2 measures the columns they gate -- a threshold over an
+    # unmeasured quantity is what this module refuses everywhere.
+    "foot_lift_v1": {"params": ("min_lift_m", "band_mps", "min_feet"),
+                     "columns": ("foot_lowest_point", "foot_contact", "command_world")},
+    "foot_slip_v1": {"params": ("max_slip_mps", "min_load", "max_slip_fraction"),
+                     "columns": ("foot_lowest_point", "foot_com_pos", "foot_lin_vel", "foot_ang_vel",
+                                 "foot_fraction")},
 }
 
 #: Which reader may read which kinds. The protocol's ``judge`` is a binding, not a label: a criterion
@@ -151,6 +219,16 @@ JUDGE_KINDS = {
                               "non_foot_contact_v1", "non_foot_carrier_v1", "mesh_clearance_v1",
                               "tracking_banded_settled_v1", "displacement_banded_settled_v1",
                               "non_foot_load_sum_v1", "gait_swing_v1"),
+    FOOTED_JUDGE_ID: ("tracking_v1", "displacement_v1", "survival_v1", "sustained_tilt_v1",
+                      "non_foot_contact_v1", "non_foot_carrier_v1", "mesh_clearance_v1",
+                      "tracking_banded_settled_v1", "displacement_banded_settled_v1",
+                      "non_foot_load_sum_v1", "gait_swing_v1", "foot_lift_v1", "foot_slip_v1"),
+}
+
+#: Which reader produces which report items. Only the newest reader declares its list: the older ones
+#: were published without one, and tightening them now would invalidate verdicts already on record.
+JUDGE_REPORTS = {
+    FOOTED_JUDGE_ID: tuple(REPORT_ITEMS),
 }
 
 
@@ -447,6 +525,115 @@ def _gate_gait_swing_v1(frames: dict, alive: torch.Tensor, dt: float, measured: 
     return bool((feet[requested] >= params["min_swing_feet"]).all())
 
 
+# --- the foot readings: one computation behind the report and the gates ---------------------------
+
+def foot_clearance(frames: dict, meta: dict) -> tuple[torch.Tensor, str]:
+    """``(T, N, F)`` each foot's lowest mesh point above the ground [m], and how the ground is known.
+
+    Measured against the ground the record *names*, not against z=0 from memory: a plane is today's
+    answer, and a record that says so is what lets a reader notice when it stops being true. A record
+    carrying no ground source is read as z=0 and *says* it assumed so, instead of passing an
+    assumption off as a measurement.
+    """
+    source = meta.get("ground_source")
+    if isinstance(source, dict) and "z_m" in source:
+        ground_z, how = float(source["z_m"]), f"declared ({source.get('kind', 'unknown')})"
+    else:
+        ground_z, how = 0.0, "assumed z=0: this record names no ground source"
+    return frames["foot_lowest_point"][..., 2] - ground_z, how
+
+
+def foot_point_velocity(frames: dict) -> torch.Tensor:
+    """``(T, N, F, 3)`` velocity of each foot's contact candidate, world frame [m/s].
+
+    At the lowest mesh point, not at the body: a loaded foot that is only rotating has a zero body
+    velocity and a moving contact point, and reading the body's velocity would call that slip zero.
+    The arithmetic is ``v_com + omega x (p - p_com)``, and it is the function the diagnoses already
+    use (``diag_metrics.contact_point_velocity``) rather than a second copy of the cross product.
+    """
+    from rl_exp.tools.diagnose.diag_metrics import contact_point_velocity
+
+    return contact_point_velocity(frames["foot_lin_vel"], frames["foot_ang_vel"],
+                                  frames["foot_lowest_point"], frames["foot_com_pos"])
+
+
+def foot_slip_speed(frames: dict, meta: dict) -> torch.Tensor:
+    """``(T, N, F)`` tangential speed of that contact candidate relative to the ground [m/s].
+
+    Tangential to the declared ground normal: a foot coming down towards the ground is not sliding
+    along it, and a normal component in this reading would make every landing look like a slip.
+    """
+    velocity = foot_point_velocity(frames)
+    source = meta.get("ground_source") or {}
+    normal = torch.as_tensor(source.get("normal") or (0.0, 0.0, 1.0),
+                             dtype=velocity.dtype, device=velocity.device)
+    normal = normal / normal.norm().clamp_min(1e-9)
+    along = (velocity * normal).sum(dim=-1, keepdim=True)
+    return (velocity - along * normal).norm(dim=-1)
+
+
+def _foot_readings(frames: dict, alive: torch.Tensor, meta: dict) -> dict:
+    """The matrices both the report and the foot gates need, computed once.
+
+    One computation, two consumers, so the number a reviewer reads is the number a verdict came from.
+    A gate applies its own thresholds to these; the report reads them unthresholded.
+    """
+    clearance, ground_how = foot_clearance(frames, meta)
+    return {
+        "clearance_m": clearance,
+        "slip_mps": foot_slip_speed(frames, meta),
+        "ground_source": ground_how,
+        "unloaded": (frames["foot_contact"] <= 0) & alive.unsqueeze(-1),
+        "loaded": (frames["foot_contact"] > 0) & alive.unsqueeze(-1),
+        "load_fraction": frames["foot_fraction"],
+    }
+
+
+def _gate_foot_lift_v1(frames: dict, alive: torch.Tensor, dt: float, measured: dict, meta: dict,
+                       params: dict) -> bool:
+    """Enough feet clear the ground by ``min_lift_m`` while unloaded, where the command asked to move.
+
+    No swing-phase machine here on purpose: a frame counts when the foot is unloaded and a foot counts
+    when its peak clearance over those frames reaches the threshold. "And it came back down" is
+    ``gait_swing_v1``'s half of the pair rather than a second phase detector to keep in step with it.
+    """
+    clearance, ground_how = foot_clearance(frames, meta)
+    unloaded = (frames["foot_contact"] <= 0) & alive.unsqueeze(-1)
+    peak = torch.where(unloaded, clearance, torch.full_like(clearance, float("-inf"))).amax(dim=0)
+    peak = torch.where(torch.isfinite(peak), peak, torch.zeros_like(peak))  # (N, F)
+    moving = (frames["command_world"][:, :, 0].abs() >= params["band_mps"]) & alive
+    requested = moving.any(dim=0)  # (N,) envs this window asked to move
+    feet = (peak >= params["min_lift_m"]).sum(dim=-1)  # (N,) feet that lifted clear
+    measured["foot_lift_ground_source"] = ground_how
+    measured["foot_lift_peak_m"] = float(peak.amax())
+    measured["foot_lift_envs_requested"] = int(requested.sum())
+    if not bool(requested.any()):
+        return False
+    measured["foot_lift_feet_least"] = int(feet[requested].min())
+    return bool((feet[requested] >= params["min_feet"]).all())
+
+
+def _gate_foot_slip_v1(frames: dict, alive: torch.Tensor, dt: float, measured: dict, meta: dict,
+                       params: dict) -> bool:
+    """A loaded foot may slide tangentially for at most ``max_slip_fraction`` of its loaded frames.
+
+    A share rather than a peak: the reading is "is this foot being dragged", and one frame at the
+    moment of a stumble is not the same claim as a foot that slides the whole stance. The threshold
+    this is compared against is a speed, the share is what tolerates the single frame.
+    """
+    slip = foot_slip_speed(frames, meta)
+    loaded = (frames["foot_contact"] > 0) & alive.unsqueeze(-1) \
+        & (frames["foot_fraction"] >= params["min_load"])
+    breach = (slip > params["max_slip_mps"]) & loaded
+    share = breach.sum(dim=0) / loaded.sum(dim=0).clamp_min(1)  # (N, F)
+    carried = loaded.any(dim=0)  # (N, F) feet that took any load at all
+    measured["foot_slip_fraction_worst"] = float(share[carried].max()) if bool(carried.any()) else 0.0
+    measured["foot_slip_frames_loaded"] = int(loaded.sum())
+    if not bool(carried.any()):
+        return False
+    return bool((share[carried] <= params["max_slip_fraction"]).all())
+
+
 #: kind -> the function that decides it. One dispatch table, so a protocol names a criterion and the
 #: judge has exactly one place to look it up.
 CRITERIA = {
@@ -466,6 +653,8 @@ CRITERIA = {
     "displacement_banded_settled_v1": _gate_displacement_banded_v1,
     "non_foot_load_sum_v1": _gate_non_foot_load_sum_v1,
     "gait_swing_v1": _gate_gait_swing_v1,
+    "foot_lift_v1": _gate_foot_lift_v1,
+    "foot_slip_v1": _gate_foot_slip_v1,
 }
 
 
@@ -537,6 +726,17 @@ def _judge_reasons(protocol: dict, plan: dict) -> list[str]:
     if uncovered:
         return [f"judge {reader!r} does not cover {uncovered}: a kind is reachable only through a "
                 "reader that lists it, so a new criterion needs a new id and not just a new name"]
+    # A reader may declare which report items it produces (only the newest one does). Then a protocol
+    # that asks to be *reported* on something nobody computes is refused here, instead of coming back
+    # with a silently missing number -- which reads like a quantity that happened to be unremarkable.
+    # Readers that declare nothing keep the behaviour they were published with: no retroactive
+    # tightening, because a verdict already published must stay reproducible.
+    produced = JUDGE_REPORTS.get(reader)
+    if produced is not None:
+        unknown = sorted(set(protocol.get("report_only", ())) - set(produced))
+        if unknown:
+            return [f"judge {reader!r} does not produce {unknown}: a declared report item has to be "
+                    f"computed by somebody, or be removed from the list ({len(produced)} are produced)"]
     return []
 
 
@@ -628,6 +828,22 @@ def judge_plan(protocol: dict) -> tuple[dict, str, list[str]]:
     return plan, "legacy", reasons
 
 
+def _report_groups(*produced: dict) -> dict:
+    """The produced numbers under the group their declaration names: measurement, task, behaviour.
+
+    Derived from the declaration rather than hand-listed here, so a number cannot end up in a group
+    nobody declared it for. A number with no declaration is simply not grouped -- it is still
+    reported, and the completeness check is what refuses an undeclared one a protocol asks for.
+    """
+    groups: dict[str, list[str]] = {}
+    for block in produced:
+        for name in block:
+            item = REPORT_ITEMS.get(name)
+            if item is not None:
+                groups.setdefault(item[0], []).append(name)
+    return {group: sorted(names) for group, names in groups.items()}
+
+
 def semantics_surface() -> dict:
     """What this judge's criteria can reach, for the frozen case table to pin by digest."""
     return CRITERION_KINDS
@@ -697,12 +913,18 @@ def _sustained(breach: torch.Tensor, dt: float, seconds: float) -> torch.Tensor:
 
 def _contract_reasons(artifact: dict) -> list[str]:
     """Why this record cannot be read at all (empty when it can)."""
+    # The declaration comes from the format the record names. Reading it off the newest table in
+    # ``baseline_frames`` instead would judge every older record by columns it never had.
+    try:
+        spec = baseline_frames.format_spec(artifact.get("format"))
+    except baseline_frames.FramesContractError as err:
+        return [str(err)]
     protocol, frames = artifact["protocol"], artifact["frames"]
     axes, meta = artifact.get("axes", {}), artifact.get("meta", {})
     steps, num_envs = meta.get("steps"), meta.get("num_envs")
     if not steps or not num_envs:
         return [f"the record does not say how large the window was: steps={steps}, num_envs={num_envs}"]
-    missing = [name for name in baseline_frames.REQUIRED_META if name not in meta]
+    missing = [name for name in spec["required_meta"] if name not in meta]
     if missing:
         return [f"the record is missing {missing}: frame 0 is already one step in, so the episode's "
                 "initial state cannot be recovered from it"]
@@ -748,23 +970,21 @@ def _contract_reasons(artifact: dict) -> list[str]:
         return [f"the window is incomplete: {len(frames[short[0]])} of {steps} frames were collected "
                 f"({len(short)} of {len(frames)} columns are short)"]
     for name, tensor in frames.items():
-        if name not in baseline_frames.COLUMNS:
+        if name not in spec["columns"]:
             reasons.append(f"the record carries {name}, which the contract does not declare")
             continue
-        kind, _, meaning = baseline_frames.COLUMNS[name]
-        expected = {"env": (steps, num_envs), "vec3": (steps, num_envs, 3)}.get(kind)
-        if expected is None:
-            labels = axes.get(name, [])
-            if not labels:
-                reasons.append(f"{name} carries no axis labels: a per-body reading that cannot name its "
-                               "bodies is not evidence")
-                continue
-            if len(labels) != tensor.shape[-1]:
-                reasons.append(f"{name} has {tensor.shape[-1]} values per frame but {len(labels)} axis labels")
-                continue
-            expected = (steps, num_envs, len(labels))
+        kind, _, meaning = spec["columns"][name]
+        labels = axes.get(name, [])
+        if kind in spec["axis_kinds"] and not labels:
+            reasons.append(f"{name} carries no axis labels: a per-body reading that cannot name its "
+                           "bodies is not evidence")
+            continue
+        # The shape rule lives with the declaration, not here: the collector stores a frame against it
+        # and this reads the stored column against it, so a kind added to one side is known to both.
+        expected = (steps, *baseline_frames.expected_shape(kind, num_envs, len(labels)))
         if tuple(tensor.shape) != expected:
-            reasons.append(f"{name} has shape {tuple(tensor.shape)}, the contract says {expected} ({meaning})")
+            reasons.append(f"{name} has shape {tuple(tensor.shape)}, the contract says {expected} "
+                           f"({meaning}) with {len(labels)} axis labels")
     if reasons:
         return reasons
     return _command_reasons(protocol, frames)
@@ -803,6 +1023,10 @@ def _data_reasons(artifact: dict, alive: torch.Tensor) -> list[str]:
     read = [column for kind, _ in plan.values() for column in CRITERION_KINDS[kind]["columns"]]
     needed = list(_BASE_COLUMNS) + [name for name in read if name not in _BASE_COLUMNS]
     for name in needed:
+        if name not in frames:
+            reasons.append(f"the record does not carry {name}, which a declared criterion reads: a "
+                           "quantity the run never measured cannot be judged, only reported")
+            continue
         bad = int((~torch.isfinite(frames[name])).sum())
         if bad:
             reasons.append(f"{name} has {bad} non-finite values: a verdict needs finite measurements")
@@ -912,6 +1136,27 @@ def _score(artifact: dict, alive: torch.Tensor) -> dict:
     if "attitude" in plan:
         decide("attitude")
 
+    # -- the foot readings: what the gait kind cannot see, reported whenever the format carries them --
+    if "foot_lowest_point" in frames and "foot_com_pos" in frames:
+        readings = _foot_readings(frames, alive, artifact["meta"])
+        clearance, slip = readings["clearance_m"], readings["slip_mps"]
+        unloaded, loaded = readings["unloaded"], readings["loaded"]
+        peak = torch.where(unloaded, clearance, torch.full_like(clearance, float("-inf"))).amax(dim=0)
+        peak = torch.where(torch.isfinite(peak), peak, torch.zeros_like(peak))
+        diagnostics["foot_clearance_swing_m"] = peak.mean(dim=0).tolist()
+        diagnostics["foot_slip_mps"] = (
+            slip.masked_fill(~loaded, 0.0).sum(dim=0) / loaded.sum(dim=0).clamp_min(1)
+        ).mean(dim=0).tolist()
+        # Each reading next to its own sample count: a mean over three frames and a mean over three
+        # thousand are not the same evidence, and a bare number cannot say which one it is.
+        diagnostics["foot_swing_frames"] = unloaded.sum(dim=(0, 1)).tolist()
+        diagnostics["foot_loaded_frames"] = loaded.sum(dim=(0, 1)).tolist()
+        diagnostics["foot_ground_source"] = readings["ground_source"]
+    if "foot_lift" in plan:
+        decide("foot_lift")
+    if "foot_slip" in plan:
+        decide("foot_slip")
+
     # -- per-body readings: always reported, gated only where the protocol says so ---
     # The record carries these whatever the protocol does with them, so a protocol that only
     # reports them (v3 does that for the mesh) still produces the reading rather than a blank.
@@ -970,6 +1215,7 @@ def _score(artifact: dict, alive: torch.Tensor) -> dict:
         "metrics": measured,
         "gates": passed,
         "diagnostics": diagnostics,
+        "report_groups": _report_groups(measured, diagnostics),
         "per_env": {
             "forward_mae_mps": forward_mae.tolist(),
             "forward_displacement_m": displacement.tolist(),

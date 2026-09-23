@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import importlib.metadata
 import json
+import os
 import pathlib
 import sys
 import traceback
@@ -38,6 +39,24 @@ def yaw_of(quat: torch.Tensor) -> torch.Tensor:
     return euler_xyz_from_quat(quat)[2]
 
 
+def judged_or_recoverable(artifact: dict, frames_path: pathlib.Path | str) -> dict:
+    """Judge a record that is already on disk; a judge that raises names the file to retry from.
+
+    The record is written before this runs on purpose. A judge that raises is a defect on the judging
+    side, not a bad policy, and it must not take the completed window with it: the error carries the
+    record's path and the offline command that re-judges it without the simulator.
+    """
+    from ablation_harness import baseline_metrics
+
+    try:
+        return baseline_metrics.judge(artifact)
+    except Exception as err:
+        raise RuntimeError(
+            f"judging failed ({type(err).__name__}: {err}). The window is saved; re-judge it offline "
+            f"with: python -m ablation_harness.baseline_metrics {frames_path} --protocol <protocol file>"
+        ) from err
+
+
 def run(args) -> dict:
     """Run the registered task and return the fixed-window report."""
     import gymnasium as gym
@@ -50,8 +69,8 @@ def run(args) -> dict:
 
     from ablation_harness import baseline_frames, baseline_metrics, record
     from rl_exp.tools.diagnose.diag_metrics import (
-        MESH_CHECK_BODIES, collision_mesh_dir, foot_ids, mesh_min_z, mesh_vertices, pad_point_clouds,
-        tilt_cos,
+        MESH_CHECK_BODIES, collision_mesh_dir, foot_ids, mesh_lowest_point, mesh_min_z, mesh_vertices,
+        pad_point_clouds, tilt_cos,
     )
     from rl_exp.tools.runrecord import provenance
     from rl_exp.tools.verify import cfg_snapshot
@@ -120,11 +139,23 @@ def run(args) -> dict:
             raise RuntimeError(f"none of {MESH_CHECK_BODIES} is a body of this asset: cannot check the floor")
         mesh_corners = pad_point_clouds([mesh_vertices(collision_mesh_dir() / f"{name}_collision.obj")
                                         for name in mesh_present]).to(live.device)
+        # The foot reading is taken off the asset's own collision meshes too: the geometry travels
+        # with the record (below), so a later reader cannot substitute another family's foot.
+        foot_names = [names[i] for i in feet]
+        foot_meshes = [f"{name}_collision.obj" for name in foot_names]
+        missing_meshes = [name for name in foot_meshes if not (collision_mesh_dir() / name).is_file()]
+        if missing_meshes:
+            raise RuntimeError(f"no collision mesh for {missing_meshes}: the foot clearance and the "
+                               "contact candidate are read off those files, not off the body origin")
+        foot_corners = pad_point_clouds([mesh_vertices(collision_mesh_dir() / name)
+                                        for name in foot_meshes]).to(live.device)
         weight_n = float(robot.data.body_mass.torch[0].sum().item() * 9.81)
         recorder = baseline_frames.BaselineFrames(
             num_envs=live.num_envs, step_dt=live.step_dt,
             axes={"non_foot_fraction": [names[i] for i in non_foot], "mesh_min_z": mesh_present,
-                  "foot_contact": [names[i] for i in feet], "foot_fraction": [names[i] for i in feet]})
+                  "foot_contact": foot_names, "foot_fraction": foot_names,
+                  "foot_lowest_point": foot_names, "foot_com_pos": foot_names,
+                  "foot_lin_vel": foot_names, "foot_ang_vel": foot_names})
 
         def snapshot():
             q = yaw_quat(robot.data.root_quat_w.torch)
@@ -147,6 +178,17 @@ def run(args) -> dict:
                 # still bool -- the accumulator would saturate at one frame per env.
                 "foot_contact": (forces[:, feet, 2] > 1.0).to(torch.float32).clone(),
                 "foot_fraction": load[:, feet].clone(),
+                # The contact candidate per foot and the substrate of a velocity *at* it: the body's
+                # COM (which is what `body_lin_vel_w` is the velocity of -- it is the COM alias, not
+                # the link-origin one), that velocity, and the angular velocity. So the offline reader
+                # can take `v + omega x (p - p_com)` itself instead of trusting a frozen projection.
+                # `mesh_lowest_point` indexes and expands, so it needs plain tensors.
+                "foot_lowest_point": mesh_lowest_point(robot.data.body_pos_w.torch.clone(),
+                                                       robot.data.body_quat_w.torch.clone(),
+                                                       feet, foot_corners).clone(),
+                "foot_com_pos": robot.data.body_com_pos_w.torch[:, feet],
+                "foot_lin_vel": robot.data.body_lin_vel_w.torch[:, feet],
+                "foot_ang_vel": robot.data.body_ang_vel_w.torch[:, feet],
             }
 
         # The episode's initial state: frame 0 is already one control step in, so displacement and
@@ -198,6 +240,7 @@ def run(args) -> dict:
                     break
         finally:
             live._reset_idx = original_reset
+        frames_path = args.output.with_name(args.output.stem + ".frames.pt")
         artifact = None
         if contract_error is not None:
             result = {
@@ -210,13 +253,22 @@ def run(args) -> dict:
             artifact = recorder.artifact(
                 protocol=protocol, **start, task=args.task, seed=args.seed, num_envs=live.num_envs,
                 checkpoint=checkpoint, policy_mode=args.policy_mode if checkpoint else "zero_action",
-                body_weight_n=weight_n)
-            result = baseline_metrics.judge(artifact)
+                body_weight_n=weight_n,
+                # Provenance of the two geometries the foot reading depends on: the ground the
+                # clearance is measured against, and the asset the sole geometry was taken off. Both
+                # travel in the record, so a later reader cannot fill either in from memory.
+                ground_source={"kind": cfg.scene.terrain.terrain_type, "z_m": 0.0,
+                               "normal": [0.0, 0.0, 1.0]},
+                foot_geometry={name: {"obj": mesh,
+                                      "sha256": record.file_sha256(collision_mesh_dir() / mesh),
+                                      "vertices": int(mesh_vertices(collision_mesh_dir() / mesh).shape[0])}
+                               for name, mesh in zip(foot_names, foot_meshes)})
+            # Saved first, judged second: the window is the evidence, and the verdict is derivable
+            # from it again offline -- so a judge defect cannot cost a completed collection.
+            baseline_frames.save(frames_path, artifact)
+            result = judged_or_recoverable(artifact, frames_path)
         if checkpoint is None and result["verdict"] in ("pass", "fail"):
             result["verdict"] = "smoke_only"
-        frames_path = args.output.with_name(args.output.stem + ".frames.pt")
-        if artifact is not None:
-            baseline_frames.save(frames_path, artifact)
         return {
             "report_format": "baseline-eval-2", "protocol": protocol,
             "protocol_path": str(protocol_path),
@@ -267,12 +319,15 @@ def main() -> None:
             handle.write(payload)
         print(json.dumps({"verdict": result["verdict"], **result["metrics"]}, indent=2))
     except BaseException:
-        # app.close() ends the process, so a traceback raised past it never reaches the terminal:
-        # every failed run would look like a silent exit with no report. Report first, then re-raise.
+        # Two things `app.close()` would otherwise take with it, both measured on a real run:
+        # raised past it, the traceback never reaches the terminal; and close() ends the process with
+        # status 0, so a script reading the status would call a failed run a success. Report, flush,
+        # then leave with a non-zero status *before* close can run -- so a failed run skips Kit's
+        # shutdown, which is a price only a run that already failed pays.
         traceback.print_exc()
         sys.stdout.flush()
         sys.stderr.flush()
-        raise
+        os._exit(1)
     finally:
         app.close()
 

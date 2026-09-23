@@ -1,0 +1,71 @@
+{
+  "format": "frame-semantics-1",
+  "why": [
+    "A format name is only an identity if the declaration behind it is pinned to that name. The frames a verdict is derived from are read under the format the record names, so the declaration has to be the one that was in force when the record was written -- an edit in place would re-read every older record under columns it never had.",
+    "So each format carries its own copy of the declaration plus two digests. `columns_sha256` is over the live declaration in `ablation_harness.baseline_frames` (the columns, their kinds and units, the axis kinds, the required meta); `frozen_sha256` is over the stored copy itself. Editing either one turns rl_exp/tools/verify/test_baseline_contract.py red. The digests are written by an explicit paste (`--print-frames-frozen` prints them), never repinned automatically: a green run afterwards says the two agree, not that anyone approved the change. A column whose meaning, unit or shape moves therefore publishes a new format name, and the old one keeps its entry.",
+    "The ceiling, stated rather than implied: this table pins the *declaration*. What a frame is refused for -- a missing column, an undeclared one, axis labels that do not line up -- is behaviour, and it is pinned by the tests named in `cases` instead of by a second runner here. A case set in this file would be a copy of those tests, and a copy drifts."
+  ],
+  "formats": {
+    "baseline-frames-1": {
+      "module": "ablation_harness.baseline_frames",
+      "constant": "FORMAT_V1",
+      "columns": {
+        "pos": ["vec3", "m", "base position, world frame"],
+        "yaw": ["env", "rad", "base yaw, in the reward kernel's yaw-aligned frame"],
+        "velocity_yaw": ["vec3", "m/s", "base velocity in the yaw-aligned gravity frame"],
+        "command_world": ["vec3", "m/s", "command as issued this frame, world frame -- the x/y the reward kernel compares against the yaw-frame velocity, so acceptance reads the trained quantity"],
+        "head_tail_force": ["env", "N", "sum of |net contact force| over the head/neck/tail bodies"],
+        "tilt_cos": ["env", "1", "cosine of the base tilt, 1.0 = upright"],
+        "non_foot_fraction": ["bodies", "1", "per-body normal contact force / body weight"],
+        "mesh_min_z": ["bodies", "m", "lowest world z of those bodies' collision meshes (ground z = 0)"],
+        "foot_contact": ["feet", "1", "1.0 where that foot carries more than 1 N this frame"],
+        "foot_fraction": ["feet", "1", "per-foot normal contact force / body weight"],
+        "terminated": ["env", "1", "nonzero-termination flag of this frame"],
+        "timeout": ["env", "1", "episode-length flag of this frame"]
+      },
+      "axis_kinds": ["bodies", "feet"],
+      "required_meta": ["start_pos", "start_yaw", "body_weight_n"],
+      "cases": [
+        "test_collector_refuses_frames_that_do_not_fit_the_contract",
+        "test_axis_labels_must_agree_with_the_values",
+        "test_an_older_format_record_is_read_under_its_own_declaration",
+        "test_an_unknown_format_is_refused_not_read_as_the_newest"
+      ],
+      "columns_sha256": "sha256:bd8e5f6a2655bd1237c5fa0a9a6d2a0fe8ff7eef01c22499db459874dd31ea8d",
+      "frozen_sha256": "sha256:2f4f5defda2d352078a9393a967aa35e6a612c378538a98d7286705d4ffa40c6"
+    },
+    "baseline-frames-2": {
+      "module": "ablation_harness.baseline_frames",
+      "constant": "FORMAT",
+      "columns": {
+        "pos": ["vec3", "m", "base position, world frame"],
+        "yaw": ["env", "rad", "base yaw, in the reward kernel's yaw-aligned frame"],
+        "velocity_yaw": ["vec3", "m/s", "base velocity in the yaw-aligned gravity frame"],
+        "command_world": ["vec3", "m/s", "command as issued this frame, world frame -- the x/y the reward kernel compares against the yaw-frame velocity, so acceptance reads the trained quantity"],
+        "head_tail_force": ["env", "N", "sum of |net contact force| over the head/neck/tail bodies"],
+        "tilt_cos": ["env", "1", "cosine of the base tilt, 1.0 = upright"],
+        "non_foot_fraction": ["bodies", "1", "per-body normal contact force / body weight"],
+        "mesh_min_z": ["bodies", "m", "lowest world z of those bodies' collision meshes (ground z = 0)"],
+        "foot_contact": ["feet", "1", "1.0 where that foot carries more than 1 N this frame"],
+        "foot_fraction": ["feet", "1", "per-foot normal contact force / body weight"],
+        "terminated": ["env", "1", "nonzero-termination flag of this frame"],
+        "timeout": ["env", "1", "episode-length flag of this frame"],
+        "foot_lowest_point": ["vec3_feet", "m", "world position of that foot's lowest collision-mesh vertex"],
+        "foot_com_pos": ["vec3_feet", "m", "that foot body's center of mass, world frame -- the point foot_lin_vel is the velocity of"],
+        "foot_lin_vel": ["vec3_feet", "m/s", "that foot body's COM linear velocity, world frame"],
+        "foot_ang_vel": ["vec3_feet", "rad/s", "that foot body's angular velocity, world frame"]
+      },
+      "axis_kinds": ["bodies", "feet", "vec3_feet"],
+      "required_meta": ["start_pos", "start_yaw", "body_weight_n", "ground_source", "foot_geometry"],
+      "cases": [
+        "test_collector_refuses_frames_that_do_not_fit_the_contract",
+        "test_a_per_foot_vector_needs_one_point_per_foot",
+        "test_the_newest_format_demands_where_its_foot_geometry_came_from",
+        "test_a_new_format_does_not_move_an_old_records_verdict",
+        "test_an_unknown_format_is_refused_not_read_as_the_newest"
+      ],
+      "columns_sha256": "sha256:b1514634dd8c35ea9519259dfb9f07b1f66ced1f0b96c3495bdc72d8df179d76",
+      "frozen_sha256": "sha256:b0d31d270b3c257366f912fa1fac507cbb9a1f05685563ede9737bed4b16a3a0"
+    }
+  }
+}

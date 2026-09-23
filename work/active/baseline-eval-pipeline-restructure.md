@@ -3,11 +3,11 @@ id: baseline-eval-pipeline-restructure
 title: baseline / Lizard2 eval 解耦机制计划
 scope: ablation_harness, rl_exp/tools/verify
 status: open
-landing: ablation_harness/baseline_frames.py, ablation_harness/baseline_metrics.py, ablation_harness/baseline_eval.py, rl_exp/tools/verify/test_baseline_contract.py, ablation_harness/HARNESS.md
-next: P0 由 baseline-eval-persist-before-judge 独立实施；本项按 P1→P3 落机制并完成 P4 验收。协议版本与产品口径消费 lizard2-family-landing 的决定，不在本项另定。
-close_when: 执行者核验 P1–P4 的格式兼容、离线复判、报告声明和场景覆盖；P0、baseline-eval-measurement-trust、floor-contact-attribution 均关闭，家族项完成本轮新协议发布与口径验收后，本总项关闭。家族项的其他落成工作不阻挡本项关闭。
-depends_on: baseline-eval-persist-before-judge, baseline-eval-measurement-trust, floor-contact-attribution, lizard2-family-landing
-evidence: acceptance/records/2026-09-21-baseline-eval-measurement-contract.md, acceptance/records/2026-09-23-lizard2-v1-first-eval.md, acceptance/records/2026-09-23-lizard2-v1-gait-skate.md
+landing: ablation_harness/baseline_frames.py, ablation_harness/baseline_metrics.py, ablation_harness/baseline_eval.py, ablation_harness/frame_semantics.json, rl_exp/tools/verify/test_baseline_contract.py, ablation_harness/HARNESS.md
+next: P0 已关闭（`work/closed/2026/baseline-eval-persist-before-judge.md`）。P1 两半都落（格式 2 + 足端四列 + 两条来源 meta，真跑核过几何摘要、轴标、20 ms 短接触下限，读数见 evidence）。P2 已落：新 reader `baseline-criteria-footed-1` 可读 `foot_lift_v1`/`foot_slip_v1`（参数封闭、列依赖随 kind 声明，接触点是 `v_com + ω × (p − p_com)`，复用 `diag_metrics`）；报告项声明表 + 按 reader 的完整性检查（只对新 reader 强制，旧判决不追溯作废）；报告分组为测量有效性/任务表现/行为有效性；六种合成反例各有回归。余 P3 固定命令场景、P4 验收与 harness 版本声明。协议版本与产品口径归 lizard2-family-landing。
+close_when: 执行者核验 P1–P4 的格式兼容、离线复判、报告声明和场景覆盖，四项出口各有观测即关。不等其它事项关闭：`depends_on` 是要消费的输入，协议发布与消费留在各自事项，本项只留指针。
+depends_on: ablation_harness/baseline_frames.py, floor-contact-attribution, lizard2-family-landing
+evidence: acceptance/records/2026-09-21-baseline-eval-measurement-contract.md, acceptance/records/2026-09-23-baseline-frames-format-2-foot-reading.md, acceptance/records/2026-09-23-lizard2-v1-first-eval.md, acceptance/records/2026-09-23-lizard2-v1-gait-skate.md
 ---
 
 ## 归属与边界
@@ -16,13 +16,14 @@ evidence: acceptance/records/2026-09-21-baseline-eval-measurement-contract.md, a
 本项负责足端采集、指标实现、声明检查和固定命令驱动；家族项只引用这些交付，不再重复实施步骤。
 `depends_on` 表达最终验收所需输入，不要求家族项先整体关闭；家族协议可在机制交付后发布。
 
-P0 的实施与验收已移至 `work/active/baseline-eval-persist-before-judge.md`，本项只消费结果。
+P0 已关闭（`work/closed/2026/baseline-eval-persist-before-judge.md`），本项只消费结果。
 地面接触归因归 `floor-contact-attribution`，真实早终止取证归 `baseline-eval-measurement-trust`；
 开训闸门归 `eval-protocol-before-training`。不改训练配方、奖励、资产或 rough 入口，不建通用采集框架。
 
 ## 机制边界
 
-流水线为：采集条件与字段 → 保存记录 → 离线指标 → 判据 → 报告；默认命令可顺序编排，并提供仅采集路径。
+流水线为：采集条件与字段 → 保存记录 → 离线指标 → 判据 → 报告；默认命令可顺序编排。「采集后异地判分」就是既有帧
+文件加 `baseline_metrics` 离线入口，不另设开关。
 记录保留实际条件和来源，复判只更换判据，不能覆盖原采集身份。报告绑定帧摘要、条件和 reader/协议身份。
 条件不兼容、必需数据未测或采样能力不足须显式说明；存了更多字段不代表测到了所需场景。
 
@@ -32,11 +33,14 @@ P0 的实施与验收已移至 `work/active/baseline-eval-persist-before-judge.m
 |---|---|
 | 基座位置/完整姿态/线角速度，生效命令，终止/超时 | 跟踪、位移、姿态、有效区间与命令对齐 |
 | 逐 body 接触合力向量，逐 env 质量与重力来源，部位轴标 | 接触、承重、占空比；合力不等同于地面专属力 |
-| 足端姿态/线角速度，足底几何参考，地面高度/法向来源 | 离地高度与参考点切向运动 |
+| 足端几何参考（最低网格顶点的世界位）、body 质心位、质心线速度、角速度 | 脚底净空、承重期接触点切向速度（`v_com + ω × (p − p_com)`）、摆动期足端轨迹 |
 | 现有非足网格诊断所需量及实际资产来源 | 保留诊断能力，避免用当前或旧家族网格补历史几何 |
 
 地面专属接触对、摩擦归因、关节力矩与录像维持专项采集。常规协议对力矩报告项的取舍只在家族项登记。
 测量参数、单位、坐标系、采样周期及轴标随记录保存；先测开销再决定缓存/传输优化，不预建分块存储系统。
+**足端姿态四元数没有进格式 2**：它不进任何一条声明过的读数，而最低点已承载姿态对"接触点在哪"的影响；
+`foot_com_pos` 是补的（`body_lin_vel_w` 是 **COM** 速度的别名，没有质心位就无法复算接触点速度）。
+**短接触有已知下限**：控制步 20 ms 下四脚最短接触段都是 1 帧，接触时长的判据必须声明该分辨率。
 
 ## P1：按格式分派与冻结采集契约
 
@@ -60,7 +64,7 @@ P0 的实施与验收已移至 `work/active/baseline-eval-persist-before-judge.m
 落点：`baseline_metrics` 计算函数、`CRITERION_KINDS`、`JUDGE_KINDS` 与 `judge_semantics.json`。
 
 - 指标显式声明列依赖、单位、适用条件，返回数值及有效样本量；报告与判据共用计算结果。足端测量机制在此实现，
-  哪些指标进入协议及其阈值由家族项消费。参考点速度含 `v + ω × r`；未经接触参照验证须标近似。
+  哪些指标进入协议及其阈值由家族项消费。脚底净空必须相对地面几何计算，足端前后轨迹必须相对机身计算；承重滑移按地面接触点切向速度计算，包含 `v + ω × r`。若只能取得几何参考点速度，须标为近似并说明参考点、接触筛选和误差边界；不得用刚体原点速度冒充接触点滑移。地面接触过滤与接触归因消费 `floor-contact-attribution` 的交付。
   **诊断侧已先行（2026-09-23）**：`rl_exp/tools/diagnose/diag_metrics.py` 的 `mesh_lowest_point` / `contact_point_velocity`（参考点取 COM：`body_lin_vel_w` 是 `body_com_lin_vel_w` 的别名）/ `yaw_frame_offset`，驱动为 `gait_probe.py`，已按上述口径在同一检查点上跑通（读数见 `acceptance/records/2026-09-23-lizard2-v1-gait-skate` 的 ⑤）⇒ P1 的帧列与 P2 的指标**复用这三个函数**，不在 `baseline_metrics` 里另写一份。
 - **报告项完整性仅由新 reader id 强制**：沿 `JUDGE_KINDS` 身份绑定声明能力，未知/未实现的名称拒绝；缺数据或
   无样本显式不可用。必需判据缺证据给 `invalid`，可选诊断缺证据保留原因。旧 reader 沿旧路径，不追溯加严。
@@ -75,7 +79,11 @@ P0 的实施与验收已移至 `work/active/baseline-eval-persist-before-judge.m
 
 落点：`baseline_eval` 命令驱动与现有命令/帧契约测试；场景序列、速度带、等待窗及覆盖要求只读家族新协议。
 
-核对注入坐标和时序，阻止环境重采样覆盖评测命令，保证策略观察对应实际命令。分别报告场景分配数、执行数和
+复用 `ablation_harness/components/command_player.py` 的命令机器（同一条时间线同时驱动注入与指标窗；注入点是
+`vel_command_b`，先例 `eval.py:494`、`video_matrix.py:208`；冻结重采样先例 `dr_controller.py:73`），核对注入坐标和
+时序，阻止环境重采样覆盖评测命令，保证策略观察对应实际命令。其 `command_at` 把同一命令广播给全部 env
+（`command_player.py:42`），按 env 分配固定场景须扩它或在落点写明替代。冻结重采样是 cfg 改动，而帧记录不是
+`record.json` ⇒ 条件面只有帧 meta 一个家。分别报告场景分配数、执行数和
 有效样本数；区分采集漏执行与策略提前失败，不能把失败策略一律归为采集无效。环境数不足或空带明确暴露。
 同表核对采集条件、格式/测量身份与判据；旧随机采样帧不能冒充新场景。
 

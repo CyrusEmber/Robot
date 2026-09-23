@@ -269,6 +269,31 @@
         }
       }
     },
+    "baseline-criteria-footed-1": {
+      "module": "ablation_harness.baseline_metrics",
+      "constant": "FOOTED_JUDGE_ID",
+      "driver": "baseline",
+      "protocol_file": "baseline_flat_v4.json",
+      "kinds": [
+        "displacement_banded_settled_v1",
+        "displacement_v1",
+        "foot_lift_v1",
+        "foot_slip_v1",
+        "gait_swing_v1",
+        "mesh_clearance_v1",
+        "non_foot_carrier_v1",
+        "non_foot_contact_v1",
+        "non_foot_load_sum_v1",
+        "survival_v1",
+        "sustained_tilt_v1",
+        "tracking_banded_settled_v1",
+        "tracking_v1"
+      ],
+      "note": "The reader for the foot criteria. Its ``cases`` is empty by design and that is the gap this line admits to rather than hides: the kind table is pinned by digest below, and the behaviour behind foot_lift_v1 / foot_slip_v1 is pinned by the named tests in rl_exp/tools/verify/test_baseline_contract.py (the walk reference, the swing that never lifts, the loaded foot that slides, the foot that only pivots on its contact, the foot descending, and the record that carries no foot columns). ``protocol_file`` names the criteria declaration the fixtures are built from until a family protocol declares this reader.",
+      "cases": {},
+      "kinds_sha256": "sha256:cc88319b9dddde2b4edab35c509babfa481301b1ae3030c9ae7d105ea3030665",
+      "frozen_sha256": "sha256:587f032d34d4b3b8fb7cb12ac8553196e7af1e3874ab274e8c9f35368809f702"
+    },
     "legacy-baseline-threshold-keys-1": {
       "module": "ablation_harness.baseline_metrics",
       "constant": "LEGACY_JUDGE_ID",
