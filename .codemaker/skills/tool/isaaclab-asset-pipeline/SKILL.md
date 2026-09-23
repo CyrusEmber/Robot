@@ -12,64 +12,67 @@ description: >
 
 # IsaacLab Asset Pipeline（资产管线）
 
-机器人物理资产管线：Blender 站姿 SSOT → URDF（几何 SSOT）→ USD（训练用）。
-方法论通用；**每机器人一个 `<robot>_exp\` 目录**（convert_urdf.py / blender\ /
-meshes\ / 验证脚本都在里面；目录与脚本清单见该机器人的仓根 `FILEMAP.md`）。
-本项目实例：lizard → `E:\IsaacLab\rl_exp\`。
+资产链路：Blender 站姿 SSOT → URDF（几何 SSOT）→ USD（训练用）。方法论通用；
+每机器人一个 `<robot>_exp\` 目录（转换脚本、`blender\`、`meshes\`、验证脚本都在其中；
+目录与脚本清单见该机器人仓根 `FILEMAP.md`）。
 
-**改了 URDF 或 PD 参数后必须重跑 convert**，env 引用的 USD 才更新（`force_usd_conversion`
-只管重转不管触发）。**资产换代时同步冻结配方环境**（快照里抄了资产配置的）。
+## 核心规则
+
+- **改了 URDF 或 PD 参数后必须重跑 convert**，env 引用的 USD 才更新
+  （`force_usd_conversion` 只管重转、不管触发）
+- **转换前删旧 assets 目录 + `.asset_hash` + `config.yaml`**
+- **资产换代时同步冻结配方环境** —— 快照里抄了资产配置
+- `UrdfConverterCfg` 要点新机器人照抄，每条都有踩坑理由，别乱改
 
 ## convert_urdf 运行
 
 ```
-<venv python> E:\IsaacLab\<robot>_exp\tools\pipeline\convert_urdf.py --headless
+<venv python> <robot>_exp\tools\pipeline\convert_urdf.py --headless
 ```
 
-`UrdfConverterCfg` 要点（都有踩坑理由，新机器人照抄，别乱改）：
+`UrdfConverterCfg` 要点：
 
-- PD 增益从 `<robot>_params.yaml` actuator 组读取——USD 内嵌 drive 与训练配置一致
+- PD 增益从 `<robot>_params.yaml` actuator 组读取 → USD 内嵌 drive 与训练配置一致
 - `merge_fixed_joints=False`：保留脚部独立 body，接触奖励依赖它们
 - `fix_base=False`；`self_collision=True`
 - `run_asset_transformer=False` / `run_multi_physics_conversion=False`：分层资产把物理放
-  deferred payload，spawn 不加载 → articulation 塌成单刚体（训练直接趴倒）
-- 转完自动 `flatten_usd()`：3.0 importer 把 link 嵌套进 base body（issue #5126），
-  破坏接触传感器 body 匹配，必须拍平回 2.x 布局
+  deferred payload，spawn 不加载 → articulation 塌成单刚体
+- 转完自动 `flatten_usd()`：3.0 importer 把 link 嵌套进 base body，破坏接触传感器
+  body 匹配，必须拍平回 2.x 布局
 - 显式 `usd_file_name="<robot>/<robot>.usda"`：缺省时旧目录占坑会被静默改名
-  `<robot>_1/`，yaml 指向空。**转换前删旧 assets 目录 + `.asset_hash` + `config.yaml`**
+  `<robot>_1/`，yaml 指向空
 
-## 转换后验证链（从 E:\IsaacLab 根目录，venv python）
+## 资产层 vs 环境层
+
+PD 增益虽内嵌 USD，env cfg actuator 配置会覆盖它 ⇒ **调 PD 改 yaml 即生效，不用重转
+USD**。PD 初值随质量量级重估，抄旧机器人数值必炸。
+
+## 转换后验证链（从 IsaacLab 根目录，venv python）
 
 | 步骤 | 方法 |
 |---|---|
-| 关节数 | `findstr /i "Revolute" assets\<robot>\<robot>.usda \| find /c /i "joint"` = yaml `joint_order` 长度（秒级） |
-| 几何量 | usda 应为 MB 级、`faceVertexIndices`/`PhysicsCollisionAPI` 计数 > 0（丢几何见坑表） |
-| 位置/受力 | exp 目录的 position_check 类脚本（z 轨迹 + 接触力 + NaN） |
-| 关节对表 | exp 目录的 joint_check 类脚本（reset 后关节名/角度 vs joint_order） |
-| 站姿对称 | exp 目录的 debug_pose 类脚本（每腿 pivot 世界坐标） |
-| 肉眼终验 | GUI 观察脚本（如 `tools\verify\view_terrain.py --viz kit --task <任意 PLAY 任务>`）——开 Isaac Sim 窗口看站立/穿模/地形 |
+| 关节数 | usda 内 Revolute/joint 计数 = yaml `joint_order` 长度（秒级） |
+| 几何量 | usda 应为 MB 级、`faceVertexIndices` / `PhysicsCollisionAPI` 计数 > 0 |
+| 位置/受力 | exp 目录 position_check 类脚本（z 轨迹 + 接触力 + NaN） |
+| 关节对表 | exp 目录 joint_check 类脚本（reset 后关节名/角度 vs `joint_order`） |
+| 站姿对称 | exp 目录 debug_pose 类脚本（每腿 pivot 世界坐标） |
+| 肉眼终验 | GUI 观察脚本（开 Isaac Sim 窗口看站立 / 穿模 / 地形） |
 
-具体脚本名见该机器人的仓根 `FILEMAP.md`（入口与闸门清单）。标准顺序：convert → 关节数 → position_check（数据）
-→ view_terrain（肉眼）。
+标准顺序：convert → 关节数 → position_check（数据）→ 肉眼终验。具体脚本名见仓根
+`FILEMAP.md`。
 
 ## 核心坑（症状 → 根因）
 
 | 症状 | 根因与修法 |
 |---|---|
-| 机器人穿地坠落、usda 只有 ~60KB、`faceVertexIndices`=0 | **mesh 相对路径坑（静默丢几何）**：importer 按 URDF 所在目录解析相对路径，路径错不报错只丢几何。URDF 里写 `meshes/...`（不是 `../meshes/...`） |
-| 关节正则失配 `Not all regular expressions are matched!` | **3.0 importer 给关节名加 `_joint` 后缀**（body 名不加）。所有关节正则带后缀、body 正则不带 |
-| 接触抖振（脚力 ±kN 交替） | 关自碰撞：`enabled_self_collisions=False` + `solver_position_iteration_count=8`（实测 ±kN 级 → 数百 N） |
+| 穿地坠落、usda 仅 ~60KB、`faceVertexIndices`=0 | **mesh 相对路径坑（静默丢几何）**：importer 按 URDF 所在目录解析相对路径，路径错不报错只丢几何 ⇒ URDF 里写 `meshes/...`（不是 `../meshes/...`） |
+| 正则失配 `Not all regular expressions are matched!` | **3.0 importer 给关节名加 `_joint` 后缀**（body 名不加）⇒ 关节正则带后缀、body 正则不带 |
+| 接触抖振（脚力 ±kN 交替） | 关自碰撞：`enabled_self_collisions=False` + `solver_position_iteration_count=8` |
 | 资产改了没生效 | 忘重跑 convert，或没删旧 assets 目录（被挤到 `_1/`） |
 | 训练直接塌倒 | `run_asset_transformer` 被开了（单刚体），或 `merge_fixed_joints=True` |
-| 站姿左右不对称/腿折向天上 | 手算镜像 rpy 必翻车——走 Blender 管线（见 references/blender_pipeline.md） |
-
-## 资产层 vs 环境层
-
-PD 增益虽内嵌 USD，但 env cfg actuator 配置会覆盖它——**调 PD 改 yaml 即生效，不用重转 USD**。
-PD 初值跨体型要重估，随质量量级变（案例：14kg 机器人 50/3，72kg 用 600/30 起步），
-抄旧机器人数值必炸。
+| 站姿左右不对称 / 腿折向天上 | 手算镜像 rpy 必翻车 ⇒ 走 Blender 管线 |
 
 ## 改站姿
 
-完整 Blender 流程（摆位 → fix_bones → generate_urdf → 转换 → 验证）是**实例参考**，
-新机器人复制改造：见 `references/blender_pipeline.md`。
+Blender 流程（摆位 → fix_bones → generate_urdf → 转换 → 验证）见
+`references/blender_pipeline.md`；新机器人照它改写，不手算姿态。
