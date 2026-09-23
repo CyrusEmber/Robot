@@ -532,6 +532,39 @@ def test_an_absent_fact_is_unproven_and_an_unreadable_row_is_named():
     assert report["unreadable"] and not report["conflicts"], report
 
 
+def test_a_diagnostic_row_cannot_sit_in_a_scores_table():
+    """``--group`` decides where a row lands, never what it is (work/active/diagnostic-run-gate.md).
+
+    Four cases, because the refusal has to be narrower than "any row I dislike": a zero-action row
+    in a scores table is refused with its kind named; the same row under the smoke group is allowed
+    (that table is a diagnostic one on purpose); a scored row passes; and a record written before
+    ``policy.kind`` existed is reported uncertified -- refusing it would make every historical table
+    unreadable, which is not the same thing as safer.
+    """
+    sys.path.insert(0, str(_REPO / "ablation_harness"))
+    import run_ablation  # noqa: E402
+
+    def table(group: str | None, kind: str | None):
+        base = pathlib.Path(tempfile.mkdtemp(prefix="table-")) / "proto"
+        folder = base / group if group else base
+        run_id = "run-ck" if kind == "checkpoint" else "run-zero"
+        (folder / run_id).mkdir(parents=True)
+        payload = {"record_format": record.RECORD_FORMAT}
+        if kind is not None:
+            payload["policy"] = {"kind": kind}
+        (folder / run_id / "record.json").write_text(json.dumps(payload), encoding="utf-8")
+        path = folder / "summary.csv"
+        path.write_text(f"run_id\n{run_id}\n", encoding="utf-8")
+        return run_ablation._identity_report(path, [{"run_id": run_id}])
+
+    assert table(None, "zero_action") == ([("run-zero", "zero_action")], []), \
+        "a diagnostic row in a scores table has to be refused, with its kind named"
+    assert table("smoke", "zero_action") == ([], []), "a smoke table is a diagnostic table on purpose"
+    assert table(None, "checkpoint") == ([], []), "a scored policy row is what a scores table is for"
+    refused, uncertified = table(None, None)
+    assert not refused and uncertified == ["run-zero"], "no kind is uncertified, not refused"
+
+
 def _main() -> None:
     tests = [fn for name, fn in sorted(globals().items()) if name.startswith("test_") and callable(fn)]
     for fn in tests:

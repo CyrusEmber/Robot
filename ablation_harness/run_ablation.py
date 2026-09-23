@@ -180,6 +180,44 @@ def _condition_report(summary_path: pathlib.Path, rows: list[dict]) -> dict:
     return {**record.table_conflicts(records), "no_record": no_record}
 
 
+#: The one group name that is allowed to hold rows nobody scored. Everything else is a scores
+#: table, and this is what turns that convention into a mechanism: ``--group`` decides where a row
+#: lands, never what it is (HARNESS 挂账 #5).
+_SMOKE_GROUP = "smoke"
+
+
+def _identity_report(summary_path: pathlib.Path, rows: list[dict]) -> tuple[list[tuple[str, str]], list[str]]:
+    """Rows in a scores table that were not measured by a policy: refusals, then uncertifiable ones.
+
+    The table does not carry the policy identity, so it is read from each row's own ``record.json``
+    -- the same place the condition check reads. Two things it must not do:
+
+    * treat a diagnostic row as a reading: a zero-action rollout written into a scores group sits in
+      the table beside real numbers, and the v3 smoke column is exactly the case where that reads as
+      "v3 performance" (HARNESS.md says that column has no information on this run);
+    * refuse a row written before ``policy.kind`` existed: that would make every historical table
+      unreadable instead of safer, so those are reported as uncertified. A row with no usable record
+      at all is already refused by :func:`_condition_report`.
+    """
+    if summary_path.parent.name == _SMOKE_GROUP:
+        return [], []
+    refused, uncertified = [], []
+    for row in rows:
+        run_id = row.get("run_id") or "?"
+        path = summary_path.parent / run_id / "record.json"
+        if not path.is_file():
+            continue
+        try:
+            kind = ((record.load(path) or {}).get("policy") or {}).get("kind")
+        except (OSError, json.JSONDecodeError):
+            continue
+        if kind is None:
+            uncertified.append(run_id)
+        elif kind != "checkpoint":
+            refused.append((run_id, str(kind)))
+    return refused, uncertified
+
+
 def _summarize(args_cli) -> int:
     """Print the table, and refuse one whose rows were not measured under the same conditions."""
     protocol_dir = _HARNESS_DIR / "results" / args_cli.protocol
@@ -203,6 +241,16 @@ def _summarize(args_cli) -> int:
         print(" | ".join(str(r.get(c, "")).ljust(widths[c]) for c in columns))
     problems = 0
     for path, group_rows in rows_by_path.items():
+        refused, uncertified = _identity_report(path, group_rows)
+        if refused:
+            problems += 1
+            for run_id, kind in sorted(refused):
+                print(f"[ABLATION] {path}: {run_id} was measured by policy.kind={kind!r}, not a "
+                      f"checkpoint: a diagnostic row in a scores table. Give it its own "
+                      f"--group {_SMOKE_GROUP}, or score a policy here.")
+        for run_id in uncertified:
+            print(f"[ABLATION] {path}: {run_id} carries no policy.kind -- identity uncertified "
+                  "(written before the field existed), not refused")
         report = _condition_report(path, group_rows)
         if not report["conflicts"] and not report["no_record"]:
             continue

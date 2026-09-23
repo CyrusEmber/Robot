@@ -27,7 +27,9 @@
   （复现 = `git checkout harness-vN.M.K -- ablation_harness/`；已推的 tag 不改指不改名，内容错了开新
   版本号，不去改旧的）。v1.9.0 = v1.8.0（判据身份化 + 套件锁 + 同表条件面）加 `video_matrix.py`（见下）。
   **敞口**：v1.9.0 还没有锚点 —— 加模块那笔提交没声明版本，这一格登记在
-  `work/active/harness-version-anchor-missing.md`，由落下一笔的人补。
+  `work/active/harness-version-anchor-missing.md`，由落下一笔的人补。同一敞口下另有一笔未编号的改动：
+  2026-09-23 的汇总侧身份闸门（记录格式节 ④，`run_ablation._identity_report`）—— 它不是新模块、也不改
+  测量语义，编号与锚点同上面那条一起定，别在这里凭空写一个版本号。
 - **部署形态**：仓根独立目录，全部自定位。机器本地事实（IsaacLab 树 + venv 解释器）登记在仓根
   `paths.yaml`（模板 `paths.example.yaml`），唯一读者 `host_paths.py`；`E:\IsaacLab\ablation_harness`
   junction 已废，原机可 `rmdir` 摘链接。
@@ -70,7 +72,12 @@ unknown 不算冲突但记 `unproven` —— 建立在缺失值上的表就是�
 ②同一 `run_id` 已有**可比**记录 ⇒ 重跑自重写，其余一律拒（记录有真差异 / legacy / 不完整 /
 目录有结果无记录 / 记录文件不可读）。放行只有 `--variant`（另起身份）或 `--overwrite`（显式替换）。
 拒写发生在 rollout **之前**。③**汇总侧按条件面拒表**：`--summarize` 读每行 run 目录的 `record.json`，
-条件冲突或记录读不到 ⇒ 列出冲突字段与方向并以非零码退出。`record.json` / `eval.json` /
+条件冲突或记录读不到 ⇒ 列出冲突字段与方向并以非零码退出。④**汇总侧按身份拒表**（2026-09-23）：
+`--group` 只决定一行落在哪张表，不决定它是什么 ⇒ 非 `smoke` 组的表里出现 `policy.kind != checkpoint`
+的行（零动作 / 冒烟）即点名该行与它的 kind 并非零退出 —— 那类行是**诊断**，与真分数同行会被读成性能读数
+（`locomotion_eval_v4` 根表里唯一那行就是 `zero_action`，其读数与 v3 smoke 同值、没有信息量）。写在
+`policy.kind` 字段出现之前的记录记 `identity uncertified` 但**不拒**：把历史表全变成不可读不叫更安全。
+`record.json` / `eval.json` /
 `summary.csv` 一律 tmp + `os.replace` 原子落盘：截断的记录会让下一次 run 崩在解析上，而不是崩在一个决定上。
 
 **摘要拼写按字段而异，别靠猜**（实测）：`env_cfg.digest` / `agent_cfg.digest` / `suite.digest` /
@@ -129,7 +136,8 @@ harness 代码高频变更 / 多机器人共用 / 再开新协议时 → 目录�
 **禁止跨协议直接对比**（任何表格/图表不得混 v1 / v2 / v3 / v4 行）；新协议新起 campaign 目录，
 `--report` / `--summarize` 按协议目录天然隔离。v1.8.0 起这条**部分由机器执行**：`--summarize` 按
 条件面（见记录格式节）逐对比较，冲突即非零退出。**闸门只覆盖它看见的字段** —— `policy.kind`
-（零动作冒烟行混进真分数表）不在条件面内，图表/HTML 也不经过 `--summarize`，那些仍是纪律。
+（零动作冒烟行混进真分数表）自 2026-09-23 起由 `--summarize` 单独拒绝（记录格式节 ④），
+图表/HTML 不经过 `--summarize`，那部分仍是纪律。
 
 ## 与 rl_exp 的契约（单向消费，改动必跑闸门）
 
@@ -153,5 +161,5 @@ harness 代码高频变更 / 多机器人共用 / 再开新协议时 → 目录�
 | 2 | 记录格式的剩余真跑段（rsl_rl 身份 / num_envs 格子 / 资产 fail 路径待授权） | → `work/active/record-format-live-checks.md` | 中 |
 | 3 | 地形随机源两处缺口 + 几何证据归档（已收） | → `work/closed/2026/terrain-suite-v2-rng.md`、`work/closed/2026/terrain-evidence-18b.md` | — |
 | 4 | 地形证据归档位置与 `rebuild.py` 角色（已裁决：运行目录 + 材料完整性） | → `work/closed/2026/archive-location-decision.md`；裁决见 `acceptance/records/2026-09-22-terrain-evidence-archive-and-verification.md` | — |
-| 5 | 诊断 run 与 campaign 表之间没有闸门 | → `work/active/diagnostic-run-gate.md` | 中 |
+| 5 | 诊断 run 与 campaign 表之间没有闸门（已收：汇总侧按身份拒表） | → `work/closed/2026/diagnostic-run-gate.md`；读数见 `acceptance/records/2026-09-23-diagnostic-row-identity-gate.md` | — |
 | 6 | `--headless` 已弃用而本仓仍在用 | → `work/active/headless-flag-deprecation.md` | 低 |
