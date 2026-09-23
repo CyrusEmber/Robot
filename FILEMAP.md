@@ -103,18 +103,18 @@
 - **工具目录按类别分**：新脚本先决定属于 `verify\`（闸门 / 套件，进离线清单）还是 `diagnose\`（人看的读数）；一次性历史脚本进 `archive\`，不要留在主路径上。
 - **`teacher_mdp.py` 一个模块承载 v3–v13 的增量段**（v3 包 / v5 行 SIR / v11 联合粒子 / v12 噪声 / v13 跟踪核），按版本段落读；"只增不改"是纪律。
 
-## 版本线与线目录（本表到此为止；版本目录不逐条登记）
+## 版本目录内的文件（本表不索引线目录与版本目录）
 
-> 版本**不再**在本表逐条登记（2026-09-23 起）：那一行只重复路径与一句同样的说明，读者要靠它选版也选不出来，
-> 而"这个版本是什么"归各 `versions\<family>\FAMILY.md` 的版本史。目录本身是否存在、四件套齐不齐，
-> 由 `check_version_docs.py` 的形态检查读目录来判，不靠一份手抄索引。
-> 新增版本 = 建 `versions\<family>\<line>\vN\`（四件套 + `base.json`）+ 补 FAMILY 版本史行；本表不加行。
+> 本表**不**逐条登记版本目录（2026-09-23 起）**也**不登记线目录（同日晚些）：两种行的形状相同——重复一次路径 + 一句
+> "身份与教训见 `FAMILY.md`"——而线目录那三行**没有任何闸门看守**，且其中两行至今仍指向 2026-09-22 已退役的 `lizard/parkour` 与
+> `lizard/baseline`，状态一个字都没写。**哪个家族、哪条线存在、是活跃还是已退役**的唯一声明是
+> `versions\lines.json`（`check_recipe_registry.py` 看守：发现到的线必须有记录、退役必须带日期与理由）；
+> **"这个版本是什么"**归各 `versions\<family>\FAMILY.md` 的版本史；目录存在与齐件由 `check_version_docs.py` 读目录来判。
+> 布局本身见上文 `rl_exp\versions\` 那行与"主线就是家族本身"一条。
+> 新增版本 = 建 `versions\<family>\<line>\vN\`（四件套 + `base.json`）+ 补 FAMILY 版本史行 + 在 `lines.json` 登记线；本表不加行。
 
 | 目录 | 身份 |
 |---|---|
-| `rl_exp\versions\lizard\parkour\` | 支线版本包（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
-| `rl_exp\versions\lizard\baseline\` | 支线版本包（身份与教训见 `versions\lizard\FAMILY.md` 版本史；本表只给路径与冻结状态） |
-| `rl_exp\versions\lizard2\main\` | 版本线目录（身份与教训见 `versions\lizard2\FAMILY.md` 版本史；本表只给路径与冻结状态） |
 | `<线>\vN\PLAN.md` | 版本级计划（目的 / 假设 / 决策点 / 验收线）；结果回填走 NOTES |
 | `<线>\vN\NOTES.md` | 版本文档：目的 / 参数 diff / 训练命令 / 结果回填 |
 | `<线>\vN\<line>_params.yaml` | 冻结参数副本：跑冻结版只读这份，资产内容由 `asset_lock.json` 钉 |

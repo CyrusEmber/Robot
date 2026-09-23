@@ -22,8 +22,9 @@ What this script does, in order:
    declares ``null``), ``PLAN.md`` and ``NOTES.md`` skeletons whose section names are the ones
    versioning.mdc A-2 requires, each marked TODO.
 3. **Write ``versions/<family>/FAMILY.md``** when the family has no family document yet.
-4. **Print** (never write) the FAMILY.md version row and the FILEMAP.md line row a human has to
-   paste -- the FAMILY row is exactly what ``check_version_docs.py`` looks for.
+4. **Print** (never write) the FAMILY.md version row a human has to paste -- that row is exactly what
+   ``check_version_docs.py`` looks for. No FILEMAP row: what a new line needs is its entry in
+   ``versions/lines.json``, which the registry gate guards.
 5. **With ``--apply`` only**: call the lock/declaration generators --
    ``emit_diff_declaration.py`` (the version's own ``diff.json``, after the frozen yaml lands),
    ``check_cfg_lock.py --update --line <family>/<line> --reason <why>`` (a new line needs its
@@ -102,7 +103,7 @@ class Target:
 
     @property
     def rel(self) -> str:
-        """Family-relative version path (``main/v1``), the name FAMILY/FILEMAP rows use."""
+        """Family-relative version path (``main/v1``), the spelling the FAMILY row uses."""
         return f"{self.line}/{self.version}"
 
 
@@ -522,8 +523,8 @@ def family_md(target: Target, facts: dict, today: str) -> str:
 > **本文只收已成立的事实（现在时/过去时）**：任何"待/未/若"字头的内容住 [PLAN.md](PLAN.md)。
 > **继承机制按引用不复制**：升版五步、状态机、记录规范、PLAN/NOTES 必含骨架从
 > `.codemaker/rules/versioning.mdc` §A 继承，本文不复制规则正文；目录职责、闸门清单、
-> 版本目录**不再**逐条登记于仓根 `FILEMAP.md`（2026-09-23 起）；本文这张版本史表就是它的登记，
-> 路径与冻结状态由目录本身与 `check_version_docs` 的形态检查保证。
+> 版本目录与线目录都**不再**登记于仓根 `FILEMAP.md`（2026-09-23 起）；本文这张版本史表就是版本的身份登记，
+> 线的身份与状态归 `versions/lines.json`（`check_recipe_registry` 看守），目录存在与齐件由 `check_version_docs` 读目录来判。
 
 ## 家族身份
 
@@ -559,20 +560,6 @@ TODO 家族为什么存在（要回答的那个问题），以及**不借别的�
 def family_row(target: Target, today: str) -> str:
     """The FAMILY.md version-history row, in the shape ``check_version_docs`` matches on."""
     return f"| {target.rel} | {today} | TODO 这版是什么（血统根 ⇒ `base.json` 为 `null`） | （训练后补） |"
-
-
-def filemap_rows(target: Target) -> list[str]:
-    """The FILEMAP.md row to paste: the line directory, which is the level FILEMAP indexes.
-
-    Versions are no longer listed here (2026-09-23). The row that used to stand for a version
-    repeated its path and one boilerplate sentence, and the check behind it only looked for the
-    path as a substring -- a passing mention satisfied it. What a version *is* belongs in the
-    FAMILY row, and that the directory exists at all is what the shape checks read.
-    """
-    family_doc = f"`versions/{target.family}/FAMILY.md`"
-    return [
-        f"| `rl_exp\\versions\\{target.family}\\{target.line}\\` | 版本线目录（线根放开发态参数与配方锁；身份见 {family_doc} 版本史） |",
-    ]
 
 
 # --------------------------------------------------------------------------------------
@@ -731,9 +718,9 @@ def main(argv: list[str] | None = None) -> int:
     print("\n--- pasted by hand (this tool never edits a shared document)")
     print(f"FAMILY.md  versions/{target.family}/FAMILY.md -> 版本历史 表加一行:")
     print(f"  {family_row(target, today)}")
-    print("FILEMAP.md -> 版本线目录 表加一行（版本目录不再逐条登记）:")
-    for row in filemap_rows(target):
-        print(f"  {row}")
+    # No FILEMAP row is printed: that table indexes neither line nor version directories any more
+    # (2026-09-23). What a new line needs is its entry in versions/lines.json, which the registry
+    # gate guards; a row here would be a second, unwatched copy of "this line exists".
     print(f"runner cfg (rl_exp/tasks/agents/rsl_rl_ppo_cfg.py): the class named by this line's recipe keys"
           f" must declare experiment_name={target.experiment_name!r}"
           + (f" and max_iterations={target.max_iterations}" if target.max_iterations is not None else "")
