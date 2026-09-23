@@ -186,6 +186,31 @@ def pad_point_clouds(clouds: list[torch.Tensor]) -> torch.Tensor:
     return padded
 
 
+def mesh_lowest_point(body_pos_w: torch.Tensor, body_quat_w: torch.Tensor,
+                      ids: list[int], corners: torch.Tensor) -> torch.Tensor:
+    """World position of each selected body's lowest collision-mesh vertex, shape (N, B, 3) [m].
+
+    The same rotation :func:`mesh_min_z` reads, kept as a point because a clearance alone does not
+    locate a contact: the deepest vertex is the geometric candidate for where the body touches, so
+    it is also what a contact-point velocity has to be taken at.
+
+    Args:
+        body_pos_w: (N, num_bodies, 3) world positions.
+        body_quat_w: (N, num_bodies, 4) world orientations, xyzw.
+        ids: body column indices to measure.
+        corners: (len(ids), K, 3) link-frame points of those bodies -- a collision mesh's vertices,
+            padded to a common K by :func:`pad_point_clouds`.
+    """
+    k = corners.shape[1]
+    n, nb = body_pos_w.shape[0], len(ids)
+    pos = body_pos_w[:, ids][:, :, None, :].expand(n, nb, k, 3).reshape(-1, 3)
+    quat = body_quat_w[:, ids][:, :, None, :].expand(n, nb, k, 4).reshape(-1, 4)
+    pts = corners[None].expand(n, nb, k, 3).reshape(-1, 3)
+    world = (pos + quat_apply(quat, pts)).reshape(n, nb, k, 3)
+    lowest = world[..., 2].argmin(dim=-1)
+    return world.gather(-2, lowest[..., None, None].expand(n, nb, 1, 3)).squeeze(-2)
+
+
 def mesh_min_z(body_pos_w: torch.Tensor, body_quat_w: torch.Tensor,
                ids: list[int], corners: torch.Tensor) -> torch.Tensor:
     """Lowest world z of the selected bodies' collision meshes, shape (N,) [m].
@@ -202,11 +227,49 @@ def mesh_min_z(body_pos_w: torch.Tensor, body_quat_w: torch.Tensor,
         corners: (len(ids), K, 3) link-frame points of those bodies -- a collision mesh's vertices,
             padded to a common K by :func:`pad_point_clouds`.
     """
-    k = corners.shape[1]
-    n, nb = body_pos_w.shape[0], len(ids)
-    pos = body_pos_w[:, ids][:, :, None, :].expand(n, nb, k, 3).reshape(-1, 3)
-    quat = body_quat_w[:, ids][:, :, None, :].expand(n, nb, k, 4).reshape(-1, 4)
-    pts = corners[None].expand(n, nb, k, 3).reshape(-1, 3)
-    world = pos + quat_apply(quat, pts)
-    return world.reshape(n, nb, k, 3)[..., 2].min(dim=-1).values
+    return mesh_lowest_point(body_pos_w, body_quat_w, ids, corners)[..., 2]
+
+
+def contact_point_velocity(com_lin_vel_w: torch.Tensor, ang_vel_w: torch.Tensor,
+                           com_pos_w: torch.Tensor, point_pos_w: torch.Tensor) -> torch.Tensor:
+    """Velocity of a point rigidly attached to a body: ``v_com + ω × (p − p_com)``, (N, B, 3) [m/s].
+
+    The reference point is the **COM**, and that is not a detail: in this framework
+    ``body_lin_vel_w`` aliases ``body_com_lin_vel_w`` while ``body_pos_w`` gives the link origin.
+    Pairing those two mixes reference points and mis-states the ``ω × r`` term by
+    ``ω × (origin − com)`` for every body whose mass is offset from its link origin -- the normal
+    case, and exactly why a foot *origin* speed could not answer "is the contact point sliding": a
+    foot rolling over its toe moves its origin a lot while its contact point stands still.
+
+    Args:
+        com_lin_vel_w: (N, B, 3) world linear velocity of each body's COM [m/s].
+        ang_vel_w: (N, B, 3) world angular velocity [rad/s].
+        com_pos_w: (N, B, 3) world COM position [m].
+        point_pos_w: (N, B, 3) world position of the point on the body [m].
+
+    ponytail: the point is taken to be the deepest collision-mesh vertex -- a geometric guess at
+    where contact is, with a ceiling of mesh resolution plus one control step of pose lag. Upgrade
+    path is the contact pair from a ``force_matrix_w`` sensor, which both locates the real point and
+    separates ground contact from self-collision.
+    """
+    return com_lin_vel_w + torch.cross(ang_vel_w, point_pos_w - com_pos_w, dim=-1)
+
+
+def yaw_frame_offset(root_pos_w: torch.Tensor, root_quat_w: torch.Tensor,
+                     body_pos_w: torch.Tensor) -> torch.Tensor:
+    """Body positions relative to the root, in the yaw-aligned gravity frame, (N, B, 3) [m].
+
+    The frame the reward kernel and the acceptance metrics already read, so a fore-aft trajectory
+    here and a forward speed there are one coordinate system: ``[..., 0]`` fore-aft, ``[..., 1]``
+    lateral, ``[..., 2]`` up. Pitch and roll are projected out on purpose -- a pitching gait must
+    not read as fore-aft travel.
+
+    Args:
+        root_pos_w: (N, 3) root world position.
+        root_quat_w: (N, 4) root world orientation, xyzw.
+        body_pos_w: (N, B, 3) body world positions.
+    """
+    delta = body_pos_w - root_pos_w[:, None, :]
+    yaw = yaw_quat(root_quat_w).unsqueeze(1).expand(-1, delta.shape[1], -1)
+    return quat_apply_inverse(yaw, delta)
 
