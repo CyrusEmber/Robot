@@ -47,19 +47,19 @@
 
 | 项 | 值 |
 |---|---|
-| run id | `logs/rsl_rl/lizard2_v1/2026-09-22_19-26-50`（14000/14000、4096 envs、seed 42） |
-| checkpoint | `model_13999.pt`，sha256 `48e89b4afa24a3ed171626885e9234f5e0d61445ece03b44cd849c16d8c92f1f` |
+| run id | `logs/rsl_rl/lizard2_v1/2026-09-22_19-26-50`（14000/14000、4096 envs、seed 42；`manifest --verify` 的缺口见"实际执行与偏离"偏离 2） |
+| checkpoint | `model_13999.pt`（sha256 与全量参数见该 run 目录的 `checkpoints.json`） |
 | 评测报告 | `ablation_harness/results/lizard2_flat_v2/v1/Lizard2-Flat-v1_13999_deterministic_seed123/eval.json`（**pass**，八条全过）；无 settle 读者的 v1 判决与被取代的中间报告在同根目录下并列保存 |
-| 训练读数 | `mean_reward` 32.64（平台）、成功指标 1.0、`error_vel_xy` 0.078、回合 1000/1000 帧、`base_contact` 0、无 NaN |
-| 分类判定 | **未定**：判据侧 `pass`，但**步态实测不合格**（承重脚滑移 0.65–1.54 m/s、摆动相离地仅 2–8 cm，本仓自己的标准是 0.2 m）⇒ 本版按"能力基线"记账，**不按"会走路"记账** |
+| 训练读数 | 见 run 目录的 tfevents（巡检入口 `rl_exp/tools/trainlog/probe_run.py --exp lizard2_v1`）；数值的书面家见下"结论"引用的两份记录 |
+| 分类判定 | **未定**：判据侧 `pass`，步态实测**不合格** ⇒ 按"能力基线"记账，**不按"会走路"记账**（判定依据见两份记录） |
 
 ## 结论
 
-- **能成立**：新构型在平地 0–3 m/s 区间上不倒（20 s × 256 envs 零 `base_contact`）、不趴、不把非足部位
-  当支撑、方向与位移对（三带位移比 0.988–1.006，跟踪误差 0.006–0.036）。
-- **不成立**：**步态质量**。承重脚在滑、摆动脚只抬 2–8 cm，而八条判据**没有一条能看见**
-  （读接触与承重，不读高度与滑速）。根因两侧：奖励侧删了 `feet_slide`/`foot_clearance`（旧线 PLAN 预注册
-  的取舍，现已到期）**且**判据侧把 `min_lift_m` 丢了。数值、对照与出处见
-  `acceptance/records/2026-09-23-lizard2-v1-gait-skate.md`。
+- **能成立**：新构型在平地 0–3 m/s 区间上不倒、不趴、不把非足部位当支撑、方向与位移对。
+- **不成立**：**步态质量**（承重脚在滑、摆动脚抬不起来）。根因两侧：奖励侧删了
+  `feet_slide`/`foot_clearance`（旧线预注册的取舍，现已到期），判据侧把 PLAN 验收要求的 `min_lift_m`
+  丢了 ⇒ 八条判据没有一条能看见它。**数值、对照标准与出处不复述，见
+  `acceptance/records/2026-09-23-lizard2-v1-gait-skate.md`**；判决侧的另一半见
+  `acceptance/records/2026-09-23-lizard2-v1-first-eval.md`。
 - **边界**：1 个 seed、1 颗检查点、无 DR、无课程；`pass` 与"垫着滑"同出一份 20 s 窗口，故本版只能归因到
   "新构型 + 本配方"，不能把步态问题归因于骨骼修正。
