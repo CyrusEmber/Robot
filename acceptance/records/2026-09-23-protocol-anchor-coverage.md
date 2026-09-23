@@ -47,6 +47,12 @@ ALL_EVAL_FRAME_V2_TESTS_PASSED
 
 **五、套件**：`ALL_OFFLINE_CHECKS_PASSED (47/47 in 47.4s)`；`[23]` 标签未改、入口数未增。
 
+**六、非阈值字段同样被抓（补证，2026-09-23 同日）**：锚按**字节**判，因此不挑字段。改 v4 的
+`post_failure_velocity`（`"zero"` → `"keep"`，一个非阈值字段）⇒
+`AssertionError: protocols/baseline_flat_v4.json: the bytes moved since they were approved`；还原 ⇒
+`ok 7 protocol(s) match…` + `ALL_EVAL_FRAME_V2_TESTS_PASSED`，且 `git diff` 对该文件为空。
+⇒ **不需要逐字段枚举**：一处证明已覆盖全部字段（命令窗口、`bands`、`terminal_frame` 等同一机制）。
+
 ## 证据引用
 
 ```
@@ -64,8 +70,7 @@ $ git log --date=short --format="%h %ad %s" -2 -- ablation_harness/protocols/liz
 
 ## 未覆盖边界
 
-- `next` ① 后半未做：阈值以外的协议字段（命令窗口、`bands`、`terminal_frame`、`post_failure_velocity`…）
-  同受锚保护，但**未逐一反证**。
+- 阈值以外的字段**已补证**（见"结果"节六：锚按字节判，一处证明即覆盖全部字段），不再列为未覆盖。
 - **`LEGACY_PROTOCOLS` 本身无摘要看守**：它是现在唯一的豁免真源，谁把一份新协议加进那对白名单，核验就不会出声。
 - 只认 `.json`/`.yaml`：未来出现 `.yml` 会被静默忽略（当前无此情况）。
 - 豁免按 `(name, version)` 判，**改文件名不影响豁免**；反之，改 `name`/`version` 字段会让一份已锚协议"变成"另一份身份。
