@@ -6,9 +6,9 @@
 
 ## 设计的引用
 
-目的与假设见 [PLAN.md](PLAN.md)（不复制判据）。开训前的状态：**未开训**——
-`PLAN.md` 的三条硬前置（本线评测协议冻结、启动探针按 30 维动作/102 维观测/区间命令复测、落地姿态目视）
-尚未完成，因此本文件暂只有骨架与已成立的离线事实。
+目的与假设见 [PLAN.md](PLAN.md)（不复制判据）。开训前状态：三条硬前置里**启动探针与落地目视已完成**、
+**评测协议已冻结**，但 PLAN 要求的"协议缺失/摘要不符 ⇒ 拒绝开训"**启动闸门仍未建**（形态归
+`work/active/eval-protocol-before-training.md`）——2026-09-22 的开训是在该闸门缺失下按所有者决定启动的。
 
 已成立的离线事实（训练前就该有的，全部有记录）：
 
@@ -18,6 +18,7 @@
   动作 30/30、obs 102 实测批准）
 - obs 协议与实测关节序：`versions/obs_protocols.json` 的 `Lizard2-Flat-v1` / `-Play-v1`（协议
   `a25a8c39001b`）、`versions/joint_order_runtime.json` 的 `assets/lizard2/lizard2.usda`
+- 评测协议冻结：`acceptance/records/2026-09-22-lizard2-eval-protocol-freeze.md`（v1），判决后的修订见 v2
 
 ## 本版重点变化（阅读提示，≤2 句）
 
@@ -27,21 +28,38 @@
 
 ## 实际执行与偏离
 
-未开训。实跑后必须写 run 目录路径 `logs/rsl_rl/lizard2_v1/<时间戳>`——同一 `experiment_name` 下会有
-多次 run，缺时间戳指向的是目录、不是那一次。命令行 / 覆盖参数 / seed / checkpoint 的正文留在该目录的
-`run_manifest.json` / `checkpoints.json`（记录本体机器本地、不进仓）⇒ 这里只给路径 + 复读命令。
-偏离计划的地方照实写；run 记录不完整就写明缺什么、结果凭什么锚住。
+- run：`logs/rsl_rl/lizard2_v1/2026-09-22_19-26-50`（4096 envs、seed 42、`--max_iterations 14000`、
+  `save_interval 50`）。命令行与覆盖参数留在该目录的 `run_manifest.json` / `checkpoints.json`
+  （记录本体机器本地、不进仓）⇒ 这里只给路径 + 复读命令。
+- **偏离 1（记账）**：`max_iterations` 实跑 **14000**，而本线 runner cfg（`Lizard2PPORunnerCfg`，逐项照
+  baseline v2）声明 10000 ⇒ 本 run 的迭代预算不是配方声明的那个数。
+- **偏离 2（启动记录不完整）**：该 run 的 `run_manifest.json` T0 `declaration` **为空**，`after_env`
+  因此报 5 条 `declared None != actual`（`num_envs` 4096、`sim_dt` 0.005、`control_dt` 0.02、`seed` 42、
+  `params_version v1`）；查旧线 `lizard_baseline_v2` 的 run 同样如此 ⇒ 本机所有 run 的既有状态、
+  非本次启动特有，但**该 run 的声明面因此不可读**。
+- **偏离 3（判据交付不完整）**：PLAN 验收节的步态判据要求 `min_lift_m`（离地高度），交付的两种 K
+  **没有实现该项**；`report_only` 另声明了无人计算的 `foot_slip_mps` 等 6 项。见"结论"与
+  `acceptance/records/2026-09-23-lizard2-v1-gait-skate.md`。
+- 评测在训练**之后**做（协议先冻结、判决后修订一次），过程与两处尺子缺陷见
+  `acceptance/records/2026-09-23-lizard2-v1-first-eval.md`。
 
 ## 结果回填
 
 | 项 | 值 |
 |---|---|
-| run id | 未开训 |
-| checkpoint | 未开训 |
-| 评测报告 | 未开训（本线评测协议待冻结，见 PLAN「验收」硬前置 1） |
-| 分类判定 | 未开训 |
+| run id | `logs/rsl_rl/lizard2_v1/2026-09-22_19-26-50`（14000/14000、4096 envs、seed 42） |
+| checkpoint | `model_13999.pt`，sha256 `48e89b4afa24a3ed171626885e9234f5e0d61445ece03b44cd849c16d8c92f1f` |
+| 评测报告 | `ablation_harness/results/lizard2_flat_v2/v1/Lizard2-Flat-v1_13999_deterministic_seed123/eval.json`（**pass**，八条全过）；无 settle 读者的 v1 判决与被取代的中间报告在同根目录下并列保存 |
+| 训练读数 | `mean_reward` 32.64（平台）、成功指标 1.0、`error_vel_xy` 0.078、回合 1000/1000 帧、`base_contact` 0、无 NaN |
+| 分类判定 | **未定**：判据侧 `pass`，但**步态实测不合格**（承重脚滑移 0.65–1.54 m/s、摆动相离地仅 2–8 cm，本仓自己的标准是 0.2 m）⇒ 本版按"能力基线"记账，**不按"会走路"记账** |
 
 ## 结论
 
-未开训，无结论。结论的边界届时照实写：几个 seed、几个 checkpoint、有无 DR、以及
-`PLAN.md`「风险与挂账」第 1 条的归因边界（本版只到"新构型 + 本配方"，不能单独归因于骨骼修正）。
+- **能成立**：新构型在平地 0–3 m/s 区间上不倒（20 s × 256 envs 零 `base_contact`）、不趴、不把非足部位
+  当支撑、方向与位移对（三带位移比 0.988–1.006，跟踪误差 0.006–0.036）。
+- **不成立**：**步态质量**。承重脚在滑、摆动脚只抬 2–8 cm，而八条判据**没有一条能看见**
+  （读接触与承重，不读高度与滑速）。根因两侧：奖励侧删了 `feet_slide`/`foot_clearance`（旧线 PLAN 预注册
+  的取舍，现已到期）**且**判据侧把 `min_lift_m` 丢了。数值、对照与出处见
+  `acceptance/records/2026-09-23-lizard2-v1-gait-skate.md`。
+- **边界**：1 个 seed、1 颗检查点、无 DR、无课程；`pass` 与"垫着滑"同出一份 20 s 窗口，故本版只能归因到
+  "新构型 + 本配方"，不能把步态问题归因于骨骼修正。
