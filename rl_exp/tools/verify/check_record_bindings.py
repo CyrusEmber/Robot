@@ -34,6 +34,17 @@ without tripping it (this file does), while the same text as code cannot hide be
   the same dependency another way (a distribution version) so the two records of one run could
   not be reconciled; a re-spelled identity is how that comes back.
 
+**One behavioural half, not a signature.** ``binding.git_run`` and ``lifecycle_entry_run._run`` are
+the two places where a record's evidence arrives from a child process, and both read it through a
+decode. Left to the host locale, a byte the locale cannot decode kills the reader thread, ``stdout``
+arrives as ``None``, and the caller still sees success -- measured twice on 2026-09-23
+(``acceptance/records/2026-09-23-git-output-encoding.md`` and
+``acceptance/records/2026-09-23-utf8-assumption-and-entry-run-decode.md``), and it only shows on a
+host without UTF-8 mode (PEP 597). No static rule can decide that, so this gate starts one
+interpreter with ``-X utf8=0`` and asserts both shapes -- and reproduces the *old* shape in the same
+process as a control, so the assertion cannot pass by measuring nothing on a host that stopped
+breaking on those bytes.
+
 **The ceiling, honestly stated** (work/active/record-variant-and-snapshot-specs.md's own warning about paste detectors): this decides
 *which side of* a home *a line sits on*, not whether the record it feeds is right. A duplicate
 in a shape none of the four signatures reaches -- text decoded and then hashed,
@@ -49,6 +60,7 @@ from __future__ import annotations
 import argparse
 import ast
 import pathlib
+import subprocess
 import sys
 import warnings
 
@@ -261,6 +273,71 @@ _FIXTURES: list[tuple[str, str, bool]] = [
 ]
 
 
+#: The probe one ``-X utf8=0`` interpreter runs (see the docstring). It is a string rather than a
+#: second file so the gate stays one file, and it reports ASCII only: the child's stdout is a
+#: locale-encoded pipe, which is the subject. The interpreter it starts is named through ``PY`` so
+#: this gate's spawn count is the one spawn *this file* makes -- the probe's text is data, not a call.
+_DECODE_PROBE = "\n".join([
+    "import pathlib, subprocess, sys, tempfile",
+    "sys.path.insert(0, sys.argv[1])",
+    "PY = sys.executable",
+    "from rl_exp.tools.runrecord import binding",
+    "from rl_exp.tools.verify import lifecycle_entry_run",
+    "SUBJECT = 'twin probes \\U0001F98E attach'",
+    "control = subprocess.run([PY, '-X', 'utf8=1', '-c', 'print(%r)' % SUBJECT],",
+    "                         capture_output=True, text=True)",
+    "print('control_stdout_is_none', control.stdout is None)",
+    "with tempfile.TemporaryDirectory() as tmp:",
+    "    root = pathlib.Path(tmp)",
+    "    try:",
+    "        binding.git_run(root, 'init', '-q')",
+    "        (root / 'a.txt').write_text('x', encoding='utf-8')",
+    "        binding.git_run(root, 'add', 'a.txt')",
+    "        binding.git_run(root, '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', SUBJECT)",
+    "        subject = binding.git_run(root, 'log', '-1', '--pretty=%s')",
+    "    except Exception as err:  # the crash is the failure mode: stdout arrived as None",
+    "        subject = 'raised %s' % type(err).__name__",
+    "    print('git_run_recovered', subject == SUBJECT)",
+    "said = \"[run-manifest] \\u8bad\\u7ec3\\u542f\\u52a8\\uff1a\\u4e2d\\u6587\\u65e5\\u5fd7\"",
+    "run = lifecycle_entry_run._run([PY, '-X', 'utf8=1', '-c', 'print(%r)' % said],",
+    "                               cwd=pathlib.Path.cwd(),",
+    "                               environment=lifecycle_entry_run._environment())",
+    "print('entry_stdout_is_none', run.stdout is None)",
+    "print('entry_stdout_recovered', said in (run.stdout or ''))",
+])
+
+
+def decode_probe() -> list[str]:
+    """Start one non-UTF-8-mode interpreter and read what it says about the two decode shapes.
+
+    Empty means both call sites handed their child's text on, **and** the control confirms that this
+    host can still exhibit the failure being guarded against.
+    """
+    proc = subprocess.run(
+        [sys.executable, "-X", "utf8=0", "-c", _DECODE_PROBE, str(_REPO)],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    said = dict(line.split(maxsplit=1) for line in proc.stdout.splitlines() if " " in line)
+    if proc.returncode != 0:
+        # A probe that crashed and a reading that came back missing look the same from here, so say
+        # which it was: the crash is the probe's bug, the missing reading is the decode's.
+        return [
+            f"the decode probe itself failed (rc={proc.returncode}): "
+            f"{(proc.stdout.strip() or proc.stderr.strip())[-300:]!r}"
+        ]
+    if said.get("control_stdout_is_none") != "True":
+        return [
+            "the unpinned decode no longer breaks on this host: this assertion has stopped measuring"
+            f" anything (rc={proc.returncode}, said={proc.stdout.strip()[-200:]!r})"
+        ]
+    problems = []
+    if said.get("git_run_recovered") != "True":
+        problems.append("binding.git_run lost the non-ASCII git output off UTF-8 mode")
+    if said.get("entry_stdout_is_none") != "False" or said.get("entry_stdout_recovered") != "True":
+        problems.append("lifecycle_entry_run._run lost the child's non-ASCII output off UTF-8 mode")
+    return problems
+
+
 def self_test() -> list[str]:
     """The detector must fire on each duplicate it exists for and stay quiet on its neighbours."""
     problems: list[str] = []
@@ -306,20 +383,26 @@ def main(argv: list[str] | None = None) -> int:
     homes = (pathlib.Path(args.home),) if args.home else (HOME, IDENTITY_HOME)
 
     self_test_problems = self_test()
+    decode_problems = decode_probe()
     scanned, findings = scan(roots, homes)
     for problem in self_test_problems:
         print(f"  self-test: {problem}")
+    for problem in decode_problems:
+        print(f"  decode: {problem}")
     for path, hits in findings:
         for hit in hits:
             print(f"  {path}: {hit}")
-    if self_test_problems or findings:
+    if self_test_problems or decode_problems or findings:
         print(
             f"RECORD_BINDING_SINGLE_SOURCE_VIOLATED ({len(self_test_problems)} self-test, "
-            f"{len(findings)} file(s)): the file digest, the revision spelling and the rsl_rl "
-            f"identity belong in {', '.join(str(home) for home in homes)}"
+            f"{len(decode_problems)} decode, "
+            f"{len(findings)} file(s)): the file digest, the revision spelling, the rsl_rl "
+            f"identity belong in {', '.join(str(home) for home in homes)}, and the child's output is "
+            f"decoded rather than left to the host locale"
         )
         return 1
     print(f"record binding primitives: one home ({', '.join(str(home) for home in homes)}), {scanned} file(s) clean")
+    print("record binding decode: one -X utf8=0 interpreter, both shapes recovered, control still red")
     print("RECORD_BINDING_SINGLE_SOURCE_OK")
     return 0
 

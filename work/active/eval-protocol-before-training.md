@@ -4,9 +4,8 @@ title: 开训前必须已有冻结的验收协议（启动闸门，而非事后�
 scope: rl_exp/tools/runrecord, rl_exp/tools/verify, ablation_harness, rl_exp/versions/lizard
 status: open
 landing: rl_exp/tools/runrecord/manifest.py, rl_exp/tools/verify/offline_suite.py, ablation_harness/HARNESS.md
-next: 形态**已定**（`acceptance/records/2026-09-23-two-forms-decided.md` A 节）：载体＝`rl_exp/versions/obs_protocols.json` 的 task 路由加 `eval_protocol`（按 task id 查 + 核 `(line, version)` 与本次配方一致；不放进配方 YAML/PLAN）；摘要＝`binding.sha256_file` 的路径 + 预期值，且若该文件在 `protocol_anchors.json` 里则须与批准锚一致；覆盖＝**所有新启动含旧版本重启**都须绑定，**不用"有声明才检查"**；**不设 override**；`begin` 在 T0 写盘前记录事实、写盘后在 `dirty_tree_refusal` 同侧拒绝。**实施前置 = `baseline-eval-protocol-gap` 的首跑判定与 NOTES 回填完成**（盘上 v2 产物不算证据）。② 写反证：缺协议 ⇒ 拒绝且报错点名缺什么；协议存在但被改 ⇒ 摘要不符即拒。③ 落文档：`ablation_harness/HARNESS.md` 写清"协议在开训前冻结、训后只读"，版本模板的 kickoff 清单加一行
+next: 形态**已定**（`acceptance/records/2026-09-23-two-forms-decided.md` A 节）：载体＝`rl_exp/versions/obs_protocols.json` 的 task 路由加 `eval_protocol`（按 task id 查 + 核 `(line, version)` 与本次配方一致；不放进配方 YAML/PLAN）；摘要＝`binding.sha256_file` 的路径 + 预期值，且若该文件在 `protocol_anchors.json` 里则须与批准锚一致；覆盖＝**所有新启动含旧版本重启**都须绑定，**不用"有声明才检查"**；**不设 override**；`begin` 在 T0 写盘前记录事实、写盘后在 `dirty_tree_refusal` 同侧拒绝。**实施前置已满足（2026-09-23）**：`baseline-eval-protocol-gap` 的 v2 首跑判定与 NOTES 回填完成（`acceptance/records/2026-09-23-baseline-v2-first-run.md`），"盘上 v2 产物不算证据"这条按该记录的口径满足。② 写反证：缺协议 ⇒ 拒绝且报错点名缺什么；协议存在但被改 ⇒ 摘要不符即拒。③ 落文档：`ablation_harness/HARNESS.md` 写清"协议在开训前冻结、训后只读"，版本模板的 kickoff 清单加一行
 close_when: 执行者真起一次训练命令观察启动行为——本版本无协议 ⇒ 训练在 begin 处被拒且提示写明缺哪份协议；补上协议后同一命令开训成功。两个分支各留一条证据（日志片段或测试），写入 `acceptance/records/`，本项关闭
-depends_on: baseline-eval-protocol-gap
 evidence: acceptance/records/2026-09-20-baseline-flat-eval-protocol.md
 ---
 

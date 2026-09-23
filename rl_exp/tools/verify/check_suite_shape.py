@@ -56,6 +56,11 @@ RUNNER = "offline_suite.py"
 SPAWN_ALLOWED: dict[str, tuple[int, str]] = {
     "test_cfg_snapshot.py": (1, "the digest must be identical from two PYTHONHASHSEED runs"),
     "test_dump_tb_sampling.py": (2, "the CLI resample path only exists in dump_tb.py's __main__"),
+    "check_record_bindings.py": (
+        1,
+        "losing the child's output to the host locale only reproduces off UTF-8 mode (PEP 597), so the "
+        "assertion is an interpreter started with -X utf8=0",
+    ),
 }
 
 # A reason must explain why ordering the falsifier last cannot preserve coverage.
