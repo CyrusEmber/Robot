@@ -177,6 +177,7 @@ def self_check() -> None:
         "swing_fore_aft_excursion_p50_m": 0.15, "swing_forward_p50_m": -0.15,
         "hip_target_p2p_rad": 0.3, "hip_err_p50_rad": 0.1, "hip_target_p2p_unloaded_rad": 0.0,
         "hip_target_outside_range_frac": 0.0, "hip_target_margin_min_rad": 0.5,
+        "hip_err_p50_in_range_rad": 0.1, "hip_err_p50_out_of_range_rad": None,
     }
     for key, value in expected.items():
         assert summary[key] == value, (key, summary[key], value)
@@ -271,10 +272,18 @@ def summarise(foot: dict, contact_n: float, transition_frames: int = 2) -> dict:
         # Distance to the nearest stop, and how often the target is outside the range outright: a
         # target beyond a limit is the policy asking for a pose this joint cannot reach.
         low, high = foot[f"joint_limits_{joint}"]
-        out[f"{joint}_target_outside_range_frac"] = round(float(
-            ((target < low) | (target > high)).float().mean()), 3)
+        outside = (target < low) | (target > high)
+        error = (target - actual).abs()
+        out[f"{joint}_target_outside_range_frac"] = round(float(outside.float().mean()), 3)
         out[f"{joint}_target_margin_min_rad"] = round(
             float(torch.minimum(target - low, high - target).min()), 4)
+        # The error split by whether the target was reachable at all: "the actuator lags" and "the
+        # command was impossible" are different findings, and the sum of the two hides which one a
+        # growing error is made of.
+        out[f"{joint}_err_p50_in_range_rad"] = (round(float(error[~outside].median()), 4)
+                                                if bool((~outside).any()) else None)
+        out[f"{joint}_err_p50_out_of_range_rad"] = (round(float(error[outside].median()), 4)
+                                                    if bool(outside.any()) else None)
     return out
 
 
@@ -403,6 +412,14 @@ def main() -> None:
                            for key, values in (("force", force), ("clearance", clearance),
                                                ("contact", contact), ("fore_aft", fore_aft),
                                                ("clearance_target", clearance_target))}
+        # Per-frame joint targets and actual positions, per leg. A summary can say one leg behaves
+        # differently; only the series says whether it is the same phase done differently or a
+        # different phase altogether, which is the comparison the left front leg still needs.
+        entry["joint_series"] = {
+            f"{name}_{joint}_{kind}": [round(float(x), 5) for x in values[
+                alive, env_index, leg_joint_ids[joint][name.split("_")[0]]].tolist()]
+            for name in foot_bodies for joint in ("hip", "hfe")
+            for kind, values in (("target", target), ("actual", actual))}
         report["envs"].append(entry)
 
     args_cli.out.parent.mkdir(parents=True, exist_ok=True)
