@@ -89,6 +89,24 @@ def run(args) -> dict:
         raise ValueError("recipe episode length differs from the frozen baseline protocol")
     cfg.scene.num_envs = args.num_envs
     cfg.seed = args.seed
+    # A protocol may declare fixed scenes: one constant command per env, held for the whole window.
+    # Then the environment's own resampling has to go, or it overwrites the injected command on its
+    # own schedule and the frames belong to a command nobody planned. The neutralization is the one
+    # the locomotion harness applies for the same reason (``components/dr_controller.apply_eval_mode``)
+    # and it is recorded in the frame meta, because it is a collection condition like any other.
+    scenes = protocol.get("scenes")
+    if scenes is not None:
+        if not isinstance(scenes, list) or not scenes or not all(isinstance(scene, dict) for scene in scenes):
+            raise ValueError("the protocol's scenes must be a non-empty list of objects with vx/vy/wz")
+        missing = [scene for scene in scenes if "name" not in scene]
+        if missing:
+            raise ValueError(f"every scene needs a name to be reported by: {missing}")
+        cmd_cfg = cfg.commands.base_velocity
+        cmd_cfg.heading_command = False
+        cmd_cfg.rel_standing_envs = 0.0
+        cmd_cfg.rel_heading_envs = 0.0
+        cmd_cfg.resampling_time_range = (1.0e9, 1.0e9)
+        cmd_cfg.debug_vis = False
     if args.device:
         cfg.sim.device = args.device
     agent_cfg = string_to_callable(gym.spec(args.task).kwargs["rsl_rl_cfg_entry_point"])()
@@ -216,9 +234,22 @@ def run(args) -> dict:
         box = baseline_metrics.command_box(protocol)
         low = torch.tensor([low for low, _ in box], device=live.device)
         high = torch.tensor([high for _, high in box], device=live.device)
+        # The declared scenes as one constant command per env. The box check below is read back from
+        # the environment rather than from this variable, so an injection that did not land (or
+        # landed on the wrong envs) shows up here instead of being assumed away.
+        scene_block = scene_term = None
+        assignment = None
+        if scenes is not None:
+            from ablation_harness.components.command_player import scene_assignment, scene_commands
+
+            assignment = scene_assignment(scenes, live.num_envs, args.seed)
+            scene_block = scene_commands(scenes, assignment, live.num_envs, live.device)
+            scene_term = live.command_manager.get_term("base_velocity")
         torch.manual_seed(args.seed)
         try:
             for _ in range(steps):
+                if scene_term is not None:
+                    scene_term.vel_command_b[:] = scene_block
                 command = live.command_manager.get_command("base_velocity")
                 if bool((command < low - 1e-6).any() or (command > high + 1e-6).any()):
                     raise RuntimeError(f"issued command leaves the protocol's box {box}: "
@@ -250,10 +281,18 @@ def run(args) -> dict:
                 "metrics": {}, "diagnostics": {}, "per_env": {}, "axes": recorder.axes,
             }
         else:
+            # The collection conditions a scene window carries: which scenes were declared, which env
+            # walked which one, and that the environment's own resampling was frozen to make that hold.
+            # The frame record is not a run record, so its meta is the only home these have.
+            scene_conditions = {} if scenes is None else {
+                "scenes": {"declared": [dict(scene) for scene in scenes],
+                           "assignment": assignment.tolist(),
+                           "resampling_frozen": True,
+                           "seed": args.seed}}
             artifact = recorder.artifact(
                 protocol=protocol, **start, task=args.task, seed=args.seed, num_envs=live.num_envs,
                 checkpoint=checkpoint, policy_mode=args.policy_mode if checkpoint else "zero_action",
-                body_weight_n=weight_n,
+                body_weight_n=weight_n, **scene_conditions,
                 # Provenance of the two geometries the foot reading depends on: the ground the
                 # clearance is measured against, and the asset the sole geometry was taken off. Both
                 # travel in the record, so a later reader cannot fill either in from memory.

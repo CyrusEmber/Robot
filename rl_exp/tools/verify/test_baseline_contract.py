@@ -20,6 +20,7 @@ _REPO = pathlib.Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_REPO))
 import torch
 from ablation_harness import baseline_frames, baseline_metrics, loco_judge, metrics, record
+from ablation_harness.components import command_player
 from rl_exp.tools.diagnose.diag_metrics import mesh_min_z, pad_point_clouds
 from rl_exp.tools.verify.baseline_runtime import joint_reset_errors, material_errors, termination_errors
 
@@ -489,6 +490,98 @@ def test_every_reader_this_module_implements_has_a_frozen_block():
         block = spec["ids"].get(judge_id)
         assert block is not None, f"{judge_id} can be named by a protocol but nothing pins its kinds"
         assert set(block["kinds"]) == set(kinds), (judge_id, block["kinds"], kinds)
+
+
+# --- fixed scenes: one command per env, held for the whole window -------------------------------
+#
+# ``SCENE_PROTOCOL`` lives with the other protocols, after ``V4_PROTOCOL``; the fixtures here only
+# read it when a test runs.
+
+
+def scene_window(*, num_envs: int = 6, assign: bool = True, collide: int | None = None,
+                 kill: int | None = None, shift_env: int | None = None) -> dict:
+    """A window under :data:`SCENE_PROTOCOL`, each env's frames carrying its assigned scene's command.
+
+    ``assign=False`` leaves the record with no assignment at all, ``collide`` folds one scene onto
+    another (so an env was never assigned it), ``kill`` ends one scene's envs on frame 0, and
+    ``shift_env`` gives one env a command its scene does not declare.
+    """
+    artifact = build(SCENE_PROTOCOL, 20, num_envs=num_envs)
+    scenes = SCENE_PROTOCOL["scenes"]
+    if not assign:
+        return artifact
+    assignment = command_player.scene_assignment(scenes, num_envs, 11)
+    if collide is not None:
+        assignment = torch.where(assignment == collide, torch.zeros_like(assignment), assignment)
+    block = command_player.scene_commands(scenes, assignment, num_envs, "cpu")
+    artifact["frames"]["command_world"] = block.unsqueeze(0).expand(20, num_envs, 3).clone()
+    if shift_env is not None:
+        artifact["frames"]["command_world"][:, shift_env, 0] += 1.0
+    if kill is not None:
+        artifact["frames"]["terminated"][:, assignment == kill] = 1.0
+    artifact["meta"] = dict(artifact["meta"], scenes={
+        "declared": [dict(scene) for scene in scenes], "assignment": assignment.tolist(),
+        "resampling_frozen": True, "seed": 11})
+    return artifact
+
+
+def test_a_scene_assignment_covers_every_scene_and_does_not_fix_scene_to_env():
+    """Round-robin sets the counts so no band can be empty; the seed decides which envs, not how many."""
+    scenes = SCENE_PROTOCOL["scenes"]
+    assignment = command_player.scene_assignment(scenes, 6, 11)
+    assert [int((assignment == index).sum()) for index in range(len(scenes))] == [2, 2, 2]
+    assert command_player.scene_assignment(scenes, 6, 11).tolist() == assignment.tolist(), "not reproducible"
+    other = command_player.scene_assignment(scenes, 6, 12)
+    assert sorted(other.tolist()) == sorted(assignment.tolist()), "the counts are the point, not the order"
+    assert other.tolist() != assignment.tolist(), "a fixed pairing would confound a band with its env"
+    uneven = command_player.scene_assignment(scenes, 4, 3)
+    assert sorted(int((uneven == index).sum()) for index in range(len(scenes))) == [1, 1, 2]
+
+
+def test_scene_commands_put_each_env_under_its_own_scene():
+    scenes = SCENE_PROTOCOL["scenes"]
+    assignment = command_player.scene_assignment(scenes, 6, 11)
+    block = command_player.scene_commands(scenes, assignment, 6, "cpu")
+    for env in range(6):
+        assert block[env, 0].item() == scenes[int(assignment[env])]["vx"], env
+
+
+def test_a_scene_window_without_its_assignment_is_invalid():
+    result = baseline_metrics.judge(scene_window(assign=False))
+    assert result["verdict"] == "invalid", result["gates"]
+    assert any("which scene each env walked" in reason for reason in result["invalid_reasons"]), \
+        result["invalid_reasons"]
+
+
+def test_a_declared_scene_that_measured_nothing_is_named():
+    """Coverage is why the block exists: a band nobody measured is refused, not left silently empty."""
+    collision = baseline_metrics.judge(scene_window(collide=2))
+    assert collision["verdict"] == "invalid", collision["gates"]
+    assert any("assigned to no env" in reason for reason in collision["invalid_reasons"]), \
+        collision["invalid_reasons"]
+
+    # The weaker case stays a reading rather than a refusal: an env that ended on frame 0 still has
+    # that frame inside its episode, and the report has to distinguish "two frames" from "coverage".
+    killed = baseline_metrics.judge(scene_window(kill=1))
+    assert killed["invalid_reasons"] == [], killed["invalid_reasons"]
+    assert killed["diagnostics"]["scene_valid_frames"]["mid_2mps"] == 2, killed["diagnostics"]
+    assert killed["diagnostics"]["scene_valid_frames"]["slow_1mps"] == 40, killed["diagnostics"]
+
+
+def test_the_recorded_commands_must_match_the_assigned_scene():
+    """The check a broadcast-only injection cannot pass: env 0's frames carry another scene's command."""
+    result = baseline_metrics.judge(scene_window(shift_env=0))
+    assert result["verdict"] == "invalid", result["gates"]
+    assert any("disagree" in reason for reason in result["invalid_reasons"]), result["invalid_reasons"]
+
+
+def test_a_scene_window_reports_how_many_valid_frames_each_scene_got():
+    result = baseline_metrics.judge(scene_window())
+    assert result["invalid_reasons"] == [], result["invalid_reasons"]
+    assert set(result["diagnostics"]["scene_valid_frames"]) == {"slow_1mps", "mid_2mps", "fast_3mps"}
+    assert all(count == 2 * 20 for count in result["diagnostics"]["scene_valid_frames"].values()), \
+        result["diagnostics"]["scene_valid_frames"]
+    assert result["report_groups"]["measurement"].count("scene_valid_frames") == 1
 
 
 def test_v2_refuses_a_gate_it_could_not_measure():
@@ -965,6 +1058,14 @@ FOOTED_PROTOCOL = {
     },
     "report_only": ["forward_mae_mps", "foot_slip_mps", "foot_clearance_swing_m", "foot_duty",
                     "foot_swing_frames", "foot_ground_source"],
+}
+
+#: A protocol that declares fixed scenes -- one constant command per env, held for the whole window --
+#: with every scene inside the box the same protocol already declares.
+SCENE_PROTOCOL = {
+    **V4_PROTOCOL,
+    "scenes": [{"name": "slow_1mps", "vx": 1.0}, {"name": "mid_2mps", "vx": 2.0},
+               {"name": "fast_3mps", "vx": 3.0}],
 }
 
 

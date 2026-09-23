@@ -125,6 +125,8 @@ REPORT_ITEMS = {
     "foot_ground_source": ("measurement", "text", ("ground_source",),
                            "how the ground the clearance is read against was obtained"),
     "foot_swing_frames": ("measurement", "frames", ("foot_contact",), "unloaded frames per foot"),
+    "scene_valid_frames": ("measurement", "frames", ("terminated", "timeout"),
+                           "valid frames per declared scene"),
     "foot_loaded_frames": ("measurement", "frames", ("foot_fraction",), "loaded frames per foot"),
     # -- behaviour --------------------------------------------------------------------------------
     "lateral_speed_abs_mps": ("behaviour", "m/s", ("velocity_yaw",), "mean sideways speed"),
@@ -1015,6 +1017,48 @@ def _command_reasons(protocol: dict, frames: dict) -> list[str]:
             "collected under a different command protocol"]
 
 
+def _scene_reasons(protocol: dict, frames: dict, meta: dict, alive: torch.Tensor) -> list[str]:
+    """Why a fixed-scene window's frames do not line up with the scenes its protocol declares.
+
+    The record says which scene each env walked and every frame carries the command it was issued, so
+    the two can be checked against each other -- which is what turns "the injection landed" from an
+    assumption into a reading. A scene nothing valid measured is refused by name: band coverage is the
+    whole reason the block exists, and it cannot be left to the environment's own resampling to
+    happen to satisfy.
+    """
+    scenes = protocol.get("scenes")
+    if not scenes:
+        return []
+    recorded = meta.get("scenes")
+    if not isinstance(recorded, dict) or not isinstance(recorded.get("assignment"), list):
+        return ["the protocol declares fixed scenes but the record does not say which scene each env "
+                "walked: a frame nobody assigned cannot be attributed to a band"]
+    commands = frames["command_world"]
+    assignment = torch.as_tensor(recorded["assignment"], dtype=torch.long, device=commands.device)
+    if assignment.numel() != commands.shape[1]:
+        return [f"the record's scene assignment has {assignment.numel()} entries for {commands.shape[1]} envs"]
+    reasons = []
+    for index, scene in enumerate(scenes):
+        rows = assignment == index
+        if not bool(rows.any()):
+            reasons.append(f"scene {scene.get('name')!r} was assigned to no env")
+            continue
+        if int(alive[:, rows].sum()) == 0:
+            # Unreachable while ``_alive`` counts frame 0 as inside the episode whatever ends it; kept
+            # because that is the invariant this reading rests on, and it is one line to state it.
+            reasons.append(f"scene {scene.get('name')!r} has no valid frame: it was declared, assigned, "
+                           "and measured nothing")
+            continue
+        want = torch.tensor([float(scene.get("vx", 0.0)), float(scene.get("vy", 0.0)),
+                             float(scene.get("wz", 0.0))], dtype=commands.dtype, device=commands.device)
+        deviation = float((commands[:, rows] - want).abs().max())
+        if deviation > 1e-4:
+            reasons.append(f"scene {scene.get('name')!r} declares {want.tolist()} but this env's frames "
+                           f"were issued commands {deviation:g} away from it: the injection and the "
+                           "record disagree about what was asked")
+    return reasons
+
+
 def _data_reasons(artifact: dict, alive: torch.Tensor) -> list[str]:
     """Why these numbers cannot support a verdict (empty when they can)."""
     protocol, frames = artifact["protocol"], artifact["frames"]
@@ -1033,6 +1077,7 @@ def _data_reasons(artifact: dict, alive: torch.Tensor) -> list[str]:
     empty = int((alive.sum(dim=0) == 0).sum())
     if empty:
         reasons.append(f"{empty} env(s) never contributed a frame inside their first episode")
+    reasons.extend(_scene_reasons(protocol, frames, artifact["meta"], alive))
     tracking = plan.get("tracking")
     # Only the absolute/fraction-of-command kind normalizes: the banded kind carries a floor_mps and a
     # zero-command band precisely so that a box including 0 m/s stays readable.
@@ -1156,6 +1201,17 @@ def _score(artifact: dict, alive: torch.Tensor) -> dict:
         decide("foot_lift")
     if "foot_slip" in plan:
         decide("foot_slip")
+
+    # -- the fixed scenes: how many valid frames each declared band actually got ---
+    # Read here rather than collected: the frames carry the command they were issued and the record
+    # carries the assignment, so the coverage is reconstructible offline like every other reading.
+    scene_decl = protocol.get("scenes")
+    scene_assignment = (artifact["meta"].get("scenes") or {}).get("assignment")
+    if scene_decl and scene_assignment:
+        rows = torch.as_tensor(scene_assignment, dtype=torch.long, device=alive.device)
+        diagnostics["scene_valid_frames"] = {
+            str(scene.get("name")): int(alive[:, rows == index].sum())
+            for index, scene in enumerate(scene_decl)}
 
     # -- per-body readings: always reported, gated only where the protocol says so ---
     # The record carries these whatever the protocol does with them, so a protocol that only

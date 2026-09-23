@@ -3,11 +3,11 @@ id: baseline-eval-pipeline-restructure
 title: baseline / Lizard2 eval 解耦机制计划
 scope: ablation_harness, rl_exp/tools/verify
 status: open
-landing: ablation_harness/baseline_frames.py, ablation_harness/baseline_metrics.py, ablation_harness/baseline_eval.py, ablation_harness/frame_semantics.json, rl_exp/tools/verify/test_baseline_contract.py, ablation_harness/HARNESS.md
-next: P0 已关闭（`work/closed/2026/baseline-eval-persist-before-judge.md`）。P1 两半都落（格式 2 + 足端四列 + 两条来源 meta，真跑核过几何摘要、轴标、20 ms 短接触下限，读数见 evidence）。P2 已落：新 reader `baseline-criteria-footed-1` 可读 `foot_lift_v1`/`foot_slip_v1`（参数封闭、列依赖随 kind 声明，接触点是 `v_com + ω × (p − p_com)`，复用 `diag_metrics`）；报告项声明表 + 按 reader 的完整性检查（只对新 reader 强制，旧判决不追溯作废）；报告分组为测量有效性/任务表现/行为有效性；六种合成反例各有回归。余 P3 固定命令场景、P4 验收与 harness 版本声明。协议版本与产品口径归 lizard2-family-landing。
+landing: ablation_harness/baseline_frames.py, ablation_harness/baseline_metrics.py, ablation_harness/baseline_eval.py, ablation_harness/components/command_player.py, ablation_harness/frame_semantics.json, rl_exp/tools/verify/test_baseline_contract.py, ablation_harness/HARNESS.md
+next: P0 已关闭（`work/closed/2026/baseline-eval-persist-before-judge.md`）。P1/P2 已落（格式 2 足端四列 + 来源 meta；新 reader `baseline-criteria-footed-1` + `foot_lift_v1`/`foot_slip_v1` + 报告项声明表与按 reader 的完整性检查 + 报告分组）。P3 已落：协议可选 `scenes`（常量命令，按 env 分配 + seed 打乱），评测器冻重采样并逐步注入，条件入帧 meta，判分侧同表核对并给逐场景有效帧；真跑留下一对对照（未对齐 ⇒ 判据点名空带 fail；对齐 ⇒ 四带各 4000 帧 pass，读数见 evidence）。余 P4：验收总账与 harness 版本声明。协议版本与产品口径归 lizard2-family-landing。
 close_when: 执行者核验 P1–P4 的格式兼容、离线复判、报告声明和场景覆盖，四项出口各有观测即关。不等其它事项关闭：`depends_on` 是要消费的输入，协议发布与消费留在各自事项，本项只留指针。
 depends_on: ablation_harness/baseline_frames.py, floor-contact-attribution, lizard2-family-landing
-evidence: acceptance/records/2026-09-21-baseline-eval-measurement-contract.md, acceptance/records/2026-09-23-baseline-frames-format-2-foot-reading.md, acceptance/records/2026-09-23-lizard2-v1-first-eval.md, acceptance/records/2026-09-23-lizard2-v1-gait-skate.md
+evidence: acceptance/records/2026-09-21-baseline-eval-measurement-contract.md, acceptance/records/2026-09-23-baseline-fixed-scenes.md, acceptance/records/2026-09-23-baseline-frames-format-2-foot-reading.md, acceptance/records/2026-09-23-lizard2-v1-first-eval.md, acceptance/records/2026-09-23-lizard2-v1-gait-skate.md
 ---
 
 ## 归属与边界
