@@ -1,0 +1,101 @@
+{
+  "name": "Lizard2-Flat-v2",
+  "version": 2,
+  "recipe": "lizard2-flat-v1@1",
+  "recipe_version": "v1",
+  "episode_length_s": 20.0,
+  "terrain": "plane",
+  "judge": "baseline-criteria-banded-settled-1",
+  "command": {
+    "mode": "range",
+    "lin_vel_x": [0.0, 3.0],
+    "lin_vel_y": [0.0, 0.0],
+    "ang_vel_z": [0.0, 0.0],
+    "resample_s": 10.0,
+    "why": "The recipe samples 0-3 m/s on the framework's own 10 s window, so the protocol declares a BOX and the record carries the command actually issued each frame -- a range in the yaml and the tensor the manager issues are two things the config alone cannot tell apart. The top of the window carries headroom past the retired lizard line's 3.0 m/s by owner decision (2026-09-22), so 'it cannot reach 3 m/s' must not be read as a policy failure before the actuator reading says so."
+  },
+  "displacement_frame": "initial_yaw",
+  "tracking_frame": "current_yaw",
+  "post_failure_velocity": "zero",
+  "terminal_frame": "post_physics_pre_reset",
+  "why_v1": [
+    "One mean cannot judge a range command: a run that walks in [0.1, 1.0) and stalls in [2.0, 3.0) and a run that is uniformly mediocre produce the same mean and are different failures. So the bands are part of the criterion (tracking_banded_v1 / displacement_banded_v1) and every band must pass, including the zero-command band, which is read in absolute units and in the criterion rather than left out as 'the command is rarely zero'.",
+    "The zero band is a declared band, not a special case: bands partition the command window ([0.0, 0.1) and then the three relative bands), so a frame belongs to exactly one of them, and a frame outside every band is a declaration hole the judge fails on instead of dropping.",
+    "The old normalized comparison is not reused. `tracking_v1.normalized` divides by `max(v_cmd, 1e-6)`, which turns a near-zero command into noise, and `displacement_v1.normalized` divides per env before averaging, which is unstable as the expected distance approaches zero. `floor_mps` and 'sum over the band first, divide after' replace both.",
+    "The four criteria the retired families' protocols do not have are added as new kinds with their own judge id rather than by editing a published kind: a changed criterion has to be a new name, or old records would silently point at a reader that no longer exists.",
+    "A gate here is a pass condition, not a diagnostic. `non_foot_carrier_v1` and `non_foot_load_sum_v1` are both required: the first collapses the bodies before the dwell (bodies taking turns carrying), the second sums them first (two bodies under the fraction carrying the weight between them). Their thresholds are breach LEVELS -- raising one is looser, and both sit above the measured healthy reading and below the retired line's measured failure (11.6-12.8% of body weight) by construction, not at it.",
+    "No lift term in the gait criterion. The record carries per-foot contact and load, not height, and a threshold on a quantity the run never measured is refused everywhere else in this module; the criterion therefore reads swing duration and the load recovered on landing, and the support-phase drag it cannot see stays a report-only number."
+  ],
+  "why_v2": [
+    "The banded reader was wrong about a band's first frames. On the line's first verdict (model_13999, 256 envs, seed 123, 20 s window) the zero-command band failed with the maximum at 2.622 m/s against a 0.15 limit and a net drift of 3.216 m against a 0.3 limit; all fifteen zero-command runs of that window begin at frame 499, which is the framework's 10 s resample, and the speed decays from 2.622 to below 0.1 m/s within 1.0 s. The band was reading the command step, not the policy: no causal policy is at 0 m/s on the frame the command reaches 0.",
+    "So both banded criteria declare `settle_s`: a frame is evidence only if its command has been in force that long, and the frames the episode's first command covers are as new as a change and are not evidence either. The value is derived, not chosen for its verdict: the measured deceleration is 2.622 -> 0.104 m/s in 1.0 s, about 2.5 m/s^2, and a step from the declared top of the box (3.0 m/s) at that rate needs 1.2 s, so the allowance is 1.5 s. The margin is visible in every report rather than buried here: `tracking_band_unsettled_max` carries the band's speed before the trim beside the gated one (2.622 vs 0.213 on this run).",
+    "The allowance is bounded, which is what keeps the band's teeth: a policy still at the old speed after `settle_s`, or one that creeps on through the band, is judged frame by frame exactly as before. Both directions are falsified in the frozen case set (a brake inside the window passes, a brake past it and a sustained creep do not).",
+    "The zero band's displacement reading was env-count dependent and is now per env. It summed the drift over every env and every frame and compared that to a metre limit, so the same policy read 3.216 m at 256 envs and would have read 0.2 m at 16 -- a criterion whose number moves with the batch size is not a criterion. The reading is now the worst env's drift inside the band (1.248 m summed over 15 envs was 0.083 m per env against the 0.3 m limit), and the absolute limit keeps its metres.",
+    "It is a new reader id (`baseline-criteria-banded-settled-1`) and new kind names (`*_banded_settled_v1`), not a re-pinned parameter on the published reader: the old id's block keeps pinning the no-settle semantics, so the verdict it produced stays readable as what it says -- that reader failed the zero band, and it did so on a step. The settled reader's own first report (0.213 m/s, +1.248 m) was produced before the per-env correction and is superseded by this one; its frames are the same rollout and can be re-judged offline.",
+    "Every other number is unchanged from `Lizard2-Flat-v1`: same recipe, same box, same bands, same thresholds, same dwells."
+  ],
+  "criteria": {
+    "tracking": {
+      "kind": "tracking_banded_settled_v1",
+      "params": {
+        "threshold": 0.25,
+        "floor_mps": 0.5,
+        "zero_band_mps": 0.1,
+        "zero_abs_mps": 0.15,
+        "settle_s": 1.5,
+        "bands": [[0.0, 0.1], [0.1, 1.0], [1.0, 2.0], [2.0, 3.0]]
+      }
+    },
+    "displacement": {
+      "kind": "displacement_banded_settled_v1",
+      "params": {
+        "threshold": 0.8,
+        "zero_band_mps": 0.1,
+        "zero_abs_m": 0.3,
+        "settle_s": 1.5,
+        "bands": [[0.0, 0.1], [0.1, 1.0], [1.0, 2.0], [2.0, 3.0]]
+      }
+    },
+    "survival": {
+      "kind": "survival_v1",
+      "params": {"threshold": 0.9}
+    },
+    "attitude": {
+      "kind": "sustained_tilt_v1",
+      "params": {"threshold_cos": 0.766, "sustain_s": 0.5}
+    },
+    "no_non_foot_contact": {
+      "kind": "non_foot_contact_v1",
+      "params": {"limit_n": 1.0, "eps": 1e-09}
+    },
+    "no_non_foot_carrier": {
+      "kind": "non_foot_carrier_v1",
+      "params": {"fraction": 0.05, "sustain_s": 0.5}
+    },
+    "no_non_foot_load_sum": {
+      "kind": "non_foot_load_sum_v1",
+      "params": {"fraction_sum": 0.08, "sustain_s": 0.5}
+    },
+    "gait": {
+      "kind": "gait_swing_v1",
+      "params": {"min_swing_feet": 2, "min_air_time_s": 0.1, "min_landing_load": 0.05, "band_mps": 0.5}
+    }
+  },
+  "report_only": [
+    "forward_mae_mps",
+    "lateral_speed_abs_mps",
+    "yaw_offset_abs_rad",
+    "head_tail_contact_force_n",
+    "first_episode_frame_fraction",
+    "foot_duty",
+    "foot_load_fraction",
+    "feet_down_mean",
+    "tilt_max_deg",
+    "non_foot_load_fraction",
+    "non_foot_contact_load_n",
+    "non_foot_mesh_min_z_m",
+    "foot_yaw_deg",
+    "foot_slip_mps",
+    "dof_torque_frac_of_limit"
+  ]
+}

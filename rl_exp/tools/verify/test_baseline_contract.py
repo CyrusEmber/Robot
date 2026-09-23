@@ -583,6 +583,10 @@ def test_termination_injection_is_independent_of_wiring():
 # prints the digests to paste after deliberately publishing a new id.
 V4_PROTOCOL = json.loads((_REPO / "ablation_harness/protocols/baseline_flat_v4.json").read_text())
 LIZARD2_PROTOCOL = json.loads((_REPO / "ablation_harness/protocols/lizard2_flat_v1.json").read_text())
+#: The same protocol with the settled banded kinds (``settle_s``): a band's first frames are not
+#: evidence, so it is a reader of its own rather than a re-pinned parameter on the one above.
+LIZARD2_SETTLED_PROTOCOL = json.loads(
+    (_REPO / "ablation_harness/protocols/lizard2_flat_v2.json").read_text())
 _SEMANTICS_PATH = _REPO / "ablation_harness" / "judge_semantics.json"
 _STEP_DT = 0.02  # every fixture below runs the protocol's 20 s window in 1000 steps
 
@@ -771,9 +775,18 @@ def _fixture_banded(kw):
     ``stop_after`` stops the robot while the command keeps being issued; ``load_fraction`` /
     ``load_frames`` put that fraction of body weight on both non-foot bodies; ``swing_feet`` /
     ``air_frames`` give that many feet a swing of that length; ``zero_env`` holds one env at a zero
-    command for the whole window; ``protocol_patch`` edits a parameter of a copy of the protocol.
+    command for the whole window; ``meta_plain`` hands the episode's initial state in as plain
+    numbers instead of tensors; ``settled`` reads the window under ``lizard2_flat_v2.json`` (the
+    settled banded kinds) instead of v1, with ``settle_s`` overriding its declared 0.5 s; ``coast`` is
+    ``(speed, frames)`` -- the robot keeps that speed for that many frames after the command drops to
+    zero from a nonzero one, which is what a command step costs in reality; ``protocol_patch`` edits a
+    parameter of a copy of the protocol.
     """
-    protocol = json.loads(json.dumps(LIZARD2_PROTOCOL))
+    protocol = json.loads(json.dumps(LIZARD2_SETTLED_PROTOCOL if kw.get("settled")
+                                     else LIZARD2_PROTOCOL))
+    if kw.get("settled") and "settle_s" in kw:
+        for gate in ("tracking", "displacement"):
+            protocol["criteria"][gate]["params"]["settle_s"] = kw["settle_s"]
     for gate, params in (kw.get("protocol_patch") or {}).items():
         protocol["criteria"][gate]["params"].update(params)
     steps, num_envs = 200, 2
@@ -785,15 +798,31 @@ def _fixture_banded(kw):
     zero_env, swing = kw.get("zero_env"), kw.get("swing_feet", 0)
     air = kw.get("air_frames", 8)
     load_fraction, load_frames = kw.get("load_fraction", 0.0), kw.get("load_frames", 0)
+    coast = kw.get("coast")
 
     def commanded(env, step):
         return 0.0 if env == zero_env else speeds[step]
+
+    def zero_run_start(env, step):
+        """First frame of the zero-command run ``step`` is in, when that run follows a moving command."""
+        if commanded(env, step) != 0.0:
+            return None
+        start = step
+        while start > 0 and commanded(env, start - 1) == 0.0:
+            start -= 1
+        return start if start > 0 and commanded(env, start - 1) != 0.0 else None
 
     def velocity(env, step):
         speed = commanded(env, step)
         if spoil is not None and spoil[0] <= speed < spoil[1]:
             speed *= factor
-        return creep if speed == 0.0 else speed
+        if speed == 0.0:
+            if coast is not None:
+                start = zero_run_start(env, step)
+                if start is not None and step - start < coast[1]:
+                    return coast[0]
+            return creep
+        return speed
 
     forward = [0.0] * num_envs
     positions = []
@@ -819,6 +848,13 @@ def _fixture_banded(kw):
         loaded = load_fraction if 10 <= step < 10 + load_frames else 0.0
         return torch.full((num_envs, 2), loaded)
 
+    # ``meta_plain`` hands the initial state in as plain numbers. The collector passes meta through
+    # unchanged, so on the live path these are the device tensors the episode started from while the
+    # frames are CPU copies: a gate that assumes either device breaks on both, and only this one can
+    # be reproduced without a second device in the test.
+    meta = ({"start_pos": [[0.0, 0.0, 0.0]] * num_envs, "start_yaw": [0.0] * num_envs}
+            if kw.get("meta_plain") else {})
+
     return protocol, build(protocol, steps, num_envs=num_envs, series={
         "command_world": lambda step: torch.tensor([[commanded(env, step), 0.0, 0.0]
                                                     for env in range(num_envs)]),
@@ -828,7 +864,7 @@ def _fixture_banded(kw):
         "foot_contact": contact,
         "foot_fraction": fraction,
         "non_foot_fraction": non_foot,
-    })
+    }, **meta)
 
 
 # Registered next to its definition rather than in the table above: the table is built at import
@@ -882,6 +918,63 @@ def test_banded_displacement_sums_over_the_band_before_dividing():
     assert abs(stopped["metrics"]["displacement_band_ratio"]["2-3mps"]) < 1e-6, stopped["metrics"]
     assert abs(stopped["metrics"]["displacement_band_ratio"]["0.1-1mps"] - 1.0) < 1e-6, \
         "a band the robot did walk must not be charged for a later one"
+
+
+def test_banded_displacement_reads_an_initial_state_that_is_not_already_a_tensor():
+    """The initial state travels beside the frames, so the gate must not assume a device for it.
+
+    The live path hands meta through as the tensors the episode started from -- device tensors, while
+    the frames are CPU copies -- and the first real run of this gate died on exactly that ("Expected
+    all tensors to be on the same device, but found at least two devices, cuda:0 and cpu"). A second
+    device is not available to a fixture, so this one hands the same state in as plain numbers: the
+    same assumption, broken the same way, raising the same way before the conversion.
+    """
+    sweep = {"segments": [[0.0, 50], [0.5, 50], [1.5, 50], [2.5, 50]], "swing_feet": 2,
+             "meta_plain": True}
+    plain = baseline_metrics.judge(_fixture_banded(sweep)[1])
+    assert plain["gates"]["displacement"], plain["metrics"]["displacement_band_reasons"]
+    assert abs(plain["metrics"]["displacement_band_ratio"]["1-2mps"] - 1.0) < 1e-6, plain["metrics"]
+
+
+def test_settled_banded_criteria_forgive_the_command_step_and_nothing_more():
+    """A band boundary is a step: the frames before the command has been in force are not evidence.
+
+    Same window several ways, on the schedule that walks last and then stops, which is where a real
+    resample lands (the line's own zero band began at frame 499, the 10 s boundary). ``coast`` is the
+    braking the step costs: inside the declared 1.5 s it must not be held against the policy, beyond it
+    it must be, and a robot that keeps creeping through the band is a failure either way. The same
+    braking run under the un-settled reader fails, which is what the settle window changed, and the
+    zero band's displacement reading is metres per env rather than a sum over the band's envs.
+    """
+    walk_then_stop = {"segments": [[0.5, 50], [1.5, 50], [2.5, 50], [0.0, 50]], "swing_feet": 2}
+    # The fixture's step is 0.1 s, so the declared 1.5 s of settling is 15 frames.
+    inside = baseline_metrics.judge(_fixture_banded(
+        {**walk_then_stop, "settled": True, "coast": (2.6, 10)})[1])
+    assert inside["gates"]["tracking"], inside["metrics"]["tracking_band_reasons"]
+    assert inside["gates"]["displacement"], inside["metrics"]["displacement_band_reasons"]
+    assert abs(inside["metrics"]["tracking_band_unsettled_max"]["0-0.1mps"] - 2.6) < 1e-6, \
+        "the report must carry what the trim removed, not only what it left"
+
+    unread = baseline_metrics.judge(_fixture_banded({**walk_then_stop, "coast": (2.6, 10)})[1])
+    assert not unread["gates"]["tracking"], \
+        "the published reader has no settle window, so it reads the step: that is the defect"
+
+    beyond = baseline_metrics.judge(_fixture_banded(
+        {**walk_then_stop, "settled": True, "coast": (2.6, 25)})[1])
+    assert not beyond["gates"]["tracking"], beyond["metrics"]["tracking_band_error"]
+    assert not beyond["gates"]["displacement"], beyond["metrics"]["displacement_band_ratio"]
+
+    creeping = baseline_metrics.judge(_fixture_banded(
+        {**walk_then_stop, "settled": True, "creep": 0.4})[1])
+    assert not creeping["gates"]["tracking"], creeping["metrics"]["tracking_band_error"]
+
+    # Five settled frames of a 1.0 m/s crawl is 0.5 m in *each* env: metres, not the 1.0 m two envs
+    # add up to. A criterion whose number scales with the batch size is not a criterion.
+    per_env = baseline_metrics.judge(_fixture_banded(
+        {**walk_then_stop, "settled": True, "coast": (1.0, 20)})[1])
+    assert not per_env["gates"]["displacement"], per_env["metrics"]["displacement_band_ratio"]
+    assert abs(per_env["metrics"]["displacement_band_ratio"]["0-0.1mps"] - 0.5) < 1e-6, \
+        per_env["metrics"]["displacement_band_ratio"]
 
 
 def test_non_foot_load_sum_catches_two_bodies_under_the_single_body_fraction():

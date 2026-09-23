@@ -83,7 +83,7 @@
         "tracking_v1"
       ],
       "kinds_sha256": "sha256:b1e9046fec28d0381cd3976e3cefb80fe5b311ac185d440e5344a35638bdb019",
-      "frozen_sha256": "sha256:15484281c2f6ddab6ae081c2ee9200891ef1db6e1a67b7c09ba0b4118c68fbc9",
+      "frozen_sha256": "sha256:63a051e2f8264e783e227ffe9c0d5ea0bb9a7db7aec1bd17c654b6750e000ba9",
       "cases": {
         "banded_sweep_passes_every_axis": {
           "fixture": "banded",
@@ -93,6 +93,12 @@
             "gates": {"tracking": true, "displacement": true, "gait": true,
                       "no_non_foot_carrier": true, "no_non_foot_load_sum": true}
           }
+        },
+        "banded_initial_state_need_not_be_a_tensor_on_the_frames_device": {
+          "fixture": "banded",
+          "kw": {"segments": [[0.0, 50], [0.5, 50], [1.5, 50], [2.5, 50]], "swing_feet": 2,
+                 "meta_plain": true},
+          "expect": {"verdict": "pass", "gates": {"displacement": true}}
         },
         "banded_tracking_fails_when_one_band_lags": {
           "fixture": "banded",
@@ -161,6 +167,104 @@
           "fixture": "banded",
           "kw": {"segments": [[0.0, 50], [0.5, 50], [1.5, 50], [2.5, 50]], "swing_feet": 2,
                  "air_frames": 8, "zero_env": 1},
+          "expect": {"verdict": "pass", "gates": {"gait": true}}
+        }
+      }
+    },
+    "baseline-criteria-banded-settled-1": {
+      "module": "ablation_harness.baseline_metrics",
+      "constant": "BANDED_SETTLED_JUDGE_ID",
+      "driver": "baseline",
+      "protocol_file": "lizard2_flat_v2.json",
+      "kinds": [
+        "displacement_banded_settled_v1",
+        "displacement_v1",
+        "gait_swing_v1",
+        "mesh_clearance_v1",
+        "non_foot_carrier_v1",
+        "non_foot_contact_v1",
+        "non_foot_load_sum_v1",
+        "survival_v1",
+        "sustained_tilt_v1",
+        "tracking_banded_settled_v1",
+        "tracking_v1"
+      ],
+      "kinds_sha256": "sha256:77052228467b4951449663a663efe0664db98a92bf45018e0d2e973fe96c0f61",
+      "frozen_sha256": "sha256:6f27b59b223654f8feb6b6ef256247b7f85093df182ee0674c3030952e7fd6a7",
+      "cases": {
+        "settled_sweep_passes_every_axis": {
+          "fixture": "banded",
+          "kw": {"segments": [[0.0, 50], [0.5, 50], [1.5, 50], [2.5, 50]], "swing_feet": 2,
+                 "settled": true},
+          "expect": {
+            "verdict": "pass",
+            "gates": {"tracking": true, "displacement": true, "gait": true,
+                      "no_non_foot_carrier": true, "no_non_foot_load_sum": true}
+          }
+        },
+        "settled_ignores_a_brake_inside_the_declared_window": {
+          "fixture": "banded",
+          "kw": {"segments": [[0.5, 50], [1.5, 50], [2.5, 50], [0.0, 50]], "swing_feet": 2,
+                 "settled": true, "coast": [2.6, 10]},
+          "expect": {"verdict": "pass", "gates": {"tracking": true, "displacement": true}}
+        },
+        "settled_still_fails_a_brake_longer_than_the_window": {
+          "fixture": "banded",
+          "kw": {"segments": [[0.5, 50], [1.5, 50], [2.5, 50], [0.0, 50]], "swing_feet": 2,
+                 "settled": true, "coast": [2.6, 25]},
+          "expect": {"verdict": "fail", "gates": {"tracking": false, "displacement": false}}
+        },
+        "settled_zero_band_drift_is_metres_per_env_not_a_sum_over_the_band": {
+          "fixture": "banded",
+          "kw": {"segments": [[0.5, 50], [1.5, 50], [2.5, 50], [0.0, 50]], "swing_feet": 2,
+                 "settled": true, "coast": [1.0, 20]},
+          "expect": {"verdict": "fail", "gates": {"displacement": false}}
+        },
+        "settled_still_fails_a_robot_that_creeps_through_the_band": {
+          "fixture": "banded",
+          "kw": {"segments": [[0.5, 50], [1.5, 50], [2.5, 50], [0.0, 50]], "swing_feet": 2,
+                 "settled": true, "creep": 0.4},
+          "expect": {"verdict": "fail", "gates": {"tracking": false}}
+        },
+        "settled_a_band_nothing_was_commanded_into_is_not_a_pass": {
+          "fixture": "banded",
+          "kw": {"segments": [[0.5, 100], [1.5, 100]], "settled": true},
+          "expect": {"verdict": "fail", "gates": {"tracking": false}}
+        },
+        "settled_frames_in_no_declared_band_are_a_declaration_hole": {
+          "fixture": "banded",
+          "kw": {"segments": [[0.5, 100], [1.5, 100]], "settled": true,
+                 "protocol_patch": {"tracking": {"bands": [[0.0, 0.1], [0.1, 1.0]]}}},
+          "expect": {"verdict": "fail", "gates": {"tracking": false}}
+        },
+        "settled_displacement_charges_the_stopped_half": {
+          "fixture": "banded",
+          "kw": {"segments": [[0.0, 50], [0.5, 50], [1.5, 50], [2.5, 50]], "swing_feet": 2,
+                 "settled": true, "stop_after": 150},
+          "expect": {"verdict": "fail", "gates": {"displacement": false}}
+        },
+        "settled_load_sum_two_bodies_under_the_fraction_still_fail": {
+          "fixture": "banded",
+          "kw": {"segments": [[0.5, 200]], "settled": true, "load_fraction": 0.04, "load_frames": 6},
+          "expect": {"verdict": "fail",
+                     "gates": {"no_non_foot_carrier": true, "no_non_foot_load_sum": false}}
+        },
+        "settled_gait_two_swings_pass": {
+          "fixture": "banded",
+          "kw": {"segments": [[0.0, 50], [0.5, 50], [1.5, 50], [2.5, 50]], "swing_feet": 2,
+                 "settled": true, "air_frames": 8},
+          "expect": {"verdict": "pass", "gates": {"gait": true}}
+        },
+        "settled_gait_one_swing_is_not_the_declared_number": {
+          "fixture": "banded",
+          "kw": {"segments": [[0.0, 50], [0.5, 50], [1.5, 50], [2.5, 50]], "swing_feet": 1,
+                 "settled": true, "air_frames": 8},
+          "expect": {"verdict": "fail", "gates": {"gait": false}}
+        },
+        "settled_gait_ignores_an_env_commanded_to_stand": {
+          "fixture": "banded",
+          "kw": {"segments": [[0.0, 50], [0.5, 50], [1.5, 50], [2.5, 50]], "swing_feet": 2,
+                 "settled": true, "air_frames": 8, "zero_env": 1},
           "expect": {"verdict": "pass", "gates": {"gait": true}}
         }
       }

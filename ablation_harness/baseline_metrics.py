@@ -74,6 +74,14 @@ JUDGE_ID = "baseline-criteria-1"
 #: not be attributed to the reader that predates them.
 BANDED_JUDGE_ID = "baseline-criteria-banded-1"
 
+#: The reader for the banded criteria once a band's first frames are no longer evidence. The first
+#: real verdict of the lizard2 line failed its zero-command band on the single frame the 10 s resample
+#: dropped the command to 0 m/s (2.622 m/s there, decaying below 0.1 within 1.0 s, 0.004 m per frame
+#: after 0.5 s): the band judges a step change the policy cannot have followed yet. The settled reader
+#: declares how long a command must have been in force before a frame counts, and a different
+#: allowance is a different reader -- hence a new id rather than a re-pinned parameter.
+BANDED_SETTLED_JUDGE_ID = "baseline-criteria-banded-settled-1"
+
 #: The identity of the pre-criteria reader. Spelled by mechanism, not by version: ``v1``/``v2``/``v3``
 #: are three declarations read by *one* implementation, and this names that implementation. Their
 #: protocol identity travels next to it, so "which thresholds" and "which reader" stay separable.
@@ -104,6 +112,16 @@ CRITERION_KINDS = {
     "displacement_banded_v1": {
         "params": ("threshold", "zero_band_mps", "zero_abs_m", "bands"),
         "columns": ("command_world", "pos")},
+    # The same two criteria with a declared settling time. ``settle_s`` is how long a command must have
+    # been in force before a frame is evidence; the band boundary is a step, and at the frame it lands
+    # no causal policy is already at the new speed. New kind names on purpose: adding the parameter to
+    # the kinds above would move a published reader's semantics instead of adding a reader.
+    "tracking_banded_settled_v1": {
+        "params": ("threshold", "floor_mps", "zero_band_mps", "zero_abs_mps", "settle_s", "bands"),
+        "columns": ("command_world", "velocity_yaw")},
+    "displacement_banded_settled_v1": {
+        "params": ("threshold", "zero_band_mps", "zero_abs_m", "settle_s", "bands"),
+        "columns": ("command_world", "pos")},
     # The single-body criterion reads each body against the fraction *before* the dwell, so bodies
     # taking turns under the fraction accumulate into one sustained reading there. Two bodies at 4%
     # under a 5% threshold are invisible to it while carrying 8% between them; here the load is
@@ -129,6 +147,10 @@ JUDGE_KINDS = {
                       "non_foot_contact_v1", "non_foot_carrier_v1", "mesh_clearance_v1",
                       "tracking_banded_v1", "displacement_banded_v1", "non_foot_load_sum_v1",
                       "gait_swing_v1"),
+    BANDED_SETTLED_JUDGE_ID: ("tracking_v1", "displacement_v1", "survival_v1", "sustained_tilt_v1",
+                              "non_foot_contact_v1", "non_foot_carrier_v1", "mesh_clearance_v1",
+                              "tracking_banded_settled_v1", "displacement_banded_settled_v1",
+                              "non_foot_load_sum_v1", "gait_swing_v1"),
 }
 
 
@@ -224,6 +246,30 @@ def _band_label(band: tuple[float, float]) -> str:
     return f"{band[0]:g}-{band[1]:g}mps"
 
 
+def _settled(command: torch.Tensor, dt: float, params: dict) -> torch.Tensor | None:
+    """``(T, N)`` bool: the command has been in force for at least this kind's ``settle_s``.
+
+    ``None`` when the kind declares no settling time, which is how the banded kinds read. The question
+    the allowance answers is causal: a band boundary is a step, and on the frame it lands no policy has
+    had time to be at the new speed. Measured on the lizard2 line's first verdict, the zero band's
+    worst frame is the resample frame itself -- 2.622 m/s against a 0.15 limit, decaying below 0.1
+    within 1.0 s and moving 0.004 m per frame after 0.5 s -- so the whole failure was the step, not
+    the policy. The allowance is bounded and declared: a policy still at the old speed after
+    ``settle_s`` is judged like any other frame, and the frames the episode's first command covers are
+    as new as a change, so they are not evidence either.
+    """
+    settle_s = float(params.get("settle_s", 0.0))
+    if settle_s <= 0.0:
+        return None
+    steps = max(1, int(round(settle_s / dt)))
+    index = torch.arange(command.shape[0], device=command.device).reshape(-1, 1).expand_as(command)
+    changed = torch.zeros_like(command, dtype=torch.bool)
+    changed[0] = True  # the episode's first command is as new as a change
+    changed[1:] = command[1:] != command[:-1]
+    since = torch.cummax(torch.where(changed, index, torch.zeros_like(index)), dim=0).values
+    return (index - since) >= steps
+
+
 def _gate_tracking_banded_v1(frames: dict, alive: torch.Tensor, dt: float, measured: dict, meta: dict,
                              params: dict) -> bool:
     """Per-band forward-speed error, with the zero-command band judged on absolute speed.
@@ -235,18 +281,21 @@ def _gate_tracking_banded_v1(frames: dict, alive: torch.Tensor, dt: float, measu
     episode are charged the full error (a policy that stopped early keeps scoring), while the zero
     band is read on ``alive`` frames only -- otherwise a fallen robot would collect "stood still"
     credit. A band with no frames inside the episode is not a pass: it is a run whose command
-    schedule never covered the declared window.
+    schedule never covered the declared window. With a ``settle_s`` declared, only frames whose
+    command has been in force that long are read at all -- see :func:`_settled` for why a band's first
+    frames are not evidence about the policy.
     """
     command = frames["command_world"][:, :, 0]
     forward = frames["velocity_yaw"][:, :, 0]
     zero_band = float(params["zero_band_mps"])
+    settled = _settled(command, dt, params)
     relative = torch.where(alive, (forward - command).abs() / command.clamp_min(params["floor_mps"]),
                            torch.ones_like(forward))
     masks, unclaimed = _band_masks(command, params)
     counts, readings, reasons = {}, {}, []
     for band, mask in masks:
         label = _band_label(band)
-        inside = mask & alive
+        inside = mask & alive if settled is None else mask & alive & settled
         counts[label] = int(inside.sum())
         if counts[label] == 0:
             reasons.append(f"{label} measured nothing")
@@ -257,11 +306,17 @@ def _gate_tracking_banded_v1(frames: dict, alive: torch.Tensor, dt: float, measu
         if band[1] <= zero_band:
             worst = float(_keep(forward.abs(), inside, 0.0).max())
             readings[label] = worst
+            if settled is not None:
+                # Reported beside the gated number: what the settle window removed. On the line's own
+                # run the zero band read 2.622 m/s untrimmed and 0.213 m/s trimmed, so a reader who
+                # wants the allowance moved has the margin in front of them.
+                measured.setdefault("tracking_band_unsettled_max", {})[label] = \
+                    float(_keep(forward.abs(), mask & alive, 0.0).max())
             if worst > params["zero_abs_mps"]:
                 reasons.append(f"{label} moved at {worst:.3f} m/s with no command (limit "
                                f"{params['zero_abs_mps']})")
             continue
-        mean_error = float(relative[mask].mean())
+        mean_error = float(relative[mask if settled is None else mask & settled].mean())
         readings[label] = mean_error
         if not mean_error < params["threshold"]:
             reasons.append(f"{label} error {mean_error:.3f} is not below {params['threshold']}")
@@ -282,21 +337,31 @@ def _gate_displacement_banded_v1(frames: dict, alive: torch.Tensor, dt: float, m
     the episode ended (the command is still issued while the robot no longer moves), so a policy that
     stopped early is pulled down by its own denominator instead of having the rest of the window cut
     away. The numerator counts per-frame forward travel in the episode's initial-yaw frame -- an
-    increment, not a position difference, so a respawn's jump cannot enter it.
+    increment, not a position difference, so a respawn's jump cannot enter it. With a ``settle_s``
+    declared, a band is read over the frames whose command has been in force that long: the numerator
+    and the denominator drop the same frames, so the ratio stays a ratio and the braking distance a
+    command step costs is charged to no band.
     """
     command = frames["command_world"][:, :, 0]
     zero_band = float(params["zero_band_mps"])
-    start, yaw = meta["start_pos"], meta["start_yaw"]
-    heading = torch.stack([torch.cos(yaw), torch.sin(yaw), torch.zeros_like(yaw)], dim=-1)  # (N, 3)
+    # The collector hands meta through unchanged, so it may still be the live device tensor the episode
+    # started from while the frames are already CPU copies. Bring it to the frames, the same way the
+    # retired displacement kind does -- assuming a device is what broke this gate's first real run
+    # ("Expected all tensors to be on the same device, but found at least two devices, cuda:0 and cpu").
     position = frames["pos"]
+    device = position.device
+    start = torch.as_tensor(meta["start_pos"]).to(device)
+    yaw = torch.as_tensor(meta["start_yaw"]).to(device)
+    heading = torch.stack([torch.cos(yaw), torch.sin(yaw), torch.zeros_like(yaw)], dim=-1)  # (N, 3)
     travel = torch.zeros_like(command)
     travel[0] = (position[0] - start).mul(heading).sum(dim=-1)
     travel[1:] = (position[1:] - position[:-1]).mul(heading).sum(dim=-1)
     masks, unclaimed = _band_masks(command, params)
+    settled = _settled(command, dt, params)
     counts, readings, reasons = {}, {}, []
     for band, mask in masks:
         label = _band_label(band)
-        inside = mask & alive
+        inside = mask & alive if settled is None else mask & alive & settled
         counts[label] = int(inside.sum())
         if counts[label] == 0:
             reasons.append(f"{label} measured nothing")
@@ -305,7 +370,12 @@ def _gate_displacement_banded_v1(frames: dict, alive: torch.Tensor, dt: float, m
             reasons.append(f"{label} straddles the zero-command boundary at {zero_band:g}")
             continue
         if band[1] <= zero_band:
-            net = float(travel.masked_fill(~inside, 0.0).sum())
+            # Per env, then the worst env: the limit is metres, so the reading has to be metres. Summing
+            # over every env as well multiplied the reading by however many envs the band covered, which
+            # made the same policy read differently at 16 and 256 envs (the settled reader's first run
+            # read +1.248 m = 0.083 m per env against a 0.3 m limit).
+            per_env = travel.masked_fill(~inside, 0.0).sum(dim=0)
+            net = float(per_env.sum()) if settled is None else float(per_env.abs().max())
             readings[label] = net
             if abs(net) > params["zero_abs_m"]:
                 reasons.append(f"{label} drifted {net:+.3f} m with no command (limit "
@@ -313,8 +383,9 @@ def _gate_displacement_banded_v1(frames: dict, alive: torch.Tensor, dt: float, m
             continue
         # Summed over the band's frames, then divided: the command of every frame in the band counts,
         # including the frames after the episode ended, which is what makes stopping early visible.
-        commanded = float((command[mask] * dt).sum())
-        actual = float(travel.masked_fill(~(mask & alive), 0.0).sum())
+        samples = mask if settled is None else mask & settled
+        commanded = float((command[samples] * dt).sum())
+        actual = float(travel.masked_fill(~inside, 0.0).sum())
         ratio = actual / commanded if commanded > 0.0 else 0.0
         readings[label] = ratio
         if not ratio > params["threshold"]:
@@ -388,6 +459,11 @@ CRITERIA = {
     "mesh_clearance_v1": _gate_mesh_clearance_v1,
     "tracking_banded_v1": _gate_tracking_banded_v1,
     "displacement_banded_v1": _gate_displacement_banded_v1,
+    # One function each, two kinds: ``settle_s`` is what the kind may declare, and a kind that does not
+    # declare it reaches the same code with no settling time, so the published banded reader keeps
+    # reading exactly what it read before.
+    "tracking_banded_settled_v1": _gate_tracking_banded_v1,
+    "displacement_banded_settled_v1": _gate_displacement_banded_v1,
     "non_foot_load_sum_v1": _gate_non_foot_load_sum_v1,
     "gait_swing_v1": _gate_gait_swing_v1,
 }
