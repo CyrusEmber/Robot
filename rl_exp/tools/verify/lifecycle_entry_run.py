@@ -49,9 +49,16 @@ RETIRED_LINE = "lizard/parkour"
 
 
 def _run(command: list[str], *, cwd: pathlib.Path, environment: dict) -> subprocess.CompletedProcess:
-    """One real process, output captured (the judgement reads it, so it has to be here)."""
+    """One real process, output captured (the judgement reads it, so it has to be here).
+
+    The decode is pinned rather than left to the host locale: the trainer's log is not ASCII, and
+    when the locale cannot decode it the reader thread dies, ``stdout`` arrives as ``None`` and the
+    run still reports success -- evidence silently missing instead of a loud failure. UTF-8 with
+    replacement is how the other tool-output readers in this tree decode.
+    """
     print(f"[entry-run] {' '.join(command[:3])} ... (cwd {cwd})", flush=True)
-    return subprocess.run(command, cwd=str(cwd), env=environment, capture_output=True, text=True, timeout=1800)
+    return subprocess.run(command, cwd=str(cwd), env=environment, capture_output=True, text=True,
+                          encoding="utf-8", errors="replace", timeout=1800)
 
 
 def _environment() -> dict:
