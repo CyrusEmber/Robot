@@ -168,6 +168,8 @@ def self_check() -> None:
         "joint_actual_hfe": torch.full((12,), 0.1),
         "joint_limits_hip": (-1.0, 1.0),
         "joint_limits_hfe": (-1.0, 1.0),
+        "joint_kp": 800.0,
+        "joint_effort_limit": 180.0,
     }
     summary = summarise(series, 0.5, transition_frames=1)
     # Every ``p50`` here is ``torch.median``, i.e. the LOWER middle value on an even count, not the
@@ -188,6 +190,9 @@ def self_check() -> None:
         "hip_err_p50_in_range_rad": 0.1, "hip_err_p50_out_of_range_rad": None,
         "swing_mid_clearance_p50_m": 0.02, "swing_mid_clearance_target_p50_m": 0.015,
         "unloaded_pred_linear_p50_m": 0.001, "unloaded_pred_rotation_p50_m": 0.002,
+        "hip_actual_at_stop_frac": 0.0, "hip_actual_at_stop_dwell_max_frames": 0,
+        "hip_out_of_range_actual_at_stop_frac": None, "hip_clip_removed_torque_p50_nm": None,
+        "hip_effort_limit_nm": 180.0,
     }
     for key, value in expected.items():
         assert summary[key] == value, (key, summary[key], value)
@@ -308,6 +313,25 @@ def summarise(foot: dict, contact_n: float, transition_frames: int = 2) -> dict:
                                                 if bool((~outside).any()) else None)
         out[f"{joint}_err_p50_out_of_range_rad"] = (round(float(error[outside].median()), 4)
                                                     if bool(outside.any()) else None)
+        # The two facts that decide whether clipping an out-of-range reference is right, told apart:
+        # a joint SITTING at its stop while the reference keeps pushing is a different situation from
+        # a joint still moving normally with a distant reference -- which is how a position PD is
+        # asked for torque in the first place. The out-of-range fraction alone cannot tell them apart.
+        at_stop = torch.minimum(actual - low, high - actual).abs() < 0.01
+        dwell = max((j - i for i, j in _runs(at_stop)), default=0)
+        out[f"{joint}_actual_at_stop_frac"] = round(float(at_stop.float().mean()), 3)
+        out[f"{joint}_actual_at_stop_dwell_max_frames"] = int(dwell)
+        out[f"{joint}_out_of_range_actual_at_stop_frac"] = (
+            round(float(at_stop[outside].float().mean()), 3) if bool(outside.any()) else None)
+        # What clipping would remove, in torque: stiffness times the part of the reference that lies
+        # beyond the stop (only while the joint is still inside it -- once the joint sits at the stop
+        # the drive is the same either way, which is the "one saturation into the same saturation"
+        # case). Effort limit is reported next to it so the size is readable.
+        kp, effort = foot[f"joint_kp"], foot[f"joint_effort_limit"]
+        removed = (kp * (target - target.clamp(low, high)).abs())[outside & ~at_stop]
+        out[f"{joint}_clip_removed_torque_p50_nm"] = (round(float(removed.median()), 2)
+                                                     if bool(removed.numel()) else None)
+        out[f"{joint}_effort_limit_nm"] = round(float(effort), 1)
     return out
 
 
@@ -349,6 +373,12 @@ def main() -> None:
     # Position limits, because "the target asks for the sole below the floor" has two very different
     # readings: a pose the policy chose, or a target pressed against a stop it cannot pass.
     pos_limits = robot.data.joint_pos_limits.torch[0]  # (J, 2); the same for every env
+    # Stiffness and effort limit from the INSTANTIATED cfg, not copied from the yaml: with position
+    # PD a target error is a torque (stiffness times the error), so these two numbers decide what
+    # clipping an out-of-range target would actually remove.
+    legs = cfg.scene.robot.actuators.get("legs") if hasattr(cfg.scene.robot, "actuators") else None
+    legs_kp = float(getattr(legs, "stiffness", 0.0) or 0.0)
+    legs_effort = float(getattr(legs, "effort_limit", 0.0) or 0.0)
 
     command = torch.tensor([[speed, 0.0, 0.0] for speed in speeds], device=live.device)
     command_term = live.command_manager.get_term("base_velocity")
@@ -437,6 +467,8 @@ def main() -> None:
                 row[f"joint_target_{joint}"] = target[alive, env_index, column]
                 row[f"joint_actual_{joint}"] = actual[alive, env_index, column]
                 row[f"joint_limits_{joint}"] = tuple(pos_limits[column].tolist())
+                row[f"joint_kp"] = legs_kp
+                row[f"joint_effort_limit"] = legs_effort
             entry["feet"].append(summarise(row, args_cli.contact_n, args_cli.transition_frames))
         entry["series"] = {key: [[round(float(x), 5) for x in values[alive, env_index, foot].tolist()]
                                  for foot in range(len(foot_bodies))]
