@@ -50,6 +50,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import pathlib
 import sys
 
@@ -340,10 +341,16 @@ if __name__ == "__main__":
         try:
             main()
         except BaseException:
-            # app.close() ends the process, so a traceback raised past it never reaches the terminal.
+            # The two losses `app.close()` otherwise takes with it, both measured on a real run (see
+            # ablation_harness/baseline_eval.py's failure branch): a traceback raised past close()
+            # never reaches the terminal, and close() ends the process with status 0, so a caller
+            # reading the status calls a failed run a success -- and then reads the previous
+            # report, which is exactly how a crashed probe would look like a fresh reading.
+            # Report, flush, then leave with a non-zero status before close can run.
             import traceback
             traceback.print_exc()
             sys.stdout.flush()
-            raise
+            sys.stderr.flush()
+            os._exit(1)
         finally:
             simulation_app.close()
