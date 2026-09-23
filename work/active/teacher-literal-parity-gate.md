@@ -2,7 +2,7 @@
 id: teacher-literal-parity-gate
 title: 补闸门：教师快照的资产派生字面量要有可验证关系（矩阵定位的缺口）
 scope: rl_exp/tools/verify, rl_exp/tasks, rl_exp/versions/freeze_parity.json
-status: open
+status: blocked
 landing: rl_exp/tools/verify/check_dr_parity.py, rl_exp/versions/freeze_parity.json, rl_exp/tasks/teacher_env_cfg.py
 next: 先**由用户拍板**形态（三选一）：① **声明式** —— 每个冻结字面量旁声明它所依据的资产事实（体尺 / 足底尺寸 / 运动范围的来源），闸门断言该声明仍与它命名的资产一致（把 ⑤ 的形状扩到 `tasks/*.py` 里的字面量）；② **派生式** —— 资产派生量从资产或参数导出而非手抄，并把"冻结的是当时的资产事实、不是那串数字"写清；③ **对照式** —— 断言教师字面量与家族侧构造结果一致，**默认不选**：教师是 *frozen* 对照，与家族相等不是不变式（除非把比对面收窄到"资产事实"那一层）。形态定后：把矩阵四例做成夹具（C3 / C4 必须由静默变红，C1 / C2 保持现状），并复跑 `rl_exp\tools\verify\run_offline_checks.bat`
 close_when: 闸门落地且两侧夹具齐（"教师侧资产派生字面量被改 ⇒ 红"与"家族侧有意调参 ⇒ 不误红"）、离线套件全绿 ⇒ 关。读数与缺口定义见 `acceptance/records/2026-09-22-teacher-snapshot-parity-matrix.md`（本项不复述）
