@@ -7,7 +7,7 @@ landing: rl_exp/tools/verify/check_golden_frozen.py, rl_exp/tools/verify/check_d
 next: 第二步第三类（开训前协议绑定）**blocked**：等两件外部事 —— `eval-protocol-before-training` ① 的形态拍板（其 `next` 首句即"在动工前写清"），与 `baseline-eval-protocol-gap`（in_progress）的 v2 首跑报告；且这两个事项互相 `depends_on`（环，闸门只校验目标 id 存在、不查环）。第二步其余三类已完成（`evidence` 第 2-4 条）⇒ 转第三步试点：拿已冻结的 `lizard2_flat_v1`（带 `suite_expected` 与四个新 kind）与 `baseline_flat_v4` 走一次"纯阈值调整"的候选 → 差异摘要 → 审查批准 → 检查执行，并与第一步计数器（手改 1 处 + 2 处文档复述）对比
 close_when: 按第五步对比基线：纯阈值调整不必换 kind、不必多处抄同一组数值；新线漏登记明确红；旧协议与旧记录仍可读；批准边界与不同时间点的独立验证保留；agent 一次正常修改需读的材料减少 ⇒ 推广。若需通用注册表或大规模历史迁移 ⇒ 补完修复后停止扩展并记下理由
 depends_on: eval-protocol-before-training, teacher-literal-parity-gate, obs-three-tables-merge
-evidence: acceptance/records/2026-09-22-freeze-simplification-baseline, acceptance/records/2026-09-22-golden-subject-completeness, acceptance/records/2026-09-23-asset-lock-set-completeness, acceptance/records/2026-09-23-git-output-encoding
+evidence: acceptance/records/2026-09-22-freeze-simplification-baseline, acceptance/records/2026-09-22-golden-subject-completeness, acceptance/records/2026-09-23-asset-lock-set-completeness, acceptance/records/2026-09-23-git-output-encoding, acceptance/records/2026-09-23-utf8-assumption-and-entry-run-decode
 ---
 
 ## 问题与范围
@@ -19,7 +19,7 @@ evidence: acceptance/records/2026-09-22-freeze-simplification-baseline, acceptan
 五步、每步可单独停止（2026-09-22 定稿）：
 
 1. 基线：**已完成**（`evidence`）。三问结论：五件套 + 条件件 `diff.json`，tag 只 WARN；三个枚举外目录在 `lizard/main/`（`rough-v0`、`curriculum-flat-v0`、`curriculum-rough-v0`）——**内容**经 `params_line` 路由受 golden 看守，**目录形态**无任何闸门看守（是否补声明闸按第 4 步"抓什么具体错误"判，不预设）；复读闭包 10/13 可解析，主断链是记录自带 rev `aa86af408e1e` 的树里**不含判据实现**（`loco_judge.py`／`judge_semantics.json`／`suite_lock.py` 之后才入库），且 v3 及更早 record 无 `judge` 块；计数器 = 改阈值须手改 1 处（另 2 处文档复述），加一条线 11 类手写点（含 3/3/17 条计数钉）。
-2. 补缺口、全部折入现有闸门：**golden 集合完整性已完成**（`check_golden_frozen` 主体改为从树上读，第 5 条锁已钉；该缺口是第二次发生 —— baseline 线 2026-09-17、lizard2 线 2026-09-22）；**asset lock 集合完整性已完成**（`check_dr_parity` 双向比对 + "有锁但无人读"判红；自测当场抓到 glob 少一层的实现 bug）；**Git 输出编码已完成**（`git_run` 钉 UTF-8 + replace；崩得含糊是本条的要害，见 `evidence` 第四条）；**开训前协议绑定 blocked**（等形态拍板 + v2 首跑）。tag 若只是辅助索引，写明边界。
+2. 补缺口、全部折入现有闸门：**golden 集合完整性已完成**（`check_golden_frozen` 主体改为从树上读，第 5 条锁已钉；该缺口是第二次发生 —— baseline 线 2026-09-17、lizard2 线 2026-09-22）；**asset lock 集合完整性已完成**（`check_dr_parity` 双向比对 + "有锁但无人读"判红；自测当场抓到 glob 少一层的实现 bug）；**Git 输出编码已完成**（`git_run` 钉 UTF-8 + replace；崩得含糊是本条的要害；顺带补了 `lifecycle_entry_run._run` —— 同一解码形状且是唯一读真实训练日志的点，它会**静默丢证据**，见 `evidence` 第五、六条）；**入口钉 `PYTHONUTF8` 已测否**（无该环境变量时套件仍 47/47 绿）⇒ 不加，只记事实；**开训前协议绑定 blocked**（等形态拍板 + v2 首跑）。tag 若只是辅助索引，写明边界。
 3. 阈值试点：职责＝协议（阈值与条件组合）／kind（公式与聚合、失败帧语义）／judge（解释与执行）／record（身份与摘要）；流程＝候选 → 差异摘要 → 审查批准 → 检查执行。先验证分工，不改造历史格式。
 4. 逐项去重：一次一个候选，删前答三问（原抓什么错／依据来自哪／谁接替＋反例）。候选三类：obs 合口依 `obs-three-tables-merge` 自己的核认前置（builder 改动静下来后一次落；实施归原事项，边界保留：`--live` 证据强度下降、golden 不动、真实环境验证）；teacher／`freeze_parity.json` 去重 **blocked**，等该事形态三选一（定案 ≠ 批准取消 teacher 独立快照纪律）；其余候选可独立审查。阻塞是分项级，本项仍 open（基线可独立开始）。离线检查与开训重验、生成结果与批准锚、反例与真实运行不因"重复读取"而删。
 5. 决定是否继续：与基线对比，收益不明显即停止扩展。
@@ -30,4 +30,4 @@ evidence: acceptance/records/2026-09-22-freeze-simplification-baseline, acceptan
 
 ## 未覆盖边界
 
-kind 分工只做验证，不改造历史格式；`git_run` 的取舍是 `errors="replace"`（非 UTF-8 字节变 U+FFFD，JSON 安全）而非 `surrogateescape`，且**没有永久回归测试**——本机复现要求非 UTF-8 宿主，得动套件形状那张 spawn 名单（见 `evidence` 第四条）；折入三条后复核套件预算闸；"记录缺工作树是否干净这一字段"是记录格式的缺口，本次不动。
+kind 分工只做验证，不改造历史格式；`git_run` 与 `_run` 的取舍都是 `errors="replace"`（非 UTF-8 字节变 U+FFFD，JSON 安全）而非 `surrogateescape`，两处**都没有永久回归测试**——本机复现要求非 UTF-8 宿主，得动套件形状那张 spawn 名单（要加就加**一处**，覆盖两种形状）；折入三条后复核套件预算闸；仓对未写下的 `PYTHONUTF8=1` 有环境级依赖（实测套件不需要，故不钉）；"记录缺工作树是否干净这一字段"是记录格式的缺口，本次不动。
