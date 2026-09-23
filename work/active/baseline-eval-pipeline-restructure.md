@@ -61,6 +61,7 @@ P0 的实施与验收已移至 `work/active/baseline-eval-persist-before-judge.m
 
 - 指标显式声明列依赖、单位、适用条件，返回数值及有效样本量；报告与判据共用计算结果。足端测量机制在此实现，
   哪些指标进入协议及其阈值由家族项消费。参考点速度含 `v + ω × r`；未经接触参照验证须标近似。
+  **诊断侧已先行（2026-09-23）**：`rl_exp/tools/diagnose/diag_metrics.py` 的 `mesh_lowest_point` / `contact_point_velocity`（参考点取 COM：`body_lin_vel_w` 是 `body_com_lin_vel_w` 的别名）/ `yaw_frame_offset`，驱动为 `gait_probe.py`，已按上述口径在同一检查点上跑通（读数见 `acceptance/records/2026-09-23-lizard2-v1-gait-skate` 的 ⑤）⇒ P1 的帧列与 P2 的指标**复用这三个函数**，不在 `baseline_metrics` 里另写一份。
 - **报告项完整性仅由新 reader id 强制**：沿 `JUDGE_KINDS` 身份绑定声明能力，未知/未实现的名称拒绝；缺数据或
   无样本显式不可用。必需判据缺证据给 `invalid`，可选诊断缺证据保留原因。旧 reader 沿旧路径，不追溯加严。
 - 测试同时钉两侧：旧 `lizard2_flat_v2` 与旧帧复判维持原判决；新 reader 遇未实现项必须拒绝，新家族协议的清单

@@ -4,7 +4,7 @@ title: 地面接触归属：谁在滑、谁在牵引、穿透容忍度
 scope: rl_exp/tools/diagnose, rl_exp/assets
 status: open
 landing: rl_exp/tools/diagnose/diagnose_support.py, rl_exp/tools/diagnose/diag_metrics.py, ablation_harness/protocols/baseline_flat_v2.json
-next: ① 滑动判据换成**接触点**相对地面的切向速度（`v_body + ω × r`，body 原点速度不够——纯转动时原点为零而接触点在滑），`r` 暂取最深网格顶点并标 `ponytail:` 记上限；② 用带 `filter_prim_paths_expr` 的传感器（`force_matrix_w`）把**与地面的接触**和**自碰撞**分开——`net_forces_w` 是该 body 全部接触的合力，配方 `baseline_recipe.py:146` 未声明 filter 且不能加（会动冻结的 cfg 摘要）⇒ 在诊断器自建 cfg 里建；③ 用切向力**方向**区分"牵引"与"被拖着走"：颈 82–90 N 只说明它受力，不说明它在提供前向牵引；④ 穿透容忍度：先做受控对照（时间步 / 求解迭代 / 接触参数），再拍板
+next: ① **已交付 2026-09-23（诊断侧）**：接触点切向速度 `v_com + ω × r` 落在 `diag_metrics.contact_point_velocity`，`r` 取最深网格顶点且已标 `ponytail:` 上限，配套 `mesh_lowest_point`（`mesh_min_z` 改为复用它）；口径以 **COM** 为参考点——框架 `body_lin_vel_w` 是 `body_com_lin_vel_w` 的别名，与 `body_pos_w` 混用会把 `ω × r` 算错。读数见 `acceptance/records/2026-09-23-lizard2-v1-gait-skate` 的 ⑤。余下：诊断器（`diagnose_support.py`）与验收器复用同一函数，不得各写一份；② 用带 `filter_prim_paths_expr` 的传感器（`force_matrix_w`）把**与地面的接触**和**自碰撞**分开——`net_forces_w` 是该 body 全部接触的合力，配方 `baseline_recipe.py:146` 未声明 filter 且不能加（会动冻结的 cfg 摘要）⇒ 在诊断器自建 cfg 里建；③ 用切向力**方向**区分"牵引"与"被拖着走"：颈 82–90 N 只说明它受力，不说明它在提供前向牵引；④ 穿透容忍度：先做受控对照（时间步 / 求解迭代 / 接触参数），再拍板
 close_when: (a) 报告给出逐接触 body 的接触点切向速度、摩擦利用率与切向力方向，且结论与位移、逐脚 duty 自洽；(b) 穿透容忍度有一句明确决定，且该决定引用受控对照的读数——不得以"实测 5 mm"直接当作"允许 5 mm"。两项齐了才关
 evidence: acceptance/records/2026-09-21-baseline-eval-measurement-contract.md
 ---
