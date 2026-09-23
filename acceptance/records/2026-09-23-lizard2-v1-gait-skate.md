@@ -215,8 +215,8 @@
   `_tmp_*` 在 `.gitignore` 内）。它读 `robot.data.body_pos_w` / `body_lin_vel_w` 与接触传感器，
   命令经 `vel_command_b` 每步注入 —— 与 `video_matrix.py` 同一注入机制，只是不录画面。
 - 探针（⑤）：`rl_exp/tools/diagnose/gait_probe.py`（入仓）；**读数本体机器本地**：
-  `rl_exp/tools/diagnose/out/gait_probe/full.json`（`out/` gitignore）+ `gait_full.log`。
-  复读：
+  `rl_exp/tools/diagnose/out/gait_probe/full.json` 与同目录的 `gait_full.log`（`out/` gitignore，
+  跑前先删旧报告，理由见 ⑥ 第 5 条）。复读：
 
   ```
   "E:/IsaacLab/env_isaaclab/Scripts/python.exe" rl_exp\tools\diagnose\gait_probe.py \
