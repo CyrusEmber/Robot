@@ -135,6 +135,12 @@ def self_check() -> None:
     offset = torch.tensor([[[0.0, 0.0, -0.05]]])
     moved = diag_metrics.target_vertex_delta(jac, error, offset)
     assert torch.allclose(moved, torch.tensor([[[-0.005, 0.0, 0.1]]]), atol=1e-6), moved
+    # The split, on the same case: the z lift is entirely the linear term and the sideways push is
+    # entirely the rotation term. A reader that mixes them cannot tell a motion from an estimator
+    # artefact, which is the distinction the left front leg needed.
+    linear, rotation = diag_metrics.target_vertex_delta_parts(jac, error, offset)
+    assert torch.allclose(linear, torch.tensor([[[0.0, 0.0, 0.1]]]), atol=1e-6), linear
+    assert torch.allclose(rotation, torch.tensor([[[-0.005, 0.0, 0.0]]]), atol=1e-6), rotation
 
     # The summary itself, on a series whose answers are known by hand. One swing (frames 4-7) between
     # two stances, and a contact speed that is 9 at each stance's two END frames and 1 in between, so
@@ -149,6 +155,8 @@ def self_check() -> None:
         "sole_clearance_target_m": torch.tensor([0.001, 0.001, 0.001, 0.001,
                                                  0.004, 0.015, 0.05, 0.008,
                                                  0.001, 0.001, 0.001, 0.001]),
+        "pred_linear_m": torch.full((12,), 0.001),
+        "pred_rotation_m": torch.tensor([0.0005] * 4 + [0.002] * 4 + [0.0005] * 4),
         "contact_speed_horiz_mps": torch.tensor([9.0, 1, 1, 9, 0, 0, 0, 0, 9, 1, 1, 9]),
         "foot_fore_aft_m": torch.tensor([0.0, 0.1, 0.2, 0.3, 0.30, 0.25, 0.20, 0.15,
                                          0.4, 0.5, 0.6, 0.7]),
@@ -178,6 +186,8 @@ def self_check() -> None:
         "hip_target_p2p_rad": 0.3, "hip_err_p50_rad": 0.1, "hip_target_p2p_unloaded_rad": 0.0,
         "hip_target_outside_range_frac": 0.0, "hip_target_margin_min_rad": 0.5,
         "hip_err_p50_in_range_rad": 0.1, "hip_err_p50_out_of_range_rad": None,
+        "swing_mid_clearance_p50_m": 0.02, "swing_mid_clearance_target_p50_m": 0.015,
+        "unloaded_pred_linear_p50_m": 0.001, "unloaded_pred_rotation_p50_m": 0.002,
     }
     for key, value in expected.items():
         assert summary[key] == value, (key, summary[key], value)
@@ -261,6 +271,20 @@ def summarise(foot: dict, contact_n: float, transition_frames: int = 2) -> dict:
         "stance_fore_aft_drift_p50_m": (round(float(torch.tensor(
             [float(fore_aft[j - 1] - fore_aft[i]) for i, j in stances]).median()), 4)
             if stances else None),
+        # Mid-swing only, and the prediction split into its two terms. The unloaded-frame median
+        # covers liftoff and touchdown as well, and for two legs that swing in alternation it is not
+        # even the same phase on both -- which is how a mirrored pair of legs can read as opposites.
+        "swing_mid_clearance_p50_m": (round(float(torch.tensor(
+            [float(clearance[i + (j - i) // 3:j - (j - i) // 3].median()) for i, j in swings
+             if j - i >= 3]).median()), 4) if any(j - i >= 3 for i, j in swings) else None),
+        "swing_mid_clearance_target_p50_m": (round(float(torch.tensor(
+            [float(foot["sole_clearance_target_m"][i + (j - i) // 3:j - (j - i) // 3].median())
+             for i, j in swings if j - i >= 3]).median()), 4)
+            if any(j - i >= 3 for i, j in swings) else None),
+        "unloaded_pred_linear_p50_m": (round(float(foot["pred_linear_m"][unloaded].median()), 4)
+                                       if bool(unloaded.any()) else None),
+        "unloaded_pred_rotation_p50_m": (round(float(foot["pred_rotation_m"][unloaded].median()), 4)
+                                         if bool(unloaded.any()) else None),
     }
     for joint in ("hip", "hfe"):
         target, actual = foot[f"joint_target_{joint}"], foot[f"joint_actual_{joint}"]
@@ -337,7 +361,7 @@ def main() -> None:
     obs = wrapper.get_observations()
     trace: dict[str, list[torch.Tensor]] = {key: [] for key in
                                             ("force", "clearance", "clearance_target", "contact",
-                                             "fore_aft", "done")}
+                                             "fore_aft", "pred_linear", "pred_rotation", "done")}
     joint_trace: dict[str, list[torch.Tensor]] = {key: [] for key in ("target", "actual")}
     for step in range(steps):
         command_term.vel_command_b[:] = command
@@ -361,9 +385,12 @@ def main() -> None:
         joint_error = torch.cat(
             [torch.zeros(pose.shape[0], 1, 6, device=pose.device),
              (data.joint_pos_target.torch - data.joint_pos.torch).unsqueeze(1)], dim=-1)
-        trace["clearance_target"].append((lowest[..., 2] + diag_metrics.target_vertex_delta(
+        linear, rotation = diag_metrics.target_vertex_delta_parts(
             data.body_link_jacobian_w.torch[:, robot_foot_ids], joint_error,
-            lowest - pose[:, robot_foot_ids])[..., 2]).clone())
+            lowest - pose[:, robot_foot_ids])
+        trace["pred_linear"].append(linear[..., 2].clone())
+        trace["pred_rotation"].append(rotation[..., 2].clone())
+        trace["clearance_target"].append((lowest[..., 2] + linear[..., 2] + rotation[..., 2]).clone())
         trace["done"].append(live.termination_manager.dones.clone())
         joint_trace["target"].append(data.joint_pos_target.torch.clone())
         joint_trace["actual"].append(data.joint_pos.torch.clone())
@@ -373,6 +400,8 @@ def main() -> None:
     force = torch.stack(trace["force"])
     clearance = torch.stack(trace["clearance"])
     clearance_target = torch.stack(trace["clearance_target"])
+    pred_linear = torch.stack(trace["pred_linear"])
+    pred_rotation = torch.stack(trace["pred_rotation"])
     contact = torch.stack(trace["contact"])
     fore_aft = torch.stack(trace["fore_aft"])
     done = torch.stack(trace["done"])
@@ -399,6 +428,8 @@ def main() -> None:
             row = {"body": name, "force": force[alive, env_index, foot],
                    "sole_clearance_m": clearance[alive, env_index, foot],
                    "sole_clearance_target_m": clearance_target[alive, env_index, foot],
+                   "pred_linear_m": pred_linear[alive, env_index, foot],
+                   "pred_rotation_m": pred_rotation[alive, env_index, foot],
                    "contact_speed_horiz_mps": contact[alive, env_index, foot],
                    "foot_fore_aft_m": fore_aft[alive, env_index, foot]}
             for joint in ("hip", "hfe"):

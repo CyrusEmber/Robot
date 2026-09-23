@@ -277,8 +277,28 @@ def target_vertex_delta(jacobian_w: torch.Tensor, joint_error: torch.Tensor,
     target would settle into -- that would need the targets replayed through a solver, a different
     instrument.
     """
+    linear, rotation = target_vertex_delta_parts(jacobian_w, joint_error, offset_w)
+    return linear + rotation
+
+
+def target_vertex_delta_parts(jacobian_w: torch.Tensor, joint_error: torch.Tensor,
+                              offset_w: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    """:func:`target_vertex_delta` split into its two terms, each (N, B, 3) [m].
+
+    The split is not cosmetic: the linear term is mirror-invariant under a left/right swap of a
+    mirrored body, the rotation term is not (it carries the offset and the roll), so only the split
+    can say whether a difference between two mirrored legs comes from the motion or from the
+    estimator. Measured 2026-09-23 on lizard2: the left and right front legs' joint targets are
+    mirror images and their meshes are the same shape, yet the predicted clearances came out with
+    opposite signs -- so the term that flips had to be identified before the reading could be used.
+
+    Args:
+        jacobian_w: (N, B, 6, J) world Jacobian of the bodies, as ``body_link_jacobian_w`` gives it.
+        joint_error: (N, 1, J) or (N, B, J) joint target minus actual position [rad].
+        offset_w: (N, B, 3) vector from the body's link origin to the point, in world [m].
+    """
     delta = (jacobian_w @ joint_error.unsqueeze(-1)).squeeze(-1)  # (N, B, 6)
-    return delta[..., :3] + torch.cross(delta[..., 3:], offset_w, dim=-1)
+    return delta[..., :3], torch.cross(delta[..., 3:], offset_w, dim=-1)
 
 
 def yaw_frame_offset(root_pos_w: torch.Tensor, root_quat_w: torch.Tensor,
