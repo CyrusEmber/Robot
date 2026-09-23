@@ -2,12 +2,12 @@
 id: baseline-eval-pipeline-restructure
 title: baseline / Lizard2 eval 解耦机制计划
 scope: ablation_harness, rl_exp/tools/verify
-status: open
+status: done
 landing: ablation_harness/baseline_frames.py, ablation_harness/baseline_metrics.py, ablation_harness/baseline_eval.py, ablation_harness/components/command_player.py, ablation_harness/frame_semantics.json, rl_exp/tools/verify/test_baseline_contract.py, ablation_harness/HARNESS.md
-next: P0 已关闭（`work/closed/2026/baseline-eval-persist-before-judge.md`）。P1/P2 已落（格式 2 足端四列 + 来源 meta；新 reader `baseline-criteria-footed-1` + `foot_lift_v1`/`foot_slip_v1` + 报告项声明表与按 reader 的完整性检查 + 报告分组）。P3 已落：协议可选 `scenes`（常量命令，按 env 分配 + seed 打乱），评测器冻重采样并逐步注入，条件入帧 meta，判分侧同表核对并给逐场景有效帧；真跑留下一对对照（未对齐 ⇒ 判据点名空带 fail；对齐 ⇒ 四带各 4000 帧 pass，读数见 evidence）。余 P4：验收总账与 harness 版本声明。协议版本与产品口径归 lizard2-family-landing。
 close_when: 执行者核验 P1–P4 的格式兼容、离线复判、报告声明和场景覆盖，四项出口各有观测即关。不等其它事项关闭：`depends_on` 是要消费的输入，协议发布与消费留在各自事项，本项只留指针。
 depends_on: ablation_harness/baseline_frames.py, floor-contact-attribution, lizard2-family-landing
 evidence: acceptance/records/2026-09-21-baseline-eval-measurement-contract.md, acceptance/records/2026-09-23-baseline-fixed-scenes.md, acceptance/records/2026-09-23-baseline-frames-format-2-foot-reading.md, acceptance/records/2026-09-23-lizard2-v1-first-eval.md, acceptance/records/2026-09-23-lizard2-v1-gait-skate.md
+outcome: 四个出口各有读数、各有回归。P1：契约按记录 `format` 选择（未知格式拒判、旧格式照旧可读可判），`frame_semantics.json` 两份声明各按摘要冻结、不自动重钉；格式 2 = v1 十二列 + 足端四列 + 两条来源 meta，真跑核过几何摘要在磁盘上对上、轴标等于报告的脚、20 ms 下最短接触段为 1 帧。P2：新 reader `baseline-criteria-footed-1` 加 `foot_lift_v1`/`foot_slip_v1`，接触点速度取 `v_com + ω × (p − p_com)`（复用 `diag_metrics`）；报告项声明表 + 按 reader 的完整性检查（只对新 reader 强制，冻结判决不追溯作废）；六种合成反例与正常参照可区分。P3：协议可选 `scenes`，评测器按 env 分配（round-robin 计 + seed 打乱）、冻重采样、逐步注入，条件入帧 meta；判分侧同表核对并给逐场景有效帧；真跑一对对照 —— 场景与声明的带不对齐时判据点名空带（fail），对齐后四带各 4000 帧（pass）。P4：验收总账即本行，版本编号这半登记在 `work/active/harness-version-anchor-missing.md`（同一敞口下三笔未编号改动，编号与锚点一起定）。离线套件里本项相关检查绿；当时另有两处 `gait_probe.py` 的单源闸门红（另一条线的收尾，非本项）。
 ---
 
 ## 归属与边界

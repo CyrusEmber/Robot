@@ -17,6 +17,11 @@ close_when: `git ls-remote --tags origin` 里出现 `harness-v1.9.0`，且它指
 按 `HARNESS.md` 的版本纪律，往 `ablation_harness/` 加模块是 minor 新增、应同时落"版本声明 + tag"；
 这一件只补那两样，不改任何测量语义。
 
+同一敞口下另有三笔未编号的改动（2026-09-23，同一天落地，编号一并定）：帧格式 2 与足端读数
+（`baseline_frames` / `frame_semantics.json`）、能读它的 reader（`baseline_metrics` 的
+`baseline-criteria-footed-1` 与报告项声明表）、定点场景驱动（`baseline_eval` + `components/command_player.py`）。
+读数见 `acceptance/records/2026-09-23-baseline-frames-format-2-foot-reading.md` 与同日的定点场景记录。
+
 ## 未覆盖边界
 
 只补锚点，不重新评价 `video_matrix.py` 的实现（归 `work/closed/2026/video-matrix-gears.md` 那条链）；

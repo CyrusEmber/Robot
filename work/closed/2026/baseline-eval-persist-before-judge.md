@@ -11,7 +11,8 @@ outcome: 四条各有真跑读数。判分前先落盘（临时写入 + link、�
 
 ## 来源与范围
 
-由 `work/active/baseline-eval-pipeline-restructure.md` 的 P0 拆出，可独立实施，无家族阈值前置。
+由 `work/closed/2026/baseline-eval-pipeline-restructure.md` 的 P0 拆出（该总项 2026-09-23 关闭），
+可独立实施，无家族阈值前置。
 `baseline_eval.run` 当前在保存帧前调用 `judge`；本项只修已完成采集被判分异常连带丢失的执行耦合。
 
 ## 实施与验收
