@@ -33,7 +33,7 @@
 | checkpoint | （训练后填，sha256 见该 run 目录的 `checkpoints.json`） |
 | 评测报告 | （训练后填，与对照臂同一协议） |
 | 对照臂 | （训练后填：v1 在当前资产上的重训 run 与其报告；历史 checkpoint 只作背景） |
-| 训练读数 | 曲线入库落点 = **本目录 `tb_scalars.csv`**（收尾：`dump_tb.py --log_dir <run> --out <本目录>\tb_scalars.full.csv`，再 `--csv_in … --max_points 150`；读法 `plot_tb.py --csv <本目录>\tb_scalars.csv --out_dir <本目录>\plots`）；巡检入口 `rl_exp/tools/trainlog/probe_run.py --exp lizard2_v2`；**收敛读数（分块均值/平台带/失败模式首现）归 `acceptance/records/`（路径待填）** |
+| 训练读数 | 曲线落点 = 本目录 `tb_scalars.csv`（收尾入库；全量 `.full.csv` 留机器本地）；读法 `dump_tb.py` / `plot_tb.py`，巡检 `probe_run.py --exp lizard2_v2`；**收敛读数**归 `acceptance/records/`（记录路径训练后回填） |
 | 分类判定 | （按 PLAN 预写的判据填：滑移改善且跟踪/存活不退化才算支持；下降但变慢或更易倒不算） |
 
 ## 结论

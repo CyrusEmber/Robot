@@ -52,7 +52,7 @@
 | run id | `logs/rsl_rl/lizard2_v1/2026-09-22_19-26-50`（14000/14000、4096 envs、seed 42；`manifest --verify` 的缺口见"实际执行与偏离"偏离 2） |
 | checkpoint | `model_13999.pt`（sha256 与全量参数见该 run 目录的 `checkpoints.json`） |
 | 评测报告 | `ablation_harness/results/lizard2_flat_v2/v1/Lizard2-Flat-v1_13999_deterministic_seed123/eval.json`（**pass**，八条全过）；无 settle 读者的 v1 判决与被取代的中间报告在同根目录下并列保存 |
-| 训练读数 | 曲线已入库：同目录 `tb_scalars.csv`（150 点/tag；全量 350000 点的 `tb_scalars.full.csv` 留机器本地，`dump_tb.py --csv_in` 可重抽样），读法 `plot_tb.py --csv rl_exp\versions\lizard2\main\v1\tb_scalars.csv --out_dir <本目录>\plots`；过程巡检 `probe_run.py --exp lizard2_v1`；**收敛读数**（千迭代分块均值 / 平台带 / 失败模式首现）见 `acceptance/records/2026-09-28-lizard2-v1-training-curve.md` |
+| 训练读数 | 曲线落点 = 同目录 `tb_scalars.csv`（抽样入库；全量 `.full.csv` 留机器本地）；读法与复读命令、**收敛读数**（分块均值 / 平台带 / 失败模式首现）见 `acceptance/records/2026-09-28-lizard2-v1-training-curve.md` |
 | 分类判定 | **未定**：判据侧 `pass`，步态实测**不合格**（v2 探针同 run 补测：摆动贴地 + 承重接触点滑移；成因已分开为"低速是目标层命令的、高速是执行器跟踪、lf 目标要求入地"）⇒ 按"能力基线"记账，**不按"会走路"记账**（判定依据见两份记录） |
 
 ## 结论
