@@ -71,6 +71,16 @@ from rl_exp.tools.verify.baseline_runtime import (  # noqa: E402
 )
 from rl_exp.tasks import obs_protocol, recipe_params  # noqa: E402
 
+
+def _mesh_dir() -> pathlib.Path:
+    """The collision tree of the family ``--task`` belongs to (per-family declaration, 2026-09-28).
+
+    Resolved from the task rather than fixed at the shared tree: a probe that measures one family's
+    run against another family's mesh reports a geometry no simulation loaded.
+    """
+    return collision_mesh_dir(obs_protocol.family_of(args_cli.task))
+
+
 PROBLEMS: list[str] = []
 EXPECTED_COMMAND = (0.5, 0.0, 0.0)
 # every randomization event the framework base registers: the recipe turns all of them
@@ -218,7 +228,7 @@ def run_head_press(env, unwrapped, robot, body_names, joint_names, contact_senso
     patterns = body_patterns.get("head_contact_body_names") or []
     matched = [name for name in body_names
                if any(re.fullmatch(pattern, name) for pattern in patterns)]
-    collider = collision_mesh_dir()
+    collider = _mesh_dir()
     head_bodies = [name for name in matched if (collider / f"{name}_collision.obj").is_file()]
     # A contact gate can only act through a collider. A pattern that matches a link without one is
     # a dead entry that reads like coverage -- the same defect this repo already carries in the
@@ -511,7 +521,7 @@ def main() -> int:
     spawn_z = robot.data.root_pos_w.torch[:, 2].mean().item()
     mesh_present = [name for name in MESH_CHECK_BODIES if name in body_names]
     mesh_ids = [body_names.index(name) for name in mesh_present]
-    mesh_corners = pad_point_clouds([mesh_vertices(collision_mesh_dir() / f"{name}_collision.obj")
+    mesh_corners = pad_point_clouds([mesh_vertices(_mesh_dir() / f"{name}_collision.obj")
                                      for name in mesh_present]).to(unwrapped.device) if mesh_present else None
     z_rows: list[torch.Tensor] = []
     tilt_rows: list[torch.Tensor] = []

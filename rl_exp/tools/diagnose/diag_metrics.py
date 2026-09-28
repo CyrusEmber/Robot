@@ -20,6 +20,7 @@ v14.2). Every function here is sim-free so the offline gate can test it.
 
 from __future__ import annotations
 
+import json
 import pathlib
 
 import torch
@@ -32,9 +33,34 @@ from isaaclab.utils.math import quat_apply, quat_apply_inverse, yaw_quat
 MESH_CHECK_BODIES = ["chest_pitch", "neck_pitch", "tail1_pitch", "tail2_pitch", "tail3_pitch"]
 
 
-def collision_mesh_dir() -> pathlib.Path:
-    """Directory of the collision meshes the bbox reader consumes (``rl_exp/meshes/collision``)."""
-    return pathlib.Path(__file__).resolve().parents[2] / "meshes" / "collision"
+def meshes_dir(family: str | None = None) -> pathlib.Path:
+    """The mesh tree a family consumes, as ``versions/<family>/assets.json`` declares it.
+
+    Which tree a family reads is a per-family fact, not a global constant: the retired ``lizard``
+    family declares the shared ``meshes/``, and ``lizard2`` declares its own
+    ``versions/lizard2/meshes/`` so that repairing one family's foot cannot move the other's physics.
+    A family with no declaration is an error rather than a silent fallback -- two conventions for the
+    same question is how a reading starts describing a mesh the run never loaded.
+
+    Args:
+        family: family name (the first path segment of a route line, e.g. ``lizard2``). ``None``
+            means the caller has no family context and wants the legacy shared tree.
+    """
+    if family is None:
+        return pathlib.Path(__file__).resolve().parents[2] / "meshes"
+    declaration = pathlib.Path(__file__).resolve().parents[2] / "versions" / family / "assets.json"
+    try:
+        declared = json.loads(declaration.read_text(encoding="utf-8")).get("meshes_dir")
+    except (OSError, json.JSONDecodeError) as err:
+        raise ValueError(f"{declaration}: cannot read the family's mesh tree ({err})") from err
+    if not isinstance(declared, str) or not declared:
+        raise ValueError(f"{declaration}: no 'meshes_dir' -- which tree this family reads must be declared")
+    return pathlib.Path(__file__).resolve().parents[2] / declared
+
+
+def collision_mesh_dir(family: str | None = None) -> pathlib.Path:
+    """This family's collision meshes (``.../meshes/collision``). See :func:`meshes_dir`."""
+    return meshes_dir(family) / "collision"
 
 
 def yaw_frame_lin_vel(quat_w: torch.Tensor, lin_vel_w: torch.Tensor) -> torch.Tensor:
@@ -228,6 +254,145 @@ def mesh_min_z(body_pos_w: torch.Tensor, body_quat_w: torch.Tensor,
             padded to a common K by :func:`pad_point_clouds`.
     """
     return mesh_lowest_point(body_pos_w, body_quat_w, ids, corners)[..., 2]
+
+
+def mesh_triangles(obj_path) -> torch.Tensor:
+    """Every triangle of a collision mesh in its link frame, shape (T, 3, 3) [m].
+
+    An area reading cannot come from :func:`mesh_vertices`' point count: vertices cluster where the
+    surface bends, and this asset's feet carry only 26 of them, so "the share of vertices near the
+    floor" moves with the tessellation rather than with the pose. Triangles carry the area.
+
+    Args:
+        obj_path: path to the ``<body>_collision.obj`` mesh.
+    """
+    vertices, faces = [], []
+    with open(obj_path, encoding="utf-8") as handle:
+        for line in handle:
+            if line.startswith("v "):
+                vertices.append([float(x) for x in line.split()[1:4]])
+            elif line.startswith("f "):
+                # OBJ indices are 1-based, and a face may carry more than three (fan-triangulate).
+                faces.append([int(token.split("/")[0]) - 1 for token in line.split()[1:]])
+    points = torch.tensor(vertices, dtype=torch.float32)
+    corners = [[face[0], face[i], face[i + 1]] for face in faces for i in range(1, len(face) - 1)]
+    return points[torch.tensor(corners)]
+
+
+def sole_area_m2(triangles: torch.Tensor) -> float:
+    """Projected-on-xy area of the triangles facing the link frame's ``-z``, (T,3,3) -> [m^2].
+
+    The denominator of a "how much of the sole is on the floor" reading. Link frame, not world: it
+    is a fixed property of the foot ("this much face can point at a floor below it"), so it does not
+    grow when the policy pitches the foot. Measured on ``lf_foot_collision.obj``: 0.164180 m^2 of
+    0.427635 m^2 of surface, against a 0.231527 m^2 bounding box -- the sole is a curved pad, not a
+    flat plate, so the achievable ratio on flat ground is small and the threshold has to be set
+    against the same measurement, not against 1.0.
+    """
+    normal = torch.linalg.cross(triangles[:, 1] - triangles[:, 0], triangles[:, 2] - triangles[:, 0])
+    down = normal[:, 2] < -1e-9
+    area = 0.5 * normal[down].norm(dim=-1)
+    return float((area * normal[down, 2].abs() / normal[down].norm(dim=-1)).sum())
+
+
+def clip_area_below_z(triangles: torch.Tensor, h: float, *, strict: bool = False) -> torch.Tensor:
+    """Projected-on-xy area of the part of each triangle below ``z = h``, shape (T,) [m^2].
+
+    The floor is a plane, so this one quantity is all an area band needs: the band
+    ``[lo, hi]`` is ``A(hi) - A(lo)``, and it stays exact when the band is thinner than a triangle
+    (this mesh's triangles are ~2 cm across, i.e. far wider than a millimetre band, so testing whole
+    triangles instead would quantise the reading to a handful of steps). ``strict`` picks which side
+    of the boundary a vertex lying exactly on ``h`` belongs to, which decides whether a plate resting
+    exactly on the floor is contact or something below it.
+
+    ponytail: a loop over triangles because a probe reads 24 of them per foot per frame. As a reward
+    term this has to be rewritten branch-free over the whole batch, which is a different instrument.
+    """
+    out = torch.zeros(triangles.shape[0], dtype=triangles.dtype, device=triangles.device)
+    for index in range(triangles.shape[0]):
+        corner = triangles[index]
+        kind = (corner[:, 2] < h) if strict else (corner[:, 2] <= h)
+        if not bool(kind.any()):
+            continue
+        if bool(kind.all()):
+            polygon = corner
+        else:
+            # Walk the triangle's boundary in order, emitting each vertex of the kept side and the
+            # point where an edge crosses. Emitting the kept vertices first and the crossings after
+            # is not the same polygon: when the kept vertices are not contiguous (say vertices 1 and
+            # 2 kept, 0 dropped) that bowties the strip and the shoelace returns ~0 for a strip of
+            # real area -- measured here as 1.4e-6 m^2 where the answer is 1e-4.
+            polygon = []
+            for i in range(3):
+                j = (i + 1) % 3
+                if bool(kind[i]):
+                    polygon.append(corner[i])
+                if bool(kind[i]) != bool(kind[j]):
+                    z_i, z_j = float(corner[i, 2]), float(corner[j, 2])
+                    w = (h - z_i) / (z_j - z_i)
+                    polygon.append(corner[i] + w * (corner[j] - corner[i]))
+            polygon = torch.stack(polygon)
+        x, y = polygon[:, 0], polygon[:, 1]
+        out[index] = 0.5 * (x * y.roll(-1) - x.roll(-1) * y).sum().abs()
+    return out
+
+
+def ground_contact_area_m2(triangles_w: torch.Tensor, band_m: float,
+                           eps_m: float) -> tuple[torch.Tensor, torch.Tensor]:
+    """Sole area on the floor and below it, shapes (T,) each [m^2].
+
+    World-frame triangles (rotate the link-frame mesh by the body pose) against the ground plane
+    ``z = 0``: area in ``[-eps_m, band_m]`` is ON the floor, area below ``-eps_m`` is THROUGH it. The
+    lower edge is strict so a sole whose vertex sits exactly on the plane reads as contact, not as
+    something underneath it. They are two numbers rather than one on purpose -- a band with no floor
+    on its underside rewards pressing harder, so penetration has to be read next to the contact area
+    instead of folded into it. Both ``band_m`` and ``eps_m`` are the caller's declaration: the record
+    measured a steady ~5 mm insertion (``acceptance/records/2026-09-20-baseline-flat-eval-protocol.md``)
+    and explicitly refused to read that as an allowance, so the tolerance cannot be smuggled in here.
+
+    Flat terrain only: on a slope the band belongs to the local surface, not to z = 0. Leading batch
+    dims may be flattened into the triangle axis by the caller: the triangles do not interact.
+    """
+    through = clip_area_below_z(triangles_w, -eps_m, strict=True)
+    return clip_area_below_z(triangles_w, band_m) - through, through
+
+
+def mesh_triangles_w(body_pos_w: torch.Tensor, body_quat_w: torch.Tensor,
+                     ids: list[int], triangles_link: torch.Tensor) -> torch.Tensor:
+    """Selected bodies' collision-mesh triangles in world frame, (N, B, T, 3, 3) [m].
+
+    The triangle twin of :func:`mesh_lowest_point`: same rotation, area instead of minimum.
+
+    Args:
+        body_pos_w: (N, num_bodies, 3) world positions.
+        body_quat_w: (N, num_bodies, 4) world orientations, xyzw.
+        ids: body column indices to measure.
+        triangles_link: (len(ids), T, 3, 3) link-frame triangles -- no padding needed while every
+            mesh in the group has the same triangle count, which the four feet do (48 each).
+    """
+    n, nb, t = body_pos_w.shape[0], len(ids), triangles_link.shape[1]
+    pos = body_pos_w[:, ids][:, :, None, None, :].expand(n, nb, t, 3, 3).reshape(-1, 3)
+    quat = body_quat_w[:, ids][:, :, None, None, :].expand(n, nb, t, 3, 4).reshape(-1, 4)
+    pts = triangles_link[None].expand(n, nb, t, 3, 3).reshape(-1, 3)
+    return (pos + quat_apply(quat, pts)).reshape(n, nb, t, 3, 3)
+
+
+def body_down_in_link(body_quat_w: torch.Tensor, ids: list[int]) -> torch.Tensor:
+    """World "down" expressed in each selected body's own frame, (N, B, 3), unit vectors.
+
+    The quantity that separates a foot resting on its toe from a foot whose pad is simply curved: the
+    pad's shape is a constant, but which PART of it is lowest is not -- it is this vector's ``(x, y)``,
+    and how far the sole is from level is ``acos(-z)``. Reading it in the link frame is what makes the
+    two components mean "which edge", independent of the leg's kinematics.
+
+    Args:
+        body_quat_w: (N, num_bodies, 4) world orientations, xyzw.
+        ids: body column indices to measure.
+    """
+    down_w = torch.tensor([0.0, 0.0, -1.0], device=body_quat_w.device, dtype=body_quat_w.dtype)
+    quat = body_quat_w[:, ids]
+    return quat_apply_inverse(quat.reshape(-1, 4), down_w.expand(quat.shape[0] * quat.shape[1], 3)
+                              ).reshape(*quat.shape[:-1], 3)
 
 
 def contact_point_velocity(com_lin_vel_w: torch.Tensor, ang_vel_w: torch.Tensor,

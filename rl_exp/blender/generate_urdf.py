@@ -1,5 +1,6 @@
 import bpy
 import bmesh
+import json
 import os
 import shutil
 import struct
@@ -58,7 +59,15 @@ ROBOT_SPECS = {
 SPEC = ROBOT_SPECS[ROBOT]
 AXIS_MAP = SPEC["axes"]
 _BLEND_IN = os.path.join(_SCRIPT_DIR, SPEC["blend"])
-OUT_DIR = os.path.join(_SCRIPT_DIR, "..", "%s_urdf" % ROBOT)
+# The family's own directory, read off the declaration rather than guessed: this generator writes the
+# meshes the URDF references and the asset lock pins, and since 2026-09-28 that tree is per-family
+# (`versions/<family>/assets.json`). It used to write into a scratch `<robot>_urdf/` directory while
+# referencing `../meshes/` (the shared tree), so a regeneration landed where nothing read it.
+_EXP_DIR = os.path.abspath(os.path.join(_SCRIPT_DIR, ".."))
+_DECLARATION = os.path.join(_EXP_DIR, "versions", ROBOT, "assets.json")
+with open(_DECLARATION) as _fh:
+    _DECLARED = json.load(_fh)["meshes_dir"]
+OUT_DIR = os.path.join(_EXP_DIR, _DECLARED)
 
 BALL_MESHES = {
     "Roundcube.001", "Roundcube.017", "Roundcube.025", "Roundcube.018", "Roundcube.019",
@@ -126,6 +135,30 @@ def export_stl(bm, path):
     bm.free()
 
 
+def export_obj(bm, path):
+    """The same triangles as ``export_stl``, as an OBJ, because that is what the URDFs reference.
+
+    Written beside the STL rather than instead of it: the URDFs in ``versions/<family>/`` name
+    ``meshes/collision/<link>_collision.obj``, and a regeneration that only produced STL would leave
+    every one of those references dangling.
+    """
+    verts, faces = [], []
+    for face in bm.faces:
+        vs = face.verts
+        for i in range(1, len(vs) - 1):
+            indices = []
+            for vertex in (vs[0], vs[i], vs[i + 1]):
+                verts.append(vertex.co)
+                indices.append(len(verts))
+            faces.append(indices)
+    with open(path, "w") as fh:
+        fh.write("# lizard mesh\n")
+        for co in verts:
+            fh.write("v %.6f %.6f %.6f\n" % (co.x, co.y, co.z))
+        for tri in faces:
+            fh.write("f %d %d %d\n" % tuple(tri))
+
+
 link_data = {}
 for link, bone in bones.items():
     offset = bone["head"]
@@ -136,10 +169,12 @@ for link, bone in bones.items():
         area = sum(f.calc_area() for f in vis_bm.faces)
         coords = [v.co.copy() for v in vis_bm.verts]
         export_stl(vis_bm, os.path.join(OUT_DIR, "meshes", "visual", "%s_visual.stl" % link))
+        export_obj(vis_bm, os.path.join(OUT_DIR, "meshes", "visual", "%s_visual.obj" % link))
         col_objs = [o for o in objs if o.name not in BALL_MESHES]
         if col_objs:
             col_bm = build_bmesh(col_objs, offset, False)
             export_stl(col_bm, os.path.join(OUT_DIR, "meshes", "collision", "%s_collision.stl" % link))
+            export_obj(col_bm, os.path.join(OUT_DIR, "meshes", "collision", "%s_collision.obj" % link))
         entry["has_collision"] = bool(col_objs)
         entry["area"] = area
         entry["aabb_min"] = Vector((min(c.x for c in coords), min(c.y for c in coords), min(c.z for c in coords)))
@@ -210,12 +245,12 @@ for link, entry in link_data.items():
     if entry["area"] > 0.0:
         xml.append('    <visual>')
         xml.append('      <origin xyz="0 0 0" rpy="0 0 0"/>')
-        xml.append('      <geometry><mesh filename="../meshes/visual/%s_visual.stl"/></geometry>' % link)
+        xml.append('      <geometry><mesh filename="meshes/visual/%s_visual.obj"/></geometry>' % link)
         xml.append('    </visual>')
         if entry["has_collision"]:
             xml.append('    <collision>')
             xml.append('      <origin xyz="0 0 0" rpy="0 0 0"/>')
-            xml.append('      <geometry><mesh filename="../meshes/collision/%s_collision.stl"/></geometry>' % link)
+            xml.append('      <geometry><mesh filename="meshes/collision/%s_collision.obj"/></geometry>' % link)
             xml.append('    </collision>')
     xml.append('  </link>')
 

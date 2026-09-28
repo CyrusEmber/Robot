@@ -110,6 +110,7 @@ from rsl_rl.runners import OnPolicyRunner  # noqa: E402
 
 import metrics  # noqa: E402  (harness 纯函数库)
 import diag_metrics  # noqa: E402  (验收口径纯函数：与奖励核同用 yaw 帧)
+from rl_exp.tasks import obs_protocol  # noqa: E402  (task -> family, for the mesh tree)
 from components.dr_controller import apply_eval_mode  # noqa: E402
 
 # --- 几何常量（单级台阶网格） ---
@@ -154,8 +155,16 @@ LOAD_BODIES = ["base_link", "chest_pitch", "neck_pitch",
 # 只对可能压地的非足 body 建表；URDF 里这些 link 的 collision origin/scale 均为 identity。
 MESH_POINT_BODIES = ["base_link", "chest_pitch", "neck_pitch",
                      "tail1_pitch", "tail2_pitch", "tail3_pitch"]
-MESH_DIR = _REPO_ROOT / "rl_exp" / "meshes" / "collision"
 TAIL_PITCH_JOINTS = ["tail1_pitch_joint", "tail2_pitch_joint", "tail3_pitch_joint"]
+
+
+def mesh_dir() -> pathlib.Path:
+    """The collision tree of the family this run's task belongs to (per-family declaration).
+
+    Not a module constant: two families can carry different geometry, so a fixed path here would
+    measure one family's mesh against another family's run.
+    """
+    return diag_metrics.collision_mesh_dir(obs_protocol.family_of(args_cli.task))
 
 
 def mesh_vertices(body: str) -> torch.Tensor:
@@ -164,7 +173,7 @@ def mesh_vertices(body: str) -> torch.Tensor:
     2026-09-21 加：此前用下面的 AABB 角点读"入地深度"，那是**上界**而非真值——link 系里角点与最低
     顶点同高，但机身一旋转，角点就不再是形体上的点，世界系里可以比任何真实顶点更低。
     """
-    return diag_metrics.mesh_vertices(MESH_DIR / f"{body}_collision.obj")
+    return diag_metrics.mesh_vertices(mesh_dir() / f"{body}_collision.obj")
 
 
 def _pad_clouds(clouds: list[torch.Tensor]) -> torch.Tensor:

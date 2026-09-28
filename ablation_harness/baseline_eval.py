@@ -75,6 +75,11 @@ def run(args) -> dict:
     from rl_exp.tools.runrecord import provenance
     from rl_exp.tools.verify import cfg_snapshot
     from rl_exp.tools.verify.baseline_runtime import joint_reset_errors, resolve_task_cfg
+    from rl_exp.tasks import obs_protocol
+
+    # The tree this task's family declares (2026-09-28): two families can carry different geometry,
+    # and the foot reading plus its `foot_geometry` meta have to come off the mesh the run loaded.
+    mesh_dir = collision_mesh_dir(obs_protocol.family_of(args.task))
 
     protocol_path = pathlib.Path(args.protocol)
     protocol = json.loads(protocol_path.read_text(encoding="utf-8"))
@@ -155,17 +160,17 @@ def run(args) -> dict:
         mesh_ids = [names.index(name) for name in mesh_present]
         if not mesh_present:
             raise RuntimeError(f"none of {MESH_CHECK_BODIES} is a body of this asset: cannot check the floor")
-        mesh_corners = pad_point_clouds([mesh_vertices(collision_mesh_dir() / f"{name}_collision.obj")
+        mesh_corners = pad_point_clouds([mesh_vertices(mesh_dir / f"{name}_collision.obj")
                                         for name in mesh_present]).to(live.device)
         # The foot reading is taken off the asset's own collision meshes too: the geometry travels
         # with the record (below), so a later reader cannot substitute another family's foot.
         foot_names = [names[i] for i in feet]
         foot_meshes = [f"{name}_collision.obj" for name in foot_names]
-        missing_meshes = [name for name in foot_meshes if not (collision_mesh_dir() / name).is_file()]
+        missing_meshes = [name for name in foot_meshes if not (mesh_dir / name).is_file()]
         if missing_meshes:
             raise RuntimeError(f"no collision mesh for {missing_meshes}: the foot clearance and the "
                                "contact candidate are read off those files, not off the body origin")
-        foot_corners = pad_point_clouds([mesh_vertices(collision_mesh_dir() / name)
+        foot_corners = pad_point_clouds([mesh_vertices(mesh_dir / name)
                                         for name in foot_meshes]).to(live.device)
         weight_n = float(robot.data.body_mass.torch[0].sum().item() * 9.81)
         recorder = baseline_frames.BaselineFrames(
@@ -298,9 +303,12 @@ def run(args) -> dict:
                 # travel in the record, so a later reader cannot fill either in from memory.
                 ground_source={"kind": cfg.scene.terrain.terrain_type, "z_m": 0.0,
                                "normal": [0.0, 0.0, 1.0]},
+                # The tree is per-family now, so the file NAME no longer identifies the geometry --
+                # the digest does, and it is taken from the tree this family declares. No new key
+                # here: the frame format's meta shape is fixed for the life of the format.
                 foot_geometry={name: {"obj": mesh,
-                                      "sha256": record.file_sha256(collision_mesh_dir() / mesh),
-                                      "vertices": int(mesh_vertices(collision_mesh_dir() / mesh).shape[0])}
+                                      "sha256": record.file_sha256(mesh_dir / mesh),
+                                      "vertices": int(mesh_vertices(mesh_dir / mesh).shape[0])}
                                for name, mesh in zip(foot_names, foot_meshes)})
             # Saved first, judged second: the window is the evidence, and the verdict is derivable
             # from it again offline -- so a judge defect cannot cost a completed collection.

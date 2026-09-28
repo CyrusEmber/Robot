@@ -366,17 +366,26 @@ def check_asset_contract() -> list[str]:
 # asset artifacts pinned by a version's asset_lock.json (paths relative to rl_exp); each version's
 # lock additionally pins its OWN frozen yaml
 def _lock_files(family: str) -> list[str]:
-    """That family's urdf + compiled usda + every source mesh under meshes/** (meshes are the
-    regeneration upstream of both; usda embeds copies but a mesh-only rebuild must still go loud).
+    """That family's urdf + compiled usda + every source mesh under the tree IT declares.
 
-    The mesh tree is shared on purpose: a family whose geometry is unchanged (lizard2 adds joints,
-    not meshes) reads the same source files, and a family that changes geometry has to put its own
-    tree there, which this list then picks up for both.
+    The tree is per-family since 2026-09-28 (``versions/<family>/assets.json``): the retired
+    ``lizard`` family declares the shared ``meshes/`` it has always read, and ``lizard2`` declares
+    its own ``versions/lizard2/meshes/``. Sharing one tree made a single-family geometry repair
+    rewrite the other family's frozen physics, which is the coupling this split removes. Paths stay
+    relative to ``rl_exp/`` (the same base the locks use); a family with no declaration is refused
+    rather than defaulted -- see ``diag_metrics.meshes_dir``.
     """
+    from rl_exp.tools.diagnose import diag_metrics  # lazy: one reader of the declaration, light gate
+
+    try:
+        tree = diag_metrics.meshes_dir(family)
+    except ValueError as err:
+        raise ValueError(f"{family}: cannot resolve its mesh tree ({err})") from err
+    if not tree.is_dir():
+        raise ValueError(f"{family}: declared mesh tree {tree} is not a directory")
     files = [f"versions/{family}/{family}.urdf", f"assets/{family}/{family}.usda"]
     files += sorted(
-        str(p.relative_to(_EXP)).replace("\\", "/")
-        for p in (_EXP / "meshes").rglob("*") if p.is_file()
+        str(p.relative_to(_EXP)).replace("\\", "/") for p in tree.rglob("*") if p.is_file()
     )
     return files
 
@@ -513,6 +522,193 @@ def _self_test_locks() -> list[str]:
     return problems
 
 
+def _family_trees() -> dict[str, pathlib.Path]:
+    """Every family declaration: family -> the mesh tree it consumes (absolute)."""
+    trees: dict[str, pathlib.Path] = {}
+    for declaration in sorted(_VERSIONS.glob("*/assets.json")):
+        family = declaration.parent.name
+        try:
+            declared = json.loads(declaration.read_text(encoding="utf-8")).get("meshes_dir")
+        except (OSError, json.JSONDecodeError) as err:
+            raise ValueError(f"{declaration}: unreadable ({err})") from err
+        if not isinstance(declared, str) or not declared:
+            raise ValueError(f"{declaration}: no 'meshes_dir'")
+        trees[family] = (_EXP / declared).resolve()
+    return trees
+
+
+def _isolation_lock_files(family: str, tree: pathlib.Path) -> list[str]:
+    """That family's locked paths (urdf + usda + every file under its declared tree)."""
+    files = [f"versions/{family}/{family}.urdf", f"assets/{family}/{family}.usda"]
+    files += sorted(str(p.relative_to(_EXP)).replace("\\", "/")
+                    for p in tree.rglob("*") if p.is_file())
+    return files
+
+
+def _usda_points(usda: pathlib.Path, body: str) -> list[list[float]] | None:
+    """The inline collision points of one body in a family's usda, or ``None`` when absent."""
+    block = re.search(rf'def Mesh "{body}_collision".*?point3f\[\] points = \[(.*?)\]',
+                      usda.read_text(encoding="utf-8"), re.DOTALL)
+    if block is None:
+        return None
+    return [[float(v) for v in item.split(",")]
+            for item in re.findall(r"\(([^)]*)\)", block.group(1))]
+
+
+def _vertex_gap(torch, first: list[list[float]], second: list[list[float]]) -> float:
+    """Max nearest-neighbour distance between two vertex sets (both directions), [m]."""
+    a = torch.unique(torch.tensor(first, dtype=torch.float32).round(decimals=5), dim=0)
+    b = torch.unique(torch.tensor(second, dtype=torch.float32).round(decimals=5), dim=0)
+    return max(float(torch.cdist(x, y).min(dim=1).values.max()) for x, y in ((a, b), (b, a)))
+
+
+#: Two copies of one collision mesh are written by different tools and are independently quantised
+#: (the .usda prints fewer decimals), so the floor is not zero: measured 2026-09-28 at 0.086-0.244 mm
+#: over both families. The tolerance is three orders below the defect it was written for (the rl foot's
+#: 4.4 mm deeper, nine-times-wider resting patch).
+ISOLATION_TOLERANCE_M = 5.0e-4
+#: The shared tree, i.e. the retirement-era convention. A family declaring it is the declared
+#: exception to "urdf references must land in the declared tree" -- its files are frozen under locks
+#: that must not be rewritten, so the divergence is printed rather than repaired here.
+LEGACY_TREE = "meshes"
+
+
+def check_asset_isolation() -> list[str]:
+    """Each family loads and measures the geometry IT declares, and no two families share it.
+
+    Four refusals, all of them failures this repo has actually had: a family that consumes a tree it
+    never declared; physics (the usda's inline points) and diagnostics (the declared tree's .obj)
+    drifting apart, so a report describes a mesh no run loaded; two families pinning the same files,
+    which turns "repair family A's foot" into "retire family B's assets"; and a URDF whose references
+    resolve somewhere other than the tree its family declares.
+    """
+    import torch
+
+    problems: list[str] = []
+    trees = _family_trees()
+    if not trees:
+        problems.append("no family declares a mesh tree (versions/<family>/assets.json)")
+    # A family that carries an asset contract but no declaration is refused rather than defaulted:
+    # iterating only the declarations would make an undeclared family invisible.
+    on_disk = {urdf.parent.name for urdf in _VERSIONS.glob("*/*.urdf")}
+    for family in sorted(on_disk - set(trees)):
+        problems.append(f"{family}: has a urdf but no versions/{family}/assets.json -- the tree it "
+                        "reads must be declared, not defaulted")
+
+    locked = {family: set(_isolation_lock_files(family, tree)) for family, tree in trees.items()}
+    for family, tree in trees.items():
+        if not tree.is_dir():
+            problems.append(f"{family}: declared mesh tree {tree} is not a directory")
+    families = sorted(trees)
+    for i, first in enumerate(families):
+        for second in families[i + 1:]:
+            shared = locked[first] & locked[second]
+            if shared:
+                problems.append(f"{first} and {second} lock the same files ({len(shared)} paths, "
+                                f"e.g. {sorted(shared)[0]}): one family's geometry change would "
+                                "rewrite the other's frozen assets")
+
+    for family, tree in trees.items():
+        usda = _EXP / "assets" / family / f"{family}.usda"
+        declared_legacy = json.loads((_VERSIONS / family / "assets.json")
+                                     .read_text(encoding="utf-8")).get("meshes_dir") == LEGACY_TREE
+        refs = [ref for ref in (ref_path.resolve() for ref_path in _urdf_refs(family)) if ref.is_file()]
+        missing = len(_urdf_refs(family)) - len(refs)
+        if missing:
+            problems.append(f"{family}: urdf has {missing} mesh reference(s) that do not resolve")
+        landed = {ref.parent.parent for ref in refs}
+        if landed and landed != {tree}:
+            if declared_legacy:
+                print(f"  {family}: urdf references {sorted(str(p) for p in landed)} while the family "
+                      f"declares {tree} -- frozen divergence, recorded rather than repaired")
+            else:
+                problems.append(f"{family}: urdf mesh references resolve to "
+                                f"{sorted(str(p) for p in landed)}, not to the declared tree {tree}")
+
+        bodies = sorted(p.name[: -len("_collision.obj")]
+                        for p in (tree / "collision").glob("*_collision.obj"))
+        compared, worst_body, worst_gap = 0, "", 0.0
+        for body in bodies:
+            inline = _usda_points(usda, body)
+            if inline is None:
+                problems.append(f"{family}: {body} has a collision mesh in {tree} but no inline "
+                                "points in the usda -- physics and diagnostics disagree")
+                continue
+            obj = [line.split()[1:4] for line in
+                   (tree / "collision" / f"{body}_collision.obj")
+                   .read_text(encoding="utf-8").splitlines() if line.startswith("v ")]
+            gap = _vertex_gap(torch, inline, [[float(v) for v in row] for row in obj])
+            compared += 1
+            if gap > worst_gap:
+                worst_body, worst_gap = body, gap
+            if gap > ISOLATION_TOLERANCE_M:
+                problems.append(f"{family}/{body}: usda inline points differ from {tree} by "
+                                f"{gap * 1000:.3f} mm (tolerance {ISOLATION_TOLERANCE_M * 1000:.1f}) "
+                                "-- the run does not load the mesh the readings are taken off")
+        print(f"  {family}: {compared} collision mesh(es) against its usda, tree={tree}, "
+              f"worst gap {worst_gap * 1000:.3f} mm ({worst_body})")
+    return problems
+
+
+def _urdf_refs(family: str) -> list[pathlib.Path]:
+    """Where a family's URDF mesh references resolve, relative to the URDF's own directory."""
+    urdf = _VERSIONS / family / f"{family}.urdf"
+    if not urdf.is_file():
+        return []
+    return [urdf.parent / name for name in
+            re.findall(r'<mesh filename="([^"]+)"', urdf.read_text(encoding="utf-8"))]
+
+
+def _self_test_isolation() -> list[str]:
+    """Falsifiers: a declared pair passes; re-shared trees, a drifted usda and a missing declaration fail."""
+    problems: list[str] = []
+    with tempfile.TemporaryDirectory() as tmp:
+        root = pathlib.Path(tmp)
+        (root / "rl_exp" / "versions" / "alpha" / "meshes" / "collision").mkdir(parents=True)
+        (root / "rl_exp" / "versions" / "beta" / "meshes" / "collision").mkdir(parents=True)
+        (root / "rl_exp" / "meshes" / "collision").mkdir(parents=True)
+        (root / "rl_exp" / "assets" / "alpha").mkdir(parents=True)
+        (root / "rl_exp" / "assets" / "beta").mkdir(parents=True)
+        triangle = "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n"
+        for family, tree in (("alpha", "meshes"), ("beta", "versions/beta/meshes")):
+            (root / "rl_exp" / "versions" / family / "assets.json").write_text(
+                json.dumps({"format": 1, "meshes_dir": tree}), encoding="utf-8")
+            (root / "rl_exp" / tree / "collision" / "body_collision.obj").write_text(
+                triangle, encoding="utf-8")
+            (root / "rl_exp" / "versions" / family / f"{family}.urdf").write_text(
+                '<mesh filename="meshes/collision/body_collision.obj"/>', encoding="utf-8")
+            (root / "rl_exp" / "assets" / family / f"{family}.usda").write_text(
+                'def Mesh "body_collision" {\n  point3f[] points = [(0, 0, 0), (1, 0, 0), (0, 1, 0)]\n}\n',
+                encoding="utf-8")
+        # alpha is the legacy shape: its URDF names a per-family tree while the family declares the
+        # shared one, and that divergence is reported rather than failed.
+        (root / "rl_exp" / "versions" / "alpha" / "meshes" / "collision"
+         / "body_collision.obj").write_text(triangle, encoding="utf-8")
+        global _EXP, _VERSIONS
+        saved = (_EXP, _VERSIONS)
+        try:
+            _EXP, _VERSIONS = root / "rl_exp", root / "rl_exp" / "versions"
+            if check_asset_isolation():
+                problems.append("a declared, isolated pair was reported as a problem")
+            (root / "rl_exp" / "versions" / "beta" / "assets.json").write_text(
+                json.dumps({"format": 1, "meshes_dir": "meshes"}), encoding="utf-8")
+            if not any("lock the same files" in p for p in check_asset_isolation()):
+                problems.append("two families pinning the same files was not reported")
+            (root / "rl_exp" / "versions" / "beta" / "assets.json").write_text(
+                json.dumps({"format": 1, "meshes_dir": "versions/beta/meshes"}), encoding="utf-8")
+            (root / "rl_exp" / "assets" / "beta" / "beta.usda").write_text(
+                'def Mesh "body_collision" {\n  point3f[] points = [(0, 0, 0), (1, 0, 0), (0, 1, 0.01)]\n}\n',
+                encoding="utf-8")
+            if not any("inline points differ" in p for p in check_asset_isolation()):
+                problems.append("a usda that drifted from its declared tree was not reported")
+            (root / "rl_exp" / "versions" / "beta" / "assets.json").unlink()
+            if not any("no versions/beta/assets.json" in p for p in check_asset_isolation()):
+                problems.append("a family with an asset contract but no declaration was not reported")
+        finally:
+            _EXP, _VERSIONS = saved
+    return problems
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--strict", action="store_true")
@@ -537,6 +733,11 @@ def main() -> int:
             print(f"  SELFTEST: {problem}")
         if lock_problems:
             return 1
+        isolation_problems = _self_test_isolation()
+        for problem in isolation_problems:
+            print(f"  SELFTEST: {problem}")
+        if isolation_problems:
+            return 1
 
     if args.update_locks:
         problems = update_asset_locks(args.family)
@@ -555,6 +756,8 @@ def main() -> int:
         "robot ArticulationCfg parity (family vs teacher)": check_robot_block_parity,
         "asset contract (usda prims/joints vs yamls + hardcoded paths)": check_asset_contract,
         "asset lock (frozen versions vs current assets)": check_asset_locks,
+        "asset isolation (per-family mesh tree declared / usda matches that tree / no two families "
+        "pin the same files / urdf refs land in the declared tree)": check_asset_isolation,
     }
     all_problems = []
     for title, fn in checks.items():

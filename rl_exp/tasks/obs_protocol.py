@@ -104,6 +104,19 @@ def usd_path(task_id: str) -> str | None:
     return usd_path_for_route(route.get("line"), route.get("version"))
 
 
+def family_of(task_id: str) -> str | None:
+    """The family a task belongs to, read off its route line (``lizard2/main`` -> ``lizard2``).
+
+    Sits next to :func:`usd_path` because both answer "what does this task load": a family's mesh
+    tree is a per-family fact (``versions/<family>/assets.json``), and a caller that resolves one of
+    the two by guessing from a task id can end up measuring assets no run loaded.
+    """
+    line = task_route(task_id).get("line")
+    if not isinstance(line, str) or not line:
+        return None
+    return line.split("/")[0]
+
+
 def runtime_joint_order_for_asset(asset: str) -> list[str] | None:
     """The measured articulation order of an asset, or ``None`` when unpinned.
 
