@@ -70,7 +70,7 @@
 | `check_recipe_registry.py` | 实验线生命周期闸门（`lines.json` 二值 `status`，闸门无时钟）；反证 `test_recipe_registry_gate.py` |
 | `check_obs_protocol.py` / `obs_protocol_live.py` | 协议闸门（自洽 + 已审锚点 + golden 逐任务 + `--live` 实构比对 + 覆盖）；live 侧起 env 读真实 manager 的组序/项序/宽度/shape。反证 `test_obs_protocol_gate.py` |
 | `check_obs_layout.py` | obs 布局静态门（读 `obs_protocols.json`，不自带副本） |
-| `check_dr_parity.py` | 契约漂移闸门（`--strict` 即 CI）：DR 行静态对比 / 两份 DR 事件名清单同步 / 全部 `*_PLAY` 接线 / 资产结构契约 / 资产锁比对 |
+| `check_dr_parity.py` | 契约漂移闸门（`--strict` 即 CI）：DR 行静态对比 / 两份 DR 事件名清单同步 / 全部 `*_PLAY` 接线 / 资产结构契约 / 资产锁比对 / **资产隔离**（每家族声明自己的网格树、物理 usda 内联点必须等于该树的 obj、两家族不许钉同一批文件、URDF 引用必须落在声明树内） |
 | `check_configclass_fields.py` | 字段面闸门：`params_version` 一类的声明必须真的进 `to_dict`（类属性读不到即红）；反证 `test_configclass_fields_gate.py` |
 | `check_pxr_leak.py` | 按注册入口**构造** cfg 并断言 `pxr` 不进 `sys.modules`（防 Kit 启动被毒化，见 `rl_exp\docs\pitfalls.md` P001/P003/P004）；反证 `test_pxr_leak_gate.py` |
 | `check_split_probe_wait.py` | P005：构造期等框架 import 的载体不许是 `sys.meta_path` finder（导入在第一个给出 spec 的 finder 处停止） |
@@ -92,7 +92,7 @@
 - **主线就是家族本身**：`rl_exp\versions\<family>\<line>\vN\`。主线 = `versions\lizard\main\vN\`，支线多一层（`versions\lizard\parkour\v1\`、`versions\lizard\baseline\v1\`）。家族级文档（`FAMILY.md` / `PLAN.md` / `OBS.md` / `REWARDS.md` / `ACCEPTANCE.md`）落在 `versions\lizard\`，**不在 `main\` 里**。
 - **`versions\lizard\main\` 里不全是版本目录**：`rough-v0\`、`curriculum-flat-v0\`、`curriculum-rough-v0\` 是**配方 diff 目录**（`base.json` 指该配方的母本 + `diff.json` 声明相对母本的差异），既不是 `vN\` 也不受版本四件套闸门管辖；配方锁在 `main\cfg_lock.json`，开发态参数在 `main\main_params.yaml`。
 - **开发态参数与冻结参数是两份**：开发态 `versions\<family>\<line>\<line>_params.yaml`，冻结副本 `vN\<line>_params.yaml`；跑冻结版**永远不读**开发态（`recipe_params.frozen_only`）。`vN\asset_lock.json` 补"冻结 yaml 只钉路径不钉内容"这个洞（资产原地换代 → 常驻任务 id 复现被破坏）。
-- **机器件不是文档**：`versions\recipes.json`（配方身份映射，身份写出来不推出来）/ `obs_protocols.json`（obs 协议声明，key 就是自身内容摘要）/ `obs_protocol_anchors.json`（已审摘要与宽度，只读不写）/ `lines.json`（实验线生命周期，二值 `status`；资产契约只查 `active` 线）/ `cfg_baselines.json`（框架组合基线，全仓一份）/ `freeze_parity.json`（冻结期对拍对象：哪两个 cfg 文件互为手工副本 + 已审差异，闸门不认识任何家族名）/ `<线>\cfg_lock.json`（配方 golden，**一线一份**，`--update --line` 只能写自己那份）。这些是闸门读的契约；`cfg_lock.json` **不写进 `vN\`**。
+- **机器件不是文档**：`versions\recipes.json`（配方身份映射，身份写出来不推出来）/ `obs_protocols.json`（obs 协议声明，key 就是自身内容摘要）/ `obs_protocol_anchors.json`（已审摘要与宽度，只读不写）/ `lines.json`（实验线生命周期，二值 `status`；资产契约只查 `active` 线）/ `cfg_baselines.json`（框架组合基线，全仓一份）/ `freeze_parity.json`（冻结期对拍对象：哪两个 cfg 文件互为手工副本 + 已审差异，闸门不认识任何家族名）/ `<家族>\assets.json`（**每家族一行 `meshes_dir`**：该家族消费哪棵网格树；缺声明是拒绝项，`check_dr_parity` 的资产隔离一节看守）/ `<线>\cfg_lock.json`（配方 golden，**一线一份**，`--update --line` 只能写自己那份）。这些是闸门读的契约；`cfg_lock.json` **不写进 `vN\`**。
 - **`joint_order` 有两种，别混**：配方里的 `joint_order` = URDF 树序（`export_ue.py` 拿它断 URDF）；obs/action 真正按索引取值的是 `versions\joint_order_runtime.json` 的**实测序**（**按资产键**，`--pin --reason` 才写），只有 `obs_protocol.py` 读它。UE 工件同时输出两者并注明用途，读它只有一处。
 - **记录与证据落点**：跑分 → `ablation_harness\results\<协议>\<group>\<run_id>\`（外加组内 `summary.csv` / `terrains.csv`）；真跑证据 → `rl_exp\versions\lizard\verify_logs\`；版本结果回填 → 各 `vN\NOTES.md`；验收记录 → `acceptance\records\`（通过数/通过率的唯一归属是 `rl_exp\versions\lizard\ACCEPTANCE.md`）；训练 log / ckpt 在 `<ROOT>\logs\`（不入库）。
 - **线之间的隔离是硬约束**：`tasks\recipe_factory.py` 是跨线共用的类构造器但**不 import 任何具体线**，每条线由自己的模块调它（`recipe_tasks.py` 按名按需生成可注册类，`_LINES_BUILT_ELSEWHERE`）；baseline 线刻意复制自己的奖励核而不共享 `teacher_mdp.py`。看守：`test_baseline_isolation.py`。

@@ -4,7 +4,7 @@ title: lizard2 v1 步态验收缺口与 v2 配方决策
 scope: rl_exp/versions/lizard2, rl_exp/tasks, rl_exp/tools/pipeline, rl_exp/tools/verify, ablation_harness
 status: open
 landing: rl_exp/versions/lizard2/main/main_params.yaml, rl_exp/tasks/lizard2_recipe.py, rl_exp/tools/pipeline/emit_diff_declaration.py, rl_exp/tools/verify/check_recipe_build.py
-next: ① 决定无界动作输出的约束方式，并保证 train/play 一致；② 奖励项与权重按新配方裁决。v1 已训练并锚定，依版本规则，任何 reward/action 配方变更都进入 `lizard2/main/v2`，不能作为 v1 开训前修订。实测与撤回项见 `acceptance/records/2026-09-23-lizard2-v1-gait-skate.md`。
+next: ① **动作接口边界：已收窄为"等 (c)"** —— 保留接口；(a)(b) 两问与 (b) 的"只是从一种饱和换成同一种饱和"都有读数（步态记录 ⑨/⑩），**(c) 部署端是否接受限位外位置参考不在本仓**，待它与后续验收证据再定是否约束参考。② **奖励变更归属**：`v1` 已训练并锚定，任何 reward/action 配方变更都进 `lizard2/main/v2`（**该目录尚不存在**）；候选项已收敛为 `feet_slide` / `foot_clearance` 两项——**脚掌接触面积/形状项已排除**（记录 ⑪ 及其"四脚求和必然罚抬脚、饱和只修脚内不修脚间"的机理），前置是**统一承重门**（`foot_slip_v1` 的 `foot_fraction ≥ min_load` 与探针的 `net_z > 1 N` 不同源）。④⑤⑥⑦ 四条出口属**协议升级**：`lizard2_flat_v2.json` 已按 sha256 锚定，不能就地在它上面收窄 `report_only`。实测与撤回项见 `acceptance/records/2026-09-23-lizard2-v1-gait-skate.md`。
 close_when: 动作边界和奖励方案决定落入 v2 的 PLAN、参数与差异声明；新步态协议使用已核验的三项行为量并完成阈值标定；v2 通过配方构建与冻结前检查，形成可复现的训练候选。训练结果另按 v2 NOTES 回填。
 evidence: acceptance/records/2026-09-23-lizard2-v1-gait-skate, acceptance/records/2026-09-23-lizard2-v1-first-eval, acceptance/records/2026-09-22-lizard2-family-landing, acceptance/records/2026-09-22-family-landing-decoupled, acceptance/records/2026-09-22-lizard2-stride-at-load, acceptance/records/2026-09-22-lizard2-declarations-and-plan, acceptance/records/2026-09-22-lizard2-self-collision-sweep, acceptance/records/2026-09-22-lizard2-actuator-capability, acceptance/records/2026-09-22-lizard2-probe-observer-fixes
 ---
@@ -27,12 +27,12 @@ evidence: acceptance/records/2026-09-23-lizard2-v1-gait-skate, acceptance/record
 - 在新协议声明固定命令序列、速度带、等待窗及覆盖要求，消费机制项的驱动与覆盖检查；新条件重新采集，
   不把旧随机重采样结果当成新场景证据。
 
-本节出口：新协议与新 reader 绑定、报告清单全有实现、产品口径有依据、固定场景真跑可验；原判决仍按原协议可复读。
+本节出口：新协议与新 reader 绑定、报告清单全有实现、产品口径有依据、固定场景真跑可验；原判决仍按原协议可复读。**收窄 `report_only` 与把三项行为量写进 `criteria` 都需要新的协议版本**：`lizard2_flat_v2.json` 已由 `protocol_anchors.json` 按 sha256 锚定、四份报告带该 digest ⇒ 不得就地在它上面改；旧协议的 `why_*` 保持逐字节不变。
 
 ## 当前待决定
 
-1. **动作接口边界**（决定范围已按证据收窄，见步态记录 ⑦ 第 6–8 条与 ⑨）：位置 PD 下更远的参考本身就是产生驱动力的手段 ⇒ **"参考越限"不等于"接口有缺陷"，也不等于该裁剪**。最小核查的三问里两问已有读数：**(a) 关节是否贴限位** —— 贴住帧占比 ≤ 0.01、最长 4 帧（0.08 s），越限帧里同时贴住的比例多为 0（最坏 2.8 档 rr hip 27%）⇒ 没有"长期顶限位"；**(b) 投影回限位会少掉多少力矩** —— hip 9.4–121.0、hfe 0.4–101.2 N·m，相对 leg 组 `effort_limit` 180 N·m 最大两格达 56–67% ⇒ 裁剪会实质改变驱动，不是"一种饱和换同一种饱和"。**第三问未答且不在本仓**：**(c) 部署端是否接受限位外参考（或自行裁剪/拒绝）** —— 训练必须匹配真正的部署行为。⇒ 待决定的是：按 (c) 的答案与后续验收证据再定是否约束参考；**在那之前保留接口**，验收侧仍按要求单列"参考超出范围的部分"。
-2. **奖励变更归属**：`v1` 已训练并有结果锚点，依 `.codemaker/rules/versioning.mdc` §A/§B，修改 `feet_slide` / `foot_clearance` 属于已训配方变更，必须建立 `lizard2/main/v2`；不能按 v1 开训前修订处理。待决定的是是否加回两项、具体实现与权重，并在 v2 方案中给出对应验收。v1 的奖励与结果保持可复读。
+1. **动作接口边界**（范围已按证据收窄；读数与撤回见步态记录 ⑦ 第 6–8 条、⑨、⑩，本处不复述）：位置 PD 下更远的参考本身就是产生驱动力的手段 ⇒ **"参考越限"不等于"接口有缺陷"，也不等于该裁剪**。最小核查的三问里 **(a)(b) 已有读数，(b) 的"只是从一种饱和换成同一种饱和"已被排除**（⑩）；**第三问 (c) 未答且不在本仓**——部署端是否接受限位外参考（或自行裁剪/拒绝），训练必须匹配真正的部署行为。⇒ 待决定的是：按 (c) 的答案与后续验收证据再定是否约束参考；**在那之前保留接口**，验收侧仍按要求单列"参考超出范围的部分"。
+2. **奖励变更归属**：`v1` 已训练并有结果锚点，依 `.codemaker/rules/versioning.mdc` §A/§B，修改 `feet_slide` / `foot_clearance` 属已训配方变更，必须建立 `lizard2/main/v2`（**该目录尚不存在**），不能按 v1 开训前修订处理。候选**收敛为这两项**：脚掌**接触面积/形状**项已排除——四脚求和必然惩罚正确抬脚、饱和只修脚内不修脚间、只评估承重脚仍留"把重量压到最平那只脚"的漏洞（判断与读数见步态记录 ⑪）。待决定的是这两项的实现、权重与 v2 验收；**前置**是统一承重门（`foot_slip_v1` 的 `foot_fraction ≥ min_load` 与探针的 `net_z > 1 N` 不同源，见该记录"未覆盖边界"）。v1 的奖励与结果保持可复读。
 
 **lf（左前）异常已撤回**：不得再把一阶目标预测中的负净空解释为“目标要求入地”；摆动中段实测净空三档均高于 rf，符号翻转来自线性修正项。复核方法与撤回依据见步态记录 ⑧。后续读一阶预测须区分相位和瞬时修正量，不能把瞬时量当作姿态。
 

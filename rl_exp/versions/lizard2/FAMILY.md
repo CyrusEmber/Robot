@@ -25,6 +25,15 @@ lizard2 = lizard 的**四足构型修正版**：在每条腿的根部**插入一
 - 家族级文档（`FAMILY.md` / `PLAN.md`）落在 `versions/lizard2/`，**不在 `main/` 里**。
 - 线之间的隔离是硬约束：本线不 import 其它线的 cfg/mdp，要哪个核就复制一份进本线自己的模块。
 
+## 资产树（2026-09-28）
+
+本家族的资产按**自己的树**解析，声明在 `versions/lizard2/assets.json`（`meshes_dir =
+versions/lizard2/meshes`）：物理读 `assets/lizard2/lizard2.usda` 的**内联点**，诊断/验收读
+`versions/lizard2/meshes/collision/*.obj`，URDF 的相对引用也落在同一棵树，资产锁钉同一棵树。
+旧家族 `lizard` 声明共享树 `meshes/`（其 19 个冻结锁逐字节不动）⇒ 修一个家族的几何不再改写另一个
+家族的物理。同日 `rl_foot_collision` 换代为 `rr` 的 y 镜像（原平板 hull 与另三只不同形，理由与读
+数见 `acceptance/records/2026-09-28-lizard2-foot-hull-and-asset-isolation.md`）。
+
 ## 任务注册表
 
 真源是 `rl_exp/tasks/recipe.py` 的配方表 + `versions/recipes.json`（本文只留人类速查）。
