@@ -192,6 +192,23 @@ def head_press_action(unwrapped, robot, joint_names, end: int) -> torch.Tensor:
     return action
 
 
+def declared_action_joints(params: dict, joint_names: list[str]) -> set[str]:
+    """The joints the recipe's yaml says its action interface drives.
+
+    A version whose interface is not the class default declares it (``action.joints``, patterns per
+    group), and that declaration is what the probe asserts against. Hard-coding "every joint is
+    channelled" instead writes v1's interface as a law: it fails exactly the versions whose point is
+    that some joints are NOT commanded (lizard2 v2 drops the four blades), which is the failure the
+    sibling line's v2 item has carried since 2026-09-25. A yaml with no declaration means the class
+    default, which is every joint.
+    """
+    patterns = [pattern for group in (params.get("action", {}).get("joints") or {}).values()
+                for pattern in group]
+    if not patterns:
+        return set(joint_names)
+    return {name for name in joint_names if any(re.fullmatch(pattern, name) for pattern in patterns)}
+
+
 def write_frame(path: pathlib.Path, frame) -> pathlib.Path:
     """Save one RGB frame with whichever image writer this runtime ships."""
     try:
@@ -538,6 +555,13 @@ def main() -> int:
         shot_dir.mkdir(exist_ok=True)
     reward_names = list(getattr(unwrapped.reward_manager, "_term_names", []))
     act_dim = unwrapped.action_manager.total_action_dim
+    # The joints the yaml does not give to the interface, and how far their TARGET drifts from the
+    # default pose while the others are excited: the recipe claims they are held by their own PD at
+    # the resting angle, and a channel that survived the edit (or a default offset that is not the
+    # resting angle) looks identical in the config and only shows up as a moving target here.
+    declared_joints = declared_action_joints(params, joint_names)
+    uncommanded_ids = [index for index, name in enumerate(joint_names) if name not in declared_joints]
+    uncommanded_drift = 0.0
     soft_limits = robot.data.soft_joint_pos_limits.torch
     span = (soft_limits[..., 1] - soft_limits[..., 0]).clamp_min(1e-6)
     last_action = None
@@ -576,6 +600,11 @@ def main() -> int:
         joint_means["at_limit_low"].append(at_limit_low.float().mean().reshape(1))
         joint_means["at_limit_high"].append(at_limit_high.float().mean().reshape(1))
         torque_rows.append(robot.data.applied_torque.torch.abs().mean(dim=0).clone())
+        if uncommanded_ids:
+            uncommanded_drift = max(
+                uncommanded_drift,
+                float((robot.data.joint_pos_target.torch[:, uncommanded_ids]
+                       - robot.data.default_joint_pos.torch[:, uncommanded_ids]).abs().max()))
         if standing:
             z_rows.append(robot.data.root_pos_w.torch[:, 2].mean().reshape(1))
             # the angle to straight down is acos of the same quantity the fall criteria read
@@ -633,10 +662,24 @@ def main() -> int:
         print(f"  term {term_name}: {len(term._joint_names)} joints, scale {scale}")
         for joint in term._joint_names:
             channelled[joint] = channelled.get(joint, 0) + 1
-    missing = sorted(set(joint_names) - set(channelled))
+    missing = sorted(declared_joints - set(channelled))
+    undeclared = sorted(set(channelled) - declared_joints)
     doubled = sorted(joint for joint, count in channelled.items() if count > 1)
-    check("actions/every-joint-channelled", not missing, f"no action term carries {missing}")
+    check("actions/declared-joints-channelled", not missing, f"no action term carries {missing}")
+    check("actions/no-undeclared-joint-channelled", not undeclared,
+          f"{undeclared} are channelled although the yaml's action.joints does not name them -- a"
+          " joint the recipe means to leave alone must not have a channel")
     check("actions/no-joint-in-two-terms", not doubled, f"carried twice: {doubled}")
+    check("actions/dim-matches-declared", am.total_action_dim == len(declared_joints),
+          f"dim {am.total_action_dim} vs {len(declared_joints)} joints the yaml declares")
+    if uncommanded_ids:
+        check("actions/uncommanded-hold-default-target", uncommanded_drift <= 1e-5,
+              f"{[joint_names[index] for index in uncommanded_ids]} target drifted"
+              f" {uncommanded_drift:.3e} rad from the default pose while the other joints were"
+              " excited -- an uncommanded joint sits at its default target, it does not follow the"
+              " network (the blade keeps its own PD, which is not the same as being passive)")
+        print(f"  uncommanded {[joint_names[index] for index in uncommanded_ids]}: max"
+              f" |target - default| {uncommanded_drift:.3e} rad over {args_cli.steps} steps")
     check("actions/dim-matches-mapping", am.total_action_dim == len(channelled),
           f"dim {am.total_action_dim} vs {len(channelled)} channelled joints")
 
