@@ -493,6 +493,7 @@ TODO 偏离计划的地方照实写；run 记录不完整就写明缺什么、�
 | run id | TODO |
 | checkpoint | TODO |
 | 评测报告 | TODO |
+| 训练曲线 | TODO 入库落点 = 本目录 `tb_scalars.csv`（`dump_tb.py --log_dir <run> --out <本目录>\\tb_scalars.full.csv`，再 `--csv_in … --max_points 150`；读法 `plot_tb.py --csv`）；**收敛读数（分块均值 / 平台带 / 失败模式首现）归 `acceptance/records/`（路径待填）** |
 | 分类判定 | TODO |
 
 ## 结论
