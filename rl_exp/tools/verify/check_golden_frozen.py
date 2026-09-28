@@ -91,7 +91,13 @@ FROZEN = {
     # entry comes with :func:`uncovered` below: the covered set is read off the tree now, so leaving
     # a lock out has to be a deliberate edit rather than a silence. lizard2 v1 is untrained and
     # untagged, so this freezes the bytes the line landed with.
-    "rl_exp/versions/lizard2/main/cfg_lock.json": "0d67afd05d66061b2557aca047393140fd855f3b315bff737cdc2965360c05ce",
+    #
+    # Re-baselined 2026-09-28 (fifth re-baseline, and the first on this line): v2 added two task ids
+    # (the blade-authority pair) to the same lock, so the bytes moved by that addition and nothing
+    # else. The previous digest's two v1 entries were verified unchanged by the --update that wrote
+    # the new ones, and the diff was reviewed as a two-entry addition, not as a rewrite: see
+    # acceptance/records/2026-09-28-lizard2-v2-cfg-lock-rebaseline.md.
+    "rl_exp/versions/lizard2/main/cfg_lock.json": "62b51d8930146db27e776ce9e7d02c4cb62425b6cf47a362bf3f4820b0f4be6e",
 }
 
 FROZEN_REVS: dict[str, str] = {
@@ -106,8 +112,9 @@ FROZEN_REVS: dict[str, str] = {
     # The fourth re-anchor took the same two steps: 817d64e carries the head-chain contact guard.
     "rl_exp/versions/lizard/baseline/cfg_lock.json": "817d64e",
     # The lizard2 line's bytes landed in dfdc2ae (the pre-training revision that repointed the head
-    # guard); the digest above is that revision's bytes.
-    "rl_exp/versions/lizard2/main/cfg_lock.json": "dfdc2ae",
+    # guard). The 2026-09-28 re-baseline took the documented two-step shape: the new bytes landed in
+    # e59e240 ("Register lizard2 v2"), and this line names that revision.
+    "rl_exp/versions/lizard2/main/cfg_lock.json": "e59e240",
 }
 """Which revision each frozen file's bytes are from, for the banner only.
 
