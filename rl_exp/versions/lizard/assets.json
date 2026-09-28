@@ -1,0 +1,5 @@
+{
+  "format": 1,
+  "meshes_dir": "meshes",
+  "why": "This retired family consumes the shared tree rl_exp/meshes/** -- the path its 19 frozen asset locks have always listed. Declared rather than defaulted so 'which tree does this family read' has one answer per family; changing this file changes which files the family's lock pins."
+}

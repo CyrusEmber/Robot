@@ -1,0 +1,5 @@
+{
+  "format": 1,
+  "meshes_dir": "versions/lizard2/meshes",
+  "why": "This family's own tree, the one versions/lizard2/lizard2.urdf names relative to itself. It exists because lizard2's foot collision mesh cannot be shared with the retired lizard family: 2026-09-28 found rl's hull flat-bottomed (a 0.119 m2 resting patch) while lf/rf/rr were domed (0.013), and repairing it must not rewrite the other family's frozen physics. Paths are relative to rl_exp/, the same base the asset locks use."
+}
