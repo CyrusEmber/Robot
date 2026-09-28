@@ -68,7 +68,7 @@ DIFF_NAME = "diff.json"
 EXPECTED_COMPARED: dict[str, int] = {
     "lizard/main": 32,
     "lizard/baseline": 4,
-    "lizard2/main": 2,
+    "lizard2/main": 4,
 }
 """How many recipe/task pairs this gate compares, per line, pinned.
 
@@ -122,6 +122,11 @@ EXPECTED_DIFFS: dict[tuple[str, str], int] = {
     # computed from the recipe itself, so this count is the only thing that can notice the day the
     # computation loses a group.
     ("lizard2/main", "v1"): 108,
+    # v2's base.json names v1, so this is a LINEAGE reading and the count is small on purpose: the one
+    # env path its own delta moves (the legs action group's joint list: the blade patterns leave it)
+    # plus the two agent leaves its own runner sets (experiment_name, max_iterations) = 3. A 108 here
+    # would mean the emitter had read it as a root and restated v1's whole heritage as v2's delta.
+    ("lizard2/main", "v2"): 3,
 }
 """Recipe -> how many paths its difference declaration lists (``diff.json`` next to the recipe)."""
 

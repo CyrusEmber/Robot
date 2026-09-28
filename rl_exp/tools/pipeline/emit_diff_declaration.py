@@ -40,8 +40,43 @@ import check_recipe_build as crb  # noqa: E402 - the gate that owns the hard-B m
 from rl_exp.tasks import recipe  # noqa: E402
 
 AGENT_STOCK = "isaaclab_rl.rsl_rl:RslRlOnPolicyRunnerCfg"
-WHY_TODO_ENV = "TODO: this element writes this path -- say why (compared against the framework stock cfg)"
-WHY_TODO_AGENT = "TODO: this leaf is set where the stock leaves it unset -- say why"
+
+ROOT_NOTE = (
+    "Hard B, root reading: base.json is null (a lineage root has no mother), so the declared"
+    " difference is against the framework stock cfg -- the only base a root can have. This file"
+    " was COMPUTED from this recipe's own resolved cfg (rl_exp/tools/pipeline/emit_diff_declaration.py):"
+    " the paths are the leaves that differ from stock and the element named under each group is the one"
+    " that moved them in the replay, so the paths here cannot disagree with the build. The why strings"
+    " are TODO until an author writes them: hard B compares paths, not prose, so an unwritten reason is"
+    " a review item rather than a wrong claim."
+)
+
+LINEAGE_NOTE = (
+    "Hard B, lineage reading: base.json names {mother} as this recipe's mother, so the declared"
+    " difference is against that recipe -- not against the framework stock cfg, which would bury this"
+    " version's own delta inside everything its ancestors already wrote. Env paths are grouped by the"
+    " element that last moved them in the replay, so the paths here cannot disagree with the build;"
+    " params_version is filtered as identity, because it says which recipe this is and it is what makes"
+    " the two recipes different at all. The why strings are TODO until an author writes them: hard B"
+    " compares paths, not prose, so an unwritten reason is a review item rather than a wrong claim."
+)
+
+
+def why_todo_env(mother: str | None) -> str:
+    """The unwritten-reason placeholder, naming the base this declaration is read against."""
+    return ("TODO: this element writes this path -- say why (compared against "
+            f"{f'its mother {mother}' if mother else 'the framework stock cfg'})")
+
+
+def why_todo_agent(mother: str | None) -> str:
+    """Same, for an agent leaf. The root wording is kept byte-for-byte: it is what existing root
+    declarations carry, and a re-emit must not look like an edit."""
+    return ("TODO: this leaf is set where "
+            f"{f'mother {mother}' if mother else 'the stock'} leaves it unset -- say why")
+
+
+AGENT_WHY = ("The agent is a class, not a declaration: these entries carry a reason and no element"
+             " name.")
 
 
 def wiring_class(family: str, line_key: str):
@@ -69,13 +104,21 @@ def stock_parent(wiring) -> tuple[type, str]:
     raise SystemExit(f"{wiring.__name__} has no isaaclab_tasks parent: it is not a stock-derived wiring")
 
 
-def agent_entry(line: str) -> str:
-    """The runner cfg this line's recipes name, read from the recipe map rather than guessed."""
-    data = json.loads((_EXP / "versions" / "recipes.json").read_text(encoding="utf-8"))
-    for key, entry in data["recipes"].items():
-        if entry.get("line") == line and "play" not in key:
-            return entry["agent_entry"]
-    raise SystemExit(f"no recipe entry names line {line!r}")
+def base_mother(line_key: str, version: str) -> str | None:
+    """The mother this version's ``base.json`` names, or ``None`` for a lineage root.
+
+    The base is neither this tool's choice nor the declaration's: ``base.json`` decides it, and the
+    gate reads the same file to decide what to compare against (``check_recipe_build.base_of`` says
+    so from its side, and refuses a declaration whose stock block contradicts it). Reading it here is
+    what stops a version that has a mother from being emitted as if it were a root -- which is what
+    this tool did while it had one reading, and why every later version on a line had to be written
+    by hand until now.
+    """
+    path = _EXP / "versions" / line_key / version / "base.json"
+    try:
+        return json.loads(path.read_text(encoding="utf-8")).get("base")
+    except (OSError, json.JSONDecodeError) as err:
+        raise SystemExit(f"{line_key}/{version}: base.json unreadable: {type(err).__name__}: {err}")
 
 
 def leaf_rows(base_obj, subject_obj) -> list[tuple[str, str, str]]:
@@ -93,60 +136,87 @@ def build(line_key: str, version: str) -> dict:
     family, line = line_key.split("/")
     wiring = wiring_class(family, line_key)
     stock_cls, stock_handle = stock_parent(wiring)
+    mother = base_mother(line_key, version)
 
-    wiring_rows: list = []
-    lock.walk_diff(cs.snapshot(stock_cls()), cs.snapshot(wiring(params_version=version)), "", wiring_rows,
-                   limit=1 << 30)
-    wiring_except = sorted(row[0] for row in wiring_rows)
+    # The stock/wiring walk has a reader only in the root reading's ``base`` block. A version with a
+    # mother is read against that recipe, so the walk is not paid for -- and, more to the point, it
+    # cannot end up in a block the gate refuses as a second answer to the base question.
+    wiring_except: list = []
+    if mother is None:
+        wiring_rows: list = []
+        lock.walk_diff(cs.snapshot(stock_cls()), cs.snapshot(wiring(params_version=version)), "",
+                       wiring_rows, limit=1 << 30)
+        wiring_except = sorted(row[0] for row in wiring_rows)
 
     subject = recipe.build(version, line=line_key)
-    env_rows = leaf_rows(stock_cls(), subject)
+    base_cfg = stock_cls() if mother is None else recipe.build(mother, line=line_key)
+    env_rows = leaf_rows(base_cfg, subject)
     changed = [row[0] for row in env_rows]
     env_briefs = {row[0]: str(row[2]) for row in env_rows}
 
     trace: list = []
     recipe.build(version, trace=trace, line=line_key)
     produced = crb.authored_paths(trace, line_key, version)
-    # last writer wins: a path several elements touch in sequence still has one element that set its
-    # final value, and the gate accepts any element that really moved it.
-    author_of = {leaf: name for name in produced for leaf in produced[name] if leaf in changed}
+    # Declare what the REPLAY says each element moved, not the leaf the mother comparison landed on.
+    # The two granularities differ whenever an element rewrites a whole sub-cfg while only one leaf
+    # under it actually moved: the replay says ``actions.joint_pos_legs``, the comparison against a
+    # mother says ``actions.joint_pos_legs.joint_names[]``. The gate asks whether the entry COVERS a
+    # path the element moved (``check_recipe_build.hard_b``), so the entry has to sit at or above the
+    # replay's path; last writer wins, because a path several elements touch still has one element
+    # that set its final value and the gate accepts any element that really moved it.
+    author_of: dict[str, tuple[str, str]] = {}
+    for name in reversed([name for name, _ in trace]):
+        for moved in sorted(produced.get(name, ())):
+            for leaf in changed:
+                if leaf not in author_of and crb.covers(moved, leaf):
+                    author_of[leaf] = (name, moved)
 
     env_allowed: dict[str, dict] = {}
     unowned = []
+    declared: set[str] = set()
     for leaf in changed:
-        author = author_of.get(leaf)
-        if author is None:
+        found = author_of.get(leaf)
+        if found is None:
             unowned.append(leaf)
             continue
-        env_allowed.setdefault(author, {"paths": [], "why": WHY_TODO_ENV})["paths"].append(leaf)
+        author, entry = found
+        group = env_allowed.setdefault(author, {"paths": [], "why": why_todo_env(mother)})
+        if entry not in declared:
+            declared.add(entry)
+            group["paths"].append(entry)
     for group in env_allowed.values():
         group["paths"].sort()
 
-    agent_handle = agent_entry(line_key)
-    agent_cls = lock.resolve_entry(agent_handle)
-    agent_rows = leaf_rows(lock.resolve_entry(AGENT_STOCK)(), agent_cls())
+    # The agent side is read against the same base as the env side: the mother's runner cfg when there
+    # is one, the stock runner otherwise. The gate resolves the base the same way, and a ``stock`` key
+    # here is the second answer that would contradict ``base.json``.
+    agent_cls = lock.resolve_entry(crb.agent_entry(line_key, version))
+    agent_base_handle = crb.agent_entry(line_key, mother) if mother else AGENT_STOCK
+    agent_rows = leaf_rows(lock.resolve_entry(agent_base_handle)(), agent_cls())
     agent_changed = [row[0] for row in agent_rows]
     agent_briefs = {row[0]: str(row[2]) for row in agent_rows}
-    declaration = {
-        "format": 4,
-        "recipe": None,  # filled by the caller's recipe key lookup below
-        "line": line_key,
-        "note": (
-            "Hard B, root reading: base.json is null (a lineage root has no mother), so the declared"
-            " difference is against the framework stock cfg -- the only base a root can have. This file"
-            " was COMPUTED from this recipe's own resolved cfg (rl_exp/tools/pipeline/emit_diff_declaration.py):"
-            " the paths are the leaves that differ from stock and the element named under each group is the one"
-            " that moved them in the replay, so the paths here cannot disagree with the build. The why strings"
-            " are TODO until an author writes them: hard B compares paths, not prose, so an unwritten reason is"
-            " a review item rather than a wrong claim."
-        ),
-        "base": {"stock": stock_handle, "wiring": f"{wiring.__module__}:{wiring.__name__}",
-                 "wiring_is_stock_except": wiring_except},
-        "env": {"allowed": env_allowed},
-        "agent": {"stock": AGENT_STOCK,
-                  "why": "The agent is a class, not a declaration: these entries carry a reason and no element name.",
-                  "allowed": {path: WHY_TODO_AGENT for path in sorted(agent_changed)}},
-    }
+    if mother is None:
+        declaration = {
+            "format": 4,
+            "recipe": None,  # filled by the caller's recipe key lookup below
+            "line": line_key,
+            "note": ROOT_NOTE,
+            "base": {"stock": stock_handle, "wiring": f"{wiring.__module__}:{wiring.__name__}",
+                     "wiring_is_stock_except": wiring_except},
+            "env": {"allowed": env_allowed},
+            "agent": {"stock": AGENT_STOCK, "why": AGENT_WHY,
+                      "allowed": {path: why_todo_agent(None) for path in sorted(agent_changed)}},
+        }
+    else:
+        declaration = {
+            "format": 4,
+            "recipe": None,  # filled by the caller's recipe key lookup below
+            "line": line_key,
+            "note": LINEAGE_NOTE.format(mother=mother),
+            "env": {"allowed": env_allowed},
+            "agent": {"why": AGENT_WHY,
+                      "allowed": {path: why_todo_agent(mother) for path in sorted(agent_changed)}},
+        }
     data = json.loads((_EXP / "versions" / "recipes.json").read_text(encoding="utf-8"))
     for key, entry in data["recipes"].items():
         if entry.get("line") == line_key and entry.get("legacy_task_version") == version:
@@ -255,9 +325,13 @@ def main() -> int:
     else:
         print(text)
     env_paths = sum(len(g["paths"]) for g in declaration["env"]["allowed"].values())
+    # The base line is read from the declaration the same way the gate reads it: a stock block for a
+    # lineage root, and for a version with a mother the mother -- which ``build`` already resolved, so
+    # the summary cannot describe a different reading than the file it just wrote.
+    base_desc = (f"base {declaration['base']['stock']} + {declaration['base']['wiring_is_stock_except']}"
+                 if "base" in declaration else f"base mother {base_mother(args.line, args.version)}")
     print(f"[emit] {args.line}/{args.version}: {len(declaration['env']['allowed'])} element groups, "
-          f"{env_paths} env paths, {len(declaration['agent']['allowed'])} agent leaves, "
-          f"base {declaration['base']['stock']} + {declaration['base']['wiring_is_stock_except']}",
+          f"{env_paths} env paths, {len(declaration['agent']['allowed'])} agent leaves, {base_desc}",
           file=sys.stderr)
     if unowned:
         print(f"[emit] {len(unowned)} changed path(s) no element claims: {unowned[:5]}", file=sys.stderr)
