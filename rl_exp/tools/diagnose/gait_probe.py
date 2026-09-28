@@ -37,12 +37,23 @@ apart:
                             included, against its OWN effort limit (70 N*m where the leg group's is
                             180): how hard the joint is driven, what share of its limit that is, how
                             often the drive reaches the limit, and how far the policy commands the
-                            joint away from the zero pose. "All four feet tip up" is an appearance: at
-                            Kp 200 / Kd 12 the cap is only reached at 0.35 rad of error, so how much
-                            force a blade uses is a number, not something a pose can show. A limit can
-                            only be cut for a reason if the drive has been read against it first --
-                            and if the drive never reaches it, cutting it changes nothing and the
-                            trial that cut it answers nothing.
+                            joint away from the zero pose. Beside the command sits what the joint
+                            ACTUALLY stands at, the peak rate it moves at while loaded, and how often
+                            its drive reverses sign per second: a softer gain is supposed to let the
+                            pad settle under load, and "settles" versus "rattles" is the difference
+                            between a low peak rate and a high flip rate. ``stance_count`` /
+                            ``steady_stance_count`` say how many load cycles the medians rest on --
+                            the number that decides whether a reading is a distribution or an anecdote.
+                            "All four feet tip up" is an appearance: at Kp 200 / Kd 12 the cap is only
+                            reached at 0.35 rad of error, so how much force a blade uses is a number,
+                            not something a pose can show. A limit can only be cut for a reason if the
+                            drive has been read against it first -- and if the drive never reaches it,
+                            cutting it changes nothing and the trial that cut it answers nothing.
+                            ``--feet-kp`` / ``--feet-kd`` / ``--feet-effort`` override that group's
+                            drive before the env is built, which is how a candidate gain is read on an
+                            EXISTING checkpoint without touching a frozen recipe; the override is
+                            recorded in the report and the gains are read back out of the sim, so a
+                            report cannot claim nominal gains it did not run.
   ``sole_contact_area_m2``  how much of the sole is within ``--sole_band_mm`` of the floor, and how
                             much is under it (``sole_through_area_m2``), from the collision mesh's
                             triangles rotated by the live pose -- the reading for "bearing weight on a
@@ -110,6 +121,15 @@ parser.add_argument("--sole_band_mm", type=float, default=2.0,
                     help="sole within this height of the floor is called on the floor [mm]")
 parser.add_argument("--sole_eps_mm", type=float, default=0.0,
                     help="sole below -this is called through the floor, not contact [mm]")
+parser.add_argument("--feet-kp", type=float, default=None,
+                    help="override the feet group's stiffness [N*m/rad] before the env is built: a "
+                         "diagnostic of the DRIVE, not a recipe -- the probe owns its cfg, the "
+                         "override lands in the report, and the per-joint gains are read back out of "
+                         "the sim, so a report cannot claim nominal gains it did not run")
+parser.add_argument("--feet-kd", type=float, default=None,
+                    help="override the feet group's damping [N*m*s/rad]")
+parser.add_argument("--feet-effort", type=float, default=None,
+                    help="override the feet group's effort limit [N*m]")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 
@@ -211,11 +231,15 @@ def self_check() -> None:
         # 0.3 against actual 0.1 is 40 N*m at rest, and the ONE steady frame carrying -3 rad/s drives it
         # to |40 + 36| = 76 -- past the cap, on 1 of the 4 steady frames. Median (40) and saturated share
         # (0.25) are therefore different readings of the same series, and a reader that had only one of
-        # them could call this joint either barely loaded or saturated.
+        # them could call this joint either barely loaded or saturated. The last steady frame carries
+        # +4 rad/s instead, which drives the SAME joint to 40 - 48 = -8: one frame on the other side of
+        # zero, so the sign-flip reading has something to count (two flips over four steady frames) and
+        # the offset/velocity readings have a peak to report. A fixture where every steady frame pushes
+        # the same way would pass a broken sign counter.
         "joint_target_foot": torch.full((12,), 0.3),
         "joint_actual_foot": torch.full((12,), 0.1),
         "joint_vel_foot": torch.tensor([0.0, 0.0, -3.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                                        0.0, 0.0, 0.0, 0.0]),
+                                        0.0, 4.0, 0.0, 0.0]),
         "joint_default_foot": 0.0,
         "joint_limits_foot": (-0.6, 0.6),
         "joint_kp_sim_foot": 200.0, "joint_kd_sim_foot": 12.0,
@@ -232,7 +256,7 @@ def self_check() -> None:
         "sole_tilt_deg": torch.tensor([45.0, 10, 10, 45, 0, 0, 0, 0, 45, 10, 10, 45]),
         "sole_low_edge_xy": torch.tensor([[0.5, 0.0]] * 12),
     }
-    summary = summarise(series, 0.5, transition_frames=1)
+    summary = summarise(series, 0.5, transition_frames=1, step_dt=0.02)
     # Every ``p50`` here is ``torch.median``, i.e. the LOWER middle value on an even count, not the
     # midpoint of the two -- worth knowing before reading any median in this probe's report. And the
     # transition cut shows up in the p95, not the p50: with the edges the minority, a median votes
@@ -270,16 +294,27 @@ def self_check() -> None:
         "hip_torque_steady_p50_nm": 80.0, "hip_torque_steady_max_nm": 80.0,
         "hip_torque_frac_of_limit_p50": 0.444, "hip_effort_saturated_frac_steady": 0.0,
         "hip_target_off_default_steady_p50_rad": 0.2,
+        "hip_actual_off_default_steady_p50_rad": 0.1, "hip_vel_steady_max_abs": 0.0,
+        "hip_torque_sign_flips_per_s": 0.0,
         "foot_torque_steady_p50_nm": 40.0, "foot_torque_steady_max_nm": 76.0,
         "foot_torque_loaded_p50_nm": 40.0, "foot_torque_frac_of_limit_p50": 0.571,
         "foot_effort_saturated_frac_steady": 0.25, "foot_target_off_default_steady_p50_rad": 0.3,
+        # The blade stands 0.1 rad off its flat pose under this fixture's load while being COMMANDED to
+        # 0.3: the two numbers are the two claims, and the fixture is built so they differ.
+        "foot_actual_off_default_steady_p50_rad": 0.1, "foot_vel_steady_max_abs": 4.0,
+        # 40 -> 76 -> -8 -> 40 over the four steady frames: two sign changes, 0.02 s each.
+        "foot_torque_sign_flips_per_s": 25.0,
+        # Two load cycles here, both long enough to keep a middle frame at transition_frames=1: the
+        # sample count a comparison needs before its medians mean anything.
+        "stance_count": 2, "steady_stance_count": 2,
     }
     for key, value in expected.items():
         assert summary[key] == value, (key, summary[key], value)
     print("[SELF-CHECK] geometry, contact-point velocity, yaw frame, target prediction and the "
           "swing/stance summary all agree with the hand cases; the blade reads its own 70 N*m limit "
-          "(p50 40 N*m, 1 saturated frame of 4) and its commanded offset, while the hip is scored "
-          "against its own 180 N*m")
+          "(p50 40 N*m, 1 saturated frame of 4), its commanded and its ACTUAL offset, its peak rate "
+          "and two drive sign flips over four steady frames, while the hip is scored against its own "
+          "180 N*m")
     self_check_sole_area()
     self_check_clip_saturation()
 
@@ -414,7 +449,7 @@ def self_check_clip_saturation() -> None:
         "sole_through_area_m2": torch.zeros(5), "sole_cap_m2": 0.02,
         "sole_tilt_deg": torch.zeros(5), "sole_low_edge_xy": torch.zeros(5, 2),
     }
-    summary = summarise(foot, 0.5)
+    summary = summarise(foot, 0.5, step_dt=0.02)
     # 4 of 5 targets are outside; only frame 2 has the joint within 5 mrad of its stop, and it is the
     # one outside frame that sits there, so the two fractions disagree on purpose. |target - actual|
     # over the outside frames is [0.3, 0.6, 0.105, 0.6] -> the lower middle is 0.3.
@@ -433,6 +468,8 @@ def self_check_clip_saturation() -> None:
         "foot_torque_steady_p50_nm": None, "foot_torque_loaded_p50_nm": None,
         "foot_torque_frac_of_limit_p50": None, "foot_effort_saturated_frac_steady": None,
         "foot_target_off_default_steady_p50_rad": None,
+        "foot_actual_off_default_steady_p50_rad": None, "foot_vel_steady_max_abs": None,
+        "foot_torque_sign_flips_per_s": None, "steady_stance_count": 0,
         "sole_area_m2": 0.16418, "sole_contact_area_p50_m2": None,
         "sole_contact_ratio_p50": None, "sole_through_area_p50_m2": None,
         "sole_cap_m2": 0.02, "sole_contact_of_cap_p50": None,
@@ -458,7 +495,8 @@ def _runs(mask: torch.Tensor) -> list[tuple[int, int]]:
     return spans
 
 
-def summarise(foot: dict, contact_n: float, transition_frames: int = 2) -> dict:
+def summarise(foot: dict, contact_n: float, transition_frames: int = 2,
+              step_dt: float | None = None) -> dict:
     """Per-foot summary from the raw series of one env, plus the two joint readings for that leg."""
     force, clearance = foot["force"], foot["sole_clearance_m"]
     fore_aft, contact = foot["foot_fore_aft_m"], foot["contact_speed_horiz_mps"]
@@ -520,6 +558,13 @@ def summarise(foot: dict, contact_n: float, transition_frames: int = 2) -> dict:
         "stance_fore_aft_drift_p50_m": (round(float(torch.tensor(
             [float(fore_aft[j - 1] - fore_aft[i]) for i, j in stances]).median()), 4)
             if stances else None),
+        # How many load cycles this foot actually produced here, and how many of them kept a middle
+        # frame to be read on. A per-foot, per-tier sample count is the one number a comparison across
+        # runs needs before its medians mean anything: a stance count in the single digits is a
+        # different claim from the same reading over hundreds of cycles, and the difference is
+        # invisible in the medians themselves.
+        "stance_count": len(stances),
+        "steady_stance_count": sum(1 for i, j in stances if j - i - 2 * transition_frames >= 1),
         # Mid-swing only, and the prediction split into its two terms. The unloaded-frame median
         # covers liftoff and touchdown as well, and for two legs that swing in alternation it is not
         # even the same phase on both -- which is how a mirrored pair of legs can read as opposites.
@@ -629,12 +674,35 @@ def summarise(foot: dict, contact_n: float, transition_frames: int = 2) -> dict:
             # anything about the run, the same distinction the sole-clearance target made for the knee.
             out[f"{joint}_target_off_default_steady_p50_rad"] = round(float(
                 (target - foot[f"joint_default_{joint}"])[torque_window].abs().median()), 4)
+            # ... and what the joint ACTUALLY sits at while the foot bears weight. Target and actual
+            # are two different claims about the pose: a blade that is commanded to the flat pose and
+            # still stands at 0.3 rad is a blade the drive cannot hold back, which is the question a
+            # softer gain is supposed to answer -- and the one the load under it is really applying.
+            out[f"{joint}_actual_off_default_steady_p50_rad"] = round(float(
+                (actual - foot[f"joint_default_{joint}"])[torque_window].abs().median()), 4)
+            # Peak rate while loaded: a pad that rattles against the floor shows up here before it
+            # shows up in a median, and a pad that is compliant under load moves slowly. Max is used
+            # rather than a quantile because it is a hand-checkable number in the synthetic case, and
+            # this reading's job is to catch "does it chatter at all", not to describe a tail.
+            out[f"{joint}_vel_steady_max_abs"] = round(float(
+                foot[f"joint_vel_{joint}"][torque_window].abs().max()), 3)
+            # Chatter as a rate and not a vibe: how often the drive REVERSES SIGN while the foot is on
+            # the floor. A spring holding a one-sided load keeps its sign; a blade oscillating against
+            # the floor flips it every cycle. This is the reading that distinguishes "softer gain lets
+            # the pad settle" from "softer gain lets the pad rattle", which is the failure mode a
+            # weaker gain is meant to avoid. None without a step time: a per-second rate whose
+            # denominator is unknown is not a rate.
+            ordered = cmd[torque_window]
+            flips = int((ordered[1:] * ordered[:-1] < 0).sum()) if ordered.numel() > 1 else 0
+            out[f"{joint}_torque_sign_flips_per_s"] = (round(flips / (step_dt * ordered.numel()), 2)
+                                                      if step_dt else None)
         else:
             # A joint that never bore weight was never measured: None, not zero, for the same reason the
             # sole-area readings report None on a foot that was never loaded.
             for key in ("torque_steady_p50_nm", "torque_steady_max_nm", "torque_loaded_p50_nm",
                         "torque_frac_of_limit_p50", "effort_saturated_frac_steady",
-                        "target_off_default_steady_p50_rad"):
+                        "target_off_default_steady_p50_rad", "actual_off_default_steady_p50_rad",
+                        "vel_steady_max_abs", "torque_sign_flips_per_s"):
                 out[f"{joint}_{key}"] = None
     # How much of the sole is on the floor, which is the reading for "bearing weight on a toe or an
     # edge": area, not force, so it says WHERE the foot is loaded and not only that it is. Read on the
@@ -691,6 +759,18 @@ def main() -> None:
     cfg.scene.num_envs = len(speeds)
     cfg.seed = args_cli.seed
     cfg.episode_length_s = args_cli.seconds
+    # The feet group's drive, overridden BEFORE the env exists: the one way to ask "how does this
+    # blade behave at these gains" without touching a frozen recipe. Both the deprecated and the sim
+    # field are written, so the value cannot be silently dropped by whichever one this fork reads.
+    # The reading stays honest because the gains and the limit are read back OUT of the sim per joint
+    # and printed in the report: an override that did not take shows up as the old number.
+    feet_overrides = {"stiffness": args_cli.feet_kp, "damping": args_cli.feet_kd,
+                      "effort_limit": args_cli.feet_effort}
+    for field, value in feet_overrides.items():
+        if value is not None:
+            setattr(cfg.scene.robot.actuators["feet"], field, value)
+            if field == "effort_limit":
+                cfg.scene.robot.actuators["feet"].effort_limit_sim = value
     env = gym.make(args_cli.task, cfg=cfg)
     wrapper = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
     live = env.unwrapped
@@ -846,6 +926,8 @@ def main() -> None:
               "sole_cap_m2": sole_caps,
               "checkpoint": str(args_cli.checkpoint),
               "checkpoint_sha256": binding.sha256_file(pathlib.Path(args_cli.checkpoint)),
+              "feet_overrides": {name: value for name, value in feet_overrides.items()
+                                 if value is not None},
               "argv": sys.argv, "foot_bodies": foot_bodies, "envs": []}
     for env_index, speed in enumerate(speeds):
         # "up to the first termination", written as a cummax: this is not the terrain split rule and
@@ -880,7 +962,8 @@ def main() -> None:
                 row[f"joint_kp_sim_{joint}"] = float(gains["kp"][env_index, column])
                 row[f"joint_kd_sim_{joint}"] = float(gains["kd"][env_index, column])
                 row[f"joint_effort_limit_{joint}"] = joint_effort[joint]
-            entry["feet"].append(summarise(row, args_cli.contact_n, args_cli.transition_frames))
+            entry["feet"].append(summarise(row, args_cli.contact_n, args_cli.transition_frames,
+                                           live.step_dt))
         entry["series"] = {key: [[round(float(x), 5) for x in values[alive, env_index, foot].tolist()]
                                  for foot in range(len(foot_bodies))]
                            for key, values in (("force", force), ("clearance", clearance),
