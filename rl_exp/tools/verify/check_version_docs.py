@@ -255,8 +255,12 @@ def main(show_tree: bool = "--tree" in sys.argv) -> int:
                 or ("/" not in rel and t == leaf)  # legacy unprefixed main-line tags
                 for t in tags
             ):
+                # the message names only spellings this check accepts: for a line version the bare
+                # leaf is NOT one of them (it would collide with the main line's first generation),
+                # and a message that offers it sends the reader after a tag that would still warn
+                expected = f"{tag_stem}[.minor]" if "/" in rel else f"{leaf} or {tag_stem}[.minor]"
                 warnings.append(
-                    f"{family}/{rel}: no git tag ({leaf} or {tag_stem}[.minor]) --"
+                    f"{family}/{rel}: no git tag ({expected}) --"
                     " fine for proposals; must exist once training starts"
                 )
             base_path = vdir / "base.json"
