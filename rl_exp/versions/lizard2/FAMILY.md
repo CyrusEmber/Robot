@@ -42,6 +42,8 @@ versions/lizard2/meshes`）：物理读 `assets/lizard2/lizard2.usda` 的**内�
 |---|---|
 | `Lizard2-Flat-v1` | `lizard2-flat-v1@1`（冻结参数 `versions/lizard2/main/v1/main_params.yaml`） |
 | `Lizard2-Flat-Play-v1` | `lizard2-flat-play-v1@1`（冻结参数 `versions/lizard2/main/v1/main_params.yaml`） |
+| `Lizard2-Flat-v2` | `lizard2-flat-v2@1`（冻结参数 `versions/lizard2/main/v2/main_params.yaml`） |
+| `Lizard2-Flat-Play-v2` | `lizard2-flat-play-v2@1`（冻结参数 `versions/lizard2/main/v2/main_params.yaml`） |
 
 ## 版本历史
 
@@ -51,3 +53,4 @@ versions/lizard2/meshes`）：物理读 `assets/lizard2/lizard2.usda` 的**内�
 | 版本 | 日期 | 摘要 | 教训 |
 |---|---|---|---|
 | main/v1 | 2026-09-22 | 新骨骼上的第一条线：髋轴补齐 + 无 DR、无课程的平地速度追踪配方（`lin_vel_x ∈ [0, 2]`，奖励/终止沿用 v1 基线）；血统根 ⇒ `base.json` 为 `null`，比较对象是框架 stock | （训练后补） |
+| main/v2 | 2026-09-28 | v1 的**单变量**对照版：脚板（blade）四个关节从动作接口去掉（动作维度随之减少），脚板保留 v1 的增益、默认平放目标与上限；其余（奖励/终止/命令/sim/预算）逐字沿用 v1；血统母本 = `main/v1` | （训练后补） |

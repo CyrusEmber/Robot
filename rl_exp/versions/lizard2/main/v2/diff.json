@@ -1,0 +1,29 @@
+{
+  "format": 4,
+  "recipe": "lizard2-flat-v2@1",
+  "line": "lizard2/main",
+  "note": "Hard B, lineage reading: base.json names v1 as this recipe's mother, so the declared difference is against that recipe -- not against the framework stock cfg, which would bury this version's own delta inside everything its ancestors already wrote. Env paths are grouped by the element that last moved them in the replay, so the paths here cannot disagree with the build; params_version is filtered as identity, because it says which recipe this is and it is what makes the two recipes different at all. The why strings are TODO until an author writes them: hard B compares paths, not prose, so an unwritten reason is a review item rather than a wrong claim.",
+  "env": {
+    "allowed": {
+      "lizard2_actions": {
+        "paths": [
+          "actions.joint_pos_legs"
+        ],
+        "why": "v2 declares the joints each action group drives, and the legs group is v1's list minus the blade pattern: the four `*_foot_joint` keep their PD, their default flat target and their effort limit, and stop being joints the policy may command. That is the single variable this version exists to move -- which is why this file lists exactly one path against its mother v1. (re-read 2026-09-28 after the emitter learned the lineage reading: the entry moved from the deep leaf the mother comparison reports to the replay's own granularity, nothing about the claim changed)"
+      }
+    }
+  },
+  "agent": {
+    "why": "The agent is a class, not a declaration: these entries carry a reason and no element name.",
+    "allowed": {
+      "experiment_name": "lizard2_v2 -- this version's own log directory (versioning.mdc A: one version, one log dir). Reusing v1's `lizard2_v1` would file two different action interfaces' runs under one name, and the two arms of the comparison must not land among each other's either.",
+      "max_iterations": "14000 -- the value v1 was actually trained with, declared here instead of passed as a CLI override, so this version's run is reproducible from its own NOTES (v1's NOTES had to record declared-10000/run-14000 as a deviation). The comparison arm needs the same number and is re-run with the same override recorded in its own NOTES."
+    }
+  },
+  "authored_against": {
+    "env": {
+      "lizard2_actions": "eca5bbb3799b"
+    },
+    "agent": "031d9ad91f31"
+  }
+}

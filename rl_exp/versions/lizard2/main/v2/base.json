@@ -1,0 +1,4 @@
+{
+  "base": "v1",
+  "note": "The only mother snapshot this version was cut from: v2 is v1's own yaml with the blade joints' action authority removed, so every other field it carries is v1's, field for field. That the blade keeps v1's gains, default flat target and effort limit is the experiment's point rather than a leftover -- v2 changes WHO may command the blade, not the blade. The control arm's definition and the evaluation design are decisions, not lineage, so they live in PLAN.md."
+}

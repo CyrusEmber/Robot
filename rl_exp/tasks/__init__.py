@@ -437,3 +437,26 @@ gym.register(
         "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:Lizard2PPORunnerCfg",
     },
 )
+
+# lizard2 v2 (2026-09-28): the same recipe as v1 with the blade joints' action authority removed,
+# so its action width (26) differs from v1's (30) and a v1 checkpoint cannot be replayed on it --
+# hence its own ids and its own runner (one version, one log directory).
+gym.register(
+    id="Lizard2-Flat-v2",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": "rl_exp.tasks.recipe_tasks:Lizard2FlatV2EnvCfg",
+        "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:Lizard2V2PPORunnerCfg",
+    },
+)
+
+gym.register(
+    id="Lizard2-Flat-Play-v2",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": "rl_exp.tasks.recipe_tasks:Lizard2FlatV2EnvCfg_PLAY",
+        "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:Lizard2V2PPORunnerCfg",
+    },
+)

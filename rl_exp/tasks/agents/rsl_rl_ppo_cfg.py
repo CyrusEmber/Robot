@@ -353,7 +353,7 @@ class LizardBaselineV2PPORunnerCfg(LizardBaselinePPORunnerCfg):
 
 @configclass
 class Lizard2PPORunnerCfg(LizardBaselinePPORunnerCfg):
-    """Runner cfg for `Lizard2-Flat-v1` (new family: 30-joint skeleton, 0-2 m/s command window).
+    """Runner cfg for `Lizard2-Flat-v1` (new family: 30-joint skeleton, 0-3 m/s command window).
 
     The same PPO recipe as the baseline line's v1 on purpose -- the algorithm is not a variable this
     family's baseline adds -- with the two record-level changes that pattern already carries:
@@ -371,3 +371,21 @@ class Lizard2PPORunnerCfg(LizardBaselinePPORunnerCfg):
 
     max_iterations = 10000
     experiment_name = "lizard2_v1"
+
+
+@configclass
+class Lizard2V2PPORunnerCfg(Lizard2PPORunnerCfg):
+    """Runner cfg for `Lizard2-Flat-v2` (same recipe as v1, blade loses action authority).
+
+    The same PPO recipe and the same recorded budget as v1's *run*, not as v1's declaration:
+    ``max_iterations`` is stated at the value v1 was actually trained with, so this version's run
+    is reproducible from its own NOTES instead of repeating the deviation v1's NOTES had to record
+    (declared 10000, run 14000). The comparison arm needs the same number, so it is declared here
+    rather than passed as an override twice.
+
+    Its own ``experiment_name`` for the usual reason (one version, one log directory): a v2 run must
+    not land among v1's, and the two arms' runs must not land among each other's.
+    """
+
+    max_iterations = 14000
+    experiment_name = "lizard2_v2"
