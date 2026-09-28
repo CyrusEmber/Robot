@@ -250,22 +250,33 @@ def anchors() -> dict:
 
 
 def recorded_dims(task_id: str) -> dict[str, int] | None:
-    """The approved per-group widths FOR THIS TASK'S ASSET, or ``None`` when unapproved.
+    """The approved per-group widths FOR THIS TASK, or ``None`` when unapproved.
 
-    Keyed by the asset, not by the protocol: a protocol identity is the layout (groups, term
-    order, clip/scale/noise) and says nothing about how wide a joint vector is, so two assets
-    with different joint counts legitimately share one protocol while building different widths
+    Keyed by the asset first, because a protocol identity is the layout (groups, term order,
+    clip/scale/noise) and says nothing about how wide a joint vector is, so two assets with
+    different joint counts legitimately share one protocol while building different widths
     (lizard 26 joints / policy 90, lizard2 30 joints / policy 102 -- measured 2026-09-22). Keyed
     per protocol, the second one would be compared against the first one's number forever. This
     is the same reasoning as :func:`runtime_joint_order_for_asset`: the fact belongs to the asset
     a recipe loads.
+
+    The asset is not always enough: two versions of one family load one asset under one layout
+    while their ACTION interfaces differ, so they build different widths (lizard2 v1 commands the
+    blades / policy 102, v2 does not / 98 -- measured 2026-09-28). A task layer, where a protocol
+    carries one, is the narrower claim and is preferred; every task that does not need it keeps
+    reading the asset's number.
 
     ``None`` and ``{}`` mean different things -- unmeasured versus measured-and-empty -- so the
     caller can tell "nobody has looked" from "there is nothing there".
     """
     key = protocol_for(task_id)
     entry = (anchors().get("protocols") or {}).get(key)
-    by_asset = (entry or {}).get("dims") if isinstance(entry, dict) else None
+    if not isinstance(entry, dict):
+        return None
+    by_task = (entry.get("dims_by_task") or {}).get(task_id)
+    if isinstance(by_task, dict) and by_task:
+        return dict(by_task)
+    by_asset = entry.get("dims")
     asset = usd_path(task_id)
     dims = (by_asset or {}).get(asset) if isinstance(by_asset, dict) and asset else None
     return dict(dims) if isinstance(dims, dict) and dims else None

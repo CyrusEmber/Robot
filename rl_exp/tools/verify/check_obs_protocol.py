@@ -58,22 +58,30 @@ def content_digest(groups) -> str:
     return hashlib.sha256(inv.canonical(groups).encode("utf-8")).hexdigest()
 
 
-def dims_digest(dims) -> str:
-    """The digest over a protocol's approved widths, per asset, with key order irrelevant.
+def dims_digest(dims, dims_by_task=None) -> str:
+    """The digest over a protocol's approved widths, per asset and (where carried) per task.
 
     The protocol digest covers the layout, not the widths, so without this an approved width
     edited in place would change nothing a check can see: the widths are read by the smoke runs
     (real-run only) and recorded in manifests, and nothing compared them to an approved value.
 
-    The map is ``{asset: {group: width}}``: an approved width is a fact about the protocol
+    The asset map is ``{asset: {group: width}}``: an approved width is a fact about the protocol
     INSTANTIATED on an asset (a 30-joint body builds a wider joint vector than a 26-joint one
-    under the same layout), so the digest covers both levels.
+    under the same layout), so the digest covers both levels. The task map is ``{task: {group:
+    width}}`` for the narrower case the asset cannot express -- one asset, one layout, two action
+    interfaces -- and it is APPENDED to the same input rather than folded into the shape: an
+    approval that carries no task layer keeps the digest it was approved with, so adding this
+    layer re-approves nothing, and a task width edited in place moves the digest exactly like an
+    asset width does.
     """
-    return hashlib.sha256(
-        inv.canonical({
-            asset: dict(sorted((body or {}).items())) for asset, body in sorted((dims or {}).items())
-        }).encode("utf-8")
-    ).hexdigest()
+    body = inv.canonical({
+        asset: dict(sorted((row or {}).items())) for asset, row in sorted((dims or {}).items())
+    })
+    if dims_by_task:
+        body += inv.canonical({
+            task: dict(sorted((row or {}).items())) for task, row in sorted(dims_by_task.items())
+        })
+    return hashlib.sha256(body.encode("utf-8")).hexdigest()
 
 
 def check_dims(key: str, groups: dict, dims) -> list[str]:
@@ -107,6 +115,41 @@ def check_dims(key: str, groups: dict, dims) -> list[str]:
             # bool is an int in Python, and `True` as a width is a typo, not a measurement
             if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
                 out.append(f"{key}: dims[{asset!r}][{group!r}] = {value!r} is not a positive integer")
+    return out
+
+
+def check_dims_by_task(key: str, groups: dict, dims_by_task, tasks_on_protocol: set[str]) -> list[str]:
+    """Structural rules for the narrower width layer: declared tasks, live groups, positive ints, all or nothing.
+
+    The same rules as :func:`check_dims` one level up, because the failure they prevent is the same
+    -- a partial or invented entry reads as an approval to every caller that trusts the map. One
+    rule is specific to this layer: the key has to be a task that actually names this protocol,
+    because an entry filed under the wrong protocol is an approval nobody will ever read.
+    """
+    out: list[str] = []
+    if dims_by_task is None:
+        return out
+    if not isinstance(dims_by_task, dict):
+        return [f"{key}: dims_by_task must be an object keyed by task id"]
+    live = {group for group, body in groups.items() if not body.get("dropped")}
+    for task_id, body in sorted(dims_by_task.items()):
+        if task_id not in tasks_on_protocol:
+            out.append(f"{key}: dims_by_task key {task_id!r} is not a task that names this protocol")
+            continue
+        if not isinstance(body, dict):
+            out.append(f"{key}: dims_by_task[{task_id!r}] must be an object of group -> width")
+            continue
+        unknown = sorted(set(body) - live)
+        if unknown:
+            out.append(f"{key}: dims_by_task[{task_id!r}] names group(s) this protocol does not"
+                       f" carry live: {unknown}")
+        missing = sorted(live - set(body))
+        if missing:
+            out.append(f"{key}: dims_by_task[{task_id!r}] must be all or nothing -- no width for {missing}")
+        for group, value in sorted(body.items()):
+            if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+                out.append(f"{key}: dims_by_task[{task_id!r}][{group!r}] = {value!r} is not a"
+                           " positive integer")
     return out
 
 
@@ -229,6 +272,13 @@ def check_anchors(document: dict, anchors: dict) -> list[str]:
             out.append(f"{key}: no task references this protocol and its anchor states no purpose")
         dims = anchor.get("dims")
         out.extend(check_dims(key, groups if isinstance(groups, dict) else {}, dims))
+        # The narrower layer: a task whose action interface is not its asset's default width cannot
+        # be described by the asset key (see ``obs_protocol.recorded_dims``), so it carries its own.
+        by_task = anchor.get("dims_by_task")
+        tasks_on_protocol = {task_id for task_id, body in (document.get("tasks") or {}).items()
+                             if isinstance(body, dict) and body.get("protocol") == key}
+        out.extend(check_dims_by_task(key, groups if isinstance(groups, dict) else {}, by_task,
+                                      tasks_on_protocol))
         # Every asset a declared task of this protocol loads must carry a COMPLETE width map. Three
         # shapes are the same failure ("a width nobody approved, on a body somebody trains"):
         # no dims at all, no entry for this asset, and an entry missing a live group. They are
@@ -244,25 +294,29 @@ def check_anchors(document: dict, anchors: dict) -> list[str]:
             )
         if loaded:
             live_groups = {group for group, body in (groups or {}).items() if not body.get("dropped")}
-            if not isinstance(dims, dict) or not dims:
+            if (not isinstance(dims, dict) or not dims) and not (isinstance(by_task, dict) and by_task):
                 out.append(
                     f"{key}: no approved widths at all, but declared task(s) load {sorted(loaded)} --"
                     " measure them once (obs_protocol_live.py --tasks <id> --pin) and record them here"
                 )
             else:
-                for asset in sorted(set(dims) - loaded):
+                # The asset layer may legitimately be absent when every task on the protocol carries
+                # its own width: the task layer is the narrower claim, and the coverage rules below
+                # still have to run -- against whatever the asset layer does say, which may be nothing.
+                assets = dims if isinstance(dims, dict) else {}
+                for asset in sorted(set(assets) - loaded):
                     out.append(
                         f"{key}: dims approved for {asset!r}, which no task on this protocol loads"
                         f" (tasks load {sorted(loaded)}) -- a width belongs to the body it was measured on"
                     )
-                for asset in sorted(loaded - set(dims)):
+                for asset in sorted(loaded - set(assets)):
                     out.append(
                         f"{key}: {asset!r} is loaded by declared task(s) of this protocol but has no approved"
                         " width -- measure it once (obs_protocol_live.py --tasks <id> --pin) and record the"
                         " numbers here, so a width nobody approved cannot be trained against"
                     )
-                for asset in sorted(loaded & set(dims)):
-                    body = dims[asset]
+                for asset in sorted(loaded & set(assets)):
+                    body = assets[asset]
                     if not isinstance(body, dict):
                         continue  # check_dims already said so
                     missing = sorted(live_groups - set(body))
@@ -272,11 +326,12 @@ def check_anchors(document: dict, anchors: dict) -> list[str]:
                             " table is not an approval, and a group with no approved number reads as"
                             " 'measured' to every caller that trusts this map"
                         )
-        if isinstance(dims, dict) and dims:
-            if anchor.get("dims_digest") != dims_digest(dims):
+        if (isinstance(dims, dict) and dims) or (isinstance(by_task, dict) and by_task):
+            recomputed = dims_digest(dims, by_task)
+            if anchor.get("dims_digest") != recomputed:
                 out.append(
                     f"{key}: approved dims digest {anchor.get('dims_digest')!r} != recomputed "
-                    f"{dims_digest(dims)!r} -- a width was edited without a re-approval"
+                    f"{recomputed!r} -- a width was edited without a re-approval"
                 )
             # An approved width has to say what asserted it. The digest half is self-consistent by
             # construction -- a regeneration recomputes it -- so what a regeneration cannot write is

@@ -76,8 +76,16 @@
      "policy": 102
     }
    },
-   "dims_digest": "766268f50f74f690d9c9d18931cfc73be06238463da85999faa965cfbeeea237",
-   "evidence": "measured 2026-09-18: obs_protocol_live.py --headless over the 8 family tasks (OBS_PROTOCOL_LIVE_OK, 0 problems), approved by hand; ACCEPTANCE.md section '3.1e 补账 · 家族 8 条协议的宽度实测与批准' | 2026-09-22 lizard2: policy=102 measured on assets/lizard2/lizard2.usda by `obs_protocol_live.py --viz none --tasks Lizard2-Flat-v1 Lizard2-Flat-Play-v1 --pin` (OBS_PROTOCOL_LIVE_OK, both tasks policy=102, bodies=31; the same protocol's lizard widths are 90 because the layout does not fix a joint count -- 26 joints vs 30)"
+   "dims_by_task": {
+    "Lizard2-Flat-Play-v2": {
+     "policy": 98
+    },
+    "Lizard2-Flat-v2": {
+     "policy": 98
+    }
+   },
+   "dims_digest": "31ec89fbc9a8d36bf455308d01399337c1ba4273f55af58b34dac1f23970b8c3",
+   "evidence": "measured 2026-09-18: obs_protocol_live.py --headless over the 8 family tasks (OBS_PROTOCOL_LIVE_OK, 0 problems), approved by hand; ACCEPTANCE.md section '3.1e 补账 · 家族 8 条协议的宽度实测与批准' | 2026-09-22 lizard2: policy=102 measured on assets/lizard2/lizard2.usda by `obs_protocol_live.py --viz none --tasks Lizard2-Flat-v1 Lizard2-Flat-Play-v1 --pin` (OBS_PROTOCOL_LIVE_OK, both tasks policy=102, bodies=31; the same protocol's lizard widths are 90 because the layout does not fix a joint count -- 26 joints vs 30) | 2026-09-28 lizard2 v2: policy=98 measured by `obs_protocol_live.py --viz none --tasks Lizard2-Flat-v2 Lizard2-Flat-Play-v2` (both tasks policy=98, bodies=31, joints=30), recorded as a TASK layer because the asset key cannot hold two widths: v1 and v2 load one asset under one layout and differ only in the action interface (four blade joints leave the action, so the actions term is four narrower). Same asset, same protocol, two approved widths -- the asset entry stays the default for every task that does not name its own."
   },
   "c71114b0c0fd": {
    "digest": "c71114b0c0fdfcffb7859a0389830d740273cf392ef44da91639f8ae7f5a4a52",

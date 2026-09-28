@@ -181,11 +181,40 @@ def main() -> int:
         unmeasured["protocols"][key2]["dims_digest"] = g.dims_digest(unmeasured["protocols"][key2]["dims"])
         fired = g.check_anchors(DECLARED, unmeasured)
         check("dims/task-body-has-no-width", any("has no approved" in line for line in fired), f"{fired}")
-        # the same protocol with the whole map gone: the other shape of the same failure
+        # the same protocol with the whole map gone: the other shape of the same failure. "The whole
+        # map" is BOTH layers now -- an anchor whose asset widths are gone but whose task layer still
+        # names every task that loads it is not unmeasured, and that is exactly the case the task layer
+        # exists for (one asset, two action interfaces).
         gone = copy_of(ANCHORED)
         gone["protocols"][key2].pop("dims")
+        gone["protocols"][key2].pop("dims_by_task", None)
+        gone["protocols"][key2]["dims_digest"] = g.dims_digest(None)
         fired = g.check_anchors(DECLARED, gone)
         check("dims/whole-map-absent", any("no approved widths at all" in line for line in fired), f"{fired}")
+
+    # The task layer, where a protocol carries one: the same all-or-nothing rule as the asset layer,
+    # plus "the key has to be a task that names this protocol" -- an entry filed under the wrong
+    # protocol is an approval nobody reads.
+    layered = [key for key, entry in ANCHORED["protocols"].items()
+               if isinstance(entry.get("dims_by_task"), dict) and entry["dims_by_task"]]
+    if layered:
+        key3 = layered[0]
+        task3 = sorted(ANCHORED["protocols"][key3]["dims_by_task"])[0]
+        group3 = sorted(ANCHORED["protocols"][key3]["dims_by_task"][task3])[0]
+        partial_task = copy_of(ANCHORED)
+        partial_task["protocols"][key3]["dims_by_task"][task3].pop(group3)
+        partial_task["protocols"][key3]["dims_digest"] = g.dims_digest(
+            partial_task["protocols"][key3].get("dims"),
+            partial_task["protocols"][key3]["dims_by_task"])
+        fired = g.check_anchors(DECLARED, partial_task)
+        check("dims/task-layer-partial-map", any("all or nothing" in line for line in fired), f"{fired}")
+        stray_task = copy_of(ANCHORED)
+        stray_task["protocols"][key3]["dims_by_task"]["No-Such-Task-v9"] = {group3: 1}
+        stray_task["protocols"][key3]["dims_digest"] = g.dims_digest(
+            stray_task["protocols"][key3].get("dims"), stray_task["protocols"][key3]["dims_by_task"])
+        fired = g.check_anchors(DECLARED, stray_task)
+        check("dims/task-layer-stray-key", any("is not a task that names this protocol" in line for line in fired),
+              f"{fired}")
 
     if loaded_assets:
         emptied = copy_of(ANCHORED)
