@@ -69,8 +69,9 @@
   在读 eval.json 时就崩 `KeyError: 'mode'`（`plot_eval.py:65`）—— 它期望顶层 `mode` 与字符串 `checkpoint`，
   而 `ablation_harness/results/**` 里**没有一份** eval.json 有这两个形状（全是 `protocol: {...}` /
   `checkpoint: {...}`）⇒ 该报告器对盘上全部记录都已失效，训练曲线那一段因此到不了。
-  这条属评测台自己的缺口（SSOT = `ablation_harness/HARNESS.md`），不在本记录里修，已立项
-  `work/active/plot-eval-report-stale.md`。
+  这条属评测台自己的缺口（SSOT = `ablation_harness/HARNESS.md`），不在本记录里修，已立项并已收：
+  `work/closed/2026/plot-eval-report-stale.md`（`plot_eval.py` 现在按 `report_format` 分派两种读法，
+  lizard2 的记录能出 `report.html`）。
 - 抽样器自测：`python rl_exp\tools\verify\test_dump_tb_sampling.py`（`DUMP_TB_SAMPLING_OK`）
 
 ## 未覆盖边界
@@ -81,5 +82,6 @@
 3. **`head_contact` 的首现迭代精度只到分块**（第 0 块内），要精确到迭代需重读全量 csv。
 4. **曲线不含步态量**：滑移、承重分配、离地高度都不在 tfevents 里，本记录不涉步态判决。
 5. **入库是抽样**：`tb_scalars.csv` 为 150 点/tag，逐迭代细节以机器本地 `.full.csv` 为准。
-6. **报告侧通路未验**：`plot_eval.py --report` 目前对盘上所有记录都崩（见"证据引用"），所以"eval 报告
-   自动读这张 csv"这件事**今天还不能演示**；csv 的落点与消费约定成立，消费方本身待修。
+6. **报告侧当时未通**（现已修，见"证据引用"）：`plot_eval.py --report` 当时对盘上所有记录都崩
+   （`KeyError: 'mode'`）⇒ "eval 报告自动读这张 csv"在写作本记录时还不能演示；csv 的落点与消费约定成立，
+   消费方已按 lizard2 的记录形状修通并关项。
