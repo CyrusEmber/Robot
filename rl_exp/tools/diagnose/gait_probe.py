@@ -130,6 +130,13 @@ parser.add_argument("--feet-kd", type=float, default=None,
                     help="override the feet group's damping [N*m*s/rad]")
 parser.add_argument("--feet-effort", type=float, default=None,
                     help="override the feet group's effort limit [N*m]")
+parser.add_argument("--freeze-feet-action", action="store_true",
+                    help="zero the blade joints' action columns, i.e. run the v2 configuration "
+                         "(blade keeps its PD, its target stays at the default pose) on the policy it "
+                         "was NOT trained with. This is the only way to read a candidate blade gain "
+                         "without retraining: without it, overriding the gain leaves the policy free "
+                         "to COMMAND the blade, and an unadapted policy drives that command far "
+                         "outside anything it ever asked for")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 
@@ -777,6 +784,26 @@ def main() -> None:
     robot = live.scene["robot"]
     sensor = live.scene.sensors["contact_forces"]
 
+    # Which columns of the concatenated action belong to the blade joints, read from the action
+    # manager rather than assumed: both the term order and each term's joint order are the framework's,
+    # and a hardcoded offset would zero the wrong four numbers while looking like it worked. Zeroing
+    # the raw action IS "target = the default pose" because the term is built with use_default_offset
+    # (target = default + scale * action), which makes the mask self-verifying: the blade's commanded
+    # offset in the report reads ~0 exactly when the mask took.
+    frozen_foot_columns: list[int] = []
+    action_offset = 0
+    for term_name in live.action_manager.active_terms:
+        action_term = live.action_manager.get_term(term_name)
+        for position, joint_name in enumerate(action_term._joint_names):
+            if joint_name.endswith("_foot_joint"):
+                frozen_foot_columns.append(action_offset + position)
+        action_offset += len(action_term._joint_names)
+    if action_offset != live.action_manager.total_action_dim:
+        parser.error(f"action interface read as {action_offset} columns, manager says "
+                     f"{live.action_manager.total_action_dim}: refusing to mask against a guess")
+    if args_cli.freeze_feet_action and not frozen_foot_columns:
+        parser.error("--freeze-feet-action found no *_foot_joint in the action interface")
+
     foot_columns = [i for i, name in enumerate(sensor.body_names) if name.endswith("_foot")]
     foot_bodies = [sensor.body_names[i] for i in foot_columns]
     robot_foot_ids = [robot.body_names.index(name) for name in foot_bodies]
@@ -844,7 +871,11 @@ def main() -> None:
     for step in range(steps):
         command_term.vel_command_b[:] = command
         with torch.no_grad():
-            obs, _, _, _ = wrapper.step(policy(obs))
+            action = policy(obs)
+            if args_cli.freeze_feet_action:
+                action = action.clone()
+                action[:, frozen_foot_columns] = 0.0
+            obs, _, _, _ = wrapper.step(action)
         data = robot.data
         pose, quat = data.body_pos_w.torch, data.body_quat_w.torch
         lowest = diag_metrics.mesh_lowest_point(pose, quat, robot_foot_ids, clouds)
@@ -928,6 +959,7 @@ def main() -> None:
               "checkpoint_sha256": binding.sha256_file(pathlib.Path(args_cli.checkpoint)),
               "feet_overrides": {name: value for name, value in feet_overrides.items()
                                  if value is not None},
+              "frozen_foot_columns": (frozen_foot_columns if args_cli.freeze_feet_action else []),
               "argv": sys.argv, "foot_bodies": foot_bodies, "envs": []}
     for env_index, speed in enumerate(speeds):
         # "up to the first termination", written as a cummax: this is not the terrain split rule and
