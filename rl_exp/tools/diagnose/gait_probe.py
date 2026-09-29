@@ -101,6 +101,11 @@ import diag_metrics  # noqa: E402
 #: tells the two apart without a second declaration of the same fact.
 LEG_SUFFIXES = ("_hip_joint", "_haa_joint", "_hfe_joint", "_kfe_joint", "_foot_joint")
 
+#: The leg joints the per-frame series carries: the whole chain, not the three the summary tables
+#: were built around. Exporting only the stride axis, the fore-aft hinge and the blade is what made
+#: "the thigh barely moves" unanswerable from a report that did not hold the joint that moves it.
+SERIES_TOKENS = ("hip", "haa", "hfe", "kfe", "foot")
+
 from rl_exp.tools.runrecord import binding  # noqa: E402
 from rl_exp.tasks import obs_protocol  # noqa: E402
 
@@ -837,7 +842,7 @@ def main() -> None:
         sole_band, 0.0)[0].sum()) for mesh in foot_meshes]
     joint_names = list(robot.joint_names)
     leg_joint_ids = {}
-    for joint in ("hip", "hfe", "foot"):
+    for joint in SERIES_TOKENS:
         leg_joint_ids[joint] = {name.split("_")[0]: joint_names.index(f"{name.split('_')[0]}_{joint}_joint")
                                 for name in foot_bodies}
     # The trunk: every joint that is not a leg joint, in the asset's own order. This is the same
@@ -1039,7 +1044,7 @@ def main() -> None:
         entry["joint_series"] = {
             f"{name}_{joint}_{kind}": [round(float(x), 5) for x in values[
                 alive, env_index, leg_joint_ids[joint][name.split("_")[0]]].tolist()]
-            for name in foot_bodies for joint in ("hip", "hfe", "foot")
+            for name in foot_bodies for joint in SERIES_TOKENS
             for kind, values in (("target", target), ("actual", actual), ("vel", vel))}
         # The trunk, per frame, joint by joint. Exported because a vertebrate that undulates and one
         # that holds its spine still look identical in every reading above: they differ in a shape over

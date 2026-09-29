@@ -859,8 +859,11 @@ def _nan_correlation(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
 
 
 #: The joint tokens that make a joint a leg joint rather than a trunk joint, and the pairs a stride
-#: can come from. Named here because both the partition and the stride reading are about these three.
-_LEG_TOKENS = ("_hip_joint", "_hfe_joint", "_foot_joint")
+#: can come from. All five because a leg's chain is what the shape questions are about: which joint
+#: carries the stride, and whether the thigh and the shank moved at all. Leaving `haa`/`kfe` out was
+#: tried and cost a round trip -- "the thigh barely moves" was unanswerable from a record that did not
+#: carry the joint that moves it.
+_LEG_TOKENS = ("_hip_joint", "_haa_joint", "_hfe_joint", "_kfe_joint", "_foot_joint")
 
 #: Forward command above which the window counts as "asked to move" [m/s]. The same floor the banded
 #: tracking criterion divides its bands with, so "moving" means one thing in this module.

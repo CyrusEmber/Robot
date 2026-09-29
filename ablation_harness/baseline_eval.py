@@ -44,14 +44,14 @@ def _gait_shape_joints(cfg, names: list[str]) -> list[str]:
     """The joints a gait-shape reading needs: the spine's own group, plus one token per leg.
 
     Named rather than "all of them": a column nobody reads is what this harness refuses elsewhere, and
-    these are the joints a stride can come from (the sprawl axis, the fore-aft hinge, the blade) plus
-    the trunk that a sprawled reptile undulates. A family without one of the tokens simply matches
-    fewer joints; the joint order is the asset's own, so the axis labels cannot disagree with the
-    values they label.
+    these are the joints a stride can come from (the sprawl axis, the thigh's own elevation, the
+    fore-aft hinge, the shank, the blade) plus the trunk that a sprawled reptile undulates. A family
+    without one of the tokens simply matches fewer joints; the joint order is the asset's own, so the
+    axis labels cannot disagree with the values they label.
     """
     actuators = getattr(cfg.scene.robot, "actuators", None) or {}
     spinal = getattr(actuators.get("spine"), "joint_names_expr", ()) or ()
-    tokens = ("_hip_joint", "_hfe_joint", "_foot_joint")
+    tokens = ("_hip_joint", "_haa_joint", "_hfe_joint", "_kfe_joint", "_foot_joint")
     return [name for name in names
             if name.endswith(tokens) or any(re.fullmatch(pattern, name) for pattern in spinal)]
 
