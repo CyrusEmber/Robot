@@ -57,7 +57,8 @@
 | `rl_exp\tools\trainlog\dump_tb.py` | TB 事件 → `vN\tb_scalars.csv`（按 tag 抽样、**保首尾**；`--csv_in` 重抽样不需 tensorboard） |
 | `rl_exp\tools\verify\view_terrain.py` | GUI 看机器人站**指定版本的真实地形**（每 env 头向箭头 + 接触点探针 vs 碰撞栈预算） |
 | `rl_exp\tools\diagnose\plot_joints.py` | 读探针报告出图（**不起仿真**）：逐关节实际/目标/两条限位 + 贴限位着色 + 逐关节"贴限位帧占比"柱图；`--at_stop_rad` 是判据带宽，`--self-check` 手算边界 |
-| `rl_exp\tools\verify\check_leg_reachability.py` | 腿链**离线 FK**（读 URDF，不碰仿真/torch）：判断限位内能否摆出"掌面水平 + 着地"的姿态、以及这些姿态能否连成所需步幅的支撑轨迹；`--self-check` 用手算的两个位姿对口径 |
+| `rl_exp\tools\diagnose\pose_slider.py` | **交互摆姿器**（固定机身、无重力、无仿真）：四条腿各 5 个关节 + 机身高度滑块，画腿链/关节轴/脚垫网格/地面网格；读数 = 每腿倾角、最低顶点离地、足端前后与外展偏移、**末次触碰关节的轴向 + dp/dq + dn/dq + d(tilt)/dq**；越限关节标红，`limits` 按钮只在内存里放宽范围（不碰资产）用于"还差多少行程"的对比；`reset`/`save`（JSON，默认落 `out/pose_slider/`）、`--load` 回放。需 `env_isaaclab` 的 python（主机 python 无 matplotlib），`--self-check` 无界面可跑任一解释器 |
+| `rl_exp\tools\verify\check_leg_reachability.py` | 腿链**离线 FK 与摆姿读数**（读 URDF 与家族碰撞网格；不碰仿真/torch，stdlib）：`chain_frames` / `foot_pose` / `joint_effect`（dp/dq、dn/dq、d(tilt)/dq、轴在 base 系）与 `pad_state`（垫面倾角、最低顶点离地、垫原点）；`--pose` 印单腿位姿；`--self-check` 用手算事实对口径（原点求和、髋轴不改变倾角、抬机身即抬脚垫、dp/dq = 力臂）。**可达性扫描（A/B/C 三段）尚未实现** |
 | `rl_exp\tools\verify\terrain_preflight.py` | 开训前地形预检：离线生成全部子地形 + 粗糙度 + PNG 预览 + 几何摘要。它是**离线预览的回归基线**，不是真跑所站地形的证据（真跑几何由 `terrain_split_probe` 采集归档） |
 | `rl_exp\tools\pipeline\export_ue.py` | SSOT → UE 工件（盲部署前置）；**没有实测关节序就拒绝导出**（不写文件） |
 
