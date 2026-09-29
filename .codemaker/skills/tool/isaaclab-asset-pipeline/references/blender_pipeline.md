@@ -9,7 +9,7 @@
 **不要手算关节 rpy/镜像符号**——左右手性推导极易翻车（实测：手算版两条腿折向天上）。
 零位 = 站姿（joint rpy 全 0，姿态烘进几何），env 默认姿态就是自然站立。
 
-## 管线脚本（`E:\IsaacLab\rl_exp\blender\`）
+## 管线脚本（`<REPO>\rl_exp\blender\`）
 
 Steam Blender 运行：
 `E:\SteamLibrary\steamapps\common\Blender\blender.exe --background --python <脚本>`

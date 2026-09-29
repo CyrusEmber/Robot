@@ -24,9 +24,15 @@ tilt is about x" is a fact you read there, not one you infer from two slider pos
 Sliders are clamped to the URDF limits by default; the ``limits`` button lifts them in memory only --
 nothing on disk is touched -- and every joint outside its limit is called out on the readout line.
 
-Run it with the IsaacLab env's python (the host interpreter has no matplotlib):
+Run it from the repo root, with the IsaacLab env's python -- the repo tree does not live inside the
+IsaacLab install, and the host interpreter has no matplotlib:
 
-    E:\\IsaacLab\\env_isaaclab\\Scripts\\python.exe rl_exp\\tools\\diagnose\\pose_slider.py
+    cd /d <REPO>
+    <ROOT>\\env_isaaclab\\Scripts\\python.exe rl_exp\\tools\\diagnose\\pose_slider.py
+
+Any cwd works in module form, because the venv's ``rl_exp.pth`` points at the repo:
+
+    <ROOT>\\env_isaaclab\\Scripts\\python.exe -m rl_exp.tools.diagnose.pose_slider
 
 ``--self-check`` runs headless under either interpreter: it defers to the FK module's caliber check
 and adds the two things this file owns -- the clamp and the pose round trip through JSON.

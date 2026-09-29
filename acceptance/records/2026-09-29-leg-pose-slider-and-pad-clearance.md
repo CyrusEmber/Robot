@@ -75,8 +75,10 @@
 
 - 工具（入仓）：`rl_exp/tools/diagnose/pose_slider.py`、
   `rl_exp/tools/verify/check_leg_reachability.py`；文件路由见 `FILEMAP.md` 两行。
-- 复读：`python rl_exp\tools\verify\check_leg_reachability.py --self-check`；
-  `E:\IsaacLab\env_isaaclab\Scripts\python.exe rl_exp\tools\diagnose\pose_slider.py`（GUI）；
+- 复读（**必须从仓根 `<REPO>` 发起**；`rl_exp` 不复制进 IsaacLab 根，见 `README.md` 摆位节）：
+  `cd /d <REPO>` 后 `python rl_exp\tools\verify\check_leg_reachability.py --self-check`、
+  `<ROOT>\env_isaaclab\Scripts\python.exe rl_exp\tools\diagnose\pose_slider.py`（GUI）；
+  任意 cwd 用模块式 `<ROOT>\env_isaaclab\Scripts\python.exe -m rl_exp.tools.diagnose.pose_slider`；
   加 `--self-check` 则无界面。
 - 冒烟（机器本地、不入仓）：`rl_exp/tools/diagnose/_tmp_pose_slider_smoke.py` —— Agg 建图 + 21 滑块 +
   3 按钮 + 越限标注 + 存/读/复位往返 + TkAgg 画布构建（`FigureCanvasTkAgg`）。

@@ -21,6 +21,13 @@ rotated about the hip's own axis. Both are hand arithmetic, not a re-run of the 
 
 :func:`chain_frames` and :func:`pad_vertices` are the two things a display needs out of this module:
 the frame each joint turns in (an axis drawn in ``base_link``) and the pad's own mesh.
+
+Run it from the repo root -- the repo tree does not live inside the IsaacLab install. Standard library
+only, so the host interpreter is enough (``-m`` works from any cwd when the venv's ``rl_exp.pth``
+points at the repo):
+
+    cd /d <REPO>
+    python rl_exp\\tools\\verify\\check_leg_reachability.py --self-check
 """
 
 import argparse
