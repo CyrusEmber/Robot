@@ -483,6 +483,35 @@ def test_only_the_reader_that_declares_its_reports_can_be_asked_for_one_nobody_c
     assert old["verdict"] in ("pass", "fail"), old["verdict"]
 
 
+def test_the_two_lizard2_arms_are_judged_by_one_ruler_spelled_twice():
+    """Two arms, two recipe versions, so two protocol files -- and only the identity may differ.
+
+    The experiment moves one variable (who may command the blade joints), and the evaluator refuses
+    a protocol whose declared recipe version is not the task's version. So the criteria have to be
+    spelled once per arm, and the risk this test covers is the obvious one: two files that drift
+    apart are not one ruler, and every cross-arm reading would then be taken with two different
+    instruments nobody compared.
+    """
+    identity_keys = {"name", "version", "supersedes", "recipe", "recipe_version"}
+    # Keyed by the recipe each file judges: the file names carry the protocol's own version, which
+    # is why `lizard2_flat_v3.json` is the one that names v2.
+    files = {"v1": "lizard2_flat_v2.json", "v2": "lizard2_flat_v3.json"}
+    protocols = {}
+    for recipe_version, file_name in files.items():
+        block = json.loads((_REPO / "ablation_harness/protocols" / file_name).read_text())
+        # ``why_vN`` are each file's own account of how it got here, keyed by protocol version.
+        protocols[recipe_version] = {
+            key: value for key, value in block.items()
+            if key not in identity_keys and not key.startswith("why_")}
+        assert block["recipe_version"] == recipe_version, (file_name, block["recipe_version"])
+    differing = sorted(
+        key for key in set(protocols["v1"]) | set(protocols["v2"])
+        if protocols["v1"].get(key) != protocols["v2"].get(key))
+    assert not differing, (
+        "the two lizard2 protocols judge by the same numbers or the comparison is void; "
+        f"these blocks disagree: {differing}")
+
+
 def test_every_reader_this_module_implements_has_a_frozen_block():
     """A reader without a block is a semantics change nobody pinned; the table is the gate."""
     spec = json.loads(_SEMANTICS_PATH.read_text(encoding="utf-8"))
