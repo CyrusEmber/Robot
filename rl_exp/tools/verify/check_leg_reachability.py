@@ -10,6 +10,17 @@ limits -- while standing at body height, and while sweeping through a stance of 
 That is a kinematics feasibility question, and it does not need a rollout. What it does need is an
 FK whose numbers are the simulator's, which is what the caliber check below is for.
 
+Two properties of this chain are asserted here rather than argued in prose, because both were read
+wrong from the numbers alone, and both decide what "a level pad" can even mean:
+
+* **the pad's tilt is its fold sum's**: the three hinges share one axis, so the tilt is a function of
+  ``haa + hfe + kfe`` and the blade angle alone (:func:`fold_tilt`) -- the hip angle drops out, how the
+  sum is split does not matter, and no blade stroke can cancel the part of the fold that lies along the
+  hinge axis (measured: 1-3 deg of travel against a 30-50 deg fold);
+* **the knee's straight pose is not at zero**: ``hfe`` makes thigh and shank collinear at +-55.15 deg,
+  while the asset's range is a symmetric +-1.2 rad (:data:`KNEE_FACTS`), so every leg carries 13.6 deg
+  of knee hyperextension -- the limit was carried over when ``hfe``'s axis changed from ``Z`` to ``-X``.
+
 The chain, per leg, is a 5-revolute serial chain off ``base_link``
 (``*_hip`` -> ``*_haa`` -> ``*_hfe`` -> ``*_kfe`` -> ``*_foot``); the URDF gives each joint's origin,
 axis and position limits, so nothing here is transcribed from the asset by hand.
@@ -23,11 +34,12 @@ rotated about the hip's own axis. Both are hand arithmetic, not a re-run of the 
 the frame each joint turns in (an axis drawn in ``base_link``) and the pad's own mesh.
 
 Run it from the repo root -- the repo tree does not live inside the IsaacLab install. Standard library
-only, so the host interpreter is enough (``-m`` works from any cwd when the venv's ``rl_exp.pth``
-points at the repo):
+only (``-m`` works from any cwd when the venv's ``rl_exp.pth`` points at the repo); ``--frames`` is the
+one path that touches a record and therefore torch:
 
     cd /d <REPO>
     python rl_exp\\tools\\verify\\check_leg_reachability.py --self-check
+    python rl_exp\\tools\\verify\\check_leg_reachability.py --frames <record>\\eval.frames.pt
 """
 
 import argparse
@@ -40,6 +52,20 @@ DEFAULT_URDF = _REPO / "rl_exp" / "versions" / "lizard2" / "lizard2.urdf"
 #: The five joints of a leg, root to pad. The blade is the last one: the pad is rigid to it.
 CHAIN = ("hip", "haa", "hfe", "kfe", "foot")
 LEGS = ("lf", "rf", "rl", "rr")
+
+#: The knee's own geometry, per leg: the ``hfe`` that makes thigh and shank collinear [deg, signed
+#: about the joint's own axis], the hyperextension the +-1.2 rad limit leaves beyond it [deg], and the
+#: thigh-shank angle at the FOLDED end of the range [deg]. Four entries rather than one because the
+#: four chains are not exact mirrors of one another (the front pair mirrors to ~4 mdeg, and the rear
+#: pair is not the right legs' mirror at all). ``hfe``'s axis moved from ``Z`` to ``-X`` in
+#: ``rl_exp/blender/generate_urdf.py`` while its +-1.2 limit was carried over, so the number never had
+#: a knee's geometry behind it: every leg's range contains 13.6 deg of knee hyperextension.
+KNEE_FACTS = {
+    "rr": (55.146871, 13.608064, 123.901807),
+    "rf": (55.148202, 13.606733, 123.903137),
+    "lf": (-55.146496, 13.608439, 123.901431),
+    "rl": (-55.149688, 13.605247, 123.904623),
+}
 
 
 def _floats(text: str, count: int) -> list[float]:
@@ -237,6 +263,57 @@ def joint_effect(chain: list[dict], angles: list[float], index: int, normal: lis
     return dp, dn, axis, d_tilt
 
 
+def fold_tilt_cos(normal: list[float], sigma: float, foot: float) -> float:
+    """The pad normal's z-component in a level body frame, read so that 1 = flat:
+
+        cos(tilt) = ny sin(sigma) + (nx sin(foot) - nz cos(foot)) cos(sigma)
+
+    The well-conditioned form of :func:`fold_tilt`, and the one to check against a measured tilt: an
+    angle near 0 has no resolution through ``acos`` (a float64 cosine at 1 - 1e-16 returns ~1e-8 rad),
+    so comparing angles would measure the rounding instead of the identity. Valid for this asset's axis
+    directions -- the three hinges along ``-x`` and the blade along ``+y`` -- which the self-check
+    asserts, because a sign in either would silently flip a term here.
+    """
+    nx, ny, nz = _unit(normal)
+    return (ny * math.sin(sigma)
+            + (nx * math.sin(foot) - nz * math.cos(foot)) * math.cos(sigma))
+
+
+def fold_tilt(normal: list[float], sigma: float, foot: float) -> float:
+    """The pad's tilt [deg] off a level body's down, from the fold sum alone.
+
+    ``haa``, ``hfe`` and ``kfe`` all turn about the same axis, so the pad link's attitude in
+    ``base_link`` is ``Rz(hip) Rx(sigma) Ry(foot)`` with ``sigma`` their SUM: the hip drops out of the
+    tilt (a z rotation leaves the normal's z alone) and how the sum is split does not matter. For a
+    level body the tilt is therefore a function of ``(sigma, foot)`` and the pad's own normal
+    (:func:`fold_tilt_cos`) -- exact, and it says nothing about a pad that has to be level to the WORLD
+    while the body carries roll and pitch, which is what an eval frame cannot show.
+    """
+    return math.degrees(math.acos(max(-1.0, min(1.0, abs(fold_tilt_cos(normal, sigma, foot))))))
+
+
+def straight_hfe(chain: list[dict]) -> float:
+    """The ``hfe`` angle [rad] that makes thigh and shank collinear, signed about the joint's axis.
+
+    The thigh and shank are the two segments the chain's third and fourth origins span, so this is
+    where the knee IS straight. The asset states the knee's range as a symmetric +-1.2 rad around a
+    neutral pose that is already bent by this much, which is why the limit has to be compared with
+    this angle rather than with zero.
+    """
+    thigh, shank, axis = _unit(chain[2]["origin"]), _unit(chain[3]["origin"]), _unit(chain[2]["axis"])
+    return math.atan2(sum(_cross(shank, thigh)[i] * axis[i] for i in range(3)),
+                      sum(shank[i] * thigh[i] for i in range(3)))
+
+
+def thigh_shank_angle(chain: list[dict], angles: list[float]) -> float:
+    """Angle [deg] between the thigh and shank segments: 0 = collinear, 180 = folded onto the thigh."""
+    frames = chain_frames(chain, angles)
+    thigh = [sum(frames[2][i][j] * chain[2]["origin"][j] for j in range(3)) for i in range(3)]
+    shank = [sum(frames[3][i][j] * chain[3]["origin"][j] for j in range(3)) for i in range(3)]
+    norm = math.sqrt(sum(v * v for v in thigh)) * math.sqrt(sum(v * v for v in shank))
+    return math.degrees(math.acos(max(-1.0, min(1.0, sum(thigh[i] * shank[i] for i in range(3)) / norm))))
+
+
 def _smallest_eigenvector(cov) -> list[float]:
     """The least-variance direction of a 3x3 covariance: power iteration on ``scale*I - cov``.
 
@@ -294,6 +371,36 @@ def self_check(urdf: pathlib.Path) -> None:
         dp, dn, axis, _ = joint_effect(chain, zero_angles, len(CHAIN) - 1, normal, vertices)
         assert abs(math.sqrt(sum(value * value for value in dn))
                    - math.sqrt(sum(value * value for value in _cross(axis, normal)))) < 1e-6, (leg, dn, axis)
+        # The pad's tilt is its FOLD SUM's, and the hip is not in it: the three hinges share one axis,
+        # so redistributing the same sum must change the tilt by nothing, and so must the hip angle.
+        assert chain[1]["axis"] == chain[2]["axis"] == chain[3]["axis"], (leg, "hinges not parallel")
+        assert chain[1]["axis"] == [-1.0, 0.0, 0.0] and chain[4]["axis"] == [0.0, 1.0, 0.0], \
+            (leg, "the closed form is written for the asset's own hinge and blade directions")
+        for sigma in (-0.9, -0.35, 0.0, 0.31, 0.62):
+            for foot in (-0.5, -0.2, 0.0, 0.17, 0.5):
+                spread = pad_state(chain, [0.11, sigma, 0.0, 0.0, foot], normal, vertices, 0.9)
+                other = pad_state(chain, [0.11, sigma / 3.0, sigma / 3.0, sigma / 3.0, foot],
+                                  normal, vertices, 0.9)
+                turned = pad_state(chain, [-0.4, sigma, 0.0, 0.0, foot], normal, vertices, 0.9)
+                assert abs(spread["tilt_deg"] - other["tilt_deg"]) < 1e-9, (leg, sigma, foot)
+                assert abs(spread["tilt_deg"] - turned["tilt_deg"]) < 1e-9, (leg, sigma, foot)
+                assert abs(fold_tilt_cos(normal, sigma, foot) - (-spread["normal"][2])) < 1e-12, \
+                    (leg, sigma, foot)
+        # The blade cannot buy the tilt back: with the legs folded by 0.62 rad its whole +-0.5 rad
+        # stroke leaves >= 30 deg, which is the reading ("1-3 deg of travel against a 30-50 deg fold").
+        stroke = min(pad_state(chain, [0.0, 0.62, 0.0, 0.0, -0.5 + i * 0.01], normal, vertices,
+                               0.9)["tilt_deg"] for i in range(101))
+        assert stroke > 30.0, (leg, stroke)
+        # The knee's straight pose, against the pinned per-leg facts: the limit over-runs it, and the
+        # other end of the range is a fold. A regeneration that moves an origin must trip these.
+        straight = math.degrees(straight_hfe(chain))
+        pinned, margin, folded = KNEE_FACTS[leg]
+        assert abs(straight - pinned) < 1e-3, (leg, straight, pinned)
+        low, high = chain[2]["limits"]
+        fold_limit, over_limit = (low, high) if straight > 0 else (high, low)
+        over_run = math.degrees(abs(over_limit)) - abs(straight)
+        assert abs(over_run - margin) < 1e-3, (leg, over_run, margin)
+        assert abs(thigh_shank_angle(chain, [0.0, 0.0, fold_limit, 0.0, 0.0]) - folded) < 1e-3, leg
         limits = " ".join("%s[%+.2f,%+.2f]" % (joint["name"].split("_")[-2], *joint["limits"])
                           for joint in chain)
         tilt = math.degrees(math.acos(-normal[2] / math.sqrt(sum(v * v for v in normal))))
@@ -302,9 +409,60 @@ def self_check(urdf: pathlib.Path) -> None:
         print("      pad normal %s -> %.2f deg off the link's -z  tilt %.2f deg  lowest %+.4f m  "
               "hip lever %.4f m"
               % (["%+.4f" % v for v in normal], tilt, zero["tilt_deg"], zero["lowest_z"], lever))
+        print("      knee: straight at %+.4f deg, the +-1.2 rad limit over-runs it by %.4f deg, "
+              "folded end %.2f deg" % (straight, over_run, folded))
     print("[SELF-CHECK] zero pose equals the origin sum, a quarter hip turn rotates about the hip "
-          "axis, the hip leaves the tilt alone, a body-height shift moves the pad with it, and each "
-          "joint's dp/dq equals its own lever arm")
+          "axis, the hip leaves the tilt alone, a body-height shift moves the pad with it, each "
+          "joint's dp/dq equals its own lever arm, the tilt is the fold sum's alone (a blade stroke "
+          "worth 1-3 deg against a 30-50 deg fold), and the knee's straight pose is not at zero")
+
+
+def fold_reading(path: pathlib.Path, urdf: pathlib.Path, contact_n: float = 1.0) -> None:
+    """Per leg and command band: the fold sum while the pad carries load, beside the blade's own angle.
+
+    The quantity the pad question needs is ``|SIGMA|`` on the loaded frames -- the part of the tilt no
+    blade stroke can cancel (:func:`fold_tilt`) -- read against the blade's own travel. ``tilt@fold`` is
+    the identity's prediction at the band's median fold sum with the blade at zero, i.e. at the blade's
+    own optimum here (these legs' mesh normals are offset in y, so the blade's angle can only make the
+    tilt worse). It is read with each leg's own fitted normal, and it assumes a LEVEL body -- the one
+    boundary this reading cannot close: format 3 deliberately carries no attitude column
+    (``ablation_harness/baseline_frames.py``), so a pad that is level to the WORLD while the body
+    carries roll and pitch sits flatter in a record than the prediction says.
+
+    Run it on a ``baseline-frames-3`` record (``.../eval.frames.pt``). Older formats have no joint
+    column and are refused rather than read as if the joints were missing.
+    """
+    import torch  # the one torch-touching path in this file: reading a record is not geometry
+
+    artifact = torch.load(path, map_location="cpu", weights_only=False)
+    if artifact.get("format") != "baseline-frames-3":
+        raise SystemExit(f"{path}: format {artifact.get('format')!r} carries no joint column")
+    index = {name: i for i, name in enumerate(artifact["axes"]["joint_pos"])}
+    joints = artifact["frames"]["joint_pos"]
+    load = artifact["frames"]["foot_fraction"] * float(artifact["meta"]["body_weight_n"])
+    speed = artifact["frames"]["command_world"][..., 0].abs()
+    legs = [name[: -len("_foot")] for name in artifact["axes"]["foot_contact"]]
+    print("%s: %d steps x %d envs, loaded = >%s N"
+          % (path.name, joints.shape[0], joints.shape[1], contact_n))
+    print("%-5s %-3s %8s %16s %14s %10s"
+          % ("band", "leg", "frames", "|SIGMA| p50/p95", "blade p50/p95", "tilt@fold"))
+    for band, low, high in (("slow", 0.1, 1.0), ("mid", 1.0, 2.0), ("fast", 2.0, 3.0)):
+        mask = (speed > low) & (speed <= high)
+        for k, leg in enumerate(legs):
+            loaded = (load[..., k] > contact_n) & mask
+            sigma = (joints[..., index[f"{leg}_haa_joint"]] + joints[..., index[f"{leg}_hfe_joint"]]
+                     + joints[..., index[f"{leg}_kfe_joint"]])[loaded]
+            blade = joints[..., index[f"{leg}_foot_joint"]][loaded]
+            if sigma.numel() == 0:
+                print("%-5s %-3s %8d" % (band, leg, 0))
+                continue
+            predicted = fold_tilt(pad_normal_in_link(urdf, leg), float(sigma.median()), 0.0)
+            print("%-5s %-3s %8d %7.1f/%6.1f %7.1f/%6.1f %10.1f"
+                  % (band, leg, int(sigma.numel()),
+                     math.degrees(float(sigma.abs().median())),
+                     math.degrees(float(sigma.abs().quantile(0.95))),
+                     math.degrees(float(blade.median())),
+                     math.degrees(float(blade.quantile(0.95))), predicted))
 
 
 def _rotation_about(axis, angle: float):
@@ -320,12 +478,19 @@ def main() -> None:
     parser.add_argument("--pose", nargs=5, type=float, metavar=("HIP", "HAA", "HFE", "KFE", "FOOT"),
                         help="print one leg's pad pose at these joint angles [rad]")
     parser.add_argument("--leg", default="lf", choices=LEGS)
+    parser.add_argument("--frames", type=pathlib.Path, default=None,
+                        help="a baseline-frames-3 record: print the fold sum on its loaded frames")
+    parser.add_argument("--contact_n", type=float, default=1.0,
+                        help="per-foot normal force above which the pad is called loaded [N]")
     args = parser.parse_args()
     if args.self_check:
         self_check(args.urdf)
         return
+    if args.frames is not None:
+        fold_reading(args.frames, args.urdf, args.contact_n)
+        return
     if args.pose is None:
-        parser.error("nothing to do: pass --self-check or --pose")
+        parser.error("nothing to do: pass --self-check, --frames or --pose")
     chain = load_chain(args.urdf, args.leg)
     position, rotation = foot_pose(chain, args.pose)
     for i, row in enumerate(rotation):
