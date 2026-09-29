@@ -23,6 +23,10 @@
       "sha256": "cdc2b835d1ee38d79d1f32fda57b377b7f102924dd888d4dc4df7087fabe9807",
       "reason": "Frozen as the identity copy that judges the v2 arm: same reader, same criteria, same numbers as lizard2_flat_v2.json, declared against recipe v2 because the evaluator refuses a protocol whose recipe version is not the task's. Every judged block is compared to the v2 file by test_baseline_contract.py, so the pair is one ruler and not two."
     },
+    "protocols/lizard2_flat_v4.json": {
+      "sha256": "268dabc4341039b8f194d9b881c773861492dd6107db9b1e9b07e0ef8a286b4d",
+      "reason": "Frozen as the reporting upgrade of v3: same recipe, same criteria, and four added report-only items about gait shape (the trunk's lateral travel and its coupling to a leg, and per foot whether the stride came from the hip or the knee). Adding a metric is a protocol version even when no gate moves, because the records already on disk do not carry the column these read."
+    },
     "protocols/locomotion_eval_v4.yaml": {
       "sha256": "f33328ddf66e03e81f32dd0b96ea015a8fadba0b6d266dd7c8e34c7a771b9176",
       "reason": "The locomotion path's current protocol. Its suite_expected pins the ground a run was measured on; this pins the numbers it was judged by -- the same value the eval records already carry as eval_protocol.digest."

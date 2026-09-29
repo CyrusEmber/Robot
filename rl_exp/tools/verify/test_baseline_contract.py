@@ -41,6 +41,12 @@ AXES = {
     "foot_com_pos": FEET,
     "foot_lin_vel": FEET,
     "foot_ang_vel": FEET,
+    # The joint axis of the newest format: two trunk yaw joints and one leg's three tokens, which is
+    # the whole partition the gait-shape readings make (a leg joint by token, a trunk joint by not
+    # being one).
+    "joint_pos": ["chest_yaw_joint", "tail1_yaw_joint",
+                  "rr_hip_joint", "rr_hfe_joint", "rr_foot_joint",
+                  "rl_hip_joint", "rl_hfe_joint", "rl_foot_joint"],
 }
 
 # What the newest format demands on top of the first one's meta: where the ground came from, and
@@ -333,14 +339,20 @@ def test_the_newest_format_demands_where_its_foot_geometry_came_from():
 
 
 def test_a_new_format_does_not_move_an_old_records_verdict():
-    """Two formats, one policy: extra columns may not change what the same run is judged to be."""
+    """Two formats, one policy: extra columns may not change what the same run is judged to be.
+
+    The added set is read off the declaration rather than listed here, so publishing a third format
+    moves this test with it: what the test is about is "the verdict did not move", and a hand-listed
+    set would have to be edited by whoever publishes the format, which is the copy that drifts.
+    """
     old = baseline_metrics.judge(build(PROTOCOL, 20, fmt=_OLD_FORMAT))
     new = baseline_metrics.judge(build(PROTOCOL, 20))
     assert old["verdict"] == new["verdict"] == "pass", (old["invalid_reasons"], new["invalid_reasons"])
     assert old["gates"] == new["gates"], (old["gates"], new["gates"])
     assert old["metrics"] == new["metrics"], (old["metrics"], new["metrics"])
     added = set(new["axes"]) - set(old["axes"])
-    assert added == {"foot_lowest_point", "foot_com_pos", "foot_lin_vel", "foot_ang_vel"}, added
+    published = set(baseline_frames.format_spec(baseline_frames.FORMAT)["columns"]) - set(_OLD_COLUMNS)
+    assert added == published, (sorted(added), sorted(published))
 
 
 def test_a_saved_record_is_written_whole_and_never_over_one_that_exists():
@@ -481,6 +493,80 @@ def test_only_the_reader_that_declares_its_reports_can_be_asked_for_one_nobody_c
     assert old["judge"]["id"] == baseline_metrics.BANDED_SETTLED_JUDGE_ID, old["judge"]
     assert old["invalid_reasons"] == [], old["invalid_reasons"]
     assert old["verdict"] in ("pass", "fail"), old["verdict"]
+
+
+def gait_shape_window(*, swinging: bool) -> dict:
+    """A judged window whose gait shape has a known answer.
+
+    The hips swing (rr and rl in antiphase, 0.2 rad, two strides across the window) and each foot's
+    own fore-aft offset follows its own hip; the knee tokens and the blade stay at zero, so nothing
+    sagittal happens. With ``swinging`` the trunk's two yaw joints swing with the hips, in phase with
+    each other; without it they are exactly zero. ``pos`` is pinned so the foot's offset relative to
+    the base is the sinusoid itself and not a ramp the body's travel put there.
+    """
+    period = 8
+    names = AXES["joint_pos"]
+
+    def joints(step):
+        values = torch.zeros(len(names))
+        trunk = 0.2 * math.sin(2 * math.pi * step / period) if swinging else 0.0
+        for index, name in enumerate(names):
+            if name.endswith("_yaw_joint"):
+                values[index] = trunk
+            elif name.endswith("_hip_joint"):
+                values[index] = 0.2 * math.sin(2 * math.pi * step / period
+                                                + (0.0 if name.startswith("rr") else math.pi))
+        return values.unsqueeze(0)
+
+    def feet(step):
+        positions = torch.zeros(1, len(FEET), 3)
+        for index, foot in enumerate(FEET):
+            sign = 1.0 if foot.startswith("rr") else -1.0
+            positions[0, index, 0] = sign * 0.05 * math.sin(2 * math.pi * step / period)
+        return positions
+
+    return baseline_metrics.judge(build(V3_PROTOCOL, 20, series={
+        "pos": lambda step: torch.zeros(1, 3),
+        "joint_pos": joints,
+        "foot_lowest_point": feet,
+    }))
+
+
+def test_the_gait_shape_readings_tell_a_swinging_trunk_from_a_static_one():
+    """Both windows stride with the hip; only one has a trunk that swings, and that is the reading."""
+    swinging = gait_shape_window(swinging=True)["diagnostics"]
+    still = gait_shape_window(swinging=False)["diagnostics"]
+    # One number per trunk yaw joint -- the fixture has two -- and 0.2 rad of amplitude is a 0.4 rad
+    # 5-95% travel: 23 deg, so the bound is a classification, not a fit.
+    assert len(swinging["spine_yaw_travel_deg"]) == 2, swinging["spine_yaw_travel_deg"]
+    assert all(value > 5.0 for value in swinging["spine_yaw_travel_deg"]), swinging["spine_yaw_travel_deg"]
+    assert all(value < 0.01 for value in still["spine_yaw_travel_deg"]), still["spine_yaw_travel_deg"]
+    assert swinging["spine_leg_coupling"] > 0.9, swinging["spine_leg_coupling"]
+    assert still["spine_leg_coupling"] < 0.01, still["spine_leg_coupling"]
+    # The trunk swings in phase with each hip it is compared against, so the worst pair is a perfect
+    # one; the knee carries nothing, so its correlation is the undefined case pinned to zero.
+    assert all(value > 0.9 for value in swinging["stride_hip_corr"]), swinging["stride_hip_corr"]
+    assert all(abs(value) < 0.05 for value in swinging["stride_knee_corr"]), swinging["stride_knee_corr"]
+
+
+def test_a_record_without_the_joint_column_cannot_supply_a_gait_shape_number():
+    """An item names the column it reads, so an older record is refused for it -- not left absent."""
+    protocol = dict(FOOTED_PROTOCOL, report_only=["stride_hip_corr", "spine_yaw_travel_deg"])
+    older = baseline_metrics.judge(build(protocol, 20, fmt="baseline-frames-2"))
+    assert older["verdict"] == "invalid", older["gates"]
+    assert any("joint_pos" in reason for reason in older["invalid_reasons"]), older["invalid_reasons"]
+    current = baseline_metrics.judge(build(protocol, 20))
+    assert not any("joint_pos" in reason for reason in current["invalid_reasons"]), \
+        current["invalid_reasons"]
+    # And a joint axis with no yaw joint in it: an axis of pitch joints would answer a different
+    # question under this name, so it is refused rather than quietly read as a trunk that never swings.
+    without_yaw = build(protocol, 20)
+    kept = ["rr_hip_joint", "rr_hfe_joint", "rr_foot_joint"]
+    without_yaw["axes"]["joint_pos"] = kept
+    without_yaw["frames"]["joint_pos"] = without_yaw["frames"]["joint_pos"][
+        :, :, [AXES["joint_pos"].index(name) for name in kept]]
+    refused = baseline_metrics.judge(without_yaw)
+    assert any("yaw joint" in reason for reason in refused["invalid_reasons"]), refused["invalid_reasons"]
 
 
 def test_the_two_lizard2_arms_are_judged_by_one_ruler_spelled_twice():

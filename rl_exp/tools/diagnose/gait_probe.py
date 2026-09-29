@@ -97,6 +97,10 @@ import torch  # noqa: E402
 
 import diag_metrics  # noqa: E402
 
+#: The suffixes that make a joint a leg joint. Everything else is trunk, which is how the report
+#: tells the two apart without a second declaration of the same fact.
+LEG_SUFFIXES = ("_hip_joint", "_haa_joint", "_hfe_joint", "_kfe_joint", "_foot_joint")
+
 from rl_exp.tools.runrecord import binding  # noqa: E402
 from rl_exp.tasks import obs_protocol  # noqa: E402
 
@@ -836,6 +840,11 @@ def main() -> None:
     for joint in ("hip", "hfe", "foot"):
         leg_joint_ids[joint] = {name.split("_")[0]: joint_names.index(f"{name.split('_')[0]}_{joint}_joint")
                                 for name in foot_bodies}
+    # The trunk: every joint that is not a leg joint, in the asset's own order. This is the same
+    # partition the protocol's gait-shape reading makes, and the probe needs it for the same reason --
+    # "the trunk does not swing" is a claim about joints nothing else in this report names.
+    spine_names = [name for name in joint_names if not name.endswith(LEG_SUFFIXES)]
+    spine_ids = [joint_names.index(name) for name in spine_names]
     # Position limits, because "the target asks for the sole below the floor" has two very different
     # readings: a pose the policy chose, or a target pressed against a stop it cannot pass.
     pos_limits = robot.data.joint_pos_limits.torch[0]  # (J, 2); the same for every env
@@ -1031,6 +1040,14 @@ def main() -> None:
             f"{name}_{joint}_{kind}": [round(float(x), 5) for x in values[
                 alive, env_index, leg_joint_ids[joint][name.split("_")[0]]].tolist()]
             for name in foot_bodies for joint in ("hip", "hfe", "foot")
+            for kind, values in (("target", target), ("actual", actual), ("vel", vel))}
+        # The trunk, per frame, joint by joint. Exported because a vertebrate that undulates and one
+        # that holds its spine still look identical in every reading above: they differ in a shape over
+        # the stride, and a shape read off a table of medians is a shape nobody saw.
+        entry["spine_series"] = {
+            f"{name}_{kind}": [round(float(x), 5) for x in
+                               values[alive, env_index, spine_ids[index]].tolist()]
+            for index, name in enumerate(spine_names)
             for kind, values in (("target", target), ("actual", actual), ("vel", vel))}
         report["envs"].append(entry)
 

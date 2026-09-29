@@ -81,15 +81,36 @@ FOOT_COLUMNS: dict[str, tuple[str, str, str]] = {
     "foot_ang_vel": (VEC3_FEET, "rad/s", "that foot body's angular velocity, world frame"),
 }
 
-#: The newest format: the twelve columns above plus the foot reading.
-COLUMNS: dict[str, tuple[str, str, str]] = {**COLUMNS_V1, **FOOT_COLUMNS}
+#: Format 2's columns: the twelve above plus the foot reading. Kept under its own name because a
+#: published format keeps the declaration its name stands for -- format 3 below shares it by value.
+COLUMNS_V2: dict[str, tuple[str, str, str]] = {**COLUMNS_V1, **FOOT_COLUMNS}
 #: What the newest format must carry on top of the first one's meta: where its ground came from, and
 #: which asset's geometry the foot reading was taken off -- so no later reader fills that gap with
 #: another family's mesh, which is how a historical record would silently change meaning.
 REQUIRED_META_V2 = ("ground_source", "foot_geometry")
 
+#: Format 2's name. Its declaration is still the one above, byte for byte: the entry in
+#: ``frame_semantics.json`` points here so that records written under it keep being read as what they
+#: were, now that the newest format has a name of its own.
+FORMAT_V2 = "baseline-frames-2"
+
+#: A scalar per joint name -- one number per joint, like ``BODIES`` but indexed by a joint list
+#: rather than a body list.
+JOINTS = "joints"
+
+#: The joint reading: the angles a gait-shape question needs and no column above carries. Which
+#: joints a collector fills is a reading's business, not the format's; the format only says that the
+#: values are radians and that their axis labels are joint names, in the asset's own order.
+JOINT_COLUMNS: dict[str, tuple[str, str, str]] = {
+    "joint_pos": (JOINTS, "rad", "joint position, by joint name"),
+}
+
+#: The newest format: format 2's sixteen columns plus the joint reading.
+COLUMNS: dict[str, tuple[str, str, str]] = {**COLUMNS_V2, **JOINT_COLUMNS}
+
 #: The format a collector writes unless it pins an older one.
-FORMAT = "baseline-frames-2"
+FORMAT_V3 = "baseline-frames-3"
+FORMAT = FORMAT_V3
 
 #: Every format this reader knows, by the name a record carries. A declaration is fixed for the life
 #: of its format: changing a column's meaning, unit or shape publishes a new name, so records written
@@ -98,7 +119,9 @@ FORMAT = "baseline-frames-2"
 #: it cannot pass as an edit of one of them.
 _FORMATS: dict[str, dict] = {
     FORMAT_V1: {"columns": COLUMNS_V1, "axis_kinds": AXIS_KINDS, "required_meta": REQUIRED_META},
-    FORMAT: {"columns": COLUMNS, "axis_kinds": (*AXIS_KINDS, VEC3_FEET),
+    FORMAT_V2: {"columns": COLUMNS_V2, "axis_kinds": (*AXIS_KINDS, VEC3_FEET),
+                "required_meta": (*REQUIRED_META, *REQUIRED_META_V2)},
+    FORMAT: {"columns": COLUMNS, "axis_kinds": (*AXIS_KINDS, VEC3_FEET, JOINTS),
              "required_meta": (*REQUIRED_META, *REQUIRED_META_V2)},
 }
 

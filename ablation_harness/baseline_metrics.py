@@ -148,6 +148,21 @@ REPORT_ITEMS = {
     "foot_lift_peak_m": ("behaviour", "m", ("foot_lowest_point",), "highest clearance any foot reached"),
     "foot_lift_feet_least": ("behaviour", "feet", ("foot_lowest_point",), "worst env's lifted feet"),
     "foot_slip_fraction_worst": ("behaviour", "1", ("foot_lin_vel",), "worst foot's sliding share"),
+    # -- gait shape: what the footfall and the trunk do, not just how fast the base went ------------
+    # These read the joint column. They are reported rather than gated on purpose: a threshold here
+    # would claim to know what a lizard's trunk should do, and the readings to place one above the
+    # healthy numbers and below the failing ones do not exist yet.
+    "spine_yaw_travel_deg": ("behaviour", "deg", ("joint_pos",),
+                             "per trunk yaw joint, its 5-95% travel in degrees, in the joint axis's "
+                             "order -- a list, because one average hides which joint moved"),
+    "spine_leg_coupling": ("behaviour", "1", ("joint_pos",),
+                           "worst |correlation| between a trunk yaw joint and a leg joint, per env"),
+    "stride_hip_corr": ("behaviour", "1", ("joint_pos", "foot_lowest_point", "command_world"),
+                        "per foot the record carries a hip for: correlation of its fore-aft position "
+                        "with the hip angle (the sprawl axis), over the frames the command asked to move"),
+    "stride_knee_corr": ("behaviour", "1", ("joint_pos", "foot_lowest_point", "command_world"),
+                         "per foot: the same against the fore-aft hinge (hfe), which is where a "
+                         "sagittal, mammal-like stride would show up"),
 }
 
 #: kind -> {"params": exactly these, "columns": the record columns it reads}.
@@ -830,6 +845,111 @@ def judge_plan(protocol: dict) -> tuple[dict, str, list[str]]:
     return plan, "legacy", reasons
 
 
+def _nan_correlation(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+    """Per-env correlation over the frames both are finite in, ``(N,)``; NaN where it is undefined.
+
+    Built on nan-aware reductions because the frames after an env's first termination are dropped by
+    masking them to NaN rather than by shortening every column -- the envs do not run out together,
+    and a mask that has to stay aligned with the frames cannot be a length.
+    """
+    mx, my = torch.nanmean(x, dim=0), torch.nanmean(y, dim=0)
+    dx, dy = x - mx, y - my
+    denom = torch.sqrt(torch.nanmean(dx * dx, dim=0) * torch.nanmean(dy * dy, dim=0))
+    return torch.nanmean(dx * dy, dim=0) / denom.clamp_min(1e-12)
+
+
+#: The joint tokens that make a joint a leg joint rather than a trunk joint, and the pairs a stride
+#: can come from. Named here because both the partition and the stride reading are about these three.
+_LEG_TOKENS = ("_hip_joint", "_hfe_joint", "_foot_joint")
+
+#: Forward command above which the window counts as "asked to move" [m/s]. The same floor the banded
+#: tracking criterion divides its bands with, so "moving" means one thing in this module.
+MOVING_COMMAND_MPS = 0.5
+
+
+def _gait_shape_readings(frames: dict, alive: torch.Tensor, axes: dict, meta: dict) -> dict:
+    """The trunk's lateral motion and where each foot's stride comes from, read off ``joint_pos``.
+
+    A verdict says how fast the base went; it cannot say whether the machine walked like a sprawled
+    reptile or like a mammal, and those two look the same in the base's trajectory. Two questions
+    separate them and both are shapes over frames:
+
+    * does the trunk swing, and does that swing move with a leg -- a static trunk is a mammal trait;
+    * is each foot's fore-aft position carried by the hip (the sprawl axis a lizard strides about) or
+      by the fore-aft hinge (a sagittal knee swing, which is what a bound is made of).
+
+    Nothing here is thresholded, and nothing is imputed: a quantity with no joint to measure it is
+    left out rather than reported as zero.
+    """
+    names = list(axes.get("joint_pos", ()))
+    if not names or "joint_pos" not in frames:
+        return {}
+    angles = frames["joint_pos"]
+    mask = alive.unsqueeze(-1)
+    alive_f = angles.masked_fill(~mask, float("nan"))
+    out: dict[str, object] = {}
+    leg_ids = [index for index, name in enumerate(names) if name.endswith(_LEG_TOKENS)]
+    yaw_ids = [index for index, name in enumerate(names)
+               if index not in leg_ids and name.endswith("_yaw_joint")]
+    if yaw_ids:
+        spread = (torch.nanquantile(alive_f[..., yaw_ids], 0.95, dim=0)
+                  - torch.nanquantile(alive_f[..., yaw_ids], 0.05, dim=0))
+        # One number per yaw joint, in the axis's order, rather than their average. The average is
+        # what this reading used to be, and it is the trap the whole module refuses: a trunk whose
+        # chest barely moves and whose tail swings twenty degrees reads like a trunk that moved ten.
+        # The 5-95% spread is also deliberate over the peak-to-peak: a single spike is not a swing,
+        # and a joint that is still except for two frames has to read as still.
+        per_joint = []
+        for column in range(spread.shape[-1]):
+            column_values = spread[..., column]
+            finite = column_values[torch.isfinite(column_values)]
+            per_joint.append(finite.mean().rad2deg().item() if finite.numel() else None)
+        if any(value is not None for value in per_joint):
+            out["spine_yaw_travel_deg"] = per_joint
+        if leg_ids:
+            # Per trunk joint against per leg joint, then the worst pair: summing the trunk's yaw
+            # joints first would cancel them (a chest and a tail swinging in antiphase sum to zero,
+            # which is a shape a real body can take), and a coupling reading must not be blind to it.
+            pairs = torch.stack([_nan_correlation(alive_f[..., trunk_id], alive_f[..., leg_id]).abs()
+                                 for trunk_id in yaw_ids for leg_id in leg_ids])  # (pairs, N)
+            # ponytail: the worst of every trunk-leg pair, with no correction for how many pairs were
+            # tried -- with ten trunk joints and a dozen leg joints the maximum of the noise is already
+            # a few tenths. Ceiling: it answers "does some pair move together", not "how coupled is the
+            # trunk"; upgrade by reporting the pair that wins and its angle, or by one lag-based
+            # coupling per trunk joint instead of a maximum over pairs.
+            out["spine_leg_coupling"] = torch.nan_to_num(pairs).max(dim=0).values.mean().item()
+    # Where each foot's stride comes from. The foot's own fore-aft position is taken relative to the
+    # base and projected on the episode's initial heading, so the body's travel drops out and what is
+    # left is the excursion the leg produced.
+    if "foot_lowest_point" in frames and "foot_lowest_point" in axes:
+        feet = list(axes["foot_lowest_point"])
+        heading = torch.as_tensor(meta["start_yaw"]).reshape(-1).to(frames["pos"].device)
+        # Only the frames the command asked to move in. The window holds stand-still segments too (a
+        # range command regularly asks for zero), and on those frames a leg's excursion is the ground
+        # shifting under a stationary foot: including them dilutes both correlations towards zero,
+        # which reads as "neither joint carries the stride" when the truth is "nothing was asked to.
+        moving = alive & (frames["command_world"][:, :, 0] > MOVING_COMMAND_MPS)
+        for token, item in (("hip", "stride_hip_corr"), ("hfe", "stride_knee_corr")):
+            values = []
+            for foot_index, foot in enumerate(feet):
+                leg = foot.split("_")[0]
+                joint = f"{leg}_{token}_joint"
+                if joint not in names:
+                    continue
+                offset = frames["foot_lowest_point"][:, :, foot_index, :2] - frames["pos"][:, :, :2]
+                fore_aft = offset[..., 0] * heading.cos() + offset[..., 1] * heading.sin()
+                values.append(_nan_correlation(
+                    fore_aft.masked_fill(~moving, float("nan")),
+                    angles.masked_fill(~moving.unsqueeze(-1), float("nan"))[..., names.index(joint)]
+                ))
+            # Per foot, over the envs that were asked to move at all: a window that never asked has
+            # no stride to attribute, and that is reported as no item rather than as a zero or a NaN.
+            per_env = [value for value in values if bool(torch.isfinite(value).any())]
+            if per_env:
+                out[item] = [torch.nanmean(value).item() for value in per_env]
+    return out
+
+
 def _report_groups(*produced: dict) -> dict:
     """The produced numbers under the group their declaration names: measurement, task, behaviour.
 
@@ -965,6 +1085,23 @@ def _contract_reasons(artifact: dict) -> list[str]:
             if column not in frames:
                 reasons.append(f"the protocol gates {gate} through {kind}, which reads {column}, but the "
                                "record never measured it: unmeasured is unknown, and unknown is not a pass")
+    # The same rule for what a protocol only asks to be reported: an item whose column the record
+    # lacks would come back as an absent number, which reads like a quantity that happened to be
+    # unremarkable. Meta counts as a source too, because some items are read off it, not the frames.
+    for item in protocol.get("report_only", ()):
+        declared = REPORT_ITEMS.get(item)
+        if declared is None:
+            continue  # a name no reader computes is refused by the reader's own declared list
+        for column in declared[2]:
+            if column not in frames and column not in meta:
+                reasons.append(f"the protocol reports {item}, which reads {column}, but the record "
+                               "never measured it: an absent number reads as an unremarkable one")
+    # A trunk-swing reading needs a joint that can swing about the vertical: an axis of pitch joints
+    # would answer a different question under the same name.
+    if "spine_yaw_travel_deg" in protocol.get("report_only", ()):
+        if not any(name.endswith("_yaw_joint") for name in axes.get("joint_pos", ())):
+            reasons.append("the protocol reports the trunk's lateral swing, but the record's joint "
+                           "axis carries no yaw joint")
     if reasons:
         return reasons
     short = sorted(name for name in frames if len(frames[name]) != steps)
@@ -1201,6 +1338,12 @@ def _score(artifact: dict, alive: torch.Tensor) -> dict:
         decide("foot_lift")
     if "foot_slip" in plan:
         decide("foot_slip")
+
+    # -- the gait shape: the trunk's swing and where each foot's stride comes from ---------------
+    # Computed whenever the joint column is there, not only when a protocol lists the items: the
+    # numbers a verdict did not need are exactly the ones a later reader wants to have been measured.
+    if "joint_pos" in frames:
+        diagnostics.update(_gait_shape_readings(frames, alive, axes, artifact["meta"]))
 
     # -- the fixed scenes: how many valid frames each declared band actually got ---
     # Read here rather than collected: the frames carry the command they were issued and the record

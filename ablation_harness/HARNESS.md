@@ -22,6 +22,10 @@
   （v4 起）与 `LEGACY_JUDGE_ID`（v1–v3，按声明身份白名单进入），身份→语义用例的冻结表在
   `judge_semantics.json`，由 `test_baseline_contract.py` 看守；无 `criteria` 且身份不在白名单 ⇒ 拒判，
   不回落。**v4 与 v3 判同一份记录必须得出同一结论**（迁移证明，有回归）。
+- **加一条报告项也算升版**：`report_only` 里多一项，旧记录的报告列里就没有它，而在已锚定的协议文件上
+  就地加字段等于改掉那份字节（`protocol_anchors.json` 的摘要会当场红）。所以新指标 = 新协议版本号 + 新锚点，
+  哪怕判据一个数都没动。报告项**自带依赖列**：读不到那一列时该记录判 `invalid`，不是少一个数 ——
+  "缺失"与"这一项当时平平无奇"在报告里长得一样，这就是依赖列的理由。
 - **代码基线**：v1.9.0 —— 几何测量的唯一家 `rl_exp/tasks/terrain_geometry.py`；记录格式见下一节。
   **版本纪律**：往 `ablation_harness/` 加模块、或改测量语义 ⇒ minor bump，并打 `harness-vN.M.K` 锚点
   （复现 = `git checkout harness-vN.M.K -- ablation_harness/`；已推的 tag 不改指不改名，内容错了开新

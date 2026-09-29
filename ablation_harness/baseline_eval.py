@@ -20,6 +20,7 @@ import importlib.metadata
 import json
 import os
 import pathlib
+import re
 import sys
 import traceback
 
@@ -37,6 +38,22 @@ def yaw_of(quat: torch.Tensor) -> torch.Tensor:
     from isaaclab.utils.math import euler_xyz_from_quat
 
     return euler_xyz_from_quat(quat)[2]
+
+
+def _gait_shape_joints(cfg, names: list[str]) -> list[str]:
+    """The joints a gait-shape reading needs: the spine's own group, plus one token per leg.
+
+    Named rather than "all of them": a column nobody reads is what this harness refuses elsewhere, and
+    these are the joints a stride can come from (the sprawl axis, the fore-aft hinge, the blade) plus
+    the trunk that a sprawled reptile undulates. A family without one of the tokens simply matches
+    fewer joints; the joint order is the asset's own, so the axis labels cannot disagree with the
+    values they label.
+    """
+    actuators = getattr(cfg.scene.robot, "actuators", None) or {}
+    spinal = getattr(actuators.get("spine"), "joint_names_expr", ()) or ()
+    tokens = ("_hip_joint", "_hfe_joint", "_foot_joint")
+    return [name for name in names
+            if name.endswith(tokens) or any(re.fullmatch(pattern, name) for pattern in spinal)]
 
 
 def judged_or_recoverable(artifact: dict, frames_path: pathlib.Path | str) -> dict:
@@ -173,12 +190,21 @@ def run(args) -> dict:
         foot_corners = pad_point_clouds([mesh_vertices(mesh_dir / name)
                                         for name in foot_meshes]).to(live.device)
         weight_n = float(robot.data.body_mass.torch[0].sum().item() * 9.81)
+        # The joint reading: which joints, and in the asset's own order, so the axis labels and the
+        # values they label cannot drift apart. Empty is refused here rather than stored as a column
+        # with no axes -- a reading nobody can name is not evidence.
+        gait_joints = _gait_shape_joints(cfg, list(robot.joint_names))
+        if not gait_joints:
+            raise RuntimeError("no leg-token or spine joint resolved: the gait-shape reading would "
+                               "carry an empty axis")
+        gait_joint_ids = [robot.joint_names.index(name) for name in gait_joints]
         recorder = baseline_frames.BaselineFrames(
             num_envs=live.num_envs, step_dt=live.step_dt,
             axes={"non_foot_fraction": [names[i] for i in non_foot], "mesh_min_z": mesh_present,
                   "foot_contact": foot_names, "foot_fraction": foot_names,
                   "foot_lowest_point": foot_names, "foot_com_pos": foot_names,
-                  "foot_lin_vel": foot_names, "foot_ang_vel": foot_names})
+                  "foot_lin_vel": foot_names, "foot_ang_vel": foot_names,
+                  "joint_pos": gait_joints})
 
         def snapshot():
             q = yaw_quat(robot.data.root_quat_w.torch)
@@ -212,6 +238,10 @@ def run(args) -> dict:
                 "foot_com_pos": robot.data.body_com_pos_w.torch[:, feet],
                 "foot_lin_vel": robot.data.body_lin_vel_w.torch[:, feet],
                 "foot_ang_vel": robot.data.body_ang_vel_w.torch[:, feet],
+                # The joint reading. `joint_pos` is the live deployed quantity (implicit PD drives
+                # against it), so a gait-shape reading taken from here is the same window the verdict
+                # is taken from, not a second rollout that happened to look similar.
+                "joint_pos": robot.data.joint_pos.torch[:, gait_joint_ids].clone(),
             }
 
         # The episode's initial state: frame 0 is already one control step in, so displacement and
