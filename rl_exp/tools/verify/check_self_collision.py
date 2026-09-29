@@ -152,6 +152,10 @@ def mesh_gap(points_a: np.ndarray, verts_b: np.ndarray, faces_b: np.ndarray) -> 
     over-approximate a concave link, so a positive hull margin can still be a real clearance and a
     negative one can be a hull artefact -- which is exactly why the flagged poses are re-checked here
     (review 2026-09-22).
+
+    Both arguments must be in the SAME frame, and that sign is only containment evidence while the gap
+    is small: at tens of millimetres a point can sit behind the nearest triangle's plane while being
+    outside the mesh, so a large negative number is not a penetration (2026-09-29).
     """
     tri = verts_b[faces_b]
     best = float("inf")
@@ -194,7 +198,10 @@ def confirm(joints: dict, links: dict, q: dict, pairs: list[tuple[str, str]], to
         vb, fb = read_obj_faces(links[b]["collision"])
         pa = (placed[a][:3, :3] @ va.T).T + placed[a][:3, 3]
         pb = (placed[b][:3, :3] @ vb.T).T + placed[b][:3, 3]
-        gap = max(mesh_gap(pa, vb, fb), mesh_gap(pb, va, fa))
+        # Both sides placed: passing A's world points against B's LOCAL vertices (what this did until
+        # 2026-09-29) measures A against B-as-if-at-the-origin, which is not a distance between the
+        # links at all -- the lizard2 knee pair read +393 mm that way against a true -33 mm.
+        gap = max(mesh_gap(pa, pb, fb), mesh_gap(pb, pa, fa))
         out.append({"pair": [a, b], "mesh_gap_mm": gap * 1000.0, "pose": dict(q)})
     return sorted(out, key=lambda row: row["mesh_gap_mm"])[:tops]
 
