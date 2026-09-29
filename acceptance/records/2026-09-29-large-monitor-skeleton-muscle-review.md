@@ -45,7 +45,7 @@
 
 1. Kępa 等，*Functional Anatomy of the Thoracic Limb of the Komodo Dragon*，2023，*Animals* **13**(18):2895，DOI `10.3390/ani13182895`，PMID 37760295；前肢解剖与影像。**单只**7 岁雌性，30 kg，SVL 93.6 cm，Wrocław 动物园；前肢分段实测：全前肢 28.7 cm、手 6.9 cm、前臂 9.8 cm、上臂 12.0 cm。该文“后肢肌量随体增、因此不需转直立”是**引文**（其 ref 17/47），不是其自测。
 2. Tomańska 等，*The Musculoskeletal Anatomy of the Komodo Dragon’s Hindlimb*，2025（2024 年末在线），*Animals* **15**(1):35，DOI `10.3390/ani15010035`，PMID 39794978；后肢解剖与组织学。**与 [1] 同一只标本**（另用一具馆藏骨骼做对比）；逐肌质量以**占体重百分比**给出（文中一组肌为 0.04–0.07%，占体重比例最高的耻坐胫肌 PIT 为 0.28%）；ambiens 功能原文为 "likely affects postural stability and limited abduction of the limb, allowing for knee extension"；纤维直径 11–220 µm。**无自身的缩放/异速分析**。
-3. Clemente 等，*Evolution of limb bone loading and body size in varanid lizards*，2011，*J Exp Biol*，DOI `10.1242/jeb.059345`；体型、姿态及承重时间的跨物种比较。
+3. Clemente 等，*Evolution of limb bone loading and body size in varanid lizards*，2011，*J Exp Biol* **214**(18):3013–3020，DOI `10.1242/jeb.059345`，PMID 21865513；**11 种巨蜥，0.04–8 kg**。结论是**姿态不随体型变**（股骨内收与髋高只按几何缩放到位），减压靠**提高 duty factor** 与可能**减小股骨旋转**。本记录引它的"体型与姿态"行以该样本范围为准。
 4. Dick 与 Clemente，*How to build your dragon: scaling of muscle architecture from the world's smallest to the world's largest monitor lizard*，2016，*Front Zool* **13**:8，DOI `10.1186/s12983-016-0141-5`；22 肌 / 27 个体 / 9 种 / 7.6 g–40 kg（科莫多 **3 只冻体**，昆士兰博物馆），缩放回归与姿态关联分析。
 5. Dick 与 Clemente，*Where Have All the Giants Gone? How Animals Deal with the Problem of Size*，2017，*PLoS Biol* **15**(1):e2000473，DOI `10.1371/journal.pbio.2000473`；**评论/综述（Unsolved Mystery），无自有数据**。"posture is decoupled from body size" 与五条减应力路径的叙述出自此文。
 
@@ -55,6 +55,8 @@
 - 逐肌**占体重百分比**只有这一组单标本数据；**前后肢逐肌质量对照表本文未见**（[1] 以“两侧肌质量相当、抗原肌发达、前臂肌分化更高”定性表述），因此整机前后肢/躯干/尾部质量分配仍缺证，不填猜测值。
 - 2016 的科莫多上限是 **40 kg / 3 只冻体**，而该种成体可 >100 kg ⇒ 单标本与大样本都不覆盖机器人所需的尺度档；跨尺度外推一律不做（机器人对应尺度见家族文档，不进本记录）。
 - 无任何一篇给出可用来定 `haa`/`hfe` 限位的**活体关节角度或正常活动范围**数值：2016 的姿态相关用的是 Clemente 2011/2013 的已发表运动学，且是物种均值。
+- **运动学数据集的体型上限 = 8 kg**（Clemente 2011，11 种）：所以"巨蜥姿态不随体型变"这句话**从未覆盖成年大个体**（成体可 >70 kg）。40 kg 那只只出现在 [4] 的**肌肉**数据集里——两个数据集是不同动物、不同的量，不得互相补位。
+- 关节**活动范围/限位**的生物学证据已在 `acceptance/records/2026-09-29-varanid-joint-range-of-motion-evidence.md` 收口（结论：巨蜥被动 ROM 零命中，方法性证据归 tegu/鳄类），本记录不重复。
 - 前文讨论过的 `lizard2` 关节几何与反折属于**机器人资产证据**，不属于本生物学记录；见 `acceptance/records/2026-09-29-lizard2-hfe-knee-limit.md`。
 
 ## 核对痕迹（2026-09-29）
