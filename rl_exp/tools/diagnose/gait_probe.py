@@ -807,6 +807,9 @@ def main() -> None:
     foot_columns = [i for i, name in enumerate(sensor.body_names) if name.endswith("_foot")]
     foot_bodies = [sensor.body_names[i] for i in foot_columns]
     robot_foot_ids = [robot.body_names.index(name) for name in foot_bodies]
+    # The shank each pad hangs off. A pad's orientation is the leg chain's, composed with the blade's
+    # own angle, so a tilted sole cannot be attributed to either one without the shank's orientation.
+    robot_shank_ids = [robot.body_names.index(name.split("_")[0] + "_kfe") for name in foot_bodies]
     # The tree this family declares, not a global one: a reading off another family's mesh is how a
     # report silently stops describing the run it was taken from.
     family = obs_protocol.family_of(args_cli.task)
@@ -863,7 +866,8 @@ def main() -> None:
     trace: dict[str, list[torch.Tensor]] = {key: [] for key in
                                             ("force", "clearance", "clearance_target", "contact",
                                              "fore_aft", "pred_linear", "pred_rotation", "done",
-                                             "sole_contact", "sole_through", "sole_tilt", "sole_edge")}
+                                             "sole_contact", "sole_through", "sole_tilt", "sole_edge",
+                                             "shank_up")}
     joint_trace: dict[str, list[torch.Tensor]] = {key: [] for key in ("target", "actual", "vel")}
     # One read of the sim-side gains, which are static per joint. They are the ones the torque
     # reconstruction needs (see the clipping reading in ``summarise``).
@@ -919,6 +923,12 @@ def main() -> None:
         trace["sole_tilt"].append(torch.rad2deg(
             torch.acos((-down_in_link[..., 2]).clamp(-1.0, 1.0))).clone())
         trace["sole_edge"].append(down_in_link[..., :2].clone())
+        # The world up vector in the SHANK's frame. Together with the pad's own normal (a constant in
+        # the foot frame, measured at ~1.45 deg off -z) and the blade's angle, this is everything the
+        # reading "is a level pad reachable at all" needs: the pad's tilt for any blade angle is the
+        # angle between that angle's rotation of the pad normal and this vector. Stored per frame
+        # because it is a pose, not a statistic -- its median describes no frame that occurred.
+        trace["shank_up"].append(diag_metrics.body_down_in_link(quat, robot_shank_ids).neg().clone())
         joint_trace["target"].append(data.joint_pos_target.torch.clone())
         joint_trace["actual"].append(data.joint_pos.torch.clone())
         joint_trace["vel"].append(data.joint_vel.torch.clone())
@@ -940,6 +950,7 @@ def main() -> None:
     sole_through = torch.stack(trace["sole_through"])
     sole_tilt = torch.stack(trace["sole_tilt"])
     sole_edge = torch.stack(trace["sole_edge"])
+    shank_up = torch.stack(trace["shank_up"])
     target = torch.stack(joint_trace["target"])
     actual = torch.stack(joint_trace["actual"])
     vel = torch.stack(joint_trace["vel"])
@@ -1003,7 +1014,10 @@ def main() -> None:
                                                ("clearance_target", clearance_target),
                                                ("sole_contact", sole_contact),
                                                ("sole_through", sole_through),
-                                               ("sole_tilt", sole_tilt))}
+                                               ("sole_tilt", sole_tilt),
+                                               ("shank_up_x", shank_up[..., 0]),
+                                               ("shank_up_y", shank_up[..., 1]),
+                                               ("shank_up_z", shank_up[..., 2]))}
         # Per-frame joint targets, actual positions and velocities, per leg. A summary can say one leg
         # behaves differently; only the series says whether it is the same phase done differently or a
         # different phase altogether, which is the comparison the left front leg still needs. The
