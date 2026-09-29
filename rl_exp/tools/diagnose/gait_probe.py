@@ -597,6 +597,10 @@ def summarise(foot: dict, contact_n: float, transition_frames: int = 2,
         # Distance to the nearest stop, and how often the target is outside the range outright: a
         # target beyond a limit is the policy asking for a pose this joint cannot reach.
         low, high = foot[f"joint_limits_{joint}"]
+        # Exported, not just used: a reader cannot tell "how close to the stop" from a margin alone
+        # when the series is on someone else's plot, and the position limits are the sim's own
+        # (``robot.data.joint_pos_limits``), not a value copied from the yaml.
+        out[f"{joint}_limits_rad"] = [float(low), float(high)]
         outside = (target < low) | (target > high)
         error = (target - actual).abs()
         out[f"{joint}_target_outside_range_frac"] = round(float(outside.float().mean()), 3)

@@ -56,6 +56,7 @@
 | `rl_exp\tools\trainlog\probe_run.py` | 训练中巡检（只读 tfevents，秒级，不起仿真）：进度 / ETA / 趋势 / 终止计数 / 课程值 / 告警 |
 | `rl_exp\tools\trainlog\dump_tb.py` | TB 事件 → `vN\tb_scalars.csv`（按 tag 抽样、**保首尾**；`--csv_in` 重抽样不需 tensorboard） |
 | `rl_exp\tools\verify\view_terrain.py` | GUI 看机器人站**指定版本的真实地形**（每 env 头向箭头 + 接触点探针 vs 碰撞栈预算） |
+| `rl_exp\tools\diagnose\plot_joints.py` | 读探针报告出图（**不起仿真**）：逐关节实际/目标/两条限位 + 贴限位着色 + 逐关节"贴限位帧占比"柱图；`--at_stop_rad` 是判据带宽，`--self-check` 手算边界 |
 | `rl_exp\tools\verify\terrain_preflight.py` | 开训前地形预检：离线生成全部子地形 + 粗糙度 + PNG 预览 + 几何摘要。它是**离线预览的回归基线**，不是真跑所站地形的证据（真跑几何由 `terrain_split_probe` 采集归档） |
 | `rl_exp\tools\pipeline\export_ue.py` | SSOT → UE 工件（盲部署前置）；**没有实测关节序就拒绝导出**（不写文件） |
 
