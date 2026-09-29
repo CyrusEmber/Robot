@@ -4,7 +4,7 @@ title: 步幅轴行程 vs 最高速度档：±0.6 rad 在 2.8 m/s 被顶满
 scope: rl_exp/versions/lizard2, rl_exp/blender, rl_exp/tasks, acceptance/records
 status: open
 landing: rl_exp/versions/lizard2/main/main_params.yaml, ablation_harness/protocols/lizard2_flat_v4.json, rl_exp/tools/diagnose/gait_probe.py
-next: ① **先把它从"单 seed 单窗口"变成结论**：现有读数是 256 envs/seed 123 的 20 s 窗口（lf 的 hip 在 2.8 档有 26.6% 的帧贴在上限 +0.600、四腿的髋都碰到过限位），而同一批读数里**脚板离限位还有 0.32 rad**。做法：换 2 个以上 seed 或 checkpoint、按档分开读同一读数（`plot_joints.py --at_stop_rad` 的"贴限位帧占比"与最小余量已给逐关节值）。② 若系统性成立，三选一（代价各写）：**(i) 加宽 hip 行程** —— 属资产换代（同样的生成器真跑 + 快照同步 + 历史 run 作废，与 `pad-flat-requirement-and-ankle-axis` 共用前置）；**(ii) 收窄命令窗口**到行程够用的范围 —— 属配方变更，已训的 v2 因此只能开 v3，且所有历史判决的"命令箱"与它不可比；**(iii) 接受** —— 写成口径前提："高速档由折膝折踝而非大腿摆动维持，速度上限由步幅轴行程决定"，并说明它如何影响"像蜥蜴"的判读。③ 与 `pad-flat-requirement-and-ankle-axis` 的**共用前置**：任何资产换代都要先有生成器真跑（`asset-tree-per-family`）；`hfe-extension-stop-not-validated` 若同期定值，**三件一起换代**（一次换代 = 一次锁/快照刷新）。
+next: ① **先把它从"单 seed 单窗口"变成结论**：现有读数是 256 envs/seed 123 的 20 s 窗口（lf 的 hip 在 2.8 档有 26.6% 的帧贴在上限 +0.600、四腿的髋都碰到过限位），而同一批读数里**脚板离限位还有 0.32 rad**。做法：换 2 个以上 seed 或 checkpoint、按档分开读同一读数（`plot_joints.py --at_stop_rad` 的"贴限位帧占比"与最小余量已给逐关节值）。② 若系统性成立，三选一（代价各写）：**(i) 加宽 hip 行程** —— 属资产换代（同样的生成器真跑 + 快照同步 + 历史 run 作废，与 `pad-flat-requirement-and-ankle-axis` 共用前置）；**(ii) 收窄命令窗口**到行程够用的范围 —— 属配方变更，已训的 v2 因此只能开 v3，且所有历史判决的"命令箱"与它不可比；**(iii) 接受** —— 写成口径前提："高速档由折膝折踝而非大腿摆动维持，速度上限由步幅轴行程决定"，并说明它如何影响"像蜥蜴"的判读。③ 与 `pad-flat-requirement-and-ankle-axis` 的**共用前置**：任何资产换代都要先有生成器真跑（`asset-tree-per-family`）；`joint-limit-shape-and-range-pass` 若同期定值，**三件一起换代**（一次换代 = 一次锁/快照刷新）。
 close_when: (a) "髋贴限位是否系统性"有读数（≥2 seed 或 ≥2 checkpoint，按档分开报）；(b) 三条出口里有一条被选为决策，且落点可查（新版本参数 / 新命令窗口 + 版本号 / 一条口径前提）；(c) 若选了 (i) 或 (ii)，它对已训 v2 与历史判决的可比性影响已写明。
 evidence: acceptance/records/2026-09-29-lizard2-pad-leveling-unreachable, acceptance/records/2026-09-29-lizard2-v2-gait-five-claims, acceptance/records/2026-09-29-lizard2-hfe-knee-limit, acceptance/records/2026-09-29-lizard2-pad-tilt-is-the-fold-sum
 ---
@@ -26,7 +26,7 @@ evidence: acceptance/records/2026-09-29-lizard2-pad-leveling-unreachable, accept
 **更正（2026-09-29）**：本项原先引的"hfe 余量 ≥0.35 rad / hfe 从不靠近限位"不成立 —— 四腿三档的最小余量是
 **0.1254 rad**（lf_hfe，2.8 档），且 lf 的实际膝角已越过伸直 6.4°。这条**不改本项的口径**（髋是唯一贴满行程的轴），
 但它不是"离限位很远"而是"限位本身画错了"：读数与代价见
-`acceptance/records/2026-09-29-lizard2-hfe-knee-limit.md`，处置归 `hfe-extension-stop-not-validated`。
+`acceptance/records/2026-09-29-lizard2-hfe-knee-limit.md`，处置归 `joint-limit-shape-and-range-pass`。
 
 ## 与邻近事项的边界
 

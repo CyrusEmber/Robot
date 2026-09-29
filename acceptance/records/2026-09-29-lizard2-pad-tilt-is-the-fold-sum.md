@@ -69,7 +69,7 @@ cos(tilt) = ny·sin(SIGMA) + (nx·sin(foot) − nz·cos(foot))·cos(SIGMA)     (
 
 三铰同轴 ⇒ "伸直"是 `hfe` 把大小腿转成共线、**不是零位**（零位本身已弯），所以"限位有没有越过伸直"必须逐腿算。
 逐腿数值、网格止挡与行为读数归 `2026-09-29-lizard2-hfe-knee-limit.md`（它同时更正了 pad 记录的 hfe 行），
-取值与是否重训归 `work/active/hfe-extension-stop-not-validated.md` —— 本记录不复述那批数。
+取值与是否重训归 `work/active/joint-limit-shape-and-range-pass.md` —— 本记录不复述那批数。
 
 本记录在这件事上只留两样：**这条几何现在被离线断言钉住**（`check_leg_reachability.py` 的 `straight_hfe` /
 `thigh_shank_angle` / 逐腿 `KNEE_FACTS`，自检里逐腿对表 ⇒ 换资产或手改 URDF 会让它响），

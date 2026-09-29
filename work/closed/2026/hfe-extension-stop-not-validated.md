@@ -2,10 +2,11 @@
 id: hfe-extension-stop-not-validated
 title: 膝限位（hfe）越过伸直 13.61°：取值与是否重训待定
 scope: rl_exp/versions/lizard2, rl_exp/blender, rl_exp/tools/diagnose, rl_exp/tools/verify, acceptance/records
-status: blocked
+status: superseded
 landing: rl_exp/blender/generate_urdf.py, rl_exp/versions/lizard2/lizard2.urdf, rl_exp/assets/lizard2/lizard2.usda
-next: ① **先定伸展端取值**（三档代价已量：0.9625 / 0.90 / 0.79 rad，见 evidence）——但**任一取值都会改已训 v2 的行为**（最小改动也压掉 lf@2.8 的 10.31% 帧），所以取值必须与"是否重训/是否只重评"一起定；② 若定值：生成器改成**逐腿镜像非对称**（现 `joint_spec` 按后缀查一条 spec、四腿共用，`:227-231`）+ 真跑 + `convert_urdf.py --headless --robot lizard2` + **同 commit `--update-locks`** + 历史 run 可复现性写明；③ 屈曲端与 `*_kfe`（±1.6 rad = 折叠 75.5° 过伸直）**网格上没有止挡证据、同批未判**——是"只堵反折"还是"两端都按设计收"，由 owner 定；④ 潜在护栏：把"膝限位不得越过共线"做成离线断言（`rl_exp/tools/verify/check_leg_reachability.py` 已有 `straight_hfe` / `thigh_shank_angle` 与逐腿 `KNEE_FACTS`，扩展即可），避免下次换轴再沿用旧数值。
 close_when: (a) 伸展端（以及是否含屈曲端/kfe）的取值被选定且落点可查（生成器 + URDF/USD + 锁）；(b) 若动物理：历史 run 的可复现性影响与"重训 or 只重评"写明；(c) 未取值的那一端显式收口（判掉，或写成口径前提）。
+outcome: 并入 `joint-limit-shape-and-range-pass`（2026-09-29）：范围从"膝伸展端一处"扩到全关节，理由是**同源无推导 + 约束形状不对**（髋之后 `haa`/`hfe`/`kfe` 同轴 ⇒ 平面链，逐关节盒表达不了物理止挡）。三档代价、取值与重训取舍随内容移交，本项未作独立决策。
+superseded_by: joint-limit-shape-and-range-pass
 evidence: acceptance/records/2026-09-29-lizard2-hfe-knee-limit, acceptance/records/2026-09-29-lizard2-pad-leveling-unreachable, acceptance/records/2026-09-29-lizard2-pad-tilt-is-the-fold-sum
 depends_on: asset-tree-per-family
 ---

@@ -169,6 +169,6 @@ y 分量给出来的 ⇒ **绕 x 的那部分倾角在脚板关节下是常量**
 ⇒ **2.8 档有 10.3% 的帧里左前膝转过了伸直 6.4°**，"hfe 离限位很远"把这件事挡掉了。
 机制、口径与全文未受影响的结论（"坏的不是脚板那条"、立边归因、可达性未算）在
 `acceptance/records/2026-09-29-lizard2-hfe-knee-limit.md`；限位数值的处置归
-`work/active/hfe-extension-stop-not-validated.md`。
+`work/active/joint-limit-shape-and-range-pass.md`。
 
 **未受影响**：⑤ 的髋/脚板行、①②③④ 的全部读数、以及本记录"板立边是整条链的后果"的判定。

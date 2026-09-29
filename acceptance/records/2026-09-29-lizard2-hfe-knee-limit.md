@@ -9,7 +9,7 @@
   需 venv python：`E:\IsaacLab\env_isaaclab\Scripts\python.exe`）、`_tmp_hfe_band.py` / `_tmp_hfe_stop_impact.py`
   （读 `rl_exp/tools/diagnose/out/gait_probe/gait_v2_chain.json`）。四个 `_tmp_*` 已 gitignore，不入仓。
 - **不覆盖**：机械设计意图（该不该有止挡、止挡在哪）、改限位后的动力学代价（没跑）、`*_kfe`（±1.6 rad）
-  的同类问题（同批未判）、以及"改不改"的决策（归 `work/active/hfe-extension-stop-not-validated.md`）。
+  的同类问题（同批未判）、以及"改不改"的决策（归 `work/active/joint-limit-shape-and-range-pass.md`）。
 
 ## 验收条件
 
@@ -85,7 +85,7 @@ v2 `model_9999`，三档各一个 env、20 s。actual 的**伸展侧极值**（�
   `… _tmp_hfe_band.py`；`… _tmp_hfe_stop_impact.py`。
 - 被本记录更正的两份记录：`2026-09-29-lizard2-pad-leveling-unreachable.md`（hfe 行与"从不靠近"结论）、
   `2026-09-22-lizard2-self-collision-sweep.md`（网格复核列，另属坐标系混用，见其勘误）。
-- 落点：`work/active/hfe-extension-stop-not-validated.md`（取值与重训决策）；
+- 落点：`work/active/joint-limit-shape-and-range-pass.md`（取值与重训决策）；
   `work/active/stride-axis-range-vs-speed.md` 的"hfe 从不靠近"已按本记录更正。
 
 ## 未覆盖边界
