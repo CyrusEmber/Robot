@@ -45,7 +45,7 @@
 ## 证据引用
 
 - 资产：`rl_exp/versions/lizard2/lizard2.urdf` 与 `rl_exp/versions/lizard2/meshes/collision/`。
-- 实现：`rl_exp/tools/verify/check_leg_reachability.py` 的 `joint_effect`、`fold_tilt_cos`、`fold_tilt`、`pad_state`。当前 `--urdf` 与 `_pad_mesh` 尚未统一绑定候选身体，不能用新 URDF 搭旧网格宣称新机体通过。
+- 实现：`rl_exp/tools/verify/check_leg_reachability.py` 的 `joint_effect`、`fold_tilt_cos`、`fold_tilt`、`pad_state`。当前 `--urdf` 与 `_pad_mesh` 尚未统一绑定候选身体，不能用新 URDF 搭旧网格宣称新机体通过。**2026-09-30 回改**：已绑定——网格改从 URDF 自己 `<leg>_foot` 的碰撞体解析（URDF 离开自己的网格树则报错退出），链改自 URDF 树遍历，因此新 URDF 载得进新增关节且不可能搭旧网格；反例与破坏测试读数为 `acceptance/records/2026-09-30-leg-fk-caliber-facing-and-candidate-chains.md`。
 - 自检：在仓根运行 `E:/IsaacLab/env_isaaclab/Scripts/python.exe rl_exp/tools/verify/check_leg_reachability.py --self-check`。
 - 内联复算：用上述解释器的 `-B -c` 运行下列代码（本机 isaaclab.bat 为空，因此直接用环境解释器；此代码只读）：
 

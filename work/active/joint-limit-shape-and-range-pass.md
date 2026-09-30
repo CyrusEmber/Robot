@@ -4,10 +4,10 @@ title: 巨蜥目标动作 → 结构候选对比 → 常用范围与硬限位 �
 scope: rl_exp/blender, rl_exp/versions/lizard2, rl_exp/tasks, rl_exp/tools/verify, rl_exp/tools/diagnose, acceptance/records
 status: blocked
 landing: rl_exp/blender/generate_urdf.py, rl_exp/versions/lizard2/lizard2.urdf, rl_exp/assets/lizard2/lizard2.usda, rl_exp/tools/verify/check_leg_reachability.py
-next: 先形成低速平地的目标姿态序列与证据等级，修齐候选验证工具的口径；再做现腿链与新增股骨长轴旋转的离线对比，同时拟合骨段方向和足端轨迹。结构选定后验证四腿连续轨迹、反推常用范围与硬边界，再做动力学与一次机体换代。分步产物和失败出口见正文；当前未获得足以冻结数值的目标序列与容差。
+next: ① 的目标姿态序列与容差仍缺（无可用巨蜥 ROM 与三维序列）——这是唯一的阻塞项。② 的**工具口径已修齐**（有向朝面判决、机体姿态进世界系、候选机体与网格绑定、链自 URDF 树遍历、`--compare` 入口、反例能使自检失败），见 acceptance/records/2026-09-30-leg-fk-caliber-facing-and-candidate-chains.md；下一步是在目标序列到位后做现腿链与新增股骨长轴旋转的同一目标对比（骨段方向 + 足端轨迹），同时补前置验证
 close_when: (a) 目标动作、参考来源、坐标与零位、测量误差和工程容差可追溯；(b) 前后肢分别映射，结构候选对比有同一目标下的骨段与足端误差，采用或不采用新增轴的理由明确；(c) 逐轴记录常用范围、硬边界候选、工程选择及其来源，独立区间或组合禁区的结论与保证范围明确；(d) 四腿连续性、碰撞、限位余量与动力学均有判定，未通过不得称为已验证方案；(e) 工具绑定同一候选机体，几何回归与设计验收分开，反例能使验收失败；(f) 若采用新机体，同变更退休旧机体的冻结消费者，新版本首次冻结建锁、旧锁不刷新，并记录重训及历史可比性；(g) 结论不冒称真实巨蜥机械极限。各阶段具体读数与判定只有 acceptance/records/ 一处正文。
 depends_on: asset-tree-per-family
-evidence: acceptance/records/2026-09-30-lizard2-leg-to-anatomy-mapping, acceptance/records/2026-09-30-lizard2-joint-limit-plan-review, acceptance/records/2026-09-29-large-monitor-skeleton-muscle-review, acceptance/records/2026-09-29-varanid-joint-range-of-motion-evidence, acceptance/records/2026-09-29-lizard2-hfe-knee-limit, acceptance/records/2026-09-29-lizard2-pad-leveling-unreachable, acceptance/records/2026-09-29-lizard2-pad-tilt-is-the-fold-sum
+evidence: acceptance/records/2026-09-30-leg-fk-caliber-facing-and-candidate-chains, acceptance/records/2026-09-30-lizard2-leg-to-anatomy-mapping, acceptance/records/2026-09-30-lizard2-joint-limit-plan-review, acceptance/records/2026-09-29-large-monitor-skeleton-muscle-review, acceptance/records/2026-09-29-varanid-joint-range-of-motion-evidence, acceptance/records/2026-09-29-lizard2-hfe-knee-limit, acceptance/records/2026-09-29-lizard2-pad-leveling-unreachable, acceptance/records/2026-09-29-lizard2-pad-tilt-is-the-fold-sum
 ---
 
 ## 目标与范围
@@ -32,6 +32,8 @@ evidence: acceptance/records/2026-09-30-lizard2-leg-to-anatomy-mapping, acceptan
 ### ② 仪器口径与结构候选对比
 
 候选验证前，修齐工具：有方向的掌面法线与无方向的平面倾角分开；翻掌反例必须拒绝；机体姿态纳入世界系读数。候选的 URDF、USD、碰撞网格必须绑定同一机体，FK 支持候选的新关节与坐标变换，离线与仿真 FK 逐位核对。现工具的口径问题与复算见 review evidence，未修齐前不得用其宣布候选通过。
+
+**2026-09-30 口径落点**：朝面有向判决（`faces_down`/`facing_cos`，`fold_tilt` 明确为无向）、机体姿态进世界系（`base_rpy`）、链自 URDF 树遍历（`chain_joint_names`，载得进候选新增关节）、网格绑 URDF 自己的 link（`pad_mesh`）、双机体读数入口（`--compare`）、反例破坏测试（`--break-test`）已落，读数与命令归 `acceptance/records/2026-09-30-leg-fk-caliber-facing-and-candidate-chains.md`。**仍未做**：离线与仿真 FK 逐位核对（需 Isaac）、目标序列驱动的拟合；USD 侧同机体一致性归 asset-tree-per-family。
 
 A = 当前腿链；B = 后肢增加沿股骨长轴、随股骨方向变化的旋转关节。仅扩大 A 的角域作结构排查，不把扩大值提交成限位。两者使用同一骨长、机体姿态、目标序列、权重、容差与碰撞口径；任何额外变化另列，不能算成新轴的收益。B 的轴、插入位置、下游骨段随动关系由 FK 明确，不由“加一条 Y 轴”命名推出。
 
