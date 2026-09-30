@@ -63,6 +63,34 @@ Tomańska 等 2025，*Animals* **15**(1):35，DOI `10.3390/ani15010035`，PMID 3
 
 **两轮一致的结论**：可达语料里**没有**巨蜥关节活动范围/限位数据。带角度的文献只有两类——**活体运动学**（用到的范围）与**患病个体的临床观察**；被动 ROM 仍为零，硬限位只能由机器人几何 + 显式工程选择给出。
 
+### 第三轮：把"摆动幅度"与"限位"分开问（2026-09-30，用户追问）
+
+前两轮只问被动 ROM，所以结论是"零"；用户追问"蜥蜴有没有摆动幅度"后换检索式复核。**结论要分成两句话**：**摆动幅度类文献大量存在（含巨蜥），关节限位依旧空白**——把两类量混成一句就会答错。
+
+检索面（Europe PMC REST，本轮 API 已恢复）
+
+| 检索式 | 命中 |
+|---|---|
+| `("femur retraction" OR "femoral retraction") AND (lizard OR varanid OR Varanus OR Iguana OR Sceloporus)` | 16 |
+| `"range of motion" AND (lizard OR Varanus OR varanid OR Iguana OR squamate)` | 122（含医学、龙舟等无关命中，须逐条筛） |
+
+**本轮取到正文并核实的数值**（量级参照，非限位）
+
+| 量 | 值 | 来源与口径 |
+|---|---:|---|
+| 活体髋屈伸 ROM | **117°** | 火蝾螈 *Salamandra salamandra*（Herbst 2022, *J Anat* 241:1066，in vivo + 逐层去软组织对照） |
+| 活体膝屈伸 ROM | **115°** | 同上 |
+| 视频法髋 / 膝屈伸 ROM | **100° / 60°** | Pierce 2020（由 Herbst 2022 引述） |
+| 后肢 / 前肢 duty factor | **49.8% / 42.6%** | Cieri 2021, *Biol Lett* 17:20200612（巨蜥 7 g–37 kg、12 种、28 只、217 步、0.96–4.05 m/s，OA） |
+
+**只到题录层、不得引用为读数的**（数值在付费墙图/表里）：Clemente 2011 的巨蜥**股骨内收 / 膝角 / 踝角**（各物种均值，Cieri 2021 引其"不随体型显著变化"）、Clemente 2013 的**股骨内收 / 股骨长轴旋转 / 踝角**对步幅的贡献、Clemente 2012、Irschick & Jayne 1999 / Jayne & Irschick 1999 / Irschick & Jayne 2000 的 3D 髋膝踝、Reilly & Delancey 1997、McElroy 2012、Spezzano & Jayne 2004、Bonnan 2025（鬃狮蜥肘 XROMM 的前臂长轴旋转）。Wayback 存有 Clemente 2011/2013 的 PDF，但本机无 PDF 文本提取器，压缩流未解出。
+
+**限位侧三篇独立研究同向**：Arnold 2014（*Iguana* 髋：**皮**对长轴旋转与前后摆动限制最大；活体只用"仅韧带相连"最宽松状态的很小一部分）、Wright & Pierce 2026（tegu 髋：皮限制之，**支撑相被软组织压住、摆动相才逼近尸体边界**）、Brocklehurst 2025（tegu 肩/肘：旋转—平移耦合，**形态给不出活动度图**）。⇒ **从骨架推限位不成立**，与活跃方案的立场一致。
+
+**方法性要点（可直接进验收口径）**：Herbst 2022 明确"某一轴的 ROM 取决于另两轴的角度"——即**组合禁区**，与本工具 `hinge_vs_body_z` + 组合约束同向；Bonnan 2025 表明**长轴旋转在蜥蜴步态中真实存在且量级可观**（前肢肘—腕为同类自由度），可作为"该轴值得进结构候选"的**功能旁证**，仍不能单独证明本任务必须加轴。
+
+**口径纪律（此后本记录以此为准）**：**限位 / ROM** 专指关节囊—韧带—软组织的被动边界；**摆动幅度**专指活体某工况下用到的范围（随速度、坡度、物种、体型、相位变化）。二者不得互换，更不得把摆动幅度当限位写进机器人 yaml。
+
 ## 未证实项（不入正文）
 
 搜索引擎摘要里出现、但在所引文章正文/摘要中找不到的：tegu 只用 ex vivo 平移容量约 39%；"活体只用被动 ROM 的 50–70%"；"Dick 2016 指出陆栖巨蜥踝 ROM 更大"（2016 不测 ROM）；"Dick 2016 用 3D 数字操作测被动 ROM"；Jenkins 与 Goslow 1983 是否给过后肢关节角基线（该文是**肩**的功能解剖）。以上一律**不作为证据**。
@@ -78,6 +106,13 @@ Tomańska 等 2025，*Animals* **15**(1):35，DOI `10.3390/ani15010035`，PMID 3
 7. Wolfe、Stringer、Krauss、Trout（2015），*J Zoo Wildl Med* **46**(1):164–166，DOI `10.1638/2014-0103R.1`；科莫多骨关节炎物理治疗（**患病个体**，未读到，仅线索）。
 8. Granatosky（2020），*J Exp Zool A* **333**(5):325–332，DOI `10.1002/jez.2361`；活体 *Varanus exanthematicus* 行走中 m. peroneus longus（未读到，仅线索）。
 9. Clemente、Withers、Thompson（2012），*Physiol Biochem Zool* **85**(3):265–273，DOI `10.1086/665275`；*Varanus panoptes* 0.09–5.75 kg 冲刺运动学。
+10. Herbst、Eberhard、Richards、Hutchinson（2022），*J Anat* **241**(4):1066–1082，DOI `10.1111/joa.13738`，PMID 35986620，PMC9482696；火蝾螈 in vivo 与 ex vivo ROM（第三轮已读全文）。
+11. Cieri、Dick、Irwin、Rumsey、Clemente（2021），*Biol Lett* **17**(2):20200612，DOI `10.1098/rsbl.2020.0612`，PMID 33529545，PMC8086983；巨蜥 GRF 与 duty factor，数据在 Dryad `10.5061/dryad.rn8pk0p82`（第三轮已读全文）。
+12. Arnold、Fischer、Nyakatura（2014），*J Anat* **225**(1):31–41，DOI `10.1111/joa.12187`，PMID 24762236；*Iguana iguana* 髋 ex vivo 活动度与活体动作对比（只读摘要）。
+13. Irschick 与 Jayne（1999），*J Exp Biol* **202**(9):1047–1065，DOI `10.1242/jeb.202.9.1047`，PMID 10101105；5 种蜥蜴三维后肢运动学（只读摘要）。
+14. Jayne 与 Irschick（1999），*J Exp Biol* **202**(2):143–159，DOI `10.1242/jeb.202.2.143`，PMID 9851904；*Dipsosaurus dorsalis* 坡度与速度（只读摘要）。
+15. Bonnan 等（2025），*Anat Rec* **308**(8):2173–2193，DOI `10.1002/ar.25588`，PMID 39401091；鬃狮蜥肘 XROMM 与桡尺长轴旋转（只读摘要）。
+16. 其余"摆动幅度"题录层线索：Reilly 与 Delancey 1997（*J Exp Biol* 200:753，DOI `10.1242/jeb.200.4.753`）、McElroy 2012（*J Exp Biol* 215:442，DOI `10.1242/jeb.058867`）、Spezzano 与 Jayne 2004（*J Exp Biol* 207:2115，DOI `10.1242/jeb.00995`）、Irschick 与 Jayne 2000（*J Exp Biol* 203:2133，DOI `10.1242/jeb.203.14.2133`）、Demuth 2020（*Sci Rep* 10:15357，DOI `10.1038/s41598-020-70175-y`，PMC7506000，化石类群 3D 活动度）、Manafzadeh 2020（*Integr Org Biol* 2:obaa041，DOI `10.1093/iob/obaa041`，ex vivo 活动度测量方法）。
 
 ## 未覆盖边界
 
@@ -86,14 +121,16 @@ Tomańska 等 2025，*Animals* **15**(1):35，DOI `10.3390/ani15010035`，PMID 3
 - tegu 证据只覆盖**髋、肩、肘**，且 Brocklehurst 是**尸体**；`haa`/`hfe`/`kfe`/`foot` 两类都没对应数据。
 - 活体的"常用范围"数值（分速度、分档的关节角）需回到 Clemente 2011/2013 原文附图，本轮只取摘要层面。
 - 本记录不改任何资产、配方或限位；判据与落点归 `work/active/joint-limit-shape-and-range-pass.md` 与 `work/active/large-monitor-skeleton-muscle-literature.md`。
-- **第二轮（2026-09-30）只查了 PubMed**：Europe PMC REST 当日 503，未重跑；"两库皆空"这句话在 Europe PMC 恢复并重跑前不成立。
+- **第二轮（2026-09-30）只查了 PubMed**：Europe PMC REST 当日 503。**第三轮它已恢复**，两库口径见各轮表格；"两库皆空"这句话此刻成立，但只针对**被动 ROM**这一个问题。
 - 第二轮的三条新线索（Wolfe 2015 / Granatosky 2020 / Clemente 2012）正文均未取到（付费墙 + 反爬），只有题录层信息。
+- **第三轮**：摆动幅度类文献的**正文普遍在付费墙后**，少数 OA（Herbst 2022、Cieri 2021、Demuth 2020）可取；Wayback 虽存有 Clemente 2011/2013 的 PDF，但本机无 PDF 文本提取器，压缩流未解 ⇒ **巨蜥自身的角度数值本轮仍未取到**。
 
 ## 核对痕迹（2026-09-30 补）
 
 - 第二轮语料与工具：**PubMed 检索页**（Europe PMC REST 三次 503），检索式与命中数见上表。
 - 新命中 Tomańska 2025 走 **PMC 全文**（`PMC11718905`，开放获取）逐句核对，"摘要称有 ROM" 的搜索结论被正文否掉——这是本记录要求"摘要级数字不入正文"的一次实际兑现。
-- 判据：只有**同时**给出关节角度/活动范围**且**写明量测手法的，才算限位证据；单只标本的骨段比例、肌束结构、临床病例报告都不入。
+- 第三轮：Europe PMC REST 恢复后按**换词**（`femur retraction`、`range of motion` + 类群）重查，命中面见第三轮表格；能读的全文用 PMC 取，取不到的一律停在题录层。
+- 判据：只有**同时**给出关节角度/活动范围**且**写明量测手法（活体透视 / XROMM / 逐层去软组织 / 视频）的，才算"摆动幅度"证据；其中**只有被动边界**才算限位证据。单只标本的骨段比例、肌束结构、临床病例报告都不入。
 
 ## 核对痕迹（2026-09-29）
 
