@@ -25,6 +25,7 @@ import functools
 import hashlib
 import json
 import pathlib
+import xml.etree.ElementTree as ET
 
 DECLARATION = pathlib.Path(__file__).resolve().parents[2] / "rl_exp" / "versions" / "obs_protocols.json"
 ANCHORS = pathlib.Path(__file__).resolve().parents[2] / "rl_exp" / "versions" / "obs_protocol_anchors.json"
@@ -280,6 +281,132 @@ def recorded_dims(task_id: str) -> dict[str, int] | None:
     asset = usd_path(task_id)
     dims = (by_asset or {}).get(asset) if isinstance(by_asset, dict) and asset else None
     return dict(dims) if isinstance(dims, dict) and dims else None
+
+
+# ---------------------------------------------------------------------------------------------
+# The body a recipe loads: its usd, its urdf, and the meshes that urdf references.
+#
+# One implementation for the three callers that need it -- the asset lock builder, the joint-layout
+# probe and the contact-ownership probe -- because two of them used to derive the family from the
+# spawn path's parent directory and re-invent the urdf lookup, which is how a new body ends up
+# paired with the old family's URDF. The recipe's declared ``usd_path`` is the entry, always.
+# ---------------------------------------------------------------------------------------------
+
+
+def urdf_refs(urdf: pathlib.Path) -> list[pathlib.Path]:
+    """Where a URDF's mesh references resolve, relative to the URDF's own directory.
+
+    Parsed as XML rather than matched with a pattern: a regex expecting ``<mesh filename="…"`` reads
+    a URDF written with single quotes, or with the attributes in another order, as a body with NO
+    meshes -- and "no meshes" is the answer every caller treats as clean, so a mesh could change with
+    nothing noticing. Tags are matched by local name, so a namespace cannot hide them either.
+
+    Raises:
+        ProtocolError: the file exists but is not readable XML. Refused rather than answered with an
+            empty list: an unparsed URDF is not a body without meshes.
+    """
+    if not urdf.is_file():
+        return []
+    try:
+        root = ET.fromstring(urdf.read_text(encoding="utf-8"))
+    except (OSError, ET.ParseError) as err:
+        raise ProtocolError(f"{urdf}: not readable URDF XML ({err})") from err
+    refs: list[pathlib.Path] = []
+    for element in root.iter():
+        if element.tag.rpartition("}")[2] != "mesh":
+            continue
+        name = element.get("filename")
+        if name:
+            refs.append(urdf.parent / name)
+    return refs
+
+
+def _rl_exp() -> pathlib.Path:
+    """The ``rl_exp`` base that declared asset paths are relative to (``assets/...``, ``versions/...``)."""
+    return DECLARATION.parents[1]
+
+
+def _key(path: pathlib.Path, base: pathlib.Path, what: str) -> str:
+    """The path as a repo-relative key, refusing anything that resolves outside ``rl_exp``."""
+    resolved = path.resolve()
+    if resolved != base and base not in resolved.parents:
+        raise ProtocolError(f"{what} {path} resolves outside {base}")
+    return str(resolved.relative_to(base)).replace("\\", "/")
+
+
+def resolve_urdf(usd: pathlib.Path, family: str, base: pathlib.Path | None = None) -> pathlib.Path:
+    """The URDF of the body a usd belongs to.
+
+    Two shapes, one rule. A body in its own directory carries ``<stem>.urdf`` beside its usda. The
+    legacy layout is ``assets/<family>/<family>.usda`` with ``versions/<family>/<family>.urdf``, and
+    that fallback applies to THAT usd path only: anywhere else a usda with no urdf beside it is
+    refused, because pairing a new body with the family's old URDF is precisely the mismatch a lock
+    would then pin as the body the version loads.
+
+    Raises:
+        ProtocolError: no urdf can be resolved for this usd.
+    """
+    base = base or _rl_exp()
+    beside = usd.parent / f"{usd.stem}.urdf"
+    if beside.is_file():
+        return beside
+    if usd.resolve() == (base / "assets" / family / f"{family}.usda").resolve():
+        legacy = base / "versions" / family / f"{family}.urdf"
+        if legacy.is_file():
+            return legacy
+        raise ProtocolError(f"{family}: the declared legacy usd {usd.name} has no "
+                            f"versions/{family}/{family}.urdf either")
+    raise ProtocolError(f"{family}: {usd} is not the declared legacy usd and has no <stem>.urdf "
+                        "beside it -- a body in its own directory must ship its own URDF")
+
+
+def resolve_body(usd_rel: str, family: str, base: pathlib.Path | None = None) -> dict:
+    """The files a declared body is made of: its usd, its urdf, and the meshes the urdf references.
+
+    Args:
+        usd_rel: the recipe's ``usd_path``, relative to ``rl_exp``.
+        family: the family the recipe belongs to (the legacy-shape fallback is keyed by it).
+        base: ``rl_exp`` to resolve against; defaults to the real tree.
+
+    Returns:
+        ``{"usd": Path, "urdf": Path, "refs": [Path], "keys": [str]}`` -- the paths resolved, and the
+        same set spelled as repo-relative keys (the spelling the asset locks use).
+
+    Raises:
+        ProtocolError: the usd is missing, resolves outside ``rl_exp``, has no urdf, or a mesh
+            reference lands outside it.
+    """
+    base = base or _rl_exp()
+    usd = base / usd_rel
+    if not usd.is_file():
+        raise ProtocolError(f"{usd_rel} is not on disk (under {base})")
+    urdf = resolve_urdf(usd, family, base)
+    keys = [_key(usd, base, "usd"), _key(urdf, base, "urdf")]
+    refs: list[pathlib.Path] = []
+    for ref in urdf_refs(urdf):
+        keys.append(_key(ref, base, "mesh reference"))
+        refs.append(ref.resolve())
+    return {"usd": usd.resolve(), "urdf": urdf.resolve(), "refs": refs, "keys": sorted(set(keys))}
+
+
+def body_for_task(task_id: str, base: pathlib.Path | None = None) -> dict:
+    """The body a task's recipe loads: the route names the line, the line's recipe names the usd.
+
+    One path from a task id to files, shared by the tools that used to derive a family from the spawn
+    path's parent directory. Same return shape as :func:`resolve_body`.
+
+    Raises:
+        ProtocolError: the task is undeclared, its recipe declares no ``usd_path``, or the body
+            cannot be resolved.
+    """
+    route = task_route(task_id)
+    line = route.get("line")
+    if not isinstance(line, str) or not line:
+        raise ProtocolError(f"{task_id}: no line declared, so no body to resolve")
+    usd_rel = usd_path_for_route(line, route.get("version"))
+    if not usd_rel:
+        raise ProtocolError(f"{task_id}: its recipe declares no usd_path")
+    return resolve_body(usd_rel, line.split("/")[0], base)
 
 
 def dims_for(task_id: str) -> dict[str, int]:

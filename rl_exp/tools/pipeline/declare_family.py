@@ -29,8 +29,9 @@ What this script does, in order:
    ``emit_diff_declaration.py`` (the version's own ``diff.json``, after the frozen yaml lands),
    ``check_cfg_lock.py --update --line <family>/<line> --reason <why>`` (a new line needs its
    own golden, which lands in the line root, never in ``vN/``) and ``check_dr_parity.py
-   --update-locks --family <family>`` (the version's own ``asset_lock.json``: the frozen yaml
-   pins the usd PATH, the lock pins its CONTENT). Every gate's exit code is checked, and the
+   --update-locks --version <family>/<line>/<vN>`` (the version's own ``asset_lock.json``: the
+   frozen yaml pins the usd PATH, the lock pins its CONTENT, and it is written once -- an existing
+   lock is refused, never refreshed). Every gate's exit code is checked, and the
    run ends with a byte comparison of every OTHER family's ``asset_lock.json``: this tool
    cannot reach another family, and now it cannot pretend it did not either.
 
@@ -117,7 +118,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
         epilog=(
             "Dry run is the default and prints every artifact in full; --apply writes them and then"
-            " runs check_cfg_lock.py --update and check_dr_parity.py --update-locks --family <family>,"
+            " runs check_cfg_lock.py --update and check_dr_parity.py --update-locks --version"
+            " <family/line/vN>,"
             " failing the run on any non-zero gate and on any foreign asset_lock.json byte change."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -708,7 +710,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     print(
         f"  [gate product, not written here] versions/{target.family}/{target.line}/{target.version}/asset_lock.json"
-        "  <- check_dr_parity.py --update-locks --family <family> (--apply only)"
+        "  <- check_dr_parity.py --update-locks --version <family/line/vN> (--apply only)"
     )
 
     print("\n--- artifacts in full (nothing written yet)")
@@ -733,7 +735,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  would then check: the emitted agent leaves carry {target.experiment_name!r}"
               + (f" and {target.max_iterations}" if target.max_iterations is not None else ""))
         print(f"  would run: check_cfg_lock.py --update --line {target.key} --reason {args.reason or '<--reason>'!r}")
-        print(f"  would run: check_dr_parity.py --update-locks --family {target.family}")
+        print(f"  would run: check_dr_parity.py --update-locks --version {target.key}/{target.version}")
         print("  would check: every OTHER family's asset_lock.json byte-identical before vs after")
         print("  note: without --apply there is no asset_lock.json in the new version directory, so")
         print("        check_version_docs.py reports that piece missing until the generators run.")
@@ -801,8 +803,9 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     if not gate_passed(
         repo,
-        ["rl_exp/tools/verify/check_dr_parity.py", "--update-locks", "--family", target.family],
-        "check_dr_parity --update-locks --family",
+        ["rl_exp/tools/verify/check_dr_parity.py", "--update-locks",
+         "--version", f"{target.key}/{target.version}", "--family", target.family],
+        "check_dr_parity --update-locks --version",
     ):
         print("*** REFUSED: check_dr_parity --update-locks failed -- no lock was written for this version.")
         return 1

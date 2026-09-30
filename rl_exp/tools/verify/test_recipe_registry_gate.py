@@ -134,6 +134,14 @@ STATUS_CASES: list[tuple[str, dict, str, str, str | None]] = [
     ("invented status", _registry(main=_entry(status="deprecated")), MAIN, "v0", None),
     ("exception with an invented status must not fall back",
      _registry(main=_entry(versions={"v0": _v(status="deprecated")})), MAIN, "v0", None),
+    # An exception may only retire. "active" written explicitly is NOT permission to run: it is a
+    # malformed exception, so the reader must answer unknown and let the launch refuse.
+    ("an exception that says active must not pass",
+     _registry(main=_entry(versions={"v0": _v(status="active")})), MAIN, "v0", None),
+    # A versions map of the wrong type is unknown too -- inheriting the line's status here would be
+    # exactly the silent default the reader exists to prevent.
+    ("a malformed versions map is unknown, not inherited",
+     _registry(main=_entry(versions="v0")), MAIN, "v0", None),
 ]
 
 

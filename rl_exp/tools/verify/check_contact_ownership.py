@@ -160,9 +160,16 @@ def main() -> int:
             f"task {args_cli.task} declares no line, so no family to read assets from"
             f" (spawn path {usd_path} is not an identity)"
         )
-    urdf = pathlib.Path(__file__).resolve().parents[2] / "versions" / family / f"{family}.urdf"
-    if not urdf.exists():
-        raise SystemExit(f"no urdf beside the task's asset: {urdf} (task {args_cli.task})")
+    # The URDF comes off the ONE body resolver the lock builder and the joint-layout probe share:
+    # this probe used to hard-code ``versions/<family>/<family>.urdf``, which is the old layout's
+    # path -- a body in its own directory would have had its collisions read off another body.
+    _RL_EXP = pathlib.Path(__file__).resolve().parents[2]
+    try:
+        body = obs_protocol.resolve_body(
+            str(usd_path.relative_to(_RL_EXP)).replace("\\", "/"), family, _RL_EXP)
+    except obs_protocol.ProtocolError as err:
+        raise SystemExit(f"cannot resolve the body of {args_cli.task}: {err}") from err
+    urdf = body["urdf"]
     print(f"ASSET family={family} usd={usd_path.name} urdf={urdf.name} envs={num_envs}")
 
     urdf_links = urdf_collision(urdf)

@@ -164,10 +164,16 @@ def effective_status(registry, key: str, version: str | None) -> str | None:
         return "retired"
     if version is not None:
         exceptions = entry.get("versions")
+        if exceptions is not None and not isinstance(exceptions, dict):
+            # A versions map of the wrong type is UNKNOWN, not "inherit the line's status": falling
+            # back here would be the silent default this reader exists to prevent.
+            return None
         if isinstance(exceptions, dict) and version in exceptions:
             chosen = exceptions[version]
-            if isinstance(chosen, dict) and chosen.get("status") in STATUSES:
-                return chosen["status"]
+            # An exception may only RETIRE. An explicit ``active`` is a malformed exception, not a
+            # permission to run: the reader answers unknown, and the launch refuses.
+            if isinstance(chosen, dict) and chosen.get("status") == "retired":
+                return "retired"
             return None  # an exception this reader cannot parse must not fall back to the line's status
     return line_status
 

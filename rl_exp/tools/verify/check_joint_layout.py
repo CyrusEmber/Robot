@@ -140,6 +140,8 @@ import isaaclab_tasks  # noqa: F401
 from isaaclab.utils.math import quat_apply, quat_apply_inverse
 from isaaclab.utils.string import string_to_callable
 
+from rl_exp.tasks import obs_protocol  # noqa: E402  (task -> family; a body's directory is not one)
+
 INJECT_RAD = 0.3
 SETTLE_STEPS = args_cli.settle
 
@@ -153,14 +155,21 @@ body_names = list(robot.data.body_names)
 
 # The script is task-parameterized, so its asset knowledge has to be too: the leg chain of a family
 # that INSERTED a joint is a different chain, and a hand-written "hfe x kfe" sweep on it measures the
-# wrong joints while looking exactly like a passing run (review 2026-09-22). Family and URDF are read
-# off the task's own spawn path; every leg joint below is derived from the joint list.
+# wrong joints while looking exactly like a passing run (review 2026-09-22). The family comes off the
+# task's declared route and the URDF off that body; every leg joint below is derived from the joint list.
 _USD = pathlib.Path(str(cfg.scene.robot.spawn.usd_path))
-_FAMILY = _USD.parent.name
 _RL_EXP = pathlib.Path(__file__).resolve().parents[2]
-_URDF = _RL_EXP / "versions" / _FAMILY / f"{_FAMILY}.urdf"
-if not _URDF.exists():
-    raise SystemExit(f"no urdf beside the task's asset: {_URDF} (task {args_cli.task}, usd {_USD})")
+# Not ``_USD.parent.name``: a body in its own directory (``.../b1/b1.usda``, the layout a new body
+# lands in) would name the body as the family and then look for a URDF that does not exist. The
+# family comes off the task's declared route and the URDF off the one resolver every caller shares.
+_FAMILY = obs_protocol.family_of(args_cli.task)
+if not _FAMILY:
+    raise SystemExit(f"task {args_cli.task} declares no line, so no family to read assets from")
+try:
+    _BODY = obs_protocol.resolve_body(str(_USD.relative_to(_RL_EXP)).replace("\\", "/"), _FAMILY, _RL_EXP)
+except obs_protocol.ProtocolError as err:
+    raise SystemExit(f"cannot resolve the body of {args_cli.task}: {err}") from err
+_URDF = _BODY["urdf"]
 print("ASSET family=%s usd=%s urdf=%s" % (_FAMILY, _USD.name, _URDF.name))
 
 
