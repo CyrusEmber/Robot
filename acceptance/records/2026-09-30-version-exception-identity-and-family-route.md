@@ -1,7 +1,7 @@
 # 版本例外的身份合成、退休版齐件豁免、家族走路由（bcd 三条旁链）
 
 - 日期：2026-09-30
-- 范围：`work/active/body-swap-and-version-retire.md` ⑧ 的三条旁链 —— B 身份、C 齐件、D 路由
+- 范围：`work/closed/2026/body-swap-and-version-retire.md`（该事项已于 2026-09-30 关闭）⑧ 的三条旁链 —— B 身份、C 齐件、D 路由
 - 关联：`acceptance/records/2026-09-28-lizard2-foot-hull-and-asset-isolation.md`（家族级声明与 `family_of` 的先例）
 
 ## 适用范围

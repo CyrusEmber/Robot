@@ -48,5 +48,5 @@ evidence: acceptance/records/2026-09-30-lizard2-leg-to-anatomy-mapping, acceptan
 - `leg-chain-symmetry-convention`：生成器只能有**一处**腿侧判据（`joint_spec` 按后缀查一条 spec、四腿共用，`:227-228`）；逐腿非对称（左右共线角正负不同）只能落在这一处，不要各写一套。
 - `large-monitor-skeleton-muscle-literature`：生物学侧的补证与证据边界归它；本项只用它已收口的结论，不重复检索。
 - `asset-tree-per-family`：任何换代的共用前置（生成器真跑）。
-- `body-swap-and-version-retire`（另一会话在办）：提议把"构型变更必换家族"改成"采用新机体 ⇒ 依赖旧机体的版本退休"。本项与映射记录里"若要做结构改动 ⇒ 换家族"按**现行** §A 写；**该提议落地后需回改这两处**。谁改结构自由度、退休范围怎么算，归那条，不归本项。
+- `body-swap-and-version-retire`（**已关闭** 2026-09-30，见 `work/closed/2026/`）：规则已落地——"采用新机体 ⇒ 依赖旧机体的冻结版本在**同一次变更**里退休"取代了"构型变更必换家族"；判据 = 活跃线 dev yaml 声明的 `usd_path`，检查在 `check_dr_parity.py` 的 body swap 一节。本项与映射记录里"若要做结构改动 ⇒ 换家族"的旧表述已按此回改：结构改动属**同一家族内的机体换代**（新机体走新路径、旧机体版本连同其锁一起退休），不再自动换家族。谁改结构自由度归本项，退休范围与锁的算法归那条（已闭环）。
 - `hfe-extension-stop-not-validated`：已并入本项（见 `work/closed/2026/`），不另立正文。
