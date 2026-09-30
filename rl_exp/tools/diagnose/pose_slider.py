@@ -135,8 +135,8 @@ def build(args) -> None:
 
     chains = {leg: load_chain(args.urdf, leg) for leg in LEGS}
     normals = {leg: pad_normal_in_link(args.urdf, leg) for leg in LEGS}
-    vertices = {leg: pad_vertices(leg) for leg in LEGS}
-    faces = {leg: pad_faces(leg) for leg in LEGS}
+    vertices = {leg: pad_vertices(args.urdf, leg) for leg in LEGS}
+    faces = {leg: pad_faces(args.urdf, leg) for leg in LEGS}
 
     angles = {leg: [0.0] * len(CHAIN) for leg in LEGS}
     base_z = args.base_z
@@ -167,7 +167,8 @@ def build(args) -> None:
         position = posed["position"]
         flag = "  PENETRATES" if posed["lowest_z"] < -1e-4 else ""
         return [
-            f"{leg}  tilt {posed['tilt_deg']:6.2f} deg  lowest {posed['lowest_z']:+.4f} m  "
+            f"{leg}  tilt {posed['tilt_deg']:6.2f} deg (facing {posed['facing_cos']:+.2f})  "
+            f"lowest {posed['lowest_z']:+.4f} m  "
             f"xy ({position[0]:+.3f},{position[1]:+.3f})  "
             f"vs zero ({position[0] - zero[leg][0]:+.3f},{position[1] - zero[leg][1]:+.3f}){flag}",
             f"     {' '.join('%s %+.2f' % (joint, angles[leg][index]) for index, joint in enumerate(CHAIN))}"

@@ -21,6 +21,26 @@ wrong from the numbers alone, and both decide what "a level pad" can even mean:
   while the asset's range is a symmetric +-1.2 rad (:data:`KNEE_FACTS`), so every leg carries 13.6 deg
   of knee hyperextension -- the limit was carried over when ``hfe``'s axis changed from ``Z`` to ``-X``.
 
+A third reading is separated here because it is what "a level pad" is actually asked for:
+
+* **flat is not the same as facing down**: the fold identity reads the pad normal's z-component and
+  :func:`fold_tilt` returns the same 0 for a pad lying on its sole and one lying on its back. The
+  direction is a separate read (:func:`faces_down` on ``facing_cos``), and the review's counterexample
+  -- inside the limits -- is refused by it.
+
+The pad's facing and the pad's height are read in the WORLD frame: ``base_link`` may carry roll and
+pitch, so :func:`pad_state` takes the body's own attitude instead of assuming a level body (the body
+frame's ``-z`` is the world's down only when it is level).
+
+Which body a reading belongs to is not guessed either. The pad's collision mesh is resolved from the
+URDF's own ``<leg>_foot`` link -- the convention ``check_joint_layout.py`` already uses -- so a
+candidate URDF cannot be scored against the old body's mesh, and a URDF carried away from its meshes
+fails instead of borrowing one. The chain itself is walked off the URDF's tree (:func:`load_chain`), so
+a candidate that INSERTED a joint is read with that joint rather than as the old chain with it silently
+missing; joints carry their own ``rpy``, so an inserted joint may sit on a rotated frame; and
+``--compare`` reads two candidates at the same body pose, height and tolerance, reporting a joint only
+one of them has on its own rather than folding it into the shared numbers.
+
 The chain, per leg, is a 5-revolute serial chain off ``base_link``
 (``*_hip`` -> ``*_haa`` -> ``*_hfe`` -> ``*_kfe`` -> ``*_foot``); the URDF gives each joint's origin,
 axis and position limits, so nothing here is transcribed from the asset by hand.
@@ -29,6 +49,7 @@ axis and position limits, so nothing here is transcribed from the asset by hand.
 pose the foot origin must equal the sum of the chain's origins (valid there because every leg origin
 carries ``rpy="0 0 0"``), and with the hip turned a quarter turn the foot must be that same point
 rotated about the hip's own axis. Both are hand arithmetic, not a re-run of the same matrix product.
+``--break-test`` perturbs the readings those verdicts rest on and fails if the self-check stays green.
 
 :func:`chain_frames` and :func:`pad_vertices` are the two things a display needs out of this module:
 the frame each joint turns in (an axis drawn in ``base_link``) and the pad's own mesh.
@@ -39,18 +60,27 @@ one path that touches a record and therefore torch:
 
     cd /d <REPO>
     python rl_exp\\tools\\verify\\check_leg_reachability.py --self-check
+    python rl_exp\\tools\\verify\\check_leg_reachability.py --break-test
     python rl_exp\\tools\\verify\\check_leg_reachability.py --frames <record>\\eval.frames.pt
+    python rl_exp\\tools\\verify\\check_leg_reachability.py --compare <candidate>.urdf --leg rl
 """
 
 import argparse
+import contextlib
+import io
+import itertools
 import math
 import pathlib
+import tempfile
 import xml.etree.ElementTree as ET
 
 _REPO = pathlib.Path(__file__).resolve().parents[3]
 DEFAULT_URDF = _REPO / "rl_exp" / "versions" / "lizard2" / "lizard2.urdf"
 #: The five joints of a leg, root to pad. The blade is the last one: the pad is rigid to it.
 CHAIN = ("hip", "haa", "hfe", "kfe", "foot")
+#: The three hinges that share one axis. Their plane is what ``hip`` can yaw and nothing can tilt,
+#: which is the structural claim :func:`hinge_vs_body_z` turns into a number.
+HINGES = CHAIN[1:4]
 LEGS = ("lf", "rf", "rl", "rr")
 
 #: The knee's own geometry, per leg: the ``hfe`` that makes thigh and shank collinear [deg, signed
@@ -84,18 +114,45 @@ def _cross(a: list[float], b: list[float]) -> list[float]:
     return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
 
 
-def _matrix(origin, axis, angle: float) -> list[list[float]]:
-    """One joint's transform: the origin, then a rotation of ``angle`` about ``axis``."""
+def _rpy_matrix(rpy) -> list[list[float]]:
+    """The URDF's ``rpy`` as a rotation matrix: ``Rz(yaw) Ry(pitch) Rx(roll)``."""
+    roll, pitch, yaw = rpy
+    cr, sr = math.cos(roll), math.sin(roll)
+    cp, sp = math.cos(pitch), math.sin(pitch)
+    cy, sy = math.cos(yaw), math.sin(yaw)
+    return [
+        [cy * cp, cy * sp * sr - sy * cr, cy * sp * cr + sy * sr],
+        [sy * cp, sy * sp * sr + cy * cr, sy * sp * cr - cy * sr],
+        [-sp, cp * sr, cp * cr],
+    ]
+
+
+def _matrix(origin, axis, angle: float, rpy=None) -> list[list[float]]:
+    """One joint's transform: ``T(origin) . R(rpy) . R(axis, angle)``, the URDF's own order.
+
+    The axis is stated in the joint's OWN frame, i.e. after ``rpy`` -- composing the axis before it is
+    how an inserted joint on a rotated frame comes out silently wrong. Every joint that carries
+    ``rpy="0 0 0"`` (the current asset's, all of them) takes the identical path it always did.
+    """
     x, y, z = origin
     ax, ay, az = axis
     norm = math.sqrt(ax * ax + ay * ay + az * az)
     ax, ay, az = ax / norm, ay / norm, az / norm
     c, s = math.cos(angle), math.sin(angle)
     k = 1.0 - c
+    rotation = [
+        [ax * ax * k + c, ax * ay * k - az * s, ax * az * k + ay * s],
+        [ay * ax * k + az * s, ay * ay * k + c, ay * az * k - ax * s],
+        [az * ax * k - ay * s, az * ay * k + ax * s, az * az * k + c],
+    ]
+    if rpy is not None and any(value != 0.0 for value in rpy):
+        turn = _rpy_matrix(rpy)
+        rotation = [[sum(turn[i][k] * rotation[k][j] for k in range(3)) for j in range(3)]
+                    for i in range(3)]
     return [
-        [ax * ax * k + c, ax * ay * k - az * s, ax * az * k + ay * s, x],
-        [ay * ax * k + az * s, ay * ay * k + c, ay * az * k - ax * s, y],
-        [az * ax * k - ay * s, az * ay * k + ax * s, az * az * k + c, z],
+        [rotation[0][0], rotation[0][1], rotation[0][2], x],
+        [rotation[1][0], rotation[1][1], rotation[1][2], y],
+        [rotation[2][0], rotation[2][1], rotation[2][2], z],
         [0.0, 0.0, 0.0, 1.0],
     ]
 
@@ -104,31 +161,56 @@ def _multiply(a, b):
     return [[sum(a[i][k] * b[k][j] for k in range(4)) for j in range(4)] for i in range(4)]
 
 
-def load_chain(urdf: pathlib.Path, leg: str) -> dict:
-    """The leg's five joints as ``(origin xyz, axis, limits)``, in chain order, read off the URDF.
+def chain_joint_names(urdf: pathlib.Path, leg: str) -> tuple[str, ...]:
+    """The leg's joints, root to pad, walked UP the URDF's own tree from ``<leg>_foot``.
 
-    A joint origin carrying a non-zero ``rpy`` is refused rather than dropped: this FK composes
-    rotations from the axes alone, so an asset that rotated a joint frame would be read silently
-    wrong (every leg joint in the current asset has ``rpy="0 0 0"``, which the self-check leans on).
+    The tree is the authority on which joints a candidate has, so nobody has to hand it the list: a
+    candidate that inserted a femoral rotation gets it read without this file naming it. The walk stops
+    at the first parent link that does not carry the leg's own prefix (``lf_``), which is the family's
+    naming convention and the only thing assumed here; a link with no parent joint or with two is
+    refused rather than guessed at.
+    """
+    root = ET.parse(urdf).getroot()
+    parent_of = {}
+    for joint in root.iter("joint"):
+        child = joint.find("child").get("link")
+        if child in parent_of:
+            raise SystemExit(f"{urdf}: link {child} has two parent joints")
+        parent_of[child] = joint
+    names, link = [], f"{leg}_foot"
+    while link.startswith(f"{leg}_"):
+        joint = parent_of.get(link)
+        if joint is None:
+            raise SystemExit(f"{urdf}: no joint leads into link {link}")
+        names.append(joint.get("name"))
+        link = joint.find("parent").get("link")
+    if not names:
+        raise SystemExit(f"{urdf}: {leg}_foot has no joint of its own")
+    return tuple(reversed(names))
+
+
+def load_chain(urdf: pathlib.Path, leg: str) -> list[dict]:
+    """The leg's joints as ``(origin, rpy, axis, limits)``, root to pad, read off the URDF.
+
+    Which joints those are comes off the tree (:func:`chain_joint_names`), so a candidate that INSERTED
+    a joint is read with it instead of being read as the old chain with the extra joint silently
+    missing. Each entry keeps its own ``rpy``, so an inserted joint may sit on a rotated frame -- the
+    composition is the URDF's own (see :func:`_matrix`) -- and the URDF states an axis in its own joint
+    frame, which is why the axis has to be read together with that frame's ``rpy``.
     """
     root = ET.parse(urdf).getroot()
     by_name = {joint.get("name"): joint for joint in root.iter("joint")}
     chain = []
-    for token in CHAIN:
-        name = f"{leg}_{token}_joint"
-        joint = by_name.get(name)
-        if joint is None:
-            raise SystemExit(f"{urdf} has no joint {name}")
+    for name in chain_joint_names(urdf, leg):
+        joint = by_name[name]
         origin_tag = joint.find("origin")
         origin = _floats(origin_tag.get("xyz"), 3) if origin_tag is not None else [0.0] * 3
-        rpy = origin_tag.get("rpy") if origin_tag is not None else None
-        if any(value != 0.0 for value in _floats(rpy or "0 0 0", 3)):
-            raise SystemExit(f"{name} carries rpy={rpy!r}: this FK turns joints about their axes "
-                             f"only, so a rotated joint origin would be read as the identity")
+        rpy = _floats(origin_tag.get("rpy") or "0 0 0", 3) if origin_tag is not None else [0.0] * 3
         axis = _floats(joint.find("axis").get("xyz"), 3)
         limit = joint.find("limit")
         bounds = (float(limit.get("lower")), float(limit.get("upper")))
-        chain.append({"name": name, "origin": origin, "axis": axis, "limits": bounds})
+        chain.append({"name": name, "token": name[len(leg) + 1: -len("_joint")], "origin": origin,
+                      "rpy": rpy, "axis": axis, "limits": bounds})
     return chain
 
 
@@ -141,7 +223,8 @@ def chain_frames(chain: list[dict], angles: list[float]):
     transform = [[1.0 if i == j else 0.0 for j in range(4)] for i in range(4)]
     frames = [transform]
     for joint, angle in zip(chain, angles):
-        transform = _multiply(transform, _matrix(joint["origin"], joint["axis"], angle))
+        transform = _multiply(transform, _matrix(joint["origin"], joint["axis"], angle,
+                                                 joint.get("rpy")))
         frames.append(transform)
     return frames
 
@@ -154,37 +237,50 @@ def foot_pose(chain: list[dict], angles: list[float]):
     return position, rotation
 
 
-def _pad_mesh(leg: str) -> pathlib.Path:
-    """The pad's collision mesh, from the family's own mesh tree."""
-    candidates = sorted((_REPO / "rl_exp" / "versions" / "lizard2" / "meshes" / "collision").glob(
-        f"{leg}_foot_collision.obj"))
-    if not candidates:
-        raise SystemExit(f"no collision mesh for {leg}'s pad")
-    return candidates[0]
+def pad_mesh(urdf: pathlib.Path, leg: str) -> pathlib.Path:
+    """The pad's collision mesh, from the URDF's OWN ``<leg>_foot`` link.
+
+    Resolved off the URDF rather than a fixed directory (``check_joint_layout.py`` reads the same
+    node), because the mesh and the chain have to belong to the SAME body: scored against the old
+    body's mesh, a candidate URDF reads a pad it does not have.
+    """
+    root = ET.parse(urdf).getroot()
+    link_name = f"{leg}_foot"
+    link = next((item for item in root.findall("link") if item.get("name") == link_name), None)
+    if link is None:
+        raise SystemExit(f"{urdf} has no link {link_name}")
+    mesh = link.find("collision/geometry/mesh")
+    if mesh is None:
+        raise SystemExit(f"{urdf}: {link_name} declares no collision mesh")
+    path = (urdf.parent / mesh.get("filename")).resolve()
+    if not path.is_file():
+        raise SystemExit(f"{urdf}: {link_name}'s collision mesh {path} is missing")
+    return path
 
 
-def _obj_lines(leg: str) -> list[str]:
-    return _pad_mesh(leg).read_text(encoding="utf-8", errors="replace").splitlines()
+def _obj_lines(urdf: pathlib.Path, leg: str) -> list[str]:
+    return pad_mesh(urdf, leg).read_text(encoding="utf-8", errors="replace").splitlines()
 
 
-def pad_vertices(leg: str) -> list[list[float]]:
+def pad_vertices(urdf: pathlib.Path, leg: str) -> list[list[float]]:
     """The pad's mesh vertices in the foot link's frame, read from the exported ``.obj``."""
-    return [[float(token) for token in line.split()[1:4]] for line in _obj_lines(leg)
+    return [[float(token) for token in line.split()[1:4]] for line in _obj_lines(urdf, leg)
             if line.startswith("v ")]
 
 
-def pad_faces(leg: str) -> list[list[int]]:
+def pad_faces(urdf: pathlib.Path, leg: str) -> list[list[int]]:
     """The pad mesh's triangles, as 0-based indices into :func:`pad_vertices`.
 
     The asset is triangulated: 26 vertices and 48 faces satisfy ``V - E + F = 2`` with ``3F = 2E``,
     so a face is always three indices and there is nothing to fan here.
     """
     faces = []
-    for line in _obj_lines(leg):
+    for line in _obj_lines(urdf, leg):
         if line.startswith("f "):
             tokens = line.split()[1:]
             if len(tokens) != 3:
-                raise SystemExit(f"{_pad_mesh(leg).name} has a {len(tokens)}-gon face: not triangulated")
+                raise SystemExit(f"{pad_mesh(urdf, leg).name} has a {len(tokens)}-gon face: "
+                                 f"not triangulated")
             faces.append([int(token.split("/")[0]) - 1 for token in tokens])
     return faces
 
@@ -195,7 +291,7 @@ def pad_normal_in_link(urdf: pathlib.Path, leg: str) -> list[float]:
     Read from the exported ``.obj`` rather than assumed: the sole is a curved cap, and how far its
     contact patch is from the link's ``-z`` is a property of the asset, not of this script.
     """
-    vertices = pad_vertices(leg)
+    vertices = pad_vertices(urdf, leg)
     lowest = min(vertex[2] for vertex in vertices)
     band = [vertex for vertex in vertices if vertex[2] <= lowest + 0.002]
     centroid = [sum(vertex[i] for vertex in band) / len(band) for i in range(3)]
@@ -207,34 +303,68 @@ def pad_normal_in_link(urdf: pathlib.Path, leg: str) -> list[float]:
 
 
 def pad_state(chain: list[dict], angles: list[float], normal: list[float],
-              vertices: list[list[float]], base_z: float) -> dict:
-    """One leg's pad read out for a given pose: where it is, how tilted, and how far off the ground.
+              vertices: list[list[float]], base_z: float,
+              base_rpy: tuple[float, float, float] = (0.0, 0.0, 0.0)) -> dict:
+    """One leg's pad read out for a pose: where it is, which way it FACES, and how far off the ground.
 
-    A fixed, level body is assumed throughout: with no roll or pitch on ``base_link``, the body
-    frame's ``-z`` *is* the world's down, so the tilt is ``angle(normal, -z)`` and the ground is the
-    plane ``z = -base_z``. That is the one assumption this file cannot check.
+    Read in the WORLD frame: the pad's facing and its height are taken through the body's own attitude
+    ``base_rpy``, because ``base_link``'s ``-z`` is the world's down only while the body is level, and
+    a pad that has to meet the ground while the body rolls is not answered by a body-frame lean.
 
     Args:
         chain: as :func:`load_chain` returns it.
-        angles: five joint angles [rad].
+        angles: one angle per joint [rad].
         normal: unit pad normal in the foot link's frame -- :func:`pad_normal_in_link`.
         vertices: pad mesh vertices in the foot link's frame -- :func:`pad_vertices`.
-        base_z: the body's height above the ground [m].
+        base_z: the body's height above the ground [m]; the ground is the plane ``z = 0``.
+        base_rpy: the body's own roll, pitch, yaw [rad] -- the attitude the world is read through.
 
     Returns:
-        ``frames`` (as :func:`chain_frames`), the pad origin and pad normal in ``base_link``,
-        ``tilt_deg`` off the world down, and ``lowest_z`` -- the lowest pad vertex above the ground
-        [m], negative when the pad is through it.
+        ``frames`` (as :func:`chain_frames`); ``position`` and ``normal``, the pad origin and pad
+        normal in ``base_link`` (what a display draws); ``world_normal``, that normal in the world
+        frame; ``facing_cos``, its cosine with the world's down, SIGNED -- ``+1`` flat on the sole,
+        ``-1`` flat on its back; ``tilt_deg``, the same read as an angle off the world's down
+        (0 = facing down, 180 = facing straight up); and ``lowest_z``, the lowest pad vertex above the
+        ground [m], negative when the pad is through it.
     """
     frames = chain_frames(chain, angles)
     rotation = [[frames[-1][i][j] for j in range(3)] for i in range(3)]
     position = [frames[-1][i][3] for i in range(3)]
     body_normal = [sum(rotation[i][k] * normal[k] for k in range(3)) for i in range(3)]
-    tilt = math.degrees(math.acos(max(-1.0, min(1.0, -body_normal[2]))))
-    lowest = min(base_z + position[2] + sum(rotation[2][k] * vertex[k] for k in range(3))
-                 for vertex in vertices)
+    body_rotation = _rpy_matrix(base_rpy)
+    world_normal = [sum(body_rotation[i][k] * body_normal[k] for k in range(3)) for i in range(3)]
+    facing = max(-1.0, min(1.0, -world_normal[2]))
+    tilt = math.degrees(math.acos(facing))
+    lowest = min(base_z + sum(body_rotation[2][k] * (position[k] + sum(rotation[k][j] * vertex[j]
+                                                                         for j in range(3)))
+                               for k in range(3)) for vertex in vertices)
     return {"frames": frames, "position": position, "normal": body_normal,
-            "tilt_deg": tilt, "lowest_z": lowest}
+            "world_normal": world_normal, "facing_cos": facing, "tilt_deg": tilt, "lowest_z": lowest}
+
+
+def faces_down(facing_cos: float, tol_deg: float) -> bool:
+    """Whether a pad closing the world's down at ``facing_cos`` faces it within ``tol_deg``.
+
+    The DIRECTED verdict, and the only one that separates a pad resting on its sole from one resting
+    on its back: ``fold_tilt`` returns 0 for both, and ``tilt_deg`` -- which reads the same cosine as
+    an angle -- is 180 for the second. Feed it ``pad_state(...)["facing_cos"]`` or the closed form's
+    :func:`fold_tilt_cos`; both are the same quantity.
+    """
+    return facing_cos >= math.cos(math.radians(tol_deg))
+
+
+def hinge_vs_body_z(chain: list[dict], angles: list[float], index: int) -> float:
+    """The angle [deg] between joint ``index``'s axis and the body's z, both in ``base_link``.
+
+    90 means the joint's motion plane can never be tilted out of a plane that contains the body's z --
+    the invariant the current asset's three hinges hold exactly, over the hip's whole range. A joint
+    inserted along the femur drives its downstream hinges off 90, which is the structural difference
+    an added femoral rotation buys; measured here rather than argued from an axis name.
+    """
+    frames = chain_frames(chain, angles)
+    axis = _unit(chain[index]["axis"])
+    turned = [sum(frames[index][i][k] * axis[k] for k in range(3)) for i in range(3)]
+    return math.degrees(math.acos(max(-1.0, min(1.0, abs(turned[2])))))
 
 
 def joint_effect(chain: list[dict], angles: list[float], index: int, normal: list[float],
@@ -288,6 +418,10 @@ def fold_tilt(normal: list[float], sigma: float, foot: float) -> float:
     level body the tilt is therefore a function of ``(sigma, foot)`` and the pad's own normal
     (:func:`fold_tilt_cos`) -- exact, and it says nothing about a pad that has to be level to the WORLD
     while the body carries roll and pitch, which is what an eval frame cannot show.
+
+    UNDIRECTED: this is the fold's magnitude, and it reads 0 for a pad on its sole and on its back
+    alike (the ``abs`` is where the sign dies). It cannot accept a pose -- that takes the DIRECTED read,
+    :func:`fold_tilt_cos`'s sign through :func:`faces_down`.
     """
     return math.degrees(math.acos(max(-1.0, min(1.0, abs(fold_tilt_cos(normal, sigma, foot))))))
 
@@ -331,6 +465,72 @@ def _smallest_eigenvector(cov) -> list[float]:
     return vector
 
 
+def _inserted_joint_urdf(urdf: pathlib.Path, leg: str, token: str, folder: pathlib.Path) -> pathlib.Path:
+    """The asset's own URDF plus ONE revolute inserted along the femur, for the self-check.
+
+    A fixture, not a design asset: the inserted joint takes ``hfe``'s own origin while ``hfe``'s origin
+    becomes zero, so the zero pose is the asset's exactly and the only difference is the extra rotation.
+    Its axis is the femur direction (``haa``'s frame to ``hfe``'s origin, stated in the frame it sits
+    in), i.e. the shape a femoral long-axis rotation would have -- which is what the FK has to be able
+    to carry. Mesh paths are made absolute so the fixture runs out of a temp directory.
+    """
+    tree = ET.parse(urdf)
+    root = tree.getroot()
+    hfe = next(joint for joint in root.iter("joint") if joint.get("name") == f"{leg}_hfe_joint")
+    femur = _floats(hfe.find("origin").get("xyz"), 3)
+    for mesh in root.iter("mesh"):
+        mesh.set("filename", str((urdf.parent / mesh.get("filename")).resolve()))
+    ET.SubElement(root, "link").set("name", f"{leg}_{token}")
+    insertion = ET.Element("joint", {"name": f"{leg}_{token}_joint", "type": "revolute"})
+    ET.SubElement(insertion, "parent", {"link": f"{leg}_haa"})
+    ET.SubElement(insertion, "child", {"link": f"{leg}_{token}"})
+    ET.SubElement(insertion, "origin", {"xyz": " ".join("%.6f" % value for value in femur),
+                                        "rpy": "0 0 0"})
+    ET.SubElement(insertion, "axis", {"xyz": " ".join("%.6f" % value for value in _unit(femur))})
+    ET.SubElement(insertion, "limit", {"lower": "-0.60", "upper": "0.60", "effort": "120",
+                                       "velocity": "8"})
+    root.insert(0, insertion)
+    hfe.find("parent").set("link", f"{leg}_{token}")
+    hfe.find("origin").set("xyz", "0.000000 0.000000 0.000000")
+    path = folder / f"{urdf.stem}_{token}.urdf"
+    tree.write(path, encoding="utf-8", xml_declaration=True)
+    return path
+
+
+def _candidate_chain_check(urdf: pathlib.Path) -> None:
+    """A candidate chain loads, moves, and tilts the plane the asset's hinges cannot tilt.
+
+    The asset holds one invariant that a femoral rotation breaks: its three hinge axes stay exactly 90
+    deg to the body's z over the whole range, so the plane they span always contains that z
+    (:func:`hinge_vs_body_z`). This reads both sides of that -- the asset at exactly 90, the fixture
+    off it by the inserted joint's angle -- so the read can be shown to tell the two chains apart.
+    """
+    leg, token = "lf", "fem"
+    with tempfile.TemporaryDirectory() as folder:
+        candidate = _inserted_joint_urdf(urdf, leg, token, pathlib.Path(folder))
+        chain, base = load_chain(candidate, leg), load_chain(urdf, leg)
+    tokens = tuple(joint["token"] for joint in chain)
+    # The walk finds the asset's own chain, and it finds the inserted joint in its place rather than
+    # reading the candidate as the old chain -- both are the point of walking the tree at all.
+    assert tuple(joint["token"] for joint in base) == CHAIN, tuple(joint["token"] for joint in base)
+    assert tokens == CHAIN[:2] + (token,) + CHAIN[2:], tokens
+    zero_candidate = foot_pose(chain, [0.0] * len(tokens))[0]
+    zero_base = foot_pose(base, [0.0] * len(CHAIN))[0]
+    assert all(abs(zero_candidate[i] - zero_base[i]) < 1e-9 for i in range(3)), (zero_candidate, zero_base)
+    moved = foot_pose(chain, [0.0, 0.0, 0.5, 0.0, 0.0, 0.0])[0]
+    travel = math.sqrt(sum((moved[i] - zero_candidate[i]) ** 2 for i in range(3)))
+    assert travel > 1e-3, (travel, "the inserted joint does not move the pad")
+    for angles in ([0.0] * 5, [0.4, 0.2, 0.6, -0.3, 0.1], [-0.6, -0.6, -1.2, -1.0, 0.5]):
+        for index in range(1, len(HINGES) + 1):
+            assert abs(hinge_vs_body_z(base, angles, index) - 90.0) < 1e-9, (angles, index)
+    driven = hinge_vs_body_z(chain, [0.0, 0.0, 0.5, 0.0, 0.0, 0.0], tokens.index("hfe"))
+    assert 90.0 - driven > 20.0, (driven, "an inserted femoral rotation left the hinge plane alone")
+    print("[CANDIDATE-CHAIN] one revolute inserted along the femur loads as a %d-joint chain: zero pose "
+          "unchanged, pad travels %.4f m at 0.5 rad, and the downstream hinge leaves 90 deg by %.1f deg"
+          " (the asset's three stay at 90.0000 over their whole range)"
+          % (len(tokens), travel, 90.0 - driven))
+
+
 def self_check(urdf: pathlib.Path) -> None:
     """Poses whose answers are hand arithmetic, not a second pass of the same matrix product."""
     for leg in LEGS:
@@ -351,7 +551,14 @@ def self_check(urdf: pathlib.Path) -> None:
         # normal leans off the world's down (a rotation about z leaves the normal's z alone), and
         # raising the body by h must raise every pad vertex by exactly h.
         normal = pad_normal_in_link(urdf, leg)
-        vertices = pad_vertices(leg)
+        vertices = pad_vertices(urdf, leg)
+        # The mesh and the chain have to come off the SAME body: a path resolved from anywhere else is
+        # how a candidate URDF gets scored against the old body's pad. This literal is a BACKSTOP --
+        # on this asset the old hard-coded tree and the URDF's own tree coincide, so a reintroduced
+        # hard-coded path would not trip it. What does trip loudly is `pad_mesh` on a URDF carried away
+        # from its meshes (SystemExit), which is the misuse this binding exists to stop.
+        assert urdf.parent in pad_mesh(urdf, leg).parents, \
+            (leg, pad_mesh(urdf, leg), "the pad mesh is not read off this URDF's own tree")
         zero_angles = [0.0] * len(CHAIN)
         zero = pad_state(chain, zero_angles, normal, vertices, 0.9)
         turned_tilt = pad_state(chain, [0.4, 0.0, 0.0, 0.0, 0.0], normal, vertices, 0.9)["tilt_deg"]
@@ -409,6 +616,39 @@ def self_check(urdf: pathlib.Path) -> None:
         stroke = min(pad_state(chain, [0.0, 0.62, 0.0, 0.0, -0.5 + i * 0.01], normal, vertices,
                                0.9)["tilt_deg"] for i in range(101))
         assert stroke > 30.0, (leg, stroke)
+        # A pad on its BACK must not pass for a pad on its sole. The review's counterexample sits
+        # inside the limits and the fold identity reads it as flat, so only the DIRECTED facing
+        # separates the two -- and the verdict is checked on both reads that carry it (the FK state and
+        # the closed form), because they are the same quantity and were allowed to drift apart.
+        sigma_flip = math.pi + math.atan2(normal[1], -normal[2])
+        flip = [0.0, 0.6, 1.2, sigma_flip - 1.8, 0.0]
+        assert all(joint["limits"][0] <= angle <= joint["limits"][1] for joint, angle in zip(chain, flip)), \
+            (leg, flip, "the flipped counterexample is no longer inside the limits")
+        flipped = pad_state(chain, flip, normal, vertices, 0.9)
+        assert abs(fold_tilt(normal, sigma_flip, 0.0)) < 0.5, (leg, "the counterexample is not flat")
+        assert flipped["facing_cos"] < -0.9, (leg, flipped["facing_cos"], "the flip is not facing up")
+        assert not faces_down(flipped["facing_cos"], 10.0), (leg, "a pad on its back was accepted")
+        assert not faces_down(fold_tilt_cos(normal, sigma_flip, 0.0), 10.0), \
+            (leg, "the closed form accepted the flipped pad")
+        assert zero["facing_cos"] - flipped["facing_cos"] > 1.8, \
+            (leg, zero["facing_cos"], flipped["facing_cos"])
+        assert faces_down(1.0, 10.0) and not faces_down(0.9, 10.0) and faces_down(0.9, 30.0), leg
+        # The body's attitude is part of the read, not an assumption this file gets to make: rolled by
+        # phi about x, the pad's facing takes the hand-written Rx row, and so does the world height of
+        # every pad vertex. Both are asserted at a NON-zero pose (at the zero pose the link rotation is
+        # the identity and the second assertion would not exercise a rotation at all).
+        roll = 0.3
+        posed = pad_state(chain, [0.2, 0.3, 0.4, -0.2, 0.1], normal, vertices, 0.9)
+        rolled = pad_state(chain, [0.2, 0.3, 0.4, -0.2, 0.1], normal, vertices, 0.9, base_rpy=(roll, 0.0, 0.0))
+        expected_facing = posed["facing_cos"] * math.cos(roll) - posed["normal"][1] * math.sin(roll)
+        assert abs(rolled["facing_cos"] - expected_facing) < 1e-12, (leg, rolled["facing_cos"], expected_facing)
+        link_rotation = [[posed["frames"][-1][i][j] for j in range(3)] for i in range(3)]
+        position = posed["position"]
+        hand_low = min(0.9 + (position[1] + sum(link_rotation[1][k] * vertex[k] for k in range(3)))
+                       * math.sin(roll)
+                       + (position[2] + sum(link_rotation[2][k] * vertex[k] for k in range(3)))
+                       * math.cos(roll) for vertex in vertices)
+        assert abs(rolled["lowest_z"] - hand_low) < 1e-12, (leg, rolled["lowest_z"], hand_low)
         # The knee's straight pose, against the pinned per-leg facts: the limit over-runs it, and the
         # other end of the range is a fold. A regeneration that moves an origin must trip these.
         straight = math.degrees(straight_hfe(chain))
@@ -424,17 +664,185 @@ def self_check(urdf: pathlib.Path) -> None:
         tilt = math.degrees(math.acos(-normal[2] / math.sqrt(sum(v * v for v in normal))))
         print("  %s zero-pose pad origin %s  quarter-turn %s  limits %s"
               % (leg, ["%+.6f" % v for v in zero_position], ["%+.6f" % v for v in turned_position], limits))
-        print("      pad normal %s -> %.2f deg off the link's -z  tilt %.2f deg  lowest %+.4f m  "
-              "hip lever %.4f m"
-              % (["%+.4f" % v for v in normal], tilt, zero["tilt_deg"], zero["lowest_z"], lever))
+        print("      pad normal %s -> %.2f deg off the link's -z  tilt %.2f deg to the world's down "
+              "(facing %+.3f)  lowest %+.4f m  hip lever %.4f m"
+              % (["%+.4f" % v for v in normal], tilt, zero["tilt_deg"], zero["facing_cos"],
+                 zero["lowest_z"], lever))
+        print("      flipped counterexample in the box: fold_tilt %.2f deg (undirected), facing %+.3f "
+              "-> %s" % (fold_tilt(normal, sigma_flip, 0.0), flipped["facing_cos"],
+                         "rejected" if not faces_down(flipped["facing_cos"], 10.0) else "ACCEPTED"))
+        print("      hinges vs the body's z: haa/hfe/kfe %.4f/%.4f/%.4f deg (90 = the plane the three "
+              "of them span contains the body's z)"
+              % tuple(hinge_vs_body_z(chain, zero_angles, i) for i in (1, 2, 3)))
         print("      knee: straight at %+.4f deg, the +-1.2 rad limit over-runs it by %.4f deg, "
               "folded end %.2f deg" % (straight, over_run, folded))
+    # A joint's own frame may be rotated, and then the axis is stated in it: composed, not ignored.
+    yawed = [{"name": "t", "token": "t", "origin": [0.0, 0.0, 0.0], "rpy": [0.0, 0.0, math.pi / 2],
+              "axis": [1.0, 0.0, 0.0], "limits": (-1.0, 1.0)}]
+    rotation = foot_pose(yawed, [0.0])[1]
+    assert abs(rotation[0][1] + 1.0) < 1e-12 and abs(rotation[1][0] - 1.0) < 1e-12, rotation
+    _candidate_chain_check(urdf)
     print("[SELF-CHECK] zero pose equals the origin sum, a quarter hip turn rotates about the hip "
           "axis, the hip leaves the tilt alone, a body-height shift moves the pad with it, each "
           "joint's dp/dq equals its own lever arm, the tilt is the fold sum's alone (a blade stroke "
           "worth 1-3 deg against a 30-50 deg fold), the motion plane never tilts (haa's axis stays "
-          "turned about the body's z over the hip's whole range), and the knee's straight pose is "
-          "not at zero")
+          "turned about the body's z over the hip's whole range), the knee's straight pose is not at "
+          "zero, a pad flat on its BACK is rejected while the same pad on its sole is accepted, the "
+          "body's roll enters the facing and the pad height by the hand-written Rx row, a joint's rpy "
+          "is composed before its axis, and a candidate chain with an inserted femoral rotation loads "
+          "and leaves the hinge plane's 90 deg")
+
+
+def _grid_poses(chain: list[dict], grid_tokens: tuple[str, ...], samples: int):
+    """Every pose of the grid: ``samples`` values per gridded joint, endpoints included, the rest 0.
+
+    Joints outside the grid are held at zero, and that is what makes two candidates comparable: the
+    shared joints carry the same values in both, while each candidate's own extra joint is read on its
+    own afterwards instead of being folded into the shared numbers.
+    """
+    per_joint = []
+    for joint in chain:
+        low, high = joint["limits"]
+        if joint["token"] in grid_tokens and samples > 1:
+            per_joint.append([low + (high - low) * step / (samples - 1) for step in range(samples)])
+        else:
+            per_joint.append([0.0])
+    return list(itertools.product(*per_joint))
+
+
+def _candidate_read(path: pathlib.Path, chain: list[dict], tokens: tuple[str, ...], leg: str,
+                    grid_tokens: tuple[str, ...], samples: int, base_z: float) -> dict:
+    """One chain over the grid: where its pad reaches, which way it faces, and its hinge-vs-body-z."""
+    normal, vertices = pad_normal_in_link(path, leg), pad_vertices(path, leg)
+    spans = [[], [], []]
+    facings, hinges = [], []
+    for angles in _grid_poses(chain, grid_tokens, samples):
+        state = pad_state(chain, list(angles), normal, vertices, base_z)
+        for i in range(3):
+            spans[i].append(state["position"][i])
+        facings.append(state["facing_cos"])
+        for token in HINGES:
+            if token in grid_tokens:
+                hinges.append((hinge_vs_body_z(chain, list(angles), tokens.index(token)), token))
+    return {"poses": len(facings), "spans": [(min(values), max(values)) for values in spans],
+            "facings": facings, "hinge_worst": min(hinges) if hinges else None}
+
+
+def _extra_read(chain: list[dict], tokens: tuple[str, ...], extra: list[str], samples: int) -> None:
+    """The joints only this chain has, each swept ALONE: its own effect, not a pose the other can take."""
+    for token in extra:
+        low, high = next(joint for joint in chain if joint["token"] == token)["limits"]
+        values = [low + (high - low) * step / (samples - 1) for step in range(samples)] \
+            if samples > 1 else [0.0]
+        worst = (90.0, "-", 0.0)
+        for value in values:
+            angles = [0.0] * len(tokens)
+            angles[tokens.index(token)] = value
+            for hinge in HINGES:
+                if hinge in tokens:
+                    worst = min(worst, (hinge_vs_body_z(chain, angles, tokens.index(hinge)), hinge, value))
+        own = hinge_vs_body_z(chain, [0.0] * len(tokens), tokens.index(token))
+        print("  extra %-19s its own axis sits %.1f deg off the body's z at rest; swept alone over "
+              "%.2f..%.2f it drives the worst hinge (%s) to %.4f deg at %s=%+.2f"
+              % (token, own, low, high, worst[1], worst[0], token, worst[2]))
+
+
+def compare(urdf: pathlib.Path, candidate: pathlib.Path, leg: str, tol_deg: float, base_z: float,
+            samples: int = 3) -> None:
+    """Two chains read at the same body pose, height and tolerance: the reference against a candidate.
+
+    Only the joints BOTH chains have are gridded, so the shared part of every pose is identical and the
+    reads can be subtracted; a joint only one of them carries is reported on its own, never folded into
+    the shared numbers -- that is how an inserted axis collects credit it has not earned.
+
+    It reads STRUCTURE, not the target action, so a wider reachable set is not a verdict: nothing here
+    says a pose is one the animal makes, and a bone length, body height or collision shape that differs
+    between the two candidates is a second change this cannot separate out. Whether the hinge plane's
+    departure from the body's z is worth an axis is decided by fitting a target sequence, not here.
+    """
+    reference, other = load_chain(urdf, leg), load_chain(candidate, leg)
+    tokens_a = tuple(joint["token"] for joint in reference)
+    tokens_b = tuple(joint["token"] for joint in other)
+    shared = tuple(token for token in tokens_a if token in tokens_b)
+    print("=== COMPARE leg %s | body z %.3f m | tolerance %.0f deg | %d values per joint ==="
+          % (leg, base_z, tol_deg, samples))
+    print("  shared joints (gridded): %s" % " ".join(shared))
+    for name, path, chain, tokens in ((urdf.name + " (reference)", urdf, reference, tokens_a),
+                                      (candidate.name + " (candidate)", candidate, other, tokens_b)):
+        read = _candidate_read(path, chain, tokens, leg, shared, samples, base_z)
+        flipped = sum(1 for facing in read["facings"] if facing < 0)
+        accepted = sum(1 for facing in read["facings"] if faces_down(facing, tol_deg))
+        print("  %-26s %4d poses | pad span (base_link) %s m | facing %+.3f..%+.3f (%d flipped, "
+              "%d/%d accepted) | hinge vs body z min %.4f deg"
+              % (name, read["poses"],
+                 " ".join("%s %.3f" % (axis, high - low)
+                          for axis, (low, high) in zip("xyz", read["spans"])),
+                 min(read["facings"]), max(read["facings"]), flipped, accepted, read["poses"],
+                 read["hinge_worst"][0] if read["hinge_worst"] else float("nan")))
+        extra = [token for token in tokens if token not in shared]
+        if extra:
+            _extra_read(chain, tokens, extra, samples)
+        else:
+            print("  %-26s extra joints: none" % "")
+    print("  not a verdict: reachability and the hinge plane only -- no target action, no bone length "
+          "comparison, no collision and no dynamics")
+
+
+def break_test(urdf: pathlib.Path) -> int:
+    """Perturb what this file's verdicts rest on; every one must make :func:`self_check` fail.
+
+    A check nobody has seen fail is not evidence of anything, and the work item this tool serves asks
+    that counterexamples be able to fail the acceptance. Each case below is one reading put back the
+    way it was wrong before (or wrong in the way it is easy to be wrong again); a case that leaves
+    ``self_check`` green is a hole in the caliber pass, printed and returned as a failure.
+    """
+    identity = [[1.0 if i == j else 0.0 for j in range(3)] for i in range(3)]
+    real = {name: globals()[name]
+            for name in ("faces_down", "_rpy_matrix", "pad_state", "chain_joint_names")}
+    def no_attitude(*args, **kwargs):
+        """``pad_state`` with the body's attitude dropped: the level-body assumption, put back."""
+        kwargs = {name: value for name, value in kwargs.items() if name != "base_rpy"}
+        return real["pad_state"](*args[:5], **kwargs)
+
+    cases = [
+        ("a sign-blind facing verdict",
+         {"faces_down": lambda cos_value, tol: abs(cos_value) >= math.cos(math.radians(tol))}),
+        ("a joint's rpy read as zero",
+         {"_rpy_matrix": lambda rpy: identity}),
+        ("the body's attitude dropped",
+         {"pad_state": no_attitude}),
+        ("the chain taken from the asset's token list, not the tree",
+         {"chain_joint_names": lambda _urdf, leg: tuple(f"{leg}_{token}_joint" for token in CHAIN)}),
+    ]
+    holes = []
+    for label, patches in cases:
+        globals().update(patches)
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                self_check(urdf)
+        except (AssertionError, SystemExit):
+            print("  %-56s caught" % label)
+        else:
+            holes.append(label)
+            print("  %-56s NOT CAUGHT" % label)
+        finally:
+            globals().update(real)
+    # Not a patch: a URDF carried away from its meshes must FAIL rather than borrow another body's.
+    with tempfile.TemporaryDirectory() as folder:
+        moved = pathlib.Path(folder) / urdf.name
+        moved.write_text(urdf.read_text(encoding="utf-8"), encoding="utf-8")
+        try:
+            pad_mesh(moved, LEGS[0])
+        except SystemExit:
+            print("  %-56s caught" % "a URDF carried away from its meshes")
+        else:
+            holes.append("a URDF carried away from its meshes")
+            print("  %-56s NOT CAUGHT" % "a URDF carried away from its meshes")
+    if holes:
+        print("BREAK_TEST_FAILED: %d perturbation(s) left the self-check green" % len(holes))
+        return 1
+    print("BREAK_TEST_OK (%d perturbation(s), every one caught)" % (len(cases) + 1))
+    return 0
 
 
 def fold_reading(path: pathlib.Path, urdf: pathlib.Path, contact_n: float = 1.0) -> None:
@@ -495,9 +903,21 @@ def main() -> None:
     parser.add_argument("--urdf", type=pathlib.Path, default=DEFAULT_URDF)
     parser.add_argument("--self-check", action="store_true",
                         help="hand-computed poses; no simulator, no sweep")
+    parser.add_argument("--break-test", action="store_true",
+                        help="perturb the readings --self-check's verdicts rest on: each one must "
+                             "make it fail, or this reports the hole and exits non-zero")
     parser.add_argument("--pose", nargs=5, type=float, metavar=("HIP", "HAA", "HFE", "KFE", "FOOT"),
                         help="print one leg's pad pose at these joint angles [rad]")
     parser.add_argument("--leg", default="lf", choices=LEGS)
+    parser.add_argument("--compare", type=pathlib.Path, default=None,
+                        help="a candidate URDF, read against --urdf at the same body pose, height and "
+                             "tolerance. Joints only one of them has are reported separately")
+    parser.add_argument("--tol", type=float, default=10.0,
+                        help="how far off the world's down a pad may face and still be accepted [deg]")
+    parser.add_argument("--base_z", type=float, default=0.9,
+                        help="the body's height above the ground for the pad reads [m]")
+    parser.add_argument("--samples", type=int, default=3,
+                        help="values per joint in --compare's grid, endpoints included")
     parser.add_argument("--frames", type=pathlib.Path, default=None,
                         help="a baseline-frames-3 record: print the fold sum on its loaded frames")
     parser.add_argument("--contact_n", type=float, default=1.0,
@@ -506,16 +926,25 @@ def main() -> None:
     if args.self_check:
         self_check(args.urdf)
         return
+    if args.break_test:
+        raise SystemExit(break_test(args.urdf))
+    if args.compare is not None:
+        compare(args.urdf, args.compare, args.leg, args.tol, args.base_z, args.samples)
+        return
     if args.frames is not None:
         fold_reading(args.frames, args.urdf, args.contact_n)
         return
     if args.pose is None:
-        parser.error("nothing to do: pass --self-check, --frames or --pose")
+        parser.error("nothing to do: pass --self-check, --compare, --frames or --pose")
     chain = load_chain(args.urdf, args.leg)
     position, rotation = foot_pose(chain, args.pose)
     for i, row in enumerate(rotation):
         print("  row %d %s" % (i, ["%+.5f" % v for v in row]))
     print("  pad origin in base_link %s" % ["%+.6f" % v for v in position])
+    state = pad_state(chain, list(args.pose), pad_normal_in_link(args.urdf, args.leg),
+                      pad_vertices(args.urdf, args.leg), args.base_z)
+    print("  pad faces %+.4f of the world's down (%.2f deg off it: 0 faces down, 180 faces up)"
+          % (state["facing_cos"], state["tilt_deg"]))
 
 
 if __name__ == "__main__":
