@@ -129,7 +129,13 @@ _CLOSED_ONLY = ("outcome",)
 #: 4638. 4096 leaves room for the ~25 items the two sessions are heading for and still expires
 #: around 4 KB, where the remedy is to narrow the view -- never to cancel an item.
 #: Raised 4096 -> 5120 on 2026-09-21 with the active-set budget above (27 items, 4234 bytes).
-LIST_BYTES = 5120
+#: Raised 5120 -> 6144 on 2026-09-30: the new item (``body-swap-and-version-retire``) is decided
+#: new scope, not a duplicate -- merging it into ``asset-tree-per-family`` mixes two workstreams,
+#: and the shave the 2026-09-23 note pointed at closed with that item. Measured before the raise:
+#: 5024 bytes without it (98% of 5120), 5247 with it, its own line 222; its id alone is 29, so
+#: trimming to fit would mean narrowing ``scope`` past what the item covers. 6144 leaves ~900
+#: bytes, about four items at the current line length.
+LIST_BYTES = 6144
 #: Total bytes of ``work/active/``. A backlog alarm, **not** the default read cost (items are read
 #: on demand) and not a token budget: nobody reads the sum. It stays quiet during ordinary work
 #: and speaks up when the backlog itself is the problem. Raised 24000 -> 48000 on 2026-09-21

@@ -52,7 +52,7 @@
 | `ablation_harness\video_matrix.py` | 录像矩阵（**相机，不是判官**）：`--speeds` × `--terrains` 想怎么组合都行，默认最高速 × 配方平地 → 每格一段 mp4 + `matrix.json`（命令区间 / 是否在配方区间内 / 帧数 / 峰值与净位移 / 复位 / 相机）；地形挡位取套件命名列（单列板）；**不产 verdict、不写 `results/`**，产物落 `ablation_harness\videos\`（gitignore） |
 | `rl_exp\tools\launch_recipe.py` | 新启动器：目录 → 身份 → 配置侧绑定 → golden 对比 → 生命周期判定 → 记录；默认只检查（不起 sim），`--launch` 交回 fork trainer |
 | `ablation_harness\protocols\locomotion_eval_v*.yaml` | 评测协议契约（时间线 / 帧定义 / 阈值 / 套件 / DR）：v1/v2 冻结封存，v3 换真起伏套件 `lizard_suite_v2`；**改动 = 新建 v4，v1/v2/v3 不得混表**。套件定义在 `ablation_harness\suites.py` |
-| `rl_exp\tools\runrecord\` | 运行记录层（**训练路径实际调用**，不是人手跑的入口）：`manifest.py` T0/T1 记录 + `--verify` 两维度 / `lifecycle.py` 启动生命周期判定（退休线拒新训与续训）/ `binding.py` 摘要与 rev 拼写的唯一家（stdlib 栈底）/ `provenance.py` 代码来源规则 / `rebuild.py` 恢复演练（按需） |
+| `rl_exp\tools\runrecord\` | 运行记录层（**训练路径实际调用**，不是人手跑的入口）：`manifest.py` T0/T1 记录 + `--verify` 两维度 / `lifecycle.py` 启动生命周期判定（退休线或退休版本拒新训与续训）/ `binding.py` 摘要与 rev 拼写的唯一家（stdlib 栈底）/ `provenance.py` 代码来源规则 / `rebuild.py` 恢复演练（按需） |
 | `rl_exp\tools\trainlog\probe_run.py` | 训练中巡检（只读 tfevents，秒级，不起仿真）：进度 / ETA / 趋势 / 终止计数 / 课程值 / 告警 |
 | `rl_exp\tools\trainlog\dump_tb.py` | TB 事件 → `vN\tb_scalars.csv`（按 tag 抽样、**保首尾**；`--csv_in` 重抽样不需 tensorboard） |
 | `rl_exp\tools\verify\view_terrain.py` | GUI 看机器人站**指定版本的真实地形**（每 env 头向箭头 + 接触点探针 vs 碰撞栈预算） |
@@ -66,11 +66,11 @@
 
 | 闸门 | 看守什么 |
 |---|---|
-| `check_version_docs.py` | 版本文档完备 + 血统闸：每版本目录四件套（PLAN/NOTES/`<line>_params.yaml`/asset_lock）+ `base.json` 边合法 + FAMILY 版本史行 + 本文件版本行；另扫覆盖文档的闸门判词与 `ARCH_PLAN.md` 加粗状态词 |
+| `check_version_docs.py` | 版本文档完备 + 血统闸：每版本目录齐件（PLAN/NOTES/`<line>_params.yaml` + asset_lock；**退休版免锁**，状态经 `check_recipe_registry.effective_status` 读）+ `base.json` 边合法 + FAMILY 版本史行 + 本文件版本行；另扫覆盖文档的闸门判词与 `ARCH_PLAN.md` 加粗状态词 |
 | `check_cfg_lock.py` | 配方 golden 闸门（format 3 分两层：框架组合块 + 线自己的条目）；`--update` 必须带 `--line` + `--reason`；反证 `test_cfg_lock_gate.py` |
 | `check_recipe_build.py` | 构建硬闸：冻结 golden 逐字段比 + 覆盖钉数 + 逐步归属 |
 | `check_recipe_map.py` | 配方身份闸门：`ast` 读注册表（不 import），声明的 `env_cfg_entry`/`agent_entry` 与注册逐字一致；`--bind-config` 构造实例读 `params_version`；反证 `test_recipe_map_gate.py` |
-| `check_recipe_registry.py` | 实验线生命周期闸门（`lines.json` 二值 `status`，闸门无时钟）；反证 `test_recipe_registry_gate.py` |
+| `check_recipe_registry.py` | 实验线生命周期闸门（`lines.json` 二值 `status` + 版本例外只许退休，闸门无时钟）；`effective_status` 是"线状态 + 版本例外"的唯一读者（离线闸门与启动共用）；反证 `test_recipe_registry_gate.py` |
 | `check_obs_protocol.py` / `obs_protocol_live.py` | 协议闸门（自洽 + 已审锚点 + golden 逐任务 + `--live` 实构比对 + 覆盖）；live 侧起 env 读真实 manager 的组序/项序/宽度/shape。反证 `test_obs_protocol_gate.py` |
 | `check_obs_layout.py` | obs 布局静态门（读 `obs_protocols.json`，不自带副本） |
 | `check_dr_parity.py` | 契约漂移闸门（`--strict` 即 CI）：DR 行静态对比 / 两份 DR 事件名清单同步 / 全部 `*_PLAY` 接线 / 资产结构契约 / 资产锁比对 / **资产隔离**（每家族声明自己的网格树、物理 usda 内联点必须等于该树的 obj、两家族不许钉同一批文件、URDF 引用必须落在声明树内） |
