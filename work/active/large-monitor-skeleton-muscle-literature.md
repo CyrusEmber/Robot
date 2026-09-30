@@ -4,7 +4,7 @@ title: 大型陆栖巨蜥骨骼与肌肉分工的生物学文献备忘
 scope: acceptance/records, work/active
 status: open
 landing: acceptance/records/2026-09-29-large-monitor-skeleton-muscle-review.md
-next: ① **关节活动范围已检索收口**：巨蜥科被动 ROM 零命中，能借的只有 tegu/鳄类的**方法**——见 evidence 第二条，本项不再重复检索 ROM。② 仍需补的是**全身肌群分配**与**成年大个体（超越 8 kg 档）的活体步态、地面反作用力**资料，标注样本量与口径。不将单标本肌肉重量或跨物种趋势换算为机器人限位或驱动力矩。
+next: ① **关节活动范围已两轮检索收口**（2026-09-29 Europe PMC、2026-09-30 PubMed，结论一致）：巨蜥科被动 ROM 零命中，能借的只有 tegu/鳄类的**方法**，带角度的文献只有活体运动学与一例患病个体临床 ⇒ 本项不再重复检索 ROM。② 仍缺的是**全身肌群分配**与**成年大个体（超越 8 kg 档）的活体步态、地面反作用力**资料；科莫多后肢解剖（单只 30 kg 雌体）已提供一条**单标本**来源，其样本量与固定标本性质须随用随标，不与跨物种趋势或运动学数据集混用。③ 三条只到题录层的线索列在 ROM evidence 的"仍未证实"节，取到正文前不作为证据。
 close_when: 由资料审阅者核对一份带来源与样本量的文献记录，分别能回答骨段功能、前后肢及膝踝肌群分工、体型/生境效应；未找到的全身分配或正常关节角度明确标为缺证，不填猜测值。
 evidence: acceptance/records/2026-09-29-large-monitor-skeleton-muscle-review, acceptance/records/2026-09-29-varanid-joint-range-of-motion-evidence
 ---

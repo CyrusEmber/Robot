@@ -40,6 +40,29 @@ Europe PMC 全文检索 `"range of motion" AND varanid`：**11 命中，零篇�
 
 tegu 的读数说"支撑期在活动空间**内部**、摆动期才**贴边界**"；`lizard2` 的读数是**步幅轴（`hip`）被顶满、承重轴不吃紧**。同类群不同种、不同方法、不同身体 ⇒ 只能记作**方向一致**，它给"贴边界的该是摆动相而非支撑相"提供了一个可检验的先验。
 
+### 第二轮检索（2026-09-30，PubMed）
+
+**口径变化**：上一轮只用 Europe PMC REST + 单一检索式。本轮换语料与检索式；Europe PMC REST 当日**三次尝试全 503**（nginx），故改走 **PubMed**（搜索结果页）。⇒ 本轮结论只代表 PubMed，Europe PMC 需另日重试才可写"两库都查过"。
+
+| 检索式（PubMed，2026-09-30） | 命中 | 与"巨蜥限位"的关系 |
+|---|---|---|
+| `(varanid OR Varanus OR "monitor lizard") AND ("range of motion" OR "joint angle" OR "joint angles")` | **0** | 零命中（该式未经自动词映射 ⇒ 无可扩结果） |
+| `(Varanus OR varanid OR "monitor lizard") AND (kinematics OR goniometry OR XROMM OR "joint range")` | 24 | **无一篇是巨蜥关节活动范围/限位研究**：肋与脊椎 XROMM（Cieri 2018、2020）、颅骨 FEA 与咬合（Moreno 2008、McCurry 2015、Wilken 2019）、摄食与颌 kinematics（Condon 1987、Delheusy 1999、Elias 2000、Schaerlaeken 2011、Montuelle 2012）、肌架构与肌群分配（Cieri 2020、2022；Dick & Clemente 2016）、地面反作用力与 duty factor（Cieri 2021）、步态运动学（Clemente 2011/2012/2013）、后肢肌肉角色（Granatosky 2020）、转动惯量（Walter & Carrier 2002）、轴向肌电（Ritter 1996）、非巨蜥（Reilly 1998） |
+
+**新命中并已读原文（上一轮未列）**
+
+Tomańska 等 2025，*Animals* **15**(1):35，DOI `10.3390/ani15010035`，PMID 39794978：**科莫多后肢**肌骨解剖（开放获取，本轮读全文）。检索引擎摘要称其"分析 ranges of motion"，**读全文后该说法不成立**：全文没有关节角度或活动范围数值，也无线下量测手法（无测角术、无手法活动、无 CT 活动度）；`range of motion` 一词只出现在一句肌纤维长度—直径比的定性讨论里（比值高者"更大力量、更短的活动范围"）。其数据是肌重/肌长/周径、纤维直径（N=100）与**骨段与肢体比例**（后肢全长远端计 37.9 cm、`pes` 12.7 cm 占 33.5%、后肢/前肢 1.32、`pes`/`manus` 1.84、功能肢指数 40.5、步幅潜力 75.8 cm、近段/足 1.98）。样本 = **单只雌性、7 岁、30 kg、动物园自然死亡后福尔马林固定**，解剖 + X 光 + 组织学；作者自写明不得外推到物种。表 1 的小数点分隔符在重量列用逗号、直径列用点 ⇒ 取该表数字须逐列核对。
+
+⇒ 对**限位**问题这是又一条负面证据；对**骨段比例**它是新来源，但属另一类量，且是另一只动物、固定标本，不得直接搬到机器人几何。
+
+**仍未证实的新线索（不入证据）**
+
+- Wolfe 等 2015，*J Zoo Wildl Med* **46**(1):164–166，DOI `10.1638/2014-0103R.1`：科莫多骨关节炎的物理治疗。可能是**活体**关节角观察的唯一来源，但对象是**患病个体**（骨关节炎），即便有角度也不能当正常限位；页面被 Incapsula 拦，本轮未读到。
+- Granatosky 2020，*J Exp Zool A* **333**(5):325–332，DOI `10.1002/jez.2361`：活体巨蜥行走中 m. peroneus longus 的推进作用（含踝部力臂/运动学）；Wiley 站点被 Cloudflare 拦，本轮未读到。即便含角度，属"活体使用范围"，不是被动 ROM。
+- Clemente 2012，*Physiol Biochem Zool* **85**(3):265–273，DOI `10.1086/665275`：*Varanus panoptes* 0.09–5.75 kg 的冲刺运动学；摘要层未见关节角数值。
+
+**两轮一致的结论**：可达语料里**没有**巨蜥关节活动范围/限位数据。带角度的文献只有两类——**活体运动学**（用到的范围）与**患病个体的临床观察**；被动 ROM 仍为零，硬限位只能由机器人几何 + 显式工程选择给出。
+
 ## 未证实项（不入正文）
 
 搜索引擎摘要里出现、但在所引文章正文/摘要中找不到的：tegu 只用 ex vivo 平移容量约 39%；"活体只用被动 ROM 的 50–70%"；"Dick 2016 指出陆栖巨蜥踝 ROM 更大"（2016 不测 ROM）；"Dick 2016 用 3D 数字操作测被动 ROM"；Jenkins 与 Goslow 1983 是否给过后肢关节角基线（该文是**肩**的功能解剖）。以上一律**不作为证据**。
@@ -51,6 +74,10 @@ tegu 的读数说"支撑期在活动空间**内部**、摆动期才**贴边界**
 3. Clemente、Withers、Thompson、Lloyd（2011），*J Exp Biol* **214**(18):3013–3020，DOI `10.1242/jeb.059345`，PMID 21865513；11 种巨蜥，0.04–8 kg。
 4. Clemente、Withers、Thompson、Lloyd（2013），*J Exp Biol* **216**(20):3854–3862，DOI `10.1242/jeb.089060`，PMID 23868836。
 5. 鳄类后肢肌骨建模（*J Anat*）：题名来自 Europe PMC 检索命中，**作者/卷页/年份未取到**，仅作线索。
+6. Tomańska、Stawinoga、Gębarowski、Janeczek、Klećkowska-Nawrot、Goździewska-Harłajczuk、Dobrzyński（2024/2025），*Animals* **15**(1):35，DOI `10.3390/ani15010035`，PMID 39794978；科莫多后肢肌骨解剖，**单只 30 kg 雌体**尸体，**无关节角度**（第二轮已读全文，见上）。
+7. Wolfe、Stringer、Krauss、Trout（2015），*J Zoo Wildl Med* **46**(1):164–166，DOI `10.1638/2014-0103R.1`；科莫多骨关节炎物理治疗（**患病个体**，未读到，仅线索）。
+8. Granatosky（2020），*J Exp Zool A* **333**(5):325–332，DOI `10.1002/jez.2361`；活体 *Varanus exanthematicus* 行走中 m. peroneus longus（未读到，仅线索）。
+9. Clemente、Withers、Thompson（2012），*Physiol Biochem Zool* **85**(3):265–273，DOI `10.1086/665275`；*Varanus panoptes* 0.09–5.75 kg 冲刺运动学。
 
 ## 未覆盖边界
 
@@ -59,6 +86,14 @@ tegu 的读数说"支撑期在活动空间**内部**、摆动期才**贴边界**
 - tegu 证据只覆盖**髋、肩、肘**，且 Brocklehurst 是**尸体**；`haa`/`hfe`/`kfe`/`foot` 两类都没对应数据。
 - 活体的"常用范围"数值（分速度、分档的关节角）需回到 Clemente 2011/2013 原文附图，本轮只取摘要层面。
 - 本记录不改任何资产、配方或限位；判据与落点归 `work/active/joint-limit-shape-and-range-pass.md` 与 `work/active/large-monitor-skeleton-muscle-literature.md`。
+- **第二轮（2026-09-30）只查了 PubMed**：Europe PMC REST 当日 503，未重跑；"两库皆空"这句话在 Europe PMC 恢复并重跑前不成立。
+- 第二轮的三条新线索（Wolfe 2015 / Granatosky 2020 / Clemente 2012）正文均未取到（付费墙 + 反爬），只有题录层信息。
+
+## 核对痕迹（2026-09-30 补）
+
+- 第二轮语料与工具：**PubMed 检索页**（Europe PMC REST 三次 503），检索式与命中数见上表。
+- 新命中 Tomańska 2025 走 **PMC 全文**（`PMC11718905`，开放获取）逐句核对，"摘要称有 ROM" 的搜索结论被正文否掉——这是本记录要求"摘要级数字不入正文"的一次实际兑现。
+- 判据：只有**同时**给出关节角度/活动范围**且**写明量测手法的，才算限位证据；单只标本的骨段比例、肌束结构、临床病例报告都不入。
 
 ## 核对痕迹（2026-09-29）
 
