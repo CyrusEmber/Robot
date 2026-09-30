@@ -31,7 +31,7 @@ evidence: acceptance/records/2026-09-29-lizard2-pad-leveling-unreachable, accept
 
 ## 与邻近事项的边界
 
-- **结构表达限制**（远端链运动平面只能转方位角、不能相对机体倾斜；`haa`/`hfe`/`kfe` 平行共面且随 `hip` 绕机体 z 转）**不在本项**：那要动的是**自由度拓扑**，按 `versioning.mdc` §A 属换家族；本项只问踝轴/行程与需求判定。见 `acceptance/records/2026-09-30-lizard2-leg-to-anatomy-mapping.md`。
+- **结构表达限制**（远端链运动平面只能转方位角、不能相对机体倾斜；`haa`/`hfe`/`kfe` 平行共面且随 `hip` 绕机体 z 转）**不在本项**：那要动的是**自由度拓扑**，按 `versioning.mdc` 越级段属**同家族内的机体换代**（新机体走新路径、旧机体上的冻结版本同一次变更退休；2026-09-30 前写的"必换家族"已被该段取代，机制见 `work/closed/2026/body-swap-and-version-retire.md`）；本项只问踝轴/行程与需求判定。见 `acceptance/records/2026-09-30-lizard2-leg-to-anatomy-mapping.md`。
 - `lizard2-family-landing`：管 v2 配方的奖励/动作接口决定；本项是**资产几何与需求**，不是配方。
 - `asset-tree-per-family`：本项**依赖**它 —— 改轴/行程都要"生成器真跑 + 引用落在声明树内"这半边先成立。
 - `teacher-snapshot-asset-sync`：资产换代后 teacher 快照里的派生字面量同步仍人工；本项不接管那一步。
