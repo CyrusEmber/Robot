@@ -376,6 +376,24 @@ def self_check(urdf: pathlib.Path) -> None:
         assert chain[1]["axis"] == chain[2]["axis"] == chain[3]["axis"], (leg, "hinges not parallel")
         assert chain[1]["axis"] == [-1.0, 0.0, 0.0] and chain[4]["axis"] == [0.0, 1.0, 0.0], \
             (leg, "the closed form is written for the asset's own hinge and blade directions")
+        # The motion plane can be yawed but never tilted: with the hip as the body's z, `haa`'s axis in
+        # the body frame is the zero-pose hinge turned about that z, so its z component stays zero over
+        # the whole hip range and the plane the three parallel hinges span always contains the body's z.
+        # The premise is asserted above (a level-hip turn leaves the tilt alone) and to the left (the
+        # hinges are parallel and `haa` is a literal -X); what this adds is the literal on the hip's own
+        # axis plus the regression across the range, endpoints included because a limit is where a
+        # rebuild would drift first. A break test (hip axis perturbed to `0 0.3 1`) fails, but at the
+        # level-hip-tilt assertion rather than here -- this one is the backstop, not the first guard.
+        assert chain[0]["axis"] == [0.0, 0.0, 1.0], (leg, chain[0]["axis"], "hip is not the body's z")
+        hinge = _unit(chain[1]["axis"])
+        low, high = chain[0]["limits"]
+        for hip in (low, low / 2.0, 0.0, high / 2.0, high):
+            axis_at = joint_effect(chain, [hip, 0.0, 0.0, 0.0, 0.0], 1, normal, vertices)[2]
+            turned = _rotation_about([0.0, 0.0, 1.0], hip)
+            expected = [sum(turned[i][k] * hinge[k] for k in range(3)) for i in range(3)]
+            assert abs(axis_at[2]) < 1e-12, (leg, hip, axis_at, "the motion plane tilted")
+            assert all(abs(axis_at[i] - expected[i]) < 1e-9 for i in range(3)), \
+                (leg, hip, axis_at, expected)
         for sigma in (-0.9, -0.35, 0.0, 0.31, 0.62):
             for foot in (-0.5, -0.2, 0.0, 0.17, 0.5):
                 spread = pad_state(chain, [0.11, sigma, 0.0, 0.0, foot], normal, vertices, 0.9)
@@ -414,7 +432,9 @@ def self_check(urdf: pathlib.Path) -> None:
     print("[SELF-CHECK] zero pose equals the origin sum, a quarter hip turn rotates about the hip "
           "axis, the hip leaves the tilt alone, a body-height shift moves the pad with it, each "
           "joint's dp/dq equals its own lever arm, the tilt is the fold sum's alone (a blade stroke "
-          "worth 1-3 deg against a 30-50 deg fold), and the knee's straight pose is not at zero")
+          "worth 1-3 deg against a 30-50 deg fold), the motion plane never tilts (haa's axis stays "
+          "turned about the body's z over the hip's whole range), and the knee's straight pose is "
+          "not at zero")
 
 
 def fold_reading(path: pathlib.Path, urdf: pathlib.Path, contact_n: float = 1.0) -> None:
