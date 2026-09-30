@@ -23,7 +23,7 @@
 
 ### ① 恒等式（自检里逐位验证）
 
-腿链 `hip(Z) → haa(−X) → hfe(−X) → kfe(−X) → foot(+Y)`（`lizard2.urdf:415,422,429,436`），三个铰同轴可加，
+腿链 `hip(Z) → haa(−X) → hfe(−X) → kfe(−X) → foot(+Y)`（`lizard2.urdf:415,422,429,436`），三个铰**平行且共面**、角可加，
 脚板 link 相对机体的姿态 = `Rz(hip)·Rx(SIGMA)·Ry(foot)`，`SIGMA = haa + hfe + kfe`
 ⇒ 机体水平时，脚掌法线相对机体竖直的倾角只由这三个数决定：
 
@@ -67,7 +67,7 @@ cos(tilt) = ny·sin(SIGMA) + (nx·sin(foot) − nz·cos(foot))·cos(SIGMA)     (
 
 ### ③ 连带量到的几何事实：hfe 的限位越过膝伸直位
 
-三铰同轴 ⇒ "伸直"是 `hfe` 把大小腿转成共线、**不是零位**（零位本身已弯），所以"限位有没有越过伸直"必须逐腿算。
+三铰**平行共面** ⇒ "伸直"是 `hfe` 把大小腿转成共线、**不是零位**（零位本身已弯），所以"限位有没有越过伸直"必须逐腿算。
 逐腿数值、网格止挡与行为读数归 `2026-09-29-lizard2-hfe-knee-limit.md`（它同时更正了 pad 记录的 hfe 行），
 取值与是否重训归 `work/active/joint-limit-shape-and-range-pass.md` —— 本记录不复述那批数。
 

@@ -48,4 +48,5 @@ evidence: acceptance/records/2026-09-30-lizard2-leg-to-anatomy-mapping, acceptan
 - `leg-chain-symmetry-convention`：生成器只能有**一处**腿侧判据（`joint_spec` 按后缀查一条 spec、四腿共用，`:227-228`）；逐腿非对称（左右共线角正负不同）只能落在这一处，不要各写一套。
 - `large-monitor-skeleton-muscle-literature`：生物学侧的补证与证据边界归它；本项只用它已收口的结论，不重复检索。
 - `asset-tree-per-family`：任何换代的共用前置（生成器真跑）。
+- `body-swap-and-version-retire`（另一会话在办）：提议把"构型变更必换家族"改成"采用新机体 ⇒ 依赖旧机体的版本退休"。本项与映射记录里"若要做结构改动 ⇒ 换家族"按**现行** §A 写；**该提议落地后需回改这两处**。谁改结构自由度、退休范围怎么算，归那条，不归本项。
 - `hfe-extension-stop-not-validated`：已并入本项（见 `work/closed/2026/`），不另立正文。

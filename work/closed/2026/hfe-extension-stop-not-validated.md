@@ -5,7 +5,7 @@ scope: rl_exp/versions/lizard2, rl_exp/blender, rl_exp/tools/diagnose, rl_exp/to
 status: superseded
 landing: rl_exp/blender/generate_urdf.py, rl_exp/versions/lizard2/lizard2.urdf, rl_exp/assets/lizard2/lizard2.usda
 close_when: (a) 伸展端（以及是否含屈曲端/kfe）的取值被选定且落点可查（生成器 + URDF/USD + 锁）；(b) 若动物理：历史 run 的可复现性影响与"重训 or 只重评"写明；(c) 未取值的那一端显式收口（判掉，或写成口径前提）。
-outcome: 并入 `joint-limit-shape-and-range-pass`（2026-09-29）：范围从"膝伸展端一处"扩到全关节，理由是**同源无推导 + 约束形状不对**（髋之后 `haa`/`hfe`/`kfe` 同轴 ⇒ 平面链，逐关节盒表达不了物理止挡）。三档代价、取值与重训取舍随内容移交，本项未作独立决策。
+outcome: 并入 `joint-limit-shape-and-range-pass`（2026-09-29）：范围从"膝伸展端一处"扩到全关节，理由是**同源无推导**，以及**约束形状**（髋之后 `haa`/`hfe`/`kfe` 平行共面 ⇒ 腿是一条平面链，"逐关节盒表达不了物理止挡"当时写作结论、现降级为待验证假设）。三档代价、取值与重训取舍随内容移交，本项未作独立决策。
 superseded_by: joint-limit-shape-and-range-pass
 evidence: acceptance/records/2026-09-29-lizard2-hfe-knee-limit, acceptance/records/2026-09-29-lizard2-pad-leveling-unreachable, acceptance/records/2026-09-29-lizard2-pad-tilt-is-the-fold-sum
 depends_on: asset-tree-per-family

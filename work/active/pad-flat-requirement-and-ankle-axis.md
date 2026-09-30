@@ -21,7 +21,7 @@ evidence: acceptance/records/2026-09-29-lizard2-pad-leveling-unreachable, accept
 本项只收**决定与它落在哪**：需求判定、轴/行程的取舍、以及"若不动轴"时口径要怎么说清。
 
 **更正（2026-09-29，② 的可测形式）**：本项原先按"掌面能否贴地"问，而上游的倾角本身是一个**标量** ——
-三个铰同轴可加 ⇒ 机体水平时倾角只由折腿和 `SIGMA = haa + hfe + kfe` 与脚板角决定（髋不进、怎么分配也不进），
+三个铰**平行共面**、角可加 ⇒ 机体水平时倾角只由折腿和 `SIGMA = haa + hfe + kfe` 与脚板角决定（髋不进、怎么分配也不进），
 且现成策略已在其中一条腿上做到平放 ⇒ ② 的**容差层可以直接写成 `SIGMA` 的容差**（可从帧记录直接算、
 零资产、零新关节），"掌面能否平放"是它的**推论**而不是前提。另一条：脚板关节对倾角只有 `cos(foot)` 一条通道，
 在本资产的法线朝向下它的最优角就是自己的零位 ⇒ "给脚板换轴/加行程"不是平放的必要条件。
@@ -31,6 +31,7 @@ evidence: acceptance/records/2026-09-29-lizard2-pad-leveling-unreachable, accept
 
 ## 与邻近事项的边界
 
+- **结构表达限制**（远端链运动平面只能转方位角、不能相对机体倾斜；`haa`/`hfe`/`kfe` 平行共面且随 `hip` 绕机体 z 转）**不在本项**：那要动的是**自由度拓扑**，按 `versioning.mdc` §A 属换家族；本项只问踝轴/行程与需求判定。见 `acceptance/records/2026-09-30-lizard2-leg-to-anatomy-mapping.md`。
 - `lizard2-family-landing`：管 v2 配方的奖励/动作接口决定；本项是**资产几何与需求**，不是配方。
 - `asset-tree-per-family`：本项**依赖**它 —— 改轴/行程都要"生成器真跑 + 引用落在声明树内"这半边先成立。
 - `teacher-snapshot-asset-sync`：资产换代后 teacher 快照里的派生字面量同步仍人工；本项不接管那一步。
