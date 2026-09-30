@@ -17,6 +17,14 @@ the clock. The runtime side reads the status it found at startup and never re-re
 the 2.2 table and the running trainer cannot disagree. What identifies a directory in the record
 is the content digest of its two files, not a counter someone has to remember to bump.
 
+Version-level exceptions ride in each entry's ``versions`` map (``null`` when there are none):
+an exception may only **retire** a version -- ``active`` is what inheriting the line's status
+already means -- and it carries the same evidence a retired line does. There is one exception
+type on purpose: algorithm, body or recipe-plan reasons all mean the same thing (this version is
+out; it is not trained again, and nothing is promised about re-running it), so the *reason* is
+prose in ``reason``, never a classification field. :func:`effective_status` is the single reader
+of "line status + version exception", so a gate and a launch cannot answer differently.
+
 Refusals, all of them deliberate:
 
 * A discovered line with no entry is rejected -- missing lifecycle must never read as
@@ -24,6 +32,7 @@ Refusals, all of them deliberate:
 * ``active`` and ``retired`` carry mutually exclusive evidence: a retired line names its
   date and reason, an active line carries neither.
 * A ``successor`` must be a different, registered line that is itself active.
+* A version exception must retire a version this line actually has, with a date and a reason.
 """
 
 from __future__ import annotations
@@ -42,7 +51,8 @@ _REPO = pathlib.Path(__file__).resolve().parents[3]
 REGISTRY = _REPO / "rl_exp" / "versions" / "lines.json"
 FORMAT_VERSION = 1
 STATUSES = ("active", "retired")
-ENTRY_KEYS = ("status", "successor", "retired_at", "reason")
+ENTRY_KEYS = ("status", "successor", "retired_at", "reason", "versions")
+VERSION_KEYS = ("status", "retired_at", "reason")
 
 
 def _date(text) -> _dt.date | None:
@@ -55,7 +65,41 @@ def _date(text) -> _dt.date | None:
         return None
 
 
-def _check_entry(key: str, entry, entries: dict, out: list[str]) -> None:
+def _check_versions(key: str, versions, line, out: list[str]) -> None:
+    """Validate one line's version-level exceptions against every rule."""
+    if versions is None:
+        return
+    if not isinstance(versions, dict):
+        out.append(f"{key}: versions must be null or an object keyed by version")
+        return
+    known = set(getattr(line, "versions", {}) or {})
+    for version in sorted(versions):
+        tag = f"{key}/{version}"
+        entry = versions[version]
+        if version not in known:
+            out.append(f"{tag}: exception names no version of this line (dangling or misspelled)")
+        if not isinstance(entry, dict):
+            out.append(f"{tag}: exception must be an object")
+            continue
+        missing = [name for name in VERSION_KEYS if name not in entry]
+        extra = sorted(set(entry) - set(VERSION_KEYS))
+        if missing:
+            out.append(f"{tag}: exception is missing {missing} (state it explicitly, null included)")
+        if extra:
+            out.append(f"{tag}: exception carries unknown fields {extra} (run-scoped data belongs in the run record)")
+        if missing or extra:
+            continue
+        if entry["status"] != "retired":
+            out.append(f"{tag}: exception status {entry['status']!r} is not 'retired' -- inheriting the "
+                       "line's status is what active already means")
+            continue
+        if _date(entry["retired_at"]) is None:
+            out.append(f"{tag}: retired needs retired_at as an ISO date, got {entry['retired_at']!r}")
+        if not isinstance(entry["reason"], str) or not entry["reason"].strip():
+            out.append(f"{tag}: retired needs a reason (why this version is out)")
+
+
+def _check_entry(key: str, entry, entries: dict, line, out: list[str]) -> None:
     """Validate one line entry against every lifecycle rule."""
     if not isinstance(entry, dict):
         out.append(f"{key}: entry must be an object")
@@ -93,6 +137,40 @@ def _check_entry(key: str, entry, entries: dict, out: list[str]) -> None:
         elif isinstance(entries[successor], dict) and entries[successor].get("status") != "active":
             out.append(f"{key}: successor {successor!r} is not active")
 
+    _check_versions(key, entry["versions"], line, out)
+
+
+def effective_status(registry, key: str, version: str | None) -> str | None:
+    """The status that decides a launch of ``version`` on line ``key``.
+
+    The one reader of "line status + version exception": a version exception wins for that
+    version, everything else inherits the line's status. The line's ``retired`` outranks every
+    exception -- an exception is a claim about one version of a line that is still running, and
+    reading it as "active" would let a hand-edited index put a retired line back into service.
+    That case is reachable: the gates that call this one do not all run :func:`validate` first.
+    ``None`` means the index cannot answer (unknown line, missing entry, invented status, an
+    exception that is not a status) and every caller must refuse rather than default to ``active``.
+    """
+    entries = (registry or {}).get("lines")
+    if not isinstance(entries, dict) or key not in entries:
+        return None
+    entry = entries[key]
+    if not isinstance(entry, dict):
+        return None
+    line_status = entry.get("status")
+    if line_status not in STATUSES:
+        return None
+    if line_status == "retired":
+        return "retired"
+    if version is not None:
+        exceptions = entry.get("versions")
+        if isinstance(exceptions, dict) and version in exceptions:
+            chosen = exceptions[version]
+            if isinstance(chosen, dict) and chosen.get("status") in STATUSES:
+                return chosen["status"]
+            return None  # an exception this reader cannot parse must not fall back to the line's status
+    return line_status
+
 
 def validate(registry, lines) -> list[str]:
     """Every lifecycle problem in one pass (empty list = the index is consistent).
@@ -118,7 +196,7 @@ def validate(registry, lines) -> list[str]:
     for key in sorted(set(entries) - set(lines)):
         out.append(f"{key}: lifecycle entry names no recipe line in this tree (dangling or misspelled)")
     for key in sorted(set(entries) & set(lines)):
-        _check_entry(key, entries[key], entries, out)
+        _check_entry(key, entries[key], entries, lines[key], out)
     return out
 
 

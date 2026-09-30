@@ -49,6 +49,13 @@ SIDE_TASK = "Lizard-Parkour-Climb-v1"
 MAIN_RECIPE = "teacher-v14@1"
 SIDE_RECIPE = "climb-v1@1"
 _TASKS = {MAIN_RECIPE: TASK, SIDE_RECIPE: SIDE_TASK}
+#: the version each fixture recipe declares, exactly as the real map states it (``legacy_task_version``)
+_RECIPE_VERSION = {MAIN_RECIPE: "v14", SIDE_RECIPE: "v1"}
+
+
+def _version_retire() -> dict:
+    """One version-level exception, the only kind that exists."""
+    return {"status": "retired", "retired_at": "2026-09-30", "reason": "the body it was trained on is gone"}
 
 
 class _AgentCfg:
@@ -85,7 +92,7 @@ def _tree(tmp: pathlib.Path, *, lines: dict, recipes: dict) -> pathlib.Path:
                         "line": line,
                         "env_cfg_entry": "pkg.mod:Cfg",
                         "agent_entry": "pkg.mod:Agent",
-                        "legacy_task_version": None,
+                        "legacy_task_version": _RECIPE_VERSION.get(key),
                     }
                     for key, line in recipes.items()
                 },
@@ -147,6 +154,7 @@ def main() -> int:
         tmp = pathlib.Path(tmp_dir)
         failures.extend(_identity_cases(tmp))
         failures.extend(_retired_cases(tmp))
+        failures.extend(_version_cases(tmp))
         failures.extend(_flag_cases(tmp))
         with active_index(tmp):
             failures.extend(_trainer_cases(tmp))
@@ -232,6 +240,42 @@ def _retired_cases(tmp: pathlib.Path) -> list[str]:
         problems.append(f"the real retired line must refuse with its identity: {verdict!r} {evidence!r}")
     if "successor" in verdict.reason:
         problems.append(f"the refusal must not promise a successor the index does not register: {verdict!r}")
+    return problems
+
+
+def _version_cases(tmp: pathlib.Path) -> list[str]:
+    """Retiring ONE version refuses its own launch, and only its own.
+
+    The version is an exception inside a line that stays active -- the shape this item exists for
+    (a body swap retires the versions trained on the old body while the line keeps training) -- so
+    the case has to show both halves: the retired version refuses, and a version that exception does
+    not name still runs, or the exception would be indistinguishable from retiring the line.
+    """
+    problems: list[str] = []
+    retired = _tree(
+        tmp / "version-retired",
+        lines={MAIN: _entry(versions={"v14": _version_retire()})},
+        recipes={MAIN_RECIPE: MAIN, SIDE_RECIPE: SIDE},
+    )
+
+    verdict, evidence = _gate(tmp, directory=retired)
+    if verdict.allowed or "refusing new_train" not in verdict.reason:
+        problems.append(f"new training on a retired version must be refused, got {verdict!r}")
+    if (evidence["line"], evidence["version"], evidence["status"]) != (MAIN, "v14", "retired"):
+        problems.append(f"the refusal must name the version and the composed status: {evidence!r}")
+
+    verdict, _ = _gate(tmp, directory=retired, agent_cfg=_AgentCfg(resume=True))
+    if verdict.allowed or "refusing resume" not in verdict.reason:
+        problems.append(f"a resume of a retired version must be refused, got {verdict!r}")
+
+    sibling = _tree(
+        tmp / "version-sibling",
+        lines={MAIN: _entry(versions={"v8": _version_retire()})},
+        recipes={MAIN_RECIPE: MAIN, SIDE_RECIPE: SIDE},
+    )
+    verdict, evidence = _gate(tmp, directory=sibling)
+    if not verdict.allowed or evidence["status"] != "active":
+        problems.append(f"an exception scoped to another version must not refuse this one: {verdict!r} {evidence!r}")
     return problems
 
 

@@ -28,8 +28,9 @@ Run:
 
 Exit code is 0 only when the arrangement is coherent: every penalty body has a collider, every
 contacting body is covered by a penalty term or is a foot, and the run measured contact at all.
-Task-parameterised (the family and URDF come off the task's own spawn path), so the same command
-runs on any family -- a retired line is not refused here because building an env is not training.
+Task-parameterised (the family comes off the task's declared route, the URDF off that family's
+directory), so the same command runs on any family -- a retired line is not refused here because
+building an env is not training.
 """
 
 import argparse
@@ -55,6 +56,7 @@ import torch  # noqa: E402
 
 from pxr import Usd, UsdPhysics  # noqa: E402
 
+from rl_exp.tasks import obs_protocol  # noqa: E402  (task -> family, the declared route)
 from rl_exp.tools.verify.baseline_runtime import resolve_task_cfg  # noqa: E402
 
 PROBLEMS: list[str] = []
@@ -148,7 +150,16 @@ def main() -> int:
     num_envs = args_cli.num_envs
 
     usd_path = pathlib.Path(str(cfg.scene.robot.spawn.usd_path))
-    family = usd_path.parent.name
+    # The family comes off the task's declared route, not off the spawn path: ``assets/<family>/
+    # <family>.usda`` happens to name the family in the parent directory today, so the two agree for
+    # every version now -- but that is a coincidence of the layout, and a per-version body (or a usd
+    # named after anything else) would send this probe looking for another family's URDF.
+    family = obs_protocol.family_of(args_cli.task)
+    if not family:
+        raise SystemExit(
+            f"task {args_cli.task} declares no line, so no family to read assets from"
+            f" (spawn path {usd_path} is not an identity)"
+        )
     urdf = pathlib.Path(__file__).resolve().parents[2] / "versions" / family / f"{family}.urdf"
     if not urdf.exists():
         raise SystemExit(f"no urdf beside the task's asset: {urdf} (task {args_cli.task})")

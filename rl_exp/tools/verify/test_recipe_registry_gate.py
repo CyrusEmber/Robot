@@ -13,7 +13,12 @@ index.
 
 The one property a reviewer cannot see by reading the happy path gets its own cases: ``active``
 and ``retired`` carry mutually exclusive evidence, and a ``successor`` is a claim about another
-line that has to hold up.
+line that has to hold up. The version-level exceptions get the same treatment: they may only
+retire a version of their own line with a date and a reason, and carrying a classification field
+is a refusal -- the reason is prose in ``reason``, so re-introducing a type field goes red here
+rather than becoming a second thing to keep in step. ``effective_status`` (the reader the gates
+and a launch share) gets its own table, including the case it must refuse instead of falling back
+to the line's status.
 """
 
 from __future__ import annotations
@@ -24,7 +29,7 @@ import tempfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from check_recipe_registry import validate  # noqa: E402
+from check_recipe_registry import effective_status, validate  # noqa: E402
 from recipe_lines import discover  # noqa: E402
 
 MAIN = "lizard/main"
@@ -47,7 +52,7 @@ def _tree(tmp: pathlib.Path) -> dict:
 
 
 def _entry(**over) -> dict:
-    entry = {"status": "active", "successor": None, "retired_at": None, "reason": None}
+    entry = {"status": "active", "successor": None, "retired_at": None, "reason": None, "versions": None}
     entry.update(over)
     return entry
 
@@ -61,6 +66,13 @@ def _registry(main=None, side=None, fmt: int = 1) -> dict:
 
 def _retired(**over) -> dict:
     entry = _entry(status="retired", retired_at="2026-09-16", reason="superseded by the new line")
+    entry.update(over)
+    return entry
+
+
+def _v(**over) -> dict:
+    """One version-level exception: retiring ONE version is the only thing it may say."""
+    entry = {"status": "retired", "retired_at": "2026-09-30", "reason": "algorithm superseded"}
     entry.update(over)
     return entry
 
@@ -83,6 +95,21 @@ CASES: list[tuple[str, dict, str | None]] = [
     ("successor points at itself", _registry(main=_retired(successor=MAIN)), "points at itself"),
     ("successor is itself retired", _registry(main=_retired(successor=SIDE), side=_retired()),
      f"{SIDE!r} is not active"),
+    # -- version exceptions: retire one version, nothing else -------------------------
+    ("a version exception that tries to stay active", _registry(main=_entry(versions={"v0": _v(status="active")})),
+     "is not 'retired'"),
+    ("a version exception naming no version of this line", _registry(main=_entry(versions={"v9": _v()})),
+     "names no version"),
+    ("a version exception missing a field", _registry(main=_entry(versions={"v0": {"status": "retired"}})),
+     "exception is missing"),
+    ("a version exception without a reason", _registry(main=_entry(versions={"v0": _v(reason="   ")})), "needs a reason"),
+    ("a version exception with a non-date", _registry(main=_entry(versions={"v0": _v(retired_at="yesterday")})),
+     "as an ISO date"),
+    ("a version exception that is not an object", _registry(main=_entry(versions={"v0": "retired"})),
+     "exception must be an object"),
+    ("versions that are not an object", _registry(main=_entry(versions=[])), "must be null or an object"),
+    ("a version exception carrying a classification field",
+     _registry(main=_entry(versions={"v0": _v(scope="body")})), "unknown fields"),
     # -- format ----------------------------------------------------------------------
     ("registry format changed without this gate", _registry(fmt=2), "format"),
     # -- the clean shapes ------------------------------------------------------------
@@ -90,6 +117,23 @@ CASES: list[tuple[str, dict, str | None]] = [
     ("a retired line that states its date and reason", _registry(main=_retired()), None),
     ("a retired line pointing at an active successor",
      _registry(main=_retired(successor=SIDE), side=_entry()), None),
+    ("an active line that retires one of its versions", _registry(main=_entry(versions={"v0": _v()})), None),
+]
+
+#: ``effective_status``: the reader a gate and a launch share. The last case is the one that must
+#: refuse rather than fall back -- an exception this reader cannot parse is not "inherit the line".
+STATUS_CASES: list[tuple[str, dict, str, str, str | None]] = [
+    ("active line, no exception", _registry(), MAIN, "v0", "active"),
+    ("active line, that version retired", _registry(main=_entry(versions={"v0": _v()})), MAIN, "v0", "retired"),
+    ("active line, a different version asked about",
+     _registry(main=_entry(versions={"v0": _v()})), MAIN, "v1", "active"),
+    ("retired line, no exception", _registry(main=_retired()), MAIN, "v0", "retired"),
+    ("an exception cannot put a retired line's version back in service",
+     _registry(main=_retired(versions={"v0": _v(status="active")})), MAIN, "v0", "retired"),
+    ("unregistered line", _registry(), "lizard/ghost", "v0", None),
+    ("invented status", _registry(main=_entry(status="deprecated")), MAIN, "v0", None),
+    ("exception with an invented status must not fall back",
+     _registry(main=_entry(versions={"v0": _v(status="deprecated")})), MAIN, "v0", None),
 ]
 
 
@@ -108,13 +152,17 @@ def main() -> int:
                     failures.append(f"{label}: expected clean, got {problems}")
             elif not any(expected in problem for problem in problems):
                 failures.append(f"{label}: expected {expected!r}, got {problems}")
+        for label, registry, key, version, expected in STATUS_CASES:
+            got = effective_status(registry, key, version)
+            if got != expected:
+                failures.append(f"{label}: effective_status -> {got!r}, expected {expected!r}")
 
     if failures:
         for failure in failures:
             print(f"FAIL {failure}")
-        print(f"recipe lifecycle gate: {len(failures)}/{len(CASES)} case(s) wrong")
+        print(f"recipe lifecycle gate: {len(failures)}/{len(CASES) + len(STATUS_CASES)} case(s) wrong")
         return 1
-    print(f"  {len(CASES)} refusals fired, clean shapes stayed clean")
+    print(f"  {len(CASES)} refusals fired, clean shapes stayed clean; {len(STATUS_CASES)} status reads answered")
     print("RECIPE_REGISTRY_GATE_OK")
     return 0
 

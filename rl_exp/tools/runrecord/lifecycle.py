@@ -15,8 +15,8 @@ directory is turned into a verdict -- the decision table itself is not repeated 
 What this module owns:
 
 * **Identity from the directory**, not from the task id: ``versions/recipes.json`` says which
-  recipe a task id means, ``versions/lines.json`` says whether that line is active. A number in
-  a task id never grants permission.
+  recipe a task id means, ``versions/lines.json`` says whether that line -- or that one version
+  of it -- may run. A number in a task id never grants permission.
 * **Read once** -- the index is read at startup and never again, so a directory edited while a
   run is in flight cannot change what that run was launched under (2.2). The content digests of
   both files are captured with the verdict, which is what T0 records.
@@ -67,18 +67,24 @@ def read_index(root: pathlib.Path | None = None) -> dict:
 
 
 def identity(task: str | None, index: dict) -> dict:
-    """Resolve ``task id -> recipe key -> line -> status``, or list what stopped it.
+    """Resolve ``task id -> recipe key -> line -> version -> status``, or list what stopped it.
 
     Every step is checked here rather than defaulted: a task that is not in the map is not
     "probably main", and a line with no lifecycle entry is not "probably active".
+
+    The version is what the *recipe* declares (``legacy_task_version``, the same field the identity
+    map binds to the config's ``params_version``), never a number parsed back out of the task id --
+    a version is retired on its own, and a launch has to be refused on the recipe it actually names.
+    The status is composed by the registry gate's one reader (:func:`effective_status`), so offline
+    gates and this launch cannot answer "may this version run" differently.
 
     Args:
         task: the gym task id being launched.
         index: the parsed directory from :func:`read_index`.
 
     Returns:
-        ``{"task", "recipe", "line", "status", "problems"}``: the resolved identity and, when
-        resolution failed, the reasons (a non-empty ``problems`` must refuse the launch).
+        ``{"task", "recipe", "line", "version", "status", "problems"}``: the resolved identity and,
+        when resolution failed, the reasons (a non-empty ``problems`` must refuse the launch).
     """
     recipes = index.get("recipes") or {}
     lines = index.get("lines") or {}
@@ -91,7 +97,8 @@ def identity(task: str | None, index: dict) -> dict:
     key = (recipes.get("tasks") or {}).get(task)
     entry = (recipes.get("recipes") or {}).get(key) if key else None
     line = (entry or {}).get("line")
-    status = ((lines.get("lines") or {}).get(line) or {}).get("status") if line else None
+    version = (entry or {}).get("legacy_task_version")
+    status = check_recipe_registry.effective_status(lines, line, version) if line else None
     if not key:
         problems.append(
             f"task {task!r} is not in the recipe map: a recipe is registered before it is launched,"
@@ -103,7 +110,14 @@ def identity(task: str | None, index: dict) -> dict:
         problems.append(
             f"line {line!r} has no lifecycle entry; a missing lifecycle must not read as active"
         )
-    return {"task": task, "recipe": key, "line": line, "status": status, "problems": problems}
+    return {
+        "task": task,
+        "recipe": key,
+        "line": line,
+        "version": version,
+        "status": status,
+        "problems": problems,
+    }
 
 
 def flag_in(argv: list[str] | None, name: str) -> bool:
@@ -185,6 +199,7 @@ def startup_check(
         "task": task,
         "recipe": identity_["recipe"],
         "line": identity_["line"],
+        "version": identity_["version"],
         "status": identity_["status"],
         "declared_params_line": declared_line,
         "directory_sha256": index.get("digests"),

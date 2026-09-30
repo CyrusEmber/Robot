@@ -17,6 +17,12 @@ discoverable at all is delegated to ``recipe_lines`` rather than counted here.
 FILEMAP.md used to need a per-version row too; that row is gone (2026-09-23) --
 see the note where the check stood.
 
+A **retired version** (``versions/lines.json`` version exception) keeps PLAN/NOTES/yaml and
+drops the asset lock: the lock exists to hold a trained recipe to the bytes it was trained on,
+and a version nobody trains again is not re-checked against anything. The status is read
+through ``check_recipe_registry.effective_status``, the same single reader the launch path uses,
+so this gate cannot disagree with the one that refuses a retired version's training.
+
 Known ceiling (warn, not fail): git tags. Legacy versions predate the tag
 discipline and prefix styles differ (v1/v2/v5 vs lizard-vN), so a missing
 tag only warns; per versioning.mdc A, a training run started without a tag
@@ -61,11 +67,24 @@ import subprocess
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import check_recipe_registry  # noqa: E402 - owns the lifecycle index's shape and its one status reader
 from recipe_lines import RecipeLineError, discover  # noqa: E402
 
 _REPO = pathlib.Path(__file__).resolve().parents[3]
 _VERSIONS = _REPO / "rl_exp" / "versions"
+_LINES = _VERSIONS / "lines.json"
 _ARCH_PLAN = _REPO / "ARCH_PLAN.md"
+
+
+def required_pieces(retired: bool) -> tuple[str, ...]:
+    """The pieces a version directory must ship: a retired version drops its asset lock.
+
+    The lock pins the version to the asset bytes it was trained on, which is a claim only a
+    version that may still be run has to make. PLAN/NOTES stay either way -- the record of what
+    the version was is exactly what retirement keeps.
+    """
+    pieces = ("PLAN.md", "NOTES.md")
+    return pieces if retired else (*pieces, "asset_lock.json")
 
 #: Gate verdict tokens. Ratios are deliberately NOT scanned (see the module docstring).
 _COVERAGE_VERDICT = re.compile(r"\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*_OK\b|ALL_OFFLINE_CHECKS_PASSED")
@@ -107,7 +126,7 @@ def status_claims(text: str) -> list[tuple[int, str]]:
 
 
 def self_test() -> int:
-    """Falsifier for the verdict scan: the real leaks it was written for, and the near-misses it must let pass."""
+    """Falsifier for the verdict scan and the piece set: the real cases, and the near-misses that must pass."""
     cases = [
         # the two quotes this scan was written for, verbatim from before they were split
         (
@@ -140,6 +159,12 @@ def self_test() -> int:
         # the preamble quotes the forbidden words unbolded -- that sentence is the rule itself
         ("the ARCH_PLAN preamble quoting the rule", '不写"已完成/已落地/待实现"；正文只写**当时证据与实现形态**（带日期）', 0),
     ]
+    # the piece set is conditional on the version's status, so both directions are asserted: a
+    # dropped lock that is still demanded, or a lock nobody drops, is the drift this covers.
+    piece_cases = [
+        ("an active version ships its asset lock", False, ("PLAN.md", "NOTES.md", "asset_lock.json")),
+        ("a retired version keeps the record and drops the lock", True, ("PLAN.md", "NOTES.md")),
+    ]
     problems = [
         f"self-test '{name}': expected {expected} leak(s), found {len(verdict_leaks(text))}"
         for name, text, expected in cases
@@ -148,12 +173,19 @@ def self_test() -> int:
         f"self-test '{name}': expected {expected} status marker(s), found {len(status_claims(text))}"
         for name, text, expected in status_cases
         if len(status_claims(text)) != expected
+    ] + [
+        f"self-test '{name}': expected {expected}, got {tuple(required_pieces(retired))}"
+        for name, retired, expected in piece_cases
+        if tuple(required_pieces(retired)) != expected
     ]
     if problems:
         for problem in problems:
             print(f"check_version_docs: FAIL -- {problem}")
         return 1
-    print(f"check_version_docs: self-test OK ({len(cases) + len(status_cases)} fixtures)")
+    print(
+        f"check_version_docs: self-test OK "
+        f"({len(cases) + len(status_cases) + len(piece_cases)} fixtures)"
+    )
     return 0
 
 
@@ -172,6 +204,7 @@ def main(show_tree: bool = "--tree" in sys.argv) -> int:
         return 1
     problems: list[str] = []
     warnings: list[str] = []
+    retired_versions: list[str] = []
     tags = _git_tags()
     families = sorted(p for p in _VERSIONS.iterdir() if p.is_dir())
 
@@ -186,7 +219,8 @@ def main(show_tree: bool = "--tree" in sys.argv) -> int:
         lines = {}
         discovery_error = str(err)
     # keys are in this file's own record space: a version directory's path relative to
-    # its family ("v0" for the main line, "parkour/v1" for a side line)
+    # its family ("main/v0", "parkour/v1" -- the line directory since the main line
+    # moved into main/)
     discovered = {
         f"{line.key}/{version}".split("/", 1)[1]: path.name
         for line in lines.values()
@@ -194,6 +228,18 @@ def main(show_tree: bool = "--tree" in sys.argv) -> int:
     }
     if discovery_error is not None:
         problems.append(f"recipe line discovery: {discovery_error}")
+
+    # Whether a version was retired is a lifecycle fact (``lines.json`` version exception) and is
+    # read through the registry gate's one reader, so this gate cannot answer "may this version
+    # run" differently from the launch path. An unusable index is reported here rather than
+    # silently waiving nothing: no status means no version is exempt.
+    registry = check_recipe_registry.load(_LINES)
+    for key in ("_missing", "_unreadable"):
+        if registry.get(key):
+            problems.append(
+                f"{_LINES.name} is not usable ({registry[key]}): no version's status can be read,"
+                f" so nothing here is exempt"
+            )
 
     for family_dir in families:
         family = family_dir.name
@@ -220,13 +266,28 @@ def main(show_tree: bool = "--tree" in sys.argv) -> int:
                     f"{family}/{rel}: recipe_lines cannot discover this version directory "
                     f"(versioning.mdc A-2: exactly one params file, named after its line)"
                 )
-            for piece in ("PLAN.md", "NOTES.md", "asset_lock.json"):
+            # rel is "<line>/vN"; a directory that is not under a line names no registered line,
+            # so its status reads as unknown and it keeps every requirement (discovery already
+            # reports it as a problem).
+            line_name, _, version = rel.rpartition("/")
+            retired = (
+                check_recipe_registry.effective_status(registry, f"{family}/{line_name}", version)
+                == "retired"
+            )
+            if retired:
+                retired_versions.append(f"{family}/{rel}")
+            for piece in required_pieces(retired):
                 if not (vdir / piece).is_file():
                     problems.append(
                         f"{family}/{rel}: {piece} missing (versioning.mdc A-2 four-piece set)"
+                        + (
+                            " -- a retired version keeps PLAN/NOTES/yaml and drops its asset lock"
+                            if retired
+                            else ""
+                        )
                     )
             lock_path = vdir / "asset_lock.json"
-            if lock_path.is_file() and own_yaml is not None:
+            if not retired and lock_path.is_file() and own_yaml is not None:
                 try:
                     lock = json.loads(lock_path.read_text(encoding="utf-8"))
                     key = f"versions/{family}/{rel}/{own_yaml}"
@@ -355,6 +416,11 @@ def main(show_tree: bool = "--tree" in sys.argv) -> int:
             )
 
     print(f"  families checked: {len(families)} ({', '.join(p.name for p in families)})")
+    if retired_versions:
+        print(
+            f"  retired versions ({len(retired_versions)}, asset_lock.json not required):"
+            f" {sorted(retired_versions)}"
+        )
     for warn in warnings:
         print(f"  WARN: {warn}")
     for problem in problems:

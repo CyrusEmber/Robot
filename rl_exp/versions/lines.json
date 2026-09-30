@@ -5,25 +5,29 @@
       "status": "retired",
       "successor": null,
       "retired_at": "2026-09-22",
-      "reason": "Owner retired the entire lizard family because of body design defects on 2026-09-22. No new training or resume. Historical artifacts remain; see acceptance/records/2026-09-22-lizard-family-retirement.md"
+      "reason": "Owner retired the entire lizard family because of body design defects on 2026-09-22. No new training or resume. Historical artifacts remain; see acceptance/records/2026-09-22-lizard-family-retirement.md",
+      "versions": null
     },
     "lizard/parkour": {
       "status": "retired",
       "successor": null,
       "retired_at": "2026-09-17",
-      "reason": "Cannot construct an env any more: the v8 anatomy rename left actuators.spine.joint_patterns and default_joint_pos in versions/lizard/parkour/v1/parkour_params.yaml saying rear_.*/tail_.*, which match no joint on the current asset, so IsaacLab raises 'Not all regular expressions are matched'. Found by the Step 3.1e live run (and only there: the offline gates were green over it). Retired rather than repaired -- repairing means re-pointing the patterns and re-running parkour training, which nobody has asked for."
+      "reason": "Cannot construct an env any more: the v8 anatomy rename left actuators.spine.joint_patterns and default_joint_pos in versions/lizard/parkour/v1/parkour_params.yaml saying rear_.*/tail_.*, which match no joint on the current asset, so IsaacLab raises 'Not all regular expressions are matched'. Found by the Step 3.1e live run (and only there: the offline gates were green over it). Retired rather than repaired -- repairing means re-pointing the patterns and re-running parkour training, which nobody has asked for.",
+      "versions": null
     },
     "lizard/baseline": {
       "status": "retired",
       "successor": null,
       "retired_at": "2026-09-22",
-      "reason": "Owner retired the entire lizard family because of body design defects on 2026-09-22. No new training or resume. Historical artifacts remain; see acceptance/records/2026-09-22-lizard-family-retirement.md"
+      "reason": "Owner retired the entire lizard family because of body design defects on 2026-09-22. No new training or resume. Historical artifacts remain; see acceptance/records/2026-09-22-lizard-family-retirement.md",
+      "versions": null
     },
     "lizard2/main": {
       "status": "active",
       "successor": null,
       "retired_at": null,
-      "reason": null
+      "reason": null,
+      "versions": null
     }
   }
 }
