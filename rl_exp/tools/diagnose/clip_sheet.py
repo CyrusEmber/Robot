@@ -24,6 +24,8 @@ Usage:
 
     python rl_exp/tools/diagnose/clip_sheet.py --yt-id S1cZEIqYwx0
     python rl_exp/tools/diagnose/clip_sheet.py --video clip.mp4 --start 9.5 --duration 4 --fps 3
+    python rl_exp/tools/diagnose/clip_sheet.py --video clip.mp4 --start 0.3 --duration 2.2 --fps 4 \
+        --cols 3 --rows 3 --scale 560 --grid 50
 """
 
 from __future__ import annotations
@@ -34,6 +36,7 @@ import pathlib
 import shutil
 import subprocess
 import sys
+import tempfile
 
 _DEFAULT_WORK = pathlib.Path(os.environ.get("TEMP", "/tmp")) / "rl_clips"
 
@@ -85,6 +88,52 @@ def sheet(video: pathlib.Path, out: pathlib.Path, start: float, duration: float,
     return out
 
 
+def grid_sheet(video: pathlib.Path, out: pathlib.Path, start: float, duration: float, fps: float,
+               cols: int, rows: int, scale: int, grid: int) -> pathlib.Path:
+    """Same tiles as :func:`sheet`, but each one carries a labelled pixel grid.
+
+    Angles in a single camera plane come out of pixel coordinates, so no scale or calibration is
+    needed -- only a way to read a point off the image to a stated precision. ``grid`` is that
+    precision: coordinates are labelled every ``grid`` pixels, and a marked point is read to about
+    half of one cell. The frame's timestamp is printed on the tile so a sheet is self-describing.
+    """
+    from PIL import Image, ImageDraw, ImageFont
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="clip_frames_") as tmp:
+        subprocess.run(
+            [_exe("ffmpeg"), "-hide_banner", "-loglevel", "error", "-ss", str(start), "-t", str(duration),
+             "-i", str(video), "-vf", f"fps={fps},scale={scale}:-2", "-y", str(pathlib.Path(tmp) / "f_%03d.png")],
+            check=True)
+        frames = sorted(pathlib.Path(tmp).glob("f_*.png"))[: cols * rows]
+        if not frames:
+            raise SystemExit(f"no frames in [{start}, {start + duration}) -- check --fps/--duration")
+        opened = [Image.open(frame).convert("RGB") for frame in frames]
+        tw, th = opened[0].size
+        font = ImageFont.load_default(size=max(14, tw // 28))
+        sheet_image = Image.new("RGB", (cols * tw, rows * th), (16, 16, 16))
+        for index, frame in enumerate(opened):
+            tile = frame.copy()
+            overlay = Image.new("RGBA", tile.size, (0, 0, 0, 0))
+            draw = ImageDraw.Draw(overlay)
+            for x in range(grid, tw, grid):
+                draw.line([(x, 0), (x, th)], fill=(255, 0, 0, 90), width=1)
+                if x % (grid * 2) == 0:
+                    draw.text((x + 2, 2), str(x), font=font, fill=(255, 80, 80, 255))
+            for y in range(grid, th, grid):
+                draw.line([(0, y), (tw, y)], fill=(255, 0, 0, 90), width=1)
+                if y % (grid * 2) == 0:
+                    draw.text((2, y + 2), str(y), font=font, fill=(255, 80, 80, 255))
+            tile = Image.alpha_composite(tile.convert("RGBA"), overlay).convert("RGB")
+            draw = ImageDraw.Draw(tile)
+            stamp = f"#{index} t={start + index / fps:.2f}s"
+            draw.rectangle([0, th - 26, 12 + 10 * len(stamp), th], fill=(0, 0, 0))
+            draw.text((4, th - 22), stamp, font=font, fill=(0, 255, 0))
+            sheet_image.paste(tile, ((index % cols) * tw, (index // cols) * th))
+        sheet_image.save(out)
+    return out
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Clip -> tiled frame sheet (see module docstring).")
     source = parser.add_mutually_exclusive_group(required=True)
@@ -98,12 +147,17 @@ def main() -> None:
     parser.add_argument("--cols", type=int, default=4)
     parser.add_argument("--rows", type=int, default=3)
     parser.add_argument("--scale", type=int, default=260, help="per-tile width, pixels")
+    parser.add_argument("--grid", type=int, default=0,
+                        help="draw a labelled pixel grid every N px, so a point can be read off a "
+                             "tile to ~half a cell (needs Pillow; angles need no other calibration)")
     parser.add_argument("--out", type=pathlib.Path, default=None)
     args = parser.parse_args()
 
     video = args.video or fetch(args.yt_id, args.work, args.height)
     out = args.out or pathlib.Path(video).with_name(f"{pathlib.Path(video).stem}_s{args.start:g}_d{args.duration:g}.png")
-    print(sheet(video, out, args.start, args.duration, args.fps, args.cols, args.rows, args.scale))
+    writer = grid_sheet if args.grid else sheet
+    extra = (args.grid,) if args.grid else ()
+    print(writer(video, out, args.start, args.duration, args.fps, args.cols, args.rows, args.scale, *extra))
     print(f"rows: {args.rows}, cols: {args.cols}, tile {args.scale}px, fps {args.fps} -- read row-major")
 
 
