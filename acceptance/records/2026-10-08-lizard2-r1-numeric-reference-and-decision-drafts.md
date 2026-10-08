@@ -343,6 +343,32 @@
 
 **不得据此下的结论**：本节没有、也不能给出骨段长度的取值；缩放是不带网格与惯量的**运动学**实验，接触刚度、力矩、碰撞与结构强度都不在其中。
 
+### 17. 方位角可达包络：把"带"换成量出来的边界（2026-10-08 追加）
+
+**做法**（单命令可复读）：`--sweep-bands` 里放探测带——下界探测用 `LOW:120`、上界探测用 `0:HIGH`——A 在带内解不出来就报 POSTURE，于是**能通过的极值就是该条件下这条链的可达边界**。条件：`rl`、0.30 m/s（扫幅 0.2484 m）、体高 0.90 m、支撑段平放、足底贴地。
+
+| 探测带 | A 失败相位 | 违例 | 读法 |
+|---|---|---|---|
+| 65:120 | 1/12 | CLEARANCE | 方位角 ≥65° 可满足 |
+| 70:120 | 1/12 | CLEARANCE | ≥70° 可满足 |
+| 75:120 | 2/12 | CLEARANCE, POSTURE | 有相位到不了 75° |
+| 80:120 | 3/12 | CLEARANCE, POSTURE | 两个相位到不了 80° |
+| 0:80 | 8/12 | CLEARANCE, POS, POSTURE | 多数相位远超 80° |
+| 0:90 | 5/12 | CLEARANCE, CONTACT, POS, POSTURE | |
+| 0:100 | 3/12 | CLEARANCE, POSTURE | 仍有相位超过 100° |
+| 0:110 | 1/12 | CLEARANCE | 全部相位 ≤110° |
+
+⇒ **实测包络 ≈ [70°, 105°]**（下界 70 可达、75 起出现到不了的相位；上界 100 起仍有超差、110 全过）。
+
+**这改变了前两轮结论的性质**：
+
+1. **40–60° 带从来不在可达域内**：在该目标其余判据（平放、贴地、给定足端路径、0.90 m 体高）不变的条件下，这条链把股骨压不到 60° 以下 ⇒ §14/§15 那两轮"紧带不可达"**不是骨架缺陷，而是那个带本身不可能**；顺带说明我当初把带设成 60–120° 是**碰巧合理**（实测包络 70–105° 是它的子集），而不是量出来的。
+2. **增轴的价值随之重新定位**：在可达包络内它**不被使用**（§15）；在包络外它是"**减小违约量**"（最大位置误差 70→34/50 mm），**不是**"把不可能的姿态变成可能"。因此"该轴能不能做出低侧展姿势"这个问题**目前无法回答**——包络本身不允许，任何候选都不允许。
+3. **目标侧换变量也开不出来**：速度 0.15–0.45 m/s × 体高 0.80–1.00 m 的九格里，紧带下失败相位始终 9–12/12，最坏位置误差 58–83 mm（随扫幅增大），从未接近 20 mm 门 ⇒ 缺口不在扫幅或体高。
+4. **几乎每种配置的头号失效都是摆动净空**（相位 9，18.1 mm vs 20 mm 阈值，§12）：它是这条目标唯一稳定卡住的地方，**下一个该处理的边界是目标自己的抬脚量/净空阈值**，不是姿态带。
+
+**不得据此下的结论**：包络是**这条链在这组判据下**的边界，不是动物的姿态范围；"巨蜥是否落在 70–105°"**没有被量过**（没有三维标记级数据），所以包络不能用来声称"像巨蜥"，也不能用来定带或定限位。
+
 ## 证据引用
 - 判据入口：`acceptance/records/2026-10-08-lizard2-joint-design-review-contract.md`（R1–R5、判定与实施交接）。
 - 定性参考与量定义：`acceptance/records/2026-10-08-lizard2-reference-motion-v0.md`（来源层标签、坐标与测量字段、腿平面代理的定义）。
@@ -354,7 +380,7 @@
 - 口径与既有读数（不在此复述数值）：`2026-09-29-varanid-joint-range-of-motion-evidence.md`、`2026-09-30-lizard2-leg-to-anatomy-mapping.md`、`2026-09-30-leg-fk-caliber-facing-and-candidate-chains.md`、`2026-09-29-lizard2-pad-tilt-is-the-fold-sum.md`、`2026-09-29-lizard2-pad-leveling-unreachable.md`、`2026-09-29-leg-pose-slider-and-pad-clearance.md`、`2026-09-29-lizard2-v2-gait-five-claims.md`。
 - 复读命令（工具与解释器路径同 `2026-09-30-lizard2-joint-limit-plan-review.md`）：`E:/IsaacLab/env_isaaclab/Scripts/python.exe rl_exp/tools/verify/check_leg_reachability.py --self-check`；摆位 `rl_exp/tools/diagnose/pose_slider.py`。
 - 取帧：`rl_exp/tools/diagnose/clip_sheet.py`（`--video` 本地片 / `--yt-id` 直取）；片段源 `_NlCa7r6ETs`、`S1cZEIqYwx0`（K23），弃用 `f12buVzUehM`；本地落点 `%TEMP%\rl_clips\`。
-- 目标驱动比较（§12–§16）：`python rl_exp\tools\verify\fit_gait_target.py --self-check`（7 条控制）；不带参数出 A/B 全表 + 相位间加密核验；`--speed <m/s> --base-z <m> --asset-only` 出速度/体高敏感性；`--facing-mid-stance` 出 D1 分阶段接触对照；`--posture-azim MIN:MAX` 改姿势带；`--sweep-bands ... --sweep-travel ...` 出 §15 的两维图；`--scale hfe=0.95,kfe=1.15` 出 §16 的骨段长度扫。
+- 目标驱动比较（§12–§17）：`python rl_exp\tools\verify\fit_gait_target.py --self-check`（7 条控制）；不带参数出 A/B 全表 + 相位间加密核验；`--speed <m/s> --base-z <m> --asset-only` 出速度/体高敏感性；`--facing-mid-stance` 出 D1 分阶段接触对照；`--posture-azim MIN:MAX` 改姿势带；`--sweep-bands ... --sweep-travel ...` 出 §15 的两维图与 §17 的包络探测（`LOW:120` / `0:HIGH`）；`--sweep-cells SPEED:HEIGHT,...` 出 §17 的目标侧网格；`--scale hfe=0.95,kfe=1.15` 出 §16 的骨段长度扫。
 
 ## 未覆盖边界
 

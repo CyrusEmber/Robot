@@ -4,7 +4,7 @@ title: 巨蜥关节设计决策：参考动作、姿态与范围
 scope: acceptance/records, rl_exp/tools/verify, rl_exp/tools/diagnose, rl_exp/blender
 status: in_progress
 landing: acceptance/records/2026-10-08-lizard2-joint-design-review-contract.md#结果
-next: 骨段长度已作候选扫过（r1 记录 §16，工具 `--scale TOKEN=FACTOR`）：紧带 40–60° 内股骨/小腿在 ±15–30% 范围内**最坏位置误差恒定在 68–72 mm、没有任何长度组合开出可达性** ⇒ 长度不是该缺口的解；**归属更正：骨段长度与默认姿态属本项，`leg-chain-symmetry-convention` 只管镜像**。下一步：① 在**目标侧**找可达边界（周期、扫幅、体高、支撑比例的组合），而不是继续动骨架；② 按 §11 镜像规则扩到前肢与其余三腿；③ 默认姿态候选与长度候选等目标重建（"像巨蜥"）后再定；④ 分支连续性与机体自碰撞口径待定；⑤ D1–D3 待答复
+next: 方位角**可达包络已实测 ≈[70°,105°]**（r1 记录 §17，条件：rl/0.30 m/s/体高 0.90 m/平放+贴地）：40–60° 带**从来不在可达域内** ⇒ 前两轮"紧带不可达"改判为"那个带不可能"，增轴在包络内不被使用、包络外只减小违约量；目标侧速度×体高九格也开不出来。下一步：① 处理**唯一稳定卡住的边界**——摆动净空（相位 9 的 18.1 mm vs 20 mm 阈值，即目标自己的抬脚量/阈值）；② 包络不能声称"像巨蜥"：动物是否落在 70–105° 未量过，需要三维标记级或可标注素材；③ 按 §11 镜像规则扩到前肢与其余三腿；④ 分支连续性与机体自碰撞口径待定；⑤ D1–D3 待答复
 close_when: Codex 复核 landing 的最终判定与证据，本对话用户确认选择及工况；保留/修改方案经评审通过且未完实施已交具名活跃事项后关闭，全部拒绝亦关闭，任一待决或未判定继续在办；正式采用另过机制闸门
 evidence: acceptance/records/2026-10-08-lizard2-joint-design-review-contract, acceptance/records/2026-10-08-lizard2-reference-motion-v0, acceptance/records/2026-10-08-lizard2-r1-numeric-reference-and-decision-drafts
 ---

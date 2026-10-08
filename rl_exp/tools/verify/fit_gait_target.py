@@ -568,6 +568,27 @@ def sweep(target, leg, base_z, args, reference, bands, travels) -> None:
                       f"{','.join(b_set) or '-'}")
 
 
+def sweep_cells(target, leg, base_z, args, reference, cells) -> None:
+    """Sweep the TARGET's own variables (speed -> stance sweep, body height) on the asset arm.
+
+    The tight posture band defeated every length and every axis travel, so the question moves to the
+    target: which combination of stride sweep and body height lets the asset live in a less lateral
+    posture at all? Each cell re-solves the asset alone -- the candidate arm would double the cost and
+    answer a question nobody asked yet.
+    """
+    print(f"  {'speed':>7} {'height':>7} {'sweep_m':>8} {'fails':>6} {'worst_mm':>9}  violations")
+    for speed, height in cells:
+        args.speed = speed
+        result = run_one("A", args.urdf, target, leg, height, args, reference)
+        fails = sum(1 for row in result["rows"] if row["flags"])
+        worst = max(row["position_error_m"] for row in result["rows"])
+        sets = sorted({flag for row in result["rows"] for flag in row["flags"]})
+        sweep = target["gait"]["stance_sweep_m"] * speed / target["gait"]["speed_m_per_s"]
+        print(f"  {speed:>7.2f} {height:>7.2f} {sweep:>8.4f} {fails:>6} {worst * 1000:>9.1f}  "
+              f"{','.join(sets) or '-'}")
+    args.speed = None
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--target", type=pathlib.Path, default=DEFAULT_TARGET)
@@ -600,6 +621,9 @@ def main() -> None:
                              "single run")
     parser.add_argument("--sweep-travel", default=None, metavar="RAD,...",
                         help="axis travel limits [rad] to sweep for the candidate arm")
+    parser.add_argument("--sweep-cells", default=None, metavar="SPEED:HEIGHT,...",
+                        help="sweep the target's own variables on the asset arm: stance sweep (through "
+                             "speed) against body height")
     args = parser.parse_args()
 
     target = load_target(args.target)
@@ -618,6 +642,14 @@ def main() -> None:
     base_z = args.base_z if args.base_z is not None else target["body"]["base_z_m"]
     if args.self_check:
         raise SystemExit(self_check(target, leg, args))
+    if args.sweep_cells:
+        cells = [tuple(float(value) for value in cell.split(":")) for cell in args.sweep_cells.split(",")]
+        chain_a, _, _, _, reference = zero_pose(args.urdf, leg, base_z)
+        print(f"target {args.target.name}: {target['meta']['status']}")
+        print(f"  target-side cells, leg {leg}; posture band "
+              f"{target['posture']['femur_azim_min_deg']:.0f}-{target['posture']['femur_azim_max_deg']:.0f} deg")
+        sweep_cells(target, leg, base_z, args, reference, cells)
+        return
     if args.sweep_bands:
         if not args.sweep_travel:
             parser.error("--sweep-bands needs --sweep-travel")
