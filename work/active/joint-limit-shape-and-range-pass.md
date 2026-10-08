@@ -4,7 +4,7 @@ title: 巨蜥关节设计决策：参考动作、姿态与范围
 scope: acceptance/records, rl_exp/tools/verify, rl_exp/tools/diagnose, rl_exp/blender
 status: in_progress
 landing: acceptance/records/2026-10-08-lizard2-joint-design-review-contract.md#结果
-next: 两维能力图已出（r1 记录 §15）：宽带 60–120° 下 A 达标且**增轴三档行程都不被使用**；紧带 40–60°/20–40° 下 A 与 B **都不合格**，B 只把最大位置误差从 70/102 mm 压到 34/50 mm ⇒ 该轴目前的价值是**降低代价**，不是打开可达性。下一步：① 在紧带内换别的变量（周期、扫幅、体高、支撑比例）找可达边界，而不是继续加轴行程；② 按 §11 镜像规则扩到前肢与其余三腿；③ 骨架对称性与骨段长度决策归 `leg-chain-symmetry-convention`，本项只出默认姿态候选；④ 分支连续性与机体自碰撞口径待定；⑤ D1–D3 待答复
+next: 骨段长度已作候选扫过（r1 记录 §16，工具 `--scale TOKEN=FACTOR`）：紧带 40–60° 内股骨/小腿在 ±15–30% 范围内**最坏位置误差恒定在 68–72 mm、没有任何长度组合开出可达性** ⇒ 长度不是该缺口的解；**归属更正：骨段长度与默认姿态属本项，`leg-chain-symmetry-convention` 只管镜像**。下一步：① 在**目标侧**找可达边界（周期、扫幅、体高、支撑比例的组合），而不是继续动骨架；② 按 §11 镜像规则扩到前肢与其余三腿；③ 默认姿态候选与长度候选等目标重建（"像巨蜥"）后再定；④ 分支连续性与机体自碰撞口径待定；⑤ D1–D3 待答复
 close_when: Codex 复核 landing 的最终判定与证据，本对话用户确认选择及工况；保留/修改方案经评审通过且未完实施已交具名活跃事项后关闭，全部拒绝亦关闭，任一待决或未判定继续在办；正式采用另过机制闸门
 evidence: acceptance/records/2026-10-08-lizard2-joint-design-review-contract, acceptance/records/2026-10-08-lizard2-reference-motion-v0, acceptance/records/2026-10-08-lizard2-r1-numeric-reference-and-decision-drafts
 ---

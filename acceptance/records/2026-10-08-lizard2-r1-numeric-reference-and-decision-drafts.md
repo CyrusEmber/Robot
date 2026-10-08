@@ -315,6 +315,34 @@
 - **行程的两侧代价**：0.3 rad 在紧带内饱和；1.2 rad 在紧带内引入 RATE/STEP/FACE ⇒ 0.6 rad 在这组条件下最好，但这是**在这个目标与这组阈值下**的比较，不是行程的设计值。
 - 这些读数与 §14 一样，**不证明"像巨蜥"**，也不构成轴行程或限位的批准；两个候选在紧带内都不合格，说明缺口可能在目标（周期/扫幅/体高）而不是骨架。
 
+### 16. 骨段长度候选（2026-10-08 追加）
+
+**归属更正**：**骨段长度属本项**（腿链结构与参考动作），不是 `leg-chain-symmetry-convention` 的事——那一项只管**镜像**（源资产是否应镜像及其数值约束）。长度在此只作**候选**：按用户口径，这组 engineered 目标尚不能反过来决定最终骨段长度与限位。
+
+**工具**：`--scale TOKEN=FACTOR,...`（`hfe`=股骨、`kfe`=小腿、`foot`=跖部）按段缩放链上的 origin 偏移后重解；**网格与 pad 自身尺寸不动**——FK 不读网格，pad 尺寸是另一个设计变量。
+
+**紧带 40–60° 下的长度扫**（A 仅，速度 0.30 m/s，体高 0.90 m，相位间路径核验关闭）：
+
+| 变更 | 失败相位 | 最坏位置误差 | 违例集 |
+|---|---|---|---|
+| 资产（1.00） | 10/12 | 70.3 mm | CLEARANCE, CONTACT, POS, POSTURE |
+| 股骨 0.85 | 12/12 | 70.7 mm | +STEP |
+| **股骨 0.95** | **9/12** | 72.2 mm | POS, POSTURE（最干净） |
+| 股骨 1.15 | 12/12 | 68.2 mm | CLEARANCE, CONTACT, POS, POSTURE |
+| 股骨 1.30 | 12/12 | 72.0 mm | CLEARANCE, CONTACT, POS, POSTURE |
+| 小腿 0.85 | 11/12 | 70.2 mm | +STEP |
+| 小腿 1.15 | 12/12 | 71.1 mm | CLEARANCE, POS, POSTURE |
+| 股骨 0.95 + 小腿 1.15 | 12/12 | 70.2 mm | CLEARANCE, POS, POSTURE |
+| 对照：**宽带 60–120°** 下股骨 0.95 | **0/12** | 18.9 mm | 无 |
+
+**结论（带条件，且是否定性的）**：
+
+1. **骨段长度不是这个紧带缺口的解**：在 ±15–30% 的股骨/小腿范围内，最坏位置误差几乎恒定在 68–72 mm，失败相位数只在 9–12 之间抖，**没有任何长度组合开出可达性**。⇒ "把股骨加长就能做出低侧展的巨蜥姿势"这条直觉被排除。
+2. 长度变化动的是**其它判据的边缘**：股骨 0.95 在宽带下反而 **0/12 全过**（比资产的 1/12 干净，消掉了摆动净空超差），在紧带下违例集也最干净（只剩 POS+POSTURE），但仍不合格。
+3. 缺口变量更可能在**目标侧**（周期、扫幅、体高、支撑比例），下一步在那里找可达边界；长度与默认姿态继续作候选，等目标重建（"像巨蜥"）之后再定。
+
+**不得据此下的结论**：本节没有、也不能给出骨段长度的取值；缩放是不带网格与惯量的**运动学**实验，接触刚度、力矩、碰撞与结构强度都不在其中。
+
 ## 证据引用
 - 判据入口：`acceptance/records/2026-10-08-lizard2-joint-design-review-contract.md`（R1–R5、判定与实施交接）。
 - 定性参考与量定义：`acceptance/records/2026-10-08-lizard2-reference-motion-v0.md`（来源层标签、坐标与测量字段、腿平面代理的定义）。
@@ -326,7 +354,7 @@
 - 口径与既有读数（不在此复述数值）：`2026-09-29-varanid-joint-range-of-motion-evidence.md`、`2026-09-30-lizard2-leg-to-anatomy-mapping.md`、`2026-09-30-leg-fk-caliber-facing-and-candidate-chains.md`、`2026-09-29-lizard2-pad-tilt-is-the-fold-sum.md`、`2026-09-29-lizard2-pad-leveling-unreachable.md`、`2026-09-29-leg-pose-slider-and-pad-clearance.md`、`2026-09-29-lizard2-v2-gait-five-claims.md`。
 - 复读命令（工具与解释器路径同 `2026-09-30-lizard2-joint-limit-plan-review.md`）：`E:/IsaacLab/env_isaaclab/Scripts/python.exe rl_exp/tools/verify/check_leg_reachability.py --self-check`；摆位 `rl_exp/tools/diagnose/pose_slider.py`。
 - 取帧：`rl_exp/tools/diagnose/clip_sheet.py`（`--video` 本地片 / `--yt-id` 直取）；片段源 `_NlCa7r6ETs`、`S1cZEIqYwx0`（K23），弃用 `f12buVzUehM`；本地落点 `%TEMP%\rl_clips\`。
-- 目标驱动比较（§12–§15）：`python rl_exp\tools\verify\fit_gait_target.py --self-check`（7 条控制）；不带参数出 A/B 全表 + 相位间加密核验；`--speed <m/s> --base-z <m> --asset-only` 出速度/体高敏感性；`--facing-mid-stance` 出 D1 分阶段接触对照；`--posture-azim MIN:MAX` 改姿势带；`--sweep-bands 60:120,40:60,20:40 --sweep-travel 0.3,0.6,1.2` 出 §15 的两维能力图。
+- 目标驱动比较（§12–§16）：`python rl_exp\tools\verify\fit_gait_target.py --self-check`（7 条控制）；不带参数出 A/B 全表 + 相位间加密核验；`--speed <m/s> --base-z <m> --asset-only` 出速度/体高敏感性；`--facing-mid-stance` 出 D1 分阶段接触对照；`--posture-azim MIN:MAX` 改姿势带；`--sweep-bands ... --sweep-travel ...` 出 §15 的两维图；`--scale hfe=0.95,kfe=1.15` 出 §16 的骨段长度扫。
 
 ## 未覆盖边界
 

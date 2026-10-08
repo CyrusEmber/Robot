@@ -494,6 +494,27 @@ def self_check(target: dict, leg: str, args) -> int:
     return failures
 
 
+def with_length_scale(urdf: pathlib.Path, leg: str, scales: dict[str, float], out: pathlib.Path) -> pathlib.Path:
+    """A copy of ``urdf`` whose named segment offsets are scaled.
+
+    The segment tokens are the joints whose ``origin`` *is* the preceding bone: ``hfe`` is the femur
+    (haa frame to the knee axis), ``kfe`` the shank, ``foot`` the metatarsus. Scaling those offsets is
+    what a bone-length design change does to the kinematics; the meshes and the pad's own size are left
+    alone on purpose, because pad size is a different design variable and FK does not read meshes.
+    """
+    tree = ET.parse(urdf)
+    for mesh in tree.getroot().iter("mesh"):  # the copy lands elsewhere, so its mesh paths must be absolute
+        mesh.set("filename", str((urdf.parent / mesh.get("filename")).resolve()))
+    for token, factor in scales.items():
+        joint = next(entry for entry in tree.getroot().iter("joint")
+                     if entry.get("name") == f"{leg}_{token}_joint")
+        origin = joint.find("origin")
+        xyz = [float(value) for value in origin.get("xyz").split()]
+        origin.set("xyz", " ".join(f"{value * factor:.6f}" for value in xyz))
+    tree.write(out, encoding="utf-8", xml_declaration=True)
+    return out
+
+
 def with_axis_travel(urdf: pathlib.Path, joint_name: str, travel_rad: float, out: pathlib.Path) -> pathlib.Path:
     """A copy of ``urdf`` whose named joint is limited to +-``travel_rad``.
 
@@ -571,6 +592,9 @@ def main() -> None:
                              "the experiment that asks whether a candidate can live in a given sprawl, "
                              "which a temporal criterion cannot answer")
     parser.add_argument("--self-check", action="store_true")
+    parser.add_argument("--scale", default=None, metavar="TOKEN=FACTOR,...",
+                        help="scale segment offsets, e.g. hfe=1.15,kfe=0.9 (femur, shank): the bone-length "
+                             "question is this tool's to answer, the mirror question is not")
     parser.add_argument("--sweep-bands", default=None, metavar="MIN:MAX,...",
                         help="with --sweep-travel: the two-dimensional capability map instead of a "
                              "single run")
@@ -583,6 +607,14 @@ def main() -> None:
         low, high = (float(value) for value in args.posture_azim.split(":"))
         target["posture"].update({"femur_azim_min_deg": low, "femur_azim_max_deg": high})
     leg = args.leg or target["meta"]["leg"]
+    if args.scale:
+        scales = {token: float(factor) for token, factor in
+                  (cell.split("=") for cell in args.scale.split(","))}
+        slug = "_".join(f"{token}{factor:g}" for token, factor in scales.items())
+        out = pathlib.Path(tempfile.gettempdir()) / "rl_gait_scaled" / f"{args.urdf.stem}_{slug}.urdf"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        args.urdf = with_length_scale(args.urdf, leg, scales, out)
+        print(f"length scale {scales} -> {args.urdf}")
     base_z = args.base_z if args.base_z is not None else target["body"]["base_z_m"]
     if args.self_check:
         raise SystemExit(self_check(target, leg, args))
@@ -617,6 +649,11 @@ def main() -> None:
     asset = run_one("A (asset)", args.urdf, target, leg, base_z, args, reference)
     print()
     _table(asset)
+    fails = sum(1 for row in asset["rows"] if row["flags"])
+    worst = max(row["position_error_m"] for row in asset["rows"])
+    sets = sorted({flag for row in asset["rows"] for flag in row["flags"]})
+    print(f"  SUMMARY: {fails}/{len(asset['rows'])} phases fail a criterion; worst position "
+          f"{worst * 1000:.1f} mm; violations {','.join(sets) or '-'}")
     if args.dense:
         worst = dense_check(chain_a, normal_a, vertices_a, base_z, asset["rows"], target, args.dense)
         limit = min(joint_velocity_limits(args.urdf).get(joint["name"], math.inf) for joint in chain_a)
