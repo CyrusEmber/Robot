@@ -76,7 +76,8 @@ Codex 为每个候选链接 R1–R5 的读数与判定，本对话用户确认�
 
 迁移后测量：活跃文件由 18229 B 降为 2652 B，close_when 值由 1727 B 降为 265 B，active 总量由 90559 B 降为 74982 B；未新增、关闭或取消事项，预算未调整。测量以 UTF-8 字节计，close_when 不含字段名和换行。
 
-候选结果入口：后续在此链接每份候选证据、需求答复与具名实施项；目前未形成设计定案。
+候选结果入口：后续在此链接每份候选证据、需求答复与具名实施项。**R1 首份数值参考与 D1–D3 提案草案**（含答复栏）见
+`acceptance/records/2026-10-08-lizard2-r1-numeric-reference-and-decision-drafts.md`；目前未形成设计定案。
 
 文档验证：`framework_pin_check.py --strict --self-test`、`check_dr_parity.py --strict`、`check_version_docs.py`、`check_work_docs.py`、`check_obs_layout.py` 及 `git diff --check` 通过。原有框架工作树改动、历史 tag 与日期证据旧指针提示未在本轮处理；检查通过不表示人工设计评审已经完成。
 

@@ -1,0 +1,136 @@
+# lizard2 R1 数值参考与 D1–D3 提案草案（2026-10-08）
+
+## 适用范围
+
+按 `2026-10-08-lizard2-joint-design-review-contract.md` 的 R1 交付两件：**带来源与工况的数值参考**（只收本轮实际读到的数）、**D1–D3 需求提案草案**（待本对话用户答复）。
+
+本记录**不是**设计定案、不是容差批准、不是站姿冻结，也不含三维轨迹、IK 解或可训练动作文件；不改资产、关节数、限位或配方。本记录**是**下表所列 A20/D24 数字的唯一家——别处需要引用请引本记录 + 节号，不复述数值。
+
+## 验收条件
+
+- 每个量绑定**来源与工况**（物种、体型、速度、样本、周期数），并标来源层：`measured_3d` / `measured_2d` / `paper_reported` / `user_observed` / `engineered`。
+- 只在本文正文出现的数才算读数；只可读图、只到题录层或付费墙的一律进"缺口"，不填估计值、不填零。
+- **不同量不得互换**：呼吸道—肋骨旋转 ≠ 躯干侧弯幅度；连线投影扫角 ≠ 单关节行程；活体使用范围 ≠ 被动限位（口径见 `2026-09-29-varanid-joint-range-of-motion-evidence.md`）。
+- 跨物种/跨速度不拼成"实测慢走"；缺原片段的相位锚点只作核对线索，不转写成关节正负角。
+- 提案与决定分开：本记录只出**提案**（选项 + 依据 + 判据形状 + 代价），答复由用户给出并入答复栏；未答复不冒称获准。
+
+## 结果
+
+### 1. 本轮来源读取状态
+
+| ID | 本轮动作 | 结果 |
+|---|---|---|
+| A20 | 取 OA 正文（Sci Rep 10:7739） | **取到**：样本、个体质量、周期数、相位锚点、JCS 零位定义（§2） |
+| D24 | 取 OA 正文（npj Robotics 2:4） | **取到**：in-vivo 数据集规模、leg/spine ROM 区间、理论最优区间（§3） |
+| H13 | 取 JEB 页面 | **403**（Cloudflare）；图 3 曲线仍未数字化（其数值在图内，非 OA）。与既有 ROM 记录同现象 |
+| H83 | 未取新资料 | 该文是**肩**的功能解剖，不含本任务前肢逐相位角度；前肢逐相位仍缺 |
+| K23 | 未播放 | 浏览器工具仍报 `failed to write kernel assets: 系统找不到指定的路径`；无逐帧可用（照实记，不编时间戳） |
+
+### 2. A20 读数（Cieri 等 2020，XROMM，慢速跑台）
+
+**工况**：*Varanus exanthematicus* 三只（savannah01/02/03 = 1.4 / 1.2 / 0.95 kg）、*Salvator merianae* 三只（tegu03/05/06 = 1.2 / 2.1 / 1.5 kg）；**每只 1 个周期**；X 光片确认无同期肺通气与喉泵。
+
+| 量 | 值 | 来源层 |
+|---|---|---|
+| 肋骨在肋椎关节的旋转范围（bucket+pump+caliper **求和**，均值 ± s.e.） | 8.1±3.3；14.8±5.8；12.7±3.6；13±3.4；13.1±4.9；16.8±5.5 [deg]，按 savannah01–03、tegu03/05/06 顺序 | `measured_3d` |
+| 同侧前肢**蹬地段 ≈ 周期 0–50%**，摆动段 ≈ 50–100% | — | `measured_3d` |
+| **相位锚点**：同侧前肢落脚 ≈ 躯干最大**凸**侧弯；摆动开始 ≈ 最大**凹**侧弯 | 定性 | `measured_3d` |
+| 单周期时长（各个体） | 1.85 / 1.56 / 1.50 / 1.50 / 2.83 / 3.25 [s] | `measured_3d` |
+| tegu 的 caliper 在蹬地段约 **+5 deg 背向**；monitor 仅 savannah02 有明显 roll，sav01/03 几乎无 | — | `measured_3d` |
+| **JCS 零位**：椎间 = 脊柱在冠状面与矢状面对齐；肋椎 = 脊柱沿矢状面直、肋骨背侧沿冠状面；右手定则、Euler 序 ZYX | — | `measured_3d`（定义） |
+
+**两条不许混用**（直接约束本任务的量定义）：
+
+1. **8–17 deg 是"绕肋椎关节的三轴旋转之和"**，不是躯干侧弯幅度、不是关节行程、更不是任何机器人轴的角度。
+2. **躯干侧弯的幅度数值在该文只存在于图 3a 的曲线里**，正文未给数字 ⇒ 本任务的侧弯幅度目标**仍未取到**。
+
+### 3. D24 读数（Rockenfeller 等 2024，in-vivo 汇总 + 理论模型）
+
+**工况**：in-vivo 侧为 40+ 种奔跑与攀爬蜥蜴的汇总（gecko/skink/varanid/dragon），320 个数据点；模型与机器人侧为作者构造。
+
+| 量 | 值 | 来源层 |
+|---|---|---|
+| 活体 leg ROM 观测上界 | **140 deg**（模型只画 40–140 deg 区间即因"这是活体观测到的最大范围"） | `paper_reported` |
+| 活体 limb ROM 常见区间 | **60–130 deg** | `paper_reported` |
+| 活体 spine（apex）ROM 集群 | **15–30 deg** | `paper_reported` |
+| 科莫多/巨蜥科（varanid）相对位置 | **spine ROM 小、腿较短**（家族级定性，无单种数值） | `paper_reported` |
+| 速度效应 | 较快工况 **leg ROM 增大、spine ROM 减小** | `paper_reported` |
+| 理论最优（COT 最低，中等腿长） | leg ROM **60–80 deg** 且 spine ROM **≈20 deg**；Pareto 前沿 leg **70–90 deg**、spine **≈25 deg** | `engineered`（模型） |
+| 攀爬 Pareto（稳定目标） | leg ROM **50–70 deg**、spine ROM **20–40 deg** | `engineered`（模型） |
+| 机器人对照 | 刚性步态 leg ROM **105 deg** 对应曲背 **60 deg leg + 45 deg base = 82.5 deg 总和**；leg+spine 总和 **> ~90 deg 时该机器人爬墙失败** | `engineered`（机器人） |
+
+**口径限制**：D24 的 leg ROM 是**肩/髋到足端连线的投影扫角**（该文自身定义），不是股骨扫角、也不是单个髋关节行程；且上表为**跨物种**汇总，**不是科莫多实测**。它只能给量级与"速度—脊柱—腿"的取舍方向。
+
+### 4. R1 目标量清单与本轮现状
+
+| 目标量 | 本轮能给的 | 缺口 |
+|---|---|---|
+| 骨段前后摆（股骨/肱骨） | 无新数（H13 图内） | 图 3 数字化或可播放片段 |
+| 外展/内收 | 无新数 | 同上 |
+| 腿平面转动 | 无新数；机械侧代理已具（`fold_tilt`，仅诊断） | 同上 |
+| 肘膝/腕踝屈伸 | 无新数 | 同上 |
+| 体高与机体姿态 | 无新数 | 同上 + 默认站姿（未形成，见下） |
+| 躯干侧弯 | **相位锚点有**（A20 §2），幅度无数值 | 图 3a 数字化 |
+| 四足相位 | 只有前肢锚点；四腿相位未定 | 片段逐帧 |
+| 足端轨迹/接触 | 无新数 | 片段逐帧 |
+| 速度/工况带 | 参照区间：leg ROM 上限 140 deg、spine 15–30 deg、快→减侧弯（D24 §3） | 目标速度带待 D3 |
+
+**默认站姿：未形成**，且不得用建模零位充当（合同 R1:19）。可用的形成手段已具：`rl_exp/tools/diagnose/pose_slider.py` 摆位 + `rl_exp/tools/verify/check_leg_reachability.py --pose/--compare` 读数；但按合同须先有 D2 的域与容差，并经 R3/R5，本轮不预置数值。
+
+### 5. D1–D3 提案草案（**待用户答复**）
+
+答复方式：可直接在本表"答复"栏写原话（合同 R1:21：需求决定留存原答复或可追溯引用）。
+
+#### D1 接触要求
+
+- **提案**：按阶段分定接触方式，**支撑中段**要求掌面近似平放（残留倾角上界 = 待定容差），**落脚与离地**允许立边/脚趾接触；不要求全周期平放。代价（每阶段可量）：平放要求下的折叠角需求、可达性余量与失败姿态——用 `pose_slider.py` 摆位 + `check_leg_reachability.py --compare` 出读数。
+- **依据**：合同 R1:18（小腿竖直、掌面水平、折腿和为零均不预设为目标）；`2026-09-29-lizard2-pad-tilt-is-the-fold-sum.md`、`2026-09-29-lizard2-pad-leveling-unreachable.md`、`2026-09-29-leg-pose-slider-and-pad-clearance.md`（读数在这些记录里）。
+- **选项**：(a) 全周期近似平放；(b) 分阶段（本提案）；(c) 不设掌面要求，只约束接触点、相位与净空。
+- **判据形状**：每阶段各给"接触方式 + 允许倾角上界 + 依据 + 不满足时的动作代价"；倾角用**世界系有向判定**（`facing_cos` / `faces_down`），不用无向 `fold_tilt` 代替（合同 R3:39）。
+- **影响**：决定 R3 的三段连续性检查与 R5 的受力假设；不阻塞标注与量测。
+
+#### D2 允许姿态域与容差
+
+- **提案**：域按**阶段**分别给（支撑 / 摆动 / 转向），每阶段含 ①目标正例（骨段方向、肘膝侧向位置、腿平面方向、体高比例、接触相位）②**必须拒绝的具名反例**（把"直立内收、像狗"的跑姿转成可测反例）③各量工程容差。容差**先于**候选比较确定（合同 R1:17）。
+- **依据**：合同 R1:18、R4:49（采样与反例集不当连续域证明）；反例在 `2026-09-30-lizard2-joint-limit-plan-review.md` 的"运行姿态域补充"一节已要求落为可测反例。
+- **选项**：(a) 只定正例；(b) 正例 + 具名反例集 + 容差（本提案）；(c) 先不定域，直接进候选 A/B 比较。
+- **判据形状**：每个反例 = 可复读姿态（`pose_slider.py`）+ 一项失效的读数（`faces_down` / 体高比 / 相位）；容差 = 取值 + 依据（影像标注误差或工程选择）+ 被谁确认。
+- **影响**：容差先于候选比较，A/B 共用同一容差（合同 R1:17、R2:29）；决定 R3 的三段检查与 R5 的取舍面。
+
+#### D3 目标速度带与髋行程取舍
+
+- **提案**：先定**一个低速验收档**（成年陆栖平地行走）+ 一个中速对照档；历史判决只在**共同命令窗口**重评后比较（合同 R4:51）。
+- **依据**：D24 §3（快→leg ROM 增、spine ROM 减；leg ROM 上限 140 deg）；duty factor 量级与历史步态读数分别在 `2026-09-29-varanid-joint-range-of-motion-evidence.md`、`2026-09-29-lizard2-v2-gait-five-claims.md`（不在此复述）。
+- **选项**：(a) 单档低速；(b) 低速 + 中速两档分层验收（本提案）；(c) 由部署速度需求倒推档位。
+- **判据形状**：档位 = 速度区间 + 工况（平地/地形）+ 周期数；髋行程结论 = 至少两 seed 或两 checkpoint 的贴限位占比与最小余量 + 是否受该轴限制的受控对比或目标可达性（合同 R4:51）。
+- **影响**：决定 R4 的扫描面与 R5 的动力学工况；不影响标注。
+
+### 6. 阶段门现状
+
+- R2 前置（工具侧）：`check_leg_reachability.py --self-check` 本轮 **exit 0**，打印项含零位姿态、`facing` 有向判定、翻掌反例被拒、三铰链与机体 z 的关系、膝共线越界量、插入股骨旋转轴的候选链加载。该读数属**几何回归**，不构成设计验收（合同 R2:27）。
+- R2 待办：候选 A/B 的**同一目标与同一容差**比较 —— 依赖 D2。
+
+## 证据引用
+
+- 判据入口：`acceptance/records/2026-10-08-lizard2-joint-design-review-contract.md`（R1–R5、判定与实施交接）。
+- 定性参考与量定义：`acceptance/records/2026-10-08-lizard2-reference-motion-v0.md`（来源层标签、坐标与测量字段、腿平面代理的定义）。
+- A20：Cieri、Hatch、Capano、Brainerd（2020），*Sci Rep* **10**:7739，DOI `10.1038/s41598-020-64140-y`（OA，本轮读全文；X 光/CT 原始数据入口 `xmaportal.org` BROWN42/BROWN38，**本轮未读**）。
+- D24：Rockenfeller、Cieri、Schultz、Maag、Clemente（2024），*npj Robotics* **2**:4，DOI `10.1038/s44182-024-00011-2`（OA，本轮读全文）。
+- H13：Clemente、Withers、Thompson、Lloyd（2013），*J Exp Biol* **216**(20):3854–3862，DOI `10.1242/jeb.089060`（本轮 403）。
+- H83：Jenkins 与 Goslow（1983），*J Morphol* **216**:195–216，DOI `10.1002/jmor.1051750207`（肩功能解剖）。
+- 口径与既有读数（不在此复述数值）：`2026-09-29-varanid-joint-range-of-motion-evidence.md`、`2026-09-30-lizard2-leg-to-anatomy-mapping.md`、`2026-09-30-leg-fk-caliber-facing-and-candidate-chains.md`、`2026-09-29-lizard2-pad-tilt-is-the-fold-sum.md`、`2026-09-29-lizard2-pad-leveling-unreachable.md`、`2026-09-29-leg-pose-slider-and-pad-clearance.md`、`2026-09-29-lizard2-v2-gait-five-claims.md`。
+- 复读命令（工具与解释器路径同 `2026-09-30-lizard2-joint-limit-plan-review.md`）：`E:/IsaacLab/env_isaaclab/Scripts/python.exe rl_exp/tools/verify/check_leg_reachability.py --self-check`；摆位 `rl_exp/tools/diagnose/pose_slider.py`。
+
+## 未覆盖边界
+
+- **A20 是肋骨运动学，且每只 1 个周期**：样本小、非科莫多、体型 0.95–2.1 kg。它的价值是**相位锚点与零位定义**，不是幅度目标。
+- **躯干侧弯幅度、四腿相位、足端轨迹、接触事件、骨段角度**：本轮**全部未取到**（H13 图内、K23 未播放）。默认站姿未形成。
+- **D24 是跨物种汇总 + 理论模型**：varanid 只有家族级定性（spine ROM 小），leg ROM 是连线投影扫角，不能当任一关节行程。
+- 本轮没有做 IK、碰撞、可达性曲线、仿真 FK 对拍、动力学或任何限位取值；没有批准任何容差；没有关闭或推进任何事项状态。
+- 本轮改动范围：新增本记录；合同记录结果节加一行入口链接；活跃项更新 `next`/`evidence`/状态句。未触资产、配方、协议、锁或闸门。
+
+## 核对痕迹
+
+- A20 与 D24 走 **OA 正文**逐句取数（DOI 见上）；H13 走页面被 Cloudflare 403 挡，未改用其他镜像，故其数值仍停在"图内"。
+- `check_work_docs.py`（`WORK_DOCS_OK`，89 条记录）、`framework_pin_check.py --strict --self-test`、`check_version_docs.py`、`check_dr_parity.py --strict`、`git diff --check` 均通过；`check_leg_reachability.py --self-check` exit 0。
+- 上文 A20 的相位锚点与 `2026-10-08-lizard2-reference-motion-v0.md` 的表述一致；该记录只给"附近/线索"，本记录补上正文级条件（同侧前肢、周期 0–50%）。

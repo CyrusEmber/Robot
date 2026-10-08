@@ -4,9 +4,9 @@ title: 巨蜥关节设计决策：参考动作、姿态与范围
 scope: acceptance/records, rl_exp/tools/verify, rl_exp/tools/diagnose, rl_exp/blender
 status: in_progress
 landing: acceptance/records/2026-10-08-lizard2-joint-design-review-contract.md#结果
-next: Codex 继续参考周期标注与论文曲线数字化，按 landing 的 R1 提交带来源/误差的数值目标、站姿和 D1–D3 需求提案；缺三维量用显式工程模板探索，待确认项不冒称获准。按各项答复推进对应阶段，整理与提案可独立开展
+next: 待用户答复 D1–D3（数值参考与提案草案的答复栏在 `acceptance/records/2026-10-08-lizard2-r1-numeric-reference-and-decision-drafts.md`）；并行补 R1 缺口：H13 图 3 曲线数字化、K23 可播放片段筛选（播放工具卡点未解），并准备 R2 的 A/B 候选比较（同一目标与容差）
 close_when: Codex 复核 landing 的最终判定与证据，本对话用户确认选择及工况；保留/修改方案经评审通过且未完实施已交具名活跃事项后关闭，全部拒绝亦关闭，任一待决或未判定继续在办；正式采用另过机制闸门
-evidence: acceptance/records/2026-10-08-lizard2-joint-design-review-contract, acceptance/records/2026-10-08-lizard2-reference-motion-v0
+evidence: acceptance/records/2026-10-08-lizard2-joint-design-review-contract, acceptance/records/2026-10-08-lizard2-reference-motion-v0, acceptance/records/2026-10-08-lizard2-r1-numeric-reference-and-decision-drafts
 ---
 
 ## 当前动作与待决问题
@@ -19,7 +19,7 @@ evidence: acceptance/records/2026-10-08-lizard2-joint-design-review-contract, ac
 | D2 允许姿态域 | 巨蜥目标正例与拒绝反例、默认站姿、各量工程容差及依据 | 本对话用户 |
 | D3 工况与取舍 | 目标速度带、髋行程/命令窗口候选与历史可比性 | 本对话用户 |
 
-三项均待提案/答复，已表达的巨蜥动作目标沿用参考记录；不重复询问已获授权的资料整理。未答项只阻塞相应定案，不阻塞标注、量测与离线探索。
+三项提案草案已提交、答复待给（答复栏见 `evidence` 的 r1 记录）；已表达的巨蜥动作目标沿用参考记录；不重复询问已获授权的资料整理。未答项只阻塞相应定案，不阻塞标注、量测与离线探索。
 
 ## 阶段入口与交接
 
