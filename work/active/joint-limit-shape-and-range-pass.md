@@ -4,7 +4,7 @@ title: 巨蜥关节设计决策：参考动作、姿态与范围
 scope: acceptance/records, rl_exp/tools/verify, rl_exp/tools/diagnose, rl_exp/blender
 status: in_progress
 landing: acceptance/records/2026-10-08-lizard2-joint-design-review-contract.md#结果
-next: 待用户答复 D1–D3（答复栏见 evidence 的 r1 记录）；R1 取数路线已判（该记录 §7 可达性、§8 精度天花板）：网格标注**只能**出足端轨迹与相位（±10%），骨段/关节角无可见标志点 ⇒ 要么标记级来源（墙后），要么在 R2/R3 用粗目标反解关节轨迹。下一步：足端级加密试点，或直接备 R2 的 A/B 比较（同一目标与容差）
+next: 待用户答复 D1–D3（答复栏见 evidence 的 r1 记录）；R1 取数路线已判到底（该记录 §7 可达性、§8 精度天花板与片源结论）：视频路线**只能**给定性事实，足端级以上需**正侧视稳定片段**（本机片源池没有），关节角需标记级来源或 R2/R3 仿真侧反解。下一步二选一：外部提供侧视片段/论文 PDF，或转 R2 备料（A/B 候选比较框架，完整比较等 D2 容差）
 close_when: Codex 复核 landing 的最终判定与证据，本对话用户确认选择及工况；保留/修改方案经评审通过且未完实施已交具名活跃事项后关闭，全部拒绝亦关闭，任一待决或未判定继续在办；正式采用另过机制闸门
 evidence: acceptance/records/2026-10-08-lizard2-joint-design-review-contract, acceptance/records/2026-10-08-lizard2-reference-motion-v0, acceptance/records/2026-10-08-lizard2-r1-numeric-reference-and-decision-drafts
 ---
