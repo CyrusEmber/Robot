@@ -18,6 +18,10 @@ lizard2 = lizard 的**四足构型修正版**：在每条腿的根部**插入一
 `acceptance/records/2026-09-22-lizard2-stride-at-load.md`（旧构型对照见同名 2026-09-21 记录）。
 其余 27 个共有 link 的质量与网格与 lizard 逐字节相同（`acceptance/records/2026-09-22-lizard2-family-landing.md`）。
 
+## 设计入口
+
+v3 设计草案的当前载体为 [PLAN.md](PLAN.md)。正式配方版本与任务身份以本文件下方登记及机器声明为准。
+
 ## 线
 
 - `versions/lizard2/main/` = 本家族第一条线。线根放该线的开发态参数与配方锁

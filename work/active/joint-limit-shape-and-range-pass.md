@@ -23,6 +23,8 @@ evidence: acceptance/records/2026-10-08-lizard2-joint-design-review-contract, ac
 
 ## 阶段入口与交接
 
+v3 设计草案入口为 `rl_exp/versions/lizard2/PLAN.md`；本项承接其中的机体、动作与限位决策，推进状态留在本项，实测与判定仍归 evidence。
+
 按 landing 的 R1（参考/需求）→ R2（仪器/结构）→ R3（接触/连续性）→ R4（范围/速度）→ R5（发力/执行）推进。每阶段读取该处判据，不在本项维护第二套产物或通过条件。
 
 正式采用阶段才以前置核验 `work/active/asset-tree-per-family.md`；配方、动作接口及评测协议交付 `work/active/lizard2-family-landing.md`。Blender 几何交付归 `leg-chain-symmetry-convention`；其后的导出接入、数值镜像断言、候选限位与验证由本项承接，文献补证继续由各自事项承接。
