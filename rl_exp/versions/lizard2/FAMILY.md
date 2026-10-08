@@ -9,18 +9,13 @@
 
 ## 家族身份
 
-lizard2 = lizard 的**四足构型修正版**：在每条腿的根部**插入一条竖直轴髋关节（`*_hip`）**，
-腿链成为 `hip(Z) → haa(−X) → hfe(−X) → kfe(−X) → foot(+Y)`，共 30 关节；
-旧构型腿链是 `haa(−X) → hfe(Z) → kfe(−X) → foot(+Y)`，26 关节。
-家族存在的原因是"迈步轴装错了段"：旧构型唯一带竖直轴、名义上负责迈步的关节 `hfe` 坐在股骨远端
-（轴线到脚掌的力臂仅 0.06–0.07 m），承重姿态下扫满行程也只有 0.11–0.13 m 脚掌前后移动；
-把竖直轴移到腿根后力臂 0.49 m，四腿承重行程 0.55 m。实测表与口径见
-`acceptance/records/2026-09-22-lizard2-stride-at-load.md`（旧构型对照见同名 2026-09-21 记录）。
-其余 27 个共有 link 的质量与网格与 lizard 逐字节相同（`acceptance/records/2026-09-22-lizard2-family-landing.md`）。
+lizard2 = lizard 的四足构型修正版，保留每腿 `hip → haa → hfe → kfe → foot` 与机身关节，共 30 个可动关节。当前 main/v3 采用用户于 2026-10-08 批准的候选站姿骨架；旧机体 main/v1、main/v2 同次退休，保留历史配方与任务身份，不再承诺新训/续训与当前树复现。
+
+家族起源与旧机体的轴向/网格事实归历史记录 `acceptance/records/2026-09-22-lizard2-family-landing.md`、`acceptance/records/2026-09-22-lizard2-stride-at-load.md`。当前机体来源与采用记录归 `acceptance/records/2026-10-08-lizard2-v3-landing.md`。
 
 ## 设计入口
 
-v3 设计草案的当前载体为 [PLAN.md](PLAN.md)。正式配方版本与任务身份以本文件下方登记及机器声明为准。
+当前版本为 main/v3；方案入口见 [PLAN.md](PLAN.md)，正文唯一归 [main/v3/PLAN.md](main/v3/PLAN.md)。
 
 ## 线
 
@@ -29,14 +24,10 @@ v3 设计草案的当前载体为 [PLAN.md](PLAN.md)。正式配方版本与任�
 - 家族级文档（`FAMILY.md` / `PLAN.md`）落在 `versions/lizard2/`，**不在 `main/` 里**。
 - 线之间的隔离是硬约束：本线不 import 其它线的 cfg/mdp，要哪个核就复制一份进本线自己的模块。
 
-## 资产树（2026-09-28）
+## 资产树（2026-10-08）
 
-本家族的资产按**自己的树**解析，声明在 `versions/lizard2/assets.json`（`meshes_dir =
-versions/lizard2/meshes`）：物理读 `assets/lizard2/lizard2.usda` 的**内联点**，诊断/验收读
-`versions/lizard2/meshes/collision/*.obj`，URDF 的相对引用也落在同一棵树，资产锁钉同一棵树。
-旧家族 `lizard` 声明共享树 `meshes/`（其 19 个冻结锁逐字节不动）⇒ 修一个家族的几何不再改写另一个
-家族的物理。同日 `rl_foot_collision` 换代为 `rr` 的 y 镜像（原平板 hull 与另三只不同形，理由与读
-数见 `acceptance/records/2026-09-28-lizard2-foot-hull-and-asset-isolation.md`）。
+声明 `versions/lizard2/assets.json` 指向 `lizard2_candidate/meshes`。当前正式机体为 `lizard2_candidate/lizard2_candidate.usda`，同目录 `<stem>.urdf` 与相对网格引用构成实际资产集合。USD 采用原候选转换产物，未重算骨架；来源 DCC 为 `blender/lizard2_stance_candidate.blend`。
+旧 `versions/lizard2/meshes` 与 `assets/lizard2/lizard2.usda` 留作历史，不由当前活跃配方消费。资产换代退休规则从版本纪律继承。
 
 ## 任务注册表
 
@@ -47,7 +38,9 @@ versions/lizard2/meshes`）：物理读 `assets/lizard2/lizard2.usda` 的**内�
 | `Lizard2-Flat-v1` | `lizard2-flat-v1@1`（冻结参数 `versions/lizard2/main/v1/main_params.yaml`） |
 | `Lizard2-Flat-Play-v1` | `lizard2-flat-play-v1@1`（冻结参数 `versions/lizard2/main/v1/main_params.yaml`） |
 | `Lizard2-Flat-v2` | `lizard2-flat-v2@1`（冻结参数 `versions/lizard2/main/v2/main_params.yaml`） |
-| `Lizard2-Flat-Play-v2` | `lizard2-flat-play-v2@1`（冻结参数 `versions/lizard2/main/v2/main_params.yaml`） |
+| `Lizard2-Flat-Play-v2` | `lizard2-flat-play-v2@1`（历史参数 `versions/lizard2/main/v2/main_params.yaml`；退休） |
+| `Lizard2-Flat-v3` | `lizard2-flat-v3@1`（参数 `versions/lizard2/main/v3/main_params.yaml`） |
+| `Lizard2-Flat-Play-v3` | `lizard2-flat-play-v3@1`（参数 `versions/lizard2/main/v3/main_params.yaml`） |
 
 ## 版本历史
 
@@ -57,4 +50,5 @@ versions/lizard2/meshes`）：物理读 `assets/lizard2/lizard2.usda` 的**内�
 | 版本 | 日期 | 摘要 | 教训 |
 |---|---|---|---|
 | main/v1 | 2026-09-22 | 新骨骼上的第一条线：髋轴补齐 + 无 DR、无课程的平地速度追踪配方（`lin_vel_x ∈ [0, 2]`，奖励/终止沿用 v1 基线）；血统根 ⇒ `base.json` 为 `null`，比较对象是框架 stock | （训练后补） |
-| main/v2 | 2026-09-28 | v1 的**单变量**对照版：脚板（blade）四个关节从动作接口去掉（动作维度随之减少），脚板保留 v1 的增益、默认平放目标与上限；其余（奖励/终止/命令/sim/预算）逐字沿用 v1；血统母本 = `main/v1` | （训练后补） |
+| main/v2 | 2026-09-28 | v1 对照版：脚板四关节退出动作接口，其余沿用 v1；母本 main/v1。2026-10-08 因机体采用退休 | 历史结果见 main/v2/NOTES.md |
+| main/v3 | 2026-10-08 | 用户批准的候选机体采用；基于 v2 摘除 kfe 策略动作，保留全部可动关节、PD 与默认零目标；唯一母本 main/v2，旧机体版本同次退休 | 自检/限制见 `acceptance/records/2026-10-08-lizard2-v3-landing.md` |

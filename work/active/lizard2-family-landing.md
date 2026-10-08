@@ -38,6 +38,8 @@ evidence: acceptance/records/2026-09-23-lizard2-v1-gait-skate, acceptance/record
 
 ## 当前状态
 
+正式 v3 配方与新机体已接入，方案唯一归 `rl_exp/versions/lizard2/main/v3/PLAN.md`，实现与验证证据归 `acceptance/records/2026-10-08-lizard2-v3-landing.md`。本项继续承接未定奖励与评测协议，不因配方接入自动关闭。
+
 2026-09-22 完成（细节见四条 `evidence` 记录，本处不复制数值）：
 
 - **与任何历史家族解耦**：`declare_family.py` 的参照家族依赖整条删除；零漂移保护改为"目标家族之外的全部家族"
