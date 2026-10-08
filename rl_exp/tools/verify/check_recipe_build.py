@@ -68,7 +68,7 @@ DIFF_NAME = "diff.json"
 EXPECTED_COMPARED: dict[str, int] = {
     "lizard/main": 32,
     "lizard/baseline": 4,
-    "lizard2/main": 4,
+    "lizard2/main": 6,
 }
 """How many recipe/task pairs this gate compares, per line, pinned.
 
@@ -127,6 +127,8 @@ EXPECTED_DIFFS: dict[tuple[str, str], int] = {
     # plus the two agent leaves its own runner sets (experiment_name, max_iterations) = 3. A 108 here
     # would mean the emitter had read it as a root and restated v1's whole heritage as v2's delta.
     ("lizard2/main", "v2"): 3,
+    # V3 changes only the robot spawn, leg action group and version log directory against v2.
+    ("lizard2/main", "v3"): 3,
 }
 """Recipe -> how many paths its difference declaration lists (``diff.json`` next to the recipe)."""
 

@@ -97,7 +97,9 @@ FROZEN = {
     # else. The previous digest's two v1 entries were verified unchanged by the --update that wrote
     # the new ones, and the diff was reviewed as a two-entry addition, not as a rewrite: see
     # acceptance/records/2026-09-28-lizard2-v2-cfg-lock-rebaseline.md.
-    "rl_exp/versions/lizard2/main/cfg_lock.json": "62b51d8930146db27e776ce9e7d02c4cb62425b6cf47a362bf3f4820b0f4be6e",
+    # V3.2 adoption adds only the formal v3 pair; existing entries are unchanged.
+    # Re-anchor evidence: acceptance/records/2026-10-08-lizard2-v3-landing.md.
+    "rl_exp/versions/lizard2/main/cfg_lock.json": "6369e4bedc730079933fe16d7afb66d84ef34474ff8113d72f76d4ee31e609ef",
 }
 
 FROZEN_REVS: dict[str, str] = {
@@ -114,7 +116,7 @@ FROZEN_REVS: dict[str, str] = {
     # The lizard2 line's bytes landed in dfdc2ae (the pre-training revision that repointed the head
     # guard). The 2026-09-28 re-baseline took the documented two-step shape: the new bytes landed in
     # e59e240 ("Register lizard2 v2"), and this line names that revision.
-    "rl_exp/versions/lizard2/main/cfg_lock.json": "e59e240",
+    "rl_exp/versions/lizard2/main/cfg_lock.json": "working-tree:v3.2 (commit pending)",
 }
 """Which revision each frozen file's bytes are from, for the banner only.
 

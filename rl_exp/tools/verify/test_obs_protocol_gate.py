@@ -164,6 +164,14 @@ def main() -> int:
     fired = g.check_anchors(DECLARED, bad_key)
     check("dims/key-is-not-an-asset-path", any("is not an asset path" in line for line in fired), f"{fired}")
 
+    key3 = "a25a8c39001b"
+    candidate = "lizard2_candidate/lizard2_candidate.usda"
+    groups3 = DECLARED["protocols"][key3]["groups"]
+    check("dims/own-directory-body", not g.check_dims(key3, groups3, {candidate: {"policy": 94}}))
+    check("dims/outside-tree-refused", bool(g.check_dims(
+        key3, groups3, {str(g._REPO / "FILEMAP.md"): {"policy": 94}}
+    )))
+
     # the other direction: a task whose own body has NO approved width while other assets on the
     # same protocol still have theirs. This used to be invisible offline -- the live tool only
     # PRINTS "(unapproved)" -- so a family could train against a width no human ever approved.

@@ -99,8 +99,11 @@ def check_dims(key: str, groups: dict, dims) -> list[str]:
         return [f"{key}: dims must be an object keyed by asset"]
     live = {group for group, body in groups.items() if not body.get("dropped")}
     for asset, body in sorted(dims.items()):
-        if not (isinstance(asset, str) and asset.startswith("assets/") and asset.endswith(".usda")):
-            out.append(f"{key}: dims key {asset!r} is not an asset path (assets/<family>/<family>.usda)")
+        root = DECLARATION.parents[1]
+        if not (isinstance(asset, str) and not pathlib.Path(asset).is_absolute()
+                and asset.endswith(".usda") and (root / asset).is_file()
+                and root.resolve() in (root / asset).resolve().parents):
+            out.append(f"{key}: dims key {asset!r} is not an asset path under rl_exp (missing or outside tree)")
             continue
         if not isinstance(body, dict):
             out.append(f"{key}: dims[{asset!r}] must be an object of group -> width")

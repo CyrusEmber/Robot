@@ -388,6 +388,26 @@ LIZARD2_RECIPES: dict[str, dict] = {
         "train": "Lizard2-Flat-v2",
         "play": "Lizard2-Flat-Play-v2",
     },
+    "v3": {
+        "elements": (
+            "lizard2_robot",
+            "lizard2_actions",
+            "lizard2_flat_ground",
+            "lizard2_proprio_obs",
+            "lizard2_timing",
+            "lizard2_velocity_command",
+            "lizard2_rewards",
+            "lizard2_contact_gate",
+            "lizard2_no_curriculum",
+            "lizard2_no_dr",
+        ),
+        "play_elements": (),
+        "pins": ("lizard2_timing",),
+        "declares": (False, False),
+        "pins_full_range": (False, False),
+        "train": "Lizard2-Flat-v3",
+        "play": "Lizard2-Flat-Play-v3",
+    },
 }
 
 ELEMENTS = {

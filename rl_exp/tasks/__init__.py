@@ -460,3 +460,24 @@ gym.register(
         "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:Lizard2V2PPORunnerCfg",
     },
 )
+
+# V3 adopts the approved stance body; kfe/foot retain PD but leave the policy interface.
+gym.register(
+    id="Lizard2-Flat-v3",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": "rl_exp.tasks.recipe_tasks:Lizard2FlatV3EnvCfg",
+        "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:Lizard2V3PPORunnerCfg",
+    },
+)
+
+gym.register(
+    id="Lizard2-Flat-Play-v3",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": "rl_exp.tasks.recipe_tasks:Lizard2FlatV3EnvCfg_PLAY",
+        "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:Lizard2V3PPORunnerCfg",
+    },
+)

@@ -1,0 +1,35 @@
+{
+  "format": 4,
+  "recipe": "lizard2-flat-v3@1",
+  "line": "lizard2/main",
+  "note": "Hard B, lineage reading: base.json names v2 as this recipe's mother, so the declared difference is against that recipe -- not against the framework stock cfg, which would bury this version's own delta inside everything its ancestors already wrote. Env paths are grouped by the element that last moved them in the replay, so the paths here cannot disagree with the build; params_version is filtered as identity, because it says which recipe this is and it is what makes the two recipes different at all. The why strings are TODO until an author writes them: hard B compares paths, not prose, so an unwritten reason is a review item rather than a wrong claim.",
+  "env": {
+    "allowed": {
+      "lizard2_robot": {
+        "paths": [
+          "scene.robot.spawn"
+        ],
+        "why": "Owner approved the 2026-10-08 candidate body; byte-identical USD is placed beside its URDF/meshes for actual-body resolution and locking. PD, default targets and spawn properties retain v2 values."
+      },
+      "lizard2_actions": {
+        "paths": [
+          "actions.joint_pos_legs"
+        ],
+        "why": "Owner removed four kfe action channels from v2; foot was already excluded. The policy commands hip/haa/hfe and spine only, while all kfe/foot joints retain v2 implicit PD and zero default targets."
+      }
+    }
+  },
+  "agent": {
+    "why": "The agent is a class, not a declaration: these entries carry a reason and no element name.",
+    "allowed": {
+      "experiment_name": "lizard2_v3: separate version log directory; PPO hyperparameters and the v2 training budget are unchanged."
+    }
+  },
+  "authored_against": {
+    "env": {
+      "lizard2_actions": "eca5bbb3799b",
+      "lizard2_robot": "7e2869406606"
+    },
+    "agent": "7c3a87e71c72"
+  }
+}

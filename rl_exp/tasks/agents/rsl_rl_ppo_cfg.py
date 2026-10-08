@@ -389,3 +389,10 @@ class Lizard2V2PPORunnerCfg(Lizard2PPORunnerCfg):
 
     max_iterations = 14000
     experiment_name = "lizard2_v2"
+
+
+@configclass
+class Lizard2V3PPORunnerCfg(Lizard2V2PPORunnerCfg):
+    """V3 body/action adoption; PPO and budget stay identical to v2."""
+
+    experiment_name = "lizard2_v3"

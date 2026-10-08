@@ -27,7 +27,18 @@
       "successor": null,
       "retired_at": null,
       "reason": null,
-      "versions": null
+      "versions": {
+        "v1": {
+          "status": "retired",
+          "retired_at": "2026-10-08",
+          "reason": "Owner adopted the candidate stance body in main/v3; this old-body version exits maintenance and reproduction. See acceptance/records/2026-10-08-lizard2-v3-landing.md."
+        },
+        "v2": {
+          "status": "retired",
+          "retired_at": "2026-10-08",
+          "reason": "Owner adopted the candidate stance body in main/v3; this old-body version exits maintenance and reproduction. See acceptance/records/2026-10-08-lizard2-v3-landing.md."
+        }
+      }
     }
   }
 }
