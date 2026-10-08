@@ -4,7 +4,7 @@ title: 巨蜥关节设计决策：参考动作、姿态与范围
 scope: acceptance/records, rl_exp/tools/verify, rl_exp/tools/diagnose, rl_exp/blender
 status: in_progress
 landing: acceptance/records/2026-10-08-lizard2-joint-design-review-contract.md#结果
-next: 最小核验已补（r1 记录 §13：判定改逐项合取 + minimax 收尾、加密路径核验固定为关节空间线性插值、B≤A 定义为最坏项并核验种子等价性、体高敏感性证明 0.60 非机械上限）。下一步按用户方向：① 用**候选巨蜥空间姿态**重建目标（当前 engineered 周期尚未证明"像巨蜥"，也不能反推骨段长度/限位）；② 推进**骨架对称性、骨段长度与默认姿态候选**；③ 分支连续性与机体自碰撞仍未查，需在重建时一并定口径；④ D1–D3 待答复
+next: 空间姿势带已落进目标并进求解（r1 记录 §14）：带 60–120° 时 A 自达标、B 12/12 打平；带收窄到 60° 以下 A 守不住足端路径，而带股骨长轴旋转的候选把位置误差改善到 −1.2…−54 mm，收到 15–35° 时其 ±0.60 rad 轴饱和 ⇒ **姿势带与增轴行程是两个候选设计参数**。下一步：① 扫「方位角带 × 轴行程」两维，定出哪个组合能同时满足足端路径、掌面与接触（当前轴行程值来自 fixture，需单列成候选）；② 按 §11 镜像规则扩到前肢与其余三腿；③ 骨架对称性与骨段长度决策**不在此项**（归 `leg-chain-symmetry-convention`），本项只出默认姿态候选；④ 分支连续性与机体自碰撞口径待定；⑤ D1–D3 待答复
 close_when: Codex 复核 landing 的最终判定与证据，本对话用户确认选择及工况；保留/修改方案经评审通过且未完实施已交具名活跃事项后关闭，全部拒绝亦关闭，任一待决或未判定继续在办；正式采用另过机制闸门
 evidence: acceptance/records/2026-10-08-lizard2-joint-design-review-contract, acceptance/records/2026-10-08-lizard2-reference-motion-v0, acceptance/records/2026-10-08-lizard2-r1-numeric-reference-and-decision-drafts
 ---

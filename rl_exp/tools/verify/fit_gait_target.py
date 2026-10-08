@@ -152,6 +152,14 @@ def residuals(chain, angles, normal, vertices, base_z, phase, target, point, fac
     if anchor is not None:
         terms.append(max(0.0, abs(values["thigh_elev_deg"] - anchor) - tol["thigh_elev_deg"])
                      / tol["thigh_elev_deg"])
+    band = target.get("posture")
+    if band and phase["contact"] == band.get("applies_to", "stance"):
+        for value_key, low_key, high_key in (("thigh_azim_deg", "femur_azim_min_deg", "femur_azim_max_deg"),
+                                             ("thigh_elev_deg", "femur_elev_min_deg", "femur_elev_max_deg")):
+            value = values[value_key]
+            outside = max(0.0, band[low_key] - value, value - band[high_key])
+            terms.append(outside / band["tol"])
+            values[f"{value_key}_outside_deg"] = outside
     values["angles"] = angles
     values["terms"] = terms
     values["cost"] = sum(term * term for term in terms) + 1e-6 * sum(abs(value) for value in angles)
@@ -249,6 +257,8 @@ def _flags(entry, target, step_rad, rate, velocity_limit, have_previous) -> list
     if entry.get("thigh_elev_deg") is not None and entry.get("thigh_anchor_deg") is not None \
             and abs(entry["thigh_elev_deg"] - entry["thigh_anchor_deg"]) > tol["thigh_elev_deg"]:
         flags.append("THIGH")
+    if entry.get("thigh_azim_deg_outside_deg", 0.0) > 0.0 or entry.get("thigh_elev_deg_outside_deg", 0.0) > 0.0:
+        flags.append("POSTURE")
     if have_previous and step_rad > tol["joint_step_rad"]:
         flags.append("STEP")
     if have_previous and velocity_limit is not None and rate > velocity_limit:
@@ -468,6 +478,17 @@ def self_check(target: dict, leg: str, args) -> int:
     print(f"  control 6 (a 90 deg thigh anchor is unreachable and must be reported): reached "
           f"{read['thigh_elev_deg']:.1f} deg -> {'reported' if missed else 'WRONGLY ACCEPTED'}")
     failures += not missed
+    # Same idea for the posture band: a band the stance cannot live in must come out as a violation,
+    # or the spatial criterion every 'is it a lizard' question rests on would be decorative.
+    tight = json.loads(json.dumps(target))
+    tight["posture"].update({"femur_azim_min_deg": 0.0, "femur_azim_max_deg": 20.0})
+    found = solve(chain, normal, vertices, base_z, tight["phases"][0], tight, point, False, zero,
+                  samples=args.samples)
+    read = residuals(chain, found, normal, vertices, base_z, tight["phases"][0], tight, point, False)
+    flagged = read.get("thigh_azim_deg_outside_deg", 0.0) > 0.0
+    print(f"  control 7 (a sagittal-plane-only posture band must be reported): azimuth "
+          f"{read['thigh_azim_deg']:.1f} deg vs band 0-20 -> {'reported' if flagged else 'WRONGLY ACCEPTED'}")
+    failures += not flagged
     print(f"  SELF_CHECK_{'OK' if failures == 0 else 'FAILED'}")
     return failures
 
@@ -491,10 +512,17 @@ def main() -> None:
                         help="body height override [m]; the engineered target's own value is the default")
     parser.add_argument("--facing-mid-stance", action="store_true",
                         help="D1's option b: demand a level pad only through the middle half of stance")
+    parser.add_argument("--posture-azim", default=None, metavar="MIN:MAX",
+                        help="override the posture band's femur azimuth window [deg]; sweeping this is "
+                             "the experiment that asks whether a candidate can live in a given sprawl, "
+                             "which a temporal criterion cannot answer")
     parser.add_argument("--self-check", action="store_true")
     args = parser.parse_args()
 
     target = load_target(args.target)
+    if args.posture_azim:
+        low, high = (float(value) for value in args.posture_azim.split(":"))
+        target["posture"].update({"femur_azim_min_deg": low, "femur_azim_max_deg": high})
     leg = args.leg or target["meta"]["leg"]
     base_z = args.base_z if args.base_z is not None else target["body"]["base_z_m"]
     if args.self_check:

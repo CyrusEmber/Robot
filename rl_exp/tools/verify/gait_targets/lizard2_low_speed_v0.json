@@ -23,6 +23,16 @@
   },
   "stance_reference": "sole_on_floor",
   "stance_reference_note": "a stance phase's dz is measured against the pad ORIGIN's standing height, but a contact is made by the pad's SOLE; the tool lifts the standing sole onto the floor (its own lowest vertex, read from the asset) before applying dz, otherwise the cycle asks for a contact the pad cannot have. Measured 2026-10-08: at body height 0.9 m the standing sole already sits ~6 mm under the floor, so without this the stance read ~5-6 mm of penetration that looked like a chain failure and was a target-definition error",
+  "posture": {
+    "applies_to": "stance",
+    "femur_azim_min_deg": 60.0,
+    "femur_azim_max_deg": 120.0,
+    "femur_elev_min_deg": -50.0,
+    "femur_elev_max_deg": -10.0,
+    "tol": 10.0,
+    "status": "CANDIDATE bands, not measurements and not approved. The rejection the user asked for is the low end of the azimuth band: a femur inside the sagittal plane (azimuth -> 0) is the upright, adducted 'dog' gait, and a similar footfall timing can carry either posture, which is why this criterion is spatial rather than temporal. The bands' motivation is that varanids sprawl and add femoral adduction and long-axis rotation to lengthen the stride (Clemente 2011/2013, cited in 2026-09-29-varanid-joint-range-of-motion-evidence.md); the numbers themselves are this file's own engineering choice and the pitch axis is missing from the asset entirely",
+    "measured_from": "the femur vector, elevation = atan2(z, hypot(x, y)) and azimuth = atan2(y, x), both in base_link, so the lateral component is never dropped"
+  },
   "body": {
     "base_z_m": 0.9,
     "base_rpy_rad": [0.0, 0.0, 0.0],
