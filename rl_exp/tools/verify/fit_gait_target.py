@@ -50,6 +50,7 @@ Usage:
     python rl_exp/tools/verify/fit_gait_target.py
     python rl_exp/tools/verify/fit_gait_target.py --speed 0.45 --asset-only
     python rl_exp/tools/verify/fit_gait_target.py --speed 0.45 --facing-mid-stance --asset-only
+    python rl_exp/tools/verify/fit_gait_target.py --sweep-bands 60:120,40:60 --sweep-travel 0.3,0.6,1.2
 """
 
 from __future__ import annotations
@@ -493,6 +494,59 @@ def self_check(target: dict, leg: str, args) -> int:
     return failures
 
 
+def with_axis_travel(urdf: pathlib.Path, joint_name: str, travel_rad: float, out: pathlib.Path) -> pathlib.Path:
+    """A copy of ``urdf`` whose named joint is limited to +-``travel_rad``.
+
+    The fixture states its own travel (0.6 rad), which is a fixture number, not a design value: the axis
+    travel is one of the two things a posture question actually decides, so it has to be sweepable
+    without editing the fixture.
+    """
+    tree = ET.parse(urdf)
+    joint = next(entry for entry in tree.getroot().iter("joint") if entry.get("name") == joint_name)
+    limit = joint.find("limit")
+    limit.set("lower", f"{-travel_rad:.6f}")
+    limit.set("upper", f"{travel_rad:.6f}")
+    tree.write(out, encoding="utf-8", xml_declaration=True)
+    return out
+
+
+def sweep(target, leg, base_z, args, reference, bands, travels) -> None:
+    """The two-dimensional capability map: posture band across, axis travel down.
+
+    A is solved once per band (its answer cannot depend on a joint it does not have) and B once per cell.
+    Each cell reports the phases that fail a criterion, the worst position error, and whether the extra
+    axis ran out of travel -- a candidate that satisfies the band only by saturating its own joint has
+    not answered the question, it has moved it into the joint limit.
+    """
+    with tempfile.TemporaryDirectory(prefix="sweep_") as folder:
+        chain_a, normal_a, vertices_a, _, _ = zero_pose(args.urdf, leg, base_z)
+        print(f"  {'band':>10} {'travel':>7} {'A fails':>8} {'A pos':>7} {'B fails':>8} {'B pos':>7} "
+              f"{'B-A pos':>8} {'B sat':>6}  violations")
+        for band in bands:
+            target_band = json.loads(json.dumps(target))
+            target_band["posture"].update({"femur_azim_min_deg": band[0], "femur_azim_max_deg": band[1]})
+            asset = run_one("A", args.urdf, target_band, leg, base_z, args, reference)
+            a_fails = sum(1 for row in asset["rows"] if row["flags"])
+            a_pos = max(row["position_error_m"] for row in asset["rows"])
+            a_set = sorted({flag for row in asset["rows"] for flag in row["flags"]})
+            print(f"  {f'{band[0]:.0f}-{band[1]:.0f}':>10} {'-':>7} {a_fails:>8} {a_pos * 1000:>7.1f} "
+                  f"{'':>8} {'':>7} {'':>8} {'':>6}  A: {','.join(a_set) or '-'}")
+            for travel in travels:
+                fixture = K._inserted_joint_urdf(args.urdf, leg, args.b_token, pathlib.Path(folder))
+                candidate = with_axis_travel(fixture, f"{leg}_{args.b_token}_joint", travel,
+                                             pathlib.Path(folder) / f"b_{travel:.2f}.urdf")
+                extra = run_one("B", candidate, target_band, leg, base_z, args, reference,
+                                seed_rows=asset["rows"])
+                b_fails = sum(1 for row in extra["rows"] if row["flags"])
+                b_pos = max(row["position_error_m"] for row in extra["rows"])
+                b_set = sorted({flag for row in extra["rows"] for flag in row["flags"]})
+                index = [joint["token"] for joint in K.load_chain(candidate, leg)].index(args.b_token)
+                sat = max(abs(row["angles"][index]) for row in extra["rows"]) >= travel - 1e-3
+                print(f"  {'':>10} {travel:>7.2f} {'':>8} {'':>7} {b_fails:>8} {b_pos * 1000:>7.1f} "
+                      f"{(b_pos - a_pos) * 1000:>+8.1f} {'yes' if sat else 'no':>6}  B: "
+                      f"{','.join(b_set) or '-'}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--target", type=pathlib.Path, default=DEFAULT_TARGET)
@@ -517,6 +571,11 @@ def main() -> None:
                              "the experiment that asks whether a candidate can live in a given sprawl, "
                              "which a temporal criterion cannot answer")
     parser.add_argument("--self-check", action="store_true")
+    parser.add_argument("--sweep-bands", default=None, metavar="MIN:MAX,...",
+                        help="with --sweep-travel: the two-dimensional capability map instead of a "
+                             "single run")
+    parser.add_argument("--sweep-travel", default=None, metavar="RAD,...",
+                        help="axis travel limits [rad] to sweep for the candidate arm")
     args = parser.parse_args()
 
     target = load_target(args.target)
@@ -527,6 +586,17 @@ def main() -> None:
     base_z = args.base_z if args.base_z is not None else target["body"]["base_z_m"]
     if args.self_check:
         raise SystemExit(self_check(target, leg, args))
+    if args.sweep_bands:
+        if not args.sweep_travel:
+            parser.error("--sweep-bands needs --sweep-travel")
+        bands = [tuple(float(value) for value in cell.split(":")) for cell in args.sweep_bands.split(",")]
+        travels = [float(value) for value in args.sweep_travel.split(",")]
+        chain_a, _, _, _, reference = zero_pose(args.urdf, leg, base_z)
+        print(f"target {args.target.name}: {target['meta']['status']}")
+        print(f"  capability map, leg {leg}, body z {base_z} m, speed "
+              f"{args.speed or target['gait']['speed_m_per_s']} m/s; A is solved once per band")
+        sweep(target, leg, base_z, args, reference, bands, travels)
+        return
 
     print(f"target {args.target.name}: {target['meta']['status']}")
     print(f"  leg {leg}, period {target['gait']['period_s']} s, speed {target['gait']['speed_m_per_s']} m/s, "

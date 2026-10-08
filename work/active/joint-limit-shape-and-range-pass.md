@@ -4,7 +4,7 @@ title: 巨蜥关节设计决策：参考动作、姿态与范围
 scope: acceptance/records, rl_exp/tools/verify, rl_exp/tools/diagnose, rl_exp/blender
 status: in_progress
 landing: acceptance/records/2026-10-08-lizard2-joint-design-review-contract.md#结果
-next: 空间姿势带已落进目标并进求解（r1 记录 §14）：带 60–120° 时 A 自达标、B 12/12 打平；带收窄到 60° 以下 A 守不住足端路径，而带股骨长轴旋转的候选把位置误差改善到 −1.2…−54 mm，收到 15–35° 时其 ±0.60 rad 轴饱和 ⇒ **姿势带与增轴行程是两个候选设计参数**。下一步：① 扫「方位角带 × 轴行程」两维，定出哪个组合能同时满足足端路径、掌面与接触（当前轴行程值来自 fixture，需单列成候选）；② 按 §11 镜像规则扩到前肢与其余三腿；③ 骨架对称性与骨段长度决策**不在此项**（归 `leg-chain-symmetry-convention`），本项只出默认姿态候选；④ 分支连续性与机体自碰撞口径待定；⑤ D1–D3 待答复
+next: 两维能力图已出（r1 记录 §15）：宽带 60–120° 下 A 达标且**增轴三档行程都不被使用**；紧带 40–60°/20–40° 下 A 与 B **都不合格**，B 只把最大位置误差从 70/102 mm 压到 34/50 mm ⇒ 该轴目前的价值是**降低代价**，不是打开可达性。下一步：① 在紧带内换别的变量（周期、扫幅、体高、支撑比例）找可达边界，而不是继续加轴行程；② 按 §11 镜像规则扩到前肢与其余三腿；③ 骨架对称性与骨段长度决策归 `leg-chain-symmetry-convention`，本项只出默认姿态候选；④ 分支连续性与机体自碰撞口径待定；⑤ D1–D3 待答复
 close_when: Codex 复核 landing 的最终判定与证据，本对话用户确认选择及工况；保留/修改方案经评审通过且未完实施已交具名活跃事项后关闭，全部拒绝亦关闭，任一待决或未判定继续在办；正式采用另过机制闸门
 evidence: acceptance/records/2026-10-08-lizard2-joint-design-review-contract, acceptance/records/2026-10-08-lizard2-reference-motion-v0, acceptance/records/2026-10-08-lizard2-r1-numeric-reference-and-decision-drafts
 ---
