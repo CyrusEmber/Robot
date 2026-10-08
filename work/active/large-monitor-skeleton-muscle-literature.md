@@ -9,4 +9,4 @@ close_when: 由资料审阅者核对一份带来源与样本量的文献记录�
 evidence: acceptance/records/2026-09-29-large-monitor-skeleton-muscle-review, acceptance/records/2026-09-29-varanid-joint-range-of-motion-evidence
 ---
 
-本项仅维护大型陆栖巨蜥生物学资料的证据边界与补证动作。现有文献梳理及来源见 evidence；`lizard2` 的关节限位决策（含 `hfe` 几何）归 `joint-limit-shape-and-range-pass`，步态/足端要求归 `pad-flat-requirement-and-ankle-axis`，本项不接管资产、配方或限位修改。
+本项仅维护大型陆栖巨蜥生物学资料的证据边界与补证动作。现有文献梳理及来源见 evidence；`lizard2` 的参考动作、关节限位决策（含 `hfe` 几何）及步态/足端要求统一归 `joint-limit-shape-and-range-pass`，本项不接管资产、配方或限位修改。
