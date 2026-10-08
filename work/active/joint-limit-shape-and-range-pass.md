@@ -4,7 +4,7 @@ title: 巨蜥关节设计决策：参考动作、姿态与范围
 scope: acceptance/records, rl_exp/tools/verify, rl_exp/tools/diagnose, rl_exp/blender
 status: in_progress
 landing: acceptance/records/2026-10-08-lizard2-joint-design-review-contract.md#结果
-next: 本轮已交付并**改正**可运行的工程周期与目标驱动比较（r1 记录 §12：判据入解、足底接触入判据、周期闭合与关节速率、B 按关节名从 A 播种，自检四条全过）。下一步：① 0.60 m/s 的失效（相位 0/8 的位置+接触）需在目标或体高/姿态上找出路，不是删判据；② 分支连续性与按真实时间的关节速度仍未查（12 点采样不够）；③ 消掉未量测的 mid-stance 大腿锚点（换成实测或 D2 的空间反例）；④ 按 §11 镜像规则扩到前肢与其余三腿；⑤ D1–D3 待答复
+next: 最小核验已补（r1 记录 §13：判定改逐项合取 + minimax 收尾、加密路径核验固定为关节空间线性插值、B≤A 定义为最坏项并核验种子等价性、体高敏感性证明 0.60 非机械上限）。下一步按用户方向：① 用**候选巨蜥空间姿态**重建目标（当前 engineered 周期尚未证明"像巨蜥"，也不能反推骨段长度/限位）；② 推进**骨架对称性、骨段长度与默认姿态候选**；③ 分支连续性与机体自碰撞仍未查，需在重建时一并定口径；④ D1–D3 待答复
 close_when: Codex 复核 landing 的最终判定与证据，本对话用户确认选择及工况；保留/修改方案经评审通过且未完实施已交具名活跃事项后关闭，全部拒绝亦关闭，任一待决或未判定继续在办；正式采用另过机制闸门
 evidence: acceptance/records/2026-10-08-lizard2-joint-design-review-contract, acceptance/records/2026-10-08-lizard2-reference-motion-v0, acceptance/records/2026-10-08-lizard2-r1-numeric-reference-and-decision-drafts
 ---

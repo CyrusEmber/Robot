@@ -162,41 +162,64 @@ def _clipped(chain, angles):
     return [min(max(angles[i], chain[i]["limits"][0]), chain[i]["limits"][1]) for i in range(len(chain))]
 
 
+def _minimax(chain, angles, normal, vertices, base_z, phase, target, point, facing_required) -> float:
+    """The worst single normalised violation, with the sum as a tie-break: the anti-compensation score.
+
+    A small sum of normalised terms does not mean every criterion passed -- one criterion can be paid
+    for by another. Minimising the largest term instead makes the criteria equally urgent, so the pose
+    that comes out is the one with the least excuse rather than the best average.
+    """
+    read = residuals(chain, angles, normal, vertices, base_z, phase, target, point, facing_required)
+    return max(read["terms"]) + 1e-9 * sum(read["terms"])
+
+
 def solve(chain, normal, vertices, base_z, phase, target, point, facing_required, seed, samples=9, sweeps=25):
-    """Scan one joint at a time and repeat from ``seed``: monotone, deterministic, limit-respecting.
+    """Scan one joint at a time and repeat from ``seed``, then repeat once more on the worst violation.
 
     A coarse grid over every joint at once was tried and dropped: with five or six joints the grid is
     either too coarse to seed the descent near a solution or too large to run, and the descent then
     stalled against a limit 13 mm from a target its own FK had produced.
+
+    Two passes, and the second is the one that matters for a verdict: the first minimises the sum of
+    normalised terms, the second minimises the largest one, starting from the first pass's answer.
     """
     best = _clipped(chain, list(seed))
     best_cost = residuals(chain, best, normal, vertices, base_z, phase, target, point,
                           facing_required)["cost"]
-    for _ in range(sweeps):
-        improved = False
-        for index in range(len(chain)):
-            low, high = chain[index]["limits"]
-            for step in range(samples):
-                trial = list(best)
-                trial[index] = low + (high - low) * step / (samples - 1)
-                read = residuals(chain, trial, normal, vertices, base_z, phase, target, point,
-                                 facing_required)
-                if read["cost"] < best_cost:
-                    best, best_cost, improved = trial, read["cost"], True
-        if not improved:
-            break
-    for step in (0.02, 0.005, 0.001):
-        for _ in range(40):
-            improved = False
-            for index in range(len(chain)):
-                for delta in (step, -step):
-                    trial = _clipped(chain, list(best[:index] + [best[index] + delta] + best[index + 1:]))
-                    read = residuals(chain, trial, normal, vertices, base_z, phase, target, point,
-                                     facing_required)
-                    if read["cost"] < best_cost:
-                        best, best_cost, improved = trial, read["cost"], True
-            if not improved:
-                break
+
+    def descend(score_of, current, current_score):
+        best_here, best_score = current, current_score
+        for step in (0.08, 0.025, 0.008):
+            for _ in range(60):
+                improved = False
+                for index in range(len(chain)):
+                    low, high = chain[index]["limits"]
+                    span = [low + (high - low) * tick / (samples - 1) for tick in range(samples)]
+                    step_values = [best_here[index] + step, best_here[index] - step] + span
+                    for value in step_values:
+                        trial = _clipped(chain, list(best_here[:index] + [value] + best_here[index + 1:]))
+                        score = score_of(trial)
+                        if score < best_score:
+                            best_here, best_score, improved = trial, score, True
+                if not improved:
+                    break
+        return best_here, best_score
+
+    def cost_of(angles):
+        return residuals(chain, angles, normal, vertices, base_z, phase, target, point,
+                         facing_required)["cost"]
+
+    def worst_of(angles):
+        return _minimax(chain, angles, normal, vertices, base_z, phase, target, point, facing_required)
+
+    best, best_cost = descend(cost_of, best, best_cost)
+    # The minimax pass starts from the seed as well as from the sum's answer, and the better worst-term
+    # wins. Without the seed in the running, a candidate seeded from A's answer could come out with a
+    # larger worst term than its own seed -- which would make "B is not worse than A" unassertable.
+    for start in (list(seed), best):
+        landed, _ = descend(worst_of, _clipped(chain, list(start)), worst_of(_clipped(chain, list(start))))
+        if worst_of(landed) < worst_of(best):
+            best = landed
     return best
 
 
@@ -280,6 +303,50 @@ def run_one(label, urdf, target, leg, base_z, args, reference, seed_rows=None) -
             "closure_rad": closure, "closure_rate_rad_s": closure / dt}
 
 
+def dense_check(chain, normal, vertices, base_z, rows, target, sub):
+    """Interpolate the solved trajectory in joint space and re-check it *between* the phases.
+
+    The interpolation is FIXED as linear in joint angles over each interval, and stated rather than left
+    to a default: any other choice (cubic, minimum-jerk) moves the answer. This is what turns "the step
+    between two samples is under the bar" into "the rate along the path is", and it is where a
+    mid-interval ground penetration or a lost contact shows up. It is NOT a collision check -- only the
+    pad's own lowest vertex is read, so body self-collision stays unchecked -- and the cycle seam (last
+    phase back to the first) is part of the path for the same reason.
+    """
+    dt = target["gait"]["period_s"] / len(rows)
+    dt_sub = dt / sub
+    contact_m = target["tolerances"]["contact_m"]
+    clearance_m = target["tolerances"]["clearance_m"]
+    worst = {"rate_deg_s": 0.0, "rate_at": None, "penetration_m": 0.0, "penetration_at": None,
+             "clearance_m": math.inf, "clearance_at": None, "seam_step_deg": 0.0}
+    for index, (first, second) in enumerate(zip(rows, rows[1:] + rows[:1])):
+        seam = index == len(rows) - 1
+        # The interval that contains liftoff or touchdown starts and ends in different phases, so which
+        # instant is "airborne" is not resolvable at this sampling. It is held to the no-penetration bar
+        # only; the clearance bar applies once both ends of an interval are swing.
+        fully_airborne = first["contact"] == "swing" and second["contact"] == "swing"
+        previous = list(first["angles"])
+        for tick in range(1, sub + 1):
+            blend = tick / sub
+            angles = [first["angles"][joint] + (second["angles"][joint] - first["angles"][joint]) * blend
+                      for joint in range(len(chain))]
+            step = max(abs(angles[joint] - previous[joint]) for joint in range(len(chain)))
+            rate = math.degrees(step / dt_sub)
+            if rate > worst["rate_deg_s"]:
+                worst["rate_deg_s"], worst["rate_at"] = rate, (int(first["phase"]), tick)
+            if seam:
+                worst["seam_step_deg"] = max(worst["seam_step_deg"], math.degrees(step))
+            lowest = K.pad_state(chain, angles, normal, vertices, base_z)["lowest_z"]
+            if -lowest > worst["penetration_m"]:
+                worst["penetration_m"], worst["penetration_at"] = -lowest, (int(first["phase"]), tick)
+            if fully_airborne and lowest < worst["clearance_m"]:
+                worst["clearance_m"], worst["clearance_at"] = lowest, (int(first["phase"]), tick)
+            previous = angles
+    worst["penetration_ok"] = worst["penetration_m"] <= contact_m
+    worst["clearance_ok"] = worst["clearance_m"] >= clearance_m
+    return worst
+
+
 def _table(result: dict) -> None:
     print(f"  {result['label']}: {result['urdf']}  ({result['joints']} joints)")
     print(f"  {'ph':>3} {'contact':<6} {'dx_mm':>7} {'dz_mm':>6} {'pos_mm':>7} {'face_deg':>8} "
@@ -292,12 +359,24 @@ def _table(result: dict) -> None:
               f"{math.degrees(row['step_rad']):>8.1f} {math.degrees(row['rate_rad_s']):>10.1f} "
               f"{row['thigh_elev_deg']:>8.1f} {row['thigh_azim_deg']:>8.1f}  {','.join(row['flags']) or '-'}")
     failed = [int(row["phase"]) for row in result["rows"] if row["flags"]]
-    thigh = [row["thigh_elev_deg"] for row in result["rows"]]
-    print(f"  failed phases: {failed or 'none'}")
-    print(f"  thigh elevation over the cycle {min(thigh):.1f} .. {max(thigh):.1f} deg (off the HORIZONTAL "
-          f"plane; x-z projection would read these wrong)")
+    violations = sorted({flag for row in result["rows"] for flag in row["flags"]})
+    anchored = [(int(row["phase"]), row["thigh_elev_deg"], row["thigh_anchor_deg"])
+                for row in result["rows"] if row.get("thigh_anchor_deg") is not None]
+    free = [row["thigh_elev_deg"] for row in result["rows"] if row.get("thigh_anchor_deg") is None]
+    print(f"  phases failing a criterion: {failed or 'none'}")
+    verdict = ("every criterion passes in every phase" if not violations
+               else "NO QUALIFYING SOLUTION FOUND -- violations: " + ", ".join(violations))
+    print(f"  VERDICT: {verdict}")
+    if violations:
+        print("    (that is a statement about this search on this target: with a different period, "
+              "footfall placement or body height the outcome changes)")
+    print(f"  thigh elevation (off the HORIZONTAL plane, x-z projection would read it wrong): "
+          f"unanchored phases {min(free):.1f} .. {max(free):.1f} deg; "
+          f"anchored " + (", ".join(f"phase {phase}: {value:.1f} vs anchor {anchor:.1f}"
+                                    for phase, value, anchor in anchored) or "none"))
     print(f"  cycle closure (last phase -> next cycle's phase 0): {math.degrees(result['closure_rad']):.1f} deg "
-          f"= {math.degrees(result['closure_rate_rad_s']):.1f} deg/s; branch continuity: not checked")
+          f"= {math.degrees(result['closure_rate_rad_s']):.1f} deg/s (interval mean); branch continuity: "
+          f"not checked")
 
 
 def compare(base: dict, other: dict) -> None:
@@ -358,10 +437,37 @@ def self_check(target: dict, leg: str, args) -> int:
         candidate = K._inserted_joint_urdf(args.urdf, leg, args.b_token, pathlib.Path(folder))
         asset = run_one("A", args.urdf, target, leg, base_z, args, reference)
         extra = run_one("B", candidate, target, leg, base_z, args, reference, seed_rows=asset["rows"])
-        worst = max(second["cost"] - first["cost"] for first, second in zip(asset["rows"], extra["rows"]))
-        print(f"  control 4 (B seeded from A cannot cost more): worst {worst:+.2e} "
-              f"-> {'yes' if worst <= 1e-9 else 'NO'}")
+        worst = max(max(second["terms"]) - max(first["terms"])
+                    for first, second in zip(asset["rows"], extra["rows"]))
+        print(f"  control 4 (B's best WORST-TERM is not worse than its seed, which is A's answer): "
+              f"worst {worst:+.2e} -> {'yes' if worst <= 1e-9 else 'NO'}")
         failures += worst > 1e-9
+        # The comparison is only meaningful if the seed really is A's answer: B with its extra joint at
+        # zero must reproduce A's pad position, facing and sole height, or "B <= seed" compares nothing.
+        b_chain, b_normal, b_vertices, _, _ = zero_pose(candidate, leg, base_z)
+        names_b = [joint["name"] for joint in b_chain]
+        drift = 0.0
+        for row in asset["rows"]:
+            embedded = [row["angle_by_name"].get(name, 0.0) for name in names_b]
+            a_state = K.pad_state(chain, row["angles"], normal, vertices, base_z)
+            b_state = K.pad_state(b_chain, embedded, b_normal, b_vertices, base_z)
+            drift = max(drift, _distance(a_state["position"], b_state["position"]),
+                        abs(a_state["facing_cos"] - b_state["facing_cos"]),
+                        abs(a_state["lowest_z"] - b_state["lowest_z"]))
+        print(f"  control 5 (A's answer embedded in B at zero extra angle reproduces A exactly): "
+              f"worst drift {drift:.2e} -> {'yes' if drift <= 1e-9 else 'NO'}")
+        failures += drift > 1e-9
+    # A criterion nobody can fail is not a criterion: an unreachable thigh anchor must be reported.
+    hard = json.loads(json.dumps(target))
+    hard["phases"][4]["thigh_elev_deg"] = 90.0
+    point = [reference[0] + hard["phases"][4]["dx_m"], reference[1], reference[2]]
+    found = solve(chain, normal, vertices, base_z, hard["phases"][4], hard, point, False, zero,
+                  samples=args.samples)
+    read = residuals(chain, found, normal, vertices, base_z, hard["phases"][4], hard, point, False)
+    missed = abs(read["thigh_elev_deg"] - 90.0) > hard["tolerances"]["thigh_elev_deg"]
+    print(f"  control 6 (a 90 deg thigh anchor is unreachable and must be reported): reached "
+          f"{read['thigh_elev_deg']:.1f} deg -> {'reported' if missed else 'WRONGLY ACCEPTED'}")
+    failures += not missed
     print(f"  SELF_CHECK_{'OK' if failures == 0 else 'FAILED'}")
     return failures
 
@@ -379,6 +485,10 @@ def main() -> None:
                         help="override the target's speed [m/s]; stance offsets scale with it, which is "
                              "how a sensitivity run is made")
     parser.add_argument("--asset-only", action="store_true")
+    parser.add_argument("--dense", type=int, default=20,
+                        help="sub-samples per phase interval for the between-phase path check; 0 disables")
+    parser.add_argument("--base-z", type=float, default=None,
+                        help="body height override [m]; the engineered target's own value is the default")
     parser.add_argument("--facing-mid-stance", action="store_true",
                         help="D1's option b: demand a level pad only through the middle half of stance")
     parser.add_argument("--self-check", action="store_true")
@@ -386,7 +496,7 @@ def main() -> None:
 
     target = load_target(args.target)
     leg = args.leg or target["meta"]["leg"]
-    base_z = target["body"]["base_z_m"]
+    base_z = args.base_z if args.base_z is not None else target["body"]["base_z_m"]
     if args.self_check:
         raise SystemExit(self_check(target, leg, args))
 
@@ -402,13 +512,26 @@ def main() -> None:
     if args.speed:
         print(f"  speed override {args.speed} m/s -> stance sweep "
               f"{target['gait']['stance_sweep_m'] * args.speed / target['gait']['speed_m_per_s']:.4f} m")
-    chain_a, _, _, _, reference = zero_pose(args.urdf, leg, base_z)
+    chain_a, normal_a, vertices_a, zero_a, reference = zero_pose(args.urdf, leg, base_z)
     femur = math.sqrt(sum(value * value for value in chain_a[2]["origin"]))
     print(f"  A standing pad origin {[round(value, 4) for value in reference]} m; femur length {femur:.4f} m")
 
     asset = run_one("A (asset)", args.urdf, target, leg, base_z, args, reference)
     print()
     _table(asset)
+    if args.dense:
+        worst = dense_check(chain_a, normal_a, vertices_a, base_z, asset["rows"], target, args.dense)
+        limit = min(joint_velocity_limits(args.urdf).get(joint["name"], math.inf) for joint in chain_a)
+        print(f"  between-phase path check (linear in joint space, {args.dense} sub-samples per interval, "
+              f"interval {target['gait']['period_s'] / len(asset['rows']) * 1000:.0f} ms):")
+        print(f"    peak joint rate {worst['rate_deg_s']:.1f} deg/s at {worst['rate_at']} "
+              f"(URDF limit {math.degrees(limit):.1f} deg/s)")
+        print(f"    deepest penetration anywhere along the path {worst['penetration_m'] * 1000:.1f} mm at "
+              f"{worst['penetration_at']} (bar {target['tolerances']['contact_m'] * 1000:.0f} mm -> "
+              f"{'ok' if worst['penetration_ok'] else 'VIOLATION'})")
+        print(f"    lowest clearance inside swing intervals {worst['clearance_m'] * 1000:.1f} mm at "
+              f"{worst['clearance_at']} (bar {target['tolerances']['clearance_m'] * 1000:.0f} mm -> "
+              f"{'ok' if worst['clearance_ok'] else 'VIOLATION'}); seam sub-step {worst['seam_step_deg']:.1f} deg")
     if args.asset_only:
         return
     with tempfile.TemporaryDirectory(prefix="fit_candidate_") as folder:
