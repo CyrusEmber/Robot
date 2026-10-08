@@ -4,7 +4,7 @@ title: 巨蜥关节设计决策：参考动作、姿态与范围
 scope: acceptance/records, rl_exp/tools/verify, rl_exp/tools/diagnose, rl_exp/blender
 status: in_progress
 landing: acceptance/records/2026-10-08-lizard2-joint-design-review-contract.md#结果
-next: 本轮已交付可运行的工程周期与目标驱动 A/B 比较（r1 记录 §12，工具 `fit_gait_target.py` + 目标 JSON，自检 OK）。下一步：① 消两处仍失败——mid-stance 大腿锚点需实测值或改挂 D2 的空间反例条件，相位 9 的抬脚跳变需更密相位或关节速度上限；② 按 §11 镜像规则把同一目标扩到前肢与其余三腿；③ D1–D3 待答复后按答复推进同目标比较
+next: 本轮已交付并**改正**可运行的工程周期与目标驱动比较（r1 记录 §12：判据入解、足底接触入判据、周期闭合与关节速率、B 按关节名从 A 播种，自检四条全过）。下一步：① 0.60 m/s 的失效（相位 0/8 的位置+接触）需在目标或体高/姿态上找出路，不是删判据；② 分支连续性与按真实时间的关节速度仍未查（12 点采样不够）；③ 消掉未量测的 mid-stance 大腿锚点（换成实测或 D2 的空间反例）；④ 按 §11 镜像规则扩到前肢与其余三腿；⑤ D1–D3 待答复
 close_when: Codex 复核 landing 的最终判定与证据，本对话用户确认选择及工况；保留/修改方案经评审通过且未完实施已交具名活跃事项后关闭，全部拒绝亦关闭，任一待决或未判定继续在办；正式采用另过机制闸门
 evidence: acceptance/records/2026-10-08-lizard2-joint-design-review-contract, acceptance/records/2026-10-08-lizard2-reference-motion-v0, acceptance/records/2026-10-08-lizard2-r1-numeric-reference-and-decision-drafts
 ---

@@ -9,7 +9,7 @@
       "gait.speed_m_per_s": "paper_reported as a cross-species reference (M08 walk, V. exanthematicus 0.29 m/s, range 0.24-0.34) -- NOT a Komodo value",
       "gait.hind_duty": "paper_reported (M08 same source: hindlimb stance 69 +/- 1.7 % of cycle)",
       "phases[].dx_m / dz_m": "engineered, derived in gait.derivation from the three values above",
-      "phases[].thigh_dir_deg": "engineered anchor from one camera reading that the thigh runs near-horizontal at mid-stance. KNOWN CONFLICT: every run so far reports phase 4 as THIGH, the fit putting the thigh near vertical there (~-89 deg at 0.3 m/s), so either the anchor is a mis-read or the mid-stance posture this rig needs is not the animal's. Kept as a flagged conflict, not deleted, until a measured anchor exists -- do not read it as an animal value",
+      "phases[].thigh_elev_deg": "the femur's elevation off the HORIZONTAL PLANE (negative = pointing down), per this file's own definition: elevation = atan2(femur_z, hypot(femur_x, femur_y)), so the lateral component is NOT dropped -- an x-z projection once read a sprawling femur as a vertical one. The single anchor (0.0 = level, at mid-stance) is a crude guess from a camera frame and is PENDING a measurement: the rig's own solution at that phase sits near -34.6 deg with the femur almost entirely lateral, so do not read the anchor as an animal value and do not read the gap as a conflict until both sides are stated in this same definition",
       "body.base_z_m": "engineering choice, equal to the checker's own default so a reading is comparable with the existing pose prints"
     },
     "missing": [
@@ -21,6 +21,8 @@
     ],
     "derivation": "stance_sweep = speed * duty * period = 0.3 * 0.69 * 1.2 = 0.2484 m. The foot travels that far aft over the body while planted, so dx runs +sweep/2 -> -sweep/2 across stance and back across swing; the body itself advances speed * period = 0.36 m per cycle."
   },
+  "stance_reference": "sole_on_floor",
+  "stance_reference_note": "a stance phase's dz is measured against the pad ORIGIN's standing height, but a contact is made by the pad's SOLE; the tool lifts the standing sole onto the floor (its own lowest vertex, read from the asset) before applying dz, otherwise the cycle asks for a contact the pad cannot have. Measured 2026-10-08: at body height 0.9 m the standing sole already sits ~6 mm under the floor, so without this the stance read ~5-6 mm of penetration that looked like a chain failure and was a target-definition error",
   "body": {
     "base_z_m": 0.9,
     "base_rpy_rad": [0.0, 0.0, 0.0],
@@ -43,17 +45,19 @@
   "tolerances": {
     "position_m": 0.02,
     "facing_deg": 10.0,
+    "contact_m": 0.005,
+    "clearance_m": 0.02,
     "limit_margin_rad": 0.05,
     "joint_step_rad": 0.35,
-    "thigh_dir_deg": 15.0,
-    "note": "exploration thresholds, not approved values: none of these has been shown sufficient"
+    "thigh_elev_deg": 15.0,
+    "note": "exploration thresholds, not approved values: none of these has been shown sufficient. joint_step_rad 0.35 is 20.1 deg, over the target's own sampling interval of 0.1 s; the joint rate is also read against the URDF's OWN velocity limit, which is a physical bound rather than a chosen one"
   },
   "phases": [
     {"phase": 0.0, "fraction_of_cycle": 0.0, "contact": "stance", "dx_m": 0.1242, "dz_m": 0.0, "thigh_dir_deg": null},
     {"phase": 1.0, "fraction_of_cycle": 0.0833, "contact": "stance", "dx_m": 0.0942, "dz_m": 0.0, "thigh_dir_deg": null},
     {"phase": 2.0, "fraction_of_cycle": 0.1667, "contact": "stance", "dx_m": 0.0642, "dz_m": 0.0, "thigh_dir_deg": null},
     {"phase": 3.0, "fraction_of_cycle": 0.25, "contact": "stance", "dx_m": 0.0342, "dz_m": 0.0, "thigh_dir_deg": null},
-    {"phase": 4.0, "fraction_of_cycle": 0.3333, "contact": "stance", "dx_m": 0.0042, "dz_m": 0.0, "thigh_dir_deg": 0.0},
+    {"phase": 4.0, "fraction_of_cycle": 0.3333, "contact": "stance", "dx_m": 0.0042, "dz_m": 0.0, "thigh_elev_deg": 0.0},
     {"phase": 5.0, "fraction_of_cycle": 0.4167, "contact": "stance", "dx_m": -0.0258, "dz_m": 0.0, "thigh_dir_deg": null},
     {"phase": 6.0, "fraction_of_cycle": 0.5, "contact": "stance", "dx_m": -0.0558, "dz_m": 0.0, "thigh_dir_deg": null},
     {"phase": 7.0, "fraction_of_cycle": 0.5833, "contact": "stance", "dx_m": -0.0858, "dz_m": 0.0, "thigh_dir_deg": null},
