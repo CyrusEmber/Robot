@@ -4,14 +4,14 @@ title: 巨蜥关节设计决策：参考动作、姿态与范围
 scope: acceptance/records, rl_exp/tools/verify, rl_exp/tools/diagnose, rl_exp/blender
 status: in_progress
 landing: acceptance/records/2026-10-08-lizard2-joint-design-review-contract.md#结果
-next: 先由用户执行 leg-chain-symmetry-convention 的 Blender 对称骨架、长度与默认姿态候选；交付后 Codex 核对导出与 FK、补数值镜像断言，依次推进候选动作、限位和运行时初始角度。已有探索与未决边界保留在 r1 记录，不把动物数据或 D1–D3 最终定值设为本轮建模前置
+next: 候选由 Codex 本轮交付（见 leg-chain-symmetry-convention 的 landing：blend、截图、隔离目录导出、随姿态偏转的转轴与 FK 运动读数），等用户判定接受/修改/拒绝。用户答复后按序推进：候选动作 → 限位 → 运行时初始角度，并处理本轮量出、尚未拍板的四项（下段朝前倾角的价格、左右命令的正负约定、后脚板形状、旧方位包络与折腿和在新区位下的重验）；判定权与工况仍在用户，不把动物数据或 D1–D3 最终定值设为本轮建模前置
 close_when: Codex 复核 landing 的最终判定与证据，本对话用户确认选择及工况；保留/修改方案经评审通过且未完实施已交具名活跃事项后关闭，全部拒绝亦关闭，任一待决或未判定继续在办；正式采用另过机制闸门
 evidence: acceptance/records/2026-10-08-lizard2-joint-design-review-contract, acceptance/records/2026-10-08-lizard2-reference-motion-v0, acceptance/records/2026-10-08-lizard2-r1-numeric-reference-and-decision-drafts
 ---
 
 ## 当前动作与待决问题
 
-总体核对与接入执行者为 Codex；Blender 候选由本对话用户执行，落在 `work/active/leg-chain-symmetry-convention.md`。需求确认人与最终设计决策人为本对话用户。技术判据唯一入口是 landing 的“验收条件”，候选读数与决策进入该记录的结果指针。
+总体核对与接入执行者为 Codex；Blender 候选自本月由 Codex 用脚本执行，落点仍在 `work/active/leg-chain-symmetry-convention.md`。需求确认人与最终设计决策人为本对话用户。技术判据唯一入口是 landing 的“验收条件”，候选读数与决策进入该记录的结果指针。
 
 | 决策线程 | Codex 下一份可审阅提案 | 确认人 |
 |---|---|---|
