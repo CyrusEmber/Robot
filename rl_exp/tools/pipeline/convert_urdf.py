@@ -19,6 +19,12 @@ parser = argparse.ArgumentParser(description="Convert a robot's URDF (SSOT) into
 parser.add_argument("--robot", default="lizard",
                     help="family name; picks versions/<robot>/<robot>.urdf, that line's params yaml "
                          "and assets/<robot>/<robot>.usda")
+parser.add_argument("--urdf", default=None,
+                    help="URDF to convert instead of versions/<robot>/<robot>.urdf; an unadopted "
+                         "candidate keeps its own tree and has no versions/<...> directory")
+parser.add_argument("--name", default=None,
+                    help="asset name for the output: assets/<name>/<name>.usda (defaults to --robot). "
+                         "A candidate must not land in assets/<robot>/, which frozen asset locks pin")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 ROBOT = args_cli.robot
@@ -38,14 +44,16 @@ def main():
     with open(EXP_DIR / "versions" / ROBOT / "main" / "main_params.yaml", encoding="utf-8") as f:
         params = yaml.safe_load(f)
 
-    urdf_path = str(EXP_DIR / "versions" / ROBOT / ("%s.urdf" % ROBOT))
+    urdf_path = (str(pathlib.Path(args_cli.urdf).resolve()) if args_cli.urdf
+                 else str(EXP_DIR / "versions" / ROBOT / ("%s.urdf" % ROBOT)))
+    name = args_cli.name or ROBOT
     dest_path = str(EXP_DIR / "assets")
     legs_params = params["actuators"]["legs"]
 
     urdf_converter_cfg = UrdfConverterCfg(
         asset_path=urdf_path,
         usd_dir=dest_path,
-        usd_file_name="%s/%s.usda" % (ROBOT, ROBOT),
+        usd_file_name="%s/%s.usda" % (name, name),
         fix_base=False,
         # keep {leg}_FOOT as separate bodies: contact rewards need them
         merge_fixed_joints=False,
