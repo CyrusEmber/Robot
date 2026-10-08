@@ -2,12 +2,12 @@
 id: joint-limit-shape-and-range-pass
 title: 巨蜥目标动作 → 结构候选对比 → 常用范围与硬限位 → 验证与换代
 scope: rl_exp/blender, rl_exp/versions/lizard2, rl_exp/tasks, rl_exp/tools/verify, rl_exp/tools/diagnose, acceptance/records
-status: blocked
+status: in_progress
 landing: rl_exp/blender/generate_urdf.py, rl_exp/versions/lizard2/lizard2.urdf, rl_exp/assets/lizard2/lizard2.usda, rl_exp/tools/verify/check_leg_reachability.py
-next: ① 的目标姿态序列与容差仍缺（无可用巨蜥 ROM 与三维序列）——这是唯一的阻塞项。② 的**工具口径已修齐**（有向朝面判决、机体姿态进世界系、候选机体与网格绑定、链自 URDF 树遍历、`--compare` 入口、反例能使自检失败），见 acceptance/records/2026-09-30-leg-fk-caliber-facing-and-candidate-chains.md；下一步是在目标序列到位后做现腿链与新增股骨长轴旋转的同一目标对比（骨段方向 + 足端轨迹），同时补前置验证
+next: 沿 acceptance/records/2026-10-08-lizard2-reference-motion-v0.md 整理参考动作：筛选可播放的科莫多平地完整周期，登记骨段投影、四足接触与身体侧弯；独立数字化陆栖巨蜥后肢曲线，补前肢逐相位资料。缺三维量可标明工程模板继续探索，不因缺被动 ROM 停止；数值目标与容差明确后再做现链/新增股骨旋转的同目标比较，并补离线—仿真 FK 核对
 close_when: (a) 目标动作、参考来源、坐标与零位、测量误差和工程容差可追溯，并定义允许的仿生姿态域及必须拒绝的非目标反例；(b) 前后肢分别映射，结构候选对比有同一目标下的骨段与足端误差，采用或不采用新增轴的理由明确；(c) 逐轴记录常用范围、硬边界候选、工程选择及其来源，独立区间或组合禁区的结论与保证范围明确，目标轨迹可执行且预定义非巨蜥姿态被运行时机制拒绝；(d) 四腿连续性、碰撞、限位余量与动力学均有判定，未通过不得称为已验证方案；(e) 工具绑定同一候选机体，几何回归与设计验收分开，反例能使验收失败；(f) 若采用新机体，同变更退休旧机体的冻结消费者，新版本首次冻结建锁、旧锁不刷新，并记录重训及历史可比性；(g) 结论不冒称真实巨蜥机械极限。各阶段具体读数与判定只有 acceptance/records/ 一处正文。
 depends_on: asset-tree-per-family
-evidence: acceptance/records/2026-09-30-leg-fk-caliber-facing-and-candidate-chains, acceptance/records/2026-09-30-lizard2-leg-to-anatomy-mapping, acceptance/records/2026-09-30-lizard2-joint-limit-plan-review, acceptance/records/2026-09-29-large-monitor-skeleton-muscle-review, acceptance/records/2026-09-29-varanid-joint-range-of-motion-evidence, acceptance/records/2026-09-29-lizard2-hfe-knee-limit, acceptance/records/2026-09-29-lizard2-pad-leveling-unreachable, acceptance/records/2026-09-29-lizard2-pad-tilt-is-the-fold-sum
+evidence: acceptance/records/2026-10-08-lizard2-reference-motion-v0, acceptance/records/2026-09-30-leg-fk-caliber-facing-and-candidate-chains, acceptance/records/2026-09-30-lizard2-leg-to-anatomy-mapping, acceptance/records/2026-09-30-lizard2-joint-limit-plan-review, acceptance/records/2026-09-29-large-monitor-skeleton-muscle-review, acceptance/records/2026-09-29-varanid-joint-range-of-motion-evidence, acceptance/records/2026-09-29-lizard2-hfe-knee-limit, acceptance/records/2026-09-29-lizard2-pad-leveling-unreachable, acceptance/records/2026-09-29-lizard2-pad-tilt-is-the-fold-sum
 ---
 
 ## 目标与范围
@@ -21,6 +21,8 @@ evidence: acceptance/records/2026-09-30-leg-fk-caliber-facing-and-candidate-chai
 ## 推进顺序与验收
 
 ### ① 目标序列与解剖映射
+
+参考来源、首版定性周期与测量定义见 `acceptance/records/2026-10-08-lizard2-reference-motion-v0.md`；沿其数值参考出口推进，不把资料整理与结构采用的前置混成同一阻塞。
 
 先固定参考对象与低速平地工况，取完整支撑—摆动周期，并包含折叠、承重高度、前后端点、抬脚与落脚。量测股骨前后摆动、外展/内收、股骨—胫骨平面转动、肘/膝与腕/踝屈伸、躯干姿态、四足相位、足端轨迹与接触方式。
 
