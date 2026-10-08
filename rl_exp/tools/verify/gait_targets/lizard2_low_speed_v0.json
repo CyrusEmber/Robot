@@ -1,0 +1,65 @@
+{
+  "meta": {
+    "id": "lizard2_low_speed_v0",
+    "what": "engineered low-speed hind-leg cycle for one lizard2 leg -- the fitting target an A/B structural comparison is run against",
+    "status": "engineered. No field here is a Komodo measurement, and this file is not a design decision; it exists so two candidate chains can be scored on the same target.",
+    "leg": "rl",
+    "labels": {
+      "gait.period_s": "engineered (chosen so the cycle is slow enough for a walking gait)",
+      "gait.speed_m_per_s": "paper_reported as a cross-species reference (M08 walk, V. exanthematicus 0.29 m/s, range 0.24-0.34) -- NOT a Komodo value",
+      "gait.hind_duty": "paper_reported (M08 same source: hindlimb stance 69 +/- 1.7 % of cycle)",
+      "phases[].dx_m / dz_m": "engineered, derived in gait.derivation from the three values above",
+      "phases[].thigh_dir_deg": "engineered anchor from one camera reading that the thigh runs near-horizontal at mid-stance. KNOWN CONFLICT: every run so far reports phase 4 as THIGH, the fit putting the thigh near vertical there (~-89 deg at 0.3 m/s), so either the anchor is a mis-read or the mid-stance posture this rig needs is not the animal's. Kept as a flagged conflict, not deleted, until a measured anchor exists -- do not read it as an animal value",
+      "body.base_z_m": "engineering choice, equal to the checker's own default so a reading is comparable with the existing pose prints"
+    },
+    "missing": [
+      "thigh and shank direction over the cycle (one mid-stance anchor only)",
+      "pad yaw and lateral foot position over the cycle (y is left at the asset's own zero pose)",
+      "torso, spine and tail motion; body height variation over the cycle",
+      "forelimbs and the other three legs (the mirror rule for those is in the r1 record, section 11)",
+      "passive joint range: no varanid ROM values exist to bound this target (see 2026-09-29-varanid-joint-range-of-motion-evidence.md)"
+    ],
+    "derivation": "stance_sweep = speed * duty * period = 0.3 * 0.69 * 1.2 = 0.2484 m. The foot travels that far aft over the body while planted, so dx runs +sweep/2 -> -sweep/2 across stance and back across swing; the body itself advances speed * period = 0.36 m per cycle."
+  },
+  "body": {
+    "base_z_m": 0.9,
+    "base_rpy_rad": [0.0, 0.0, 0.0],
+    "note": "level body, no yaw; a turning or rolling body is out of scope for v0"
+  },
+  "gait": {
+    "period_s": 1.2,
+    "speed_m_per_s": 0.3,
+    "hind_duty": 0.69,
+    "touchdown_phase": 0.0,
+    "stance_sweep_m": 0.2484,
+    "swing_lift_m": 0.08,
+    "phases_per_cycle": 12
+  },
+  "facing": {
+    "required_during_stance": true,
+    "tol_deg": 10.0,
+    "note": "checked and flagged, never fitted: the objective is position plus a priced joint excursion, so no criterion below can be paid off with a smaller position error"
+  },
+  "tolerances": {
+    "position_m": 0.02,
+    "facing_deg": 10.0,
+    "limit_margin_rad": 0.05,
+    "joint_step_rad": 0.35,
+    "thigh_dir_deg": 15.0,
+    "note": "exploration thresholds, not approved values: none of these has been shown sufficient"
+  },
+  "phases": [
+    {"phase": 0.0, "fraction_of_cycle": 0.0, "contact": "stance", "dx_m": 0.1242, "dz_m": 0.0, "thigh_dir_deg": null},
+    {"phase": 1.0, "fraction_of_cycle": 0.0833, "contact": "stance", "dx_m": 0.0942, "dz_m": 0.0, "thigh_dir_deg": null},
+    {"phase": 2.0, "fraction_of_cycle": 0.1667, "contact": "stance", "dx_m": 0.0642, "dz_m": 0.0, "thigh_dir_deg": null},
+    {"phase": 3.0, "fraction_of_cycle": 0.25, "contact": "stance", "dx_m": 0.0342, "dz_m": 0.0, "thigh_dir_deg": null},
+    {"phase": 4.0, "fraction_of_cycle": 0.3333, "contact": "stance", "dx_m": 0.0042, "dz_m": 0.0, "thigh_dir_deg": 0.0},
+    {"phase": 5.0, "fraction_of_cycle": 0.4167, "contact": "stance", "dx_m": -0.0258, "dz_m": 0.0, "thigh_dir_deg": null},
+    {"phase": 6.0, "fraction_of_cycle": 0.5, "contact": "stance", "dx_m": -0.0558, "dz_m": 0.0, "thigh_dir_deg": null},
+    {"phase": 7.0, "fraction_of_cycle": 0.5833, "contact": "stance", "dx_m": -0.0858, "dz_m": 0.0, "thigh_dir_deg": null},
+    {"phase": 8.0, "fraction_of_cycle": 0.6667, "contact": "stance", "dx_m": -0.1158, "dz_m": 0.0, "thigh_dir_deg": null},
+    {"phase": 9.0, "fraction_of_cycle": 0.75, "contact": "swing", "dx_m": -0.0761, "dz_m": 0.0457, "thigh_dir_deg": null},
+    {"phase": 10.0, "fraction_of_cycle": 0.8333, "contact": "swing", "dx_m": -0.0093, "dz_m": 0.0794, "thigh_dir_deg": null},
+    {"phase": 11.0, "fraction_of_cycle": 0.9167, "contact": "swing", "dx_m": 0.0574, "dz_m": 0.0598, "thigh_dir_deg": null}
+  ]
+}
