@@ -26,6 +26,11 @@ Usage:
     python rl_exp/tools/diagnose/clip_sheet.py --video clip.mp4 --start 9.5 --duration 4 --fps 3
     python rl_exp/tools/diagnose/clip_sheet.py --video clip.mp4 --start 0.3 --duration 2.2 --fps 4 \
         --cols 3 --rows 3 --scale 560 --grid 50
+    python rl_exp/tools/diagnose/clip_sheet.py --video clip.mp4 --start 1.4 --duration 1.0 --fps 6 \
+        --crop 900:400:250:430 --scale 760 --grid 50
+
+``--crop`` takes ffmpeg's own ``W:H:X:Y`` and is applied *before* the scale: spending a tile on the limb
+band is what makes a foot readable, while upscaling only enlarges the same pixels.
 """
 
 from __future__ import annotations
@@ -77,19 +82,28 @@ def _is_fragment(path: pathlib.Path) -> bool:
     return path.stem.endswith((".f137", ".f299", ".f251", ".f248", ".f136"))
 
 
+def _filters(scale: int, crop: str | None) -> str:
+    """Scale first or crop first matters: cropping keeps the source's own pixels, upscaling invents none."""
+    chain = []
+    if crop:
+        chain.append(f"crop={crop}")
+    chain.append(f"scale={scale}:-2")
+    return ",".join(chain)
+
+
 def sheet(video: pathlib.Path, out: pathlib.Path, start: float, duration: float, fps: float,
-          cols: int, rows: int, scale: int) -> pathlib.Path:
+          cols: int, rows: int, scale: int, crop: str | None = None) -> pathlib.Path:
     """Write one tiled sheet covering ``[start, start + duration)`` at ``fps`` samples per second."""
     out.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(
         [_exe("ffmpeg"), "-hide_banner", "-loglevel", "error", "-ss", str(start), "-t", str(duration),
-         "-i", str(video), "-vf", f"fps={fps},scale={scale}:-2,tile={cols}x{rows}", "-y", str(out)],
+         "-i", str(video), "-vf", f"fps={fps},{_filters(scale, crop)},tile={cols}x{rows}", "-y", str(out)],
         check=True)
     return out
 
 
 def grid_sheet(video: pathlib.Path, out: pathlib.Path, start: float, duration: float, fps: float,
-               cols: int, rows: int, scale: int, grid: int) -> pathlib.Path:
+               cols: int, rows: int, scale: int, grid: int, crop: str | None = None) -> pathlib.Path:
     """Same tiles as :func:`sheet`, but each one carries a labelled pixel grid.
 
     Angles in a single camera plane come out of pixel coordinates, so no scale or calibration is
@@ -103,7 +117,8 @@ def grid_sheet(video: pathlib.Path, out: pathlib.Path, start: float, duration: f
     with tempfile.TemporaryDirectory(prefix="clip_frames_") as tmp:
         subprocess.run(
             [_exe("ffmpeg"), "-hide_banner", "-loglevel", "error", "-ss", str(start), "-t", str(duration),
-             "-i", str(video), "-vf", f"fps={fps},scale={scale}:-2", "-y", str(pathlib.Path(tmp) / "f_%03d.png")],
+             "-i", str(video), "-vf", f"fps={fps},{_filters(scale, crop)}", "-y",
+             str(pathlib.Path(tmp) / "f_%03d.png")],
             check=True)
         frames = sorted(pathlib.Path(tmp).glob("f_*.png"))[: cols * rows]
         if not frames:
@@ -150,13 +165,16 @@ def main() -> None:
     parser.add_argument("--grid", type=int, default=0,
                         help="draw a labelled pixel grid every N px, so a point can be read off a "
                              "tile to ~half a cell (needs Pillow; angles need no other calibration)")
+    parser.add_argument("--crop", default=None,
+                        help="crop W:H:X:Y in source pixels, ffmpeg's own order, applied before --scale: "
+                             "the only way to spend a tile on detail instead of on empty frame")
     parser.add_argument("--out", type=pathlib.Path, default=None)
     args = parser.parse_args()
 
     video = args.video or fetch(args.yt_id, args.work, args.height)
     out = args.out or pathlib.Path(video).with_name(f"{pathlib.Path(video).stem}_s{args.start:g}_d{args.duration:g}.png")
     writer = grid_sheet if args.grid else sheet
-    extra = (args.grid,) if args.grid else ()
+    extra = (args.grid, args.crop) if args.grid else (args.crop,)
     print(writer(video, out, args.start, args.duration, args.fps, args.cols, args.rows, args.scale, *extra))
     print(f"rows: {args.rows}, cols: {args.cols}, tile {args.scale}px, fps {args.fps} -- read row-major")
 
