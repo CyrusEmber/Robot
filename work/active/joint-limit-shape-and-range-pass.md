@@ -4,14 +4,14 @@ title: 巨蜥关节设计决策：参考动作、姿态与范围
 scope: acceptance/records, rl_exp/tools/verify, rl_exp/tools/diagnose, rl_exp/blender
 status: in_progress
 landing: acceptance/records/2026-10-08-lizard2-joint-design-review-contract.md#结果
-next: 方位角**可达包络已实测 ≈[70°,105°]**（r1 记录 §17，条件：rl/0.30 m/s/体高 0.90 m/平放+贴地）：40–60° 带**从来不在可达域内** ⇒ 前两轮"紧带不可达"改判为"那个带不可能"，增轴在包络内不被使用、包络外只减小违约量；目标侧速度×体高九格也开不出来。下一步：① 处理**唯一稳定卡住的边界**——摆动净空（相位 9 的 18.1 mm vs 20 mm 阈值，即目标自己的抬脚量/阈值）；② 包络不能声称"像巨蜥"：动物是否落在 70–105° 未量过，需要三维标记级或可标注素材；③ 按 §11 镜像规则扩到前肢与其余三腿；④ 分支连续性与机体自碰撞口径待定；⑤ D1–D3 待答复
+next: 先由用户执行 leg-chain-symmetry-convention 的 Blender 对称骨架、长度与默认姿态候选；交付后 Codex 核对导出与 FK、补数值镜像断言，依次推进候选动作、限位和运行时初始角度。已有探索与未决边界保留在 r1 记录，不把动物数据或 D1–D3 最终定值设为本轮建模前置
 close_when: Codex 复核 landing 的最终判定与证据，本对话用户确认选择及工况；保留/修改方案经评审通过且未完实施已交具名活跃事项后关闭，全部拒绝亦关闭，任一待决或未判定继续在办；正式采用另过机制闸门
 evidence: acceptance/records/2026-10-08-lizard2-joint-design-review-contract, acceptance/records/2026-10-08-lizard2-reference-motion-v0, acceptance/records/2026-10-08-lizard2-r1-numeric-reference-and-decision-drafts
 ---
 
 ## 当前动作与待决问题
 
-当前执行者为 Codex；需求确认人与最终设计决策人为本对话用户。技术判据唯一入口是 landing 的“验收条件”，候选读数与决策进入该记录的结果指针。
+总体核对与接入执行者为 Codex；Blender 候选由本对话用户执行，落在 `work/active/leg-chain-symmetry-convention.md`。需求确认人与最终设计决策人为本对话用户。技术判据唯一入口是 landing 的“验收条件”，候选读数与决策进入该记录的结果指针。
 
 | 决策线程 | Codex 下一份可审阅提案 | 确认人 |
 |---|---|---|
@@ -25,6 +25,6 @@ evidence: acceptance/records/2026-10-08-lizard2-joint-design-review-contract, ac
 
 按 landing 的 R1（参考/需求）→ R2（仪器/结构）→ R3（接触/连续性）→ R4（范围/速度）→ R5（发力/执行）推进。每阶段读取该处判据，不在本项维护第二套产物或通过条件。
 
-正式采用阶段才以前置核验 `work/active/asset-tree-per-family.md`；配方、动作接口及评测协议交付 `work/active/lizard2-family-landing.md`。源资产镜像与文献补证继续由各自事项承接；缺少实施落点时先建立具名事项再交接。
+正式采用阶段才以前置核验 `work/active/asset-tree-per-family.md`；配方、动作接口及评测协议交付 `work/active/lizard2-family-landing.md`。Blender 几何交付归 `leg-chain-symmetry-convention`；其后的导出接入、数值镜像断言、候选限位与验证由本项承接，文献补证继续由各自事项承接。
 
 换代与两种锁的处理只引用 `.codemaker/rules/versioning.mdc` §A；规则证据见 `acceptance/records/2026-09-30-body-swap-and-lock-freeze.md`。此处涉及的资产冻结锁为 `asset_lock.json`，配方锁为 `cfg_lock.json`。
