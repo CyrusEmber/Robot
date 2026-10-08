@@ -1,6 +1,7 @@
 import bpy
 import bmesh
 import json
+import math
 import os
 import shutil
 import struct
@@ -12,11 +13,20 @@ from mathutils import Vector
 # passes script arguments after a bare `--`, so the call is
 #   blender.exe --background --python generate_urdf.py -- --robot lizard2
 ROBOT = "lizard"
-if "--" in sys.argv:
-    _argv = sys.argv[sys.argv.index("--") + 1:]
+_argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
+
+
+def cli(name):
+    """Value of ``--<name>`` from the argument tail, or None."""
     for _i, _a in enumerate(_argv):
-        if _a == "--robot" and _i + 1 < len(_argv):
-            ROBOT = _argv[_i + 1]
+        if _a == "--%s" % name and _i + 1 < len(_argv):
+            return _argv[_i + 1]
+    return None
+
+
+ROBOT = cli("robot") or ROBOT
+BLEND_OVERRIDE = cli("blend")
+OUT_OVERRIDE = cli("out_dir")
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 TOTAL_MASS = 72.0
@@ -55,19 +65,29 @@ AXIS_MAP_LIZARD2 = dict(AXIS_MAP, hip=_HIP_AXIS, hfe=("-1 0 0", -1.2, 1.2, 150, 
 ROBOT_SPECS = {
     "lizard": {"axes": AXIS_MAP, "blend": "lizard_stance.blend", "hip_joint": False, "micro_budget": None},
     "lizard2": {"axes": AXIS_MAP_LIZARD2, "blend": "lizard_stance.blend", "hip_joint": True, "micro_budget": 5},
+    # The 2026-10-08 stance candidate's twin of lizard2: same family, same links, but the blend's
+    # default stance now carries a leg-plane yaw per leg, so its in-plane hinges must follow that
+    # yaw (`leg_plane_axes`). Written where `--out_dir` says -- never into versions/<family>/meshes,
+    # which the frozen v1/v2 asset locks pin, because it is a candidate and not an adopted asset.
+    "lizard2_candidate": {"axes": AXIS_MAP_LIZARD2, "blend": "lizard2_stance_candidate.blend",
+                          "hip_joint": True, "micro_budget": 5, "leg_plane_axes": True},
 }
 SPEC = ROBOT_SPECS[ROBOT]
 AXIS_MAP = SPEC["axes"]
-_BLEND_IN = os.path.join(_SCRIPT_DIR, SPEC["blend"])
+_BLEND_IN = BLEND_OVERRIDE or os.path.join(_SCRIPT_DIR, SPEC["blend"])
 # The family's own directory, read off the declaration rather than guessed: this generator writes the
 # meshes the URDF references and the asset lock pins, and since 2026-09-28 that tree is per-family
 # (`versions/<family>/assets.json`). It used to write into a scratch `<robot>_urdf/` directory while
 # referencing `../meshes/` (the shared tree), so a regeneration landed where nothing read it.
+# `--out_dir` overrides it for a candidate family that has no declaration on purpose.
 _EXP_DIR = os.path.abspath(os.path.join(_SCRIPT_DIR, ".."))
-_DECLARATION = os.path.join(_EXP_DIR, "versions", ROBOT, "assets.json")
-with open(_DECLARATION) as _fh:
-    _DECLARED = json.load(_fh)["meshes_dir"]
-OUT_DIR = os.path.join(_EXP_DIR, _DECLARED)
+if OUT_OVERRIDE:
+    OUT_DIR = os.path.abspath(OUT_OVERRIDE)
+else:
+    _DECLARATION = os.path.join(_EXP_DIR, "versions", ROBOT, "assets.json")
+    with open(_DECLARATION) as _fh:
+        _DECLARED = json.load(_fh)["meshes_dir"]
+    OUT_DIR = os.path.join(_EXP_DIR, _DECLARED)
 
 BALL_MESHES = {
     "Roundcube.001", "Roundcube.017", "Roundcube.025", "Roundcube.018", "Roundcube.019",
@@ -132,7 +152,9 @@ def export_stl(bm, path):
             normal = normal / length if length > 0 else Vector((0.0, 0.0, 0.0))
             fh.write(struct.pack("<12fH", normal.x, normal.y, normal.z,
                                  va.x, va.y, va.z, vb.x, vb.y, vb.z, vc.x, vc.y, vc.z, 0))
-    bm.free()
+    # This used to free the bmesh, which made the OBJ export that follows it raise
+    # `ReferenceError: BMesh data ... has been removed` under Blender 5.x: the caller exports both
+    # formats from one bmesh and owns it, so it frees it.
 
 
 def export_obj(bm, path):
@@ -175,6 +197,8 @@ for link, bone in bones.items():
             col_bm = build_bmesh(col_objs, offset, False)
             export_stl(col_bm, os.path.join(OUT_DIR, "meshes", "collision", "%s_collision.stl" % link))
             export_obj(col_bm, os.path.join(OUT_DIR, "meshes", "collision", "%s_collision.obj" % link))
+            col_bm.free()
+        vis_bm.free()
         entry["has_collision"] = bool(col_objs)
         entry["area"] = area
         entry["aabb_min"] = Vector((min(c.x for c in coords), min(c.y for c in coords), min(c.z for c in coords)))
@@ -231,6 +255,40 @@ def joint_spec(link):
     return None
 
 
+# Per-leg baked flexion-plane yaw [deg]: once the default stance carries a leg yaw, a leg's flexion
+# plane is no longer the body's own x = const plane, and an in-plane hinge has to stay perpendicular
+# to it. Read off the pose itself -- the two proximal segment directions -- rather than restating the
+# stance constants here, so the two cannot drift apart. The branch keeps the frozen asset's sign
+# convention: every leg's in-plane hinge keeps a negative x component.
+LEG_YAW = {}
+for _leg in ("lf", "rf", "rl", "rr"):
+    if "%s_kfe" % _leg in bones:
+        _d1 = bones["%s_hfe" % _leg]["head"] - bones["%s_haa" % _leg]["head"]
+        _d2 = bones["%s_kfe" % _leg]["head"] - bones["%s_hfe" % _leg]["head"]
+        _normal = _d1.cross(_d2).normalized()
+        _yaw = math.degrees(math.atan2(_normal.y, _normal.x))
+        LEG_YAW[_leg] = _yaw - math.copysign(180.0, _yaw) if abs(_yaw) > 90.0 else _yaw
+
+
+def axis_for(link, axis_str):
+    """``axis_str`` rotated by the link's own leg-plane yaw, when the spec asks for it.
+
+    A baked leg yaw turns the leg's flexion plane while every exported joint frame keeps ``rpy = 0``,
+    so yesterday's world-X hinge would point out of the plane. ``R_z(yaw) @ base_axis`` is the same
+    hinge in the new plane: the vertical hip yaw is untouched, the in-plane hinges
+    (``haa``/``hfe``/``kfe``, base -X) and the sagittal ``foot`` (base +Y) follow their leg.
+    """
+    if not SPEC.get("leg_plane_axes"):
+        return axis_str
+    yaw = LEG_YAW.get(link[:2])
+    if yaw is None or link.split("_")[-1] not in ("haa", "hfe", "kfe", "foot"):
+        return axis_str
+    v = [float(value) for value in axis_str.split()]
+    theta = math.radians(yaw)
+    return "%.6f %.6f %.6f" % (v[0] * math.cos(theta) - v[1] * math.sin(theta),
+                               v[0] * math.sin(theta) + v[1] * math.cos(theta), v[2])
+
+
 xml = ['<?xml version="1.0"?>', '<robot name="lizard_robot">']
 for link, entry in link_data.items():
     mass = entry["mass"]
@@ -265,7 +323,7 @@ for link, entry in link_data.items():
     xml.append('    <parent link="%s"/>' % parent)
     xml.append('    <child link="%s"/>' % link)
     xml.append('    <origin xyz="%.6f %.6f %.6f" rpy="0 0 0"/>' % (rel.x, rel.y, rel.z))
-    xml.append('    <axis xyz="%s"/>' % axis)
+    xml.append('    <axis xyz="%s"/>' % axis_for(link, axis))
     xml.append('    <limit lower="%.2f" upper="%.2f" effort="%d" velocity="%d"/>' % (lo, hi, effort, vel))
     xml.append('  </joint>')
 
@@ -276,6 +334,13 @@ with open(urdf_path, "w") as f:
 
 mass_sum = sum(e["mass"] for e in link_data.values())
 print("=== URDF ===")
+print("robot=%s blend=%s out_dir=%s" % (ROBOT, _BLEND_IN, OUT_DIR))
 print("links=%d joints=%d total_mass=%.2fkg" % (len(link_data), len(link_data) - 1, mass_sum))
 print("saved=%s" % urdf_path)
+if SPEC.get("leg_plane_axes"):
+    print("=== LEG PLANE AXES (R_z(yaw) @ base) ===")
+    for leg in ("lf", "rf", "rl", "rr"):
+        print("  %s yaw=%+7.3f deg | haa/hfe/kfe %s | foot %s"
+              % (leg, LEG_YAW[leg], axis_for("%s_haa" % leg, AXIS_MAP["haa"][0]),
+                 axis_for("%s_foot" % leg, AXIS_MAP["foot"][0])))
 print("=== DONE ===")

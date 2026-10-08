@@ -56,3 +56,11 @@ ablation_harness/videos/
 # relative to the URDF's own directory; regenerable from rl_exp/meshes)
 rl_exp/lizard_urdf/
 rl_exp/versions/lizard/meshes/
+
+# stance-candidate products: the URDF+meshes tree and the review renderings are one Blender run away
+# from the committed .blend (`rl_exp/blender/lizard2_stance_candidate.py` +
+# `generate_urdf.py --robot lizard2_candidate --out_dir rl_exp/lizard2_candidate`), and the readings
+# that matter live in the record. The candidate tree is also *not* a family asset tree: a frozen
+# version's asset_lock.json pins versions/<family>/meshes, so writing there would be an adoption.
+rl_exp/lizard2_candidate/
+rl_exp/blender/lizard2_stance_candidate_*.png
