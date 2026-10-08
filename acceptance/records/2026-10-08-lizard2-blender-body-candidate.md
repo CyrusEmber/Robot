@@ -42,6 +42,16 @@
 - 默认姿态的实际足底能放到同一地面，骨段与躯干无明显互穿。找不到兼顾腿形与接地的候选时，保留失败姿态和原因交回 Codex，不靠扩大限位或删目标掩盖。
 - 重新打开候选后，静止骨架和网格保持一致，截图与文件对应。Blender 检查不等于导出碰撞、承重或动力学通过。
 
+### 动作通道决定
+
+用户拍板（2026-10-08）：踝部只取消策略动作通道。按现有腿链映射，范围为四条腿的 `*_kfe_joint` 与 `*_foot_joint`；前肢对应腕/足端，后肢对应踝/足端。它们仍是可动关节，保留 PD 驱动机制；不改成 fixed，不删骨骼，不用 Blender 的旋转锁代替动作配置。
+
+正式 v3 配置中，对应关节不进入 `action.joints`，也不留无效动作占位。未接收策略命令时，位置目标须为本版 `default_joint_pos`；新静止几何下默认角仍需核对，不能以“取消通道”替代默认目标设计。本次决定不顺带改 PD 增益、力矩/速度上限或机械限位。
+
+当前 v2 的动作列表已不含 foot、仍含 kfe；若其余接口不变，v3 从 v2 继续去掉四个 kfe 通道，预计动作维度由 26 变为 22。物理关节数量不因这项动作配置改变而减少。此处是接口设计预期，不是已运行读数；最终由配置构建与运行时布局核验，含 last-action 观测、部署映射及默认目标复位。
+
+验收时须同时看到：策略无对应通道、执行器仍存在、未命令关节目标与版本默认角一致、实际关节可在接触载荷下偏离目标。恒定目标不保证实际关节锁死，也不保证足底全程水平；接地、滑移与承重仍按实际运动检查。
+
 ### 导出与限位交接
 
 本轮不直接运行 `generate_urdf.py`：它固定读原 `lizard_stance.blend` 并写家族资产，候选另存后不会自动被消费。也不盲跑 `fix_bones.py`、`rotate_rig.py`、`rename_flip_v8.py` 或 `build_rig.py`：前者从网格对象原点覆写 head，旧映射须核对；后几者含历史一次性变换/重命名。
@@ -53,6 +63,8 @@ Blender 的 bone roll 或 Limit Rotation 约束不是当前 URDF 转轴/限位�
 ## 结果
 
 执行单已准备；Blender 操作尚未执行，未改模型、骨长、限位、运行时初始姿态或训练配置。用户要求在 Blender 修改，并选择自己执行。
+
+踝部动作通道的用户决定已落在本单，运行时实现交 `work/active/lizard2-family-landing.md`；本轮只修订设计文档，未修改动作配置或关节类型。
 
 执行后回填，未检查的项目保留空缺：
 
@@ -69,6 +81,7 @@ Blender 的 bone roll 或 Limit Rotation 约束不是当前 URDF 转轴/限位�
 ## 证据引用
 
 - 本对话用户：要求修改对称性、长度、初始姿态与限位；明确上表四段方向；要求依据 MD 在 Blender 修改，随后选择自己执行。
+- 本对话用户更正：“就是取消动作通道”；动作集合对照读取 `rl_exp/versions/lizard2/main/v2/main_params.yaml` 的 `action.joints`。保留驱动与默认目标的实现验收参考 `acceptance/records/2026-09-28-lizard2-v2-startup-contract.md`。
 - `acceptance/records/2026-10-08-lizard2-reference-motion-v0.md`：用户观察、坐标与骨段定义；本单将用户确认方向作为工程候选要求，不升级为动物量测。
 - `acceptance/records/2026-10-08-lizard2-r1-numeric-reference-and-decision-drafts.md`：单腿工程探索和局限；包络、长度扫与时序不是本单的生物设计定值。
 - `acceptance/records/2026-09-30-lizard2-leg-to-anatomy-mapping.md`：关节中心与骨段对应；前肢仍须按肩—肘—腕核对。
