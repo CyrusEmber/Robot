@@ -4,10 +4,10 @@ title: 巨蜥参考动作、腿链结构与限位：接触、步幅、验证与�
 scope: rl_exp/blender, rl_exp/versions/lizard2, rl_exp/tasks, rl_exp/tools/verify, rl_exp/tools/diagnose, ablation_harness, acceptance/records
 status: in_progress
 landing: rl_exp/blender/generate_urdf.py, rl_exp/versions/lizard2/lizard2.urdf, rl_exp/assets/lizard2/lizard2.usda, rl_exp/tools/verify/check_leg_reachability.py, rl_exp/tools/diagnose/pose_slider.py, rl_exp/tools/diagnose/gait_probe.py, rl_exp/versions/lizard2/main/main_params.yaml, ablation_harness/protocols/lizard2_flat_v4.json
-next: 沿 acceptance/records/2026-10-08-lizard2-reference-motion-v0.md 整理参考动作：筛选可播放的科莫多平地完整周期，登记骨段投影、四足接触与身体侧弯；独立数字化陆栖巨蜥后肢曲线，补前肢逐相位资料。缺三维量可标明工程模板继续探索，不因缺被动 ROM 停止；数值目标与容差明确后再做现链/新增股骨旋转的同目标比较，并补离线—仿真 FK 核对
-close_when: (a) 目标动作、参考来源、坐标与零位、测量误差和工程容差可追溯，并定义允许的仿生姿态域及必须拒绝的非目标反例；(b) 前后肢分别映射，结构候选对比有同一目标下的骨段与足端误差，采用或不采用新增轴的理由明确；(c) 逐轴记录常用范围、硬边界候选、工程选择及其来源，独立区间或组合禁区的结论与保证范围明确，目标轨迹可执行且预定义非巨蜥姿态被运行时机制拒绝；(d) 四腿连续性、碰撞、限位余量与动力学均有判定，未通过不得称为已验证方案；(e) 工具绑定同一候选机体，几何回归与设计验收分开，反例能使验收失败；(f) 若采用新机体，同变更退休旧机体的冻结消费者，新版本首次冻结建锁、旧锁不刷新，并记录重训及历史可比性；(g) 结论不冒称真实巨蜥机械极限；(h) 接触需求与容差有具名决定和依据，静态支撑、支撑轨迹、连续性三段各有误差—容差、步幅—体高、余量与碰撞记录，几何出口与动力学判定分开；(i) 髋贴限位按速度档在至少两个 seed 或至少两个 checkpoint 上复核，扩大行程/收窄命令窗口/接受现状有明确取舍、落点与历史可比性说明，范围不足的因果结论另有验证。各阶段具体读数与判定只有 acceptance/records/ 一处正文。
+next: 沿 acceptance/records/2026-10-08-lizard2-reference-motion-v0.md 整理参考动作：筛选可播放的科莫多平地完整周期，登记骨段投影、四足接触与身体侧弯；独立数字化陆栖巨蜥后肢曲线，补前肢逐相位资料。缺三维量可标明工程模板继续探索，不因缺被动 ROM 停止；同步形成默认站姿与按相位重置的数值候选；数值目标与容差明确后再做现链/新增股骨旋转的同目标比较，并补离线—仿真 FK 核对及姿态/相位相关的承载与推进验证
+close_when: (a) 目标动作、参考来源、坐标与零位、测量误差和工程容差可追溯，并定义允许的仿生姿态域及必须拒绝的非目标反例；(b) 前后肢分别映射，结构候选对比有同一目标下的骨段与足端误差，采用或不采用新增轴的理由明确；(c) 逐轴记录常用范围、硬边界候选、工程选择及其来源，独立区间或组合禁区的结论与保证范围明确，目标轨迹可执行且预定义非巨蜥姿态被运行时机制拒绝；(d) 四腿连续性、碰撞、限位余量与动力学均有判定，未通过不得称为已验证方案；(e) 工具绑定同一候选机体，几何回归与设计验收分开，反例能使验收失败；(f) 若采用新机体，同变更退休旧机体的冻结消费者，新版本首次冻结建锁、旧锁不刷新，并记录重训及历史可比性；(g) 结论不冒称真实巨蜥机械极限；(h) 接触需求与容差有具名决定和依据，静态支撑、支撑轨迹、连续性三段各有误差—容差、步幅—体高、余量与碰撞记录，几何出口与动力学判定分开；(i) 髋贴限位按速度档在至少两个 seed 或至少两个 checkpoint 上复核，扩大行程/收窄命令窗口/接受现状有明确取舍、落点与历史可比性说明，范围不足的因果结论另有验证；(j) 默认站姿与训练重置状态分别有数值、来源和验证，默认动作偏置及重置变化的配方影响明确；(k) 按姿态与接触相位核对所需力矩/速度、可交付能力、跟踪、饱和与摩擦，身体侧弯和结构候选的收益有同目标对比，实测与估算分开。各阶段具体读数与判定只有 acceptance/records/ 一处正文。
 depends_on: asset-tree-per-family
-evidence: acceptance/records/2026-10-08-lizard2-work-consolidation, acceptance/records/2026-10-08-lizard2-reference-motion-v0, acceptance/records/2026-09-30-leg-fk-caliber-facing-and-candidate-chains, acceptance/records/2026-09-30-lizard2-leg-to-anatomy-mapping, acceptance/records/2026-09-30-lizard2-joint-limit-plan-review, acceptance/records/2026-09-29-large-monitor-skeleton-muscle-review, acceptance/records/2026-09-29-varanid-joint-range-of-motion-evidence, acceptance/records/2026-09-29-lizard2-hfe-knee-limit, acceptance/records/2026-09-29-lizard2-pad-leveling-unreachable, acceptance/records/2026-09-29-lizard2-pad-tilt-is-the-fold-sum, acceptance/records/2026-09-29-leg-pose-slider-and-pad-clearance, acceptance/records/2026-09-29-lizard2-v2-gait-five-claims, acceptance/records/2026-09-23-lizard2-v1-gait-skate
+evidence: acceptance/records/2026-10-08-lizard2-posture-force-validation-scope, acceptance/records/2026-10-08-lizard2-work-consolidation, acceptance/records/2026-10-08-lizard2-reference-motion-v0, acceptance/records/2026-09-30-leg-fk-caliber-facing-and-candidate-chains, acceptance/records/2026-09-30-lizard2-leg-to-anatomy-mapping, acceptance/records/2026-09-30-lizard2-joint-limit-plan-review, acceptance/records/2026-09-29-large-monitor-skeleton-muscle-review, acceptance/records/2026-09-29-varanid-joint-range-of-motion-evidence, acceptance/records/2026-09-29-lizard2-hfe-knee-limit, acceptance/records/2026-09-29-lizard2-pad-leveling-unreachable, acceptance/records/2026-09-29-lizard2-pad-tilt-is-the-fold-sum, acceptance/records/2026-09-29-leg-pose-slider-and-pad-clearance, acceptance/records/2026-09-29-lizard2-v2-gait-five-claims, acceptance/records/2026-09-23-lizard2-v1-gait-skate
 ---
 
 ## 目标与范围
@@ -33,6 +33,8 @@ evidence: acceptance/records/2026-10-08-lizard2-work-consolidation, acceptance/r
 - 正例与反例一起定义：按股骨/肱骨侧展、肘膝相对躯干的侧向位置、腿平面方向、机体高度与骨长比例、接触相位等量描述允许域；把用户不接受的内收直立跑姿转成可复读反例，不能仅以“像狗”命名代替判据。支撑、摆动、转向分别定域，不能用一个角阈值无差别禁止必要过渡。
 
 产物：目标序列、映射与容差的证据记录。没有明确目标时，结构与限位只作探索候选，不能冻结。
+
+默认站姿与训练重置分别交付：默认站姿给四腿骨段方向、关节角、机体姿态/体高与足接触，经过③几何和⑤承载验证；建模零位不直接视为参考站姿。按周期相位重置时，关节位置/速度、机体状态与接触阶段须一致，重置扰动也在允许域内验证。调整 `default_joint_pos` 时同步核对 `use_default_offset` 对动作参考中心的影响；新配方落点交 `lizard2-family-landing`，不原地改冻结版本。采用/保留初始姿态与各限位分别给依据，不预设全部参数都要改变。
 
 ### ② 仪器口径与结构候选对比
 
@@ -93,6 +95,12 @@ A = 当前腿链；B = 后肢增加沿股骨长轴、随股骨方向变化的旋
 ### ⑤ 动力学、采用与新版本
 
 验证目标体高、支撑分配与连续步幅下的力矩、速度、饱和持续时间、接触与平衡，并区分请求力矩、可交付上界与实测量。先低速，再扩工况；不同候选在同一评价口径下比较。几何通过而动力学失败时，回查姿态、机构与驱动，不以“奖励没训好”掩盖缺口。
+
+按默认站姿、支撑前/中/后段及摆动建立姿态—发力记录；同一关节的作用随整链姿态、关节速度和接触约束核对，不按关节名固定分配推进/承重功能。每阶段至少关联骨段/机体姿态、接触脚与受力方向、所需关节力矩/速度、可交付余量、跟踪误差、饱和持续时间及摩擦/滑移。先做声明载荷与支撑分配的静力筛查，再验证完整周期动力学；静力或雅可比结果不能单独证明动态可执行，也不在奇异位形直接求逆宣称足端力能力。
+
+身体侧弯与新增旋转轴的作用在相同目标速度、接触条件和执行器能力下对比；候选新增驱动的质量/功率预算差异另报。比较动作误差、承载/推进能力和执行代价，不能只看奖励或几何可达性。由验证结果回查参考站姿、运行姿态域与范围；必要时改结构、驱动或目标工况，不能靠扩限位掩盖发力缺口。巨蜥肌肉资料提供功能参照，未经机构/电机证据不移植成姿态相关电机力矩曲线。
+
+力矩采集先核实传感/求解器通道含义；隐式执行器的无效或占位零值不能当实际输出，PD 估算与能力上界分别标注。具体方法边界见 posture-force evidence；本节产物是可追溯的分阶段载荷与执行验证记录。
 
 采用依据是动作表达和可执行性；新轴不能只靠更高奖励分获准。结构变更需新配方重训；旧 checkpoint 仅作影响诊断，不能代替新机体验证。只有范围变化时，重训/重评取舍也要有明示依据。
 
