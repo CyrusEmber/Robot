@@ -22,9 +22,9 @@
 |---|---|---|
 | A20 | 取 OA 正文（Sci Rep 10:7739） | **取到**：样本、个体质量、周期数、相位锚点、JCS 零位定义（§2） |
 | D24 | 取 OA 正文（npj Robotics 2:4） | **取到**：in-vivo 数据集规模、leg/spine ROM 区间、理论最优区间（§3） |
-| H13 | 取 JEB 页面 | **403**（Cloudflare）；图 3 曲线仍未数字化（其数值在图内，非 OA）。与既有 ROM 记录同现象 |
+| H13 | 取 JEB 页面 + 找 OA 副本 | **未取到**：页面 403（Cloudflare）；OpenAlex/Semantic Scholar 指的 bronze OA 链接返回的还是 JS 挑战页（非 PDF）；Europe PMC 无 PMC 号、非 OA ⇒ 数值仍停在图内。见 §7 的路线说明 |
 | H83 | 未取新资料 | 该文是**肩**的功能解剖，不含本任务前肢逐相位角度；前肢逐相位仍缺 |
-| K23 | 未播放 | 浏览器工具仍报 `failed to write kernel assets: 系统找不到指定的路径`；无逐帧可用（照实记，不编时间戳） |
+| K23 | 本地取到并筛过 | **已可取用**：浏览器工具的卡点不再是死路——`yt-dlp` 直取，见 §7；镜头可用性见该处判决 |
 
 ### 2. A20 读数（Cieri 等 2020，XROMM，慢速跑台）
 
@@ -110,8 +110,24 @@
 - R2 前置（工具侧）：`check_leg_reachability.py --self-check` 本轮 **exit 0**，打印项含零位姿态、`facing` 有向判定、翻掌反例被拒、三铰链与机体 z 的关系、膝共线越界量、插入股骨旋转轴的候选链加载。该读数属**几何回归**，不构成设计验收（合同 R2:27）。
 - R2 待办：候选 A/B 的**同一目标与同一容差**比较 —— 依赖 D2。
 
-## 证据引用
+### 7. 片段筛选与本地取帧路径（同轮追加）
 
+**工具链**（用户级安装，**不入仓、不进 IsaacLab env**）：`yt-dlp` 直取视频、`imageio-ffmpeg` 自带 ffmpeg 二进制抽帧、`pymupdf` 读 PDF 正文与渲染页面。取帧口径落在实现里：`rl_exp/tools/diagnose/clip_sheet.py`（下载 + 连拍二合一，默认工作目录 `%TEMP%\rl_clips`，片段与连拍图都**不进仓**）。连拍图按**行优先**读：一张图 = 一个时间窗。
+
+| 片段 | 时长 / 视角 | 可用窗 | 判决 |
+|---|---|---|---|
+| `_NlCa7r6ETs` | 68.6 s；**固定机位**、三/四分之一侧视、画面内嵌时间戳 | `00:00:00.03–00:00:03.19` 及同段后续 | **主候选**：机位稳、时间戳可对帧 |
+| `S1cZEIqYwx0`（K23） | 59.7 s；竖屏 2160×3840@60、**手持**、牵绳、多为正面 | 侧向约 t=10–13 / 20–22 / 30–31 / 42 s | 次选：构图与机位漂移，只作交叉核对 |
+| `f12buVzUehM` | 10.9 s | — | **弃**：画面是行人/单车，与标题不符 |
+| `8_w6zQNU4po` / `n9bEM8Ijals` / `RaS-rkFHgec` / `inxyERPtxtw` | — | — | 未下载；题录判断为 CGI 走循环，不作测量源 |
+
+**主候选窗内已读到的定性事实**（`--fps 3`，12 帧/窗）：步态**四足交替支撑**、支撑期连续（无腾空相）；**摆动腿明显屈膝**，足端在髋下方附近落地。**未做**：逐帧关节角数字化、相位归属（哪条腿 vs 哪条腿）与接触事件时刻 ⇒ **幅度与相位数值仍缺**。
+
+**为什么数值目标还没出**：主候选是斜视，量到的只能是投影；要出 2D 投影目标须先固定标注口径（读哪几个骨点、镜头假设、像素→角度换算），否则读出的角度不可复读、不可比。这是下一步动作，不是本轮读数。
+
+**H13 的路线说明**：三条合法路径都在反爬墙上——publisher 直连 403、bronze OA 链接返回 JS 挑战页、Europe PMC 无全文；本机可用的是 `yt-dlp`（视频）与 `pymupdf`（PDF），都不解 JS。⇒ 要么等一个能过挑战页的浏览器，要么接受 H13 曲线继续留缺（不得由其它来源拼出其数值）。
+
+## 证据引用
 - 判据入口：`acceptance/records/2026-10-08-lizard2-joint-design-review-contract.md`（R1–R5、判定与实施交接）。
 - 定性参考与量定义：`acceptance/records/2026-10-08-lizard2-reference-motion-v0.md`（来源层标签、坐标与测量字段、腿平面代理的定义）。
 - A20：Cieri、Hatch、Capano、Brainerd（2020），*Sci Rep* **10**:7739，DOI `10.1038/s41598-020-64140-y`（OA，本轮读全文；X 光/CT 原始数据入口 `xmaportal.org` BROWN42/BROWN38，**本轮未读**）。
@@ -120,17 +136,22 @@
 - H83：Jenkins 与 Goslow（1983），*J Morphol* **216**:195–216，DOI `10.1002/jmor.1051750207`（肩功能解剖）。
 - 口径与既有读数（不在此复述数值）：`2026-09-29-varanid-joint-range-of-motion-evidence.md`、`2026-09-30-lizard2-leg-to-anatomy-mapping.md`、`2026-09-30-leg-fk-caliber-facing-and-candidate-chains.md`、`2026-09-29-lizard2-pad-tilt-is-the-fold-sum.md`、`2026-09-29-lizard2-pad-leveling-unreachable.md`、`2026-09-29-leg-pose-slider-and-pad-clearance.md`、`2026-09-29-lizard2-v2-gait-five-claims.md`。
 - 复读命令（工具与解释器路径同 `2026-09-30-lizard2-joint-limit-plan-review.md`）：`E:/IsaacLab/env_isaaclab/Scripts/python.exe rl_exp/tools/verify/check_leg_reachability.py --self-check`；摆位 `rl_exp/tools/diagnose/pose_slider.py`。
+- 取帧：`rl_exp/tools/diagnose/clip_sheet.py`（`--video` 本地片 / `--yt-id` 直取）；片段源 `_NlCa7r6ETs`、`S1cZEIqYwx0`（K23），弃用 `f12buVzUehM`；本地落点 `%TEMP%\rl_clips\`。
 
 ## 未覆盖边界
 
 - **A20 是肋骨运动学，且每只 1 个周期**：样本小、非科莫多、体型 0.95–2.1 kg。它的价值是**相位锚点与零位定义**，不是幅度目标。
-- **躯干侧弯幅度、四腿相位、足端轨迹、接触事件、骨段角度**：本轮**全部未取到**（H13 图内、K23 未播放）。默认站姿未形成。
+- **躯干侧弯幅度、四腿相位、足端轨迹、接触事件、骨段角度**：本轮**全部未取到**——H13 在反爬墙后，视频只到定性层（§7）。默认站姿未形成。
+- **片段与连拍图不进仓**：它们是源素材/工作文件，落 `%TEMP%`；记录只留 ID、时间窗与复读命令。
+- **本轮新增的是用户级工具**（`yt-dlp`、`imageio-ffmpeg`、`pymupdf`），**不是仓依赖**；换机器要重装才能复读取帧链路。
 - **D24 是跨物种汇总 + 理论模型**：varanid 只有家族级定性（spine ROM 小），leg ROM 是连线投影扫角，不能当任一关节行程。
 - 本轮没有做 IK、碰撞、可达性曲线、仿真 FK 对拍、动力学或任何限位取值；没有批准任何容差；没有关闭或推进任何事项状态。
 - 本轮改动范围：新增本记录；合同记录结果节加一行入口链接；活跃项更新 `next`/`evidence`/状态句。未触资产、配方、协议、锁或闸门。
 
 ## 核对痕迹
 
-- A20 与 D24 走 **OA 正文**逐句取数（DOI 见上）；H13 走页面被 Cloudflare 403 挡，未改用其他镜像，故其数值仍停在"图内"。
+- A20 与 D24 走 **OA 正文**逐句取数（DOI 见上）；D24 的 S1 附页（16 页）用 `pymupdf` 逐页扫过，**无文本数据表**（蜥蜴数据只在图中，位图，不 OCR ⇒ 不读数）。
+- H13 三条合法路径全在反爬墙上（页面 403 / bronze OA 链接返回 JS 挑战页 / Europe PMC 无全文），本轮未再找镜像，其数值仍停在"图内"。
+- 片段筛选方法：`--fps 1` 连拍扫全片定位窗口（每片 2 张），窗口内再用 `--fps 3` 连拍读相位；两个主候选各读过 1 张全景连拍 + 1 张窗口连拍。
 - `check_work_docs.py`（`WORK_DOCS_OK`，89 条记录）、`framework_pin_check.py --strict --self-test`、`check_version_docs.py`、`check_dr_parity.py --strict`、`git diff --check` 均通过；`check_leg_reachability.py --self-check` exit 0。
 - 上文 A20 的相位锚点与 `2026-10-08-lizard2-reference-motion-v0.md` 的表述一致；该记录只给"附近/线索"，本记录补上正文级条件（同侧前肢、周期 0–50%）。

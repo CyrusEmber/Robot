@@ -4,7 +4,7 @@ title: 巨蜥关节设计决策：参考动作、姿态与范围
 scope: acceptance/records, rl_exp/tools/verify, rl_exp/tools/diagnose, rl_exp/blender
 status: in_progress
 landing: acceptance/records/2026-10-08-lizard2-joint-design-review-contract.md#结果
-next: 待用户答复 D1–D3（数值参考与提案草案的答复栏在 `acceptance/records/2026-10-08-lizard2-r1-numeric-reference-and-decision-drafts.md`）；并行补 R1 缺口：H13 图 3 曲线数字化、K23 可播放片段筛选（播放工具卡点未解），并准备 R2 的 A/B 候选比较（同一目标与容差）
+next: 待用户答复 D1–D3（答复栏见 evidence 的 r1 记录）；R1 幅度/相位缺口的下一步不是找资料而是定口径——在固定机位片段（`_NlCa7r6ETs`，窗口与工具见该记录 §7）固定读点、镜头假设与误差，出 2D 投影目标；并行备 R2 的 A/B 比较（同一目标与容差）。H13 待能过反爬页的浏览器
 close_when: Codex 复核 landing 的最终判定与证据，本对话用户确认选择及工况；保留/修改方案经评审通过且未完实施已交具名活跃事项后关闭，全部拒绝亦关闭，任一待决或未判定继续在办；正式采用另过机制闸门
 evidence: acceptance/records/2026-10-08-lizard2-joint-design-review-contract, acceptance/records/2026-10-08-lizard2-reference-motion-v0, acceptance/records/2026-10-08-lizard2-r1-numeric-reference-and-decision-drafts
 ---
