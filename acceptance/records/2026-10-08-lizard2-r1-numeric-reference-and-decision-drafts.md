@@ -125,7 +125,20 @@
 
 **为什么数值目标还没出**：主候选是斜视，量到的只能是投影；要出 2D 投影目标须先固定标注口径（读哪几个骨点、镜头假设、像素→角度换算），否则读出的角度不可复读、不可比。这是下一步动作，不是本轮读数。
 
-**H13 的路线说明**：三条合法路径都在反爬墙上——publisher 直连 403、bronze OA 链接返回 JS 挑战页、Europe PMC 无全文；本机可用的是 `yt-dlp`（视频）与 `pymupdf`（PDF），都不解 JS。⇒ 要么等一个能过挑战页的浏览器，要么接受 H13 曲线继续留缺（不得由其它来源拼出其数值）。
+**H13 的路线说明**：三条合法路径都在反爬墙上——publisher 直连 403、bronze OA 链接返回 JS 挑战页、Europe PMC 无全文；本机可用的是 `yt-dlp`（视频）与 `pymupdf`（PDF），都不解 JS。⇒ 要么等一个能过挑战页的浏览器，要么接受 H13 曲线继续留缺（不得由其它来源拼出其数值）。同轮实测把这一条推广成上表：**墙后的来源一律取不到**（eSpace 的 AWS WAF 是第二个独立例子）。
+
+**来源侧可达性（本轮实测，决定"还能从哪里取数"）**
+
+| 出口 | 结果 |
+|---|---|
+| `nature.com`（OA 期刊主页） | **通** —— 本轮 A20、D24 就是从这里读的 |
+| Europe PMC REST / PubMed | **通**（前几轮已用） |
+| YouTube（`yt-dlp`） | **通** —— K23 与主候选都这样取到 |
+| `journals.biologists.com`（JEB 正文与 PDF） | 挡：Cloudflare 挑战页 |
+| UQ eSpace（Clemente 2012 等 OA 副本） | 挡：AWS WAF「Human Verification」 |
+| 通用浏览器工具 | 不可用（kernel assets 路径报错） |
+
+⇒ **判据**：凡在 WAF/Cloudflare 后的来源，本机现在取不到；能取的只有不设挑战墙的 OA 站点。这把 R1 的数值缺口从"资料没找够"改判为**能力缺口**：文献侧数字要么在墙后（JEB、eSpace），要么只存在于图里（D24 S1 无文本表）。
 
 ## 证据引用
 - 判据入口：`acceptance/records/2026-10-08-lizard2-joint-design-review-contract.md`（R1–R5、判定与实施交接）。
