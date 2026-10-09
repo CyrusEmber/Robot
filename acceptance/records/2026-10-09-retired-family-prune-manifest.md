@@ -61,8 +61,8 @@
 | 路径 | 判定 | 依据 |
 |---|---|---|
 | `rl_exp/versions/recipes.json` | **改** | 删 21 条旧线 recipe 键（`:4-231`）与 39 条 task 映射（`:270-307`）；留 lizard2 各 6 条（`:232-267`、`:308-313`） |
-| `rl_exp/versions/obs_protocols.json` | **删条目（裁决 C①）** | 删 `line: lizard/*` 条目（`:825-1014`）；6 条 lizard2 条目共用协议 `a25a8c39001b`（`:1015-1044`）保留 |
-| `rl_exp/versions/obs_protocol_anchors.json` | **删条目（C①）** | anchors 只留被 lizard2 引用的协议摘要；历史 run 的 manifest 复读退化为"protocol 未声明"（`runrecord/manifest.py:171-183` 已优雅降级） |
+| `rl_exp/versions/obs_protocols.json` | **留（裁决 C②，替代 C①；见 §8）** | 保留 golden 的协议可读面；退休只退出注册与运行，不删除历史任务映射 |
+| `rl_exp/versions/obs_protocol_anchors.json` | **留（C②）** | 与保留的协议声明配套；不接受本次清理导致历史 manifest 的协议复读降级 |
 | `rl_exp/versions/freeze_parity.json` | **删文件（裁决 D①）** | 唯一 subject 是 `lizard/main`（`:4-33`），两份手抄 cfg 都删 ⇒ 机制无被试对象 |
 | `rl_exp/versions/lines.json` | 留 | 退休记录本身是历史事实 |
 | `rl_exp/versions/lizard/**`（含 `cfg_lock.json`） | 留 | 边界 |
@@ -70,7 +70,7 @@
 | `rl_exp/fork_patches/config_lizard___init__.py` | 留 | 只 `import rl_exp.tasks`，lizard2 也经它注册；改名会牵动部署链，收益为零 |
 | `FILEMAP.md` 相关条目 | **改** | `rl_exp/tasks/` 节提到的 parkour / baseline 支线、`teacher_smoke*`、`_LINES_BUILT_ELSEWHERE` 等行 |
 | `rl_exp/tools/verify/` 脚本 **删** | **删**（24 个） | `teacher_smoke.py`、`teacher_smoke_v{3,5,6,8,11}.py`、`teacher_smoke_runner.py`（§7-2 由"留"翻"删"）、`parkour_smoke.py`、`check_reward_v13.py`、`check_terminations_v14.py`、`test_v3_curriculum.py`、`test_v5_rewards.py`、`test_v12_noise.py`、`test_student_networks.py`、`test_baseline_mdp.py`、`test_baseline_isolation.py`、`test_component_ownership.py`、`test_teacher_networks.py`、`test_staged_curriculum.py`、`check_obs_layout.py`（裁决 B2①）、`pose_check.py`、`joint_check.py`、`position_check.py`、`smoke_test.py` |
-| 同上 **改** | **改** | `check_recipe_build.py`（计数表 `:68-135` 删两条 lizard 行、留 `lizard2/main`）、`check_dr_parity.py`（删两节 freeze-parity 代码 + `load_subjects` 的 `SUBJECTS_PATH` 引用；留 asset contract 与 body swap 段）、`test_params_isolation.py`（`:20` 四处 import 全是被删模块）、`test_launcher.py`（`:39-41/:69/:186` 硬编码 `Lizard-Rough-v14` / `lizard/main`）、`terrain_preflight.py`（默认 `--version v4` 指 lizard，contract `teacher_env_cfg.py`） |
+| 同上 **改** | **改** | `framework_pin_check.py`（按 §8-F 清旧消费者 needle、保留活跃 PPO 与续训依赖）；`check_recipe_build.py`（计数表 `:68-135` 删两条 lizard 行、留 `lizard2/main`，并按 §8-G 删除 component 专属归因）；`check_dr_parity.py`（删两节 freeze-parity 代码 + `load_subjects` 的 `SUBJECTS_PATH` 引用；留 asset contract 与 body swap 段）、`test_params_isolation.py`（`:20` 四处 import 全是被删模块）、`test_launcher.py`（`:39-41/:69/:186` 硬编码 `Lizard-Rough-v14` / `lizard/main`）、`terrain_preflight.py`（默认 `--version v4` 指 lizard，contract `teacher_env_cfg.py`） |
 | 同上 **留**（含"随 A① 由删转留"的） | 留 | `test_joint_sir.py`、`test_v5_terrain_sir.py`、`cstate_observer.py`（SIR 段保留 ⇒ 其断言对象仍在）、`test_resume_state.py`、`check_c_layer.py`、`lifecycle_entry_run.py`、`check_version_docs.py`（`:79-87` 已内建 retired 版本判据——退休线目录留在盘上即仍被覆盖，**不需改**） |
 
 ### 3. 离线套件 48 项：删 11 / 改 8 / 留 29（执行面复核后校正，依据见 §7）
@@ -138,7 +138,7 @@ done / cancelled / superseded`；后三词即关闭，关闭 = **移动不是改
 | A | `teacher_mdp.py` 的 SIR / c_k 段去向 | ①**保留 teacher_mdp**，只删旧线其余模块；死代码暂留，其去向另立事项 |
 | B | 离线套件 12 条旧线检查 | ①**删脚本 + 删条目**（`MAX_CHECKS` 48→36） |
 | B2 | `check_obs_layout.py` | ①**删**，并把 `check_obs_protocol --live` 补进套件 `[42]` |
-| C | `obs_protocols.json` / anchors 的 lizard 条目 | ①**删**（接受历史 manifest 复读降级）——**执行时发现不可行，见 §7-3，待重新裁决** |
+| C | `obs_protocols.json` / anchors 的 lizard 条目 | 原裁决 ①删；发现 §7-3 的保留 golden 冲突后，用户拍板改为 **②保留**（2026-10-09，见 §8-C）；原裁决撤回，不加 retired 豁免 |
 | D | `freeze_parity.json` 与 `check_dr_parity` 的 freeze-parity 段 | ①**删该机制**（与其唯一主体同进退），保留 asset contract / body swap 段 |
 | E | 9 项判删事项的关闭词 | 按接管关系分开写：7 项 `superseded_by: retired-family-code-prune`；2 项（`row-sir-commanded-measurement-defect`、`deployment-delay-injection-dr`）`cancelled` |
 
@@ -146,7 +146,7 @@ done / cancelled / superseded`；后三词即关闭，关闭 = **移动不是改
 
 1. **打 tag `lizard-final`**（删除前的整树快照；此后旧 checkpoint 只能靠该 tag 取回）。
 2. **同一提交内建新删旧**（`AGENTS.md` 迁移纪律）：拆 `recipe.py` 旧线 import 与元素、删 §1 的 13 个模块、
-   删 §2 的 24 个 verify 脚本、清 `recipes.json` 与 `freeze_parity.json`（`obs_protocols.json` / anchors 见 §7-3）、
+   删 §2 的 24 个 verify 脚本、清 `recipes.json` 与 `freeze_parity.json`（`obs_protocols.json` / anchors 按 §8-C 保留）、
    删 §3 的 11 条套件条目并把 `MAX_CHECKS` 收到 37、改 §2 的 7 个脚本。中间态不留红。
 3. **独立提交**：给 `[42]` 加 `--live`，`SERIAL_BUDGET_S` 用 `--confirm-cost` 实测后钉。
 4. **独立提交**：§4 的事项移动（9 移 `work/closed/2026/`、3 项改 scope）。
@@ -154,7 +154,7 @@ done / cancelled / superseded`；后三词即关闭，关闭 = **移动不是改
    构造读数，删完复跑同一命令逐条比）—— 判据形状只在 §验收条件 一处写。
 6. **收尾**：commit / push 走 `git-auto-sync` skill；`FILEMAP.md` 同步改；本项 `close_when` 判词回填。
 
-### 7. 执行面核查（2026-10-09 执行时发现；与本节之前的计数冲突处，以本表为准）
+### 7. 执行面核查（2026-10-09 执行时发现；计数以本节为准，补裁决以 §8 为准）
 
 逐条核对清单时六处不符，判据均为代码内 `file:line`：
 
@@ -171,9 +171,57 @@ done / cancelled / superseded`；后三词即关闭，关闭 = **移动不是改
 
 **已落盘 vs 未落盘**：四个并行编辑块在中断时被撤销 ⇒ **代码零改动**；本次唯一落盘的是本记录与在办事项 frontmatter/`next`。
 
-**待裁决（阻塞执行）**：① C 的反向选择——翻回 C②（声明面不动，声明即保留 golden 的可读面）或保留 C① 并给 `check_obs_protocol.check_recorded` 加退休线豁免（该模块已 import `retired_lines()`，约 5 行）；② `framework_pin_check` 三条依赖已消失的 needle（`staged_curriculum` / `teacher_networks` / `student_networks`）删或留；③ `check_recipe_build` 的 `COMPONENT_AUTHOR = "components."` 判据重组是否授权就地重构。
+**补裁决已落定**：当时阻塞执行的 C / framework needle / component 归因三项已由用户拍板，当前选择见 §8；本段保留发现顺序，不再作为待裁决入口。
 
+### 8. 补裁决（用户拍板：2026-10-09；本轮只回填，不执行代码清理）
 
+依据：用户选择“采用推荐，只回填裁决”。实际变化是旧线退出注册、活跃线继续使用 stock MLP；不是引入新组件框架。三项均为现有边界内的本地依赖清理，不授权扩大架构重构。
+
+#### C. 改为 C②：协议声明与 anchors 保留
+
+- **采纳**：`obs_protocols.json`、`obs_protocol_anchors.json` 不动。golden 留存，声明保留其可读面；`check_recorded` 继续核对历史声明，`check_live` 沿用现有退休线未注册豁免（`rl_exp/tools/verify/check_obs_protocol.py:356-398`）。不增加 recorded 半边豁免。
+- **未选方案**：C①删历史条目并加 retired 豁免。它也可实现，但要接受历史 manifest 降级、收窄 golden 覆盖并补相应破坏测试；与本次“保留历史 golden”边界相比，多改机制而没有活跃路径收益。
+- **验证要求**：清理后 recorded 核对仍覆盖保留声明；live 核对只构造仍注册的任务。声明留存不等于承诺退休环境还能运行。
+
+#### F. framework needle 按真实消费者处理，不按模块名一刀切
+
+**采纳**：删除仅看守待删功能的 needle；保留活跃 PPO、观测传递、评测和 A① 续训机制仍依赖的 needle。不改框架 pin、fork patch 检查或 DR 语义判据。
+
+| `rl_exp/tools/verify/framework_pin_check.py` 中的条目（编辑前行号） | 裁决与依据 |
+|---|---|
+| `:38-40` manager 内 `term_cfg.func` 实例替换 | 删这条 staged 跨 term 引用专属针；不解释成 ManagerTermBase/SIR 机制被删除，A① 的 SIR 实现及其测试照留 |
+| `:79-81` `resolve_callable` 的冒号点路径分支 | 删 custom teacher 类装载专属针；lizard2 的 stock `MLPModel` 不是自定义 `module:Class`（框架 `rl_cfg.py:25`） |
+| `:91-96` distillation 的 student / teacher 注入 | 两条均删；蒸馏消费者整体退出，不只删文字里提 `student_networks` 的那条 |
+| `:97-99` `get_latent` | 删自定义 SplitEncoderModel 基类覆写契约的针；不是删除框架 MLP 方法 |
+| `:85-90` PPO 的 actor / critic `resolve_callable` | **留并改消费者说明**为 lizard2 stock MLP；框架 `rsl_rl/algorithms/ppo.py:417-418` 仍经这两处构造 actor/critic |
+| `:63-65` wrapper 的 TensorDict 传递 | **留并改说明**为活跃观测组 → stock MLP；网络换成 MLP 不意味着 wrapper 传递契约消失 |
+| `:68-73` curriculum reset/clock；`:101-106` checkpoint infos | 留；A① 保留 `curriculum_state` 与续训依赖，不因旧 runner 删除而连带摘针 |
+
+**未选方案**：整组保留原针，在说明里写“legacy”。它省下本轮改动，但仍将无人消费的自定义网络/蒸馏契约作为开训前框架阻塞项；不符合本次退出主路径的目标。
+
+`offline_suite` 中 framework 条目的 `contract` 重指保留的 `rl_exp/tasks/agents/rsl_rl_ppo_cfg.py` 与 `rl_exp/tasks/curriculum_state.py`；其余两处死亡 contract 的重指仍按 §7-4，不能只改 needle 忘记声明文件路径。
+
+**验证要求**：剩余针逐项能指出保留消费者；framework 检查与 suite shape 通过，lizard2 runner 构造对拍不漂移。不得靠删 actor/critic 针让检查变绿。
+
+#### G. 授权 check_recipe_build 就地删 component 专属判据，不做通用化
+
+**采纳**：删除 `COMPONENT_AUTHOR`、`ownership()`、`component_owns()`，以及 hard-B 中 wiring 反查旧 component ownership 和 `components.*` 作者专属分支（`rl_exp/tools/verify/check_recipe_build.py:312-319,401-423,490-505`）。同步去掉对 `test_component_ownership` 的依赖。
+
+- 保留实际差异双向覆盖：未声明变化要红，无效声明也要红；保留 base 血统与 stock 核对、agent 差异核对。
+- 保留逐 element 重放归因：每个声明作者集合必须与实际改变该路径的 writers 相等且非空。`components.*` 不能变成被默许的旧前缀，须落入作者不匹配失败。
+- 保留 `wiring` 残余归因：只有无 element 写入时才允许归 wiring；不复制旧 ownership 表，不新增空表或插件式作者注册。
+- lizard2 现有 v1/v2/v3 的 `diff.json` 作者均为 element，没有 `components.*` 作者，不需要重写冻结声明或刷新 golden。历史 lizard 的 component 声明原样保留，不再尝试构造已退出的旧线。
+- 连带修 `attribution(..., line=recipe.MAIN_LINE)` 的默认值（`:191`）：删除 `MAIN_LINE` 后不能留下导入时即失败的引用；已有调用显式传 line 时去掉该旧默认即可。
+
+**未选方案**：将旧 ownership 表搬到保留模块、只改 import。它能保持旧判据，但为不存在的组件复制 SSOT、继续用旧线 scene 名管 lizard2；不是本次清理所需的能力。
+
+**验证要求**：执行时沿用最小 runnable check，逐例破坏 lizard2 的未声明路径、无效声明、错误作者（含伪造 `components.*`）以及把 element 路径错归 wiring，均须失败，恢复后通过；只看构造对拍或 golden 一致不足以证明归因判据仍成立。
+
+#### 本轮落盘边界
+
+只更新本清单与 `work/active/retired-family-code-prune.md` 的当前状态/下一步；上述代码、JSON、套件参数、tag 均未执行修改。三项决策阻塞解除，不代表清理实施或行为验收完成。
+
+本轮文档提交前复核：`check_suite_banners.py`、`framework_pin_check.py --strict --self-test`、`check_dr_parity.py --strict`、`check_version_docs.py`、`check_work_docs.py`、`check_obs_layout.py` 与 `git diff --check` 通过。既有 fork 工作树改动警告、历史 tag 缺失警告与旧事项路径提示仍在，未修改；这些检查验证的是回填后的当前树，不是尚未实施的清理方案。
 
 ## 证据引用
 
