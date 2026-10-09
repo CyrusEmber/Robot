@@ -22,7 +22,8 @@
   "agent": {
     "why": "The agent is a class, not a declaration: these entries carry a reason and no element name.",
     "allowed": {
-      "experiment_name": "lizard2_v3: separate version log directory; PPO hyperparameters and the v2 training budget are unchanged."
+      "experiment_name": "lizard2_v3: separate version log directory; PPO hyperparameters unchanged.",
+      "max_iterations": "6000: the adopted body is untrained and its limits, ankle sense and collision surface are still open, so a run here is a short read of the new body rather than a training candidate (user call 2026-10-09)."
     }
   },
   "authored_against": {
@@ -30,6 +31,6 @@
       "lizard2_actions": "eca5bbb3799b",
       "lizard2_robot": "7e2869406606"
     },
-    "agent": "7c3a87e71c72"
+    "agent": "27d23454332d"
   }
 }

@@ -127,8 +127,11 @@ EXPECTED_DIFFS: dict[tuple[str, str], int] = {
     # plus the two agent leaves its own runner sets (experiment_name, max_iterations) = 3. A 108 here
     # would mean the emitter had read it as a root and restated v1's whole heritage as v2's delta.
     ("lizard2/main", "v2"): 3,
-    # V3 changes only the robot spawn, leg action group and version log directory against v2.
-    ("lizard2/main", "v3"): 3,
+    # V3 changes only the robot spawn, leg action group and log directory against v2 -- 3 paths until
+    # 2026-10-09, when the v3.3 revision gave this version its own `max_iterations = 6000` instead of
+    # inheriting v2's 14000, which is a second agent leaf: 2 env + 2 agent = 4. Pinned at the same
+    # freeze as v1/v2; a regeneration that loses a group shows up here as a count, not as silence.
+    ("lizard2/main", "v3"): 4,
 }
 """Recipe -> how many paths its difference declaration lists (``diff.json`` next to the recipe)."""
 

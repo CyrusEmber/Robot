@@ -1,9 +1,9 @@
 {
  "lock_format": 3,
  "note": "recipe golden of line 'lizard2/main': entry keys are '<combination>|<task id>' and a training run never adds one",
- "reason": "v3.2 owner-approved candidate body adoption, 22 actions, unchanged PD/defaults and v2 recipe; old-body versions retired",
- "reason_at": "2026-10-08T17:52:51+08:00",
- "reason_rev": "1573d5948988",
+ "reason": "v3 declares its own 6000-iteration budget (user call 2026-10-09): agent.max_iterations 14000 -> 6000 on the v3 train/play pair only, nothing else moved",
+ "reason_at": "2026-10-09T10:39:02+08:00",
+ "reason_rev": "7b4cda93f42a",
  "entries": {
   "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13|Lizard2-Flat-Play-v1": {
    "version": "v1",
@@ -3204,7 +3204,7 @@
    "version": "v3",
    "env_cfg_class": "rl_exp.tasks.recipe_tasks:Lizard2FlatV3EnvCfg_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:Lizard2V3PPORunnerCfg",
-   "digest": "3088fc4f03642897d06e291ac4f7aff986c70f26c5c1fea68cfb260c8f52b026",
+   "digest": "f9c7151c0dfd69725d5c8044f7553b4b241bad8dd36cf1910cc44b616a069c52",
    "snapshot": {
     "env": {
      "viewer": {
@@ -4709,7 +4709,7 @@
      "seed": 42,
      "device": "cuda:0",
      "num_steps_per_env": 24,
-     "max_iterations": 14000,
+     "max_iterations": 6000,
      "empirical_normalization": {
       "__missing__": true
      },
@@ -7995,7 +7995,7 @@
    "version": "v3",
    "env_cfg_class": "rl_exp.tasks.recipe_tasks:Lizard2FlatV3EnvCfg",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:Lizard2V3PPORunnerCfg",
-   "digest": "4bd41edd8a7d6ffb162bb7c029128ff073ea36ee7eea8a6b9e7548ce98fe0fe6",
+   "digest": "22be651e34d6080eb3a16ea434c4cb7218999f69e4cf172490db23964c5df673",
    "snapshot": {
     "env": {
      "viewer": {
@@ -9500,7 +9500,7 @@
      "seed": 42,
      "device": "cuda:0",
      "num_steps_per_env": 24,
-     "max_iterations": 14000,
+     "max_iterations": 6000,
      "empirical_normalization": {
       "__missing__": true
      },

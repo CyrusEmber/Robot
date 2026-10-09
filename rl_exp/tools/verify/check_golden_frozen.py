@@ -99,7 +99,13 @@ FROZEN = {
     # acceptance/records/2026-09-28-lizard2-v2-cfg-lock-rebaseline.md.
     # V3.2 adoption adds only the formal v3 pair; existing entries are unchanged.
     # Re-anchor evidence: acceptance/records/2026-10-08-lizard2-v3-landing.md.
-    "rl_exp/versions/lizard2/main/cfg_lock.json": "6369e4bedc730079933fe16d7afb66d84ef34474ff8113d72f76d4ee31e609ef",
+    #
+    # Re-baselined 2026-10-09 (sixth re-baseline, second on this line): v3 declared its own
+    # `max_iterations = 6000` against v2's 14000. The `--update` printed one field path on each of
+    # the two v3 tasks -- `agent.max_iterations: 14000 -> 6000` -- and the other four entries were
+    # written untouched, so this is a two-field edit, not a rewrite. Reason, per-field diff and the
+    # matching `diff.json`/PLAN revision: acceptance/records/2026-10-09-lizard2-v3-budget-and-calibration.md.
+    "rl_exp/versions/lizard2/main/cfg_lock.json": "90c8f5a22fd52dc6e86c8b2bd8fbedbf2ae5fab56dd6748a592eb0b97d7af80d",
 }
 
 FROZEN_REVS: dict[str, str] = {
@@ -116,7 +122,9 @@ FROZEN_REVS: dict[str, str] = {
     # The lizard2 line's bytes landed in dfdc2ae (the pre-training revision that repointed the head
     # guard). The 2026-09-28 re-baseline took the documented two-step shape: the new bytes landed in
     # e59e240 ("Register lizard2 v2"), and this line names that revision.
-    "rl_exp/versions/lizard2/main/cfg_lock.json": "4928ced",
+    # The 2026-10-09 re-baseline is mid-two-step here: the digest above is the working tree's, and
+    # this line is backfilled with the commit that lands the budget change.
+    "rl_exp/versions/lizard2/main/cfg_lock.json": "working-tree:v3.3 (commit pending)",
 }
 """Which revision each frozen file's bytes are from, for the banner only.
 

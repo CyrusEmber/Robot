@@ -62,8 +62,12 @@ from rl_exp.tools.verify.check_leg_reachability import (  # noqa: E402
     self_check as fk_self_check,
 )
 
-#: Body height at zero action in the settled simulator pose [m] (``2026-09-22-lizard2-stride-at-load``).
-DEFAULT_BASE_Z = 0.912
+#: Body height at zero action in the settled simulator pose [m]: the ADOPTED body's, from the PLAY
+#: zero-action window of ``acceptance/records/2026-10-08-lizard2-v3-landing.md`` (60 steps, 2 envs,
+#: mean; the 0.8842 m minimum in that line is the settle transient). The value it replaced, 0.912 m,
+#: was the first body's -- the slider holds the body at this height, so a stale constant reads every
+#: pad clearance through the wrong body.
+DEFAULT_BASE_Z = 0.9253
 COLORS = {"lf": "tab:blue", "rf": "tab:orange", "rl": "tab:green", "rr": "tab:red"}
 
 

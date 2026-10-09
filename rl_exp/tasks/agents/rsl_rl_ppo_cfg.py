@@ -393,6 +393,14 @@ class Lizard2V2PPORunnerCfg(Lizard2PPORunnerCfg):
 
 @configclass
 class Lizard2V3PPORunnerCfg(Lizard2V2PPORunnerCfg):
-    """V3 body/action adoption; PPO and budget stay identical to v2."""
+    """V3 body/action adoption; PPO identical to v2, budget declared at 6000.
 
+    The adopted body is untrained and its joint limits, ankle sense and collision surface are still
+    open (`work/active/joint-limit-shape-and-range-pass.md`), so a run here is a short read of the
+    new body, not a training candidate: 6000 is what it will have been trained for, and every
+    reading off it says "up to step 6000" rather than "converged" (user's call, 2026-10-09). Declared
+    here rather than passed as a CLI override for the reason v2's docstring gives.
+    """
+
+    max_iterations = 6000
     experiment_name = "lizard2_v3"
