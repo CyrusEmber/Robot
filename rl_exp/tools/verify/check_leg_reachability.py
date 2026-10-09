@@ -77,17 +77,40 @@ import argparse
 import contextlib
 import io
 import itertools
+import json
 import math
 import pathlib
 import tempfile
 import xml.etree.ElementTree as ET
 
 _REPO = pathlib.Path(__file__).resolve().parents[3]
-#: The body the family consumes today: ``versions/lizard2/assets.json`` declares the candidate's mesh
-#: tree and ``main_params.yaml`` spawns its USD, so the default reading has to be the adopted body --
-#: otherwise the pinned knee facts below would describe a body nothing runs. The first body stays
-#: reachable through ``--urdf``.
-DEFAULT_URDF = _REPO / "rl_exp" / "lizard2_candidate" / "lizard2_candidate.urdf"
+
+
+def family_urdf(rl_exp: pathlib.Path, family: str) -> tuple[pathlib.Path, str]:
+    """The URDF of the body ``family`` consumes, and where that choice came from (callers print it).
+
+    Two layouts are live, so the rule tries the family's own asset declaration first and falls back to
+    the pre-adoption one: a family that adopted a body inside its declared mesh tree (``lizard2`` ->
+    ``lizard2_candidate/``) is read there, while a family whose tree is shared at the repo level
+    (``lizard`` -> ``rl_exp/meshes``, its URDF beside the version directory) is read from
+    ``versions/<family>/<family>.urdf``. The source string comes back rather than being logged here so
+    that a reading of an old body can never be silent about which file it answered for (P011: a tool
+    reported on the current body while reading the retired one, twice in one day).
+    """
+    declared = rl_exp / "versions" / family / "assets.json"
+    meshes = rl_exp / json.loads(declared.read_text(encoding="utf-8"))["meshes_dir"]
+    body = meshes.parent
+    candidate = body / f"{body.name}.urdf"
+    if candidate.exists():
+        return candidate, f"declared asset tree ({declared.name}: {meshes.name})"
+    return rl_exp / "versions" / family / f"{family}.urdf", "legacy layout versions/<family>/<family>.urdf"
+
+
+#: The body the family consumes today, resolved from its own declaration (``versions/lizard2/assets.json``
+#: names the candidate's mesh tree, and ``main_params.yaml`` spawns its USD): the default reading has to
+#: be the adopted body, otherwise the pinned knee facts below would describe a body nothing runs. The
+#: first body stays reachable through ``--urdf``.
+DEFAULT_URDF = family_urdf(_REPO / "rl_exp", "lizard2")[0]
 #: The five joints of a leg, root to pad. The blade is the last one: the pad is rigid to it.
 CHAIN = ("hip", "haa", "hfe", "kfe", "foot")
 #: The three hinges that share one axis. Their plane is what ``hip`` can yaw and nothing can tilt,

@@ -53,6 +53,8 @@ from scipy.spatial import ConvexHull
 
 _REPO = pathlib.Path(__file__).resolve().parents[3]
 _RL_EXP = _REPO / "rl_exp"
+sys.path.insert(0, str(pathlib.Path(__file__).parent))
+from check_leg_reachability import family_urdf  # noqa: E402 - one home for "which body a family reads"
 _LEGS = ("lf", "rf", "rl", "rr")
 _LEG_TOKENS = ("hip", "haa", "hfe", "kfe", "foot")
 
@@ -288,14 +290,20 @@ def sweep_poses(joints: dict) -> list[tuple[dict[str, float], str]]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--family", required=True, help="family whose urdf + collision meshes to sweep")
+    parser.add_argument("--urdf", type=pathlib.Path, default=None,
+                        help="override the family's declared body (e.g. to sweep a retired one)")
     parser.add_argument("--clearance", type=float, default=5.0, help="minimum clearance to demand [mm]")
     parser.add_argument("--json", help="write the full report here")
     args = parser.parse_args()
 
-    urdf = _RL_EXP / "versions" / args.family / f"{args.family}.urdf"
+    if args.urdf is not None:
+        urdf, source = args.urdf, "--urdf override"
+    else:
+        urdf, source = family_urdf(_RL_EXP, args.family)
     if not urdf.exists():
         print(f"no urdf: {urdf}", file=sys.stderr)
         return 1
+    print(f"sweeping {urdf}  [body from: {source}]")
     model = load_urdf(urdf)
     links, joints = model["links"], model["joints"]
     movable = [name for name in links if links[name]["collision"] is not None]

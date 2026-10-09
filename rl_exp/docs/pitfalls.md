@@ -508,3 +508,49 @@ URDF 里 joint 的 `origin xyz` 是它在**父连杆系**里的位置，即该�
 - 探针 `gait_probe.py --self-check` 现覆盖：线性/转动项分开、相位剔除、`torch.median` 是**下中位**。
 - 报告里若"中段值"与"峰值值"、"贴住"与"越限比例"没有**并列**出现，就不要据此下结论——
   ⑧ 与 ⑨ 正是补上这两组并列才把三次错读分别否掉的。
+
+## P011 工具默认读的是**退役机体**，报告却像在检当前机体（同一天咬三处）
+
+### 症状
+
+换届（机体采用）之后，离线工具仍然绿着、数字也照出，但它读的是**上一代**的 URDF/网格：
+
+- `check_leg_reachability.py` 的 `DEFAULT_URDF` 指 `versions/lizard2/lizard2.urdf`（旧机体），而家族消费的是
+  `rl_exp/lizard2_candidate/`；于是它对当前机体量不出任何东西（`--self-check` 在候选上直接红，见
+  `acceptance/records/2026-10-09-lizard2-knee-reverse-bending-measurement.md`）；
+- `check_self_collision.py` 固定读 `versions/<family>/<family>.urdf`，对 lizard2 同样落在旧机体上——
+  它自称在检这个家族，实际检的是一个已经退休的物体（同一天修，见
+  `acceptance/records/2026-10-09-lizard2-collision-margin-and-ankle-pass.md`）；
+- `stance_step_probe.py` 的 `--urdf` 默认也指同一个退役文件，而它同时用 `--usd` 生成机体：两者不是同一台
+  时，**标定来源与仿真机体分叉**，读数看起来照旧。
+
+危险之处不是报错，是**不报错**：口径换了一个物体，读数照样是一串数字，而且看起来"这项检查是绿的"。
+
+### 根因
+
+"哪台机体在跑"有一份声明（`versions/<family>/assets.json` 的网格树 + 版本 yaml 的 `usd_path`），
+而工具的默认路径是**另一处写字面量**的地方。换届只改了声明，字面量不动 ⇒ 工具与运行时指向两个物体，
+且两者都能"正常工作"。同一族事实有两个家。
+
+### 修复
+
+默认路径从**声明**解析、字面量只留作回退，并且**把读了哪个文件打印出来**。规则只有一个家
+（`check_leg_reachability.family_urdf(rl_exp, family) -> (path, source)`，stdlib-only，另两个工具 import 它）：
+
+- `check_leg_reachability.py`：`DEFAULT_URDF` 由它解析（= 资产树声明消费的候选机体），`--urdf` 换机体；
+- `check_self_collision.py`：按 `assets.json` 的网格树所在目录解析 `<body>/<body>.urdf`，回退老布局
+  （`lizard` 的树是仓级的），`--urdf` 覆盖，首行打 `sweeping <path> [body from: …]`；
+- `stance_step_probe.py`：`--urdf` 默认走同一解析，首行打 `CALIBRATION <path> [body from: …]`，
+  非默认时标注 `--urdf override`。
+
+### 通用规则
+
+**"这台机器是哪台"必须只有一个家**：工具的默认值从那份声明解析，不写字面量；换届时要么解析跟着走，
+要么**当场红**。配套：任何"读了哪个文件/哪个资产"的离线检查，**把来源打在第一行**——静默读错物体
+比读错数更贵，因为它看起来是绿的。
+
+### 检测方法
+
+- 换届后逐个跑 `tools/verify` 与 `tools/diagnose` 的默认入口，对比它们打印的资产路径与
+  `versions/<family>/assets.json` + 版本 yaml 的 `usd_path` 是否同一个物体。
+- 反证：把工具的 `--urdf` 指到旧机体上，读数**应当**变（若不变，说明它根本没按参数读）。

@@ -41,6 +41,14 @@ sys.path.insert(0, str(_HERE.parents[3]))             # rl_exp.tools.verify.chec
 
 from isaaclab.app import AppLauncher  # noqa: E402
 
+# Declared-body calibration, resolved before the parser so the default is a real path and its source is
+# printable: the literal this replaced named the retired first body, which is P011's failure mode (the
+# calibration source and the spawned USD drifting apart silently). Stdlib-only import, so it is safe
+# ahead of the app launcher.
+from rl_exp.tools.verify.check_leg_reachability import family_urdf as _family_urdf  # noqa: E402
+
+_DEFAULT_URDF, _DEFAULT_URDF_SOURCE = _family_urdf(_HERE.parents[2], "lizard2")
+
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument("--task", default="Lizard2-Flat-Play-v2",
                     help="a PLAY task: no randomization, no policy. It supplies the cfg shape only -- "
@@ -48,10 +56,10 @@ parser.add_argument("--task", default="Lizard2-Flat-Play-v2",
                          "without touching a frozen one")
 parser.add_argument("--usd", default=None,
                     help="USD to spawn instead of the task's own asset (e.g. an isolated candidate USD)")
-parser.add_argument("--urdf", default=str(pathlib.Path(__file__).resolve().parents[2] / "versions"
-                                          / "lizard2" / "lizard2.urdf"),
-                    help="URDF the sole calibration is read from (pad mesh + contact-band normal); pass "
-                         "the candidate's URDF together with its --usd")
+parser.add_argument("--urdf", default=str(_DEFAULT_URDF),
+                    help="URDF the sole calibration is read from (pad mesh + contact-band normal); defaults "
+                         "to the body this family declares and the header prints which file was read. Pass "
+                         "the candidate's URDF together with its --usd when they are not the same body")
 parser.add_argument("--drop-joints", default="kfe,foot",
                     help="comma-separated joint suffixes taken OFF the action interface, so their drives "
                          "only hold the version's default target")
@@ -103,6 +111,7 @@ for _group in ("legs", "spine"):
     _term.joint_names = _names
 
 URDF = pathlib.Path(args_cli.urdf).resolve()
+URDF_SOURCE = _DEFAULT_URDF_SOURCE if URDF == _DEFAULT_URDF.resolve() else "--urdf override"
 PAD_NORMAL = {leg: torch.tensor(reach.pad_normal_in_link(URDF, leg), dtype=torch.float32)
               for leg in ("lf", "rf", "rl", "rr")}
 PAD_CLOUDS = diag_metrics.pad_point_clouds([diag_metrics.mesh_vertices(reach.pad_mesh(URDF, leg))
@@ -130,7 +139,8 @@ target_index = joint_names.index(target_joint)
 print("ASSET %s (task %s) | self_collision=%s | step_dt=%.4f s | joints=%d | action_dim=%d" % (
     cfg.scene.robot.spawn.usd_path, args_cli.task, args_cli.self_collision, step_dt, len(joint_names),
     manager.total_action_dim))
-print("CALIBRATION %s | pad contact-band normals loaded for %s" % (URDF.name, " ".join(sorted(PAD_NORMAL))))
+print("CALIBRATION %s [body from: %s] | pad contact-band normals loaded for %s"
+      % (URDF, URDF_SOURCE, " ".join(sorted(PAD_NORMAL))))
 print("RAMP %s continuously 0 -> +A -> 0 -> -A -> 0 (%d steps per leg of the triangle), A=%.3f rad = %.1f deg"
       % (target_joint, args_cli.steps, args_cli.amplitude, torch.rad2deg(torch.tensor(args_cli.amplitude))))
 
