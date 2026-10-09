@@ -148,7 +148,8 @@ done / cancelled / superseded`；后三词即关闭，关闭 = **移动不是改
    删 §3 的 12 条套件条目并把 `MAX_CHECKS` 收到 36、改 §2 的 6 个脚本。中间态不留红。
 3. **独立提交**：给 `[42]` 加 `--live`，`SERIAL_BUDGET_S` 用 `--confirm-cost` 实测后钉。
 4. **独立提交**：§4 的事项移动（9 移 `work/closed/2026/`、3 项改 scope）。
-5. **验收**：`run_offline_checks.bat` 全绿 + `Lizard2-Flat-v1/v2/v3` 注册与构造抽检 + `check_cfg_lock.py --diff` 无漂移。
+5. **验收**：`run_offline_checks.bat` 全绿 + `Lizard2-Flat-v1/v2/v3` **构造对拍**（第 1 步之后、删除之前
+   先存一次 cfg 构造读数，删完复跑同一命令逐条比）+ `check_cfg_lock.py --diff` 无漂移。
 6. **收尾**：commit / push 走 `git-auto-sync` skill；`FILEMAP.md` 同步改；本项 `close_when` 判词回填。
 
 ## 证据引用
@@ -163,7 +164,8 @@ done / cancelled / superseded`；后三词即关闭，关闭 = **移动不是改
 ## 未覆盖边界
 
 - 逐项判据是**静态依赖**（import / 注册 / contract 路径），未验证"删除后 lizard2 训练能否跑起来"——
-  真跑归执行后的验收，不归本清单。
+  §6-5 的构造对拍只钉"配置面没被拆坏"，真跑归执行后的验收，不归本清单。
+  删除**不是不可逆**：`lizard-final` tag 是取回路径；真正不可逆的是"没打 tag 就删"。
 - 删除面**之外**但会被牵动的引用不在本项 scope，执行前须再扫一遍并另立或顺手处理：
   `ablation_harness` 里对旧线任务 id 的默认值（如 `baseline_eval.py` 的默认 task）与 `rl_exp/ue/*.json` 的导出引用。
 - A① 的代价**未被任何设备度量**：保留 `teacher_mdp.py` 意味着旧线奖励 / 终止内核仍在主路径，
