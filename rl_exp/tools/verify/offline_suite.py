@@ -159,6 +159,9 @@ CHECKS: list[Check] = [
           [f"{_V}/check_split_probe_wait.py"], contract=("rl_exp/tools/verify/terrain_split_probe.py",)),
     Check    ("record binding primitives have one home (no second file digest / revision spelling / rsl_rl identity; detector self-tested)",
           [f"{_V}/check_record_bindings.py"], contract=("rl_exp/tools/runrecord/binding.py",)),
+    Check("leg chain caliber (adopted body's foot mesh + hinge plane + knee straight pose; the range must not reach straight)",
+          [f"{_V}/check_leg_reachability.py", "--self-check"],
+          contract=("rl_exp/lizard2_candidate/lizard2_candidate.urdf",)),
 ]
 
 
@@ -189,7 +192,7 @@ def default_jobs() -> int:
 #   Deliberately far above the cost budget, so that a slow check is reported as cost, not
 #   killed as a hang.
 PER_CHECK_BUDGET_S = 25.0
-MAX_CHECKS = 47  # ratchet: today's count (46 + the work-ledger shape gate; stdlib-only, ~0.1s, its own object of record). Add one -> remove or merge one, or raise this here.
+MAX_CHECKS = 48  # ratchet: today's count (47 + the leg-chain caliber, whose knee assertion is the only guard the "no reverse bending" requirement has). Add one -> remove or merge one, or raise this here.
 SERIAL_BUDGET_S = 175.0  # the total; --confirm-cost measures it (160s on 2026-09-18, 45 checks; 140s and 154s on 2026-09-20, 46 checks -- neither reading has moved the constant)
 SOLO_RECHECKS = 3  # breaching checks re-run alone, worst first, before they are suspect
 PER_CHECK_TIMEOUT_S = 180.0

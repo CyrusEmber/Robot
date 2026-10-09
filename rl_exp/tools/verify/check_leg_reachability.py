@@ -17,9 +17,13 @@ wrong from the numbers alone, and both decide what "a level pad" can even mean:
   ``haa + hfe + kfe`` and the blade angle alone (:func:`fold_tilt`) -- the hip angle drops out, how the
   sum is split does not matter, and no blade stroke can cancel the part of the fold that lies along the
   hinge axis (measured: 1-3 deg of travel against a 30-50 deg fold);
-* **the knee's straight pose is not at zero**: ``hfe`` makes thigh and shank collinear at +-55.15 deg,
-  while the asset's range is a symmetric +-1.2 rad (:data:`KNEE_FACTS`), so every leg carries 13.6 deg
-  of knee hyperextension -- the limit was carried over when ``hfe``'s axis changed from ``Z`` to ``-X``.
+* **the knee's straight pose is not at zero**: ``hfe`` makes thigh and shank collinear at +-75.00 deg,
+  while the asset's range is a symmetric +-1.2 rad (:data:`KNEE_FACTS`), so the range stops 6.245 deg
+  SHORT of straight -- reverse bending is unreachable and the knee cannot fully straighten either.
+  The sign of that margin is the requirement (the user's 2026-10-09 decision: the limit must not
+  allow reverse bending); the first body carried +13.6 deg of it the other way, because ``hfe``'s
+  axis changed from ``Z`` to ``-X`` in ``rl_exp/blender/generate_urdf.py`` while its +-1.2 limit was
+  carried over.
 
 A third reading is separated here because it is what "a level pad" is actually asked for:
 
@@ -63,6 +67,10 @@ one path that touches a record and therefore torch:
     python rl_exp\\tools\\verify\\check_leg_reachability.py --break-test
     python rl_exp\\tools\\verify\\check_leg_reachability.py --frames <record>\\eval.frames.pt
     python rl_exp\\tools\\verify\\check_leg_reachability.py --compare <candidate>.urdf --leg rl
+
+``--urdf`` reads ANY body's geometry (``--pose`` / ``--compare`` / ``--frames``), but the pinned knee
+facts are the ADOPTED body's, so ``--self-check`` is a reading of that body: pointing it at another
+URDF is expected to trip the knee assertions rather than to pass on borrowed numbers.
 """
 
 import argparse
@@ -75,7 +83,11 @@ import tempfile
 import xml.etree.ElementTree as ET
 
 _REPO = pathlib.Path(__file__).resolve().parents[3]
-DEFAULT_URDF = _REPO / "rl_exp" / "versions" / "lizard2" / "lizard2.urdf"
+#: The body the family consumes today: ``versions/lizard2/assets.json`` declares the candidate's mesh
+#: tree and ``main_params.yaml`` spawns its USD, so the default reading has to be the adopted body --
+#: otherwise the pinned knee facts below would describe a body nothing runs. The first body stays
+#: reachable through ``--urdf``.
+DEFAULT_URDF = _REPO / "rl_exp" / "lizard2_candidate" / "lizard2_candidate.urdf"
 #: The five joints of a leg, root to pad. The blade is the last one: the pad is rigid to it.
 CHAIN = ("hip", "haa", "hfe", "kfe", "foot")
 #: The three hinges that share one axis. Their plane is what ``hip`` can yaw and nothing can tilt,
@@ -84,17 +96,23 @@ HINGES = CHAIN[1:4]
 LEGS = ("lf", "rf", "rl", "rr")
 
 #: The knee's own geometry, per leg: the ``hfe`` that makes thigh and shank collinear [deg, signed
-#: about the joint's own axis], the hyperextension the +-1.2 rad limit leaves beyond it [deg], and the
-#: thigh-shank angle at the FOLDED end of the range [deg]. Four entries rather than one because the
-#: four chains are not exact mirrors of one another (the front pair mirrors to ~4 mdeg, and the rear
-#: pair is not the right legs' mirror at all). ``hfe``'s axis moved from ``Z`` to ``-X`` in
-#: ``rl_exp/blender/generate_urdf.py`` while its +-1.2 limit was carried over, so the number never had
-#: a knee's geometry behind it: every leg's range contains 13.6 deg of knee hyperextension.
+#: about the joint's own axis], the margin the +-1.2 rad limit leaves against that pose [deg, signed:
+#: POSITIVE = the limit runs past straight, i.e. the knee can hyperextend; NEGATIVE = the range stops
+#: short of straight], and the thigh-shank angle at the FOLDED end of the range [deg]. Four entries
+#: rather than one because the four chains are not exact mirrors of one another.
+#:
+#: These are the ADOPTED body's numbers (``rl_exp/lizard2_candidate/lizard2_candidate.urdf``), where
+#: the range stops 6.245 deg short of straight, so reverse bending is not reachable and the knee
+#: cannot fully straighten either. The first body was the other way round -- collinear at +-55.1465
+#: deg inside a +-1.2 rad range, i.e. 13.608 deg of hyperextension it inherited when ``hfe``'s axis
+#: moved from ``Z`` to ``-X`` -- and the user's requirement (2026-10-09: the limit must not allow
+#: reverse bending) is what makes this sign count. A regeneration that flips it back fails the
+#: self-check below, which is the only guard this requirement has.
 KNEE_FACTS = {
-    "rr": (55.146871, 13.608064, 123.901807),
-    "rf": (55.148202, 13.606733, 123.903137),
-    "lf": (-55.146496, 13.608439, 123.901431),
-    "rl": (-55.149688, 13.605247, 123.904623),
+    "rr": (74.999968, -6.245033, 143.754903),
+    "rf": (74.999965, -6.245030, 143.754901),
+    "lf": (-74.999965, -6.245030, 143.754901),
+    "rl": (-74.999968, -6.245033, 143.754903),
 }
 
 
@@ -393,27 +411,53 @@ def joint_effect(chain: list[dict], angles: list[float], index: int, normal: lis
     return dp, dn, axis, d_tilt
 
 
-def fold_tilt_cos(normal: list[float], sigma: float, foot: float) -> float:
+def leg_plane_yaw(chain: list[dict]) -> float:
+    """The leg plane's yaw [rad] about the body's z, read off the hinge axis itself.
+
+    The three hinges turn about one axis, and on this family's assets that axis is the body's ``-x``
+    turned by the leg's own yaw: ``R_z(psi) @ (-1, 0, 0)``. It is 0 on the first body and +-20 deg on
+    the adopted candidate, so the closed form below reads it here instead of assuming ``-x``.
+    """
+    hinge = _unit(chain[1]["axis"])
+    return math.atan2(-hinge[1], -hinge[0])
+
+
+def yawed_normal(normal: list[float], yaw: float) -> list[float]:
+    """``normal`` taken into the un-yawed leg frame -- the frame the closed form is written in.
+
+    The plane's yaw is a rotation about the body's z, which leaves the normal's z-component alone, so
+    this one substitution carries a yawed leg through the closed form unchanged.
+    """
+    cos_yaw, sin_yaw = math.cos(yaw), math.sin(yaw)
+    unit = _unit(normal)
+    return [unit[0] * cos_yaw + unit[1] * sin_yaw,
+            -unit[0] * sin_yaw + unit[1] * cos_yaw,
+            unit[2]]
+
+
+def fold_tilt_cos(normal: list[float], sigma: float, foot: float, yaw: float = 0.0) -> float:
     """The pad normal's z-component in a level body frame, read so that 1 = flat:
 
         cos(tilt) = ny sin(sigma) + (nx sin(foot) - nz cos(foot)) cos(sigma)
 
     The well-conditioned form of :func:`fold_tilt`, and the one to check against a measured tilt: an
     angle near 0 has no resolution through ``acos`` (a float64 cosine at 1 - 1e-16 returns ~1e-8 rad),
-    so comparing angles would measure the rounding instead of the identity. Valid for this asset's axis
-    directions -- the three hinges along ``-x`` and the blade along ``+y`` -- which the self-check
-    asserts, because a sign in either would silently flip a term here.
+    so comparing angles would measure the rounding instead of the identity. ``yaw`` is the leg
+    plane's own yaw (:func:`leg_plane_yaw`): the hinge and the blade are the body's ``-x`` and ``+y``
+    turned by it, and a rotation about the body's z leaves the normal's z-component alone, so the
+    plane factors out as ``R_z(-yaw)`` applied to the normal. The premise is asserted by the
+    self-check and this form is compared against the FK, because a sign in either would silently flip
+    a term here.
     """
-    nx, ny, nz = _unit(normal)
+    nx, ny, nz = yawed_normal(normal, yaw)
     return (ny * math.sin(sigma)
             + (nx * math.sin(foot) - nz * math.cos(foot)) * math.cos(sigma))
 
-
-def fold_tilt(normal: list[float], sigma: float, foot: float) -> float:
+def fold_tilt(normal: list[float], sigma: float, foot: float, yaw: float = 0.0) -> float:
     """The pad's tilt [deg] off a level body's down, from the fold sum alone.
 
     ``haa``, ``hfe`` and ``kfe`` all turn about the same axis, so the pad link's attitude in
-    ``base_link`` is ``Rz(hip) Rx(sigma) Ry(foot)`` with ``sigma`` their SUM: the hip drops out of the
+    ``base_link`` is ``Rz(hip + yaw) Rx(sigma) Ry(foot) Rz(-yaw)`` with ``sigma`` their SUM: the hip drops out of the
     tilt (a z rotation leaves the normal's z alone) and how the sum is split does not matter. For a
     level body the tilt is therefore a function of ``(sigma, foot)`` and the pad's own normal
     (:func:`fold_tilt_cos`) -- exact, and it says nothing about a pad that has to be level to the WORLD
@@ -423,7 +467,7 @@ def fold_tilt(normal: list[float], sigma: float, foot: float) -> float:
     alike (the ``abs`` is where the sign dies). It cannot accept a pose -- that takes the DIRECTED read,
     :func:`fold_tilt_cos`'s sign through :func:`faces_down`.
     """
-    return math.degrees(math.acos(max(-1.0, min(1.0, abs(fold_tilt_cos(normal, sigma, foot))))))
+    return math.degrees(math.acos(max(-1.0, min(1.0, abs(fold_tilt_cos(normal, sigma, foot, yaw))))))
 
 
 def straight_hfe(chain: list[dict]) -> float:
@@ -581,18 +625,26 @@ def self_check(urdf: pathlib.Path) -> None:
         # The pad's tilt is its FOLD SUM's, and the hip is not in it: the three hinges share one axis,
         # so redistributing the same sum must change the tilt by nothing, and so must the hip angle.
         assert chain[1]["axis"] == chain[2]["axis"] == chain[3]["axis"], (leg, "hinges not parallel")
-        assert chain[1]["axis"] == [-1.0, 0.0, 0.0] and chain[4]["axis"] == [0.0, 1.0, 0.0], \
-            (leg, "the closed form is written for the asset's own hinge and blade directions")
+        # The closed form's premise, read off the axes instead of asserted as the first body's
+        # literals: both axes horizontal (a rotation about the body's z cannot tilt them), the blade
+        # the hinge turned a quarter turn about the z, and -- the non-tautological half -- the yaw the
+        # hinge states equal to the yaw the blade states.
+        hinge, blade = _unit(chain[1]["axis"]), _unit(chain[4]["axis"])
+        assert abs(hinge[2]) < 1e-12 and abs(blade[2]) < 1e-12, (leg, hinge, blade, "a tilted plane")
+        assert all(abs(blade[i] + _cross([0.0, 0.0, 1.0], hinge)[i]) < 1e-9 for i in range(3)), \
+            (leg, hinge, blade, "the blade is not the hinge turned a quarter turn about the z")
+        assert abs(leg_plane_yaw(chain) - math.atan2(-blade[0], blade[1])) < 1e-9, \
+            (leg, leg_plane_yaw(chain), blade, "the hinge and the blade disagree on the plane's yaw")
         # The motion plane can be yawed but never tilted: with the hip as the body's z, `haa`'s axis in
         # the body frame is the zero-pose hinge turned about that z, so its z component stays zero over
         # the whole hip range and the plane the three parallel hinges span always contains the body's z.
         # The premise is asserted above (a level-hip turn leaves the tilt alone) and to the left (the
-        # hinges are parallel and `haa` is a literal -X); what this adds is the literal on the hip's own
+        # hinges are parallel and horizontal); what this adds is the literal on the hip's own
         # axis plus the regression across the range, endpoints included because a limit is where a
         # rebuild would drift first. A break test (hip axis perturbed to `0 0.3 1`) fails, but at the
         # level-hip-tilt assertion rather than here -- this one is the backstop, not the first guard.
         assert chain[0]["axis"] == [0.0, 0.0, 1.0], (leg, chain[0]["axis"], "hip is not the body's z")
-        hinge = _unit(chain[1]["axis"])
+        yaw = leg_plane_yaw(chain)
         low, high = chain[0]["limits"]
         for hip in (low, low / 2.0, 0.0, high / 2.0, high):
             axis_at = joint_effect(chain, [hip, 0.0, 0.0, 0.0, 0.0], 1, normal, vertices)[2]
@@ -609,7 +661,7 @@ def self_check(urdf: pathlib.Path) -> None:
                 turned = pad_state(chain, [-0.4, sigma, 0.0, 0.0, foot], normal, vertices, 0.9)
                 assert abs(spread["tilt_deg"] - other["tilt_deg"]) < 1e-9, (leg, sigma, foot)
                 assert abs(spread["tilt_deg"] - turned["tilt_deg"]) < 1e-9, (leg, sigma, foot)
-                assert abs(fold_tilt_cos(normal, sigma, foot) - (-spread["normal"][2])) < 1e-12, \
+                assert abs(fold_tilt_cos(normal, sigma, foot, yaw) - (-spread["normal"][2])) < 1e-12, \
                     (leg, sigma, foot)
         # The blade cannot buy the tilt back: with the legs folded by 0.62 rad its whole +-0.5 rad
         # stroke leaves >= 30 deg, which is the reading ("1-3 deg of travel against a 30-50 deg fold").
@@ -620,15 +672,16 @@ def self_check(urdf: pathlib.Path) -> None:
         # inside the limits and the fold identity reads it as flat, so only the DIRECTED facing
         # separates the two -- and the verdict is checked on both reads that carry it (the FK state and
         # the closed form), because they are the same quantity and were allowed to drift apart.
-        sigma_flip = math.pi + math.atan2(normal[1], -normal[2])
+        flip_normal = yawed_normal(normal, yaw)
+        sigma_flip = math.pi + math.atan2(flip_normal[1], -flip_normal[2])
         flip = [0.0, 0.6, 1.2, sigma_flip - 1.8, 0.0]
         assert all(joint["limits"][0] <= angle <= joint["limits"][1] for joint, angle in zip(chain, flip)), \
             (leg, flip, "the flipped counterexample is no longer inside the limits")
         flipped = pad_state(chain, flip, normal, vertices, 0.9)
-        assert abs(fold_tilt(normal, sigma_flip, 0.0)) < 0.5, (leg, "the counterexample is not flat")
+        assert abs(fold_tilt(normal, sigma_flip, 0.0, yaw)) < 0.5, (leg, "the counterexample is not flat")
         assert flipped["facing_cos"] < -0.9, (leg, flipped["facing_cos"], "the flip is not facing up")
         assert not faces_down(flipped["facing_cos"], 10.0), (leg, "a pad on its back was accepted")
-        assert not faces_down(fold_tilt_cos(normal, sigma_flip, 0.0), 10.0), \
+        assert not faces_down(fold_tilt_cos(normal, sigma_flip, 0.0, yaw), 10.0), \
             (leg, "the closed form accepted the flipped pad")
         assert zero["facing_cos"] - flipped["facing_cos"] > 1.8, \
             (leg, zero["facing_cos"], flipped["facing_cos"])
@@ -649,8 +702,10 @@ def self_check(urdf: pathlib.Path) -> None:
                        + (position[2] + sum(link_rotation[2][k] * vertex[k] for k in range(3)))
                        * math.cos(roll) for vertex in vertices)
         assert abs(rolled["lowest_z"] - hand_low) < 1e-12, (leg, rolled["lowest_z"], hand_low)
-        # The knee's straight pose, against the pinned per-leg facts: the limit over-runs it, and the
-        # other end of the range is a fold. A regeneration that moves an origin must trip these.
+        # The knee's straight pose, against the pinned per-leg facts: how far the range gets against it,
+        # and the other end of the range being a fold. A regeneration that moves an origin must trip
+        # these. The SIGN of the margin is the user's requirement (2026-10-09): positive means the limit
+        # runs past straight, i.e. reverse bending is reachable.
         straight = math.degrees(straight_hfe(chain))
         pinned, margin, folded = KNEE_FACTS[leg]
         assert abs(straight - pinned) < 1e-3, (leg, straight, pinned)
@@ -658,6 +713,7 @@ def self_check(urdf: pathlib.Path) -> None:
         fold_limit, over_limit = (low, high) if straight > 0 else (high, low)
         over_run = math.degrees(abs(over_limit)) - abs(straight)
         assert abs(over_run - margin) < 1e-3, (leg, over_run, margin)
+        assert over_run <= 0.0, (leg, over_run, "the knee's range reaches straight: reverse bending")
         assert abs(thigh_shank_angle(chain, [0.0, 0.0, fold_limit, 0.0, 0.0]) - folded) < 1e-3, leg
         limits = " ".join("%s[%+.2f,%+.2f]" % (joint["name"].split("_")[-2], *joint["limits"])
                           for joint in chain)
@@ -669,13 +725,13 @@ def self_check(urdf: pathlib.Path) -> None:
               % (["%+.4f" % v for v in normal], tilt, zero["tilt_deg"], zero["facing_cos"],
                  zero["lowest_z"], lever))
         print("      flipped counterexample in the box: fold_tilt %.2f deg (undirected), facing %+.3f "
-              "-> %s" % (fold_tilt(normal, sigma_flip, 0.0), flipped["facing_cos"],
+              "-> %s" % (fold_tilt(normal, sigma_flip, 0.0, yaw), flipped["facing_cos"],
                          "rejected" if not faces_down(flipped["facing_cos"], 10.0) else "ACCEPTED"))
         print("      hinges vs the body's z: haa/hfe/kfe %.4f/%.4f/%.4f deg (90 = the plane the three "
               "of them span contains the body's z)"
               % tuple(hinge_vs_body_z(chain, zero_angles, i) for i in (1, 2, 3)))
-        print("      knee: straight at %+.4f deg, the +-1.2 rad limit over-runs it by %.4f deg, "
-              "folded end %.2f deg" % (straight, over_run, folded))
+        print("      knee: straight at %+.4f deg, the +-1.2 rad range's margin against it %+.4f deg "
+              "(>0 = reverse bending reachable), folded end %.2f deg" % (straight, over_run, folded))
     # A joint's own frame may be rotated, and then the axis is stated in it: composed, not ignored.
     yawed = [{"name": "t", "token": "t", "origin": [0.0, 0.0, 0.0], "rpy": [0.0, 0.0, math.pi / 2],
               "axis": [1.0, 0.0, 0.0], "limits": (-1.0, 1.0)}]
@@ -798,11 +854,24 @@ def break_test(urdf: pathlib.Path) -> int:
     """
     identity = [[1.0 if i == j else 0.0 for j in range(3)] for i in range(3)]
     real = {name: globals()[name]
-            for name in ("faces_down", "_rpy_matrix", "pad_state", "chain_joint_names")}
+            for name in ("faces_down", "_rpy_matrix", "pad_state", "chain_joint_names", "load_chain")}
     def no_attitude(*args, **kwargs):
         """``pad_state`` with the body's attitude dropped: the level-body assumption, put back."""
         kwargs = {name: value for name, value in kwargs.items() if name != "base_rpy"}
         return real["pad_state"](*args[:5], **kwargs)
+
+    def widened_knee(urdf: pathlib.Path, leg: str) -> list[dict]:
+        """The knee's range widened past straight: the reverse bending the requirement forbids.
+
+        This is the perturbation the 2026-10-09 decision buys: a limit that reaches straight (or runs
+        past it, which is what the first body's +-1.2 rad did) must not pass the self-check.
+        """
+        chain = real["load_chain"](urdf, leg)
+        straight = abs(straight_hfe(chain))
+        for joint in chain:
+            if joint["token"] == "hfe":
+                joint["limits"] = (-straight - 0.05, straight + 0.05)
+        return chain
 
     cases = [
         ("a sign-blind facing verdict",
@@ -813,6 +882,8 @@ def break_test(urdf: pathlib.Path) -> int:
          {"pad_state": no_attitude}),
         ("the chain taken from the asset's token list, not the tree",
          {"chain_joint_names": lambda _urdf, leg: tuple(f"{leg}_{token}_joint" for token in CHAIN)}),
+        ("the knee's range widened past straight (reverse bending)",
+         {"load_chain": widened_knee}),
     ]
     holes = []
     for label, patches in cases:
@@ -884,7 +955,8 @@ def fold_reading(path: pathlib.Path, urdf: pathlib.Path, contact_n: float = 1.0)
             if sigma.numel() == 0:
                 print("%-5s %-3s %8d" % (band, leg, 0))
                 continue
-            predicted = fold_tilt(pad_normal_in_link(urdf, leg), float(sigma.median()), 0.0)
+            predicted = fold_tilt(pad_normal_in_link(urdf, leg), float(sigma.median()), 0.0,
+                                  leg_plane_yaw(load_chain(urdf, leg)))
             print("%-5s %-3s %8d %7.1f/%6.1f %7.1f/%6.1f %10.1f"
                   % (band, leg, int(sigma.numel()),
                      math.degrees(float(sigma.abs().median())),
@@ -923,6 +995,9 @@ def main() -> None:
     parser.add_argument("--contact_n", type=float, default=1.0,
                         help="per-foot normal force above which the pad is called loaded [N]")
     args = parser.parse_args()
+    # Resolved once, here: the mesh check below compares the URDF's own tree with the path a mesh was
+    # read from, and a relative URDF would compare a relative parent against an absolute child.
+    args.urdf = args.urdf.resolve()
     if args.self_check:
         self_check(args.urdf)
         return

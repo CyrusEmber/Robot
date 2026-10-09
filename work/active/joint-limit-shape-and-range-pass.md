@@ -4,9 +4,9 @@ title: 巨蜥关节设计决策：参考动作、姿态与范围
 scope: acceptance/records, rl_exp/tools/verify, rl_exp/tools/diagnose, rl_exp/blender
 status: in_progress
 landing: acceptance/records/2026-10-08-lizard2-joint-design-review-contract.md#结果
-next: 按 landing 的 R4 与 acceptance/records/2026-10-09-lizard2-limit-requirement-and-status-sync.md 中的用户决定，先逐腿量测当前机体的伸直边界、方向与控制余量，形成限位候选；继续核验完整动作周期、真实网格碰撞及旧机体开自碰撞控制组。下段倾角、左右命令符号、后脚板形状与新零位下旧包络仍分别决策，不因正式采用自动关闭
+next: 膝的反曲边界已按当前机体重测（伸直位 ±75.00°、限位余量 -6.245° = 反曲不可达、折叠端 143.75°，见 acceptance/records/2026-10-09-lizard2-knee-reverse-bending-measurement.md），该读数已进离线闸门；待定的是余量是否够控制误差（R4：扰动、跟踪误差与执行验证）、踝/掌的反曲方向定义与候选、以及限位实施的版本与资产路径（§A）。继续核验完整动作周期、真实网格碰撞及旧机体开自碰撞控制组。下段倾角、左右命令符号、后脚板形状与新零位下旧包络仍分别决策，不因正式采用自动关闭
 close_when: Codex 复核 landing 的最终判定与证据，本对话用户确认选择及工况；保留/修改方案经评审通过且未完实施已交具名活跃事项后关闭，全部拒绝亦关闭，任一待决或未判定继续在办；正式采用另过机制闸门
-evidence: acceptance/records/2026-10-08-lizard2-joint-design-review-contract, acceptance/records/2026-10-08-lizard2-reference-motion-v0, acceptance/records/2026-10-08-lizard2-r1-numeric-reference-and-decision-drafts, acceptance/records/2026-10-08-lizard2-v3-landing, acceptance/records/2026-10-09-lizard2-limit-requirement-and-status-sync
+evidence: acceptance/records/2026-10-08-lizard2-joint-design-review-contract, acceptance/records/2026-10-08-lizard2-reference-motion-v0, acceptance/records/2026-10-08-lizard2-r1-numeric-reference-and-decision-drafts, acceptance/records/2026-10-08-lizard2-v3-landing, acceptance/records/2026-10-09-lizard2-limit-requirement-and-status-sync, acceptance/records/2026-10-09-lizard2-knee-reverse-bending-measurement
 ---
 
 ## 当前动作与待决问题
