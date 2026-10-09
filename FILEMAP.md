@@ -1,11 +1,14 @@
 # FILEMAP —— 目录导航（给下一个 AI / 新协作者）
 
 > **本文件是目录导航，不是文件登记册。** 它回答"这块东西住哪、干什么、哪条路不能靠看树推出来"，
-> 不逐个登记文件。由此三条边界：
+> 不逐个登记文件。由此四条边界：
 >
 > - 新增一个普通文件、一条事项或一批验收记录 **都不需要改本文件**；
 > - 新增版本 **只需满足既有目录登记**（`versions\<family>\<line>\vN\` 四件套 + `base.json` + FAMILY 版本史行 + 本文件版本行）；
-> - 只有"入口 / 闸门 / 契约 SSOT / 看树推不出来的坑"这四类才值得加行。
+> - 只有"入口 / 闸门 / 契约 SSOT / 看树推不出来的坑"这四类才值得加行；
+> - **每格只留「是什么 / 何时选它 / 关键开关 / 已知天花板」**：逐 flag、逐函数、逐样本输出归脚本自己的
+>   docstring，坑归 `rl_exp\docs\pitfalls.md` 的 P00x。同一条事实写两处 = 造一个会失真的副本；
+>   存量格子改到哪行清哪行，不强制回溯。
 >
 > 读图顺序：`README.md`（仓定位 + 新机器摆位）→ 本文件（目录职责与入口）→
 > `rl_exp\versions\lizard\PLAN.md`（意图与挂账）→ `rl_exp\versions\lizard\FAMILY.md`（已成立事实）。
@@ -60,7 +63,7 @@
 | `rl_exp\tools\diagnose\pose_slider.py` | **交互摆姿器**（固定机身、无重力、无仿真）：四腿各 5 关节 + 机身高度滑块；读数 = 每腿倾角 / 最低顶点离地 / 足端偏移 / 末次触碰关节的轴向与导数（与 `check_leg_reachability.py` 同口径）。`limits` 只在**内存**里放宽，`reset`/`save`/`--load` 走 JSON（默认落 `rl_exp\tools\diagnose\out\pose_slider\`，gitignore）；`--self-check` 无界面可跑；需 `env_isaaclab` 的 python |
 | `rl_exp\tools\diagnose\stance_step_probe.py` | **静站承重 + 单关节小幅迈步的仿真读数**（PLAY 任务、1 env、无策略无 checkpoint）：先 `--settle` 步静置（零动作 = 未命令关节只由 PD 保持默认，即"取消动作通道"后的情形），再按**连续三角插值**把 `--leg`/`--joint` 的目标扫出去再扫回来，每控制步采样（base 高 / 四脚受力 / 标定后的足底法线倾角 / 接触点水平速度 / 力矩 / 非足体最大接触力）。`--usd`/`--urdf` 换资产与标定来源、`--drop-joints` 摘关节；**口径限制**（力矩由 Kp/Kd 重建等）；"碰撞"指非足体接触力，自碰撞关时不证明无碰撞 |
 | `rl_exp\tools\verify\check_leg_reachability.py` | 腿链**离线 FK 与摆姿读数**（链自 URDF 树遍历、垫网格取 URDF 自己的 `<leg>_foot` 碰撞体；stdlib，不碰仿真，`--frames` 是唯一碰 torch 的路径）：可 import 的读点 = `chain_frames` / `foot_pose` / `joint_effect` / `pad_state`（世界系）/ `fold_tilt`（无向，**不能作验收**）/ `faces_down`（有向：翻掌必拒）/ `KNEE_FACTS`（膝伸直余量，**>0 = 可达反曲**）/ `straight_hfe` / `leg_plane_yaw`；`--urdf` 换机体、`--compare <候选.urdf>` 同姿态比两机体、`--self-check` 对口径、`--break-test` 破坏口径并**要求自检变红**。**可达性扫描（A/B/C 三段）尚未实现** |
-| `rl_exp\tools\verify\check_self_collision.py` | 限位盒内自碰撞的**网格级**检查（离线，点-三角确认，相邻对按枢轴规则跳过，`single`/`combined` 两组姿态）：`--family` 按该家族 `assets.json` 声明的机体解析 URDF、`--urdf` 覆盖（**首行打印读了哪个文件与依据**）；命中或余量低于 `--clearance`（默认 5 mm）即 exit 1 打 `SELF_COLLISION_COUNTEREXAMPLE`。**不在离线清单**——采用机体当前是红的，加红闸等于每天红一次；方法天花板（凸包近似、漏边-面交叉）由它自己印出 |
+| `rl_exp\tools\verify\check_self_collision.py` | 限位盒内自碰撞的**网格级**检查（离线，`single`/`combined` 两组姿态）：`--family` 按该家族 `assets.json` 声明的机体解析 URDF、`--urdf` 覆盖（**首行打印读了哪个文件与依据**）；命中或余量低于 `--clearance`（默认 5 mm）即 exit 1 打 `SELF_COLLISION_COUNTEREXAMPLE`。**不在离线清单**——采用机体当前是红的，加红闸等于每天红一次；方法天花板（凸包近似、漏边-面交叉）由它自己印出 |
 | `rl_exp\tools\verify\terrain_preflight.py` | 开训前地形预检：离线生成全部子地形 + 粗糙度 + PNG 预览 + 几何摘要。它是**离线预览的回归基线**，不是真跑所站地形的证据（真跑几何由 `terrain_split_probe` 采集归档） |
 | `rl_exp\tools\pipeline\export_ue.py` | SSOT → UE 工件（盲部署前置）；**没有实测关节序就拒绝导出**（不写文件） |
 
