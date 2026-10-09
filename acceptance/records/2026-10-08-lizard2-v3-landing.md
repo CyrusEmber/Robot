@@ -67,6 +67,7 @@ git diff --check
 
 ## 未覆盖边界
 
+- 后续反曲禁区需求、旧机体证据适用边界与文档状态同步见 `2026-10-09-lizard2-limit-requirement-and-status-sync.md`；本记录的最小运行结果不证明限位已按新零位修正。
 - 正式最小仿真已完成，不是 stance probe 的 --drop-joints 替代；未做 GUI、长期/多 seed 稳定、完整动作周期、mesh 自碰撞验证，旧机体+selfcollision 对照仍未运行。候选旧记录 local-space BVHTree 205 pairs 无效，不引用其为碰撞证据。
 - 保留 v2 的 velocity_limit 字段；框架明确告警 implicit actuator 不采用该旧字段，运行表速度上限极大。这是继承语义，不在本轮改 velocity_limit_sim，否则增加物理调参。effort_limit 同样有未来弃用告警但当前 effort 上限生效。
 - 最小 sim 未设环境 seed，仅一次短窗，不能声称跨 seed 确定性。运行 stdout 由本次执行返回，本记录保留命令/判词/摘要，未另保存 raw 日志。

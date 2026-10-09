@@ -18,6 +18,8 @@
 
 报告：`acceptance/records/2026-10-08-lizard2-v3-landing.md`。仿真/离线检查按该记录复读。
 
+后续需求与文档状态核对：`acceptance/records/2026-10-09-lizard2-limit-requirement-and-status-sync.md`；本次仅更新文档，无新仿真或训练 run。
+
 ## 结论
 
 本轮工程交付判定见报告；不把接口自检当作 mesh 碰撞、完整动作周期或策略效果验收。

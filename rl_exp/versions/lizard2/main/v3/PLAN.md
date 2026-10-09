@@ -1,6 +1,6 @@
 # lizard2 设计计划：main/v3
 
-> 更新：2026-10-08。修订：v3.2（用户拍板）。
+> 更新：2026-10-09。修订：v3.2.1（记录性勘误；采用方案仍为 v3.2 用户拍板）。
 > 本版采用本轮候选机体，唯一母本为 v2；本轮只实施与自检，不训练、不冻结/tag。
 > 家族 PLAN 仅作入口，设计正文唯一在本文件。
 
@@ -30,7 +30,7 @@
 1. 采用本轮用户批准的导出，来源唯一归 `acceptance/records/2026-10-08-lizard2-blender-body-candidate.md`。
 2. 同次退休加载旧机体的 v1/v2，删除旧资产锁，保留历史 yaml、注册与文档；不刷新旧锁、不改旧配方。
 3. 运行 v3 正式 train/play 的构建、obs 实测、PD/默认目标与最小运行自检；不以 `--drop-joints` 模拟替代。
-4. 限位、完整动作周期、mesh 碰撞与旧机体开自碰撞对照另由 `work/active/joint-limit-shape-and-range-pass.md` 承接，本轮不声称验收。
+4. 限位、完整动作周期、mesh 碰撞与旧机体开自碰撞对照另由 `work/active/joint-limit-shape-and-range-pass.md` 承接，本轮不声称验收。后续需求与当前状态见 `acceptance/records/2026-10-09-lizard2-limit-requirement-and-status-sync.md`，技术判据消费评审合同 R4；本次仅补记录指针，不改本版资产或配方。
 5. 后续训练必须另经用户确认；启动方案使用 `Lizard2-Flat-v3` 与独立日志目录，先预检再冻结。当前不执行训练命令。
 
 ## 验收与开训条件
@@ -61,3 +61,4 @@
 | 2026-10-08 | v3 | 用户要求先填写 v3 文档；建立机体与默认姿态优先的设计草案，衔接 Blender 执行单及现有 work。方向要求来源为用户明确说明；长度与训练安排是候选方案。依据：`acceptance/records/2026-10-08-lizard2-blender-body-candidate.md`、`acceptance/records/2026-10-08-lizard2-r1-numeric-reference-and-decision-drafts.md`。 |
 | 2026-10-08 | v3.1 | 用户拍板：踝部只取消策略动作通道，保留关节运动与 PD；纠正此前将“关闭自由度”解释为机械锁定的口头理解。动作集合与默认目标要求见 Blender 执行单“动作通道决定”；运行时配置尚未实施。 |
 | 2026-10-08 | v3.2 | 用户拍板：现在采用本轮候选，基于 v2 摘除 kfe 动作并保持全部 PD/零目标，保留 v2 其余配方；迁入正式版本、收回家族正文、同次退休旧机体版本。本轮不开训、不冻结；依据指向 `acceptance/records/2026-10-08-lizard2-v3-landing.md`。 |
+| 2026-10-09 | v3.2.1 | 记录性勘误：补后续需求和当前状态指针，纠正文档将已接入事项列为未做的口径；采用方案、资产、配方和训练安排未变。依据：`acceptance/records/2026-10-09-lizard2-limit-requirement-and-status-sync.md`。 |

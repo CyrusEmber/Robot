@@ -42,7 +42,7 @@ A 达标优先保留；A 有被证实的结构缺口且 B 补足，才进入新�
 
 ### R4 范围、约束形状与速度预算
 
-逐轴分别记录目标轨迹的常用范围、机构/碰撞或明确设计禁区形成的硬边界候选、缺证下的工程选择。动物常用幅度不等于被动机械边界，源角度须经过映射；候选不得冒称真实巨蜥机械极限。先决定膝/肘是否允许越共线，余量结合控制误差与执行验证确定。
+逐轴分别记录目标轨迹的常用范围、机构/碰撞或明确设计禁区形成的硬边界候选、缺证下的工程选择。动物常用幅度不等于被动机械边界，源角度须经过映射；候选不得冒称真实巨蜥机械极限。用户于 2026-10-09 明确“要根据不能反曲调整限位”（原答复见 `2026-10-09-lizard2-limit-requirement-and-status-sync.md`），膝/肘不得越过伸直位进入反曲侧；这项禁区已定，不再等待是否禁止的决定。按当前候选逐腿核对关节—解剖映射、新零位、轴向、伸直边界与屈曲侧，控制余量结合跟踪误差、扰动与执行验证确定，不能直接套用旧机体的角度或左右符号。
 
 运行姿态域为机械有效域与获准仿生域的交集。先检验独立区间能否保留目标周期并拒绝已定义反例；给出盒内违规组合及保守收窄的代价后，才决定是否需要组合约束。阶段性接触、常用姿态与必须禁止的状态分别处理；新增轴也受选定姿态域约束。
 
@@ -70,14 +70,14 @@ Codex 为每个候选链接 R1–R5 的读数与判定，本对话用户确认�
 
 ## 结果
 
-当前候选仍未判定：尚无完整数值参考、确认的工程容差、目标驱动比较及完整动力学证据。本轮仅完成 work 的职责收敛和判据迁移，没有关闭或取消任何在办动作，也未修改机器人资产、配方、协议或闸门。
+完整动作与运行姿态域仍未判定：尚缺完整数值参考、确认的其余工程容差、目标驱动比较及完整动力学证据。用户已批准采用候选，工程接入与最小运行验证见 `2026-10-08-lizard2-v3-landing.md`；采用不等于本合同的全部设计验收通过。2026-10-09 的需求补充与状态核对见 `2026-10-09-lizard2-limit-requirement-and-status-sync.md`。以下迁移统计与检查仅描述 2026-10-08 判据收敛时的变更。
 
 本次整改对应用户评审：close_when 改为具名复核与正/负/未判定出口；技术要求只在本记录保留；活跃项不再罗列工具内部符号；landing 改为设计评审记录；全局依赖移为采用阶段前置；明确两种锁；需求线程 D1–D3 指明提案人与确认人。原有合并、发力记录中的阶段引用保留为日期追踪，不作为当前要求副本。
 
 迁移后测量：活跃文件由 18229 B 降为 2652 B，close_when 值由 1727 B 降为 265 B，active 总量由 90559 B 降为 74982 B；未新增、关闭或取消事项，预算未调整。测量以 UTF-8 字节计，close_when 不含字段名和换行。
 
 候选结果入口：后续在此链接每份候选证据、需求答复与具名实施项。**R1 首份数值参考与 D1–D3 提案草案**（含答复栏）见
-`acceptance/records/2026-10-08-lizard2-r1-numeric-reference-and-decision-drafts.md`；目前未形成设计定案。
+`acceptance/records/2026-10-08-lizard2-r1-numeric-reference-and-decision-drafts.md`；后续采用与需求决定分别按上述落地、状态同步记录读取，完整设计尚未验收。
 
 文档验证：`framework_pin_check.py --strict --self-test`、`check_dr_parity.py --strict`、`check_version_docs.py`、`check_work_docs.py`、`check_obs_layout.py` 及 `git diff --check` 通过。原有框架工作树改动、历史 tag 与日期证据旧指针提示未在本轮处理；检查通过不表示人工设计评审已经完成。
 
@@ -90,7 +90,8 @@ Codex 为每个候选链接 R1–R5 的读数与判定，本对话用户确认�
 - 生物资料：`acceptance/records/2026-09-29-large-monitor-skeleton-muscle-review.md`、`acceptance/records/2026-09-29-varanid-joint-range-of-motion-evidence.md`。
 - 姿态与发力：`acceptance/records/2026-10-08-lizard2-posture-force-validation-scope.md`、`acceptance/records/2026-09-22-lizard2-actuator-capability.md`。
 - 合并追踪：`acceptance/records/2026-10-08-lizard2-work-consolidation.md`；换代规则证据：`acceptance/records/2026-09-30-body-swap-and-lock-freeze.md`。
-- 独立事项：`work/active/asset-tree-per-family.md`、`work/active/lizard2-family-landing.md`、`work/active/leg-chain-symmetry-convention.md`、`work/active/large-monitor-skeleton-muscle-literature.md`。
+- 独立事项：`work/active/asset-tree-per-family.md`、`work/active/lizard2-family-landing.md`、`work/active/large-monitor-skeleton-muscle-literature.md`；Blender 交付归档为 `work/closed/2026/leg-chain-symmetry-convention.md`。
+- 当前采用与需求：`acceptance/records/2026-10-08-lizard2-v3-landing.md`、`acceptance/records/2026-10-09-lizard2-limit-requirement-and-status-sync.md`。
 
 ## 未覆盖边界
 
