@@ -109,8 +109,10 @@ parser.add_argument("--init-dist", action="store_true",
                          "how often each joint sits on a position stop, then exit")
 parser.add_argument("--init-dwells", type=int, nargs="*", default=[1, 4, 20],
                     help="control steps each action sample is held for, one pass each")
-parser.add_argument("--init-frames", type=int, default=1000,
-                    help="measured frames to collect per dwell (fallen/reset frames do not count)")
+parser.add_argument("--init-frames", type=int, default=8000,
+                    help="measured frames to collect per dwell (fallen/reset frames do not count). "
+                         "This sets the WINDOW LENGTH: with 16 envs, 8000 frames is ~10 s of "
+                         "simulation, and a shorter window under-reads whatever settles slowly")
 parser.add_argument("--init-envs", type=int, default=16,
                     help="parallel envs to pool frames over: one step yields one frame per env")
 parser.add_argument("--init-band", type=float, default=0.01,
@@ -392,6 +394,11 @@ def run_init_dist(task: str, dwells: list[int], frames_wanted: int, band: float,
       with the base still around 0.7 m), so ``pressed_frac`` is the column that separates the drive
       from the posture, and ``episodes_ended`` / ``frames_dropped_below_half_spawn`` are printed to
       show how much of the window sits near a termination at all;
+    * the window is also a LENGTH, printed in simulation seconds: a quantity that keeps growing as the
+      body settles -- a spine sagging onto its stop -- is under-read by a short window, and that is
+      exactly how the first version of this layer reported half of ``chest_pitch``'s occupancy. Length
+      is set by ``--init-frames`` (frames / envs = steps), and comparing two lengths is the cheap check
+      that the number is not an artefact of the one that was picked;
     * frames are POOLED over ``--init-envs`` parallel envs -- one step yields one frame per env, which
       is the only reason this reads fast enough to be worth running -- so a "frame" is an env-frame and
       a held sample makes neighbouring frames of one env correlated. Each dwell prints the
@@ -504,9 +511,11 @@ def run_init_dist(task: str, dwells: list[int], frames_wanted: int, band: float,
         rows.sort(key=lambda row: -row["at_stop_frac"])
         independent = (measured / dwell) if dwell else float(measured)
         elapsed = time.perf_counter() - started
+        window_s = steps * dt
         print(f"\n  -- dwell {dwell} control step(s) = {dwell * dt:.2f} s: {measured} measured frame(s) "
-              f"pooled over {envs} env(s), {samples} action sample(s), {episodes} episode(s) ended, "
-              f"{dropped} frame(s) dropped below half the spawn height")
+              f"over {window_s:.1f} s of SIMULATION, pooled over {envs} env(s), {samples} action "
+              f"sample(s), {episodes} episode(s) ended, {dropped} frame(s) dropped below half the "
+              f"spawn height")
         print(f"     {steps} step(s) in {elapsed:.1f}s ({steps / max(elapsed, 1e-9):.0f} steps/s): the "
               f"cost is steps, so frames-per-step is the lever, not patience")
         print(f"     ~{independent:.0f} independent sample(s) (frames/dwell): a HELD action makes "
@@ -529,6 +538,7 @@ def run_init_dist(task: str, dwells: list[int], frames_wanted: int, band: float,
                              (f" -- {', '.join(untouched)}" if untouched else "")))
         reports.append({
             "dwell_steps": dwell, "dwell_s": dwell * dt, "measured_frames": measured,
+            "window_s": round(window_s, 2),
             "action_samples": samples, "independent_samples_estimate": independent,
             "episodes_ended": episodes, "frames_dropped_below_half_spawn": dropped,
             "steps_taken": steps, "budget_steps": budget,
