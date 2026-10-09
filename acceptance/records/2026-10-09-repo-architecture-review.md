@@ -73,8 +73,10 @@
 ## 善后（2026-10-09 同日：分诊表里"就地修 / 清，不立项"的三条）
 
 - **仓根 64 个 `_tmp_*` 全删**（59 个在根、5 个在 `rl_exp/tools/`，含九份验收记录引用的脚本与原始件 ⇒ 那些
-  "复读"路径作废，记录本身已声明它们不入仓）；两个工具的仓根默认输出改落
-  `rl_exp/tools/diagnose/out/`（`terrain_preflight.py` 的预览、`baseline_probe.py` 的目视帧）。
+  "复读"路径作废，记录本身已声明它们不入仓；受影响的冻结记录按勘误就地标注删除与原委，不删读数）；两个工具的
+  仓根默认输出改落 `rl_exp/tools/diagnose/out/`（`terrain_preflight.py` 的预览、`baseline_probe.py` 的目视帧）。
+  另删两个已变成垃圾的仓根输出目录（同上两个工具的旧默认落点）与 `rl_exp/tools/diagnose/out/_tmp_lizard2_gait/`
+  （2026-09-23 记录的旁证，一次性目录）。
 - **机制**：`check_suite_banners.py`（本因横幅写出仓根 `config` 而生）加"仓根只许声明项"扫描 —— 按声明判
   （改名成 `helper.py` 一样红），`hooks/pre-commit` 也调它 ⇒ **提交即截止线**；`_tmp_*` 的 gitignore 与命名
   约定保留（工作树的脏判据不受影响）。规则本就写在 `FILEMAP.md`，欠的是闸门。

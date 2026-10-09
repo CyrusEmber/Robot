@@ -63,8 +63,8 @@
 
 ## 证据引用
 
-- 几何对比与 dry-run：`_tmp_foot_{audit,audit2,compare,trees,delta,fix,source,plan,stl,flat,families}.py`（一次性，`_tmp_*` 已 gitignore）
-- 修复脚本：`_tmp_tree_fix.py`（lizard2 树内镜像）
+- 几何对比与 dry-run：`_tmp_foot_{audit,audit2,compare,trees,delta,fix,source,plan,stl,flat,families}.py`（一次性，`_tmp_*` 已 gitignore；**2026-10-09 已删，见文末勘误**）
+- 修复脚本：`_tmp_tree_fix.py`（lizard2 树内镜像；**2026-10-09 已删，见文末勘误**）
 - 落点代码：`rl_exp/tools/diagnose/diag_metrics.py`（`meshes_dir`/`collision_mesh_dir`）、`rl_exp/tasks/obs_protocol.py`（`family_of`）、`rl_exp/tools/verify/check_dr_parity.py`（`_lock_files` + 资产隔离一节与它的伪例）、`rl_exp/blender/generate_urdf.py`
 - 声明：`rl_exp/versions/lizard/assets.json`、`rl_exp/versions/lizard2/assets.json`
 - 复读命令：
@@ -81,3 +81,12 @@
 4. **`foot_geometry` 仍不带树路径**：靠 digest 区分；若将来要让报告自证"读的是哪棵树"，那是一次帧格式版本变更（新名字），不是在现有 meta 里加键。
 5. 本次**未重训、未重评**：修复改变的是物理接触几何，lizard2 v1 的既有 run/报告仍是"平板 hull"下的读数，可比性到此为止（v1 已训练，属"已训配方变更"⇒ 依版本规则进 `lizard2/main/v2`）。
 6. **一处归属事实**：⑪ 引用的探针读数（`sole_*`/`tilt`）与"两家族读两棵树"的自检断言落在 `gait_probe.py`；该文件当时同时载有**另一会话在飞的** blade / 逐关节力矩读数（30 个 hunk 里 18 个属本线、5 个双方同块）⇒ 无法按 hunk 干净切开，本记录的提交不含它。它随后被那一侧的整文件提交 `62b92c9` 一并带入（含本线的读数），归属按那次 commit 记；本记录的"口径"一节仍以本线提交的 `diag_metrics`/`mesh_dir` 为准。
+
+## 勘误（2026-10-09，仓根 `_tmp_*` 清仓）
+
+本记录"证据引用"里的一次性脚本（`_tmp_foot_{audit,audit2,compare,trees,delta,fix,source,plan,stl,flat,families}.py`
+与 `_tmp_tree_fix.py`）**未入仓，已于 2026-10-09 随 64 个 `_tmp_*` 删除**（原委见
+`2026-10-09-repo-architecture-review.md` 的善后节与 `rl_exp/tools/verify/OFFLINE_CHECKS.md` §6）⇒ 那两行
+"几何对比与 dry-run / 修复脚本"的路径**作废**，修复形态只能从落点代码（`diag_metrics.py` 的
+`meshes_dir`/`collision_mesh_dir`、两个 `assets.json`）读。**读数不变**（usda↔obj 最差 0.244 mm、
+`PARITY_OK`、19 个 lizard 锁逐字节未动都在正文里）；那份"复读命令"两行仍有效，跑的是入仓闸门。

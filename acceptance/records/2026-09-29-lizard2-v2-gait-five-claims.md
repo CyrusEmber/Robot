@@ -76,7 +76,7 @@
   `ablation_harness/baseline_metrics.py` 的 `_LEG_TOKENS` 与 `ablation_harness/baseline_eval.py` 的
   `_gait_shape_joints`（采集侧补 `haa`/`kfe` ⇒ 该列变成全部 30 个关节）。**帧格式、协议、锚都没有动**：
   格式只声明"这列是按关节名的弧度值"，**具体哪些关节由记录自己的 `axes` 携带**，所以补关节不是格式变更。
-- 相位与行程的转表脚本：`_tmp_v3_claims.py` / `_tmp_v2_chain_read.py`（一次性，`_tmp_*` 已 gitignore）。
+- 相位与行程的转表脚本：`_tmp_v3_claims.py` / `_tmp_v2_chain_read.py`（一次性，`_tmp_*` 已 gitignore；**2026-10-09 已删 ⇒ 复读路径作废，读数以本记录表内数值为准**）。
 - 相关记录：`2026-09-29-gait-shape-in-the-eval-flow.md`（这四项进流水线）、
   `2026-09-29-lizard2-pad-leveling-unreachable.md`（立边与轴）。
 

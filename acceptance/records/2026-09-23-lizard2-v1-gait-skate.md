@@ -678,15 +678,16 @@ PD 保留 = v2 在动作接口上的配置）；标称与候选（Kp 50 / Kd 3 /
 - 探针（⑬）：**同一个** `gait_probe.py` 与同一 checkpoint；两组 = 标称与候选，`--out` 分别指到
   `rl_exp/tools/diagnose/out/gait_probe/gait_nominal.json` 与 `gait_weak_pd.json`（机器本地，`out/`
   gitignore；跑前删旧报告，理由见 ⑥ 第 5 条）；并把读数转表用一次性脚本
-  `_tmp_foot_read.py <报告> [<报告>]`（未入仓）。**"覆盖是否生效"的检法不是相信命令行**：报告里每只脚
+  `_tmp_foot_read.py <报告> [<报告>]`（未入仓；**2026-10-09 已删，命令作废，见文末勘误**）。**"覆盖是否生效"的检法不是相信命令行**：报告里每只脚
   `foot_kp_sim` / `foot_kd_sim` / `foot_effort_limit_nm` 必须等于覆盖值，否则那一组就是另一个实验。
 - 探针（⑭）：**同一个** `gait_probe.py` 与同一 checkpoint，加 `--freeze-feet-action`（掩蔽脚板动作列 ⇒
   目标恒为默认平放位，即 v2 的配置）；标称与候选各一组，`--out` = `.../gait_frozen_nominal.json` /
   `gait_frozen_weak.json`。掩蔽是否生效同样有自证读数：脚板的目标偏转 p50 应 ≈ 0。
 - 视频（人眼入口）：`ablation_harness/videos/2026-09-23-lizard2-v1-13999/{0.5,1.5,3}mps_plane.mp4`
   （该目录 gitignore）。
-- 支撑诊断（③的旁证，但**只能读 0.5 那一行**）：`rl_exp/tools/diagnose/out/_tmp_lizard2_gait`；
-  1.5 / 2.8 两行 `foot z_min = −3.5…−4.5 m`、`tilt_max 90°`、垂直载荷只剩 0.36 体重
+- 支撑诊断（③的旁证，但**只能读 0.5 那一行**）：原是 `rl_exp/tools/diagnose/out/_tmp_lizard2_gait`
+  （**2026-10-09 随一次性 `_tmp_*` 清仓删除**——机器本地件不留，且它不在任何闸门的读链上；结论以本条文字为准，
+  原始 JSON 不再可读）；1.5 / 2.8 两行 `foot z_min = −3.5…−4.5 m`、`tilt_max 90°`、垂直载荷只剩 0.36 体重
   ⇒ **跑出有限地板掉下去了**，其读数不是能力。
 - 判决记录：`acceptance/records/2026-09-23-lizard2-v1-first-eval.md`；
   执行器竞争解释：`acceptance/records/2026-09-22-lizard2-actuator-capability.md`。
@@ -704,6 +705,16 @@ PD 保留 = v2 在动作接口上的配置）；标称与候选（Kp 50 / Kd 3 /
 4. ⑤ 之后仍未测：把 hip/hfe **目标角**经正运动学映射出的脚底高度（分离"目标本身就低"与
    "被执行器按住"的唯一一步）、足端姿态（`foot_yaw_deg`）、支撑相接触面积、0–0.1 m/s 档的步态
    （三档最低 0.5）。
+
+## 勘误（2026-10-09，仓根 `_tmp_*` 清仓）
+
+本记录引用的读数转表与复核脚本 —— `_tmp_foot_read.py`、`_tmp_foot_clearance.py`（含其 `.json`）、
+`_tmp_sole_read.py`、`_tmp_sat_read.py`、`_tmp_mesh_check.py`，以及旁证目录
+`rl_exp/tools/diagnose/out/_tmp_lizard2_gait/` —— **未入仓，已于 2026-10-09 随 64 个 `_tmp_*` 删除**
+（原委见 `2026-10-09-repo-architecture-review.md` 的善后节与 `rl_exp/tools/verify/OFFLINE_CHECKS.md` §6）。
+⇒ 上文凡出现这些路径、或把它们当复读入口的位置（含"证据引用"里的复读命令）**一律作废**；
+**表内读数不变** —— 删掉的是复现手段，不是读数。本记录的量测侧复现路径只剩入仓工具
+（`rl_exp/tools/diagnose/gait_probe.py` 与 `diag_metrics.py`），逐格复读需按它们的 `--out` 重跑。
 5. 未修：`min_lift_m` 未实现、`foot_slip_mps` 未计算、奖励侧 `feet_slide`/`foot_clearance` 未加回。
    `dof_torque_frac_of_limit` 属"真未计算的三项"之一（见"更正与撤回"4），**探针侧现在有同义读数**
    （⑫ 的 `torque_frac_of_limit_p50` / `effort_saturated_frac_steady`，逐关节按自身 `effort_limit`）；

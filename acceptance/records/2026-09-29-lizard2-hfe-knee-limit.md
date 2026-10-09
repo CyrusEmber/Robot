@@ -81,7 +81,7 @@ v2 `model_9999`，三档各一个 env、20 s。actual 的**伸展侧极值**（�
 
 ## 证据引用
 
-- 复读：`python _tmp_knee_check.py`；`"E:\IsaacLab\env_isaaclab\Scripts\python.exe" _tmp_knee_stop.py --step 4 --legs lf --radius 0.10`；
+- 复读（**脚本 2026-10-09 已删 ⇒ 命令作废，见文末勘误**）：`python _tmp_knee_check.py`；`"E:\IsaacLab\env_isaaclab\Scripts\python.exe" _tmp_knee_stop.py --step 4 --legs lf --radius 0.10`；
   `… _tmp_hfe_band.py`；`… _tmp_hfe_stop_impact.py`。
 - 被本记录更正的两份记录：`2026-09-29-lizard2-pad-leveling-unreachable.md`（hfe 行与"从不靠近"结论）、
   `2026-09-22-lizard2-self-collision-sweep.md`（网格复核列，另属坐标系混用，见其勘误）。
@@ -97,3 +97,12 @@ v2 `model_9999`，三档各一个 env、20 s。actual 的**伸展侧极值**（�
 4. **四腿只逐腿复算了 lf**（其余三腿几何同构，但 2026-09-23 记录已证明后腿对不是严格镜像 ⇒ 
    伸展端数值要动时须逐腿复算）。
 5. **伸直位是奇异位形**（膝的力矩臂 → 0）：余量取多少是设计决策，不是几何算出来的数。
+
+## 勘误（2026-10-09，仓根 `_tmp_*` 清仓）
+
+本记录用的四支一次性脚本 —— `_tmp_knee_check.py`（①③）、`_tmp_knee_stop.py`（②）、`_tmp_hfe_band.py`、
+`_tmp_hfe_stop_impact.py` —— **未入仓，且已于 2026-10-09 随 64 个 `_tmp_*` 一并删除**（原委见
+`2026-10-09-repo-architecture-review.md` 的善后节与 `rl_exp/tools/verify/OFFLINE_CHECKS.md` §6）。
+⇒ 上文"证据引用"的复读命令**作废**，本记录在本仓**不再可复读**；**表内读数不变**（删掉的是复现手段，
+不是读数，判据与几何事实（±1.20 rad、伸直位 +75.00°、越界 13.61°）都写在正文里）。要再复读 = 按本记录
+的判据重写工具并落到 `rl_exp/tools/diagnose/`，别再造一次性脚本（仓根声明表 = `check_suite_banners.py`）。

@@ -80,7 +80,7 @@
   `<ROOT>\env_isaaclab\Scripts\python.exe rl_exp\tools\diagnose\pose_slider.py`（GUI）；
   任意 cwd 用模块式 `<ROOT>\env_isaaclab\Scripts\python.exe -m rl_exp.tools.diagnose.pose_slider`；
   加 `--self-check` 则无界面。
-- 冒烟（机器本地、不入仓）：`rl_exp/tools/diagnose/_tmp_pose_slider_smoke.py` —— Agg 建图 + 21 滑块 +
+- 冒烟（机器本地、不入仓；**2026-10-09 已删，见文末勘误**）：`rl_exp/tools/diagnose/_tmp_pose_slider_smoke.py` —— Agg 建图 + 21 滑块 +
   3 按钮 + 越限标注 + 存/读/复位往返 + TkAgg 画布构建（`FigureCanvasTkAgg`）。
 - 相关读数：`2026-09-29-lizard2-pad-leveling-unreachable`（踝轴与行程的逐帧读数）、
   `2026-09-22-lizard2-stride-at-load`（机身高度与髋 arm）、
@@ -95,3 +95,12 @@
 4. 自碰撞、限位外的真实可行性、执行器能力都不在；GUI 的**鼠标交互本身**只有人眼验证过（建图、回调、
    存读、TkAgg 画布是自动跑过的）。
 5. 零位读数只对这一个 URDF 有效；资产换代后 `--self-check` 会因 rpy 守卫或网格面数变化而报出。
+
+## 勘误（2026-10-09，仓根 `_tmp_*` 清仓）
+
+本文提到的冒烟脚本 `rl_exp/tools/diagnose/_tmp_pose_slider_smoke.py` **未入仓，已于 2026-10-09 随 64 个
+`_tmp_*` 删除**（原委见 `2026-10-09-repo-architecture-review.md` 的善后节与
+`rl_exp/tools/verify/OFFLINE_CHECKS.md` §6）⇒ 那条"冒烟"路径作废。**本记录的两支工具都在仓内**
+（`pose_slider.py` / `check_leg_reachability.py`），复读不受影响，只需把冒烟那一项换成它们各自的
+`--self-check`（无界面，任意 python），读数与判据不变。缺失的只是"GUI 建图 + 21 滑块 + 三按钮"那条
+端到端冒烟，要恢复得按本节判据重写并落到 `rl_exp/tools/diagnose/`（别再造一次性脚本）。

@@ -46,7 +46,7 @@
 - **无碰撞网格的死条目**：探针的 `head/no-collider-less-pattern` 报出 `chest_.*`/`neck_.*` 同时命中
   `chest_yaw`/`neck_yaw`（无碰撞网格 ⇒ 那半个模式永不触发）；yaml 已收窄为 `chest_pitch`/`neck_pitch`，
   该检查转绿。此项**单独一次提交**，不与取样修复混为一谈。
-- **目视帧**：`--shot`（需 `--enable_cameras`）把零动作回合的 7 帧写到 `_tmp_zero_action_shots/`
+- **目视帧**：`--shot`（需 `--enable_cameras`）把零动作回合的 7 帧写到 `_tmp_zero_action_shots/`（**2026-10-09：该目录已删，默认改落 `rl_exp/tools/diagnose/out/zero_action_shots/`**）
   （`_tmp_*` 已在 `.gitignore`）。已看一眼末帧：8 台机器人平地站姿，四足平贴网格、无可见穿地，绿色箭头是
   命令可视化标记。**静态帧不能证明动态稳定**，动态侧仍以数值为准（base z 均值 0.937 m、tilt 均值 0.43°、
   载荷全在四足）。
