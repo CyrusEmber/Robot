@@ -127,7 +127,7 @@ CHECKS: list[Check] = [
     Check("hard A: built recipes are field-for-field the frozen golden (declaration, no subclass)",
           [f"{_V}/check_recipe_build.py"], contract=("rl_exp/tasks/recipe.py",)),
     Check("obs protocol declaration (laid out as declared, self-consistent, digests approved)",
-          [f"{_V}/check_obs_protocol.py", "--self-test"], contract=("rl_exp/versions/obs_protocols.json",)),
+          [f"{_V}/check_obs_protocol.py", "--self-test", "--live"], contract=("rl_exp/versions/obs_protocols.json",)),
     Check("eval record format (three-state read / P04 substitutions / run-id reuse)",
           [f"{_V}/test_eval_record.py"], contract=("ablation_harness/record.py",)),
     Check("terrain split rule and record (hand-computed split / pairing identity / sanity refusals)",
@@ -172,7 +172,7 @@ def default_jobs() -> int:
 #   killed as a hang.
 PER_CHECK_BUDGET_S = 25.0
 MAX_CHECKS = 37  # ratchet: today's count (48 - 11 retired 2026-10-09 with the lizard main/parkour/baseline lines: every one of those entries guarded a module or registration that left the repo -- i.e. 36 + the leg-chain caliber, whose knee assertion is the only guard the "no reverse bending" requirement has). Add one -> remove or merge one, or raise this here.
-SERIAL_BUDGET_S = 175.0  # the total; --confirm-cost measures it (160s on 2026-09-18, 45 checks; 140s and 154s on 2026-09-20, 46 checks -- neither reading has moved the constant)
+SERIAL_BUDGET_S = 160.0  # the total; --confirm-cost measures it (160s on 2026-09-18, 45 checks; 140s and 154s on 2026-09-20, 46 checks -- those readings did not move the constant. It moved on 2026-10-09 with the count ratchet, 48 -> 37: quiet 146s, 37 checks, so the ceiling comes down with the checks)
 SOLO_RECHECKS = 3  # breaching checks re-run alone, worst first, before they are suspect
 PER_CHECK_TIMEOUT_S = 180.0
 _DRAIN_TIMEOUT_S = 30.0  # bounded read after a kill, so a survivor cannot block the report
