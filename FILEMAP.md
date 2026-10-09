@@ -15,19 +15,19 @@
 
 | 目录 / 文件 | 职责 |
 |---|---|
-| `\`（仓根） | 入口脚本 + 主机路径模板 + 仓级文档；代码家是 git 仓，不是 IsaacLab 树 |
-| `setup.bat` | 新机器摆位一键（幂等）：写 venv `.pth` / 建 `config\lizard\` 拷 fork shim / 逐份应用 `fork_patches\*.patch` / 按本机生成 `paths.yaml` / 设 `core.hooksPath`。纯 ASCII（`.bat` 按控制台代码页读，非 ASCII 带崩解析）；补丁打不上 `[FAIL]` 非零退出 |
+| `\`（仓根） | 入口脚本 + 主机路径模板 + 仓级文档；代码家是 git 仓，不是 IsaacLab 树。**只许住户 = 声明表**（`check_suite_banners.py:DECLARED_ROOT`，`hooks\pre-commit` 也跑）：一次性脚本不是仓根住户 |
+| `setup.bat` | 新机器摆位一键（幂等）：venv `.pth` / 建 `config\lizard\` 拷 fork shim / 按序应用 `fork_patches\*.patch` / 生成 `paths.yaml` / 设 `core.hooksPath`。纯 ASCII（非 ASCII 带崩 `.bat` 解析） |
 | `paths.example.yaml` | 主机路径模板（`isaac_root` + `python`）；每台机器 copy 成 `paths.yaml`（不入库） |
 | `README.md` / `AGENTS.md` | 仓定位与摆位步骤 / 工作与 IsaacLab 守则 |
-| `ARCH_PLAN.md` | 架构改造的判据与实现形态（**只写当时证据，不写当前状态**）；加粗状态词与"覆盖文档里的闸门判词"由 `check_version_docs.py` 扫 |
+| `ARCH_PLAN.md` | 架构改造的判据与实现形态（**只写当时证据，不写当前状态**：加粗状态词、H1 标题行状态词与"覆盖文档里的闸门判词"由 `check_version_docs.py` 扫） |
 | `work\` | 在办事项（`active\`，一项一文件）与关闭归档（`closed\<year>\`）；形状闸 `check_work_docs.py`，发现命令见 `AGENTS.md` |
 | `FILEMAP.md` | 本文件 = 目录导航（见文首边界） |
 | `rl_exp\` | 任务包（自包含核心）；`import rl_exp` 经 venv `.pth` 可达 |
-| `rl_exp\tasks\` | gym 任务包 = 训练代码本体：家族线 + `parkour` / `baseline` 支线；注册表在 `__init__.py` |
+| `rl_exp\tasks\` | gym 任务包 = 训练代码本体：家族线 + 支线（哪条线存在看 `versions\lines.json`）；注册表在 `__init__.py` |
 | `rl_exp\versions\` | 声明与冻结层：`<family>\<line>\` 路线层 + `vN\` 版本目录 + 配方 diff 目录 + 全仓声明 JSON + 各线 `cfg_lock.json` |
 | `rl_exp\blender\` | DCC 源件 + 一次性 Blender 脚本（几何 / 绑骨 / 重命名的唯一出处） |
 | `rl_exp\assets\` / `rl_exp\meshes\` | 训练用 USD 资产 / URDF 网格（`versions\lizard\meshes\` 为版本侧网格，与仓根 `rl_exp\meshes\` 同构） |
-| `rl_exp\tools\` | 工具按类分目录：`pipeline\` 资产与 UE 导出 / `verify\` 离线闸门与套件 / `trainlog\` 训练日志 / `runrecord\` 运行记录 / `diagnose\` 诊断 / `archive\` 考古 |
+| `rl_exp\tools\` | 工具按类分目录：`pipeline\` 资产与 UE 导出 / `verify\` 离线闸门与套件 / `trainlog\` 训练日志 / `runrecord\` 运行记录 / `diagnose\` 诊断（人看的读数）/ `archive\` 考古。**新脚本先选目录；一次性脚本别落仓根**（仓根声明表 = `check_suite_banners.py`） |
 | `rl_exp\docs\pitfalls.md` | 踩坑登记（P00x 编号）—— 闸门"为什么存在"写在编号条目里 |
 | `rl_exp\fork_patches\` | IsaacLab 树侧的 fork 补丁存档 + 注册 shim 副本 |
 | `rl_exp\ue\` | UE 侧 JSON 与编辑器脚本 |
@@ -44,12 +44,12 @@
 
 | 入口 | 作用 |
 |---|---|
-| `ablation_harness\host_paths.py` | **机器本地路径的唯一读者**（`eval` / 调度 / `run_offline_checks.bat` / `hooks\pre-commit` / `framework_pin_check` 共用）；纯 stdlib、不 import `rl_exp`、**无 PATH 兜底**（宁缺不猜），`--check` 取不到即 exit 1 |
+| `ablation_harness\host_paths.py` | **机器本地路径的唯一读者**（`eval` / 调度 / 离线套件 / `hooks\pre-commit` / `framework_pin_check` 共用）；纯 stdlib、不 import `rl_exp`、**无 PATH 兜底**（宁缺不猜），取不到即 exit 1 |
 | `rl_exp\tools\verify\run_offline_checks.bat` | 离线全套一键；本体只剩主机 python 引导（`paths.yaml` → `host_paths.py`），额外参数原样透传（`--jobs` / `--verbose` / `--list` / `--self-test`） |
-| `rl_exp\tools\verify\offline_suite.py` | **离线清单的唯一来源 + 并行调度器**（fail-fast、每项独立进程与 temp、全绿才打一行判词，字面见 runner 末行）。改 tasks 或 harness 后、commit 前必跑；规则见 `OFFLINE_CHECKS.md` |
+| `rl_exp\tools\verify\offline_suite.py` | **离线清单的唯一来源 + 并行调度器**（fail-fast、每项独立进程与 temp）。改 tasks 或 harness 后、commit 前必跑；规则见 `OFFLINE_CHECKS.md` |
 | `ablation_harness\eval.py` | 统一评测 runner：task + checkpoint + 协议 + 模式 → `eval.json`（另写 `terrain\geometry.json`） |
 | `ablation_harness\run_ablation.py` | 消融调度：spec yaml → 串行 train + eval → 汇总表，断点续跑；`--by-terrain` 出逐地形长表 |
-| `ablation_harness\video_matrix.py` | 录像矩阵（**相机，不是判官**）：`--speeds` × `--terrains` 想怎么组合都行，默认最高速 × 配方平地 → 每格一段 mp4 + `matrix.json`（命令区间 / 是否在配方区间内 / 帧数 / 峰值与净位移 / 复位 / 相机）；地形挡位取套件命名列（单列板）；**不产 verdict、不写 `results/`**，产物落 `ablation_harness\videos\`（gitignore） |
+| `ablation_harness\video_matrix.py` | 录像矩阵（**相机，不是判官**）：`--speeds` × `--terrains` 怎么组合都行（默认最高速 × 配方平地），每格一段 mp4 + `matrix.json`（含是否在配方区间内）；地形挡位取套件命名列；**不产 verdict、不写 `results/`**，产物落 `ablation_harness\videos\`（gitignore） |
 | `rl_exp\tools\launch_recipe.py` | 新启动器：目录 → 身份 → 配置侧绑定 → golden 对比 → 生命周期判定 → 记录；默认只检查（不起 sim），`--launch` 交回 fork trainer |
 | `ablation_harness\protocols\locomotion_eval_v*.yaml` | 评测协议契约（时间线 / 帧定义 / 阈值 / 套件 / DR）：v1/v2 冻结封存，v3 换真起伏套件 `lizard_suite_v2`；**改动 = 新建 v4，v1/v2/v3 不得混表**。套件定义在 `ablation_harness\suites.py` |
 | `rl_exp\tools\runrecord\` | 运行记录层（**训练路径实际调用**，不是人手跑的入口）：`manifest.py` T0/T1 记录 + `--verify` 两维度 / `lifecycle.py` 启动生命周期判定（退休线或退休版本拒新训与续训）/ `binding.py` 摘要与 rev 拼写的唯一家（stdlib 栈底）/ `provenance.py` 代码来源规则 / `rebuild.py` 恢复演练（按需） |
@@ -57,10 +57,10 @@
 | `rl_exp\tools\trainlog\dump_tb.py` | TB 事件 → `vN\tb_scalars.csv`（按 tag 抽样、**保首尾**；`--csv_in` 重抽样不需 tensorboard） |
 | `rl_exp\tools\verify\view_terrain.py` | GUI 看机器人站**指定版本的真实地形**（每 env 头向箭头 + 接触点探针 vs 碰撞栈预算） |
 | `rl_exp\tools\diagnose\plot_joints.py` | 读探针报告出图（**不起仿真**）：逐关节实际/目标/两条限位 + 贴限位着色 + 逐关节"贴限位帧占比"柱图；`--at_stop_rad` 是判据带宽，`--self-check` 手算边界 |
-| `rl_exp\tools\diagnose\pose_slider.py` | **交互摆姿器**（固定机身、无重力、无仿真）：四腿各 5 关节 + 机身高度滑块；读数 = 每腿倾角 / 最低顶点离地 / 足端偏移 / **末次触碰关节的轴向 + dp/dq + dn/dq + d(tilt)/dq**（与 `check_leg_reachability.py` 同口径）。`limits` 只在**内存**里放宽（不碰资产），用于"还差多少行程"的对比；`reset`/`save`/`--load` 存读 JSON（默认 `out/pose_slider/`）；`--self-check` 无界面可跑；需 `env_isaaclab` 的 python（主机 python 无 matplotlib） |
-| `rl_exp\tools\diagnose\stance_step_probe.py` | **静站承重 + 单关节小幅迈步的仿真读数**（PLAY 任务、1 env、无策略无 checkpoint）：先 `--settle` 步静置（零动作 = 未命令关节只由 PD 保持默认，即"取消动作通道"后的情形），再按**连续三角插值**把 `--leg`/`--joint` 的目标扫出去再扫回来、每个控制步采样（base 高 / 四脚受力 / **标定后的足底法线倾角** / **接触点水平速度** / 目标与实际力矩 / 非足体最大接触力）。`--usd` 换资产（候选走隔离 USD）、`--urdf` 换标定来源、`--drop-joints`（默认 `kfe,foot`）摘关节。**口径限制**：力矩由 Kp/Kd 重建、非实测；"碰撞"指非足体接触力，自碰撞关时不证明无碰撞 |
-| `rl_exp\tools\verify\check_leg_reachability.py` | 腿链**离线 FK 与摆姿读数**（链自 URDF 树遍历、垫网格取 URDF 自己 `<leg>_foot` 的碰撞体；不碰仿真，stdlib，`--frames` 是唯一碰 torch 的路径）：可 import 的读点 `chain_frames` / `foot_pose` / `joint_effect`（dp/dq、dn/dq、d(tilt)/dq）/ `pad_state`（世界系：facing / tilt / 最低点离地）/ `fold_tilt`（无向，**不能作验收**）/ `faces_down`（有向判决：翻掌必拒）/ `hinge_vs_body_z` / `straight_hfe` + `KNEE_FACTS`（膝伸直位与限位对它的带符号余量，**>0 = 可达反曲**；钉**资产树声明消费的采用机体**）/ `leg_plane_yaw`；`--urdf` 换机体、`--compare <候选.urdf>` 在同一机体姿态/高度/容差下比两机体、`--self-check` 用手算事实对口径、`--break-test` 破坏口径并**要求自检变红**。**可达性扫描（A/B/C 三段）尚未实现** |
-| `rl_exp\tools\verify\check_self_collision.py` | 限位盒内自碰撞的**网格级**检查（离线不起仿真；点-三角确认，直接相邻对按枢轴规则跳过，两组姿态 `single`/`combined`）：`--family` 按该家族 `assets.json` 声明的机体解析 URDF（老布局回退）、`--urdf` 覆盖，**首行打印读了哪个文件与依据**；命中或余量低于 `--clearance`（默认 5 mm）即 exit 1 打 `SELF_COLLISION_COUNTEREXAMPLE`。**不在离线清单**——采用机体当前是红的，加红闸等于每天红一次；口径天花板（凸包过近似凹形、包含判定漏边-面交叉、盒内极值不一定载荷可达）由它自己印出 |
+| `rl_exp\tools\diagnose\pose_slider.py` | **交互摆姿器**（固定机身、无重力、无仿真）：四腿各 5 关节 + 机身高度滑块；读数 = 每腿倾角 / 最低顶点离地 / 足端偏移 / 末次触碰关节的轴向与导数（与 `check_leg_reachability.py` 同口径）。`limits` 只在**内存**里放宽，`reset`/`save`/`--load` 走 JSON（默认落 `rl_exp\tools\diagnose\out\pose_slider\`，gitignore）；`--self-check` 无界面可跑；需 `env_isaaclab` 的 python |
+| `rl_exp\tools\diagnose\stance_step_probe.py` | **静站承重 + 单关节小幅迈步的仿真读数**（PLAY 任务、1 env、无策略无 checkpoint）：先 `--settle` 步静置（零动作 = 未命令关节只由 PD 保持默认，即"取消动作通道"后的情形），再按**连续三角插值**把 `--leg`/`--joint` 的目标扫出去再扫回来，每控制步采样（base 高 / 四脚受力 / 标定后的足底法线倾角 / 接触点水平速度 / 力矩 / 非足体最大接触力）。`--usd`/`--urdf` 换资产与标定来源、`--drop-joints` 摘关节；**口径限制**（力矩由 Kp/Kd 重建等）；"碰撞"指非足体接触力，自碰撞关时不证明无碰撞 |
+| `rl_exp\tools\verify\check_leg_reachability.py` | 腿链**离线 FK 与摆姿读数**（链自 URDF 树遍历、垫网格取 URDF 自己的 `<leg>_foot` 碰撞体；stdlib，不碰仿真，`--frames` 是唯一碰 torch 的路径）：可 import 的读点 = `chain_frames` / `foot_pose` / `joint_effect` / `pad_state`（世界系）/ `fold_tilt`（无向，**不能作验收**）/ `faces_down`（有向：翻掌必拒）/ `KNEE_FACTS`（膝伸直余量，**>0 = 可达反曲**）/ `straight_hfe` / `leg_plane_yaw`；`--urdf` 换机体、`--compare <候选.urdf>` 同姿态比两机体、`--self-check` 对口径、`--break-test` 破坏口径并**要求自检变红**。**可达性扫描（A/B/C 三段）尚未实现** |
+| `rl_exp\tools\verify\check_self_collision.py` | 限位盒内自碰撞的**网格级**检查（离线，点-三角确认，相邻对按枢轴规则跳过，`single`/`combined` 两组姿态）：`--family` 按该家族 `assets.json` 声明的机体解析 URDF、`--urdf` 覆盖（**首行打印读了哪个文件与依据**）；命中或余量低于 `--clearance`（默认 5 mm）即 exit 1 打 `SELF_COLLISION_COUNTEREXAMPLE`。**不在离线清单**——采用机体当前是红的，加红闸等于每天红一次；方法天花板（凸包近似、漏边-面交叉）由它自己印出 |
 | `rl_exp\tools\verify\terrain_preflight.py` | 开训前地形预检：离线生成全部子地形 + 粗糙度 + PNG 预览 + 几何摘要。它是**离线预览的回归基线**，不是真跑所站地形的证据（真跑几何由 `terrain_split_probe` 采集归档） |
 | `rl_exp\tools\pipeline\export_ue.py` | SSOT → UE 工件（盲部署前置）；**没有实测关节序就拒绝导出**（不写文件） |
 
@@ -68,21 +68,21 @@
 
 | 闸门 | 看守什么 |
 |---|---|
-| `check_version_docs.py` | 版本文档完备 + 血统闸：每版本目录齐件（PLAN/NOTES/`<line>_params.yaml` + asset_lock；**退休版免锁**，状态经 `check_recipe_registry.effective_status` 读）+ `base.json` 边合法 + FAMILY 版本史行 + 本文件版本行；另扫覆盖文档的闸门判词与 `ARCH_PLAN.md` 加粗状态词 |
+| `check_version_docs.py` | 版本文档完备 + 血统闸：每版本目录齐件（PLAN/NOTES/`<line>_params.yaml` + asset_lock；**退休版免锁**，状态经 `check_recipe_registry.effective_status` 读）+ `base.json` 边合法 + FAMILY 版本史行 + 本文件版本行；另扫覆盖文档的闸门判词 + `ARCH_PLAN.md` 的状态词（加粗形式与 H1 标题行） |
 | `check_cfg_lock.py` | 配方 golden 闸门（format 3 分两层：框架组合块 + 线自己的条目）；`--update` 必须带 `--line` + `--reason`；反证 `test_cfg_lock_gate.py` |
 | `check_recipe_build.py` | 构建硬闸：冻结 golden 逐字段比 + 覆盖钉数 + 逐步归属 |
 | `check_recipe_map.py` | 配方身份闸门：`ast` 读注册表（不 import），声明的 `env_cfg_entry`/`agent_entry` 与注册逐字一致；`--bind-config` 构造实例读 `params_version`；反证 `test_recipe_map_gate.py` |
 | `check_recipe_registry.py` | 实验线生命周期闸门（`lines.json` 二值 `status` + 版本例外只许退休，闸门无时钟）；`effective_status` 是"线状态 + 版本例外"的唯一读者（离线闸门与启动共用）；反证 `test_recipe_registry_gate.py` |
 | `check_obs_protocol.py` / `obs_protocol_live.py` | 协议闸门（自洽 + 已审锚点 + golden 逐任务 + `--live` 实构比对 + 覆盖）；live 侧起 env 读真实 manager 的组序/项序/宽度/shape。反证 `test_obs_protocol_gate.py` |
 | `check_obs_layout.py` | obs 布局静态门（读 `obs_protocols.json`，不自带副本） |
-| `check_dr_parity.py` | 契约漂移闸门（`--strict` 即 CI）：DR 行静态对比 / 两份 DR 事件名清单同步 / 全部 `*_PLAY` 接线 / 资产结构契约 / 资产锁比对 / **资产隔离**（每家族声明自己的网格树、物理 usda 内联点必须等于该树的 obj、两家族不许钉同一批文件、URDF 引用必须落在声明树内） |
+| `check_dr_parity.py` | 契约漂移闸门（`--strict` 即 CI）：DR 行静态对比 / 两份 DR 事件名清单同步 / 全部 `*_PLAY` 接线 / 资产结构契约 / 资产锁比对 / **资产隔离**（每家族声明自己的网格树、两家族不许钉同一批文件、URDF 引用落在声明树内） |
 | `check_configclass_fields.py` | 字段面闸门：`params_version` 一类的声明必须真的进 `to_dict`（类属性读不到即红）；反证 `test_configclass_fields_gate.py` |
 | `check_pxr_leak.py` | 按注册入口**构造** cfg 并断言 `pxr` 不进 `sys.modules`（防 Kit 启动被毒化，见 `rl_exp\docs\pitfalls.md` P001/P003/P004）；反证 `test_pxr_leak_gate.py` |
 | `check_split_probe_wait.py` | P005：构造期等框架 import 的载体不许是 `sys.meta_path` finder（导入在第一个给出 spec 的 finder 处停止） |
 | `check_joint_layout.py` | 关节布局硬闸（球头必 +X / 天线必 −X / 腿序）+ 单关节注入驱动读数 |
 | `check_reward_v13.py` / `check_terminations_v14.py` | 版本专项静态闸：跟踪核替换与冻结不动 / 翻覆判据 + dwell 累积语义 + 惩罚算术 + 接线 |
 | `check_record_bindings.py` / `check_golden_frozen.py` / `check_terrain_split_source.py` | 记录绑定原语单源看守（四条签名 + 反证）/ 冻结点与拆地来源的来源检查 |
-| `check_suite_shape.py` / `check_suite_banners.py` | 套件形状（清单唯一来源、不许未声明 spawn 解释器）与 `.bat` 横幅转义卫生（未转义 `<`/`>` 在 bat 里是重定向） |
+| `check_suite_shape.py` / `check_suite_banners.py` | 套件形状（清单唯一来源、不许未声明 spawn 解释器）与**仓根卫生**：`.bat` 横幅转义（未转义 `<`/`>` 是重定向，真往仓根写过一个 `config`）+ **仓根只许声明项**（`DECLARED_ROOT`，`hooks\pre-commit` 也跑 ⇒ 提交即截止线） |
 | `framework_pin_check.py` | 框架 pin：IsaacLab 内部符号 + 已验证 commit + `fork_patches\*.patch` 存档校验（按序应用到 pristine 副本再逐字节比） |
 | `recipe_lines.py` | **线 / 版本目录发现规则的唯一入口**（`discover()`）；上面四个版本相关闸门全走它，零份 / 多份 / 名字不符一律抛错不跳过 |
 | `cfg_snapshot.py` | 配置快照序列化器（顺序敏感 / 浮点位级 / callable 点路径 / MISSING 按类型 / 路径相对化 / 不落对象地址）；反证 `test_cfg_snapshot.py` |
@@ -94,28 +94,27 @@
 
 - **IsaacLab 源码树里只有 1 个文件属于本仓**：共享 shim `<ROOT>\config\lizard\__init__.py`（副本 `rl_exp\fork_patches\config_lizard___init__.py`），只负责 `import isaaclab_tasks` 时注册任务。`<ROOT>` = `paths.yaml` 的 `isaac_root`（持 `scripts/` 与 `logs/`）。
 - **旧 junction 摆位已死**：`E:\IsaacLab\rl_exp` 已删、`E:\IsaacLab\ablation_harness` 已废（只准 `rmdir` 摘链接）。机器本地路径一律问 `host_paths.py`，不要在代码里把"调用路径的爹"当配置。
-- **主线就是家族本身**：`rl_exp\versions\<family>\<line>\vN\`。主线 = `versions\lizard\main\vN\`，支线多一层（`versions\lizard\parkour\v1\`、`versions\lizard\baseline\v1\`）。家族级文档（`FAMILY.md` / `PLAN.md` / `OBS.md` / `REWARDS.md` / `ACCEPTANCE.md`）落在 `versions\lizard\`，**不在 `main\` 里**。
+- **主线就是家族本身**：`rl_exp\versions\<family>\<line>\vN\`。主线 = `versions\lizard\main\vN\`，支线在同一层多一个目录（`<family>\<line>\v1\`）。家族级文档（`FAMILY.md` / `PLAN.md` / `OBS.md` / `REWARDS.md` / `ACCEPTANCE.md`）落在 `versions\<family>\`，**不在 `main\` 里**。
 - **`versions\lizard\main\` 里不全是版本目录**：`rough-v0\`、`curriculum-flat-v0\`、`curriculum-rough-v0\` 是**配方 diff 目录**（`base.json` 指该配方的母本 + `diff.json` 声明相对母本的差异），既不是 `vN\` 也不受版本四件套闸门管辖；配方锁在 `main\cfg_lock.json`，开发态参数在 `main\main_params.yaml`。
-- **开发态参数与冻结参数是两份**：开发态 `versions\<family>\<line>\<line>_params.yaml`，冻结副本 `vN\<line>_params.yaml`；跑冻结版**永远不读**开发态（`recipe_params.frozen_only`）。`vN\asset_lock.json` 补"冻结 yaml 只钉路径不钉内容"这个洞（资产原地换代 → 常驻任务 id 复现被破坏）。
-- **机器件不是文档**：`versions\recipes.json`（配方身份映射，身份写出来不推出来）/ `obs_protocols.json`（obs 协议声明，key 就是自身内容摘要）/ `obs_protocol_anchors.json`（已审摘要与宽度，只读不写）/ `lines.json`（实验线生命周期，二值 `status`；资产契约只查 `active` 线）/ `cfg_baselines.json`（框架组合基线，全仓一份）/ `freeze_parity.json`（冻结期对拍对象：哪两个 cfg 文件互为手工副本 + 已审差异，闸门不认识任何家族名）/ `<家族>\assets.json`（**每家族一行 `meshes_dir`**：该家族消费哪棵网格树；缺声明是拒绝项，`check_dr_parity` 的资产隔离一节看守）/ `<线>\cfg_lock.json`（配方 golden，**一线一份**，`--update --line` 只能写自己那份）。这些是闸门读的契约；`cfg_lock.json` **不写进 `vN\`**。
+- **开发态参数与冻结参数是两份**：开发态 `versions\<family>\<line>\<line>_params.yaml`，冻结副本 `vN\<line>_params.yaml`；跑冻结版**永远不读**开发态（`recipe_params.frozen_only`）。`vN\asset_lock.json` 补"冻结 yaml 只钉路径不钉内容"这个洞。
+- **机器件不是文档**：`versions\recipes.json`（配方身份映射，身份写出来不推出来）/ `obs_protocols.json`（obs 协议声明，key 就是自身内容摘要）/ `obs_protocol_anchors.json`（已审摘要与宽度，只读不写）/ `lines.json`（实验线生命周期，二值 `status`；资产契约只查 `active` 线）/ `cfg_baselines.json`（框架组合基线，全仓一份）/ `freeze_parity.json`（冻结期对拍对象：哪两个 cfg 文件互为手工副本 + 已审差异，闸门不认识任何家族名）/ `<家族>\assets.json`（**每家族一行 `meshes_dir`**：该家族消费哪棵网格树，缺声明即拒绝，`check_dr_parity` 的资产隔离一节看守）/ `<线>\cfg_lock.json`（配方 golden，**一线一份**，`--update --line` 只能写自己那份）。这些是闸门读的契约；`cfg_lock.json` **不写进 `vN\`**。
 - **`joint_order` 有两种，别混**：配方里的 `joint_order` = URDF 树序（`export_ue.py` 拿它断 URDF）；obs/action 真正按索引取值的是 `versions\joint_order_runtime.json` 的**实测序**（**按资产键**，`--pin --reason` 才写），只有 `obs_protocol.py` 读它。UE 工件同时输出两者并注明用途，读它只有一处。
 - **记录与证据落点**：跑分 → `ablation_harness\results\<协议>\<group>\<run_id>\`（外加组内 `summary.csv` / `terrains.csv`）；真跑证据 → `rl_exp\versions\lizard\verify_logs\`；版本结果回填 → 各 `vN\NOTES.md`；验收记录 → `acceptance\records\`（通过数/通过率的唯一归属是 `rl_exp\versions\lizard\ACCEPTANCE.md`）；训练 log / ckpt 在 `<ROOT>\logs\`（不入库）。
 - **线之间的隔离是硬约束**：`tasks\recipe_factory.py` 是跨线共用的类构造器但**不 import 任何具体线**，每条线由自己的模块调它（`recipe_tasks.py` 按名按需生成可注册类，`_LINES_BUILT_ELSEWHERE`）；baseline 线刻意复制自己的奖励核而不共享 `teacher_mdp.py`。看守：`test_baseline_isolation.py`。
 - **生成的注册类名是 ckpt 载荷的一部分**：`recipe_tasks.py` 沿用被替换的版本类名（载荷记 `type(cfg).__name__` 并参与 resume 身份核验），改名会让跨路径续训被拒。
 - **续训状态的硬失败边界**：任务可声明 `REQUIRES_CURRICULUM_STATE`，缺载荷 / 缺 slot / 未覆盖 stateful term / hook 未装**训练前终止**；`--drop_curriculum_state`（旧 `--weights_only` 为别名）是唯一显式降级；状态只从 rank 0 写，多 GPU 不在保证范围。
 - **`fork_patches\*.patch` 有顺序与格式纪律**：按文件名序应用，`train_seed_rng.patch` 排最后（其 hunk 行号指"全部补丁打完后"）；一份存档里同一个文件只能有**一个** `diff --git` 段——追加第二段会让 `git apply` 报 `wrong type`，正确动作是**新起一份存档**。
-- **`blender\` 的输入只有一个**：`generate_urdf.py` / `fix_bones.py` / `rotate_rig.py` / `rename_flip_v8.py` 一律以 `lizard_stance.blend` 为输入；`lizard.blend` 只在"从原始模型重做几何/绑骨/贴图"时才用得上，**管线不读它**（同目录 `lizard.glb` 未入库，是它的导出件）。**例外是候选**：`lizard2_stance_candidate.py` 读同一 SSOT、写 `lizard2_stance_candidate.blend`（站姿候选，2026-10-08 由 lizard2/main/v3 采用；实际机体为 `rl_exp/lizard2_candidate/lizard2_candidate.usda` + 同目录 URDF/meshes，来源与限制见 `acceptance/records/2026-10-08-lizard2-v3-landing.md`）；要出它的 URDF 用 `generate_urdf.py --robot lizard2_candidate --blend <候选> --out_dir rl_exp\lizard2_candidate`（`--blend`/`--out_dir` 只走候选，默认路径仍写 `versions\<family>\meshes`，那条被冻结资产的 `asset_lock.json` 钉住）。
-- **工具目录按类别分**：新脚本先决定属于 `verify\`（闸门 / 套件，进离线清单）还是 `diagnose\`（人看的读数）；一次性历史脚本进 `archive\`，不要留在主路径上。
+- **`blender\` 的输入只有一个**：`generate_urdf.py` / `fix_bones.py` / `rotate_rig.py` / `rename_flip_v8.py` 一律以 `lizard_stance.blend` 为输入；`lizard.blend` 只在"从原始模型重做几何/绑骨/贴图"时才用得上，**管线不读它**（同目录 `lizard.glb` 未入库，是它的导出件）。**例外是候选**：`lizard2_stance_candidate.py` 读同一 SSOT、写 `lizard2_stance_candidate.blend`（站姿候选，2026-10-08 由 lizard2/main/v3 采用；实际机体 = `rl_exp/lizard2_candidate/` 下的 usda + 同目录 URDF/meshes，来源与限制见 `acceptance/records/2026-10-08-lizard2-v3-landing.md`）；出它的 URDF 用 `generate_urdf.py --robot lizard2_candidate --blend <候选> --out_dir rl_exp\lizard2_candidate`（默认路径仍写 `versions\<family>\meshes`，那条被冻结资产的 `asset_lock.json` 钉住）。
+- **工具目录按类别分，仓根不是住户**：新脚本先决定属于 `verify\`（闸门 / 套件，进离线清单）还是 `diagnose\`（人看的读数），一次性历史脚本进 `archive\`；**攒在仓根的一次性脚本必须删**——仓根只许放声明项（`check_suite_banners.py:DECLARED_ROOT` 扫，`hooks\pre-commit` 也跑 ⇒ 提交即截止线）。
 - **`teacher_mdp.py` 一个模块承载 v3–v13 的增量段**（v3 包 / v5 行 SIR / v11 联合粒子 / v12 噪声 / v13 跟踪核），按版本段落读；"只增不改"是纪律。
 
 ## 版本目录内的文件（本表不索引线目录与版本目录）
 
-> 本表**不**逐条登记版本目录（2026-09-23 起）**也**不登记线目录（同日晚些）：两种行的形状相同——重复一次路径 + 一句
-> "身份与教训见 `FAMILY.md`"——而线目录那三行**没有任何闸门看守**，且其中两行至今仍指向 2026-09-22 已退役的 `lizard/parkour` 与
-> `lizard/baseline`，状态一个字都没写。**哪个家族、哪条线存在、是活跃还是已退役**的唯一声明是
-> `versions\lines.json`（`check_recipe_registry.py` 看守：发现到的线必须有记录、退役必须带日期与理由）；
-> **"这个版本是什么"**归各 `versions\<family>\FAMILY.md` 的版本史；目录存在与齐件由 `check_version_docs.py` 读目录来判。
-> 布局本身见上文 `rl_exp\versions\` 那行与"主线就是家族本身"一条。
+> 本表**不**逐条登记版本目录（2026-09-23 起）**也不**登记线目录（同日晚些）：两种行的形状相同（重复一次路径 + 一句
+> "身份与教训见 `FAMILY.md`"），而线目录那几行**无闸门看守**，其中两行还指着 2026-09-22 已退役的线。唯一声明：
+> **哪个家族、哪条线存在、活跃还是已退役** → `versions\lines.json`（`check_recipe_registry.py` 看守）；
+> **"这个版本是什么"** → 各 `versions\<family>\FAMILY.md` 的版本史；**目录存在与齐件** → `check_version_docs.py` 读目录来判。
+> 布局见上文 `rl_exp\versions\` 那行与"主线就是家族本身"一条。
 > 新增版本 = 建 `versions\<family>\<line>\vN\`（四件套 + `base.json`）+ 补 FAMILY 版本史行 + 在 `lines.json` 登记线；本表不加行。
 
 | 目录 | 身份 |

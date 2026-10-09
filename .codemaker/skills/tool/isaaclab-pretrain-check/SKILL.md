@@ -46,7 +46,7 @@ metadata:
 - 与上一版对比：再跑一次 `--version <上一版>`，预期只有改过的子地形有差异；不一致 =
   隔离性破了，先查代码
 - `--difficulty 1.0` 默认最难课程排（0.0 = 最易排）
-- 渲染图自动存 `_tmp_terrain_previews/`（git 已忽略），逐张打开目视
+- 渲染图自动存 `rl_exp\tools\diagnose\out\terrain_previews\`（git 已忽略），逐张打开目视
 
 ### 第 3 步：GUI 目视（拉起 Isaac Sim，分钟级）
 

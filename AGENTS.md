@@ -32,6 +32,10 @@ Be direct, critical, and practical. Help avoid shallow thinking, over-engineerin
   收回到记录一处（`88a1ecb`）；下一次复制没有自动判据能发现，**发现靠评审**。
 - **迁移必须同一变更内建新删旧**（保留 id 与指针，不留两份正文）；预算超额时工具只报最大贡献项，
   **不自动取消 / 关闭 / 归档**，由人决定，取消是否合理是保留的人工审查风险。
+- **一次性脚本不留仓根**：仓根只放声明项（`check_suite_banners.py:DECLARED_ROOT`，`hooks/pre-commit` 也跑
+  ⇒ 提交即截止线）。值得复读的读数工具进 `rl_exp/tools/diagnose/`、历史进 `rl_exp/tools/archive/`、其余
+  提交前删；验收记录别把一次性脚本写成"复读"路径 —— 那条路径只在本机，且随脚本一起消失
+  （2026-10-09：规则本来就有，无闸门，于是攒下 64 个 `_tmp_*`）。
 
 ## Gates (offline suite)
 
