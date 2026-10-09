@@ -69,35 +69,37 @@
 | `rl_exp/versions/lizard2/main/cfg_lock.json` | 留 | 活跃线 golden；删除后须用 `check_cfg_lock.py --diff` 复核未漂移 |
 | `rl_exp/fork_patches/config_lizard___init__.py` | 留 | 只 `import rl_exp.tasks`，lizard2 也经它注册；改名会牵动部署链，收益为零 |
 | `FILEMAP.md` 相关条目 | **改** | `rl_exp/tasks/` 节提到的 parkour / baseline 支线、`teacher_smoke*`、`_LINES_BUILT_ELSEWHERE` 等行 |
-| `rl_exp/tools/verify/` 脚本 **删** | **删** | `teacher_smoke.py`、`teacher_smoke_v{3,5,6,8,11}.py`、`parkour_smoke.py`、`check_reward_v13.py`、`check_terminations_v14.py`、`test_v3_curriculum.py`、`test_v5_rewards.py`、`test_v12_noise.py`、`test_student_networks.py`、`test_baseline_mdp.py`、`test_baseline_isolation.py`、`test_component_ownership.py`、`test_teacher_networks.py`、`test_staged_curriculum.py`、`check_obs_layout.py`（裁决 B2①）、`pose_check.py`、`joint_check.py`、`position_check.py`、`smoke_test.py` |
+| `rl_exp/tools/verify/` 脚本 **删** | **删**（24 个） | `teacher_smoke.py`、`teacher_smoke_v{3,5,6,8,11}.py`、`teacher_smoke_runner.py`（§7-2 由"留"翻"删"）、`parkour_smoke.py`、`check_reward_v13.py`、`check_terminations_v14.py`、`test_v3_curriculum.py`、`test_v5_rewards.py`、`test_v12_noise.py`、`test_student_networks.py`、`test_baseline_mdp.py`、`test_baseline_isolation.py`、`test_component_ownership.py`、`test_teacher_networks.py`、`test_staged_curriculum.py`、`check_obs_layout.py`（裁决 B2①）、`pose_check.py`、`joint_check.py`、`position_check.py`、`smoke_test.py` |
 | 同上 **改** | **改** | `check_recipe_build.py`（计数表 `:68-135` 删两条 lizard 行、留 `lizard2/main`）、`check_dr_parity.py`（删两节 freeze-parity 代码 + `load_subjects` 的 `SUBJECTS_PATH` 引用；留 asset contract 与 body swap 段）、`test_params_isolation.py`（`:20` 四处 import 全是被删模块）、`test_launcher.py`（`:39-41/:69/:186` 硬编码 `Lizard-Rough-v14` / `lizard/main`）、`terrain_preflight.py`（默认 `--version v4` 指 lizard，contract `teacher_env_cfg.py`） |
-| 同上 **留**（含"随 A① 由删转留"的） | 留 | `test_joint_sir.py`、`test_v5_terrain_sir.py`、`teacher_smoke_runner.py`、`cstate_observer.py`（SIR 段保留 ⇒ 其断言对象仍在）、`test_resume_state.py`、`check_c_layer.py`、`lifecycle_entry_run.py`、`check_version_docs.py`（`:79-87` 已内建 retired 版本判据——退休线目录留在盘上即仍被覆盖，**不需改**） |
+| 同上 **留**（含"随 A① 由删转留"的） | 留 | `test_joint_sir.py`、`test_v5_terrain_sir.py`、`cstate_observer.py`（SIR 段保留 ⇒ 其断言对象仍在）、`test_resume_state.py`、`check_c_layer.py`、`lifecycle_entry_run.py`、`check_version_docs.py`（`:79-87` 已内建 retired 版本判据——退休线目录留在盘上即仍被覆盖，**不需改**） |
 
-### 3. 离线套件 48 项：删 12 / 改 6 / 留 30
+### 3. 离线套件 48 项：删 11 / 改 8 / 留 29（执行面复核后校正，依据见 §7）
 
-**删（12）**：`[4]` test_staged_curriculum、`[5]` test_teacher_networks、`[6]` test_student_networks、
+**删（11）**：`[4]` test_staged_curriculum、`[5]` test_teacher_networks、`[6]` test_student_networks、
 `[7]` test_v3_curriculum、`[8]` check_obs_layout（B2①）、`[9]` test_v5_rewards、`[16]` test_v12_noise、
-`[20]` check_reward_v13、`[21]` check_terminations_v14、`[22]` test_baseline_contract、
+`[20]` check_reward_v13、`[21]` check_terminations_v14、
 `[34]` test_baseline_isolation、`[37]` test_component_ownership。
 理由同 §1/§2：被断言对象在删除面上（contract 直指 `versions/lizard/**/main_params.yaml` 或被删模块）。
 
-**改（6）**：`[2]` check_dr_parity（D①）、`[12]` terrain_preflight（默认版本与 contract）、
+**改（8）**：`[1]` framework_pin_check（contract 指被删模块）、`[2]` check_dr_parity（D①）、
+`[12]` terrain_preflight（地形来源重指）、`[22]` test_baseline_contract（**摘掉旧线尾段，条目保留**，见 §7-1）、
 `[33]` test_params_isolation（import）、`[40]` test_launcher（硬编码任务）、`[41]` check_recipe_build（计数表）、
 `[42]` check_obs_protocol（**条目参数加 `--live`**：`:526-530` 支持 `--self-test` 与 `--live` 并存，
-`:547` 的 live 半边补上被删的 `[8]` 的覆盖；同时清锚点与声明里 lizard 条目）。
+`:547` 的 live 半边补上被删的 `[8]` 的覆盖）。
 
-**留（30）**：其余条目。点名几条易误判的：`[10]` test_v5_terrain_sir、`[11]` test_joint_sir、
+**留（29）**：其余条目。点名几条易误判的：`[10]` test_v5_terrain_sir、`[11]` test_joint_sir、
 `[18]` test_resume_state（A① 下 SIR 实现与冻结参数文档都在，断言对象未消失）、
 `[14]` check_version_docs（retired 判据已内建）、`[39]` test_lifecycle_gate（用 `lines.json` 的
 `lizard/parkour` 退休条目当样例，条目保留）、`[17]` check_pxr_leak 与 `[24]` check_configclass_fields
 （走注册表，注册一删自动只剩 lizard2）、`[48]` check_leg_reachability（lizard2 资产）、
-`[26]`/`[35]` cfg_lock / golden（按线遍历，退休线 lock 保留仍被盖）。
+`[26]`/`[35]` cfg_lock / golden（**经复核不需改**：`check_cfg_lock.py:650-701` 只遍历"有注册任务的行"，
+退休线零注册后其 golden 永不被读）。
 
 **连带修改**：
-- `offline_suite.py:195` `MAX_CHECKS` 48 → **36**（棘轮常数必须同步收）。
+- `offline_suite.py:195` `MAX_CHECKS` 48 → **37**（棘轮常数必须同步收）。
 - `offline_suite.py:196` `SERIAL_BUDGET_S = 175.0` 须 `--confirm-cost` **实测后**再钉，不按比例外推。
 - **顺序约束（不可省）**：`MAX_CHECKS` 是硬上限，48 封顶 ⇒ 给 `[42]` 加 `--live`（新增一条检查）
-  必须在 12 条删除**之后**的独立提交里做，否则套件瞬态 49 条、`_count_problem` 直接红（`offline_suite.py:314-326`）。
+  必须在 11 条删除**之后**的独立提交里做，否则套件瞬态 49 条、`_count_problem` 直接红（`offline_suite.py:314-326`）。
 
 ### 4. 在办事项（口径 = `check_work_docs.py --list` 的 28 项；其中 1 项是本项自身 ⇒ 27 项待判）
 
@@ -136,21 +138,42 @@ done / cancelled / superseded`；后三词即关闭，关闭 = **移动不是改
 | A | `teacher_mdp.py` 的 SIR / c_k 段去向 | ①**保留 teacher_mdp**，只删旧线其余模块；死代码暂留，其去向另立事项 |
 | B | 离线套件 12 条旧线检查 | ①**删脚本 + 删条目**（`MAX_CHECKS` 48→36） |
 | B2 | `check_obs_layout.py` | ①**删**，并把 `check_obs_protocol --live` 补进套件 `[42]` |
-| C | `obs_protocols.json` / anchors 的 lizard 条目 | ①**删**（接受历史 manifest 复读降级） |
+| C | `obs_protocols.json` / anchors 的 lizard 条目 | ①**删**（接受历史 manifest 复读降级）——**执行时发现不可行，见 §7-3，待重新裁决** |
 | D | `freeze_parity.json` 与 `check_dr_parity` 的 freeze-parity 段 | ①**删该机制**（与其唯一主体同进退），保留 asset contract / body swap 段 |
 | E | 9 项判删事项的关闭词 | 按接管关系分开写：7 项 `superseded_by: retired-family-code-prune`；2 项（`row-sir-commanded-measurement-defect`、`deployment-delay-injection-dr`）`cancelled` |
 
 ### 6. 执行顺序（批准后照此走，每步都是独立可回滚的提交）
 
 1. **打 tag `lizard-final`**（删除前的整树快照；此后旧 checkpoint 只能靠该 tag 取回）。
-2. **同一提交内建新删旧**（`AGENTS.md` 迁移纪律）：拆 `recipe.py` 旧线 import 与元素、删 §1 的 17 个模块、
-   删 §2 的 verify 脚本、清 `recipes.json` / `obs_protocols.json` / anchors / `freeze_parity.json`、
-   删 §3 的 12 条套件条目并把 `MAX_CHECKS` 收到 36、改 §2 的 6 个脚本。中间态不留红。
+2. **同一提交内建新删旧**（`AGENTS.md` 迁移纪律）：拆 `recipe.py` 旧线 import 与元素、删 §1 的 13 个模块、
+   删 §2 的 24 个 verify 脚本、清 `recipes.json` 与 `freeze_parity.json`（`obs_protocols.json` / anchors 见 §7-3）、
+   删 §3 的 11 条套件条目并把 `MAX_CHECKS` 收到 37、改 §2 的 7 个脚本。中间态不留红。
 3. **独立提交**：给 `[42]` 加 `--live`，`SERIAL_BUDGET_S` 用 `--confirm-cost` 实测后钉。
 4. **独立提交**：§4 的事项移动（9 移 `work/closed/2026/`、3 项改 scope）。
-5. **验收**：`run_offline_checks.bat` 全绿 + `Lizard2-Flat-v1/v2/v3` **构造对拍**（第 1 步之后、删除之前
-   先存一次 cfg 构造读数，删完复跑同一命令逐条比）+ `check_cfg_lock.py --diff` 无漂移。
+5. **验收**：按 §验收条件；其中 lizard2 三任务的构造须**对拍**（第 1 步之后、删除之前先存一次 cfg
+   构造读数，删完复跑同一命令逐条比）—— 判据形状只在 §验收条件 一处写。
 6. **收尾**：commit / push 走 `git-auto-sync` skill；`FILEMAP.md` 同步改；本项 `close_when` 判词回填。
+
+### 7. 执行面核查（2026-10-09 执行时发现；与本节之前的计数冲突处，以本表为准）
+
+逐条核对清单时六处不符，判据均为代码内 `file:line`：
+
+| # | 清单写法 | 实情 | 依据 |
+|---|---|---|---|
+| 1 | 套件删 12 条 | 删 **11** 条：`[22]` test_baseline_contract 是**混合范围**，条目保留、摘尾段 | 其 `contract` 主体是评测对照臂（`ablation_harness` 的 `metrics.py` / `baseline_frames.py` / `baseline_metrics.py` / `frame_semantics.json`，全部保留），只有尾段 `:1804` 牵 `test_baseline_mdp`、`:980` 牵 `parkour_mdp` allowlist |
+| 2 | `teacher_smoke_runner.py` 判"留" | 必须**删** | 它经 `recipe_tasks` 解析 `LizardRoughTeacherEnvCfg_{VER}`（`:283-286`），这些类随注册面一起消失 |
+| 3 | 裁决 C①（删 `obs_protocols.json` / anchors 的 lizard 条目） | **不可行**（阻塞） | `check_obs_protocol.py:460-483` 要求声明面任务集 == 所有 golden 的任务集，而 `obs_protocol_inventory.goldens()` 扫全部 `versions/**/cfg_lock.json`（**含边界内保留的 `versions/lizard/**`**）⇒ 删声明即红 |
+| 4 | D① 只删两节代码 + 一个文件 | 连带 **3 条 contract** 必须重指 | `[1]` / `[2]` / `[12]` 的 `contract=` 指 `teacher_env_cfg.py`（`[2]` 还指 `freeze_parity.json`），而 `check_suite_shape` 要求 contract 是**存在的文件** |
+| 5 | （清单未提，属压掉的改动面） | `check_cfg_lock` / `check_version_docs` **不需改** | `check_cfg_lock.py:650-701` 只遍历"有注册任务的行"，退休线零注册后其 golden 永不被读；`check_version_docs.py:79-87` 已内建 retired 判据 |
+| 6 | `terrain_preflight` 判"改" | 判定成立，但**新来源不是 lizard2** | 它被保留的门 `test_terrain_geometry.py:111` import（`build_sub_terrain`）且被 `isaaclab-pretrain-check` skill 调用；lizard2 是平地（`terrain_generator=None`）⇒ 地形来源改建自保留的 `param_grid_terrain` + 冻结 v11 yaml（经保留的 `recipe_params` 读） |
+
+**校正后的执行面计数**：删 **13 个模块**（清单写 17）/ 删 **24 个验证脚本** / 套件删 11 条、`MAX_CHECKS` 48→**37** / 删 **1 个声明文件**（`freeze_parity.json`）/ 台账 **9 项**（7 superseded + 2 cancelled）/ 改 4 个 tasks 模块 + 7 个验证脚本 + `recipes.json`。
+
+**已落盘 vs 未落盘**：四个并行编辑块在中断时被撤销 ⇒ **代码零改动**；本次唯一落盘的是本记录与在办事项 frontmatter/`next`。
+
+**待裁决（阻塞执行）**：① C 的反向选择——翻回 C②（声明面不动，声明即保留 golden 的可读面）或保留 C① 并给 `check_obs_protocol.check_recorded` 加退休线豁免（该模块已 import `retired_lines()`，约 5 行）；② `framework_pin_check` 三条依赖已消失的 needle（`staged_curriculum` / `teacher_networks` / `student_networks`）删或留；③ `check_recipe_build` 的 `COMPONENT_AUTHOR = "components."` 判据重组是否授权就地重构。
+
+
 
 ## 证据引用
 
