@@ -33,6 +33,13 @@ Be direct, critical, and practical. Help avoid shallow thinking, over-engineerin
 - **迁移必须同一变更内建新删旧**（保留 id 与指针，不留两份正文）；预算超额时工具只报最大贡献项，
   **不自动取消 / 关闭 / 归档**，由人决定，取消是否合理是保留的人工审查风险。
 
+## Gates (offline suite)
+
+- **新闸门 = 一次真实缺陷 + 在该缺陷上的破坏测试**：写清它回应的是哪一次失败（commit 或
+  `acceptance/records/` 路径），"以防万一"不是准入理由；并标明它是查**声明一致**（文档 / 声明 / 锁之间
+  互查）还是查**行为成立**（构造、真跑、数值）——声明一致类不得单独作为某能力"已验证"的依据。
+  细则（含暂缓条件）见 `rl_exp/tools/verify/OFFLINE_CHECKS.md` §4，准入无机器闸门，判定由 review 做。
+
 ## Before work
 
 - Show a plan before any code or file changes.
