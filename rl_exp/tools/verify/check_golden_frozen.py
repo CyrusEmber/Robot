@@ -122,9 +122,9 @@ FROZEN_REVS: dict[str, str] = {
     # The lizard2 line's bytes landed in dfdc2ae (the pre-training revision that repointed the head
     # guard). The 2026-09-28 re-baseline took the documented two-step shape: the new bytes landed in
     # e59e240 ("Register lizard2 v2"), and this line names that revision.
-    # The 2026-10-09 re-baseline is mid-two-step here: the digest above is the working tree's, and
-    # this line is backfilled with the commit that lands the budget change.
-    "rl_exp/versions/lizard2/main/cfg_lock.json": "working-tree:v3.3 (commit pending)",
+    # The 2026-10-09 re-baseline took the documented two-step shape: the new bytes landed in ad7620e
+    # ("declare the v3 budget at 6000"), and this line names that revision.
+    "rl_exp/versions/lizard2/main/cfg_lock.json": "ad7620e",
 }
 """Which revision each frozen file's bytes are from, for the banner only.
 
