@@ -4,9 +4,9 @@ title: lizard2 配方、动作接口与评测协议交付
 scope: rl_exp/versions/lizard2, rl_exp/tasks, rl_exp/tools/pipeline, rl_exp/tools/verify, ablation_harness
 status: open
 landing: rl_exp/versions/lizard2/main/main_params.yaml, rl_exp/tasks/lizard2_recipe.py, rl_exp/tools/pipeline/emit_diff_declaration.py, rl_exp/tools/verify/check_recipe_build.py
-next: 消费 joint-limit-shape-and-range-pass 的设计决定；核对部署端对限位外位置参考的处理，形成动作接口提案；统一奖励与诊断的承重口径后评审滑移/净空奖励；交付新评测协议、实现清单与阈值标定。当前采用与剩余缺口见 acceptance/records/2026-10-09-lizard2-limit-requirement-and-status-sync.md，版本处理沿用 versioning.mdc，不再把已接入的 v3 当作待建版本
+next: ① **评测入口已交付**（身份副本协议 + 锚点条目 + 三臂同尺用例，见 evidence 末条）：只剩"真跑一次 v3 的 eval"才把入口从启动契约级验成可用，它需要一份 v3 的 checkpoint（训练另经用户确认）。② 消费 joint-limit-shape-and-range-pass 的设计决定；核对部署端对限位外位置参考的处理，形成动作接口提案。③ 统一奖励与诊断的承重口径后评审滑移/净空奖励：**低命令段站着有分这件事只是假设**（核是双侧惩罚），动 sigma 或命令窗口前先按命令分桶取误差/存活/接触。④ 速度上限先出读数再决定是否启用有效限速；"声明了但不生效的字段"已折进 `check_configclass_fields.py` 的 `INERT_VELOCITY_LIMITS`（改值/加 sim 上限即红，见 evidence 末条）。当前采用与剩余缺口见 acceptance/records/2026-10-09-lizard2-limit-requirement-and-status-sync.md，版本处理沿用 versioning.mdc，不再把已接入的 v3 当作待建版本
 close_when: 动作接口与奖励决定落入对应版本的 PLAN、参数和差异声明，或明确不采用；新协议与 reader 绑定、报告清单有实现、阈值及固定场景经标定；对应训练候选完成构建和冻结前检查，结果有具名记录。未完设计由父事项承接，不以现有 v3 最小自检替代完整验收
-evidence: acceptance/records/2026-09-23-lizard2-v1-gait-skate, acceptance/records/2026-09-29-lizard2-v2-eval, acceptance/records/2026-10-08-lizard2-v3-landing, acceptance/records/2026-10-09-lizard2-limit-requirement-and-status-sync
+evidence: acceptance/records/2026-09-23-lizard2-v1-gait-skate, acceptance/records/2026-09-29-lizard2-v2-eval, acceptance/records/2026-10-08-lizard2-v3-landing, acceptance/records/2026-10-09-lizard2-limit-requirement-and-status-sync, acceptance/records/2026-10-09-lizard2-v3-eval-entry-and-inert-velocity-field
 ---
 
 ## 当前范围与交接
@@ -18,6 +18,7 @@ evidence: acceptance/records/2026-09-23-lizard2-v1-gait-skate, acceptance/record
 - 部署端是否接受限位外位置参考仍待核对，由 Codex 整理实际部署行为或具名缺口；历史参考越限的诊断与撤回见步态记录，不能仅据参考越限决定裁剪。物理反曲禁区按父事项 landing 的 R4 实施，不能用动作参考裁剪替代。
 - `feet_slide` / `foot_clearance` 保留为奖励候选，先统一奖励与诊断的承重口径，再决定实现与权重。脚掌接触面积/形状项的排除依据、lf 异常撤回及历史因果边界见步态记录，不在本项复述读数。
 - 姿态目标未验收时不直接新增角度监督；用户设计要求、量测结果与可训练目标的交接见父事项及状态同步记录。
+- 速度上限：yaml 里 implicit actuator 的旧 `velocity_limit` 字段不进引擎（v1/v2/v3 同款继承，读数边界见 v3 落地记录的未覆盖边界）。先出"PLAY 窗 `joint_vel` 对 URDF 自带速度上限"的读数，再决定要不要启用有效限速；"yaml 声明的字段必须与引擎采用的一致"折进已有离线闸（不新增条数，`MAX_CHECKS` 棘轮已满）。
 
 ## 评测协议交付
 
@@ -27,6 +28,7 @@ evidence: acceptance/records/2026-09-23-lizard2-v1-gait-skate, acceptance/record
 - 整理 `report_only` 实现清单，移除 `dof_torque_frac_of_limit`（关节力矩留专项采集），未实现的 `foot_yaw_deg` 不进入新清单。清单收窄或新增验收 criteria 走新协议文件，冻结旧协议和报告摘要保持不变。
 - 由用户确认摆动脚数量、净空、摆幅与滑移容限；Codex 提交定义、阈值依据及正常/异常标定样本，结果唯一进验收记录。
 - 补齐 `no_non_foot_carrier` 的持续部分承重标定，再决定门槛；新协议声明固定命令序列、速度带、等待窗与覆盖要求，并按新场景采集，不将历史随机场景读数当作新证据。
+- v3 的身份副本协议**已交付**（判据逐字段同 v4，只换 `recipe`/版本与身份说明）；三处登记点＝文件本身、`protocol_anchors.json`（覆盖由 `protocols/` 目录推出 ⇒ 放进目录即被闸门要求，改表＝人工批准，理由必填）、`test_baseline_contract.py` 的 lizard2 臂表（现三条；`report_only` 显式豁免，其余键不同即红）。**剩余**：真跑一次 v3 的 eval 才算"入口可用"；协议号与配方号是两个命名空间，别互推。读数与复读命令归 `acceptance/records/2026-10-09-lizard2-v3-eval-entry-and-inert-velocity-field.md`。
 
 ## 证据边界
 
