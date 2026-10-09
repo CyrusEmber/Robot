@@ -51,7 +51,9 @@ What it reports, and what it cannot:
 * **static load** (``--static-only``): gravity on, ZERO action -- the robot holds its default joint
   targets, which is a posture, not a policy. Reports per joint the PD-estimate magnitude against that
   joint's own solver-side limit. It is the load FLOOR (what standing costs), and it cannot answer the
-  command window's question. Caliber in :func:`run_static`.
+  command window's question. The report carries ``settle_reached``: this body's stance never quiets
+  below the tolerance, so the cap normally fires and the window is a micro-motion window. Caliber in
+  :func:`run_static`.
 
 Usage (from the repo root):
 
@@ -212,9 +214,16 @@ def run_static(task: str, settle_s: float, window_s: float, settle_vel: float) -
       1 every joint is slower than the tolerance because nothing has moved yet, so the window opens
       while the body is still falling from its spawn height -- the report carries the steps taken, the
       speed and the height, which is what makes that visible instead of silent;
-    * window = after that, until the first env reset or the frame the base drops below half the settled
-      height. A fallen or just-reset frame is not a stance, and averaging one in would report a load no
-      stance ever carried;
+    * a cap that fires is NOT a settle, and the report says which of the three happened
+      (``settle_reached`` / ``settle_landed``): landed-but-still-moving is a MICRO-MOTION window, a body
+      still moving in height is not a stance at all, and either way ``base_height_m`` is the height AT
+      THE CAP, not a settled stance height. On this body the cap firing is the normal outcome, not a
+      defect -- the stance never quiets below the tolerance
+      (``2026-10-09-lizard2-static-load-demand.md`` ⑤), so reading the height as "where it settled" is
+      exactly the mistake the flags exist to prevent;
+    * window = after that, until the first env reset or the frame the base drops below half the height
+      the window opened at. A fallen or just-reset frame is not a stance, and averaging one in would
+      report a load no stance ever carried;
     * the counter is ``pd_estimate_over_limit_frac``, NOT "saturation": an estimate crossing the limit
       is not the solver clipping. ``applied_torque`` is structurally zero for implicit drives and the
       clip happens inside the solver, so the crossing is a hypothesis about clamping, not a reading.
@@ -230,6 +239,7 @@ def run_static(task: str, settle_s: float, window_s: float, settle_vel: float) -
     dt = float(env.unwrapped.step_dt)
     zero = torch.zeros((1, action_map(env)[1]), device=robot.device)
     settle_steps, cap, quiet = 0, max(20, int(settle_s / dt)), float("inf")
+    settle_reached, landed = False, False
     heights: list[float] = []
     while settle_steps < cap:
         env.step(zero)
@@ -238,6 +248,7 @@ def run_static(task: str, settle_s: float, window_s: float, settle_vel: float) -
         heights.append(float(robot.data.root_pos_w.torch[0, 2]))
         landed = len(heights) > 10 and max(heights[-5:]) - min(heights[-5:]) < 1e-4
         if landed and quiet < settle_vel:
+            settle_reached = True
             break
     height0 = float(robot.data.root_pos_w.torch[0, 2])
 
@@ -261,8 +272,18 @@ def run_static(task: str, settle_s: float, window_s: float, settle_vel: float) -
 
     rows = []
     print(f"\n=== layer 3 STATIC: gravity on, zero action, {frames} frame(s) measured ===")
+    if settle_reached:
+        settle_note = f"settle REACHED (landed AND quiet): base height {height0:.4f} m"
+    elif landed:
+        settle_note = (f"settle NOT reached -- the cap fired with the body landed but still moving: "
+                       f"MICRO-MOTION window, base height at the cap {height0:.4f} m, not a settled "
+                       f"stance")
+    else:
+        settle_note = (f"settle NOT reached -- the cap fired with the body still moving IN HEIGHT "
+                       f"(landed=False): the window below is over a body that never stabilized, so "
+                       f"{height0:.4f} m is not a stance height")
     print(f"  settle: {settle_steps}/{cap} step(s) of the {settle_s:.1f}s cap; fastest joint "
-          f"{quiet:.4f} rad/s at that point (tol {settle_vel}); settled base height {height0:.4f} m")
+          f"{quiet:.4f} rad/s at that point (tol {settle_vel}); {settle_note}")
     print(f"  ({stop}; estimate {('Kp*(q*-q) - Kd*qd')})")
     print("  zero action = the DEFAULT joint targets held by PD: a posture, not a trained policy, and")
     print("  not a gait -- a joint with no budget left here still has to be asked by something.")
@@ -291,7 +312,8 @@ def run_static(task: str, settle_s: float, window_s: float, settle_vel: float) -
     print("         'the solver clamped' -- see the caliber in run_static's docstring.")
     env.close()
     return {"task": task, "frames": frames, "settle_s": settle_s, "settle_steps": settle_steps,
-            "settle_cap_steps": cap, "settle_vel_tol": settle_vel, "settle_fastest_rad_s": quiet,
+            "settle_cap_steps": cap, "settle_reached": settle_reached, "settle_landed": landed,
+            "settle_vel_tol": settle_vel, "settle_fastest_rad_s": quiet,
             "stop": stop, "base_height_m": height0, "joints": rows}
 
 

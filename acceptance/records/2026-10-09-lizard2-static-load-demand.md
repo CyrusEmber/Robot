@@ -15,16 +15,18 @@
 - 分母 = **该关节自己的**求解器侧限幅（`data.joint_effort_limits`），不是组 cfg——逐关节口径沿用
   `2026-09-23-lizard2-v1-gait-skate.md` ⑫（那里逐关节化正是因为一次组内单键覆盖把 hip 按脚板限幅算了）；
 - 落定 = 现在按**两者同时满足**判：机体高度五帧内变化 < 1e-4 m（且至少 10 帧）**且**最快关节速度 <
-  `--static-vel`（默认 0.05 rad/s），`settle_s` 只作**上限**；窗口 = 落定之后到**首次 env 复位**或**机体高度跌破
-  落定高度一半**为止；落定/掉地/复位帧不进统计。
+  `--static-vel`（默认 0.05 rad/s），`settle_s` 只作**上限**；**上限到点不算落定**——报告显式带
+  `settle_reached`（双条件达成）与 `settle_landed`（机体已不再下沉），两者都为真才叫落定，超时开启的是
+  **微动窗口**；窗口 = 那之后到**首次 env 复位**或**机体高度跌破开启时高度的一半**为止；落定/掉地/复位帧不进统计。
 - 计数名 = `pd_estimate_over_limit_frac`，**不叫"饱和"**：估算越限 ≠ 求解器夹断（`applied_torque` 对 implicit
   结构性为零，夹断在求解器内部）。
 - 不据此声称任何速度带下的执行器能力（静站不是步态）。
 
 ## 结果
 
-落定后机体高度 **0.9082 m**，窗口正常关闭（无复位、无掉地），**100 帧**（2.0 s @ 50 Hz 控制）。全部 30 个关节的
-`pd_estimate_over_limit_frac` = **0.000** ⇒ 默认站姿下**没有任何关节的估算触碰限幅**。
+窗口开启时的机体高度 **0.9082 m**（该次是**超时开启**的微动窗口，不是双条件达成的落定，见 ⑤），窗口正常
+关闭（无复位、无掉地），**100 帧**（2.0 s @ 50 Hz 控制）。全部 30 个关节的 `pd_estimate_over_limit_frac` =
+**0.000** ⇒ 默认站姿下**没有任何关节的估算触碰限幅**。
 
 按组给最坏的 `frac_of_limit_p50`（p50 占**自身**限幅）：
 
@@ -61,7 +63,11 @@
    0.0000（陷阱版，已在 ④ 说明）/ 0.0874 / — / 0.0762 rad/s，**始终没到 0.05 的容差**；而各组最坏占用是
    spine 0.548 / 0.546 / 0.544 / 0.544、legs 0.198 / 0.198 / 0.199 / 0.199、feet 0.030（各档同值）
    ⇒ 窗口取 2 s 还是 6 s，占用相差 <0.5%。**结论**：占用对落定选择不敏感，"落定判据"在这台机体上只能是
-   **上限**（微动 ~0.08 rad/s 长期存在），不是可达到的容差。
+   **上限**（微动 ~0.08 rad/s 长期存在），不是可达到的容差。**记录没有一次是"落定后"读数**：全部
+   `settle_reached = false`、`settle_landed = true`（机体早早不再下沉，只是不静），窗口一律在**上限到点**时
+   开启。报告现在把三种结局分开写：落定达成 / 落地但仍微动（微动窗口）/ 高度都还没稳定（**不是站姿**），
+   JSON 带 `settle_reached` / `settle_landed` 两个布尔，各自对应一段文字。读到 `base_height_m` 时不会再误当成
+   "落定高度"；这些占用数字本身不受影响（同一份读数，改的只是标签）。
 
 6. **p50 不是偶发值**：工具逐关节报 p50 / p95 / max，被引用最多的四个是 `tail1_pitch` 43.66 / 46.18 / 46.32、
    `lf_hfe` 35.70 / 36.43 / 36.48、`tail2_pitch` 15.05 / 16.21 / 16.28、`rf_foot` 2.09 / 2.21 / 2.22
@@ -78,7 +84,13 @@
 
 本机该次报告落在 `C:\Users\yanke03\AppData\Local\Temp\static_load_lizard2_v3.json`（**机器本地，不进仓**）。
 完成标记 `STATIC_LOAD_MEASURED`，退出码 0（测量，不是判决）。落定敏感性用同一命令加
-`--static-settle 1` / `4`（结果 ④）。
+`--static-settle 1` / `4`（结果 ④）。2026-10-09 复跑同一命令（为验 ⑤ 的标签）：报告第三行是
+`settle: 100/100 step(s) of the 2.0s cap; fastest joint 0.0874 rad/s at that point (tol 0.05); settle NOT
+reached -- the cap fired with the body landed but still moving: MICRO-MOTION window, base height at the cap
+0.9082 m, not a settled stance`，JSON 里 `settle_reached: false`、`settle_landed: true`；逐关节占用与上表逐位
+一致（`tail1_pitch` 43.66/46.18/46.32、spine 0.546、legs 0.198、feet 0.030）。另两个分支也跑到了：`--static-vel
+5.0` 给 `49/100`、`settle REACHED (landed AND quiet)`、高度 0.9077 m；`--static-settle 0.1` 给 `20/20`、
+`landed=False`、`0.9065 m is not a stance height`。
 
 ## 证据引用
 

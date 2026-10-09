@@ -27,10 +27,16 @@ What it cannot say: what the policy does after training (the mean stops being ze
 does with an unreachable target (that is a torque question -- ``check_actuator_budget.py``); and
 whether a fraction out of reach is a defect, which is the undeclared requirement above.
 
+``Nm@stop`` and ``p_eff`` are read at each joint's NEARER stop, which is the side that binds: see
+:func:`stop_readings`. Every joint of the current asset has symmetric stops, so that choice does not
+show in today's table -- it starts to matter the moment the limits go asymmetric, which
+``work/active/joint-limit-shape-and-range-pass.md`` is about to do.
+
 Usage (from the repo root):
 
     python rl_exp\\tools\\verify\\action_range_check.py --task Lizard2-Flat-v3
     python rl_exp\\tools\\verify\\action_range_check.py --task Lizard2-Flat-v3 --json "%TEMP%\\range.json"
+    python rl_exp\\tools\\verify\\action_range_check.py --self-check
 """
 
 import argparse
@@ -60,6 +66,8 @@ parser.add_argument("--sigma", type=float, default=None,
 parser.add_argument("--reach", type=float, default=3.0,
                     help="the multiple of sigma whose target is reported as the reach case")
 parser.add_argument("--json", help="write the measured table here")
+parser.add_argument("--self-check", action="store_true",
+                    help="test this tool's stop arithmetic (asymmetric limits) instead of reading a task")
 args_cli = parser.parse_args()
 
 
@@ -81,6 +89,34 @@ def tail_probability(limit: float, mean: float, sigma: float, side: str) -> floa
     if side == "upper":
         return 0.5 * math.erfc(z)
     return 0.5 * math.erfc(-z)
+
+
+def stop_readings(lower: float, upper: float, kp: float | None, effort: float | None,
+                  sigma_target: float, reach: float) -> dict:
+    """The stop-side readings for one channel. **The NEARER stop binds.**
+
+    Seated there the PD has the longer way to travel, so it sees the larger demand, and it is the side
+    a target centred on zero crosses first. Every joint of the current asset has symmetric stops
+    (``hip``/``haa`` ±0.60, ``hfe`` ±1.20, ``kfe`` ±1.60, spine ±0.50/±0.60), so which side is taken
+    does not show in today's table -- but reading the FARTHER side would under-report both the demand
+    and the tail probability the moment the limits go asymmetric, which is what
+    ``work/active/joint-limit-shape-and-range-pass.md`` is about to do. ``--self-check`` pins the
+    choice with a hand case.
+    """
+    near = min(abs(lower), abs(upper))
+    demand_stop = None if (kp is None or effort is None) else near + effort / kp
+    return {
+        "near_stop": near,
+        "target_at_reach": reach * sigma_target,
+        "reach_out": reach * sigma_target > near,
+        "nm_at_stop": None if kp is None else kp * max(0.0, reach * sigma_target - near),
+        # Seated at the stop, the PD estimate is Kp*(target - stop): the samples whose demand exceeds
+        # the joint's own effort limit are the ones the solver would clip. Both sides are asked, and
+        # with a target centred on zero the nearer side's threshold subsumes the farther side's.
+        "p_demand_over_effort": None if demand_stop is None else (
+            tail_probability(demand_stop, 0.0, sigma_target, "upper")
+            + tail_probability(-demand_stop, 0.0, sigma_target, "lower")),
+    }
 
 
 def scale_for(joint: str, scale) -> float:
@@ -115,10 +151,6 @@ def rows_for(cfg, limits: dict[str, tuple[float, float]], sigma: float, reach: f
             group = next((g for p, g in groups.items() if re.fullmatch(p, joint)), None)
             kp = None if group is None else float(group.stiffness)
             effort = None if group is None else scale_for(joint, group.effort_limit)
-            far = max(abs(lower), abs(upper))
-            # Seated at the stop, the PD estimate is Kp*(target - stop): samples whose demand
-            # exceeds the joint's own effort limit are the ones the solver would clip.
-            demand_stop = None if (kp is None or effort is None) else far + effort / kp
             rows.append({
                 "term": name,
                 "joint": joint,
@@ -128,19 +160,50 @@ def rows_for(cfg, limits: dict[str, tuple[float, float]], sigma: float, reach: f
                 "upper": upper,
                 "p_out": tail_probability(upper, 0.0, target_sigma, "upper")
                 + tail_probability(lower, 0.0, target_sigma, "lower"),
-                "target_at_reach": reach * target_sigma,
-                "reach_out": reach * target_sigma > far,
                 "kp": kp,
                 "effort": effort,
-                "nm_at_stop": None if kp is None else kp * max(0.0, reach * target_sigma - far),
-                "p_demand_over_effort": None if demand_stop is None else (
-                    tail_probability(demand_stop, 0.0, target_sigma, "upper")
-                    + tail_probability(-demand_stop, 0.0, target_sigma, "lower")),
+                **stop_readings(lower, upper, kp, effort, target_sigma, reach),
             })
     return rows
 
 
+def self_check() -> int:
+    """One hand case, run by hand: asymmetric stops are read at the NEARER side.
+
+    It falsifies the farther-side reading -- under it the ``(-0.60, +1.20)`` case would come out equal
+    to the symmetric ``(-1.20, +1.20)`` case, so the last two assertions below would fire. Hand
+    numbers: ``3 sigma = 1.5 rad`` against a near stop of 0.60 at ``Kp = 800`` -> 720 N.m.
+    """
+    kw = {"kp": 800.0, "effort": 180.0, "sigma_target": 0.5, "reach": 3.0}
+    asymmetric = stop_readings(-0.60, 1.20, **kw)
+    mirrored = stop_readings(-1.20, 0.60, **kw)
+    symmetric = stop_readings(-1.20, 1.20, **kw)
+    problems = []
+    if asymmetric != mirrored:
+        problems.append(f"mirroring the stops changed the reading: {asymmetric} vs {mirrored}")
+    if abs(asymmetric["nm_at_stop"] - 720.0) > 1e-9:
+        problems.append("near stop 0.60, 3 sigma 1.5 rad, Kp 800 must read 720 N.m, "
+                        f"got {asymmetric['nm_at_stop']}")
+    if not (asymmetric["nm_at_stop"] > symmetric["nm_at_stop"]
+            and asymmetric["p_demand_over_effort"] > symmetric["p_demand_over_effort"]):
+        problems.append("the near stop must demand more than the wide pair "
+                        f"(nm {asymmetric['nm_at_stop']} vs {symmetric['nm_at_stop']}, "
+                        f"p_eff {asymmetric['p_demand_over_effort']} vs "
+                        f"{symmetric['p_demand_over_effort']})")
+    if not asymmetric["reach_out"]:
+        problems.append("a 1.5 rad target against a 0.60 rad stop is out of reach")
+    if problems:
+        print("SELF_CHECK_FAILED")
+        for problem in problems:
+            print(f"  {problem}")
+        return 1
+    print("SELF_CHECK_OK (asymmetric stops bind at the nearer side; mirroring is a no-op)")
+    return 0
+
+
 def main() -> int:
+    if args_cli.self_check:
+        return self_check()
     spec = gym.spec(args_cli.task)
     cfg = string_to_callable(spec.kwargs["env_cfg_entry_point"])()
     runner = string_to_callable(spec.kwargs["rsl_rl_cfg_entry_point"])()
