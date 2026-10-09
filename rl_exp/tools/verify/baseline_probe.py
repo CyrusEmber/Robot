@@ -50,7 +50,8 @@ parser.add_argument(
     help="save rendered frames of the zero-action rollout (needs --enable_cameras): the numbers can "
     "say the feet are on the floor, not whether the stance is the robot the recipe describes",
 )
-parser.add_argument("--shot-dir", default="_tmp_zero_action_shots", help="frame output dir (git-ignored)")
+parser.add_argument("--shot-dir", default="rl_exp/tools/diagnose/out/zero_action_shots",
+                    help="frame output dir, relative to the working directory (git-ignored)")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 app_launcher = AppLauncher(args_cli)

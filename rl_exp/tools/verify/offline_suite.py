@@ -127,7 +127,7 @@ CHECKS: list[Check] = [
           [f"{_V}/check_recipe_registry.py", "--self-test"], contract=("rl_exp/versions/lines.json",)),
     Check("recipe identity map (task id to recipe, revision to entries, vs registration + built configs)",
           [f"{_V}/check_recipe_map.py", "--self-test", "--bind-config"], contract=("rl_exp/versions/recipes.json",)),
-    Check("suite banner hygiene (no bare redirects in echo lines; detector self-tested)",
+    Check("repo hygiene (no bare redirects in echo lines; repo root holds declared entries only; detector self-tested)",
           [f"{_V}/check_suite_banners.py"], contract=("rl_exp/tools/verify/run_offline_checks.bat",)),
     Check("params loaders hand each caller its own document (cache must not alias cfgs)",
           [f"{_V}/test_params_isolation.py"], contract=("rl_exp/tasks/recipe_params.py",)),

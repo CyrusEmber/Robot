@@ -8,6 +8,20 @@ set -u
 REPO=$(git rev-parse --show-toplevel) || exit 1
 cd "$REPO" || exit 1
 
+# Repo-root hygiene runs on every commit, before the staged-path filter below -- a scratch file
+# left at the root is exactly what that filter cannot see (`_tmp_*` is git-ignored, so it appears
+# in neither --cached nor `git status`), and 64 of them had piled up by 2026-10-09. Stdlib-only,
+# instant, any python will do.
+if command -v python >/dev/null 2>&1; then
+  echo "[pre-commit] check_suite_banners (echo redirects + repo root)"
+  python rl_exp/tools/verify/check_suite_banners.py || {
+    echo "[pre-commit] FAIL: a banner would redirect, or the repo root holds an undeclared entry. Delete the scratch, or declare a new top-level entry in check_suite_banners.DECLARED_ROOT in the same commit."
+    exit 1
+  }
+else
+  echo "[pre-commit] WARN: no python on PATH -- skipping check_suite_banners"
+fi
+
 # Only gate commits that touch recipe-relevant files; pure prose commits
 # pass. Version-record markdown counts as recipe-relevant: the doc gate must
 # run on the commits that could break it. Patch archives and this hook itself

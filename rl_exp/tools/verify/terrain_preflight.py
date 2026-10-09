@@ -13,8 +13,9 @@ table benchmarked against the body calibration:
 sole spans at a stance -- the metric that caught the v3.6 flat-rubble bug
 (0.3 m pitch < sole width, plate bridged the bumps).
 
-Also writes one PNG heatmap per sub-terrain to _tmp_terrain_previews/ for
-eyeballing (git-ignored), plus a sha256 of what actually decides the geometry
+Also writes one PNG heatmap per sub-terrain to the git-ignored products tree
+(rl_exp/tools/diagnose/out/terrain_previews/) for eyeballing, plus a sha256 of
+what actually decides the geometry
 -- vertices, faces and the terrain origin -- so a preview run can be compared
 against the next one instead of trusted.
 
@@ -172,8 +173,8 @@ def main():
     p.add_argument("--difficulty", type=float, default=1.0,
                    help="1.0 = hardest curriculum row (default), 0.0 = easiest.")
     p.add_argument("--seed", type=int, default=0)
-    p.add_argument("--out", default="_tmp_terrain_previews",
-                   help="PNG output dir (git-ignored default).")
+    p.add_argument("--out", default="rl_exp/tools/diagnose/out/terrain_previews",
+                   help="PNG output dir, relative to the repo root (git-ignored default).")
     p.add_argument("--self-test", action="store_true", help="falsify the geometry digest instead")
     args = p.parse_args()
 

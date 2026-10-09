@@ -49,8 +49,12 @@ Status-marker scan (same 仓根层 clause, other half): ARCH_PLAN.md writes
 judgements and implementation form, never current status, so a bold
 已完成/已落地/待实现 is the same class of second copy (measured 2026-09-20:
 eight of them, in the 判据 lists). The preamble's own sentence quotes the
-words unbolded -- that sentence is the rule, not a violation, so the scan is
-scoped to the bold form.
+words unbolded -- that sentence is the rule, not a violation, so that scan is
+scoped to the bold form. The clause names 标题 first, and the H1 line is where
+a stale status is read before anything else: scanning only the bold form left
+"（提案，待审核）" in the title from the day the document was written until
+2026-10-09 (twenty days and one architecture review later), so the H1 line now
+carries its own word list. Body prose may say 提案 -- only the H1 line is read.
 
 Known ceiling: only verdict tokens are scanned, never ratios. ``90/208/83``
 (obs widths), ``400/20`` (PD gains) and ``60/30/10`` (noise conditions) are
@@ -94,6 +98,10 @@ _COVERAGE_VERDICT = re.compile(r"\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*_OK\b|ALL_OFFLIN
 #: form because the preamble quotes the forbidden words unbolded -- that sentence *is* the rule.
 _ARCH_STATUS = re.compile(r"\*\*(已完成|已落地|待实现)\*\*")
 
+#: Status words the ARCH_PLAN H1 (title) line must not carry -- the clause names 标题 first. The
+#: prefix is lazy so the matched word is the one reported, not the whole title.
+_ARCH_TITLE = re.compile(r"^#\s+.*?(提案|待审核|进行中|已完成|已落地|待实现)")
+
 
 def coverage_docs() -> list[pathlib.Path]:
     """The documents that write coverage instead of pass counts (versioning.mdc 仓根层)."""
@@ -120,6 +128,16 @@ def status_claims(text: str) -> list[tuple[int, str]]:
     found: list[tuple[int, str]] = []
     for lineno, line in enumerate(text.splitlines(), 1):
         match = _ARCH_STATUS.search(line)
+        if match is not None:
+            found.append((lineno, match.group(1)))
+    return found
+
+
+def title_claims(text: str) -> list[tuple[int, str]]:
+    """Status words on an H1 line of ``text``, as ``(line_number, word)``."""
+    found: list[tuple[int, str]] = []
+    for lineno, line in enumerate(text.splitlines(), 1):
+        match = _ARCH_TITLE.match(line)
         if match is not None:
             found.append((lineno, match.group(1)))
     return found
@@ -159,6 +177,17 @@ def self_test() -> int:
         # the preamble quotes the forbidden words unbolded -- that sentence is the rule itself
         ("the ARCH_PLAN preamble quoting the rule", '不写"已完成/已落地/待实现"；正文只写**当时证据与实现形态**（带日期）', 0),
     ]
+    title_cases = [
+        # the title as it read from the day the document was written until 2026-10-09
+        ("the ARCH_PLAN title as it read before",
+         "# ARCH_PLAN —— 实验可复现性与配置组织重整（提案，待审核）", 1),
+        ("the same title after", "# ARCH_PLAN —— 实验可复现性与配置组织重整", 0),
+        # body prose may name 提案 as a decision source; only the H1 line is read
+        ("a body line naming 提案 as a decision source",
+         "- **判据怎么来的**（决策来源：用户明示 / 审核建议 / 提案选择）→ `git log -p ARCH_PLAN.md`", 0),
+        # a level-2 heading is not the title line
+        ("a level-2 heading", "## 待定已结 2 项（用户拍板 2026-09-15）", 0),
+    ]
     # the piece set is conditional on the version's status, so both directions are asserted: a
     # dropped lock that is still demanded, or a lock nobody drops, is the drift this covers.
     piece_cases = [
@@ -174,6 +203,10 @@ def self_test() -> int:
         for name, text, expected in status_cases
         if len(status_claims(text)) != expected
     ] + [
+        f"self-test '{name}': expected {expected} title status word(s), found {len(title_claims(text))}"
+        for name, text, expected in title_cases
+        if len(title_claims(text)) != expected
+    ] + [
         f"self-test '{name}': expected {expected}, got {tuple(required_pieces(retired))}"
         for name, retired, expected in piece_cases
         if tuple(required_pieces(retired)) != expected
@@ -184,7 +217,7 @@ def self_test() -> int:
         return 1
     print(
         f"check_version_docs: self-test OK "
-        f"({len(cases) + len(status_cases) + len(piece_cases)} fixtures)"
+        f"({len(cases) + len(status_cases) + len(title_cases) + len(piece_cases)} fixtures)"
     )
     return 0
 
@@ -405,14 +438,21 @@ def main(show_tree: bool = "--tree" in sys.argv) -> int:
                 " (versioning.mdc 仓根层: pass rates and counts live in ACCEPTANCE.md only)"
             )
 
-    # ARCH_PLAN.md writes judgements and implementation form, never current status (its preamble).
+    # ARCH_PLAN.md writes judgements and implementation form, never current status (its preamble):
+    # no bold marker anywhere in it, and no status word on its title line.
     if not _ARCH_PLAN.is_file():
         problems.append("ARCH_PLAN.md: missing")
     else:
-        for lineno, word in status_claims(_ARCH_PLAN.read_text(encoding="utf-8")):
+        plan_text = _ARCH_PLAN.read_text(encoding="utf-8")
+        for lineno, word in status_claims(plan_text):
             problems.append(
                 f"ARCH_PLAN.md:{lineno}: status marker '**{word}**' (preamble: 标题/表头/出口写判据,"
                 " 正文只写当时证据与实现形态)"
+            )
+        for lineno, word in title_claims(plan_text):
+            problems.append(
+                f"ARCH_PLAN.md:{lineno}: status word '{word}' in the title line (preamble:"
+                " 标题/表头/出口一律写判据；当前状态归 ACCEPTANCE.md)"
             )
 
     print(f"  families checked: {len(families)} ({', '.join(p.name for p in families)})")
