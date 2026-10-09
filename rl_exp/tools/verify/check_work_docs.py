@@ -706,8 +706,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--locate", metavar="KEY", help="print the item files matching KEY")
     parser.add_argument("--self-test", action="store_true", help="run the falsifiers")
     args = parser.parse_args(argv)
-    if args.self_test:
-        return self_test()
+    if args.self_test and self_test() != 0:
+        return 1
+    # --self-test FALLS THROUGH into the real check on purpose: it is the flag the daily offline suite
+    # passes, and while it stopped at the fixtures the real tree went unread there -- the record
+    # section-order drift was caught by the commit hook alone, i.e. the local gate was weaker than the
+    # hook. Both banners now print, the fixtures first, and the exit code is either one's.
     if args.list is not None:
         return _list(args.list or None)
     if args.locate:
