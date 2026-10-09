@@ -570,32 +570,41 @@ def test_a_record_without_the_joint_column_cannot_supply_a_gait_shape_number():
 
 
 def test_the_two_lizard2_arms_are_judged_by_one_ruler_spelled_twice():
-    """Two arms, two recipe versions, so two protocol files -- and only the identity may differ.
+    """One arm per protocol file, and nothing that decides a verdict may differ.
 
-    The experiment moves one variable (who may command the blade joints), and the evaluator refuses
-    a protocol whose declared recipe version is not the task's version. So the criteria have to be
-    spelled once per arm, and the risk this test covers is the obvious one: two files that drift
-    apart are not one ruler, and every cross-arm reading would then be taken with two different
-    instruments nobody compared.
+    The name still says *two* because the frozen v3 and v4 protocol files cite it by that name in
+    their own ``why_v3`` -- the set it compares is the table below, which carries one entry per arm
+    (one arm = one recipe version). The experiment moves one variable at a time (who may command the
+    blade joints; then the adopted body and the ankle channels), and the evaluator refuses a protocol
+    whose declared recipe version is not the task's version. So the criteria have to be spelled once
+    per arm, and the risk this test covers is the obvious one: files that drift apart are not one
+    ruler, and every cross-arm reading would then be taken with two different instruments nobody
+    compared -- while the reporting surface stays free to grow.
     """
     identity_keys = {"name", "version", "supersedes", "recipe", "recipe_version"}
+    # ``report_only`` reports and does not judge: adding an item there is a protocol version
+    # (``HARNESS.md``) but moves no verdict, and the v4 arm is exactly that upgrade. Everything else
+    # stays in the comparison -- a new key that decides a verdict has to trip this and be argued for.
+    non_judged_keys = identity_keys | {"report_only"}
     # Keyed by the recipe each file judges: the file names carry the protocol's own version, which
     # is why `lizard2_flat_v3.json` is the one that names v2.
-    files = {"v1": "lizard2_flat_v2.json", "v2": "lizard2_flat_v3.json"}
+    files = {"v1": "lizard2_flat_v2.json", "v2": "lizard2_flat_v3.json", "v3": "lizard2_flat_v5.json"}
     protocols = {}
     for recipe_version, file_name in files.items():
         block = json.loads((_REPO / "ablation_harness/protocols" / file_name).read_text())
         # ``why_vN`` are each file's own account of how it got here, keyed by protocol version.
         protocols[recipe_version] = {
             key: value for key, value in block.items()
-            if key not in identity_keys and not key.startswith("why_")}
+            if key not in non_judged_keys and not key.startswith("why_")}
         assert block["recipe_version"] == recipe_version, (file_name, block["recipe_version"])
-    differing = sorted(
-        key for key in set(protocols["v1"]) | set(protocols["v2"])
-        if protocols["v1"].get(key) != protocols["v2"].get(key))
-    assert not differing, (
-        "the two lizard2 protocols judge by the same numbers or the comparison is void; "
-        f"these blocks disagree: {differing}")
+    arms = sorted(protocols)
+    for arm in arms[1:]:
+        differing = sorted(
+            key for key in set(protocols[arms[0]]) | set(protocols[arm])
+            if protocols[arms[0]].get(key) != protocols[arm].get(key))
+        assert not differing, (
+            "the lizard2 protocols judge by the same numbers or the comparison is void; "
+            f"{arms[0]} and {arm} disagree: {differing}")
 
 
 def test_every_reader_this_module_implements_has_a_frozen_block():
