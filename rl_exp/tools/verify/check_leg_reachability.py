@@ -294,6 +294,12 @@ def link_inertials(urdf: pathlib.Path) -> dict[str, dict]:
         block = inertial.find("inertia")
         ixx, iyy, izz, ixy, ixz, iyz = (float(block.get(key)) for key in
                                         ("ixx", "iyy", "izz", "ixy", "ixz", "iyz"))
+        # The URDF states the inertia MATRIX, so these go in as written: ixy is the (0,1) entry, not a
+        # product of inertia to be negated. Some CAD exporters write the products into these fields
+        # instead -- a known divergence, and one this file cannot settle from the asset, because this
+        # asset states ZERO off-diagonals on every link (its own generator, blender/generate_urdf.py:301,
+        # writes 0). An asset with non-zero ones would have to be read against the engine's URDF
+        # importer before this projection can be trusted for it.
         out[link.get("name")] = {
             "mass": float(inertial.find("mass").get("value")), "com": com,
             "tensor": [[ixx, ixy, ixz], [ixy, iyy, iyz], [ixz, iyz, izz]],
@@ -403,10 +409,13 @@ def reflected_inertia(chain: list[dict], angles: list[float], inertials: dict[st
             offset = [point[i] - origin[i] for i in range(3)]
             along = sum(offset[i] * axis[i] for i in range(3))
             perpendicular = math.sqrt(sum((offset[i] - along * axis[i]) ** 2 for i in range(3)))
-            turn = [[frame[i][j] for j in range(3)] for i in range(3)]
-            spun = [[sum(turn[i][k] * props["tensor"][k][j] for k in range(3)) for j in range(3)]
-                    for i in range(3)]
-            along_tensor = sum(axis[i] * spun[i][j] * axis[j] for i in range(3) for j in range(3))
+            # u' (R I R') u, taken in the LINK's own frame: the axis expressed there is R' u, and the
+            # tensor is stated there. Composing only R on the left (`u' R I u`) is not the same rotation
+            # and can come out NEGATIVE on a light link -- which is how this was caught, and the case
+            # below keeps it caught.
+            local_axis = [sum(frame[k][i] * axis[k] for k in range(3)) for i in range(3)]
+            along_tensor = sum(local_axis[i] * props["tensor"][i][j] * local_axis[j]
+                               for i in range(3) for j in range(3))
             inertia += props["mass"] * perpendicular ** 2 + along_tensor
         gains = table[joint["name"]]
         if inertia <= 0.0:
@@ -418,6 +427,49 @@ def reflected_inertia(chain: list[dict], angles: list[float], inertials: dict[st
                      "zeta": gains["kd"] / (2 * math.sqrt(gains["kp"] * inertia)),
                      "over_physics_rate": (wn / (2 * math.pi)) / 200.0,
                      "over_control_rate": (wn / (2 * math.pi)) / 50.0})
+    return rows
+
+
+def load_case_angles(chain: list[dict]) -> dict[str, list[float]]:
+    """The poses the inertia is read at: each joint driven to its OWN declared limits, one at a time.
+
+    Nothing here is invented -- every angle below is a limit the URDF states, with the other joints left
+    at zero. The caveat a single-pose reading carries ("it moves with the pose") is only a number once
+    the poses are named, and these are the ones the mechanism itself declares. The knee's straight pose
+    is deliberately NOT a case: it sits outside this range (that is what keeps reverse bending
+    unreachable), so posing there would be a configuration the leg cannot be in.
+    """
+    cases = {"zero": [0.0] * len(chain)}
+    for index, joint in enumerate(chain):
+        low, high = joint["limits"]
+        for label, angle in (("lo", low), ("hi", high)):
+            angles = [0.0] * len(chain)
+            angles[index] = angle
+            cases[f"{joint['token']}-{label}"] = angles
+    return cases
+
+
+def inertia_range(chain: list[dict], cases: dict[str, list[float]], inertials: dict[str, dict],
+                  downstream: dict[str, list[str]], table: dict[str, dict]) -> list[dict]:
+    """Per joint, the reflected inertia's spread over the load cases, and which case gives each end.
+
+    Reports ``{joint, group, i_min, i_min_case, i_max, i_max_case, wn_min_hz, wn_max_hz, i_ratio}``.
+    The gain's frequency pairs follow from the inertia because ``w_n = sqrt(Kp/I)`` is monotone in it:
+    the smallest inertia is the HIGHEST ``w_n``, so the ends swap between the two columns.
+    """
+    per_case = {name: reflected_inertia(chain, angles, inertials, downstream, table)
+                for name, angles in cases.items()}
+    rows = []
+    for index, joint in enumerate(chain):
+        readings = [(name, moments[index]["inertia"]) for name, moments in per_case.items()]
+        low_case, low = min(readings, key=lambda pair: pair[1])
+        high_case, high = max(readings, key=lambda pair: pair[1])
+        gains = table[joint["name"]]
+        rows.append({"joint": joint["name"], "group": gains["group"], "i_min": low, "i_min_case": low_case,
+                     "i_max": high, "i_max_case": high_case,
+                     "wn_min_hz": math.sqrt(gains["kp"] / high) / (2 * math.pi),
+                     "wn_max_hz": math.sqrt(gains["kp"] / low) / (2 * math.pi),
+                     "i_ratio": high / low if low else float("inf")})
     return rows
 
 
@@ -930,6 +982,37 @@ def self_check(urdf: pathlib.Path) -> None:
                                    for name, props in link_inertials(urdf).items()},
                                   downstream_links(urdf, leg), gains)
         assert all(smaller["inertia"] < bigger["inertia"] for smaller, bigger in zip(light, moments)), leg
+        # The spread over the poses the mechanism itself declares -- and the two facts that keep it from
+        # being decoration. (a) Every joint's reading is INVARIANT under the hip angle: the hip's rotation
+        # turns the whole downstream leg about the hip's own axis, so both the axis and the geometry it
+        # measures turn together and every distance/tensor product in the sum is unchanged. A reading that
+        # moved here would mean the sweep posed the wrong frame. (b) A case that changes no joint's reading
+        # is a case that was never applied, which is the way this kind of sweep goes silently empty.
+        cases = load_case_angles(chain)
+        inertials = link_inertials(urdf)
+        spread = inertia_range(chain, cases, inertials, downstream_links(urdf, leg), gains)
+        per_case = {name: reflected_inertia(chain, angles, inertials, downstream_links(urdf, leg), gains)
+                    for name, angles in cases.items()}
+        for name, case_moments in per_case.items():
+            if name not in ("zero", "hip-lo", "hip-hi"):  # zero IS the reading; the hip cases are invariant
+                moved = max(abs(case_moments[i]["inertia"] - moments[i]["inertia"]) / moments[i]["inertia"]
+                            for i in range(len(moments)))
+                assert moved > 1e-6, (leg, name, "the case left every reading where it was")
+        for name in ("hip-lo", "hip-hi"):
+            for index, case_moment in enumerate(per_case[name]):
+                assert abs(case_moment["inertia"] - moments[index]["inertia"]) \
+                    < 1e-9 * moments[index]["inertia"], (leg, name, index)
+        # And the last joint's reading is invariant under EVERY case, by construction rather than by
+        # luck: its subtree is the pad alone, and the axis it measures about sits in the pad's own link
+        # frame -- so every joint upstream (and the pad's own angle, which turns about that very axis)
+        # carries the pad and the axis together. A sweep that posed the wrong joint index would move it.
+        tip = len(moments) - 1
+        tips = [per_case[name][tip]["inertia"] for name in per_case]
+        assert max(tips) - min(tips) < 1e-12, (leg, tips)
+        print("      inertia over the %d declared load cases (%s): %s"
+              % (len(cases), " ".join(sorted(cases)), "  ".join(
+                  "%s %.4f-%.4f [%s]" % (row["joint"].split("_")[-2], row["i_min"], row["i_max"],
+                                         row["i_max_case"]) for row in spread)))
         print("      reflected inertia (base fixed, zero pose): %s"
               % "  ".join("%s I=%.4f w_n=%.1f Hz zeta=%.3f" % (m["joint"].split("_")[-2], m["inertia"],
                                                               m["wn_hz"], m["zeta"]) for m in moments))
@@ -971,6 +1054,30 @@ def self_check(urdf: pathlib.Path) -> None:
     assert abs(light[0]["inertia"] - 4.5) < 1e-12 and abs(light[1]["inertia"] - 0.5) < 1e-12, light
     assert abs(heavy[0]["inertia"] - 2 * light[0]["inertia"]) < 1e-12, (light, heavy)
     assert abs(heavy[1]["inertia"] - 2 * light[1]["inertia"]) < 1e-12, (light, heavy)
+    # And the tensor's rotation, on a link frame that is actually turned: the joint carries rpy 90 deg
+    # about x, so the joint's axis (its own z, which IS the link's z) still reads izz -- but the axis in
+    # base_link is -y now, and the transform that takes it there is where the term comes from. Dropping
+    # the R' on the right (the bug this was written for) reads 0 here instead of 3, and it is invisible
+    # whenever every link frame happens to be identity -- which is what the cases above are.
+    turned_chain = [{"name": "j_r", "token": "r", "origin": [0.0, 0.0, 0.0],
+                     "rpy": [math.pi / 2, 0.0, 0.0], "axis": [0.0, 0.0, 1.0], "limits": (-1.0, 1.0)}]
+    turned_masses = {"l_r": {"mass": 0.0, "com": [0.0, 0.0, 0.0], "tensor": [[1.0, 0.0, 0.0],
+                                                                              [0.0, 2.0, 0.0],
+                                                                              [0.0, 0.0, 3.0]]}}
+    turned_gains = {"j_r": {"group": "g", "kp": 100.0, "kd": 10.0}}
+    assert abs(reflected_inertia(turned_chain, [0.0], turned_masses, {"j_r": ["l_r"]},
+                                 turned_gains)[0]["inertia"] - 3.0) < 1e-12
+    # The tensor's off-diagonals, against the URDF's own statement of them: the file states the inertia
+    # MATRIX, so ixy goes in as the (0,1) entry. An earlier version of this fixture asserted the negated
+    # matrix (reading ixy as a product of inertia) and so agreed with the same mistake in the reader --
+    # which is why a fixture agreeing with the code proves nothing on its own.
+    with tempfile.TemporaryDirectory() as folder:
+        fixture = pathlib.Path(folder) / "tensor.urdf"
+        fixture.write_text(
+            '<robot name="t"><link name="x"><inertial><mass value="1"/><inertia ixx="1" iyy="2" izz="3" '
+            'ixy="0.5" ixz="0.25" iyz="0.125"/></inertial></link></robot>\n', encoding="utf-8")
+        tensor = link_inertials(fixture)["x"]["tensor"]
+    assert tensor == [[1.0, 0.5, 0.25], [0.5, 2.0, 0.125], [0.25, 0.125, 3.0]], tensor
     _candidate_chain_check(urdf)
     print("[SELF-CHECK] zero pose equals the origin sum, a quarter hip turn rotates about the hip "
           "axis, the hip leaves the tilt alone, a body-height shift moves the pad with it, each "
@@ -982,7 +1089,10 @@ def self_check(urdf: pathlib.Path) -> None:
           "is composed before its axis, a candidate chain with an inserted femoral rotation loads "
           "and leaves the hinge plane's 90 deg, and the reflected inertia about each axis matches the "
           "hand-computed 4.8/0.8 on a two-link chain -- where the axis read one frame out would give "
-          "the same number for both joints -- and halves exactly once the tensor is dropped")
+          "the same number for both joints -- and halves exactly once the tensor is dropped, while the "
+          "tensor's off-diagonals go in as the URDF's own matrix entries (no extra sign) and the tensor "
+          "turns with the link frame (a 90 deg rpy picks izz), every declared load case moves at least "
+          "one reading, and the last joint's reading is invariant under all of them")
 
 
 def _grid_poses(chain: list[dict], grid_tokens: tuple[str, ...], samples: int):
@@ -1091,7 +1201,7 @@ def break_test(urdf: pathlib.Path) -> int:
     identity = [[1.0 if i == j else 0.0 for j in range(3)] for i in range(3)]
     real = {name: globals()[name]
             for name in ("faces_down", "_rpy_matrix", "pad_state", "chain_joint_names", "load_chain",
-                         "link_inertials", "downstream_links")}
+                         "link_inertials", "downstream_links", "load_case_angles")}
 
     def point_masses(urdf: pathlib.Path) -> dict:
         """Every link's inertia tensor dropped: the chain read as a set of point masses.
@@ -1137,6 +1247,9 @@ def break_test(urdf: pathlib.Path) -> int:
         ("the subtree truncated to the joint's own child link",
          {"downstream_links": lambda urdf, leg: {name: links[:1]
                                                  for name, links in real["downstream_links"](urdf, leg).items()}}),
+        ("the load cases posed at zero (a sweep that never moved the leg)",
+         {"load_case_angles": lambda chain: {name: [0.0] * len(chain)
+                                             for name in real["load_case_angles"](chain)}}),
     ]
     holes = []
     for label, patches in cases:
