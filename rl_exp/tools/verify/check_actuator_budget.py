@@ -82,6 +82,8 @@ parser.add_argument("--settle", type=int, default=60, help="zero-action steps be
 parser.add_argument("--static-settle", type=float, default=2.0,
                     help="zero-action seconds before the static (layer 3) window opens")
 parser.add_argument("--static-s", type=float, default=2.0, help="seconds measured, static layer")
+parser.add_argument("--static-vel", type=float, default=0.05,
+                    help="static layer: settle until the fastest joint is below this [rad/s]")
 parser.add_argument("--static-only", action="store_true",
                     help="skip layers 1-2 and the unloaded sweep: run the static load layer and exit")
 parser.add_argument("--inertia", type=float, default=1.57,
@@ -194,7 +196,7 @@ def run_drive_audit(task: str) -> dict:
     return {"task": task, "joints": rows, "unclaimed": unclaimed}
 
 
-def run_static(task: str, settle_s: float, window_s: float) -> dict:
+def run_static(task: str, settle_s: float, window_s: float, settle_vel: float) -> dict:
     """Gravity on, zero action: what the settled stance costs each joint, against its OWN limit.
 
     Caliber, stated because a number without it is not a reading:
@@ -204,12 +206,18 @@ def run_static(task: str, settle_s: float, window_s: float) -> dict:
     * divisor = the joint's OWN limit read back from the solver (``data.joint_effort_limits``), not the
       group cfg -- the per-joint convention the gait probe adopted after one group-wide value was found
       scoring hip joints against the foot's limit (``2026-09-23-lizard2-v1-gait-skate.md`` ⑫);
-    * window = after ``settle_s`` of zero action, until the first env reset or the frame the base drops
-      below half the settled height. A fallen or just-reset frame is not a stance, and averaging one in
-      would report a load no stance ever carried;
+    * settle = step until BOTH the body has stopped descending (its height moves less than 1e-4 m over
+      five frames, minimum 10 frames) AND the fastest joint is slower than ``settle_vel`` [rad/s], with
+      ``settle_s`` as the CAP. Joint speed alone is NOT a settle criterion and was tried first: on frame
+      1 every joint is slower than the tolerance because nothing has moved yet, so the window opens
+      while the body is still falling from its spawn height -- the report carries the steps taken, the
+      speed and the height, which is what makes that visible instead of silent;
+    * window = after that, until the first env reset or the frame the base drops below half the settled
+      height. A fallen or just-reset frame is not a stance, and averaging one in would report a load no
+      stance ever carried;
     * the counter is ``pd_estimate_over_limit_frac``, NOT "saturation": an estimate crossing the limit
       is not the solver clipping. ``applied_torque`` is structurally zero for implicit drives and the
-      clip happens inside the solver, so the crossing is a hypothesis about clamping, not a reading of it.
+      clip happens inside the solver, so the crossing is a hypothesis about clamping, not a reading.
 
     What it is for: the load floor. It says how much of the budget a standing robot spends, not what a
     gait at speed needs -- a static reading cannot answer the command window's question.
@@ -221,8 +229,16 @@ def run_static(task: str, settle_s: float, window_s: float) -> dict:
     limits = [float(v) for v in robot.data.joint_effort_limits.torch[0]]
     dt = float(env.unwrapped.step_dt)
     zero = torch.zeros((1, action_map(env)[1]), device=robot.device)
-    for _ in range(max(20, int(settle_s / dt))):
+    settle_steps, cap, quiet = 0, max(20, int(settle_s / dt)), float("inf")
+    heights: list[float] = []
+    while settle_steps < cap:
         env.step(zero)
+        settle_steps += 1
+        quiet = float(robot.data.joint_vel.torch[0].abs().max())
+        heights.append(float(robot.data.root_pos_w.torch[0, 2]))
+        landed = len(heights) > 10 and max(heights[-5:]) - min(heights[-5:]) < 1e-4
+        if landed and quiet < settle_vel:
+            break
     height0 = float(robot.data.root_pos_w.torch[0, 2])
 
     samples = {index: [] for index in range(len(names))}
@@ -244,34 +260,39 @@ def run_static(task: str, settle_s: float, window_s: float) -> dict:
             samples[index].append(abs(float(torque[index])))
 
     rows = []
-    print(f"\n=== layer 3 STATIC: gravity on, zero action, {frames} frame(s) after {settle_s:.1f}s settle ===")
-    print(f"  (settled base height {height0:.4f} m; {stop}; estimate {('Kp*(q*-q) - Kd*qd')})")
+    print(f"\n=== layer 3 STATIC: gravity on, zero action, {frames} frame(s) measured ===")
+    print(f"  settle: {settle_steps}/{cap} step(s) of the {settle_s:.1f}s cap; fastest joint "
+          f"{quiet:.4f} rad/s at that point (tol {settle_vel}); settled base height {height0:.4f} m")
+    print(f"  ({stop}; estimate {('Kp*(q*-q) - Kd*qd')})")
     print("  zero action = the DEFAULT joint targets held by PD: a posture, not a trained policy, and")
     print("  not a gait -- a joint with no budget left here still has to be asked by something.")
-    print("  joint                group    p50_nm  max_nm  limit_nm  frac_of_limit_p50  pd_est_over_limit_frac")
+    print("  joint                group    p50_nm  p95_nm  max_nm  limit_nm  frac_of_limit_p50  pd_est_over_limit_frac")
     groups: dict[str, list[float]] = {}
     for index, name in enumerate(names):
         values = sorted(samples[index])
         if not values:
             continue
         p50 = values[len(values) // 2]
+        p95 = values[min(len(values) - 1, int(0.95 * len(values)))]
         limit = limits[index]
         frac = p50 / limit if limit else float("nan")
         over = sum(1 for value in values if value >= limit) / len(values)
         group = next((key for key, actuator in robot.actuators.items() if index in actuator.joint_indices),
                      "<none>")
         groups.setdefault(group, []).append(frac)
-        rows.append({"joint": name, "group": group, "p50_nm": p50, "max_nm": values[-1],
-                     "effort_limit_nm": limit, "frac_of_limit_p50": frac, "pd_estimate_over_limit_frac": over})
-        print(f"  {name:20s} {group:8s} {p50:7.2f} {values[-1]:7.2f} {limit:9.0f} "
+        rows.append({"joint": name, "group": group, "p50_nm": p50, "p95_nm": p95, "max_nm": values[-1],
+                     "effort_limit_nm": limit, "frac_of_limit_p50": frac,
+                     "pd_estimate_over_limit_frac": over})
+        print(f"  {name:20s} {group:8s} {p50:7.2f} {p95:7.2f} {values[-1]:7.2f} {limit:9.0f} "
               f"{frac:18.3f} {over:21.3f}")
     for group, fracs in groups.items():
         print(f"  {group:8s} worst frac_of_limit_p50 = {max(fracs):.3f} over {len(fracs)} joint(s)")
     print("  scope: a stance is not a gait. This is a load FLOOR, and 'estimate over limit' is not")
     print("         'the solver clamped' -- see the caliber in run_static's docstring.")
     env.close()
-    return {"task": task, "frames": frames, "settle_s": settle_s, "stop": stop,
-            "base_height_m": height0, "joints": rows}
+    return {"task": task, "frames": frames, "settle_s": settle_s, "settle_steps": settle_steps,
+            "settle_cap_steps": cap, "settle_vel_tol": settle_vel, "settle_fastest_rad_s": quiet,
+            "stop": stop, "base_height_m": height0, "joints": rows}
 
 
 def action_map(env):
@@ -412,7 +433,7 @@ print("        number is not convertible into a speed ceiling; and no velocity l
 probe.close()
 
 if args_cli.static_only:
-    measurement = run_static(args_cli.task, args_cli.static_settle, args_cli.static_s)
+    measurement = run_static(args_cli.task, args_cli.static_settle, args_cli.static_s, args_cli.static_vel)
     if args_cli.json:
         pathlib.Path(args_cli.json).write_text(json.dumps(measurement, ensure_ascii=False, indent=1) + "\n",
                                               encoding="utf-8")
@@ -443,7 +464,7 @@ print(f"LOADED: best paddle {fastest['freq_hz']:.2f} Hz -> {fastest['mean_forwar
 print("ceiling: a paddle is not a gait (no lift, no duty, no body work), so this is a LOWER bound; and")
 print("'paddle speed < window top' is not yet a verdict about any trained policy.")
 
-static = run_static(args_cli.task, args_cli.static_settle, args_cli.static_s)
+static = run_static(args_cli.task, args_cli.static_settle, args_cli.static_s, args_cli.static_vel)
 
 if args_cli.json:
     pathlib.Path(args_cli.json).write_text(json.dumps(

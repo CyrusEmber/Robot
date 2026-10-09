@@ -446,6 +446,18 @@ def load_case_angles(chain: list[dict]) -> dict[str, list[float]]:
             angles = [0.0] * len(chain)
             angles[index] = angle
             cases[f"{joint['token']}-{label}"] = angles
+    # The corners and the one multi-joint pose the mechanism actually lives in. A coordinate sweep can
+    # miss a joint whose load is set by ANOTHER joint's angle being off zero (the levers are shared), so
+    # the two same-sign corners are here, plus the pinched leg: knee at its fold end AND ankle at its own
+    # limit together, which is the pose a folded stroke is in and neither single-joint case reaches.
+    for label, take in (("all-lo", 0), ("all-hi", 1)):
+        cases[label] = [joint["limits"][take] for joint in chain]
+    folded = [0.0] * len(chain)
+    fold_side = 0 if straight_hfe(chain) > 0 else 1
+    for index, joint in enumerate(chain):
+        if joint["token"] in ("hfe", "kfe"):
+            folded[index] = joint["limits"][fold_side]
+    cases["fold"] = folded
     return cases
 
 
