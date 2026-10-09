@@ -55,12 +55,22 @@ What it reports, and what it cannot:
   below the tolerance, so the cap normally fires and the window is a micro-motion window. Caliber in
   :func:`run_static`.
 
+* **init-dist limit occupancy** (``--init-dist``): no checkpoint and no policy -- the action is
+  ``sigma * N(0, 1)`` per channel (the actor's own t=0 distribution, ``sigma`` off the task's runner
+  cfg), held for a dwell and redrawn, and the report says how often each joint actually SITS on a
+  position stop and how often the command asked past it. Caliber in :func:`run_init_dist`. It exists
+  because the at-stop reading a trained policy gives (``gait_probe.py``) needs a checkpoint, so before
+  the first run nothing else shows whether the initial distribution presses joints into walls; and
+  because the random-action probe that does exist (``baseline_probe.py --random-actions``) draws
+  UNIFORM actions, which at this recipe's scales cannot reach a stop at all.
+
 Usage (from the repo root):
 
     python rl_exp/tools/verify/check_actuator_budget.py --task Lizard2-Flat-Play-v1
     python rl_exp/tools/verify/check_actuator_budget.py --task Lizard2-Flat-Play-v1 --json <report>
     python rl_exp/tools/verify/check_actuator_budget.py --task Lizard2-Flat-Play-v1 --drive-audit
     python rl_exp/tools/verify/check_actuator_budget.py --task Lizard2-Flat-Play-v1 --static-only
+    python rl_exp/tools/verify/check_actuator_budget.py --task Lizard2-Flat-v3 --init-dist
 
 Exit code is 0: this is a measurement that feeds the plan, not a pass/fail gate.
 """
@@ -70,6 +80,7 @@ import json
 import math
 import pathlib
 import sys
+import time
 
 from isaaclab.app import AppLauncher
 
@@ -93,6 +104,19 @@ parser.add_argument("--inertia", type=float, default=1.57,
 parser.add_argument("--drive-audit", action="store_true",
                     help="skip the sweep: compare what each actuator declared against what the solver "
                          "holds per joint (the PhysX readback), and exit")
+parser.add_argument("--init-dist", action="store_true",
+                    help="skip the sweep: run the actor's own initialisation distribution and report "
+                         "how often each joint sits on a position stop, then exit")
+parser.add_argument("--init-dwells", type=int, nargs="*", default=[1, 4, 20],
+                    help="control steps each action sample is held for, one pass each")
+parser.add_argument("--init-frames", type=int, default=1000,
+                    help="measured frames to collect per dwell (fallen/reset frames do not count)")
+parser.add_argument("--init-envs", type=int, default=16,
+                    help="parallel envs to pool frames over: one step yields one frame per env")
+parser.add_argument("--init-band", type=float, default=0.01,
+                    help="distance to a stop that counts as sitting on it [rad]")
+parser.add_argument("--init-sigma", type=float, default=None,
+                    help="override the exploration std read off the task's runner cfg")
 parser.add_argument("--json", help="write the measured curve here")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
@@ -105,9 +129,9 @@ import isaaclab_tasks  # noqa: F401,E402
 from isaaclab.utils.string import string_to_callable  # noqa: E402
 
 
-def build(task: str, gravity_off: bool):
+def build(task: str, gravity_off: bool, num_envs: int = 1):
     cfg = string_to_callable(gym.spec(task).kwargs["env_cfg_entry_point"])()
-    cfg.scene.num_envs = 1
+    cfg.scene.num_envs = num_envs
     if gravity_off:
         cfg.sim.gravity = (0.0, 0.0, 0.0)
     return gym.make(task, cfg=cfg)
@@ -317,6 +341,209 @@ def run_static(task: str, settle_s: float, window_s: float, settle_vel: float) -
             "stop": stop, "base_height_m": height0, "joints": rows}
 
 
+def init_sigma(task: str, override: float | None) -> tuple[float, str]:
+    """The exploration std the actor is initialised with, and which cfg leaf answered.
+
+    The same two leaves ``action_range_check.py`` reads -- new-style ``actor.distribution_cfg.init_std``
+    then ``policy.init_noise_std``. A second spelling of one convention, kept here because that tool
+    parses argv at import and so cannot be imported: both tools PRINT the leaf that answered, so the
+    two disagreeing about sigma shows up in the readings instead of staying silent. A third caller
+    means this becomes a module they all import.
+    """
+    if override is not None:
+        return float(override), "--init-sigma override"
+    runner = string_to_callable(gym.spec(task).kwargs["rsl_rl_cfg_entry_point"])()
+    distribution = getattr(getattr(runner, "actor", None), "distribution_cfg", None)
+    sigma = getattr(distribution, "init_std", None)
+    leaf = "runner cfg: actor.distribution_cfg.init_std"
+    if sigma is None:
+        sigma = getattr(getattr(runner, "policy", None), "init_noise_std", None)
+        leaf = "runner cfg: policy.init_noise_std"
+    if sigma is None:
+        raise SystemExit("no exploration std found on the task's runner cfg -- pass --init-sigma")
+    return float(sigma), leaf
+
+
+def run_init_dist(task: str, dwells: list[int], frames_wanted: int, band: float,
+                  sigma_override: float | None, envs: int) -> dict:
+    """Sample the actor's OWN initialisation distribution, hold it, and ask where the joints end up.
+
+    Caliber, stated because the number means nothing without it:
+
+    * the action is ``sigma * N(0, 1)`` per channel -- the actor's t=0 distribution -- turned into a
+      position target by the ENV's own action term; the target is read back
+      (``data.joint_pos_target``) rather than reconstructed from the yaml, so the offset/scale
+      convention cannot differ from the one training uses;
+    * a sample is HELD for ``dwell_steps`` control steps and then redrawn, because the real actor is
+      temporally correlated. A joint cannot be pinned by a reference redrawn before it can travel
+      there, so the dwell is the parameter this reading is sensitive to, and the sweep is how that
+      sensitivity is reported instead of hidden behind one arbitrary choice;
+    * at-stop = ``min(|q - low|, |high - q|) < band`` against the SIM's hard position limits
+      (``data.joint_pos_limits``) -- the same expression ``gait_probe.py`` uses (band 0.01 there), and
+      both limits are exported per joint so a reader is not guessing which stop was read;
+    * ``pressed_frac`` = the frames where the joint is at the stop AND the target is still beyond it:
+      "sitting on a wall the drive keeps pushing into" is not "grazing the wall on the way past", and
+      the out-of-range fraction alone cannot tell the two apart;
+    * ``target_outside_frac`` is the command side -- the same quantity ``action_range_check.py``
+      computes offline as ``p_out``, so the two are a cross-check on each other;
+    * the window keeps only measured frames: post-reset frames and frames below half the spawn height
+      are dropped, because a body on the floor has its joints moved by the floor and not by the drive.
+      That height rule catches a COLLAPSE and not a nose-dive (a termination on head contact happens
+      with the base still around 0.7 m), so ``pressed_frac`` is the column that separates the drive
+      from the posture, and ``episodes_ended`` / ``frames_dropped_below_half_spawn`` are printed to
+      show how much of the window sits near a termination at all;
+    * frames are POOLED over ``--init-envs`` parallel envs -- one step yields one frame per env, which
+      is the only reason this reads fast enough to be worth running -- so a "frame" is an env-frame and
+      a held sample makes neighbouring frames of one env correlated. Each dwell prints the
+      frame/dwell count, which is what bounds the variance of a fraction;
+    * what it cannot say: what the trained policy does (this is t=0, and the std is a learnable
+      parameter, so it moves), anything about behaviour at speed, and anything about the effort side --
+      an at-stop reading from a trained policy is a different quantity
+      (``acceptance/records/2026-09-22-lizard2-stride-at-load.md``), and so is
+      ``pd_estimate_over_limit_frac`` in :func:`run_static`.
+    """
+    sigma, leaf = init_sigma(task, sigma_override)
+    env = build(task, gravity_off=False, num_envs=envs)
+    env.reset()
+    robot = env.unwrapped.scene["robot"]
+    names = list(robot.joint_names)
+    mapping, dim = action_map(env)
+    dt = float(env.unwrapped.step_dt)
+    hard = robot.data.joint_pos_limits.torch[0]
+    soft = robot.data.soft_joint_pos_limits.torch[0]
+    low, high = hard[:, 0].unsqueeze(0), hard[:, 1].unsqueeze(0)  # (1, J), broadcast over envs
+    commanded = [index for index, name in enumerate(names) if name in mapping]
+    group_of: dict[int, str] = {}
+    for key, actuator in robot.actuators.items():
+        for index in actuator.joint_indices:
+            group_of[int(index)] = key
+    spawn_z = robot.data.root_pos_w.torch[:, 2].clone()  # (N,) per env: a reset re-spawns
+
+    print("\n=== layer 4 INIT-DIST: the actor's own initialisation distribution, no policy, no checkpoint ===")
+    print(f"  action = {sigma:g} * N(0,1) per channel ({leaf}); held for the dwell, then redrawn "
+          f"(seed 0, so a")
+    print(f"           report's sample path is repeatable); {envs} env(s), one action row each")
+    print(f"  at-stop = min(|q-low|, |high-q|) < {band:g} rad on the sim's hard position limits")
+    print(f"  window: measured frames only -- post-reset frames, and frames below half that env's spawn "
+          f"height")
+    print(f"          (spawn z {float(spawn_z.min()):.4f}-{float(spawn_z.max()):.4f} m), are dropped")
+    print(f"  measured-frame target {frames_wanted} per dwell; {len(commanded)} commanded joint(s)")
+    differ = [names[i] for i in range(len(names))
+              if abs(float(soft[i, 0]) - float(hard[i, 0])) > 1e-9
+              or abs(float(soft[i, 1]) - float(hard[i, 1])) > 1e-9]
+    print(f"  soft limits differing from the hard ones: {len(differ)} joint(s)"
+          + (f" (e.g. {', '.join(differ[:3])}: at-stop is read on the HARD stop, the one the solver "
+             f"holds)" if differ else ""))
+
+    reports = []
+    by_group: dict[str, list[int]] = {}
+    for index in commanded:
+        by_group.setdefault(group_of.get(index, "<none>"), []).append(index)
+    for dwell in dwells:
+        env.reset()
+        spawn_z = robot.data.root_pos_w.torch[:, 2].clone()
+        gen = torch.Generator().manual_seed(0)
+        action = torch.zeros((envs, dim), device=robot.device)
+        # Per GROUP, not one number over all 22 channels: the spine hangs on its stops by gravity
+        # (the chest/tail chain carries mass) while a hip only gets there when it is commanded there,
+        # and a single "any channel at a stop" fraction would report the first phenomenon as if it were
+        # the second -- which is the question being asked.
+        group_any = {group: 0 for group in by_group}
+        stops = torch.zeros(len(names), dtype=torch.long)
+        entries = torch.zeros(len(names), dtype=torch.long)
+        pressed = torch.zeros(len(names), dtype=torch.long)
+        outsides = torch.zeros(len(names), dtype=torch.long)
+        previous = env.unwrapped.episode_length_buf.clone()
+        prev_stop = torch.zeros((envs, len(names)), dtype=torch.bool, device=robot.device)
+        # A run of frames at a stop has to be counted per env -- pooling the frames of 16 envs into one
+        # sequence would make "consecutive" mean "adjacent in the report". ``prev_stop`` carries each
+        # env's own previous frame, and a dropped frame starts a new run.
+        steps, samples, episodes, dropped, measured = 0, 0, 0, 0, 0
+        budget = max(4, frames_wanted * 4)
+        started = time.perf_counter()
+        while measured < frames_wanted and steps < budget:
+            steps += 1
+            if (steps - 1) % dwell == 0:
+                action = (sigma * torch.randn((envs, dim), generator=gen)).to(robot.device)
+                samples += 1
+            env.step(action)
+            buf = env.unwrapped.episode_length_buf
+            resets = buf < previous
+            episodes += int(resets.sum())
+            previous = buf.clone()
+            height = robot.data.root_pos_w.torch[:, 2]
+            spawn_z = torch.where(resets, height, spawn_z)
+            alive = (~resets) & (buf > 1)
+            keep = alive & (height > 0.5 * spawn_z)
+            dropped += int((alive & ~keep).sum())
+            position, target = robot.data.joint_pos.torch, robot.data.joint_pos_target.torch
+            stop = torch.minimum(position - low, high - position).abs() < band
+            beyond = (target < low) | (target > high)
+            if bool(keep.any()):
+                stops += stop[keep].sum(dim=0).cpu()
+                entries += (stop & ~prev_stop)[keep].sum(dim=0).cpu()
+                pressed += (stop & beyond)[keep].sum(dim=0).cpu()
+                outsides += beyond[keep].sum(dim=0).cpu()
+                for group, indices in by_group.items():
+                    group_any[group] += int(stop[keep][:, indices].any(dim=1).sum())
+                measured += int(keep.sum())
+            prev_stop = torch.where(keep.unsqueeze(1), stop, torch.zeros_like(stop))
+
+        rows = []
+        for index, name in enumerate(names):
+            stopped, entered = int(stops[index]), int(entries[index])
+            rows.append({
+                "joint": name, "group": group_of.get(index), "commanded": index in commanded,
+                "limit_low_rad": float(hard[index, 0]), "limit_high_rad": float(hard[index, 1]),
+                "at_stop_frac": (stopped / measured) if measured else float("nan"),
+                "at_stop_entries": entered,
+                "at_stop_mean_run_frames": (stopped / entered) if entered else 0.0,
+                "pressed_frac": (int(pressed[index]) / measured) if measured else float("nan"),
+                "target_outside_frac": (int(outsides[index]) / measured) if measured else float("nan"),
+            })
+        rows.sort(key=lambda row: -row["at_stop_frac"])
+        independent = (measured / dwell) if dwell else float(measured)
+        elapsed = time.perf_counter() - started
+        print(f"\n  -- dwell {dwell} control step(s) = {dwell * dt:.2f} s: {measured} measured frame(s) "
+              f"pooled over {envs} env(s), {samples} action sample(s), {episodes} episode(s) ended, "
+              f"{dropped} frame(s) dropped below half the spawn height")
+        print(f"     {steps} step(s) in {elapsed:.1f}s ({steps / max(elapsed, 1e-9):.0f} steps/s): the "
+              f"cost is steps, so frames-per-step is the lever, not patience")
+        print(f"     ~{independent:.0f} independent sample(s) (frames/dwell): a HELD action makes "
+              f"neighbouring frames correlated, so this -- not the frame count -- bounds the variance")
+        for group, count in group_any.items():
+            share = (count / measured) if measured else float("nan")
+            print(f"     frames with >=1 {group} channel at a stop: {share:.3f}")
+        print("     joint                group    at_stop  mean_run  entries  pressed  target_outside   limits")
+        shown = [row for row in rows if row["at_stop_frac"] > 0
+                 or any(tag in row["joint"] for tag in ("hip", "haa", "hfe"))]
+        for row in shown:
+            print(f"     {row['joint']:<20} {row['group'] or '-':<8} {row['at_stop_frac']:7.3f} "
+                  f"{row['at_stop_mean_run_frames']:9.2f} {row['at_stop_entries']:8d} "
+                  f"{row['pressed_frac']:8.3f} {row['target_outside_frac']:15.3e}  "
+                  f"[{row['limit_low_rad']:+.3f},{row['limit_high_rad']:+.3f}]")
+        rest = [row for row in rows if row not in shown]
+        untouched = [row["joint"] for row in rest if row["target_outside_frac"] == 0.0]
+        print(f"     never at a stop and never commanded past one: {len(untouched)}/{len(names)} "
+              f"joint(s)" + (f" -- {', '.join(untouched[:4])}..." if len(untouched) > 4 else
+                             (f" -- {', '.join(untouched)}" if untouched else "")))
+        reports.append({
+            "dwell_steps": dwell, "dwell_s": dwell * dt, "measured_frames": measured,
+            "action_samples": samples, "independent_samples_estimate": independent,
+            "episodes_ended": episodes, "frames_dropped_below_half_spawn": dropped,
+            "steps_taken": steps, "budget_steps": budget,
+            "wall_seconds": round(elapsed, 1),
+            "frames_any_channel_at_stop_frac_by_group": {
+                group: (count / measured) if measured else None for group, count in group_any.items()},
+            "joints": rows,
+        })
+    env.close()
+    print("\n  scope: t=0 distribution, no policy, no checkpoint. The std is a learnable parameter, so")
+    print("         this is not the whole run; a trained-policy at-stop reading is another quantity.")
+    return {"task": task, "sigma": sigma, "sigma_source": leaf, "at_stop_band_rad": band,
+            "envs": envs, "dwells": reports}
+
+
 def action_map(env):
     """``joint -> (action index, scale)`` for the deployed interface."""
     am = env.unwrapped.action_manager
@@ -440,6 +667,16 @@ if args_cli.drive_audit:
                                               encoding="utf-8")
         print(f"report written: {args_cli.json}")
     print("DRIVE_AUDIT_MEASURED")
+    sys.exit(0)
+
+if args_cli.init_dist:
+    occupancy = run_init_dist(args_cli.task, args_cli.init_dwells, args_cli.init_frames,
+                              args_cli.init_band, args_cli.init_sigma, args_cli.init_envs)
+    if args_cli.json:
+        pathlib.Path(args_cli.json).write_text(json.dumps(occupancy, ensure_ascii=False, indent=1) + "\n",
+                                              encoding="utf-8")
+        print(f"report written: {args_cli.json}")
+    print("INIT_DIST_MEASURED")
     sys.exit(0)
 
 probe = build(args_cli.task, gravity_off=True)
