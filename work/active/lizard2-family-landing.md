@@ -18,7 +18,7 @@ evidence: acceptance/records/2026-09-23-lizard2-v1-gait-skate, acceptance/record
 - 部署端是否接受限位外位置参考仍待核对，由 Codex 整理实际部署行为或具名缺口；历史参考越限的诊断与撤回见步态记录，不能仅据参考越限决定裁剪。物理反曲禁区按父事项 landing 的 R4 实施，不能用动作参考裁剪替代。
 - `feet_slide` / `foot_clearance` 保留为奖励候选，先统一奖励与诊断的承重口径，再决定实现与权重。脚掌接触面积/形状项的排除依据、lf 异常撤回及历史因果边界见步态记录，不在本项复述读数。
 - 姿态目标未验收时不直接新增角度监督；用户设计要求、量测结果与可训练目标的交接见父事项及状态同步记录。
-- 速度上限：yaml 里 implicit actuator 的旧 `velocity_limit` 字段不进引擎（v1/v2/v3 同款继承，读数边界见 v3 落地记录的未覆盖边界）。先出"PLAY 窗 `joint_vel` 对 URDF 自带速度上限"的读数，再决定要不要启用有效限速；"yaml 声明的字段必须与引擎采用的一致"折进已有离线闸（不新增条数，`MAX_CHECKS` 棘轮已满）。
+- 速度上限：yaml 里 implicit actuator 的旧 `velocity_limit` 字段不进引擎（v1/v2/v3 同款继承，读数边界见 v3 落地记录的未覆盖边界）。先出"PLAY 窗 `joint_vel` 对 URDF 自带速度上限"的读数，再决定要不要启用有效限速（**是否启用**是本项的决策）；"yaml 声明的字段必须与引擎采用的一致"那半条连同断言落点归 `work/active/actuator-params-audit.md`，不在这里留第二份。
 
 ## 评测协议交付
 
