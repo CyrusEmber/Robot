@@ -5,20 +5,43 @@ A gate that has never been seen to fail is not a gate. This injects each drift t
 gate claims to catch -- target missing from to_dict(), a declared field never
 reaching the instance __dict__, the class attribute becoming readable again, a
 mixed field/non-field family, the instance attribute vanishing, the field /
-non-field branch contract disagreeing, and a PLAY variant retargeting the recipe it
-belongs to -- and asserts every one of them produces a problem. Row dicts are
-shallow-copied and mutated; no config is rebuilt.
+non-field branch contract disagreeing, a PLAY variant retargeting the recipe it
+belongs to, and each way a framework-dropped `velocity_limit` can stop being
+recognisably inert -- and asserts every one of them produces a problem. Row dicts
+are shallow-copied and mutated; no config is rebuilt.
 """
 
 import sys
+import types
 
 sys.path.insert(0, ".")
 sys.path.insert(0, "rl_exp/tools/verify")
 import check_configclass_fields as g
 
+from isaaclab.actuators import ImplicitActuatorCfg
+
 rows: dict[str, dict] = {}
 TARGET = "LizardRoughTeacherEnvCfg_V14"
 PLAY_TARGET = "LizardRoughTeacherEnvCfg_V14_PLAY"
+
+
+def _synthetic(*, stub: tuple[str, ...] = (), **groups) -> dict:
+    """A row carrying the caller's actuator groups, so a mutation cannot touch a real cfg.
+
+    The other cases mutate a row *dict*; this claim reads the constructed cfg, and mutating a real
+    one would leave the drift in place for every later case and for the gate's own run. The groups
+    are real ``ImplicitActuatorCfg`` objects unless named in ``stub``, which is how the one case that
+    is about the actuator *kind* isolates itself: a stub fires that branch and nothing else.
+    """
+    actuators = {}
+    for group, (value, simulated) in groups.items():
+        if group in stub:
+            actuators[group] = types.SimpleNamespace(velocity_limit=value, velocity_limit_sim=simulated)
+        else:
+            actuators[group] = ImplicitActuatorCfg(joint_names_expr=[".*"], stiffness=1.0, damping=1.0,
+                                                   velocity_limit=value, velocity_limit_sim=simulated)
+    robot = types.SimpleNamespace(actuators=actuators)
+    return {"instance": types.SimpleNamespace(scene=types.SimpleNamespace(robot=robot))}
 
 
 def _snapshot() -> dict[str, dict]:
@@ -59,6 +82,16 @@ def main(probed_rows: dict[str, dict] | None = None) -> int:
         # the PLAY variant is paired with its train class by name: the rule that used to be read off
         # the MRO. Moving it without a falsifier is exactly how a rule stops being one.
         _fires(lambda r: r[PLAY_TARGET].update(value="v99"), g._check_play_inheritance, "play retarget    "),
+        # The inert velocity declaration: four ways out of the pinned state, one case each, so a
+        # case cannot pass on a branch that belongs to a different one.
+        _fires(lambda r: r.update(synthetic=_synthetic(tail=(4.0, None))),
+               g._check_inert_velocity_limits, "unreviewed group "),
+        _fires(lambda r: r.update(synthetic=_synthetic(legs=(8.0, None))),
+               g._check_inert_velocity_limits, "value moved      "),
+        _fires(lambda r: r.update(synthetic=_synthetic(legs=(10.0, 8.0))),
+               g._check_inert_velocity_limits, "sim cap enabled  "),
+        _fires(lambda r: r.update(synthetic=_synthetic(legs=(10.0, None), stub=("legs",))),
+               g._check_inert_velocity_limits, "actuator honours "),
     ])
     print("CONFIGCLASS_FIELDS_GATE_FALSIFIABLE" if ok else "CONFIGCLASS_FIELDS_GATE_SILENT")
     return 0 if ok else 1

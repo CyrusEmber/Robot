@@ -26,6 +26,10 @@ guess, and fails if the surface drifts.
 
 No sim: constructs configs only, same footing as ``check_obs_layout.py``.
 
+The same construction also answers a second field-surface question the params_version one does not:
+a field can exist, be honoured nowhere, and still read as a knob. What this repo declares of that
+kind is pinned below (``INERT_VELOCITY_LIMITS``).
+
 Which classes it is about is part of the claim: every configclass a *registered task* resolves to
 -- resolved name by name through the identity map, because ``recipe_tasks`` builds them on demand
 -- plus the wiring classes that carry the field. The exports are cross-checked against the map in
@@ -46,11 +50,26 @@ sys.path.insert(0, str(_REPO))
 
 import yaml  # noqa: E402
 
+from isaaclab.actuators import ImplicitActuatorCfg  # noqa: E402
+
 import rl_exp.tasks as _tasks_pkg  # noqa: E402
 
 TARGET = "params_version"
 TASKS_MODULE = "rl_exp.tasks.recipe_tasks"
 RECIPES_JSON = _REPO / "rl_exp" / "versions" / "recipes.json"
+
+#: The velocity declaration that the framework accepts and then throws away for implicit actuators.
+#:
+#: ``ImplicitActuatorCfg`` cannot be built with ``velocity_limit`` alone: the actuator's own
+#: constructor warns and deletes the field, and only ``velocity_limit_sim`` reaches the drive
+#: (``isaaclab/actuators/actuator_pd.py``). So the values every recipe declares -- legs 10, feet 6,
+#: spine 4 rad/s -- are physics-inert: they read as a speed cap and cap nothing. They stay because
+#: they are inherited from the line roots and because enabling a real cap *is* a physics change
+#: (``work/active/lizard2-family-landing.md``), not a rename. What is pinned here is therefore the
+#: inert state itself: which groups declare one, at which values, with ``velocity_limit_sim`` absent
+#: and the actuator still implicit. Any of the four moving is a decision, not an edit -- and the day
+#: one moves silently, this is what says so instead of a reader.
+INERT_VELOCITY_LIMITS: dict[str, float] = {"legs": 10.0, "feet": 6.0, "spine": 4.0}
 
 
 def _declared_entries() -> list[tuple[str, str]]:
@@ -258,6 +277,49 @@ def _check_branch(rows: dict[str, dict], problems: list[str]) -> None:
                 )
 
 
+def _check_inert_velocity_limits(rows: dict[str, dict], problems: list[str]) -> None:
+    """A declaration the framework drops must stay recognisable as one (see the constant above).
+
+    The subject is every robot env cfg this gate resolves, so a new line or version that copies the
+    field forward is covered the moment it is registered rather than when someone notices it. Four
+    ways to leave the pinned state, four separate messages: a group nobody reviewed, a value nobody
+    reviewed, ``velocity_limit_sim`` present (which does reach the drive), and an actuator that is no
+    longer implicit (which would make the same field effective). They are reported apart because the
+    fix differs -- only the last two change physics.
+    """
+    for name, p in rows.items():
+        actuators = getattr(getattr(getattr(p["instance"], "scene", None), "robot", None), "actuators", None)
+        if not actuators:
+            continue
+        for group in sorted(actuators):
+            cfg = actuators[group]
+            declared = getattr(cfg, "velocity_limit", None)
+            simulated = getattr(cfg, "velocity_limit_sim", None)
+            if declared is None and simulated is None:
+                continue
+            if not isinstance(cfg, ImplicitActuatorCfg):
+                problems.append(
+                    f"{name}.{group}: {type(cfg).__name__} honours `velocity_limit`, so this "
+                    f"declaration is no longer inert -- it is a physics knob and needs a version"
+                )
+            if simulated is not None:
+                problems.append(
+                    f"{name}.{group}: `velocity_limit_sim={simulated}` reaches the drive; a real cap "
+                    f"is a physics change (new recipe version), not a value in this pin"
+                )
+            if group not in INERT_VELOCITY_LIMITS:
+                problems.append(
+                    f"{name}.{group}: declares `velocity_limit={declared}`, which no reviewed group "
+                    f"does (pinned: {INERT_VELOCITY_LIMITS}); it caps nothing, so say why it is there"
+                )
+            elif declared != INERT_VELOCITY_LIMITS[group]:
+                problems.append(
+                    f"{name}.{group}: `velocity_limit={declared}` moves off the pinned inert value "
+                    f"{INERT_VELOCITY_LIMITS[group]}; the field enforces nothing, so the change is "
+                    f"either a physics decision or a declaration to delete"
+                )
+
+
 def _check_play_inheritance(rows: dict[str, dict], problems: list[str]) -> None:
     """PLAY variants must not retarget the params line they belong to.
 
@@ -340,6 +402,7 @@ def main() -> int:
     _check_shape(rows, problems)
     _check_branch(rows, problems)
     _check_play_inheritance(rows, problems)
+    _check_inert_velocity_limits(rows, problems)
 
     if args.json is not None:
         surface = {
