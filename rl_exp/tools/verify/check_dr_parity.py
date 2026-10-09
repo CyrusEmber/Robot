@@ -30,7 +30,7 @@ Six checks, all machine-readable, all fail under --strict:
    the urdf column is not the winning value wherever a group claims the joint -- but "covered" is a
    statement about the yaml, not about the built env). The divergence between the urdf column and the
    cfg value is therefore PRINTED, not gated: whether the two numbers ought to agree needs a torque
-   requirement no line has declared yet (``work/active/actuator-params-audit.md``).
+   requirement no line has declared yet (``work/closed/2026/actuator-params-audit.md``).
 6. asset lock: each ``versions/<line>/vN/asset_lock.json`` pins sha256 of its family's urdf,
    the compiled usda, every mesh under ``meshes/**``, and the version's OWN
    frozen yaml. Frozen yamls pin the usd PATH, not its CONTENT, so an in-place
@@ -480,7 +480,7 @@ def check_asset_contract() -> list[str]:
               f"joint(s); the urdf's own limit differs from the value the cfg hands the solver on "
               f"{counts['urdf_differs']} joint-column(s), and {counts['velocity_declared']} declared "
               f"velocity_limit(s) never reach it -- the urdf column is READOUT, not the winner, and why "
-              f"the two should agree is still open (work/active/actuator-params-audit.md)")
+              f"the two should agree is still open (work/closed/2026/actuator-params-audit.md)")
     return problems
 
 

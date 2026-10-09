@@ -46,7 +46,7 @@ What it reports, and what it cannot:
   ``get_dof_stiffnesses`` / ``get_dof_dampings`` / ``get_dof_max_forces`` / ``get_dof_max_velocities``
   view when the data buffers are built, i.e. after the cfg was handed over). It answers "did the declared
   value become the solver's value" -- per joint, not per group -- which the yaml-side coverage gate
-  cannot (``work/active/actuator-params-audit.md``).
+  cannot (``work/closed/2026/actuator-params-audit.md``).
 
 * **static load** (``--static-only``): gravity on, ZERO action -- the robot holds its default joint
   targets, which is a posture, not a policy. Reports per joint the PD-estimate magnitude against that

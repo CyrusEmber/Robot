@@ -2,7 +2,7 @@
 
 ## 适用范围
 
-`work/active/actuator-params-audit.md` 的 `next` ④：量"站住要花掉多少力预算"，作为**承重下限**。零动作
+`work/closed/2026/actuator-params-audit.md` 当时列的第 ④ 项：量"站住要花掉多少力预算"，作为**承重下限**。零动作
 （策略不参与）、重力开、默认关节目标，逐关节对自己的求解器侧限幅取占用率。不改资产、配方、限位；不训练。
 
 被读对象：`Lizard2-Flat-Play-v3`（30 关节，单环境，`num_envs=1`）。
@@ -82,7 +82,7 @@
 
 ## 证据引用
 
-- 事项与判据：`work/active/actuator-params-audit.md`。
+- 事项与判据：`work/closed/2026/actuator-params-audit.md`。
 - 同轮驱动读回（声明值 vs 求解器持有值）：`acceptance/records/2026-10-09-lizard2-drive-readback-audit.md`。
 - 逐关节占用口径的来处（含一次组内单键覆盖的真错）：`acceptance/records/2026-09-23-lizard2-v1-gait-skate.md`（⑫）。
 - 生效限幅与单关节跟踪能力首测：`acceptance/records/2026-09-22-lizard2-actuator-capability.md`。
@@ -95,7 +95,7 @@
 - **单次、单环境、单 seed**：未做跨 seed/跨 checkpoint 复核，未做多环境。
 - **估算不是力矩**：不含求解器隐式项，也不含接触冲量；`pd_est_over_limit_frac = 0` 只说明估算没越限。
 - 默认站姿下 `tail1_pitch` 的占用**成因未查**：占用高既可能来自默认角与几何，也可能来自抗重力保持；要分清得有
-  接触力/支撑分配读数，本轮没有。取值与是否改配置归 `work/active/actuator-params-audit.md`（改数值 = 新版本，
+  接触力/支撑分配读数，本轮没有。取值与是否改配置归 `work/closed/2026/actuator-params-audit.md`（改数值 = 新版本，
   本轮只出读数）。
 - **落定与统计量已测，边界在此**：上限 1 / 2 / 4 / 6 s 的占用一致到 <0.5%，逐关节 p95/p50 ≤ 1.06（见结果 ⑤⑥）。
   **未做**的是"接触建立时刻"作为落定判据（要接触力读数）、跨 seed 复核、p99 等更极端统计量。

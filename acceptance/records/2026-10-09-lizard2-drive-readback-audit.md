@@ -2,7 +2,7 @@
 
 ## 适用范围
 
-本轮只做一件事：把 `work/active/actuator-params-audit.md` 的 `next` ③ 落成读数——**逐关节**回答"yaml/cfg 声明的
+本轮只做一件事：把 `work/closed/2026/actuator-params-audit.md` 当时列的第 ③ 项落成读数——**逐关节**回答"yaml/cfg 声明的
 增益与上限，有没有成为求解器持有的值"。不改资产、不改配方、不动限位、不训练；结论不改任何数值。
 
 被读对象：`Lizard2-Flat-Play-v3`（采用机体 `rl_exp/lizard2_candidate/lizard2_candidate.urdf`，30 关节，单环境）。
@@ -55,7 +55,7 @@
 
 ## 证据引用
 
-- 事项与判据：`work/active/actuator-params-audit.md`。
+- 事项与判据：`work/closed/2026/actuator-params-audit.md`。
 - 生效限幅与响应曲线的首测：`acceptance/records/2026-09-22-lizard2-actuator-capability.md`。
 - 承重期逐关节饱和占用与"被裁剪拿走多少驱动"的口径：`acceptance/records/2026-09-23-lizard2-v1-gait-skate.md`（⑨–⑫）。
 - 落点代码：`rl_exp/tools/verify/check_actuator_budget.py`（`run_drive_audit` / `--drive-audit`）。

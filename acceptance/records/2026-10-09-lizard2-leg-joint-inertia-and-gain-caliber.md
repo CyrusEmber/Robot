@@ -2,7 +2,7 @@
 
 ## 适用范围
 
-补 `work/active/actuator-params-audit.md` 的 `next` ⑤ 缺的第一样：**关节轴上的有效惯量口径**，以及频率侧
+补 `work/closed/2026/actuator-params-audit.md` 当时列的第 ⑤ 项缺的第一样：**关节轴上的有效惯量口径**，以及频率侧
 口径。给出读数与判据形状，**不设阈值、不改任何增益、不动资产**。
 
 被读对象：采用机体 `rl_exp/lizard2_candidate/lizard2_candidate.urdf`（零位构型），增益取消费该机体的配方声明
@@ -112,7 +112,7 @@ foot 0.0219）。膝的两个限位给 `hip`/`haa` 的读数差 **<0.1%**，所�
 
 ## 证据引用
 
-- 事项与判据：`work/active/actuator-params-audit.md`。
+- 事项与判据：`work/closed/2026/actuator-params-audit.md`。
 - 同轮驱动读回与静站基线：`acceptance/records/2026-10-09-lizard2-drive-readback-audit.md`、
   `acceptance/records/2026-10-09-lizard2-static-load-demand.md`。
 - 跟踪能力随频率的实测（本口径的另一半问题）：`acceptance/records/2026-09-22-lizard2-actuator-capability.md`。
