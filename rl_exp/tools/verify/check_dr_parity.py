@@ -23,6 +23,14 @@ Six checks, all machine-readable, all fail under --strict:
    match a link. Only declared keys are asserted: a line is not required to carry the old family's
    recipe shape, and a line that declares no ``usd_path`` has no asset contract to check.
    Catches asset regeneration that renames/drops prims.
+   Same check, same pass: a yaml that declares an ``actuators:`` block must cover EVERY joint the
+   body's urdf limits, exactly once -- a joint no group matches keeps its urdf ``effort``/``velocity``
+   silently, and two groups claiming one joint leave the winner ambiguous. What that does NOT prove
+   is that the claimed value reached the solver (the cfg is what the implicit actuator hands over, so
+   the urdf column is not the winning value wherever a group claims the joint -- but "covered" is a
+   statement about the yaml, not about the built env). The divergence between the urdf column and the
+   cfg value is therefore PRINTED, not gated: whether the two numbers ought to agree needs a torque
+   requirement no line has declared yet (``work/active/actuator-params-audit.md``).
 6. asset lock: each ``versions/<line>/vN/asset_lock.json`` pins sha256 of its family's urdf,
    the compiled usda, every mesh under ``meshes/**``, and the version's OWN
    frozen yaml. Frozen yamls pin the usd PATH, not its CONTENT, so an in-place
@@ -339,10 +347,67 @@ def _recipe_yamls(problems: list[str]) -> list[pathlib.Path]:
     return [path for line in _recipe_lines(problems) for path in line.versions.values()]
 
 
+def _actuator_groups(text: str) -> dict[str, dict]:
+    """The yaml's ``actuators:`` block as ``{group: {"patterns": [...], <scalar key>: str}}``.
+
+    Hand-read by line, like the scalar keys above: the block is a mapping whose value is a list plus a
+    few floats, and this file carries no yaml dependency on purpose. A line that declares no
+    ``actuators:`` block returns ``{}`` -- not declaring one is not a contract, the same rule the
+    body-name lists follow.
+    """
+    start = re.search(r"^actuators:[ \t]*$", text, re.M)
+    if start is None:
+        return {}
+    rest = text[start.end():]
+    stop = re.search(r"^\S", rest, re.M)
+    block = rest[: stop.start()] if stop else rest
+    groups: dict[str, dict] = {}
+    for match in re.finditer(r"^  (\w+):[ \t]*\n((?:[ \t]{4,}.*\n|\n)*)", block, re.M):
+        body = match.group(2)
+        groups[match.group(1)] = {
+            "patterns": [item.strip().strip("\"'") for item in re.findall(r"^[ \t]+- (.+)$", body, re.M)],
+            **dict(re.findall(r"^[ \t]+(\w+): ([-\d.]+)[ \t]*$", body, re.M)),
+        }
+    return groups
+
+
+def _urdf_limits(urdf: pathlib.Path) -> dict[str, dict[str, float | None]]:
+    """Every ``<joint>`` limit the urdf carries: ``{joint: {"effort": 150.0, ...}}``.
+
+    This is the URDF's OWN column -- metadata the converter copies into the usda and the solver can be
+    handed at spawn. It is read to decide which yaml group owns each joint, and to print how far that
+    column has drifted from the value the cfg hands the solver.
+    """
+    text = urdf.read_text(encoding="utf-8", errors="ignore")
+    out: dict[str, dict[str, float | None]] = {}
+    for joint in re.finditer(r'<joint name="([^"]+)"[^>]*>(.*?)</joint>', text, re.S):
+        limit = re.search(r"<limit ([^/>]*)/>", joint.group(2))
+        if limit is None:
+            continue
+        values: dict[str, float | None] = {}
+        for key, raw in re.findall(r'(\w+)="([^"]*)"', limit.group(1)):
+            try:
+                values[key] = float(raw)
+            except ValueError:
+                values[key] = None
+        out[joint.group(1)] = values
+    return out
+
+
+def _joint_owners(groups: dict[str, dict], limits: dict[str, dict]) -> dict[str, list[str]]:
+    """Which actuator group claims each urdf joint: ``{joint: [group, ...]}``; an empty list = nobody."""
+    return {
+        joint: sorted(name for name, spec in groups.items()
+                      if any(re.search(pattern, joint) for pattern in spec["patterns"]))
+        for joint in limits
+    }
+
+
 def check_asset_contract() -> list[str]:
     problems = []
     yamls = _version_yamls(problems)
-    counts = {"asset": 0, "joint_order": 0, "body_lists": 0, "no_asset": 0}
+    counts = {"asset": 0, "joint_order": 0, "body_lists": 0, "no_asset": 0,
+              "actuators": 0, "joints": 0, "urdf_differs": 0, "velocity_declared": 0}
     for tag, path in yamls.items():
         text = path.read_text(encoding="utf-8")
         usd_rel = _yaml_scalar(text, "usd_path")
@@ -379,8 +444,43 @@ def check_asset_contract() -> list[str]:
             for pattern in patterns:
                 if not any(re.search(pattern, link) for link in links):
                     problems.append(f"{tag}: body pattern matches no link: {key}={pattern}")
+        groups = _actuator_groups(text)
+        if not groups:
+            continue  # no actuators: this yaml's contract is about prims, not about a value the solver is given
+        counts["actuators"] += 1
+        try:
+            urdf = obs_protocol.resolve_body(usd_rel, path.relative_to(_VERSIONS).parts[0], _EXP)["urdf"]
+            limits = _urdf_limits(urdf)
+        except ValueError as err:
+            problems.append(f"{tag}: declares actuators but its body's urdf is unresolvable ({err})")
+            continue
+        owners = _joint_owners(groups, limits)
+        counts["joints"] += len(owners)
+        for joint, claims in sorted(owners.items()):
+            if not claims:
+                problems.append(
+                    f"{tag}: urdf joint {joint} is claimed by no actuator group -- nothing covers it, so "
+                    "the urdf's own effort/velocity is the only value it has")
+            elif len(claims) > 1:
+                problems.append(f"{tag}: urdf joint {joint} is claimed by {claims} -- the winning group "
+                                "is ambiguous")
+        for joint, claims in owners.items():
+            if len(claims) != 1:
+                continue
+            spec = groups[claims[0]]
+            counts["velocity_declared"] += 1 if "velocity_limit" in spec else 0
+            for column, key in (("effort", "effort_limit"), ("velocity", "velocity_limit")):
+                declared, actual = spec.get(key), limits[joint].get(column)
+                if declared is not None and actual is not None and abs(float(declared) - actual) > 1e-9:
+                    counts["urdf_differs"] += 1
     print(f"  yamls checked: {len(yamls)} ({counts['asset']} declare an asset, {counts['no_asset']} do not;"
           f" {counts['joint_order']} declare joint_order, {counts['body_lists']} declare body-name lists)")
+    if counts["actuators"]:
+        print(f"  actuator blocks: {counts['actuators']} yaml(s) declare one over {counts['joints']} urdf "
+              f"joint(s); the urdf's own limit differs from the value the cfg hands the solver on "
+              f"{counts['urdf_differs']} joint-column(s), and {counts['velocity_declared']} declared "
+              f"velocity_limit(s) never reach it -- the urdf column is READOUT, not the winner, and why "
+              f"the two should agree is still open (work/active/actuator-params-audit.md)")
     return problems
 
 
@@ -800,6 +900,86 @@ def _self_test_retired_versions() -> list[str]:
             held = [p for p in check_asset_locks() if "gamma/main/v1" in p or "delta" in p]
             if held:
                 problems.append(f"a retired version was still held to its assets: {held}")
+        finally:
+            _EXP, _VERSIONS, _LINES = saved
+    return problems
+
+
+def _self_test_actuator_contract() -> list[str]:
+    """Falsify the actuator-group coverage rule, one case per way it can be wrong.
+
+    The rule exists because a yaml group is what makes the cfg value the one the solver is given: a
+    joint no group claims keeps its urdf ``effort``/``velocity`` instead, and a joint two groups claim
+    has no defined winner. Both are silent without an assertion, so both cases are fixtured here --
+    a happy-path fixture alone would only prove the regex matches when it matches.
+    """
+    problems: list[str] = []
+    with tempfile.TemporaryDirectory() as tmp:
+        root = pathlib.Path(tmp)
+        versions = root / "rl_exp" / "versions"
+        body = root / "rl_exp" / "assets" / "gamma" / "b2"
+        body.mkdir(parents=True)
+        (body / "b2.usda").write_text('def Scope "Geometry" {}\n', encoding="utf-8")
+        (versions / "gamma" / "assets.json").parent.mkdir(parents=True, exist_ok=True)
+        (versions / "gamma" / "assets.json").write_text(
+            json.dumps({"format": 1, "meshes_dir": "versions/gamma/meshes"}), encoding="utf-8")
+        (versions / "lines.json").write_text(json.dumps({"format": 1, "lines": {
+            "gamma/main": {"status": "active", "successor": None, "retired_at": None, "reason": None}}}),
+            encoding="utf-8")
+
+        def write_urdf(joints: list[str]) -> None:
+            # A urdf is a single <robot> document: resolve_body parses it, so bare <joint> elements
+            # are refused as junk after the document element.
+            (body / "b2.urdf").write_text(
+                '<robot name="gamma">\n' + "".join(
+                    f'  <joint name="{joint}" type="revolute">\n'
+                    f'    <limit lower="-1.0" upper="1.0" effort="30" velocity="6"/>\n  </joint>\n'
+                    for joint in joints) + "</robot>\n", encoding="utf-8")
+
+        def write_yaml(groups: str) -> None:
+            path = versions / "gamma" / "main" / "main_params.yaml"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("robot:\n  usd_path: assets/gamma/b2/b2.usda\n"
+                            f"actuators:\n{groups}", encoding="utf-8")
+
+        def contract() -> list[str] | None:
+            """The check's own actuator findings, or None when the fixture's tree is undiscoverable."""
+            found = check_asset_contract()
+            if any("recipe line discovery" in p or "no active line" in p for p in found):
+                return None  # an undiscoverable fixture checks nothing and would pass vacuously
+            # An unresolvable body counts as a finding: filtering it out would let a fixture that
+            # never read a urdf pass the clean case by producing no actuator findings at all.
+            return [p for p in found
+                    if "actuator group" in p or "winning group" in p or "declares actuators" in p]
+
+        covered = ("  legs:\n    joint_patterns:\n      - \".*_hip_joint\"\n"
+                   "    stiffness: 800.0\n    effort_limit: 180.0\n"
+                   "  feet:\n    joint_patterns:\n      - \".*_foot_joint\"\n"
+                   "    stiffness: 200.0\n    effort_limit: 70.0\n")
+        global _EXP, _VERSIONS, _LINES
+        saved = (_EXP, _VERSIONS, _LINES)
+        try:
+            _EXP, _VERSIONS, _LINES = root / "rl_exp", versions, versions / "lines.json"
+            write_urdf(["lf_hip_joint", "lf_foot_joint"])
+            write_yaml(covered)
+            found = contract()
+            if found is None:
+                problems.append("the actuator fixture's own tree is undiscoverable")
+            elif found:
+                problems.append(f"a fully covered urdf was reported as uncovered: {found}")
+
+            write_urdf(["lf_hip_joint", "lf_foot_joint", "lf_spare_joint"])
+            found = contract()
+            if found is None or not any("claimed by no actuator group" in p for p in found):
+                problems.append("a urdf joint no group claims was NOT reported: its body's own "
+                                "effort/velocity would win silently")
+
+            write_urdf(["lf_hip_joint", "lf_foot_joint"])
+            write_yaml(covered + "  extra:\n    joint_patterns:\n      - \".*_hip_joint\"\n"
+                                 "    stiffness: 1.0\n")
+            found = contract()
+            if found is None or not any("winning group is ambiguous" in p for p in found):
+                problems.append("a urdf joint claimed by two groups was NOT reported")
         finally:
             _EXP, _VERSIONS, _LINES = saved
     return problems
@@ -1431,6 +1611,7 @@ def main() -> int:
                                  ("lock content", _self_test_lock_content),
                                  ("body swap", _self_test_body_swap),
                                  ("retired versions", _self_test_retired_versions),
+                                 ("actuator contract", _self_test_actuator_contract),
                                  ("urdf resolution", _self_test_urdf_resolution),
                                  ("isolation", _self_test_isolation),
                                  ("swap rehearsal", _self_test_swap_rehearsal)):

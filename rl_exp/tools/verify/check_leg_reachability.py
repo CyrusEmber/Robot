@@ -80,8 +80,14 @@ import itertools
 import json
 import math
 import pathlib
+import sys
 import tempfile
 import xml.etree.ElementTree as ET
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+# ONE answer to "which actuator group owns this joint" (the parity gate's), shared rather than
+# re-implemented: the gain table below reads the same yaml block that gate asserts coverage over.
+from check_dr_parity import _actuator_groups, _joint_owners  # noqa: E402
 
 _REPO = pathlib.Path(__file__).resolve().parents[3]
 
@@ -268,6 +274,151 @@ def chain_frames(chain: list[dict], angles: list[float]):
                                                  joint.get("rpy")))
         frames.append(transform)
     return frames
+
+
+def link_inertials(urdf: pathlib.Path) -> dict[str, dict]:
+    """Each link's own mass properties, in the LINK's own frame: ``{link: {"mass", "com", "tensor"}}``.
+
+    Read straight off ``<inertial>`` (``origin``/``mass``/``ixx``..``iyz``). A link with no ``<inertial>``
+    gets zero mass -- the massless link, not a substituted one.
+    """
+    out = {}
+    for link in ET.parse(urdf).getroot().iter("link"):
+        inertial = link.find("inertial")
+        if inertial is None:
+            out[link.get("name")] = {"mass": 0.0, "com": [0.0, 0.0, 0.0],
+                                     "tensor": [[0.0] * 3 for _ in range(3)]}
+            continue
+        origin = inertial.find("origin")
+        com = _floats(origin.get("xyz"), 3) if origin is not None else [0.0] * 3
+        block = inertial.find("inertia")
+        ixx, iyy, izz, ixy, ixz, iyz = (float(block.get(key)) for key in
+                                        ("ixx", "iyy", "izz", "ixy", "ixz", "iyz"))
+        out[link.get("name")] = {
+            "mass": float(inertial.find("mass").get("value")), "com": com,
+            "tensor": [[ixx, ixy, ixz], [ixy, iyy, iyz], [ixz, iyz, izz]],
+        }
+    return out
+
+
+def downstream_links(urdf: pathlib.Path, leg: str) -> dict[str, list[str]]:
+    """Per leg joint, the links at or below its child link: ``{joint: [child, ...subtree]}`` root-first.
+
+    Walked off the URDF's own tree. On this family the subtree is exactly the rest of the chain, and
+    :func:`reflected_inertia` refuses anything else rather than inventing a frame for a link no chain
+    transform covers.
+    """
+    root = ET.parse(urdf).getroot()
+    children: dict[str, list] = {}
+    for joint in root.iter("joint"):
+        children.setdefault(joint.find("parent").get("link"), []).append(joint)
+    by_name = {joint.get("name"): joint for joint in root.iter("joint")}
+
+    def subtree(link: str) -> list[str]:
+        out = [link]
+        for joint in children.get(link, []):
+            out += subtree(joint.find("child").get("link"))
+        return out
+
+    return {name: subtree(by_name[name].find("child").get("link"))
+            for name in chain_joint_names(urdf, leg)}
+
+
+def gain_table(rl_exp: pathlib.Path, family: str, joint_names: tuple[str, ...]) -> dict[str, dict]:
+    """``{joint: {"group", "kp", "kd"}}`` from the recipe that CONSUMES this body, not from the body.
+
+    The gains are not in the URDF, so they have to come from their one home: the line's ``actuators:``
+    block, matched to joints by its own ``joint_patterns``. The group->joint mapping is imported from the
+    parity gate instead of being re-implemented (one answer to "which group owns this joint"), and a
+    joint no group claims -- or two claiming it -- is refused: a gain table invented here would be a
+    second home for a number the recipe owns.
+    """
+    yaml_path = rl_exp / "versions" / family / "main" / "main_params.yaml"
+    groups = _actuator_groups(yaml_path.read_text(encoding="utf-8"))
+    if not groups:
+        raise SystemExit(f"{yaml_path}: declares no actuators block, so there are no gains to read")
+    owners = _joint_owners(groups, {name: {} for name in joint_names})
+    table = {}
+    for name, claims in owners.items():
+        if len(claims) != 1:
+            raise SystemExit(f"{yaml_path}: {name} is claimed by {claims or 'no group'} -- "
+                             "expected exactly one actuator group")
+        spec = groups[claims[0]]
+        table[name] = {"group": claims[0], "kp": float(spec["stiffness"]), "kd": float(spec["damping"])}
+    return table
+
+
+def reflected_inertia(chain: list[dict], angles: list[float], inertials: dict[str, dict],
+                      downstream: dict[str, list[str]], table: dict[str, dict]) -> list[dict]:
+    """Per chain joint, the inertia its own axis sees at this pose, and what the gains make of it.
+
+    The caliber, stated because an inertia number without one is not a reading:
+
+    * the value is the DIAGONAL of the joint-space inertia at this configuration -- every link below the
+      joint summed as ``m*|r_perp|^2 + u' I_L u``, i.e. composite-rigid-body with the downstream joints
+      held at these same angles. Exact for the diagonal, and NOT the off-diagonal coupling;
+    * the base is treated as FIXED. With a floating base the strict quantity is the base-eliminated
+      ``M_ii``; the body is far heavier than one leg, but how far this approximation lands was **not**
+      quantified here -- it is a named gap, not a correction;
+    * no contact, no ground, no other leg, no spine: it is this chain alone, at ONE pose, and it moves
+      with the pose;
+    * ``w_n = sqrt(Kp/I)`` [rad/s] and ``zeta = Kd/(2*sqrt(Kp*I))`` are the LOCAL single-DOF pair. zeta is
+      not a statement about the robot's stability: coupled joints, contacts and the spine live outside it;
+    * the frequency columns are ratios only -- against the physics step (200 Hz) and the control period
+      (50 Hz). The actuator's own bandwidth is not known here (no datasheet), so it gets no number.
+
+    Returns ``[{joint, group, kp, kd, inertia, wn_rad_s, wn_hz, zeta, over_physics_rate,
+    over_control_rate}]``; a joint whose downstream links are all massless refuses rather than dividing
+    by zero.
+    """
+    frames = chain_frames(chain, angles)
+    names = [joint["name"] for joint in chain]
+    for index, joint in enumerate(chain):
+        expected = [downstream[name][0] for name in names[index:]]
+        if downstream[joint["name"]] != expected:
+            raise SystemExit(f"{joint['name']}: its subtree is {downstream[joint['name']]} but the chain "
+                             f"below it is {expected} -- this caliber only covers a leg that is one chain")
+    frame_of = {downstream[name][0]: frames[index + 1][:] for index, name in enumerate(names)}
+    rows = []
+    for index, joint in enumerate(chain):
+        # The joint's own frame is the CHILD link's frame (URDF states the axis in it), i.e. the frame
+        # after this joint's origin/rpy -- frames[index], which is the parent frame the axis is stated
+        # relative to, would put the axis one joint's origin away and still look plausible. The hand
+        # case below is what caught exactly that.
+        own = frames[index + 1]
+        origin = [own[i][3] for i in range(3)]
+        rotation = [[own[i][j] for j in range(3)] for i in range(3)]
+        raw = [sum(rotation[i][k] * joint["axis"][k] for k in range(3)) for i in range(3)]
+        axis = _unit(raw)
+        inertia = 0.0
+        for link in downstream[joint["name"]]:
+            props = inertials.get(link)
+            if props is None:
+                raise SystemExit(f"{joint['name']}: link {link} is not in the URDF's link list")
+            frame = frame_of.get(link)
+            if frame is None:
+                raise SystemExit(f"{joint['name']}: link {link} has no chain frame")
+            point = [frame[i][3] + sum(frame[i][j] * props["com"][j] for j in range(3))
+                     for i in range(3)]
+            offset = [point[i] - origin[i] for i in range(3)]
+            along = sum(offset[i] * axis[i] for i in range(3))
+            perpendicular = math.sqrt(sum((offset[i] - along * axis[i]) ** 2 for i in range(3)))
+            turn = [[frame[i][j] for j in range(3)] for i in range(3)]
+            spun = [[sum(turn[i][k] * props["tensor"][k][j] for k in range(3)) for j in range(3)]
+                    for i in range(3)]
+            along_tensor = sum(axis[i] * spun[i][j] * axis[j] for i in range(3) for j in range(3))
+            inertia += props["mass"] * perpendicular ** 2 + along_tensor
+        gains = table[joint["name"]]
+        if inertia <= 0.0:
+            raise SystemExit(f"{joint['name']}: reflected inertia {inertia} -- the gains cannot be "
+                             "scaled against a massless chain")
+        wn = math.sqrt(gains["kp"] / inertia)
+        rows.append({"joint": joint["name"], "group": gains["group"], "kp": gains["kp"], "kd": gains["kd"],
+                     "inertia": inertia, "wn_rad_s": wn, "wn_hz": wn / (2 * math.pi),
+                     "zeta": gains["kd"] / (2 * math.sqrt(gains["kp"] * inertia)),
+                     "over_physics_rate": (wn / (2 * math.pi)) / 200.0,
+                     "over_control_rate": (wn / (2 * math.pi)) / 50.0})
+    return rows
 
 
 def foot_pose(chain: list[dict], angles: list[float]):
@@ -598,6 +749,11 @@ def _candidate_chain_check(urdf: pathlib.Path) -> None:
           % (len(tokens), travel, 90.0 - driven))
 
 
+#: The recipe the gains are read from. The gains are not a property of the body, so this is the family
+#: whose line consumes it -- the same family the default body is resolved for.
+_GAIN_FAMILY = "lizard2"
+
+
 def self_check(urdf: pathlib.Path) -> None:
     """Poses whose answers are hand arithmetic, not a second pass of the same matrix product."""
     for leg in LEGS:
@@ -755,11 +911,66 @@ def self_check(urdf: pathlib.Path) -> None:
               % tuple(hinge_vs_body_z(chain, zero_angles, i) for i in (1, 2, 3)))
         print("      knee: straight at %+.4f deg, the +-1.2 rad range's margin against it %+.4f deg "
               "(>0 = reverse bending reachable), folded end %.2f deg" % (straight, over_run, folded))
+        # Reflected inertia about each of this leg's own axes, and what the DECLARED gains make of it.
+        # Nested subtrees do NOT make it monotone -- the mass term carries each joint's OWN lever arm, so
+        # at the zero pose the yaw hip sees almost nothing of a leg that hangs along its axis while the
+        # abduction axis swings the whole leg. The reading is per joint, not a nesting of the one above.
+        gains = gain_table(_REPO / "rl_exp", _GAIN_FAMILY, tuple(joint["name"] for joint in chain))
+        moments = reflected_inertia(chain, zero_angles, link_inertials(urdf), downstream_links(urdf, leg),
+                                   gains)
+        assert all(moment["inertia"] > 0.0 for moment in moments), (leg, moments)
+        assert [m["group"] for m in moments] == ["legs"] * 4 + ["feet"], (leg, moments[0]["group"])
+        # Dropping a link's own tensor is a change the nesting cannot see and the magnitude checks
+        # cannot see either, so it gets its own statement on the REAL asset: every link's tensor term is
+        # `u' I u >= 0`, hence the point-mass reading is strictly below the full one at every joint. The
+        # synthetic hand case below covers the same mistake on arithmetic; this covers the asset.
+        stub = [[0.0] * 3 for _ in range(3)]
+        light = reflected_inertia(chain, zero_angles,
+                                  {name: {**props, "tensor": stub}
+                                   for name, props in link_inertials(urdf).items()},
+                                  downstream_links(urdf, leg), gains)
+        assert all(smaller["inertia"] < bigger["inertia"] for smaller, bigger in zip(light, moments)), leg
+        print("      reflected inertia (base fixed, zero pose): %s"
+              % "  ".join("%s I=%.4f w_n=%.1f Hz zeta=%.3f" % (m["joint"].split("_")[-2], m["inertia"],
+                                                              m["wn_hz"], m["zeta"]) for m in moments))
     # A joint's own frame may be rotated, and then the axis is stated in it: composed, not ignored.
     yawed = [{"name": "t", "token": "t", "origin": [0.0, 0.0, 0.0], "rpy": [0.0, 0.0, math.pi / 2],
               "axis": [1.0, 0.0, 0.0], "limits": (-1.0, 1.0)}]
     rotation = foot_pose(yawed, [0.0])[1]
     assert abs(rotation[0][1] + 1.0) < 1e-12 and abs(rotation[1][0] - 1.0) < 1e-12, rotation
+    # The reflected inertia, against hand arithmetic on a two-joint chain: joint b sits 1 m along x from
+    # joint a, both turn about z, and the only massive link (c, below b) has mass 2 kg, its COM at
+    # +0.5 m x in its own frame and 0.3 kg m^2 about z. So a sees |1.5| m and b sees |0.5| m of lever:
+    # 2*1.5^2 + 0.3 = 4.8 and 2*0.5^2 + 0.3 = 0.8. Dropping the tensor (a point mass) would give 4.5
+    # and 0.5, which is the mistake the break test puts back.
+    zero_tensor = [[0.0] * 3 for _ in range(3)]
+    synthetic = [{"name": "j_a", "token": "a", "origin": [0.0, 0.0, 0.0], "rpy": [0.0, 0.0, 0.0],
+                  "axis": [0.0, 0.0, 1.0], "limits": (-1.0, 1.0)},
+                 {"name": "j_b", "token": "b", "origin": [1.0, 0.0, 0.0], "rpy": [0.0, 0.0, 0.0],
+                  "axis": [0.0, 0.0, 1.0], "limits": (-1.0, 1.0)}]
+    synthetic_masses = {"l_b": {"mass": 0.0, "com": [0.0, 0.0, 0.0], "tensor": zero_tensor},
+                        "l_c": {"mass": 2.0, "com": [0.5, 0.0, 0.0], "tensor": [[0.0, 0.0, 0.0],
+                                                                                  [0.0, 0.0, 0.0],
+                                                                                  [0.0, 0.0, 0.3]]}}
+    synthetic_downstream = {"j_a": ["l_b", "l_c"], "j_b": ["l_c"]}
+    synthetic_gains = {"j_a": {"group": "g", "kp": 100.0, "kd": 10.0},
+                       "j_b": {"group": "g", "kp": 100.0, "kd": 10.0}}
+    moments = reflected_inertia(synthetic, [0.0, 0.0], synthetic_masses, synthetic_downstream,
+                                synthetic_gains)
+    assert abs(moments[0]["inertia"] - 4.8) < 1e-12, moments
+    assert abs(moments[1]["inertia"] - 0.8) < 1e-12, moments
+    assert abs(moments[1]["wn_rad_s"] - math.sqrt(100.0 / 0.8)) < 1e-12, moments
+    assert abs(moments[1]["zeta"] - 10.0 / (2 * math.sqrt(100.0 * 0.8))) < 1e-12, moments
+    # The mass term scales with mass and the tensor does not: with the tensor gone, doubling the mass
+    # doubles the reading exactly -- which is the pair of facts a point-mass model would get wrong.
+    point_mass = {**synthetic_masses, "l_c": {**synthetic_masses["l_c"], "tensor": zero_tensor}}
+    light = reflected_inertia(synthetic, [0.0, 0.0], point_mass, synthetic_downstream, synthetic_gains)
+    heavy = reflected_inertia(synthetic, [0.0, 0.0], {**point_mass, "l_c": {**point_mass["l_c"],
+                                                                            "mass": 4.0}},
+                              synthetic_downstream, synthetic_gains)
+    assert abs(light[0]["inertia"] - 4.5) < 1e-12 and abs(light[1]["inertia"] - 0.5) < 1e-12, light
+    assert abs(heavy[0]["inertia"] - 2 * light[0]["inertia"]) < 1e-12, (light, heavy)
+    assert abs(heavy[1]["inertia"] - 2 * light[1]["inertia"]) < 1e-12, (light, heavy)
     _candidate_chain_check(urdf)
     print("[SELF-CHECK] zero pose equals the origin sum, a quarter hip turn rotates about the hip "
           "axis, the hip leaves the tilt alone, a body-height shift moves the pad with it, each "
@@ -768,8 +979,10 @@ def self_check(urdf: pathlib.Path) -> None:
           "turned about the body's z over the hip's whole range), the knee's straight pose is not at "
           "zero, a pad flat on its BACK is rejected while the same pad on its sole is accepted, the "
           "body's roll enters the facing and the pad height by the hand-written Rx row, a joint's rpy "
-          "is composed before its axis, and a candidate chain with an inserted femoral rotation loads "
-          "and leaves the hinge plane's 90 deg")
+          "is composed before its axis, a candidate chain with an inserted femoral rotation loads "
+          "and leaves the hinge plane's 90 deg, and the reflected inertia about each axis matches the "
+          "hand-computed 4.8/0.8 on a two-link chain -- where the axis read one frame out would give "
+          "the same number for both joints -- and halves exactly once the tensor is dropped")
 
 
 def _grid_poses(chain: list[dict], grid_tokens: tuple[str, ...], samples: int):
@@ -877,7 +1090,19 @@ def break_test(urdf: pathlib.Path) -> int:
     """
     identity = [[1.0 if i == j else 0.0 for j in range(3)] for i in range(3)]
     real = {name: globals()[name]
-            for name in ("faces_down", "_rpy_matrix", "pad_state", "chain_joint_names", "load_chain")}
+            for name in ("faces_down", "_rpy_matrix", "pad_state", "chain_joint_names", "load_chain",
+                         "link_inertials", "downstream_links")}
+
+    def point_masses(urdf: pathlib.Path) -> dict:
+        """Every link's inertia tensor dropped: the chain read as a set of point masses.
+
+        The mistake is easy to make (mass and COM are the obvious fields) and it changes the reading in
+        a way no nesting assertion sees -- a truncated tensor still nests, it just understates. The hand
+        case on the two-link chain is what refuses it: 4.5 against 4.8.
+        """
+        zero = [[0.0] * 3 for _ in range(3)]
+        return {link: {**props, "tensor": zero} for link, props in real["link_inertials"](urdf).items()}
+
     def no_attitude(*args, **kwargs):
         """``pad_state`` with the body's attitude dropped: the level-body assumption, put back."""
         kwargs = {name: value for name, value in kwargs.items() if name != "base_rpy"}
@@ -907,6 +1132,11 @@ def break_test(urdf: pathlib.Path) -> int:
          {"chain_joint_names": lambda _urdf, leg: tuple(f"{leg}_{token}_joint" for token in CHAIN)}),
         ("the knee's range widened past straight (reverse bending)",
          {"load_chain": widened_knee}),
+        ("the links' own inertia tensors dropped (point masses)",
+         {"link_inertials": point_masses}),
+        ("the subtree truncated to the joint's own child link",
+         {"downstream_links": lambda urdf, leg: {name: links[:1]
+                                                 for name, links in real["downstream_links"](urdf, leg).items()}}),
     ]
     holes = []
     for label, patches in cases:

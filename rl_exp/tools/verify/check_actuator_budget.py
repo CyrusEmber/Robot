@@ -39,10 +39,26 @@ What it reports, and what it cannot:
   separate column: whether a trajectory is inertial-heavy and whether the servo follows it are two
   different questions, and the first version of this table conflated them.
 
+* **drive audit** (``--drive-audit``): no sweep -- one build, then the per-joint comparison between what
+  each actuator DECLARED and what the solver HOLDS. The group table below reports the actuator objects'
+  own cfg (what they were asked for); this layer adds the readback (``data.joint_stiffness`` /
+  ``joint_damping`` / ``joint_effort_limits`` / ``joint_vel_limits``, cloned from the PhysX
+  ``get_dof_stiffnesses`` / ``get_dof_dampings`` / ``get_dof_max_forces`` / ``get_dof_max_velocities``
+  view when the data buffers are built, i.e. after the cfg was handed over). It answers "did the declared
+  value become the solver's value" -- per joint, not per group -- which the yaml-side coverage gate
+  cannot (``work/active/actuator-params-audit.md``).
+
+* **static load** (``--static-only``): gravity on, ZERO action -- the robot holds its default joint
+  targets, which is a posture, not a policy. Reports per joint the PD-estimate magnitude against that
+  joint's own solver-side limit. It is the load FLOOR (what standing costs), and it cannot answer the
+  command window's question. Caliber in :func:`run_static`.
+
 Usage (from the repo root):
 
     python rl_exp/tools/verify/check_actuator_budget.py --task Lizard2-Flat-Play-v1
     python rl_exp/tools/verify/check_actuator_budget.py --task Lizard2-Flat-Play-v1 --json <report>
+    python rl_exp/tools/verify/check_actuator_budget.py --task Lizard2-Flat-Play-v1 --drive-audit
+    python rl_exp/tools/verify/check_actuator_budget.py --task Lizard2-Flat-Play-v1 --static-only
 
 Exit code is 0: this is a measurement that feeds the plan, not a pass/fail gate.
 """
@@ -63,8 +79,16 @@ parser.add_argument("--freqs", type=float, nargs="*", default=[0.5, 1.0, 1.5, 2.
 parser.add_argument("--unloaded-s", type=float, default=2.0, help="seconds per frequency, unloaded layer")
 parser.add_argument("--loaded-s", type=float, default=3.0, help="seconds per frequency, loaded layer")
 parser.add_argument("--settle", type=int, default=60, help="zero-action steps before each layer")
+parser.add_argument("--static-settle", type=float, default=2.0,
+                    help="zero-action seconds before the static (layer 3) window opens")
+parser.add_argument("--static-s", type=float, default=2.0, help="seconds measured, static layer")
+parser.add_argument("--static-only", action="store_true",
+                    help="skip layers 1-2 and the unloaded sweep: run the static load layer and exit")
 parser.add_argument("--inertia", type=float, default=1.57,
                     help="swing inertia estimate [kg m^2] for the inertia-only column (printed, not used to pass/fail)")
+parser.add_argument("--drive-audit", action="store_true",
+                    help="skip the sweep: compare what each actuator declared against what the solver "
+                         "holds per joint (the PhysX readback), and exit")
 parser.add_argument("--json", help="write the measured curve here")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
@@ -99,6 +123,155 @@ def act_limits(robot) -> dict:
             "velocity_limit_cfg_dropped": group.velocity_limit is None,
         }
     return out
+
+
+def run_drive_audit(task: str) -> dict:
+    """What the SOLVER holds per joint, against what each actuator was asked for.
+
+    ``joint_stiffness`` / ``joint_damping`` / ``joint_effort_limits`` / ``joint_vel_limits`` are cloned
+    from the PhysX view at data-init, after the articulation handed the actuator cfg over -- so they are
+    the solver's values, not the yaml's. This is the readback the group table above lacks: a group cfg
+    says what was REQUESTED for its joints, this says what those joints GOT.
+
+    What it still does not say: whether a policy ever asks those joints for anything, and whether the
+    torque estimate in the sweeps below was clipped -- the readback is a statement about the drive, not
+    about behaviour.
+    """
+    env = build(task, gravity_off=False)
+    env.reset()
+    robot = env.unwrapped.scene["robot"]
+    names = list(robot.joint_names)
+    held = {
+        "stiffness": [float(v) for v in robot.data.joint_stiffness.torch[0]],
+        "damping": [float(v) for v in robot.data.joint_damping.torch[0]],
+        "effort_limit": [float(v) for v in robot.data.joint_effort_limits.torch[0]],
+        "velocity_limit": [float(v) for v in robot.data.joint_vel_limits.torch[0]],
+    }
+    asked: dict[int, dict] = {}
+    for key, actuator in robot.actuators.items():
+        for index in actuator.joint_indices:
+            config = actuator.cfg
+            asked[int(index)] = {
+                "group": key,
+                "stiffness": float(config.stiffness),
+                "damping": float(config.damping),
+                "effort_limit": None if config.effort_limit_sim is None else float(config.effort_limit_sim),
+                "velocity_limit": None if config.velocity_limit_sim is None else float(config.velocity_limit_sim),
+            }
+
+    rows: list[dict] = []
+    print("=== drive audit: solver readback vs the actuator's declaration, per joint ===")
+    print(f"  (readback = PhysX get_dof_* at data-init, after the cfg was handed over; task {task})")
+    by_group: dict[str, list[dict]] = {}
+    for index, joint in enumerate(names):
+        spec = asked.get(index)
+        row = {"joint": joint, "group": None if spec is None else spec["group"], "asked": spec,
+               "solver": {name: values[index] for name, values in held.items()}}
+        rows.append(row)
+        by_group.setdefault(row["group"] or "<no actuator claims it>", []).append(row)
+    for group, group_rows in by_group.items():
+        lines, mismatched = [], False
+        for name in ("stiffness", "damping", "effort_limit", "velocity_limit"):
+            wanted = sorted({r["asked"][name] for r in group_rows if r["asked"]}, key=lambda v: (v is None, v))
+            got = sorted({r["solver"][name] for r in group_rows})
+            if wanted == [None]:
+                # The cfg declared no value (this fork drops a bare velocity_limit), so the drive kept
+                # whatever the spawn gave it. That is the known fork behaviour, and the held number IS
+                # the finding -- counting it as a disagreement would report every run as broken.
+                lines.append(f"      {name:15s} asked=none (cfg dropped by the fork) held={got}")
+                continue
+            match = len(wanted) == 1 and all(abs(wanted[0] - value) < 1e-6 for value in got)
+            mismatched = mismatched or not match
+            lines.append(f"      {name:15s} asked={wanted} held={got}" + ("" if match else "   <-- differs"))
+        print(f"  {group:22s} joints={len(group_rows):2d} {'differs' if mismatched else 'matches'}")
+        for line in lines:
+            print(line)
+    unclaimed = [row["joint"] for row in rows if row["asked"] is None]
+    print(f"  joints audited: {len(rows)}; claimed by no actuator: {unclaimed if unclaimed else 'none'}")
+    print("  the velocity row is the answer to \"did the yaml velocity_limit reach the sim\": whatever")
+    print("  'held' shows is the drive's cap, and no cfg value has to be involved in it.")
+    env.close()
+    return {"task": task, "joints": rows, "unclaimed": unclaimed}
+
+
+def run_static(task: str, settle_s: float, window_s: float) -> dict:
+    """Gravity on, zero action: what the settled stance costs each joint, against its OWN limit.
+
+    Caliber, stated because a number without it is not a reading:
+
+    * estimate = ``Kp*(q*-q) - Kd*qd`` with ``Kp``/``Kd`` read from the solver, same expression the
+      sweeps and the reward reconstruction use (``parkour_mdp.py:271``);
+    * divisor = the joint's OWN limit read back from the solver (``data.joint_effort_limits``), not the
+      group cfg -- the per-joint convention the gait probe adopted after one group-wide value was found
+      scoring hip joints against the foot's limit (``2026-09-23-lizard2-v1-gait-skate.md`` ⑫);
+    * window = after ``settle_s`` of zero action, until the first env reset or the frame the base drops
+      below half the settled height. A fallen or just-reset frame is not a stance, and averaging one in
+      would report a load no stance ever carried;
+    * the counter is ``pd_estimate_over_limit_frac``, NOT "saturation": an estimate crossing the limit
+      is not the solver clipping. ``applied_torque`` is structurally zero for implicit drives and the
+      clip happens inside the solver, so the crossing is a hypothesis about clamping, not a reading of it.
+
+    What it is for: the load floor. It says how much of the budget a standing robot spends, not what a
+    gait at speed needs -- a static reading cannot answer the command window's question.
+    """
+    env = build(task, gravity_off=False)
+    env.reset()
+    robot = env.unwrapped.scene["robot"]
+    names = list(robot.joint_names)
+    limits = [float(v) for v in robot.data.joint_effort_limits.torch[0]]
+    dt = float(env.unwrapped.step_dt)
+    zero = torch.zeros((1, action_map(env)[1]), device=robot.device)
+    for _ in range(max(20, int(settle_s / dt))):
+        env.step(zero)
+    height0 = float(robot.data.root_pos_w.torch[0, 2])
+
+    samples = {index: [] for index in range(len(names))}
+    frames, stop = 0, "window closed"
+    for _ in range(max(2, int(window_s / dt))):
+        env.step(zero)
+        if int(env.unwrapped.episode_length_buf[0]) <= 1:
+            stop = "env reset inside the window (the frames before it are kept)"
+            break
+        if float(robot.data.root_pos_w.torch[0, 2]) < 0.5 * height0:
+            stop = "base dropped below half its settled height"
+            break
+        frames += 1
+        kp = robot.data.joint_stiffness.torch[0]
+        kd = robot.data.joint_damping.torch[0]
+        torque = kp * (robot.data.joint_pos_target.torch[0] - robot.data.joint_pos.torch[0]) \
+            - kd * robot.data.joint_vel.torch[0]
+        for index in range(len(names)):
+            samples[index].append(abs(float(torque[index])))
+
+    rows = []
+    print(f"\n=== layer 3 STATIC: gravity on, zero action, {frames} frame(s) after {settle_s:.1f}s settle ===")
+    print(f"  (settled base height {height0:.4f} m; {stop}; estimate {('Kp*(q*-q) - Kd*qd')})")
+    print("  zero action = the DEFAULT joint targets held by PD: a posture, not a trained policy, and")
+    print("  not a gait -- a joint with no budget left here still has to be asked by something.")
+    print("  joint                group    p50_nm  max_nm  limit_nm  frac_of_limit_p50  pd_est_over_limit_frac")
+    groups: dict[str, list[float]] = {}
+    for index, name in enumerate(names):
+        values = sorted(samples[index])
+        if not values:
+            continue
+        p50 = values[len(values) // 2]
+        limit = limits[index]
+        frac = p50 / limit if limit else float("nan")
+        over = sum(1 for value in values if value >= limit) / len(values)
+        group = next((key for key, actuator in robot.actuators.items() if index in actuator.joint_indices),
+                     "<none>")
+        groups.setdefault(group, []).append(frac)
+        rows.append({"joint": name, "group": group, "p50_nm": p50, "max_nm": values[-1],
+                     "effort_limit_nm": limit, "frac_of_limit_p50": frac, "pd_estimate_over_limit_frac": over})
+        print(f"  {name:20s} {group:8s} {p50:7.2f} {values[-1]:7.2f} {limit:9.0f} "
+              f"{frac:18.3f} {over:21.3f}")
+    for group, fracs in groups.items():
+        print(f"  {group:8s} worst frac_of_limit_p50 = {max(fracs):.3f} over {len(fracs)} joint(s)")
+    print("  scope: a stance is not a gait. This is a load FLOOR, and 'estimate over limit' is not")
+    print("         'the solver clamped' -- see the caliber in run_static's docstring.")
+    env.close()
+    return {"task": task, "frames": frames, "settle_s": settle_s, "stop": stop,
+            "base_height_m": height0, "joints": rows}
 
 
 def action_map(env):
@@ -217,6 +390,15 @@ def run_loaded(task: str) -> list[dict]:
     return rows
 
 
+if args_cli.drive_audit:
+    audit = run_drive_audit(args_cli.task)
+    if args_cli.json:
+        pathlib.Path(args_cli.json).write_text(json.dumps(audit, ensure_ascii=False, indent=1) + "\n",
+                                              encoding="utf-8")
+        print(f"report written: {args_cli.json}")
+    print("DRIVE_AUDIT_MEASURED")
+    sys.exit(0)
+
 probe = build(args_cli.task, gravity_off=True)
 probe.reset()
 limits = act_limits(probe.unwrapped.scene["robot"])
@@ -228,6 +410,15 @@ for group, body in limits.items():
 print("  note: the effort limit bounds the COMPOSITE torque (a P term can cancel a D term), so this")
 print("        number is not convertible into a speed ceiling; and no velocity limit reached the sim.")
 probe.close()
+
+if args_cli.static_only:
+    measurement = run_static(args_cli.task, args_cli.static_settle, args_cli.static_s)
+    if args_cli.json:
+        pathlib.Path(args_cli.json).write_text(json.dumps(measurement, ensure_ascii=False, indent=1) + "\n",
+                                              encoding="utf-8")
+        print(f"report written: {args_cli.json}")
+    print("STATIC_LOAD_MEASURED")
+    sys.exit(0)
 
 print(f"\n=== layer 1 UNLOADED: gravity off, {args_cli.joint} sine {args_cli.amplitude:+.2f} rad, "
       "all other joints held at the settled reference ===")
@@ -251,9 +442,13 @@ print(f"LOADED: best paddle {fastest['freq_hz']:.2f} Hz -> {fastest['mean_forwar
       f"({fastest['peak_forward_mps']:+.3f} peak)")
 print("ceiling: a paddle is not a gait (no lift, no duty, no body work), so this is a LOWER bound; and")
 print("'paddle speed < window top' is not yet a verdict about any trained policy.")
+
+static = run_static(args_cli.task, args_cli.static_settle, args_cli.static_s)
+
 if args_cli.json:
     pathlib.Path(args_cli.json).write_text(json.dumps(
         {"task": args_cli.task, "amplitude_rad": args_cli.amplitude, "limits": limits,
-         "unloaded": unloaded, "loaded": loaded}, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+         "unloaded": unloaded, "loaded": loaded, "static": static}, ensure_ascii=False, indent=1) + "\n",
+        encoding="utf-8")
     print(f"report written: {args_cli.json}")
 print("ACTUATOR_CURVE_MEASURED")
