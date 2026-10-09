@@ -3,21 +3,12 @@
 
 Six checks, all machine-readable, all fail under --strict:
 
-1. teacher-vs-family DR wiring, PER DECLARED SUBJECT: extracts every ``self.<manager>.<term>``
-   wiring line from each pair named in ``versions/freeze_parity.json`` and reports the symmetric
-   difference. The teacher snapshot deliberately duplicates the DR wiring (freeze discipline: no
-   family imports) -- intentional divergence is fine, but it must be REVIEWED, never accidental.
-   Which files form a pair, and which divergences were reviewed, are both declared there: this
-   module holds no family name of its own.
-2. DR event list sync: ``play_utils.DR_EVENT_NAMES`` (PLAY variants) must equal
+1. DR event list sync: ``play_utils.DR_EVENT_NAMES`` (PLAY variants) must equal
    ``dr_controller._DR_EVENT_NAMES`` (eval modes). Two physical copies exist by
    design (the harness stays robot-agnostic); this check makes drift loud.
-3. PLAY wiring coverage: every ``*_PLAY`` cfg class must call
+2. PLAY wiring coverage: every ``*_PLAY`` cfg class must call
    ``apply_play_wiring`` -- the block that hand-copies drifted twice historically.
-4. robot block parity, per declared subject: the ``ArticulationCfg(...)`` literal in the two files
-   (spawn props, init_state, limits) is a hand-copied freeze that check 1 does not see; symmetric
-   line diff, reviewed diffs go to that subject's ``robot_block_allowlist``.
-5. asset contract: every ACTIVE line's yaml (``versions/lines.json`` status, not a name rule) is
+3. asset contract: every ACTIVE line's yaml (``versions/lines.json`` status, not a name rule) is
    checked against the asset IT names -- the usda must still provide the Geometry scope, every
    ``base_body_name`` and ``joint_order`` entry, and every body-name list the yaml DECLARES must
    match a link. Only declared keys are asserted: a line is not required to carry the old family's
@@ -31,7 +22,7 @@ Six checks, all machine-readable, all fail under --strict:
    statement about the yaml, not about the built env). The divergence between the urdf column and the
    cfg value is therefore PRINTED, not gated: whether the two numbers ought to agree needs a torque
    requirement no line has declared yet (``work/closed/2026/actuator-params-audit.md``).
-6. asset lock: each ``versions/<line>/vN/asset_lock.json`` pins sha256 of its family's urdf,
+4. asset lock: each ``versions/<line>/vN/asset_lock.json`` pins sha256 of its family's urdf,
    the compiled usda, every mesh under ``meshes/**``, and the version's OWN
    frozen yaml. Frozen yamls pin the usd PATH, not its CONTENT, so an in-place
    asset regeneration silently breaks working-tree reproduction of every
@@ -44,15 +35,24 @@ Six checks, all machine-readable, all fail under --strict:
    version loaded erases the evidence that it changed, and a version that loads different assets is
    a new version. Locks frozen before this rule keep their older ``note`` text -- they are frozen
    records, not documents to correct.
+5. body swap: a version still loading a body its family's ACTIVE line has replaced must be retired
+   in the same change -- it was not trained on the new one, and its deleted lock is what stopped
+   anything silently rebinding it.
+6. asset isolation: each family loads and measures the geometry IT declares (its own mesh tree, its
+   usda's inline collision points, no two families pinning the same files).
+
+Freeze parity -- the teacher-vs-family wiring diff and the robot block diff, both read off a declared
+list of hand-copied cfg file pairs -- is NOT among them any more: its only subject was the retired
+``lizard/main`` pair, so the mechanism and its declaration file went with it
+(acceptance/records/2026-10-09-retired-family-prune-manifest.md, 裁决 D①).
 
 Usage: python rl_exp\\tools\\verify\\check_dr_parity.py [--strict] [--self-test]
        python rl_exp\\tools\\verify\\check_dr_parity.py --update-locks --version <family/line/vN>
 
 ``--self-test`` runs the falsifiers in-process before the real checks (``test_declare_family``):
 they demonstrate that a tree with exactly ONE family can be landed, that the tool writes only that
-family's subtree and fails on any failed step, that the subject declaration refuses an empty or
-unreadable one, and that the asset contract no longer demands the old family's keys. A gate whose
-failure modes were never demonstrated is not a gate.
+family's subtree and fails on any failed step, and that the asset contract no longer demands the old
+family's keys. A gate whose failure modes were never demonstrated is not a gate.
 """
 import argparse
 import json
@@ -82,55 +82,8 @@ _PLAY_UTILS = _TASKS / "play_utils.py"
 _DR_CONTROLLER = _REPO / "ablation_harness" / "components" / "dr_controller.py"
 _VERSIONS = _EXP / "versions"
 _LINES = _VERSIONS / "lines.json"
-# Which files are compared against each other is a DECLARATION, not a constant here: the freeze
-# discipline makes the teacher snapshot a hand copy of a family cfg, and only the pair's owner knows
-# which pair that is. Hard-coding lizard's two filenames made this gate unable to serve any other
-# family and unable to notice a pair that moved (review 2026-09-22).
-SUBJECTS_PATH = _VERSIONS / "freeze_parity.json"
-
 # PLAY classes that legitimately skip apply_play_wiring (reviewed exceptions), keyed by class name
 PLAY_WIRING_ALLOWLIST: set[str] = set()
-
-
-def load_subjects() -> tuple[list[dict], list[str]]:
-    """The declared parity subjects, as ``(subjects, problems)``.
-
-    A subject names a line and the two cfg files whose hand-copied content must stay in sync, plus
-    the divergences already reviewed (exact line -> why). Everything is checked here: a subject whose
-    files are missing, or a tree with no subject at all, is a problem rather than a silent pass --
-    "nothing was compared" must never print the same as "everything agreed".
-    """
-    problems: list[str] = []
-    try:
-        document = json.loads(SUBJECTS_PATH.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as err:
-        return [], [f"{SUBJECTS_PATH}: unreadable or not JSON ({err}) -- the parity subjects are a"
-                    " declaration, so a missing one is a refusal, not a default"]
-    subjects = document.get("subjects")
-    if not isinstance(subjects, list) or not subjects:
-        return [], [f"{SUBJECTS_PATH}: no subjects declared -- nothing would be compared"]
-    for subject in subjects:
-        if not isinstance(subject, dict) or not subject.get("line"):
-            problems.append(f"{SUBJECTS_PATH}: a subject without a 'line' handle")
-            continue
-        for key in ("family_cfg", "teacher_cfg"):
-            rel = subject.get(key)
-            if not isinstance(rel, str) or not (_REPO / rel).is_file():
-                problems.append(f"{SUBJECTS_PATH}: subject {subject['line']!r} {key} missing: {rel}")
-        for key in ("wiring_allowlist", "robot_block_allowlist"):
-            if not isinstance(subject.get(key), dict):
-                problems.append(f"{SUBJECTS_PATH}: subject {subject['line']!r} {key} must be an"
-                                " object mapping the exact line to its reason")
-    return subjects, problems
-
-
-def wiring_lines(path: pathlib.Path) -> list[str]:
-    pat = re.compile(r"^\s*self\.(events|rewards|terminations)\.\w+")
-    out = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        if pat.match(line):
-            out.append(re.sub(r"\s+", " ", line.strip()))
-    return out
 
 
 def _extract_name_list(path: pathlib.Path, var_name: str) -> list[str]:
@@ -140,26 +93,6 @@ def _extract_name_list(path: pathlib.Path, var_name: str) -> list[str]:
     if match is None:
         raise RuntimeError(f"list '{var_name}' not found in {path}")
     return re.findall(r'"([^"]+)"', match.group(1))
-
-
-def check_wiring_parity() -> list[str]:
-    """Each declared subject: the symmetric wiring difference of its two files, allowlist applied."""
-    subjects, problems = load_subjects()
-    for subject in subjects:
-        if not subject.get("family_cfg") or not subject.get("teacher_cfg"):
-            continue
-        allow = set(subject.get("wiring_allowlist") or {})
-        sides = {}
-        for key in ("family_cfg", "teacher_cfg"):
-            lines = [l for l in wiring_lines(_REPO / subject[key]) if l not in allow]
-            sides[key] = set(lines)
-        for key, label in (("family_cfg", "family-only"), ("teacher_cfg", "teacher-only")):
-            counterpart = sides["teacher_cfg" if key == "family_cfg" else "family_cfg"]
-            for line in sorted(sides[key] - counterpart):
-                problems.append(f"[{subject['line']}] {label} wiring line: {line}")
-        print(f"  {subject['line']}: family {len(sides['family_cfg'])} lines | teacher"
-              f" {len(sides['teacher_cfg'])} lines | allowlisted {len(allow)}")
-    return problems
 
 
 def check_dr_list_sync() -> list[str]:
@@ -199,49 +132,6 @@ def check_play_wiring_coverage() -> list[str]:
                 if name not in PLAY_WIRING_ALLOWLIST:
                     problems.append(f"{path.name}: class {name} does not call apply_play_wiring")
     print(f"  PLAY classes checked")
-    return problems
-
-
-def _articulation_block(path: pathlib.Path) -> list[str]:
-    """Extract the ArticulationCfg(...) literal as normalized code lines."""
-    text = path.read_text(encoding="utf-8")
-    start = text.find("ArticulationCfg(")
-    if start < 0:
-        raise RuntimeError(f"no ArticulationCfg(...) literal in {path}")
-    depth = 0
-    end = len(text)
-    for i in range(start, len(text)):
-        if text[i] == "(":
-            depth += 1
-        elif text[i] == ")":
-            depth -= 1
-            if depth == 0:
-                end = i + 1
-                break
-    lines = []
-    for line in text[start:end].splitlines():
-        code = line.split("#", 1)[0].strip()
-        if code:
-            lines.append(re.sub(r"\s+", " ", code))
-    return lines
-
-
-def check_robot_block_parity() -> list[str]:
-    """Each declared subject: the symmetric ArticulationCfg difference of its two files."""
-    subjects, problems = load_subjects()
-    for subject in subjects:
-        if not subject.get("family_cfg") or not subject.get("teacher_cfg"):
-            continue
-        allow = set(subject.get("robot_block_allowlist") or {})
-        sides = {}
-        for key in ("family_cfg", "teacher_cfg"):
-            sides[key] = set(l for l in _articulation_block(_REPO / subject[key]) if l not in allow)
-        for key, label in (("family_cfg", "family-only"), ("teacher_cfg", "teacher-only")):
-            counterpart = sides["teacher_cfg" if key == "family_cfg" else "family_cfg"]
-            for line in sorted(sides[key] - counterpart):
-                problems.append(f"[{subject['line']}] {label} robot line: {line}")
-        print(f"  {subject['line']}: family block {len(sides['family_cfg'])} lines | teacher"
-              f" {len(sides['teacher_cfg'])} lines")
     return problems
 
 
@@ -1593,9 +1483,9 @@ def main() -> int:
     parser.add_argument("--family", default=None,
                         help="with --update-locks: refuse a --version outside this family")
     parser.add_argument("--self-test", action="store_true",
-                        help="also falsify the detector in-process (declared subjects, declared asset "
-                             "contract keys, the lock set's two comparisons, and the family-landing "
-                             "tool's write scope)")
+                        help="also falsify the detector in-process (declared asset contract keys, the "
+                             "lock set's two comparisons, the swap rehearsal, and the "
+                             "family-landing tool's write scope)")
     args = parser.parse_args()
 
     if args.self_test:
@@ -1635,10 +1525,8 @@ def main() -> int:
         return 0
 
     checks = {
-        "wiring parity (family vs teacher)": check_wiring_parity,
         "DR event list sync (play_utils vs dr_controller)": check_dr_list_sync,
         "PLAY wiring coverage (apply_play_wiring)": check_play_wiring_coverage,
-        "robot ArticulationCfg parity (family vs teacher)": check_robot_block_parity,
         "asset contract (usda prims/joints vs yamls + hardcoded paths)": check_asset_contract,
         "asset lock (frozen versions vs current assets)": check_asset_locks,
         "body swap (a version frozen on a replaced body must be retired)": check_body_swap,

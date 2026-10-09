@@ -61,7 +61,7 @@ TASK_SUFFIX = "-keyboard"
 # Se2KeyboardCfg defaults (0.8, 0.4, 1.0) are slow next to the trained command
 # range -- v8's yaml is x (-1, 3), y (-0.5, 0.5), yaw (-1, 1) -- so x is pinned
 # at the ambition end here, y and yaw left alone. Edit these two numbers (no CLI
-# plumbing), same convention as play_fast_task.FAST_VX.
+# plumbing).
 KEY_SENSITIVITY = (3.0, 0.4, 1.0)
 
 

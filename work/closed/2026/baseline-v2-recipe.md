@@ -2,10 +2,10 @@
 id: baseline-v2-recipe
 title: baseline v2（1–3 m/s + 脚板去权限 + 头链触地终止）
 scope: rl_exp/versions/lizard/baseline, rl_exp/tasks
-status: in_progress
-landing: rl_exp/versions/lizard/baseline/v2/baseline_params.yaml, rl_exp/versions/lizard/baseline/v2/PLAN.md, rl_exp/tasks/baseline_recipe.py, rl_exp/tasks/baseline_mdp.py, rl_exp/tasks/agents/rsl_rl_ppo_cfg.py, rl_exp/versions/recipes.json
-next: **① 与 ③ 已完成，只剩 ②**。① 验收协议 = `baseline_flat_v3.json`（命令 box + 相对门槛 + 接触轴；几何门槛降为诊断），管路已用零动作跑通（`results/baseline_flat_v3/v2-recipe-smoke/`）；"协议与启动闸门绑定"仍未做，归 `eval-protocol-before-training`。③ 2026-09-21 开训（`lizard_baseline_v2/2026-09-21_17-41-12`，9999 iter），2026-09-23 按 v3 首跑判定 `pass`、五轴全过、`baseline/v2/NOTES.md` 已回填 —— 见 `acceptance/records/2026-09-23-baseline-v2-first-run.md`（同记录也写了训侧记录半截这条缺口，归 `baseline-pre-make-record-check`）。**② 仍缺**：探针按新接口复测（命令落在区间且逐 env 采样、动作 22 维、脚关节无动作权）并真跑，且旧断言在 v2 上会红 —— 至今**未做**，NOTES 已按 `close_when` 的允许写法写明"未做"；现有旁证只有快照级（配方声明 + 首跑报告自带的 `env_cfg.actions`）
-close_when: 两次真跑留证后关闭——(a) 探针在新任务上按新断言通过，且旧断言在 v2 上会红；(b) v2 训完后按 v3 产出报告并回填 NOTES 的结果表与结论。**排序事实（2026-09-21，用户定）**：开训早于**启动闸门**、但不早于协议（v3 于 `1183b2f` 冻结在前）⇒ 记"闸门后补"，不得事后改协议迁就结果；探针复测若跳过，要在这里写明"未做"
+status: superseded
+landing: rl_exp/versions/lizard/baseline/v2/baseline_params.yaml, rl_exp/versions/lizard/baseline/v2/PLAN.md, rl_exp/tasks/agents/rsl_rl_ppo_cfg.py, rl_exp/versions/recipes.json
+outcome: 线已退休，产物已判 pass；余下的 ②（探针按新接口复测）的断言对象与运行入口随本迭代的代码清理删除 ⇒ 不再有可执行动作，剥离由清理项接管，观察记录仍归 evidence 的两条记录。
+superseded_by: retired-family-code-prune
 depends_on: eval-protocol-before-training
 evidence: acceptance/records/2026-09-20-baseline-flat-eval-protocol.md, acceptance/records/2026-09-23-baseline-v2-first-run.md
 ---

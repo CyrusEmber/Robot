@@ -148,8 +148,10 @@ def _cfg_classes(declared: list[tuple[str, str]], problems: list[str]) -> dict[s
     that does not resolve is therefore a problem, never a skip, and a resolved class that carries
     no ``params_version`` is a problem too: filtering it out is exactly the silent shrinkage.
 
-    Where a name is both (``LizardFlatEnvCfg`` is a wiring class and a registered task's class),
-    the registry's wins: it is the one a run builds, and the one a field-surface claim is about.
+    Where a name is both (a shared wiring class that is also a registered task's class), the
+    registry's wins: it is the one a run builds, and the one a field-surface claim is about. The
+    active line's shared wiring (``Lizard2WiringCfg``) reaches the set through the walk only -- no
+    recipe registers it -- so neither source is the optional one.
     """
     found: dict[str, type] = {}
     modules = sorted(m.name for m in pkgutil.iter_modules(_tasks_pkg.__path__))

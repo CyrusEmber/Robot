@@ -221,6 +221,10 @@ done / cancelled / superseded`；后三词即关闭，关闭 = **移动不是改
 
 只更新本清单与 `work/active/retired-family-code-prune.md` 的当前状态/下一步；上述代码、JSON、套件参数、tag 均未执行修改。三项决策阻塞解除，不代表清理实施或行为验收完成。
 
+> **后记（2026-10-09，同一日稍后）**：用户在该轮之后明示"执行"，上面的"本轮只回填"边界随之作废——
+> 代码/JSON/套件参数/tag 已按本清单与 §8 全部落地，落盘事实、判词与偏离见
+> `acceptance/records/2026-10-09-retired-family-prune-execution.md`。本节的裁决内容仍然有效，只有那句边界不再成立。
+
 本轮文档提交前复核：`check_suite_banners.py`、`framework_pin_check.py --strict --self-test`、`check_dr_parity.py --strict`、`check_version_docs.py`、`check_work_docs.py`、`check_obs_layout.py` 与 `git diff --check` 通过。既有 fork 工作树改动警告、历史 tag 缺失警告与旧事项路径提示仍在，未修改；这些检查验证的是回填后的当前树，不是尚未实施的清理方案。
 
 ## 证据引用

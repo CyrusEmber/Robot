@@ -21,8 +21,13 @@ import check_configclass_fields as g
 from isaaclab.actuators import ImplicitActuatorCfg
 
 rows: dict[str, dict] = {}
-TARGET = "LizardRoughTeacherEnvCfg_V14"
-PLAY_TARGET = "LizardRoughTeacherEnvCfg_V14_PLAY"
+# The subject pair is NAMED, not derived from `rows`: a mutation has to land on a class the gate
+# really probes (see the absent check below), and a name picked out of `rows` could never be
+# absent from it -- the check would be a tautology. The pair is the active line's train/PLAY pair,
+# so re-pointing it is the deliberate act a retired line requires (2026-10: the lizard/main pair
+# this used to name went with the line).
+TARGET = "Lizard2FlatV3EnvCfg"
+PLAY_TARGET = "Lizard2FlatV3EnvCfg_PLAY"
 
 
 def _synthetic(*, stub: tuple[str, ...] = (), **groups) -> dict:

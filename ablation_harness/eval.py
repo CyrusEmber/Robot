@@ -11,7 +11,7 @@ per-segment / per-terrain metrics to results/<protocol>/<run_id>/eval.json
 plus one row into the protocol's summary.csv.
 
 Usage (from E:\\IsaacLab):
-    python ablation_harness\\eval.py --task Lizard-Rough-v2 --checkpoint <model.pt> ^
+    python ablation_harness\\eval.py --task Lizard2-Flat-v3 --checkpoint <model.pt> ^
         --protocol locomotion_eval_v3 --mode nominal --seed 123
 """
 

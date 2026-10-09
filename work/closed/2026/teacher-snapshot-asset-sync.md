@@ -2,10 +2,10 @@
 id: teacher-snapshot-asset-sync
 title: 资产换代时同步 teacher 快照文件（PLAN #8；同步仍人工）
 scope: rl_exp/tasks, rl_exp/tools/verify
-status: open
-landing: rl_exp/tools/verify/check_dr_parity.py, acceptance/records/2026-09-22-teacher-snapshot-parity-matrix.md, rl_exp/tasks/teacher_env_cfg.py
-next: ① 缺口已由反向验证矩阵定位（读数见 `acceptance/records/2026-09-22-teacher-snapshot-parity-matrix.md`）：教师侧**资产派生字面量**在 ④⑤⑥ 三条上全静默，cfg_lock 只报"cfg 变了"、不验两侧同步 ⇒ **补闸门另立** `work/active/teacher-literal-parity-gate.md`，本项不承接该实施动作；② 待那条闸门落地后，**由用户拍板**哪些同步动作保留人工纪律（名单与口径届时登记，不在本项预先列出）
-close_when: 补闸门项关闭（静默类缺口变红、且家族侧有意调参不误红）后，用户给出"哪些同步动作保留人工纪律"的裁决并登记 ⇒ 关；裁决若是"全部机器化"，本项以"无余下人工动作"收口。观测 = 该裁决能在实现或文档里被读到，且本项不再持有未落地的动作
+status: superseded
+landing: rl_exp/tools/verify/check_dr_parity.py, acceptance/records/2026-09-22-teacher-snapshot-parity-matrix.md
+outcome: 同步的两侧都随本迭代的代码清理消失（teacher 快照 `teacher_env_cfg.py` 与家族侧 `lizard_env_cfg.py` 已删除）⇒ "哪些同步动作保留人工纪律"失去裁决对象，本项由清理项接管；缺口读数仍归 evidence 的矩阵记录。
+superseded_by: retired-family-code-prune
 ---
 
 ## 当前状态
@@ -17,7 +17,7 @@ teacher 快照（`teacher_env_cfg.py`）与家族侧（`lizard_env_cfg.py`）是
 结果：**存在一类教师侧改动，④⑤⑥ 三条全静默**；cfg_lock 虽补位，但只报"cfg 变了"、不验两侧同步 ⇒
 不能把"三个反例被拦住"读成"覆盖完整"。逐例读数与机制归
 `acceptance/records/2026-09-22-teacher-snapshot-parity-matrix.md`（本项不复述），缺口与补闸门动作落在
-`work/active/teacher-literal-parity-gate.md`。
+`work/closed/2026/teacher-literal-parity-gate.md`。
 
 ## 未覆盖边界
 

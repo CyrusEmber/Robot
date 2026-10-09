@@ -13,9 +13,13 @@ not reveal them:
   ``rl_exp/tasks/__init__.py`` is written). The first version read positional args only
   and returned an empty registry, which made the gate pass for the wrong reason -- a
   parser that finds nothing looks exactly like a tree with nothing to check.
-* the declared version must be a dash-separated token of the task id, so ``v1`` is not
-  satisfied by ``Lizard-Rough-v14``. Substring matching would have blessed a v14 task
-  mapped to a v1 recipe.
+* the declared version must be a dash-separated token of the task id, so ``v2`` is not
+  satisfied by ``Lizard2-Flat-v3``. Substring matching would have blessed a v3 task
+  mapped to a v2 recipe.
+
+The fixtures below are synthetic (they never import a config class), but they name the
+live line's shapes: the task id, the entries and the recipe key are the ones
+``versions/recipes.json`` declares for the only family still on the training path.
 """
 
 from __future__ import annotations
@@ -27,16 +31,17 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 from check_recipe_map import bind, load, registered, validate  # noqa: E402
 
-ENV_V14 = "rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V14"
-AGENT_V14 = "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV14PPORunnerCfg"
-LINE = "lizard/main"
-TASK = "Lizard-Rough-v14"
-LINES = {"lizard/main": None, "lizard/parkour": None}
-REGISTERED = {TASK: {"env_cfg_entry_point": ENV_V14, "rsl_rl_cfg_entry_point": AGENT_V14}}
+ENV_V3 = "rl_exp.tasks.recipe_tasks:Lizard2FlatV3EnvCfg"
+AGENT_V3 = "rl_exp.tasks.agents.rsl_rl_ppo_cfg:Lizard2V3PPORunnerCfg"
+LINE = "lizard2/main"
+TASK = "Lizard2-Flat-v3"
+KEY = "lizard2-flat-v3@1"
+LINES = {"lizard2/main": None}
+REGISTERED = {TASK: {"env_cfg_entry_point": ENV_V3, "rsl_rl_cfg_entry_point": AGENT_V3}}
 
 
 def _entry(**over) -> dict:
-    entry = {"line": "lizard/main", "env_cfg_entry": ENV_V14, "agent_entry": AGENT_V14, "legacy_task_version": "v14"}
+    entry = {"line": "lizard2/main", "env_cfg_entry": ENV_V3, "agent_entry": AGENT_V3, "legacy_task_version": "v3"}
     entry.update(over)
     return entry
 
@@ -45,51 +50,45 @@ def _doc(recipes: dict, tasks: dict, fmt: int = 1) -> dict:
     return {"format": fmt, "recipes": recipes, "tasks": tasks}
 
 
-CLEAN = _doc({"teacher-v14@1": _entry()}, {TASK: "teacher-v14@1"})
+CLEAN = _doc({KEY: _entry()}, {TASK: KEY})
 
 CASES: list[tuple[str, dict, dict, str | None]] = [
-    ("registered task with no mapping", _doc({"teacher-v14@1": _entry()}, {}), REGISTERED,
+    ("registered task with no mapping", _doc({KEY: _entry()}, {}), REGISTERED,
      "with no recipe mapping"),
-    ("mapping names an unregistered task", _doc({"teacher-v14@1": _entry()}, {TASK: "teacher-v14@1", "Lizard-Rough-v99": "teacher-v14@1"}),
+    ("mapping names an unregistered task", _doc({KEY: _entry()}, {TASK: KEY, "Lizard2-Flat-v99": KEY}),
      REGISTERED, "names no registered task"),
-    ("mapping points at a recipe that does not exist", _doc({"teacher-v14@1": _entry()}, {TASK: "teacher-v13@1"}),
+    ("mapping points at a recipe that does not exist", _doc({KEY: _entry()}, {TASK: "lizard2-flat-v2@1"}),
      REGISTERED, "which no recipe defines"),
     ("env entry redirected away from the registration",
-     _doc({"teacher-v14@1": _entry(env_cfg_entry="rl_exp.tasks.recipe_tasks:LizardRoughTeacherEnvCfg_V13")},
-          {TASK: "teacher-v14@1"}), REGISTERED, "must not be redirected silently"),
+     _doc({KEY: _entry(env_cfg_entry="rl_exp.tasks.recipe_tasks:Lizard2FlatV2EnvCfg")},
+          {TASK: KEY}), REGISTERED, "must not be redirected silently"),
     ("agent entry redirected away from the registration",
-     _doc({"teacher-v14@1": _entry(agent_entry="rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardTeacherV13PPORunnerCfg")},
-          {TASK: "teacher-v14@1"}), REGISTERED, "must not be redirected silently"),
-    ("recipe names an undiscovered line", _doc({"teacher-v14@1": _entry(line="lizard/ghost")}, {TASK: "teacher-v14@1"}),
+     _doc({KEY: _entry(agent_entry="rl_exp.tasks.agents.rsl_rl_ppo_cfg:Lizard2V2PPORunnerCfg")},
+          {TASK: KEY}), REGISTERED, "must not be redirected silently"),
+    ("recipe names an undiscovered line", _doc({KEY: _entry(line="lizard2/ghost")}, {TASK: KEY}),
      REGISTERED, "is not a discovered recipe line"),
-    ("recipe key without a revision", _doc({"teacher-v14": _entry()}, {TASK: "teacher-v14"}), REGISTERED,
+    ("recipe key without a revision", _doc({"lizard2-flat-v3": _entry()}, {TASK: "lizard2-flat-v3"}), REGISTERED,
      "must read <id>@<revision>"),
-    ("recipe key with revision zero", _doc({"teacher-v14@0": _entry()}, {TASK: "teacher-v14@0"}), REGISTERED,
+    ("recipe key with revision zero", _doc({"lizard2-flat-v3@0": _entry()}, {TASK: "lizard2-flat-v3@0"}), REGISTERED,
      "must read <id>@<revision>"),
-    ("recipe omits a field", _doc({"teacher-v14@1": {"line": "lizard"}}, {TASK: "teacher-v14@1"}), REGISTERED,
+    ("recipe omits a field", _doc({KEY: {"line": "lizard2/main"}}, {TASK: KEY}), REGISTERED,
      "recipe is missing"),
     ("recipe carries a run-scoped field",
-     _doc({"teacher-v14@1": _entry(run_id="abc")}, {TASK: "teacher-v14@1"}), REGISTERED, "unknown fields"),
+     _doc({KEY: _entry(run_id="abc")}, {TASK: KEY}), REGISTERED, "unknown fields"),
     ("legacy version is not v<N>",
-     _doc({"teacher-v14@1": _entry(legacy_task_version="14")}, {TASK: "teacher-v14@1"}), REGISTERED,
+     _doc({KEY: _entry(legacy_task_version="3")}, {TASK: KEY}), REGISTERED,
      "must be null or v<N>"),
-    ("v1 must not be satisfied by v14 in the task id",
-     _doc({"teacher-v1@1": _entry(legacy_task_version="v1")}, {TASK: "teacher-v1@1"}), REGISTERED, "never states"),
+    ("v2 must not be satisfied by v3 in the task id",
+     _doc({"lizard2-flat-v2@1": _entry(legacy_task_version="v2")}, {TASK: "lizard2-flat-v2@1"}), REGISTERED, "never states"),
     ("entry point is not module:qualname",
-     _doc({"teacher-v14@1": _entry(agent_entry="LizardTeacherV14PPORunnerCfg")}, {TASK: "teacher-v14@1"}),
+     _doc({KEY: _entry(agent_entry="Lizard2V3PPORunnerCfg")}, {TASK: KEY}),
      REGISTERED, "is not module:qualname"),
-    ("format changed without this gate", _doc({"teacher-v14@1": _entry()}, {TASK: "teacher-v14@1"}, fmt=2),
+    ("format changed without this gate", _doc({KEY: _entry()}, {TASK: KEY}, fmt=2),
      REGISTERED, "format"),
     # -- shapes that must stay green ------------------------------------------------
     ("matching map", CLEAN, REGISTERED, None),
-    ("v0 family: no declared version while the id says v0",
-     _doc({"rough-v0@1": _entry(env_cfg_entry="rl_exp.tasks.recipe_tasks:LizardRoughEnvCfg",
-                                agent_entry="rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardRoughPPORunnerCfg",
-                                legacy_task_version=None)},
-          {"Lizard-Velocity-Rough-v0": "rough-v0@1"}),
-     {"Lizard-Velocity-Rough-v0": {"env_cfg_entry_point": "rl_exp.tasks.recipe_tasks:LizardRoughEnvCfg",
-                                   "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:LizardRoughPPORunnerCfg"}},
-     None),
+    ("no declared version while the id still states one: accepted here, the reverse reading is absent",
+     _doc({KEY: _entry(legacy_task_version=None)}, {TASK: KEY}), REGISTERED, None),
 ]
 
 
@@ -107,16 +106,16 @@ def _builder(versions: dict):
 
 
 BIND_CASES: list[tuple[str, dict, dict, str | None]] = [
-    ("binding agrees", {"r@1": _entry()}, {ENV_V14: "v14"}, None),
-    ("class carries no version", {"r@1": _entry()}, {ENV_V14: None}, "carries params_version=None"),
-    ("class carries a different version", {"r@1": _entry()}, {ENV_V14: "v13"}, "carries params_version='v13'"),
-    ("declared null while the class carries one", {"r@1": _entry(legacy_task_version=None)}, {ENV_V14: "v0"},
+    ("binding agrees", {"r@1": _entry()}, {ENV_V3: "v3"}, None),
+    ("class carries no version", {"r@1": _entry()}, {ENV_V3: None}, "carries params_version=None"),
+    ("class carries a different version", {"r@1": _entry()}, {ENV_V3: "v2"}, "carries params_version='v2'"),
+    ("declared null while the class carries one", {"r@1": _entry(legacy_task_version=None)}, {ENV_V3: "v0"},
      "declared legacy_task_version=None"),
-    ("entry point cannot be built", {"r@1": _entry()}, {ENV_V14: ImportError("no module named")}, "cannot build"),
+    ("entry point cannot be built", {"r@1": _entry()}, {ENV_V3: ImportError("no module named")}, "cannot build"),
     ("entry point is not a string, left to validate", {"r@1": _entry(env_cfg_entry=17)}, {}, None),
-    ("right version, wrong line", {"r@1": _entry()}, {ENV_V14: ("v14", "lizard/baseline")},
+    ("right version, wrong line", {"r@1": _entry()}, {ENV_V3: ("v3", "lizard2/ghost")},
      "lifecycle permissions would be read from the wrong line"),
-    ("config declares no line at all", {"r@1": _entry()}, {ENV_V14: ("v14", None)}, "params_line=None"),
+    ("config declares no line at all", {"r@1": _entry()}, {ENV_V3: ("v3", None)}, "params_line=None"),
 ]
 
 
@@ -149,7 +148,7 @@ def main() -> int:
         failures.append("registration parser read no tasks from rl_exp/tasks/__init__.py")
     elif len(real) != declared:
         failures.append(f"registration parser read {len(real)} tasks, the map declares {declared}")
-    elif not real[TASK].get("env_cfg_entry_point", "").endswith(f":{ENV_V14.split(':')[1]}"):
+    elif not real[TASK].get("env_cfg_entry_point", "").endswith(f":{ENV_V3.split(':')[1]}"):
         # the parser's job is to read the *env* entry for this task, not to agree with one module
         # path: after the entry switch the same class is reached through recipe_tasks, and pinning
         # the module here would make this falsifier go red for a change it does not guard

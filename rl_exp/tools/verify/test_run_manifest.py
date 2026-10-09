@@ -27,12 +27,12 @@ import torch  # noqa: E402
 from rl_exp.tools.runrecord import manifest as M  # noqa: E402
 from rl_exp.tools.runrecord import provenance as prov  # noqa: E402
 from rl_exp.tasks import curriculum_state as cstate  # noqa: E402
-from rl_exp.tasks.agents.rsl_rl_ppo_cfg import LizardTeacherV14PPORunnerCfg  # noqa: E402
-from rl_exp.tasks.recipe_tasks import LizardRoughTeacherEnvCfg_V14  # noqa: E402
+from rl_exp.tasks.agents.rsl_rl_ppo_cfg import Lizard2V3PPORunnerCfg  # noqa: E402
+from rl_exp.tasks.recipe_tasks import Lizard2FlatV3EnvCfg  # noqa: E402
 from test_lifecycle_gate import active_index  # noqa: E402
 
 PROBLEMS: list[str] = []
-TASK = "Lizard-Rough-v14"
+TASK = "Lizard2-Flat-v3"
 
 
 def _begin(**kwargs):
@@ -87,7 +87,7 @@ class _StubEnv:
             step_dt=step_dt if step_dt is not None else cfg.sim.dt * cfg.decimation,
             common_step_counter=1234,
             observation_manager=types.SimpleNamespace(
-                group_obs_dim={"proprio": (90,), "extero": (208,), "priv": (83,)}
+                group_obs_dim={"policy": (94,)}
             ),
         )
 
@@ -108,8 +108,8 @@ def _record(
     case is the honest default and a mismatch has to be asked for explicitly.
     ``curriculum_resume`` stands in for the outcome ``apply_resume_state`` returns.
     """
-    cfg = LizardRoughTeacherEnvCfg_V14()
-    agent = LizardTeacherV14PPORunnerCfg()
+    cfg = Lizard2FlatV3EnvCfg()
+    agent = Lizard2V3PPORunnerCfg()
     env = _StubEnv(cfg, num_envs)
     runner = _StubRunner(lr=agent.algorithm.learning_rate if runner_lr is None else runner_lr)
     ctx = _begin(log_dir=tmp, task=TASK, argv=["train.py", "--task", TASK], env_cfg=cfg, agent_cfg=agent)
@@ -178,7 +178,7 @@ def main() -> int:
     real_sources = prov.code_sources
     prov.code_sources = _clean_sources
     try:
-        run_dir = root / "2026-09-15_14-00-00_v14"
+        run_dir = root / "2026-09-15_14-00-00_v3"
         ctx, env, runner = _record(run_dir)
 
         manifest = json.loads((run_dir / M.MANIFEST_NAME).read_text(encoding="utf-8"))
@@ -206,13 +206,13 @@ def main() -> int:
         check(
             "record/effective-lr",
             manifest["stages"]["ready_to_learn"]["learning_rate"]["effective"]
-            == LizardTeacherV14PPORunnerCfg().algorithm.learning_rate
+            == Lizard2V3PPORunnerCfg().algorithm.learning_rate
             and manifest["stages"]["ready_to_learn"]["learning_rate"]["agrees"] is True,
             f"{manifest['stages']['ready_to_learn']['learning_rate']}",
         )
         check(
             "record/obs-dims",
-            manifest["stages"]["ready_to_learn"]["obs_group_dims"] == {"proprio": [90], "extero": [208], "priv": [83]},
+            manifest["stages"]["ready_to_learn"]["obs_group_dims"] == {"policy": [94]},
             f"{manifest['stages']['ready_to_learn']['obs_group_dims']}",
         )
         check(
@@ -391,7 +391,7 @@ def main() -> int:
         shutil.rmtree(bad)
 
         # a checkpoint written before T1 froze must not claim readiness
-        early = root / "2026-09-15_13-00-00_v14"
+        early = root / "2026-09-15_13-00-00_v3"
         ctx_early, _, runner_early = _record(early, save_early=True)
         early_infos = runner_early.saves[-1].get(M.CKPT_INFOS_KEY, {})
         check(
@@ -410,7 +410,7 @@ def main() -> int:
         check("negative/checkpoint-restored", M.main(["--verify", str(run_dir)]) == 0, "restored checkpoint did not pass")
 
         # a stub env that disagrees with the declaration must be recorded as a failure
-        mismatch_dir = root / "2026-09-15_12-00-00_v14"
+        mismatch_dir = root / "2026-09-15_12-00-00_v3"
         ctx_bad, _, _ = _record(mismatch_dir, num_envs=64)
         check("negative/env-mismatch-fails", ctx_bad.failures and "num_envs" in ctx_bad.failures[-1], f"{ctx_bad.failures}")
         check("negative/env-mismatch-verify", M.main(["--verify", str(mismatch_dir)]) == 1, "mismatch passed verification")
@@ -428,10 +428,10 @@ def main() -> int:
         dirty_sources = json.loads(json.dumps(_clean_sources()))
         dirty_sources["repository"].update(dirty=True, diff_lines=17, untracked_count=2)
         prov.code_sources = lambda: dirty_sources
-        dirty_dir = root / "2026-09-15_11-00-00_v14"
+        dirty_dir = root / "2026-09-15_11-00-00_v3"
         dirty_dir.mkdir()
-        cfg_dirty = LizardRoughTeacherEnvCfg_V14()
-        agent_dirty = LizardTeacherV14PPORunnerCfg()
+        cfg_dirty = Lizard2FlatV3EnvCfg()
+        agent_dirty = Lizard2V3PPORunnerCfg()
         saved_override = os.environ.pop(M.DIRTY_OVERRIDE_ENV, None)
         try:
             _begin(log_dir=dirty_dir, task=TASK, argv=["train.py"], env_cfg=cfg_dirty, agent_cfg=agent_dirty)

@@ -273,7 +273,7 @@ def run(args) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--task", default="Lizard-Baseline-Flat-Play-v2")
+    parser.add_argument("--task", default="Lizard2-Flat-Play-v3")
     parser.add_argument("--checkpoint", help="policy checkpoint; required unless --dry-run")
     parser.add_argument("--speeds", default="3.0", help="comma-separated speed gears [m/s]")
     parser.add_argument("--terrains", default=PLANE,

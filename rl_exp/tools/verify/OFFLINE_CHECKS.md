@@ -56,16 +56,17 @@ git/子进程、重复构造同一个 cfg。）
 
 | 常量 | 现值 | 口径 |
 |---|---|---|
-| `MAX_CHECKS` | 48 | **条数棘轮**（默认路径的闸）：条数是个整数，不受负载影响 |
+| `MAX_CHECKS` | 37 | **条数棘轮**（默认路径的闸）：条数是个整数，不受负载影响 |
 | `PER_CHECK_BUDGET_S` | 25 | 单条检查在**安静**下单独跑的秒数上限（超了先单独重跑再定罪） |
 | `SERIAL_BUDGET_S` | 175 | **合计**，只在 `--confirm-cost` 审计时用它（2026-09-18 实测 160s/45 条；2026-09-20 两次读数 140s 与 154s，46 条，常量均未动；超 20% 富余会自己喊"tighten it"） |
 
-条数棘轮 45 → 46（2026-09-20）：新增条目 = `test_baseline_isolation.py`。**为什么必须是新进程**：
+条数棘轮 45 → 46（2026-09-20）：新增条目 = `test_baseline_isolation.py`（该检查已随 lizard main / parkour / baseline
+三条线于 2026-10-09 退役，本节保留的是**为什么进程边界本身就是被测对象**这条规则）。**为什么必须是新进程**：
 它断言的是"解析基线任务不会导入主线"，而在任何已 import 过主线的进程里这条断言**不可测**
 （`rl_exp.tasks.recipe` 已在 `sys.modules` 里，封锁器无从失效）—— 进程边界本身就是被测对象。
 它同时**替换**了 `test_acceptance_metrics.py` 那条的位置：后者与 baseline 的四条断言合并进
-`test_baseline_contract.py`（一个进程内 = `test_baseline_mdp` 自检 + 四条基线断言 + **末段**转
-acceptance metrics），所以净增只有这一次。
+`test_baseline_contract.py`（一个进程内 = 四条基线断言 + **末段**转 acceptance metrics），所以净增
+只有这一次。
 `SERIAL_BUDGET_S` 的复核（`--confirm-cost`，分钟级）已于 2026-09-20 树静下来后补测：46 条
 quiet 合计 **140s**（wave 184s），仍在 ratified 175s 内。140s 与 tighten 阈值 `0.8 × 175 = 140`
 **恰好相等**⇒ 工具不报提示，但 25% 的富余略宽于本口径自称的 20%；本轮**只记测量、常量不动**
@@ -74,6 +75,11 @@ quiet 合计 **140s**（wave 184s），仍在 ratified 175s 内。140s 与 tight
 同样落在 ratified 175s 内，且**没有**越过收紧线 `0.8 × 175 = 140`（154 > 140）⇒ "常量不动"的结论
 不变。两次读数相差 10%，说明"安静主机"在不同时刻并不等价：单次实测够不上收紧阈值的证据，
 要么多测几次取最坏，要么只在读数明显低的时候才动这个常量。
+
+**2026-10-09 条数棘轮再次移动**：`MAX_CHECKS` 48 → 37 —— 收掉的 11 条，各自的受保护产物都随
+lizard main / parkour / baseline 三条退休线离开主路径（逐条判据：`acceptance/records/2026-10-09-retired-family-prune-manifest.md`
+§3）。上面两段的 `--confirm-cost` 读数属于 46 条那棵树，**不随条数外推**：按 §3.2 的口径在本轮
+移动之后重新实测，本轮不动 `SERIAL_BUDGET_S`。
 
 一条检查 = 一个进程，第一句断言之前先付解释器 + torch import（~2.5s），所以条数就是这个套件的
 主要成本；而成本里唯一不受负载污染的量只有两个：**条数**与**单条在安静主机上的秒数**。默认路径
@@ -151,9 +157,9 @@ quiet 合计 **140s**（wave 184s），仍在 ratified 175s 内。140s 与 tight
 
 ## 5 什么时候它**不该**进离线套件
 
-- 要起仿真 / 要 GPU / 要 Isaac Sim app（那就不是离线：`smoke_test.py`、`view_terrain.py`、
+- 要起仿真 / 要 GPU / 要 Isaac Sim app（那就不是离线：`view_terrain.py`、
   `terrain_split_env_run.py` 这类留在目录里但不进 `CHECKS`）。注意反面例子也算数：
-  `terrain_preflight.py` 只从框架 import 离线函数、秒级返回，它已进 `CHECKS`（几何摘要的
+  `terrain_preflight.py` 只做离线几何构造（不起 app、秒级返回），它已进 `CHECKS`（几何摘要的
   自证），不要因为"名字里带 preflight"就当成要起仿真的那类。
 - 单次超过 25s 且砍不动：先用 `--json` 落报告 + 窄化断言（`--tasks`、`--only` 那类入口），
   或拆成"快速契约 + 慢速离线"两层，别把 25s 直接抬到 120s。
@@ -173,7 +179,6 @@ quiet 合计 **140s**（wave 184s），仍在 ratified 175s 内。140s 与 tight
 | 写路径契约 | **无闸门**，只有 §4.4 的约定 + 本轮一次人工审计（见下）。新增检查要写仓的话，自己核一遍 |
 | 新条目的准入（来源缺陷 + 类别，§4） | **无闸门**：写在 commit message 里，判定靠 review |
 | 冻结 yaml 不被跨 cfg 共享 | `test_params_isolation.py` |
-| 基线线的配方代码不拉主线（解析基线任务不 import main；类由本线构造器生成、与导入顺序无关） | `test_baseline_isolation.py` |
 
 每条规则要说明如何验证；没有机器闸门不自动意味着必须新增进程。
 优先扩充已有闸门，对无法廉价自动化的判断明确写出人工审查责任。本仓已有先例：横幅卫生当初只是约定，

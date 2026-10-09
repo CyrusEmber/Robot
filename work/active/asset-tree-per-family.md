@@ -4,9 +4,9 @@ title: 每家族一份网格树：生成器真跑与旧家族冻结分歧的处�
 scope: rl_exp/versions, rl_exp/tools/verify, rl_exp/blender, ablation_harness
 status: open
 landing: rl_exp/versions/lizard2/assets.json, rl_exp/tools/verify/check_dr_parity.py, rl_exp/blender/generate_urdf.py
-next: ① **生成器真跑一次**：本机无 Blender，目前只有"引用必须落在声明树内"这半边被闸门看守；真跑要确认重新生成落到声明树、URDF 引用可解析、usda 内联点与之一致（三份拷贝同几何）。② **处置旧家族 `lizard` 的冻结分歧**：它的 URDF 引用 `versions/lizard/meshes/**`，而它声明并消费共享树 `meshes/`；两条出路是"在那条线开新版本时一并换树"或"带理由的长期豁免并写明期限"，不能继续只是打印。③ 若将来要修旧家族的 `rl` 脚平板 hull，按同一流程再走一次换代（其历史 run 的可复现性随之作废）。
+next: ① **生成器真跑一次**：本机无 Blender，目前只有"引用必须落在声明树内"这半边被闸门看守；真跑要确认重新生成落到声明树、URDF 引用可解析、usda 内联点与之一致（三份拷贝同几何）。② **遗留冻结分歧的处置**：它的 URDF 引用 `versions/lizard/meshes/**`，而它声明并消费共享树 `meshes/`；两条出路是"在那条线开新版本时一并换树"或"带理由的长期豁免并写明期限"，不能继续只是打印。③ 若将来要修旧家族的 `rl` 脚平板 hull，按同一流程再走一次换代（其历史 run 的可复现性随之作废）。
 close_when: (a) 生成器在真机上跑过一次，产出落在声明树、三份拷贝互证、闸门全绿；(b) 旧家族的分歧有一条明确处置（换树，或写明理由与期限的豁免），且该处置引用一次真跑或一次闸门读数。
-depends_on: teacher-snapshot-asset-sync
+depends_on: rl_exp/tools/verify/check_dr_parity.py
 evidence: acceptance/records/2026-09-28-lizard2-foot-hull-and-asset-isolation
 ---
 

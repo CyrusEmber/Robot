@@ -3,7 +3,7 @@ id: teacher-v1-first-run
 title: teacher 环境快照重写 + smoke 解包 bug + v1 首跑验收（PLAN 挂账 #1/#2/#3，已结案）
 scope: rl_exp/tasks, rl_exp/versions/lizard/main/v1
 status: done
-landing: rl_exp/tasks/teacher_env_cfg.py, rl_exp/tools/verify/teacher_smoke.py, rl_exp/versions/lizard/main/v1/NOTES.md
+landing: rl_exp/versions/lizard/main/v1/NOTES.md
 outcome: teacher env 去掉 lizard 中间层继承、独立成快照；teacher_smoke 的 gym 5 元组解包 bug 修掉；v1 首跑 14000 iters 并出对照结论——**特权 obs 救活趴窝**（零动作 success 0.254 → v1 0.635），遗留 fall 随迭代上升（0.03→0.33）、`gap_40cm` 不跳。
 evidence: rl_exp/versions/lizard/ACCEPTANCE.md, rl_exp/versions/lizard/main/v1/NOTES.md
 ---

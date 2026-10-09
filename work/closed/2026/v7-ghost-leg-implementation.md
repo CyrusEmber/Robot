@@ -2,10 +2,10 @@
 id: v7-ghost-leg-implementation
 title: v7 实施（ghost 断腿鲁棒性；方案 SSOT = v7/PLAN.md）
 scope: rl_exp/versions/lizard/main/v7, rl_exp/tasks, ablation_harness
-status: open
+status: superseded
 landing: rl_exp/versions/lizard/main/v7/PLAN.md, rl_exp/tasks/recipe.py, ablation_harness/suites.py
-next: 按 `v7/PLAN.md` 清单实施（本项只管排期与前置门，方案正文不复述）：V7 env cfg + 任务注册 `Lizard-Rough-v7`、broken_leg DR 事件、`damage_flags` 4 维进 actor obs、断腿 hfe/kfe 接触罚豁免（走 V7 子类、不改旧类）、broken-leg eval suite、v8 ckpt 微调入口。**前置依赖：v8 已训**（未满足不许冻结/开训）。obs 维度变化属契约变更 ⇒ 走 `versions/obs_protocols.json` 声明面，不改旧版本的声明
-close_when: 执行者实施完并观察两条：① `check_cfg_lock` / `check_obs_protocol` / `check_dr_parity` 三条离线闸全绿，且 v7 声明面与实构 cfg 一致；② broken-leg suite 能起来并出一条**真分数**（不是零动作 run）。两条都成立即关；任一红或 suite 起不来 ⇒ 记缺口并保持 open。读数归 `ACCEPTANCE.md`，不进本项
+outcome: v7 是退役线 `lizard/main` 的版本，实施对象（env cfg、`Lizard-Rough-v7` 注册、断腿 DR 与 eval suite）随本迭代的代码清理删除，前置依赖（v8 已训）也随线消失 ⇒ 实施动作由清理项接管；方案文本仍在冻结的 `v7/PLAN.md`。
+superseded_by: retired-family-code-prune
 ---
 
 ## 当前状态

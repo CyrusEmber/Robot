@@ -24,8 +24,9 @@ pins the policy gates that keep a resume honest:
   uncovered stateful term is reported, a registered class wired un-instantiated aborts
 * S08 v1 payloads migrate with their missing evidence listed (never backfilled); the
   deprecated ``weights_only`` entry works, and contradicting it is an error
-* S09 the declaration is a class attribute (V5..V14 inherit it, PLAY overrides it) that
-  does not enter the config data; a non-zero rank neither restores nor saves
+* S09 the declaration is a class attribute the recipe stamps per kind, and it stays out of
+  the config data (so changing it cannot look like changing the configuration); a non-zero
+  rank neither restores nor saves
 * S10 the manifest records the outcome ``apply_resume_state`` returned (test_run_manifest)
 * B-layer (1.4a): both SIR terms, given the same statistics and a reset RNG, produce the
   same curriculum update -- driven through the production entry point and per update
@@ -73,10 +74,8 @@ from rl_exp.tasks.curriculum_state import (  # noqa: E402
 )
 from rl_exp.tasks.param_grid_terrain import build_param_grid_terrain_cfg  # noqa: E402
 from rl_exp.tasks.recipe_tasks import (  # noqa: E402
-    LizardRoughTeacherEnvCfg_V4,
-    LizardRoughTeacherEnvCfg_V5,
-    LizardRoughTeacherEnvCfg_V13_PLAY,
-    LizardRoughTeacherEnvCfg_V14,
+    Lizard2FlatV3EnvCfg,
+    Lizard2FlatV3EnvCfg_PLAY,
 )
 from rl_exp.tasks.teacher_mdp import JOINT_SIR_TERM, ck_value, init_ck  # noqa: E402
 from rl_exp.tools.verify import terrain_split_probe as probe  # noqa: E402
@@ -93,7 +92,7 @@ from test_v5_terrain_sir import _env as _row_env  # noqa: E402
 from test_v5_terrain_sir import _term as _row_term  # noqa: E402
 
 CK = dict(c0=0.2, decay=0.98, steps_per_iteration=24)
-"""The v3 c_k schedule used by the tests (matches the v11 yaml section)."""
+"""The c_k schedule the tests arm: a fixture value, deliberately not read off a live yaml."""
 
 ROW_SEED = 31
 """Fixed test RNG seed for the B-layer row-SIR comparisons (both sides reseeded per call)."""
@@ -102,7 +101,11 @@ JOINT_SEED = 32
 """Fixed test RNG seed for the B-layer joint-SIR comparisons."""
 
 ROW_TERM = "terrain_levels"
-"""The term name V5..V14 wire the row SIR under."""
+"""The curriculum field name the row-SIR tests wire the term under (its historical name).
+
+No active recipe wires a curriculum term -- lizard2 is flat, with no curriculum and no DR -- so
+the name is this file's, and the term it carries is the retained one the DR line will reuse.
+"""
 
 ROW_CFG_KEYS = (
     "command_name",
@@ -467,11 +470,18 @@ def test_uncovered_stateful_term_tripwire() -> None:
     assert any("not covered by any registered adapter" in r for r in reports)
 
 
-# --- row SIR (v5..v14 line) + c_k-only + the boundary cases ------------------------
+# --- the retained row SIR + c_k-only + the boundary cases --------------------------
 
 
 class _TaskCfgV14:
-    """Stand-in env cfg: the v14 recipe declares the curriculum contract, as the real class does."""
+    """Stand-in env cfg for a recipe that DECLARES the curriculum contract.
+
+    The declaration lives on the class and is read through ``type(env.cfg)``, so a stand-in
+    exercises it exactly as a real env cfg does. It has to be a stand-in: the active line states
+    the opposite (lizard2 is flat, so every recipe declares False), and the declaring side of the
+    contract must keep being covered while the retained state layer waits for the DR that will
+    give it a real carrier again.
+    """
 
     REQUIRES_CURRICULUM_STATE = True
 
@@ -519,7 +529,7 @@ def _row_grid(names, props, *, rows=10, cols=20):
 
 
 def _row_pair(terrain=None, *, counter=0, cfg_cls=_TaskCfgV14):
-    """(env, term) for the row SIR line, wired and c_k-armed the way V5..V14 wire it."""
+    """(env, term) for the row SIR: wired as a recipe would wire it and c_k-armed."""
     terrain = _row_grid(("t0", "t1", "t2"), (0.2, 0.3, 0.5)) if terrain is None else terrain
     env = _row_env(terrain, counter=counter)
     env.cfg = cfg_cls()
@@ -531,7 +541,7 @@ def _row_pair(terrain=None, *, counter=0, cfg_cls=_TaskCfgV14):
 
 
 def _ck_only_env(*, counter=0, ck=True):
-    """An env that wires no curriculum term and only runs the c_k clock (v3/v4 line)."""
+    """An env that wires no curriculum term and only runs the c_k clock."""
     env = _row_env(_row_grid(("t0", "t1", "t2"), (0.2, 0.3, 0.5)), counter=counter)
     env.cfg = _TaskCfgV14()
     env.num_envs = ROW_ENVS
@@ -908,20 +918,30 @@ def test_declaration_is_checked_against_wiring_and_each_save() -> None:
 
 
 def test_declaration_is_class_level_and_off_in_play() -> None:
-    assert getattr(LizardRoughTeacherEnvCfg_V5, REQUIRES_CURRICULUM_STATE) is True
-    assert getattr(LizardRoughTeacherEnvCfg_V14, REQUIRES_CURRICULUM_STATE) is True  # stamped per recipe
-    assert getattr(LizardRoughTeacherEnvCfg_V13_PLAY, REQUIRES_CURRICULUM_STATE) is False
-    # v4 has no SIR term, so it must not claim to require one. The declaration path states False
-    # where the version subclass said nothing at all, and the two are one answer: all four readers
-    # (resume refusal, save guard, the trainer's import guard, the manifest) go through
-    # ``getattr(..., False)``, and check_recipe_build compares them as bools for the same reason.
-    assert getattr(LizardRoughTeacherEnvCfg_V4, REQUIRES_CURRICULUM_STATE, False) is False
+    """S09: the declaration is a class attribute, stamped per recipe kind, and is not config data.
+
+    The active line states it OFF, both kinds: lizard2 is flat -- no curriculum, no DR -- so every
+    recipe declares ``False`` (``lizard2_recipe``'s per-recipe table, read through the same
+    ``type(env.cfg)`` the production readers use). The ON side has no live carrier at all, which is
+    why it is asserted through this file's declaring stand-in instead: the retained state layer is
+    kept for the DR this line has not wired yet, and a test that only ever saw ``False`` would stop
+    covering the branch the moment a recipe declares ``True`` again.
+    """
+    assert getattr(Lizard2FlatV3EnvCfg, REQUIRES_CURRICULUM_STATE) is False
+    assert getattr(Lizard2FlatV3EnvCfg_PLAY, REQUIRES_CURRICULUM_STATE) is False  # stamped per kind
+
+    # the mechanism: the statement is read off the class, and a class that states nothing reads as
+    # False. That is why all four readers (resume refusal, save guard, the trainer's import guard,
+    # the manifest) go through ``getattr(..., False)``, and check_recipe_build compares them as
+    # bools; the wiring conjunction on top of the statement is the neighbouring case's claim.
+    assert declares(SimpleNamespace(cfg=_TaskCfgV14())) is True
+    assert declares(SimpleNamespace(cfg=_TaskCfgV14Plain())) is False
 
     # not config data: the cfg snapshot (the recipe golden and every run manifest's
     # cfg digest) excludes ClassVars, so changing the declaration cannot look like
     # changing the configuration. Upstream's to_dict walks the instance namespace and
     # still carries it -- that dump is a per-run artifact, not a comparison surface.
-    cfg = LizardRoughTeacherEnvCfg_V5()
+    cfg = Lizard2FlatV3EnvCfg()
     assert REQUIRES_CURRICULUM_STATE not in cs.snapshot(cfg)  # the golden/digest surface
     assert REQUIRES_CURRICULUM_STATE in cfg.to_dict()  # upstream dump: recorded, not compared
 

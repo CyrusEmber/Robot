@@ -972,12 +972,6 @@ _WXYZ_YAW = (
 _YAW_EXTRACTIONS_ALLOWED = {
     # kept on purpose: the wrong branch the diagnostics display next to the library's answer
     "rl_exp/tools/diagnose/diagnose_support.py": "对照 that proves the wrong branch wrong (see its comment)",
-    # known bad, another line, decided 2026-09-22: its docstring claims (x, y, z, w) while its
-    # math is the (w, x, y, z) branch. The line is retired and never trained -- its only log
-    # directory holds the refusal manifest and nothing else -- so no reading needs reinterpretation
-    # and the fix is not applied. Kept here so the debt stays visible instead of silent
-    # (work/closed/2026/parkour-yaw-reinterpretation.md).
-    "rl_exp/tasks/parkour_mdp.py": "parkour line's _yaw_from_quat: same bug class, line retired and never trained",
 }
 
 
@@ -1800,10 +1794,6 @@ def main():
         print(json.dumps(frame_frozen_digests(
             json.loads(_FRAMES_SEMANTICS_PATH.read_text(encoding="utf-8"))), indent=2))
         return
-    # Import isolation has its own fresh-process suite entry.
-    from rl_exp.tools.verify import test_baseline_mdp
-
-    test_baseline_mdp.main()
     for name, test in sorted(globals().copy().items()):
         if name.startswith("test_"):
             test()

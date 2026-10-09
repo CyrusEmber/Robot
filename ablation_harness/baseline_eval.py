@@ -370,7 +370,7 @@ def main() -> None:
     from isaaclab.app import AppLauncher
 
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--task", default="Lizard-Baseline-Flat-Play-v1")
+    parser.add_argument("--task", default="Lizard2-Flat-Play-v3")
     parser.add_argument("--protocol", type=pathlib.Path, required=True,
                         help="frozen protocol under protocols/; the report records its digest")
     parser.add_argument("--checkpoint")

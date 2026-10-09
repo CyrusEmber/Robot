@@ -6,7 +6,7 @@ status: blocked
 landing: AGENTS.md, rl_exp/tools/verify/OFFLINE_CHECKS.md
 next: 观测首条新增套件项是否按判据登记来源缺陷与类别（本身无动作；解除者 = 下一次加检查的人）
 close_when: 用户裁决——(a) 采纳：`AGENTS.md` 与 `OFFLINE_CHECKS.md` 能读到准入判据，且此后第一条新增套件项按它填写了来源缺陷 ⇒ done；(b) 否决 ⇒ cancelled 写理由；观测 = 规则文本 + 首个按判据入套件的 commit
-depends_on: retired-family-code-prune
+depends_on: rl_exp/tools/verify/offline_suite.py
 evidence: acceptance/records/2026-10-09-repo-architecture-review
 ---
 

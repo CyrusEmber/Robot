@@ -6,51 +6,30 @@
 # -*- coding: utf-8 -*-
 """The recipe builder: one env cfg from what a recipe declares (``ARCH_PLAN.md`` 2.4, stage B3).
 
-The class hierarchy expresses a recipe twice over: once as the shared base wiring, and again as a
-chain of per-version subclasses whose ``__post_init__`` each overwrite a few fields. The winner
-is whichever class the MRO ran last, so "what is v14" is only readable by replaying every body in
-the chain -- and a new recipe means a new class.
+The class hierarchy expressed a recipe twice over: once as the shared base wiring, and again as a
+chain of per-version subclasses whose ``__post_init__`` each overwrote a few fields. The winner was
+whichever class the MRO ran last, so "what is a version" was only readable by replaying every body
+in the chain -- and a new recipe meant a new class. Those chains are gone
+(``acceptance/records/2026-10-09-retired-family-prune-manifest.md``); the one line left, the lizard2
+family's, states its elements in :mod:`rl_exp.tasks.lizard2_recipe` and is read through this module.
 
 The builder keeps the shared wiring (an env cfg whose every structural choice resolves from the
 version it is handed) and turns the *deltas* into data: an ordered list of named elements per
 recipe. That is the whole point of stage B -- a new recipe becomes a declaration, not a subclass.
 
 A recipe is listed here only once its entire delta is declared. Until then the field is ``None``
-and the hard-A gate prints it, because a builder that quietly produced "v14 minus whatever I have
+and the hard-A gate prints it, because a builder that quietly produced "vN minus whatever I have
 not moved yet" would pass every check it was asked to pass.
 """
 
 from __future__ import annotations
 
-import pathlib
-from copy import deepcopy
 from typing import ClassVar
 
-import isaaclab.sim as sim_utils
-import isaaclab_tasks.manager_based.locomotion.velocity.mdp as mdp
-from isaaclab.actuators import ImplicitActuatorCfg
-from isaaclab.assets import ArticulationCfg
-from isaaclab.managers import CurriculumTermCfg as CurrTerm
-from isaaclab.managers import EventTermCfg as EventTerm
-from isaaclab.managers import ObservationTermCfg as ObsTerm
-from isaaclab.managers import RewardTermCfg as RewTerm
-from isaaclab.managers import SceneEntityCfg
-from isaaclab.sensors import RayCasterCfg, patterns
-from isaaclab.utils.configclass import configclass
-from isaaclab.utils.noise import UniformNoiseCfg as Unoise
-
-from rl_exp.tasks import baseline_env_cfg, baseline_recipe, components, recipe_params, teacher_mdp
-from rl_exp.tasks.recipe_factory import make_class
-from rl_exp.tasks import curriculum_env_cfg, lizard_env_cfg, rough_env_cfg
 from rl_exp.tasks import curriculum_state as cstate
-from rl_exp.tasks import teacher_env_cfg
-from rl_exp.tasks import lizard2_env_cfg, lizard2_recipe
+from rl_exp.tasks import lizard2_env_cfg, lizard2_recipe, recipe_params
 from rl_exp.tasks.play_utils import apply_play_wiring
-from rl_exp.tasks.staged_curriculum import StageCfg, StagedCurriculumTerm, StagedCurriculumTermCfg
-
-# recipe.py lives at rl_exp/tasks/recipe.py -> exp root is parents[1], the same root the line
-# modules resolve their asset paths against
-_RL_EXP_DIR = pathlib.Path(__file__).resolve().parents[1]
+from rl_exp.tasks.recipe_factory import make_class
 
 
 def _doc(cfg) -> dict:
@@ -63,657 +42,38 @@ def _doc(cfg) -> dict:
     return recipe_params.load(cfg.params_line, cfg.params_version)
 
 
-def v3_contact_headroom(cfg) -> None:
-    """PhysX contact buffer headroom (v3.6.1).
-
-    Belly contact is persistent by design once the base-contact termination is gone (a
-    flat-belly robot is not tilted, so tilt does not fire either) and the v3 terrain adds
-    stepping-stone contact pairs. The stock 2**26 collision stack overflows at 4096 envs and
-    PhysX then drops contacts silently, i.e. nondeterministic physics. v1/v2 keep the stock
-    value.
-    """
-    cfg.sim.physics.default.gpu_collision_stack_size = 2**28
-
-
-def v3_speed_curriculum(cfg) -> None:
-    """Staged speed curriculum (v3.6).
-
-    v1's replay showed foot-pad creeping is the optimum at a 1 m/s command cap, so the range
-    climbs -1..2 up to 5, gated on success_rate >= 0.8 sustained 120 s: a stage the robot cannot
-    track is never applied (user decision 2026-09-01). Stage 0 seeds the cfg range too, so the
-    first resamples already match the curriculum.
-    """
-    cfg.curriculum.speed_curriculum = StagedCurriculumTermCfg(
-        func=StagedCurriculumTerm,
-        stages=[
-            StageCfg(command_ranges={"lin_vel_x": (-1.0, 2.0)}, metric_threshold=0.8, sustain_s=120.0),
-            StageCfg(command_ranges={"lin_vel_x": (-1.0, 3.0)}, metric_threshold=0.8, sustain_s=120.0),
-            StageCfg(command_ranges={"lin_vel_x": (-1.0, 4.0)}, metric_threshold=0.8, sustain_s=120.0),
-            StageCfg(command_ranges={"lin_vel_x": (-1.0, 5.0)}),
-        ],
-    )
-
-
-def v3_anti_drag_reward(cfg) -> None:
-    """D2: the anti-drag foot-clearance reward replaces ``feet_air_time``.
-
-    The ``feet_air_time`` *observation* term stays (it lives in the priv group) -- only the
-    reward is replaced, by one that charges for dragging a foot near the ground.
-    """
-    rfc = _doc(cfg)["v3"]["r_fc"]
-    cfg.rewards.feet_air_time = None
-    cfg.rewards.foot_clearance = RewTerm(
-        func=teacher_mdp.FootClearanceReward,
-        weight=rfc["weight"],
-        params={
-            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
-            "clearance": rfc["clearance"],
-            "contact_threshold": rfc["contact_threshold"],
-            "mesh_prim_path": "/World/ground",
-            "max_distance": rfc["max_distance"],
-            "start_offset": rfc["start_offset"],
-        },
-    )
-
-
-def v3_ck_clock(cfg) -> None:
-    """D3/D4: the c_k schedule and its in-place function swaps.
-
-    Term names stay stable so the PLAY wiring and the DR event list keep matching -- the swap is
-    of ``func`` and ``mode``, never of the term's name. The loop form (rather than a literal per
-    term) is also what keeps these recipe-layer swaps out of the family-vs-teacher wiring parity
-    text check, which guards the BASE wiring freeze, not version recipes.
-    """
-    ck = _doc(cfg)["v3"]["curriculum_ck"]
-    cfg.events.init_ck = EventTerm(
-        func=teacher_mdp.init_ck,
-        mode="startup",
-        params={
-            "c0": ck["c0"],
-            "decay": ck["decay"],
-            "steps_per_iteration": ck["steps_per_iteration"],
-        },
-    )
-    for name, func in (
-        ("dof_acc_l2", teacher_mdp.joint_acc_l2_ck),
-        ("dof_torques_l2", teacher_mdp.joint_torques_l2_ck),
-        ("ang_vel_xy_l2", teacher_mdp.ang_vel_xy_l2_ck),
-    ):
-        getattr(cfg.rewards, name).func = func
-    # base_com lives inside a preset wrapper; .default is the physx branch
-    com_term = cfg.events.base_com.default
-    com_term.func = teacher_mdp.randomize_rigid_body_com_ck
-    com_term.mode = "reset"
-    for name, func in (
-        ("add_base_mass", teacher_mdp.randomize_rigid_body_mass_ck),
-        ("randomize_limb_mass", teacher_mdp.randomize_rigid_body_mass_ck),
-        ("randomize_inertia", teacher_mdp.randomize_rigid_body_inertia_ck),
-        ("randomize_actuator_gains", teacher_mdp.randomize_actuator_gains_ck),
-        ("randomize_joint_params", teacher_mdp.randomize_joint_parameters_ck),
-    ):
-        term = getattr(cfg.events, name)
-        term.func = func
-        term.mode = "reset"
-
-
-def v4_stock_contact_stack(cfg) -> None:
-    """v4 re-tests the stock PhysX contact stack (2**26) on the coarser rubble.
-
-    WARNING (user decision 2026-09-02): inspect the terrain before launching training or tests.
-    If the overflow returns (PhysX drops contacts silently, so the physics turn
-    nondeterministic), the root cause is contact density -- flat soles on a fine heightfield --
-    and not buffer size: do not raise the stack again, simplify the contact geometry instead.
-    """
-    cfg.sim.physics.default.gpu_collision_stack_size = 2**26
-
-
-def v5_drops_speed_curriculum(cfg) -> None:
-    """v5 removes the staged speed curriculum (v5.0).
-
-    Installed by ``v3_speed_curriculum`` above and taken away here, exactly as the subclass
-    chain did it: the staged term is a *field* of the curriculum block, so leaving it out of
-    the element list would make the built cfg state ``absent`` where the frozen recipe states
-    ``null`` -- and the snapshot keeps those apart on purpose. The reason it goes: stage 0's
-    (-1, 2) window kept a 50% standstill-freeload band under the exp kernel, and the linear
-    kernel below needs no range gating.
-    """
-    cfg.curriculum.speed_curriculum = None
-
-
-def v5_reward_package(cfg) -> None:
-    """The reward-side anti-collapse package (v5.0-v5.2).
-
-    v3/v4 trained to a foot-pad creeping optimum (15555 iters, success_rate pinned at the
-    standstill freeload baseline, terrain levels frozen at 1.27, foot_clearance reward never
-    above 5e-5), so four holes are closed here:
-
-    * the exp tracking kernel let ``|v_cmd| < 0.5`` stand still for half the command
-      distribution -- the linear (Cheng et al. 2023 Eq. 2) form scores standing 0 and reversal
-      negative;
-    * ``r_slip`` charges contact-foot sliding (paper S7, c_k-scaled) -- the only direct
-      anti-creeping term, dropped from v3 by an erratum;
-    * ``r_co`` narrows to thigh/shank (HFE/KFE) and the base body moves to a dedicated
-      continuous belly-force penalty at a *constant* weight (lying flat must never become free
-      as c_k anneals), HAA/spine exempt (user decision);
-    * both new weights are negative in this recipe's yaml -- v5.0/v5.1 shipped them positive,
-      i.e. paying for sliding and belly contact (same bug class as the v3 ``r_fc`` sign flip).
-    """
-    doc = _doc(cfg)
-    v5 = doc["v5"]
-    base_name = doc["robot"]["base_body_name"]
-
-    cfg.rewards.track_lin_vel_xy_exp = None
-    cfg.rewards.track_lin_vel_xy_lin = RewTerm(
-        func=teacher_mdp.track_lin_vel_xy_lin,
-        weight=v5["track_goal_vel"]["weight"],
-        params={"command_name": "base_velocity", "min_speed": v5["track_goal_vel"]["min_speed"]},
-    )
-    # both cfgs must be explicit params so the manager resolves body_ids (a defaulted
-    # SceneEntityCfg stays unresolved and indexes with body_ids=None)
-    cfg.rewards.feet_slide = RewTerm(
-        func=teacher_mdp.feet_slide_ck,
-        weight=v5["r_slip"]["weight"],
-        params={
-            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
-            "asset_cfg": SceneEntityCfg("robot", body_names=".*_foot"),
-        },
-    )
-    cfg.rewards.undesired_contacts.func = teacher_mdp.undesired_contacts_ck
-    cfg.rewards.belly_contact_force = RewTerm(
-        func=teacher_mdp.belly_contact_force,
-        weight=v5["belly_contact_force"]["weight"],
-        params={
-            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=[base_name]),
-            "force_scale": v5["belly_contact_force"]["force_scale"],
-        },
-    )
-
-
-def v5_sir_terrain_curriculum(cfg) -> None:
-    """v5.3: the SIR particle terrain curriculum replaces the stock level walk.
-
-    Lee et al. 2020 Algorithm S1 (discrete adaptation): a particle is (terrain type, difficulty
-    row) on the fixed 8-type x 10-row x 20-col grid -- v4's types plus a flat bootstrap column --
-    and spawn traffic is redistributed per measured success band. The v3.5 "spawn at the easiest
-    row" prerequisite dies here: SIR samples uniformly at start (paper line 1), which is why
-    ``components.TERRAIN_BY_RECIPE["v5"]`` carries no start level and why this term owns
-    ``terrain_levels`` instead.
-    """
-    sir = _doc(cfg)["v5"]["terrain_curriculum"]
-    cfg.curriculum.terrain_levels = teacher_mdp.SIRTerrainCurriculumCfg(
-        func=teacher_mdp.SpawnWeightSIRTerrainCurriculum,
-        command_name="base_velocity",
-        band=tuple(sir["band"]),
-        eval_every=int(sir["eval_every"]),
-        n_traj_min=int(sir["n_traj_min"]),
-        p_transition=float(sir["p_transition"]),
-        p_replay=float(sir["p_replay"]),
-        success_ratio=float(sir["success_ratio"]),
-        soft_edge=float(sir["soft_edge"]),
-        steps_per_iteration=int(sir["steps_per_iteration"]),
-    )
-
-
-def v6_spine_unlock(cfg) -> None:
-    """v6.1: the whole spine term (rear + neck + tail, 10 joints) becomes live.
-
-    v1-v5 left ``spine_scale`` at the class default 0.0, so the spine and tail were
-    policy-frozen and only wobbled passively under PD 150/10. The value is read from *this*
-    recipe's yaml (0.25), and that is what keeps v1-v5 pinned at 0.0: a recipe is the document
-    it names, not this element's behaviour. The 26-dim action layout and the obs groups
-    (90/208/83) are untouched: only the spine channels start moving.
-    """
-    cfg.actions.joint_pos_spine.scale = _doc(cfg)["action"]["spine_scale"]
-
-
-def v11_joint_sir_curriculum(cfg) -> None:
-    """v11: the joint (terrain combination, velocity bucket) particle filter replaces the row SIR.
-
-    The v5 scalar-row SIR is dropped first -- a field the frozen v11 recipe states, not a detail
-    that can be skipped. The replacement is installed under ``teacher_mdp.JOINT_SIR_TERM`` rather
-    than ``terrain_levels``: the command term and ``check_obs_layout`` look the term up by that
-    same name (v11.1). Measurement returns to the paper's per-state-transition Tr (Lee et al. 2020
-    Eq. 2/3/7, option a of work/closed/2026/sir-criterion-and-obs-layout.md); velocity enters the
-    particle as a repo extension.
-    The param-sampled terrain and the particle-sourced command term are structural and declared in
-    ``components.TERRAIN_BY_RECIPE`` / ``components.COMMAND_RANGE``.
-    """
-    v11 = _doc(cfg)["v11"]
-    sir = v11["terrain_curriculum"]
-    cfg.curriculum.terrain_levels = None
-    setattr(
-        cfg.curriculum,
-        teacher_mdp.JOINT_SIR_TERM,
-        teacher_mdp.JointSIRTerrainCurriculumCfg(
-            func=teacher_mdp.JointSIRTerrainCurriculum,
-            command_name="base_velocity",
-            band=tuple(sir["band"]),
-            velocity_buckets=tuple(v11["velocity_buckets"]),
-            particles_per_type=int(sir["particles_per_type"]),
-            eval_every=int(sir["eval_every"]),
-            n_traj_min=int(sir["n_traj_min"]),
-            p_transition=float(sir["p_transition"]),
-            p_replay=float(sir["p_replay"]),
-            maintain_mass=float(sir["maintain_mass"]),
-            steps_per_iteration=int(sir["steps_per_iteration"]),
-        ),
-    )
-
-
-def v12_reset_robustness(cfg) -> None:
-    """v12: the Miki et al. 2022 S8 reset/observation robustness package.
-
-    The audit against the paper's S8 list found three gaps on top of v11, all numbers in the
-    recipe's yaml:
-
-    * ``reset_robot_joints`` scales the default pose -- all-zero for this sprawled rig, so it has
-      been a silent no-op. It is dropped and replaced by three ``reset_joints_by_offset`` terms
-      (legs / feet / spine) that randomize initial position *and* velocity, soft-limit clamped.
-    * the base pose/velocity reset ranges move into the yaml (stock base-cfg values until now:
-      pose x/y +-0.5 m, yaw +-3.14 rad, 6-axis velocity +-0.5 -- now tunable).
-    * occasional foot-friction dips and the per-episode height-ring noise state get their reset
-      events. ``components.observations`` owns the four extero terms' func and parameters (the
-      ``NoisyFootRing`` + ``sample_ring_noise`` pair), so this element only wires the events --
-      extero names, order and the 208 width stay the contract.
-
-    Deliberate deviation (user decision 2026-09-10, no student distillation): the noise rides the
-    TEACHER actor, so the priv group stays clean.
-    """
-    v12 = _doc(cfg)["v12"]
-    rr = v12["reset_randomization"]
-    hn = v12["height_noise"]
-
-    cfg.events.reset_robot_joints = None
-    for name, patterns, key in (
-        ("reset_joints_legs", [".*_haa_joint", ".*_hfe_joint", ".*_kfe_joint"], "legs"),
-        ("reset_joints_feet", [".*_foot_joint"], "feet"),
-        ("reset_joints_spine", ["chest_.*", "neck_.*", "tail[0-9]_.*"], "spine"),
-    ):
-        setattr(
-            cfg.events,
-            name,
-            EventTerm(
-                func=mdp.reset_joints_by_offset,
-                mode="reset",
-                params={
-                    "asset_cfg": SceneEntityCfg("robot", joint_names=patterns),
-                    "position_range": tuple(rr["joints"][key]),
-                    "velocity_range": tuple(rr["joint_velocity"]),
-                },
-            ),
-        )
-    cfg.events.reset_base.params["pose_range"] = {a: tuple(r) for a, r in rr["base_pose_range"].items()}
-    cfg.events.reset_base.params["velocity_range"] = {a: tuple(r) for a, r in rr["base_velocity_range"].items()}
-    cfg.events.foot_friction_dip = EventTerm(
-        func=teacher_mdp.FootFrictionDipTerm,
-        mode="reset",
-        params={
-            "asset_cfg": SceneEntityCfg("robot", body_names=".*_foot"),
-            "static_friction_range": tuple(rr["friction_dip"]["static"]),
-            "dynamic_ratio_range": tuple(rr["friction_dip"]["dynamic_ratio"]),
-            "p_dip": float(rr["friction_dip"]["p_dip"]),
-        },
-    )
-    cfg.events.sample_ring_noise = EventTerm(
-        func=teacher_mdp.sample_ring_noise,
-        mode="reset",
-        params={"ratios": tuple(hn["ratios"])},
-    )
-
-
-def v13_miki_kernel(cfg) -> None:
-    """v13: the symmetric Miki et al. 2022 tracking kernel replaces the v5 EP one.
-
-    The v10 diagnosis pinned three holes in ``track_lin_vel_xy_lin``: it scores only the velocity
-    projection onto the command axis, so overspeed is free (measured +48..54% at 0.3 m/s while the
-    ledger read 1.47/1.5), lateral drift is invisible, and a zero command carries no stop gradient.
-    ``exp(-||v_cmd - v_yaw||^2 / 0.25)`` on the full 2D error closes all three. Weight stays 1.5
-    (not the paper's 0.75) so the tracking ceiling and penalty ratios stay identical to v10.
-    """
-    v13 = _doc(cfg)["v13"]["track_goal_vel"]
-    cfg.rewards.track_lin_vel_xy_lin = None
-    cfg.rewards.track_lin_vel_xy_miki = RewTerm(
-        func=teacher_mdp.track_lin_vel_xy_miki,
-        weight=v13["weight"],
-        params={"command_name": "base_velocity", "sigma_sq": v13["sigma_sq"]},
-    )
-
-
-def v14_head_load(cfg) -> None:
-    """v14.3: the front-plant termination becomes a per-step penalty.
-
-    A head-planted pose costs reward but keeps its rollout data, which removes the "sustained
-    nose-down attitude on a slope" false-positive surface along with the termination. The roll-over
-    fall gate that stops a rolled-onto-side/back pose is owned by ``components.terminations``
-    (``components.ROLL_OVER``), not by this element.
-    """
-    head_load = _doc(cfg)["v14"]["head_load"]
-    cfg.rewards.head_load_penalty = RewTerm(
-        func=teacher_mdp.head_load_penalty,
-        weight=head_load["weight"],
-        params={
-            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=tuple(head_load["head_body_names"])),
-            "force_scale": head_load["force_scale"],
-        },
-    )
-
-
-def play_drops_speed_curriculum(cfg) -> None:
-    """Evaluation determinism: a good policy must not have its range widened mid-run."""
-    cfg.curriculum.speed_curriculum = None
-
-
-def play_pins_full_command_range(cfg) -> None:
-    """Pin the range the curriculum would have climbed to (see ``components.FULL_FORWARD_RANGE``)."""
-    cfg.commands.base_velocity.ranges.lin_vel_x = components.FULL_FORWARD_RANGE
-
-
-def play_drops_sir_terrain_curriculum(cfg) -> None:
-    """Deterministic evaluation: the SIR term would reassign spawn origins per episode from
-    replay outcomes, so a replay must keep the terrain assignment it started with."""
-    cfg.curriculum.terrain_levels = None
-
-
-def play_drops_joint_sir_curriculum(cfg) -> None:
-    """Deterministic evaluation: the joint SIR reassigns spawn origins *and velocities* per
-    episode, so a replay must keep its pairing. The particle command term stays wired and then
-    takes its uniform-range fallback, which is what the frozen v11/v12 PLAY recipes do."""
-    setattr(cfg.curriculum, teacher_mdp.JOINT_SIR_TERM, None)
-
-
-# --- the family's dev-state envs (flat/rough x plain/curriculum, no frozen version) -----------
-# The four envs the teacher line was snapshot from: they read the *live* dev yaml
-# (``params_version = None``, so the recipe table states None rather than borrowing a version token
-# from the handle), and they share one wiring root -- ``LizardFlatEnvCfg``, the family's flat stack.
-# So the base these four declare is that root and not the line's teacher wiring, exactly as
-# :func:`recipe_base` allows; ``flat-v0``, which that root *is*, declares no elements at all, the
-# same shape the teacher line's v1 has (its delta is empty because the teacher wiring is v1).
-def v0_rough_terrain(cfg) -> None:
-    """Undo the flat conversion: the lizard-scaled rough terrain generator.
-
-    Read from :mod:`rl_exp.tasks.rough_env_cfg` rather than restated here -- the generator is one
-    object, and a copy of its six sub-terrain blocks would be a second answer to "how rough".
-
-    Deep-copied, and not for tidiness: the class path is handed its own copy by ``configclass``'s
-    post-init sweep, which an element runs *after* -- so assigning the module object would share it,
-    and the PLAY wiring's ``num_rows = num_cols = 5`` would then rewrite it for every later cfg in
-    the process (measured: the rough training cfg read the play grid).
-    """
-    cfg.scene.terrain.terrain_type = "generator"
-    cfg.scene.terrain.terrain_generator = deepcopy(rough_env_cfg.LIZARD_ROUGH_TERRAINS_CFG)
-    cfg.scene.terrain.max_init_terrain_level = 5
-
-
-def v0_rough_height_scanner(cfg) -> None:
-    """The perceptive height scanner (up to 135 points) and its policy.
-
-    Bodies live under the importer's Geometry scope (flattened USD: /Robot/Geometry/base_link);
-    stock anymal assumes /Robot/base, so the prim path is written out. The base class set
-    ``update_period`` on the STOCK scanner object; this replacement lost it, so the policy-rate
-    cadence (50 Hz, the teacher snapshot's) is re-applied here -- 0 would raycast at the sim rate.
-    """
-    cfg.scene.height_scanner = RayCasterCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/Geometry/base_link",
-        offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 20.0)),
-        ray_alignment="yaw",
-        pattern_cfg=patterns.GridPatternCfg(resolution=0.2, size=[2.8, 1.6]),
-        debug_vis=False,
-        mesh_prim_paths=["/World/ground"],
-    )
-    cfg.scene.height_scanner.update_period = cfg.decimation * cfg.sim.dt
-    cfg.observations.policy.height_scan = ObsTerm(
-        func=mdp.height_scan,
-        params={"sensor_cfg": SceneEntityCfg("height_scanner")},
-        noise=Unoise(n_min=-0.1, n_max=0.1),
-        clip=(-1.0, 1.0),
-    )
-
-
-def v0_rough_terrain_curriculum(cfg) -> None:
-    """The stock terrain difficulty curriculum the flat wiring dropped (``terrain_levels``)."""
-    cfg.curriculum.terrain_levels = CurrTerm(func=mdp.terrain_levels_vel)
-
-
-def v0_curriculum_actions(cfg) -> None:
-    """Split the single joint action term into legs + spine, so the spine scale can be gated.
-
-    The term cfg comes from :mod:`rl_exp.tasks.curriculum_env_cfg` -- the split's joint patterns
-    are that module's, and the flat task's single ``joint_pos`` term is replaced by it wholesale
-    (legs ordered before spine keeps the concatenated layout identical to the tree order).
-    """
-    action_params = _doc(cfg)["action"]
-    cfg.actions = curriculum_env_cfg.LizardCurriculumActionsCfg()
-    cfg.actions.joint_pos_legs.scale = action_params["legs_scale"]
-    cfg.actions.joint_pos_legs.use_default_offset = action_params["use_default_offset"]
-    cfg.actions.joint_pos_spine.use_default_offset = action_params["use_default_offset"]
-
-
-def v0_curriculum_stages(cfg) -> None:
-    """The three staged curricula (bone/speed/turning) that replace the fixed command ranges.
-
-    The stage lists stay in ``curriculum_env_cfg._make_stages``: they are the tunables, and a
-    transcription here would be a second copy of every threshold and sustain time.
-    """
-    for term_name, term_cfg in curriculum_env_cfg._make_stages(_doc(cfg)["action"]["spine_scale"]).items():
-        setattr(cfg.curriculum, term_name, term_cfg)
-
-
-def v0_curriculum_stage0_ranges(cfg) -> None:
-    """Initial command ranges mirror stage 0 (avoids one off-spec resample)."""
-    cfg.commands.base_velocity.ranges.lin_vel_x = (0.0, 1.0)
-    cfg.commands.base_velocity.ranges.ang_vel_z = (-0.5, 0.5)
-
-
-def play_drops_staged_curricula(cfg) -> None:
-    """Evaluation determinism: the staged curricula would widen the ranges and hand the spine to the
-    policy mid-run, so a replay must keep the stage it started in."""
-    cfg.curriculum.bone_curriculum = None
-    cfg.curriculum.speed_curriculum = None
-    cfg.curriculum.turn_curriculum = None
-
-
-def play_unlocks_spine(cfg) -> None:
-    """The final stage's spine: stage 0 locks it at the rest pose (scale 0), and an evaluation runs
-    where the policy drives it at this recipe's ``spine_scale``."""
-    cfg.actions.joint_pos_spine.scale = _doc(cfg)["action"]["spine_scale"]
-
-
-def play_pins_final_ranges(cfg) -> None:
-    """The final stage's command window, which the dropped curricula can no longer climb to."""
-    cfg.commands.base_velocity.ranges.lin_vel_x = (1.0, 3.0)
-    cfg.commands.base_velocity.ranges.ang_vel_z = (-2.0, 2.0)
-
-
-def play_drops_terrain_levels(cfg) -> None:
-    """Deterministic evaluation: the stock level walk reassigns spawn origins per episode from the
-    measured success rate, so a replay must keep the terrain assignment it started with. The flat
-    dev envs need no such element -- their flat wiring already removed the term."""
-    cfg.curriculum.terrain_levels = None
-
-
-# --- the baseline line (flat-ground walking baseline, no ancestry in the teacher line) --------
-# Its recipes have no upstream mother (``base.json`` is a lineage root), so "what the recipe is"
-# is exactly "what it writes on top of the framework stock cfg" -- which is why the same element
-# list is also the declared difference from that stock cfg (hard B). The elements themselves live
-# in :mod:`rl_exp.tasks.baseline_recipe`; the table below merges them.
-# Named recipe elements, in application order. An element takes the env cfg and owns its fields
-# outright -- the same contract as the five structural components in :mod:`rl_exp.tasks.components`,
-# and it gets the same treatment: one writer, resolved by recipe, never by the MRO.
-ELEMENTS: dict[str, object] = {
-    "v3_contact_headroom": v3_contact_headroom,
-    "v3_speed_curriculum": v3_speed_curriculum,
-    "v3_anti_drag_reward": v3_anti_drag_reward,
-    "v3_ck_clock": v3_ck_clock,
-    "v4_stock_contact_stack": v4_stock_contact_stack,
-    "v5_drops_speed_curriculum": v5_drops_speed_curriculum,
-    "v5_reward_package": v5_reward_package,
-    "v5_sir_terrain_curriculum": v5_sir_terrain_curriculum,
-    "v6_spine_unlock": v6_spine_unlock,
-    "v11_joint_sir_curriculum": v11_joint_sir_curriculum,
-    "v12_reset_robustness": v12_reset_robustness,
-    "v13_miki_kernel": v13_miki_kernel,
-    "v14_head_load": v14_head_load,
-    "play_drops_speed_curriculum": play_drops_speed_curriculum,
-    "play_pins_full_command_range": play_pins_full_command_range,
-    "play_drops_sir_terrain_curriculum": play_drops_sir_terrain_curriculum,
-    "play_drops_joint_sir_curriculum": play_drops_joint_sir_curriculum,
-    "v0_rough_terrain": v0_rough_terrain,
-    "v0_rough_height_scanner": v0_rough_height_scanner,
-    "v0_rough_terrain_curriculum": v0_rough_terrain_curriculum,
-    "v0_curriculum_actions": v0_curriculum_actions,
-    "v0_curriculum_stages": v0_curriculum_stages,
-    "v0_curriculum_stage0_ranges": v0_curriculum_stage0_ranges,
-    "play_drops_staged_curricula": play_drops_staged_curricula,
-    "play_unlocks_spine": play_unlocks_spine,
-    "play_pins_final_ranges": play_pins_final_ranges,
-    "play_drops_terrain_levels": play_drops_terrain_levels,
-    # The baseline line's elements live in their own module (``baseline_recipe``), so that resolving
-    # a baseline task does not import this one. They enter here through it: one name -> function
-    # mapping per element, never two copies to keep in step.
-    **baseline_recipe.ELEMENTS,
-    # Same extension point for the lizard2 family's own line: it exports its element map the same way,
-    # so a new family joins this table without this module knowing any of its element names.
-    **lizard2_recipe.ELEMENTS,
-}
-
-# What each recipe is: the ordered elements it applies on top of the shared wiring (and, for its
-# PLAY variant, the extra ones after the shared PLAY wiring), plus the registered tasks it claims
-# to reproduce -- named, not derived from the version string, because a task id is a published
-# name and a rename must not silently re-point this gate at nothing.
-#
-# Each delta is stated once, as the previous recipe's delta plus its own additions -- which is what
-# the recipes are (vN's subclass extends vN-1's body). Writing them out again per version would put
-# "v8 declares the same as v6" in three places to keep in sync; sharing the tuple makes it one
-# object. What stays explicit, per recipe, is the task ids.
-_V3_DELTA: tuple[str, ...] = (
-    "v3_contact_headroom",
-    "v3_speed_curriculum",
-    "v3_anti_drag_reward",
-    "v3_ck_clock",
-)
-_V4_DELTA: tuple[str, ...] = (*_V3_DELTA, "v4_stock_contact_stack")
-_V5_DELTA: tuple[str, ...] = (
-    *_V4_DELTA,
-    "v5_drops_speed_curriculum",
-    "v5_reward_package",
-    "v5_sir_terrain_curriculum",
-)
-# v6.1 unlocks the spine; v8 and v10 add nothing to the cfg (the asset flip and the tilt flag are
-# not cfg fields), so the three recipes share this one list and their task ids are the difference.
-_V6_DELTA: tuple[str, ...] = (*_V5_DELTA, "v6_spine_unlock")
-_V11_DELTA: tuple[str, ...] = (*_V6_DELTA, "v11_joint_sir_curriculum")
-_V12_DELTA: tuple[str, ...] = (*_V11_DELTA, "v12_reset_robustness")
-# v13 branches off v10, not off v12: the single-variable kernel fix on the v10 line.
-_V13_DELTA: tuple[str, ...] = (*_V6_DELTA, "v13_miki_kernel")
-_V14_DELTA: tuple[str, ...] = (*_V13_DELTA, "v14_head_load")
-
-_V3_PLAY: tuple[str, ...] = ("play_drops_speed_curriculum", "play_pins_full_command_range")
-_SIR_PLAY: tuple[str, ...] = ("play_drops_sir_terrain_curriculum",)
-"""The only PLAY element v5-v10 and v13/v14 need: they keep v5's yaml-sourced forward range, so the
-``_V3_PLAY`` pair is absent by design -- it would null a curriculum they already dropped and pin the
-range to the curriculum's (-1, 5) where the frozen PLAY recipe says (0, 3)."""
-_JOINT_SIR_PLAY: tuple[str, ...] = ("play_drops_joint_sir_curriculum",)
-"""v11/v12 replace the row SIR with the joint one, so their PLAY guard is the joint term."""
-
-# The family's dev-state envs: the flat root plus the three deltas its own class files declare.
-# `flat-v0` is the root itself (nothing to add), `rough-v0` adds the rough terrain stack,
-# `curriculum-flat-v0` the staged curricula, `curriculum-rough-v0` both -- and each delta is stated
-# once, as the class bodies state it once (curriculum_rough_env_cfg.py copies curriculum_env_cfg's
-# block, it does not extend it).
-_V0_ROUGH_DELTA: tuple[str, ...] = (
-    "v0_rough_terrain",
-    "v0_rough_height_scanner",
-    "v0_rough_terrain_curriculum",
-)
-_V0_CURRICULUM_DELTA: tuple[str, ...] = (
-    "v0_curriculum_actions",
-    "v0_curriculum_stages",
-    "v0_curriculum_stage0_ranges",
-)
-_V0_CURRICULUM_PLAY: tuple[str, ...] = ("play_drops_staged_curricula", "play_unlocks_spine", "play_pins_final_ranges")
-"""Both curriculum PLAY bodies state the same three things after the shared PLAY wiring: the staged
-terms off, the final stage's spine live, and its command window. Only the rough one has a terrain
-curriculum left to drop, which its own body says too."""
-
-RECIPES: dict[str, dict] = {
-    "v1": {"elements": (), "play_elements": (), "declares": (False, False), "pins_full_range": (False, False), "train": "Lizard-Rough-v1", "play": "Lizard-Rough-Play-v1"},
-    "v2": {"elements": (), "play_elements": (), "declares": (False, False), "pins_full_range": (False, False), "train": "Lizard-Rough-v2", "play": "Lizard-Rough-Play-v2"},
-    "v3": {"elements": _V3_DELTA, "play_elements": _V3_PLAY, "declares": (False, False), "pins_full_range": (False, True), "train": "Lizard-Rough-v3", "play": "Lizard-Rough-Play-v3"},
-    "v4": {"elements": _V4_DELTA, "play_elements": _V3_PLAY, "declares": (False, False), "pins_full_range": (False, True), "train": "Lizard-Rough-v4", "play": "Lizard-Rough-Play-v4"},
-    "v5": {"elements": _V5_DELTA, "play_elements": _SIR_PLAY, "declares": (True, False), "pins_full_range": (False, False), "train": "Lizard-Rough-v5", "play": "Lizard-Rough-Play-v5"},
-    # v6/v8/v10 share one element list: v6.1 unlocks the spine (one yaml-sourced line), v8 and
-    # v10 change no cfg field at all -- v8's flip + joint renames are the asset, v10's tilt
-    # removal is the yaml flag components.terminations already reads. An empty delta is stated
-    # as v6's list, never as ``None``: these recipes ARE declared, what they declare beyond v6
-    # is nothing.
-    "v6": {"elements": _V6_DELTA, "play_elements": _SIR_PLAY, "declares": (True, False), "pins_full_range": (False, False), "train": "Lizard-Rough-v6", "play": "Lizard-Rough-Play-v6"},
-    "v8": {"elements": _V6_DELTA, "play_elements": _SIR_PLAY, "declares": (True, False), "pins_full_range": (False, False), "train": "Lizard-Rough-v8", "play": "Lizard-Rough-Play-v8"},
-    "v10": {"elements": _V6_DELTA, "play_elements": _SIR_PLAY, "declares": (True, False), "pins_full_range": (False, False), "train": "Lizard-Rough-v10", "play": "Lizard-Rough-Play-v10"},
-    # v11 hands the terrain curriculum to the joint particle filter; v12 adds the reset/obs
-    # robustness package on top of it. v13 deliberately branches off v10, NOT off v12 -- it is the
-    # single-variable kernel fix on the v10 line -- so its list is v6's plus its own element, and
-    # the joint SIR / v12 resets are absent from it by construction.
-    "v11": {"elements": _V11_DELTA, "play_elements": _JOINT_SIR_PLAY, "declares": (True, False), "pins_full_range": (False, False), "train": "Lizard-Rough-v11", "play": "Lizard-Rough-Play-v11"},
-    "v12": {"elements": _V12_DELTA, "play_elements": _JOINT_SIR_PLAY, "declares": (True, False), "pins_full_range": (False, False), "train": "Lizard-Rough-v12", "play": "Lizard-Rough-Play-v12"},
-    "v13": {"elements": _V13_DELTA, "play_elements": _SIR_PLAY, "declares": (True, False), "pins_full_range": (False, False), "train": "Lizard-Rough-v13", "play": "Lizard-Rough-Play-v13"},
-    "v14": {"elements": _V14_DELTA, "play_elements": _SIR_PLAY, "declares": (True, False), "pins_full_range": (False, False), "train": "Lizard-Rough-v14", "play": "Lizard-Rough-Play-v14"},
-    # The four v0-family dev-state envs (lizard_env_cfg / rough_env_cfg / curriculum_env_cfg /
-    # curriculum_rough_env_cfg). They state their own base -- the family flat wiring, not this
-    # line's teacher wiring -- and their own params_version: None, because they read the live dev
-    # yaml and record no version, which is the one fact their handles ("v0") must not overrule.
-    # `declares`/`pins_full_range` are stated False rather than left out: neither class states
-    # them, so False is the answer the class path already gives, and a statement that is not
-    # written down is the gap this table exists to close.
-    "flat-v0": {"elements": (), "play_elements": (), "base": lizard_env_cfg.LizardFlatEnvCfg, "params_version": None, "declares": (False, False), "pins_full_range": (False, False), "train": "Lizard-Velocity-Flat-v0", "play": "Lizard-Velocity-Flat-Play-v0"},
-    "rough-v0": {"elements": _V0_ROUGH_DELTA, "play_elements": (), "base": lizard_env_cfg.LizardFlatEnvCfg, "params_version": None, "declares": (False, False), "pins_full_range": (False, False), "train": "Lizard-Velocity-Rough-v0", "play": "Lizard-Velocity-Rough-Play-v0"},
-    "curriculum-flat-v0": {"elements": _V0_CURRICULUM_DELTA, "play_elements": _V0_CURRICULUM_PLAY, "base": lizard_env_cfg.LizardFlatEnvCfg, "params_version": None, "declares": (False, False), "pins_full_range": (False, False), "train": "Lizard-Velocity-Curriculum-Flat-v0", "play": "Lizard-Velocity-Curriculum-Flat-Play-v0"},
-    "curriculum-rough-v0": {"elements": (*_V0_ROUGH_DELTA, *_V0_CURRICULUM_DELTA), "play_elements": ("play_drops_terrain_levels", *_V0_CURRICULUM_PLAY), "base": lizard_env_cfg.LizardFlatEnvCfg, "params_version": None, "declares": (False, False), "pins_full_range": (False, False), "train": "Lizard-Velocity-Curriculum-Rough-v0", "play": "Lizard-Velocity-Curriculum-Rough-Play-v0"},
-}
-
-MAIN_LINE = "lizard/main"
-BASELINE_LINE = "lizard/baseline"
-
-# The baseline line: flat ground, a fixed low-speed command, proprio only -- and no ancestry in
-# the teacher line (its ``base.json`` is a lineage root). Its shared wiring is therefore the
-# framework stock cfg, so the recipe's elements are simultaneously "what this recipe is" and
-# "how it differs from that stock cfg" -- which is what hard B asks a new recipe to declare.
-BASELINE_RECIPES = baseline_recipe.BASELINE_RECIPES
-
 # The lizard2 family's main line: a new family (its own USD asset, its own 30-joint skeleton) with
-# the baseline line's shape -- flat ground, one version, a declaration module of its own that this
-# one does not import for anything but the table. The line is registered so a task id can resolve a
-# class; it is not frozen (no version directory, no frozen yaml, no golden), which is what
-# ``check_recipe_build`` reports until the line is frozen.
+# the retired baseline line's shape -- flat ground, one version per frozen recipe, and a declaration
+# module of its own that exports both the element map and the recipe table, so nothing below has to
+# know an element name.
 LIZARD2_LINE = "lizard2/main"
 LIZARD2_RECIPES = lizard2_recipe.LIZARD2_RECIPES
 
 # Line -> its shared wiring and its recipe table. Keyed by the same family-relative handle the
 # recipe map and the golden locks use, so "which line is this" has one answer everywhere.
 LINES: dict[str, dict] = {
-    MAIN_LINE: {"base": teacher_env_cfg.LizardRoughTeacherEnvCfg, "recipes": RECIPES},
-    BASELINE_LINE: {"base": baseline_env_cfg.BaselineWiringCfg, "recipes": BASELINE_RECIPES},
     LIZARD2_LINE: {"base": lizard2_env_cfg.Lizard2WiringCfg, "recipes": LIZARD2_RECIPES},
 }
 
 
-def declared(line: str = MAIN_LINE) -> list[str]:
+def declared(line: str = LIZARD2_LINE) -> list[str]:
     """The recipes of ``line`` whose whole delta is declared, so the builder can produce them."""
     return sorted(version for version, decl in LINES[line]["recipes"].items() if decl["elements"] is not None)
 
 
-def pending(line: str = MAIN_LINE) -> list[str]:
-    """The recipes of ``line`` still expressed by their subclass body."""
+def pending(line: str = LIZARD2_LINE) -> list[str]:
+    """The recipes of ``line`` whose delta is not declared yet, so no class can be built for them."""
     return sorted(version for version, decl in LINES[line]["recipes"].items() if decl["elements"] is None)
 
 
-def declaration(version: str, *, play: bool = False, line: str = MAIN_LINE) -> bool | None:
+def declaration(version: str, *, play: bool = False, line: str = LIZARD2_LINE) -> bool | None:
     """Whether ``line``'s ``version`` promises a resumable curriculum state, or None if unstated.
 
     The promise is a *statement about* a recipe, so the snapshot leaves it out (format 2 excludes
     ``ClassVar``) and it is carried as a ``ClassVar`` on the built config rather than as a field --
-    a field would enter the frozen golden and re-anchor every lock. Until this table carries it,
-    the runtime answered by reading the version subclass; ``check_recipe_build`` compares the two
-    for as long as both paths exist, so a drifted table is red instead of quiet.
+    a field would enter the frozen golden and re-anchor every lock. The statement lives in the
+    recipe table, and ``check_recipe_build`` reports a version class that reappears as a second
+    expression of the same recipe, so a drifted table is red instead of quiet.
 
     Args:
         version: recipe version, a key of this line's recipe table.
@@ -727,13 +87,13 @@ def declaration(version: str, *, play: bool = False, line: str = MAIN_LINE) -> b
     return _stated(version, "declares", play=play, line=line)
 
 
-def pins_full_range(version: str, *, play: bool = False, line: str = MAIN_LINE) -> bool | None:
+def pins_full_range(version: str, *, play: bool = False, line: str = LIZARD2_LINE) -> bool | None:
     """Whether ``line``'s ``version`` pins the full forward range, or None if unstated.
 
     The second ``ClassVar`` a version class used to state (``PLAY_PINS_COMMAND_RANGE``), carried
     the same way and for the same reason. Its reader is the shared wiring's ``__post_init__``, i.e.
-    *construction* time: on v3/v4 the play variant has no curriculum left to widen the range, so it
-    asks for the full one instead of the curriculum's window. Reproducing that effect with a
+    *construction* time: a play variant of a recipe whose curriculum cannot widen the range asks for
+    the full one instead of the curriculum's window. Reproducing that effect with a
     play element afterwards -- which is what the builder did while the table was silent -- leaves
     the statement itself unstated, and a statement that only exists on a class body dies with it.
 
@@ -755,14 +115,14 @@ def _stated(version: str, key: str, *, play: bool, line: str) -> bool | None:
     return None if stated is None else bool(stated[1 if play else 0])
 
 
-def declared_params_version(version: str, *, line: str = MAIN_LINE):
+def declared_params_version(version: str, *, line: str = LIZARD2_LINE):
     """The ``params_version`` this recipe carries: the table key, unless the recipe states its own.
 
     The key is a *handle* -- what the table is keyed by and what gates iterate -- and the field value
-    is a separate fact, because "a recipe with no frozen version" is a real thing here. The family's
-    four dev-state envs read the live yaml and record no version at all (``legacy_task_version:
-    null`` in the identity map, ``params_version`` written as ``None`` on the class since they
-    existed). Reading the version off the key would have forced a version token they do not have,
+    is a separate fact, because "a recipe with no frozen version" is a real thing here: the retired
+    family's four dev-state envs read the live yaml and recorded no version at all
+    (``legacy_task_version: null`` in the identity map, ``params_version`` written as ``None`` on
+    the class). Reading the version off the key would have forced a version token they do not have,
     which the golden and the identity map would then disagree with.
 
     Args:
@@ -775,14 +135,15 @@ def declared_params_version(version: str, *, line: str = MAIN_LINE):
     return LINES[line]["recipes"][version].get("params_version", version)
 
 
-def recipe_base(version: str, *, line: str = MAIN_LINE):
+def recipe_base(version: str, *, line: str = LIZARD2_LINE):
     """The shared wiring this recipe is built on: the line's, unless the recipe names its own.
 
-    Two roots share one line. The teacher recipes build on the teacher wiring, and the family's
-    dev-state envs on the family wiring -- same robot stack, same dev yaml (their ``params_line`` is
-    this line), different constructor. A base per *line* would have forced the family envs onto a
-    second line, and a second line needs its own ``<line>_params.yaml``: two SSOTs for one set of
-    numbers, which is exactly what :mod:`rl_exp.tasks.recipe_params` exists to prevent.
+    The override exists because one line can hold two wiring roots: the retired family's frozen
+    recipes built on its teacher wiring and its four dev-state envs on the family wiring -- same
+    robot stack, same dev yaml (their ``params_line`` was that line), different constructor. A base
+    per *line* would have forced those envs onto a second line, and a second line needs its own
+    ``<line>_params.yaml``: two SSOTs for one set of numbers, which is exactly what
+    :mod:`rl_exp.tasks.recipe_params` exists to prevent. lizard2 states no per-recipe base.
     """
     entry = LINES[line]["recipes"][version]
     return entry.get("base") or LINES[line]["base"]
@@ -829,7 +190,7 @@ def _wired_class(version: str, *, play: bool, line: str):
     )
 
 
-def base_cfg(version: str, *, line: str = MAIN_LINE, play: bool = False):
+def base_cfg(version: str, *, line: str = LIZARD2_LINE, play: bool = False):
     """The shared wiring a recipe starts from, before any of its own elements are applied.
 
     Public because the attribution check has to start where the builder starts: a checker that
@@ -840,7 +201,7 @@ def base_cfg(version: str, *, line: str = MAIN_LINE, play: bool = False):
     return _wired_class(version, play=play, line=line)(params_version=declared_params_version(version, line=line))
 
 
-def apply_into(cfg, version: str, *, play: bool = False, line: str = MAIN_LINE, trace: list | None = None):
+def apply_into(cfg, version: str, *, play: bool = False, line: str = LIZARD2_LINE, trace: list | None = None):
     """Apply this recipe's declared steps to an existing cfg -- ``build``'s body, as a function.
 
     Shared by :func:`build` and :func:`recipe_class` so the two mechanisms cannot drift: one
@@ -858,10 +219,13 @@ def apply_into(cfg, version: str, *, play: bool = False, line: str = MAIN_LINE, 
         The same cfg, for chaining.
     """
     entry = LINES[line]["recipes"][version]
+    # the line's element map: lizard2 exports its own, so the names a table states resolve here
+    # without this module knowing one of them
+    elements = lizard2_recipe.ELEMENTS
     for name in entry["elements"]:
-        ELEMENTS[name](cfg)
+        elements[name](cfg)
         if trace is not None:
-            trace.append((name, ELEMENTS[name]))
+            trace.append((name, elements[name]))
     if play:
         # the shared PLAY wiring first, then the recipe's own evaluation-determinism elements:
         # they undo parts of what the recipe just built (a curriculum that would widen the range
@@ -870,13 +234,13 @@ def apply_into(cfg, version: str, *, play: bool = False, line: str = MAIN_LINE, 
         if trace is not None:
             trace.append(("apply_play_wiring", apply_play_wiring))
         for name in entry["play_elements"]:
-            ELEMENTS[name](cfg)
+            elements[name](cfg)
             if trace is not None:
-                trace.append((name, ELEMENTS[name]))
+                trace.append((name, elements[name]))
     return cfg
 
 
-def recipe_class(version: str, *, play: bool = False, line: str = MAIN_LINE, name: str | None = None):
+def recipe_class(version: str, *, play: bool = False, line: str = LIZARD2_LINE, name: str | None = None):
     """The class a registry entry can point at: the shared wiring, wired by its declared steps.
 
     A class, because that is what a task registration resolves: hydra instantiates the entry point
@@ -927,8 +291,7 @@ def recipe_class(version: str, *, play: bool = False, line: str = MAIN_LINE, nam
     )
 
 
-
-def build(version: str, *, play: bool = False, trace: list | None = None, line: str = MAIN_LINE):
+def build(version: str, *, play: bool = False, trace: list | None = None, line: str = LIZARD2_LINE):
     """The env cfg a recipe declares.
 
     Args:

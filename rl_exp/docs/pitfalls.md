@@ -188,6 +188,9 @@ train.py:414 main()
 → isaaclab/terrains/utils.py:14 from pxr import UsdGeom   ← pip usd-core pxr 进 sys.modules
 ```
 
+（链里的 `components.py` / `teacher_env_cfg.py` 已随 lizard 家族于 2026-10-09 退役；本条留下的是"构造期副作用"
+这个坑与它的修法——现在构造任何家族配方都走同一条纪律。）
+
 探针必须在 `TerrainGenerator` 被构造**之前**装好（生成发生在 `TerrainGenerator.__init__` 内），
 而 `install()` 是 cfg 构造期（pre-Kit）被调用的 —— 于是"装补丁"这件事本身成了毒 import。
 

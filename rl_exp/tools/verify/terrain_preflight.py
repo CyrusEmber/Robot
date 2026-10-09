@@ -2,10 +2,11 @@
 """Pre-training terrain preflight: offline roughness stats + rendered previews.
 
 No Isaac Sim needed (plain venv python, numpy + torch + matplotlib). Builds every
-sub-terrain of the selected recipe version's terrain generator cfg through
-the SAME IsaacLab code path the env uses (generator-level scale/slope
-injection included, terrain_generator.py:123-130) and prints a roughness
-table benchmarked against the body calibration:
+sub-terrain of the frozen ``lizard/main`` v11 ``terrain_grid`` table -- expanded by
+the retained ``param_grid_terrain`` builder and read through the retained
+``recipe_params`` loader -- through the SAME IsaacLab code path the env uses
+(generator-level scale/slope injection included, terrain_generator.py:123-130) and
+prints a roughness table benchmarked against the body calibration:
 
   sole 0.46 x 0.51 m flat plate | stand height 0.94 m | foot lift ~0.52 m
 
@@ -28,8 +29,7 @@ so a real run's geometry also depends on the process history. Archiving the
 actual run's geometry is a different item (work/active/verified-rebuild-rating.md ⑤b).
 
 Usage:
-  python rl_exp\\tools\\verify\\terrain_preflight.py                     # v4 (default)
-  python rl_exp\\tools\\verify\\terrain_preflight.py --version v3       # compare base
+  python rl_exp\\tools\\verify\\terrain_preflight.py                    # frozen v11 param grid
   python rl_exp\\tools\\verify\\terrain_preflight.py --self-test        # falsify the digest
 """
 import argparse
@@ -48,31 +48,38 @@ matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt  # noqa: E402
 
+from rl_exp.tasks import recipe_params  # noqa: E402
+from rl_exp.tasks.param_grid_terrain import build_param_grid_terrain_cfg  # noqa: E402
 from rl_exp.tasks.terrain_geometry import foot_relief, geometry_digest, seed_rngs, stats  # noqa: E402,F401
-
-from rl_exp.tasks.teacher_env_cfg import (  # noqa: E402
-    TEACHER_TERRAINS_CFG,
-    TEACHER_TERRAINS_CFG_V3,
-    TEACHER_TERRAINS_CFG_V4,
-    TEACHER_TERRAINS_CFG_V5,
-)
 from isaaclab.terrains.height_field import HfTerrainBaseCfg  # noqa: E402
 
-_CFG_BY_VERSION = {
-    "v1": TEACHER_TERRAINS_CFG,
-    "v2": TEACHER_TERRAINS_CFG,
-    "v3": TEACHER_TERRAINS_CFG_V3,
-    "v4": TEACHER_TERRAINS_CFG_V4,
-    # v5.3: v4 grid + flat bootstrap column (SIR terrain curriculum)
-    "v5": TEACHER_TERRAINS_CFG_V5,
-}
-#: Sub-terrains whose geometry comes from a global RNG, and which therefore pin the seeding.
-_RANDOM_SUB_TERRAINS = ("random_rough", "stepping_stones", "boxes")
+#: The frozen geometry source: ``versions/lizard/main/v11/main_params.yaml``, read through the
+#: loader every line shares. The version names both the frozen document and the section inside it
+#: (the ``terrain_grid`` table is a v11 recipe delta -- versions/lizard/v11/PLAN.md section 1).
+_GRID_LINE = "lizard/main"
+_GRID_VERSION = "v11"
+#: Sub-terrain TYPES whose geometry comes from a global RNG *and* can differ between seeds at all.
+#: Param-grid sub-terrains are named ``<type>|<levels>``, so the type is the part before the bar.
+#: ``random_rough`` is deliberately absent: the frozen grid pins its ``noise_amp`` levels to
+#: single-value ranges whose step is the amplitude itself, so a height field samples one value and
+#: is the same constant plane under every seed -- a seed comparison on it fails by construction,
+#: not by defect (measured on the v11 grid, 2026-10-09: seed 7 and seed 8 hash alike).
+_RANDOM_SUB_TERRAINS = ("stepping_stones", "boxes")
+
+
+def terrain_cfg(version: str):
+    """The generator cfg to preview: the frozen version's ``terrain_grid`` table, expanded.
+
+    One sub-terrain per parameter combination, with single-value ranges -- so the recipe's own
+    difficulty levels are what the preview shows, rather than points on a difficulty diagonal.
+    """
+    document = recipe_params.load(_GRID_LINE, version)
+    return build_param_grid_terrain_cfg(document[version]["terrain_grid"])
 
 
 def build_sub_terrain(gen_cfg, sub_cfg, difficulty, seed):
     """Materialize one sub-terrain the way TerrainGenerator would (injection
-    included, but on a copy -- the module-level teacher cfgs stay frozen).
+    included, but on a copy -- the caller's generator cfg stays as built).
 
     The global RNGs are seeded per sub-terrain, which the real generator does not do: the
     preview trades the run's stream order for a digest that depends on (version, difficulty,
@@ -106,7 +113,8 @@ def render(mesh, name, out_dir, version, difficulty):
     ax.set_title(f"{version} / {name}  (difficulty {difficulty:.2f})")
     ax.set_xlabel("x [cells of 0.2 m]")
     ax.set_ylabel("y [cells of 0.2 m]")
-    out = out_dir / f"{version}_{name}.png"
+    # param-grid names separate the type from its levels with a bar, which no filesystem accepts
+    out = out_dir / f"{version}_{name.replace('|', '_')}.png"
     fig.savefig(out, dpi=120, bbox_inches="tight")
     plt.close(fig)
     return out
@@ -124,10 +132,11 @@ def self_test() -> list[str]:
         One problem per case that behaved unlike the geometry says.
     """
     problems: list[str] = []
-    gen = _CFG_BY_VERSION["v5"]
-    names = [name for name in _RANDOM_SUB_TERRAINS if name in gen.sub_terrains]
+    gen = terrain_cfg(_GRID_VERSION)
+    names = [name for name in gen.sub_terrains if name.split("|")[0] in _RANDOM_SUB_TERRAINS]
     if not names:
-        return ["no global-RNG sub-terrain in the v5 cfg: this self-test would guard nothing"]
+        return ["no seed-sensitive global-RNG sub-terrain in the frozen v11 grid: this self-test"
+                " would guard nothing"]
 
     def digest_of(name: str, seed: int) -> str:
         meshes, origin, _ = build_sub_terrain(gen, gen.sub_terrains[name], 1.0, seed)
@@ -169,9 +178,13 @@ def self_test() -> list[str]:
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--version", default="v4", choices=sorted(_CFG_BY_VERSION))
+    p.add_argument("--version", default=_GRID_VERSION, choices=(_GRID_VERSION,),
+                   help="frozen params version whose terrain_grid is previewed (the only one that "
+                        "still carries the table)")
     p.add_argument("--difficulty", type=float, default=1.0,
-                   help="1.0 = hardest curriculum row (default), 0.0 = easiest.")
+                   help="row difficulty handed to the sub-terrain function; every param-grid combo "
+                        "pins its ranges to a single value, so this no longer moves the geometry "
+                        "(0.0..1.0, default = hardest)")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--out", default="rl_exp/tools/diagnose/out/terrain_previews",
                    help="PNG output dir, relative to the repo root (git-ignored default).")
@@ -186,7 +199,7 @@ def main():
 
     out_dir = _REPO / args.out
     out_dir.mkdir(exist_ok=True)
-    gen_cfg = _CFG_BY_VERSION[args.version]
+    gen_cfg = terrain_cfg(args.version)
 
     print(f"version {args.version}  difficulty {args.difficulty:.2f}  seed {args.seed}")
     print(f"body calibration: sole 0.46x0.51 m | stand 0.94 m | foot lift ~0.52 m")

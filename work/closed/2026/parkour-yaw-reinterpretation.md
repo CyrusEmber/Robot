@@ -3,7 +3,7 @@ id: parkour-yaw-reinterpretation
 title: parkour 线 yaw 取角缺陷：其记录是否重解释（已裁决）
 scope: rl_exp/tasks, rl_exp/versions/lizard/parkour
 status: done
-landing: rl_exp/tasks/parkour_mdp.py, rl_exp/tools/verify/test_baseline_contract.py, rl_exp/versions/lizard/parkour/v1/NOTES.md
+landing: rl_exp/tools/verify/test_baseline_contract.py, rl_exp/versions/lizard/parkour/v1/NOTES.md
 outcome: 裁决为"无可重解释"（2026-09-22），依据是本项原前提被推翻：该线**从未训练**——盘上 `logs/rsl_rl/lizard_parkour_climb_v1/` 只有一个 run 目录 `2026-09-17_17-02-16`，其中只有 `run_manifest.json`，内容是退休线拒启（`lifecycle.allowed=false`、`failures` 一条、`stages` 止于 `pre_make`），无 checkpoint、无 eval；`ablation_harness/results/` 下无本线产物 ⇒ 三选一（保留现状/重解释/判废）失去对象。处置：`_yaw_from_quat` 缺陷**保持不修**（线已退休、env 建不出来），白名单条目保留并改为已裁决理由；该线 `NOTES.md` 结论节写明"未训练 + `heading_error` 不可引用"；`baseline/v1/NOTES.md` 里"parkour 线有训练 run"这句错误声明已更正并附裁决。观测收口 = 该线记录与 baseline 侧口径不再互相矛盾，白名单的"已知坏"理由仍在。
 evidence: rl_exp/tools/verify/test_baseline_contract.py, rl_exp/versions/lizard/parkour/v1/NOTES.md, rl_exp/versions/lizard/baseline/v1/NOTES.md
 ---

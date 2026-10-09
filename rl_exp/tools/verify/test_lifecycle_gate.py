@@ -42,15 +42,23 @@ if str(_REPO) not in sys.path:
 from rl_exp.tools.runrecord import lifecycle  # noqa: E402
 from rl_exp.tools.runrecord import manifest as M  # noqa: E402
 
-MAIN = "lizard/main"
+MAIN = "lizard2/main"
 SIDE = "lizard/parkour"
-TASK = "Lizard-Rough-v14"
+TASK = "Lizard2-Flat-v3"
 SIDE_TASK = "Lizard-Parkour-Climb-v1"
-MAIN_RECIPE = "teacher-v14@1"
+MAIN_RECIPE = "lizard2-flat-v3@1"
 SIDE_RECIPE = "climb-v1@1"
+REAL_RETIRED_TASK = "Lizard2-Flat-v1"
+"""The real index's only retired subject: the active line's retired *version* (v1, 2026-10-08).
+
+The family-level retired line this case used to name (``lizard/parkour``) no longer has a task in
+the identity map -- the whole line's code and registrations went on 2026-10-09 -- so a real-index
+refusal can only be exercised through a version exception. ``SIDE``/``SIDE_TASK`` stay as
+synthetic handles: the fixtures build their own index, no real task id.
+"""
 _TASKS = {MAIN_RECIPE: TASK, SIDE_RECIPE: SIDE_TASK}
 #: the version each fixture recipe declares, exactly as the real map states it (``legacy_task_version``)
-_RECIPE_VERSION = {MAIN_RECIPE: "v14", SIDE_RECIPE: "v1"}
+_RECIPE_VERSION = {MAIN_RECIPE: "v3", SIDE_RECIPE: "v1"}
 
 
 def _version_retire() -> dict:
@@ -217,7 +225,7 @@ def _identity_cases(tmp: pathlib.Path) -> list[str]:
 
 
 def _retired_cases(tmp: pathlib.Path) -> list[str]:
-    """The 2.2 table, on a synthetic retired line and on the real one."""
+    """The 2.2 table, on a synthetic retired line and on the real index."""
     problems: list[str] = []
     retired = _retired_tree(tmp, "retired")
 
@@ -229,15 +237,18 @@ def _retired_cases(tmp: pathlib.Path) -> list[str]:
     if verdict.allowed or "refusing resume" not in verdict.reason:
         problems.append(f"a resume on a retired line must be refused, got {verdict!r}")
 
-    # the real line: no fixture stands in for it, and no successor is registered for it
+    # the real index: no fixture stands in for it, and no successor is registered for what it
+    # retires. Its retired subject is a *version* now (the family-level line's task id left the
+    # identity map with its code on 2026-10-09), so this case shows a real refusal that names a
+    # real identity rather than a fixture's.
     verdict, evidence = lifecycle.startup_check(
-        task=SIDE_TASK,
-        argv=["train.py", "--task", SIDE_TASK],
+        task=REAL_RETIRED_TASK,
+        argv=["train.py", "--task", REAL_RETIRED_TASK],
         agent_cfg=_AgentCfg(),
         root=_REPO,
     )
-    if verdict.allowed or evidence["status"] != "retired" or evidence["line"] != SIDE:
-        problems.append(f"the real retired line must refuse with its identity: {verdict!r} {evidence!r}")
+    if verdict.allowed or evidence["status"] != "retired" or evidence["line"] != MAIN:
+        problems.append(f"the real retired version must refuse with its identity: {verdict!r} {evidence!r}")
     if "successor" in verdict.reason:
         problems.append(f"the refusal must not promise a successor the index does not register: {verdict!r}")
     return problems
@@ -254,14 +265,14 @@ def _version_cases(tmp: pathlib.Path) -> list[str]:
     problems: list[str] = []
     retired = _tree(
         tmp / "version-retired",
-        lines={MAIN: _entry(versions={"v14": _version_retire()})},
+        lines={MAIN: _entry(versions={"v3": _version_retire()})},
         recipes={MAIN_RECIPE: MAIN, SIDE_RECIPE: SIDE},
     )
 
     verdict, evidence = _gate(tmp, directory=retired)
     if verdict.allowed or "refusing new_train" not in verdict.reason:
         problems.append(f"new training on a retired version must be refused, got {verdict!r}")
-    if (evidence["line"], evidence["version"], evidence["status"]) != (MAIN, "v14", "retired"):
+    if (evidence["line"], evidence["version"], evidence["status"]) != (MAIN, "v3", "retired"):
         problems.append(f"the refusal must name the version and the composed status: {evidence!r}")
 
     verdict, _ = _gate(tmp, directory=retired, agent_cfg=_AgentCfg(resume=True))
@@ -440,7 +451,7 @@ def _env_cfg():
     """A minimal env cfg: the fields the T0 declaration reads, and a declared recipe line."""
 
     class _Cfg:
-        params_version = "v14"
+        params_version = "v3"
         params_line = MAIN
         seed = 42
         decimation = 4

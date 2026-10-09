@@ -11,8 +11,8 @@ family" is a generic operation or a copy of a historical one:
 * the zero-drift guard's scope is "every family but the target", not a name;
 * a gate that fails fails the run, and a guard with nothing to compare refuses instead of
   passing quietly;
-* the parity gate's subject list and the asset contract's key list are DECLARATIONS: a yaml
-  without the old family's keys is checked on its own terms instead of being refused.
+* the asset contract's key list is a DECLARATION: a yaml without the old family's keys is
+  checked on its own terms instead of being refused.
 
 Everything runs offline (no sim, no IsaacLab import): the tool is driven as a subprocess on a
 synthetic tree, and the two gate entry points are imported for their pure functions.
@@ -132,30 +132,12 @@ def main() -> int:
         check("refusal/broken-tree-fails", refused.returncode == 1 and "REFUSED" in refused.stdout,
               f"rc={refused.returncode}: {refused.stdout[-400:]}")
 
-    # --- 5. the parity subjects are a declaration, and an empty one refuses ------------------
-    with tempfile.TemporaryDirectory() as tmp:
-        empty = pathlib.Path(tmp) / "freeze_parity.json"
-        empty.write_text(json.dumps({"format": 1, "subjects": []}), encoding="utf-8")
-        keep = dp.SUBJECTS_PATH
-        dp.SUBJECTS_PATH = empty
-        subjects, problems = dp.load_subjects()
-        check("subjects/empty-declaration-refuses", subjects == [] and bool(problems), f"problems={problems}")
-        empty.write_text(json.dumps({"format": 1, "subjects": [{"line": "x", "family_cfg": "nope.py",
-                                                                "teacher_cfg": "nope.py"}]}), encoding="utf-8")
-        subjects, problems = dp.load_subjects()
-        check("subjects/missing-files-refuse", sum("missing" in p for p in problems) == 2,
-              f"problems={problems}")
-        dp.SUBJECTS_PATH = keep
-        real_subjects, real_problems = dp.load_subjects()
-        check("subjects/repo-declares-one", len(real_subjects) == 1 and not real_problems,
-              f"{real_problems or [s.get('line') for s in real_subjects]}")
-
-        # --- 6. the asset contract follows declared keys, not the old family's shape ---------
-        yaml_text = "robot:\n  usd_path: assets/zoo/zoo.usda\n  joint_order:\n    - a\n    - b\n"
-        lists = dp._declared_block_lists(yaml_text)
-        check("contract/finds-declared-lists", sorted(lists) == ["joint_order"], f"{sorted(lists)}")
-        check("contract/no-limb-key-required", "limb_body_names" not in lists,
-              "a yaml without the old family's DR block would still be refused by a fixed key list")
+    # --- 5. the asset contract follows declared keys, not the old family's shape ---------
+    yaml_text = "robot:\n  usd_path: assets/zoo/zoo.usda\n  joint_order:\n    - a\n    - b\n"
+    lists = dp._declared_block_lists(yaml_text)
+    check("contract/finds-declared-lists", sorted(lists) == ["joint_order"], f"{sorted(lists)}")
+    check("contract/no-limb-key-required", "limb_body_names" not in lists,
+          "a yaml without the old family's DR block would still be refused by a fixed key list")
 
     if PROBLEMS:
         print(f"DECLARE_FAMILY_SELF_TEST_FAILED ({len(PROBLEMS)})")

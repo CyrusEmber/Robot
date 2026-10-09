@@ -33,8 +33,8 @@ echo "$STAGED" | grep -qE '^(rl_exp|ablation_harness)/.*\.(py|yaml|yml|json|urdf
 
 # Python: the venv is recorded in paths.yaml (or RL_PYTHON) and reported by
 # host_paths.py -- a stdlib-only query, so whatever python is on PATH can ask
-# it. The obs-layout gate below needs isaaclab, so it is skipped when the
-# answer is missing and only the plain-python parity gate runs.
+# it. The obs gate at the end runs its declaration half with any python and
+# adds the live half only when this answer names one.
 PY=""
 if command -v python >/dev/null 2>&1; then
   PY=$(python ablation_harness/host_paths.py --python 2>/dev/null)
@@ -81,15 +81,20 @@ echo "[pre-commit] check_work_docs"
   exit 1
 }
 
+# stdlib-only, runs with any python: the declaration against the recipe goldens. The live
+# half builds each registered cfg, so it is skipped when the venv answer is missing --
+# the same split check_obs_protocol.py documents, and the suite runs both.
+echo "[pre-commit] check_obs_protocol"
+OBS_ARGS=""
 if [ "$HAVE_VENV" = 1 ]; then
-  echo "[pre-commit] check_obs_layout"
-  "$PY" rl_exp/tools/verify/check_obs_layout.py || {
-    echo "[pre-commit] FAIL: obs layout gate (group names / term order / c_k consistency)."
-    exit 1
-  }
+  OBS_ARGS="--live"
 else
-  echo "[pre-commit] WARN: IsaacLab venv not found, skipping check_obs_layout (parity gate above still ran)"
+  echo "[pre-commit] WARN: IsaacLab venv not found, running the declaration half only (the live half needs isaaclab)"
 fi
+"$PY" rl_exp/tools/verify/check_obs_protocol.py $OBS_ARGS || {
+  echo "[pre-commit] FAIL: obs protocol declaration (group names / term order / widths) disagrees with the goldens or the constructed cfgs."
+  exit 1
+}
 
 echo "[pre-commit] static gates passed"
 exit 0

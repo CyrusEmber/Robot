@@ -64,7 +64,7 @@
 | `rl_exp\tools\diagnose\stance_step_probe.py` | **静站承重 + 单关节小幅迈步的仿真读数**（PLAY 任务、1 env、无策略无 checkpoint）：先 `--settle` 步静置（零动作 = 未命令关节只由 PD 保持默认，即"取消动作通道"后的情形），再按**连续三角插值**把 `--leg`/`--joint` 的目标扫出去再扫回来，每控制步采样（base 高 / 四脚受力 / 标定后的足底法线倾角 / 接触点水平速度 / 力矩 / 非足体最大接触力）。`--usd`/`--urdf` 换资产与标定来源、`--drop-joints` 摘关节；**口径限制**（力矩由 Kp/Kd 重建等）；"碰撞"指非足体接触力，自碰撞关时不证明无碰撞 |
 | `rl_exp\tools\verify\check_leg_reachability.py` | 腿链**离线 FK 与摆姿读数**（链自 URDF 树遍历、垫网格取 URDF 自己的 `<leg>_foot` 碰撞体；stdlib，不碰仿真，`--frames` 是唯一碰 torch 的路径）：可 import 的读点 = `chain_frames` / `foot_pose` / `joint_effect` / `pad_state`（世界系）/ `fold_tilt`（无向，**不能作验收**）/ `faces_down`（有向：翻掌必拒）/ `KNEE_FACTS`（膝伸直余量，**>0 = 可达反曲**）/ `straight_hfe` / `leg_plane_yaw`；`--urdf` 换机体、`--compare <候选.urdf>` 同姿态比两机体、`--self-check` 对口径、`--break-test` 破坏口径并**要求自检变红**。**可达性扫描（A/B/C 三段）尚未实现** |
 | `rl_exp\tools\verify\check_self_collision.py` | 限位盒内自碰撞的**网格级**检查（离线，`single`/`combined` 两组姿态）：`--family` 按该家族 `assets.json` 声明的机体解析 URDF、`--urdf` 覆盖（**首行打印读了哪个文件与依据**）；命中或余量低于 `--clearance`（默认 5 mm）即 exit 1 打 `SELF_COLLISION_COUNTEREXAMPLE`。**不在离线清单**——采用机体当前是红的，加红闸等于每天红一次；方法天花板（凸包近似、漏边-面交叉）由它自己印出 |
-| `rl_exp\tools\verify\terrain_preflight.py` | 开训前地形预检：离线生成全部子地形 + 粗糙度 + PNG 预览 + 几何摘要。它是**离线预览的回归基线**，不是真跑所站地形的证据（真跑几何由 `terrain_split_probe` 采集归档） |
+| `rl_exp\tools\verify\terrain_preflight.py` | 开训前地形预检：离线展开**冻结 v11 的 `terrain_grid` 表**（经 `param_grid_terrain` 构建器读 `versions\lizard\main\v11\main_params.yaml`，`--version` 只认 v11）+ 粗糙度 + PNG 预览 + 几何摘要。它是**离线预览的回归基线**，不是真跑所站地形的证据（真跑几何由 `terrain_split_probe` 采集归档） |
 | `rl_exp\tools\pipeline\export_ue.py` | SSOT → UE 工件（盲部署前置）；**没有实测关节序就拒绝导出**（不写文件） |
 
 ### 闸门与反证（`rl_exp\tools\verify\`；`check_*` = 闸门本体，`test_*` = 它的反证）
@@ -77,21 +77,18 @@
 | `check_recipe_map.py` | 配方身份闸门：`ast` 读注册表（不 import），声明的 `env_cfg_entry`/`agent_entry` 与注册逐字一致；`--bind-config` 构造实例读 `params_version`；反证 `test_recipe_map_gate.py` |
 | `check_recipe_registry.py` | 实验线生命周期闸门（`lines.json` 二值 `status` + 版本例外只许退休，闸门无时钟）；`effective_status` 是"线状态 + 版本例外"的唯一读者（离线闸门与启动共用）；反证 `test_recipe_registry_gate.py` |
 | `check_obs_protocol.py` / `obs_protocol_live.py` | 协议闸门（自洽 + 已审锚点 + golden 逐任务 + `--live` 实构比对 + 覆盖）；live 侧起 env 读真实 manager 的组序/项序/宽度/shape。反证 `test_obs_protocol_gate.py` |
-| `check_obs_layout.py` | obs 布局静态门（读 `obs_protocols.json`，不自带副本） |
-| `check_dr_parity.py` | 契约漂移闸门（`--strict` 即 CI）：DR 行静态对比 / 两份 DR 事件名清单同步 / 全部 `*_PLAY` 接线 / 资产结构契约 / 资产锁比对 / **资产隔离**（每家族声明自己的网格树、两家族不许钉同一批文件、URDF 引用落在声明树内） |
+| `check_dr_parity.py` | 契约漂移闸门（`--strict` 即 CI）：两份 DR 事件名清单同步 / 全部 `*_PLAY` 接线 / 资产结构契约 / 资产锁比对 / 旧机体回退必须与换代同提交（body swap） / **资产隔离**（每家族声明自己的网格树、两家族不许钉同一批文件、URDF 引用落在声明树内） |
 | `check_configclass_fields.py` | 字段面闸门：`params_version` 一类的声明必须真的进 `to_dict`（类属性读不到即红）；反证 `test_configclass_fields_gate.py` |
 | `check_pxr_leak.py` | 按注册入口**构造** cfg 并断言 `pxr` 不进 `sys.modules`（防 Kit 启动被毒化，见 `rl_exp\docs\pitfalls.md` P001/P003/P004）；反证 `test_pxr_leak_gate.py` |
 | `check_split_probe_wait.py` | P005：构造期等框架 import 的载体不许是 `sys.meta_path` finder（导入在第一个给出 spec 的 finder 处停止） |
 | `check_joint_layout.py` | 关节布局硬闸（球头必 +X / 天线必 −X / 腿序）+ 单关节注入驱动读数 |
-| `check_reward_v13.py` / `check_terminations_v14.py` | 版本专项静态闸：跟踪核替换与冻结不动 / 翻覆判据 + dwell 累积语义 + 惩罚算术 + 接线 |
 | `check_record_bindings.py` / `check_golden_frozen.py` / `check_terrain_split_source.py` | 记录绑定原语单源看守（四条签名 + 反证）/ 冻结点与拆地来源的来源检查 |
 | `check_suite_shape.py` / `check_suite_banners.py` | 套件形状（清单唯一来源、不许未声明 spawn 解释器）与**仓根卫生**：`.bat` 横幅转义（未转义 `<`/`>` 是重定向，真往仓根写过一个 `config`）+ **仓根只许声明项**（`DECLARED_ROOT`，`hooks\pre-commit` 也跑 ⇒ 提交即截止线） |
 | `framework_pin_check.py` | 框架 pin：IsaacLab 内部符号 + 已验证 commit + `fork_patches\*.patch` 存档校验（按序应用到 pristine 副本再逐字节比） |
 | `recipe_lines.py` | **线 / 版本目录发现规则的唯一入口**（`discover()`）；上面四个版本相关闸门全走它，零份 / 多份 / 名字不符一律抛错不跳过 |
 | `cfg_snapshot.py` | 配置快照序列化器（顺序敏感 / 浮点位级 / callable 点路径 / MISSING 按类型 / 路径相对化 / 不落对象地址）；反证 `test_cfg_snapshot.py` |
-| `teacher_smoke_runner.py` + `teacher_smoke_v*.py` | 冒烟协议与 `SMOKE_SPEC` 版本表（代码级真源）+ 薄壳；**开新版本 = 加表行 + 薄壳，不复制整文件** |
 | `baseline_runtime.py` / `tools\diagnose\diag_metrics.py` | 共用运行时读点（实际关节/材质/终止注入）与验收量测纯函数（与奖励同帧坐标系）——防"验收与奖励不同坐标系"复发 |
-| `test_*.py`（约 45 份） | 各闸门的反证与契约单测，清单在 `offline_suite.py`；命名与被看守对象同名 |
+| `test_*.py`（约 25 份） | 各闸门的反证与契约单测，清单在 `offline_suite.py`；命名与被看守对象同名 |
 
 ## 不直观的布局关系（看树推不出来、最容易搞错的）
 
@@ -100,10 +97,10 @@
 - **主线就是家族本身**：`rl_exp\versions\<family>\<line>\vN\`。主线 = `versions\lizard\main\vN\`，支线在同一层多一个目录（`<family>\<line>\v1\`）。家族级文档（`FAMILY.md` / `PLAN.md` / `OBS.md` / `REWARDS.md` / `ACCEPTANCE.md`）落在 `versions\<family>\`，**不在 `main\` 里**。
 - **`versions\lizard\main\` 里不全是版本目录**：`rough-v0\`、`curriculum-flat-v0\`、`curriculum-rough-v0\` 是**配方 diff 目录**（`base.json` 指该配方的母本 + `diff.json` 声明相对母本的差异），既不是 `vN\` 也不受版本四件套闸门管辖；配方锁在 `main\cfg_lock.json`，开发态参数在 `main\main_params.yaml`。
 - **开发态参数与冻结参数是两份**：开发态 `versions\<family>\<line>\<line>_params.yaml`，冻结副本 `vN\<line>_params.yaml`；跑冻结版**永远不读**开发态（`recipe_params.frozen_only`）。`vN\asset_lock.json` 补"冻结 yaml 只钉路径不钉内容"这个洞。
-- **机器件不是文档**：`versions\recipes.json`（配方身份映射，身份写出来不推出来）/ `obs_protocols.json`（obs 协议声明，key 就是自身内容摘要）/ `obs_protocol_anchors.json`（已审摘要与宽度，只读不写）/ `lines.json`（实验线生命周期，二值 `status`；资产契约只查 `active` 线）/ `cfg_baselines.json`（框架组合基线，全仓一份）/ `freeze_parity.json`（冻结期对拍对象：哪两个 cfg 文件互为手工副本 + 已审差异，闸门不认识任何家族名）/ `<家族>\assets.json`（**每家族一行 `meshes_dir`**：该家族消费哪棵网格树，缺声明即拒绝，`check_dr_parity` 的资产隔离一节看守）/ `<线>\cfg_lock.json`（配方 golden，**一线一份**，`--update --line` 只能写自己那份）。这些是闸门读的契约；`cfg_lock.json` **不写进 `vN\`**。
+- **机器件不是文档**：`versions\recipes.json`（配方身份映射，身份写出来不推出来）/ `obs_protocols.json`（obs 协议声明，key 就是自身内容摘要）/ `obs_protocol_anchors.json`（已审摘要与宽度，只读不写）/ `lines.json`（实验线生命周期，二值 `status`；资产契约只查 `active` 线）/ `cfg_baselines.json`（框架组合基线，全仓一份）/ `<家族>\assets.json`（**每家族一行 `meshes_dir`**：该家族消费哪棵网格树，缺声明即拒绝，`check_dr_parity` 的资产隔离一节看守）/ `<线>\cfg_lock.json`（配方 golden，**一线一份**，`--update --line` 只能写自己那份）。这些是闸门读的契约；`cfg_lock.json` **不写进 `vN\`**。
 - **`joint_order` 有两种，别混**：配方里的 `joint_order` = URDF 树序（`export_ue.py` 拿它断 URDF）；obs/action 真正按索引取值的是 `versions\joint_order_runtime.json` 的**实测序**（**按资产键**，`--pin --reason` 才写），只有 `obs_protocol.py` 读它。UE 工件同时输出两者并注明用途，读它只有一处。
 - **记录与证据落点**：跑分 → `ablation_harness\results\<协议>\<group>\<run_id>\`（外加组内 `summary.csv` / `terrains.csv`）；真跑证据 → `rl_exp\versions\lizard\verify_logs\`；版本结果回填 → 各 `vN\NOTES.md`；验收记录 → `acceptance\records\`（通过数/通过率的唯一归属是 `rl_exp\versions\lizard\ACCEPTANCE.md`）；训练 log / ckpt 在 `<ROOT>\logs\`（不入库）。
-- **线之间的隔离是硬约束**：`tasks\recipe_factory.py` 是跨线共用的类构造器但**不 import 任何具体线**，每条线由自己的模块调它（`recipe_tasks.py` 按名按需生成可注册类，`_LINES_BUILT_ELSEWHERE`）；baseline 线刻意复制自己的奖励核而不共享 `teacher_mdp.py`。看守：`test_baseline_isolation.py`。
+- **线之间的隔离是硬约束**：`tasks\recipe_factory.py` 是跨线共用的类构造器但**不 import 任何具体线**，每条线由自己的模块调它（`recipe_tasks.py` 按名按需生成可注册类，`_LINES_BUILT_ELSEWHERE` 列出的线由该线自己的模块建类）。
 - **生成的注册类名是 ckpt 载荷的一部分**：`recipe_tasks.py` 沿用被替换的版本类名（载荷记 `type(cfg).__name__` 并参与 resume 身份核验），改名会让跨路径续训被拒。
 - **续训状态的硬失败边界**：任务可声明 `REQUIRES_CURRICULUM_STATE`，缺载荷 / 缺 slot / 未覆盖 stateful term / hook 未装**训练前终止**；`--drop_curriculum_state`（旧 `--weights_only` 为别名）是唯一显式降级；状态只从 rank 0 写，多 GPU 不在保证范围。
 - **`fork_patches\*.patch` 有顺序与格式纪律**：按文件名序应用，`train_seed_rng.patch` 排最后（其 hunk 行号指"全部补丁打完后"）；一份存档里同一个文件只能有**一个** `diff --git` 段——追加第二段会让 `git apply` 报 `wrong type`，正确动作是**新起一份存档**。
@@ -129,7 +126,6 @@
 
 ## 历史包袱提示（仍然改变今天决策的那些）
 
-- `tools\verify\smoke_test.py` / `pose_check.py` 2026-08-31 修过陈旧 bug（动作维度 / 旧命名）——跑挂先查命名是否又变。
 - `blender\build_rig.py`、`tools\archive\patch_*.py`、`tools\pipeline\migrate_joint_names_v8.py` 是早期一次性脚本（仅考古 / 迁移出处，别照抄改主路径）。
 - `ablation_harness\results\...\summary.csv` 里 2026-08-28 那两行的 `energy_per_m_j` **无效**（energy 修复前少乘 step_dt，虚高 ~50×）；其余列有效，energy 列重跑后才有意义。
 - 套件口径：`lizard_suite_v1` 的 rough 两列实为均匀抬升平板（`noise_range` 单值使 `np.random.choice` 退化），拿它当起伏地形会误判；真起伏从 `lizard_suite_v2` + 协议 v3 起，v1/v2/v3 **不得混表**。

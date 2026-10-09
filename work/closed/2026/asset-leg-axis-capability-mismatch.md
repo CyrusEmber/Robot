@@ -5,7 +5,6 @@ scope: rl_exp/blender, rl_exp/tools/verify, rl_exp/versions/lizard
 status: done
 landing: rl_exp/versions/lizard/FAMILY.md, rl_exp/tools/verify/check_joint_layout.py, rl_exp/docs/pitfalls.md, rl_exp/blender/generate_urdf.py, rl_exp/blender/build_rig.py, rl_exp/tools/verify/check_contact_ownership.py
 close_when: (b) 分支已发生（组合扫描给出足够行程 ⇒ 能力结论已撤回，记录只留较窄事实）；(c) 换代已决定并落成 —— 决定、分项评估与余项都在 `work/active/lizard2-family-landing.md`。剩余：① 碰撞归属在 USD 侧与运行时各有结论。
-depends_on: baseline-v2-recipe
 evidence: acceptance/records/2026-09-21-lizard-leg-axis-kinematics, acceptance/records/2026-09-23-leg-collision-authorship
 outcome: 关闭于 2026-09-23，两项余数各有结论。① 碰撞归属两侧都已读（见 evidence 第二条）：USD 侧与 URDF 侧逐 body bbox 一致、approximation 全为 convexHull；胫骨几何所属 `*_hfe`、股骨挂在 `*_haa` 且不在罚项名单内（v1 PLAN 写作"大腿/小腿"）；`.*_kfe` 两代资产都没有碰撞体 ⇒ 罚项名单一半是恒 0 死条目；运行时稳态站立只有四脚承重（旧线 643/949/1077/3778 N），漏罚那条在站姿下不触发。**新家族的碰撞归属与旧资产逐比特相同**：换骨骼没有动碰撞作者身份，改与不改归资产线。② v5.6 的提交意图仓内已有答案（`rl_exp/blender/rotate_rig.py:1-7`：修的是 "URDF long axis was Y while the velocity task commands/reward assume base +X is forward"）⇒ 当年被认成**朝向**问题，不是能力轴问题；当时的位移读数属退役线历史，未复读。③ 机制落成：`check_joint_layout.py` 覆盖轴位（力臂）/ 轴向（FK 极性）/ 四腿全覆盖（`leg_probes` 按资产推导）/ 承重姿态组合扫描；`check_contact_ownership.py` 补第四件——碰撞体归属与罚项可见性，自带三条断言（死条目 / 接触体无人罚 / 空测量）。
 ---

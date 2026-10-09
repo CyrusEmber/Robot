@@ -14,9 +14,10 @@ which is what "the two entries cannot answer differently" has to mean in practic
 
 The comparison is only meaningful if both sides are produced for the same directory: the
 launcher and trainer read an isolated active-line fixture through the same module;
-both hash its actual files. The retired case uses the line the
-directory really retired (``lizard/parkour``): a line is never retired to make a test pass
-(2.1a), and the refusal must not promise a successor that the index does not register.
+both hash its actual files. The refusal case uses the retirement the directory really
+carries (``lizard2/main``'s v1, retired 2026-10-08): a line or version is never retired to
+make a test pass (2.1a), and the refusal must not promise a successor the index does not
+register.
 """
 
 from __future__ import annotations
@@ -36,9 +37,12 @@ from rl_exp.tools.runrecord import lifecycle  # noqa: E402
 from rl_exp.tools.runrecord import manifest as M  # noqa: E402
 from test_lifecycle_gate import active_index  # noqa: E402
 
-TASK = "Lizard-Rough-v14"
-RETIRED_TASK = "Lizard-Parkour-Climb-v1"
-RETIRED_LINE = "lizard/parkour"
+TASK = "Lizard2-Flat-v3"
+#: The retirement the directory really carries, judged on the real index rather than a fixture: a
+#: line is never retired to make a test pass (2.1a). lizard2/main's v1 exited maintenance on
+#: 2026-10-08 and its recipe and classes are still registered, so the launch reaches the refusal.
+RETIRED_TASK = "Lizard2-Flat-v1"
+RETIRED_LINE = "lizard2/main"
 
 
 def main() -> int:
@@ -66,7 +70,7 @@ def _happy_path() -> list[str]:
     record = launch_recipe.plan(TASK, argv=["launch_recipe.py", "--task", TASK], num_envs=64, seed=7)
     if not record["allowed"]:
         return [f"{TASK} must be launchable from an active line: {record['reason']}"]
-    if record["recipe"] != "teacher-v14@1" or record["lifecycle"]["line"] != "lizard/main":
+    if record["recipe"] != "lizard2-flat-v3@1" or record["lifecycle"]["line"] != "lizard2/main":
         problems.append(f"the directory's own identity must be recorded: {record['identity']!r}")
     declared = lifecycle.read_index()["recipes"]["recipes"][record["recipe"]]["env_cfg_entry"]
     if record["recipe_entry"]["env_cfg_entry"] != declared:
@@ -84,7 +88,7 @@ def _happy_path() -> list[str]:
 
 
 def _refusals() -> list[str]:
-    """What the launcher must not let through, on the line the directory really retired."""
+    """What the launcher must not let through, on the retirement the directory really carries."""
     problems: list[str] = []
     invented = launch_recipe.plan("Lizard-Invented-v99", argv=["launch_recipe.py"])
     if invented["allowed"] or "not in the recipe map" not in invented["reason"]:
@@ -92,11 +96,11 @@ def _refusals() -> list[str]:
 
     retired = launch_recipe.plan(RETIRED_TASK, argv=["launch_recipe.py", "--task", RETIRED_TASK])
     if retired["allowed"]:
-        problems.append(f"the retired line must refuse the launch: {retired.get('reason')!r}")
+        problems.append(f"{RETIRED_TASK} must be refused: the directory retired it")
     if retired["lifecycle"]["status"] != "retired" or retired["lifecycle"]["line"] != RETIRED_LINE:
         problems.append(f"the refusal must carry the identity it read: {retired.get('lifecycle')!r}")
     if "retired line" not in retired["reason"]:
-        problems.append(f"the refusal must say the line is retired: {retired.get('reason')!r}")
+        problems.append(f"the refusal must say the subject is retired: {retired.get('reason')!r}")
     if "successor" in retired["reason"]:
         problems.append(
             f"the index registers no successor for {RETIRED_LINE}, so the refusal must not promise one:"
@@ -161,8 +165,8 @@ def _env_cfg():
     """The env cfg the trainer's T0 reads: declared line and version, nothing else used here."""
 
     class _Cfg:
-        params_version = "v14"
-        params_line = "lizard/main"
+        params_version = "v3"
+        params_line = "lizard2/main"
         seed = 42
         decimation = 4
 
@@ -183,7 +187,7 @@ def _agent_cfg():
         load_run = None
         load_checkpoint = None
         max_iterations = 3000
-        experiment_name = "lizard_rough_teacher_v14"
+        experiment_name = "lizard2_v3"
         seed = 42
         device = "cuda:0"
 

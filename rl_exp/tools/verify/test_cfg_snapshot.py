@@ -37,11 +37,11 @@ from dataclasses import MISSING
 sys.path.insert(0, ".")
 sys.path.insert(0, "rl_exp/tools/verify")
 import cfg_snapshot as cs  # noqa: E402
-from rl_exp.tasks.agents.rsl_rl_ppo_cfg import LizardTeacherV14PPORunnerCfg  # noqa: E402
+from rl_exp.tasks.agents.rsl_rl_ppo_cfg import Lizard2V3PPORunnerCfg  # noqa: E402
 from rl_exp.tasks import obs_protocol  # noqa: E402
 from rl_exp.tasks.recipe_tasks import (  # noqa: E402
-    LizardRoughTeacherEnvCfg_V13,
-    LizardRoughTeacherEnvCfg_V14,
+    Lizard2FlatV2EnvCfg,
+    Lizard2FlatV3EnvCfg,
 )
 
 PROBLEMS: list[str] = []
@@ -63,19 +63,22 @@ _GROUP_FIELDS = {"enable_corruption", "concatenate_terms", "history_length", "fl
 def check_order(snap: dict, cfg) -> None:
     """Order is preserved from the live instance and is inside the digest.
 
-    The extero term order is asserted against the protocol declaration, which owns that
-    contract (the network reshapes ``[N, 4, 52]`` in that order), so this is not a
+    The policy term order is asserted against the protocol declaration, which owns that
+    contract (the network reshapes the policy group in that order), so this is not a
     restatement of how the snapshot was built. Group-level settings live in the same
-    mapping; they are not terms.
+    mapping and are not terms -- nor is a term this recipe dropped: that one stays in the
+    mapping as an explicit ``None``, which is why the comparison is made on the terms that
+    are still on, against the declaration's own ``dropped_terms``.
     """
     groups = snap["observations"]
-    terms = [t for t in groups["extero"] if t not in _GROUP_FIELDS]
-    expected = obs_protocol.live_terms_for("Lizard-Rough-v14", "extero")
-    check("order/obs-groups-visible", {"proprio", "extero", "priv"} <= set(groups), f"got {sorted(groups)}")
-    check("order/extero-terms", terms == expected, f"{terms} != {expected}")
+    body = groups["policy"]
+    terms = [name for name, value in body.items() if name not in _GROUP_FIELDS and value is not None]
+    expected = obs_protocol.live_terms_for("Lizard2-Flat-v3", "policy")
+    check("order/obs-groups-visible", {"policy"} <= set(groups), f"got {sorted(groups)}")
+    check("order/policy-terms", terms == expected, f"{terms} != {expected}")
 
     reversed_snap = json.loads(cs.canonical_json(snap))
-    reversed_snap["observations"]["extero"] = dict(reversed(list(reversed_snap["observations"]["extero"].items())))
+    reversed_snap["observations"]["policy"] = dict(reversed(list(reversed_snap["observations"]["policy"].items())))
     check(
         "order/digest-covers-order",
         cs.digest(reversed_snap) != cs.digest(snap),
@@ -110,20 +113,19 @@ def check_identities(snap: dict) -> None:
     text = cs.canonical_json(snap)
     calls = sorted(set(re.findall(r'"__callable__":"([^"]+)"', text)))
     types_ = sorted(set(re.findall(r'"__type__":"([^"]+)"', text)))
-    check("identity/callables-present", len(calls) > 5, f"only {len(calls)} callables in a v14 snapshot")
+    check("identity/callables-present", len(calls) > 5, f"only {len(calls)} callables in the v3 snapshot")
     check(
         "identity/name-form",
         all(re.fullmatch(r"[\w.]+", name) for name in calls + types_),
         f"{[n for n in calls + types_ if not re.fullmatch(r'[\w.]+', n)][:3]}",
     )
     check("identity/no-address", re.search(r"at 0x[0-9a-fA-F]+", text) is None, "an object repr leaked")
-    # callables that the config already carries as resolvable strings stay strings:
-    # they are the stable identity already, so they must NOT be re-wrapped in a tag
+    # a class_type the config already carries as a resolvable string stays a string:
+    # it is the stable identity already, so it must NOT be re-wrapped in a tag
     check(
-        "identity/terrain-generator-class-type",
-        snap["scene"]["terrain"]["terrain_generator"]["class_type"]
-        == "isaaclab.terrains.terrain_generator:TerrainGenerator",
-        f"{snap['scene']['terrain']['terrain_generator']['class_type']}",
+        "identity/terrain-importer-class-type",
+        snap["scene"]["terrain"]["class_type"] == "isaaclab.terrains.terrain_importer:TerrainImporter",
+        f"{snap['scene']['terrain']['class_type']}",
     )
 
 
@@ -144,13 +146,13 @@ def check_missing_vs_none() -> None:
 
 def check_agent_cfg() -> None:
     """The agent cfg is where unset (MISSING) fields actually live; it must stay stable."""
-    agent = cs.snapshot(LizardTeacherV14PPORunnerCfg())
+    agent = cs.snapshot(Lizard2V3PPORunnerCfg())
     text = cs.canonical_json(agent)
     check("agent/no-address", cs.ADDRESS_RE.search(text) is None, "an object repr leaked into the agent snapshot")
     check("agent/missing-tagged", cs.MISSING_TAG in text, "unset agent fields must be tagged, not printed")
     check(
         "agent/deterministic",
-        cs.digest(agent) == cs.digest(cs.snapshot(LizardTeacherV14PPORunnerCfg())),
+        cs.digest(agent) == cs.digest(cs.snapshot(Lizard2V3PPORunnerCfg())),
         "two constructions of the agent cfg differ inside one process",
     )
 
@@ -160,7 +162,7 @@ def check_cross_process() -> None:
     code = (
         "import sys;sys.path.insert(0,'.');sys.path.insert(0,'rl_exp/tools/verify');"
         "import cfg_snapshot as cs;"
-        "from rl_exp.tasks.agents.rsl_rl_ppo_cfg import LizardTeacherV14PPORunnerCfg as A;"
+        "from rl_exp.tasks.agents.rsl_rl_ppo_cfg import Lizard2V3PPORunnerCfg as A;"
         "print(cs.digest(cs.snapshot(A())))"
     )
 
@@ -200,17 +202,17 @@ def check_tags_exercised(snap: dict) -> None:
 
 
 def check_digest(snap: dict) -> None:
-    check("digest/deterministic", cs.digest(snap) == cs.digest(cs.snapshot(LizardRoughTeacherEnvCfg_V14())))
+    check("digest/deterministic", cs.digest(snap) == cs.digest(cs.snapshot(Lizard2FlatV3EnvCfg())))
     check(
         "digest/discriminates",
-        cs.digest(snap) != cs.digest(cs.snapshot(LizardRoughTeacherEnvCfg_V13())),
-        "v13 and v14 share a digest: the summary cannot tell recipes apart",
+        cs.digest(snap) != cs.digest(cs.snapshot(Lizard2FlatV2EnvCfg())),
+        "v2 and v3 share a digest: the summary cannot tell recipes apart",
     )
     check("digest/versioned-format", isinstance(cs.FORMAT_VERSION, int))
 
 
 def main() -> int:
-    cfg = LizardRoughTeacherEnvCfg_V14()
+    cfg = Lizard2FlatV3EnvCfg()
     snap = cs.snapshot(cfg)
     check("snapshot/json-stable", json.loads(cs.canonical_json(snap)) == json.loads(cs.canonical_json(cs.snapshot(cfg))))
     check_order(snap, cfg)
@@ -222,7 +224,7 @@ def main() -> int:
     check_paths(snap)
     check_tags_exercised(snap)
     check_digest(snap)
-    print(f"  snapshot digest (v14): {cs.digest(snap)[:16]}... size {len(cs.canonical_json(snap))} bytes")
+    print(f"  snapshot digest (Lizard2-Flat-v3): {cs.digest(snap)[:16]}... size {len(cs.canonical_json(snap))} bytes")
     if PROBLEMS:
         print(f"CFG_SNAPSHOT_DRIFT ({len(PROBLEMS)})")
         return 1

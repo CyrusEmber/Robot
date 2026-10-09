@@ -9,368 +9,52 @@ from isaaclab_rl.rsl_rl import RslRlMLPModelCfg, RslRlOnPolicyRunnerCfg, RslRlPp
 
 
 @configclass
-class LizardFlatPPORunnerCfg(RslRlOnPolicyRunnerCfg):
-    num_steps_per_env = 24
-    max_iterations = 1500
-    save_interval = 50
-    experiment_name = "lizard_flat"
-    actor = RslRlMLPModelCfg(
-        hidden_dims=[256, 128, 128],
-        activation="elu",
-        obs_normalization=False,
-        distribution_cfg=RslRlMLPModelCfg.GaussianDistributionCfg(init_std=1.0),
-    )
-    critic = RslRlMLPModelCfg(
-        hidden_dims=[256, 128, 128],
-        activation="elu",
-        obs_normalization=False,
-    )
-    algorithm = RslRlPpoAlgorithmCfg(
-        value_loss_coef=1.0,
-        use_clipped_value_loss=True,
-        clip_param=0.2,
-        entropy_coef=0.005,
-        num_learning_epochs=5,
-        num_mini_batches=4,
-        learning_rate=1.0e-3,
-        schedule="adaptive",
-        gamma=0.99,
-        lam=0.95,
-        desired_kl=0.01,
-        max_grad_norm=1.0,
-    )
-
-
-@configclass
-class LizardRoughPPORunnerCfg(LizardFlatPPORunnerCfg):
-    """Runner cfg for `Lizard-Velocity-Rough-v0` (family rough, separate log dir)."""
-
-    experiment_name = "lizard_rough"
-
-
-@configclass
-class LizardTeacherPPORunnerCfg(LizardFlatPPORunnerCfg):
-    """Runner cfg for the `Lizard-Rough-v1` teacher snapshot.
-
-    Separate log dir from the family rough runs: the teacher recipe is frozen
-    (plan §4.1) and must not share checkpoints with family experiments.
-    """
-
-    experiment_name = "lizard_rough_teacher"
-
-
-@configclass
-class LizardTeacherV2PPORunnerCfg(LizardTeacherPPORunnerCfg):
-    """Runner cfg for `Lizard-Rough-v2` (per-version log dir).
-
-    Convention (versioning.mdc §A): experiment_name carries the recipe version
-    -- one log dir per version. The bare ``lizard_rough_teacher`` dir stays
-    with v1's published runs; v1 re-runs continue into it.
-    """
-
-    experiment_name = "lizard_rough_teacher_v2"
-
-
-@configclass
-class LizardCurriculumFlatPPORunnerCfg(LizardFlatPPORunnerCfg):
-    """Runner cfg for `Lizard-Velocity-Curriculum-Flat-v0` (separate log dir)."""
-
-    experiment_name = "lizard_curriculum_flat"
-
-
-@configclass
-class LizardCurriculumRoughPPORunnerCfg(LizardFlatPPORunnerCfg):
-    """Runner cfg for `Lizard-Velocity-Curriculum-Rough-v0` (separate log dir)."""
-
-    experiment_name = "lizard_curriculum_rough"
-
-
-@configclass
-class LizardV3PpoAlgorithmCfg(RslRlPpoAlgorithmCfg):
-    """PPO algorithm cfg with the paper S1 hyperparams + per-iter lr decay.
-
-    ``lr_decay`` is consumed by ``DecayingLrPPO`` (teacher_networks.py,
-    registered via the ``class_name`` point path -- zero rsl_rl changes).
-    """
-
-    class_name: str = "rl_exp.tasks.teacher_networks:DecayingLrPPO"
-    lr_decay: float = 0.9999
-
-
-@configclass
-class LizardTeacherV3PPORunnerCfg(RslRlOnPolicyRunnerCfg):
-    """Runner cfg for `Lizard-Rough-v3` (paper-aligned teacher, obs 381).
-
-    Paper S1 hyperparams: lr 5e-4 with 0.9999/iter decay (schedule fixed),
-    gamma 0.996, 2 epochs, clip 0.2, entropy 0.005, GAE 0.95. num_mini_batches
-    = 11 ~ 4096 envs x 24 steps / 8300 (paper reference size; soft, not a
-    constraint -- user 2026-09-01: no need to force the 8300 equivalence when
-    env count changes). Actor/critic are the three-encoder
-    ``SplitEncoderModel`` (per-stream normalization ON), fed by the env's
-    proprio/extero/priv obs groups.
-    """
-
-    num_steps_per_env = 24
-    max_iterations = 4000
-    save_interval = 50
-    experiment_name = "lizard_rough_teacher_v3"
-    obs_groups = {
-        "actor": ["proprio", "extero", "priv"],
-        "critic": ["proprio", "extero", "priv"],
-    }
-    actor = RslRlMLPModelCfg(
-        class_name="rl_exp.tasks.teacher_networks:SplitEncoderModel",
-        hidden_dims=[256, 160, 128],
-        activation="lrelu",
-        obs_normalization=True,
-        distribution_cfg=RslRlMLPModelCfg.GaussianDistributionCfg(init_std=1.0),
-    )
-    critic = RslRlMLPModelCfg(
-        class_name="rl_exp.tasks.teacher_networks:SplitEncoderModel",
-        hidden_dims=[256, 160, 128],
-        activation="lrelu",
-        obs_normalization=True,
-    )
-    algorithm = LizardV3PpoAlgorithmCfg(
-        num_learning_epochs=2,
-        # 11 batches ~ 4096 x 24 / 8300 (paper reference; soft constraint)
-        num_mini_batches=11,
-        learning_rate=5.0e-4,
-        schedule="fixed",
-        gamma=0.996,
-        lam=0.95,
-        entropy_coef=0.005,
-        desired_kl=0.01,
-        max_grad_norm=1.0,
-        value_loss_coef=1.0,
-        use_clipped_value_loss=True,
-        clip_param=0.2,
-    )
-
-
-@configclass
-class LizardTeacherV4PPORunnerCfg(LizardTeacherV3PPORunnerCfg):
-    """Runner cfg for `Lizard-Rough-v4` (terrain-only re-tune of v3, obs 381).
-
-    Everything inherits from v3 (paper S1 hyperparams, three-encoder model);
-    only the log dir changes -- one version, one dir (versioning.mdc §A).
-    """
-
-    experiment_name = "lizard_rough_teacher_v4"
-
-
-@configclass
-class LizardTeacherV5PPORunnerCfg(LizardTeacherV4PPORunnerCfg):
-    """Runner cfg for `Lizard-Rough-v5` (reward anti-collapse package, obs 381).
-
-    Everything inherits from v3/v4 (paper S1 hyperparams, three-encoder
-    model); only the log dir changes -- one version, one dir (versioning.mdc §A).
-    """
-
-    experiment_name = "lizard_rough_teacher_v5"
-
-
-@configclass
-class LizardTeacherV6PPORunnerCfg(LizardTeacherV5PPORunnerCfg):
-    """Runner cfg for `Lizard-Rough-v6` (asset axis fix, obs 381).
-
-    Same recipe as v5 (paper S1 hyperparams, three-encoder model); only the
-    log dir changes -- one version, one dir (versioning.mdc §A).
-    """
-
-    experiment_name = "lizard_rough_teacher_v6"
-
-
-@configclass
-class LizardTeacherV8PPORunnerCfg(LizardTeacherV6PPORunnerCfg):
-    """Runner cfg for `Lizard-Rough-v8` (anatomy-correct asset, obs 381).
-
-    Same recipe as v6.2 (paper S1 hyperparams, three-encoder model, spine
-    unlocked at yaml spine_scale); only the log dir changes -- one version,
-    one dir (versioning.mdc §A).
-    """
-
-    experiment_name = "lizard_rough_teacher_v8"
-
-
-@configclass
-class LizardTeacherV10PPORunnerCfg(LizardTeacherV8PPORunnerCfg):
-    """Runner cfg for `Lizard-Rough-v10` (tilt termination removed, obs 381).
-
-    Same recipe as v8.1 (paper S1 hyperparams, three-encoder model); only the
-    log dir changes -- one version, one dir (versioning.mdc §A).
-    """
-
-    experiment_name = "lizard_rough_teacher_v10"
-
-
-@configclass
-class LizardTeacherV11PPORunnerCfg(LizardTeacherV10PPORunnerCfg):
-    """Runner cfg for `Lizard-Rough-v11` (joint particle terrain curriculum).
-
-    Same recipe as v10 (paper S1 hyperparams, three-encoder model); only the
-    log dir changes -- one version, one dir (versioning.mdc §A).
-    """
-
-    experiment_name = "lizard_rough_teacher_v11"
-
-
-@configclass
-class LizardTeacherV12PPORunnerCfg(LizardTeacherV11PPORunnerCfg):
-    """Runner cfg for `Lizard-Rough-v12` (Miki S8 reset/obs robustness package).
-
-    Same recipe as v11 (paper S1 hyperparams, three-encoder model); only the
-    log dir changes -- one version, one dir (versioning.mdc §A).
-    """
-
-    experiment_name = "lizard_rough_teacher_v12"
-
-
-@configclass
-class LizardTeacherV13PPORunnerCfg(LizardTeacherV10PPORunnerCfg):
-    """Runner cfg for `Lizard-Rough-v13` (symmetric Miki tracking kernel).
-
-    Same recipe as v10 (paper S1 hyperparams, three-encoder model); only the
-    log dir changes -- one version, one dir (versioning.mdc §A).
-    """
-
-    experiment_name = "lizard_rough_teacher_v13"
-
-
-@configclass
-class LizardTeacherV14PPORunnerCfg(LizardTeacherV10PPORunnerCfg):
-    """Runner cfg for `Lizard-Rough-v14` (per-axis pitch/roll fall gate).
-
-    Same recipe as v10 (paper S1 hyperparams, three-encoder model); only the
-    log dir changes -- one version, one dir (versioning.mdc §A).
-    """
-
-    experiment_name = "lizard_rough_teacher_v14"
-
-
-@configclass
-class LizardParkourClimbPPORunnerCfg(LizardFlatPPORunnerCfg):
-    """Runner cfg for `Lizard-Parkour-Climb-v1` (position-task stairs expert).
-
-    Parkour line (parkour/v1/PLAN.md): single policy obs group (278:
-    proprio + clean height scan + position command), plain MLP -- no
-    three-encoder model, no obs_groups. PPO hyperparams reuse the paper-S1
-    recipe (lr decay, gamma 0.996); separate log dir per the family
-    convention (one task family, one dir).
-    """
-
-    experiment_name = "lizard_parkour_climb_v1"
-    max_iterations = 4000
-    actor = RslRlMLPModelCfg(
-        hidden_dims=[256, 160, 128],
-        activation="lrelu",
-        obs_normalization=True,
-        distribution_cfg=RslRlMLPModelCfg.GaussianDistributionCfg(init_std=1.0),
-    )
-    critic = RslRlMLPModelCfg(
-        hidden_dims=[256, 160, 128],
-        activation="lrelu",
-        obs_normalization=True,
-    )
-    algorithm = LizardV3PpoAlgorithmCfg(
-        num_learning_epochs=2,
-        num_mini_batches=11,
-        learning_rate=5.0e-4,
-        schedule="fixed",
-        gamma=0.996,
-        lam=0.95,
-        entropy_coef=0.005,
-        desired_kl=0.01,
-        max_grad_norm=1.0,
-        value_loss_coef=1.0,
-        use_clipped_value_loss=True,
-        clip_param=0.2,
-    )
-
-
-@configclass
-class LizardBaselinePPORunnerCfg(RslRlOnPolicyRunnerCfg):
-    """Runner cfg for `Lizard-Baseline-Flat-v1` (flat ground, fixed speed, proprio MLP).
-
-    A plain MLP over the single proprio group, and the framework's own velocity-task
-    PPO hyperparameters -- deliberately not the paper S1 recipe and not the three-encoder
-    model, both of which were tuned for 4096 envs with a 381-dim, three-group observation.
-    Reusing them here would describe a different recipe than the one being recorded.
-
-    ``obs_normalization`` is off by this first recipe's choice. Starting from scratch
-    does not require disabling normalization: fresh statistics would also be new state.
-    One version, one log dir (versioning.mdc A).
-    """
-
-    num_steps_per_env = 24
-    max_iterations = 3000
-    save_interval = 50
-    experiment_name = "lizard_baseline_v1"
-    actor = RslRlMLPModelCfg(
-        hidden_dims=[256, 128, 128],
-        activation="elu",
-        obs_normalization=False,
-        distribution_cfg=RslRlMLPModelCfg.GaussianDistributionCfg(init_std=1.0),
-    )
-    critic = RslRlMLPModelCfg(
-        hidden_dims=[256, 128, 128],
-        activation="elu",
-        obs_normalization=False,
-    )
-    algorithm = RslRlPpoAlgorithmCfg(
-        value_loss_coef=1.0,
-        use_clipped_value_loss=True,
-        clip_param=0.2,
-        entropy_coef=0.005,
-        num_learning_epochs=5,
-        num_mini_batches=4,
-        learning_rate=1.0e-3,
-        schedule="adaptive",
-        gamma=0.99,
-        lam=0.95,
-        desired_kl=0.01,
-        max_grad_norm=1.0,
-    )
-
-
-@configclass
-class LizardBaselineV2PPORunnerCfg(LizardBaselinePPORunnerCfg):
-    """Runner cfg for `Lizard-Baseline-Flat-v2` (1-3 m/s window, 22-dim action).
-
-    The same PPO recipe as v1 on purpose -- the hyperparameters are not a variable this round
-    adds -- with two changes that are about the *record*, not the algorithm:
-
-    * its own ``experiment_name``: one version, one log directory (versioning.mdc A), so a v2
-      run cannot land among v1's.
-    * ``max_iterations`` stated as what is actually intended. v1 declared 3000 and its run was
-      launched with 15000 by a CLI override, which left the recorded run unreproducible from its
-      own NOTES. A wider command window earns a larger budget, declared here instead.
-    """
-
-    max_iterations = 10000
-    experiment_name = "lizard_baseline_v2"
-
-
-@configclass
-class Lizard2PPORunnerCfg(LizardBaselinePPORunnerCfg):
+class Lizard2PPORunnerCfg(RslRlOnPolicyRunnerCfg):
     """Runner cfg for `Lizard2-Flat-v1` (new family: 30-joint skeleton, 0-3 m/s command window).
 
-    The same PPO recipe as the baseline line's v1 on purpose -- the algorithm is not a variable this
-    family's baseline adds -- with the two record-level changes that pattern already carries:
+    The value block below is declared here rather than inherited from another line's runner: it is
+    the plain-MLP recipe this family's runs were launched with, and an edit to it moves this family
+    alone. ``obs_normalization`` is off by this first recipe's choice -- starting from scratch does
+    not require disabling it, fresh statistics would also be new state.
 
-    * its own ``experiment_name``: one version, one log directory (versioning.mdc A), so a lizard2 run
-      cannot land among another line's.
+    Two record-level choices it carries:
+
+    * its own ``experiment_name``: one version, one log directory (versioning.mdc A), so a lizard2
+      run cannot land among another line's.
     * ``max_iterations`` stated as what is actually intended, so the recorded run is reproducible
-      from its own NOTES. Same budget as the other line's v2: a command *range* (two commands per
-      20 s episode) plus a skeleton whose learning curve is unknown.
-
-    It inherits from the baseline line's runner, so a PPO hyperparameter edit there moves this family
-    too -- accepted because the two are meant to be the same recipe, and the dependency is a code
-    import, visible in the edit rather than discovered later.
+      from its own NOTES: a command *range* (two commands per 20 s episode) plus a skeleton whose
+      learning curve is unknown.
     """
 
+    num_steps_per_env = 24
     max_iterations = 10000
+    save_interval = 50
     experiment_name = "lizard2_v1"
+    actor = RslRlMLPModelCfg(
+        hidden_dims=[256, 128, 128],
+        activation="elu",
+        obs_normalization=False,
+        distribution_cfg=RslRlMLPModelCfg.GaussianDistributionCfg(init_std=1.0),
+    )
+    critic = RslRlMLPModelCfg(
+        hidden_dims=[256, 128, 128],
+        activation="elu",
+        obs_normalization=False,
+    )
+    algorithm = RslRlPpoAlgorithmCfg(
+        value_loss_coef=1.0,
+        use_clipped_value_loss=True,
+        clip_param=0.2,
+        entropy_coef=0.005,
+        num_learning_epochs=5,
+        num_mini_batches=4,
+        learning_rate=1.0e-3,
+        schedule="adaptive",
+        gamma=0.99,
+        lam=0.95,
+        desired_kl=0.01,
+        max_grad_norm=1.0,
+    )
 
 
 @configclass

@@ -121,7 +121,7 @@ echo <REPO>> <ROOT>\env_isaaclab\Lib\site-packages\rl_exp.pth
 ```
 
 **2. fork shim**（`<ROOT>` 源码树唯一常驻文件：`import isaaclab_tasks` 时
-自动注册全部 lizard 任务；现成副本在 `<REPO>\rl_exp\fork_patches\`。**stock 树里
+自动注册本仓全部任务（现为 `Lizard2-*` 六条）；现成副本在 `<REPO>\rl_exp\fork_patches\`。**stock 树里
 没有 `config\lizard\` 目录，要先建**——`import_packages` 用 `pkgutil` 自动发现带
 `__init__.py` 的目录，父级 `config\__init__.py` 不用动）：
 
@@ -141,15 +141,15 @@ copy <REPO>\rl_exp\fork_patches\config_lizard___init__.py ^
 （按墙钟走，按键才落得进去）。键位：小键盘/方向键前后左右，`Z`/`X` 转向，`L` 清零。
 **按住才动、松开即停**（设备是 press/release 增量配平，不会滑行）；Alt+Tab 失焦会丢
 release、命令卡住不归零，按 `L` 兜底。按一次的量级在 `play_keyboard_task.KEY_SENSITIVITY`
-（默认 x=3.0 m/s、y=0.4、yaw=1.0 rad/s；v8 训练范围 x(-1,3)、y(±0.5)、yaw(±1)——stock
+（默认 x=3.0 m/s、y=0.4、yaw=1.0 rad/s；当前 lizard2 配方的命令范围是 x(0,3)、y 与 yaw 恒 0——stock
 `Se2KeyboardCfg` 默认 x 只有 0.8，相对上限太慢，故覆盖）。
 
 **A. 仓内变体（推荐，不改 `<ROOT>`）**——覆盖有 `commands.base_velocity` 的
-Lizard `-Play` 任务，`<ROOT>` 重装/换版本不失效：
+`-Play` 任务，`<ROOT>` 重装/换版本不失效：
 
 ```bat
 <ROOT>\env_isaaclab\Scripts\python.exe <ROOT>\scripts\reinforcement_learning\rsl_rl\play.py ^
-  --task Lizard-Rough-Play-v8-keyboard ^
+  --task Lizard2-Flat-Play-v3-keyboard ^
   --external_callback rl_exp.tools.diagnose.play_keyboard_task.register ^
   --viz kit --real-time --num_envs 1
 ```
@@ -213,37 +213,38 @@ cd /d <REPO>
 python ablation_harness\host_paths.py --check
 :: 离线闸门（秒级，不起仿真）：框架 pin / DR parity / recovery 等价 / 课程单测
 rl_exp\tools\verify\run_offline_checks.bat
-:: 预期: OBS_SHAPE (2, 308) / ACTION_DIM 26 / MASS_SUM ≈ 72
-python rl_exp\tools\verify\teacher_smoke.py --headless
-:: 预期: JOINT_COUNT 26 / 四脚 force_z 合计 ≈ 700N
-python rl_exp\tools\verify\position_check.py --headless --rough
+:: 腿链口径自检（采用机体的脚网格 / 铰链面 / 膝伸直余量；stdlib，不起仿真）
+python rl_exp\tools\verify\check_leg_reachability.py --self-check
 :: 预期: 跑分输出 + eval.json 落盘（注意 TRAIN id，不是 -Play：
 :: harness 自己控制 DR，Play 变体会让 robust 静默退化成 nominal）
-python ablation_harness\eval.py --task Lizard-Rough-v2 --mode nominal --seed 123 --headless
+python ablation_harness\eval.py --task Lizard2-Flat-v1 --mode nominal --seed 123 --headless
 ```
 
 **pre-commit 静态闸门**：`hooks\pre-commit` 随仓携带（staged 命中
-`rl_exp\`/`ablation_harness\` 代码时自动跑 `check_dr_parity --strict` +
-`check_obs_layout`，文档 commit 豁免）。首次 clone 后执行一次
+`rl_exp\`/`ablation_harness\` 代码时自动跑 `check_suite_banners` /
+`framework_pin_check --strict` / `check_dr_parity --strict` / `check_version_docs` /
+`check_work_docs` / `check_obs_protocol`，文档 commit 豁免）。首次 clone 后执行一次
 `git config core.hooksPath hooks` 接线（本地配置不随仓走）；全套离线闸门
 仍走 `run_offline_checks.bat`，hook 只是最后防线不是替代。
 
-注意：`versions\lizard\main\v2\` 是 teacher 运行时依赖（冻结参数），不是备份文档——
-漏拷 teacher 起不来。目录层级是硬约束（cfg 内 `parents[1]` 路径计算依赖）。
+注意：`versions\<family>\<line>\vN\` 的冻结参数是**运行时依赖**，不是备份文档——
+漏拷任务起不来（旧线 `versions\lizard\` 的冻结 yaml 仍被保留的 SIR 检查当契约读）。
+目录层级是硬约束（cfg 内 `parents[1]` 路径计算依赖）。
 
 ## 训练
 
 ```bat
-python scripts\reinforcement_learning\rsl_rl\train.py --task Lizard-Rough-v2 --max_iterations 4000 --seed 42
+python scripts\reinforcement_learning\rsl_rl\train.py --task Lizard2-Flat-v3 --max_iterations 4000 --seed 42
 ```
 
-历史版本复现：任务 id 常驻注册（如 `Lizard-Rough-v1` = v1 配方 obs 266），
-机制见 `rl_exp/versions/lizard/FAMILY.md`「任务注册表」，真源是 `rl_exp/tasks/recipe.py`
-的配方表与 `versions/recipes.json`。
+**版本复现**：任务 id 由注册表常驻（`Lizard2-Flat-v3` = v3 配方），机制见
+`rl_exp/versions/lizard2/FAMILY.md`「任务注册表」；真源是 `versions/recipes.json`（身份映射）
+与各线自己的配方声明模块（`rl_exp/tasks/lizard2_recipe.py`；`rl_exp/tasks/recipe.py` 只留
+`LINES` 路由与构建机制）。旧 lizard 三条线的任务 id 已随退休清理退出注册，只留历史配方与记录。
 
 **续训（`--resume`）**：课程状态（SIR 粒子/权重/统计 + c_k 时钟）随 checkpoint 内嵌存取，
 恢复前逐项核验（任务/env 数/载荷版本/slot/指纹），核验通过才回填；声明了课程契约的任务
-（teacher v5–v14）缺状态时**训练前硬失败**，要明确丢弃课程状态请加
+（`REQUIRES_CURRICULUM_STATE`）缺状态时**训练前硬失败**，要明确丢弃课程状态请加
 `--drop_curriculum_state`（旧名 `--weights_only` 仍可用，会打弃用提示；两者都只丢课程状态，
 rsl_rl 照常加载 model + optimizer）。多卡续训**不在保证范围**：状态只从 rank 0 写，
 非 0 rank 明确拒绝并记录，别据此宣称多卡续训已验证。

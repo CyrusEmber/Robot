@@ -3,7 +3,7 @@ id: sir-criterion-and-obs-layout
 title: SIR 课程判据 v6 候选 + obs_layout 同步（PLAN 挂账 #15/#10，已结案）
 scope: rl_exp/tasks, rl_exp/versions/lizard/main/v3
 status: done
-landing: rl_exp/tasks/components.py, rl_exp/versions/lizard/main/v11/main_params.yaml, rl_exp/tools/verify/test_joint_sir.py, rl_exp/versions/lizard/OBS.md, rl_exp/tasks/obs_protocol.py
+landing: rl_exp/versions/lizard/main/v11/main_params.yaml, rl_exp/tools/verify/test_joint_sir.py, rl_exp/versions/lizard/OBS.md, rl_exp/tasks/obs_protocol.py
 outcome: 判据候选 a（逐步 Tr，贴论文 Eq.2/3/7）**由 v11 的联合粒子 SIR 落地**；v5 时代的二值代理判据冻结不改。obs_layout 随 v3 装配同步到三组（90/208/83）——组级 SSOT 归 `OBS.md`，代码侧由 `check_obs_layout.py` 看守。
 evidence: rl_exp/versions/lizard/ACCEPTANCE.md, rl_exp/versions/lizard/main/v11/PLAN.md
 ---

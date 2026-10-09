@@ -35,9 +35,6 @@ PINNED_DESC = "perf-2026-06-24 (tested 2026-08-31)"
 
 # (file under <root>, regex, who depends on it)
 NEEDLES = [
-    ("source/isaaclab/isaaclab/managers/manager_base.py",
-     r"term_cfg\.func = term_cfg\.func\(cfg=term_cfg",
-     "staged_curriculum._dependency_met (curriculum term cross-reference)"),
     ("source/isaaclab/isaaclab/sensors/ray_caster/base_ray_caster.py",
      r"meshes: ClassVar",
      "teacher_mdp.FootContactNormalsTerm (global wp mesh registry)"),
@@ -59,10 +56,10 @@ NEEDLES = [
     ("source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/velocity_env_cfg.py",
      r"height_scanner\.update_period = self\.decimation \* self\.sim\.dt",
      "family/teacher scanner cadence contract (50 Hz policy rate)"),
-    # v3: obs groups reach the model through the wrapper untouched
+    # obs groups reach the model through the wrapper untouched
     ("source/isaaclab_rl/isaaclab_rl/rsl_rl/vecenv_wrapper.py",
      r"return TensorDict\(obs_dict, batch_size=\[self\.num_envs\]\)",
-     "SplitEncoderModel (obs dict -> TensorDict group passthrough)"),
+     "obs groups -> TensorDict passthrough (the stock MLPModel consumes that dict)"),
     # resume timing: the c_k clock lives here, and curriculum compute must stay
     # ahead of the command reset that reads the joint SIR's desired_vel
     ("source/isaaclab/isaaclab/envs/manager_based_rl_env.py",
@@ -73,30 +70,18 @@ NEEDLES = [
      "curriculum_state.apply_resume_state (restore-before-first-reset timing)"),
 ]
 
-# same but inside the rsl_rl package the venv installs under <root>: the
-# class_name point-path registration is the whole v3 architecture's foundation
+# same but inside the rsl_rl package the venv installs under <root>: the stock-MLP
+# actor/critic registration is what the active runner constructs through
 RSL_RL_NEEDLES = [
-    ("env_isaaclab/Lib/site-packages/rsl_rl/utils/utils.py",
-     r'if ":" in callable_or_name:',
-     "teacher_networks class_name point path (module:Class resolution)"),
     ("env_isaaclab/Lib/site-packages/rsl_rl/utils/utils.py",
      r"def resolve_obs_groups",
      "obs_groups cfg validation (actor/critic sets -> env group names)"),
     ("env_isaaclab/Lib/site-packages/rsl_rl/algorithms/ppo.py",
      r'resolve_callable\(cfg\["actor"\]\.pop\("class_name"\)\)',
-     "v3 runner actor class_name injection (SplitEncoderModel)"),
+     "lizard2 runner actor class_name resolution (stock MLPModel)"),
     ("env_isaaclab/Lib/site-packages/rsl_rl/algorithms/ppo.py",
      r'resolve_callable\(cfg\["critic"\]\.pop\("class_name"\)\)',
-     "v3 runner critic class_name injection"),
-    ("env_isaaclab/Lib/site-packages/rsl_rl/algorithms/distillation.py",
-     r'resolve_callable\(cfg\["student"\]\.pop\("class_name"\)\)',
-     "Phase 2 student class_name injection (student_networks)"),
-    ("env_isaaclab/Lib/site-packages/rsl_rl/algorithms/distillation.py",
-     r'resolve_callable\(cfg\["teacher"\]\.pop\("class_name"\)\)',
-     "Phase 2 teacher class_name injection"),
-    ("env_isaaclab/Lib/site-packages/rsl_rl/models/mlp_model.py",
-     r"def get_latent",
-     "SplitEncoderModel base-class forward protocol"),
+     "lizard2 runner critic class_name resolution (stock MLPModel)"),
     # resume: the curriculum state rides the checkpoint's infos slot
     ("env_isaaclab/Lib/site-packages/rsl_rl/runners/on_policy_runner.py",
      r"def save\(self, path: str, infos: dict \| None = None\)",

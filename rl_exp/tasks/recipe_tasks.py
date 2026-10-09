@@ -20,9 +20,9 @@ remove. Nothing needs to import this module explicitly: the registry names it as
 Resolution is **per name, on demand** (module ``__getattr__``), and each line is built by its own
 constructor. Both halves are load-bearing:
 
-* one line's classes are never built while resolving another's, so importing the baseline task
-  does not drag in the main line (``versions/lizard/baseline/PLAN.md``: that line does not import
-  another line's cfg or mdp);
+* one line's classes are never built while resolving another's, so importing a lizard2 task does
+  not drag in ``recipe.py`` (``lizard2_recipe``: that line does not import another line's cfg or
+  mdp);
 * a name is built once and cached, and no bulk update can overwrite it with a class from a second
   path -- "one recipe, one expression" is why the version subclasses were deleted, and a cache that
   silently swaps an object breaks the same rule at runtime.
@@ -38,16 +38,11 @@ import json
 import pathlib
 
 _MODULE = "rl_exp.tasks.recipe_tasks"
-_LINES_BUILT_ELSEWHERE = {"lizard/baseline", "lizard2/main"}
-"""Lines whose classes their own module builds, so resolving one never imports the main line.
+_LINES_BUILT_ELSEWHERE = {"lizard2/main"}
+"""Lines whose classes their own module builds, so resolving one never imports ``recipe.py``.
 
-The baseline line is the case: its recipe code is independent by contract (``baseline/PLAN.md``
-§与其它线的边界), and ``baseline_recipe.recipe_class`` is what makes that true at import time.
-Its key is the same string ``baseline_env_cfg._LINE_KEY`` and the identity map's ``line`` field
-carry; ``test_baseline_isolation.py`` asserts this table has no entry no declared task claims.
-
-The lizard2 family's main line joins it for the same reason and by the same shape: its declaration
-module (``lizard2_recipe``) imports no other line, so its constructor is the one that builds it.
+The lizard2 family's main line is the case, and by its own shape: its declaration module
+(``lizard2_recipe``) imports no other line, so its constructor is the one that builds it.
 """
 
 _RECIPES_JSON = pathlib.Path(__file__).resolve().parents[1] / "versions" / "recipes.json"
@@ -68,7 +63,7 @@ def _own_entries(mapping: dict | None = None) -> dict[str, dict]:
     guessed from the task id's shape.
 
     Only entries whose ``env_cfg_entry`` names *this* module are kept. The map is the family's, and
-    parkour's two entries are the parkour module's classes: a name collected here is a promise that
+    an entry another module owns is that module's class: a name collected here is a promise that
     ``getattr`` can produce it (``__all__`` is built from this dict), and a promise the module
     cannot keep is worse than a missing entry. A name two tasks both claim would collapse into one
     entry; ``check_configclass_fields`` cross-checks the exports against the map, which is what
@@ -96,8 +91,8 @@ def _builder(line: str):
     """``(its recipe table, its constructor)`` for ``line`` -- each line owns its own.
 
     A line listed in :data:`_LINES_BUILT_ELSEWHERE` is imported here and built by its own module;
-    every other line is built by the main declaration module. The point of the split is that the
-    baseline half is never imported to resolve the other half, and vice versa.
+    every other line is built by the ``recipe.py`` declaration module. The point of the split is
+    that neither half is imported to resolve the other.
 
     Args:
         line: family-relative line handle, as the identity map states it.
@@ -106,20 +101,12 @@ def _builder(line: str):
         The line's recipe table and a ``(version, *, play, name) -> type`` constructor.
     """
     if line in _LINES_BUILT_ELSEWHERE:
-        if line == "lizard2/main":
-            from rl_exp.tasks import lizard2_recipe
+        from rl_exp.tasks import lizard2_recipe
 
-            def build_lizard2(version: str, *, play: bool, name: str) -> type:
-                return lizard2_recipe.recipe_class(version, play=play, name=name)
+        def build_lizard2(version: str, *, play: bool, name: str) -> type:
+            return lizard2_recipe.recipe_class(version, play=play, name=name)
 
-            return lizard2_recipe.LIZARD2_RECIPES, build_lizard2
-
-        from rl_exp.tasks import baseline_recipe
-
-        def build_baseline(version: str, *, play: bool, name: str) -> type:
-            return baseline_recipe.recipe_class(version, play=play, name=name)
-
-        return baseline_recipe.BASELINE_RECIPES, build_baseline
+        return lizard2_recipe.LIZARD2_RECIPES, build_lizard2
 
     from rl_exp.tasks import recipe
 

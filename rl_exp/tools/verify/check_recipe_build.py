@@ -66,8 +66,6 @@ DIFF_NAME = "diff.json"
 """The difference declaration's filename inside a recipe's version directory (``ARCH_PLAN`` 2.4 B4)."""
 
 EXPECTED_COMPARED: dict[str, int] = {
-    "lizard/main": 32,
-    "lizard/baseline": 4,
     "lizard2/main": 6,
 }
 """How many recipe/task pairs this gate compares, per line, pinned.
@@ -81,46 +79,23 @@ deliberate change updates them in the same commit that changes the recipes.
 """
 
 EXPECTED_PENDING: dict[str, tuple[str, ...]] = {
-    "lizard/main": (),
-    "lizard/baseline": (),
     "lizard2/main": (),
 }
 """Versions whose delta is not declared yet, per line. Printed, and red when the list is not this one."""
 
 EXPECTED_DIFFS: dict[tuple[str, str], int] = {
     # Paths each recipe declares, pinned like the other counts: a declaration that quietly shrinks
-    # is exactly the failure this gate is built around. The main line's recipes declare against
-    # their mother (``base.json``); the baseline against the framework stock cfg, being a lineage
-    # root. v1 is absent on purpose -- its mother v0 has no recipe declaration, so the lineage
-    # reading has nothing to measure against. That is printed below, not papered over with a stock
-    # reading that would restate the whole line's heritage as v1's own delta.
-    ("lizard/baseline", "v1"): 76,
-    ("lizard/baseline", "v2"): 5,
-    ("lizard/main", "v2"): 6,
-    ("lizard/main", "v3"): 59,
-    ("lizard/main", "v4"): 6,
-    ("lizard/main", "v5"): 46,
-    ("lizard/main", "v6"): 4,
-    ("lizard/main", "v8"): 2,
-    ("lizard/main", "v10"): 2,
-    ("lizard/main", "v11"): 75,
-    ("lizard/main", "v12"): 40,
-    ("lizard/main", "v13"): 3,
-    ("lizard/main", "v14"): 3,
-    # The family's three dev-state deltas against the root they all build on (``flat-v0``): the
-    # rough stack, the staged curricula, and both. ``flat-v0`` itself is absent for the same reason
-    # ``v1`` is -- it IS the root, so a line-root reading would restate the family wiring as one
-    # recipe's delta, and there is no mother recipe to read it against.
-    ("lizard/main", "rough-v0"): 6,
-    ("lizard/main", "curriculum-flat-v0"): 11,
-    ("lizard/main", "curriculum-rough-v0"): 16,
-    # lizard2/main v1 is a LINEAGE ROOT (``base.json`` is null) exactly like the baseline line's v1,
-    # so its declared difference is against the framework stock cfg and the count belongs to that
-    # reading: the whole family wiring shows up as this one recipe's delta. 108 = 65 env paths +
-    # 43 agent leaves (the gate counts both halves); it was 107 before 2026-09-22's pre-training
-    # revision added the head-contact termination. Pinned at freeze (2026-09-22) -- the declaration is
-    # computed from the recipe itself, so this count is the only thing that can notice the day the
-    # computation loses a group.
+    # is exactly the failure this gate is built around. A recipe with a mother declares against it
+    # (``base.json``); a lineage root has no mother, so it can only declare against the framework
+    # stock cfg -- and the whole line's wiring then shows up as that one recipe's delta. A recipe
+    # with no declaration at all is legitimate (a root that IS the whole line): it is printed below
+    # rather than papered over, because a stock reading would restate the line's heritage as its own
+    # delta.
+    # lizard2/main v1 is a LINEAGE ROOT (``base.json`` is null): 108 = 65 env paths + 43 agent leaves
+    # (the gate counts both halves); it was 107 before 2026-09-22's pre-training revision added the
+    # head-contact termination. Pinned at freeze (2026-09-22) -- the declaration is computed from the
+    # recipe itself, so this count is the only thing that can notice the day the computation loses a
+    # group.
     ("lizard2/main", "v1"): 108,
     # v2's base.json names v1, so this is a LINEAGE reading and the count is small on purpose: the one
     # env path its own delta moves (the legs action group's joint list: the blade patterns leave it)
@@ -188,7 +163,7 @@ def resurrected_class(version: str, *, play: bool, line: str) -> type | None:
     return None
 
 
-def attribution(version: str, *, play: bool, paths: list[str], line: str = recipe.MAIN_LINE) -> None:
+def attribution(version: str, *, play: bool, paths: list[str], line: str) -> None:
     """Every declared step must change a field, and every changed field must have a step.
 
     The builder applies named elements in order (``recipe.build``), and a declaration is only as
@@ -309,19 +284,12 @@ diff always contains it -- and it is never a difference between the two recipes.
 than written into twelve declarations, because it is not a statement anybody could get wrong.
 """
 
-COMPONENT_AUTHOR = "components."
-"""Prefix marking a declared path as written by a version-resolved structural component.
-
-The main line's delta has three writers: the recipe's elements, the components in the shared wiring
-that resolve their own form from the version, and the shared wiring itself reading the recipe's
-document. All of them are named in the declaration, because "which writer is answerable for this
-path" is the question -- an entry that names nobody is how a path ends up owned by nobody.
-"""
-
 WIRING_AUTHOR = "wiring"
-"""The shared wiring, reading this recipe's own document (a yaml value no element and no component
-writes). The residual writer: if a path is neither an element's nor a component's, this is what
-produced it, and saying so is more useful than saying nothing."""
+"""The shared wiring, reading this recipe's own document (a yaml value no element writes).
+
+The residual writer: if a path is not an element's, this is what produced it, and saying so is more
+useful than saying nothing.
+"""
 
 
 def base_of(line_key: str, version: str, declared: dict, paths: list[str]):
@@ -398,31 +366,6 @@ def authored_paths(trace: list[tuple[str, object]], line_key: str, version: str)
     return out
 
 
-def ownership() -> dict[str, tuple[str, ...]]:
-    """The component ownership table, imported lazily from the gate that maintains it.
-
-    ``[37]`` is where "which component owns which name" is decided, and a second copy here is the
-    drift every comparison in this file exists to prevent. Lazy because importing a sibling gate
-    pulls ``components`` and the teacher cfg, which this gate only needs on the hard-B path.
-    """
-    from test_component_ownership import OWNERSHIP  # noqa: PLC0415 - sibling gate's table
-
-    return OWNERSHIP
-
-
-def component_owns(author: str, path: str) -> bool:
-    """Does the named component own one of the names in this path?
-
-    A component-authored entry whose component does not appear in the path is a mis-attribution:
-    the claim is "this structural component wrote it", and the table is where that is decided.
-    """
-    name = author[len(COMPONENT_AUTHOR) :]
-    owned = ownership().get(name)
-    if owned is None:
-        return False
-    return any(segment in owned for segment in path.split(".")[1:])
-
-
 def hard_b(line_key: str, version: str, declared: dict, paths: list[str]) -> int:
     """A recipe must differ from its base by exactly the declared list, and each entry must say who.
 
@@ -432,12 +375,18 @@ def hard_b(line_key: str, version: str, declared: dict, paths: list[str]) -> int
     * a **declared** entry that no longer changes anything is how a declaration rots into a
       description of a recipe that moved on;
     * an entry whose **named author does not produce that path** means the list and the declaration
-      have stopped agreeing -- an *element* author has to have moved it in the replay, a
-      *component* author (``components.<name>``) has to be a component that owns a name in the path
-      and that no element moved. Rewriting the list to go green therefore has to reach the element
-      list, which is the whole reason each entry names one;
+      have stopped agreeing: an *element* author has to have moved it in the replay, and the shared
+      wiring is the residual writer, allowed a path only where no element moved it. Rewriting the
+      list to go green therefore has to reach the element list, which is the whole reason each entry
+      names one;
     * a base that is not what ``base.json`` says it is would make every later comparison
       meaningless, so the claim is checked rather than assumed.
+
+    The gate used to accept a third kind of author (``components.<name>``, resolved through the
+    ownership table of the deleted structural-component gate). Those modules retired with the
+    historical lines, so a ``components.*`` entry is now just an author that matches no element and
+    fails like any other mis-attribution -- the prefix is not a way to be excused from naming a
+    writer (acceptance/records/2026-10-09-retired-family-prune-manifest.md, 裁决 §8-G).
 
     Returns the number of declared paths, or 0 when the declaration could not be checked.
     """
@@ -476,9 +425,9 @@ def hard_b(line_key: str, version: str, declared: dict, paths: list[str]) -> int
     for author, group in sorted(allowed.items()):
         # A group is one author set, and the paths in it have to be exactly the paths that set
         # produced: the key is the authorship claim, so a path in the wrong group is a claim about
-        # a writer that did not write it. Three kinds, because this line has three writers -- the
-        # shared wiring (reading the recipe's own document), the version-resolved components, and
-        # the recipe's elements (several of which touch the same path in sequence).
+        # a writer that did not write it. Two kinds, because this gate knows two writers -- the
+        # shared wiring (reading the recipe's own document) and the recipe's elements (several of
+        # which touch the same path in sequence).
         for key in group["paths"]:
             writers = {name for name, moves in produced.items() if any(covers(key, moved) for moved in moves)}
             if author == WIRING_AUTHOR:
@@ -487,23 +436,9 @@ def hard_b(line_key: str, version: str, declared: dict, paths: list[str]) -> int
                         f"{line_key}/{version}: {key!r} is attributed to {WIRING_AUTHOR}, but"
                         f" elements moved it: {sorted(writers)} -- name them"
                     )
-                elif any(component_owns(f"{COMPONENT_AUTHOR}{name}", key) for name in ownership()):
-                    paths.append(
-                        f"{line_key}/{version}: {key!r} is attributed to {WIRING_AUTHOR}, but a"
-                        " component owns a name in that path -- name the component"
-                    )
-            elif author.startswith(COMPONENT_AUTHOR):
-                if writers:
-                    paths.append(
-                        f"{line_key}/{version}: {key!r} is attributed to {author!r} but an element"
-                        f" moved it: {sorted(writers)} -- name the element"
-                    )
-                elif not component_owns(author, key):
-                    paths.append(
-                        f"{line_key}/{version}: {key!r} is attributed to {author!r}, which owns no"
-                        f" name in that path ({sorted(ownership())})"
-                    )
             elif writers != set(author.split("+")) or not writers:
+                # No other author kind is recognised: an entry naming anything but an element set or
+                # the wiring (the retired ``components.<name>`` prefix included) lands here.
                 paths.append(
                     f"{line_key}/{version}: {key!r} is attributed to {author!r} while the elements"
                     f" that moved it are {sorted(writers) or 'none'} -- the list and the element"

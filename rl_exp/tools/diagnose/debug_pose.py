@@ -13,11 +13,11 @@ simulation_app = AppLauncher(args_cli).app
 import gymnasium as gym
 
 import isaaclab_tasks  # noqa: F401
-from rl_exp.tasks.lizard_env_cfg import LizardFlatEnvCfg_PLAY
+from rl_exp.tasks.recipe_tasks import Lizard2FlatV3EnvCfg_PLAY
 
-cfg = LizardFlatEnvCfg_PLAY()
+cfg = Lizard2FlatV3EnvCfg_PLAY()
 cfg.scene.num_envs = 1
-env = gym.make("Lizard-Velocity-Flat-Play-v0", cfg=cfg)
+env = gym.make("Lizard2-Flat-Play-v3", cfg=cfg)
 env.reset()
 robot = env.unwrapped.scene["robot"]
 

@@ -2,10 +2,9 @@
 id: row-sir-commanded-measurement-defect
 title: 行 SIR 成功标签缺陷与退役家族历史读数边界
 scope: rl_exp/tasks/teacher_mdp.py, rl_exp/versions/lizard
-status: open
+status: cancelled
 landing: rl_exp/tasks/teacher_mdp.py, rl_exp/versions/lizard/main/v14/NOTES.md
-next: 用隔离反例验证终态命令乘全长、无方向净位移与 timeout 联合判据；按 recipe 接线及历史 run 身份核准受影响版本与读数，将允许引用和禁止推断的范围写入验收记录。旧冻结实现暂不修改；未来复用须另立版本化修复项。
-close_when: 反例与接线核验完成，历史影响已划界且各受影响的现行结果入口有证据指针；证据不足的 run 明记 unknown，不补造历史。若仍有未核对结果则保持 open。
+outcome: 用户 2026-10-09 裁决按"接管关系"分开记关闭词：本项只给退役线的历史读数划引用边界，不是被清理项接管的实施动作 ⇒ 记 `cancelled`；边界本身已写在 evidence 的退休记录里，未核对的 run 明记 unknown，不补造历史。
 evidence: acceptance/records/2026-09-22-lizard-family-retirement.md
 ---
 

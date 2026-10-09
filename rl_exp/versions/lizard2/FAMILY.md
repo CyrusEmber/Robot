@@ -31,7 +31,7 @@ lizard2 = lizard 的四足构型修正版，保留每腿 `hip → haa → hfe �
 
 ## 任务注册表
 
-真源是 `rl_exp/tasks/recipe.py` 的配方表 + `versions/recipes.json`（本文只留人类速查）。
+真源是 `versions/recipes.json`（身份映射）+ 本线自己的配方声明模块（元素表与配方表 = `rl_exp/tasks/lizard2_recipe.py`；`rl_exp/tasks/recipe.py` 只留 `LINES` 路由与构建机制）（本文只留人类速查）。
 
 | 任务 id | 配方来源 |
 |---|---|
