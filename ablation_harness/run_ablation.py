@@ -6,10 +6,13 @@
 """Ablation scheduler: spec yaml -> sequential train + eval jobs -> summary.
 
 Each spec run is a (task, tag, seed, iterations, checkpoints, modes) tuple.
-Training is skipped when the final checkpoint already exists; each eval is
+Training is skipped when the run already reached its budget; each eval is
 skipped when its eval.json already exists -- so an interrupted sweep simply
 re-runs and continues. Nothing here ever edits task source code: component
 variants enter via registered task ids or hydra override strings.
+
+An iteration budget of N is the trainer's own 0..N-1, so a run of that budget
+ends on model_{N-1}.pt; a run naming no checkpoints is scored at its last one.
 
 Usage (from the project repo root; the only machine fact left to name is the
 IsaacLab tree -- ``paths.yaml`` or ``RL_ISAAC_ROOT``, see paths.example.yaml):
@@ -74,6 +77,46 @@ def _log_dir_for_tag(tag: str) -> pathlib.Path | None:
     return max(candidates, key=lambda p: p.stat().st_mtime)
 
 
+_CHECKPOINT_NAME = re.compile(r"^model_(\d+)\.pt$")
+
+
+def _latest_checkpoint(log_dir: pathlib.Path) -> tuple[int, pathlib.Path] | None:
+    """Highest-numbered ``model_<it>.pt`` under a run directory, or None.
+
+    The index is the trainer's, not ours: rsl_rl's loop runs ``range(start, start + budget)`` and
+    its closing save names the file after the last index it ran, so a fresh run of ``budget``
+    iterations ends on ``budget - 1``. Asking for ``model_{budget}.pt`` never resolves, which is
+    why this reads the directory instead of composing a name from the spec.
+    """
+    found = [(int(m.group(1)), p) for p in log_dir.glob("model_*.pt")
+             if (m := _CHECKPOINT_NAME.match(p.name))]
+    return max(found) if found else None
+
+
+def _trained_to_budget(log_dir: pathlib.Path | None, budget: int) -> bool:
+    """Whether ``budget`` iterations have been run in this directory already.
+
+    The evidence is a checkpoint at or past the last of them -- a run interrupted halfway leaves a
+    lower index and is not a finished one.
+    """
+    if log_dir is None:
+        return False
+    latest = _latest_checkpoint(log_dir)
+    return latest is not None and latest[0] >= budget - 1
+
+
+def _eval_checkpoints(run: dict, log_dir: pathlib.Path, budget: int) -> list[int]:
+    """Iterations to score: those the spec names, else the run's last checkpoint.
+
+    The default was ``[max_iterations]``, the one index a run of that budget never saves.
+    """
+    named = run.get("eval_checkpoints")
+    if named:
+        return [int(i) for i in named]
+    latest = _latest_checkpoint(log_dir)
+    return [latest[0] if latest is not None else budget - 1]
+
+
 def _run_train(run: dict, args_cli) -> pathlib.Path | None:
     task = run["task"]
     tag = run["tag"]
@@ -96,8 +139,9 @@ def _run_train(run: dict, args_cli) -> pathlib.Path | None:
         print(f"[ABLATION] train failed (exit {exc.returncode}): {tag}", flush=True)
         return None
     log_dir = _log_dir_for_tag(tag)
-    if log_dir is None or not (log_dir / f"model_{iters}.pt").exists():
-        print(f"[ABLATION] ERROR: expected model_{iters}.pt not found under {log_dir}", flush=True)
+    if not _trained_to_budget(log_dir, iters):
+        print(f"[ABLATION] ERROR: no checkpoint at or past iteration {iters - 1} under {log_dir} "
+              f"-- a run of {iters} iterations saves model_{iters - 1}.pt last", flush=True)
         return None
     return log_dir
 
@@ -141,12 +185,12 @@ def _sweep(args_cli) -> int:
         tag = run["tag"]
         iters = int(run["max_iterations"])
         log_dir = _log_dir_for_tag(tag)
-        if log_dir is None or not (log_dir / f"model_{iters}.pt").exists():
+        if not _trained_to_budget(log_dir, iters):
             log_dir = _run_train(run, args_cli)
             if log_dir is None:
                 failures += 1
                 continue
-        for iteration in run.get("eval_checkpoints", [iters]):
+        for iteration in _eval_checkpoints(run, log_dir, iters):
             checkpoint = log_dir / f"model_{iteration}.pt"
             if not checkpoint.exists():
                 print(f"[ABLATION] ERROR: checkpoint missing {checkpoint}", flush=True)

@@ -38,8 +38,9 @@
   `2026-09-29-gait-shape-in-the-eval-flow.md`。
 - **部署形态**：仓根独立目录，全部自定位。机器本地事实（IsaacLab 树 + venv 解释器）登记在仓根
   `paths.yaml`（模板 `paths.example.yaml`），唯一读者 `host_paths.py`；`E:\IsaacLab\ablation_harness`
-  junction 已废，原机可 `rmdir` 摘链接。harness **不以它为前提**：子进程入口一律绝对路径
-  （train/eval 各自的 cwd 与那条 `--viz none` 一样，是启动参数不是定位手段）。
+  junction 已废，原机可 `rmdir` 摘链接。harness **不以它为前提**：eval 入口是本仓绝对路径
+  （`_HARNESS_DIR/eval.py`），train 入口相对**已解析**的 IsaacLab cwd（`scripts/...`）；cwd 与那条
+  `--viz none` 一样是启动参数，不是定位手段。
 - **同目录但不是测量仪器**：`video_matrix.py`（录像矩阵）与 `results/` 里的记录无关 —— 它按
   `--speeds` × `--terrains` 任意组合录 mp4 + `matrix.json`，用来**看**策略在不同速度/地面上怎么走，
   **不产 verdict、不写 `results/<协议>/`**。它的命令由评测侧注入，可以落在配方命令区间之外（那种格子

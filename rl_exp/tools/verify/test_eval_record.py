@@ -16,22 +16,30 @@ Four things this file is here to prove:
 5. The lookup that feeds it (``record.baseline_evidence``) is offline-reachable: the layout rule
    and all three refusal reasons are asserted here, including the one success path that a broken
    path composition would otherwise hide behind "always unknown".
+6. The sweep scheduler's completion evidence and launch path
+   (``work/active/ablation-sweep-final-checkpoint-name.md``): a run of budget N ends on
+   ``model_{N-1}.pt``, a spec naming no checkpoints is scored at that last one, a finished run is
+   not re-trained, and eval enters through the harness's own absolute path.
 
 The negative direction is built in: every substitution asserts both that the digest moved and
 that the two records read as ``not_comparable``, and the untouched pair as ``comparable``.
 """
 
 import ast
+import contextlib
 import json
 import pathlib
+import subprocess
 import sys
 import tempfile
+import types
 
 _REPO = pathlib.Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_REPO))
 sys.path.insert(0, str(_REPO / "ablation_harness"))
 
 import record  # noqa: E402
+import run_ablation  # noqa: E402  (sibling: the sweep's completion evidence and launch paths)
 
 
 def _record(complete: bool = True) -> dict:
@@ -563,6 +571,131 @@ def test_a_diagnostic_row_cannot_sit_in_a_scores_table():
     assert table(None, "checkpoint") == ([], []), "a scored policy row is what a scores table is for"
     refused, uncertified = table(None, None)
     assert not refused and uncertified == ["run-zero"], "no kind is uncertified, not refused"
+
+
+@contextlib.contextmanager
+def _patched(module, **values):
+    """Set module attributes for one test, restore them however it ends."""
+    old = {k: getattr(module, k) for k in values}
+    for key, value in values.items():
+        setattr(module, key, value)
+    try:
+        yield
+    finally:
+        for key, value in old.items():
+            setattr(module, key, value)
+
+
+def _probe_run(**overrides) -> dict:
+    """One-run spec payload; nominal only, so one checkpoint means one eval."""
+    return {"tag": "probe", "task": "Lizard2-Flat-v3", "seed": 42, "max_iterations": 2,
+            "eval_modes": ["nominal"], **overrides}
+
+
+def _sweep_harness(scratch: str, run: dict, seed: list[str] = (), train_ok: bool = True,
+                   train_writes_last: bool = True) -> dict:
+    """Run the real ``_sweep`` over a fake two-tree layout; only sim and sharing are faked.
+
+    ``work/active/ablation-sweep-final-checkpoint-name.md``: the scheduler asked for
+    ``model_{max_iterations}.pt`` while a run of that budget ends on ``model_{N-1}.pt``, so every
+    spec that had to train failed before eval. The fakes are the subprocess (which would start
+    Isaac Sim) and the two shared roots; the scheduler's own decisions are the real ones.
+    """
+    import yaml
+
+    isaac = pathlib.Path(scratch) / "isaac"
+    run_dir = isaac / "logs" / "rsl_rl" / "exp" / f"2026-01-01_00-00-00_{run['tag']}"
+    run_dir.mkdir(parents=True)
+    for name in seed:
+        (run_dir / name).write_bytes(b"")
+    harness = pathlib.Path(scratch) / "harness"
+    harness.mkdir()
+    (harness / "eval.py").write_text("", encoding="utf-8")
+    spec = pathlib.Path(scratch) / "spec.yaml"
+    spec.write_text(yaml.safe_dump({"runs": [run], "group": "probe"}), encoding="utf-8")
+
+    calls = {"train": [], "eval": []}
+
+    def fake_run(argv, cwd=None, check=False):
+        kind = "train" if argv[1].endswith("train.py") else "eval"
+        calls[kind].append((list(argv), cwd))
+        if kind == "train":
+            if not train_ok:
+                raise subprocess.CalledProcessError(1, argv)
+            if train_writes_last:
+                (run_dir / f"model_{int(run['max_iterations']) - 1}.pt").write_bytes(b"")
+        return types.SimpleNamespace(returncode=0)
+
+    args = types.SimpleNamespace(spec=str(spec), python="python", device=None,
+                                 protocol="locomotion_eval_v3", group=None)
+    fake_subprocess = types.SimpleNamespace(run=fake_run,
+                                            CalledProcessError=subprocess.CalledProcessError)
+    with _patched(run_ablation, _ISAAC_ROOT=isaac, _HARNESS_DIR=harness,
+                  subprocess=fake_subprocess):
+        failures = run_ablation._sweep(args)
+    return {"failures": failures, **calls, "run_dir": run_dir, "harness": harness, "isaac": isaac}
+
+
+def _checkpoint_of(argv: list[str]) -> pathlib.Path:
+    return pathlib.Path(argv[argv.index("--checkpoint") + 1])
+
+
+def test_a_fresh_run_is_scored_at_its_last_checkpoint():
+    """A run of budget N ends on model_{N-1}.pt -- the default checkpoint is that one.
+
+    Pre-fix, ``_run_train`` looked for model_2.pt on a two-iteration run, printed
+    ``expected model_2.pt not found`` and returned None: training happened, then the sweep counted a
+    failure and never reached eval. The budget's indices are the trainer's 0..N-1, so the assertion
+    is on what a real run leaves behind, not on a name the scheduler composed.
+    """
+    run = _probe_run()
+    result = _sweep_harness(tempfile.mkdtemp(prefix="sweep-"), run)
+    assert run_ablation._eval_checkpoints(run, result["run_dir"], 2) == [1], \
+        "the default is the run's last checkpoint (N-1), not the budget N the trainer never saves"
+    assert result["failures"] == 0, f"a run that trains must reach eval, got {result['failures']} failure(s)"
+    assert len(result["train"]) == 1, "the budget had not been reached, so training had to run once"
+    assert len(result["eval"]) == 1, "one default checkpoint means one eval"
+    assert _checkpoint_of(result["eval"][0][0]) == result["run_dir"] / "model_1.pt", \
+        "with no eval_checkpoints the run's own last checkpoint (N-1) is the one to score"
+
+
+def test_a_finished_run_is_not_retrained():
+    """The completion evidence reads the directory, so a finished run is reused, not re-trained."""
+    run = _probe_run()
+    result = _sweep_harness(tempfile.mkdtemp(prefix="sweep-"), run, seed=["model_1.pt"])
+    assert not result["train"], "a run that already reached its budget must not be trained again"
+    assert _checkpoint_of(result["eval"][0][0]) == result["run_dir"] / "model_1.pt"
+
+
+def test_an_unfinished_or_failed_train_is_not_a_finished_run():
+    """Half a budget, or a crash, is not "done" -- both must be counted as failures, with no eval."""
+    run = _probe_run()
+    partial = _sweep_harness(tempfile.mkdtemp(prefix="sweep-"), run, train_writes_last=False)
+    assert partial["failures"] == 1 and not partial["eval"], \
+        "a run that stopped before its last iteration is unfinished, not scored"
+    crashed = _sweep_harness(tempfile.mkdtemp(prefix="sweep-"), run, train_ok=False)
+    assert crashed["failures"] == 1 and not crashed["eval"], "a failed train is a failed run"
+
+
+def test_the_sweep_launches_from_the_repo_and_runs_isaaclab_as_cwd():
+    """Eval enters through the harness's own absolute path; the IsaacLab tree is only the cwd.
+
+    Pre-fix, ``_run_eval`` passed the string ``ablation_harness/eval.py`` with ``cwd=IsaacLab``,
+    which resolved only while the retired junction made one a child of the other -- with the link
+    gone it was ``can't open file``. The log glob must likewise come from the resolved IsaacLab tree.
+    """
+    run = _probe_run()
+    result = _sweep_harness(tempfile.mkdtemp(prefix="sweep-"), run)
+    train_argv, train_cwd = result["train"][0]
+    eval_argv, eval_cwd = result["eval"][0]
+    assert eval_argv[1] == str(result["harness"] / "eval.py"), \
+        f"the eval entry has to be an existing absolute path, not {eval_argv[1]!r}"
+    assert pathlib.Path(eval_argv[1]).is_file(), "the entry named has to exist"
+    assert train_argv[1] == "scripts/reinforcement_learning/rsl_rl/train.py" and \
+        train_cwd == str(result["isaac"]), "the trainer is IsaacLab's own script, relative to its tree"
+    assert eval_cwd == str(result["isaac"]), "eval inherits the same cwd as train"
+    assert str(result["run_dir"]).startswith(str(result["isaac"])), \
+        "the log directory must be found in the IsaacLab tree, not beside the harness"
 
 
 def _main() -> None:
