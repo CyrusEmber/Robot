@@ -25,8 +25,8 @@ close_when: `git ls-remote --tags origin` 里同时有 `harness-v1.9.0` 与 `har
 
 - 只补编号与锚点，不重新评价 `video_matrix.py` 的实现（归 `work/closed/2026/video-matrix-gears.md`）。
 - 不动 `harness-v1.8.0` 的锚点：已推的 tag 不改指不改名。
-- 不建"代码基线 ↔ tag"的闸：`OFFLINE_CHECKS.md` §4 正暂缓新增声明一致类，且离线套件不能联网、
-  弱于本项的远端判据。那一半另立 `work/active/harness-baseline-tag-gate.md`（blocked）。
+- 代码基线 ↔ tag 的闸不归本项：另立在 `work/active/harness-baseline-tag-gate.md`（已建，`pending_review`）。
+  那是**本地 ref** 的配对闸，本项的判据在远端 —— 两者不等价，见那一项的天花板一节。
 - v1.9.0 之后另有两笔改动**未**列入本次编号，因为它们既不加模块也不改测量语义：评测启动的
   `--viz none` 取代已废弃的 `--headless`（`4ef9fb4`）、lizard 家族源码退休时的四处路径改写（`f1e6421`）。
   退休那笔的自身记录在 `work/closed/2026/`。

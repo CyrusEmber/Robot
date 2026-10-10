@@ -1,40 +1,37 @@
 ---
 id: harness-baseline-tag-gate
-title: "代码基线 ↔ tag"的配对没有闸门：等 §4 冻结解除后再建
+title: 代码基线与 tag 的配对现在有闸：`check_version_docs.py` 读 HARNESS.md 的基线号
 scope: ablation_harness
-status: blocked
+status: pending_review
 landing: rl_exp/tools/verify/check_version_docs.py
-next: 等两件事齐了再动：(1) `OFFLINE_CHECKS.md` §4 的暂缓解除（lizard2 出第一条能走的策略）；(2) 用户拍板口径 —— 单给 harness 提成 red，还是与家庭侧同口径只报 WARN。齐了之后按 §4 默认动作走：断言进已有的 `check_version_docs.py`（0 新进程、0 秒预算），不新建 `check_harness_baseline.py`。落地前先读 `OFFLINE_CHECKS.md` §4 的准入两条。
-close_when: 要么闸建成且 §4 的准入两条都写进了 commit message（来源缺陷 = 本项所指的 `0c3ec25`，破坏测试 = 还原比对后 `--self-test` 变绿）；要么用户拍板"本项与 lizard2 走通前不建"并把它取消（取消是用户决策，不是默认动作）。两种之外不关闭。
+next: 由新上下文审（不带本次执笔会话的历史）：读 `check_version_docs.py` 的 `baseline_tag_problem` 与其 `--self-test` 的 `baseline_cases` 五例，然后**自己动手做破坏测试**——① 把 `ablation_harness/HARNESS.md` 的基线号临时改成没有 tag 的 `v9.9.9`，闸必须报 DRIFT 且非零退出；② 把 `**代码基线**：` 改成不带全角冒号的写法，闸必须报 `matched 0 time(s)`；两条都必须红，改回后必须绿。再对着 `close_when` 判它是否真覆盖了本项。通过则移进 `work/closed/2026/` 并把读数落一份 `acceptance/records/` 记录；破坏测试只有一条红 ⇒ 退回 in_progress。
+close_when: 审核者独立跑出两件事：① `python rl_exp/tools/verify/check_version_docs.py --self-test` 末行为自测判词、`python rl_exp/tools/verify/check_version_docs.py` 末行 `VERSION_DOCS_OK`；② 上面两条破坏测试都变红、改回后转绿。全部成立 ⇒ done（闸真咬得住，且咬的是"号没有 tag"与"基线行读不到"两个分支）；只绿不红、或改错后仍绿 ⇒ 退回 in_progress。
 ---
 
 ## 情况
 
-`ablation_harness/HARNESS.md` 的「代码基线」是散文行，改了它没有任何机器判据要求同笔打 tag。2026-09-22
-的实例是 `0c3ec25`：它把基线从 v1.8.0 写到 v1.9.0、并写下"加模块或改语义要 bump + 打锚点"，但只 push 了
-提交，v1.9.0 从此无锚点可 checkout —— 缺口由 `work/active/harness-version-anchor-missing.md` 补上，
-**但补的是数据，不是机制**。
+闸已建，落在 `rl_exp/tools/verify/check_version_docs.py`（§4 的默认动作：断言进已有闸，**0 新进程、0 秒预算**）。
 
-**为什么不现在建闸**（三条，都在仓内可查）：
+- `baseline_tag_problem(text, tags)` 读 `ablation_harness/HARNESS.md` 的 `**代码基线**：vN.M.K`，与本地
+  `harness-vN.M.K` 比对。**返回消息而不是布尔**，所以 `--self-test` 的五例夹具咬的是整条链（解析、条数、
+  tag 比对），不是只咬正则。
+- **两个分支都是失败**：号没有 tag；以及基线行匹配到 0 或 2 次 —— 这是散文解析的真空洞，行被改写后
+  断言会变成 no-op，而 no-op 读起来和"仓库没问题"一模一样。五例里有两例专门咬这个（改写、重复）。
+- **报 red，与家族版本 tag 只 WARN 并存**：家族历史前缀未统一、且有提案态；harness 的计数器一种写法、
+  无提案态，号是在版本落地时写进去的。理由写在闸的模块 docstring 与 `_BASELINE_LINE` 旁边。
+- 顺带修了共享探针 `_git_tags()`：原先 git 读不到时返回空集，与"所有 tag 都没打"不可分，会让这条红闸
+  报出误导性原因；现在返回 `None`，由调用方单独点名"git 读不到"。家族侧的 WARN 在该情形下不再刷屏。
+- `OFFLINE_CHECKS.md` §4 的暂缓条款加了范围说明（2026-10-10 用户拍板）：暂缓针对**被当作能力证据**的
+  条目，纯记账的声明一致检查不在此列。
 
-1. `OFFLINE_CHECKS.md` §4 把新检查分**声明一致**（文档 / 声明 / 锁之间互查）与**行为成立**两类，本闸属
-   前者；同一节写明"lizard2 出第一条能走的策略之前，**暂缓新增声明一致类**"。实测未解除：
-   `rl_exp/versions/lizard2/main/v1/NOTES.md` 判据 pass 而步态不合格、明说"按能力基线记账，不按会走路
-   记账"；`v2/NOTES.md` 判决 fail；v3 于 2026-10-10 才冻结开训。
-2. **离线套件不能联网** ⇒ 闸只能读本地 ref，能抓"没打 tag"、抓不到"打了没推"。而锚点的用途恰恰是
-   别人能 checkout（本项的判据落在 `git ls-remote`）⇒ 任何能建的闸都**弱于**它的判据，别把它当等价物。
-3. **口径会打架**：家庭侧就同一问题已有检查 —— `rl_exp/tools/verify/check_version_docs.py` 比对
-   `git tag --list`，**缺失只报 WARN**，理由写在 versioning.mdc（"tag 缺失仅 WARN，历史前缀可不统一"）。
-   单给 harness 提成 red，会让同一仓对同一问题有两套答案而无理由；要改口径就先改规则，再改闸。
+## 天花板
 
-## 已落的那一半
-
-`ablation_harness/HARNESS.md` 的版本纪律段添了一句：只写版本号不打 tag = 视同未声明，号成为锚点是在远端
-能 checkout 的那一刻。这是**散文纪律、无闸门**——它降低复发概率，不阻止复发。
+只读本地 ref。**"打了 tag 没推"抓不到** —— 而那一半才是别人能否 checkout 的依据，所以
+`work/active/harness-version-anchor-missing.md` 的远端判据（`git ls-remote`）仍需 review，本闸不是它的
+等价物。
 
 ## 未覆盖边界
 
-- 不碰 `harness-v1.8.0` / `harness-v1.9.0` / `harness-v1.10.0` 三个已推的 tag。
-- 不走 pre-commit 钩子：那一刻 tag 只能标正在生成的提交（鸡生蛋）；post-commit 钩子是仓内无先例的新机制
-  类别，为这点杠杆不开。
+- 不动 `harness-v1.8.0` / `v1.9.0` / `v1.10.0` 三个已推的 tag。
+- 不新建独立进程：§4 要求新进程买秒，本闸不需要。
 - 不重新评价 `video_matrix.py`（归 `work/closed/2026/video-matrix-gears.md`）。
