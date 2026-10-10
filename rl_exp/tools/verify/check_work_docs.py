@@ -22,13 +22,14 @@ Three modes, one implementation of the item format:
 * ``--locate KEY`` -- the files whose id, title or body matches KEY, with line numbers.
 * ``--check`` (default) -- the shape gates below, each printing what it saw.
 
-Prose pointers are reported, not gated. ``--check`` also scans documents for
+Prose pointers are reported, not gated. The default check also scans documents for
 ``work/active/<id>.md``-style references that no longer resolve -- closing an item moves the
 file, so every document that named the old path has to be found and the live one updated. The
 scan prints the path that resolves instead, as a ``HINT``, and never changes the exit code:
 whether a given line is a live pointer to update or a dated trace to leave alone is not
-decidable from the text. Frozen records (``rl_exp/versions/**``) are not read at all -- they
-keep the tree they were written with on purpose (see ``_a0_paths.py``).
+decidable from the text. Dated traces are not read at all (``_FROZEN_REFS``) -- they
+keep the tree they were written with on purpose (see ``_a0_paths.py``); an evidence record keeps
+the item it was taken against, and that back-reference is history, not a route.
 
 What each measurement is for -- three different things, not one budget:
 
@@ -212,8 +213,11 @@ _SHA = re.compile(r"\bsha256:[0-9a-fA-F]{8,}")
 _REF = re.compile(r"work/(?:active|closed/\d{4})/([a-z0-9-]+)\.md")
 #: Reference scopes that are dated traces rather than live pointers, so the scan skips them:
 #: A0's frozen records keep the paths they were written with, and rewriting them to match
-#: today's layout stops them being evidence of anything.
-_FROZEN_REFS = ("rl_exp/versions",)
+#: today's layout stops them being evidence of anything. An evidence record is the same case --
+#: the live handle runs item -> record, so a record's back-reference to the item it served is
+#: not a route anyone follows; the whole repo's hints came from there on 2026-10-10, which is
+#: how a real break drowns.
+_FROZEN_REFS = ("rl_exp/versions", "acceptance/records")
 #: What the pointer scan reads, and the size past which a file is a dump rather than prose.
 #: Documents only: code spells ledger paths as data (a migration tool's replacement rules) or as
 #: fixtures (a gate's own self-test literals), where "does this pointer resolve" has no meaning.
@@ -569,6 +573,10 @@ def self_test() -> int:
             "## 适用范围\n\nonly this one\n", encoding="utf-8"
         )
         (root / "acceptance" / "records" / "Bad_Name.md").write_text(good_record, encoding="utf-8")
+        # A record is a dated trace: a stale pointer inside it is history, not a break.
+        (root / "acceptance" / "records" / "2026-09-20-dated.md").write_text(
+            good_record + "\nsee work/active/gone.md\n", encoding="utf-8"
+        )
         (root / "notes" / "pointers.md").write_text(
             "see work/active/good.md\n"
             "see work/active/gone.md\n"
@@ -743,6 +751,8 @@ def self_test() -> int:
             problems.append("the pointer scan blamed a reference that resolves")
         if any("rl_exp/versions" in hint for hint in pointers):
             problems.append("the pointer scan read a frozen record")
+        if any("acceptance/records" in hint for hint in pointers):
+            problems.append("the pointer scan read a dated evidence record")
         if any("placeholder" in hint for hint in pointers):
             problems.append("the pointer scan matched a placeholder path")
         _REPO, _ACTIVE, _CLOSED, _RECORDS, BUDGET_BYTES, LIST_BYTES = saved
@@ -750,7 +760,7 @@ def self_test() -> int:
     for problem in problems:
         print(f"  FALSIFIER: {problem}")
     print(
-        "WORK_DOCS_SELF_TEST_OK (17 item + 3 record + 3 pointer fixtures)"
+        "WORK_DOCS_SELF_TEST_OK (17 item + 3 record + 4 pointer fixtures)"
         if not problems
         else f"WORK_DOCS_SELF_TEST_DRIFT ({len(problems)})"
     )
