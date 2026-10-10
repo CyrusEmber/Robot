@@ -2,7 +2,7 @@
 
 ## 适用范围
 
-本记录绑定用户需求、2026-10-10 阶段路由快照与候选设计边界；阶段路由的唯一活家是 `work/active/joint-limit-shape-and-range-pass.md` 的“分步骤执行入口”，配方与评测实施复用 `work/active/lizard2-family-landing.md`，不另立平行总账。
+本记录绑定用户需求、2026-10-10 阶段路由快照与候选设计边界；阶段路由的唯一活家是 `work/active/joint-limit-shape-and-range-pass.md` 的“路由”表，配方与评测实施复用 `work/active/lizard2-family-landing.md`，不另立平行总账。
 
 本轮按用户选择只修当前 work 与整体设计计划，不修改已训 v3 的 PLAN，不建立下一版本提案，不生成 Blender、URDF/USD 或驱动候选，不启动仿真或训练。此前足部局部探索仅做了环境和源代码核对，没有候选产物或通过判定；本轮先补驱动可实现性输入，再允许恢复足部候选设计。技术验收继承 `acceptance/records/2026-10-08-lizard2-joint-design-review-contract.md` 的 R1–R5；以下补充需求和相应验收对象，不复制其算法或版本规则。后续数值方案进入未冻结版本 PLAN/参数与实现，候选读数另立记录；本记录不作为配置副本。
 
@@ -94,21 +94,15 @@
 
 ### 阶段顺序与责任
 
-下表是 **2026-10-10 路由历史快照**，不随状态或关闭路径更新，不作当前接手入口。唯一活家为 `work/active/joint-limit-shape-and-range-pass.md` 的“分步骤执行入口”；实际步骤、输入、交付和审核出口分别归其路由的 work。
+阶段路由的唯一活家是 `work/active/joint-limit-shape-and-range-pass.md` 的“路由”表。本节早先的 S0–S4 串联表已按下节“并行结构与改名（用户拍板）”撤销：历史段落里的 S0/S1/S2/S3/S4 现分属 `lizard2-body-drive-candidate`（S0 能力调查与约束→B，S1→A，S2/S3→D，S4→C）与 `lizard2-contact-protocol`；S5/S6 仍在 `lizard2-family-landing`。S1–S3 允许带具名输入的修复迭代，不允许跳过几何失败直接训练；S6 训练必须另获用户预算和启动确认。
 
-用户于 2026-10-10 要求“直接执行的 work”和“分步骤执行的 work”，并选择“拆成独立步骤 work”。拆分时把原阶段表的具体执行动作同变更迁入下列子项，统筹项仅维护路由；本记录仍是需求、验收对象与范围证据，不维护第二份操作清单。
+### 并行结构与改名（用户拍板：2026-10-10）
 
-| 顺序 | 2026-10-10 快照路径 |
-|---|---|
-| S0 需求与仪器核对 | `work/active/lizard2-s0-target-calibration.md` |
-| S1 骨骼与碰撞候选 | `work/active/lizard2-s1-body-candidate.md` |
-| S2 完整周期（趴姿挂账） | `work/active/lizard2-s2-motion-and-prone.md` |
-| S3 驱动与承重联调 | `work/active/lizard2-s3-drive-load.md` |
-| S4 躯干和尾部协同 | `work/active/lizard2-s4-trunk-tail.md` |
-| S5 配方及评测接入 | `work/active/lizard2-family-landing.md` 的 S5 节 |
-| S6 正式采用与训练验收 | `work/active/lizard2-family-landing.md` 的 S6 节 |
+- 用户明确：每一步都审核、逐级串联的安排改为并行；机体与驱动候选、接触协议两条线各自一次审核，不逐级审。
+- 用户明确：足掌改为像人手的蜥蜴足（腕踝→掌跖段→指趾根→小接触端），需要改 Blender；目标是蜥蜴骨段朝向（上臂/股骨外展后摆、肘膝朝外、前臂/小腿近垂直落地），内扣是反例而非唯一目标。
+- 用户明确：骨骼改名，前后肢分名，名表见 `work/active/lizard2-body-drive-candidate.md`；这覆盖本记录“联动设计起点”里“沿用现有关节名称”的候选起点，旧名随旧机体的冻结版本在采用时同变更退休，不留别名。
+- 用户明确：趴姿先 block，不用管；需求正文保留在下节，事项为 `work/active/lizard2-prone-posture.md`。
 
-拆分时子项均为尚未开始的 `open`，这是历史状态，不是当前状态表；本次 S1 局部探索授权与实际执行边界见“本轮 review 整改与用户决定”，当前状态以 work 为准。S1–S3 允许带具名输入的修复迭代，不允许跳过几何失败直接训练；S5 可预先整理机制落点，正式采用仍须消费已审上游证据。S6 训练必须另获用户预算和启动确认。
 
 ### 必须纠正的既有踝部分析
 

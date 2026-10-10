@@ -3,23 +3,21 @@ id: joint-limit-shape-and-range-pass
 title: lizard2 陆地骨骼、足部驱动与完整步态修复统筹
 scope: acceptance/records, work/active
 status: open
-landing: acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work.md#阶段顺序与责任, acceptance/records/2026-10-08-lizard2-joint-design-review-contract.md#验收条件
-next: 本轮只修计划，不执行资产；按正文唯一路由先推进 S0 具名驱动能力输入，再恢复 S1 骨骼/驱动联动候选，不把能力调查延后到 S3。性能阈值与限速判准消费 evidence 的“联动设计修订”；趴姿仍挂账。正式采用及训练按 S5/S6 独立批准。
-close_when: 新上下文对照需求记录、R1–R5 和 S0–S4 子项的真实审核证据汇总设计判定，用户确认机体与动作；执行者先置 pending_review。S5/S6 未完动作仍由具名交付事项维护，不以本项关闭宣称已采用或已训；任一需求或设计缺口未判定继续在办。
+landing: acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work.md#验收条件, acceptance/records/2026-10-08-lizard2-joint-design-review-contract.md#验收条件
+next: 并行推进 lizard2-body-drive-candidate（Blender 机体、改名、驱动、躯干/尾部）与 lizard2-contact-protocol（接触评测协议），各自完成后一次审核；二者通过后 lizard2-family-landing 做 S5/S6。趴姿归 lizard2-prone-posture（blocked）。本项只汇总设计判定，不重复子项的操作步骤。
+close_when: 新上下文对照需求记录、R1–R5 和两条并行子项的真实审核证据汇总设计判定，用户确认机体与动作；执行者先置 pending_review。lizard2-family-landing 的采用与训练未完动作仍由该项维护，不以本项关闭宣称已采用或已训；任一需求或设计缺口未判定继续在办。
 evidence: acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, acceptance/records/2026-10-08-lizard2-joint-design-review-contract
 ---
 
-## 分步骤执行入口
+## 路由
 
-| 顺序 | 接手文件 |
-|---|---|
-| S0 | `work/active/lizard2-s0-target-calibration.md` |
-| S1 | `work/active/lizard2-s1-body-candidate.md` |
-| S2 | `work/active/lizard2-s2-motion-and-prone.md` |
-| S3 | `work/active/lizard2-s3-drive-load.md` |
-| S4 | `work/active/lizard2-s4-trunk-tail.md` |
-| S5/S6 | `work/active/lizard2-family-landing.md` 的两个执行节 |
+| 项 | 接手文件 | 关系 |
+|---|---|---|
+| 机体与驱动候选 | `work/active/lizard2-body-drive-candidate.md` | 并行，内部 A/B/C 同时开始，D 集成后一次审核 |
+| 接触评测协议 | `work/active/lizard2-contact-protocol.md` | 并行，不等机体 |
+| 配方、采用与训练（S5/S6） | `work/active/lizard2-family-landing.md` | 依赖上两项的已审交付 |
+| 静态趴姿 | `work/active/lizard2-prone-posture.md` | blocked，等用户 |
 
-本节是阶段路由的唯一活家；整体记录的表格仅为历史快照。子项唯一维护操作步骤、交付路径和完成条件，本项不留第二份。`open` 下游只是尚未开始，须先读取其 `depends_on` 和交付。S1 局部探索仍保留正式验收依赖，选轴/pivot及驱动方案前须消费 S0 能力输入，不得以先行探索跳过联动设计。前置关闭时，同一次变更把下游 `depends_on` 的活跃 id 换成已建立的交付记录路径，并更新统筹路由到关闭文件；不得提前指向不存在的证据或留下失效活跃依赖。
+本表是阶段路由的唯一活家，依赖关系的机器可读真身是各项 `depends_on`。子项唯一维护操作步骤、交付路径和完成条件，本项不留第二份；前置关闭时，同一次变更把下游 `depends_on` 的活跃 id 换成已建立的交付记录路径，不得提前指向不存在的证据或留下失效活跃依赖。
 
-需求与范围唯一归 evidence；生物资料由 `work/active/large-monitor-skeleton-muscle-literature.md` 按需补证，正式资产管线由 `work/active/asset-tree-per-family.md` 在采用阶段核验。两者不是 S0 离线探索的全局阻塞。
+需求与范围唯一归 evidence；生物资料由 `work/active/large-monitor-skeleton-muscle-literature.md` 按需补证，正式资产管线由 `work/active/asset-tree-per-family.md` 在采用阶段核验。两者不是候选离线探索的全局阻塞。
