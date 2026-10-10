@@ -112,6 +112,40 @@ seed 123（`--viz none`，cwd `E:\IsaacLab`）：
   livecheck 组的数不进任何对账表。顺带：这两条是 v3 下**带 ckpt 的真 run**，`runtime-acceptance-v3`
   ③ 要的"一条有 ckpt 的 run"由此有了候选，但那件事的判据归它自己。
 
+### 独立审核（2026-10-10，离线复核）
+
+**判定：不通过，不关闭。** 审核实读两条真跑记录、训练 manifest、写侧采集点与身份实现，
+并用 `env_isaaclab` 解释器执行离线断言；未重跑仿真。以下结论限定并勘误上文执笔结论。
+用户在审核后选择退回 `in_progress`；未决定验收②的新口径。
+
+- **已通过的复核**：两条记录 `read_state=complete`；base 没有 `substitutions` 键；variant 的存储证据
+  与从这对记录重新计算的证据逐项相同，`baseline` 指向 base，仅确认 `checkpoint`，`unproven=[]`。
+  训练 manifest 按已记录 `mode` 重建的字符串与两条 `runtime.rsl_rl_id` 相同。
+- **[P1] 同串不等于依赖身份成立**：活解释器的 `rsl_rl` 来自
+  `E:\IsaacLab\env_isaaclab\Lib\site-packages\rsl_rl\__init__.py`；distribution 是
+  `rsl-rl-lib 5.4.2`，无 `direct_url.json`、未声明 editable。`provenance.rsl_rl_state()` 却返回
+  `mode=editable/source`、`root=<ISAAC_ROOT>`。`rl_exp/tools/runrecord/provenance.py:194-199`
+  只问包目录是否位于 Git 树内，因 venv 位于 IsaacLab 仓内而把普通安装包绑到了外围仓 rev。
+  `rsl_rl_id()` 再于同文件 215 行拼出 `source:28a37cecdd43`；该 rev 不锚住包本体。
+  因此撤回上文将“同串”称为已核到依赖身份行为的判定：目前仅证明两侧用了同一拼写规则。
+  此外，训练 manifest 的 `code.rsl_rl.dirty=true` 与外围树差异摘要也不证明包本体逐字节相同。
+- **[P2] 同次 variant 的 rev 互相冲突**：variant `record.json` 的
+  `runtime.git_rev_lizard=0f4b2bf5317a`，但同目录 `eval.json` 与组 `summary.csv` 为 `ee1fc367cba8`。
+  两个采集点是 `ablation_harness/eval.py:831` 与 `ablation_harness/eval.py:624`；前者在 rollout 前，
+  后者在分析结果时重新读 HEAD。运行期间提交即可产生分叉，不能把后读 HEAD 当作已加载代码的身份。
+  上文“两条真 run 记同一 rev”仅对 `record.json` 成立，遗漏了同次 run 的产物冲突；
+  需明确这层边界，不能据记录完整或替换列表干净推导运行代码一致。
+- **[P2] 验收②仍未兑现**：现行 `mbenv.num_envs` 经 `ManagerBasedEnv.num_envs` →
+  `InteractiveScene.num_envs` 返回同一 scene cfg 值（宿主源码分别为
+  `source/isaaclab/isaaclab/envs/manager_based_env.py:274-276`、
+  `source/isaaclab/isaaclab/scene/interactive_scene.py:499-501`）。
+  真跑仍只有 `72 / 72`。离线复制 variant，改 `num_envs_declared=73` 后读作 complete，
+  删除该列后读作 incomplete：证明读侧保留不等列、识别缺列，**不证明写侧真跑不等格**。
+  未经用户决定，不以“结构性不可达”替代既有验收条件，也不自动改 `close_when`。
+- **勘误与保留边界**：variant 的落盘时间是 `2026-10-10T15:30:07`，上文真跑段的
+  `15:24–15:27` 时间范围不包含它。用户此前决定不构造 pre-format 分支，本次不推翻；
+  但 `_persist` 顺序写两个文件，不是跨文件事务，不能把“不做该分支”写成永远产不出缺一侧文件。
+
 ## 证据引用
 
 - 事项：`work/active/record-format-live-checks.md`；拆出项：`work/active/asset-fail-path-live-check.md`。
@@ -139,6 +173,18 @@ E:\IsaacLab\env_isaaclab\Scripts\python.exe E:\Robot\ablation_harness\eval.py --
 - 记录本体：评测记录 11 份（含真跑段新增的 `livecheck` 2 份）在 `ablation_harness/results/**/record.json`
   （进仓）；训练 manifest 在 `E:\IsaacLab\logs\rsl_rl\lizard2_v3\<时间戳>\run_manifest.json`
   （机器本地，不进仓）。
+- 独立审核的复读（无需仿真；cwd `E:\Robot`，不改记录本体）：
+
+```bat
+E:\IsaacLab\env_isaaclab\Scripts\python.exe -B -c "import pathlib,copy;from ablation_harness import record;R=pathlib.Path('ablation_harness/results/locomotion_eval_v3/livecheck');bid='Lizard2-Flat-v3_live_nominal_seed123';b=record.load(R/bid/'record.json');c=record.load(R/(bid+'_ckpt3000')/'record.json');m=record.load(r'E:\IsaacLab\logs\rsl_rl\lizard2_v3\2026-10-10_10-14-50\run_manifest.json');s=m['code']['rsl_rl'];identity=('source:'+s['rev']) if s['mode']=='editable/source' else ('installed:'+s['distribution_version']);assert record.read_state(b)['state']==record.read_state(c)['state']=='complete';assert 'substitutions' not in b;assert c['substitutions']==record.baseline_evidence(c,R.parent.parent,protocol='locomotion_eval_v3',group='livecheck',base_run_id=bid);assert b['runtime']['rsl_rl_id']==c['runtime']['rsl_rl_id']==identity;x=copy.deepcopy(c);x['runtime']['num_envs_declared']=73;assert record.read_state(x)['state']=='complete';x['runtime'].pop('num_envs_declared');assert record.read_state(x)['state']=='incomplete';print('PASS record fields, stored bindings, identity spelling, reader columns')"
+E:\IsaacLab\env_isaaclab\Scripts\python.exe -B -c "import json,importlib.util,importlib.metadata;from rl_exp.tools.runrecord import provenance;d=importlib.metadata.distribution('rsl-rl-lib');u=json.loads(d.read_text('direct_url.json') or '{}');s=provenance.rsl_rl_state();print(importlib.util.find_spec('rsl_rl').origin);print(d.metadata['Name'],d.version,'editable:',u.get('dir_info',{}).get('editable',False),'direct_url_present:',bool(u));print(s.get('mode'),s.get('root'),s.get('package_dir'))"
+E:\IsaacLab\env_isaaclab\Scripts\python.exe -B -c "from ablation_harness import record;R='ablation_harness/results/locomotion_eval_v3/livecheck/Lizard2-Flat-v3_live_nominal_seed123_ckpt3000/';c=record.load(R+'record.json');e=record.load(R+'eval.json');print('record/eval rev:',c['runtime']['git_rev_lizard'],e['git_rev_lizard']);print('timestamp:',c['run']['timestamp'])"
+```
+
+- 独立审核落点：`rl_exp/tools/runrecord/provenance.py:185-215`；
+  `ablation_harness/eval.py:336-346`、`:394`、`:624`、`:831`、`:743-744`；variant 的
+  `ablation_harness/results/locomotion_eval_v3/livecheck/Lizard2-Flat-v3_live_nominal_seed123_ckpt3000/record.json:1558-1589`
+  与同目录 `eval.json:8-10`；训练 manifest `code.rsl_rl`（机器本地，上述复读命令给出路径）。
 - 相关的旧读数：`rl_exp/versions/lizard/ACCEPTANCE.md` §3.2、`acceptance/records/2026-09-17-lizard-eval-record-and-terrain-map.md`。
 
 ## 未覆盖边界
