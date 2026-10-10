@@ -23,9 +23,12 @@ narrowphase stack).
 
 Usage:
   python view_terrain.py --viz kit                                   # flat (default)
-  python view_terrain.py --viz kit --task Lizard-Rough-Play-v4       # v4 rubble
-  python view_terrain.py --viz kit --task Lizard-Rough-Play-v8 --num-envs 4  # arrow vs ball/antenna
-  python view_terrain.py --headless --task Lizard-Rough-Play-v4 --steps 10
+  python view_terrain.py --viz kit --task Lizard2-Flat-Play-v3 --num-envs 4
+  python view_terrain.py --headless --task Lizard2-Flat-Play-v3 --steps 10
+
+The rough-terrain ids this script was written around (``Lizard-Rough-Play-v4`` / ``-v8``) retired
+with the lizard main line on 2026-10-09; the only live tasks are ``Lizard2-Flat-*``, which build
+no terrain generator.
 """
 import argparse
 import importlib
@@ -33,7 +36,7 @@ import importlib
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--task", default="Lizard-Velocity-Flat-Play-v0",
+parser.add_argument("--task", default="Lizard2-Flat-Play-v3",
                     help="Registered task id; PLAY variants have no randomization.")
 parser.add_argument("--num-envs", type=int, default=4,
                     help="Number of envs (more envs = more sub-terrains visible).")

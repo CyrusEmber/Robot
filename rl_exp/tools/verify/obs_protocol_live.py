@@ -14,7 +14,7 @@ plus the recipe's own parameters document for the joint order, since the declara
 not joints.
 
 Usage:
-    python rl_exp/tools/verify/obs_protocol_live.py --headless --tasks Lizard-Rough-v14 ...
+    python rl_exp/tools/verify/obs_protocol_live.py --headless --tasks Lizard2-Flat-v3 ...
 
 Exit code is 1 when any task's live contract disagrees.
 """
@@ -25,7 +25,7 @@ import pathlib
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--tasks", nargs="*", default=["Lizard-Rough-v14"])
+parser.add_argument("--tasks", nargs="*", default=["Lizard2-Flat-v3"])
 parser.add_argument("--envs", type=int, default=2, help="envs to build (small on purpose)")
 parser.add_argument("--pin", action="store_true", help="record the measured runtime joint order")
 parser.add_argument("--reason", default=None, help="why the order is being recorded (required with --pin)")

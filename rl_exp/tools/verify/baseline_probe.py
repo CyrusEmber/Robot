@@ -9,7 +9,7 @@ them disagrees with the recipe.
 
 Run before the first training run of a baseline version:
 
-    python rl_exp\\tools\\verify\\baseline_probe.py --task Lizard-Baseline-Flat-v1
+    python rl_exp\\tools\\verify\\baseline_probe.py --task Lizard2-Flat-v3
 
 Exit code is 0 only when every check passed; the reward magnitudes and the action
 diagnostics are printed for judgement, not asserted (an action mean is not a pass/fail
@@ -25,7 +25,7 @@ import re
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--task", default="Lizard-Baseline-Flat-v1")
+parser.add_argument("--task", default="Lizard2-Flat-v3")
 parser.add_argument("--num_envs", type=int, default=16)
 parser.add_argument("--steps", type=int, default=60, help="control steps to observe")
 parser.add_argument(

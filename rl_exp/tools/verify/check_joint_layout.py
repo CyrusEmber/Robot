@@ -94,7 +94,7 @@ from isaaclab.app import AppLauncher
 parser = argparse.ArgumentParser(description="Asset layout + actuation check (any task id).")
 parser.add_argument(
     "--task",
-    default="Lizard-Rough-Play-v8",
+    default="Lizard2-Flat-Play-v3",
     help="registered PLAY task id; the layout and the action split are the ASSET's contract, not a "
     "recipe's, so the entry point is read from the registry and any line's PLAY task works",
 )

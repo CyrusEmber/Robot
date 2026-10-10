@@ -18,8 +18,8 @@ checkout's ``versions/``, so the run's T0 binds the *same* directory this launch
 ``--launch`` is that hand-off; everything before it is real and runs without the sim app
 (``--check``, the default).
 
-    python rl_exp\\tools\\launch_recipe.py --task Lizard-Rough-v14 --num_envs 64
-    python rl_exp\\tools\\launch_recipe.py --task Lizard-Rough-v14 --resume --load_run <dir> --launch
+    python rl_exp\\tools\\launch_recipe.py --task Lizard2-Flat-v3 --num_envs 64
+    python rl_exp\\tools\\launch_recipe.py --task Lizard2-Flat-v3 --resume --load_run <dir> --launch
 """
 
 from __future__ import annotations

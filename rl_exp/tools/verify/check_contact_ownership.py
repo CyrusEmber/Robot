@@ -24,7 +24,7 @@ Three readings, one per row of the table:
 Run:
 
     E:\\IsaacLab\\env_isaaclab\\Scripts\\python.exe rl_exp\\tools\\verify\\check_contact_ownership.py ^
-        --task Lizard-Baseline-Flat-v2
+        --task Lizard2-Flat-v3
 
 Exit code is 0 only when the arrangement is coherent: every penalty body has a collider, every
 contacting body is covered by a penalty term or is a foot, and the run measured contact at all.
@@ -41,7 +41,7 @@ import xml.etree.ElementTree as ET
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--task", default="Lizard-Baseline-Flat-v2")
+parser.add_argument("--task", default="Lizard2-Flat-v3")
 parser.add_argument("--num_envs", type=int, default=8)
 parser.add_argument("--steps", type=int, default=100, help="control steps of zero action to observe")
 parser.add_argument("--threshold", type=float, default=1.0, help="contact force counted as contact [N]")

@@ -6,6 +6,10 @@
 # -*- coding: utf-8 -*-
 """A0 layout migration (ARCH_PLAN 2.1a): the main line moves into ``versions/lizard/main/``.
 
+**已经执行过**（`versions/lizard/main/` 就是它的产物），2026-10-10 从
+``rl_exp/tools/verify/`` 移到 ``archive/``：一次性脚本不留主路径（`AGENTS.md`）。留在盘上是给
+旧记录当复读路径，不是可再跑的工具。
+
 One-shot migration, not a gate (underscore prefix, same as ``_migrate_lock_v3.py``). It
 does the mechanical half only: the directory move and the parameter-file renames that the
 ``recipe_lines`` basename rule forces once the line directory is named ``main``. Everything
@@ -21,8 +25,8 @@ repeating: ``git mv`` will not move a directory whose files are untracked (it re
 from under concurrent work makes two change sets own the same paths.
 
 Usage:
-    python rl_exp\\tools\\verify\\_a0_layout_migration.py            # plan only
-    python rl_exp\\tools\\verify\\_a0_layout_migration.py --apply    # move
+    python rl_exp\\tools\\archive\\_a0_layout_migration.py            # plan only
+    python rl_exp\\tools\\archive\\_a0_layout_migration.py --apply    # move
 """
 
 from __future__ import annotations

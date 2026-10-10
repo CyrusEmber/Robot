@@ -10,7 +10,11 @@ whose record is unsound refuses instead of guessing.
 Not part of the offline suite (it starts the simulator): run it by hand, like
 ``terrain_preflight.py``. Usage, from the IsaacLab tree:
 
-    <venv python> <repo>\\rl_exp\\tools\\verify\\terrain_split_env_run.py --task Lizard-Rough-v11 --num_envs 64
+    <venv python> <repo>\\rl_exp\\tools\\verify\\terrain_split_env_run.py --task <param-grid task> --num_envs 64
+
+``--task`` has no default on purpose: this probe needs a param-grid terrain recipe task, and
+every id that ever had one (``Lizard-Rough-v11`` and friends) retired with the lizard main line
+on 2026-10-09. lizard2 is flat (``terrain_generator=None``), so there is no live id to point at.
 """
 
 import argparse
@@ -23,7 +27,7 @@ sys.path.insert(0, str(_REPO))
 from isaaclab.app import AppLauncher  # noqa: E402
 
 parser = argparse.ArgumentParser(description="Terrain split probe, inside a real env.")
-parser.add_argument("--task", type=str, default="Lizard-Rough-v11", help="A param-grid recipe task.")
+parser.add_argument("--task", type=str, required=True, help="A param-grid recipe task (no live id: see the module docstring).")
 parser.add_argument("--num_envs", type=int, default=64, help="Override the recipe's env count.")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()

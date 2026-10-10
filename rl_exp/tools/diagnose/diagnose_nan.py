@@ -1,4 +1,4 @@
-"""Diagnose NaN observations in Lizard-Velocity-Flat-v0.
+"""Diagnose NaN observations in Lizard2-Flat-v3.
 
 Spawns a few envs, resets once, then reports which observation terms and
 which raw robot state quantities contain NaN.
@@ -10,7 +10,7 @@ Usage:
 import argparse
 import sys
 
-TASK = "Lizard-Velocity-Flat-v0"
+TASK = "Lizard2-Flat-v3"
 if len(sys.argv) > 1 and not sys.argv[-1].startswith("-"):
     TASK = sys.argv.pop()
 

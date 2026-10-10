@@ -79,11 +79,11 @@ sys.path.insert(0, str(_REPO_ROOT / "ablation_harness"))
 
 from isaaclab.app import AppLauncher
 
-parser = argparse.ArgumentParser(description="v10 支撑异常诊断 (fixed ckpt, no training).")
-parser.add_argument("--task", type=str, default="Lizard-Rough-v10")
+parser = argparse.ArgumentParser(description="支撑异常诊断 (fixed ckpt, no training).")
+parser.add_argument("--task", type=str, default="Lizard2-Flat-v3")
 parser.add_argument(
-    "--checkpoint", type=str,
-    default=r"E:\IsaacLab\logs\rsl_rl\lizard_rough_teacher_v10\2026-09-09_18-15-19\model_14999.pt",
+    "--checkpoint", type=str, required=True,
+    help="训练 run 的 model_*.pt（没有默认值：旧线那一版默认路径已随其日志目录退役）",
 )
 parser.add_argument("--phases", type=str, default="1,2,3", help="逗号分隔的 phase 号，如 '1,3'。")
 parser.add_argument("--heights", type=str, default="0.05,0.10,0.15,0.20", help="台阶高度 [m]。")

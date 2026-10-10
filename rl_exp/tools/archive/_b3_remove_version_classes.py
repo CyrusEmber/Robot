@@ -6,6 +6,10 @@
 # -*- coding: utf-8 -*-
 """ARCH_PLAN 2.4 / work/closed/2026/recipe-registry-and-diff-declaration.md step 3: delete the version subclass bodies.
 
+**已经执行过**，2026-10-10 从 ``rl_exp/tools/verify/`` 移到 ``archive/``：一次性脚本不留主路径
+（`AGENTS.md`）。它按类名定位，而它要删的那些版本类连同三条退休线已于 2026-10-09 一起消失 ⇒
+在今天的树上跑只会报名字已不在。留在盘上是给旧记录当复读路径，不是可再跑的工具。
+
 The registry has resolved env cfgs through ``recipe_tasks`` since the entry switch, and every
 gate now reads the generated classes, so the version subclasses are dead code -- but dead code
 that a reader would still take for the definition of a recipe. Deleting them is what makes
@@ -24,8 +28,8 @@ on line numbers and it fails loudly if a name is already gone or if a keeper is 
 One-shot tool, not a gate (underscore prefix, like ``_a0_paths.py``).
 
 Usage:
-    python rl_exp\\tools\\verify\\_b3_remove_version_classes.py            # report only
-    python rl_exp\\tools\\verify\\_b3_remove_version_classes.py --apply    # rewrite
+    python rl_exp\\tools\\archive\\_b3_remove_version_classes.py            # report only
+    python rl_exp\\tools\\archive\\_b3_remove_version_classes.py --apply    # rewrite
 """
 
 from __future__ import annotations

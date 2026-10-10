@@ -38,7 +38,7 @@ both read as the default while nothing has moved. Hence the phases:
 The assertions are on the state after a reset, so they hold whichever layer writes it.
 
 Usage (repo root, IsaacLab venv):
-    "E:/IsaacLab/env_isaaclab/Scripts/python.exe" rl_exp\\tools\\verify\\reset_check.py --task Lizard-Baseline-Flat-v1
+    "E:/IsaacLab/env_isaaclab/Scripts/python.exe" rl_exp\\tools\\verify\\reset_check.py --task Lizard2-Flat-v3
 
 Exit code is 0 only when every phase passed.
 """
@@ -50,7 +50,7 @@ import argparse
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser(description="Reset contract check: full reset + subset reset.")
-parser.add_argument("--task", default="Lizard-Baseline-Flat-v1", help="Registered task id (any line).")
+parser.add_argument("--task", default="Lizard2-Flat-v3", help="Registered task id (any line).")
 parser.add_argument("--num_envs", type=int, default=8)
 parser.add_argument("--excite-steps", type=int, default=20, help="control steps of uniform actions in phase B")
 parser.add_argument("--subset", type=int, default=2, help="how many envs are reset alone in phase D")

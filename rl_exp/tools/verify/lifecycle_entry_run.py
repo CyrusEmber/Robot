@@ -317,7 +317,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--track", default="launcher", choices=[*TRACKS, "all"])
     parser.add_argument("--task", default=RETIRED_TASK, help="the retired line's task id")
-    parser.add_argument("--resume-task", default="Lizard-Rough-v14", help="the declared task the resume arm uses")
+    parser.add_argument("--resume-task", default="Lizard2-Flat-v3", help="the declared task the resume arm uses")
     parser.add_argument("--resume-train-iters", type=int, default=2, help="iterations for a missing source run")
     parser.add_argument("--num_envs", type=int, default=64)
     parser.add_argument("--experiment", default=None, help="log directory name (default: read off the task)")

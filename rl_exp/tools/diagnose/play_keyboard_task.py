@@ -3,13 +3,13 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""Keyboard teleop for any registered ``Lizard-*-Play-vN`` task (play.py side).
+"""Keyboard teleop for any registered ``Lizard2-*-Play-vN`` task (play.py side).
 
 Registers ``<task>-keyboard`` through play.py's ``--external_callback`` hook, so
 the IsaacLab tree stays stock -- nothing to re-apply after a reinstall:
 
     env_isaaclab\\Scripts\\python.exe scripts\\reinforcement_learning\\rsl_rl\\play.py ^
-        --task Lizard-Rough-Play-v8-keyboard ^
+        --task Lizard2-Flat-Play-v3-keyboard ^
         --external_callback rl_exp.tools.diagnose.play_keyboard_task.register ^
         --viz kit --real-time --num_envs 1
 
@@ -59,9 +59,11 @@ TASK_SUFFIX = "-keyboard"
 
 # Key-press magnitudes as (v_x [m/s], v_y [m/s], omega_z [rad/s]). The stock
 # Se2KeyboardCfg defaults (0.8, 0.4, 1.0) are slow next to the trained command
-# range -- v8's yaml is x (-1, 3), y (-0.5, 0.5), yaw (-1, 1) -- so x is pinned
-# at the ambition end here, y and yaw left alone. Edit these two numbers (no CLI
-# plumbing).
+# range -- lizard2's v3 yaml is x (0, 3), y (0, 0), yaw (0, 0) -- so x is pinned
+# at the ambition end here. y and yaw stay at the stock values although v3 pins
+# both axes to zero in training: teleop on those two axes is an off-distribution
+# probe, not a reproduction of the trained command window. Edit these two numbers
+# (no CLI plumbing).
 KEY_SENSITIVITY = (3.0, 0.4, 1.0)
 
 
@@ -179,7 +181,7 @@ def register():
     if task_id is None:
         raise ValueError(
             f"{__name__} needs --task <base>-keyboard where <base> is a registered "
-            "Lizard-*-Play-vN task; see the module docstring for the full command line."
+            "PLAY task (Lizard2-Flat-Play-vN); see the module docstring for the full command line."
         )
     task_id = task_id.split(":")[-1]
     # the operator passes the SUFFIXED id (that is the task play.py will load), so
@@ -215,7 +217,7 @@ def register():
     return []
 
 
-def _self_check(task_id: str = "Lizard-Rough-Play-v8") -> None:
+def _self_check(task_id: str = "Lizard2-Flat-Play-v3") -> None:
     """Assert ``register`` wires a real PLAY cfg to the keyboard term (offline).
 
     Drives the real entry point with a synthetic argv carrying the SUFFIXED task
@@ -249,4 +251,4 @@ def _self_check(task_id: str = "Lizard-Rough-Play-v8") -> None:
 
 
 if __name__ == "__main__":
-    _self_check(sys.argv[1] if len(sys.argv) > 1 else "Lizard-Rough-Play-v8")
+    _self_check(sys.argv[1] if len(sys.argv) > 1 else "Lizard2-Flat-Play-v3")
