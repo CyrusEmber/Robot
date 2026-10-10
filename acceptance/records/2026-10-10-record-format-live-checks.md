@@ -2,8 +2,9 @@
 
 ## 适用范围
 
-承载 `work/active/record-format-live-checks.md` 的 ①②。本轮**未起仿真**：读的是今日活解释器上的身份
-读数、今日训练 manifest、以及仓内既有评测记录/结果目录。真跑段仍挂在该事项上（见未覆盖边界）。
+承载 `work/active/record-format-live-checks.md` 的 ①②。分两段：**离线段**（当日中午，未起仿真）读的是
+活解释器上的身份读数、训练 manifest、以及仓内既有评测记录/结果目录；**真跑段**（当日 15:24–15:27，
+GPU 空出后真起仿真跑 base + variant 两条）。两段各自带适用范围，后段不追溯改写前段的读数。
 
 不含：③ 资产 fail 路径（2026-10-10 用户定：拆为 `work/active/asset-fail-path-live-check.md`）；
 协议版本切换的对照（归 `runtime-acceptance-v3`）。
@@ -62,6 +63,55 @@ protocol/group/base_run_id 那一层）——那一层未观测。
 - 结论：② 的验收句"声明与实际分列且不相等时两列都出现"在现行写侧**无法被满足**；且字段名
   `num_envs_declared` 承诺的是"声明值"，实际读到的是 harness 自己刚覆盖上去的值。
 
+## 真跑段（2026-10-10 15:24–15:27，GPU 空出后）
+
+两条真 run，同协议 `locomotion_eval_v3`、新 campaign 组 `livecheck`、`Lizard2-Flat-v3` / nominal /
+seed 123（`--viz none`，cwd `E:\IsaacLab`）：
+
+| # | 命令要点 | run 目录（进仓） | 落盘时刻 |
+|---|---|---|---|
+| 1 base | `--checkpoint …\lizard2_v3\2026-10-10_10-14-50\model_1150.pt --tag live` | `results/locomotion_eval_v3/livecheck/Lizard2-Flat-v3_live_nominal_seed123/` | `2026-10-10T15:24:01` |
+| 2 variant | 同上换 `model_3000.pt` + `--variant ckpt3000` | `…/Lizard2-Flat-v3_live_nominal_seed123_ckpt3000/` | 同上批 |
+
+### ① 写侧调用点：`main()` 把 base 找对、把 `substitutions` 与 `runtime.rsl_rl_id` 落对
+
+- **base 找对了**：run 2 记录里 `substitutions.baseline` = `{run_id: Lizard2-Flat-v3_live_nominal_seed123,
+  path: …\Lizard2-Flat-v3_live_nominal_seed123\record.json}` —— 正是 run 1 的目录，即"身份去掉 variant
+  后缀"那个 run（`eval.py:867` 的 `base_run_id` 语义在真跑上成立，没被拼回最终串去猜）。
+- **已证类目**：`comparison=compared`、`substitutions=['checkpoint']`、`unproven=[]`、`reason=""`。
+  6 条绑定逐条读出：`checkpoint.sha256` 两侧不同（`f55014d2…` vs `f4c54b9b…`），另 5 条（`suite.digest`
+  / `assets.declared_digest` / `eval_protocol.digest` / `obs_protocol.identity` / `obs_protocol.digest`）
+  两侧逐字相同 ⇒ 换 ckpt 只报一次 `checkpoint`，没有把未动的绑定也读成替换。
+- **两侧取值在写时冻结**：`bindings` 里同时存了 candidate 与 baseline 的**值**，不是事后重算 ——
+  这正是"基线日后被 `--overwrite` 改写而旧 `substitutions` 仍指同一路径"要防的那一格。
+- **无比较 = 无键**：run 1（base 自己）记录里**没有** `substitutions` 这个键；run 2 有。缺席与空集
+  没被混成一回事。
+- **`runtime.rsl_rl_id` 写侧落值**：两条真 run 都是 `source:28a37cecdd43`，与
+  `provenance.rsl_rl_id()` 当场读数、以及训练 manifest `code.rsl_rl{mode=editable/source,
+  rev=28a37cecdd43}` 按 `mode` 重建的 `source:28a37cecdd43` **四处同串**。⇒ ① 的"重建后两处取值一致"
+  在**同一次真跑**上成立，不再是跨会话拼出来的（离线段那条边界到此收敛）。
+- 两条真 run 的 `record.read_state` 都是 `complete`（`[EVAL] record=eval-record-1 state=complete`）。
+
+### ② `num_envs` 两列在真跑上的读数
+
+两条 run 都是 `num_envs=72` / `num_envs_declared=72`。**"不相等"这一格仍未观测到**，且真跑也证不了它：
+两条列都追溯到 `gym.make(cfg=env_cfg)` 那**同一个** cfg 对象（离线段已给代码路径，此处真跑只是又一次
+同值）。⇒ ② 的验收句只有"分列"这半在半真跑上落地，"不等时两列都出现"这半保持"结构性不可达"的结论。
+
+### 未做与边界（真跑段）
+
+- **pre-format 分支不构造**：`eval.json` 与 `record.json` 同进同出（`_persist` 一处落两个文件），
+  真 run 产不出"有 `eval.json` 无 `record.json`"这个状态；旧目录的 task 前缀又都是退役 id（`Lizard-Rough-v14`
+  等），当不上新 run 的基线。2026-10-10 用户定："既然不会出现就不用处理" ⇒ 该分支只保留离线段的
+  读侧取值，**不写"已真跑"**。
+- **`git_rev_lizard` 侧有位移**：两条真 run 记 `0f4b2bf5317a`，而训练 manifest 的
+  `code.repository.rev` 是 `bd1ae8dd54a5`（训练时 clean）⇒ 蜥蜴仓在训练与评测之间前进了。① 的"同串"
+  说的是 **rsl_rl 依赖身份**（`source:28a37cecdd43`），不是配方仓 rev；这条不构成跨 rev 结果可比。
+- **这两条 run 的分数不作数**：`--variant` 真跑的目的是观测记录字段的落点，且 run 2 换了 ckpt
+  （`success=0.537 fall=0.681`，`resets_in_rollout=72 early_terminations=22` 由 stdout 带出）——
+  livecheck 组的数不进任何对账表。顺带：这两条是 v3 下**带 ckpt 的真 run**，`runtime-acceptance-v3`
+  ③ 要的"一条有 ckpt 的 run"由此有了候选，但那件事的判据归它自己。
+
 ## 证据引用
 
 - 事项：`work/active/record-format-live-checks.md`；拆出项：`work/active/asset-fail-path-live-check.md`。
@@ -77,20 +127,29 @@ python -c "import json,glob,sys;sys.path.insert(0,'ablation_harness');import rec
 python -c "import json,sys;sys.path.insert(0,'ablation_harness');import record;R='ablation_harness/results';L=lambda p: json.load(open(p,encoding='utf-8'));c=L(R+'/locomotion_eval_v2/v14/Lizard-Rough-v14_1150_nominal_seed123_ckpt1150/record.json');a=record.baseline_evidence(c,R,protocol='locomotion_eval_v2',group='v14',base_run_id='Lizard-Rough-v14_850rec_nominal_seed123');print(a['comparison'],a['substitutions']);b=record.baseline_evidence(c,R,protocol='locomotion_eval_v2',group='v14',base_run_id='Lizard-Rough-v14_850_nominal_seed123');print(b['comparison'],b['reason'])"
 ```
 
-- 记录本体：评测记录 9 份在 `ablation_harness/results/**/record.json`（进仓）；训练 manifest 在
-  `E:\IsaacLab\logs\rsl_rl\lizard2_v3\<时间戳>\run_manifest.json`（机器本地，不进仓）。
+- 真跑段的复读（**起仿真**，每次一条约两分钟内；本机 GPU 需空出，cwd `E:\IsaacLab`）：
+
+```
+E:\IsaacLab\env_isaaclab\Scripts\python.exe E:\Robot\ablation_harness\eval.py --task Lizard2-Flat-v3 --checkpoint E:\IsaacLab\logs\rsl_rl\lizard2_v3\2026-10-10_10-14-50\model_1150.pt --protocol locomotion_eval_v3 --mode nominal --seed 123 --group livecheck --tag live --viz none
+E:\IsaacLab\env_isaaclab\Scripts\python.exe E:\Robot\ablation_harness\eval.py --task Lizard2-Flat-v3 --checkpoint E:\IsaacLab\logs\rsl_rl\lizard2_v3\2026-10-10_10-14-50\model_3000.pt --protocol locomotion_eval_v3 --mode nominal --seed 123 --group livecheck --tag live --variant ckpt3000 --viz none
+```
+
+- 真跑段读回（无需仿真）：`python -c "import json;L=lambda p: json.load(open(p,encoding='utf-8'));R='ablation_harness/results/locomotion_eval_v3/livecheck/Lizard2-Flat-v3_live_nominal_seed123';print(sorted(L(R+'/record.json')));print(L(R+'_ckpt3000/record.json')['substitutions'])"`
+
+- 记录本体：评测记录 11 份（含真跑段新增的 `livecheck` 2 份）在 `ablation_harness/results/**/record.json`
+  （进仓）；训练 manifest 在 `E:\IsaacLab\logs\rsl_rl\lizard2_v3\<时间戳>\run_manifest.json`
+  （机器本地，不进仓）。
 - 相关的旧读数：`rl_exp/versions/lizard/ACCEPTANCE.md` §3.2、`acceptance/records/2026-09-17-lizard-eval-record-and-terrain-map.md`。
 
 ## 未覆盖边界
 
-- **真跑段整段未做**：① 的写侧调用点（`main()` 是否把 protocol/group/base_run_id 传对、真跑落
-  `substitutions` 与 `runtime.rsl_rl_id`）、② 的真跑观测，全部未做。原因（2026-10-10 用户定）：当时有训练
-  在跑（`lizard2_v3/2026-10-10_10-14-50`，5.7 GB / 8 GB 显存，每 ~2 分钟落一个 ckpt），再起一个 Isaac app
-  有挤 OOM 的现实风险 ⇒ 本轮先不跑，真跑挂账。**不得**据本记录称"记录格式已全部真跑"或"①② 已闭"。
-- ② 的"不等格不可达"是**读代码 + 读既有记录得到的结论**，不是真跑观测；真跑也证否不了它（不可达的东西
-  跑不出来）。若日后要让这一格有牙，作法是改"声明"的读取位置（`eval.py:394` 之前）或去掉这对同源字段
+- **已收**：真跑段的 ①（写侧调用点、`substitutions` 落值、`runtime.rsl_rl_id` 写侧）与 ②（两列真跑读数）
+  已按上节观测，① 那条"跨两次会话"的边界随之收敛。**未见** ② 的"声明≠实际"格与 pre-format 分支
+  （前者结构性不可达，后者写侧产不出 —— 2026-10-10 用户定不处理）。
+- ② 的"不等格不可达"在真跑后仍是**读代码得到的结论**：真跑只能再证一次两列同值，证否不了不可达。
+  若日后要让这一格有牙，作法是改"声明"的读取位置（`eval.py:394` 之前）或去掉这对同源字段
   ——两条都改记录语义，本项不动。
-- ① 的"两侧一致"跨了两次会话：活解释器与训练 manifest 是今日（同树），评测侧的 3 份是 2026-09-20/22。
-  同串只说明拼写规则没漂，不构成"今日一次真跑同时落了训练侧与评测侧"。
-- 9 份记录 `complete` 是**当下仓内记录体**上的读数，不是对未来新增字段的承诺。
-- 资产 fail 路径（③）不在本记录内。
+- ① 的"同串"只覆盖 **rsl_rl 依赖身份**。真跑段两条 run 的 `git_rev_lizard=0f4b2bf5317a` 与训练 manifest 的
+  `bd1ae8dd54a5` 不同 ⇒ 配方仓 rev 在训练与评测之间前进了，本记录的任何读数都**不得**当作跨 rev 可比。
+- 11 份记录 `complete` 是**当下仓内记录体**上的读数，不是对未来新增字段的承诺。
+- 资产 fail 路径（③）不在本记录内（`work/active/asset-fail-path-live-check.md`）。

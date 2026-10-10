@@ -1,0 +1,3 @@
+run_id,protocol,task,tag,mode,seed,variant,git_rev_lizard,git_rev_isaaclab,timestamp,success_rate,fall_rate,lin_mae_mps,ang_mae_radps,energy_per_m_j,stop_overshoot_mps,recovery_mean_s,never_recovered
+Lizard2-Flat-v3_live_nominal_seed123,Locomotion-Eval-v3,Lizard2-Flat-v3,live,nominal,123,,0f4b2bf5317a,28a37cecdd43,2026-10-10T15:24:01,0.3192,0.0,0.6663,0.0531,4147.7007,0.0,,
+Lizard2-Flat-v3_live_nominal_seed123_ckpt3000,Locomotion-Eval-v3,Lizard2-Flat-v3,live,nominal,123,ckpt3000,ee1fc367cba8,28a37cecdd43,2026-10-10T15:30:07,0.5366,0.6806,24.9649,0.8816,16971.7676,69.2075,,
