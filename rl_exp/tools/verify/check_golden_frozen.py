@@ -122,7 +122,9 @@ FROZEN = {
 }
 
 FROZEN_REVS: dict[str, str] = {
-    "rl_exp/versions/cfg_baselines.json": "020e6fb",
+    # Its bytes moved with the 2026-10-10 re-baseline (a second combination block was added), so this
+    # line follows the same two-step shape: that change landed in cb6eb27.
+    "rl_exp/versions/cfg_baselines.json": "cb6eb27",
     # The entry column moved twice: bbedd96 (the teacher line's 26 entries) and 27ca424 (the family
     # line's 8). These bytes are the later one's, so that is the revision they are from; the
     # snapshots they carry are still 020e6fb's (B0 addenda ② and ③).
@@ -137,7 +139,9 @@ FROZEN_REVS: dict[str, str] = {
     # e59e240 ("Register lizard2 v2"), and this line names that revision.
     # The 2026-10-09 re-baseline took the documented two-step shape: the new bytes landed in ad7620e
     # ("declare the v3 budget at 6000"), and this line names that revision.
-    "rl_exp/versions/lizard2/main/cfg_lock.json": "ad7620e",
+    # The 2026-10-10 re-baseline (the rsl_rl identity moved the combination key) took the same two
+    # steps: the new bytes landed in cb6eb27.
+    "rl_exp/versions/lizard2/main/cfg_lock.json": "cb6eb27",
 }
 """Which revision each frozen file's bytes are from, for the banner only.
 

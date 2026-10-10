@@ -199,3 +199,58 @@ E:\IsaacLab\env_isaaclab\Scripts\python.exe -B -c "from ablation_harness import 
   `bd1ae8dd54a5` 不同 ⇒ 配方仓 rev 在训练与评测之间前进了，本记录的任何读数都**不得**当作跨 rev 可比。
 - 11 份记录 `complete` 是**当下仓内记录体**上的读数，不是对未来新增字段的承诺。
 - 资产 fail 路径（③）不在本记录内（`work/active/asset-fail-path-live-check.md`）。
+- **补（2026-10-10 修复后）**：下面『修复』一节改写了本节的 ① 判读（"同串"不再算核到依赖身份）与
+  ② 的口径（按用户拍板，不再要求"不相等时两列都出现"）。本节句子保留原文，判读以修复节为准。
+
+## 修复（2026-10-10，审核后）
+
+审核的 P1/P2 修复，连同它们逼出的重基线。② 的口径按用户 2026-10-10 的拍板改写；
+"字段名承诺与值不符"另立 `work/active/eval-declared-columns-are-post-override.md`。
+
+### P1 · `rsl_rl` 身份改按安装来源判（`rl_exp/tools/runrecord/provenance.py`）
+
+- **判据换了**：editable 由 PEP 610 `direct_url.json`（`dir_info.editable`）判；
+  "包目录在 git 树里"不再是判据。无 `direct_url.json` 的发行版只按版本识别，并把
+  `distribution` / `origin`（以及存在时的 `direct_url`）落进状态。
+- **发行版靠 `importlib.metadata` 找**：`top_level.txt`（缺则 `files`）认归属；editable 另按
+  "记录指向的源目录必须就是被 import 的那份文件"认领。本机 0.1–0.2 s/进程；
+  `packages_distributions()` 4.3 s 故不用。顺带修掉旧代码用 `version("rsl_rl")` 查 `rsl-rl-lib`
+  的名字错（纯安装那支会读成 `available: False`）。
+- **本机读数**：`rsl_rl_id()` = `installed:5.4.2`；旧读数 `source:28a37cecdd43` 是把 venv 所在树的
+  rev 借了过来（`source/rsl_rl` 不存在、无 `direct_url.json`、`top_level.txt = rsl_rl`）。
+- **回归测试**（`test_run_manifest.py`，未新增 check）：三条形状各一例 + "editable 记下源树名"。
+  破坏测试：把 HEAD 版 `provenance.py` 取出来在**同一构造环境**上跑 ⇒ `mode=editable/source`
+  （本机真环境即 `source:28a37cecdd43`），新断言咬得住。
+- **逼出的重基线**（组合键随身份移动，配方字段未动）：`check_cfg_lock.py --update --line
+  lizard2/main --reason "…"` ⇒ 打印 `no content change (provenance or format only)`，
+  `lizard2/main/cfg_lock.json` 落 12 条键（6 新 + 6 旧保留），`cfg_baselines.json` 组合块 2 个。
+  闸门读数：`CFG_LOCK_OK (6 tasks, 1 line(s), isaaclab=28a37cecdd43|rsl_rl=installed:5.4.2|python=3.12.13)`、
+  `RECIPE_BUILD_OK`（硬 A 绿）、`GOLDEN_FROZEN_OK`（两处 `FROZEN` 摘要重记：
+  `cfg_baselines.json` `ecec6440…`、`lizard2/main/cfg_lock.json` `8b7e7a13…`），并在
+  `rl_exp/versions/lizard/ACCEPTANCE.md` 主题表登记一行。
+- **未来判读随之变（判据不归本项）**：`manifest._verify_code` 与 `rebuild._code_item` 本来就对
+  `mode=="installed"` 明写 "installed distribution …, source not pinned" ⇒ 新 run 的 rsl_rl
+  「可重建」行从（假的）通过变未知；已存 manifest 不改写。这件事归
+  `work/active/verified-rebuild-rating.md`。
+
+### P2 · 同次 run 两个 rev（`ablation_harness/eval.py`）
+
+- `_persist` 里 `result` 的两个 rev 改取 `rec["runtime"]`（记录在 rollout 前抓），不再在 rollout
+  之后重读 HEAD。改前实测 17 对里 **2 对**分叉：livecheck variant（`0f4b2bf5317a` vs
+  `ee1fc367cba8`）、runtime-acceptance `v3ckpt5999`（`0f4b2bf5317a` vs `e4d1ac7d0a04`）；两对都只差
+  `git_rev_lizard`，`git_rev_isaaclab` 同值。
+- **守卫**（`test_eval_record.py`，未新增 check）：`one_run_one_revision()` 扫
+  `ablation_harness/results/**` 的 `record.json`/`eval.json` 对，逐字段比 `git_rev_lizard` /
+  `git_rev_isaaclab`；修复前那两对以"分歧本身"为键写成例外，**分歧消失即报"删掉例外"**。
+  测试自带控制：不带例外时必须恰好命中那两对（结论读磁盘，不读源码）。
+- **天花板**：产物级检查 —— 下一次分叉出现时才红，挡不住写入侧再写第二个 rev；写侧的唯一保证
+  是"一次采集、两处落盘"。
+
+### 本次未做
+
+- ② 的字段名问题（`runtime.num_envs_declared` / `device_declared` 落的是 harness 覆盖后的值，
+  不是配方声明值）**不改**，另立事项；本记录 ② 的口径按用户拍板改写为"同源分列即记该事实"。
+- 那两份分叉的 `eval.json` 不重写（记录即读数），例外表因此带它们的 run 路径。
+- 修复后未重跑仿真：本段读数全部来自离线闸门、仓内既有记录与一次本机身份读；真跑证据仍是上节
+  15:24 / 15:30 那两条。
+- 离线套件 37/37 绿（`ALL_OFFLINE_CHECKS_PASSED (37/37)`），未新增 check（`MAX_CHECKS` 未动）。
