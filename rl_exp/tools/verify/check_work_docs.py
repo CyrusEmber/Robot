@@ -20,7 +20,7 @@ Three modes, one implementation of the item format:
   and the close condition stay in the file and are fetched with ``--locate`` -- a shortened second
   copy here would be one more thing to keep in step.
 * ``--locate KEY`` -- the files whose id, title or body matches KEY, with line numbers.
-* ``--check`` (default) -- the shape gates below, each printing what it saw.
+* No arguments (default) -- the shape gates below, each printing what it saw.
 
 Prose pointers are reported, not gated. The default check also scans documents for
 ``work/active/<id>.md``-style references that no longer resolve -- closing an item moves the

@@ -4,22 +4,23 @@ title: lizard2 S1 执行：腕踝、掌跖段与趾根骨骼候选
 scope: rl_exp/blender, rl_exp/tools/pipeline, rl_exp/tools/verify, acceptance/records
 status: open
 landing: rl_exp/blender/lizard2_stance_candidate.py, rl_exp/blender/generate_urdf.py
-next: 先取得 S0 的已审目标与探索边界，再按正文在隔离 DCC/资产路径生成骨骼和碰撞候选；脚板位置、腕踝及趾根轴由执行者提出，不等用户给关节设计。完成后置 pending_review，请新上下文核对 R2 与资产链、用户检查多视角候选。
-close_when: 新上下文核对 S0 输入、DCC/URDF/USD 同一机体、关节职责、轴/镜像、连接、碰撞和惯量，用户确认候选外观；审核记录落 acceptance/records，通过后关闭并交 S2。此处只审工程候选，不以外观批准替代周期或承重通过。
+next: 本轮暂停资产执行、先改计划；恢复时先取得 S0 具名驱动能力输入，再联动选择“连续骨段＋小接触端”的轴/pivot与驱动方案，不等 S3 才发现表达缺口。正式验收还需已审设计约束；趴姿只挂账，不动已训 v3。
+close_when: 新上下文核对 S0 已审约束及具名驱动能力输入、联动方案、DCC/URDF/USD 绑定、轴/镜像、连接/碰撞/惯量，用户确认候选外观；记录落 acceptance/records 后交 S2。声明能力不当承重真跑，几何通过不替代 S3 动力学；未判定不关闭。
 depends_on: lizard2-s0-target-calibration
 evidence: acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, acceptance/records/2026-10-08-lizard2-joint-design-review-contract
 ---
 
 ## 直接执行
 
-1. 读取 S0 交付和整体记录“联动设计起点”，确认输入机体及可修改范围。先展示本次候选改动方案；复用 `rl_exp/blender/lizard2_stance_candidate.py`、`rl_exp/blender/generate_urdf.py` 的现有约定，不复制整套导出工具。
-2. 从当前站姿 DCC 另存隔离候选，按实际局部轴调整腕踝、掌跖段、趾根 pivot 与末端接触片；前后肢分别映射并由一侧镜像。检查骨头移动后网格归属和世界变换，不手改正式 URDF 冒充 DCC 修复。
-3. 保留现有关节数作为第一候选，修正掌段几何与惯量缺口；导出视觉/碰撞网格和 URDF。只有可复读结构缺口才比较最小新增旋转轴，并按 R2 留下预算与代价。
-4. 用 `rl_exp/tools/pipeline/convert_urdf.py` 的真实参数接口把候选转换到隔离 USD，核对相对网格路径、关节/刚体数量、末端碰撞和 DCC—URDF—USD 姿态一致。候选路径不得覆盖 `rl_exp/lizard2_candidate/` 或刷新正式锁。
-5. 提交前后/左右/俯视预览及逐关节正负转动检查，覆盖行走默认姿态和趴姿可调整方向；记录尚未证明的范围并请用户看候选。不在此宣称趴姿、蹬地或柔顺已成立。
+1. 先消费 S0 具名驱动能力表和整体记录“联动设计修订”，结合已审约束提出骨骼/驱动同一候选。能力表尚缺时仅可核对现几何，不定 pivot/轴或承诺渐硬弹性；不等待 S3 承重证据，不制造循环依赖。
+2. 按可实现恢复力与更新接口联动选择腕踝、掌跖段、趾根轴和小接触端，在隔离 DCC 路径探索。前后肢分别镜像，核对骨头/网格归属；不能先定非线性曲线再回找平台实现，线性对照或暂缓分支须明示。
+3. 第一候选保留关节数。先读 `acceptance/records/2026-10-08-lizard2-r1-numeric-reference-and-decision-drafts.md` §15–§17 的增轴及长度扫判决，不重复相同目标宽带比较；重开仅限新小腿内扣/足部布局结构反例，或用户恢复趴姿后的新反例，且须说明旧条件不适用。旧机体读数不证明新机体可达，非一次 IK 失败就增轴。重开前由执行者在本阶段记录登记结构反例及旧条件不适用的理由，新上下文审核该判断；涉及目标变动仍交用户确认。
+4. 修掌段几何/惯量后导出视觉/碰撞和 URDF，用 `convert_urdf.py` 实际接口转隔离 USD，核对路径、关节/刚体与 DCC—URDF—USD 一致；不覆盖 `rl_exp/lizard2_candidate/` 或刷新正式锁。
+5. 提交局部几何和行走默认姿态的多视角及正负转动检查，记录驱动可表达与仍待承重验证的边界；趴姿不求解、不仿真，不计本轮出口。用户看外观不等于柔顺或推进通过。
 
 ## 交付与边界
 
-- DCC、URDF、网格、USD 的实际隔离路径与摘要统一进 `acceptance/records/<日期>-lizard2-s1-body-candidate.md`，连同变更动机、镜像/姿态检查、预览指针和复读命令；文件存在后再写 evidence。
-- S2 只消费这份绑定候选。用户改外观或资产变动后，受影响检查须重做，不能沿用旧候选审核。
-- 正式采用、旧版本退休和新配方归 S5/S6；本项不训练、不调正式增益、不修改已训 v3。
+- DCC/URDF/网格/USD 的隔离路径、联动驱动方案及所消费能力记录统一进 `acceptance/records/<日期>-lizard2-s1-body-candidate.md`，连同几何检查、预览和复读；存在后补 evidence，不预填骨骼结果。
+- S2 只消费已审的绑定候选。局部探索记录不替代 S0 通过或 S1 正式验收；用户改外观或资产变动后，受影响检查须重做，不能沿用旧候选审核。
+- 审核记录按整体记录“审核输入绑定约定”落地；本项仅留已存在的记录指针。
+- 正式采用、旧版本退休和新配方归 S5/S6；本项不训练、不调正式增益、不修改已训 v3。趴姿恢复须用户决定。
