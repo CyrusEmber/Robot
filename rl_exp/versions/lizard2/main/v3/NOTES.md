@@ -11,8 +11,16 @@
 
 ## 实际执行与偏离
 
-本轮只实施与自检；无训练 run、checkpoint 或训练覆盖参数，不冻结/tag。
-实际命令、运行验证与限制归 `acceptance/records/2026-10-08-lizard2-v3-landing.md`。
+自检轮（2026-10-08~09）只实施与验证，无训练 run；那部分命令、运行验证与限制归
+`acceptance/records/2026-10-08-lizard2-v3-landing.md`。
+
+训练轮（2026-10-10，v3.4 用户拍板）：本版已冻结（tag `lizard2-main-v3`），随后启动训练。
+
+- run 目录：`logs/rsl_rl/lizard2_v3/<时间戳>`（启动后回填，见下一次提交）。
+- 命令形态：`scripts\reinforcement_learning\rsl_rl\train.py --task Lizard2-Flat-v3 --headless`，cwd `E:\IsaacLab`；
+  `num_envs`/`seed`/`max_iterations` 用配方声明值（4096 / 42 / 6000），未加会话覆盖。
+- 命令行、覆盖参数、seed、checkpoint 的正文在该 run 目录的 `run_manifest.json` / `checkpoints.json`
+  （记录本体机器本地、不进仓）：复读 `python rl_exp\tools\runrecord\manifest.py --verify <run 目录>`。
 
 ## 结果回填
 

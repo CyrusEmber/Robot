@@ -1,7 +1,7 @@
 # lizard2 设计计划：main/v3
 
-> 更新：2026-10-09。修订：v3.3（预算声明改为 6000；采用方案仍为 v3.2 用户拍板）。
-> 本版采用本轮候选机体，唯一母本为 v2；本轮只实施与自检，不训练、不冻结/tag。
+> 更新：2026-10-10。修订：v3.4（用户拍板启动训练并冻结；预算仍为 6000）。
+> 本版采用本轮候选机体，唯一母本为 v2；自检已于 2026-10-09 完成，2026-10-10 冻结（tag `lizard2-main-v3`）并启动训练。
 > 家族 PLAN 仅作入口，设计正文唯一在本文件。
 
 ## 目的与假设
@@ -33,7 +33,7 @@
 2. 同次退休加载旧机体的 v1/v2，删除旧资产锁，保留历史 yaml、注册与文档；不刷新旧锁、不改旧配方。
 3. 运行 v3 正式 train/play 的构建、obs 实测、PD/默认目标与最小运行自检；不以 `--drop-joints` 模拟替代。
 4. 限位、完整动作周期、mesh 碰撞与旧机体开自碰撞对照另由 `work/active/joint-limit-shape-and-range-pass.md` 承接，本轮不声称验收。后续需求与当前状态见 `acceptance/records/2026-10-09-lizard2-limit-requirement-and-status-sync.md`，技术判据消费评审合同 R4；本次仅补记录指针，不改本版资产或配方。
-5. 后续训练必须另经用户确认；启动方案使用 `Lizard2-Flat-v3` 与独立日志目录（`lizard2_v3`），预算 6000（v3.3），先预检再冻结。当前不执行训练命令。
+5. 后续训练必须另经用户确认；启动方案使用 `Lizard2-Flat-v3` 与独立日志目录（`lizard2_v3`），预算 6000（v3.3），先预检再冻结。训练已于 v3.4 用户拍板后启动（预检、干净树与启动闸门均先过）。
 
 ## 验收与开训条件
 
@@ -50,7 +50,7 @@
 
 ## 结果与记录安排
 
-实际测量和结论唯一归 `acceptance/records/2026-10-08-lizard2-v3-landing.md`；[NOTES.md](NOTES.md) 只放运行/报告路径与一句判定。无本版训练 run。
+实际测量和结论唯一归 `acceptance/records/2026-10-08-lizard2-v3-landing.md`；[NOTES.md](NOTES.md) 只放运行/报告路径与一句判定。本版训练 run 的执行与偏离回填在 [NOTES.md](NOTES.md)。
 
 ## 明确留到后续的内容
 
@@ -65,3 +65,4 @@
 | 2026-10-08 | v3.2 | 用户拍板：现在采用本轮候选，基于 v2 摘除 kfe 动作并保持全部 PD/零目标，保留 v2 其余配方；迁入正式版本、收回家族正文、同次退休旧机体版本。本轮不开训、不冻结；依据指向 `acceptance/records/2026-10-08-lizard2-v3-landing.md`。 |
 | 2026-10-09 | v3.2.1 | 记录性勘误：补后续需求和当前状态指针，纠正文档将已接入事项列为未做的口径；采用方案、资产、配方和训练安排未变。依据：`acceptance/records/2026-10-09-lizard2-limit-requirement-and-status-sync.md`。 |
 | 2026-10-09 | v3.3 | 用户拍板：预算声明由"沿用 v2 的 14000"改为 **6000**（本版自己的声明，不再继承）；配方锁重锚、`diff.json` 的 agent 叶子与证据指向 `acceptance/records/2026-10-09-lizard2-v3-budget-and-calibration.md`。资产、动作接口与其余配方未变。 |
+| 2026-10-10 | v3.4 | 用户拍板：**启动本版训练并冻结**（tag `lizard2-main-v3`，轻量 tag，与 v1.4–v2 同型）。前置实测已完成：预检（`acceptance/records/2026-10-09-lizard2-v3-pretrain-sanity.md`）、工作树干净、`launch_recipe.py --task Lizard2-Flat-v3` 判 `allowed: true`。方案、资产、动作接口与预算（6000）均未变；run 目录与命令回填在 [NOTES.md](NOTES.md)。 |

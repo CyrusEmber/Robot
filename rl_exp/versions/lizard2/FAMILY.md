@@ -15,7 +15,7 @@ lizard2 = lizard 的四足构型修正版，保留每腿 `hip → haa → hfe �
 
 ## 设计入口
 
-当前版本为 main/v3；方案入口见 [PLAN.md](PLAN.md)，正文唯一归 [main/v3/PLAN.md](main/v3/PLAN.md)。
+当前版本为 main/v3：2026-10-10 冻结（tag `lizard2-main-v3`）并启动训练（预算 6000 迭代），方案入口见 [PLAN.md](PLAN.md)，正文唯一归 [main/v3/PLAN.md](main/v3/PLAN.md)。
 
 ## 线
 
