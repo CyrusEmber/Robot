@@ -1,9 +1,10 @@
 # 一次性验收探针（work/active/isaac-root-parameterisation.md 与
 # work/active/ablation-sweep-final-checkpoint-name.md 的补证）：无旧 checkpoint、
 # 无旧 eval 结果的新训 2 迭代，验"调度器跑完预算后能被认出完成、默认按末档 model_{N-1}.pt
-# 进 eval"。产物进 smoke 诊断组，保留不删；其读数是未训策略，不作任何性能引用。
+# 进 eval"。产物进独立诊断组，保留不删；其读数是未训策略，不作任何性能引用。
+# 不入 smoke 组：那里已有条件不同的行，身份闸会报条件冲突并让 summarize 退出 1。
 
-group: smoke
+group: isaac-root-reprobe
 runs:
   - tag: isaac_root_reprobe
     task: Lizard2-Flat-v3

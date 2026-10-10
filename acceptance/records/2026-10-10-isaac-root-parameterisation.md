@@ -128,6 +128,23 @@ cd /d E:\IsaacLab && E:\IsaacLab\env_isaaclab\Scripts\python.exe ablation_harnes
 真实 GPU 冒烟不进离线套件（§5）。只把 `max_iterations` 文档化为“复用下标”会退掉已声明的新训能力，
 不能当修复；除非用户明确选择缩窄功能，本次不推荐这条路。
 
+## 补证（2026-10-10；修复提交 `3420339`）
+
+审核要求的补证已全部执行。判定时以产物与退出行为为准，不以本段文字为准。
+
+| 步骤 | 读数 |
+|---|---|
+| 修复形态 | 完成凭据改为读目录（`run_ablation.py` 的 `_latest_checkpoint` / `_trained_to_budget`：最新 checkpoint ≥ 预算−1 才算训完）；未指名 `eval_checkpoints` 时默认取该 run 末档。训练器契约按本机 `on_policy_runner.py:77-79,112,127-134` 核验 |
+| 单测 | `test_eval_record.py` 32 条全绿（新增 4 条覆盖：新训走通并默认末档 / 已达预算不重训 / 半途或失败不算完成 / eval 绝对入口与 cwd、日志 glob 属 IsaacLab 树） |
+| 破坏测试一 | 还原完成凭据到 HEAD 旧实现 ⇒ 红，报错即原缺陷原文 `expected model_2.pt not found`，复用路径也被认出会意外重训 |
+| 破坏测试二 | 只把 eval 入口还原成相对路径 ⇒ 红在目标断言 `the eval entry has to be an existing absolute path` |
+| 全套件 | `run_offline_checks.bat` → `ALL_OFFLINE_CHECKS_PASSED (37/37 in 48.8s)`；回归折进既有检查，条数不变 |
+| 真跑探针 | spec `ablation_harness/specs/isaac_root_reprobe.yaml`（仓内，可复读）：无旧 checkpoint 新训 2 迭代 → `[ABLATION] sweep done, failures=0`；训练目录 `E:\IsaacLab\logs\rsl_rl\lizard2_v3\2026-10-10_14-38-48_isaac_root_reprobe`（机器本地，含 `model_0.pt`/`model_1.pt`/manifest）；eval 产物在仓内 `ablation_harness/results/locomotion_eval_v3/isaac-root-reprobe/Lizard2-Flat-v3_isaac_root_reprobe_it1_nominal_seed123/`（`eval.json` + `record.json`，保留不删）。默认进 eval 的正是 `model_1.pt`（it1） |
+| 脏树偏差 | 探针启动时工作树含另一会话在办改动（`check_version_docs.py` 等），manifest 按 `RL_ALLOW_DIRTY_TREE` 记为偏差；探针代码本身已提交于 `3420339`。前两次未声明的启动被脏树闸门硬拒（T0 落盘、未训练），闸门行为符合设计 |
+| 分组修正 | 初跑产物落 smoke 组，summarize 因与既有行条件不同报冲突并退出 1（sweep 本体 `failures=0`）。产物移入独立组 `isaac-root-reprobe`，smoke 汇总表还原，`--summarize` 复跑退出 0。教训：探针行与任何既有行条件不同就别共用组，别靠事后删产物 |
+
+探针策略只训 2 迭代，其读数不具性能含义，本记录不复述数值。
+
 ## 证据引用
 
 - 事项：`work/active/isaac-root-parameterisation.md`。
