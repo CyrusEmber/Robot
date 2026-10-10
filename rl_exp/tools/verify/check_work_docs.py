@@ -15,7 +15,8 @@ much of it was migrated, and everything else is found by search.
 Three modes, one implementation of the item format:
 
 * ``--list [KEY]`` -- one line per active item (id / status / scope / title), after a line naming
-  the scope it covers; ``KEY`` narrows the view. The list is for *choosing* an item, so the action
+  the scope it covers; ``KEY`` narrows the view and matches the status too, so ``--list
+  pending_review`` is "what is waiting on a reviewer". The list is for *choosing* an item, so the action
   and the close condition stay in the file and are fetched with ``--locate`` -- a shortened second
   copy here would be one more thing to keep in step.
 * ``--locate KEY`` -- the files whose id, title or body matches KEY, with line numbers.
@@ -43,7 +44,7 @@ An item is front matter plus a free body::
     id: <matches the file name>
     title: <one line>
     scope: <path(s) that exist -- a range, never a word from a list>
-    status: <open/in_progress/blocked/done/cancelled/superseded>
+    status: <open/in_progress/pending_review/blocked/done/cancelled/superseded>
     landing: <path[#anchor], ...>          # where the rule lives, or will live
     next: <the action to take>             # active items only
     close_when: <who checks what, observes what, and what each outcome means>
@@ -55,17 +56,31 @@ An item is front matter plus a free body::
 
 ``status`` describes the work, not today: ``active`` means "not closed yet", which is **not** the
 same as "being executed now". ``open`` = there is an unfinished action that could start and has
-not; ``in_progress`` = it is being executed; ``blocked`` = unfinished, waiting on a decision, a
-schedule slot or a prerequisite, and it names **who lifts what**. A human's decision is still an
-action -- waiting on the user is ``blocked``, and "not this round" is not a cancellation. Close
-when there is neither an unfinished action nor a pending question: ``done`` if it was finished,
-``cancelled`` with its reason if it was decided against, ``superseded`` pointing at the item or
-mechanism that took it over. Nothing closes to get under a byte budget, and "nobody is touching
-it today" is not a close condition.
+not; ``in_progress`` = it is being executed; ``pending_review`` = the author says the action is
+done and the item is waiting on an independent review, which is **not** done, so the file stays
+in ``work/active/``; ``blocked`` = unfinished, waiting on a decision, a schedule slot or a
+prerequisite, and it names **who lifts what**. A human's decision is still an action -- waiting on
+the user is ``blocked``, and "not this round" is not a cancellation. Close when there is neither
+an unfinished action nor a pending question: ``done`` if it was finished, ``cancelled`` with its
+reason if it was decided against, ``superseded`` pointing at the item or mechanism that took it
+over. Nothing closes to get under a byte budget, and "nobody is touching it today" is not a close
+condition.
+
+``pending_review`` is a step in closing, not a place to park: the review is what makes the close
+legitimate, so an item that sits there is work waiting on a named reviewer, and its ``next`` says
+who that is and what they have to read. The reviewer starts from ``close_when``, the landing and
+the evidence rather than the author's summary, and may refund the item to ``in_progress`` (a
+repairable gap) or ``blocked`` (something only the user can supply) instead of closing it. The
+verdict goes into the evidence record, the item keeps a pointer to it, and evidence that changed
+after the review makes the item un-reviewed again. Only the shape is checked here: whether a
+review was real is not decidable from a file, and a record's existence is not evidence that
+anyone read it.
 
 Those three statuses *are* the close, so they are gated to the closed tree. A file carrying one
 of them in ``work/active/`` is either mid-move or drift: the move is the same change, and until
-it happens the list keeps advertising finished work as in flight.
+it happens the list keeps advertising finished work as in flight. Mirroring that, ``pending_review``
+in the closed tree is unverified work that has skipped its review: the move is the verdict, so it
+happens after the review, not instead of it.
 
 The body states the current situation only: no superseded states, no copy of a number or a
 digest whose owner is elsewhere, no restatement of a rule that lives in a mechanism.
@@ -111,10 +126,11 @@ _RECORD_SECTIONS = ("适用范围", "验收条件", "结果", "证据引用", "�
 _RECORD_NAME = re.compile(r"\d{4}-\d{2}-\d{2}-[a-z0-9-]+\.md")
 
 #: The only statuses an item may carry.
-_STATUS = ("open", "in_progress", "blocked", "done", "cancelled", "superseded")
+_STATUS = ("open", "in_progress", "pending_review", "blocked", "done", "cancelled", "superseded")
 #: The subset that *is* the close: no unfinished action and no pending question left, so the
 #: item belongs in ``work/closed/<year>/``. Spelled out rather than sliced off ``_STATUS`` so
-#: reordering that tuple cannot silently move the boundary.
+#: reordering that tuple cannot silently move the boundary. ``pending_review`` is deliberately
+#: NOT here -- it is a step before the close, and its own gate keeps it out of the closed tree.
 _TERMINAL = ("done", "cancelled", "superseded")
 #: Fields every item has, active or closed.
 _COMMON = ("id", "title", "scope", "status", "landing")
@@ -295,6 +311,12 @@ def _tally(items: list[Item], problems: list[str]) -> int:
                 "-- closing is a move to work/closed/<year>/ (keep the id, drop 'next', add "
                 "'outcome'), and the list has to keep showing what is in flight"
             )
+        if item.closed and status == "pending_review":
+            problems.append(
+                f"{_rel(item.path)}: status 'pending_review' is unverified work sitting in the "
+                "closed tree -- the move there is the verdict, so it happens after the review, "
+                "not instead of it (keep the file in work/active/ and put the reviewer in 'next')"
+            )
         if item.path.stem != item.id:
             problems.append(
                 f"{_rel(item.path)}: id '{item.id}' does not match the file name "
@@ -413,6 +435,10 @@ def _list_lines(items: list[Item], needle: str | None = None) -> list[str]:
     The list exists to let a reader *choose* an item, so it carries id, status, scope and title.
     The action and the close condition stay in the file and are fetched with ``--locate``: a
     second, shortened copy of them here would be one more thing to keep in step.
+
+    ``needle`` is matched against the status as well, so ``--list pending_review`` is the way to
+    ask "what is waiting on a reviewer" -- a status kept out of the *printed* line would be a
+    status nobody can find, and the field costs no bytes here because it is not what is printed.
     """
     active = sorted((i for i in items if not i.closed), key=lambda i: i.id)
     if needle:
@@ -420,7 +446,13 @@ def _list_lines(items: list[Item], needle: str | None = None) -> list[str]:
         active = [
             i
             for i in active
-            if low in (i.id + i.fields.get("title", "") + i.fields.get("scope", "")).lower()
+            if low
+            in (
+                i.id
+                + i.fields.get("title", "")
+                + i.fields.get("scope", "")
+                + i.fields.get("status", "")
+            ).lower()
         ]
     head = f"范围：已迁移 {len(active)} 项"
     head += f"（过滤 {needle!r}）" if needle else ""
@@ -564,6 +596,13 @@ def self_test() -> int:
         )
         item("bad-status", _GOOD.format(id="bad-status", title="x", status="done-ish"))
         item("done-in-active", _GOOD.format(id="done-in-active", title="x", status="done"))
+        item("pending-review", _GOOD.format(id="pending-review", title="x", status="pending_review"))
+        item(
+            "closed-pending-review",
+            "---\nid: closed-pending-review\ntitle: not reviewed\nscope: notes\n"
+            "status: pending_review\nlanding: notes/rule.md\noutcome: moved anyway\n---\n",
+            closed=True,
+        )
         item("name-mismatch", _GOOD.format(id="different", title="x", status="open"))
         item(
             "bad-landing",
@@ -619,6 +658,7 @@ def self_test() -> int:
             "'close_when' is missing or empty",
             "status 'done-ish' is not one of",
             "status 'done' is finished work sitting in work/active/",
+            "'pending_review' is unverified work sitting in the closed tree",
             "does not match the file name",
             "notes/not-there.md does not exist",
             "closed item: depend on a live mechanism",
@@ -643,6 +683,29 @@ def self_test() -> int:
         if len(moved) != 1 or "done-in-active.md" not in moved[0]:
             problems.append(
                 f"the finished-work gate fired on {moved} instead of only done-in-active.md"
+            )
+        # ``pending_review`` is the mirror image: legal in the active tree (the review has not
+        # happened), drift in the closed one (the move is the verdict). One gate, one direction,
+        # one fixture on each side -- so a fixture that stops being blamed is as visible as one
+        # that stops firing.
+        unreviewed = [p for p in detected if "is unverified work sitting in the closed tree" in p]
+        if len(unreviewed) != 1 or "closed-pending-review.md" not in unreviewed[0]:
+            problems.append(
+                f"the unverified-close gate fired on {unreviewed} instead of only "
+                "closed-pending-review.md"
+            )
+        if any("pending-review.md" in p for p in detected if "closed-pending-review.md" not in p):
+            problems.append(
+                "an item awaiting review was blamed while it sits in work/active/, where the "
+                "status is the point"
+            )
+        # The status has to be reachable from the list, and the fixture's id, title and scope
+        # carry none of the needle: if this passes without the status being matched, the status
+        # is one nobody can ask for.
+        listed = _list_lines(items, "pending_review")[1:]
+        if len(listed) != 1 or "pending-review  [pending_review]" not in listed[0]:
+            problems.append(
+                f"`--list pending_review` printed {listed} instead of the one item awaiting review"
             )
         if not detected:
             problems.append("nothing was flagged at all: the fixture tree is not being read")
@@ -687,7 +750,7 @@ def self_test() -> int:
     for problem in problems:
         print(f"  FALSIFIER: {problem}")
     print(
-        "WORK_DOCS_SELF_TEST_OK (15 item + 3 record + 3 pointer fixtures)"
+        "WORK_DOCS_SELF_TEST_OK (17 item + 3 record + 3 pointer fixtures)"
         if not problems
         else f"WORK_DOCS_SELF_TEST_DRIFT ({len(problems)})"
     )
