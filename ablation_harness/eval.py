@@ -737,6 +737,13 @@ def _persist(result: dict, segments: list, recovery: dict | None, run_id: str, t
     # directory keyed by the protocol FILE stem (stable); the display name stays in the JSON.
     # --group adds a campaign folder that owns both the run dirs and its summary.csv
     out_dir = _run_dir(run_id)
+    # One capture, two files (2026-10-10). ``rec["runtime"]`` was filled before the rollout and this
+    # dict is built after it, so reading HEAD again here let one run carry two revisions when a commit
+    # landed mid-run -- measured on 2 of 17 stored record/eval pairs
+    # (acceptance/records/2026-10-10-record-format-live-checks.md). The record's capture is the one
+    # both files use.
+    result["git_rev_lizard"] = rec["runtime"]["git_rev_lizard"]
+    result["git_rev_isaaclab"] = rec["runtime"]["git_rev_isaaclab"]
     rec["run"]["timestamp"] = result["timestamp"]
     _guard_writes(out_dir, rec, run_id)
     out_dir.mkdir(parents=True, exist_ok=True)

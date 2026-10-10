@@ -698,6 +698,91 @@ def test_the_sweep_launches_from_the_repo_and_runs_isaaclab_as_cwd():
         "the log directory must be found in the IsaacLab tree, not beside the harness"
 
 
+#: The pairs written before the fix (``eval.py`` read HEAD into the result *after* the rollout, so a
+#: commit landing mid-run left the two files of one run disagreeing). Each entry names the
+#: disagreement itself, so re-running one of those runs makes the entry stale and this gate says to
+#: drop it rather than letting an old exception quietly cover a new mismatch.
+_PRE_FIX_REV_PAIRS = {
+    "locomotion_eval_v3/livecheck/Lizard2-Flat-v3_live_nominal_seed123_ckpt3000": {
+        "git_rev_lizard": ("0f4b2bf5317a", "ee1fc367cba8"),
+    },
+    "locomotion_eval_v3/runtime-acceptance/Lizard2-Flat-v3_v3ckpt5999_nominal_seed123": {
+        "git_rev_lizard": ("0f4b2bf5317a", "e4d1ac7d0a04"),
+    },
+}
+_RESULTS = _REPO / "ablation_harness" / "results"
+_REV_FIELDS = ("git_rev_lizard", "git_rev_isaaclab")
+
+
+def one_run_one_revision(results: pathlib.Path, exceptions: dict[str, dict[str, tuple[str, str]]]) -> list[str]:
+    """Mismatched revisions between a run's record and its result, plus the exceptions gone stale.
+
+    One run is one measurement, so its two files have to name one revision of each tree. Reading the
+    pairs off disk covers the artifacts the write side produced, which a fixture over the writer
+    cannot: the divergence was in the two files, and no single call returns both.
+
+    Args:
+        results: the harness' results root.
+        exceptions: run key -> field -> the (record, result) pair that was already wrong when the fix
+            landed.
+
+    Returns:
+        One message per mismatch, and one per exception that is no longer needed.
+    """
+    problems: list[str] = []
+    for record_path in sorted(results.glob("**/record.json")):
+        result_path = record_path.with_name("eval.json")
+        if not result_path.is_file():
+            continue
+        record_json = json.loads(record_path.read_text(encoding="utf-8"))
+        result_json = json.loads(result_path.read_text(encoding="utf-8"))
+        recorded = record_json.get("runtime") or {}
+        key = record_path.parent.relative_to(results).as_posix()
+        for field in _REV_FIELDS:
+            pair = (recorded.get(field), result_json.get(field))
+            known = (exceptions.get(key) or {}).get(field)
+            if pair[0] == pair[1]:
+                if known is not None:
+                    problems.append(f"{key}: {field} now agrees ({pair[0]}) -- drop its exception")
+                continue
+            if known != pair:
+                problems.append(f"{key}: {field} record {pair[0]} != result {pair[1]}")
+    return problems
+
+
+def test_one_run_names_one_revision() -> None:
+    """A run's record and its result must name the same code; the stored pairs are the control.
+
+    The guard bites on the two pairs written before the fix (asserted below without the exceptions),
+    and passes with them declared. A run re-run after the fix leaves its exception unused, and that
+    is reported as a problem rather than ignored -- an exception nobody needs is how the next
+    mismatch gets covered up.
+    """
+    unguarded = one_run_one_revision(_RESULTS, {})
+    assert len(unguarded) == len(_PRE_FIX_REV_PAIRS), \
+        f"the stored pairs must hold exactly the disagreements the table names: {unguarded}"
+    for key, fields in _PRE_FIX_REV_PAIRS.items():
+        assert any(message.startswith(key) for message in unguarded), \
+            f"{key} is the pair this guard is for, and it has to be caught by reading disk: {unguarded}"
+    with tempfile.TemporaryDirectory() as scratch:
+        run = pathlib.Path(scratch) / "locomotion_eval_v3" / "group" / "a_run"
+        run.mkdir(parents=True)
+        (run / "record.json").write_text(json.dumps({"runtime": {"git_rev_lizard": "aa"}}), encoding="utf-8")
+        (run / "eval.json").write_text(json.dumps({"git_rev_lizard": "aa"}), encoding="utf-8")
+        assert one_run_one_revision(pathlib.Path(scratch), {}) == [], "two files that agree are not a finding"
+        (run / "eval.json").write_text(json.dumps({"git_rev_lizard": "bb"}), encoding="utf-8")
+        assert one_run_one_revision(pathlib.Path(scratch), {}) == [
+            "locomotion_eval_v3/group/a_run: git_rev_lizard record aa != result bb"
+        ], "a revision re-read after the rollout is exactly this shape"
+        (run / "eval.json").write_text(json.dumps({"git_rev_lizard": "aa"}), encoding="utf-8")
+        stale = {"locomotion_eval_v3/group/a_run": {"git_rev_lizard": ("zz", "zz")}}
+        assert one_run_one_revision(pathlib.Path(scratch), stale) == [
+            "locomotion_eval_v3/group/a_run: git_rev_lizard now agrees (aa) -- drop its exception"
+        ], "an exception whose disagreement is gone has to be reported"
+    assert one_run_one_revision(_RESULTS, _PRE_FIX_REV_PAIRS) == [], \
+        "with the pre-fix pairs declared, the stored runs must read clean"
+
+
 def _main() -> None:
     tests = [fn for name, fn in sorted(globals().items()) if name.startswith("test_") and callable(fn)]
     for fn in tests:
