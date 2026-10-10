@@ -113,8 +113,11 @@ def _run_eval(run: dict, checkpoint: pathlib.Path, iteration: int, mode: str, ar
     if out_json.exists():
         print(f"[ABLATION] eval exists, skip: {run_id}", flush=True)
         return True
+    # by absolute path, not "ablation_harness/eval.py": the subprocess runs with cwd=IsaacLab,
+    # where the harness was only reachable through the retired E:\IsaacLab junction. eval.py
+    # locates its own results root, so no other part of the command depends on cwd.
     cmd = [
-        args_cli.python, "ablation_harness/eval.py",
+        args_cli.python, str(_HARNESS_DIR / "eval.py"),
         "--task", task, "--checkpoint", str(checkpoint),
         "--protocol", protocol, "--mode", mode,
         "--seed", str(run.get("eval_seed", 123)), "--tag", eval_tag,
