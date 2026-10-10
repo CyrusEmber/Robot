@@ -24,6 +24,13 @@ tilt is about x" is a fact you read there, not one you infer from two slider pos
 Sliders are clamped to the URDF limits by default; the ``limits`` button lifts them in memory only --
 nothing on disk is touched -- and every joint outside its limit is called out on the readout line.
 
+The view is yours to keep. Left or middle drag rotates the whole scene -- the axes box and its ticks
+*are* the coordinate system here, so they turn with it -- and the right button zooms. There is no
+pan: matplotlib's 3D pan moves the data limits, which slides the model inside a fixed frame and
+reads as "the coordinate system did not move". Both the angles and the zoomed box survive a redraw
+(a slider move, ``reset``, ``save``): ``draw`` reads them back off the axes, because ``Axes3D.clear``
+drops the data limits and this file used to reset the angles as well.
+
 Run it from the repo root, with the IsaacLab env's python -- the repo tree does not live inside the
 IsaacLab install, and the host interpreter has no matplotlib:
 
@@ -35,7 +42,8 @@ Any cwd works in module form, because the venv's ``rl_exp.pth`` points at the re
     <ROOT>\\env_isaaclab\\Scripts\\python.exe -m rl_exp.tools.diagnose.pose_slider
 
 ``--self-check`` runs headless under either interpreter: it defers to the FK module's caliber check
-and adds the two things this file owns -- the clamp and the pose round trip through JSON.
+and adds what this file owns -- the clamp, the pose round trip through JSON, and, where matplotlib is
+present, the view a redraw has to hand back. Without matplotlib that last one says it was skipped.
 """
 
 import argparse
@@ -69,6 +77,33 @@ from rl_exp.tools.verify.check_leg_reachability import (  # noqa: E402
 #: pad clearance through the wrong body.
 DEFAULT_BASE_Z = 0.9253
 COLORS = {"lf": "tab:blue", "rf": "tab:orange", "rl": "tab:green", "rr": "tab:red"}
+
+#: The view the tool opens with: the two angles and the box it draws in [m]. Once the figure is up
+#: this is only the first frame -- after that the user's own view is carried across every redraw.
+VIEW = {"elev": 18.0, "azim": -62.0, "roll": 0.0,
+        "xlim": (-0.9, 0.9), "ylim": (-0.9, 0.9), "zlim": (-1.15, 0.15)}
+
+
+def view_state(axes) -> dict:
+    """The view as the axes hold it right now: the angles plus the box a redraw has to give back."""
+    return {"elev": axes.elev, "azim": axes.azim, "roll": axes.roll,
+            "xlim": tuple(axes.get_xlim3d()), "ylim": tuple(axes.get_ylim3d()),
+            "zlim": tuple(axes.get_zlim3d())}
+
+
+def apply_view(axes, state: dict) -> None:
+    """Put a view back on axes whose limits ``Axes3D.clear()`` has reset to (0, 1).
+
+    The limits are the half that does not survive: rotating by hand writes ``elev``/``azim`` on the
+    axes and ``clear`` keeps those, but it drops the data limits, which is where a right-drag zoom
+    lives. ``view_margin=0`` keeps the restore exact if matplotlib ever defaults
+    ``axes3d.automargin`` to True -- it adds the axes' own 1/48 margin on every set (measured: the
+    box drifts 4.17 % per redraw), and today the keyword costs nothing because that rcParam is False.
+    """
+    axes.set_xlim(*state["xlim"], view_margin=0)
+    axes.set_ylim(*state["ylim"], view_margin=0)
+    axes.set_zlim(*state["zlim"], view_margin=0)
+    axes.view_init(elev=state["elev"], azim=state["azim"], roll=state["roll"])
 
 
 def clamp(value: float, bounds: tuple[float, float], free: bool) -> float:
@@ -111,9 +146,45 @@ def read_pose(path: pathlib.Path, fallback_base_z: float) -> tuple[dict, float, 
     return angles, float(saved.get("base_z", fallback_base_z)), bool(saved.get("limits_extended", False))
 
 
-def self_check(urdf: pathlib.Path) -> None:
+def view_self_check(args) -> None:
+    """A redraw hands the user's view back -- run through the real ``build`` and ``draw``, headless.
+
+    Matplotlib is optional here (the host interpreter has none), so without it the check reports
+    that it did not run instead of passing quietly.
+    """
+    try:
+        import matplotlib
+    except ImportError:
+        print("[SELF-CHECK] no matplotlib: the view/redraw check did not run")
+        return
+    matplotlib.use("Agg")
+    axes, redraw = build(argparse.Namespace(**{**vars(args), "backend": "Agg"}), show=False)
+    axes.view_init(elev=33.0, azim=7.0)
+    axes.set_xlim(-0.45, 0.45)
+    axes.set_ylim(-0.45, 0.45)
+    axes.set_zlim(-0.80, -0.20)
+    redraw()  # what a slider move, a reset or a save does
+    held = view_state(axes)
+    assert abs(held["elev"] - 33.0) < 1e-9 and abs(held["azim"] - 7.0) < 1e-9, held
+    assert held["xlim"] == (-0.45, 0.45) and held["zlim"] == (-0.80, -0.20), held
+    # The buttons the window dispatches on: left and middle rotate, nothing pans, the right zooms.
+    buttons = (axes._rotate_btn, axes._pan_btn, axes._zoom_btn)
+    assert buttons == ([1, 2], [], [3]), buttons
+    # And the restore stays exact if matplotlib ever defaults ``axes3d.automargin`` to True, where
+    # each set would add the axes' own margin (measured drift without ``view_margin=0``: 4.17 %).
+    matplotlib.rcParams["axes3d.automargin"] = True
+    redraw()
+    again = view_state(axes)
+    matplotlib.rcParams["axes3d.automargin"] = False
+    assert again["xlim"] == (-0.45, 0.45), again
+    print("[SELF-CHECK] a redraw hands the view back: %.0f/%.0f deg, x in (%.2f, %.2f); "
+          "buttons rotate=%s pan=%s zoom=%s"
+          % (held["elev"], held["azim"], held["xlim"][0], held["xlim"][1], *buttons))
+
+
+def self_check(args) -> None:
     """The FK module's caliber check, plus what this file owns: the clamp and the JSON round trip."""
-    fk_self_check(urdf)
+    fk_self_check(args.urdf)
     bounds = (-0.6, 0.6)
     assert clamp(0.3, bounds, free=False) == 0.3
     assert clamp(-0.9, bounds, free=False) == -0.6 and clamp(0.9, bounds, free=False) == 0.6
@@ -122,14 +193,16 @@ def self_check(urdf: pathlib.Path) -> None:
     import tempfile
     with tempfile.TemporaryDirectory() as folder:
         path = pathlib.Path(folder) / "pose.json"
-        path.write_text(json.dumps(_format_pose(posed, 0.95, True, 20.0, urdf)), encoding="utf-8")
+        path.write_text(json.dumps(_format_pose(posed, 0.95, True, 20.0, args.urdf)), encoding="utf-8")
         back, base_z, free = read_pose(path, DEFAULT_BASE_Z)
     assert back == posed and base_z == 0.95 and free is True, (back, base_z, free)
     print("[SELF-CHECK] FK caliber passes, clamps hold at the limit and release in free mode, "
           "and a saved pose reads back as written")
+    view_self_check(args)
 
 
-def build(args) -> None:
+def build(args, show: bool = True):
+    """The figure. Returns the 3D axes and the redraw, so ``--self-check`` can drive the real thing."""
     import matplotlib
 
     matplotlib.use(args.backend)
@@ -148,12 +221,20 @@ def build(args) -> None:
     if args.load is not None:
         angles, base_z, free = read_pose(args.load, args.base_z)
 
-    state = {"active": None, "note": "", "silent": False}
+    state = {"active": None, "note": "", "silent": False, "drawn": False}
     zero = {leg: pad_state(chains[leg], [0.0] * len(CHAIN), normals[leg], vertices[leg], base_z)["position"]
             for leg in LEGS}
 
     fig = plt.figure(figsize=(16.0, 10.0))
     ax = fig.add_axes([0.02, 0.05, 0.56, 0.76], projection="3d")
+    # Left and middle drag rotate the scene -- the box and its ticks are the coordinate system, so
+    # they turn with it. No pan: 3D pan moves the data limits, which slides the model inside a fixed
+    # frame and reads as "the coordinate system did not move". Zoom stays on the right button.
+    ax.mouse_init(rotate_btn=[1, 2], pan_btn=[], zoom_btn=3)
+    fig.text(0.02, 0.015, "left or middle drag = rotate the view (the x/y/z frame turns with it)   |   "
+                          "right drag = zoom, no pan   |   sliders = pose the joints   |   "
+                          "a slider move keeps the view you set",
+             fontsize=8, family="monospace")
 
     def outside(leg: str) -> list[str]:
         """One leg's joints sitting past their own limits, with the limit spelled out."""
@@ -206,6 +287,8 @@ def build(args) -> None:
         return "\n".join(lines)
 
     def draw(_value=None) -> None:
+        held = view_state(ax) if state["drawn"] else VIEW
+        state["drawn"] = True
         ax.clear()
         floor = -base_z
         for step in range(7):
@@ -240,14 +323,11 @@ def build(args) -> None:
                     [position[2], position[2] + 0.1 * posed["normal"][2]], color="black", lw=1.2)
         ax.plot([p[0] for p in hips] + [hips[0][0]], [p[1] for p in hips] + [hips[0][1]],
                 [p[2] for p in hips] + [hips[0][2]], color="0.3", lw=1.0, ls="--")
-        ax.set_xlim(-0.9, 0.9)
-        ax.set_ylim(-0.9, 0.9)
-        ax.set_zlim(-1.15, 0.15)
         ax.set_box_aspect((1.0, 1.0, 0.85))
         ax.set_xlabel("x [m]")
         ax.set_ylabel("y [m]")
         ax.set_zlabel("z [m]")
-        ax.view_init(elev=18, azim=-62)
+        apply_view(ax, held)
         ax.set_title(caption(), loc="left", fontsize=8, family="monospace", linespacing=1.5)
         for (leg, index), slider in sliders.items():
             low, high = chains[leg][index]["limits"]
@@ -335,7 +415,9 @@ def build(args) -> None:
     button_free.on_clicked(toggle)
 
     draw()
-    plt.show()
+    if show:
+        plt.show()
+    return ax, draw
 
 
 def main() -> None:
@@ -357,7 +439,7 @@ def main() -> None:
     args = parser.parse_args()
     args.margin_rad = math.radians(args.margin_deg)
     if args.self_check:
-        self_check(args.urdf)
+        self_check(args)
         return
     build(args)
 
