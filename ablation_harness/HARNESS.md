@@ -29,7 +29,8 @@
 - **代码基线**：v1.10.0 —— 几何测量的唯一家 `rl_exp/tasks/terrain_geometry.py`；记录格式见下一节。
   **版本纪律**：往 `ablation_harness/` 加模块、或改测量语义 ⇒ minor bump，并打 `harness-vN.M.K` 锚点
   （复现 = `git checkout harness-vN.M.K -- ablation_harness/`；已推的 tag 不改指不改名，内容错了开新
-  版本号，不去改旧的）。v1.9.0 = v1.8.0（判据身份化 + 套件锁 + 同表条件面）加 `video_matrix.py`（见下）。
+  版本号，不去改旧的）。**只写版本号不打 tag = 视同未声明**：号成为锚点，是在远端能 checkout 的那一刻，
+  本机 tag 不算 —— 声明与 tag 是同一笔动作，分开做就有一半会漏。v1.9.0 = v1.8.0（判据身份化 + 套件锁 + 同表条件面）加 `video_matrix.py`（见下）。
   v1.10.0 = v1.9.0 加帧格式 2 与足端判据、定点场景驱动（协议 `scenes` + `components/command_player.py`）、
   汇总侧身份拒表（记录格式节 ④）、帧格式 3 与四条步态形态报告项；逐笔的改动内容与为什么要升版在
   `acceptance/records/2026-09-23-baseline-frames-format-2-foot-reading.md`、同日的
