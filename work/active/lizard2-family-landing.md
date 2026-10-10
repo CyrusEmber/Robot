@@ -13,7 +13,7 @@ evidence: acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, ac
 
 本项消费整体记录 `acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work.md` 的 S5–S6，交付配方、动作接口、驱动接入、新接触评测与训练候选；参考动作、骨骼、完整周期与驱动验证由 `work/active/joint-limit-shape-and-range-pass.md` 统筹。当前版本入口为 `rl_exp/versions/lizard2/PLAN.md`，本轮不建立或采用新版本。版本及资产采用消费 `.codemaker/rules/versioning.mdc` §A/§B。
 
-拖尾与新增掌跖段承重须进入新协议的具名接触分组；允许尾触地不等于放行腹部、头部或异常非足承重。数值依据归 evidence，姿态与驱动方案尚未批准时不先写死奖励。
+拖尾与新增掌跖段承重须进入新协议的具名接触分组；静态趴姿另设场景，需求与接触例外只取整体记录“静态放松趴姿补充”节，不把趴姿例外施加于行走或零速站立。本轮不新增趴姿训练和起卧过渡。数值依据归 evidence，姿态与驱动方案尚未批准时不先写死奖励。
 
 ## 动作接口与奖励待办
 
