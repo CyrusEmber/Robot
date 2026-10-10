@@ -67,8 +67,12 @@ from rl_exp.tools.runrecord import binding  # noqa: E402
 # machine, and `[2]`'s asset locks 4 files here and ~770 there. Re-recorded from the LF form every
 # checkout now produces, which is what makes the freeze portable. The `FROZEN_REVS` entries below
 # still name the revisions the *content* came from: the blobs are the same objects.
+# A fifth one, 2026-10-10: two of the files below moved without a recipe edit -- the shared baselines
+# file gained a combination block and the lizard2 lock re-keyed under it, because `rsl_rl` is now
+# identified by its install origin instead of by the enclosing git tree (per-file reason below, and
+# in acceptance/records/2026-10-10-record-format-live-checks.md). Hard A stayed green across it.
 FROZEN = {
-    "rl_exp/versions/cfg_baselines.json": "af9c01304d3a85f701d4989128b001c82f3a005a6ac2aa1d39e70a8b927606e4",
+    "rl_exp/versions/cfg_baselines.json": "ecec6440cd3415ddd92e6fcfdb1cebe37ebc5891d7f064028111a4cb38923a91",
     "rl_exp/versions/lizard/main/cfg_lock.json": "0af2bfe082ebfdc1ba86129759d6d058f11588857b61f07e10e4e266dc74ea52",
     "rl_exp/versions/lizard/parkour/cfg_lock.json": "350ecdfc6e1b256e81cfde759edc88b739e20e4a42e3c4852c7cbdfe4600edce",
     # Frozen 2026-09-17 at rev ed4d35b, the commit that landed the line: the baseline lock was
@@ -105,7 +109,16 @@ FROZEN = {
     # the two v3 tasks -- `agent.max_iterations: 14000 -> 6000` -- and the other four entries were
     # written untouched, so this is a two-field edit, not a rewrite. Reason, per-field diff and the
     # matching `diff.json`/PLAN revision: acceptance/records/2026-10-09-lizard2-v3-budget-and-calibration.md.
-    "rl_exp/versions/lizard2/main/cfg_lock.json": "90c8f5a22fd52dc6e86c8b2bd8fbedbf2ae5fab56dd6748a592eb0b97d7af80d",
+    #
+    # Re-baselined 2026-10-10 (seventh re-baseline, third on this line, and the first that is not a
+    # recipe edit at all): `provenance.rsl_rl_state` read "the package dir is inside a git tree" as
+    # an editable install, so this venv -- which lives inside the IsaacLab checkout -- reported a
+    # wheel as `source:28a37cecdd43`. It now reads the install's own record (PEP 610) and reports
+    # `installed:5.4.2`, which moved the framework-combination key both files are keyed by. The
+    # `--update` printed "no content change (provenance or format only)" and `check_recipe_build`
+    # stayed green, i.e. the 6 entries are the same snapshots under a new key (6 added, none edited).
+    # Reason, readouts and the independent review: acceptance/records/2026-10-10-record-format-live-checks.md.
+    "rl_exp/versions/lizard2/main/cfg_lock.json": "8b7e7a139500407b866945446e4feeea787d51904a1c96ce53705d030af47cf7",
 }
 
 FROZEN_REVS: dict[str, str] = {

@@ -2,6 +2,18 @@
  "lock_format": 3,
  "note": "framework-combination baselines, shared by every recipe line: a combination is a fact about IsaacLab / rsl_rl / Python, not about any one recipe",
  "baselines": {
+  "isaaclab=28a37cecdd43|rsl_rl=installed:5.4.2|python=3.12.13": {
+   "created_at": "2026-10-10T16:58:51+08:00",
+   "reason": "rsl_rl identity now reads the install origin: the wheel records no direct_url.json, so it is installed:5.4.2 instead of borrowing the enclosing IsaacLab revision. The framework-combination key moves with the identity; no recipe field changed (2026-10-10, acceptance/records/2026-10-10-record-format-live-checks.md)",
+   "created_rev": "10ee2d12926d",
+   "created_dirty": true,
+   "combination": {
+    "isaaclab_rev": "28a37cecdd43",
+    "rsl_rl": "installed:5.4.2",
+    "python": "3.12.13"
+   },
+   "cfg_snapshot_format": 2
+  },
   "isaaclab=28a37cecdd43|rsl_rl=source:28a37cecdd43|python=3.12.13": {
    "created_at": "2026-09-16T10:45:50+08:00",
    "reason": "joint SIR fixes 2026-09-16 (review #1-#5): trust gate (min_episode_frac/require_survive), one-scale estimate + local support (unmeasured_prior), verified frontier, per-type Tr; maintain_mass retired",

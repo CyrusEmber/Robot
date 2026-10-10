@@ -49,6 +49,7 @@
 | 组件库 B1 六片、单写者范围、`_load_params` 收敛 | `acceptance/records/2026-09-16-lizard-component-library-b1.md` |
 | 冻结基线（B0）：锚 / 比较口径 / `[35]` 看守 / 四次合法重锚 / 硬 A 前置 | `acceptance/records/2026-09-16-lizard-frozen-baseline-reanchors.md` |
 | B0 · lizard2 v3 配方黄金新增重锚（旧条目不变；提交归属由主代理回填） | `acceptance/records/2026-10-08-lizard2-v3-landing.md` |
+| B0 · 冻结基线重锚（2026-10-10）：`rsl_rl` 身份改按安装来源判 ⇒ 组合键移动、`cfg_baselines.json` 与 `lizard2/main/cfg_lock.json` 重基线十二条键、无配方字段变化（硬 A 保持绿） | `acceptance/records/2026-10-10-record-format-live-checks.md` |
 | 构建器与硬 A（B3）：机制、按版本元素化、`[41]` 覆盖钉数 / 缺口台账 / 逐步归属 | `acceptance/records/2026-09-16-lizard-builder-hard-a.md` |
 | 硬 B 差异声明：baseline → v14 试点 → main 12 条 → 家族三条、三类作者 | `acceptance/records/2026-09-17-lizard-hard-b-difference-declarations.md` |
 | 声明载体与接线对账、入口切换（C2 机制 / C4）、生命周期收缩、声明缺口清空 | `acceptance/records/2026-09-17-lizard-entry-switch-and-declaration-gap.md` |

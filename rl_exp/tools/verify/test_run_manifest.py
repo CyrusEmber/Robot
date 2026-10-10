@@ -15,6 +15,7 @@ import json
 import os
 import pathlib
 import shutil
+import subprocess
 import sys
 import tempfile
 import types
@@ -171,6 +172,37 @@ def _clean_sources() -> dict:
         "isaaclab": {"available": True, "rev": "bbbb2222", "dirty": False, "diff_sha256": "d", "untracked_in_code_root": []},
         "rsl_rl": {"available": True, "mode": "editable/source", "rev": "bbbb2222", "dirty": False, "diff_sha256": "d", "untracked_in_code_root": []},
     }
+
+
+class _FakeDistribution:
+    """The metadata reads the install-origin lookup makes, and nothing else."""
+
+    def __init__(self, name: str, version: str, *, direct: dict | None = None, top: str | None = "rsl_rl"):
+        self.metadata = {"Name": name}
+        self.version = version
+        self._direct = direct
+        self._top = top
+        self.files = [f"{name}/__init__.py"]
+
+    def read_text(self, filename: str) -> str | None:
+        if filename == "direct_url.json":
+            return json.dumps(self._direct) if self._direct is not None else None
+        if filename == "top_level.txt":
+            return self._top
+        return None
+
+
+def _rsl_rl_probe(origin: pathlib.Path, distributions: list) -> tuple[dict, str]:
+    """``(rsl_rl_state(), rsl_rl_id())`` against a fabricated box, restored afterwards."""
+    real = prov.importlib
+    prov.importlib = types.SimpleNamespace(
+        util=types.SimpleNamespace(find_spec=lambda name: types.SimpleNamespace(origin=str(origin))),
+        metadata=types.SimpleNamespace(distributions=lambda: list(distributions)),
+    )
+    try:
+        return prov.rsl_rl_state(), prov.rsl_rl_id()
+    finally:
+        prov.importlib = real
 
 
 def main() -> int:
@@ -542,6 +574,59 @@ def main() -> int:
                                                                           ["a/b.yaml", "docs/"]),
             f"{prov.split_prose(['a/b.md', 'a/b.MD', 'a/b.yaml', 'docs/'])}",
         )
+        # --- rsl_rl identity: the install's own record decides, not the enclosing tree -------------
+        # Measured 2026-10-10 (acceptance/records/2026-10-10-record-format-live-checks.md): this
+        # venv lives inside the IsaacLab checkout, `source/rsl_rl` does not exist and the wheel
+        # records no install origin -- so "the package dir is in a git tree" named an IsaacLab
+        # revision as the rsl_rl the eval record had loaded. Three shapes have to stay apart.
+        site = root / "site-packages"
+        (site / "rsl_rl").mkdir(parents=True)
+        (site / "rsl_rl" / "__init__.py").write_text("", encoding="utf-8")
+        subprocess.run(["git", "init", "-q", str(site)], capture_output=True, check=False)
+        installed, installed_id = _rsl_rl_probe(
+            site / "rsl_rl" / "__init__.py", [_FakeDistribution("rsl-rl-lib", "5.4.2")]
+        )
+        check(
+            "rsl_rl/a-wheel-in-a-git-tree-is-installed",
+            installed.get("mode") == "installed" and installed.get("distribution_version") == "5.4.2"
+            and "rev" not in installed,
+            f"a distribution that recorded no origin must not borrow the enclosing tree's revision: {installed}",
+        )
+        check(
+            "rsl_rl/the-distribution-name-need-not-match-the-import",
+            installed_id == "installed:5.4.2",
+            f"the module imports as rsl_rl while the distribution is rsl-rl-lib: {installed_id}",
+        )
+        checkout = root / "editable-checkout"
+        (checkout / "rsl_rl").mkdir(parents=True)
+        (checkout / "rsl_rl" / "__init__.py").write_text("", encoding="utf-8")
+        subprocess.run(["git", "init", "-q", str(checkout)], capture_output=True, check=False)
+        editable, editable_id = _rsl_rl_probe(
+            checkout / "rsl_rl" / "__init__.py",
+            [_FakeDistribution("rsl-rl-lib", "9.9.9",
+                               direct={"url": checkout.as_uri(), "dir_info": {"editable": True}})],
+        )
+        check(
+            "rsl_rl/an-editable-install-is-its-source-tree",
+            editable.get("mode") == "editable/source" and "distribution_version" not in editable,
+            f"a recorded editable install is the tree it points at, not a version: {editable}",
+        )
+        check(
+            "rsl_rl/an-editable-install-names-its-tree",
+            editable.get("package_dir") == prov.relativize(str(checkout)),
+            f"the state has to name the source the record points at: {editable.get('package_dir')}",
+        )
+        on_path = root / "import-path-checkout"
+        (on_path / "rsl_rl").mkdir(parents=True)
+        (on_path / "rsl_rl" / "__init__.py").write_text("", encoding="utf-8")
+        subprocess.run(["git", "init", "-q", str(on_path)], capture_output=True, check=False)
+        plain, _ = _rsl_rl_probe(on_path / "rsl_rl" / "__init__.py", [])
+        check(
+            "rsl_rl/a-checkout-on-the-import-path-is-a-source-install",
+            plain.get("mode") == "editable/source",
+            f"nothing on the box accounts for it and it is not in site-packages: {plain}",
+        )
+
     finally:
         prov.code_sources = real_sources
         shutil.rmtree(root, ignore_errors=True)

@@ -19,11 +19,15 @@ across machines.
 
 from __future__ import annotations
 
+import importlib.metadata
 import importlib.util
+import json
 import os
 import pathlib
 import sys
 from datetime import datetime
+from urllib.parse import urlsplit
+from urllib.request import url2pathname
 
 _REPO = pathlib.Path(__file__).resolve().parents[3]
 if str(_REPO) not in sys.path:
@@ -182,27 +186,122 @@ def isaac_root() -> pathlib.Path | None:
         return None
 
 
-def rsl_rl_state() -> dict:
-    """rsl_rl provenance: source tree when editable, distribution version when installed."""
-    try:
-        spec = importlib.util.find_spec("rsl_rl")
-    except (ImportError, ValueError):
-        spec = None
-    origin = getattr(spec, "origin", None) if spec is not None else None
-    if origin:
-        package_dir = pathlib.Path(origin).resolve().parent
-        tree = git(package_dir, "rev-parse", "--show-toplevel")
-        if tree:
-            state = git_state(pathlib.Path(tree), "rsl_rl", code_root=package_dir)
-            state["mode"] = "editable/source"
-            state["package_dir"] = relativize(str(package_dir))
-            return state
-    try:
-        from importlib.metadata import version
+_SITE_DIRS = ("site-packages", "dist-packages")
 
-        return {"available": True, "mode": "installed", "distribution_version": version("rsl_rl")}
-    except Exception as err:  # noqa: BLE001 - record the gap, never crash a run
-        return {"available": False, "detail": f"{type(err).__name__}: {err}"}
+
+def _module_origin(module: str) -> pathlib.Path | None:
+    """The file a top-level module resolves to, or None when it is not importable."""
+    try:
+        spec = importlib.util.find_spec(module)
+    except (ImportError, ValueError):
+        return None
+    origin = getattr(spec, "origin", None) if spec is not None else None
+    return pathlib.Path(origin).resolve() if origin else None
+
+
+def _direct_url(distribution) -> dict | None:
+    """The install origin a distribution recorded, or None when it recorded none.
+
+    PEP 610: an install from a directory, an archive or a VCS gets this file next to its metadata,
+    and an editable one carries ``dir_info.editable``. A wheel taken from an index has none, so
+    "absent" means the origin is not recorded -- not that the install has none.
+    """
+    raw = distribution.read_text("direct_url.json")
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except ValueError:
+        return None
+
+
+def _editable_source(direct_url: dict | None) -> pathlib.Path | None:
+    """The directory an editable install points at, or None when the install is not editable."""
+    if not (direct_url or {}).get("dir_info", {}).get("editable"):
+        return None
+    url = (direct_url or {}).get("url") or ""
+    if not url.startswith("file:"):
+        return None
+    return pathlib.Path(url2pathname(urlsplit(url).path))
+
+
+def _in_site_packages(origin: pathlib.Path) -> bool:
+    """Is this file inside an install directory rather than a checkout on the import path?"""
+    return any(part.lower() in _SITE_DIRS for part in origin.parts)
+
+
+def _owning_distribution(module: str, origin: pathlib.Path):
+    """``(distribution, its recorded origin, its editable source)`` for the imported ``origin``.
+
+    Ownership is read off the distribution's own metadata (``top_level.txt``, or its file list when
+    that is absent), and an editable install is matched by *path*: the source its record points at
+    has to be the file that got imported, or it is not the install that ran.
+
+    A loop rather than ``importlib.metadata.packages_distributions``: that builds the mapping for
+    every distribution on the box and measured 4.3 s here (237 distributions), while two metadata
+    reads per distribution cost 0.2 s -- and this runs once per process.
+    """
+    for distribution in importlib.metadata.distributions():
+        direct = _direct_url(distribution)
+        source = _editable_source(direct)
+        if source is not None:
+            if (source / module / "__init__.py").resolve() == origin:
+                return distribution, direct, source
+            continue
+        top = (distribution.read_text("top_level.txt") or "").split()
+        if module in top:
+            return distribution, direct, None
+        if not top and any(
+            str(part).replace("\\", "/") == f"{module}/__init__.py" for part in distribution.files or ()
+        ):
+            return distribution, direct, None
+    return None, None, None
+
+
+def rsl_rl_state() -> dict:
+    """rsl_rl provenance: an editable install is the tree it points at, anything else a distribution.
+
+    "Is it editable" is answered by the install's own record (PEP 610 ``direct_url.json``), not by
+    where the package directory happens to sit: this venv lives *inside* the IsaacLab checkout, so
+    "the package dir is in a git tree" read a wheel as a source install and named an IsaacLab
+    revision as the rsl_rl a run had loaded (measured 2026-10-10,
+    ``acceptance/records/2026-10-10-record-format-live-checks.md``). An install whose origin was not
+    recorded is identified by its version and nothing else, and says so -- borrowing the enclosing
+    tree's revision is what made that identity unfalsifiable.
+
+    Ceiling: two wheels of one version read as one identity here; the state carries the distribution
+    name and the directory it was unpacked to, so a reader can see that is the case.
+    """
+    origin = _module_origin("rsl_rl")
+    if origin is None:
+        return {"available": False, "detail": "rsl_rl is not importable"}
+    distribution, direct, source = _owning_distribution("rsl_rl", origin)
+    if source is None and not _in_site_packages(origin):
+        # Nothing accounts for the file, or a distribution accounts for it without recording an
+        # origin: either way what ran is the checkout the file sits in (PYTHONPATH, `setup.py
+        # develop`), and a venv inside a repo is excluded by the site-packages test above.
+        source = origin.parent
+    if source is not None:
+        tree = git(source, "rev-parse", "--show-toplevel")
+        if tree:
+            state = git_state(pathlib.Path(tree), "rsl_rl", code_root=source)
+            state["mode"] = "editable/source"
+            state["package_dir"] = relativize(str(source))
+            return state
+    if distribution is not None:
+        state = {
+            "available": True,
+            "mode": "installed",
+            "distribution": distribution.metadata["Name"],
+            "distribution_version": distribution.version,
+            "origin": relativize(str(origin.parent)),
+        }
+        if direct is not None:
+            state["direct_url"] = direct
+        else:
+            state["detail"] = "no direct_url.json: the wheel recorded no origin, so its version is the identity"
+        return state
+    return {"available": False, "detail": f"nothing on this box accounts for {origin}"}
 
 
 def rsl_rl_id() -> str:
