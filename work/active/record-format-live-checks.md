@@ -2,23 +2,22 @@
 id: record-format-live-checks
 title: 记录格式的剩余真跑段（HARNESS 挂账 #2 的未做半）
 scope: ablation_harness
-status: open
+status: blocked
 landing: ablation_harness/record.py, ablation_harness/eval.py
-next: 三件真跑核对：① 写侧 `substitutions` 与 `runtime.rsl_rl_id` —— 按训练记录的 `mode` 重建同一身份再比（`rsl_rl_id` 是 `source:<rev>`/`installed:<ver>`，训练侧存的是裸 rev ⇒ 不能直接相等），顺带核变体 run 的取值与 `unknown` + pre-format reason；② `num_envs` 声明值与实际值不同的格子；③ 资产 **fail** 路径真跑 —— **待决**：造 fail 要改冻结资产（越界），授权方式定了才做
-close_when: 执行者跑 ①② 并观察记录内容：① 同一 run 身份重建后两处取值一致 ⇒ 记"已核到行为"，不一致则记差异并指出是哪一侧的字段口径；② 声明与实际分列且不相等时两列都出现 ⇒ 成立，若某侧缺失则报记录不完整；③ 授权确定后同法核对。三件都写出观测结果即关；③ 若授权仍无结论，把它拆出去单列，本项只关 ①②
+evidence: acceptance/records/2026-10-10-record-format-live-checks
+next: 真跑段等窗口：① `--variant` 跑两次 —— base 换 ckpt ⇒ `substitutions` 落成已证类目；base 是只有 `eval.json` 的 pre-format 目录 ⇒ `comparison=unknown` 加该 reason；同一次真跑里核 `runtime.rsl_rl_id` 的写侧落值；② 同一批真跑读 `num_envs` / `num_envs_declared` 两列。前置机器条件：`lizard2_v3` 训练退出、GPU 空出（或用户另给窗口）—— 2026-10-10 用户定"先不跑，只写发现"，跑法与判据见证据记录
+close_when: ① 同一 run 身份按训练记录的 `mode` 重建后两处取值一致 ⇒ 记"已核到行为"，不一致 ⇒ 记差异并指出是哪一侧的字段口径；② 声明与实际分列、不相等时两列都出现 ⇒ 成立，某侧缺失 ⇒ 报记录不完整。两条都写出观测即关
 ---
 
 ## 当前状态
 
-已完成（真跑 + 逐位对照）：同 seed 无记录重复的 A/A 臂、一次真实 run 落全六类、P04 四项替换与
-拒绝路径各一次；证据在 `rl_exp/versions/lizard/ACCEPTANCE.md` §3.2。**未做**见 `next`。
-
-## 待决项（不自行决定）
-
-资产 fail 路径需要一条"能 fail 的资产"：动冻结资产越界。**授权方式**（临时副本 / 冻结资产的一次性例外 /
-改用合成摘要）由人定；在定之前本项的 ③ 不做，也不许把 ①② 的通过读成"记录格式已全部真跑"。
+离线可做的那半已核完（身份重建两处对照 / `baseline_evidence` 在真实记录与真实 pre-format 目录上的两个
+分支 / `num_envs` 两列同源），读数、复读命令与判据归 `acceptance/records/2026-10-10-record-format-live-checks.md`
+—— **真跑段仍未做**。资产 fail 路径已拆为 `work/active/asset-fail-path-live-check.md`（2026-10-10 用户定：
+③ 单列，本项只关 ①②）。
 
 ## 未覆盖边界
 
-本项不含协议版本切换的对照（见 `runtime-acceptance-v3`），也不改 `record.py` 的规则
-（记录格式的读侧/写侧语义归 `record.py` 与 `test_eval_record.py`）。
+真跑段整段未做 ⇒ **不得**据既有读数称"记录格式已全部真跑"。本项不含协议版本切换的对照
+（见 `runtime-acceptance-v3`），也不改 `record.py` 的规则（记录格式的读侧/写侧语义归 `record.py`
+与 `test_eval_record.py`）。
