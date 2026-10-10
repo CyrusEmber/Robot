@@ -4,8 +4,9 @@ title: lizard2 配方、动作接口与评测协议交付
 scope: rl_exp/versions/lizard2, rl_exp/tasks, rl_exp/tools/pipeline, rl_exp/tools/verify, ablation_harness
 status: open
 landing: rl_exp/versions/lizard2/main/main_params.yaml, rl_exp/tasks/lizard2_recipe.py, rl_exp/tools/pipeline/emit_diff_declaration.py, rl_exp/tools/verify/check_recipe_build.py
-next: 消费 joint-limit-shape-and-range-pass 的整体记录 S5–S6：设计批准后交付腕踝动作与驱动、必要最小奖励、有效限速和下一版本接入；新评测区分足部承重、允许尾部接触与禁止腹/头等异常承重，补固定场景及阈值标定。已有 v3 入口、分桶、限速和载荷对照只按 evidence 取用，不把旧判决当新步态验收；承重口径与部署端参考处理继续核对。本轮只同步 work，不改配方、协议或启动训练。
-close_when: 获准设计的动作、驱动、奖励、限速和版本决定进入 PLAN、参数与差异声明，或逐项明确不采用；新接触协议与 reader 绑定、阈值和固定场景有标定证据，训练候选完成构建及冻结前检查。执行者置 pending_review，新上下文对照 S5–S6、落点和原始证据审核；用户确认选择及训练工况。未完设计留父事项，不以旧 v3 判决或最小自检关闭。
+next: 按正文 S5 先整理新配方与协议的机制落点；参数/目标采用须消费 lizard2-s3-drive-load、lizard2-s4-trunk-tail 的已审交付，未通过不冻结。S5 条件齐备后再执行 S6 正式采用、预检、用户确认预算和训练验收；当前仅拆分 work，不改机体或启动训练。
+close_when: 新上下文对照 S5/S6 检查已审设计接入、新接触协议及标定、正式机体采用与版本证据、用户批准工况下的实际训练评测和目视验收，或明确不采用；执行者先置 pending_review。未完 S6 不能随 S5 配方构建关闭；预算未批准或设计未判定继续在办，旧 v3 判决不替代本项。
+depends_on: lizard2-s3-drive-load, lizard2-s4-trunk-tail
 evidence: acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, acceptance/records/2026-09-23-lizard2-v1-gait-skate, acceptance/records/2026-09-29-lizard2-v2-eval, acceptance/records/2026-10-08-lizard2-v3-landing, acceptance/records/2026-10-09-lizard2-limit-requirement-and-status-sync, acceptance/records/2026-10-09-lizard2-v3-eval-entry-and-inert-velocity-field, acceptance/records/2026-10-09-lizard2-v3-pretrain-sanity, acceptance/records/2026-10-10-lizard2-v3-first-eval, acceptance/records/2026-10-10-lizard2-v3-band-buckets, acceptance/records/2026-10-10-lizard2-v3-joint-velocity-limits, acceptance/records/2026-10-10-lizard2-carrier-dwell-calibration
 ---
 
@@ -14,6 +15,25 @@ evidence: acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, ac
 本项消费整体记录 `acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work.md` 的 S5–S6，交付配方、动作接口、驱动接入、新接触评测与训练候选；参考动作、骨骼、完整周期与驱动验证由 `work/active/joint-limit-shape-and-range-pass.md` 统筹。当前版本入口为 `rl_exp/versions/lizard2/PLAN.md`，本轮不建立或采用新版本。版本及资产采用消费 `.codemaker/rules/versioning.mdc` §A/§B。
 
 拖尾与新增掌跖段承重须进入新协议的具名接触分组；静态趴姿另设场景，需求与接触例外只取整体记录“静态放松趴姿补充”节，不把趴姿例外施加于行走或零速站立。本轮不新增趴姿训练和起卧过渡。数值依据归 evidence，姿态与驱动方案尚未批准时不先写死奖励。
+
+## S5 直接执行：配方与评测接入
+
+1. 先核对 S3/S4 的真实审核记录、S0 工况及 S2 姿态/轨迹；未定目标仅可整理机制落点，不可直接采用。核对部署端对限位外位置参考的实际行为，区分物理禁区与动作裁剪。
+2. 按版本机制准备未冻结下一版本 PLAN/参数与差异声明，接入获准的腕踝动作、趾根驱动、足/掌承重分组和必要的有效限速；复用现有注册/执行器机制，不改已发布 term 或 v3 参数。驱动与奖励数值归版本配置，理由和依据归对应记录。
+3. 统一奖励和诊断的承重口径，只在证据支持时采用最小滑移/净空/姿态或协同项；不要把奖励当反曲、翻掌和碰撞安全的硬保证。
+4. 发布具名新接触评测与标定样本：行走、零速站立与静态趴姿显式分场景，允许尾触地与异常主承重分别判；检查报告、reader、协议与锚点绑定，旧协议不改写。具体待核口径见后面的“评测协议交付”。
+5. 运行配方构建、注册/obs/action 对表、驱动单测及相关离线闸门；形成 S5 新记录并请新上下文审核候选接入和协议。全部产物能被复读后才允许进入 S6，S5 通过不关闭本项。
+
+S5 交付为未冻结候选版本的实际路径、配置/协议/测试及 `acceptance/records/<日期>-lizard2-s5-recipe-eval.md`；记录存在后才加入 evidence。需要回改骨骼或目标时交相应子项，受影响证据重新审核。
+
+## S6 直接执行：正式采用、预检与训练验收
+
+1. 取得 S5 已审交付及用户正式机体采用决定，按 `.codemaker/rules/versioning.mdc` §A 完成资产采用、冻结版本退休及版本身份；不覆盖或解冻已训 v3，不刷新旧资产锁。正式管线核验交 `asset-tree-per-family`，不能以候选转换成功替代。
+2. 跑当前版本的离线套件、驱动读回、静站/趴姿承重检查、地形预检及 GUI 目视，绑定同一机体和配方。产物和判定写 S6 记录；红项先修复，不开训。
+3. 向用户展示训练预算、工况、启动/评测命令与验收依据并确认。用户仅授权拆 work 不等于授权本步开训；预算或关键条件未批准置 blocked，保持可接手。
+4. 按版本机制冻结并启动用户批准训练，记录实际 run、manifest/checkpoint 与偏离；检查工作树和启动协议，不能在缺锚状态假称可复现。
+5. 固定具名新协议评测实际 checkpoint，并分别检验速度/存活、行走形态、承重滑移、躯干拖尾和静态趴姿。静态趴姿可复用诊断初始化，不新增趴姿训练任务或起卧过渡；用户检查预览。训练通过不自动代替姿势验收。
+6. 回填 NOTES 的 run/报告指针与一句判定，所有数值结论进 `acceptance/records/<日期>-lizard2-s6-adoption-training.md`；执行者置 pending_review，新上下文按 close_when 审核。失败修复或明确拒绝，未完成动作不得以预算耗尽关闭。
 
 ## 动作接口与奖励待办
 
