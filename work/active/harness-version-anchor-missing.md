@@ -1,28 +1,30 @@
 ---
 id: harness-version-anchor-missing
-title: harness v1.9.0 没有锚点：加模块那笔没有声明版本
+title: harness 代码基线缺锚点：加模块那笔没声明版本，v1.10.0 一并补齐
 scope: ablation_harness
-status: open
+status: pending_review
 landing: ablation_harness/HARNESS.md
-next: 补一次版本声明并打锚点 —— 声明提交按仓规写成 `harness-v1.9.0: ...`，随后 `git tag harness-v1.9.0 <该提交>` 且 `git push origin harness-v1.9.0`（tag 用轻量形态，先例取 `lizard2-main-v1.5`；原先例的裸标签 `lizard2-main-v1` 已于 2026-09-22 删除，因为它指的那笔提交里配方还没出现——名字与状态对不上）。锚点该指"记录该版本的那笔"，而不是随机某一笔。**2026-09-29 追加**：本项之后又落了一笔改**测量语义**的改动（新帧格式 `baseline-frames-3` + 四条报告项），按版本纪律也是 minor ⇒ 声明与锚点的编号必须是 **≥ `harness-v1.10.0`**，`HARNESS.md` 的「代码基线」这一行要随之一并改，不是继续补 v1.9.0。具体是哪些改动、为什么算语义变更见 `acceptance/records/2026-09-29-gait-shape-in-the-eval-flow.md`。
-close_when: `git ls-remote --tags origin` 里出现 `harness-v1.9.0`，且它指向的那笔提交的主题是这次版本声明；`HARNESS.md` 的「代码基线」与之一致
+next: 由新上下文审（不带本次执笔会话的历史）：跑 `git ls-remote --tags origin` 看两个锚点是否都在 origin 上、各指向哪笔（本地只有 tag 不算锚点）；对着它读 `close_when`、`HARNESS.md` 的「代码基线」段、以及那段列的四份 `acceptance/records/` 记录，判编号是否够（v1.9.0 之后是否还有改测量语义的改动被漏编）。成立则关闭并把读数落一份 `acceptance/records/` 记录；tag 缺失或编号不够则退回 in_progress。
+close_when: `git ls-remote --tags origin` 里同时有 `harness-v1.9.0` 与 `harness-v1.10.0`；前者指向 `0c3ec25`（主题以该版本号开头，即声明该版本的那笔），后者指向本次声明提交（主题同样以版本号开头）；`HARNESS.md` 的「代码基线」为 v1.10.0、再无敞口段、其中列的记录路径都存在。全部成立 ⇒ done；缺锚点、锚点指向的不是版本声明那笔、或「代码基线」与锚点对不上 ⇒ 退回 in_progress。
 ---
 
 ## 情况
 
-`HARNESS.md` 的「代码基线」已写到 v1.9.0（v1.8.0 的判据身份化/套件锁/同表条件面，加 `video_matrix.py`），
-但**只有 v1.8.0 打了 `harness-v1.8.0` 锚点**：加 `video_matrix.py` 那笔提交 `9dcbf12` 的主题是另一个
-家族的冻结，没有声明 harness 版本，因此 v1.9.0 这一刻没有锚点可 checkout。
+`HARNESS.md` 的「代码基线」随本次声明写到 v1.10.0，两个锚点成对落：
 
-按 `HARNESS.md` 的版本纪律，往 `ablation_harness/` 加模块是 minor 新增、应同时落"版本声明 + tag"；
-这一件只补那两样，不改任何测量语义。
+- `harness-v1.9.0` → 提交 `0c3ec25`（主题 `harness-v1.9.0: declare the version, log the anchor it needs`）。
+  它把基线从 v1.8.0 改到 v1.9.0 并写下版本纪律，但当时没打 tag —— 加 `video_matrix.py` 那笔 `9dcbf12`
+  的主题是另一个家族的冻结，没有声明 harness 版本，所以 v1.9.0 从落地起就没有锚点。
+- `harness-v1.10.0` → 本次声明提交。覆盖 v1.9.0 之后改测量语义的三笔（帧格式 2 与足端判据、定点场景驱动、
+  帧格式 3 与四条步态形态报告项）加汇总侧身份拒表（记录格式节 ④）；逐笔的改动内容与升版理由在
+  `HARNESS.md`「代码基线」段列的四份 `acceptance/records/` 记录里。
 
-同一敞口下另有三笔未编号的改动（2026-09-23，同一天落地，编号一并定）：帧格式 2 与足端读数
-（`baseline_frames` / `frame_semantics.json`）、能读它的 reader（`baseline_metrics` 的
-`baseline-criteria-footed-1` 与报告项声明表）、定点场景驱动（`baseline_eval` + `components/command_player.py`）。
-读数见 `acceptance/records/2026-09-23-baseline-frames-format-2-foot-reading.md` 与同日的定点场景记录。
+判据落在远端而不在本机：锚点的用途是别人能 checkout 出一份可复现的树。
 
 ## 未覆盖边界
 
-只补锚点，不重新评价 `video_matrix.py` 的实现（归 `work/closed/2026/video-matrix-gears.md` 那条链）；
-也不动 v1.8.0 的锚点（已推的 tag 不改指不改名）。
+- 只补编号与锚点，不重新评价 `video_matrix.py` 的实现（归 `work/closed/2026/video-matrix-gears.md`）。
+- 不动 `harness-v1.8.0` 的锚点：已推的 tag 不改指不改名。
+- v1.9.0 之后另有两笔改动**未**列入本次编号，因为它们既不加模块也不改测量语义：评测启动的
+  `--viz none` 取代已废弃的 `--headless`（`4ef9fb4`）、lizard 家族源码退休时的四处路径改写（`f1e6421`）。
+  退休那笔的自身记录在 `work/closed/2026/`。
