@@ -16,13 +16,14 @@
 
 训练轮（2026-10-10，v3.4 用户拍板）：本版已冻结（tag `lizard2-main-v3`，落在 `f1ae6f8`），随后启动训练。
 
-- run 目录：`logs/rsl_rl/lizard2_v3/2026-10-10_10-09-15`（`<ISAAC_ROOT>` 由 `paths.yaml` 解析，记录本体不进仓）。
+- **作废的一次**：助手于 10:09 起过一次（`logs/rsl_rl/lizard2_v3/2026-10-10_10-09-15`），10:12 按用户要求
+  手工终止（该 run 只到 `model_0.pt`，不是一次训练结果）。它的 T0/T1 留在机器本地，**本版训练依据不取它**。
+- **正式 run**：用户自行启动，run 目录在此回填。
 - 命令形态：`scripts\reinforcement_learning\rsl_rl\train.py --task Lizard2-Flat-v3 --headless`，cwd `E:\IsaacLab`；
-  无会话覆盖，`num_envs`/`seed`/`max_iterations` 取配方声明值（4096 / 42 / 6000，T0 已如此记录）。
-- T0 记 `rev f1ae6f8`（= 冻结 tag 那笔）、`dirty: true` 但 `changed_non_prose: []` —— 当时树里只有 README 的散文改动，
-  按散文豁免放行，**未用** `RL_ALLOW_DIRTY_TREE`。
-- 命令行、覆盖参数、seed、checkpoint 的正文在该 run 目录的 `run_manifest.json` / `checkpoints.json`：
-  复读 `python rl_exp\tools\runrecord\manifest.py --verify logs\rsl_rl\lizard2_v3\2026-10-10_10-09-15`（相对 `<ISAAC_ROOT>`）。
+  无会话覆盖，`num_envs`/`seed`/`max_iterations` 取配方声明值（4096 / 42 / 6000）。
+- 参考：作废那次实测约 2 分钟才进训练循环（场景创建 23.5 s、仿真启动 115 s），T0 在启动早期即落盘，
+  命令行、覆盖参数、seed、checkpoint 的正文在该 run 目录的 `run_manifest.json` / `checkpoints.json`：
+  复读 `python rl_exp\tools\runrecord\manifest.py --verify logs\rsl_rl\lizard2_v3\<时间戳>`（相对 `<ISAAC_ROOT>`）。
 
 ## 结果回填
 
