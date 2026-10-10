@@ -2,7 +2,7 @@
 
 ## 适用范围
 
-承载 `work/active/record-format-live-checks.md` 的 ①②。分两段：**离线段**（当日中午，未起仿真）读的是
+承载 `work/closed/2026/record-format-live-checks.md` 的 ①②。分两段：**离线段**（当日中午，未起仿真）读的是
 活解释器上的身份读数、训练 manifest、以及仓内既有评测记录/结果目录；**真跑段**（当日 15:24–15:27，
 GPU 空出后真起仿真跑 base + variant 两条）。两段各自带适用范围，后段不追溯改写前段的读数。
 
@@ -148,7 +148,7 @@ seed 123（`--viz none`，cwd `E:\IsaacLab`）：
 
 ## 证据引用
 
-- 事项：`work/active/record-format-live-checks.md`；拆出项：`work/active/asset-fail-path-live-check.md`。
+- 事项：`work/closed/2026/record-format-live-checks.md`（2026-10-10 关闭）；拆出项：`work/active/asset-fail-path-live-check.md`。
 - 代码：`ablation_harness/eval.py`（345-346 读两列 / 394 覆盖 / 803-804 `mbenv` 来处 /
   831-832 组装 `runtime`）、`ablation_harness/record.py`（`ALWAYS`、`read_state`、`baseline_evidence`）、
   `rl_exp/tools/runrecord/provenance.py`（`rsl_rl_state` / `rsl_rl_id`）。
@@ -254,3 +254,27 @@ E:\IsaacLab\env_isaaclab\Scripts\python.exe -B -c "from ablation_harness import 
 - 修复后未重跑仿真：本段读数全部来自离线闸门、仓内既有记录与一次本机身份读；真跑证据仍是上节
   15:24 / 15:30 那两条。
 - 离线套件 37/37 绿（`ALL_OFFLINE_CHECKS_PASSED (37/37)`），未新增 check（`MAX_CHECKS` 未动）。
+
+## 关闭审核（2026-10-10，新上下文）
+
+新上下文（不带执笔会话历史）对照事项的 `close_when`、落点与本文判定；结论 **通过、建议关闭**，
+用户同意后在同一变更内移入 `work/closed/2026/`。以下记它的判定与提出的事实，供日后查"这条为什么算过"。
+
+- **① 成立（按"按已记录的 `mode` 重建"读）**：两侧取值一致，且未覆盖面已写在本文与代码里。它同时点出
+  一个**读法缺口**：盘上已存记录仍是 `source:28a37cecdd43`，新判据下盘上并没有"按安装来源重建的两侧一致"
+  —— 本文『修复』节已按此写成边界，不是新读数。
+- **② 成立，但退化为声明型**：分列与同源在盘上（**18/18** 份记录都有这两对列，全 `72 / 72`），
+  缺列实测判 `incomplete`；"不等格"仍结构性不可达 ⇒ 这条只剩"缺列"一齿，不再能被写侧证否。
+  字段名债务已外派 `work/active/eval-declared-columns-are-post-override.md`。
+- **落点与闸门独立复现**：十二条锁键"配方未动"由它逐字段比对为真（把新键换回旧组合串后六条 body 逐字段相同）；
+  `check_cfg_lock`、`check_golden_frozen`、`test_run_manifest`、`test_eval_record` 四条 rc=0；
+  `FROZEN_REVS` 声称的落点 `cb6eb27` 与 `git log` 相符。关闭前离线套件复跑：`ALL_OFFLINE_CHECKS_PASSED (37/37)`。
+- **它提出的三处陈旧（不改结论，记在此）**：① 上文『证据引用』的行号在修复后位移 —— `runtime` 组装现在
+  `ablation_harness/eval.py:838`、`gym.make` 在 `:810-811`，被审的 `rsl_rl_state` 现在
+  `rl_exp/tools/runrecord/provenance.py:261-304`；② 记录份数已从"9 份 / 11 份"涨到 **18 份**（全 `complete`；
+  修复节的守卫按 glob 自动覆盖新文件，仍恰好命中那两对）；③ `provenance.py` 里"`packages_distributions()` 4.3 s"
+  不再是现状（本机现测 0.38 s / 325 dists）—— 选循环的理由里"一次性 0.1–0.2 s"那半仍成立。
+- **两条天花板（写下，不靠记忆）**：rsl_rl 身份退化为版本号后，同一版本的本地改写副本读作同一身份；
+  P2 守卫是产物级、只在"运行期间恰好有提交落地"时才咬 —— 把 `_persist` 那两行改回去不会有闸门变红。
+- 本项关闭后，活链上带台账编号的事项标题归零，`work/active/live-doc-ledger-numbers.md` 的标题部分随之收敛
+  （该事项的协议注释部分仍未处置）。

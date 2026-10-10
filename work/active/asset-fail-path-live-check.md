@@ -10,7 +10,8 @@ close_when: 一次真跑落成 `assets.actual.verdict = fail` 且 declared 侧�
 
 ## 当前状态
 
-2026-10-10 从 `work/active/record-format-live-checks.md` 拆出（用户定：③ 单列，本项不再被 ①② 拖着）。
+2026-10-10 从 `work/closed/2026/record-format-live-checks.md`（当时在 `work/active/`）拆出（用户定：③ 单列，
+本项不再被 ①② 拖着）。
 离线三态与 `manifest._verify_assets` 的既有测试覆盖该分支；真跑只落过 `pass`（v14 冻结锁）与
 `unknown`（dev 配方无锁），读数归 `acceptance/records/2026-09-17-lizard-eval-record-and-terrain-map.md`。
 

@@ -15,4 +15,4 @@ close_when: 口径落成实现或写明边界，且该字段的读法只有一�
 『独立审核』与『修复 · 本次未做』两节）：`runtime.num_envs_declared` / `runtime.device_declared` 读的是
 `eval.py` 覆盖过的同一个 cfg 对象（`ablation_harness/eval.py:394`、`:398-399`），
 字段名承诺的"配方声明值"从未被写下来。本项只做这一件事；记录格式的其余判读与 ② 的口径归
-`work/active/record-format-live-checks.md`。
+`work/closed/2026/record-format-live-checks.md`（2026-10-10 关闭）。

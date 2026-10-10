@@ -177,7 +177,7 @@ harness 代码高频变更 / 多机器人共用 / 再开新协议时 → 目录�
 | # | 事项 | 指针 | 优先级 |
 |---|---|---|---|
 | 1 | 运行时验收（跨协议对照 / rough 两列分布）（已收） | → `work/closed/2026/runtime-acceptance-v3.md`；读数与审核见该事项的 `evidence` | — |
-| 2 | 记录格式的剩余真跑段（rsl_rl 身份 / num_envs 格子）与资产 fail 路径（授权待定） | → `work/active/record-format-live-checks.md`、`work/active/asset-fail-path-live-check.md` | 中 |
+| 2 | 记录格式的剩余真跑段（rsl_rl 身份 / num_envs 格子）（已收）与资产 fail 路径（授权待定） | → `work/closed/2026/record-format-live-checks.md`；读数与审核见该事项的 `evidence`。资产 fail 路径仍缺授权：`work/active/asset-fail-path-live-check.md` | 中 |
 | 3 | 地形随机源两处缺口 + 几何证据归档（已收） | → `work/closed/2026/terrain-suite-v2-rng.md`、`work/closed/2026/terrain-evidence-18b.md` | — |
 | 4 | 地形证据归档位置与 `rebuild.py` 角色（已裁决：运行目录 + 材料完整性） | → `work/closed/2026/archive-location-decision.md`；裁决见 `acceptance/records/2026-09-22-terrain-evidence-archive-and-verification.md` | — |
 | 5 | 诊断 run 与 campaign 表之间没有闸门（已收：汇总侧按身份拒表） | → `work/closed/2026/diagnostic-run-gate.md`；读数见 `acceptance/records/2026-09-23-diagnostic-row-identity-gate.md` | — |
