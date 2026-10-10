@@ -4,7 +4,7 @@ title: 调度器的"训练已完成"凭据（model_{max_iterations}.pt）与训�
 scope: ablation_harness/run_ablation.py, ablation_harness/specs
 status: open
 landing: ablation_harness/run_ablation.py
-next: 先定口径再改：① `_run_train` 与 `_sweep` 那处同一检查判定"这一步训练已完成"的凭据该是什么——现在要的是 `model_{max_iterations}.pt`，而训练器收尾保存的名字是 `model_{max_iterations-1}.pt`；② 另一条路是把既有约定（spec 的 `max_iterations` 当"复用已有 checkpoint 的下标"，训练只在它缺失时发生）写进 `run_ablation.py` 的 docstring，让检查与那句话一致。两处同源一次改完，再按 `close_when` 真跑一条不能复用的 spec
+next: 执行者先核对训练器实际保存契约与 `_run_train`、`_sweep` 的完成凭据及默认 eval checkpoint 选择，再做同源修复；不要只修显式 eval_checkpoints 路径。回归范围与闸门取舍见 evidence 的“独立审核 / 闸门裁定”：按该节补破坏测试并真跑不能复用的 spec，读数落验收记录后置 pending_review。缩窄为只复用须用户明示，不以文档改口径代替修复。
 close_when: 一条**不复用旧 checkpoint** 的 spec 能走完 train → eval：判据 = `[ABLATION] sweep done, failures=0` 且对应 `results/<协议>/<组>/<run_id>/eval.json` 落盘；或用户明示"spec 只走复用路径"，则判据改为 docstring 写明该前提、检查与之一致。两条路都得落一份 `acceptance/records/` 记录。缺 checkpoint 时报失败是当前行为，不算通过
 evidence: acceptance/records/2026-10-10-isaac-root-parameterisation.md
 ---
