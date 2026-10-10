@@ -2,12 +2,12 @@
 
 ## 适用范围
 
-`work/active/isaac-root-parameterisation.md` 的执行记录。对象 = 该事项 `close_when` 的两半：
+`work/closed/2026/isaac-root-parameterisation.md` 的执行与独立审核记录。对象 = 该事项 `close_when` 的两半：
 ① 三处参数化调用点在**无 junction 布局**下确实生效；② 摘掉 `E:\IsaacLab\ablation_harness` 之后，
 一条 train/eval 命令能起来且日志目录的 glob 落在真实 IsaacLab 树。
 
 本记录只写这两半的现场读数与落点。`paths.yaml` / `RL_ISAAC_ROOT` 的解析口径归 `host_paths.py`
-与其闸门，不复述；一次性探针 spec 在仓外，不作复读路径（见「未覆盖边界」）。
+与其闸门，不复述；原探针 spec 已删，补证输入与产物保留，两批的证明边界见末节。
 
 ## 验收条件
 
@@ -128,7 +128,7 @@ cd /d E:\IsaacLab && E:\IsaacLab\env_isaaclab\Scripts\python.exe ablation_harnes
 真实 GPU 冒烟不进离线套件（§5）。只把 `max_iterations` 文档化为“复用下标”会退掉已声明的新训能力，
 不能当修复；除非用户明确选择缩窄功能，本次不推荐这条路。
 
-## 补证（2026-10-10；修复提交 `3420339`）
+### 补证（2026-10-10；修复提交 `3420339`）
 
 审核要求的补证已全部执行。判定时以产物与退出行为为准，不以本段文字为准。
 
@@ -145,30 +145,80 @@ cd /d E:\IsaacLab && E:\IsaacLab\env_isaaclab\Scripts\python.exe ablation_harnes
 
 探针策略只训 2 迭代，其读数不具性能含义，本记录不复述数值。
 
+### 补证独立审核（2026-10-10；基线 `8935cc4`）
+
+审核从 `close_when`、landing 与保留产物出发，未携带执行会话历史。初始工作树干净；本次未新训、
+未重新仿真，只读保留证据、重跑离线套件与复用调度路径。用户授权评审并回填状态；仅裁定本项，
+`ablation-sweep-final-checkpoint-name` 仍待其独立审核。
+
+| 核验 | 独立读数 / 判断 |
+|---|---|
+| 无 junction | `E:\IsaacLab\ablation_harness` 的 `Path.exists()` / `os.path.lexists()` 均为 `False` |
+| 三处根与日志 | `host_paths.isaac_root()`、调度器 `_ISAAC_ROOT` 与 AST 提取执行的 eval `_find_isaac_root()` 同为 `E:\IsaacLab`；真实 `_log_dir_for_tag("isaac_root_reprobe")` 命中补证保留目录，属于 IsaacLab 树、不属于本仓。AST 核验不算运行 eval |
+| 离线套件 | 独立执行退出 0：`ALL_OFFLINE_CHECKS_PASSED (37/37 in 46.1s, wave 212s/informational, jobs=6)`；其中 `test_eval_record: 32 passed`。关闭落地后复跑退出 0：`ALL_OFFLINE_CHECKS_PASSED (37/37 in 46.2s, wave 216s/informational, jobs=6)`；单独事项形状检查亦为 `WORK_DOCS_OK` |
+| 真训与 eval 绑定 | manifest 声明 `resume=false`、`max_iterations=2`，T0/T1 与 `model_0.pt` / `model_1.pt` 保留；`checkpoints.json` 与 eval 的 `checkpoint.resolved` 指向同一末档。重算末档 SHA-256 与索引、`record.checkpoint.sha256`、`sha256_after_load` 一致；`record.read_state` 为 `complete`。实际 eval 产物时间在训练末档写入之后 |
+| 安装训练器 | 本机 `env_isaaclab/Lib/site-packages/rsl_rl/runners/on_policy_runner.py:77-79,112,127-134` 仍按 0..N−1 循环并收尾保存末下标；不是仅接受测试替身假设 |
+| 修复代码归因 | 训练记录 rev 为 `342033952003`、eval rev 为 `67707c0361e7`；两提交间 `run_ablation.py` / `eval.py` 无差异，修复在训练和评测两半均已存在。rev 不同不据此声明整树相同 |
+| 入口破坏测试 | 仅在内存把 `_run_eval` 入口还原为相对路径、保留模块 globals 使仿真替身仍隔离：目标断言红，原文 `the eval entry has to be an existing absolute path, not 'ablation_harness/eval.py'`；恢复真实函数后同一测试绿。未修改生产文件 |
+| 复用复读 | 当前 spec 再执行不重训、不重评，打印 `eval exists, skip` 与 `sweep done, failures=0`。只证明断点复用；新训与真实 eval 成立依据是上述保留的训练记录、checkpoint 绑定及 eval 产物，不把这次 skip 当新训成功 |
+| manifest 边界 | `manifest --verify` 无 blocking，但退出 2：`RUN_MANIFEST_PARTIAL (2 required claim(s) unknown)`。本仓当时脏树 diff 已不匹配，本机 IsaacLab 有未归档的 untracked code；记录完整和末档校验成立，整树可重建未知，不声称复现能力已验 |
+
+#### 分组与汇总勘误
+
+入口破坏测试的首次内存构造使用了复制的 globals，未随测试的模块 patch 替换 subprocess，导致
+尝试启动已不存在的相对 eval 入口，并在 Python 打开文件阶段失败（未起仿真）；随后核对根因，改为
+绑定原模块 globals，才得到上表的有效隔离红/绿结果。首次构造失败不算回归断言证据。
+
+补证表里的“移入独立组，summarize 复跑退出 0”不能据此称为新组汇总成立：当前独立目录没有
+`summary.csv`，保留 `record.json:1577` 的 `run.group` 仍为 `smoke`。独立执行
+`--summarize --group isaac-root-reprobe` 虽退出 0，输出却是 `no results under ...`，没有读取该探针行。
+当前仓内 spec 的组与保留记录的实际启动组不同；保留记录不改写，物理迁移不冒充重新生成。
+
+此缺口属证据归档/声明的局部问题，不是路径架构问题。本项不验汇总与同表能力，故不以其阻拦
+`close_when`，也不认可“完整 CLI 含汇总已验证”的扩大结论。`HARNESS.md:41-43` 已明确 eval 绝对入口、
+train 相对已解析 cwd；末句“不是定位手段”只可理解为 cwd 不用于发现 IsaacLab 根，train 文件定位仍依赖 cwd。
+
+#### 关闭裁定
+
+**本项关闭审核通过。** 严格按原 `close_when` 的“train/eval 能起来、日志 glob 落真实 IsaacLab 树”，
+无 junction、独立套件全绿与保留的真实 train → checkpoint → eval 绑定均成立，不再用被删的旧探针
+或替身成功替代真实产物。本项移入 `work/closed/2026/`；不代关关联的完成凭据事项。
+
+最大的长期脆弱点是把 tag/文件名当运行身份与训练契约：当前后缀 glob 不校验 task/seed，N−1 回归替身
+也不会自动察觉安装训练器的保存契约漂移。本次独立 tag、manifest 与 checkpoint 摘要绑定消除了本次证据
+混用，不证明所有未来排程都无此风险；本项不借机重构。整树可重建与探针汇总不在关闭承诺内。
+
 ## 证据引用
 
-- 事项：`work/active/isaac-root-parameterisation.md`。
-- 代码：`ablation_harness/run_ablation.py`（`:44`、`:47-59`、`:62-74`、`:117`）、
-  `ablation_harness/eval.py`（`:109-111`、`:122`）、`ablation_harness/host_paths.py:76-97`。
-- 文档：`ablation_harness/HARNESS.md` 的「部署形态」bullet —— 原句只写到 junction "已废、可 rmdir"，
-  本次补上"不以它为前提（子进程入口一律绝对路径）"这个代码侧事实；机器本地的"已摘"不写进该文件。
-- 训练器侧命名：`rsl_rl/runners/on_policy_runner.py:112`、`:127-134`（机器本地 site-packages）。
+- 事项：`work/closed/2026/isaac-root-parameterisation.md`。
+- 代码：`ablation_harness/run_ablation.py:47-77,149-174`、
+  `ablation_harness/eval.py:109-122`、`ablation_harness/host_paths.py:76-97`。
+- 文档：`ablation_harness/HARNESS.md:39-43` 的「部署形态」；当前分别声明 eval 本仓绝对入口与
+  train 相对已解析 IsaacLab cwd，不将初次“子进程入口一律绝对路径”失真句当当前事实。
+- 训练器侧命名：`E:\IsaacLab\env_isaaclab\Lib\site-packages\rsl_rl\runners\on_policy_runner.py:77-79,112,127-134`
+  （机器本地，不进仓）。
 - 复读命令（都在本仓根跑，除标注外）：
   - 离线闸：`rl_exp\tools\verify\run_offline_checks.bat`
   - junction 已摘：`if exist "E:\IsaacLab\ablation_harness" (echo EXISTS) else (echo MISSING)`
   - 修掉的那处（等价最小复现，任选一个不存在的相对路径即可）：
     `cd /d E:\IsaacLab && E:\IsaacLab\env_isaaclab\Scripts\python.exe ablation_harness/eval.py --help`
+- 补证复读输入：`ablation_harness/specs/isaac_root_reprobe.yaml`；完整调用
+  `"E:\IsaacLab\env_isaaclab\Scripts\python.exe" ablation_harness\run_ablation.py --spec ablation_harness\specs\isaac_root_reprobe.yaml`。
+  当前执行是复用，不重新证明新训；仓内 spec 的组是归档组、不是保留记录实际启动时的 `smoke`。
+- 补证训练记录复读：
+  `"E:\IsaacLab\env_isaaclab\Scripts\python.exe" -m rl_exp.tools.runrecord.manifest --verify "E:\IsaacLab\logs\rsl_rl\lizard2_v3\2026-10-10_14-38-48_isaac_root_reprobe"`。
+- 补证产物：`ablation_harness/results/locomotion_eval_v3/isaac-root-reprobe/Lizard2-Flat-v3_isaac_root_reprobe_it1_nominal_seed123/`
+  的 `eval.json` / `record.json` / `terrain/geometry.json`；末档位于上条训练目录的 `model_1.pt`。
 - 探针产物：探针一的日志目录留在 `E:\IsaacLab\logs\rsl_rl\lizard2_v3\2026-10-10_11-41-26_isaac_root_probe`
   （机器本地，不进仓）；探针二写在 `results/locomotion_eval_v3/smoke/` 的那一行与目录**已删除**（见下）。
 
 ## 未覆盖边界
 
-- 探针 spec 是一次性文件（仓外 `%TEMP%`），不留仓、也不作复读路径；本记录里可复读的只有离线闸、
-  junction 检查与那条 `can't open file` 最小复现。
-- 探针二按 `group=smoke` 落产物后**已删除**并回滚 `smoke/summary.csv`。原执行者以避免噪声与条件冲突为由
-  删除；本次审核判定该删除使“eval 半能起”无法从产物复核，不认可文字自述替代证据。本记录不据此声称分数。
-  要重看这条路径，应使用独立组并保留产物；需要真训的 spec 当前仍会先被完成凭据缺陷挡住。
-- 探针用的是 `Lizard2-Flat-v3` 一个任务、一条 nominal eval，不覆盖其它任务 id、robust 模式与多 checkpoint
-  排程；`--summarize`/`--by-terrain` 两态本次未碰（它们不调 `_isaac_root()`）。
+- 原探针一/二 spec 是仓外一次性输入，旧 eval 产物已删；只保留其失败/退回审核历史，不再承担关闭证明。
+  当前补证输入与产物见「证据引用」，不得把原探针与补证混读。
+- 补证只覆盖 `Lizard2-Flat-v3` 一条 nominal train/eval，不覆盖其它任务 id、robust 与多 checkpoint 排程。
+  本次复读了 summarize，但独立组无 summary，故没有汇总成立证据；`--by-terrain` 未测。
+- 补证记录完整、checkpoint 绑定已核验；脏树与未归档源码使整树可重建未知。路径能力成立不等于
+  `RUN_MANIFEST_OK` 或策略性能通过。
 - 本项不评价 `paths.yaml` 的解析口径（归 `host_paths.py` 与其闸门），也不动 `paths.yaml` 的机器本地事实。
-- 缺陷二只登记不修，其判据与取舍（是改凭据命名还是改"预算已用完"的判据）归另立事项。
+- 完成凭据修复虽已用于本次链路，其独立关闭裁定仍归 `work/active/ablation-sweep-final-checkpoint-name.md`。
