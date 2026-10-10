@@ -234,8 +234,13 @@ python ablation_harness\eval.py --task Lizard2-Flat-v1 --mode nominal --seed 123
 ## 训练
 
 ```bat
-python scripts\reinforcement_learning\rsl_rl\train.py --task Lizard2-Flat-v3 --max_iterations 4000 --seed 42
+python scripts\reinforcement_learning\rsl_rl\train.py --task Lizard2-Flat-v3 --headless --max_iterations 6000 --seed 42
 ```
+
+预算/种子与配方声明一致（`main_params.yaml` 的 `max_iterations` 6000、seed 42，v3.3 用户拍板）；
+加 `--max_iterations` 只是把该声明写进命令，数值改口径仍只走版本纪律。
+`--headless` 是长跑的常规形态；launcher（`rl_exp\tools\launch_recipe.py --launch`）当前**不转发**该旗标，
+从它交棒会起 GUI。<!-- ponytail: launcher 的 PASSTHROUGH 未含 --headless，长跑前直接调训练器；补转发即可撤掉本注 -->
 
 **版本复现**：任务 id 由注册表常驻（`Lizard2-Flat-v3` = v3 配方），机制见
 `rl_exp/versions/lizard2/FAMILY.md`「任务注册表」；真源是 `versions/recipes.json`（身份映射）
