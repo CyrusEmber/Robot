@@ -81,7 +81,11 @@ def _run_train(run: dict, args_cli) -> pathlib.Path | None:
     cmd = [
         args_cli.python, "scripts/reinforcement_learning/rsl_rl/train.py",
         "--task", task, "--seed", str(run["seed"]),
-        "--max_iterations", str(iters), "--run_name", tag, "--headless",
+        "--max_iterations", str(iters), "--run_name", tag,
+        # forced headless, and not by omitting the flag: an omitted --viz means "headless
+        # unless the cfg declares a visualizer", which makes this sweep depend on a tree
+        # we do not own. '--viz none' is the deprecated '--headless' flag's replacement.
+        "--viz", "none",
     ] + [str(o) for o in run.get("overrides", [])]
     if args_cli.device:
         cmd += ["--device", args_cli.device]
@@ -113,7 +117,9 @@ def _run_eval(run: dict, checkpoint: pathlib.Path, iteration: int, mode: str, ar
         args_cli.python, "ablation_harness/eval.py",
         "--task", task, "--checkpoint", str(checkpoint),
         "--protocol", protocol, "--mode", mode,
-        "--seed", str(run.get("eval_seed", 123)), "--tag", eval_tag, "--headless",
+        "--seed", str(run.get("eval_seed", 123)), "--tag", eval_tag,
+        # same reason as the train half: forced headless, not "headless unless the cfg says otherwise"
+        "--viz", "none",
     ] + (["--group", group] if group else []) + (
         ["--device", args_cli.device] if args_cli.device else [])
     print(f"[ABLATION] eval: {run_id}", flush=True)
