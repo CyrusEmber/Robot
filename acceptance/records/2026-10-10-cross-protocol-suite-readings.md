@@ -88,3 +88,30 @@ python -c "import json;a=json.load(open('<run1>/eval.json'));b=json.load(open('<
 - **单 ckpt、单窗口**：6000 步短窗末档，读数只对这颗 ckpt 负责（同 `2026-10-10-lizard2-v3-first-eval.md` 的限定）。
 - **未跑 robust**：本记录不含 recovery / push 相关口径。
 - `eval.frames.pt` 不入仓 ⇒ 另一台机器只能重跑，不能离线重判这四条记录。
+
+## 勘误（2026-10-10，事项收束时追记）：改的是"这些读数能支撑什么"，不是读数
+
+**原委**：本记录的条件 2（①）写的是"几何相同的列读数应在 ±0.02 内"。同一次跑出的读数把它证伪，
+而第 58–62 行给的替代说法（"只在 mesh digest 相同的列上比"）救不回来 —— 超差的 `stairs_10cm` /
+`stairs_20cm` 正是 mesh 摘要字节相同的列。独立审核见 `acceptance/records/2026-10-10-runtime-acceptance-v3-review.md`；
+所服务的 `work/active/runtime-acceptance-v3.md`（同日收束为 `work/closed/2026/runtime-acceptance-v3.md`）由用户拍板
+把 ① 降级为口径诊断后关闭。逐项：
+
+1. **第 21 行（判据）**：`±0.02` 不是误差棒 —— 两臂各自重跑逐字段完全相同（条件 1）⇒ 超差是**确定性**的，
+   不是"多跑几次能压下去"的噪声带，而是"几何相同 ⇒ 读数相同"这个假设本身。该假设已证伪，故 `±0.02` 作废；
+   有效替代 = **跨协议读数只作测量差异诊断，不得作跨协议策略排名，也不得作"旧行仍可比"的依据**。
+   原判据行不改写，作废记在这里。
+2. **第 58–62 行（判定）**：可证部分保留 —— 改 rough 两列会让摘要未变的列读数改变，即读数是一整个套件的函数；
+   **收回**的是"原因不是口径"，以及候选机制 (a)(b) 的倾向性：每列实际 reset/spawn 与接触状态都没归档，
+   隔离程度不足以排除指标依赖之外的路径。机制归 `work/active/eval-column-coupling.md`。
+3. **第 64、87 行（completion 的量化口径，错）**：completion 是连续比值的 env 均值，**没有** 0.125 这个步长；
+   `1/8 = 0.125` 是 8 env 下 `fall_rate` / `success_rate` 这类**逐 env 二值**指标的计数粒度。
+   正确写法：completion 无量化步长，fall/success 的粒度是 0.125。
+4. **第 52 行（几何证据，"唯一差异"不全）**：`noise_range` 单值→区间只是其一；`suites.py:125-138` 同时改了
+   `noise_step` 与 `downsampled_scale`。三者都落在 rough 一族的参数里，但"唯一差异"这句话不成立。
+5. **首跑 v3 臂的双 rev（本记录未披露）**：该 run 的 `record.json` 记 `0f4b2bf5317a`，`eval.json` 与
+   `summary.csv` 记 `e4d1ac7d0a04`（`eval.py` 在记录与指标两处分别读 rev，中间发生提交即可形成此形状）。
+   两 rev 之间只有 `work/active/lizard2-family-landing.md` 的散文变更，测量代码无差异 ⇒ 数字不受影响；
+   但"去掉 `timestamp` 后两臂相等"**不等于**两臂的记录条件相同。原工件不无痕回写，缺口记在这里。
+
+未改动：全部读数、条件 1 的结论、条件 3（②）的成立判定，以及四个 run 的归档。

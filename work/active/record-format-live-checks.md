@@ -18,6 +18,6 @@ close_when: ① 同一 run 身份按训练记录的 `mode` 重建后两处取值
 ## 范围边界
 
 - 保留用户此前不构造 pre-format 分支的决定；适用边界见证据记录，不作全部真跑承诺。
-- 协议版本切换归 `work/active/runtime-acceptance-v3.md`；资产 fail 路径归
+- 协议版本切换归 `work/closed/2026/runtime-acceptance-v3.md`；资产 fail 路径归
   `work/active/asset-fail-path-live-check.md`。
 - `livecheck` 组不进入性能对账表；其它事项若引用其记录，仍按各自判据审核。

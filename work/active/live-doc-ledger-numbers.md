@@ -3,7 +3,7 @@ id: live-doc-ledger-numbers
 title: 活文档里的旧台账编号（4 处协议注释 + 4 个事项标题 + 2 处指针核认）
 scope: ablation_harness, work/active, ARCH_PLAN.md
 status: open
-landing: ablation_harness/HARNESS.md, ARCH_PLAN.md, work/active/record-format-live-checks.md, work/active/runtime-acceptance-v3.md
+landing: ablation_harness/HARNESS.md, ARCH_PLAN.md, work/active/record-format-live-checks.md, work/closed/2026/runtime-acceptance-v3.md
 next: ① 4 个活跃事项标题去掉「（HARNESS 挂账 #N）」：`HARNESS.md` 的 #1–#6 行已随迁移收成指针，编号在活链上解析不到；来源由 `acceptance/records/2026-09-20-harness-migration.md` 的表记着 ⇒ 标题只留当前状态，来源记录指针放进正文。② 4 处协议注释统一**不改**，判据写在本项：`locomotion_eval_v1.yaml:53` / `v2:63` / `v3:64` / `v4:83` 的 latency「挂账 #6」与 `v3:8` 的「#18 ①」都在"落库即冻结，只读"的契约文件里（v4 头部逐字如此），注释同样是字节；`ablation_harness/protocol_anchors.json` 只钉两份 JSON ⇒ 改注释不破闸门、破的是纪律，不为它开例外；要在协议内留活指针，唯一正路是下一版协议带上它（#6 的目标 = `work/closed/2026/deployment-delay-injection-dr.md`，blocked）。③ 核认 `ARCH_PLAN.md:47`、`HARNESS.md:10` 两处已带事项路径的指针，记一笔即完。
 close_when: 4 个标题里不再有活链上解析不到的编号；4 处协议注释各有处置（`next` ② 的"不改"也算处置，理由在本项）；两处指针核认已记。历史类（`rl_exp/versions/**`、`acceptance/records/`、`work/closed/`、`rl_exp/fork_patches/`、`verify_logs`）不计入判据 —— 理由同 `work/closed/2026/stale-doc-pointers-in-code.md` 的冻结与证据表，本项不改写历史。
 ---
@@ -24,6 +24,9 @@ close_when: 4 个标题里不再有活链上解析不到的编号；4 处协议�
 同类第二例（`headless-flag-deprecation`，挂账 #6）已于 2026-10-10 关入 `work/closed/2026/`（评测台两处透传
 改 `--viz none`）：活链上带编号的标题因此只剩 `record-format-live-checks`（#2）与
 `runtime-acceptance-v3`（#1）两个，`next` ① 里的"4 个"是 2026-09-23 的计数。
+
+同类第三例（`runtime-acceptance-v3`，挂账 #1）同日关入 `work/closed/2026/`（跨协议判据降级为口径诊断）
+⇒ 活链上带编号的标题只剩 `record-format-live-checks`（#2）一个。
 
 ## 为什么不并进代码侧那次
 
