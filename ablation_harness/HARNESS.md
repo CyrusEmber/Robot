@@ -17,6 +17,11 @@
   ⇒ 全指标有系统漂移；v2 的 rough 两列实为均匀抬升平板（已由 v3 换掉）；v4 的数值口径与 v3
   逐字相同，变的是**协议自己冻结地形**（下节"套件锁"）：指纹已真跑批注并解锁，`--protocol`
   默认值仍是 v3。
+- **套件列的角色**：列按**配方的训练分布**分角色 —— 与训练分布一致的那列是**成绩面**，其余是 **OOD 探针**
+  （不判分，也不可作"策略好坏"的引用）；角色不写进协议文件（冻结只读），写在这里。当前活跃家族
+  `lizard2` 训在 `plane`（`rl_exp/tasks/lizard2_recipe.py:185-186`）⇒ 9 列里只有 `flat` 是成绩面，
+  平地判决走 `baseline_eval.py` + `lizard2_flat_v*.json`（判据具名，见 `judge_semantics.json`）。
+  依据与证伪过程：`acceptance/records/2026-10-10-cross-protocol-suite-readings.md`。
 - **协议（baseline）**：`baseline_flat_v1..v4`。v1/v2/v3 冻结封存，判据由"阈值键"表达；`baseline_flat_v4`
   数值与 v3 逐字相同，判据改为显式 `criteria`（具名 kind + 封闭参数集）。判分器身份 = `JUDGE_ID`
   （v4 起）与 `LEGACY_JUDGE_ID`（v1–v3，按声明身份白名单进入），身份→语义用例的冻结表在
@@ -171,7 +176,7 @@ harness 代码高频变更 / 多机器人共用 / 再开新协议时 → 目录�
 
 | # | 事项 | 指针 | 优先级 |
 |---|---|---|---|
-| 1 | 运行时验收未跑完（跨协议对照 / 基线重跑 / rough 两列分布） | → `work/active/runtime-acceptance-v3.md` | 高 |
+| 1 | 运行时验收未跑完（跨协议对照 / rough 两列分布） | → `work/active/runtime-acceptance-v3.md` | 高 |
 | 2 | 记录格式的剩余真跑段（rsl_rl 身份 / num_envs 格子）与资产 fail 路径（授权待定） | → `work/active/record-format-live-checks.md`、`work/active/asset-fail-path-live-check.md` | 中 |
 | 3 | 地形随机源两处缺口 + 几何证据归档（已收） | → `work/closed/2026/terrain-suite-v2-rng.md`、`work/closed/2026/terrain-evidence-18b.md` | — |
 | 4 | 地形证据归档位置与 `rebuild.py` 角色（已裁决：运行目录 + 材料完整性） | → `work/closed/2026/archive-location-decision.md`；裁决见 `acceptance/records/2026-09-22-terrain-evidence-archive-and-verification.md` | — |

@@ -19,7 +19,7 @@
 
 | 原内容 | 去处 |
 |---|---|
-| 挂账 #1 的未做半（跨协议对照 / 基线重跑 / rough 两列分布） | `work/active/runtime-acceptance-v3.md` |
+| 挂账 #1 的未做半（跨协议对照 / 基线重跑 / rough 两列分布）† | `work/active/runtime-acceptance-v3.md` |
 | 挂账 #2 的未做半（rsl_rl 身份 / `num_envs` 格子 / 资产 fail 路径） | `work/active/record-format-live-checks.md` |
 | 挂账 #3 ①②（套件粗糙列退化 + 训练侧未播种，已收） | `work/closed/2026/terrain-suite-v2-rng.md` |
 | 挂账 #4（两处规格偏离，已裁决 2026-09-22） | `work/closed/2026/archive-location-decision.md`（`done`）；裁决见 `acceptance/records/2026-09-22-terrain-evidence-archive-and-verification.md` |
@@ -32,7 +32,7 @@
 
 | 产物 | 可定位 | 可执行 | 可关闭 | 无约束遗漏 |
 |---|---|---|---|---|
-| `runtime-acceptance-v3` | ✅ | ✅ 三条各有动作与口径 | ✅ 各条观测 + 不达标时的分支 | ✅ 已做半写在项内；"v2 行不得混表"在项内，不靠读者去别处拼 |
+| `runtime-acceptance-v3` | ✅ | ✅ 三条各有动作与口径 † | ✅ 各条观测 + 不达标时的分支 | ✅ 已做半写在项内；"v2 行不得混表"在项内，不靠读者去别处拼 |
 | `record-format-live-checks` | ✅ | ✅ | ✅（③ 依赖授权 —— 已写成"授权无结论则拆出单列，本项只关 ①②"） | ✅ |
 | `archive-location-decision` | ✅ | ✅ 两条待答问题写全 | ✅ 观测 = 两处不再出现"未获确认前不得当成照原文交付" | ✅ 用 `blocked` 区分"实现已生效、认可未给" |
 | `terrain-suite-v2-rng`（关闭） | ✅ | — | ✅ `landing` 五处均指向现存机制，无 `next` | ✅ 未覆盖边界指向另两个关闭项 |
@@ -61,3 +61,14 @@
 - 代码注释里指向已迁走内容的指针（`tasks/*.py`、`teacher_smoke.py`）与两处陈旧 docstring 路径仍在，
   属代码文件，另行安排。
 - 本批未做读取成本对照：批级只验四项，成本对照只在试点做过一次。
+
+## 勘误（2026-10-10）†：挂账 #1 的未做半现为两条
+
+**原委**：本批搬走的"基线重跑"要旧家族（v13 / v10）的 ckpt 在 v3 协议下重跑。旧家族已在
+`rl_exp/versions/lines.json` 里 `retired`（v13 版本目录里**没有 ckpt**；v10 的 ckpt 虽在仓，但其 task id
+已随 `work/closed/2026/retired-family-code-prune.md` 注销）⇒ 那一行跑不出来，该项已从事项删除。
+
+**处置**：`work/active/runtime-acceptance-v3.md` 现为两条（原 ① ③ 归并为 ① ②），
+`ablation_harness/HARNESS.md` 挂账 #1 文案同步去掉"/ 基线重跑"。**上表两处 † 只作当时的读数**：
+"搬了什么"第 1 行按"（跨协议对照 / rough 两列分布）"读，走查表该行"三条各有动作与口径"按"两条"读；
+理由与边界（对账对象只取本家族行）唯一归该事项的"未覆盖边界"节，不在本记录复述。
