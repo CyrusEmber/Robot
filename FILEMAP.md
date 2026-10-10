@@ -71,7 +71,7 @@
 
 | 闸门 | 看守什么 |
 |---|---|
-| `check_version_docs.py` | 版本文档完备 + 血统闸：每版本目录齐件（PLAN/NOTES/`<line>_params.yaml` + asset_lock；**退休版免锁**，状态经 `check_recipe_registry.effective_status` 读）+ `base.json` 边合法 + FAMILY 版本史行 + 本文件版本行；另扫覆盖文档的闸门判词 + `ARCH_PLAN.md` 的状态词（加粗形式与 H1 标题行） |
+| `check_version_docs.py` | 版本文档完备 + 血统闸：每版本目录齐件（PLAN/NOTES/`<line>_params.yaml` + asset_lock；**退休版免锁**，状态经 `check_recipe_registry.effective_status` 读）+ `base.json` 边合法 + FAMILY 版本史行 + 本文件版本行；另扫覆盖文档的闸门判词 + `ARCH_PLAN.md` 的状态词（加粗形式与 H1 标题行）+ **harness 代码基线（`ablation_harness/HARNESS.md`）的号是否有本地 tag**（家族版本 tag 缺失只 WARN，这一条红） |
 | `check_cfg_lock.py` | 配方 golden 闸门（format 3 分两层：框架组合块 + 线自己的条目）；`--update` 必须带 `--line` + `--reason`；反证 `test_cfg_lock_gate.py` |
 | `check_recipe_build.py` | 构建硬闸：冻结 golden 逐字段比 + 覆盖钉数 + 逐步归属 |
 | `check_recipe_map.py` | 配方身份闸门：`ast` 读注册表（不 import），声明的 `env_cfg_entry`/`agent_entry` 与注册逐字一致；`--bind-config` 构造实例读 `params_version`；反证 `test_recipe_map_gate.py` |

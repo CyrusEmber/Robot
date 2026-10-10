@@ -28,6 +28,15 @@ discipline and prefix styles differ (v1/v2/v5 vs lizard-vN), so a missing
 tag only warns; per versioning.mdc A, a training run started without a tag
 means "treat as frozen" and the tag must be added immediately.
 
+The **harness code baseline** is the exception to that. `ablation_harness/HARNESS.md`
+keeps its own version counter and writes the tag discipline in the same paragraph,
+and that counter has one naming form and no proposal state -- the number goes in when
+the version lands -- so a number without its tag is red rather than a warning. It reads
+that line as prose, so a line it cannot parse is a failure too: a reworded line would
+otherwise make the assertion a no-op, which reads exactly like a correct repo. Ceiling:
+local refs only -- a tag made and never pushed is invisible here, and that is the half
+that lets someone else check the tree out.
+
 Lineage gate: every version dir carries base.json naming its single
 ancestry parent (the one frozen snapshot this recipe was modified from;
 decision references to other versions stay in PLAN.md prose). The lineage
@@ -78,6 +87,12 @@ _REPO = pathlib.Path(__file__).resolve().parents[3]
 _VERSIONS = _REPO / "rl_exp" / "versions"
 _LINES = _VERSIONS / "lines.json"
 _ARCH_PLAN = _REPO / "ARCH_PLAN.md"
+_HARNESS_DOC = _REPO / "ablation_harness" / "HARNESS.md"
+
+#: The harness's code baseline, and the tag form the discipline beside it demands. The number is
+#: written when the version lands (no proposal state, one naming form), so the tag is due in the
+#: same breath -- which is why this pair is red while the family versions below stay a warning.
+_BASELINE_LINE = re.compile(r"\*\*代码基线\*\*：v(\d+\.\d+\.\d+)")
 
 
 def required_pieces(retired: bool) -> tuple[str, ...]:
@@ -143,6 +158,31 @@ def title_claims(text: str) -> list[tuple[int, str]]:
     return found
 
 
+def baseline_tag_problem(text: str, tags: set[str]) -> str | None:
+    """What is wrong with the harness baseline line in ``text``, or ``None`` when nothing is.
+
+    Returns a message rather than a flag so the self-test asserts the whole chain -- parse,
+    cardinality, tag lookup -- instead of only the regex. Two things are failures here and only
+    one of them is a missing tag: a line that matched zero or two times also fails, because this
+    reads prose and a reworded line would otherwise turn the assertion into a no-op that reads
+    exactly like a correct repo.
+    """
+    declared = _BASELINE_LINE.findall(text)
+    if len(declared) != 1:
+        return (
+            f"'**代码基线**：vN.M.K' matched {len(declared)} time(s), expected exactly 1"
+            " -- reworded, duplicated or missing, so no version can be read off it"
+        )
+    tag = f"harness-v{declared[0]}"
+    if tag not in tags:
+        return (
+            f"declares v{declared[0]} but has no tag {tag} -- a number in this line is not a"
+            f" declaration until the tree it names can be checked out: git tag {tag} <declaring"
+            f" commit> && git push origin {tag}"
+        )
+    return None
+
+
 def self_test() -> int:
     """Falsifier for the verdict scan and the piece set: the real cases, and the near-misses that must pass."""
     cases = [
@@ -194,6 +234,18 @@ def self_test() -> int:
         ("an active version ships its asset lock", False, ("PLAN.md", "NOTES.md", "asset_lock.json")),
         ("a retired version keeps the record and drops the lock", True, ("PLAN.md", "NOTES.md")),
     ]
+    # The harness baseline pairs a number with a tag. The near-misses are the two ways a prose
+    # check goes quietly green: the line reworded, and two lines written where one is read.
+    baseline_cases = [
+        ("the baseline line as it reads", "**代码基线**：v1.10.0 —— 几何测量的唯一家", {"harness-v1.10.0"}, True),
+        # the defect this assertion was written for: 0c3ec25 wrote v1.9.0 into the line and pushed
+        # the commit alone, so the number named a version nobody could check out
+        ("the same line before the tag existed", "**代码基线**：v1.9.0 —— 几何测量", set(), False),
+        # the discipline sentence beside it names the tag form without declaring a version
+        ("the discipline sentence naming the tag form", "并打 `harness-vN.M.K` 锚点", set(), False),
+        ("a reworded baseline line", "**基线**：v1.10.0", {"harness-v1.10.0"}, False),
+        ("two baseline lines", "**代码基线**：v1.10.0\n**代码基线**：v1.9.0", {"harness-v1.10.0"}, False),
+    ]
     problems = [
         f"self-test '{name}': expected {expected} leak(s), found {len(verdict_leaks(text))}"
         for name, text, expected in cases
@@ -210,6 +262,11 @@ def self_test() -> int:
         f"self-test '{name}': expected {expected}, got {tuple(required_pieces(retired))}"
         for name, retired, expected in piece_cases
         if tuple(required_pieces(retired)) != expected
+    ] + [
+        f"self-test '{name}': baseline line should read {('clean' if clean else 'wrong')},"
+        " it reads the opposite"
+        for name, text, tags, clean in baseline_cases
+        if (baseline_tag_problem(text, tags) is None) != clean
     ]
     if problems:
         for problem in problems:
@@ -222,14 +279,20 @@ def self_test() -> int:
     return 0
 
 
-def _git_tags() -> set[str]:
+def _git_tags() -> set[str] | None:
+    """Every tag in the repo, or ``None`` when git cannot be asked at all.
+
+    ``None`` rather than an empty set: an empty set is indistinguishable from a repo whose tags
+    are all missing, and the harness baseline below reads that as a red -- a misleading one, on a
+    machine where the cause is git rather than a declaration.
+    """
     try:
         out = subprocess.run(
             ["git", "tag", "--list"], capture_output=True, text=True, check=True, cwd=_REPO
         ).stdout
         return {line.strip() for line in out.splitlines() if line.strip()}
     except (OSError, subprocess.CalledProcessError):
-        return set()
+        return None
 
 
 def main(show_tree: bool = "--tree" in sys.argv) -> int:
@@ -238,7 +301,13 @@ def main(show_tree: bool = "--tree" in sys.argv) -> int:
     problems: list[str] = []
     warnings: list[str] = []
     retired_versions: list[str] = []
-    tags = _git_tags()
+    probed = _git_tags()
+    tags = probed or set()
+    if probed is None:
+        problems.append(
+            "git tag --list could not be read (no git, or it refused): tag presence is unknown,"
+            " so neither the harness baseline nor the version directories were checked against it"
+        )
     families = sorted(p for p in _VERSIONS.iterdir() if p.is_dir())
 
     # Which directories are discoverable versions, and under which params filename, is
@@ -343,7 +412,7 @@ def main(show_tree: bool = "--tree" in sys.argv) -> int:
             # with the main line's first generation
             leaf = rel.rsplit("/", 1)[-1]
             tag_stem = f"{family}-{rel.replace('/', '-')}" if "/" in rel else f"{family}-{leaf}"
-            if not any(
+            if probed is not None and not any(
                 t == tag_stem
                 or t.startswith(f"{tag_stem}.")
                 or ("/" not in rel and t == leaf)  # legacy unprefixed main-line tags
@@ -454,6 +523,18 @@ def main(show_tree: bool = "--tree" in sys.argv) -> int:
                 f"ARCH_PLAN.md:{lineno}: status word '{word}' in the title line (preamble:"
                 " 标题/表头/出口一律写判据；当前状态归 ACCEPTANCE.md)"
             )
+
+    # The harness code baseline (ablation_harness/HARNESS.md 代码基线) is red, unlike the family
+    # tags above: the harness has one naming form and no proposal state, so the number is written
+    # when the version lands and the tag is due in the same breath (the discipline sits in the same
+    # paragraph). Ceiling: local refs only -- "tagged but never pushed" is invisible here, and that
+    # half is what makes the tree check-outable for anyone else, so it stays a review question.
+    if not _HARNESS_DOC.is_file():
+        problems.append("ablation_harness/HARNESS.md: missing (it writes the harness baseline)")
+    else:
+        harness_problem = baseline_tag_problem(_HARNESS_DOC.read_text(encoding="utf-8"), tags)
+        if harness_problem is not None:
+            problems.append(f"ablation_harness/HARNESS.md: {harness_problem}")
 
     print(f"  families checked: {len(families)} ({', '.join(p.name for p in families)})")
     if retired_versions:
