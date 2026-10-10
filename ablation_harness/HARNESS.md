@@ -32,10 +32,16 @@
   版本号，不去改旧的）。**只写版本号不打 tag = 视同未声明**：号成为锚点，是在远端能 checkout 的那一刻，
   本机 tag 不算 —— 声明与 tag 是同一笔动作，分开做就有一半会漏。v1.9.0 = v1.8.0（判据身份化 + 套件锁 + 同表条件面）加 `video_matrix.py`（见下）。
   v1.10.0 = v1.9.0 加帧格式 2 与足端判据、定点场景驱动（协议 `scenes` + `components/command_player.py`）、
-  汇总侧身份拒表（记录格式节 ④）、帧格式 3 与四条步态形态报告项；逐笔的改动内容与为什么要升版在
+  汇总侧身份拒表（记录格式节 ④）、帧格式 3 与四条步态形态报告项、**判分器的分段与 settled 种类**
+  （身份 `baseline-criteria-banded-1` → `-settled-1`：按带逐段判且未归带的帧即失败、非足载荷先求和、
+  swing 需跑满时长且落地帧重新承载、命令切换后的 `settle_s` 窗口、声明未见判词的 gate 判 `invalid`）、
+  以及**整腿扩列**（采集轴与 reader 的 `_LEG_TOKENS` 同步扩到五个 token，`spine_leg_coupling` 的候选
+  配对随之变 —— 同格式的实现细化，但它改的是读数）、**足端几何来源改为任务家族声明的 mesh 树**
+  （读数与 `foot_geometry` 摘要取自该 run 加载的那棵树，不再取默认树）。逐笔的改动内容与为什么要升版在
   `acceptance/records/2026-09-23-baseline-frames-format-2-foot-reading.md`、同日的
   `2026-09-23-baseline-fixed-scenes.md` 与 `2026-09-23-diagnostic-row-identity-gate.md`、
-  `2026-09-29-gait-shape-in-the-eval-flow.md`。
+  `2026-09-29-gait-shape-in-the-eval-flow.md`；判分语义、整腿扩列与几何来源的落点与对照读数，以及
+  **这一段里哪些改动不计入本编号、各凭什么**，在 `2026-10-10-harness-baseline-coverage-fill.md`。
 - **部署形态**：仓根独立目录，全部自定位。机器本地事实（IsaacLab 树 + venv 解释器）登记在仓根
   `paths.yaml`（模板 `paths.example.yaml`），唯一读者 `host_paths.py`；`E:\IsaacLab\ablation_harness`
   junction 已废，原机可 `rmdir` 摘链接。harness **不以它为前提**：eval 入口是本仓绝对路径
