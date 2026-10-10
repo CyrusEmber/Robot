@@ -217,7 +217,7 @@ rl_exp\tools\verify\run_offline_checks.bat
 python rl_exp\tools\verify\check_leg_reachability.py --self-check
 :: 预期: 跑分输出 + eval.json 落盘（注意 TRAIN id，不是 -Play：
 :: harness 自己控制 DR，Play 变体会让 robust 静默退化成 nominal）
-python ablation_harness\eval.py --task Lizard2-Flat-v1 --mode nominal --seed 123 --headless
+python ablation_harness\eval.py --task Lizard2-Flat-v1 --mode nominal --seed 123
 ```
 
 **pre-commit 静态闸门**：`hooks\pre-commit` 随仓携带（staged 命中
@@ -234,13 +234,15 @@ python ablation_harness\eval.py --task Lizard2-Flat-v1 --mode nominal --seed 123
 ## 训练
 
 ```bat
-python scripts\reinforcement_learning\rsl_rl\train.py --task Lizard2-Flat-v3 --headless --max_iterations 6000 --seed 42
+python scripts\reinforcement_learning\rsl_rl\train.py --task Lizard2-Flat-v3 --max_iterations 6000 --seed 42
 ```
 
 预算/种子与配方声明一致（`main_params.yaml` 的 `max_iterations` 6000、seed 42，v3.3 用户拍板）；
 加 `--max_iterations` 只是把该声明写进命令，数值改口径仍只走版本纪律。
-`--headless` 是长跑的常规形态；launcher（`rl_exp\tools\launch_recipe.py --launch`）当前**不转发**该旗标，
-从它交棒会起 GUI。<!-- ponytail: launcher 的 PASSTHROUGH 未含 --headless，长跑前直接调训练器；补转发即可撤掉本注 -->
+headless 是本仓的常规形态，命令里不必带旗标：配方不声明 visualizer，框架据此强制 headless。
+`--headless` 已弃用；要**显式强制**（不依赖配方声明）用 `--viz none`，扫参调度
+（`ablation_harness\run_ablation.py`）按后者写。launcher（`rl_exp\tools\launch_recipe.py --launch`）
+不转发 viz 类旗标，从它交棒同样是默认 headless。
 
 **版本复现**：任务 id 由注册表常驻（`Lizard2-Flat-v3` = v3 配方），机制见
 `rl_exp/versions/lizard2/FAMILY.md`「任务注册表」；真源是 `versions/recipes.json`（身份映射）

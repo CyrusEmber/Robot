@@ -166,4 +166,4 @@ harness 代码高频变更 / 多机器人共用 / 再开新协议时 → 目录�
 | 3 | 地形随机源两处缺口 + 几何证据归档（已收） | → `work/closed/2026/terrain-suite-v2-rng.md`、`work/closed/2026/terrain-evidence-18b.md` | — |
 | 4 | 地形证据归档位置与 `rebuild.py` 角色（已裁决：运行目录 + 材料完整性） | → `work/closed/2026/archive-location-decision.md`；裁决见 `acceptance/records/2026-09-22-terrain-evidence-archive-and-verification.md` | — |
 | 5 | 诊断 run 与 campaign 表之间没有闸门（已收：汇总侧按身份拒表） | → `work/closed/2026/diagnostic-run-gate.md`；读数见 `acceptance/records/2026-09-23-diagnostic-row-identity-gate.md` | — |
-| 6 | `--headless` 已弃用而本仓仍在用 | → `work/active/headless-flag-deprecation.md` | 低 |
+| 6 | `--headless` 已弃用（已收：两处透传改 `--viz none`） | → `work/closed/2026/headless-flag-deprecation.md`；核对见 `acceptance/records/2026-10-10-ablation-harness-headless-flag-replacement.md` | — |

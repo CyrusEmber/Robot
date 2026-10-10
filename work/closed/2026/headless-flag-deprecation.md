@@ -2,10 +2,11 @@
 id: headless-flag-deprecation
 title: `--headless` 已弃用而本仓仍在用（HARNESS 挂账 #6）
 scope: ablation_harness
-status: open
-landing: ablation_harness/run_ablation.py#83, ablation_harness/run_ablation.py#115, README.md#223, .codemaker/skills/tool/isaaclab-task-creator/references/runtime_facts.md
-next: 三步核证后再决定删或留：① 查 **task cfg 整条继承链**是否声明 visualizer；② 核该声明在配置解析后是否真的启用；③ 核 `--viz none` 是否影响 `run_ablation.py` 这条调用链。按「已核到行为 / 仅读到声明」把结论写进本项，再走下面的关闭动作
+status: done
+landing: ablation_harness/run_ablation.py#88, ablation_harness/run_ablation.py#122, README.md#242, .codemaker/skills/tool/isaaclab-task-creator/references/runtime_facts.md#77
 close_when: 执行者按 ①→②→③ 做完后观察启动行为——带与不带 `--headless` 各起一次同 task 训练命令，比对启动日志与 visualizer 相关输出。行为等价 ⇒ 删除两处透传并同步 README / skill / vN NOTES 的命令示例，观测 = 命令仍能起训且不再出现弃用告警；行为不等价（例如启用 visualizer 的 task 需 `--viz none` 才真 headless）⇒ 保留透传，并在本项写明保留理由与必须用 `--viz none` 的场合。两种终局都以 ① 的观测为准，写回本项后即关
+evidence: acceptance/records/2026-10-10-ablation-harness-headless-flag-replacement.md
+outcome: 关闭于 2026-10-10，落法取"等价但改为显式强制"：两处透传 `--headless` → `--viz none`，**不是删除**——删掉后 headless 就成了"cfg 未声明 visualizer"的推论，把评测台的 headless 押在本仓不拥有的框架 cfg 链上。README 与 skill 的示例同步（示例用不带旗标的默认形态，散文讲显式强制形态），顺带改写 README 里随框架改默认值已失效的"从 launcher 交棒会起 GUI"；`rl_exp/versions/**` 冻结目录里的命令示例按只读红线不改。观测按用户决定只做离线：继承链零声明、解析后不启用、三种旗标形态 headless 同值、目标脚本接受新旗标；**未起仿真、未起训**（故 close_when 里"起一次训练看日志"那半没有做，判据落在 ① 的继承链读数上）。
 ---
 
 ## 问题与本次范围

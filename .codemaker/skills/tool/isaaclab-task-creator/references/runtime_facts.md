@@ -74,7 +74,7 @@ grep 源码树符号 + 比对已验证 commit `28a37ce`），再跑 `run_offline
 
 以下为 lizard 实例脚本（别的机器人照此模式建自己的），已按类归档在
 `<robot>_exp\tools\{verify,diagnose,trainlog}\`，命令从 IsaacLab 根目录执行，
-全部支持 `--headless`。**判读标准是脚本存在的理由**——
+默认 headless（不传 viz 旗标即可）；`--headless` 已弃用，需显式强制时用 `--viz none`。**判读标准是脚本存在的理由**——
 输出对了才算环境健康，跑通不报错≠验证通过。
 
 | 时机 | 脚本 | 预期输出（判读） |
