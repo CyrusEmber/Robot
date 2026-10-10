@@ -85,6 +85,9 @@ ALL_OFFLINE_CHECKS_PASSED (37/37 in 45.9s, wave 219s/informational, jobs=6)
 - **A① 的挂账未消化**：`teacher_mdp.py` 保留 ⇒ 旧线奖励/终止内核仍在主路径，每次 pre-commit 仍为它们付
   import 成本。"抽取或删除"须另立活跃事项，否则本条变成永久挂账。
 - 以下**未处理**、逐条都需要一次独立决定（不在本项 scope 或未获授权）：
+  > 已由 `work/closed/2026/stale-entrypoints-after-prune.md` 接管并于 2026-10-10 处置（默认值改写、
+  > 两个死工具删除、`_b3`/`_a0` 归档、skill 入口改准），落盘事实见
+  > `acceptance/records/2026-10-10-stale-entrypoints-after-prune.md`。下列各条保留的是 2026-10-09 那天的读数。
   - `rl_exp/tools/verify/_b3_remove_version_classes.py`：一次性脚本，仍指向已删模块（按仓规本应提交前删）。
   - `rl_exp/tools/diagnose/play_keyboard_task.py`：docstring 与 `_self_check` 默认仍指 `Lizard-Rough-Play-v8`，
     `KEY_SENSITIVITY` 按 v8 的 yaml 取值（lizard2 窗口 0–3 m/s，需重定才能改指）。
@@ -98,4 +101,5 @@ ALL_OFFLINE_CHECKS_PASSED (37/37 in 45.9s, wave 219s/informational, jobs=6)
     已不一致（退休家族自己的记录，故意留）。
 - `obs_protocols.json` / `obs_protocol_anchors.json` 按裁决 C② 未动：`check_obs_protocol.check_recorded`
   要求声明面的任务集覆盖**全部** golden，而 golden 按边界保留 ⇒ 声明面不能单方面清空。
-- `SERIAL_BUDGET_S` 的实测值归下一个独立提交（本次未动该常数）。
+- `SERIAL_BUDGET_S`：**本次随条数棘轮一起移动**（175 → **160**），依据是移动后重新 `--confirm-cost` 实测的
+  quiet **146s**/37 条；口径与读数写进 `rl_exp/tools/verify/OFFLINE_CHECKS.md` §3.2，`offline_suite.py:175` 的注释同步。

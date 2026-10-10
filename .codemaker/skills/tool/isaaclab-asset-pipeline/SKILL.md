@@ -53,12 +53,12 @@ USD**。PD 初值随质量量级重估，抄旧机器人数值必炸。
 |---|---|
 | 关节数 | usda 内 Revolute/joint 计数 = yaml `joint_order` 长度（秒级） |
 | 几何量 | usda 应为 MB 级、`faceVertexIndices` / `PhysicsCollisionAPI` 计数 > 0 |
-| 位置/受力 | exp 目录 position_check 类脚本（z 轨迹 + 接触力 + NaN） |
-| 关节对表 | exp 目录 joint_check 类脚本（reset 后关节名/角度 vs `joint_order`） |
-| 站姿对称 | exp 目录 debug_pose 类脚本（每腿 pivot 世界坐标） |
+| 位置/受力 | `tools\verify\baseline_probe.py`（z 轨迹 + 接触力 + NaN） |
+| 关节对表 | `tools\verify\check_joint_layout.py`（reset 后关节名/角度 vs `joint_order`） |
+| 站姿对称 | `tools\diagnose\debug_pose.py`（每腿 pivot 世界坐标） |
 | 肉眼终验 | GUI 观察脚本（开 Isaac Sim 窗口看站立 / 穿模 / 地形） |
 
-标准顺序：convert → 关节数 → position_check（数据）→ 肉眼终验。具体脚本名见仓根
+标准顺序：convert → 关节数 → baseline_probe（数据）→ 肉眼终验。具体脚本名见仓根
 `FILEMAP.md`。
 
 ## 核心坑（症状 → 根因）

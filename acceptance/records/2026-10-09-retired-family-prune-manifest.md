@@ -98,6 +98,8 @@
 **连带修改**：
 - `offline_suite.py:195` `MAX_CHECKS` 48 → **37**（棘轮常数必须同步收）。
 - `offline_suite.py:196` `SERIAL_BUDGET_S = 175.0` 须 `--confirm-cost` **实测后**再钉，不按比例外推。
+  **已执行（2026-10-09，同一批提交）**：条数棘轮移动后实测 quiet **146s**/37 条 ⇒ 收到 **160**（读数与理由见
+  `rl_exp/tools/verify/OFFLINE_CHECKS.md` §3.2）。
 - **顺序约束（不可省）**：`MAX_CHECKS` 是硬上限，48 封顶 ⇒ 给 `[42]` 加 `--live`（新增一条检查）
   必须在 11 条删除**之后**的独立提交里做，否则套件瞬态 49 条、`_count_problem` 直接红（`offline_suite.py:314-326`）。
 

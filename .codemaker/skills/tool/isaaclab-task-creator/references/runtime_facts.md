@@ -53,13 +53,17 @@
 
 ## 私有成员依赖清单（fork 版本升级即碎，改前先验证）
 
-以下三处赌了 IsaacLab 内部实现（均有注释标注），**升级 IsaacLab fork 前必须逐条验证**：
+以下赌了 IsaacLab 内部实现（均有注释标注），**升级 IsaacLab fork 前必须逐条验证**：
 
-- `staged_curriculum.py` 写 `action_term._scale`（公开 API 只有 cfg.scale）
-- `teacher_mdp.py` 用 `asset._physics_sim_view`（框架 events.py 同款 workaround，
-  有先例但仍是私有）
-- `staged_curriculum.py` 的 `_dependency_met` 假设 curriculum manager 把
-  `cfg.func` 换成 term 实例（赌 `stage_idx` 属性存在）
+- `teacher_mdp.py` 用 `asset._physics_sim_view` 建 rigid-body view（框架 events.py 同款
+  workaround，有先例但仍是私有）
+- `teacher_mdp.py` 的 `FootContactNormalsTerm` 读 `RayCaster.meshes` 类变量 + 直接调
+  `raycast_mesh_masked_kernel`（未导出的 warp 内核；两条都在 `framework_pin_check.py`
+  的 `NEEDLES` 里，被机器看守）
+
+（lizard2 之前的清单里还有 `staged_curriculum.py` 的两条——写 `action_term._scale`、赌
+curriculum manager 把 `cfg.func` 换成 term 实例。该文件与使用它的课程线已于 2026-10-09
+随 `lizard/main` 退休删除，条目也随之从 `framework_pin_check.py` 移除。）
 
 配套纪律：IsaacLab fork 版本升级 = 单独一次提交。先跑
 `tools\verify\framework_pin_check.py`（把上面三条 + 其余内部依赖做成机器检查：
@@ -75,14 +79,18 @@ grep 源码树符号 + 比对已验证 commit `28a37ce`），再跑 `run_offline
 
 | 时机 | 脚本 | 预期输出（判读） |
 |---|---|---|
-| teacher env 改动后 | `tools\verify\teacher_smoke.py` | `OBS_SHAPE (2, 308)`（v2；v1 为 266）；`LAYOUT` 行按 term 名给出切片（obs 契约按 `rl_exp/versions/lizard/OBS.md` 对账，`FAMILY.md` 只指路）；`ACTION_DIM 26`；`MASS_SUM ≈ 总质量`；`FOOT_FORCES_Z` 合计≈全重；`OBS_FINITE True` |
-| 家族 env 改动后 | `tools\verify\smoke_test.py` | `OBS_DIM` 匹配布局；`STEPPED_OK True` |
-| 资产/站姿/初始高度改动后 | `tools\verify\position_check.py`（`--rough` 切粗糙地形） | `JOINT_COUNT 26`；base z 轨迹沉降稳定不穿地不悬空；四脚 `force_z` 合计 ≈ 总重×9.8（全重落脚=站姿自洽）；`nan_free True` |
-| 几何/命名疑虑 | `tools\verify\pose_check.py` | 各 body 相对 base 坐标符合设计（头在前、四脚对称、尾在后） |
-| 想肉眼确认 | `tools\verify\view_terrain.py`（默认平地；`--task Lizard-Rough-Play-vN` 看版本地形） | GUI 持默认位姿不塌 |
-| 关节加载疑虑 | `tools\verify\joint_check.py` / `tools\diagnose\debug_pose.py` | 关节角=默认位姿 / 轴心世界坐标符合 URDF |
+| 起训前（env / 配方） | `tools\verify\baseline_probe.py` | 命令张量 / obs 组 / 奖励量级与配方一致；不给过就说明配方与运行态已经分家 |
+| 资产布局 / 动作分配 | `tools\verify\check_joint_layout.py` | 关节名序与 `joint_order` 一致；动作维数=布局声明的维数 |
+| 复位契约 | `tools\verify\reset_check.py` | 全量复位与子集复位后状态逐位一致 |
+| 接触归属 | `tools\verify\check_contact_ownership.py` | 每个受罚 body 有 collider、每个接触 body 有对应惩罚项或是脚 |
+| 想肉眼确认 | `tools\verify\view_terrain.py`（默认平地） | GUI 持默认位姿不塌 |
+| 站姿 / 轴心疑虑 | `tools\diagnose\debug_pose.py` | 各 body 相对 base 坐标符合设计（头在前、四脚对称、尾在后） |
 | obs 出 NaN | `tools\diagnose\diagnose_nan.py` | 定位哪个 term 产生 NaN |
 | 版本记录 | `tools\trainlog\dump_tb.py`（上节） | csv 行数与迭代数同量级 |
+
+（2026-10-09 前这张表里还有 `teacher_smoke.py` / `smoke_test.py` / `position_check.py` /
+`pose_check.py` / `joint_check.py`——随 `lizard/main` 退休删除，入口改由上面这些仍注册的任务
+上能跑的脚本承担。）
 
 要点：
 - 动作维度**永远写 `env.unwrapped.action_manager.total_action_dim`**，

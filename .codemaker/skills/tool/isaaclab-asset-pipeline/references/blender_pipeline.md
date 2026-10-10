@@ -31,9 +31,12 @@ Steam Blender 运行：
 6. 删 `assets\lizard\` + `.asset_hash` + `config.yaml` →
    `tools\pipeline\convert_urdf.py --headless`
 7. 验证链：`tools\diagnose\debug_pose`（四腿 pivot 对称）→
-   `tools\verify\position_check`（受力/z 稳定）→ `tools\verify\view_terrain` 肉眼终验
+   `tools\verify\baseline_probe`（受力/z 稳定）→ `tools\verify\view_terrain` 肉眼终验
 
-## 站姿判定标准（position_check / debug_pose）
+   （2026-10-09 前这一步写的是 `tools\verify\position_check`，随 `lizard/main` 退休删除；
+   上面的替换脚本在活跃任务上跑同一类读数。）
+
+## 站姿判定标准（baseline_probe / debug_pose）
 
 - 四脚 force_z 合计 ≈ 总质量 × 9.8，单脚偏差 < 30%
 - base z 轨迹收敛无震荡

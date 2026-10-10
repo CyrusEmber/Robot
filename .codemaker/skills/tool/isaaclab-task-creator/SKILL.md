@@ -27,7 +27,7 @@ description: >
 | `FAMILY.md` | 家族事实与版本史：线 / 支线身份、任务注册表（任务 id→配方版本）、版本史与教训、机体几何 |
 | `PLAN.md` | 训练计划 SSOT（决策 / 挂账 / 验收） |
 | `versions\<family>\vN\` | 冻结参数副本 + NOTES.md + tb_scalars.csv |
-| `tasks\` | **完整任务包**（自有代码 100% 自包含）：`__init__.py` 注册表、env cfg 家族、`agents\`（runner cfg）、`staged_curriculum.py` |
+| `tasks\` | **完整任务包**（自有代码 100% 自包含）：`__init__.py` 注册表、env cfg 家族、`agents\`（runner cfg）、按需的课程组件 |
 | `tools\`（pipeline/verify/diagnose/trainlog/archive）、`blender\` | 工具与验证脚本（见 asset-pipeline skill） |
 
 目录职责、闸门与入口清单在仓根 `FILEMAP.md`；obs 布局在 `OBS.md`。
@@ -123,7 +123,7 @@ term 全是类式 `ManagerTermBase`，定义在 `isaaclab/envs/mdp/events.py`（
 `setattr(self.events, "<name>", EventTerm(...))` 动态挂；OVPhysX 后端 material 随机化
 是 no-op（只 warn，别当 bug 查）。
 
-## 课程组件 API（`staged_curriculum.py`，直接复用）
+## 课程组件 API（`staged_curriculum.py` 的模式，该机器人有时直接复用）
 
 ```python
 StageCfg(
