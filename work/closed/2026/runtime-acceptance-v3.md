@@ -20,4 +20,4 @@ outcome: 关闭于 2026-10-10，走**用户拍板**的"降级判据"路线 —�
 - **本项不定成绩**：`locomotion_eval_*` 的 9 列里只有 `flat` 对平地训练家族是成绩面，其余 8 列是 OOD 探针
   （列角色见 `ablation_harness/HARNESS.md`）。本项测的是协议与套件的行为，不是策略强弱。
 - **跨列耦合机制不在本项**：本项只观测到"改套件会污染摘要未变的列"，机制候选与单变量探针归 `work/active/eval-column-coupling.md`。
-- 本项不含 ④b 之外的地形几何工作（已收，见 `work/closed/2026/`），也不含记录格式的真跑段（另立 `work/active/record-format-live-checks.md`）。
+- 本项不含 ④b 之外的地形几何工作（已收，见 `work/closed/2026/`），也不含记录格式的真跑段（当时另立事项 `record-format-live-checks`，2026-10-10 关闭 ⇒ 现于 `work/closed/2026/record-format-live-checks.md`）。
