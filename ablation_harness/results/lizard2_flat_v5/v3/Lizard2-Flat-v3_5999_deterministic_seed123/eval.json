@@ -1,0 +1,3080 @@
+{
+  "report_format": "baseline-eval-2",
+  "protocol": {
+    "name": "Lizard2-Flat-v5",
+    "version": 5,
+    "supersedes": "lizard2_flat_v4.json",
+    "recipe": "lizard2-flat-v3@1",
+    "recipe_version": "v3",
+    "episode_length_s": 20.0,
+    "terrain": "plane",
+    "judge": "baseline-criteria-banded-settled-1",
+    "command": {
+      "mode": "range",
+      "lin_vel_x": [
+        0.0,
+        3.0
+      ],
+      "lin_vel_y": [
+        0.0,
+        0.0
+      ],
+      "ang_vel_z": [
+        0.0,
+        0.0
+      ],
+      "resample_s": 10.0,
+      "why": "The recipe samples 0-3 m/s on the framework's own 10 s window, so the protocol declares a BOX and the record carries the command actually issued each frame -- a range in the yaml and the tensor the manager issues are two things the config alone cannot tell apart. The top of the window carries headroom past the retired lizard line's 3.0 m/s by owner decision (2026-09-22), so 'it cannot reach 3 m/s' must not be read as a policy failure before the actuator reading says so."
+    },
+    "displacement_frame": "initial_yaw",
+    "tracking_frame": "current_yaw",
+    "post_failure_velocity": "zero",
+    "terminal_frame": "post_physics_pre_reset",
+    "why_v1": [
+      "One mean cannot judge a range command: a run that walks in [0.1, 1.0) and stalls in [2.0, 3.0) and a run that is uniformly mediocre produce the same mean and are different failures. So the bands are part of the criterion (tracking_banded_v1 / displacement_banded_v1) and every band must pass, including the zero-command band, which is read in absolute units and in the criterion rather than left out as 'the command is rarely zero'.",
+      "The zero band is a declared band, not a special case: bands partition the command window ([0.0, 0.1) and then the three relative bands), so a frame belongs to exactly one of them, and a frame outside every band is a declaration hole the judge fails on instead of dropping.",
+      "The old normalized comparison is not reused. `tracking_v1.normalized` divides by `max(v_cmd, 1e-6)`, which turns a near-zero command into noise, and `displacement_v1.normalized` divides per env before averaging, which is unstable as the expected distance approaches zero. `floor_mps` and 'sum over the band first, divide after' replace both.",
+      "The four criteria the retired families' protocols do not have are added as new kinds with their own judge id rather than by editing a published kind: a changed criterion has to be a new name, or old records would silently point at a reader that no longer exists.",
+      "A gate here is a pass condition, not a diagnostic. `non_foot_carrier_v1` and `non_foot_load_sum_v1` are both required: the first collapses the bodies before the dwell (bodies taking turns carrying), the second sums them first (two bodies under the fraction carrying the weight between them). Their thresholds are breach LEVELS -- raising one is looser, and both sit above the measured healthy reading and below the retired line's measured failure (11.6-12.8% of body weight) by construction, not at it.",
+      "No lift term in the gait criterion. The record carries per-foot contact and load, not height, and a threshold on a quantity the run never measured is refused everywhere else in this module; the criterion therefore reads swing duration and the load recovered on landing, and the support-phase drag it cannot see stays a report-only number."
+    ],
+    "why_v2": [
+      "The banded reader was wrong about a band's first frames. On the line's first verdict (model_13999, 256 envs, seed 123, 20 s window) the zero-command band failed with the maximum at 2.622 m/s against a 0.15 limit and a net drift of 3.216 m against a 0.3 limit; all fifteen zero-command runs of that window begin at frame 499, which is the framework's 10 s resample, and the speed decays from 2.622 to below 0.1 m/s within 1.0 s. The band was reading the command step, not the policy: no causal policy is at 0 m/s on the frame the command reaches 0.",
+      "So both banded criteria declare `settle_s`: a frame is evidence only if its command has been in force that long, and the frames the episode's first command covers are as new as a change and are not evidence either. The value is derived, not chosen for its verdict: the measured deceleration is 2.622 -> 0.104 m/s in 1.0 s, about 2.5 m/s^2, and a step from the declared top of the box (3.0 m/s) at that rate needs 1.2 s, so the allowance is 1.5 s. The margin is visible in every report rather than buried here: `tracking_band_unsettled_max` carries the band's speed before the trim beside the gated one (2.622 vs 0.213 on this run).",
+      "The allowance is bounded, which is what keeps the band's teeth: a policy still at the old speed after `settle_s`, or one that creeps on through the band, is judged frame by frame exactly as before. Both directions are falsified in the frozen case set (a brake inside the window passes, a brake past it and a sustained creep do not).",
+      "The zero band's displacement reading was env-count dependent and is now per env. It summed the drift over every env and every frame and compared that to a metre limit, so the same policy read 3.216 m at 256 envs and would have read 0.2 m at 16 -- a criterion whose number moves with the batch size is not a criterion. The reading is now the worst env's drift inside the band (1.248 m summed over 15 envs was 0.083 m per env against the 0.3 m limit), and the absolute limit keeps its metres.",
+      "It is a new reader id (`baseline-criteria-banded-settled-1`) and new kind names (`*_banded_settled_v1`), not a re-pinned parameter on the published reader: the old id's block keeps pinning the no-settle semantics, so the verdict it produced stays readable as what it says -- that reader failed the zero band, and it did so on a step. The settled reader's own first report (0.213 m/s, +1.248 m) was produced before the per-env correction and is superseded by this one; its frames are the same rollout and can be re-judged offline.",
+      "Every other number is unchanged from `Lizard2-Flat-v1`: same recipe, same box, same bands, same thresholds, same dwells."
+    ],
+    "why_v3": [
+      "Identity only. This file judges `lizard2-flat-v2@1`, the arm whose single difference from v1 is WHO may command the four blade joints: they keep v1's gains, damping, effort limit and default flat target and lose their action channel, so the action interface is 26 dims instead of 30. No criterion here reads a joint's command channel, so no judged number moves -- and the evaluator refuses a protocol whose declared recipe version is not the task's, which is why the same criteria have to be spelled a second time rather than shared between the two arms.",
+      "Two files that can drift are not one ruler, so the sameness is machine-checked rather than promised: `test_baseline_contract.py::test_the_two_lizard2_arms_are_judged_by_one_ruler_spelled_twice` compares every judged block of this file and `lizard2_flat_v2.json` and refuses any difference outside the keys that name the file.",
+      "The anchor table (`protocol_anchors.json`) covers this file on arrival, because the covered set is read off `protocols/` rather than declared: a digest there says the bytes moved and this reason is what says somebody looked."
+    ],
+    "criteria": {
+      "tracking": {
+        "kind": "tracking_banded_settled_v1",
+        "params": {
+          "threshold": 0.25,
+          "floor_mps": 0.5,
+          "zero_band_mps": 0.1,
+          "zero_abs_mps": 0.15,
+          "settle_s": 1.5,
+          "bands": [
+            [
+              0.0,
+              0.1
+            ],
+            [
+              0.1,
+              1.0
+            ],
+            [
+              1.0,
+              2.0
+            ],
+            [
+              2.0,
+              3.0
+            ]
+          ]
+        }
+      },
+      "displacement": {
+        "kind": "displacement_banded_settled_v1",
+        "params": {
+          "threshold": 0.8,
+          "zero_band_mps": 0.1,
+          "zero_abs_m": 0.3,
+          "settle_s": 1.5,
+          "bands": [
+            [
+              0.0,
+              0.1
+            ],
+            [
+              0.1,
+              1.0
+            ],
+            [
+              1.0,
+              2.0
+            ],
+            [
+              2.0,
+              3.0
+            ]
+          ]
+        }
+      },
+      "survival": {
+        "kind": "survival_v1",
+        "params": {
+          "threshold": 0.9
+        }
+      },
+      "attitude": {
+        "kind": "sustained_tilt_v1",
+        "params": {
+          "threshold_cos": 0.766,
+          "sustain_s": 0.5
+        }
+      },
+      "no_non_foot_contact": {
+        "kind": "non_foot_contact_v1",
+        "params": {
+          "limit_n": 1.0,
+          "eps": 1e-09
+        }
+      },
+      "no_non_foot_carrier": {
+        "kind": "non_foot_carrier_v1",
+        "params": {
+          "fraction": 0.05,
+          "sustain_s": 0.5
+        }
+      },
+      "no_non_foot_load_sum": {
+        "kind": "non_foot_load_sum_v1",
+        "params": {
+          "fraction_sum": 0.08,
+          "sustain_s": 0.5
+        }
+      },
+      "gait": {
+        "kind": "gait_swing_v1",
+        "params": {
+          "min_swing_feet": 2,
+          "min_air_time_s": 0.1,
+          "min_landing_load": 0.05,
+          "band_mps": 0.5
+        }
+      }
+    },
+    "report_only": [
+      "forward_mae_mps",
+      "lateral_speed_abs_mps",
+      "yaw_offset_abs_rad",
+      "head_tail_contact_force_n",
+      "first_episode_frame_fraction",
+      "foot_duty",
+      "foot_load_fraction",
+      "feet_down_mean",
+      "tilt_max_deg",
+      "non_foot_load_fraction",
+      "non_foot_contact_load_n",
+      "non_foot_mesh_min_z_m",
+      "foot_yaw_deg",
+      "foot_slip_mps",
+      "dof_torque_frac_of_limit",
+      "spine_yaw_travel_deg",
+      "spine_leg_coupling",
+      "stride_hip_corr",
+      "stride_knee_corr"
+    ],
+    "why_v4": [
+      "Identity and reporting only: this file judges the same recipe `lizard2-flat-v2@1` as v3 and every number a verdict reads is v3's, field for field. What it adds is four report-only items the v3 file did not ask for: the trunk's lateral travel, whether that travel moves with a leg, and per foot whether the stride came from the hip (the sprawl axis) or the fore-aft hinge (a sagittal knee swing).",
+      "None of the four is a gate, and that is deliberate rather than unfinished: a threshold on \"how a lizard should walk\" would need readings to place above the healthy numbers and below the failing ones, and the only readings in hand are one checkpoint at three command bands. Adding a metric is still a protocol version, because the old records' report columns do not carry it (`ablation_harness/HARNESS.md`).",
+      "The four read a column that only `baseline-frames-3` has, so this protocol refuses a record collected under format 2 rather than reporting an absent number. That is the point of naming the columns in the declaration: an absent number reads as one that happened to be unremarkable."
+    ],
+    "why_v5": [
+      "Identity only, third arm. This file judges `lizard2-flat-v3@1`: the arm whose body was adopted on 2026-10-08 and whose four ankle (`kfe`) joints left the action interface, so the interface is 22 dims instead of 26 and the joints keep their gains, damping, effort limit and default flat target. No criterion here reads a joint's command channel or a body's mesh -- the command box, the bands, the limits and the loads are judged exactly as the v2 arm is judged -- so no judged number moves, and the v2 arm's frozen readings stay readable as what they say. The evaluator refuses a protocol whose declared recipe version is not the task's, which is why the same criteria are spelled a third time rather than shared between arms.",
+      "A row taken under this file is not a like-for-like twin of one taken under the v2 arm's files: the body and the action interface both moved, and the record's condition face is where that shows up -- a different `assets.declared_digest` has to be named as the substitution in `run.variant`, not quietly averaged into the same table.",
+      "Two files that can drift are not one ruler, so the sameness is machine-checked rather than promised: `test_baseline_contract.py::test_the_two_lizard2_arms_are_judged_by_one_ruler_spelled_twice` compares every judged block of the three arm files and refuses any difference outside the keys that name the file. Its name still says two because the frozen v3 and v4 files cite it by that name; the set it compares is read from its own table, which carries an entry per arm.",
+      "The anchor table (`protocol_anchors.json`) covers this file on arrival, because the covered set is read off `protocols/` rather than declared: a digest there says the bytes moved and this reason is what says somebody looked."
+    ]
+  },
+  "protocol_path": "ablation_harness\\protocols\\lizard2_flat_v5.json",
+  "protocol_digest": "sha256:db5f92ba56586907837f49081ba640d0239ff92a2692277371b3ae8b79aa138a",
+  "task": "Lizard2-Flat-Play-v3",
+  "seed": 123,
+  "num_envs": 256,
+  "timestamp": "2026-10-10T15:19:12+08:00",
+  "code": {
+    "repository": {
+      "available": true,
+      "root": "<REPO_ROOT>",
+      "rev": "0f4b2bf5317a",
+      "dirty": false,
+      "status_porcelain_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diff_lines": 0,
+      "changed_paths": [],
+      "changed_non_prose": [],
+      "changed_prose_count": 0,
+      "untracked_count": 0,
+      "untracked": [],
+      "untracked_in_code_root": [],
+      "untracked_outside_code_root": [],
+      "untracked_requires_archive": false
+    },
+    "isaaclab": {
+      "available": true,
+      "root": "<ISAAC_ROOT>",
+      "rev": "28a37cecdd43",
+      "dirty": true,
+      "status_porcelain_sha256": "82c26edc18ea8edb9c367ed8f2482726b62f238be5faed8865db5d502b11e7c1",
+      "diff_sha256": "8934638c9a560f6b7138fdc0a9948b0fde675f38c320b83b1223f6267fafbca2",
+      "diff_lines": 459,
+      "changed_paths": [
+        "IMG/上.png",
+        "IMG/侧.png",
+        "IMG/后.png",
+        "IMG/斜.png",
+        "IMG/正.png",
+        "_tmp_pngcheck/v1_episode_length.png",
+        "_tmp_pngcheck/v1_eval_terrains.png",
+        "_tmp_pngcheck/v1_eval_trend.png",
+        "_tmp_pngcheck/v1_progress.png",
+        "_tmp_pngcheck/v1_reward.png",
+        "_tmp_pngcheck/v1_termination.png",
+        "_tmp_tag_audit.py",
+        "isaaclab.bat",
+        "model/lizard.blend",
+        "model/lizard.glb",
+        "scripts/reinforcement_learning/rsl_rl/play.py",
+        "scripts/reinforcement_learning/rsl_rl/train.py",
+        "source/isaaclab_tasks/isaaclab_tasks/direct/anymal_c/anymal_c_env.py",
+        "source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/config/spider/agents/rsl_rl_ppo_cfg.py",
+        "source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/config/spider/spider_env_cfg.py",
+        "source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/velocity_env_cfg.py"
+      ],
+      "changed_non_prose": [
+        "IMG/上.png",
+        "IMG/侧.png",
+        "IMG/后.png",
+        "IMG/斜.png",
+        "IMG/正.png",
+        "_tmp_pngcheck/v1_episode_length.png",
+        "_tmp_pngcheck/v1_eval_terrains.png",
+        "_tmp_pngcheck/v1_eval_trend.png",
+        "_tmp_pngcheck/v1_progress.png",
+        "_tmp_pngcheck/v1_reward.png",
+        "_tmp_pngcheck/v1_termination.png",
+        "_tmp_tag_audit.py",
+        "isaaclab.bat",
+        "model/lizard.blend",
+        "model/lizard.glb",
+        "scripts/reinforcement_learning/rsl_rl/play.py",
+        "scripts/reinforcement_learning/rsl_rl/train.py",
+        "source/isaaclab_tasks/isaaclab_tasks/direct/anymal_c/anymal_c_env.py",
+        "source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/config/spider/agents/rsl_rl_ppo_cfg.py",
+        "source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/config/spider/spider_env_cfg.py",
+        "source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/velocity_env_cfg.py"
+      ],
+      "changed_prose_count": 0,
+      "untracked_count": 5,
+      "untracked": [
+        "IMG/",
+        "_tmp_pngcheck/",
+        "_tmp_tag_audit.py",
+        "model/",
+        "source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/config/spider/"
+      ],
+      "untracked_in_code_root": [
+        "source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/config/spider/"
+      ],
+      "untracked_outside_code_root": [
+        "IMG/",
+        "_tmp_pngcheck/",
+        "_tmp_tag_audit.py",
+        "model/"
+      ],
+      "untracked_requires_archive": true
+    },
+    "rsl_rl": {
+      "available": true,
+      "root": "<ISAAC_ROOT>",
+      "rev": "28a37cecdd43",
+      "dirty": true,
+      "status_porcelain_sha256": "82c26edc18ea8edb9c367ed8f2482726b62f238be5faed8865db5d502b11e7c1",
+      "diff_sha256": "8934638c9a560f6b7138fdc0a9948b0fde675f38c320b83b1223f6267fafbca2",
+      "diff_lines": 459,
+      "changed_paths": [
+        "IMG/上.png",
+        "IMG/侧.png",
+        "IMG/后.png",
+        "IMG/斜.png",
+        "IMG/正.png",
+        "_tmp_pngcheck/v1_episode_length.png",
+        "_tmp_pngcheck/v1_eval_terrains.png",
+        "_tmp_pngcheck/v1_eval_trend.png",
+        "_tmp_pngcheck/v1_progress.png",
+        "_tmp_pngcheck/v1_reward.png",
+        "_tmp_pngcheck/v1_termination.png",
+        "_tmp_tag_audit.py",
+        "isaaclab.bat",
+        "model/lizard.blend",
+        "model/lizard.glb",
+        "scripts/reinforcement_learning/rsl_rl/play.py",
+        "scripts/reinforcement_learning/rsl_rl/train.py",
+        "source/isaaclab_tasks/isaaclab_tasks/direct/anymal_c/anymal_c_env.py",
+        "source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/config/spider/agents/rsl_rl_ppo_cfg.py",
+        "source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/config/spider/spider_env_cfg.py",
+        "source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/velocity_env_cfg.py"
+      ],
+      "changed_non_prose": [
+        "IMG/上.png",
+        "IMG/侧.png",
+        "IMG/后.png",
+        "IMG/斜.png",
+        "IMG/正.png",
+        "_tmp_pngcheck/v1_episode_length.png",
+        "_tmp_pngcheck/v1_eval_terrains.png",
+        "_tmp_pngcheck/v1_eval_trend.png",
+        "_tmp_pngcheck/v1_progress.png",
+        "_tmp_pngcheck/v1_reward.png",
+        "_tmp_pngcheck/v1_termination.png",
+        "_tmp_tag_audit.py",
+        "isaaclab.bat",
+        "model/lizard.blend",
+        "model/lizard.glb",
+        "scripts/reinforcement_learning/rsl_rl/play.py",
+        "scripts/reinforcement_learning/rsl_rl/train.py",
+        "source/isaaclab_tasks/isaaclab_tasks/direct/anymal_c/anymal_c_env.py",
+        "source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/config/spider/agents/rsl_rl_ppo_cfg.py",
+        "source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/config/spider/spider_env_cfg.py",
+        "source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/velocity_env_cfg.py"
+      ],
+      "changed_prose_count": 0,
+      "untracked_count": 5,
+      "untracked": [
+        "IMG/",
+        "_tmp_pngcheck/",
+        "_tmp_tag_audit.py",
+        "model/",
+        "source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/config/spider/"
+      ],
+      "untracked_in_code_root": [],
+      "untracked_outside_code_root": [
+        "IMG/",
+        "_tmp_pngcheck/",
+        "_tmp_tag_audit.py",
+        "model/",
+        "source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/config/spider/"
+      ],
+      "untracked_requires_archive": false,
+      "mode": "editable/source",
+      "package_dir": "<ISAAC_ROOT>/env_isaaclab/Lib/site-packages/rsl_rl"
+    }
+  },
+  "policy_mode": "deterministic",
+  "checkpoint": {
+    "path": "E:\\IsaacLab\\logs\\rsl_rl\\lizard2_v3\\2026-10-10_10-14-50\\model_5999.pt",
+    "resolved": "E:\\IsaacLab\\logs\\rsl_rl\\lizard2_v3\\2026-10-10_10-14-50\\model_5999.pt",
+    "sha256": "sha256:954fb332bdd7c56d0ba6cb8bb7faec443006bb1a62cd9b619855cd664b7ae1aa",
+    "size": 1826357,
+    "mtime": 1791610273.568156
+  },
+  "terminal_frames_captured": 256,
+  "head_tail_sensor_bodies": [
+    "tail1_yaw",
+    "tail1_pitch",
+    "neck_yaw",
+    "tail2_yaw",
+    "neck_pitch",
+    "tail2_pitch",
+    "tail3_yaw",
+    "tail3_pitch"
+  ],
+  "foot_bodies": [
+    "rr_foot",
+    "rl_foot",
+    "rf_foot",
+    "lf_foot"
+  ],
+  "non_foot_bodies": [
+    "base_link",
+    "chest_yaw",
+    "tail1_yaw",
+    "rr_hip",
+    "rl_hip",
+    "chest_pitch",
+    "tail1_pitch",
+    "rr_haa",
+    "rl_haa",
+    "neck_yaw",
+    "rf_hip",
+    "lf_hip",
+    "tail2_yaw",
+    "rr_hfe",
+    "rl_hfe",
+    "neck_pitch",
+    "rf_haa",
+    "lf_haa",
+    "tail2_pitch",
+    "rr_kfe",
+    "rl_kfe",
+    "rf_hfe",
+    "lf_hfe",
+    "tail3_yaw",
+    "rf_kfe",
+    "lf_kfe",
+    "tail3_pitch"
+  ],
+  "mesh_check_bodies": [
+    "chest_pitch",
+    "neck_pitch",
+    "tail1_pitch",
+    "tail2_pitch",
+    "tail3_pitch"
+  ],
+  "body_weight_n": 708.2830178833008,
+  "frames_path": "ablation_harness\\results\\lizard2_flat_v5\\v3\\Lizard2-Flat-v3_5999_deterministic_seed123\\eval.frames.pt",
+  "frames_sha256": "sha256:f3cfb536651b551823ef67c11caf374546f3a09f7478a2160ddf17ea5abdbc31",
+  "env_cfg": {
+    "viewer": {
+      "eye": {
+        "__tuple__": [
+          7.5,
+          7.5,
+          7.5
+        ]
+      },
+      "lookat": {
+        "__tuple__": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "cam_prim_path": "/OmniverseKit_Persp",
+      "resolution": {
+        "__tuple__": [
+          1280,
+          720
+        ]
+      },
+      "origin_type": "world",
+      "env_index": 0,
+      "asset_name": null,
+      "body_name": null
+    },
+    "sim": {
+      "device": "cuda:0",
+      "dt": 0.005,
+      "gravity": {
+        "__tuple__": [
+          0.0,
+          0.0,
+          -9.81
+        ]
+      },
+      "physics_prim_path": "/physicsScene",
+      "physics_material": {
+        "func": "isaaclab.sim.spawners.materials.physics_materials:spawn_rigid_body_material",
+        "static_friction": 1.0,
+        "dynamic_friction": 1.0,
+        "restitution": 0.0,
+        "compliant_contact_stiffness": null,
+        "compliant_contact_damping": null,
+        "friction_combine_mode": "multiply",
+        "restitution_combine_mode": "multiply"
+      },
+      "use_fabric": true,
+      "render_interval": 4,
+      "enable_scene_query_support": false,
+      "use_newton_actuators": false,
+      "physics": {
+        "class_type": "isaaclab_physx.physics.physx_manager:PhysxManager",
+        "solver_type": 1,
+        "solve_articulation_contact_last": false,
+        "min_position_iteration_count": 1,
+        "max_position_iteration_count": 255,
+        "min_velocity_iteration_count": 0,
+        "max_velocity_iteration_count": 255,
+        "enable_scene_query_support": false,
+        "enable_ccd": false,
+        "enable_stabilization": false,
+        "enable_external_forces_every_iteration": false,
+        "enable_enhanced_determinism": false,
+        "bounce_threshold_velocity": 0.5,
+        "friction_offset_threshold": 0.04,
+        "friction_correlation_distance": 0.025,
+        "gpu_max_rigid_contact_count": 8388608,
+        "gpu_max_rigid_patch_count": 327680,
+        "gpu_found_lost_pairs_capacity": 2097152,
+        "gpu_found_lost_aggregate_pairs_capacity": 33554432,
+        "gpu_total_aggregate_pairs_capacity": 2097152,
+        "gpu_collision_stack_size": 67108864,
+        "gpu_heap_capacity": 67108864,
+        "gpu_temp_buffer_capacity": 16777216,
+        "gpu_max_num_partitions": 8,
+        "gpu_max_soft_body_contacts": 1048576,
+        "gpu_max_particle_contacts": 1048576
+      },
+      "render": {
+        "enable_translucency": null,
+        "enable_reflections": null,
+        "enable_global_illumination": null,
+        "antialiasing_mode": null,
+        "enable_dlssg": null,
+        "enable_dl_denoiser": null,
+        "dlss_mode": null,
+        "enable_direct_lighting": null,
+        "samples_per_pixel": null,
+        "enable_shadows": null,
+        "enable_ambient_occlusion": null,
+        "dome_light_upper_lower_strategy": null,
+        "max_bounces": null,
+        "split_glass": null,
+        "split_clearcoat": null,
+        "split_rough_reflection": null,
+        "ambient_light_intensity": null,
+        "ambient_occlusion_denoiser_mode": null,
+        "view_tile_limit": null,
+        "carb_settings": null,
+        "rendering_mode": null
+      },
+      "create_stage_in_memory": false,
+      "logging_level": "WARNING",
+      "save_logs_to_file": true,
+      "log_dir": null,
+      "visualizer_cfgs": []
+    },
+    "ui_window_class_type": "isaaclab.envs.ui.manager_based_rl_env_window:ManagerBasedRLEnvWindow",
+    "seed": 123,
+    "decimation": 4,
+    "scene": {
+      "num_envs": 256,
+      "env_spacing": 2.5,
+      "lazy_sensor_update": true,
+      "replicate_physics": true,
+      "filter_collisions": true,
+      "clone_in_fabric": false,
+      "robot": {
+        "class_type": "isaaclab.assets.articulation.articulation:Articulation",
+        "prim_path": "/World/envs/env_.*/Robot",
+        "spawn": {
+          "func": "isaaclab.sim.spawners.from_files.from_files:spawn_from_usd",
+          "visible": true,
+          "semantic_tags": null,
+          "copy_from_source": true,
+          "spawn_path": "/World/envs/env_0/Robot",
+          "mass_props": null,
+          "deformable_props": null,
+          "rigid_props": {
+            "rigid_body_enabled": null,
+            "kinematic_enabled": null,
+            "disable_gravity": false,
+            "linear_damping": 0.0,
+            "angular_damping": 0.0,
+            "max_linear_velocity": 1000.0,
+            "max_angular_velocity": 1000.0,
+            "max_depenetration_velocity": 1.0,
+            "max_contact_impulse": null,
+            "enable_gyroscopic_forces": null,
+            "retain_accelerations": false,
+            "solver_position_iteration_count": null,
+            "solver_velocity_iteration_count": null,
+            "sleep_threshold": null,
+            "stabilization_threshold": null
+          },
+          "collision_props": null,
+          "activate_contact_sensors": true,
+          "scale": null,
+          "articulation_props": {
+            "articulation_enabled": null,
+            "fix_root_link": null,
+            "enabled_self_collisions": false,
+            "solver_position_iteration_count": 8,
+            "solver_velocity_iteration_count": 0,
+            "sleep_threshold": null,
+            "stabilization_threshold": null
+          },
+          "fixed_tendons_props": null,
+          "spatial_tendons_props": null,
+          "joint_drive_props": null,
+          "visual_material_path": "material",
+          "visual_material": null,
+          "physics_material_path": "material",
+          "physics_material": null,
+          "usd_path": "<REPO_ROOT>/rl_exp/lizard2_candidate/lizard2_candidate.usda",
+          "variants": null
+        },
+        "init_state": {
+          "pos": {
+            "__tuple__": [
+              0.0,
+              0.0,
+              1.1
+            ]
+          },
+          "rot": {
+            "__tuple__": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ]
+          },
+          "lin_vel": {
+            "__tuple__": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "ang_vel": {
+            "__tuple__": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "joint_pos": {
+            ".*_hip_joint": 0.0,
+            ".*_haa_joint": 0.0,
+            ".*_hfe_joint": 0.0,
+            ".*_kfe_joint": 0.0,
+            ".*_foot_joint": 0.0,
+            "chest_.*": 0.0,
+            "tail[0-9]_.*": 0.0,
+            "neck.*_.*": 0.0
+          },
+          "joint_vel": {
+            ".*": 0.0
+          }
+        },
+        "collision_group": 0,
+        "debug_vis": false,
+        "disable_shape_checks": null,
+        "articulation_root_prim_path": null,
+        "soft_joint_pos_limit_factor": 0.95,
+        "actuators": {
+          "legs": {
+            "class_type": "isaaclab.actuators.actuator_pd:ImplicitActuator",
+            "joint_names_expr": [
+              ".*_hip_joint",
+              ".*_haa_joint",
+              ".*_hfe_joint",
+              ".*_kfe_joint"
+            ],
+            "effort_limit": 180.0,
+            "velocity_limit": 10.0,
+            "effort_limit_sim": null,
+            "velocity_limit_sim": null,
+            "stiffness": 800.0,
+            "damping": 40.0,
+            "armature": 0.0,
+            "friction": null,
+            "dynamic_friction": null,
+            "viscous_friction": null
+          },
+          "feet": {
+            "class_type": "isaaclab.actuators.actuator_pd:ImplicitActuator",
+            "joint_names_expr": [
+              ".*_foot_joint"
+            ],
+            "effort_limit": 70.0,
+            "velocity_limit": 6.0,
+            "effort_limit_sim": null,
+            "velocity_limit_sim": null,
+            "stiffness": 200.0,
+            "damping": 12.0,
+            "armature": 0.0,
+            "friction": null,
+            "dynamic_friction": null,
+            "viscous_friction": null
+          },
+          "spine": {
+            "class_type": "isaaclab.actuators.actuator_pd:ImplicitActuator",
+            "joint_names_expr": [
+              "chest_.*",
+              "tail[0-9]_.*",
+              "neck.*_yaw_joint",
+              "neck.*_pitch_joint"
+            ],
+            "effort_limit": 80.0,
+            "velocity_limit": 4.0,
+            "effort_limit_sim": null,
+            "velocity_limit_sim": null,
+            "stiffness": 400.0,
+            "damping": 20.0,
+            "armature": 0.0,
+            "friction": null,
+            "dynamic_friction": null,
+            "viscous_friction": null
+          }
+        },
+        "actuator_value_resolution_debug_print": false
+      },
+      "terrain": {
+        "class_type": "isaaclab.terrains.terrain_importer:TerrainImporter",
+        "collision_group": -1,
+        "prim_path": "/World/ground",
+        "num_envs": 256,
+        "terrain_type": "plane",
+        "terrain_generator": null,
+        "usd_path": null,
+        "env_spacing": 2.5,
+        "use_terrain_origins": true,
+        "visual_material": {
+          "func": "isaaclab.sim.spawners.materials.visual_materials:spawn_from_mdl_file",
+          "mdl_path": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/IsaacLab/Materials/TilesMarbleSpiderWhiteBrickBondHoned/TilesMarbleSpiderWhiteBrickBondHoned.mdl",
+          "project_uvw": true,
+          "albedo_brightness": null,
+          "texture_scale": {
+            "__tuple__": [
+              0.25,
+              0.25
+            ]
+          }
+        },
+        "physics_material": {
+          "func": "isaaclab.sim.spawners.materials.physics_materials:spawn_rigid_body_material",
+          "static_friction": 1.0,
+          "dynamic_friction": 1.0,
+          "restitution": 0.0,
+          "compliant_contact_stiffness": null,
+          "compliant_contact_damping": null,
+          "friction_combine_mode": "multiply",
+          "restitution_combine_mode": "multiply"
+        },
+        "max_init_terrain_level": null,
+        "debug_vis": false
+      },
+      "height_scanner": null,
+      "contact_forces": {
+        "class_type": "isaaclab_physx.sensors.contact_sensor.contact_sensor:ContactSensor",
+        "prim_path": "/World/envs/env_.*/Robot/.*",
+        "update_period": 0.0,
+        "debug_vis": false,
+        "track_pose": false,
+        "track_contact_points": false,
+        "track_friction_forces": false,
+        "max_contact_data_count_per_prim": null,
+        "track_air_time": true,
+        "force_threshold": null,
+        "history_length": 3,
+        "filter_prim_paths_expr": [],
+        "visualizer_cfg": {
+          "prim_path": "/Visuals/ContactSensor",
+          "markers": {
+            "contact": {
+              "func": "isaaclab.sim.spawners.shapes.shapes:spawn_sphere",
+              "visible": true,
+              "semantic_tags": null,
+              "copy_from_source": true,
+              "spawn_path": null,
+              "mass_props": null,
+              "rigid_props": null,
+              "collision_props": null,
+              "activate_contact_sensors": false,
+              "visual_material_path": "material",
+              "visual_material": {
+                "func": "isaaclab.sim.spawners.materials.visual_materials:spawn_preview_surface",
+                "diffuse_color": {
+                  "__tuple__": [
+                    1.0,
+                    0.0,
+                    0.0
+                  ]
+                },
+                "emissive_color": {
+                  "__tuple__": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ]
+                },
+                "roughness": 0.5,
+                "metallic": 0.0,
+                "opacity": 1.0
+              },
+              "physics_material_path": "material",
+              "physics_material": null,
+              "radius": 0.02
+            },
+            "no_contact": {
+              "func": "isaaclab.sim.spawners.shapes.shapes:spawn_sphere",
+              "visible": false,
+              "semantic_tags": null,
+              "copy_from_source": true,
+              "spawn_path": null,
+              "mass_props": null,
+              "rigid_props": null,
+              "collision_props": null,
+              "activate_contact_sensors": false,
+              "visual_material_path": "material",
+              "visual_material": {
+                "func": "isaaclab.sim.spawners.materials.visual_materials:spawn_preview_surface",
+                "diffuse_color": {
+                  "__tuple__": [
+                    0.0,
+                    1.0,
+                    0.0
+                  ]
+                },
+                "emissive_color": {
+                  "__tuple__": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ]
+                },
+                "roughness": 0.5,
+                "metallic": 0.0,
+                "opacity": 1.0
+              },
+              "physics_material_path": "material",
+              "physics_material": null,
+              "radius": 0.02
+            }
+          }
+        }
+      },
+      "sky_light": {
+        "class_type": null,
+        "prim_path": "/World/skyLight",
+        "spawn": {
+          "func": "isaaclab.sim.spawners.lights.lights:spawn_light",
+          "visible": true,
+          "semantic_tags": null,
+          "copy_from_source": true,
+          "spawn_path": "/World/skyLight",
+          "prim_type": "DomeLight",
+          "color": {
+            "__tuple__": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          "enable_color_temperature": false,
+          "color_temperature": 6500.0,
+          "normalize": false,
+          "exposure": 0.0,
+          "intensity": 750.0,
+          "texture_file": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/Materials/Textures/Skies/PolyHaven/kloofendal_43d_clear_puresky_4k.hdr",
+          "texture_format": "automatic",
+          "visible_in_primary_ray": true
+        },
+        "init_state": {
+          "pos": {
+            "__tuple__": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "rot": {
+            "__tuple__": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ]
+          }
+        },
+        "collision_group": 0,
+        "debug_vis": false,
+        "disable_shape_checks": null
+      }
+    },
+    "recorders": {
+      "dataset_file_handler_class_type": {
+        "__type__": "isaaclab.utils.datasets.hdf5_dataset_file_handler.HDF5DatasetFileHandler"
+      },
+      "dataset_export_dir_path": "/tmp/isaaclab/logs",
+      "dataset_filename": "dataset",
+      "dataset_export_mode": 1,
+      "export_in_record_pre_reset": true,
+      "export_in_close": false,
+      "dataset_compression": true
+    },
+    "observations": {
+      "policy": {
+        "concatenate_terms": true,
+        "concatenate_dim": -1,
+        "enable_corruption": false,
+        "history_length": null,
+        "flatten_history_dim": true,
+        "base_lin_vel": {
+          "func": {
+            "__callable__": "isaaclab.envs.mdp.observations.base_lin_vel"
+          },
+          "params": {},
+          "modifiers": null,
+          "noise": {
+            "func": "isaaclab.utils.noise.noise_model:uniform_noise",
+            "operation": "add",
+            "n_min": -0.1,
+            "n_max": 0.1
+          },
+          "clip": null,
+          "scale": null,
+          "history_length": 0,
+          "flatten_history_dim": true
+        },
+        "base_ang_vel": {
+          "func": {
+            "__callable__": "isaaclab.envs.mdp.observations.base_ang_vel"
+          },
+          "params": {},
+          "modifiers": null,
+          "noise": {
+            "func": "isaaclab.utils.noise.noise_model:uniform_noise",
+            "operation": "add",
+            "n_min": -0.2,
+            "n_max": 0.2
+          },
+          "clip": null,
+          "scale": null,
+          "history_length": 0,
+          "flatten_history_dim": true
+        },
+        "projected_gravity": {
+          "func": {
+            "__callable__": "isaaclab.envs.mdp.observations.projected_gravity"
+          },
+          "params": {},
+          "modifiers": null,
+          "noise": {
+            "func": "isaaclab.utils.noise.noise_model:uniform_noise",
+            "operation": "add",
+            "n_min": -0.05,
+            "n_max": 0.05
+          },
+          "clip": null,
+          "scale": null,
+          "history_length": 0,
+          "flatten_history_dim": true
+        },
+        "velocity_commands": {
+          "func": {
+            "__callable__": "isaaclab.envs.mdp.observations.generated_commands"
+          },
+          "params": {
+            "command_name": "base_velocity"
+          },
+          "modifiers": null,
+          "noise": null,
+          "clip": null,
+          "scale": null,
+          "history_length": 0,
+          "flatten_history_dim": true
+        },
+        "joint_pos": {
+          "func": {
+            "__callable__": "isaaclab.envs.mdp.observations.joint_pos_rel"
+          },
+          "params": {},
+          "modifiers": null,
+          "noise": {
+            "func": "isaaclab.utils.noise.noise_model:uniform_noise",
+            "operation": "add",
+            "n_min": -0.01,
+            "n_max": 0.01
+          },
+          "clip": null,
+          "scale": null,
+          "history_length": 0,
+          "flatten_history_dim": true
+        },
+        "joint_vel": {
+          "func": {
+            "__callable__": "isaaclab.envs.mdp.observations.joint_vel_rel"
+          },
+          "params": {},
+          "modifiers": null,
+          "noise": {
+            "func": "isaaclab.utils.noise.noise_model:uniform_noise",
+            "operation": "add",
+            "n_min": -1.5,
+            "n_max": 1.5
+          },
+          "clip": null,
+          "scale": null,
+          "history_length": 0,
+          "flatten_history_dim": true
+        },
+        "actions": {
+          "func": {
+            "__callable__": "isaaclab.envs.mdp.observations.last_action"
+          },
+          "params": {},
+          "modifiers": null,
+          "noise": null,
+          "clip": null,
+          "scale": null,
+          "history_length": 0,
+          "flatten_history_dim": true
+        },
+        "height_scan": null
+      }
+    },
+    "actions": {
+      "joint_pos": null,
+      "joint_pos_legs": {
+        "class_type": "isaaclab.envs.mdp.actions.joint_actions:JointPositionAction",
+        "asset_name": "robot",
+        "debug_vis": false,
+        "clip": null,
+        "joint_names": [
+          ".*_hip_joint",
+          ".*_haa_joint",
+          ".*_hfe_joint"
+        ],
+        "scale": 0.5,
+        "offset": 0.0,
+        "preserve_order": false,
+        "use_default_offset": true
+      },
+      "joint_pos_spine": {
+        "class_type": "isaaclab.envs.mdp.actions.joint_actions:JointPositionAction",
+        "asset_name": "robot",
+        "debug_vis": false,
+        "clip": null,
+        "joint_names": [
+          "chest_.*",
+          "neck_.*",
+          "tail[0-9]_.*"
+        ],
+        "scale": 0.25,
+        "offset": 0.0,
+        "preserve_order": false,
+        "use_default_offset": true
+      }
+    },
+    "events": {
+      "physics_material": null,
+      "add_base_mass": null,
+      "base_com": null,
+      "base_external_force_torque": null,
+      "reset_base": {
+        "func": {
+          "__callable__": "isaaclab.envs.mdp.events.reset_root_state_uniform"
+        },
+        "params": {
+          "pose_range": {
+            "x": {
+              "__tuple__": [
+                0.0,
+                0.0
+              ]
+            },
+            "y": {
+              "__tuple__": [
+                0.0,
+                0.0
+              ]
+            },
+            "yaw": {
+              "__tuple__": [
+                0.0,
+                0.0
+              ]
+            }
+          },
+          "velocity_range": {
+            "x": {
+              "__tuple__": [
+                0.0,
+                0.0
+              ]
+            },
+            "y": {
+              "__tuple__": [
+                0.0,
+                0.0
+              ]
+            },
+            "z": {
+              "__tuple__": [
+                0.0,
+                0.0
+              ]
+            },
+            "roll": {
+              "__tuple__": [
+                0.0,
+                0.0
+              ]
+            },
+            "pitch": {
+              "__tuple__": [
+                0.0,
+                0.0
+              ]
+            },
+            "yaw": {
+              "__tuple__": [
+                0.0,
+                0.0
+              ]
+            }
+          }
+        },
+        "mode": "reset",
+        "interval_range_s": null,
+        "is_global_time": false,
+        "min_step_count_between_reset": 0
+      },
+      "reset_robot_joints": {
+        "func": {
+          "__callable__": "isaaclab.envs.mdp.events.reset_joints_by_scale"
+        },
+        "params": {
+          "position_range": {
+            "__tuple__": [
+              1.0,
+              1.0
+            ]
+          },
+          "velocity_range": {
+            "__tuple__": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "mode": "reset",
+        "interval_range_s": null,
+        "is_global_time": false,
+        "min_step_count_between_reset": 0
+      },
+      "push_robot": null
+    },
+    "rerender_on_reset": false,
+    "num_rerenders_on_reset": 0,
+    "wait_for_textures": true,
+    "xr": null,
+    "teleop_devices": {
+      "devices": {}
+    },
+    "isaac_teleop": null,
+    "export_io_descriptors": false,
+    "log_dir": null,
+    "video_recorder": {
+      "class_type": {
+        "__type__": "isaaclab.envs.utils.video_recorder.VideoRecorder"
+      },
+      "env_render_mode": null,
+      "eye": {
+        "__tuple__": [
+          7.5,
+          7.5,
+          7.5
+        ]
+      },
+      "lookat": {
+        "__tuple__": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "backend_source": "visualizer",
+      "window_width": 1280,
+      "window_height": 720
+    },
+    "is_finite_horizon": false,
+    "episode_length_s": 20.0,
+    "rewards": {
+      "track_lin_vel_xy_exp": null,
+      "track_ang_vel_z_exp": {
+        "func": {
+          "__callable__": "isaaclab.envs.mdp.rewards.track_ang_vel_z_exp"
+        },
+        "params": {
+          "command_name": "base_velocity",
+          "std": 0.5
+        },
+        "weight": 0.5
+      },
+      "lin_vel_z_l2": {
+        "func": {
+          "__callable__": "isaaclab.envs.mdp.rewards.lin_vel_z_l2"
+        },
+        "params": {},
+        "weight": -2.0
+      },
+      "ang_vel_xy_l2": null,
+      "dof_torques_l2": {
+        "func": {
+          "__callable__": "isaaclab.envs.mdp.rewards.joint_torques_l2"
+        },
+        "params": {},
+        "weight": -1e-05
+      },
+      "dof_acc_l2": null,
+      "action_rate_l2": {
+        "func": {
+          "__callable__": "isaaclab.envs.mdp.rewards.action_rate_l2"
+        },
+        "params": {},
+        "weight": -0.01
+      },
+      "feet_air_time": null,
+      "undesired_contacts": {
+        "func": {
+          "__callable__": "isaaclab.envs.mdp.rewards.undesired_contacts"
+        },
+        "params": {
+          "sensor_cfg": {
+            "name": "contact_forces",
+            "joint_names": null,
+            "joint_ids": {
+              "__slice__": [
+                null,
+                null,
+                null
+              ]
+            },
+            "fixed_tendon_names": null,
+            "fixed_tendon_ids": {
+              "__slice__": [
+                null,
+                null,
+                null
+              ]
+            },
+            "body_names": [
+              ".*_hfe",
+              ".*_kfe"
+            ],
+            "body_ids": {
+              "__slice__": [
+                null,
+                null,
+                null
+              ]
+            },
+            "object_collection_names": null,
+            "object_collection_ids": {
+              "__slice__": [
+                null,
+                null,
+                null
+              ]
+            },
+            "preserve_order": false
+          },
+          "threshold": 1.0
+        },
+        "weight": -1.0
+      },
+      "flat_orientation_l2": null,
+      "dof_pos_limits": null,
+      "track_lin_vel_xy_miki": {
+        "func": {
+          "__callable__": "rl_exp.tasks.lizard2_recipe.track_lin_vel_xy_miki"
+        },
+        "params": {
+          "command_name": "base_velocity",
+          "sigma_sq": 0.25
+        },
+        "weight": 1.5
+      },
+      "belly_contact_force": {
+        "func": {
+          "__callable__": "rl_exp.tasks.lizard2_recipe.belly_contact_force"
+        },
+        "params": {
+          "sensor_cfg": {
+            "name": "contact_forces",
+            "joint_names": null,
+            "joint_ids": {
+              "__slice__": [
+                null,
+                null,
+                null
+              ]
+            },
+            "fixed_tendon_names": null,
+            "fixed_tendon_ids": {
+              "__slice__": [
+                null,
+                null,
+                null
+              ]
+            },
+            "body_names": [
+              "base_link"
+            ],
+            "body_ids": {
+              "__slice__": [
+                null,
+                null,
+                null
+              ]
+            },
+            "object_collection_names": null,
+            "object_collection_ids": {
+              "__slice__": [
+                null,
+                null,
+                null
+              ]
+            },
+            "preserve_order": false
+          },
+          "force_scale": 706.0
+        },
+        "weight": -0.5
+      }
+    },
+    "terminations": {
+      "time_out": {
+        "func": {
+          "__callable__": "isaaclab.envs.mdp.terminations.time_out"
+        },
+        "params": {},
+        "time_out": true
+      },
+      "base_contact": {
+        "func": {
+          "__callable__": "isaaclab.envs.mdp.terminations.illegal_contact"
+        },
+        "params": {
+          "sensor_cfg": {
+            "name": "contact_forces",
+            "joint_names": null,
+            "joint_ids": {
+              "__slice__": [
+                null,
+                null,
+                null
+              ]
+            },
+            "fixed_tendon_names": null,
+            "fixed_tendon_ids": {
+              "__slice__": [
+                null,
+                null,
+                null
+              ]
+            },
+            "body_names": [
+              "base_link"
+            ],
+            "body_ids": {
+              "__slice__": [
+                null,
+                null,
+                null
+              ]
+            },
+            "object_collection_names": null,
+            "object_collection_ids": {
+              "__slice__": [
+                null,
+                null,
+                null
+              ]
+            },
+            "preserve_order": false
+          },
+          "threshold": 1.0
+        },
+        "time_out": false
+      },
+      "head_contact": {
+        "func": {
+          "__callable__": "isaaclab.envs.mdp.terminations.illegal_contact"
+        },
+        "params": {
+          "sensor_cfg": {
+            "name": "contact_forces",
+            "joint_names": null,
+            "joint_ids": {
+              "__slice__": [
+                null,
+                null,
+                null
+              ]
+            },
+            "fixed_tendon_names": null,
+            "fixed_tendon_ids": {
+              "__slice__": [
+                null,
+                null,
+                null
+              ]
+            },
+            "body_names": [
+              "chest_pitch",
+              "neck_pitch"
+            ],
+            "body_ids": {
+              "__slice__": [
+                null,
+                null,
+                null
+              ]
+            },
+            "object_collection_names": null,
+            "object_collection_ids": {
+              "__slice__": [
+                null,
+                null,
+                null
+              ]
+            },
+            "preserve_order": false
+          },
+          "threshold": 1.0
+        },
+        "time_out": false
+      }
+    },
+    "curriculum": {
+      "terrain_levels": null
+    },
+    "commands": {
+      "base_velocity": {
+        "class_type": "isaaclab.envs.mdp.commands.velocity_command:UniformVelocityCommand",
+        "resampling_time_range": {
+          "__tuple__": [
+            10.0,
+            10.0
+          ]
+        },
+        "debug_vis": true,
+        "cmd_kind": null,
+        "element_names": null,
+        "asset_name": "robot",
+        "heading_command": false,
+        "heading_control_stiffness": 0.5,
+        "rel_standing_envs": 0.0,
+        "rel_heading_envs": 1.0,
+        "ranges": {
+          "lin_vel_x": {
+            "__tuple__": [
+              0.0,
+              3.0
+            ]
+          },
+          "lin_vel_y": {
+            "__tuple__": [
+              0.0,
+              0.0
+            ]
+          },
+          "ang_vel_z": {
+            "__tuple__": [
+              0.0,
+              0.0
+            ]
+          },
+          "heading": {
+            "__tuple__": [
+              -3.141592653589793,
+              3.141592653589793
+            ]
+          }
+        },
+        "vel_xy_success_threshold": 0.5,
+        "vel_yaw_success_threshold": 0.4,
+        "goal_vel_visualizer_cfg": {
+          "prim_path": "/Visuals/Command/velocity_goal",
+          "markers": {
+            "arrow": {
+              "func": "isaaclab.sim.spawners.from_files.from_files:spawn_from_usd",
+              "visible": true,
+              "semantic_tags": null,
+              "copy_from_source": true,
+              "spawn_path": null,
+              "mass_props": null,
+              "deformable_props": null,
+              "rigid_props": null,
+              "collision_props": null,
+              "activate_contact_sensors": false,
+              "scale": {
+                "__tuple__": [
+                  0.5,
+                  0.5,
+                  0.5
+                ]
+              },
+              "articulation_props": null,
+              "fixed_tendons_props": null,
+              "spatial_tendons_props": null,
+              "joint_drive_props": null,
+              "visual_material_path": "material",
+              "visual_material": {
+                "func": "isaaclab.sim.spawners.materials.visual_materials:spawn_preview_surface",
+                "diffuse_color": {
+                  "__tuple__": [
+                    0.0,
+                    1.0,
+                    0.0
+                  ]
+                },
+                "emissive_color": {
+                  "__tuple__": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ]
+                },
+                "roughness": 0.5,
+                "metallic": 0.0,
+                "opacity": 1.0
+              },
+              "physics_material_path": "material",
+              "physics_material": null,
+              "usd_path": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/Props/UIElements/arrow_x.usd",
+              "variants": null
+            }
+          }
+        },
+        "current_vel_visualizer_cfg": {
+          "prim_path": "/Visuals/Command/velocity_current",
+          "markers": {
+            "arrow": {
+              "func": "isaaclab.sim.spawners.from_files.from_files:spawn_from_usd",
+              "visible": true,
+              "semantic_tags": null,
+              "copy_from_source": true,
+              "spawn_path": null,
+              "mass_props": null,
+              "deformable_props": null,
+              "rigid_props": null,
+              "collision_props": null,
+              "activate_contact_sensors": false,
+              "scale": {
+                "__tuple__": [
+                  0.5,
+                  0.5,
+                  0.5
+                ]
+              },
+              "articulation_props": null,
+              "fixed_tendons_props": null,
+              "spatial_tendons_props": null,
+              "joint_drive_props": null,
+              "visual_material_path": "material",
+              "visual_material": {
+                "func": "isaaclab.sim.spawners.materials.visual_materials:spawn_preview_surface",
+                "diffuse_color": {
+                  "__tuple__": [
+                    0.0,
+                    0.0,
+                    1.0
+                  ]
+                },
+                "emissive_color": {
+                  "__tuple__": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ]
+                },
+                "roughness": 0.5,
+                "metallic": 0.0,
+                "opacity": 1.0
+              },
+              "physics_material_path": "material",
+              "physics_material": null,
+              "usd_path": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/Props/UIElements/arrow_x.usd",
+              "variants": null
+            }
+          }
+        }
+      }
+    },
+    "params_version": "v3"
+  },
+  "agent_cfg": {
+    "seed": 42,
+    "device": "cuda:0",
+    "num_steps_per_env": 24,
+    "max_iterations": 6000,
+    "empirical_normalization": {
+      "__missing__": true
+    },
+    "obs_groups": {
+      "__missing__": true
+    },
+    "clip_actions": null,
+    "check_for_nan": true,
+    "save_interval": 50,
+    "experiment_name": "lizard2_v3",
+    "run_name": "",
+    "logger": "tensorboard",
+    "neptune_project": "isaaclab",
+    "wandb_project": "isaaclab",
+    "resume": false,
+    "load_run": ".*",
+    "load_checkpoint": "model_.*.pt",
+    "class_name": "OnPolicyRunner",
+    "actor": {
+      "class_name": "MLPModel",
+      "hidden_dims": [
+        256,
+        128,
+        128
+      ],
+      "activation": "elu",
+      "obs_normalization": false,
+      "distribution_cfg": {
+        "class_name": "GaussianDistribution",
+        "init_std": 1.0,
+        "std_type": "scalar"
+      },
+      "stochastic": {
+        "__missing__": true
+      },
+      "init_noise_std": {
+        "__missing__": true
+      },
+      "noise_std_type": {
+        "__missing__": true
+      },
+      "state_dependent_std": {
+        "__missing__": true
+      }
+    },
+    "critic": {
+      "class_name": "MLPModel",
+      "hidden_dims": [
+        256,
+        128,
+        128
+      ],
+      "activation": "elu",
+      "obs_normalization": false,
+      "distribution_cfg": null,
+      "stochastic": {
+        "__missing__": true
+      },
+      "init_noise_std": {
+        "__missing__": true
+      },
+      "noise_std_type": {
+        "__missing__": true
+      },
+      "state_dependent_std": {
+        "__missing__": true
+      }
+    },
+    "algorithm": {
+      "class_name": "PPO",
+      "num_learning_epochs": 5,
+      "num_mini_batches": 4,
+      "learning_rate": 0.001,
+      "schedule": "adaptive",
+      "gamma": 0.99,
+      "lam": 0.95,
+      "entropy_coef": 0.005,
+      "desired_kl": 0.01,
+      "max_grad_norm": 1.0,
+      "optimizer": "adam",
+      "value_loss_coef": 1.0,
+      "use_clipped_value_loss": true,
+      "clip_param": 0.2,
+      "normalize_advantage_per_mini_batch": false,
+      "share_cnn_encoders": false,
+      "rnd_cfg": null,
+      "symmetry_cfg": null
+    },
+    "policy": {
+      "__missing__": true
+    }
+  },
+  "verdict": "pass",
+  "invalid_reasons": [],
+  "metrics": {
+    "forward_mae_mps": 0.05120476707816124,
+    "forward_displacement_m": 26.46126937866211,
+    "first_episode_timeout_fraction": 1.0,
+    "command_mps_mean": 1.4578907489776611,
+    "tracking_band_unsettled_max": {
+      "0-0.1mps": 2.5796194076538086
+    },
+    "tracking_band_frames": {
+      "0-0.1mps": 6370,
+      "0.1-1mps": 69276,
+      "1-2mps": 75648,
+      "2-3mps": 66306
+    },
+    "tracking_band_error": {
+      "0-0.1mps": 0.06289496272802353,
+      "0.1-1mps": 0.05506011098623276,
+      "1-2mps": 0.014597468078136444,
+      "2-3mps": 0.010115072131156921
+    },
+    "tracking_unclaimed_frames": 0,
+    "tracking_band_reasons": [],
+    "expected_displacement_m": 29.157808303833008,
+    "displacement_band_frames": {
+      "0-0.1mps": 6370,
+      "0.1-1mps": 69276,
+      "1-2mps": 75648,
+      "2-3mps": 66306
+    },
+    "displacement_band_ratio": {
+      "0-0.1mps": 0.08392906188964844,
+      "0.1-1mps": 0.9478742811236766,
+      "1-2mps": 0.956587505557872,
+      "2-3mps": 0.8756151649733062
+    },
+    "displacement_band_reasons": [],
+    "tilt_max_deg": 27.089881896972656,
+    "non_foot_load_fraction_max": 0.0,
+    "non_foot_contact_load_n_max": 0.0,
+    "non_foot_load_sum_max": 0.0,
+    "gait_envs_request_swing_feet_mean": 3.859375,
+    "gait_swing_feet_least": 3,
+    "non_foot_mesh_min_z_m": -0.0008313655853271484
+  },
+  "gates": {
+    "tracking": true,
+    "displacement": true,
+    "survival": true,
+    "attitude": true,
+    "no_non_foot_contact": true,
+    "no_non_foot_carrier": true,
+    "no_non_foot_load_sum": true,
+    "gait": true
+  },
+  "diagnostics": {
+    "lateral_speed_abs_mps": 0.02466648817062378,
+    "yaw_offset_abs_rad": 0.2493261992931366,
+    "head_tail_contact_force_n": 0.0,
+    "first_episode_frame_fraction": 1.0,
+    "tilt_max_deg": 27.089881896972656,
+    "foot_clearance_swing_m": [
+      0.1523074358701706,
+      0.18881820142269135,
+      0.2576543092727661,
+      0.2690803110599518
+    ],
+    "foot_slip_mps": [
+      1.1855465173721313,
+      1.0436676740646362,
+      1.397126317024231,
+      0.7609543800354004
+    ],
+    "foot_swing_frames": [
+      56083,
+      113969,
+      151911,
+      151058
+    ],
+    "foot_loaded_frames": [
+      199917,
+      142031,
+      104089,
+      104942
+    ],
+    "foot_ground_source": "declared (plane)",
+    "spine_yaw_travel_deg": [
+      13.866762161254883,
+      26.300695419311523,
+      4.848801136016846,
+      15.929567337036133,
+      17.810306549072266
+    ],
+    "spine_leg_coupling": 0.909358024597168,
+    "stride_hip_corr": [
+      -0.8611359596252441,
+      -0.20054104924201965,
+      0.4730249047279358,
+      0.029564591124653816
+    ],
+    "stride_knee_corr": [
+      -0.4110994338989258,
+      0.41458532214164734,
+      -0.3645956814289093,
+      0.22423000633716583
+    ],
+    "non_foot_load_fraction": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "non_foot_contact_load_n": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "non_foot_contact_frames": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "non_foot_mesh_min_z_m": [
+      0.20910167694091797,
+      -0.0008313655853271484,
+      0.4913409352302551,
+      0.5975816249847412,
+      0.13384515047073364
+    ],
+    "foot_duty": [
+      0.7809256911277771,
+      0.5548086166381836,
+      0.40659767389297485,
+      0.40992969274520874
+    ],
+    "feet_down_mean": 2.152261734008789,
+    "foot_load_fraction": [
+      0.18282774090766907,
+      0.25020095705986023,
+      0.26322320103645325,
+      0.29702770709991455
+    ]
+  },
+  "report_groups": {
+    "task": [
+      "displacement_band_ratio",
+      "expected_displacement_m",
+      "first_episode_timeout_fraction",
+      "forward_displacement_m",
+      "forward_mae_mps",
+      "tilt_max_deg",
+      "tilt_max_deg",
+      "tracking_band_error"
+    ],
+    "measurement": [
+      "command_mps_mean",
+      "displacement_band_frames",
+      "first_episode_frame_fraction",
+      "foot_ground_source",
+      "foot_loaded_frames",
+      "foot_swing_frames",
+      "tracking_band_frames",
+      "tracking_unclaimed_frames"
+    ],
+    "behaviour": [
+      "feet_down_mean",
+      "foot_clearance_swing_m",
+      "foot_duty",
+      "foot_load_fraction",
+      "foot_slip_mps",
+      "gait_swing_feet_least",
+      "head_tail_contact_force_n",
+      "lateral_speed_abs_mps",
+      "non_foot_contact_frames",
+      "non_foot_contact_load_n",
+      "non_foot_load_fraction",
+      "non_foot_mesh_min_z_m",
+      "non_foot_mesh_min_z_m",
+      "spine_leg_coupling",
+      "spine_yaw_travel_deg",
+      "stride_hip_corr",
+      "stride_knee_corr",
+      "yaw_offset_abs_rad"
+    ]
+  },
+  "per_env": {
+    "forward_mae_mps": [
+      0.03266548737883568,
+      0.07721403986215591,
+      0.03798728808760643,
+      0.060216885060071945,
+      0.037883032113313675,
+      0.043224237859249115,
+      0.08437025547027588,
+      0.05081624165177345,
+      0.060543518513441086,
+      0.047883085906505585,
+      0.03537984937429428,
+      0.026290420442819595,
+      0.0678974986076355,
+      0.12350230664014816,
+      0.09145652502775192,
+      0.09261233359575272,
+      0.04376254603266716,
+      0.12350714951753616,
+      0.10023074597120285,
+      0.10147353261709213,
+      0.0323968306183815,
+      0.06297300010919571,
+      0.023161472752690315,
+      0.05039461702108383,
+      0.06897129863500595,
+      0.027117973193526268,
+      0.06157652661204338,
+      0.06444582343101501,
+      0.030571844428777695,
+      0.07894288748502731,
+      0.042929358780384064,
+      0.047430820763111115,
+      0.042810242623090744,
+      0.06396691501140594,
+      0.025149835273623466,
+      0.0737382173538208,
+      0.021918663755059242,
+      0.033067479729652405,
+      0.03496043011546135,
+      0.07831326127052307,
+      0.05269971117377281,
+      0.06522399932146072,
+      0.05559670180082321,
+      0.049196090549230576,
+      0.03846370428800583,
+      0.02897796407341957,
+      0.04339959844946861,
+      0.07196081429719925,
+      0.11405184864997864,
+      0.039871856570243835,
+      0.03529747948050499,
+      0.03851510211825371,
+      0.059895142912864685,
+      0.04923626035451889,
+      0.052792735397815704,
+      0.06464085727930069,
+      0.044381145387887955,
+      0.07420643419027328,
+      0.04422876983880997,
+      0.0514511801302433,
+      0.0272053312510252,
+      0.02815617434680462,
+      0.04601144790649414,
+      0.023776421323418617,
+      0.02494773454964161,
+      0.07727745175361633,
+      0.058044906705617905,
+      0.05005684494972229,
+      0.08865102380514145,
+      0.022885559126734734,
+      0.04525762423872948,
+      0.04691918566823006,
+      0.023062650114297867,
+      0.04625311493873596,
+      0.03711404651403427,
+      0.027343453839421272,
+      0.06668831408023834,
+      0.03600071743130684,
+      0.0465046651661396,
+      0.05554718151688576,
+      0.07085023075342178,
+      0.05709034949541092,
+      0.06452932953834534,
+      0.04446868598461151,
+      0.035058729350566864,
+      0.06801736354827881,
+      0.04028536379337311,
+      0.041626449674367905,
+      0.0417143777012825,
+      0.10312185436487198,
+      0.0320427343249321,
+      0.030810436233878136,
+      0.05311166122555733,
+      0.04718077555298805,
+      0.03134528920054436,
+      0.022079069167375565,
+      0.029078351333737373,
+      0.02982928417623043,
+      0.03464069589972496,
+      0.05520724505186081,
+      0.04212690144777298,
+      0.0743447095155716,
+      0.036717869341373444,
+      0.037807974964380264,
+      0.030637873336672783,
+      0.038126155734062195,
+      0.03610490635037422,
+      0.06434199213981628,
+      0.04771561920642853,
+      0.06394510716199875,
+      0.05467315390706062,
+      0.06543006002902985,
+      0.04755939170718193,
+      0.02196541242301464,
+      0.03144345432519913,
+      0.09411756694316864,
+      0.05429752916097641,
+      0.04778148606419563,
+      0.0755046159029007,
+      0.05023139715194702,
+      0.0379788912832737,
+      0.04588571935892105,
+      0.029546691104769707,
+      0.024315757676959038,
+      0.07259649783372879,
+      0.054097577929496765,
+      0.04382160305976868,
+      0.06325121223926544,
+      0.04286358878016472,
+      0.04285244271159172,
+      0.10695312172174454,
+      0.08373870700597763,
+      0.041592974215745926,
+      0.022608846426010132,
+      0.03549393638968468,
+      0.02612331323325634,
+      0.08416066318750381,
+      0.033244822174310684,
+      0.07460541278123856,
+      0.04901685193181038,
+      0.0512726828455925,
+      0.04404409974813461,
+      0.04748712480068207,
+      0.08659674972295761,
+      0.05286795273423195,
+      0.03858521953225136,
+      0.061503052711486816,
+      0.0720885843038559,
+      0.0673045739531517,
+      0.062183406203985214,
+      0.043207086622714996,
+      0.04941588640213013,
+      0.03192532807588577,
+      0.06387453526258469,
+      0.03996295481920242,
+      0.05376790836453438,
+      0.043224141001701355,
+      0.028415989130735397,
+      0.05965790897607803,
+      0.04366474598646164,
+      0.04620760306715965,
+      0.034592729061841965,
+      0.0596248097717762,
+      0.052681516855955124,
+      0.048355475068092346,
+      0.06967774033546448,
+      0.02468595653772354,
+      0.06689053773880005,
+      0.054607003927230835,
+      0.06548260152339935,
+      0.04776295647025108,
+      0.04122358188033104,
+      0.07381321489810944,
+      0.07912765443325043,
+      0.056046027690172195,
+      0.039565328508615494,
+      0.02202942967414856,
+      0.035079244524240494,
+      0.08602849394083023,
+      0.07077223062515259,
+      0.03989102318882942,
+      0.06075074151158333,
+      0.03733072802424431,
+      0.04280617833137512,
+      0.04291794076561928,
+      0.031634315848350525,
+      0.022885235026478767,
+      0.04349040612578392,
+      0.026645926758646965,
+      0.033740364015102386,
+      0.023455722257494926,
+      0.08434431999921799,
+      0.0364975668489933,
+      0.07250650972127914,
+      0.023668013513088226,
+      0.03343944251537323,
+      0.06131601706147194,
+      0.037286218255758286,
+      0.040133170783519745,
+      0.06895965337753296,
+      0.07917486131191254,
+      0.03272658959031105,
+      0.08540013432502747,
+      0.06476239860057831,
+      0.03593948855996132,
+      0.09754619747400284,
+      0.04900694265961647,
+      0.02583063207566738,
+      0.04691843315958977,
+      0.07231838256120682,
+      0.050704073160886765,
+      0.027968719601631165,
+      0.08622883260250092,
+      0.025612737983465195,
+      0.04958115518093109,
+      0.025718463584780693,
+      0.03122810833156109,
+      0.034551139920949936,
+      0.0509149394929409,
+      0.04778023064136505,
+      0.07314831763505936,
+      0.03630463033914566,
+      0.02400771714746952,
+      0.03477717190980911,
+      0.06818161904811859,
+      0.042743369936943054,
+      0.0353386253118515,
+      0.034276098012924194,
+      0.051399558782577515,
+      0.038879916071891785,
+      0.0625256672501564,
+      0.07294214516878128,
+      0.03023536130785942,
+      0.046093232929706573,
+      0.026323096826672554,
+      0.07519559562206268,
+      0.06132899224758148,
+      0.030418938025832176,
+      0.03109394572675228,
+      0.07057330012321472,
+      0.048227064311504364,
+      0.05376282334327698,
+      0.14367152750492096,
+      0.04296945407986641,
+      0.04938957840204239,
+      0.051077064126729965,
+      0.055653586983680725,
+      0.04425625503063202,
+      0.045858945697546005,
+      0.0633639469742775,
+      0.07401765137910843,
+      0.03202702850103378,
+      0.03229791671037674,
+      0.07402481138706207,
+      0.04014568403363228,
+      0.09571894258260727
+    ],
+    "forward_displacement_m": [
+      30.468311309814453,
+      25.44833755493164,
+      35.67045593261719,
+      33.852317810058594,
+      34.84500503540039,
+      34.642948150634766,
+      25.68313217163086,
+      25.926589965820312,
+      36.1640510559082,
+      40.068668365478516,
+      21.29718780517578,
+      23.319473266601562,
+      34.756980895996094,
+      25.17998504638672,
+      28.387470245361328,
+      20.70056915283203,
+      38.671417236328125,
+      21.155284881591797,
+      22.911766052246094,
+      25.875778198242188,
+      30.36056900024414,
+      20.23162078857422,
+      19.451953887939453,
+      34.79408645629883,
+      16.14830780029297,
+      25.05417251586914,
+      8.8370361328125,
+      33.51767349243164,
+      14.547136306762695,
+      23.843456268310547,
+      16.058460235595703,
+      26.035057067871094,
+      37.51422119140625,
+      34.88416290283203,
+      11.811775207519531,
+      3.7072887420654297,
+      16.07270050048828,
+      26.808971405029297,
+      28.616195678710938,
+      33.585697174072266,
+      31.90996551513672,
+      37.590824127197266,
+      37.58845138549805,
+      12.118057250976562,
+      17.36478614807129,
+      27.24582290649414,
+      38.98835372924805,
+      37.15658950805664,
+      23.95954132080078,
+      36.80170822143555,
+      6.15672492980957,
+      15.747283935546875,
+      25.74014663696289,
+      39.0390739440918,
+      31.522777557373047,
+      37.37367248535156,
+      29.907150268554688,
+      11.864776611328125,
+      38.247318267822266,
+      37.62547302246094,
+      25.481609344482422,
+      22.057872772216797,
+      40.016502380371094,
+      15.602256774902344,
+      21.20983123779297,
+      32.19254684448242,
+      32.57438278198242,
+      29.14605712890625,
+      14.372215270996094,
+      17.464231491088867,
+      38.28961944580078,
+      7.502447128295898,
+      14.360288619995117,
+      8.186594009399414,
+      31.047592163085938,
+      24.21337890625,
+      21.348270416259766,
+      11.496564865112305,
+      34.386417388916016,
+      41.08342742919922,
+      30.273849487304688,
+      35.370121002197266,
+      21.052465438842773,
+      37.25400161743164,
+      33.624752044677734,
+      32.00031661987305,
+      30.17837905883789,
+      33.80719757080078,
+      26.012306213378906,
+      27.386070251464844,
+      25.4427547454834,
+      23.651975631713867,
+      27.40325927734375,
+      38.16415023803711,
+      30.967411041259766,
+      13.11320686340332,
+      27.370805740356445,
+      28.283355712890625,
+      25.685100555419922,
+      40.152198791503906,
+      26.30978012084961,
+      29.92632293701172,
+      35.08439636230469,
+      27.201669692993164,
+      22.400474548339844,
+      35.509437561035156,
+      25.660554885864258,
+      17.39926528930664,
+      33.45797348022461,
+      36.97534942626953,
+      36.79472732543945,
+      35.739776611328125,
+      9.071524620056152,
+      13.567310333251953,
+      27.497861862182617,
+      19.983875274658203,
+      37.52169418334961,
+      34.13721466064453,
+      14.475138664245605,
+      39.651695251464844,
+      32.3856086730957,
+      38.918033599853516,
+      29.146156311035156,
+      20.76618766784668,
+      26.33995819091797,
+      14.004573822021484,
+      36.32700729370117,
+      31.29230499267578,
+      37.50403594970703,
+      38.33799362182617,
+      26.95102310180664,
+      27.295501708984375,
+      25.821645736694336,
+      18.888362884521484,
+      20.612905502319336,
+      5.173511505126953,
+      19.652278900146484,
+      18.819969177246094,
+      22.105798721313477,
+      24.972026824951172,
+      27.97379493713379,
+      35.06214904785156,
+      31.706260681152344,
+      9.36574935913086,
+      25.94205093383789,
+      23.804119110107422,
+      29.401609420776367,
+      33.34352111816406,
+      33.61564636230469,
+      13.503259658813477,
+      3.9574460983276367,
+      38.15758514404297,
+      23.699705123901367,
+      31.663606643676758,
+      25.620990753173828,
+      39.367042541503906,
+      31.266061782836914,
+      6.03762674331665,
+      10.061371803283691,
+      26.704370498657227,
+      4.196388244628906,
+      32.97193908691406,
+      36.79570770263672,
+      28.10250473022461,
+      34.365943908691406,
+      26.499107360839844,
+      17.512664794921875,
+      21.74854850769043,
+      25.431133270263672,
+      29.963970184326172,
+      33.17427062988281,
+      31.651744842529297,
+      36.93184280395508,
+      7.032120704650879,
+      30.668292999267578,
+      26.19782066345215,
+      17.758056640625,
+      18.52127456665039,
+      31.09276580810547,
+      27.772296905517578,
+      29.635984420776367,
+      37.03981018066406,
+      34.57743835449219,
+      20.35649299621582,
+      37.25202941894531,
+      25.49579429626465,
+      17.45663070678711,
+      36.82370376586914,
+      22.54518699645996,
+      32.345367431640625,
+      19.490680694580078,
+      25.12166404724121,
+      33.26567077636719,
+      37.69675064086914,
+      13.713993072509766,
+      3.507505416870117,
+      29.229372024536133,
+      11.837608337402344,
+      12.110976219177246,
+      34.04561996459961,
+      34.56060028076172,
+      29.0975399017334,
+      27.42149543762207,
+      20.708091735839844,
+      29.85790252685547,
+      19.281150817871094,
+      40.028507232666016,
+      20.547292709350586,
+      34.071048736572266,
+      33.27207946777344,
+      40.785240173339844,
+      28.17369270324707,
+      19.698497772216797,
+      24.170330047607422,
+      29.89208221435547,
+      14.407674789428711,
+      29.62188720703125,
+      33.43482208251953,
+      19.295011520385742,
+      39.54540252685547,
+      22.244712829589844,
+      26.837718963623047,
+      15.5101957321167,
+      32.63762664794922,
+      37.45176696777344,
+      38.113372802734375,
+      16.160232543945312,
+      32.09719467163086,
+      29.96302032470703,
+      21.06925392150879,
+      37.20029067993164,
+      30.15769386291504,
+      10.152113914489746,
+      21.129234313964844,
+      23.55205535888672,
+      35.79814147949219,
+      35.887657165527344,
+      28.735820770263672,
+      21.21590232849121,
+      37.79222869873047,
+      30.026084899902344,
+      37.74761962890625,
+      25.91255760192871,
+      22.781835556030273,
+      18.569005966186523,
+      33.3973388671875,
+      20.945396423339844,
+      6.972808837890625,
+      12.963909149169922,
+      25.08949089050293,
+      14.920798301696777,
+      8.842951774597168,
+      18.99569320678711,
+      26.168127059936523,
+      31.669269561767578,
+      21.553546905517578
+    ],
+    "survived": [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "valid_steps": [
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000
+    ]
+  },
+  "axes": {
+    "non_foot_fraction": [
+      "base_link",
+      "chest_yaw",
+      "tail1_yaw",
+      "rr_hip",
+      "rl_hip",
+      "chest_pitch",
+      "tail1_pitch",
+      "rr_haa",
+      "rl_haa",
+      "neck_yaw",
+      "rf_hip",
+      "lf_hip",
+      "tail2_yaw",
+      "rr_hfe",
+      "rl_hfe",
+      "neck_pitch",
+      "rf_haa",
+      "lf_haa",
+      "tail2_pitch",
+      "rr_kfe",
+      "rl_kfe",
+      "rf_hfe",
+      "lf_hfe",
+      "tail3_yaw",
+      "rf_kfe",
+      "lf_kfe",
+      "tail3_pitch"
+    ],
+    "mesh_min_z": [
+      "chest_pitch",
+      "neck_pitch",
+      "tail1_pitch",
+      "tail2_pitch",
+      "tail3_pitch"
+    ],
+    "foot_contact": [
+      "rr_foot",
+      "rl_foot",
+      "rf_foot",
+      "lf_foot"
+    ],
+    "foot_fraction": [
+      "rr_foot",
+      "rl_foot",
+      "rf_foot",
+      "lf_foot"
+    ],
+    "foot_lowest_point": [
+      "rr_foot",
+      "rl_foot",
+      "rf_foot",
+      "lf_foot"
+    ],
+    "foot_com_pos": [
+      "rr_foot",
+      "rl_foot",
+      "rf_foot",
+      "lf_foot"
+    ],
+    "foot_lin_vel": [
+      "rr_foot",
+      "rl_foot",
+      "rf_foot",
+      "lf_foot"
+    ],
+    "foot_ang_vel": [
+      "rr_foot",
+      "rl_foot",
+      "rf_foot",
+      "lf_foot"
+    ],
+    "joint_pos": [
+      "chest_yaw_joint",
+      "tail1_yaw_joint",
+      "rr_hip_joint",
+      "rl_hip_joint",
+      "chest_pitch_joint",
+      "tail1_pitch_joint",
+      "rr_haa_joint",
+      "rl_haa_joint",
+      "neck_yaw_joint",
+      "rf_hip_joint",
+      "lf_hip_joint",
+      "tail2_yaw_joint",
+      "rr_hfe_joint",
+      "rl_hfe_joint",
+      "neck_pitch_joint",
+      "rf_haa_joint",
+      "lf_haa_joint",
+      "tail2_pitch_joint",
+      "rr_kfe_joint",
+      "rl_kfe_joint",
+      "rf_hfe_joint",
+      "lf_hfe_joint",
+      "tail3_yaw_joint",
+      "rr_foot_joint",
+      "rl_foot_joint",
+      "rf_kfe_joint",
+      "lf_kfe_joint",
+      "tail3_pitch_joint",
+      "rf_foot_joint",
+      "lf_foot_joint"
+    ]
+  },
+  "judge": {
+    "id": "baseline-criteria-banded-settled-1",
+    "origin": "declared",
+    "protocol_name": "Lizard2-Flat-v5",
+    "protocol_version": 5
+  }
+}
