@@ -23,6 +23,7 @@
 
 | 提交 | 判分器身份 / 协议 | 新增或改变的测量语义 | 实现落点 |
 |---|---|---|---|
+| `d60bd3f` | `baseline-criteria-banded-1`（判据的**声明半程**，当时未冻结） | `CRITERION_KINDS` 加三种带边界/求和的 kind（`bands`、`floor_mps`、`zero_*`、`fraction_sum`）、新增 `BANDED_JUDGE_ID`、`JUDGE_KINDS` 把身份绑到它能读的种类（协议命名旧读者即拒判，不能靠改标号到达新语义）、`GATE_ORDER` 加 `no_non_foot_load_sum` | `ablation_harness/baseline_metrics.py:59`、`:77`、`:184`、`:228` |
 | `1fba2b8` | `baseline-criteria-banded-1` / `lizard2_flat_v1.json` | `tracking_banded_v1`、`displacement_banded_v1`（带边界 `[lo,hi)`、未归带的帧判失败、位移先求和再除命令距离）；`non_foot_load_sum_v1`（先求和再驻留，`non_foot_carrier_v1` 的 `any` 会漏掉轮流承载）；`gait_swing_v1`（swing 需跑满最短时长且落地帧重新承载） | `ablation_harness/baseline_metrics.py:368`、`:427`、`:497`、`:512` |
 | `1fba2b8` | 同上 | 声明了但 reader 从未判的 gate：由"隐形"改为 `invalid`（原 `passed = {}` + `all(...)` 会让漏判的判据不参与判决） | `ablation_harness/baseline_metrics.py:1279`、`:1411` |
 | `6de88a0` | `baseline-criteria-banded-settled-1` / `lizard2_flat_v2.json` | `tracking_banded_settled_v1`、`displacement_banded_settled_v1`：命令切换后有 `settle_s` 窗口不计（由实测减速推出，不是由判词反推）；零命令带漂移改为**逐 env 取最差**（原按全 env 求和，读数随批量大小变） | `ablation_harness/baseline_metrics.py:344`、`:472` |
@@ -31,7 +32,7 @@
 
 `88f6bd9` 的其余部分（lizard2 的 rl 脚碰撞壳与家族资产）属资产工作，不归 harness 编号。
 
-身份与种类是可查的冻结面：`judge_semantics.json` 的用例表、各协议文件的 `judge` 与 `criteria[].kind`（`lizard2_flat_v1.json:8`、`v2.json:8`）。协议 `v3/v4/v5` 是身份副本与报告项升级（判据数值不动），不构成新的测量语义，故不在这次覆盖声明里单列。
+身份与种类是可查的冻结面：`judge_semantics.json` 的用例表、各协议文件的 `judge` 与 `criteria[].kind`（`lizard2_flat_v1.json:8`、`v2.json:8`）。协议 `locomotion_eval` 与 `baseline_flat` 的版本号不在此列；`lizard2_flat_v3`（`v2` 的副本）与 `-v5`（`v4` 的副本）也是身份副本、判据与所复制的版本逐字相同，故不在这次覆盖声明里单列 —— 两笔副本提交本身列在 ③ 表。
 
 ### ② 整腿扩列：同一输入下报告计算确实变了
 
@@ -56,12 +57,16 @@
 |---|---|---|
 | `4ef9fb4` | 评测启动的 `--headless` 换成显式 `--viz none` | 启动旗标，rollout 与指标计算不变；自身记录在 `acceptance/records/2026-10-10-ablation-harness-headless-flag-replacement.md` |
 | `f1e6421` | lizard 家族源码退休后的路径改写 | 只换默认 task 与示例；显式任务下的测量公式未动，自身记录在 `work/closed/2026/retired-family-code-prune.md` |
+| `7168a86` | 加 `lizard2_flat_v3.json`（`v2` 的身份副本）与锚点表一行 | `judge` 与 `criteria` 与 `v2` 逐字相同；报告列集合未动，判据数值不动 |
+| `4d7aa26` | 加 `lizard2_flat_v5.json`（`v4` 的身份副本，供 v3 臂自用）与锚点表一行 | `judge` 与 `criteria` 与 `v4` 逐字相同；四条步态形态报告项已由 `3bce24c` 点名，此前无该列 |
 | `862e39f` | `plot_eval.py` 兼容两种记录、加 gate 图 | 展示层，不重算测量 |
 | `21ec102`、`d086fc4` | 协议锚点表与"从目录推导覆盖集合" | 声明一致闸门，不改 rollout 或判分公式 |
 
+（`d60bd3f` 一行补入 ① 表、本表补 `7168a86`/`4d7aa26` 两行，均由复审 `2026-10-10-harness-coverage-per-commit-review.md` 的逐笔对照指出后补齐；补的是"没提到"的空白，未改任何先前读数。）
+
 ### ④ 编号裁决
 
-计进本编号的四笔（`1fba2b8`、`6de88a0`、`601f1d6`、`88f6bd9`）都是声明提交 `925d997` 的祖先，即它们**已经在 v1.10.0 锚定的树里**。缺的是覆盖文本，不是锚点内容 —— 因此：
+计进本编号的五笔（`d60bd3f`、`1fba2b8`、`6de88a0`、`601f1d6`、`88f6bd9`）都是声明提交 `925d997` 的祖先，即它们**已经在 v1.10.0 锚定的树里**。缺的是覆盖文本，不是锚点内容 —— 因此：
 
 - 不新开 v1.11.0：那会让同一棵树挂两个号，且已推的 `harness-v1.10.0` 不改指向，重编号反而丢归因；
 - 本次改动是覆盖声明的勘误（文档级），按 `versioning.mdc` B 节记 `v1.10.0.1`，只体现在 commit 主题上，`HARNESS.md` 不写修订行（该文件版本史归 git log，见其头部）；
