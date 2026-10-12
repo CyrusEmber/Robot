@@ -24,10 +24,20 @@ import re
 
 from isaaclab.app import AppLauncher
 
+# Before the parser because ``--naming`` offers the table's ids; the package is imported below anyway
+# (obs_protocol / recipe_params), so this only moves the leg table up. Aliased because a couple of the
+# functions below take the asset's own joint-name list as a parameter called ``joint_names``.
+from rl_exp.tasks import joint_names as leg_names  # noqa: E402
+
 parser = argparse.ArgumentParser()
 parser.add_argument("--task", default="Lizard2-Flat-v3")
 parser.add_argument("--num_envs", type=int, default=16)
 parser.add_argument("--steps", type=int, default=60, help="control steps to observe")
+parser.add_argument("--naming", default="shared", choices=sorted(leg_names.NAMINGS),
+                    help="which words the spawned body carries: 'shared' = every leg one root set "
+                         "(every asset today), 'split' = the front/rear rename. Declared, and verified "
+                         "against the spawned bodies -- the feet the load reading is attributed to are "
+                         "read off it")
 parser.add_argument(
     "--random-actions",
     action="store_true",
@@ -224,7 +234,7 @@ def write_frame(path: pathlib.Path, frame) -> pathlib.Path:
 
 
 def run_head_press(env, unwrapped, robot, body_names, joint_names, contact_sensor, body_patterns,
-                   params, num_envs) -> None:
+                   params, num_envs, naming: dict[str, tuple[str, ...]] | None = None) -> None:
     """Two runs of one instrument: the head standing (must) and pressed (must fire).
 
     Either run alone proves nothing -- "it fired" can be a gate wired to the feet, and "it stayed
@@ -233,6 +243,9 @@ def run_head_press(env, unwrapped, robot, body_names, joint_names, contact_senso
     the term's own window: ``env.step`` resets the terminated envs before it returns and a reset
     zeroes the sensor's buffers, so a force read afterwards belongs to the NEXT episode (measured
     2026-09-22: the guard read as firing at 0.00 N).
+
+    The feet are picked under ``naming`` (the binding the run declares): the control run's check is
+    "the robot stands on its feet", and the word for a foot belongs to the body, not to this file.
 
     What this is NOT: a threshold calibration, and it cannot become one. The head cannot reach the
     floor while the robot stands on its feet (0.478 m of clearance at the extreme head pose), so the
@@ -263,12 +276,21 @@ def run_head_press(env, unwrapped, robot, body_names, joint_names, contact_senso
         print("  no head collider, no declared threshold or no contact sensor: the experiment "
               "cannot run")
         return
+    naming = naming or leg_names.LEGACY_NAMING
     ids = [body_names.index(name) for name in head_bodies]
     corners = pad_point_clouds([mesh_vertices(collider / f"{name}_collision.obj")
                                 for name in head_bodies]).to(unwrapped.device)
+    # The feet under the declared binding, verified before use: an empty set here would make the
+    # control run's "standing on its feet" check pass on nothing at all.
+    feet = [name for name in body_names if leg_names.is_contact_body(name, naming)]
+    for leg in leg_names.LEGS:
+        end = leg_names.end_link(leg, naming)
+        if end not in body_names:
+            raise SystemExit(f"the spawned body has no {end}: it does not carry the naming "
+                             f"'{leg_names.naming_id(naming)}' -- declare the naming it carries")
     foot_corners = pad_point_clouds([mesh_vertices(collider / f"{name}_collision.obj")
-                                     for name in body_names if name.endswith("_foot")]).to(unwrapped.device)
-    foot_ids = [body_names.index(name) for name in body_names if name.endswith("_foot")]
+                                     for name in feet]).to(unwrapped.device)
+    foot_ids = [body_names.index(name) for name in feet]
     zero = torch.zeros((num_envs, unwrapped.action_manager.total_action_dim), device=unwrapped.device)
     manager = unwrapped.termination_manager
     settle = max(5, args_cli.steps // 4)
@@ -729,7 +751,7 @@ def main() -> int:
             carriers = ", ".join(f"{body_names[i]} {load[i].item():.1f}"
                                  for i in torch.argsort(load, descending=True).tolist()
                                  if load[i].item() > 1.0)
-            feet = foot_ids(body_names)
+            feet = foot_ids(body_names, leg_names.naming_for(args_cli.naming))
             print(f"  load per body [N] (>1 N): {carriers or 'none'}")
             print(f"  total/(m*g) {load.sum().item() / weight:.4f}  (feet only "
                   f"{load[feet].sum().item() / weight:.4f})")
@@ -783,7 +805,7 @@ def main() -> int:
     # one (review 2026-09-22).
     if args_cli.head_press:
         run_head_press(env, unwrapped, robot, body_names, joint_names, contact_sensor, body_patterns,
-                       params, num_envs)
+                       params, num_envs, leg_names.naming_for(args_cli.naming))
 
     env.close()
     if PROBLEMS:

@@ -3,7 +3,7 @@ id: lizard2-body-drive-candidate
 title: lizard2 机体与驱动候选：蜥蜴骨段朝向、人手式足掌、骨骼改名
 scope: rl_exp/blender, rl_exp/tools/pipeline, rl_exp/tools/verify, rl_exp/tools/diagnose, rl_exp/tasks, acceptance/records
 status: in_progress
-landing: rl_exp/blender/scripts/lizard2_stance_candidate.py, rl_exp/blender/scripts/generate_urdf.py, rl_exp/tools/diagnose/gait_probe.py, rl_exp/tools/diagnose/stance_step_probe.py, rl_exp/tools/diagnose/plot_joints.py, rl_exp/tools/verify/check_leg_reachability.py, rl_exp/tools/verify/check_self_collision.py, rl_exp/tools/verify/check_joint_layout.py, rl_exp/tasks/joint_names.py, ablation_harness/baseline_metrics.py
+landing: rl_exp/blender/scripts/lizard2_stance_candidate.py, rl_exp/blender/scripts/generate_urdf.py, rl_exp/tools/diagnose/gait_probe.py, rl_exp/tools/diagnose/stance_step_probe.py, rl_exp/tools/diagnose/plot_joints.py, rl_exp/tools/verify/check_leg_reachability.py, rl_exp/tools/verify/check_self_collision.py, rl_exp/tools/verify/check_joint_layout.py, rl_exp/tools/verify/baseline_probe.py, rl_exp/tasks/joint_names.py, ablation_harness/baseline_metrics.py
 next: 用户看 P2 小样与测量记录，确认外观及位置/网格容差；未批准不扩四肢、不进 P3。
 close_when: 新上下文按正文“关闭条件”核验 R1–R5 与 D 记录，用户确认外观和动作；未判定不关闭。
 evidence: acceptance/records/2026-10-12-lizard2-palm-p2-sample.md, acceptance/records/2026-10-12-lizard2-palm-chain-p1.md, acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory, acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, acceptance/records/2026-10-08-lizard2-joint-design-review-contract, acceptance/records/2026-10-08-lizard2-r1-numeric-reference-and-decision-drafts
@@ -14,7 +14,7 @@ evidence: acceptance/records/2026-10-12-lizard2-palm-p2-sample.md, acceptance/re
 ## 下一步
 
 1. **按 A 的探测链推进**：P1/P2 交接见本项具名记录；用户看两肢小样并确认外观及位置/网格容差，调整后再扩四肢与隔离导出；诊断转动不当限位/物理批准，旧链或合成契约通过不当几何通过，正式资产不动。
-2. **继续 E3 接线**：URDF → FK/碰撞、运行时、报告 reader 与接触面（`diag_metrics.foot_ids`、`check_contact_ownership`、`obs_protocol_live`）已接线并各有真跑读数与错配负例；当前改 Blender 构建入口、步态诊断，以及接触面余下两处（`baseline_probe`、`diagnose_support`）。报告 **writer** 侧（`baseline_eval` 的关节列集合、`gait_probe` 报告字段）属评测协议面，先交 `lizard2-contact-protocol` 再动。E4 的运行时双命名对照做不了——运行时关节名还写在配方里（动作项/`joint_order`/默认位姿），改名须与采用同一次变更落地（归 S6），现在只验到"绑定被核对、错配被拒"。
+2. **继续 E3 接线**：URDF → FK/碰撞、运行时、报告 reader、接触面（`diag_metrics.foot_ids`、`check_contact_ownership`、`obs_protocol_live`）与 `baseline_probe` 已接线并各有真跑读数与错配负例；当前改 Blender 构建入口与步态诊断。`diagnose_support.py` 归 `floor-contact-attribution`（该文件是它的 landing），E 只登记待接的四处行号，不代改。报告 **writer** 侧（`baseline_eval` 的关节列集合、`gait_probe` 报告字段）属评测协议面，先交 `lizard2-contact-protocol` 再动。E4 的运行时双命名对照做不了——运行时关节名还写在配方里（动作项/`joint_order`/默认位姿），改名须与采用同一次变更落地（归 S6），现在只验到"绑定被核对、错配被拒"。
 3. **并行边界**：A 选 pivot/轴消费 B 的能力约束，按线性对照进行，不新建驱动机制；有效限速前置仍归 B。E 接线前，A 只核对旧名源几何，不让未接线工具测新名候选；C 可用现有机体开展。
 4. **先解除资产前提**：`gait_probe` 的资产前提交 `floor-contact-attribution` 的 ⑤/⑪；不借 E 改资产或放宽断言。声明面边界与既有自检覆盖只取本项 2026-10-12 evidence。
 5. **集成后一次审核**：A/B/C 自检就绪后执行 D，读数入同一具名记录；置 pending_review，next 点名新上下文审核者。已训 v3、采用资产与趴姿边界见本项“边界”。
@@ -96,7 +96,7 @@ evidence: acceptance/records/2026-10-12-lizard2-palm-p2-sample.md, acceptance/re
 
 历史报告没有新字段时保留原 reader 及其旧协议语义，不伪补“已核机体”证据；新绑定 reader 缺来源或名称冲突则拒绝。诊断量/列名若会变更评测语义，先核协议边界并交 `lizard2-contact-protocol`，E 不重写旧协议。
 
-**接线现状**：URDF → FK/碰撞（`check_leg_reachability`、`check_self_collision`）、运行时（`check_joint_layout`、`stance_step_probe`）、报告 reader（`plot_joints`、`baseline_metrics`）与接触面（`diag_metrics.foot_ids`、`check_contact_ownership`、`obs_protocol_live`）已按绑定接通，各有真跑读数与错配负例；其余各行仍按旧名默认运行，未接线前不得指向新命名候选。
+**接线现状**：URDF → FK/碰撞（`check_leg_reachability`、`check_self_collision`）、运行时（`check_joint_layout`、`stance_step_probe`）、报告 reader（`plot_joints`、`baseline_metrics`）、接触面（`diag_metrics.foot_ids`、`check_contact_ownership`、`obs_protocol_live`）与 `baseline_probe` 已按绑定接通，各有真跑读数与错配负例（`obs_protocol_live` 那条未验）；其余各行仍按旧名默认运行，未接线前不得指向新命名候选。
 
 范围内残留硬编码逐点分成：要迁的名称选择、故意保留的旧协议/反例、几何或驱动假设。后两类不按字符串批量替换。实际漏点和延期站点只记验收记录；任何第一波必需消费者未接线，E 就不能交付。
 

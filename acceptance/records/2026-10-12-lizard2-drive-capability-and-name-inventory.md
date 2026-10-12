@@ -531,3 +531,35 @@ E 的“绑定 + 首个真实消费者”切片：名表两套命名、`check_le
 - `obs_protocol_live.py` 的那条改动**未验证**（上文的可达性事实）——只做等价对齐。
 - 两次仿真各 1–2 env、20 步：只证"接通 + 拒绝"，不是承重或接触读数；`check_contact_ownership` 的既存 FAIL 归资产/collider 事项，不借 E 改资产。
 - E4.5 的旧基线同条件复跑仍未做；E 的第一波出口仍未达。
+
+## 追加十一：E 第六切片 —— `baseline_probe` 接入，`diagnose_support` 归位（2026-10-12 同日）
+
+### 适用范围
+
+`rl_exp/tools/verify/baseline_probe.py`（零点基线探针，含 `--head-press` 的头部压地对照）接入绑定。同行的 `rl_exp/tools/diagnose/diagnose_support.py` **不代改**：它是 `floor-contact-attribution` 的 landing，改名所需的四处字面后缀（`:427/447` 非足端过滤、`:817` `find_bodies([".*_foot"])`、`:822` `find_sensors([".*_foot"])`；后者匹配的是**配方里的传感器名**，属 S6 迁移面）由那项在自己的工作里接。
+
+### 验收条件
+
+探针在自己的任务上按声明命名取足端并跑通；错配命名在测量前被拒（不是"足端集合为空、承重读数照样打印"）。
+
+### 结果
+
+- `run_head_press` 增加 `naming` 参数（缺省 `None` → 旧命名），足端由 `is_contact_body` 取，并在用之前核对**每条 leg 的命名末端 link 在所造 body 里**，缺则 `SystemExit`；`main` 的站立承重段把 `foot_ids(body_names, naming)` 传下去（该调用点原来会用空足端集合打印 `feet only 0.0000`）。CLI 加 `--naming`；名表以 `leg_names` 别名在 parser **之前**导入（`--naming` 的 choices 要用它，而本文件多个函数参数已叫 `joint_names`）。
+- 真跑（共享命名，全部跑完）：承重行列出四只脚（`load per body [N] (>1 N): lf_foot 197.0, rf_foot 193.4, rl_foot 146.4, rr_foot 143.6`）、`ok load/no-non-foot-carrier`、`ok head/press-bodies-resolved`、末行 `BASELINE_PROBE_OK` —— 足端集合非空即绑定生效。
+- 错配负例（`--naming split`）**本次未取得读数**：该次运行到提交时仍在跑，未观察到就不写结论；返回后补记（同一条拒绝在 `check_contact_ownership`/`foot_ids` 上已实测，但那是别的消费者，不替代本工具的读数）。
+
+**复读命令与实测**（`<PY>` = `python ablation_harness/host_paths.py --python`）：
+
+- `<PY> rl_exp\tools\verify\baseline_probe.py --headless --task Lizard2-Flat-v3 --num_envs 4 --steps 20 --head-press` → 上述四行读数，末行 `BASELINE_PROBE_OK`
+- `<PY> rl_exp\tools\verify\baseline_probe.py --headless --task Lizard2-Flat-v3 --num_envs 2 --steps 5 --head-press --naming split` → 提交时仍在跑，读数待补（预期拒绝：末端 link 不存在）
+
+### 证据引用
+
+- `rl_exp/tools/verify/baseline_probe.py`：`--naming` 与 `leg_names` 别名、`run_head_press` 的 naming/末端核对、`main` 的 `foot_ids(..., naming)`。
+- 归位依据：`work/active/floor-contact-attribution.md` 的 `landing:` 含 `rl_exp/tools/diagnose/diagnose_support.py`。
+
+### 未覆盖边界
+
+- `diagnose_support.py` 四处未接线（归 `floor-contact-attribution`，见上）；未接线前不得用该诊断器读新名机体。
+- 一次真跑用 4 env / 20 步（head-press 含两个对照段），只证"接通 + 足端非空"，不是承重结论；读数里的 `lf_foot 197.0` 等属该次运行的即时值，不作阈值。
+- `obs_protocol_live.py` 那条仍为**未验**（追加十），E4.5 旧基线同条件复跑仍未做；E 的第一波出口仍未达（Blender 构建入口、`gait_probe`、报告 writer 侧未做）。
