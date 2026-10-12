@@ -113,12 +113,13 @@ def _naming_id(naming: dict[str, tuple[str, ...]]) -> str:
     Raises:
         SystemExit: an undeclared binding. Every reader here has to be able to name what it was bound to
             (a report that reads one body's words and says another's is the failure this whole binding
-            exists to stop), and echoing "custom" would accept a naming the table cannot verify.
+            exists to stop), and echoing "custom" would accept a naming the table cannot verify. The
+            lookup itself lives in the name table, so a binding has one id everywhere.
     """
-    for naming_id, declared in joint_names.NAMINGS.items():
-        if naming == declared:
-            return naming_id
-    raise SystemExit(f"unbound naming {naming}: not declared in joint_names.NAMINGS")
+    try:
+        return joint_names.naming_id(naming)
+    except KeyError as err:
+        raise SystemExit(f"unbound naming: {err}") from None
 
 
 def family_urdf(rl_exp: pathlib.Path, family: str) -> tuple[pathlib.Path, str]:

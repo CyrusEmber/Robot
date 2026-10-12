@@ -871,14 +871,46 @@ def _nan_correlation(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
 #: carries the stride, and whether the thigh and the shank moved at all. Leaving `haa`/`kfe` out was
 #: tried and cost a round trip -- "the thigh barely moves" was unanswerable from a record that did not
 #: carry the joint that moves it.
-_LEG_TOKENS = joint_names.JOINT_SUFFIXES
+def leg_suffixes(naming: dict[str, tuple[str, ...]]) -> tuple[str, ...]:
+    """The five suffixes per limb group, as one set: which joints this binding calls leg joints.
+
+    A binding rather than the module constant this used to be, because the words differ between the
+    bodies that may be in the tree at once and a record has to be read in its OWN vocabulary. The
+    POSITIONS are what stays fixed, so the two namings pick the same five joints per leg.
+    """
+    return tuple(dict.fromkeys(suffix for leg in joint_names.LEGS
+                               for suffix in joint_names.suffixes_for(joint_names.roots_of(naming, leg))))
+
+
+def _record_naming(artifact: dict, naming: dict[str, tuple[str, ...]]) -> None:
+    """Refuse a record whose joint column is not in this binding's words.
+
+    A wrong binding is silent here: no column matches, the gait-shape readings come back empty, and an
+    empty reading reads like a body with nothing to report -- the failure the whole binding exists to
+    stop. A record from a body that merely LACKS a root still matches on the others, so this refuses
+    only the foreign vocabulary, not a shorter chain.
+
+    Raises:
+        ValueError: the record carries joints and none of them is one this naming names.
+    """
+    names = list(artifact.get("axes", {}).get("joint_pos", ()))
+    if not names:
+        return
+    suffixes = leg_suffixes(naming)
+    if not any(name.endswith(suffixes) for name in names):
+        raise ValueError(
+            "record %s carries %d joint column(s) and none is a leg joint of the naming '%s' (%s) -- "
+            "declare the naming this record's body carries"
+            % (artifact.get("meta", {}).get("task", "<unknown task>"), len(names),
+               joint_names.naming_id(naming), ", ".join(names[:3])))
 
 #: Forward command above which the window counts as "asked to move" [m/s]. The same floor the banded
 #: tracking criterion divides its bands with, so "moving" means one thing in this module.
 MOVING_COMMAND_MPS = 0.5
 
 
-def _gait_shape_readings(frames: dict, alive: torch.Tensor, axes: dict, meta: dict) -> dict:
+def _gait_shape_readings(frames: dict, alive: torch.Tensor, axes: dict, meta: dict,
+                         naming: dict[str, tuple[str, ...]] = joint_names.LEGACY_NAMING) -> dict:
     """The trunk's lateral motion and where each foot's stride comes from, read off ``joint_pos``.
 
     A verdict says how fast the base went; it cannot say whether the machine walked like a sprawled
@@ -895,11 +927,12 @@ def _gait_shape_readings(frames: dict, alive: torch.Tensor, axes: dict, meta: di
     names = list(axes.get("joint_pos", ()))
     if not names or "joint_pos" not in frames:
         return {}
+    suffixes = leg_suffixes(naming)
     angles = frames["joint_pos"]
     mask = alive.unsqueeze(-1)
     alive_f = angles.masked_fill(~mask, float("nan"))
     out: dict[str, object] = {}
-    leg_ids = [index for index, name in enumerate(names) if name.endswith(_LEG_TOKENS)]
+    leg_ids = [index for index, name in enumerate(names) if name.endswith(suffixes)]
     yaw_ids = [index for index, name in enumerate(names)
                if index not in leg_ids and name.endswith("_yaw_joint")]
     if yaw_ids:
@@ -940,11 +973,15 @@ def _gait_shape_readings(frames: dict, alive: torch.Tensor, axes: dict, meta: di
         # shifting under a stationary foot: including them dilutes both correlations towards zero,
         # which reads as "neither joint carries the stride" when the truth is "nothing was asked to.
         moving = alive & (frames["command_world"][:, :, 0] > MOVING_COMMAND_MPS)
-        for token, item in (("hip", "stride_hip_corr"), ("hfe", "stride_knee_corr")):
+        # The item NAMES are the protocol's and do not move with a rename; the joints they read are
+        # picked by POSITION off the binding, per leg -- the front and rear limbs of a split body carry
+        # different words, and one token for all four would find no column on two of them and report the
+        # stride as unattributable rather than as unread.
+        for position, item in ((0, "stride_hip_corr"), (2, "stride_knee_corr")):
             values = []
             for foot_index, foot in enumerate(feet):
                 leg = foot.split("_")[0]
-                joint = f"{leg}_{token}_joint"
+                joint = joint_names.joint_name(leg, joint_names.roots_of(naming, leg)[position])
                 if joint not in names:
                     continue
                 offset = frames["foot_lowest_point"][:, :, foot_index, :2] - frames["pos"][:, :, :2]
@@ -1237,7 +1274,8 @@ def _data_reasons(artifact: dict, alive: torch.Tensor) -> list[str]:
     return reasons
 
 
-def _score(artifact: dict, alive: torch.Tensor) -> dict:
+def _score(artifact: dict, alive: torch.Tensor,
+           naming: dict[str, tuple[str, ...]] = joint_names.LEGACY_NAMING) -> dict:
     """The gates, the metrics behind them, and the per-env evidence."""
     protocol, frames, axes = artifact["protocol"], artifact["frames"], artifact.get("axes", {})
     steps, dt = artifact["meta"]["steps"], artifact["meta"]["step_dt"]
@@ -1354,7 +1392,7 @@ def _score(artifact: dict, alive: torch.Tensor) -> dict:
     # Computed whenever the joint column is there, not only when a protocol lists the items: the
     # numbers a verdict did not need are exactly the ones a later reader wants to have been measured.
     if "joint_pos" in frames:
-        diagnostics.update(_gait_shape_readings(frames, alive, axes, artifact["meta"]))
+        diagnostics.update(_gait_shape_readings(frames, alive, axes, artifact["meta"], naming))
 
     # -- the fixed scenes: how many valid frames each declared band actually got ---
     # Read here rather than collected: the frames carry the command they were issued and the record
@@ -1436,17 +1474,22 @@ def _score(artifact: dict, alive: torch.Tensor) -> dict:
     }
 
 
-def judge(artifact: dict) -> dict:
+def judge(artifact: dict, naming: dict[str, tuple[str, ...]] = joint_names.LEGACY_NAMING) -> dict:
     """Score one baseline record; a record that cannot carry a verdict comes back ``invalid``.
 
     Args:
         artifact: what :meth:`ablation_harness.baseline_frames.BaselineFrames.artifact` returns --
             frames, their axis labels, the protocol, and the run's meta.
+        naming: which words the record's body carries (:data:`rl_exp.tasks.joint_names.NAMINGS`), for the
+            readings that have to pick the leg joints out of the record's own column names. Declared, and
+            checked against those columns first -- a foreign vocabulary would otherwise read as a body
+            with no leg joints to report.
     Returns:
         ``verdict`` (``invalid`` / ``fail`` / ``pass``), ``invalid_reasons``, ``gates`` (``None``
         where unjudged), ``metrics``, ``diagnostics``, the per-env evidence and ``judge`` -- the
         identity of the reader that decided, so a re-judged record says *who* re-judged it.
     """
+    _record_naming(artifact, naming)
     protocol = artifact["protocol"]
     names = gate_names(protocol)
     identity = judge_identity(protocol)
@@ -1467,7 +1510,7 @@ def judge(artifact: dict) -> dict:
             "per_env": {},
             "axes": artifact.get("axes", {}),
         }
-    return {**_score(artifact, alive), "judge": identity}
+    return {**_score(artifact, alive, naming), "judge": identity}
 
 
 def main() -> None:
@@ -1481,12 +1524,17 @@ def main() -> None:
     parser.add_argument("record", type=pathlib.Path, help="a baseline_frames record (.pt)")
     parser.add_argument("--protocol", type=pathlib.Path,
                         help="judge under this protocol instead of the one the run was collected with")
+    parser.add_argument("--naming", default="shared", choices=sorted(joint_names.NAMINGS),
+                        help="which words the record's body carries: 'shared' = every leg one root set "
+                             "(every asset today), 'split' = the front/rear rename. Declared, and checked "
+                             "against the record's own joint columns before anything is scored")
     args = parser.parse_args()
     artifact = baseline_frames.load(args.record)
     if args.protocol:
         artifact["protocol"] = json.loads(args.protocol.read_text(encoding="utf-8"))
-    result = judge(artifact)
+    result = judge(artifact, joint_names.naming_for(args.naming))
     payload = {key: value for key, value in result.items() if key != "axes"}
+    payload["naming"] = args.naming
     payload["protocol_file"] = str(args.protocol) if args.protocol else "embedded in the record"
     payload["protocol_digest"] = record.file_sha256(args.protocol) if args.protocol else None
     print(json.dumps(payload, indent=2, ensure_ascii=False))

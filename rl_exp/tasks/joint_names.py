@@ -207,7 +207,15 @@ SPLIT_NAMING: dict[str, tuple[str, ...]] = {
 #: or do the limb groups differ" -- not the body and not a lifecycle stage: a body, a branch or a
 #: checkpoint that adopts the front/rear split does not turn ``"split"`` into something else, and a
 #: caller reading the id never has to know which stage the family is in.
-NAMINGS: dict[str, dict[str, tuple[str, ...]]] = {"shared": LEGACY_NAMING, "split": SPLIT_NAMING}
+#: Four revolutes ending at the palm-bearing wrist/ankle link. This is a separate contract,
+#: not a reinterpretation or activation of the five-role split naming; geometry is still unavailable.
+PALM_NAMING: dict[str, tuple[str, ...]] = {
+    leg: roots[:-1] for leg, roots in SPLIT_NAMING.items()
+}
+
+NAMINGS: dict[str, dict[str, tuple[str, ...]]] = {
+    "shared": LEGACY_NAMING, "split": SPLIT_NAMING, "palm": PALM_NAMING,
+}
 
 
 def naming_for(naming_id: str) -> dict[str, tuple[str, ...]]:
@@ -221,6 +229,22 @@ def naming_for(naming_id: str) -> dict[str, tuple[str, ...]]:
         return NAMINGS[naming_id]
     except KeyError:
         raise KeyError(f"{naming_id!r}: not a declared naming ({sorted(NAMINGS)})") from None
+
+
+def naming_id(naming: dict[str, tuple[str, ...]]) -> str:
+    """The id a binding is declared under -- the reverse of :func:`naming_for`.
+
+    For the lines and files that have to say WHICH words a reading answered for, and for refusing a
+    binding the table does not know: a reader that echoes "custom" would be accepting a naming nobody
+    can look up.
+
+    Raises:
+        KeyError: the mapping is not one of the declared namings.
+    """
+    for declared_id, declared in NAMINGS.items():
+        if naming == declared:
+            return declared_id
+    raise KeyError(f"{naming}: not a declared naming ({sorted(NAMINGS)})")
 
 
 def planned_root(leg: str, root: str) -> str:
@@ -329,17 +353,28 @@ def _self_check() -> None:
 
     # (d) the binding: two namings, one shape of answer, and the split one IS the planned rename read per
     # leg -- which is how a consumer binds it, and how the two limb groups end at two different links.
-    assert set(NAMINGS) == {"shared", "split"}, sorted(NAMINGS)
+    assert set(NAMINGS) == {"shared", "split", "palm"}, sorted(NAMINGS)
     assert naming_for("shared") == LEGACY_NAMING and naming_for("split") == SPLIT_NAMING, sorted(NAMINGS)
     for naming_id, naming in NAMINGS.items():
         assert sorted(naming) == sorted(LEGS), (naming_id, sorted(naming))
         for leg in LEGS:
             roots = roots_of(naming, leg)
-            assert len(roots) == len(CHAIN_ROOTS) and len(set(roots)) == len(roots), (naming_id, leg, roots)
+            assert len(roots) == (4 if naming_id == "palm" else len(CHAIN_ROOTS)) and len(set(roots)) == len(roots), (naming_id, leg, roots)
             assert end_link(leg, naming) == link_name(leg, roots[-1]), (naming_id, leg)
             assert is_contact_body(end_link(leg, naming), naming), (naming_id, leg)
             assert not is_contact_body(link_name(leg, roots[0]), naming), (naming_id, leg)
             assert not is_contact_body(joint_name(leg, roots[-1]), naming), (naming_id, leg)
+    assert end_link("lf", PALM_NAMING) == "lf_wrist"
+    assert end_link("rl", PALM_NAMING) == "rl_ankle"
+    assert contact_body_patterns(PALM_NAMING) == (".*_ankle", ".*_wrist")
+    for leg in LEGS:
+        assert roots_of(PALM_NAMING, leg) == roots_of(SPLIT_NAMING, leg)[:-1]
+        for root in roots_of(PALM_NAMING, leg):
+            assert joint_name(leg, root).endswith(suffixes_for(roots_of(PALM_NAMING, leg)))
+        for forbidden in ("foot", "finger", "toe"):
+            assert not is_contact_body(link_name(leg, forbidden), PALM_NAMING)
+            assert not any(re.fullmatch(p, joint_name(leg, forbidden))
+                           for p in patterns_for(roots_of(PALM_NAMING, leg)))
     assert end_link("lf") == "lf_foot", "the naming a caller binds nothing for is still the old one"
     assert end_link("lf", SPLIT_NAMING) == "lf_finger" and end_link("rl", SPLIT_NAMING) == "rl_toe", SPLIT_NAMING
     for leg in LEGS:
@@ -380,6 +415,8 @@ def _self_check() -> None:
           "contact pattern in two, and refuse unlisted names; the two namings answer per leg with one "
           "shape -- the split one being that same rename, moving the end link per limb group -- and an "
           "unlisted naming or leg is refused rather than defaulted into the old words; "
+          "legacy shared/split bindings retain five roles; explicit palm binding has four roles, "
+          "ends at wrist/ankle, and excludes foot/finger/toe; "
           "imports are stdlib only: %s"
           % ", ".join(sorted(imported)))
 

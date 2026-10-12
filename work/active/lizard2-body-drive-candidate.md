@@ -3,7 +3,7 @@ id: lizard2-body-drive-candidate
 title: lizard2 机体与驱动候选：蜥蜴骨段朝向、人手式足掌、骨骼改名
 scope: rl_exp/blender, rl_exp/tools/pipeline, rl_exp/tools/verify, rl_exp/tools/diagnose, rl_exp/tasks, acceptance/records
 status: open
-landing: rl_exp/blender/scripts/lizard2_stance_candidate.py, rl_exp/blender/scripts/generate_urdf.py, rl_exp/tools/diagnose/gait_probe.py, rl_exp/tools/diagnose/stance_step_probe.py, rl_exp/tools/verify/check_leg_reachability.py, rl_exp/tools/verify/check_self_collision.py, rl_exp/tools/verify/check_joint_layout.py, rl_exp/tasks/joint_names.py
+landing: rl_exp/blender/scripts/lizard2_stance_candidate.py, rl_exp/blender/scripts/generate_urdf.py, rl_exp/tools/diagnose/gait_probe.py, rl_exp/tools/diagnose/stance_step_probe.py, rl_exp/tools/diagnose/plot_joints.py, rl_exp/tools/verify/check_leg_reachability.py, rl_exp/tools/verify/check_self_collision.py, rl_exp/tools/verify/check_joint_layout.py, rl_exp/tasks/joint_names.py, ablation_harness/baseline_metrics.py
 next: 执行者先按 A2 的 P1 补真实链检查与 E 接线，再做 P2 小样；缺命令/批准按停止条件处理，A/B/C 就绪后做 D 审核。
 close_when: 新上下文按正文“关闭条件”核验 R1–R5 与 D 记录，用户确认外观和动作；未判定不关闭。
 evidence: acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory, acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, acceptance/records/2026-10-08-lizard2-joint-design-review-contract, acceptance/records/2026-10-08-lizard2-r1-numeric-reference-and-decision-drafts
@@ -14,7 +14,7 @@ evidence: acceptance/records/2026-10-12-lizard2-drive-capability-and-name-invent
 ## 下一步
 
 1. **按 A 的探测链推进**：本次只改计划写法；执行者先做 P1 的真实链/角色入口小样与 E 接线，命令齐备后做 P2 的前后肢几何小样，按 A2 停止条件确定容差和转动档，再扩到四肢与隔离导出。不把旧链自检、在途改名或骨线重合当成结构已修复；已训版本与正式资产不动。
-2. **继续 E3 接线**：URDF → FK/碰撞与运行时（布局、站姿/迈步探针）已接线并各有真跑读数与错配负例；当前改 Blender 构建入口、步态诊断、接触诊断、在线协议核对和报告 reader。按 E3 表逐条贯通同一绑定，并留真实消费者读数。E4 的运行时双命名对照做不了——运行时关节名还写在配方里（动作项/`joint_order`/默认位姿），改名须与采用同一次变更落地（归 S6），现在只验到"绑定被核对、错配被拒"；报告链验真仍未做。
+2. **继续 E3 接线**：URDF → FK/碰撞、运行时（布局、站姿/迈步探针）与报告 reader（`plot_joints`、`baseline_metrics`）已接线并各有真跑读数与错配负例；当前改 Blender 构建入口、步态诊断、接触诊断、在线协议核对。报告 **writer** 侧（`baseline_eval` 的关节列集合、`gait_probe` 报告字段）属评测协议面，先交 `lizard2-contact-protocol` 再动。E4 的运行时双命名对照做不了——运行时关节名还写在配方里（动作项/`joint_order`/默认位姿），改名须与采用同一次变更落地（归 S6），现在只验到"绑定被核对、错配被拒"。
 3. **并行边界**：A 选 pivot/轴消费 B 的能力约束，按线性对照进行，不新建驱动机制；有效限速前置仍归 B。E 接线前，A 只核对旧名源几何，不让未接线工具测新名候选；C 可用现有机体开展。
 4. **先解除资产前提**：`gait_probe` 的资产前提交 `floor-contact-attribution` 的 ⑤/⑪；不借 E 改资产或放宽断言。声明面边界与既有自检覆盖只取本项 2026-10-12 evidence。
 5. **集成后一次审核**：A/B/C 自检就绪后执行 D，读数入同一具名记录；置 pending_review，next 点名新上下文审核者。已训 v3、采用资产与趴姿边界见本项“边界”。
@@ -96,18 +96,17 @@ evidence: acceptance/records/2026-10-12-lizard2-drive-capability-and-name-invent
 
 历史报告没有新字段时保留原 reader 及其旧协议语义，不伪补“已核机体”证据；新绑定 reader 缺来源或名称冲突则拒绝。诊断量/列名若会变更评测语义，先核协议边界并交 `lizard2-contact-protocol`，E 不重写旧协议。
 
-**接线现状**：URDF → FK/碰撞（`check_leg_reachability.py`、`check_self_collision.py`）与运行时（`check_joint_layout.py`、`stance_step_probe.py`）已按绑定接通，各有真跑读数、孪生等值与错配负例；其余各行仍按旧名默认运行，逐条按本表接，未接线前不得指向新命名候选。
+**接线现状**：URDF → FK/碰撞（`check_leg_reachability`、`check_self_collision`）、运行时（`check_joint_layout`、`stance_step_probe`）与报告 reader（`plot_joints`、`baseline_metrics`）已按绑定接通，各有真跑读数与错配负例；其余各行仍按旧名默认运行，未接线前不得指向新命名候选。
 
 范围内残留硬编码逐点分成：要迁的名称选择、故意保留的旧协议/反例、几何或驱动假设。后两类不按字符串批量替换。实际漏点和延期站点只记验收记录；任何第一波必需消费者未接线，E 就不能交付。
 
 ### E4. 实施顺序、验收与第一波出口
 
 1. **先绑定，再派生**：给名表最小入口数据与纯函数，保留原接口；接到一个 URDF 真实消费者后，才扩到 Blender、运行时和报告链。不增机器闸门，检查留在现有 self-check／测试入口。
-2. **同几何双样本**：测试临时目录中从同一旧名 URDF 制作完整改名副本，只改具名引用，保留轴、限位、惯量、mesh 与姿态；不只改末端 link。两套样本在同进程各持绑定，交错调用同一真实消费者，对比链角色、末端、FK、碰撞判定及报告字段，证明只是名字变了。临时样本不是新候选设计通过的证据。
-3. **破坏测试经消费者失败**：互换机体绑定、删一只末端、把前肢 finger 错绑为 toe、混入另一套名字、打乱运行时名称顺序、报告来源不符；检查应在消费前拒绝或正确重映射，不能静默少脚/少列。回归先在无修复版本失败，再在修复版本通过；不能仅触发名表自身的断言。
-4. **真实解释器与接线**：标准 Python 验纯模块；Blender 验真实构建消费者；IsaacLab 用两套隔离目标验证运行时名称解析、传感器集合、动作列和至少一步诊断读回，不训练、不替换冻结配方。合成报告验证 reader 之外，至少消费一次真实诊断输出。新候选就绪后 A/D 再对其实际资产复验，改名样本不能替代候选。
-5. **旧基线不退化**：先记录既有自检与相关离线套件的状态，再同条件复跑。既有红项按原记录及负责事项保留，不删断言、不借 E 改网格；受阻链留为未验，不算绿。仍受资产前提阻碍的必需运行时/报告验收不得以“旧红”豁免完成条件。
-6. **证据与审核**：实施读数、复读命令、输入路径/绑定来源、实际消费者、负例结果与未验项追加到本项 evidence 的 2026-10-12 记录或后续具名记录；记录存在后才补指针。E 各步只自检，最终仍随 D 一次性由新上下文审核。
+2. **同几何双样本 + 负例**：同一份 URDF／报告／记录改名为另一套词（数值不动），经同一真实消费者读出同一组数；错配命名必须在消费前被拒。已按此法验过四个消费者，构造、命令与读数见 2026-10-12 记录追加六/七/九，本项不复述。
+3. **真实解释器与接线**：标准 Python 验纯模块；Blender 验真实构建消费者；IsaacLab 用两套隔离目标验证运行时名称解析、传感器集合、动作列和至少一步诊断读回，不训练、不替换冻结配方。合成报告验证 reader 之外，至少消费一次真实诊断输出。新候选就绪后 A/D 再对其实际资产复验，改名样本不能替代候选。
+4. **旧基线不退化**：先记录既有自检与相关离线套件的状态，再同条件复跑。既有红项按原记录及负责事项保留，不删断言、不借 E 改网格；受阻链留为未验，不算绿。仍受资产前提阻碍的必需运行时/报告验收不得以“旧红”豁免完成条件。
+5. **证据与审核**：实施读数、复读命令、输入路径/绑定来源、实际消费者、负例结果与未验项追加到本项 evidence 的 2026-10-12 记录或后续具名记录；记录存在后才补指针。E 各步只自检，最终仍随 D 一次性由新上下文审核。
 
 **第一波出口**：B 的线性对照与有效限速前置约束明确；E 的同一套入口绑定接口经实际消费者验证，显式服务旧机体和新名样本，运行时接线与报告读取有证据。名表内部自检、源码支持、编译通过不能单独满足 E。未跑 Blender/运行时、缺第二套目标或必需链受阻，留为未交付；不得以方案定稿宣告第一波完成。
 

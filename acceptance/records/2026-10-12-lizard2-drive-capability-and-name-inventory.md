@@ -454,4 +454,40 @@ E 的“绑定 + 首个真实消费者”切片：名表两套命名、`check_le
 - 未做"两套命名的运行时对照"：需要一份**prim 名字已改**的 USD 且配方关节名同变更（采用动作，归 S6）；也正因如此，E 的第一波出口在运行时侧只能到"绑定被核对、错配被拒"。
 - 未做 E4.5 的旧基线同条件复跑（本轮两次运行用的步数/时长与历史记录不同），故只有"跑通且各段打印"的读数，不是与历史读数的逐项对照。
 - 起仿真两次，均为 1 env、无策略；未验证策略行为、承重动力学或候选几何。
-- 本轮改动**未提交**：另一会话正在把 `rl_exp/blender/*.py` 搬到 `rl_exp/blender/scripts/`，`check_work_docs` 因此报 9 条 `landing` 路径漂移（含本项两条），pre-commit 会拒；本项不代改他项路径、不跳过钩子。
+- 本轮改动**未提交**：另一会话正在把 `rl_exp/blender/*.py` 搬到 `rl_exp/blender/scripts/`，`check_work_docs` 因此报 9 条 `landing` 路径漂移（含本项两条），pre-commit 会拒；本项不代改他项路径、不跳过钩子。（同日补记：对方已把台账路径补齐，本切片随 `d5246ae` 入库。）
+
+## 追加九：E 第四切片 —— 报告 reader 接入同一绑定（2026-10-12 同日）
+
+### 适用范围
+
+两个报告 reader 接入绑定并真跑：`rl_exp/tools/diagnose/plot_joints.py`（读 gait_probe 报告出图，不起仿真）与 `ablation_harness/baseline_metrics.py`（离线复判 `baseline-frames` 记录）。读数取**本机已存在的真实产物**（报告 `out/gait_probe/gait_v3.json`；记录 `results/lizard2_flat_v5/v3/.../eval.frames.pt`）与其**同数据改名样本**。未覆盖 writer 侧（见末尾）。
+
+### 验收条件
+
+同一份报告/记录在旧名与新名两套词根下读出**同一组数、同一组键名**；错配命名必须拒绝而不是画出空行 / 让声明项静默缺席。
+
+### 结果
+
+- **`plot_joints.py`**：加 `--naming`；被画的三条关节改为按**链位次**从绑定取（`REPORT_POSITIONS = (0, 2, -1)`），且**逐 leg** 取（前后肢两套词），列标题随行自己的词；画之前核对报告的脚体与键名（每条 leg 的末端 link、`{body}_{token}_actual/_target`、`{token}_limits_rad`），缺任一项即拒绝并指出缺的那个键；索引 JSON 记下 `naming`。真跑：真实报告 `shared` 出图（0.5/1.5/2.8 m/s 三档）；把同一报告改成 `split` 词（数值不动）后 `split` 出图，**逐档逐角色对齐后 36 格读数与键集合完全相同**（`unmapped []`、`value differences []`）；两处错配各被拒（报出报告里实际的脚体：`['lf_finger','rf_finger','rl_toe','rr_toe']` / `['lf_foot',...]`）。
+- **`baseline_metrics.py`**：`_LEG_TOKENS = JOINT_SUFFIXES` 常量改为 `leg_suffixes(naming)` + `judge(artifact, naming=LEGACY)` / `_score` / `_gait_shape_readings` 一路带绑定，`--naming` 上 CLI；新增 `_record_naming()`：记录的关节列里**一格都不属于该命名**即拒（列名给前三条），否则空读数会被当成"这只机体没什么可报"。
+- **一处真发现的耦合**：步幅归因的两条 item 名 `stride_hip_corr` / `stride_knee_corr` 原先是**按词根拼**出来的（`f"{leg}_{token}_joint"`，token 固定 `hip`/`hfe`），而这两个名字同时写在**协议**的 `report_only` 里（`protocols/lizard2_flat_v4/v5.json`）⇒ 改名后 item 名会跟着变、协议声明项静默缺席。改法：**item 名保持协议不变**，只把要找的关节改为按位次（位次 0 = 步幅根、2 = 膝）逐 leg 取。改后两套命名的 `diagnostics` **键集合与取值完全一致**（改前差两个键：`stride_hip_corr`/`stride_knee_corr` 只在 `shared` 出现）。
+- 既有复判行为不变：真实 v3 记录 `shared` → `verdict: pass`；改名副本身份照旧 `pass`，`invalid_reasons: []`；负例（改名记录按 `shared`）→ `ValueError: record Lizard2-Flat-Play-v3 carries 30 joint column(s) and none is a leg joint of the naming 'shared' (... rr_hip_swing_joint)`。
+- `python -m pytest rl_exp\tools\verify\test_baseline_contract.py -q` → `68 passed`（复判契约未破）。
+
+**复读命令**（`<PY>` = `python ablation_harness/host_paths.py --python` 给出的解释器；报告/记录改名样本由 `%TEMP%` 下一次性脚本按“解析体名+词根+字段”生成，不入仓）：
+
+- `<PY> rl_exp\tools\diagnose\plot_joints.py --report rl_exp\tools\diagnose\out\gait_probe\gait_v3.json --naming shared --out_dir <tmp>` → `JOINT_PLOT_OK (shared)`；同报告改名副本 `--naming split` → `JOINT_PLOT_OK (split)`，两份 `*_index.json` 按角色对齐后逐格相同
+- `<PY> -m ablation_harness.baseline_metrics ablation_harness\results\lizard2_flat_v5\v3\Lizard2-Flat-v3_5999_deterministic_seed123\eval.frames.pt --protocol ablation_harness\protocols\lizard2_flat_v5.json` → `"verdict": "pass"`、`"naming": "shared"`
+- 同一记录改名关节列后 `--naming split` → `"verdict": "pass"`、`"invalid_reasons": []`；按 `shared` 读 → 上面那条 `ValueError`
+
+### 证据引用
+
+- `rl_exp/tools/diagnose/plot_joints.py`：`REPORT_POSITIONS` / `report_tokens` / `draw_band` 的键核对与逐行标题 / `main` 的脚体核对与 `--naming`。
+- `ablation_harness/baseline_metrics.py`：`leg_suffixes` / `_record_naming` / `_gait_shape_readings` 的位次取关节 / `judge` 与 CLI 的 `--naming`。
+- `rl_exp/tasks/joint_names.py`：新增 `naming_id()`（id 反向查，`check_leg_reachability` 与 `plot_joints` 共用，避免第二份 id 表）。
+
+### 未覆盖边界
+
+- **writer 侧未接线**：`ablation_harness/baseline_eval.py` 的 `_gait_shape_joints`（决定**新记录带哪些关节列**）与 `gait_probe.py` 的报告写出（报告尚不携带 `naming` 字段）都没动 —— 前者改的是"记录里有什么列"，属评测协议面，须先核协议边界并交 `lizard2-contact-protocol`；后者受资产前提阻塞（`gait_probe --self-check` 现树既存红），其报告今天只能按 `shared` 读。
+- 样本是"同数据改名"，不是候选机体上的新读数；`plot_joints` 的图只比了索引 JSON 的数值与键，没有逐像素比图。
+- E4.5 的旧基线同条件复跑仍未做；E 的第一波出口仍未达（Blender 构建入口、`gait_probe`、接触诊断与在线协议核对未接线）。

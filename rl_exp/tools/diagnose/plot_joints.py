@@ -39,11 +39,16 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 from rl_exp.tasks import joint_names  # noqa: E402
 
-#: Joint tokens the probe records per leg, in the order the panels are drawn. WHICH of the chain's
-#: joints are drawn is this plot's own choice (the probe's series carries three); the names and their
-#: order come from the chain, so a renamed or inserted joint cannot leave the panels drawing a row that
-#: does not exist while the figure still looks right.
-JOINTS = joint_names.REPORT_ROOTS
+#: The chain POSITIONS the probe records per leg (root, first hinge, blade) -- by position, never by
+#: word, so the panels follow the binding: a report written for a renamed body draws its own joints
+#: instead of three empty rows, and one written for another vocabulary is refused (see :func:`draw_band`).
+REPORT_POSITIONS = (0, 2, -1)
+
+
+def report_tokens(naming: dict[str, tuple[str, ...]], leg: str) -> tuple[str, ...]:
+    """The three tokens a leg's panels are drawn for, in this binding's words."""
+    roots = joint_names.roots_of(naming, leg)
+    return tuple(roots[index] for index in REPORT_POSITIONS)
 
 
 def at_stop(actual: list[float], low: float, high: float, band: float) -> list[bool]:
@@ -51,19 +56,39 @@ def at_stop(actual: list[float], low: float, high: float, band: float) -> list[b
     return [min(abs(value - low), abs(value - high)) <= band for value in actual]
 
 
-def draw_band(entry: dict, contact_n: float, band: float, out_dir: pathlib.Path, tag: str) -> dict:
-    """One figure of joint panels + one bar chart. Returns the numbers it drew."""
+def draw_band(entry: dict, contact_n: float, band: float, out_dir: pathlib.Path, tag: str,
+              naming: dict[str, tuple[str, ...]]) -> dict:
+    """One figure of joint panels + one bar chart. Returns the numbers it drew.
+
+    The tokens are per LEG here, not one set for the figure: a body whose front and rear limbs carry
+    different words draws each row in its own words (the column titles are that row's), which is also why
+    the presence of each key is checked before anything is plotted -- a report whose keys are in another
+    vocabulary would otherwise draw empty rows and look like a figure.
+    """
     speed = entry["speed"]
     joint_series = entry["joint_series"]
     feet = entry["feet"]
+    tokens_per_foot = [report_tokens(naming, foot["body"].split("_")[0]) for foot in feet]
+    missing = []
+    for foot, tokens in zip(feet, tokens_per_foot):
+        for token in tokens:
+            for key in (f"{foot['body']}_{token}_actual", f"{foot['body']}_{token}_target"):
+                if key not in joint_series:
+                    missing.append(key)
+            if f"{token}_limits_rad" not in foot:
+                missing.append(f"{token}_limits_rad")
+    if missing:
+        raise SystemExit("report %s does not carry the naming '%s': no %s (series keys start %s). "
+                         "Declare the naming this report was written under (--naming)"
+                         % (tag, joint_names.naming_id(naming), missing[0], sorted(joint_series)[:3]))
     summary = {}
-    fig, axes = plt.subplots(len(feet), len(JOINTS), figsize=(15.0, 8.4), sharex=True)
-    axes = axes.reshape(len(feet), len(JOINTS))
+    fig, axes = plt.subplots(len(feet), len(REPORT_POSITIONS), figsize=(15.0, 8.4), sharex=True)
+    axes = axes.reshape(len(feet), len(REPORT_POSITIONS))
     for row, foot in enumerate(feet):
         body = foot["body"]
         force = entry["series"]["force"][row]
         leg = body.split("_")[0]
-        for column, joint in enumerate(JOINTS):
+        for column, joint in enumerate(tokens_per_foot[row]):
             axis = axes[row][column]
             actual = joint_series[f"{body}_{joint}_actual"]
             target = joint_series[f"{body}_{joint}_target"]
@@ -83,8 +108,9 @@ def draw_band(entry: dict, contact_n: float, band: float, out_dir: pathlib.Path,
             axis.set_ylim(min(low, min(actual), min(target)) - 0.1 * span,
                           max(high, max(actual), max(target)) + 0.1 * span)
             axis.tick_params(labelsize=7)
-            if row == 0:
-                axis.set_title(joint, fontsize=9)
+            # Every row titled in its OWN words: under a split naming the front and rear columns are
+            # different joints, and one title across four rows would label the rear's with the front's.
+            axis.set_title(joint, fontsize=9)
             if column == 0:
                 axis.set_ylabel(leg, fontsize=9)
             margin = min(min(abs(value - low), abs(value - high)) for value in actual)
@@ -106,7 +132,9 @@ def draw_band(entry: dict, contact_n: float, band: float, out_dir: pathlib.Path,
     fig.savefig(panels, dpi=130)
     plt.close(fig)
 
-    names = [f"{foot['body'].split('_')[0]}_{joint}" for foot in feet for joint in JOINTS]
+    names = [f"{foot['body'].split('_')[0]}_{tokens[column]}"
+             for foot, tokens in zip(feet, tokens_per_foot)
+             for column in range(len(REPORT_POSITIONS))]
     shares = [summary[name]["at_stop_share"] for name in names]
     fig, axis = plt.subplots(figsize=(9.0, 4.2))
     axis.bar(range(len(names)), shares, color="tab:red", alpha=0.7)
@@ -151,6 +179,10 @@ def main() -> None:
     parser.add_argument("--at_stop_rad", type=float, default=0.02,
                         help="how close to a stop counts as 'at the stop'")
     parser.add_argument("--tag", default=None, help="figure prefix (default: the report's stem)")
+    parser.add_argument("--naming", default="shared", choices=sorted(joint_names.NAMINGS),
+                        help="which words the record carries: 'shared' = every leg one root set (every "
+                             "asset today), 'split' = the front/rear rename. Declared, and checked "
+                             "against the report's own keys and foot bodies before anything is drawn")
     parser.add_argument("--self-check", action="store_true")
     args = parser.parse_args()
     if args.self_check:
@@ -161,10 +193,22 @@ def main() -> None:
 
     report = json.loads(args.report.read_text(encoding="utf-8"))
     tag = args.tag or args.report.stem
+    naming = joint_names.naming_for(args.naming)
+    # The foot bodies are checked against the naming before the bands are drawn: the probe records the
+    # four legs in its own order, and a report written for another vocabulary would draw rows for feet
+    # this binding does not name -- an empty-looking figure rather than an error.
+    for leg in joint_names.LEGS:
+        end = joint_names.end_link(leg, naming)
+        if not any(foot["body"] == end for env in report["envs"] for foot in env["feet"]):
+            raise SystemExit("report %s carries no %s: it was not written for the naming '%s' "
+                             "(feet: %s)" % (args.report.name, end, args.naming,
+                                             sorted({foot["body"] for env in report["envs"]
+                                                     for foot in env["feet"]})))
     args.out_dir.mkdir(parents=True, exist_ok=True)
-    index = {"report": str(args.report), "at_stop_rad": args.at_stop_rad, "bands": []}
+    index = {"report": str(args.report), "at_stop_rad": args.at_stop_rad, "naming": args.naming,
+             "bands": []}
     for entry in report["envs"]:
-        drawn = draw_band(entry, report["contact_n"], args.at_stop_rad, args.out_dir, tag)
+        drawn = draw_band(entry, report["contact_n"], args.at_stop_rad, args.out_dir, tag, naming)
         print("\n=== %.1f m/s ===\n  panels %s\n  stops  %s"
               % (entry["speed"], drawn["panels"], drawn["stops"]))
         worst = sorted(drawn["joints"].items(), key=lambda item: -item[1]["at_stop_share"])[:6]
@@ -174,7 +218,7 @@ def main() -> None:
                      reading["actual_min"], reading["actual_max"], reading["limits"]))
         index["bands"].append({"speed": entry["speed"], **drawn})
     (args.out_dir / f"{tag}_index.json").write_text(json.dumps(index, indent=1), encoding="utf-8")
-    print("\nJOINT_PLOT_OK -> %s" % args.out_dir)
+    print("\nJOINT_PLOT_OK (%s) -> %s" % (args.naming, args.out_dir))
 
 
 if __name__ == "__main__":
