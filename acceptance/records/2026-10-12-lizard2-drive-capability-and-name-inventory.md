@@ -491,3 +491,43 @@ E 的“绑定 + 首个真实消费者”切片：名表两套命名、`check_le
 - **writer 侧未接线**：`ablation_harness/baseline_eval.py` 的 `_gait_shape_joints`（决定**新记录带哪些关节列**）与 `gait_probe.py` 的报告写出（报告尚不携带 `naming` 字段）都没动 —— 前者改的是"记录里有什么列"，属评测协议面，须先核协议边界并交 `lizard2-contact-protocol`；后者受资产前提阻塞（`gait_probe --self-check` 现树既存红），其报告今天只能按 `shared` 读。
 - 样本是"同数据改名"，不是候选机体上的新读数；`plot_joints` 的图只比了索引 JSON 的数值与键，没有逐像素比图。
 - E4.5 的旧基线同条件复跑仍未做；E 的第一波出口仍未达（Blender 构建入口、`gait_probe`、接触诊断与在线协议核对未接线）。
+
+## 追加十：E 第五切片 —— 接触面接入同一绑定（2026-10-12 同日）
+
+### 适用范围
+
+接触相关三处消费者接线：`diag_metrics.foot_ids`、`check_contact_ownership.py`、`obs_protocol_live.py`。读数 = 离线足端选择（两套命名 + 两处拒绝）与两次起仿真的真跑（各一次共享命名、一次错配拒绝）。`baseline_probe.py` 与 `diagnose_support.py` 的同类字面后缀未接线，见末尾。
+
+### 验收条件
+
+同一足端选择在旧名与新名两套词根下选中同一组 body；错配命名在**测量前**被拒；空匹配不得被当成"没有足端"的零读数。
+
+### 结果
+
+- **`diag_metrics.foot_ids(body_names, naming)`**：字面 `_foot` → `joint_names.is_contact_body`；**匹配不到即 `ValueError`**，报出命名与它找的模式。名表按**文件**导入（`sys.path` + `import joint_names`），因为本模块也被纯离线检查导入，不该为此付 `rl_exp.tasks` 的 gym 注册。
+- **`check_contact_ownership.py`**：`--naming`；足端集合走 `is_contact_body`；新增核对：每条 leg 的命名末端 link 必须出现在所造 body 里，否则 `SystemExit`——缺它时足端集合为空，"无未受罚体"这条会因无可比对而通过。
+- **`obs_protocol_live.py`**：`--naming`；`f"{foot}_foot"` → `joint_names.end_link(foot, naming)`（声明的 ring 项名是协议自己的词汇，足端 body 名才是机体的词）。导入位置提到 parser 之前（`--naming` 的 choices 要用表）。
+- **一处可达性事实**：`Lizard2-Flat-v3` 的协议只声明 `policy` 组（`terms_for` 见下），`feet_for(task, "extero")` 抛 `ProtocolError` ⇒ 该文件的"声明足端必须有对应 body"那段循环**今天不执行**（`feet` 为空元组）。声明文件里确有带 `extero` 的协议（`versions/obs_protocols.json` 一份，四个 `*_foot_ring`），但本次能跑的任务里没有它 ⇒ 这次改动**按共享命名与既有行为逐字等价（无行为变化），但未取得真跑验证**，记为未验，不当作已验。
+
+**复读命令与实测**（`<PY>` = `python ablation_harness/host_paths.py --python`；改名样本是临时目录里的一次性脚本，不入仓）：
+
+- 离线：`foot_ids` 在 shared/split 下都返回 `[1, 2, 3, 4]`；两处错配各拒：
+  `6 body name(s), none a .*_finger/.*_toe body of the naming 'split': ['base_link', 'lf_foot', 'rf_foot', 'rl_foot']` 与 `none a .*_foot body of the naming 'shared': ['base_link', 'lf_finger', 'rf_finger', 'rl_toe']`
+- `<PY> rl_exp\tools\verify\check_contact_ownership.py --task Lizard2-Flat-v3 --num_envs 2 --steps 20` → 跑完并打 `CONTACT_OWNERSHIP_FAILED (1)`，唯一 FAIL 是既存的 `every penalty body carries a collider  colliders missing: ['lf_kfe','rf_kfe','rl_kfe','rr_kfe']`（膝链无 collider，与命名无关）
+- 同命令 `--naming split` → `task Lizard2-Flat-v3 has no lf_finger body, so it does not carry the naming 'split' -- declare the naming of the body it spawns`
+- `<PY> rl_exp\tools\verify\obs_protocol_live.py --headless --tasks Lizard2-Flat-v3` → `OBS_PROTOCOL_LIVE_OK (1 task(s), 1 warning(s))`；`--naming split` 同结果（该段今天不执行，见上）
+- `<PY> -c "from rl_exp.tasks import obs_protocol as P; P.terms_for('Lizard2-Flat-v3','extero')"` → `ProtocolError: ... protocol declares no group 'extero'; has ['policy']`
+
+### 证据引用
+
+- `rl_exp/tools/diagnose/diag_metrics.py`：`foot_ids` 的绑定与拒绝、文件导入名表。
+- `rl_exp/tools/verify/check_contact_ownership.py`：`--naming`、末端 link 核对、`feet` 集合。
+- `rl_exp/tools/verify/obs_protocol_live.py`：`--naming`、`check_task(..., naming)` 与 `end_link` 解析。
+- `FILEMAP.md` 的 `diag_metrics` 行（`foot_ids` 的拒绝是调用方要知道的契约）。
+
+### 未覆盖边界
+
+- `baseline_probe.py`（head press 用的足端集合，`:270-271`）与 `diagnose_support.py`（非足端排名与 `find_bodies/find_sensors([".*_foot"])`，`:428/447/817/822`）**未接线**：各需一次自己的仿真真跑，留下一片做；未接线前不得用它们读新名机体。
+- `obs_protocol_live.py` 的那条改动**未验证**（上文的可达性事实）——只做等价对齐。
+- 两次仿真各 1–2 env、20 步：只证"接通 + 拒绝"，不是承重或接触读数；`check_contact_ownership` 的既存 FAIL 归资产/collider 事项，不借 E 改资产。
+- E4.5 的旧基线同条件复跑仍未做；E 的第一波出口仍未达。

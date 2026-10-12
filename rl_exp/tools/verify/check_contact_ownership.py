@@ -40,11 +40,20 @@ import xml.etree.ElementTree as ET
 
 from isaaclab.app import AppLauncher
 
+# Before the parser because ``--naming`` offers the table's ids (the import order the other diagnostics
+# use: the package registration is paid either way).
+from rl_exp.tasks import joint_names  # noqa: E402
+
 parser = argparse.ArgumentParser()
 parser.add_argument("--task", default="Lizard2-Flat-v3")
 parser.add_argument("--num_envs", type=int, default=8)
 parser.add_argument("--steps", type=int, default=100, help="control steps of zero action to observe")
 parser.add_argument("--threshold", type=float, default=1.0, help="contact force counted as contact [N]")
+parser.add_argument("--naming", default="shared", choices=sorted(joint_names.NAMINGS),
+                    help="which words the spawned body carries: 'shared' = every leg one root set (every "
+                         "asset today), 'split' = the front/rear rename. Declared, and checked against the "
+                         "spawned bodies before the unpunished-body check -- an empty foot set would "
+                         "otherwise pass that check by having nothing to compare against")
 parser.add_argument("--json", help="write the full report here")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
@@ -56,7 +65,7 @@ import torch  # noqa: E402
 
 from pxr import Usd, UsdPhysics  # noqa: E402
 
-from rl_exp.tasks import obs_protocol  # noqa: E402  (task -> family, the declared route)
+from rl_exp.tasks import obs_protocol  # noqa: E402  (task -> family; the declared route)
 from rl_exp.tools.verify.baseline_runtime import resolve_task_cfg  # noqa: E402
 
 PROBLEMS: list[str] = []
@@ -206,7 +215,16 @@ def main() -> int:
     touching = sorted(n for n, f in peak_by_body.items() if f > args_cli.threshold)
     check("the stand measured contact at all", bool(touching), f"max {max(peak_by_body.values()):.2f} N")
 
-    feet = {n for n in robot.body_names if n.endswith("_foot")}
+    # Every leg's chain-end link has to exist on the spawned body, or ``feet`` below is empty and the
+    # invisible-body check below passes by having nothing to compare against -- a naming mismatch would
+    # read as "no unpunished body" instead of as the wrong binding.
+    naming = joint_names.naming_for(args_cli.naming)
+    for leg in joint_names.LEGS:
+        end = joint_names.end_link(leg, naming)
+        if end not in robot.body_names:
+            raise SystemExit(f"task {args_cli.task} has no {end} body, so it does not carry the naming "
+                             f"'{args_cli.naming}' -- declare the naming of the body it spawns")
+    feet = {n for n in robot.body_names if joint_names.is_contact_body(n, naming)}
     blind = [n for n in touching if n not in selected and n not in feet]
     check("no contacting body is invisible to the penalty stack", not blind,
           f"unpunished: {blind}" if blind else f"touching: {touching}")

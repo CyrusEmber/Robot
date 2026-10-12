@@ -22,9 +22,16 @@ from __future__ import annotations
 
 import json
 import pathlib
+import sys
 
 import torch
 from isaaclab.utils.math import quat_apply, quat_apply_inverse, yaw_quat
+
+# The leg table by FILE, not as a package: this module is imported by pure-offline checks too, and
+# ``rl_exp.tasks.__init__`` pays the gym registration those must not need (the idiom the table's own
+# docstring documents).
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "tasks"))
+import joint_names  # noqa: E402
 
 # Bodies whose collision mesh must stay above the floor: chest, neck and the three tail links.
 # The baseline line's own pre-train standard says the belly, head chain and tail carry no load
@@ -130,15 +137,27 @@ def tilt_cos(projected_gravity_b: torch.Tensor) -> torch.Tensor:
     return (-projected_gravity_b[:, 2]).clamp(-1.0, 1.0)
 
 
-def foot_ids(body_names: list[str]) -> list[int]:
-    """Indices of the foot bodies in a sensor's body order.
+def foot_ids(body_names: list[str],
+             naming: dict[str, tuple[str, ...]] = joint_names.LEGACY_NAMING) -> list[int]:
+    """Indices of the foot bodies in a sensor's body order, under the binding ``naming``.
 
     Args:
         body_names: sensor body names, in sensor order.
+        naming: which words the body carries (:data:`joint_names.NAMINGS`). Declared: ``_foot`` is one
+            body's word, not the repo's, and a foot reading taken off a pattern that matched nothing
+            would be a zero that looks like a robot whose feet never touch the floor.
     Returns:
-        Indices whose name ends with ``_foot``.
+        Indices whose name is a chain-end link of the naming.
+    Raises:
+        ValueError: none of ``body_names`` is a foot of this naming.
     """
-    return [i for i, name in enumerate(body_names) if name.endswith("_foot")]
+    ids = [index for index, name in enumerate(body_names) if joint_names.is_contact_body(name, naming)]
+    if not ids:
+        raise ValueError(
+            "%d body name(s), none a %s body of the naming '%s': %s"
+            % (len(body_names), "/".join(joint_names.contact_body_patterns(naming)),
+               joint_names.naming_id(naming), list(body_names[:4])))
+    return ids
 
 
 def body_load_n(net_forces_w: torch.Tensor) -> torch.Tensor:

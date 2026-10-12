@@ -24,10 +24,18 @@ import pathlib
 
 from isaaclab.app import AppLauncher
 
+# Before the parser because ``--naming`` offers the table's ids; the same import order the other
+# diagnostics use. ``rl_exp.tasks`` pays the gym registration, which these tools already have.
+from rl_exp.tasks import joint_names  # noqa: E402
+
 parser = argparse.ArgumentParser()
 parser.add_argument("--tasks", nargs="*", default=["Lizard2-Flat-v3"])
 parser.add_argument("--envs", type=int, default=2, help="envs to build (small on purpose)")
 parser.add_argument("--pin", action="store_true", help="record the measured runtime joint order")
+parser.add_argument("--naming", default="shared", choices=sorted(joint_names.NAMINGS),
+                    help="which words the spawned body carries: 'shared' = every leg one root set (every "
+                         "asset today), 'split' = the front/rear rename. Declared, and checked against the "
+                         "spawned bodies (a declared foot has to exist as the naming's chain-end link)")
 parser.add_argument("--reason", default=None, help="why the order is being recorded (required with --pin)")
 parser.add_argument(
     "--all-tasks",
@@ -91,7 +99,8 @@ def params_path(line: str, version: str | None) -> pathlib.Path | None:
     return next((path for path in candidates if path.is_file()), None)
 
 
-def check_task(task_id: str, problems: list[str], warnings: list[str]) -> str:
+def check_task(task_id: str, problems: list[str], warnings: list[str],
+               naming: dict[str, tuple[str, ...]] = joint_names.LEGACY_NAMING) -> str:
     """Build one task's env, read its contract off the live managers, compare, and report."""
     spec = gym.spec(task_id)
     cfg = spec.kwargs["env_cfg_entry_point"]
@@ -138,8 +147,11 @@ def check_task(task_id: str, problems: list[str], warnings: list[str]) -> str:
             feet = ()
         robot = unwrapped.scene["robot"]
         for foot in feet:
-            if f"{foot}_foot" not in robot.body_names:
-                problems.append(f"{task_id}: declared foot {foot!r} has no {foot}_foot body in {robot.body_names}")
+            # The body a declared foot names comes off the binding: ``_foot`` is one body's word, and the
+            # declared ring term is the protocol's (its own vocabulary is frozen per protocol version).
+            end = joint_names.end_link(foot, naming)
+            if end not in robot.body_names:
+                problems.append(f"{task_id}: declared foot {foot!r} has no {end} body in {robot.body_names}")
         # joints: the declaration names terms, not joints. Two different orders are in play --
         # the recipe's joint_order (URDF tree order, what the deployment side reads) and the
         # articulation order the obs and the action use. Only the second one has to be pinned,
@@ -224,9 +236,10 @@ def main() -> int:
         print(f"OBS_PROTOCOL_LIVE_OK ({covered} declared task(s), all pinned; no env built)")
         return 0
     lines = []
+    naming = joint_names.naming_for(args_cli.naming)
     for task_id in args_cli.tasks:
         try:
-            lines.append(check_task(task_id, problems, warnings))
+            lines.append(check_task(task_id, problems, warnings, naming))
         except Exception as err:  # a task that cannot be built is a problem, never a skip
             problems.append(f"{task_id}: cannot build or reset: {err!r}")
     for line in lines:

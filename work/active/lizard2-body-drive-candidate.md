@@ -14,7 +14,7 @@ evidence: acceptance/records/2026-10-12-lizard2-palm-chain-p1.md, acceptance/rec
 ## 下一步
 
 1. **按 A 的探测链推进**：P1 交接见本项 palm-chain-p1 记录；本轮止于 P2 前。后续按 A2 补前后肢几何小样及容差/转动档批准，再扩四肢与隔离导出；旧链或合成契约通过不当几何通过，已训版本与正式资产不动。
-2. **继续 E3 接线**：URDF → FK/碰撞、运行时（布局、站姿/迈步探针）与报告 reader（`plot_joints`、`baseline_metrics`）已接线并各有真跑读数与错配负例；当前改 Blender 构建入口、步态诊断、接触诊断、在线协议核对。报告 **writer** 侧（`baseline_eval` 的关节列集合、`gait_probe` 报告字段）属评测协议面，先交 `lizard2-contact-protocol` 再动。E4 的运行时双命名对照做不了——运行时关节名还写在配方里（动作项/`joint_order`/默认位姿），改名须与采用同一次变更落地（归 S6），现在只验到"绑定被核对、错配被拒"。
+2. **继续 E3 接线**：URDF → FK/碰撞、运行时、报告 reader 与接触面（`diag_metrics.foot_ids`、`check_contact_ownership`、`obs_protocol_live`）已接线并各有真跑读数与错配负例；当前改 Blender 构建入口、步态诊断，以及接触面余下两处（`baseline_probe`、`diagnose_support`）。报告 **writer** 侧（`baseline_eval` 的关节列集合、`gait_probe` 报告字段）属评测协议面，先交 `lizard2-contact-protocol` 再动。E4 的运行时双命名对照做不了——运行时关节名还写在配方里（动作项/`joint_order`/默认位姿），改名须与采用同一次变更落地（归 S6），现在只验到"绑定被核对、错配被拒"。
 3. **并行边界**：A 选 pivot/轴消费 B 的能力约束，按线性对照进行，不新建驱动机制；有效限速前置仍归 B。E 接线前，A 只核对旧名源几何，不让未接线工具测新名候选；C 可用现有机体开展。
 4. **先解除资产前提**：`gait_probe` 的资产前提交 `floor-contact-attribution` 的 ⑤/⑪；不借 E 改资产或放宽断言。声明面边界与既有自检覆盖只取本项 2026-10-12 evidence。
 5. **集成后一次审核**：A/B/C 自检就绪后执行 D，读数入同一具名记录；置 pending_review，next 点名新上下文审核者。已训 v3、采用资产与趴姿边界见本项“边界”。
@@ -73,7 +73,7 @@ evidence: acceptance/records/2026-10-12-lizard2-palm-chain-p1.md, acceptance/rec
 ### E2. 绑定契约与接口边界
 
 1. **在入口确定目标，命名约定与它同行**。最小普通数据形状为目标路径、声明来源、按 leg 的“角色 → 词根”映射和每 leg 的末端角色；不需要命名对象或注册表。稳定角色取本项已有链映射的角色键，前后肢实际词根来自同一名表；该映射不承诺两机体几何等价。方案可附稳定标识，但取名使用绑定的映射，不看全局开关或候选生命周期。旧入口显式提供共享词根映射，新候选入口显式提供前后肢映射；下游只拿已绑定数据。未声明约定的任意外部机体不得从关节名猜方案。
-   **已落地**：`rl_exp/tasks/joint_names.py` 的 `NAMINGS`（`shared`/`split`，后者由 `PLANNED_ROOTS` 派生）+ `naming_for`/`roots_of` 与按绑定的 `end_link`/`contact_body_patterns`/`is_contact_body`；`check_leg_reachability.py` 在入口用 `--naming`/`--compare-naming` 绑定并把绑定沿调用链传递；`check_self_collision.py`（按位次选角色、末端关节核对）、`stance_step_probe.py`（所造资产末端关节与接触体核对）与 `check_joint_layout.py`（顺带修掉 `joint_names` 遮蔽模块的既存崩溃）同法接入。路径与声明来源仍由各消费者的既有入口解析（任务级用 `obs_protocol.resolve_body`），名表只回答“词根”。
+   **已落地**：`rl_exp/tasks/joint_names.py` 的 `NAMINGS`（`shared`/`split`，后者由 `PLANNED_ROOTS` 派生）+ `naming_for`/`naming_id`/`roots_of` 与按绑定的 `end_link`/`contact_body_patterns`/`is_contact_body`；各消费者按入口声明绑定并沿调用链传递（清单见 E3 接线现状）。路径与声明来源仍由各消费者的既有入口解析（任务级用 `obs_protocol.resolve_body`），名表只回答“词根”。
 2. **复用路径解析，不另造寻址**。任务工具读取最终 cfg 的实际 `usd_path`，复用 `rl_exp/tasks/obs_protocol.py:363` 的 `resolve_body()`；无覆盖时可用 `body_for_task()`。`--usd`/`--urdf` 覆盖、`--compare` 第二机体须连同各自命名约定重新绑定，不继承当前家族或第一机体的约定。未能取得约定或 USD/URDF 对应依据则拒绝比较。不能仅按 family 选新旧，同一家族会有两种机体。
 3. **声明只有入口一份**。Blender 在 `generate_urdf.py` 已有 `ROBOT_SPECS` 中随构建目标声明约定，候选骨架脚本消费同一目标；诊断入口随隔离配置声明约定，报告携带绑定来源。正式配方声明归 S6。E 不把命名参数塞进已冻结配方，不为路径另建全仓注册表。
 4. **一套函数，两套数据**。纯名表函数接收绑定中的命名数据和 leg，派生链词根、具名 joint/link、链端接触体与匹配式；后缀/正则仍由已有 builder 生成。内部按链位置或已定义角色选关节，再取该 leg 的名字，不在每层选择新旧。关节名可含多个 `_`，用完整生成名映射到角色，或只剥已知 leg 前缀与 `_joint` 后缀，不用 `rpartition('_')` 识别词根。
@@ -96,7 +96,7 @@ evidence: acceptance/records/2026-10-12-lizard2-palm-chain-p1.md, acceptance/rec
 
 历史报告没有新字段时保留原 reader 及其旧协议语义，不伪补“已核机体”证据；新绑定 reader 缺来源或名称冲突则拒绝。诊断量/列名若会变更评测语义，先核协议边界并交 `lizard2-contact-protocol`，E 不重写旧协议。
 
-**接线现状**：URDF → FK/碰撞（`check_leg_reachability`、`check_self_collision`）、运行时（`check_joint_layout`、`stance_step_probe`）与报告 reader（`plot_joints`、`baseline_metrics`）已按绑定接通，各有真跑读数与错配负例；其余各行仍按旧名默认运行，未接线前不得指向新命名候选。
+**接线现状**：URDF → FK/碰撞（`check_leg_reachability`、`check_self_collision`）、运行时（`check_joint_layout`、`stance_step_probe`）、报告 reader（`plot_joints`、`baseline_metrics`）与接触面（`diag_metrics.foot_ids`、`check_contact_ownership`、`obs_protocol_live`）已按绑定接通，各有真跑读数与错配负例；其余各行仍按旧名默认运行，未接线前不得指向新命名候选。
 
 范围内残留硬编码逐点分成：要迁的名称选择、故意保留的旧协议/反例、几何或驱动假设。后两类不按字符串批量替换。实际漏点和延期站点只记验收记录；任何第一波必需消费者未接线，E 就不能交付。
 

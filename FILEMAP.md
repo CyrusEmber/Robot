@@ -87,7 +87,7 @@
 | `framework_pin_check.py` | 框架 pin：IsaacLab 内部符号 + 已验证 commit + `fork_patches\*.patch` 存档校验（按序应用到 pristine 副本再逐字节比） |
 | `recipe_lines.py` | **线 / 版本目录发现规则的唯一入口**（`discover()`）；上面四个版本相关闸门全走它，零份 / 多份 / 名字不符一律抛错不跳过 |
 | `cfg_snapshot.py` | 配置快照序列化器（顺序敏感 / 浮点位级 / callable 点路径 / MISSING 按类型 / 路径相对化 / 不落对象地址）；反证 `test_cfg_snapshot.py` |
-| `baseline_runtime.py` / `tools\diagnose\diag_metrics.py` | 共用运行时读点（实际关节/材质/终止注入）与验收量测纯函数（与奖励同帧坐标系）——防"验收与奖励不同坐标系"复发 |
+| `baseline_runtime.py` / `tools\diagnose\diag_metrics.py` | 共用运行时读点（实际关节/材质/终止注入）与验收量测纯函数（与奖励同帧坐标系）——防"验收与奖励不同坐标系"复发；`foot_ids(body_names, naming)` 的足端按**绑定命名**取（匹配不到即拒，空匹配当过零读），名表按文件导入以不付 gym 注册 |
 | `test_*.py`（约 25 份） | 各闸门的反证与契约单测，清单在 `offline_suite.py`；命名与被看守对象同名 |
 
 ## 不直观的布局关系（看树推不出来、最容易搞错的）
