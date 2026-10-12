@@ -27,8 +27,12 @@ def cli(name):
 ROBOT = cli("robot") or ROBOT
 BLEND_OVERRIDE = cli("blend")
 OUT_OVERRIDE = cli("out_dir")
+CONTRACT_CHECK = "--contract_check" in _argv
+MEMORY_SCENE = "--memory_scene" in _argv
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+#: The ``.blend`` assets stay one level up: this folder holds scripts, not assets.
+_ASSET_DIR = os.path.dirname(_SCRIPT_DIR)
 TOTAL_MASS = 72.0
 MICRO_MASS = 0.05
 SHELL_FACTOR = 1.4
@@ -71,17 +75,30 @@ ROBOT_SPECS = {
     # which the frozen v1/v2 asset locks pin, because it is a candidate and not an adopted asset.
     "lizard2_candidate": {"axes": AXIS_MAP_LIZARD2, "blend": "lizard2_stance_candidate.blend",
                           "hip_joint": True, "micro_budget": 5, "leg_plane_axes": True},
+    # Read-only build contract only: no candidate geometry or axes approved yet.
+    "lizard2_palm_contract": {"axes": None, "blend": "lizard_stance.blend",
+                             "hip_joint": False, "micro_budget": None,
+                             "source_naming": "palm", "target_naming": "palm"},
 }
+for _spec in ROBOT_SPECS.values():
+    _spec.setdefault("source_naming", "shared")
+    _spec.setdefault("target_naming", "shared")
 SPEC = ROBOT_SPECS[ROBOT]
+if ROBOT == "lizard2_palm_contract" and not CONTRACT_CHECK:
+    raise ValueError("palm contract has no approved geometry; export blocked until P2/P3")
+if MEMORY_SCENE and not CONTRACT_CHECK:
+    raise ValueError("memory_scene is read-only and requires contract_check")
 AXIS_MAP = SPEC["axes"]
-_BLEND_IN = BLEND_OVERRIDE or os.path.join(_SCRIPT_DIR, SPEC["blend"])
+_BLEND_IN = BLEND_OVERRIDE or os.path.join(_ASSET_DIR, SPEC["blend"])
 # The family's own directory, read off the declaration rather than guessed: this generator writes the
 # meshes the URDF references and the asset lock pins, and since 2026-09-28 that tree is per-family
 # (`versions/<family>/assets.json`). It used to write into a scratch `<robot>_urdf/` directory while
 # referencing `../meshes/` (the shared tree), so a regeneration landed where nothing read it.
 # `--out_dir` overrides it for a candidate family that has no declaration on purpose.
-_EXP_DIR = os.path.abspath(os.path.join(_SCRIPT_DIR, ".."))
-if OUT_OVERRIDE:
+_EXP_DIR = os.path.abspath(os.path.join(_SCRIPT_DIR, "..", ".."))
+if CONTRACT_CHECK:
+    OUT_DIR = None
+elif OUT_OVERRIDE:
     OUT_DIR = os.path.abspath(OUT_OVERRIDE)
 else:
     _DECLARATION = os.path.join(_EXP_DIR, "versions", ROBOT, "assets.json")
@@ -96,7 +113,70 @@ BALL_MESHES = {
     "Roundcube.015", "Roundcube.008", "Roundcube.011", "Roundcube.003",
 }
 
-bpy.ops.wm.open_mainfile(filepath=_BLEND_IN)
+# Blender imports the stdlib-only table without executing tasks/__init__.py.
+sys.path.insert(0, os.path.join(_EXP_DIR, "tasks"))
+import joint_names as leg_names
+
+# Bone roles are independent of target joint roles: the old lizard2 exporter synthesizes hip,
+# while the palm source must already carry all four revolutes. No old distal role can be dropped.
+for _spec in ROBOT_SPECS.values():
+    _spec["source_roles"] = (leg_names.CHAIN_ROOTS[:-1] if _spec["source_naming"] == "palm"
+                             else leg_names.CHAIN_ROOTS[1:])
+    _spec["target_roles"] = (leg_names.CHAIN_ROOTS if _spec["hip_joint"]
+                             else _spec["source_roles"])
+
+
+def validate_build_contract(bones, spec):
+    """Bind source bones to target roles and check actual parents before any mesh write.
+
+    Palm samples prove topology only, not pivot positions, mesh ownership or approved geometry.
+    Legacy source lacks the synthesized hip; only the legacy exporter may insert that role.
+    """
+    source = leg_names.naming_for(spec["source_naming"])
+    target = leg_names.naming_for(spec["target_naming"])
+    binding = {}
+    for leg in leg_names.LEGS:
+        source_roots = leg_names.roots_of(source, leg)
+        target_roots = leg_names.roots_of(target, leg)
+        if source_roots != target_roots:
+            raise ValueError(f"{leg}: source/target roles differ; dropping distal bones is forbidden")
+        source_by_role = dict(zip(leg_names.CHAIN_ROOTS, source_roots))
+        target_by_role = dict(zip(leg_names.CHAIN_ROOTS, target_roots))
+        source_roles, target_roles = spec["source_roles"], spec["target_roles"]
+        synthetic = set(target_roles) - set(source_roles)
+        if set(source_roles) - set(target_roles) or synthetic != ({"hip"} if spec["hip_joint"] else set()):
+            raise ValueError(f"{leg}: invalid source/target role binding")
+        roles = tuple((role, source_by_role[role]) for role in source_roles)
+        names = tuple(leg_names.link_name(leg, root) for _, root in roles)
+        actual = {name for name in bones if name.startswith(leg + "_")}
+        if actual != set(names):
+            raise ValueError(f"{leg}: source bones missing={sorted(set(names) - actual)} "
+                             f"extra={sorted(actual - set(names))}")
+        for index, name in enumerate(names):
+            parent = bones[name]["parent"]
+            if index:
+                if parent != names[index - 1]:
+                    raise ValueError(f"{name}: parent {parent!r}, expected {names[index - 1]!r}")
+            elif parent not in bones or any(parent.startswith(p + "_") for p in leg_names.LEGS):
+                raise ValueError(f"{name}: missing or cross-leg root parent {parent!r}")
+            children = {child for child, data in bones.items() if data["parent"] == name}
+            expected = {names[index + 1]} if index + 1 < len(names) else set()
+            if children != expected:
+                raise ValueError(f"{name}: children {sorted(children)}, expected {sorted(expected)}")
+        binding[leg] = {
+            "roles": {role: {"source_bone": (leg_names.link_name(leg, source_by_role[role])
+                                              if role in source_roles else None),
+                             "target_link": leg_names.link_name(leg, target_by_role[role]),
+                             "target_joint": leg_names.joint_name(leg, target_by_role[role])}
+                      for role in target_roles},
+            "end_link": leg_names.end_link(leg, target),
+            "end_joint": leg_names.joint_name(leg, target_roots[-1]),
+        }
+    return binding
+
+
+if not MEMORY_SCENE:
+    bpy.ops.wm.open_mainfile(filepath=_BLEND_IN)
 depsgraph = bpy.context.evaluated_depsgraph_get()
 scene = bpy.context.scene
 
@@ -104,6 +184,14 @@ arm = next(o for o in scene.objects if o.type == "ARMATURE")
 # head in WORLD space (armature may carry the v5.6 rotation as object
 # transform; meshes are already read via matrix_world -- keep one frame)
 bones = {b.name: {"head": (arm.matrix_world @ b.head_local).copy(), "parent": b.parent.name if b.parent else None} for b in arm.data.bones}
+
+binding = validate_build_contract(bones, SPEC)
+if CONTRACT_CHECK:
+    print("CONTRACT_ONLY robot=%s source=%s target=%s geometry_proven=False" %
+          (ROBOT, SPEC["source_naming"], SPEC["target_naming"]))
+    print(json.dumps({leg: {"roles": tuple(data["roles"]), "end_link": data["end_link"],
+                           "end_joint": data["end_joint"]} for leg, data in binding.items()}, sort_keys=True))
+    raise SystemExit(0)
 
 link_meshes = {}
 for obj in scene.objects:

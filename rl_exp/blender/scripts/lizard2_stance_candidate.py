@@ -47,19 +47,22 @@ must be baked into rest geometry (a pose-mode rotation would leave the export un
 
 Run:
     E:\\SteamLibrary\\steamapps\\common\\Blender\\blender.exe --background \\
-        --python rl_exp/blender/lizard2_stance_candidate.py
+        --python rl_exp/blender/scripts/lizard2_stance_candidate.py
 """
 
 import math
 import os
+import sys
 
 import bmesh
 import bpy
 from mathutils import Matrix, Vector
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-BLEND_IN = os.path.join(_SCRIPT_DIR, "lizard_stance.blend")
-BLEND_OUT = os.path.join(_SCRIPT_DIR, "lizard2_stance_candidate.blend")
+#: The ``.blend`` assets stay one level up: this folder holds scripts, not assets.
+_ASSET_DIR = os.path.dirname(_SCRIPT_DIR)
+BLEND_IN = os.path.join(_ASSET_DIR, "lizard_stance.blend")
+BLEND_OUT = os.path.join(_ASSET_DIR, "lizard2_stance_candidate.blend")
 
 # Engineering trial values, not measurements: the r1 record's §4 has the default stance as "not
 # formed", so there is no animal number to copy. Only the LEFT legs are authored here.
@@ -364,9 +367,158 @@ def render(scene):
         cam.rotation_euler = (target - position).to_track_quat("-Z", "Y").to_euler()
         cam_data.ortho_scale = scale
         scene.render.resolution_x, scene.render.resolution_y = resolution
-        scene.render.filepath = os.path.join(_SCRIPT_DIR, "lizard2_stance_candidate_%s.png" % name)
+        scene.render.filepath = os.path.join(_ASSET_DIR, "lizard2_stance_candidate_%s.png" % name)
         bpy.ops.render.render(write_still=True)
         print("rendered=%s" % scene.render.filepath)
 
 
-main()
+def contract_self_check(without_fix=False):
+    """Run the real exporter on old source and memory-only palm topology; never author assets."""
+    import hashlib
+    import pathlib
+
+    # Include source, candidate assets, exported meshes and frozen declarations in the no-write check.
+    root = pathlib.Path(_SCRIPT_DIR).parents[1]
+    watched = [root / name for name in ("blender", "assets", "versions")]
+
+    def snapshot():
+        return {str(p): hashlib.sha256(p.read_bytes()).hexdigest()
+                for directory in watched for p in directory.rglob("*") if p.is_file()}
+
+    before = snapshot()
+
+    def no_write(event, args):
+        if event == "open":
+            mode, flags = args[1:3]
+            if (mode and any(c in mode for c in "wax+")) or (flags and flags & (
+                    os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND)):
+                raise AssertionError(f"contract probe attempted write: {args[0]}")
+        if event in ("os.remove", "os.rename", "os.mkdir", "os.rmdir"):
+            raise AssertionError(f"contract probe attempted {event}: {args}")
+
+    sys.dont_write_bytecode = True
+    sys.addaudithook(no_write)
+    exporter = os.path.join(_SCRIPT_DIR, "generate_urdf.py")
+    code = pathlib.Path(exporter).read_text(encoding="utf-8")
+    if without_fix:
+        # Narrow inverse in memory: exactly the consumer validation call, no working-tree reset.
+        original = "binding = validate_build_contract(bones, SPEC)"
+        assert code.count(original) == 1
+        code = code.replace(original, "binding = {}")
+
+    def consume(robot, memory=False):
+        old_argv = sys.argv
+        sys.argv = [exporter, "--", "--robot", robot, "--contract_check"]
+        if memory:
+            sys.argv.append("--memory_scene")
+        namespace = {"__file__": exporter, "__name__": "__main__"}
+        try:
+            try:
+                exec(compile(code, exporter, "exec"), namespace)
+            except SystemExit as exc:
+                assert exc.code == 0, exc.code
+        finally:
+            sys.argv = old_argv
+        return namespace
+
+    # The existing geometry-role reader and exporter both consume the real old .blend, read-only.
+    scene, arm, arm_mw, bones, on_bone = load()
+    assert len(leg_roles(arm_mw, bones, on_bone)) == 4
+    for robot in ("lizard", "lizard2", "lizard2_candidate"):
+        consume(robot, memory=True)
+    try:
+        consume("lizard2_palm_contract", memory=True)
+    except ValueError as exc:
+        print("NEGATIVE old long source under palm:", exc)
+    else:
+        raise AssertionError("old long source accepted under palm; distal silently discarded")
+
+    # Fresh, meshless, arbitrary-coordinate armature: topology contract ONLY, never candidate geometry.
+    ns = consume("lizard2", memory=True)
+    names = ns["leg_names"]
+
+    def fixture(change=None):
+        data = bpy.data.armatures.new("palm_contract_only")
+        sample = bpy.data.objects.new("palm_contract_only", data)
+        scene.collection.objects.link(sample)
+        for obj in list(scene.objects):
+            if obj.type == "ARMATURE" and obj is not sample:
+                scene.collection.objects.unlink(obj)
+        bpy.context.view_layer.objects.active = sample
+        sample.select_set(True)
+        bpy.ops.object.mode_set(mode="EDIT")
+        eb = data.edit_bones
+        base = eb.new("base_link")
+        base.head, base.tail = (0, 0, 0), (0, 0, 1)
+        for leg in names.LEGS:
+            parent = base
+            for index, role in enumerate(names.roots_of(names.PALM_NAMING, leg)):
+                bone = eb.new(names.link_name(leg, role))
+                bone.head, bone.tail = (index + 1, 0, 0), (index + 1, 0, 1)
+                bone.parent = parent
+                parent = bone
+        if change:
+            change(eb)
+        bpy.ops.object.mode_set(mode="OBJECT")
+        bpy.context.view_layer.update()
+        return sample
+
+    sample = fixture()
+    ns = consume("lizard2_palm_contract", memory=True)
+    assert len(ns["binding"]) == 4
+    for leg, binding in ns["binding"].items():
+        assert len(binding["roles"]) == 4
+        assert binding["end_link"] == names.end_link(leg, names.PALM_NAMING)
+        assert binding["end_joint"] == binding["end_link"] + "_joint"
+    print("POSITIVE memory-only four-revolute palm topology; geometry_proven=False")
+
+    def extra(eb, name, parent):
+        bone = eb.new(name)
+        bone.head, bone.tail = (0, 0, 0), (0, 0, 1)
+        bone.parent = eb[parent]
+
+    cases = {
+        "wrong order": lambda eb: setattr(eb["lf_elbow"], "parent", eb["base_link"]),
+        "cross-leg": lambda eb: setattr(eb["lf_shoulder_swing"], "parent", eb["rl_hip_swing"]),
+        "missing palm": lambda eb: eb.remove(eb["lf_wrist"]),
+        "retained foot": lambda eb: extra(eb, "lf_foot", "lf_wrist"),
+        "retained finger": lambda eb: extra(eb, "lf_finger", "lf_wrist"),
+        "retained toe": lambda eb: extra(eb, "rl_toe", "rl_ankle"),
+        "unnamed distal child": lambda eb: extra(eb, "distal_activity", "lf_wrist"),
+        "mixed front/rear binding": lambda eb: setattr(eb["lf_wrist"], "name", "lf_ankle"),
+    }
+    for label, change in cases.items():
+        fixture(change)
+        try:
+            consume("lizard2_palm_contract", memory=True)
+        except ValueError as exc:
+            print("NEGATIVE %s: %s" % (label, exc))
+        else:
+            raise AssertionError("malformed topology accepted: " + label)
+    # Also refuse an explicit source/target mismatch before any truncating mapping.
+    fixture()
+    ns = consume("lizard2_palm_contract", memory=True)
+    bad_spec = dict(ns["SPEC"], source_naming="shared")
+    try:
+        ns["validate_build_contract"](ns["bones"], bad_spec)
+    except ValueError as exc:
+        print("NEGATIVE source/target mismatch:", exc)
+    else:
+        raise AssertionError("source/target mismatch accepted")
+    after = snapshot()
+    assert before == after, "watched asset tree changed"
+    print("P1 PASS: old consumers=3; palm positive=1; negatives=10; "
+          "asset files hashed=%d unchanged; Python writes forbidden; geometry_proven=False" % len(before))
+
+
+if __name__ == "__main__":
+    args = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
+    if "--contract_self_check" in args:
+        try:
+            contract_self_check("--regression_without_fix" in args)
+        except Exception:
+            import traceback
+            traceback.print_exc()
+            raise SystemExit(1)
+    else:
+        main()
