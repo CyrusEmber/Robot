@@ -49,8 +49,7 @@ evidence: acceptance/records/2026-10-12-lizard2-claw-palm-shape.md, acceptance/r
 
 ## E. 名表单点化（改名前置，与 B 能力约束构成第一波）
 
-勘察、已有接线、验收缺口与既有自检的归属见
-`acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory.md` B 节及追加五。下文是后续施工与判据，不把模块自检当消费者验证。
+勘察、接线现状与逐切片读数见 `acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory.md` 的**追加段落索引**（B 节 = 名表勘察，追加五 = 出口复核，追加六–十一 = 逐切片落地与读数）。下文是后续施工与判据，不把模块自检当消费者验证。
 
 **A 节结构修订的接线影响**：现有 `split` / `PLANNED_ROOTS` 与指/趾根改名样本代表旧候选约定，不是当前无指/趾候选的名表。后续在既有入口数据中明确声明当前目标的真实角色与末端掌/跖 link；不得沿用 `finger/toe` 末端，或用旧链位次补出不存在的关节。已有双命名测试保留原含义，独立 `palm` 构建契约及 P1 消费者交接见本项 palm-chain-p1 记录；当前候选几何仍须独立通过 E/D 的真实消费者验证。
 

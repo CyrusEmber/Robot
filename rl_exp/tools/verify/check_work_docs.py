@@ -218,7 +218,14 @@ LIST_BYTES = 6144
 #: list, so splitting that back into items would raise the item count instead of lowering the bytes.
 #: 100000 buys about three items at the current 2992-byte average.
 #: Raise it by hand with a reason written here, never from inside a run.
-BUDGET_BYTES = 100000
+#: Raised 100000 -> 120000 on 2026-10-12, the fifth raise, on the user's instruction ("先抬预算吧，我懒得
+#: 管理了") after the ledger sat at 99997/100000 -- three bytes of headroom, reached while shaving a
+#: duplicate consumer list out of the item under work. What it carries: 99997 bytes over 25 active, top
+#: three lizard2-body-drive-candidate 30275, lizard2-family-landing 8411, floor-contact-attribution 5721;
+#: at the current 4000-byte item average this buys five more items. Two things do not change with the
+#: number: the note above already asked for a merge or a shave instead of a raise, and the alarm gets
+#: weaker every time this grows -- the next raise should carry one of those two, not this note again.
+BUDGET_BYTES = 120000
 
 _SHA = re.compile(r"\bsha256:[0-9a-fA-F]{8,}")
 #: A prose reference to a ledger file, spelled the way a document writes it. Placeholders

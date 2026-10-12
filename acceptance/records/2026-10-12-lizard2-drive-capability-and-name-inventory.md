@@ -222,6 +222,22 @@ rg -n "foot_yaw_deg|dof_torque_frac_of_limit" ablation_harness/protocols/lizard2
 12. **滚动/有效阶段的区分口径**没有给出——C3 只说现有通道分不开，替代口径要接触协议事项自己定。
 13. **C4 只证"这两个项不被检查"**，没有穷举还有哪些协议声明项同样落在 `REPORT_ITEMS` 之外（本轮只按 v5 的两个点核）。
 
+## 追加段落索引（读哪一节）
+
+本节是上面三条勘察（A 驱动 / B 名表 / C 接触）之后**追记的施工与复核**，按时间顺序，各节独立成立：
+
+| 节 | 一句话 | 结论状态 |
+|---|---|---|
+| 追加 | B 节清单的落地（名表集中） | 已被追加五收窄口径 |
+| 追加二/四 | 两个未交项的读数、勘误 | 判定以追加四为准 |
+| 追加五 | E 出口复核与方案回写 | 判定：E 未达出口 |
+| 追加六 | E 第一切片：绑定 + `check_leg_reachability` | 已落地、双侧读数 |
+| 追加七 | E 第二切片：`check_self_collision` | 已落地、双侧读数 |
+| 追加八 | E 第三切片：运行时（`check_joint_layout`、`stance_step_probe`） | 已落地；运行时双命名对照归 S6 |
+| 追加九 | E 第四切片：报告 reader（`plot_joints`、`baseline_metrics`） | 已落地、双侧读数 |
+| 追加十 | E 第五切片：接触面（`diag_metrics`、`check_contact_ownership`、`obs_protocol_live`） | 前两者已验；`obs_protocol_live` 那条**未验** |
+| 追加十一 | E 第六切片：`baseline_probe` | 已落地、双侧读数 |
+
 ## 追加：E 名表单点化落地（2026-10-12 同日）
 
 本节写于落地之后，**不改上面任何读数**：那些是读取当时的快照。但 **B 节的行号是重构前的存量**，重构已入库，复读时按符号名定位，不按行号。
