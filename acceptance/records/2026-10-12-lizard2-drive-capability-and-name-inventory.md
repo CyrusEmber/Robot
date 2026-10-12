@@ -342,3 +342,43 @@ python -B -c "import pathlib,re;pat=re.compile(r'(?<![A-Za-z0-9])(hip|haa|hfe|kf
 ### 未覆盖边界
 
 本次没有实现入口绑定，没有运行双机体消费者、破坏测试、Blender 导出或仿真，没有验证候选几何/动力学；E 保持未交付，不关闭事项、不置 pending_review。已有红项不豁免后续必需消费者的验证；真实候选未就绪时，完整改名的同几何临时样本只能证明双命名接线。文档形状通过不等于接口能力通过。
+
+## 追加六：E 第一切片落地（2026-10-12 同日）
+
+### 适用范围
+
+E 的“绑定 + 首个真实消费者”切片：名表两套命名、`check_leg_reachability.py` 的入口绑定与链命名核对、同几何改名孪生的正负例。读数为离线（无仿真、无 Blender、无运行时）；其余消费者（Blender 构建入口、`check_self_collision`、`check_joint_layout`、站姿/步态诊断、接触诊断与在线协议核对、报告 reader）与 E4.4 的运行时/报告验真不在本次。
+
+### 验收条件
+
+同一套读者要能显式服务旧机体和新命名机体，绑定与实际 URDF 不符必须拒绝，且拒绝本身要被负例咬住；读数、破坏测试与复读命令可复现。
+
+### 结果
+
+- **绑定落点**：`rl_exp/tasks/joint_names.py` 新增 `LEGACY_NAMING`/`SPLIT_NAMING`/`NAMINGS`（`shared`/`split`，`split` 由 `PLANNED_ROOTS` 派生，不是第二张表）、`naming_for`、`roots_of`，并把 `end_link`、`contact_body_patterns`、`is_contact_body` 改为按绑定求值（默认仍是旧名，现有调用者行为不变；`CONTACT_BODY_PATTERNS` 值不变）。模块自检新增 (d) 段：两套命名同形、`split` 即计划改名逐 leg、末端 link 与接触模式按肢组移动、未列命名与未列 leg 一律拒绝。
+- **消费者落点**：`rl_exp/tools/verify/check_leg_reachability.py` 入口加 `--naming`/`--compare-naming`（声明，不从关节名猜），绑定沿 `chain_joint_names`/`load_chain`/`downstream_links`/`pad_mesh`/`pad_vertices`/`pad_faces`/`pad_normal_in_link`/`_candidate_read`/`compare`/`fold_reading` 传递；`_verify_chain` 在产品路径上核对“链必须终于声明命名的末端词根、且命名自带的词根按序出现”，不符即 `SystemExit` 并打印差异；`--compare` 的两个机体各自绑定。
+- **同几何孪生（真消费者，非模块自检）**：`--self-check` 内建 `_naming_twin_check`，用 `_renamed_twin` 临时生成只改名（`link/@name`、`joint/@name`、parent/child；mesh 引用改绝对路径以便落临时目录）的孪生，经真实 reader 比对：链 token == 绑定词根、逐关节 origin/rpy/axis/limits 全等、pad 网格解析到同一文件、pad 顶点与 `foot_pose` 全等；负例三条——孪生按 `shared` 读、原机体按 `split` 读、以及只改关节不改 link 的混合体按 `shared` 读——必须全被拒绝。
+- **咬合验证**：停掉 `_verify_chain` 后自检在混合体那条转红（`AssertionError: a body whose joints were renamed and its links not`），说明该核对不是装饰；孪生首次实现只改 link 未改 joint 时，正例断言当场失败（token 仍旧名），说明等值断言能发现半改名。
+- **既有口径不退化**：`check_leg_reachability.py --break-test` 九条扰动全部被咬住；`check_leg_reachability.py --self-check` 与插入关节夹具（`..._fem.urdf`）都通过——`_verify_chain` 只钉“末端词根 + 自带词根有序”，机体自插的关节仍按树读取（该天花板已用 `ponytail:` 注释标出：中途半改名的机体不在拦截内，因改名按肢组原子发生）。
+
+**复读命令与实测**（工作树 HEAD 变更，`<PY>` = `python ablation_harness/host_paths.py --python` 给出的解释器）：
+
+- `<PY> rl_exp/tasks/joint_names.py` → `[SELF-CHECK] ... the two namings answer per leg with one shape -- the split one being that same rename, moving the end link per limb group -- and an unlisted naming or leg is refused rather than defaulted into the old words`（纯标准库，PATH python 亦可）
+- `<PY> rl_exp\tools\verify\check_leg_reachability.py --self-check` → `[NAMING-TWIN] a renamed twin loads through the same consumer under its own binding (split on lf/rl): chain tokens, origins, rpy, axes, limits, pad mesh and pad pose all identical to the original, and each body refuses the other's naming`
+- `<PY> rl_exp\tools\verify\check_leg_reachability.py --break-test` → `BREAK_TEST_OK (9 perturbation(s), every one caught)`
+- 破坏 `_verify_chain` 后重跑自检 → `AssertionError: a body whose joints were renamed and its links not: it read a chain that naming does not describe`
+- `rl_exp\tools\verify\run_offline_checks.bat` → `ALL_OFFLINE_CHECKS_PASSED (37/37 in 39.0s)`，含 `[37/37] leg chain caliber` 与 `[9/37] WORK_DOCS_OK`
+
+### 证据引用
+
+- 绑定：`rl_exp/tasks/joint_names.py` 的 `LEGACY_NAMING` / `roots_of` / `end_link` / `contact_body_patterns` / `is_contact_body` / `SPLIT_NAMING` / `NAMINGS` / `naming_for` 及自检 (d) 段。
+- 消费者与核对：`rl_exp/tools/verify/check_leg_reachability.py` 的 `_verify_chain` / `chain_joint_names` / `_naming_id` / `_renamed_twin` / `_naming_twin_check` / `main` 的 `--naming`、`--compare-naming`。
+- 路由：`FILEMAP.md` 该工具行（`--naming` 与孪生是选中它的判别点）。
+- 事项与证据同变更落地：`work/active/lizard2-body-drive-candidate.md` 的 E1/E2.1/E3 接线现状与 `next`。
+
+### 未覆盖边界
+
+- 只验证了离线 URDF→几何读者这一条链；**Blender、运行时（IsaacLab 的 robot/传感器/action manager 实际名字）与报告 reader 尚未接线**，E4.4 的运行时验真与 E4.5 的旧基线记录未做，故 E 仍未达第一波出口。
+- 孪生是**同几何改名**样本，不是候选几何/动力学证据，也不证明新命名已在任何真实资产上采用。
+- `_verify_chain` 的天花板：中途半改名（保留旧末端词根、改中间词根）的机体不会被拦，理由与升级路径写在函数内 `ponytail:` 注释。
+- `fold_reading` 的记录列名仍按旧词根取值（`{leg}_haa_joint` 等）——报告 reader 属 E3 未接线行，本次只把它的链与网格读取接入绑定，未改其列口径。

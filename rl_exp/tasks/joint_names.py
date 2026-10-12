@@ -30,6 +30,14 @@ the file directly -- the idiom ``check_obs_protocol.py`` already uses
 active names above are the OLD ones the assets and the checkpoints carry, and every existing gate must
 stay green on them. Flipping to the new names is the body-swap act
 (``work/active/lizard2-body-drive-candidate.md``, "骨骼改名"), not an edit here.
+
+**A body's words are a BINDING, and there are two of them.** A consumer that has to serve the old body
+and a renamed twin in one run cannot ask this module for "the current name" -- the two answers differing
+is the whole point. So every derivation that depends on the words takes a *naming* (:data:`NAMINGS`,
+id -> leg -> that leg's chain roots) and the caller binds it at its entry, where the body is chosen, and
+passes it down; the module constants above stay the ``"shared"`` naming's answers, which is what a
+caller that binds nothing still gets and what a body whose four legs carry one root set means. A naming
+a caller cannot be sure of is refused, not defaulted into (:func:`naming_for`).
 """
 
 from __future__ import annotations
@@ -56,6 +64,24 @@ JOINT_SUFFIX = "_joint"
 #: The legs by limb group, derived from :data:`LEGS` rather than written twice: the actuator groups, the
 #: per-limb naming and the contact bodies are per group, so the split has to agree with the order.
 FRONT_LEGS, REAR_LEGS = LEGS[:2], LEGS[2:]
+
+#: The naming every asset carries today: one chain for all four legs, i.e. the group split above does not
+#: reach the words. A dict rather than the tuple alone because a caller binds a *naming* and reads a leg
+#: out of it -- the two namings are then one shape of answer, which is what lets one consumer serve both.
+LEGACY_NAMING: dict[str, tuple[str, ...]] = {leg: CHAIN_ROOTS for leg in LEGS}
+
+
+def roots_of(naming: dict[str, tuple[str, ...]], leg: str) -> tuple[str, ...]:
+    """The chain ``naming`` gives ``leg``, root to pad -- the one place a leg's words come from.
+
+    Raises:
+        KeyError: this naming carries no such leg. Answering with another leg's chain (or with the
+            module default) is how a reading of one body ends up describing another.
+    """
+    try:
+        return naming[leg]
+    except KeyError:
+        raise KeyError(f"{leg!r}: not a leg this naming carries ({sorted(naming)})") from None
 
 
 def suffixes_for(roots: tuple[str, ...] = CHAIN_ROOTS) -> tuple[str, ...]:
@@ -102,13 +128,14 @@ def joint_name(leg: str, root: str) -> str:
     return link_name(leg, root) + JOINT_SUFFIX
 
 
-def end_link(leg: str) -> str:
+def end_link(leg: str, naming: dict[str, tuple[str, ...]] = LEGACY_NAMING) -> str:
     """The leg's chain-end link, ``lf_foot``: the contact body every foot sensor and ``.*_foot`` reads.
 
     Derived from the chain's last root, not written as the string ``foot``: the end of the chain is a
-    chain fact, and the rename moves it to ``finger``/``toe`` without this function being edited.
+    chain fact, and the rename moves it to ``finger``/``toe`` without this function being edited. Which
+    of the two answers comes back is the caller's binding, not a lookup of "how far the rename got".
     """
-    return link_name(leg, CHAIN_ROOTS[-1])
+    return link_name(leg, roots_of(naming, leg)[-1])
 
 
 #: The joints the per-frame reports carry and the panels draw: the root, the first fore-aft hinge and
@@ -116,21 +143,31 @@ def end_link(leg: str) -> str:
 #: row after a rename and still look like a figure, which is the failure a name table exists to stop.
 REPORT_ROOTS = (CHAIN_ROOTS[0], CHAIN_ROOTS[2], CHAIN_ROOTS[-1])
 
-#: The bodies a foot sensor, a reward or a foot raycast is handed -- the chain-end link per leg. As a
-#: PATTERN, not as the four exact names: the engine resolves it in its own body order, so naming them
-#: one by one would be this table's order silently becoming the observation's order. The rename turns
-#: this line into one pattern per limb group (front ``.*_finger``, rear ``.*_toe``).
-CONTACT_BODY_PATTERNS = (f".*_{CHAIN_ROOTS[-1]}",)
+def contact_body_patterns(naming: dict[str, tuple[str, ...]] = LEGACY_NAMING) -> tuple[str, ...]:
+    """The patterns a foot sensor, a reward or a foot raycast is handed -- one per distinct end root.
 
+    As PATTERNS, not as the four exact names: the engine resolves them in its own body order, so naming
+    them one by one would be this table's order silently becoming the observation's order. Sorted by root
+    so the tuple is deterministic, and *not* an order anything may read: the list is a selector.
 
-def is_contact_body(name: str) -> bool:
-    """Is ``name`` a body a foot is -- the chain-end link of some leg?
-
-    The predicate form of :data:`CONTACT_BODY_PATTERNS`, for the callers that hold a body name and a
-    list comprehension rather than a name they can hand the engine (``find_bodies`` /
-    ``find_sensors``). ``str.endswith("_foot")`` spelled the same fact in each of them.
+    One pattern over a shared-root body (``.*_foot``); two over a split one (front ``.*_finger``, rear
+    ``.*_toe``), which is what the limb groups parting into two words costs and why this is a function.
     """
-    return any(re.fullmatch(pattern, name) for pattern in CONTACT_BODY_PATTERNS)
+    return tuple(f".*_{end}" for end in sorted({roots_of(naming, leg)[-1] for leg in LEGS}))
+
+
+#: The active naming's patterns. The rename turns this line into two entries; no caller is edited for it.
+CONTACT_BODY_PATTERNS = contact_body_patterns()
+
+
+def is_contact_body(name: str, naming: dict[str, tuple[str, ...]] = LEGACY_NAMING) -> bool:
+    """Is ``name`` a body a foot is -- the chain-end link of some leg, under ``naming``?
+
+    The predicate form of :func:`contact_body_patterns`, for the callers that hold a body name and a list
+    comprehension rather than a name they can hand the engine (``find_bodies`` / ``find_sensors``).
+    ``str.endswith("_foot")`` spelled the same fact in each of them.
+    """
+    return any(re.fullmatch(pattern, name) for pattern in contact_body_patterns(naming))
 
 
 # -------------------------------------------------------------------------------------------------
@@ -159,6 +196,32 @@ PLANNED_ROOTS: dict[str, tuple[str, ...]] = {
     group: tuple(names[root] for root in CHAIN_ROOTS) for group, names in PLANNED_RENAMES.items()
 }
 
+#: The planned rename as the *binding* a consumer holds: leg -> its group's chain. Built from
+#: :data:`PLANNED_ROOTS`, not from a second table, so a consumer that binds this reads exactly the
+#: chains the mapping above describes.
+SPLIT_NAMING: dict[str, tuple[str, ...]] = {
+    leg: PLANNED_ROOTS["front" if leg in FRONT_LEGS else "rear"] for leg in LEGS
+}
+
+#: The namings a caller may bind, by id. The id names the SHAPE -- "does every leg carry one root set,
+#: or do the limb groups differ" -- not the body and not a lifecycle stage: a body, a branch or a
+#: checkpoint that adopts the front/rear split does not turn ``"split"`` into something else, and a
+#: caller reading the id never has to know which stage the family is in.
+NAMINGS: dict[str, dict[str, tuple[str, ...]]] = {"shared": LEGACY_NAMING, "split": SPLIT_NAMING}
+
+
+def naming_for(naming_id: str) -> dict[str, tuple[str, ...]]:
+    """The naming ``naming_id`` names, for a caller binding a body at its entry.
+
+    Raises:
+        KeyError: no such naming. A body's words are DECLARED; guessing them from a joint name, a family
+            or a path is how one body's chain is read off another's.
+    """
+    try:
+        return NAMINGS[naming_id]
+    except KeyError:
+        raise KeyError(f"{naming_id!r}: not a declared naming ({sorted(NAMINGS)})") from None
+
 
 def planned_root(leg: str, root: str) -> str:
     """The root ``root`` becomes on ``leg`` under the planned rename. Data, not the live answer.
@@ -178,7 +241,7 @@ def planned_root(leg: str, root: str) -> str:
 def _self_check() -> None:
     """Asserts, no framework and no fixtures: ``python rl_exp/tasks/joint_names.py``.
 
-    Four readings, the four this module can be wrong in:
+    Five readings, the five this module can be wrong in:
 
     (a) each dialect resolves for all five roots and all four legs -- and does NOT resolve a name that
         is not in the table (a ``.*_joint`` that matches anything is worse than a missing entry);
@@ -188,7 +251,10 @@ def _self_check() -> None:
     (c) the planned mapping keeps the chain order and the leg grouping, so the new name set is the same
         *shape* as the old one, a tool reading it per leg gets a name per chain position, and the two
         limb groups end at two different links (which is what makes the contact pattern split in two);
-    (d) this file's import surface is the standard library, so the Blender/offline interpreter that must
+    (d) the binding: both namings answer per leg with the same shape, the split one IS the planned
+        rename (one table, not two), it moves the end link and the contact pattern per limb group, and an
+        unlisted naming or leg is refused instead of falling back to the old words;
+    (e) this file's import surface is the standard library, so the Blender/offline interpreter that must
         not pay torch or gymnasium can hold the table.
     """
     # (a) three dialects, five roots, four legs
@@ -261,7 +327,42 @@ def _self_check() -> None:
             continue
         raise AssertionError(f"({leg!r}, {root!r}): not in the table, so it must not be answered")
 
-    # (d) the import surface is the standard library
+    # (d) the binding: two namings, one shape of answer, and the split one IS the planned rename read per
+    # leg -- which is how a consumer binds it, and how the two limb groups end at two different links.
+    assert set(NAMINGS) == {"shared", "split"}, sorted(NAMINGS)
+    assert naming_for("shared") == LEGACY_NAMING and naming_for("split") == SPLIT_NAMING, sorted(NAMINGS)
+    for naming_id, naming in NAMINGS.items():
+        assert sorted(naming) == sorted(LEGS), (naming_id, sorted(naming))
+        for leg in LEGS:
+            roots = roots_of(naming, leg)
+            assert len(roots) == len(CHAIN_ROOTS) and len(set(roots)) == len(roots), (naming_id, leg, roots)
+            assert end_link(leg, naming) == link_name(leg, roots[-1]), (naming_id, leg)
+            assert is_contact_body(end_link(leg, naming), naming), (naming_id, leg)
+            assert not is_contact_body(link_name(leg, roots[0]), naming), (naming_id, leg)
+            assert not is_contact_body(joint_name(leg, roots[-1]), naming), (naming_id, leg)
+    assert end_link("lf") == "lf_foot", "the naming a caller binds nothing for is still the old one"
+    assert end_link("lf", SPLIT_NAMING) == "lf_finger" and end_link("rl", SPLIT_NAMING) == "rl_toe", SPLIT_NAMING
+    for leg in LEGS:
+        assert roots_of(SPLIT_NAMING, leg) == tuple(planned_root(leg, root) for root in CHAIN_ROOTS), leg
+    assert contact_body_patterns(LEGACY_NAMING) == (".*_foot",), contact_body_patterns(LEGACY_NAMING)
+    assert set(contact_body_patterns(SPLIT_NAMING)) == {".*_finger", ".*_toe"}, contact_body_patterns(SPLIT_NAMING)
+    # A sentence holding under BOTH namings is one this check cannot see the rename through: the old end
+    # link is not a contact body under the split naming, and the new one is not under the old.
+    assert not is_contact_body("lf_foot", SPLIT_NAMING) and not is_contact_body("lf_finger", LEGACY_NAMING)
+    for bad in ("candidate", "legacy", "planned", "front"):
+        try:
+            naming_for(bad)
+        except KeyError:
+            continue
+        raise AssertionError(f"{bad!r}: not a declared naming, so it must not be answered")
+    try:
+        roots_of(SPLIT_NAMING, "lf_finger")
+    except KeyError:
+        pass
+    else:
+        raise AssertionError("'lf_finger': not a leg of this naming, so it must not be answered")
+
+    # (e) the import surface is the standard library
     assert hasattr(sys, "stdlib_module_names"), "python < 3.10 cannot read the stdlib list; this check is not running"
     imported: set[str] = set()
     for node in ast.walk(ast.parse(pathlib.Path(__file__).read_text(encoding="utf-8"))):
@@ -276,7 +377,10 @@ def _self_check() -> None:
     print("[SELF-CHECK] 3 dialects x 5 roots x 4 legs = 20 names resolve, nothing outside the table does; "
           "the hinges, the reported three and the contact pattern pick the chain's own bodies and nothing "
           "else; the planned front/rear chains keep the chain order and the leg grouping, split the "
-          "contact pattern in two, and refuse unlisted names; imports are stdlib only: %s"
+          "contact pattern in two, and refuse unlisted names; the two namings answer per leg with one "
+          "shape -- the split one being that same rename, moving the end link per limb group -- and an "
+          "unlisted naming or leg is refused rather than defaulted into the old words; "
+          "imports are stdlib only: %s"
           % ", ".join(sorted(imported)))
 
 

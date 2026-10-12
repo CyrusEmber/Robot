@@ -3,8 +3,8 @@ id: lizard2-body-drive-candidate
 title: lizard2 机体与驱动候选：蜥蜴骨段朝向、人手式足掌、骨骼改名
 scope: rl_exp/blender, rl_exp/tools/pipeline, rl_exp/tools/verify, rl_exp/tools/diagnose, rl_exp/tasks, acceptance/records
 status: open
-landing: rl_exp/blender/lizard2_stance_candidate.py, rl_exp/blender/generate_urdf.py, rl_exp/tools/diagnose/gait_probe.py, rl_exp/tasks/joint_names.py
-next: 先执行 E 的入口机体绑定与双机体消费者验证，按下文第一波出口自检；B 的能力约束取自 2026-10-12 记录，A 选 pivot/轴按线性对照进行，不新建驱动机制，那笔 velocity_limit 前置账仍归 B。E 接线前 A 可核对旧名源几何，但不让未接线工具测新名候选；C 可沿用现有机体开展。A/B/C 自检就绪后做 D 集成，一份记录，置 pending_review，请新上下文一次性审核。不动已训 v3，不覆盖 rl_exp/lizard2_candidate/，趴姿不在本项。声明面边界、既有自检覆盖和 gait_probe 的资产前提归 2026-10-12 记录；资产前提处置交 floor-contact-attribution 的 ⑤/⑪，不借 E 改资产或放宽断言。
+landing: rl_exp/blender/lizard2_stance_candidate.py, rl_exp/blender/generate_urdf.py, rl_exp/tools/diagnose/gait_probe.py, rl_exp/tools/verify/check_leg_reachability.py, rl_exp/tasks/joint_names.py
+next: E 已落地绑定与首个消费者（名表 `rl_exp/tasks/joint_names.py` 的两套命名 + `rl_exp/tools/verify/check_leg_reachability.py` 的 `--naming` 绑定、链命名核对与同几何孪生自检；读数与破坏测试归 2026-10-12 记录追加六，本项不复述）。继续 E3 其余消费者：Blender 构建入口、`check_self_collision`/`check_joint_layout`/站姿与步态诊断、接触诊断与在线协议核对、报告 reader，逐条接到同一绑定并各自留一条真跑读数；E4.4 的运行时与报告验真未做。B 的能力约束取自 2026-10-12 记录，A 选 pivot/轴按线性对照进行，不新建驱动机制，那笔 velocity_limit 前置账仍归 B。E 接线前 A 可核对旧名源几何，但不让未接线工具测新名候选；C 可沿用现有机体开展。A/B/C 自检就绪后做 D 集成，一份记录，置 pending_review，请新上下文一次性审核。不动已训 v3，不覆盖 rl_exp/lizard2_candidate/，趴姿不在本项。声明面边界、既有自检覆盖和 gait_probe 的资产前提归 2026-10-12 记录；资产前提处置交 floor-contact-attribution 的 ⑤/⑪，不借 E 改资产或放宽断言。
 close_when: 新上下文对照 R1–R5 与本项 D 节记录审核：蜥蜴骨段朝向正反例、前后肢映射与改名落地一致、同一候选的完整周期（有向掌面、限位、实际网格碰撞）、承重动力学与真实驱动读回、躯干/尾部同条件对照；你确认候选外观与目标动作。通过后交 lizard2-family-landing；失败退回 in_progress 并指明节，只有用户能给的缺口置 blocked。静力/声明/源码支持不当动力学通过；未判定不关闭。
 evidence: acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory, acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, acceptance/records/2026-10-08-lizard2-joint-design-review-contract, acceptance/records/2026-10-08-lizard2-r1-numeric-reference-and-decision-drafts
 ---
@@ -55,7 +55,8 @@ evidence: acceptance/records/2026-10-12-lizard2-drive-capability-and-name-invent
 
 ### E2. 绑定契约与接口边界
 
-1. **在入口确定目标，命名约定与它同行（待实现）**。最小普通数据形状为目标路径、声明来源、按 leg 的“角色 → 词根”映射和每 leg 的末端角色；不需要命名对象或注册表。稳定角色取本项已有链映射的角色键，前后肢实际词根来自同一名表；该映射不承诺两机体几何等价。方案可附稳定标识，但取名使用绑定的映射，不看全局开关或候选生命周期。旧入口显式提供共享词根映射，新候选入口显式提供前后肢映射；下游只拿已绑定数据。未声明约定的任意外部机体不得从关节名猜方案。
+1. **在入口确定目标，命名约定与它同行**。最小普通数据形状为目标路径、声明来源、按 leg 的“角色 → 词根”映射和每 leg 的末端角色；不需要命名对象或注册表。稳定角色取本项已有链映射的角色键，前后肢实际词根来自同一名表；该映射不承诺两机体几何等价。方案可附稳定标识，但取名使用绑定的映射，不看全局开关或候选生命周期。旧入口显式提供共享词根映射，新候选入口显式提供前后肢映射；下游只拿已绑定数据。未声明约定的任意外部机体不得从关节名猜方案。
+   **已落地**：`rl_exp/tasks/joint_names.py` 的 `NAMINGS`（`shared`/`split`，后者由 `PLANNED_ROOTS` 派生）+ `naming_for`/`roots_of` 与按绑定的 `end_link`/`contact_body_patterns`/`is_contact_body`；`check_leg_reachability.py` 在入口用 `--naming`/`--compare-naming` 绑定并把绑定沿调用链传递。路径与声明来源仍由各消费者的既有入口解析（任务级用 `obs_protocol.resolve_body`），名表只回答“词根”。
 2. **复用路径解析，不另造寻址**。任务工具读取最终 cfg 的实际 `usd_path`，复用 `rl_exp/tasks/obs_protocol.py:363` 的 `resolve_body()`；无覆盖时可用 `body_for_task()`。`--usd`/`--urdf` 覆盖、`--compare` 第二机体须连同各自命名约定重新绑定，不继承当前家族或第一机体的约定。未能取得约定或 USD/URDF 对应依据则拒绝比较。不能仅按 family 选新旧，同一家族会有两种机体。
 3. **声明只有入口一份**。Blender 在 `generate_urdf.py` 已有 `ROBOT_SPECS` 中随构建目标声明约定，候选骨架脚本消费同一目标；诊断入口随隔离配置声明约定，报告携带绑定来源。正式配方声明归 S6。E 不把命名参数塞进已冻结配方，不为路径另建全仓注册表。
 4. **一套函数，两套数据**。纯名表函数接收绑定中的命名数据和 leg，派生链词根、具名 joint/link、链端接触体与匹配式；后缀/正则仍由已有 builder 生成。内部按链位置或已定义角色选关节，再取该 leg 的名字，不在每层选择新旧。关节名可含多个 `_`，用完整生成名映射到角色，或只剥已知 leg 前缀与 `_joint` 后缀，不用 `rpartition('_')` 识别词根。
@@ -77,6 +78,8 @@ evidence: acceptance/records/2026-10-12-lizard2-drive-capability-and-name-invent
 | 报告 → 图 / 评测 | `gait_probe.py` → `plot_joints.py`；`ablation_harness/baseline_metrics.py` / `baseline_eval.py` 从报告绑定和角色映射取值，不按当前机体重解释历史数据 | 同一 reader 顺次读取两套带绑定报告，不漏前后肢、不画空列；历史报告按原协议处理 |
 
 历史报告没有新字段时保留原 reader 及其旧协议语义，不伪补“已核机体”证据；新绑定 reader 缺来源或名称冲突则拒绝。诊断量/列名若会变更评测语义，先核协议边界并交 `lizard2-contact-protocol`，E 不重写旧协议。
+
+**接线现状**：第一行（URDF → FK/碰撞）的 `check_leg_reachability.py` 已按绑定接通并留有真跑与负例；其余各行仍按旧名默认运行，逐条按本表接，未接线前不得指向新命名候选。
 
 范围内残留硬编码逐点分成：要迁的名称选择、故意保留的旧协议/反例、几何或驱动假设。后两类不按字符串批量替换。实际漏点和延期站点只记验收记录；任何第一波必需消费者未接线，E 就不能交付。
 

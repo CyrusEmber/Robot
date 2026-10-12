@@ -67,6 +67,15 @@ one path that touches a record and therefore torch:
     python rl_exp\\tools\\verify\\check_leg_reachability.py --break-test
     python rl_exp\\tools\\verify\\check_leg_reachability.py --frames <record>\\eval.frames.pt
     python rl_exp\\tools\\verify\\check_leg_reachability.py --compare <candidate>.urdf --leg rl
+    python rl_exp\\tools\\verify\\check_leg_reachability.py --pose ... --naming split --urdf <renamed>.urdf
+
+``--naming`` is the binding every reading here starts from: which words the body at ``--urdf`` carries
+(``shared`` = every leg one root set, ``split`` = the front/rear rename), with ``--compare-naming`` for
+the second body of ``--compare``. It is DECLARED, never read off the joint names -- and a naming the
+body's own tree does not describe is refused (:func:`_verify_chain`), so a mismatched pair cannot be
+reported as a difference. ``--self-check`` proves the binding twice: a body renamed only in its name
+fields is read through these same readers under its own naming with every number equal, and each body
+refuses the other's naming.
 
 ``--urdf`` reads ANY body's geometry (``--pose`` / ``--compare`` / ``--frames``), but the pinned knee
 facts are the ADOPTED body's, so ``--self-check`` is a reading of that body: pointing it at another
@@ -96,6 +105,20 @@ _REPO = pathlib.Path(__file__).resolve().parents[3]
 if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 from rl_exp.tasks import joint_names  # noqa: E402
+
+
+def _naming_id(naming: dict[str, tuple[str, ...]]) -> str:
+    """The id ``naming`` is declared under, for the lines that say which words a reading answered for.
+
+    Raises:
+        SystemExit: an undeclared binding. Every reader here has to be able to name what it was bound to
+            (a report that reads one body's words and says another's is the failure this whole binding
+            exists to stop), and echoing "custom" would accept a naming the table cannot verify.
+    """
+    for naming_id, declared in joint_names.NAMINGS.items():
+        if naming == declared:
+            return naming_id
+    raise SystemExit(f"unbound naming {naming}: not declared in joint_names.NAMINGS")
 
 
 def family_urdf(rl_exp: pathlib.Path, family: str) -> tuple[pathlib.Path, str]:
@@ -216,15 +239,43 @@ def _multiply(a, b):
     return [[sum(a[i][k] * b[k][j] for k in range(4)) for j in range(4)] for i in range(4)]
 
 
-def chain_joint_names(urdf: pathlib.Path, leg: str) -> tuple[str, ...]:
-    """The leg's joints, root to pad, walked UP the URDF's own tree from ``<leg>_foot``.
+def _verify_chain(urdf: pathlib.Path, leg: str, tokens: tuple[str, ...], roots: tuple[str, ...]) -> None:
+    """Refuse a chain the declared naming cannot describe: the walk has to END where the naming says.
 
-    The tree is the authority on which joints a candidate has, so nobody has to hand it the list: a
-    candidate that inserted a femoral rotation gets it read without this file naming it. The walk stops
-    at the first parent link that does not carry the leg's own prefix (``lf_``), which is the family's
-    naming convention and the only thing assumed here; a link with no parent joint or with two is
-    refused rather than guessed at.
+    Two facts, and only these two, because the body owns the rest: the chain's last token is the naming's
+    last root -- the contact body and the pad link are read off that link, so a naming bound to another
+    body's words would measure the wrong link -- and the tokens the naming DOES name appear in the
+    naming's order. The tree may carry joints the naming does not know (a body that inserted one, which
+    is exactly how this file's own inserted-joint fixture reads); that is a body fact, not a mismatch.
+
+    ponytail: a body half-renamed in its MIDDLE roots while keeping the old end word satisfies both
+    checks (the naming's own roots still appear in order). The rename is atomic per limb group, so no
+    such body exists today; the upgrade path is a naming that declares what may sit between its roots,
+    and it is not worth a table until a body needs one.
     """
+    order = [roots.index(token) for token in tokens if token in roots]
+    if tokens[-1] != roots[-1] or order != sorted(order):
+        raise SystemExit(f"{urdf}: leg {leg} carries the chain {tokens}, which the declared naming "
+                         f"{roots} does not describe -- it must end at {roots[-1]} with the naming's own "
+                         "roots in order. Declare the naming this body carries (--naming)")
+
+
+def chain_joint_names(urdf: pathlib.Path, leg: str,
+                      naming: dict[str, tuple[str, ...]] = joint_names.LEGACY_NAMING) -> tuple[str, ...]:
+    """The leg's joints, root to pad, walked UP the URDF's own tree from the link ``naming`` ends at.
+
+    The tree is the authority on which joints a body has, so nobody has to hand it the list: a body that
+    inserted a femoral rotation gets it read without this file naming it. The walk stops at the first
+    parent link that does not carry the leg's own prefix (``lf_``), which is the family's naming
+    convention and the only thing assumed here; a link with no parent joint or with two is refused rather
+    than guessed at.
+
+    WHERE the walk starts is the caller's binding, not a word this file carries -- the old body and a
+    renamed twin are then one reading with two declared namings -- and a naming the tree does not carry is
+    refused (:func:`_verify_chain`) rather than answered with the wrong chain.
+    """
+    roots = joint_names.roots_of(naming, leg)
+    start = joint_names.end_link(leg, naming)
     root = ET.parse(urdf).getroot()
     parent_of = {}
     for joint in root.iter("joint"):
@@ -232,7 +283,7 @@ def chain_joint_names(urdf: pathlib.Path, leg: str) -> tuple[str, ...]:
         if child in parent_of:
             raise SystemExit(f"{urdf}: link {child} has two parent joints")
         parent_of[child] = joint
-    names, link = [], joint_names.end_link(leg)
+    names, link = [], start
     while link.startswith(f"{leg}_"):
         joint = parent_of.get(link)
         if joint is None:
@@ -240,23 +291,28 @@ def chain_joint_names(urdf: pathlib.Path, leg: str) -> tuple[str, ...]:
         names.append(joint.get("name"))
         link = joint.find("parent").get("link")
     if not names:
-        raise SystemExit(f"{urdf}: {joint_names.end_link(leg)} has no joint of its own")
-    return tuple(reversed(names))
+        raise SystemExit(f"{urdf}: {start} has no joint of its own")
+    names.reverse()
+    _verify_chain(urdf, leg, tuple(name[len(leg) + 1: -len(joint_names.JOINT_SUFFIX)] for name in names), roots)
+    return tuple(names)
 
 
-def load_chain(urdf: pathlib.Path, leg: str) -> list[dict]:
+def load_chain(urdf: pathlib.Path, leg: str,
+               naming: dict[str, tuple[str, ...]] = joint_names.LEGACY_NAMING) -> list[dict]:
     """The leg's joints as ``(origin, rpy, axis, limits)``, root to pad, read off the URDF.
 
-    Which joints those are comes off the tree (:func:`chain_joint_names`), so a candidate that INSERTED
+    Which joints those are comes off the tree (:func:`chain_joint_names`), so a body that INSERTED
     a joint is read with it instead of being read as the old chain with the extra joint silently
     missing. Each entry keeps its own ``rpy``, so an inserted joint may sit on a rotated frame -- the
     composition is the URDF's own (see :func:`_matrix`) -- and the URDF states an axis in its own joint
     frame, which is why the axis has to be read together with that frame's ``rpy``.
+
+    ``naming`` is the binding the walk starts from; the entries themselves carry only what the URDF says.
     """
     root = ET.parse(urdf).getroot()
     by_name = {joint.get("name"): joint for joint in root.iter("joint")}
     chain = []
-    for name in chain_joint_names(urdf, leg):
+    for name in chain_joint_names(urdf, leg, naming):
         joint = by_name[name]
         origin_tag = joint.find("origin")
         origin = _floats(origin_tag.get("xyz"), 3) if origin_tag is not None else [0.0] * 3
@@ -315,7 +371,8 @@ def link_inertials(urdf: pathlib.Path) -> dict[str, dict]:
     return out
 
 
-def downstream_links(urdf: pathlib.Path, leg: str) -> dict[str, list[str]]:
+def downstream_links(urdf: pathlib.Path, leg: str,
+                     naming: dict[str, tuple[str, ...]] = joint_names.LEGACY_NAMING) -> dict[str, list[str]]:
     """Per leg joint, the links at or below its child link: ``{joint: [child, ...subtree]}`` root-first.
 
     Walked off the URDF's own tree. On this family the subtree is exactly the rest of the chain, and
@@ -335,7 +392,7 @@ def downstream_links(urdf: pathlib.Path, leg: str) -> dict[str, list[str]]:
         return out
 
     return {name: subtree(by_name[name].find("child").get("link"))
-            for name in chain_joint_names(urdf, leg)}
+            for name in chain_joint_names(urdf, leg, naming)}
 
 
 def gain_table(rl_exp: pathlib.Path, family: str, joint_names: tuple[str, ...]) -> dict[str, dict]:
@@ -501,15 +558,17 @@ def foot_pose(chain: list[dict], angles: list[float]):
     return position, rotation
 
 
-def pad_mesh(urdf: pathlib.Path, leg: str) -> pathlib.Path:
-    """The pad's collision mesh, from the URDF's OWN ``<leg>_foot`` link.
+def pad_mesh(urdf: pathlib.Path, leg: str,
+             naming: dict[str, tuple[str, ...]] = joint_names.LEGACY_NAMING) -> pathlib.Path:
+    """The pad's collision mesh, from the URDF's OWN chain-end link under ``naming``.
 
     Resolved off the URDF rather than a fixed directory (``check_joint_layout.py`` reads the same
     node), because the mesh and the chain have to belong to the SAME body: scored against the old
-    body's mesh, a candidate URDF reads a pad it does not have.
+    body's mesh, a body that renamed its leg reads a pad it does not have. The mesh FILE is not renamed
+    with the link, so a twin read under the other naming resolves to this same file.
     """
     root = ET.parse(urdf).getroot()
-    link_name = joint_names.end_link(leg)
+    link_name = joint_names.end_link(leg, naming)
     link = next((item for item in root.findall("link") if item.get("name") == link_name), None)
     if link is None:
         raise SystemExit(f"{urdf} has no link {link_name}")
@@ -522,40 +581,44 @@ def pad_mesh(urdf: pathlib.Path, leg: str) -> pathlib.Path:
     return path
 
 
-def _obj_lines(urdf: pathlib.Path, leg: str) -> list[str]:
-    return pad_mesh(urdf, leg).read_text(encoding="utf-8", errors="replace").splitlines()
+def _obj_lines(urdf: pathlib.Path, leg: str,
+               naming: dict[str, tuple[str, ...]] = joint_names.LEGACY_NAMING) -> list[str]:
+    return pad_mesh(urdf, leg, naming).read_text(encoding="utf-8", errors="replace").splitlines()
 
 
-def pad_vertices(urdf: pathlib.Path, leg: str) -> list[list[float]]:
+def pad_vertices(urdf: pathlib.Path, leg: str,
+                 naming: dict[str, tuple[str, ...]] = joint_names.LEGACY_NAMING) -> list[list[float]]:
     """The pad's mesh vertices in the foot link's frame, read from the exported ``.obj``."""
-    return [[float(token) for token in line.split()[1:4]] for line in _obj_lines(urdf, leg)
+    return [[float(token) for token in line.split()[1:4]] for line in _obj_lines(urdf, leg, naming)
             if line.startswith("v ")]
 
 
-def pad_faces(urdf: pathlib.Path, leg: str) -> list[list[int]]:
+def pad_faces(urdf: pathlib.Path, leg: str,
+              naming: dict[str, tuple[str, ...]] = joint_names.LEGACY_NAMING) -> list[list[int]]:
     """The pad mesh's triangles, as 0-based indices into :func:`pad_vertices`.
 
     The asset is triangulated: 26 vertices and 48 faces satisfy ``V - E + F = 2`` with ``3F = 2E``,
     so a face is always three indices and there is nothing to fan here.
     """
     faces = []
-    for line in _obj_lines(urdf, leg):
+    for line in _obj_lines(urdf, leg, naming):
         if line.startswith("f "):
             tokens = line.split()[1:]
             if len(tokens) != 3:
-                raise SystemExit(f"{pad_mesh(urdf, leg).name} has a {len(tokens)}-gon face: "
+                raise SystemExit(f"{pad_mesh(urdf, leg, naming).name} has a {len(tokens)}-gon face: "
                                  f"not triangulated")
             faces.append([int(token.split("/")[0]) - 1 for token in tokens])
     return faces
 
 
-def pad_normal_in_link(urdf: pathlib.Path, leg: str) -> list[float]:
+def pad_normal_in_link(urdf: pathlib.Path, leg: str,
+                       naming: dict[str, tuple[str, ...]] = joint_names.LEGACY_NAMING) -> list[float]:
     """The pad's own normal in the foot link's frame, fitted to the collision mesh's lowest band.
 
     Read from the exported ``.obj`` rather than assumed: the sole is a curved cap, and how far its
     contact patch is from the link's ``-z`` is a property of the asset, not of this script.
     """
-    vertices = pad_vertices(urdf, leg)
+    vertices = pad_vertices(urdf, leg, naming)
     lowest = min(vertex[2] for vertex in vertices)
     band = [vertex for vertex in vertices if vertex[2] <= lowest + 0.002]
     centroid = [sum(vertex[i] for vertex in band) / len(band) for i in range(3)]
@@ -819,6 +882,93 @@ def _candidate_chain_check(urdf: pathlib.Path) -> None:
           "unchanged, pad travels %.4f m at 0.5 rad, and the downstream hinge leaves 90 deg by %.1f deg"
           " (the asset's three stay at 90.0000 over their whole range)"
           % (len(tokens), travel, 90.0 - driven))
+
+
+def _renamed_twin(urdf: pathlib.Path, naming: dict[str, tuple[str, ...]], folder: pathlib.Path,
+                  rename_links: bool = True) -> pathlib.Path:
+    """A twin of ``urdf`` that differs ONLY in the words: every chain link and joint renamed to ``naming``.
+
+    The rename is applied to the URDF's own NAME fields -- ``link/@name``, ``joint/@name``, the parent and
+    child links -- and to nothing else: origins, axes, limits, inertias and mesh references are the
+    original file's, so a difference in a reading is the naming and never the geometry. One exception, and
+    it is not a name: mesh ``filename`` attributes are made absolute so the twin can live outside the
+    asset tree. Same files; only the path spelling differs, because the twin sits elsewhere.
+
+    ``rename_links=False`` renames the joints only, which is the MIXED body the chain check exists for: a
+    leg whose link keeps the old word while the joint moving it already carries the new one reads as a
+    chain whose end root disagrees with the naming, and must be refused rather than measured.
+    """
+    links: dict[str, str] = {}
+    joints: dict[str, str] = {}
+    for leg in joint_names.LEGS:
+        for old, new in zip(joint_names.CHAIN_ROOTS, joint_names.roots_of(naming, leg)):
+            if old != new:
+                if rename_links:
+                    links[joint_names.link_name(leg, old)] = joint_names.link_name(leg, new)
+                joints[joint_names.joint_name(leg, old)] = joint_names.joint_name(leg, new)
+    tree = ET.parse(urdf)
+    root = tree.getroot()
+    for link in root.iter("link"):
+        link.set("name", links.get(link.get("name"), link.get("name")))
+        mesh = link.find("collision/geometry/mesh")
+        if mesh is not None:
+            mesh.set("filename", str((urdf.parent / mesh.get("filename")).resolve()))
+    for joint in root.iter("joint"):
+        joint.set("name", joints.get(joint.get("name"), joint.get("name")))
+        for tag in ("parent", "child"):
+            side = joint.find(tag)
+            side.set("link", links.get(side.get("link"), side.get("link")))
+    path = folder / f"{urdf.stem}_{_naming_id(naming)}{'' if rename_links else '_joints_only'}.urdf"
+    tree.write(path, encoding="utf-8", xml_declaration=True)
+    return path
+
+
+#: The legs the naming twin is read on: one front, one rear, so both directions of the split
+#: (``finger`` vs ``toe``) are covered rather than one leg standing for the pair.
+_TWIN_LEGS = ("lf", "rl")
+
+
+def _naming_twin_check(urdf: pathlib.Path) -> None:
+    """The same body renamed, read through the SAME consumer under its own binding.
+
+    This is the binding's exit shape at its smallest: the real reader (the tree walk, the pad mesh, the
+    pad pose) bound twice, with the twin built outside the asset tree. It can fail -- the twin is renamed
+    in its name fields and nothing else, so every number has to come back equal, and each body has to
+    REFUSE the other's naming rather than quietly answer a chain no asset carries.
+    """
+    shared, split = joint_names.naming_for("shared"), joint_names.naming_for("split")
+    poses = ([0.0] * len(joint_names.CHAIN_ROOTS), [0.31, -0.22, 0.44, -0.15, 0.2])
+    for leg in _TWIN_LEGS:
+        with tempfile.TemporaryDirectory() as folder:
+            twin = _renamed_twin(urdf, split, pathlib.Path(folder))
+            base, other = load_chain(urdf, leg, shared), load_chain(twin, leg, split)
+            assert len(base) == len(other), (leg, len(base), len(other))
+            assert tuple(joint["token"] for joint in other) == joint_names.roots_of(split, leg), \
+                (leg, tuple(joint["token"] for joint in other))
+            for index, (left, right) in enumerate(zip(base, other)):
+                for field in ("origin", "rpy", "axis", "limits"):
+                    assert left[field] == right[field], (leg, index, field, left[field], right[field])
+            assert pad_mesh(twin, leg, split) == pad_mesh(urdf, leg, shared), \
+                (leg, "the twin's pad resolves to a different file than the original's")
+            assert pad_vertices(twin, leg, split) == pad_vertices(urdf, leg, shared), leg
+            for pose in poses:
+                left, right = foot_pose(base, pose)[0], foot_pose(other, pose)[0]
+                assert all(abs(left[i] - right[i]) < 1e-12 for i in range(3)), (leg, pose, left, right)
+            # The half a silent fallback would pass: each body must refuse the other's naming, and so must
+            # a MIXED body -- link and joint renamed apart -- which is the one the end-root check is for.
+            mixed = _renamed_twin(urdf, split, pathlib.Path(folder), rename_links=False)
+            for path, naming, label in ((twin, shared, f"the twin under '{_naming_id(shared)}'"),
+                                        (urdf, split, f"this body under '{_naming_id(split)}'"),
+                                        (mixed, shared, "a body whose joints were renamed and its links not")):
+                try:
+                    load_chain(path, leg, naming)
+                except SystemExit:
+                    continue
+                raise AssertionError(f"{label}: it read a chain that naming does not describe")
+    print("[NAMING-TWIN] a renamed twin loads through the same consumer under its own binding (%s on %s): "
+          "chain tokens, origins, rpy, axes, limits, pad mesh and pad pose all identical to the original, "
+          "and each body refuses the other's naming"
+          % (_naming_id(joint_names.naming_for("split")), "/".join(_TWIN_LEGS)))
 
 
 #: The recipe the gains are read from. The gains are not a property of the body, so this is the family
@@ -1099,6 +1249,7 @@ def self_check(urdf: pathlib.Path) -> None:
         tensor = link_inertials(fixture)["x"]["tensor"]
     assert tensor == [[1.0, 0.5, 0.25], [0.5, 2.0, 0.125], [0.25, 0.125, 3.0]], tensor
     _candidate_chain_check(urdf)
+    _naming_twin_check(urdf)
     print("[SELF-CHECK] zero pose equals the origin sum, a quarter hip turn rotates about the hip "
           "axis, the hip leaves the tilt alone, a body-height shift moves the pad with it, each "
           "joint's dp/dq equals its own lever arm, the tilt is the fold sum's alone (a blade stroke "
@@ -1112,7 +1263,9 @@ def self_check(urdf: pathlib.Path) -> None:
           "the same number for both joints -- and halves exactly once the tensor is dropped, while the "
           "tensor's off-diagonals go in as the URDF's own matrix entries (no extra sign) and the tensor "
           "turns with the link frame (a 90 deg rpy picks izz), every declared load case moves at least "
-          "one reading, and the last joint's reading is invariant under all of them")
+          "one reading, and the last joint's reading is invariant under all of them, while the same body "
+          "renamed is read through the same consumer under its own binding with every number equal and "
+          "each body refusing the other's naming")
 
 
 def _grid_poses(chain: list[dict], grid_tokens: tuple[str, ...], samples: int):
@@ -1133,9 +1286,10 @@ def _grid_poses(chain: list[dict], grid_tokens: tuple[str, ...], samples: int):
 
 
 def _candidate_read(path: pathlib.Path, chain: list[dict], tokens: tuple[str, ...], leg: str,
-                    grid_tokens: tuple[str, ...], samples: int, base_z: float) -> dict:
+                    grid_tokens: tuple[str, ...], samples: int, base_z: float,
+                    naming: dict[str, tuple[str, ...]] = joint_names.LEGACY_NAMING) -> dict:
     """One chain over the grid: where its pad reaches, which way it faces, and its hinge-vs-body-z."""
-    normal, vertices = pad_normal_in_link(path, leg), pad_vertices(path, leg)
+    normal, vertices = pad_normal_in_link(path, leg, naming), pad_vertices(path, leg, naming)
     spans = [[], [], []]
     facings, hinges = [], []
     for angles in _grid_poses(chain, grid_tokens, samples):
@@ -1170,28 +1324,36 @@ def _extra_read(chain: list[dict], tokens: tuple[str, ...], extra: list[str], sa
 
 
 def compare(urdf: pathlib.Path, candidate: pathlib.Path, leg: str, tol_deg: float, base_z: float,
-            samples: int = 3) -> None:
+            samples: int = 3, naming: dict[str, tuple[str, ...]] = joint_names.LEGACY_NAMING,
+            candidate_naming: dict[str, tuple[str, ...]] | None = None) -> None:
     """Two chains read at the same body pose, height and tolerance: the reference against a candidate.
 
     Only the joints BOTH chains have are gridded, so the shared part of every pose is identical and the
     reads can be subtracted; a joint only one of them carries is reported on its own, never folded into
     the shared numbers -- that is how an inserted axis collects credit it has not earned.
 
+    Each body is bound SEPARATELY (``candidate_naming`` defaults to ``naming``): a twin that differs only
+    in its words is compared by declaring both, and each chain is verified against its own binding before
+    the two are subtracted, so a mismatched pair is refused rather than reported as a difference.
+
     It reads STRUCTURE, not the target action, so a wider reachable set is not a verdict: nothing here
     says a pose is one the animal makes, and a bone length, body height or collision shape that differs
     between the two candidates is a second change this cannot separate out. Whether the hinge plane's
     departure from the body's z is worth an axis is decided by fitting a target sequence, not here.
     """
-    reference, other = load_chain(urdf, leg), load_chain(candidate, leg)
+    candidate_naming = candidate_naming or naming
+    reference, other = load_chain(urdf, leg, naming), load_chain(candidate, leg, candidate_naming)
     tokens_a = tuple(joint["token"] for joint in reference)
     tokens_b = tuple(joint["token"] for joint in other)
     shared = tuple(token for token in tokens_a if token in tokens_b)
     print("=== COMPARE leg %s | body z %.3f m | tolerance %.0f deg | %d values per joint ==="
           % (leg, base_z, tol_deg, samples))
+    print("  namings: reference %s | candidate %s" % (_naming_id(naming), _naming_id(candidate_naming)))
     print("  shared joints (gridded): %s" % " ".join(shared))
-    for name, path, chain, tokens in ((urdf.name + " (reference)", urdf, reference, tokens_a),
-                                      (candidate.name + " (candidate)", candidate, other, tokens_b)):
-        read = _candidate_read(path, chain, tokens, leg, shared, samples, base_z)
+    for name, path, chain, tokens, bound in (
+            (urdf.name + " (reference)", urdf, reference, tokens_a, naming),
+            (candidate.name + " (candidate)", candidate, other, tokens_b, candidate_naming)):
+        read = _candidate_read(path, chain, tokens, leg, shared, samples, base_z, bound)
         flipped = sum(1 for facing in read["facings"] if facing < 0)
         accepted = sum(1 for facing in read["facings"] if faces_down(facing, tol_deg))
         print("  %-26s %4d poses | pad span (base_link) %s m | facing %+.3f..%+.3f (%d flipped, "
@@ -1259,7 +1421,7 @@ def break_test(urdf: pathlib.Path) -> int:
         ("the body's attitude dropped",
          {"pad_state": no_attitude}),
         ("the chain taken from the asset's token list, not the tree",
-         {"chain_joint_names": lambda _urdf, leg: tuple(f"{leg}_{token}_joint" for token in CHAIN)}),
+         {"chain_joint_names": lambda _urdf, leg, _naming=None: tuple(f"{leg}_{token}_joint" for token in CHAIN)}),
         ("the knee's range widened past straight (reverse bending)",
          {"load_chain": widened_knee}),
         ("the links' own inertia tensors dropped (point masses)",
@@ -1302,7 +1464,8 @@ def break_test(urdf: pathlib.Path) -> int:
     return 0
 
 
-def fold_reading(path: pathlib.Path, urdf: pathlib.Path, contact_n: float = 1.0) -> None:
+def fold_reading(path: pathlib.Path, urdf: pathlib.Path, contact_n: float = 1.0,
+                 naming: dict[str, tuple[str, ...]] = joint_names.LEGACY_NAMING) -> None:
     """Per leg and command band: the fold sum while the pad carries load, beside the blade's own angle.
 
     The quantity the pad question needs is ``|SIGMA|`` on the loaded frames -- the part of the tilt no
@@ -1341,8 +1504,8 @@ def fold_reading(path: pathlib.Path, urdf: pathlib.Path, contact_n: float = 1.0)
             if sigma.numel() == 0:
                 print("%-5s %-3s %8d" % (band, leg, 0))
                 continue
-            predicted = fold_tilt(pad_normal_in_link(urdf, leg), float(sigma.median()), 0.0,
-                                  leg_plane_yaw(load_chain(urdf, leg)))
+            predicted = fold_tilt(pad_normal_in_link(urdf, leg, naming), float(sigma.median()), 0.0,
+                                  leg_plane_yaw(load_chain(urdf, leg, naming)))
             print("%-5s %-3s %8d %7.1f/%6.1f %7.1f/%6.1f %10.1f"
                   % (band, leg, int(sigma.numel()),
                      math.degrees(float(sigma.abs().median())),
@@ -1359,6 +1522,10 @@ def _rotation_about(axis, angle: float):
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--urdf", type=pathlib.Path, default=DEFAULT_URDF)
+    parser.add_argument("--naming", default="shared", choices=sorted(joint_names.NAMINGS),
+                        help="which words the body at --urdf carries: 'shared' = every leg one root set "
+                             "(every asset today), 'split' = the front/rear rename. Declared, never read "
+                             "off the joint names: a body's chain is not evidence of its naming")
     parser.add_argument("--self-check", action="store_true",
                         help="hand-computed poses; no simulator, no sweep")
     parser.add_argument("--break-test", action="store_true",
@@ -1370,6 +1537,9 @@ def main() -> None:
     parser.add_argument("--compare", type=pathlib.Path, default=None,
                         help="a candidate URDF, read against --urdf at the same body pose, height and "
                              "tolerance. Joints only one of them has are reported separately")
+    parser.add_argument("--compare-naming", default=None, choices=sorted(joint_names.NAMINGS),
+                        help="the candidate's own words; defaults to --naming. A twin that differs only "
+                             "in its names is compared by declaring both, never by inheriting one")
     parser.add_argument("--tol", type=float, default=10.0,
                         help="how far off the world's down a pad may face and still be accepted [deg]")
     parser.add_argument("--base_z", type=float, default=0.9,
@@ -1384,26 +1554,33 @@ def main() -> None:
     # Resolved once, here: the mesh check below compares the URDF's own tree with the path a mesh was
     # read from, and a relative URDF would compare a relative parent against an absolute child.
     args.urdf = args.urdf.resolve()
+    # The binding, resolved ONCE at the entry and handed down: which words the body carries is a
+    # property of the body (declared by the caller who chose it), not a question each reader re-answers.
+    naming = joint_names.naming_for(args.naming)
     if args.self_check:
         self_check(args.urdf)
         return
     if args.break_test:
         raise SystemExit(break_test(args.urdf))
     if args.compare is not None:
-        compare(args.urdf, args.compare, args.leg, args.tol, args.base_z, args.samples)
+        print("ASSET legs bound to naming '%s' (%s); candidate '%s'"
+              % (args.naming, args.urdf, args.compare_naming or args.naming))
+        compare(args.urdf, args.compare.resolve(), args.leg, args.tol, args.base_z, args.samples,
+                naming, joint_names.naming_for(args.compare_naming or args.naming))
         return
     if args.frames is not None:
-        fold_reading(args.frames, args.urdf, args.contact_n)
+        fold_reading(args.frames, args.urdf, args.contact_n, naming)
         return
     if args.pose is None:
         parser.error("nothing to do: pass --self-check, --compare, --frames or --pose")
-    chain = load_chain(args.urdf, args.leg)
+    print("ASSET %s bound to naming '%s'" % (args.urdf, args.naming))
+    chain = load_chain(args.urdf, args.leg, naming)
     position, rotation = foot_pose(chain, args.pose)
     for i, row in enumerate(rotation):
         print("  row %d %s" % (i, ["%+.5f" % v for v in row]))
     print("  pad origin in base_link %s" % ["%+.6f" % v for v in position])
-    state = pad_state(chain, list(args.pose), pad_normal_in_link(args.urdf, args.leg),
-                      pad_vertices(args.urdf, args.leg), args.base_z)
+    state = pad_state(chain, list(args.pose), pad_normal_in_link(args.urdf, args.leg, naming),
+                      pad_vertices(args.urdf, args.leg, naming), args.base_z)
     print("  pad faces %+.4f of the world's down (%.2f deg off it: 0 faces down, 180 faces up)"
           % (state["facing_cos"], state["tilt_deg"]))
 
