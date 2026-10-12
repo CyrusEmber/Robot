@@ -305,3 +305,40 @@ python -B -c "import pathlib,re;pat=re.compile(r'(?<![A-Za-z0-9])(hip|haa|hfe|kf
 - 采用机体的 rl 摘要 == v3 `asset_lock.json` 值 ⇒ 采用（2026-10-08）当时它就是平的，不是之后被改。
 - ⇒ **分类改判：不是陈旧钉值，是"已验收的修复没留在采用机体里"**（回归或跨树丢失）。归属从"归 A 节"改为 **`work/active/floor-contact-attribution.md` 的 ⑤/⑪ 资产前提**。未决仍是"有意换设计 vs 修复丢失"，git 判不了：产生/承载它的构建树被排除在版本控制外。
 - 追加三保留不删（记录不改写），判定以本节为准。
+
+## 追加五：E 出口复核与方案回写（2026-10-12）
+
+### 适用范围
+
+复核 `work/active/lizard2-body-drive-candidate.md` E 节的完成口径与下一步契约。本次只改该事项及本记录，不改 Python、配方或资产，不启动 Blender/仿真；源码观察不是行为验证。此前“追加：E 名表单点化落地”保留作当时记录，其完成含义按本节收窄。
+
+### 验收条件
+
+第一波由 B 的必要前置约束明确与 E 的双机体接口消费验证共同构成。E 须让同一消费者显式处理旧机体与新命名目标，入口绑定来源明确，URDF/运行时名称验真，接触体、动作选择和报告读取贯通；仅导入名表、名表自检或离线套件通过不满足此出口。完整施工与后续验收形状唯一归事项 E1–E4，不在本记录复制。
+
+### 结果
+
+- **E 未达到第一波出口**。源码中的 `CHAIN_ROOTS`、`JOINT_SUFFIXES`、`end_link()`、`CONTACT_BODY_PATTERNS` 与 `is_contact_body()` 仍回答旧名；`PLANNED_RENAMES` / `planned_root()` 是独立映射，没有目标机体绑定。此前自检的新名部分验证映射形状，不能证明真实消费者能用新名。
+- **具体可失败路径，不是运行读数**：`check_joint_layout.py` 在导入模块后把 `joint_names` 赋成运行时 list，随后访问 `.CHAIN_ROOTS` / `.end_link()`；`gait_probe.py` 的 `main()` 在读取 `joint_names.JOINT_SUFFIXES` / `.is_contact_body()` 后又赋同名局部 list。这是实际消费者需要就地修复的名称遮蔽；本轮未执行该路径，不以 py_compile 代替验证。
+- **多下划线风险**：`check_joint_layout.py` 用 `rpartition('_')` 从 link 拆词根；`shoulder_swing` / `shoulder_abduct` 不能按旧单词根方式解析。方案要求生成完整名称映射或剥已知前后缀，不靠猜名选机体。
+- **用户拍板：2026-10-12**：工具入口绑定目标及其命名方案，内部传递；不在每层手选 `legacy/candidate`，不用会随采用改变含义的标签。声明错配实际 URDF/运行时名称时拒绝，不自动回退。
+- **方案回写**：事项 E 节区分入口绑定、真实树结构、接触体/关节、消费者接线、双样本负例与正式采用边界；`next` 改为先做 E，不再把已有名表当作完整交付。B 的约束与有效限速欠账保留，既有资产前提仍交 `floor-contact-attribution`，不借 E 改资产。
+- **方案交叉检查**：新上下文指出绑定数据形状与全局 active 说明仍可误读，已把待实现绑定明确为目标路径、声明来源、每 leg 的角色→词根映射及末端角色，并禁止 E/S6 靠翻转 `PLANNED_ACTIVE` 选机体。该检查中“前后肢共享 hip_swing/hip_abduct”与源码不符，未采纳；“接口尚不存在因此方案不可成立”不作为实现判据。这里是方案复核，不是 D 的关闭审核，也不宣称消费者已验证。
+- **本轮文档验证**：`python -B rl_exp/tools/verify/check_work_docs.py` 返回 `WORK_DOCS_OK (85 item file(s))`；`git diff --check` 无差异格式错误；`rl_exp\tools\verify\run_offline_checks.bat` 返回 `ALL_OFFLINE_CHECKS_PASSED (37/37 in 43.1s)`，退出码 0。套件覆盖既有仓库约束，不运行 E 的双机体/Blender/仿真验收，不能据此改判 E 完成。
+
+### 证据引用
+
+本节源码坐标对应方案复核时工作树，后续按符号定位：
+
+- `rl_exp/tasks/joint_names.py:51,105-111,123-133,150-175,230-262`：旧名派生接口、独立计划映射与自检边界。
+- `rl_exp/tools/verify/check_joint_layout.py:143,153,194,204-208`：模块遮蔽及单词根拆法。
+- `rl_exp/tools/diagnose/gait_probe.py:817,826,831,849-853`：作用域遮蔽、旧链端后缀及 shank 名旁路。
+- `rl_exp/tasks/obs_protocol.py:363-409`：已有目标路径解析接口；采用实际 cfg 覆盖时调用 `resolve_body()`，不拿默认任务路径代替覆盖目标。
+- `rl_exp/tools/verify/check_leg_reachability.py:219-269`：实际 URDF 链走查与 load_chain 消费点。
+- `rl_exp/blender/generate_urdf.py:65-75`：已有构建目标声明入口。
+- `rl_exp/tools/diagnose/plot_joints.py:46,54-70`：报告 reader 的全局旧词根与列名消费点。
+- 事项修订验真：`python -B rl_exp/tools/verify/check_work_docs.py`；仅文档形状检查，执行状态以本次命令输出为准，不是 E 行为复读命令。
+
+### 未覆盖边界
+
+本次没有实现入口绑定，没有运行双机体消费者、破坏测试、Blender 导出或仿真，没有验证候选几何/动力学；E 保持未交付，不关闭事项、不置 pending_review。已有红项不豁免后续必需消费者的验证；真实候选未就绪时，完整改名的同几何临时样本只能证明双命名接线。文档形状通过不等于接口能力通过。
