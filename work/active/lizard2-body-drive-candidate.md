@@ -4,7 +4,7 @@ title: lizard2 机体与驱动候选：蜥蜴骨段朝向、人手式足掌、�
 scope: rl_exp/blender, rl_exp/tools/pipeline, rl_exp/tools/verify, rl_exp/tools/diagnose, rl_exp/tasks, acceptance/records
 status: open
 landing: rl_exp/blender/lizard2_stance_candidate.py, rl_exp/blender/generate_urdf.py, rl_exp/tools/diagnose/gait_probe.py, rl_exp/tasks/joint_names.py
-next: E 名表单点化已落地（落点 `rl_exp/tasks/joint_names.py`；读数、破坏测试与未迁站点清单归 2026-10-12 记录，本项不复述；接触体名随采用那一次变更迁移，见同记录“未迁站点”节）。A/B/C 三节此时无先后依赖，可同时开始：A 的 Blender 改造用新名表，选 pivot/轴按线性对照进行（B 的能力表已出，判词、源码坐标与具名缺口归 2026-10-12 记录，本项只留约束与那笔 `velocity_limit` 账）；C 沿用现有机体不等 A。全部节自检完成后做 D 集成，一份记录，置 pending_review，请新上下文一次性审核。不动已训 v3，不覆盖 rl_exp/lizard2_candidate/，趴姿不在本项。
+next: E 名表单点化已落地（落点 `rl_exp/tasks/joint_names.py`；读数、破坏测试与未迁站点清单归 2026-10-12 记录，本项不复述；接触体名随采用那一次变更迁移，见同记录“未迁站点”节）。A/B/C 三节此时无先后依赖，可同时开始：A 的 Blender 改造用新名表，选 pivot/轴按线性对照进行（B 的能力表已出，判词、源码坐标与具名缺口归 2026-10-12 记录，本项只留约束与那笔 `velocity_limit` 账）；C 沿用现有机体不等 A。全部节自检完成后做 D 集成，一份记录，置 pending_review，请新上下文一次性审核。不动已训 v3，不覆盖 rl_exp/lizard2_candidate/，趴姿不在本项。另有本勘察留下的两笔具名欠账（读数与缺席的代价见 2026-10-12 记录追加二）：声明面 yaml/json 可动的只剩 2 文件 94 处、`versions/**` 62/3887 属门外；既有自测 6 个里 3 个无离线入口，且 `gait_probe --self-check` 在现树已是**既存红**（家族隔离断言，与改名无关，根因"常数过期 vs 候选 rl 壳退化"二选一未判，判据在源 obj/.blend，归 A 节）。
 close_when: 新上下文对照 R1–R5 与本项 D 节记录审核：蜥蜴骨段朝向正反例、前后肢映射与改名落地一致、同一候选的完整周期（有向掌面、限位、实际网格碰撞）、承重动力学与真实驱动读回、躯干/尾部同条件对照；你确认候选外观与目标动作。通过后交 lizard2-family-landing；失败退回 in_progress 并指明节，只有用户能给的缺口置 blocked。静力/声明/源码支持不当动力学通过；未判定不关闭。
 evidence: acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory, acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, acceptance/records/2026-10-08-lizard2-joint-design-review-contract, acceptance/records/2026-10-08-lizard2-r1-numeric-reference-and-decision-drafts
 ---

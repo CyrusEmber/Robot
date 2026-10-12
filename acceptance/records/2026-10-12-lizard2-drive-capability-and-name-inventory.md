@@ -238,3 +238,42 @@ rg -n "foot_yaw_deg|dof_torque_frac_of_limit" ablation_harness/protocols/lizard2
   - 静默（改名后不报错、只是少匹配）：按后缀找接触体 —— `rl_exp/tools/diagnose/diag_metrics.py:141`、`diagnose_support.py:427,447,817,822`、`rl_exp/tools/verify/baseline_probe.py:270-271`、`check_contact_ownership.py:209`、`obs_protocol_live.py:141`；按单词取值 —— `check_self_collision.py:278,288`（`limits.get("hip"/"hfe")`）、`gait_probe.py:878-879`（`group_effort` 的键）；CLI 默认值与显示过滤 —— `check_joint_layout.py:116,123`、`check_actuator_budget.py:528`。
   - 会报错（迁移时自然暴露，不必先改）：`check_leg_reachability.py:816,1250`（`tokens.index("hfe")`）、`fit_gait_target.py:118-119`。
   - 门外不计入：`rl_exp/versions/**`（B6）、`rl_exp/blender/*`（A 节候选，走计划名）、v8 一次性迁移脚本、测试里故意钉死的字面名。
+
+## 追加二：本次勘察两个未交项的读数（同日）
+
+subagent 2 的交付里，yaml/json/md 全量清单与"必须保持绿的既有自测"清单没交。这里只补**读数与缺席的代价**，不补做枚举（理由见下）。
+
+**A. 声明面（口径：`_` 与 `.` 也算分隔符，故 `lf_foot`、`.*_hip_joint` 计入；本记录 B 节用的 `\b` 口径抓不到它们）**
+
+| 面 | 文件 / 命中 | 处置 |
+|---|---|---|
+| `rl_exp/versions/**` 的 yaml+json | 62 / 3887 | **门外**（改=版本行为，见 B6）⇒ 只需边界行，不是清单 |
+| `versions/` 之外的声明面 | **2 / 94**（`rl_exp/ue/lizard_ue.json` 92、`rl_exp/tools/verify/gait_targets/lizard2_low_speed_v0.json` 2） | 可动全集，就这么点 |
+| `rl_exp/tools/diagnose/out/**` 等生成读数 | ~91 / ~19.6k | 探针输出的列名，是**读数不是声明** |
+| `.md` 全仓 | 130 / 1434，几乎全在 `acceptance/records/**` | 历史读数，改写=伪造历史 ⇒ 不入册 |
+
+⇒ "逐点枚举"的原形状会产出上万行里 0 行可执行；该补的是上表（三行边界 + 一行全集）。
+
+复读（口径同表头）：
+```bat
+python -B -c "import pathlib,re;pat=re.compile(r'(?<![A-Za-z0-9])(hip|haa|hfe|kfe|foot)(?![A-Za-z0-9])');f=[p for p in pathlib.Path('rl_exp').rglob('*') if p.suffix in ('.yaml','.yml','.json')];h={p.as_posix():len(pat.findall(p.read_text(encoding='utf-8',errors='replace'))) for p in f};n={k:v for k,v in h.items() if v};print(len(n),sum(n.values()))"
+```
+
+**B. 既有自测（本轮改动碰过的 6 个工具）**
+
+| 工具 | 离线入口 | 本轮真跑 |
+|---|---|---|
+| `check_leg_reachability.py` | 套件 [37] | 绿 |
+| `plot_joints.py` | 自带 `--self-check`（不在套件里） | 绿 |
+| `gait_probe.py` | 自带 `--self-check`（不在套件里） | **红（既存）** |
+| `check_joint_layout.py`、`check_self_collision.py`、`stance_step_probe.py` | 无（sim-only） | 未验 |
+
+`offline_suite.py:145` 只挂了 `check_leg_reachability --self-check`，其余自检无机器入口 ⇒ 上游事项"旧名机体上全部现有自测与闸门必须保持绿"本轮**只对 3/6 成立**，另 3 个只有 `py_compile` 与"值未变"的推断。
+
+**C. `gait_probe --self-check` 的既存红（与本次改名无关）**
+
+- 读数：`python rl_exp/tools/diagnose/gait_probe.py --self-check` ⇒ `gait_probe.py:426` 家族隔离断言失败
+  `('lizard2', rl_exp/lizard2_candidate/meshes/collision, 0.11928214877843857, 0.013352)`（该块 `:416-428`）。
+- 对拍：`git show HEAD:rl_exp/tools/diagnose/gait_probe.py` 的同一自检**同样红、同一组数** ⇒ 既存，非本轮引入。
+- 两家族网格非同一文件（md5 `032544db` vs `80145e27`，树也不同），但形状一致：都 48 面、0.16423 m²、2 mm 带 cap 均 0.1192821，仅 z 偏移差 ~4.4 mm（接地归一化后消失）。
+- 本脚本分不清两种解释：常数过期（候选掌面有意重做，钉的仍是旧 lizard2 机体的值）或候选声明树里的 `rl_foot_collision.obj` 退化成旧平底壳。判据在源 obj 与 `.blend`，归 A 节。
