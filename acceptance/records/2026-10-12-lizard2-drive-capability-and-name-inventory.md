@@ -419,3 +419,39 @@ E 的“绑定 + 首个真实消费者”切片：名表两套命名、`check_le
 - 该工具**不在离线清单**（采用机体当前是红的），故这一条只有人工复读，没有常驻机器入口；孪生对照是本次人工真跑。
 - 仍未接线：Blender 构建入口、`check_joint_layout`、站姿/步态诊断、接触诊断与在线协议核对、报告 reader；E4.4 的运行时与报告验真未做，E 仍未达第一波出口。
 - 扫描结论（-222.86 mm 与 40 条穿透）是**采用机体既存红项**的复读，不是本次改动引入或修复的问题；归 `floor-contact-attribution` 的资产前提。
+
+## 追加八：E 第三切片 —— 运行时消费者接入同一绑定（2026-10-12 同日）
+
+### 适用范围
+
+运行时侧两个消费者接入绑定并真跑：`rl_exp/tools/diagnose/stance_step_probe.py`（PLAY 任务、1 env、无策略）与 `rl_exp/tools/verify/check_joint_layout.py`（布局硬闸 + 注入读数）。读数为起 IsaacLab 的实测；E4.5 的旧基线同条件复跑与 E4.4 的两套命名运行时对照均未做（原因见下）。
+
+### 验收条件
+
+同一绑定在运行时解析关节名 / 接触体 / 动作列；错配命名在**测量之前**被拒；两处错配（声明与所造资产、声明与标定 URDF）都要报出具体缺失名。
+
+### 结果
+
+- **`stance_step_probe.py`**：加 `--naming`（声明所造资产词根），绑定在入口解析后携带到底——`--joint` 缺省取该命名根轴且必须属于该 leg 的词根、`--drop-joints` 缺省取末两位词根、足底标定与网格读取、接触体模式、被扫关节名全部走绑定。新增运行时核对：每条 leg 的**命名末端关节**必须出现在所造资产的关节表里，且接触模式选出的脚必须正好是四条 leg 的命名末端 link；任一不满足即 `SystemExit`（缺这两条时，错配命名只表现为"零只脚/无边距"的干净读数）。
+- **`check_joint_layout.py`**：先修掉一处**既存崩溃**——脚本用 `joint_names` 保存资产自己的关节名列表，把同名模块遮蔽掉，于是 `leg_probes()` 在 `joint_names.CHAIN_ROOTS` 上崩（复现读数见下）。模块改别名 `leg_names`；`--naming` 声明词根并在造出资产后核末端 link；`leg_probes`、排序键、解剖硬闸（原字面 `lf_haa` 等）、`--sweep-a/-b` 缺省与校验、`_FOOT_LINK` 一律按命名位次取；`leg_of`/`token_of` 取代 `rpartition('_')`（`shoulder_swing` 这类带下划线的词根不会被切半）。工具第一次跑到 `=== DONE ===`。
+- **运行时错配**：孪生 URDF（`split`）配所造旧名 USD 时，在测量前被拒：`spawned asset ...\lizard2\lizard2.usda has no lf_finger_joint, so it does not carry the naming 'split' -- declare the naming of the asset it spawns`。
+- **一条与 E 出口直接相关的结构发现**：运行时的**关节名来自配方**（动作项 `joint_names`、`joint_order`、默认位姿都写字面名），只有 link/体名来自 USD。因此"同一进程服务两套名"在运行时**不可能只靠工具绑定达成**——改名必须与配方/机体的采用同一次变更落地（版本 §A 的迁移条款、E3 表"正式声明归 S6"）。这条同时说明：E 的运行时双命名验证只在采用后才能做，今天只能验"绑定被核对、错配被拒"。
+
+**复读命令与实测**（`<PY>` = `python ablation_harness/host_paths.py --python` 给出的解释器；孪生 URDF = `check_leg_reachability._renamed_twin(DEFAULT_URDF, naming_for('split'), <临时目录>)`，见追加六）：
+
+- `<PY> rl_exp\tools\diagnose\stance_step_probe.py --headless --settle 100 --steps 40 --naming shared` → 跑完并打印 `CARRIED leg joints`（按绑定后缀）/`UNCOMMANDED ...`/`=== SETTLE ===`/`=== RAMP lf_hip_joint ... ===`/`=== VERDICT ===`（四脚受力、base 高、足底倾角、接触点速度、非足体受力、被扫关节力矩各一行）
+- `<PY> rl_exp\tools\diagnose\stance_step_probe.py --headless --settle 20 --steps 10 --naming split --urdf <孪生>.urdf` → `spawned asset ... has no lf_finger_joint, so it does not carry the naming 'split' ...`（退出码 1）
+- 修复前：`<PY> rl_exp\tools\verify\check_joint_layout.py --headless` → `AttributeError: 'list' object has no attribute 'CHAIN_ROOTS'`
+- 修复后同命令 → `BODY lf_hip / lf_haa / lf_hfe / lf_kfe / lf_foot`（链序取自绑定）、`LAYOUT_GATES PASSED`、`=== COMPOSITE hfe x kfe ... ===`、`=== ACTUATION ... ===`、`ACTION COVERAGE 22 of 30 joints channelled`、`=== DONE ===`
+
+### 证据引用
+
+- `rl_exp/tools/diagnose/stance_step_probe.py`：`--naming` 解析与绑定携带、运行时末端关节/接触体核对、`--drop-joints` 缺省。
+- `rl_exp/tools/verify/check_joint_layout.py`：模块别名与 `leg_names` 绑定、`leg_of`/`token_of`、`leg_probes`、解剖硬闸、sweep 缺省与校验。
+
+### 未覆盖边界
+
+- 未做"两套命名的运行时对照"：需要一份**prim 名字已改**的 USD 且配方关节名同变更（采用动作，归 S6）；也正因如此，E 的第一波出口在运行时侧只能到"绑定被核对、错配被拒"。
+- 未做 E4.5 的旧基线同条件复跑（本轮两次运行用的步数/时长与历史记录不同），故只有"跑通且各段打印"的读数，不是与历史读数的逐项对照。
+- 起仿真两次，均为 1 env、无策略；未验证策略行为、承重动力学或候选几何。
+- 本轮改动**未提交**：另一会话正在把 `rl_exp/blender/*.py` 搬到 `rl_exp/blender/scripts/`，`check_work_docs` 因此报 9 条 `landing` 路径漂移（含本项两条），pre-commit 会拒；本项不代改他项路径、不跳过钩子。

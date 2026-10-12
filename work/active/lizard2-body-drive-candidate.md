@@ -3,13 +3,27 @@ id: lizard2-body-drive-candidate
 title: lizard2 机体与驱动候选：蜥蜴骨段朝向、人手式足掌、骨骼改名
 scope: rl_exp/blender, rl_exp/tools/pipeline, rl_exp/tools/verify, rl_exp/tools/diagnose, rl_exp/tasks, acceptance/records
 status: open
-landing: rl_exp/blender/lizard2_stance_candidate.py, rl_exp/blender/generate_urdf.py, rl_exp/tools/diagnose/gait_probe.py, rl_exp/tools/verify/check_leg_reachability.py, rl_exp/tools/verify/check_self_collision.py, rl_exp/tasks/joint_names.py
-next: E 已完成绑定与前两个消费者（名表两套命名；`check_leg_reachability.py` 的 `--naming` 绑定 + 链命名核对 + 同几何孪生自检；`check_self_collision.py` 的 `--naming` + 按位次选角色 + 末端关节核对；读数与破坏测试归 2026-10-12 记录追加六/七，本项不复述）。继续 E3 其余消费者：Blender 构建入口、`check_joint_layout`、站姿与步态诊断、接触诊断与在线协议核对、报告 reader，逐条接到同一绑定并各自留一条真跑读数；E4.4 的运行时与报告验真未做。B 的能力约束取自 2026-10-12 记录，A 选 pivot/轴按线性对照进行，不新建驱动机制，那笔 velocity_limit 前置账仍归 B。E 接线前 A 可核对旧名源几何，但不让未接线工具测新名候选；C 可沿用现有机体开展。A/B/C 自检就绪后做 D 集成，一份记录，置 pending_review，请新上下文一次性审核。不动已训 v3，不覆盖 rl_exp/lizard2_candidate/，趴姿不在本项。声明面边界、既有自检覆盖和 gait_probe 的资产前提归 2026-10-12 记录；资产前提处置交 floor-contact-attribution 的 ⑤/⑪，不借 E 改资产或放宽断言。
-close_when: 新上下文对照 R1–R5 与本项 D 节记录审核：蜥蜴骨段朝向正反例、前后肢映射与改名落地一致、同一候选的完整周期（有向掌面、限位、实际网格碰撞）、承重动力学与真实驱动读回、躯干/尾部同条件对照；你确认候选外观与目标动作。通过后交 lizard2-family-landing；失败退回 in_progress 并指明节，只有用户能给的缺口置 blocked。静力/声明/源码支持不当动力学通过；未判定不关闭。
+landing: rl_exp/blender/scripts/lizard2_stance_candidate.py, rl_exp/blender/scripts/generate_urdf.py, rl_exp/tools/diagnose/gait_probe.py, rl_exp/tools/diagnose/stance_step_probe.py, rl_exp/tools/verify/check_leg_reachability.py, rl_exp/tools/verify/check_self_collision.py, rl_exp/tools/verify/check_joint_layout.py, rl_exp/tasks/joint_names.py
+next: 执行者按正文“下一步”继续 E3 消费者接线与 E4 验真；A/B/C 就绪后做 D 集成，再请新上下文审核。
+close_when: 新上下文按正文“关闭条件”核验 R1–R5 与 D 记录，用户确认外观和动作；未判定不关闭。
 evidence: acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory, acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, acceptance/records/2026-10-08-lizard2-joint-design-review-contract, acceptance/records/2026-10-08-lizard2-r1-numeric-reference-and-decision-drafts
 ---
 
 本项取代按 S0–S4 串联、逐级审核的安排：各节自检只用机器闸门与可复读检查，不置 `pending_review`；只在 D 集成后审核一次。需求与范围唯一归整体记录，判据归 R1–R5，本项只留动作、交付与顺序。
+
+## 下一步
+
+1. **继续 E3 接线**：URDF → FK/碰撞与运行时（布局、站姿/迈步探针）已接线并各有真跑读数与错配负例；当前改 Blender 构建入口、步态诊断、接触诊断、在线协议核对和报告 reader。按 E3 表逐条贯通同一绑定，并留真实消费者读数。E4 的运行时双命名对照做不了——运行时关节名还写在配方里（动作项/`joint_order`/默认位姿），改名须与采用同一次变更落地（归 S6），现在只验到"绑定被核对、错配被拒"；报告链验真仍未做。
+2. **并行边界**：A 选 pivot/轴消费 B 的能力约束，按线性对照进行，不新建驱动机制；有效限速前置仍归 B。E 接线前，A 只核对旧名源几何，不让未接线工具测新名候选；C 可用现有机体开展。
+3. **先解除资产前提**：`gait_probe` 的资产前提交 `floor-contact-attribution` 的 ⑤/⑪；不借 E 改资产或放宽断言。声明面边界与既有自检覆盖只取本项 2026-10-12 evidence。
+4. **集成后一次审核**：A/B/C 自检就绪后执行 D，读数入同一具名记录；置 pending_review，next 点名新上下文审核者。已训 v3、采用资产与趴姿边界见本项“边界”。
+
+## 关闭条件
+
+- **审核者与输入**：新上下文对照 R1–R5、本项 D 节及其真实记录；用户确认候选外观与目标动作。
+- **几何与命名**：蜥蜴骨段朝向正反例、前后肢映射与改名落地一致；同一候选完整周期覆盖有向掌面、限位与实际网格碰撞。
+- **动力学与驱动**：承重动力学、真实驱动读回、躯干/尾部同条件对照有可复读证据；静力、声明或源码支持不当动力学通过。
+- **结果处理**：通过后交 `lizard2-family-landing`；失败退 in_progress 并指明节，仅用户能给的缺口置 blocked。未判定不关闭。
 
 ## 目标：蜥蜴骨段朝向，不只是防内扣
 
@@ -56,7 +70,7 @@ evidence: acceptance/records/2026-10-12-lizard2-drive-capability-and-name-invent
 ### E2. 绑定契约与接口边界
 
 1. **在入口确定目标，命名约定与它同行**。最小普通数据形状为目标路径、声明来源、按 leg 的“角色 → 词根”映射和每 leg 的末端角色；不需要命名对象或注册表。稳定角色取本项已有链映射的角色键，前后肢实际词根来自同一名表；该映射不承诺两机体几何等价。方案可附稳定标识，但取名使用绑定的映射，不看全局开关或候选生命周期。旧入口显式提供共享词根映射，新候选入口显式提供前后肢映射；下游只拿已绑定数据。未声明约定的任意外部机体不得从关节名猜方案。
-   **已落地**：`rl_exp/tasks/joint_names.py` 的 `NAMINGS`（`shared`/`split`，后者由 `PLANNED_ROOTS` 派生）+ `naming_for`/`roots_of` 与按绑定的 `end_link`/`contact_body_patterns`/`is_contact_body`；`check_leg_reachability.py` 在入口用 `--naming`/`--compare-naming` 绑定并把绑定沿调用链传递。路径与声明来源仍由各消费者的既有入口解析（任务级用 `obs_protocol.resolve_body`），名表只回答“词根”。
+   **已落地**：`rl_exp/tasks/joint_names.py` 的 `NAMINGS`（`shared`/`split`，后者由 `PLANNED_ROOTS` 派生）+ `naming_for`/`roots_of` 与按绑定的 `end_link`/`contact_body_patterns`/`is_contact_body`；`check_leg_reachability.py` 在入口用 `--naming`/`--compare-naming` 绑定并把绑定沿调用链传递；`check_self_collision.py`（按位次选角色、末端关节核对）、`stance_step_probe.py`（所造资产末端关节与接触体核对）与 `check_joint_layout.py`（顺带修掉 `joint_names` 遮蔽模块的既存崩溃）同法接入。路径与声明来源仍由各消费者的既有入口解析（任务级用 `obs_protocol.resolve_body`），名表只回答“词根”。
 2. **复用路径解析，不另造寻址**。任务工具读取最终 cfg 的实际 `usd_path`，复用 `rl_exp/tasks/obs_protocol.py:363` 的 `resolve_body()`；无覆盖时可用 `body_for_task()`。`--usd`/`--urdf` 覆盖、`--compare` 第二机体须连同各自命名约定重新绑定，不继承当前家族或第一机体的约定。未能取得约定或 USD/URDF 对应依据则拒绝比较。不能仅按 family 选新旧，同一家族会有两种机体。
 3. **声明只有入口一份**。Blender 在 `generate_urdf.py` 已有 `ROBOT_SPECS` 中随构建目标声明约定，候选骨架脚本消费同一目标；诊断入口随隔离配置声明约定，报告携带绑定来源。正式配方声明归 S6。E 不把命名参数塞进已冻结配方，不为路径另建全仓注册表。
 4. **一套函数，两套数据**。纯名表函数接收绑定中的命名数据和 leg，派生链词根、具名 joint/link、链端接触体与匹配式；后缀/正则仍由已有 builder 生成。内部按链位置或已定义角色选关节，再取该 leg 的名字，不在每层选择新旧。关节名可含多个 `_`，用完整生成名映射到角色，或只剥已知 leg 前缀与 `_joint` 后缀，不用 `rpartition('_')` 识别词根。
@@ -79,7 +93,7 @@ evidence: acceptance/records/2026-10-12-lizard2-drive-capability-and-name-invent
 
 历史报告没有新字段时保留原 reader 及其旧协议语义，不伪补“已核机体”证据；新绑定 reader 缺来源或名称冲突则拒绝。诊断量/列名若会变更评测语义，先核协议边界并交 `lizard2-contact-protocol`，E 不重写旧协议。
 
-**接线现状**：URDF → FK/碰撞一行的 `check_leg_reachability.py` 与 `check_self_collision.py` 已按绑定接通并留有真跑读数、孪生等值与错配负例；其余各行仍按旧名默认运行，逐条按本表接，未接线前不得指向新命名候选。
+**接线现状**：URDF → FK/碰撞（`check_leg_reachability.py`、`check_self_collision.py`）与运行时（`check_joint_layout.py`、`stance_step_probe.py`）已按绑定接通，各有真跑读数、孪生等值与错配负例；其余各行仍按旧名默认运行，逐条按本表接，未接线前不得指向新命名候选。
 
 范围内残留硬编码逐点分成：要迁的名称选择、故意保留的旧协议/反例、几何或驱动假设。后两类不按字符串批量替换。实际漏点和延期站点只记验收记录；任何第一波必需消费者未接线，E 就不能交付。
 

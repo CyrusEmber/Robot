@@ -65,20 +65,43 @@ parser.add_argument("--urdf", default=str(_DEFAULT_URDF),
                     help="URDF the sole calibration is read from (pad mesh + contact-band normal); defaults "
                          "to the body this family declares and the header prints which file was read. Pass "
                          "the candidate's URDF together with its --usd when they are not the same body")
-parser.add_argument("--drop-joints", default="kfe,foot",
+parser.add_argument("--drop-joints", default=None,
                     help="comma-separated joint suffixes taken OFF the action interface, so their drives "
-                         "only hold the version's default target")
+                         "only hold the version's default target. Omitted: the naming's last two roots "
+                         "(the blade and the joint above it)")
 parser.add_argument("--self-collision", default="on", choices=("on", "off"),
                     help="the versioned config ships it off; a collision reading needs it on")
 parser.add_argument("--leg", default="lf", choices=("lf", "rf", "rl", "rr"), help="leg whose joint is ramped")
-parser.add_argument("--joint", default=leg_names.CHAIN_ROOTS[0], choices=leg_names.CHAIN_ROOTS,
-                    help="joint token of that leg; hip is the fore-aft stride axis")
+parser.add_argument("--joint", default=None,
+                    help="joint token of that leg, in the naming's words; default is the naming's root "
+                         "axis (the fore-aft stride axis). Checked against the naming, so a word the "
+                         "bound naming does not carry is refused rather than looked for in the asset")
+parser.add_argument("--naming", default="shared", choices=sorted(leg_names.NAMINGS),
+                    help="which words this body carries: 'shared' = every leg one root set (every asset "
+                         "today), 'split' = the front/rear rename. Declared, and verified against the "
+                         "spawned asset before anything is measured")
 parser.add_argument("--amplitude", type=float, default=0.15, help="half-range of the ramp [rad]")
 parser.add_argument("--steps", type=int, default=120, help="control steps per ramp direction")
 parser.add_argument("--settle", type=int, default=400, help="control steps of default-target holding first")
 parser.add_argument("--contact-n", type=float, default=5.0, help="force [N] above which a foot is loaded")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
+
+# The binding, resolved once here and carried down: which words this body carries is declared by the
+# caller (it is a property of the asset, not something a joint name can be asked about), and every role
+# below -- the ramped axis, the dropped joints, the contact bodies -- is read off it. A token the naming
+# does not carry is refused now rather than searched for in the asset and silently found nowhere.
+NAMING = leg_names.naming_for(args_cli.naming)
+_LEG_ROOTS = leg_names.roots_of(NAMING, args_cli.leg)
+if args_cli.joint is None:
+    args_cli.joint = _LEG_ROOTS[0]
+elif args_cli.joint not in _LEG_ROOTS:
+    raise SystemExit("%s: not one of this naming's roots for leg %s (%s)"
+                     % (args_cli.joint, args_cli.leg, ", ".join(_LEG_ROOTS)))
+if args_cli.drop_joints is None:
+    args_cli.drop_joints = ",".join(_LEG_ROOTS[-2:])
+_BOUND_SUFFIXES = tuple(dict.fromkeys(suffix for leg in leg_names.LEGS
+                                      for suffix in leg_names.suffixes_for(leg_names.roots_of(NAMING, leg))))
 simulation_app = AppLauncher(args_cli).app
 
 import gymnasium as gym  # noqa: E402
@@ -117,9 +140,9 @@ for _group in ("legs", "spine"):
 
 URDF = pathlib.Path(args_cli.urdf).resolve()
 URDF_SOURCE = _DEFAULT_URDF_SOURCE if URDF == _DEFAULT_URDF.resolve() else "--urdf override"
-PAD_NORMAL = {leg: torch.tensor(reach.pad_normal_in_link(URDF, leg), dtype=torch.float32)
+PAD_NORMAL = {leg: torch.tensor(reach.pad_normal_in_link(URDF, leg, NAMING), dtype=torch.float32)
               for leg in ("lf", "rf", "rl", "rr")}
-PAD_CLOUDS = diag_metrics.pad_point_clouds([diag_metrics.mesh_vertices(reach.pad_mesh(URDF, leg))
+PAD_CLOUDS = diag_metrics.pad_point_clouds([diag_metrics.mesh_vertices(reach.pad_mesh(URDF, leg, NAMING))
                                             for leg in ("lf", "rf", "rl", "rr")])
 env = gym.make(args_cli.task, cfg=cfg)
 env.reset()
@@ -130,14 +153,32 @@ step_dt = env.unwrapped.step_dt
 
 joint_names = list(robot.joint_names)
 body_names = list(robot.data.body_names)
+# The binding is verified against the SPAWNED asset before anything is measured: this is the only place the
+# runtime names exist, and a wrong binding shows up silently in two ways -- the contact pattern matches
+# nothing (zero pads reported, no error) or the ramped joint is simply absent. It does not prove the naming
+# is right FOR the body in any absolute sense; it proves the spawned asset carries the naming claimed for
+# it, which is what every role below is then read off.
+for leg in leg_names.LEGS:
+    end_joint = leg_names.joint_name(leg, leg_names.roots_of(NAMING, leg)[-1])
+    if end_joint not in joint_names:
+        raise SystemExit("spawned asset %s has no %s, so it does not carry the naming '%s' -- declare the "
+                         "naming of the asset it spawns" % (cfg.scene.robot.spawn.usd_path, end_joint,
+                                                            args_cli.naming))
+CONTACT_PATTERNS = leg_names.contact_body_patterns(NAMING)
+pad_bodies = [leg_names.end_link(leg, NAMING) for leg in leg_names.LEGS]
 _DEVICE = robot.data.body_pos_w.torch.device
 PAD_CLOUDS = PAD_CLOUDS.to(_DEVICE)  # the clouds are read from files, so they start on the CPU
 PAD_NORMAL = {leg: value.to(_DEVICE) for leg, value in PAD_NORMAL.items()}
 foot_names = [name for name in body_names
-              if any(re.fullmatch(pattern, name) for pattern in leg_names.CONTACT_BODY_PATTERNS)]
+              if any(re.fullmatch(pattern, name) for pattern in CONTACT_PATTERNS)]
+if sorted(foot_names) != sorted(pad_bodies):
+    raise SystemExit("the naming '%s' selects the contact bodies %s, but the asset's leg bodies are %s -- "
+                     "a pattern matching nothing would report zero pads, not an error"
+                     % (args_cli.naming, CONTACT_PATTERNS,
+                        sorted(n for n in body_names if n.split("_")[0] in leg_names.LEGS)))
 foot_ids = [body_names.index(name) for name in foot_names]
 non_foot_ids = [i for i in range(len(body_names)) if body_names[i] not in foot_names]
-target_joint = "%s_%s_joint" % (args_cli.leg, args_cli.joint)
+target_joint = leg_names.joint_name(args_cli.leg, args_cli.joint)
 if target_joint not in joint_names:
     raise SystemExit("task %s has no joint %s (joints: %s)" % (args_cli.task, target_joint, joint_names))
 target_index = joint_names.index(target_joint)
@@ -169,9 +210,9 @@ _term, _column, _scale, _uses_default = carried[target_joint]
 default = robot.data.default_joint_pos.torch
 print("ACTION %s -> term=%s column=%d scale=%.4f use_default_offset=%s" % (
     target_joint, _term, _column, _scale, _uses_default))
-print("CARRIED leg joints: %s" % " ".join(sorted(n for n in carried if n.endswith(leg_names.JOINT_SUFFIXES))))
+print("CARRIED leg joints: %s" % " ".join(sorted(n for n in carried if n.endswith(_BOUND_SUFFIXES))))
 print("UNCOMMANDED leg joints (PD holds their default target): %s" % " ".join(
-    sorted(n for n in joint_names if n.endswith(leg_names.JOINT_SUFFIXES)
+    sorted(n for n in joint_names if n.endswith(_BOUND_SUFFIXES)
            and n not in carried)))
 
 

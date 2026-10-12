@@ -51,14 +51,19 @@ machine version of pitfall P009, where reading the axis VALUE instead of the arm
 and any inserted joint) and names the leg's largest fore-aft joint.
 
 Part 1.7 (composite grid) sweeps the pair given by --sweep-a/--sweep-b (joint TOKENS, prefixed with
---sweep-leg; defaults `lf`/`hfe`/`kfe`, which reproduces the 2026-09-21 lizard table) and WARNs when the
-pair excludes the leg's largest fore-aft joint, so the grid cannot be mistaken for the stride evidence on
-a family whose stride axis is elsewhere. The single-joint table is not a bound -- hfe sweeps the whole
-distal assembly, so what kfe does to the shank changes hfe's radius. The plate CENTRE is a fixed material
-point on purpose: the plate pitches, so "the lowest corner" changes identity between cells and a table of
-those x values measures the plate's own 0.458 m extent instead of the leg's stroke. Base x is invariant
-under a vertical shift, so each cell also reports the body height it would need to put the plate floor
-back on the ground.
+--sweep-leg; defaults `lf` plus the naming's knee and ankle, which reproduces the 2026-09-21 lizard table)
+and WARNs when the pair excludes the leg's largest fore-aft joint, so the grid cannot be mistaken for the
+stride evidence on a family whose stride axis is elsewhere. The single-joint table is not a bound -- hfe
+sweeps the whole distal assembly, so what kfe does to the shank changes hfe's radius. The plate CENTRE is a
+fixed material point on purpose: the plate pitches, so "the lowest corner" changes identity between cells
+and a table of those x values measures the plate's own 0.458 m extent instead of the leg's stroke. Base x
+is invariant under a vertical shift, so each cell also reports the body height it would need to put the
+plate floor back on the ground.
+
+``--naming`` declares which words the spawned asset carries (``shared`` = every leg one root set, ``split``
+= the front/rear rename) and is verified against the spawned bodies before anything is printed: every role
+below (the leg chain, the anatomy links, the sweep pair, the plate) is read off it, so a body read under
+the naming of another is refused instead of asserting about links it does not have.
 
 Action coverage is printed as the full index -> joint order; `--require-all-actions` turns "every joint
 of the asset is carried by exactly one action term, and the vector is as wide as the mapping" into a
@@ -91,6 +96,11 @@ import xml.etree.ElementTree as ET
 
 from isaaclab.app import AppLauncher
 
+# The leg table, before the parser because ``--naming`` offers its ids: stdlib-only, and the same import
+# order ``stance_step_probe`` uses. It is aliased because this script keeps the asset's own joint-name list
+# in a local called ``joint_names`` later on.
+from rl_exp.tasks import joint_names as leg_names  # noqa: E402  (task -> the leg chain)
+
 parser = argparse.ArgumentParser(description="Asset layout + actuation check (any task id).")
 parser.add_argument(
     "--task",
@@ -112,16 +122,25 @@ parser.add_argument(
     "covers all four legs; this only picks which leg the pair grid is computed for",
 )
 parser.add_argument(
+    "--naming",
+    default="shared",
+    choices=sorted(leg_names.NAMINGS),
+    help="which words the spawned asset carries: 'shared' = every leg one root set (every asset today), "
+    "'split' = the front/rear rename. Declared, and verified against the spawned bodies before the "
+    "layout gates run -- those gates index the chain by role, so a wrong binding would assert about "
+    "links this asset does not have",
+)
+parser.add_argument(
     "--sweep-a",
-    default="hfe",
-    help="first joint TOKEN of the composite load-height sweep (hip/haa/hfe/kfe/foot, prefixed with "
-    "--sweep-leg). The default reproduces the 2026-09-21 lizard table; on an asset whose stride "
+    default=None,
+    help="first joint TOKEN of the composite load-height sweep, in --naming's words (default: the "
+    "naming's knee, i.e. chain position 2 -- the 2026-09-21 lizard table). On an asset whose stride "
     "axis is another joint this run prints a WARN and the pair must be named explicitly",
 )
 parser.add_argument(
     "--sweep-b",
-    default="kfe",
-    help="second joint TOKEN of the composite load-height sweep, prefixed with --sweep-leg",
+    default=None,
+    help="second joint TOKEN of the composite load-height sweep (default: the naming's ankle, position 3)",
 )
 parser.add_argument(
     "--require-all-actions",
@@ -140,7 +159,15 @@ import isaaclab_tasks  # noqa: F401
 from isaaclab.utils.math import quat_apply, quat_apply_inverse
 from isaaclab.utils.string import string_to_callable
 
-from rl_exp.tasks import joint_names, obs_protocol  # noqa: E402  (task -> family; the leg chain)
+from rl_exp.tasks import obs_protocol  # noqa: E402  (task -> family; the body a task spawns)
+
+# The binding, resolved once here and read by every role below. It is DECLARED by the caller (a body's
+# words are a property of the asset), and it is verified against the spawned bodies before the layout
+# gates -- which index the chain by role -- so a wrong binding is refused instead of asserting about
+# links this asset does not have. The module is aliased above because this script legitimately keeps the
+# asset's own joint-name list in a local called ``joint_names``; a bare import made that list shadow the
+# table and this tool died on ``'list' object has no attribute 'CHAIN_ROOTS'`` (2026-10-12).
+NAMING = leg_names.naming_for(args_cli.naming)
 
 INJECT_RAD = 0.3
 SETTLE_STEPS = args_cli.settle
@@ -152,6 +179,12 @@ env.reset()
 robot = env.unwrapped.scene["robot"]
 joint_names = list(robot.joint_names)
 body_names = list(robot.data.body_names)
+for _leg in leg_names.LEGS:
+    _end = leg_names.end_link(_leg, NAMING)
+    if _end not in body_names:
+        raise SystemExit(f"task {args_cli.task} spawns {cfg.scene.robot.spawn.usd_path}, which has no "
+                         f"{_end}: it does not carry the naming '{args_cli.naming}'. Declare the naming "
+                         "of the asset the task spawns")
 
 # The script is task-parameterized, so its asset knowledge has to be too: the leg chain of a family
 # that INSERTED a joint is a different chain, and a hand-written "hfe x kfe" sweep on it measures the
@@ -188,24 +221,42 @@ def urdf_joints() -> dict:
 
 JOINTS = urdf_joints()
 
-# leg tokens, proximal -> distal. `hip` is lizard2's addition (a vertical axis at the leg root); a
-# family that inserts another joint adds a token to the name table (rl_exp/tasks/joint_names.py),
-# which is the one line a new joint costs -- seven tools used to carry a copy of this list each.
-_LEG_TOKENS = joint_names.CHAIN_ROOTS
+
+def leg_of(link: str) -> str:
+    """The leg a link belongs to, ``lf`` from ``lf_shoulder_abduct``: the two-letter prefix.
+
+    Sliced, not split on the last ``_``: a root may carry an underscore of its own (``shoulder_swing``),
+    and ``rpartition`` would hand back half a word. Every leg id in this repo is two characters, which is
+    what makes the prefix a fixed-width field.
+    """
+    return link[:2]
+
+
+def token_of(link: str) -> str:
+    """The chain token a link carries, ``shoulder_abduct`` from ``lf_shoulder_abduct``."""
+    return link[len(leg_of(link)) + 1:]
 
 
 def leg_probes() -> list[tuple[str, str, str]]:
-    """``(sim joint, child link, chain endpoint)`` for every leg joint the ASSET has, all four legs."""
+    """``(sim joint, child link, chain endpoint)`` for every leg joint the ASSET has, all four legs.
+
+    Which joints are a leg's comes off the binding: a token the declared naming does not carry is not a
+    leg joint here, and the chain end is the naming's end link. A body read under the wrong naming then
+    finds NO leg joints rather than measuring a chain it is not -- and the caller's gate on the end links
+    has already refused that case before this runs.
+    """
     out = []
     for name in joint_names:
-        if not name.endswith("_joint"):
+        if not name.endswith(leg_names.JOINT_SUFFIX):
             continue
-        link = name[: -len("_joint")]
-        prefix, _, token = link.rpartition("_")
+        link = name[: -len(leg_names.JOINT_SUFFIX)]
+        leg = leg_of(link)
+        if leg not in leg_names.LEGS or token_of(link) not in leg_names.roots_of(NAMING, leg):
+            continue
         # The chain's end link, read from the name table: ``.*_foot`` matches this link AND the joint
         # that moves it, so the body a probe lands on is the table's business, not a suffix guess.
-        end = joint_names.end_link(prefix)
-        if token not in _LEG_TOKENS or link not in body_names or end not in body_names:
+        end = leg_names.end_link(leg, NAMING)
+        if link not in body_names or end not in body_names:
             continue
         out.append((name, link, end))
     return out
@@ -222,10 +273,13 @@ print("=== LAYOUT (base frame: sphere head=+x, antenna tail=-x, left=+y, up=+z) 
 p = pos_b()[0]
 base = p[body_names.index("base_link")]
 # The leg bodies are the asset's own (a family that inserted `hip` prints one more row per leg), drawn
-# in the chain's own order -- the second copy of that order this file used to carry is `_LEG_TOKENS`.
+# in the chain's own order -- read off the binding, so "the chain's order" is the declared naming's, not
+# a list this file carries.
 for name in ("neck_pitch", "chest_pitch", "tail1_pitch", "tail3_pitch") + tuple(
-        child for _, child, _ in sorted(leg_probes(),
-                                        key=lambda probe: (probe[1][:2], _LEG_TOKENS.index(probe[1].rpartition("_")[2])))):
+        child for _, child, _ in sorted(
+            leg_probes(),
+            key=lambda probe: (leg_of(probe[1]),
+                               leg_names.roots_of(NAMING, leg_of(probe[1])).index(token_of(probe[1]))))):
     i = body_names.index(name)
     print("BODY %-11s rel=(%7.3f, %7.3f, %7.3f)" % (name, p[i, 0] - base[0], p[i, 1] - base[1], p[i, 2] - base[2]))
 
@@ -233,13 +287,17 @@ for name in ("neck_pitch", "chest_pitch", "tail1_pitch", "tail3_pitch") + tuple(
 # geometry for two versions) dies here
 assert p[body_names.index("neck_pitch"), 0] - base[0] > 1.0, "sphere head (neck_pitch) must sit at +x"
 assert p[body_names.index("tail3_pitch"), 0] - base[0] < -1.0, "antenna tail (tail3_pitch) must sit at -x"
-for n in ("lf_haa", "rf_haa"):
+for n in (leg_names.link_name("lf", leg_names.roots_of(NAMING, "lf")[1]),
+          leg_names.link_name("rf", leg_names.roots_of(NAMING, "rf")[1])):
     assert p[body_names.index(n), 0] - base[0] > 0, f"front leg {n} must be ahead of the root"
-for n in ("rl_haa", "rr_haa"):
+for n in (leg_names.link_name("rl", leg_names.roots_of(NAMING, "rl")[1]),
+          leg_names.link_name("rr", leg_names.roots_of(NAMING, "rr")[1])):
     assert p[body_names.index(n), 0] - base[0] < 0, f"rear leg {n} must be behind the root"
-for n in ("lf_haa", "rl_haa"):
+for n in (leg_names.link_name("lf", leg_names.roots_of(NAMING, "lf")[1]),
+          leg_names.link_name("rl", leg_names.roots_of(NAMING, "rl")[1])):
     assert p[body_names.index(n), 1] - base[1] > 0, f"left leg {n} must be on +y"
-for n in ("rf_haa", "rr_haa"):
+for n in (leg_names.link_name("rf", leg_names.roots_of(NAMING, "rf")[1]),
+          leg_names.link_name("rr", leg_names.roots_of(NAMING, "rr")[1])):
     assert p[body_names.index(n), 1] - base[1] < 0, f"right leg {n} must be on -y"
 print("LAYOUT_GATES PASSED (head +x / tail -x / legs anatomical)")
 
@@ -314,13 +372,18 @@ for joint, child, endpoint in FK_PROBES:
 # then sweeps the pair and reports the fore-aft (base +x) excursion of the plate's centre.
 # The base is not re-solved during the sweep (`sim.forward()` updates kinematics only), so the body
 # stays at the settled height and only the leg moves.
-_SWEEP_A, _SWEEP_B = args_cli.sweep_a, args_cli.sweep_b
-_FOOT_LINK = joint_names.end_link(args_cli.sweep_leg)
-for _token in (_SWEEP_A, _SWEEP_B):
-    if f"{args_cli.sweep_leg}_{_token}_joint" not in JOINTS or _FOOT_LINK not in body_names:
+_SWEEP_ROOTS = leg_names.roots_of(NAMING, args_cli.sweep_leg)
+_SWEEP_A = args_cli.sweep_a or _SWEEP_ROOTS[2]
+_SWEEP_B = args_cli.sweep_b or _SWEEP_ROOTS[3]
+_FOOT_LINK = leg_names.end_link(args_cli.sweep_leg, NAMING)
+for _flag, _token, _given in (("a", _SWEEP_A, args_cli.sweep_a), ("b", _SWEEP_B, args_cli.sweep_b)):
+    if _given is not None and _token not in _SWEEP_ROOTS:
+        raise SystemExit(f"--sweep-{_flag} {_token}: not one of this naming's roots for leg "
+                         f"{args_cli.sweep_leg} ({', '.join(_SWEEP_ROOTS)})")
+    if leg_names.joint_name(args_cli.sweep_leg, _token) not in JOINTS or _FOOT_LINK not in body_names:
         raise SystemExit(f"--sweep-leg {args_cli.sweep_leg} + --sweep-a/-b {_SWEEP_A}/{_SWEEP_B}: no such"
-                         f" joint ({args_cli.sweep_leg}_{_token}_joint) or foot ({_FOOT_LINK}) on this asset."
-                         f" Joints here: {sorted(JOINTS)}")
+                         f" joint ({leg_names.joint_name(args_cli.sweep_leg, _token)}) or foot "
+                         f"({_FOOT_LINK}) on this asset. Joints here: {sorted(JOINTS)}")
 
 
 def plate_corners(foot_link: str):

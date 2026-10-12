@@ -23,12 +23,12 @@
 | `paths.example.yaml` | 主机路径模板（`isaac_root` + `python`）；每台机器 copy 成 `paths.yaml`（不入库） |
 | `README.md` / `AGENTS.md` | 仓定位与摆位步骤 / 工作与 IsaacLab 守则 |
 | `ARCH_PLAN.md` | 架构改造的判据与实现形态（**只写当时证据，不写当前状态**：加粗状态词、H1 标题行状态词与"覆盖文档里的闸门判词"由 `check_version_docs.py` 扫） |
-| `work\` | 在办事项（`active\`，一项一文件）与关闭归档（`closed\<year>\`）；形状闸 `check_work_docs.py`，发现命令见 `AGENTS.md` |
+| `work\` | 在办事项（`active\`，一项一文件）与关闭归档（`closed\<year>\`）；`check_work_docs.py` 查形状、发现事项及预览/生成事项骨架（`--scaffold`）；用法见 `--help` |
 | `FILEMAP.md` | 本文件 = 目录导航（见文首边界） |
 | `rl_exp\` | 任务包（自包含核心）；`import rl_exp` 经 venv `.pth` 可达 |
 | `rl_exp\tasks\` | gym 任务包 = 训练代码本体：家族线 + 支线（哪条线存在看 `versions\lines.json`）；注册表在 `__init__.py` |
 | `rl_exp\versions\` | 声明与冻结层：`<family>\<line>\` 路线层 + `vN\` 版本目录 + 配方 diff 目录 + 全仓声明 JSON + 各线 `cfg_lock.json` |
-| `rl_exp\blender\` | DCC 源件 + 一次性 Blender 脚本（几何 / 绑骨 / 重命名的唯一出处） |
+| `rl_exp\blender\` | DCC 源件（`.blend`，SSOT 与候选）；Blender 脚本全在 `scripts\` 子目录（几何 / 绑骨 / 重命名的唯一出处） |
 | `rl_exp\assets\` / `rl_exp\meshes\` | 训练用 USD 资产 / URDF 网格（`versions\lizard\meshes\` 为版本侧网格，与仓根 `rl_exp\meshes\` 同构） |
 | `rl_exp\tools\` | 工具按类分目录：`pipeline\` 资产与 UE 导出 / `verify\` 离线闸门与套件 / `trainlog\` 训练日志 / `runrecord\` 运行记录 / `diagnose\` 诊断（人看的读数）/ `archive\` 考古。**新脚本先选目录；一次性脚本别落仓根**（仓根声明表 = `check_suite_banners.py`） |
 | `rl_exp\docs\pitfalls.md` | 踩坑登记（P00x 编号）—— 闸门"为什么存在"写在编号条目里 |
@@ -61,7 +61,7 @@
 | `rl_exp\tools\verify\view_terrain.py` | GUI 看机器人站**指定版本的真实地形**（每 env 头向箭头 + 接触点探针 vs 碰撞栈预算） |
 | `rl_exp\tools\diagnose\plot_joints.py` | 读探针报告出图（**不起仿真**）：逐关节实际/目标/两条限位 + 贴限位着色 + 逐关节"贴限位帧占比"柱图；`--at_stop_rad` 是判据带宽，`--self-check` 手算边界 |
 | `rl_exp\tools\diagnose\pose_slider.py` | **交互摆姿器**（固定机身、无重力、无仿真）：四腿各 5 关节 + 机身高度滑块；读数 = 每腿倾角 / 最低顶点离地 / 足端偏移 / 末次触碰关节的轴向与导数（与 `check_leg_reachability.py` 同口径）。`limits` 只在**内存**里放宽，`reset`/`save`/`--load` 走 JSON（默认落 `rl_exp\tools\diagnose\out\pose_slider\`，gitignore）；`--self-check` 无界面可跑；需 `env_isaaclab` 的 python |
-| `rl_exp\tools\diagnose\stance_step_probe.py` | **静站承重 + 单关节小幅迈步的仿真读数**（PLAY 任务、1 env、无策略无 checkpoint）：先 `--settle` 步静置（零动作 = 未命令关节只由 PD 保持默认，即"取消动作通道"后的情形），再按**连续三角插值**把 `--leg`/`--joint` 的目标扫出去再扫回来，每控制步采样（base 高 / 四脚受力 / 标定后的足底法线倾角 / 接触点水平速度 / 力矩 / 非足体最大接触力）。`--usd`/`--urdf` 换资产与标定来源、`--drop-joints` 摘关节；**口径限制**（力矩由 Kp/Kd 重建等）；"碰撞"指非足体接触力，自碰撞关时不证明无碰撞 |
+| `rl_exp\tools\diagnose\stance_step_probe.py` | **静站承重 + 单关节小幅迈步的仿真读数**（PLAY 任务、1 env、无策略无 checkpoint）：先 `--settle` 步静置（零动作 = 未命令关节只由 PD 保持默认，即"取消动作通道"后的情形），再按**连续三角插值**把 `--leg`/`--joint` 的目标扫出去再扫回来，每控制步采样（base 高 / 四脚受力 / 标定后的足底法线倾角 / 接触点水平速度 / 力矩 / 非足体最大接触力）。`--usd`/`--urdf` 换资产与标定来源、**`--naming`（`shared`/`split`）声明所造资产词根并在造出后核对**（末端关节缺失或接触模式匹配不到 4 只脚即拒）、`--drop-joints` 摘关节（缺省取该命名末两位词根）；**口径限制**（力矩由 Kp/Kd 重建等）；"碰撞"指非足体接触力，自碰撞关时不证明无碰撞 |
 | `rl_exp\tools\verify\check_leg_reachability.py` | 腿链**离线 FK 与摆姿读数**（链自 URDF 树遍历、垫网格取 URDF 自己的链端碰撞体；stdlib，不碰仿真，`--frames` 是唯一碰 torch 的路径）：可 import 的读点 = `chain_frames` / `foot_pose` / `joint_effect` / `pad_state`（世界系）/ `fold_tilt`（无向，**不能作验收**）/ `faces_down`（有向：翻掌必拒）/ `KNEE_FACTS`（膝伸直余量，**>0 = 可达反曲**）/ `straight_hfe` / `leg_plane_yaw`；`--urdf` 换机体、**`--naming`（`shared`/`split`）声明该机体词根、`--compare-naming` 声明第二机体**（声明与实际树不符即拒；`--self-check` 内含同几何改名孪生：两套命名经同一 reader 读数全等、互相错配必拒）、`--compare <候选.urdf>` 同姿态比两机体、`--self-check` 对口径、`--break-test` 破坏口径并**要求自检变红**。**可达性扫描（A/B/C 三段）尚未实现** |
 | `rl_exp\tools\verify\check_self_collision.py` | 限位盒内自碰撞的**网格级**检查（离线，`single`/`combined` 两组姿态）：`--family` 按该家族 `assets.json` 声明的机体解析 URDF、`--urdf` 覆盖（**首行打印读了哪个文件与依据**）、**`--naming`（`shared`/`split`）声明该机体词根**（角色按位次取，末端关节不存在即拒——否则错配命名会扫出 0 姿态的"干净"读数）；命中或余量低于 `--clearance`（默认 5 mm）即 exit 1 打 `SELF_COLLISION_COUNTEREXAMPLE`。**不在离线清单**——采用机体当前是红的，加红闸等于每天红一次；方法天花板（凸包近似、漏边-面交叉）由它自己印出 |
 | `rl_exp\tools\verify\terrain_preflight.py` | 开训前地形预检：离线展开**冻结 v11 的 `terrain_grid` 表**（经 `param_grid_terrain` 构建器读 `versions\lizard\main\v11\main_params.yaml`，`--version` 只认 v11）+ 粗糙度 + PNG 预览 + 几何摘要。它是**离线预览的回归基线**，不是真跑所站地形的证据（真跑几何由 `terrain_split_probe` 采集归档） |
@@ -81,7 +81,7 @@
 | `check_configclass_fields.py` | 字段面闸门：`params_version` 一类的声明必须真的进 `to_dict`（类属性读不到即红）；反证 `test_configclass_fields_gate.py` |
 | `check_pxr_leak.py` | 按注册入口**构造** cfg 并断言 `pxr` 不进 `sys.modules`（防 Kit 启动被毒化，见 `rl_exp\docs\pitfalls.md` P001/P003/P004）；反证 `test_pxr_leak_gate.py` |
 | `check_split_probe_wait.py` | P005：构造期等框架 import 的载体不许是 `sys.meta_path` finder（导入在第一个给出 spec 的 finder 处停止） |
-| `check_joint_layout.py` | 关节布局硬闸（球头必 +X / 天线必 −X / 腿序）+ 单关节注入驱动读数 |
+| `check_joint_layout.py` | 关节布局硬闸（球头必 +X / 天线必 −X / 腿序）+ 单关节注入驱动读数；角色按 `--naming`（`shared`/`split`）声明的词根取位次，所造资产缺该命名的末端 link 即拒 |
 | `check_record_bindings.py` / `check_golden_frozen.py` / `check_terrain_split_source.py` | 记录绑定原语单源看守（四条签名 + 反证）/ 冻结点与拆地来源的来源检查 |
 | `check_suite_shape.py` / `check_suite_banners.py` | 套件形状（清单唯一来源、不许未声明 spawn 解释器）与**仓根卫生**：`.bat` 横幅转义（未转义 `<`/`>` 是重定向，真往仓根写过一个 `config`）+ **仓根只许声明项**（`DECLARED_ROOT`，`hooks\pre-commit` 也跑 ⇒ 提交即截止线） |
 | `framework_pin_check.py` | 框架 pin：IsaacLab 内部符号 + 已验证 commit + `fork_patches\*.patch` 存档校验（按序应用到 pristine 副本再逐字节比） |
@@ -104,7 +104,7 @@
 - **生成的注册类名是 ckpt 载荷的一部分**：`recipe_tasks.py` 沿用被替换的版本类名（载荷记 `type(cfg).__name__` 并参与 resume 身份核验），改名会让跨路径续训被拒。
 - **续训状态的硬失败边界**：任务可声明 `REQUIRES_CURRICULUM_STATE`，缺载荷 / 缺 slot / 未覆盖 stateful term / hook 未装**训练前终止**；`--drop_curriculum_state`（旧 `--weights_only` 为别名）是唯一显式降级；状态只从 rank 0 写，多 GPU 不在保证范围。
 - **`fork_patches\*.patch` 有顺序与格式纪律**：按文件名序应用，`train_seed_rng.patch` 排最后（其 hunk 行号指"全部补丁打完后"）；一份存档里同一个文件只能有**一个** `diff --git` 段——追加第二段会让 `git apply` 报 `wrong type`，正确动作是**新起一份存档**。
-- **`blender\` 的输入只有一个**：`generate_urdf.py` / `fix_bones.py` / `rotate_rig.py` / `rename_flip_v8.py` 一律以 `lizard_stance.blend` 为输入；`lizard.blend` 只在"从原始模型重做几何/绑骨/贴图"时才用得上，**管线不读它**（同目录 `lizard.glb` 未入库，是它的导出件）。**例外是候选**：`lizard2_stance_candidate.py` 读同一 SSOT、写 `lizard2_stance_candidate.blend`（站姿候选，2026-10-08 由 lizard2/main/v3 采用；实际机体 = `rl_exp/lizard2_candidate/` 下的 usda + 同目录 URDF/meshes，来源与限制见 `acceptance/records/2026-10-08-lizard2-v3-landing.md`）；出它的 URDF 用 `generate_urdf.py --robot lizard2_candidate --blend <候选> --out_dir rl_exp\lizard2_candidate`（默认路径仍写 `versions\<family>\meshes`，那条被冻结资产的 `asset_lock.json` 钉住）。
+- **`blender\` 的输入只有一个**：`scripts\` 下的 `generate_urdf.py` / `fix_bones.py` / `rotate_rig.py` / `rename_flip_v8.py` 一律以 `lizard_stance.blend` 为输入；`lizard.blend` 只在"从原始模型重做几何/绑骨/贴图"时才用得上，**管线不读它**（同目录 `lizard.glb` 未入库，是它的导出件）。**例外是候选**：`scripts\lizard2_stance_candidate.py` 读同一 SSOT、写 `lizard2_stance_candidate.blend`（站姿候选，2026-10-08 由 lizard2/main/v3 采用；实际机体 = `rl_exp/lizard2_candidate/` 下的 usda + 同目录 URDF/meshes，来源与限制见 `acceptance/records/2026-10-08-lizard2-v3-landing.md`）；出它的 URDF 用 `scripts\generate_urdf.py --robot lizard2_candidate --blend <候选> --out_dir rl_exp\lizard2_candidate`（默认路径仍写 `versions\<family>\meshes`，那条被冻结资产的 `asset_lock.json` 钉住）。脚本目录与 `.blend` 同级分离：脚本按 `_ASSET_DIR = dirname(_SCRIPT_DIR)` 找资产。
 - **工具目录按类别分，仓根不是住户**：新脚本先决定属于 `verify\`（闸门 / 套件，进离线清单）还是 `diagnose\`（人看的读数），一次性历史脚本进 `archive\`；**攒在仓根的一次性脚本必须删**——仓根只许放声明项（`check_suite_banners.py:DECLARED_ROOT` 扫，`hooks\pre-commit` 也跑 ⇒ 提交即截止线）。
 - **`teacher_mdp.py` 一个模块承载 v3–v13 的增量段**（v3 包 / v5 行 SIR / v11 联合粒子 / v12 噪声 / v13 跟踪核），按版本段落读；"只增不改"是纪律。
 
@@ -126,7 +126,7 @@
 
 ## 历史包袱提示（仍然改变今天决策的那些）
 
-- `blender\build_rig.py`、`tools\archive\patch_*.py`、`tools\pipeline\migrate_joint_names_v8.py` 是早期一次性脚本（仅考古 / 迁移出处，别照抄改主路径）。
+- `blender\scripts\build_rig.py`、`tools\archive\patch_*.py`、`tools\pipeline\migrate_joint_names_v8.py` 是早期一次性脚本（仅考古 / 迁移出处，别照抄改主路径）。
 - `ablation_harness\results\...\summary.csv` 里 2026-08-28 那两行的 `energy_per_m_j` **无效**（energy 修复前少乘 step_dt，虚高 ~50×）；其余列有效，energy 列重跑后才有意义。
 - 套件口径：`lizard_suite_v1` 的 rough 两列实为均匀抬升平板（`noise_range` 单值使 `np.random.choice` 退化），拿它当起伏地形会误判；真起伏从 `lizard_suite_v2` + 协议 v3 起，v1/v2/v3 **不得混表**。
 - 旧趴窝 checkpoint 在 `E:\IsaacLab\logs\rsl_rl\lizard_rough\2026-08-28_14-08-22`（家族 run，不在仓里）。
