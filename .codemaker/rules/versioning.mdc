@@ -66,6 +66,8 @@ alwaysApply: false
    NOTES 的"训练读数"行只放 csv 落点 + 读法引用 + 该记录路径（**完整复读命令与读数都归该记录**），不复述数字
 5. 家族文档版本历史表加一行；git 侧 commit + tag `<family>-<line>-vN+1`（tag = 整树快照；commit/push 细节走 git-auto-sync skill）
 
+**复杂 PLAN 的探测链**：在同一 PLAN 的目的/假设与验收之间写“关键假设 → 最小探测 → 停止条件”，不另建 spec/checklist。只列会改变路线或阻止开训的假设；每条点明可证伪命题、最小输入/对照、已有入口与可运行命令、观察判据，以及失败或缺证时停哪一步、由谁处理。先探测高风险前提，再做依赖它的实现或长训；声明一致检查不能单独证明运行时/物理行为。判据或预算未获准不代填，明确阻塞与决策人；判据在比较前确定，失败不事后放宽。已有证据只留 `acceptance/records/` 指针，读数不复制；与验收共用的判据在一处定义、另一处引用。既有新线生成入口 `rl_exp/tools/pipeline/declare_family.py` 只产待填写骨架，生成不等于定稿。单变量短骨架不强制新增节；已冻结/已训 PLAN 不因写法升级回填，新建或合法修订时应用。
+
 **机器闸门**：第 2/5 步可量化项（每版本目录四件套 PLAN/NOTES/yaml/asset_lock 锁自身 + **base.json 血统边合法** + FAMILY 版本史行）由 `rl_exp\tools\verify\check_version_docs.py` 看守——`run_offline_checks.bat` + pre-commit 均跑，漏记录与 DR 漂移同级红；tag 缺失仅 WARN（历史前缀可不统一）。线身份与生命周期另由 `check_recipe_registry.py` 看守（**发现到的线必须有记录**、退休须带 `retired_at` 与非空 `reason`、`successor` 必须存在且为 active 的另一条线；闸门**不读时钟**——退休是目录修订，不是日期到期），配方 golden 由 `check_cfg_lock.py` 看守（**一条线一个锁文件**、`--update` 必须带 `--line` 与 `--reason`、任务必须有 `params_line`），四份文件约定（yaml 命名 / 线目录 / 锁落点）由 `recipe_lines.py` 单点供应。纯约定没闸门 = 必然欠账。
 
 **红线**：已发布 term 的实现永不改语义（新版本只允许加 term）；冻结目录只读；**配方锁正文（`versions/**/cfg_lock.json`）是闸门产物、不是阅读对象**——取用与判定只走 `check_cfg_lock.py` 的输出（`--diff` / `--vs-upstream` / `--self-test`），改动只走 `--update --line <线> --reason`；逐字读正文、手改正文、把正文抄进文档或事项都算绕开闸门（结论与实测归 evidence 记录，事项只留落点引用）。

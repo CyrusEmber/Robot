@@ -117,6 +117,11 @@ def main() -> int:
         check("apply/artifacts-mention-no-other-family", "lizard" not in texts.lower(),
               "an artifact of the new family carries another family's name (template leakage)")
 
+        plan = (root / "rl_exp" / "versions" / "zoo" / "main" / "v1" / "PLAN.md").read_text(encoding="utf-8")
+        check("apply/plan-probe-chain", all(text in plan for text in (
+            "## 关键假设 → 最小探测 → 停止条件", "可运行命令", "失败不事后放宽", "acceptance/records/"
+        )), "PLAN omitted the probe chain or its evidence/stop boundary")
+
         # --- 3. the zero-drift guard's scope excludes ONLY the target family -----------------
         real = pathlib.Path(".").resolve()
         scope = df.foreign_locks(real, "lizard")

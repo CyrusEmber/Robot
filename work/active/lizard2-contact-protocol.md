@@ -4,8 +4,8 @@ title: lizard2 新接触评测协议：滑移/滚动/偏转样本对拍与承重
 scope: ablation_harness, rl_exp/tools/verify, acceptance/records
 status: open
 landing: ablation_harness/protocols, ablation_harness/baseline_metrics.py
-next: 不等机体候选，可立即开始：通道存在性已核（清单与缺口见动作 1 指的那份记录），接着用合成/固定样本（固定偏转、滚动、真实滑动）对拍并发布具名新协议草案。阈值数值不在本项定；最终阈值由 lizard2-family-landing S5 在比较前经用户确认。
-close_when: 新上下文审核协议文件与标定样本：三类样本（偏转、滚动、真实滑动）在同一口径下被区分，行走/零速站立分场景，允许尾触地与异常主承重分别判，report_only 清单收窄且旧协议未被改写；读数归 acceptance/records，协议号与配方号不互推。通过交 lizard2-family-landing；样本不可区分或通道缺失则退回 in_progress，口径取舍需用户的置 blocked。
+next: 执行者按正文“动作”从通道缺口定口径、对拍三类样本并发布新协议草案；不等机体，阈值交 S5 确认。
+close_when: 新上下文按正文“关闭条件”审核协议与标定样本，通过交 lizard2-family-landing；缺口按责任退回。
 evidence: acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory, acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, acceptance/records/2026-10-10-lizard2-v3-first-eval, acceptance/records/2026-10-10-lizard2-v3-band-buckets, acceptance/records/2026-10-10-lizard2-carrier-dwell-calibration, acceptance/records/2026-10-09-lizard2-v3-eval-entry-and-inert-velocity-field
 ---
 
@@ -19,6 +19,13 @@ evidence: acceptance/records/2026-10-12-lizard2-drive-capability-and-name-invent
 4. 整理 `report_only` 实现清单，移除 `dof_torque_frac_of_limit`（关节力矩留专项采集），未实现的 `foot_yaw_deg` 不进新清单。
 5. `no_non_foot_carrier` 的持续部分承重档补齐幅值标定：允许尾触地与异常载荷分别标定，不沿用旧分组；既有样本、复读方法和缺口见 `acceptance/records/2026-10-10-lizard2-carrier-dwell-calibration.md`。拖尾与新增掌跖段承重进入具名接触分组，接触体名称取 `lizard2-body-drive-candidate` 名表（新名确定前以占位声明，采用时一并落定）。
 6. 声明固定命令序列、速度带、等待窗与覆盖要求，按新场景采集，不把历史随机场景读数当新证据。历史分桶只作参考。
+
+## 关闭条件
+
+- **审核者与输入**：新上下文读取协议文件、标定样本与 evidence 中的真实记录；执行者完成后先置 pending_review。
+- **可观察验收**：偏转、滚动、真实滑动三类样本在同一口径下被区分；行走与零速站立分场景；允许尾触地与异常主承重分别判定。
+- **协议与证据边界**：`report_only` 清单收窄，旧协议不改写；读数归 `acceptance/records/`，协议号与配方号不互推。最终阈值交 `lizard2-family-landing` S5 在比较前经用户确认，不在本项定。
+- **结果处理**：通过交 `lizard2-family-landing`；样本不可区分或通道缺失退 in_progress，口径取舍需用户时置 blocked。
 
 ## 边界
 

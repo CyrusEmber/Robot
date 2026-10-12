@@ -4,8 +4,8 @@ title: lizard2 配方、动作接口与评测协议交付
 scope: rl_exp/versions/lizard2, rl_exp/tasks, rl_exp/tools/pipeline, rl_exp/tools/verify, ablation_harness
 status: open
 landing: rl_exp/versions/lizard2/main/main_params.yaml, rl_exp/tasks/lizard2_recipe.py, rl_exp/tools/pipeline/emit_diff_declaration.py, rl_exp/tools/verify/check_recipe_build.py
-next: 按正文 S5 先整理新配方的机制落点；参数/目标采用须消费 lizard2-body-drive-candidate 与 lizard2-contact-protocol 的已审交付，未通过不冻结。S5 条件齐备后再执行 S6 正式采用（含改名迁移与旧机体冻结版本退休）、预检、用户确认预算和训练验收；当前不改机体或启动训练。
-close_when: 新上下文对照 S5/S6 检查已审设计接入、新接触协议及标定、正式机体采用与版本证据、用户批准工况下的实际训练评测和目视验收，或明确不采用；执行者先置 pending_review。未完 S6 不能随 S5 配方构建关闭；预算未批准或设计未判定继续在办，旧 v3 判决不替代本项。
+next: 执行者先按 S5 整理机制落点，已审设计与协议齐备后再准备候选；S6 正式采用与开训须用户确认，当前不执行。
+close_when: 新上下文按正文“关闭条件”核验完整 S5/S6 或用户明确不采用的出口；仅 S5 构建通过不关闭。
 depends_on: lizard2-body-drive-candidate, lizard2-contact-protocol
 evidence: acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, acceptance/records/2026-09-23-lizard2-v1-gait-skate, acceptance/records/2026-10-09-lizard2-limit-requirement-and-status-sync, acceptance/records/2026-10-09-lizard2-v3-pretrain-sanity, acceptance/records/2026-10-10-lizard2-v3-joint-velocity-limits
 ---
@@ -34,6 +34,14 @@ S5 交付为未冻结候选版本的实际路径、配置/协议/测试及 `acce
 4. 按版本机制冻结并启动用户批准训练，记录实际 run、manifest/checkpoint 与偏离；检查工作树和启动协议，不能在缺锚状态假称可复现。
 5. 固定具名新协议评测实际 checkpoint，分别检验速度/存活、行走形态、承重滑移与躯干拖尾；用户检查预览。不新增趴姿训练任务或起卧过渡。训练通过不自动代替姿势验收。
 6. 回填 NOTES 的 run/报告指针与一句判定，所有数值结论进 `acceptance/records/<日期>-lizard2-s6-adoption-training.md`；执行者置 pending_review，新上下文按 close_when 审核。失败修复或明确拒绝，未完成动作不得以预算耗尽关闭。
+
+## 关闭条件
+
+- **审核者与输入**：执行者先置 pending_review；新上下文对照 S5/S6、已审上游交付和本项真实记录审核。
+- **S5 交付**：已审机体/驱动设计接入候选配方，新接触协议及标定落地，配置与协议产物可复读；仅配方构建通过不关闭。
+- **S6 采用与验收**：正式机体采用、改名迁移、旧机体冻结版本退休及版本证据齐备；完成用户批准工况下的实际训练、固定协议评测与目视验收。旧 v3 判决不替代本项。
+- **不采用出口**：用户明确不采用时记录理由与未完动作的去向，不把未验证说成通过。
+- **结果处理**：完整交付经审核通过，或用户明确不采用，才关闭；可修缺口退 in_progress，预算未批准或用户设计决定缺失置 blocked。未完 S6 继续在办，不随 S5 关闭。
 
 ## 动作接口与奖励待办
 

@@ -47,8 +47,8 @@ An item is front matter plus a free body::
     scope: <path(s) that exist -- a range, never a word from a list>
     status: <open/in_progress/pending_review/blocked/done/cancelled/superseded>
     landing: <path[#anchor], ...>          # where the rule lives, or will live
-    next: <the action to take>             # active items only
-    close_when: <who checks what, observes what, and what each outcome means>
+    next: <who takes the immediate action; detailed steps in the body>
+    close_when: <who reviews the body's close conditions; outcomes in the body>
     depends_on: <an active item id, or a live mechanism path>
     evidence: <acceptance/records/<stem>[#anchor]>
     outcome: <what happened>               # closed items only
@@ -83,6 +83,18 @@ it happens the list keeps advertising finished work as in flight. Mirroring that
 in the closed tree is unverified work that has skipped its review: the move is the verdict, so it
 happens after the review, not instead of it.
 
+``next`` and ``close_when`` remain single-line routing fields, not compressed ledgers.
+New or edited items put detailed actions in ``## 下一步`` and review criteria in
+``## 关闭条件``; existing named action sections can be referenced instead of duplicated.
+The next action names its owner and any prerequisite. Close conditions separate reviewer/inputs,
+observable acceptance, hand-off and pass/repair/user-blocked outcomes. No length gate: readability
+must not remove an unfinished action or weaken acceptance. Historical items are not bulk-rewritten.
+
+``--scaffold ID --title TEXT --scope PATHS --landing PATHS`` previews an open item skeleton.
+``--apply`` writes it to ``work/active/`` exclusively: existing active or closed IDs and unsafe
+IDs are refused. Paths are checked using the same rules as an item. TODOs need an author; the
+skeleton is neither a design decision nor evidence of completion.
+
 The body states the current situation only: no superseded states, no copy of a number or a
 digest whose owner is elsewhere, no restatement of a rule that lives in a mechanism.
 
@@ -111,6 +123,8 @@ Known ceilings, deliberate:
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
 import pathlib
 import re
 import sys
@@ -540,6 +554,66 @@ def _inbound_hints(items: list[Item]) -> list[str]:
     return hints
 
 
+def scaffold(item_id: str, title: str, scope: str, landing: str, apply: bool = False) -> int:
+    """Preview or exclusively create an open item skeleton with validated metadata."""
+    if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", item_id):
+        print("REFUSED: id must be lower-case words separated by hyphens")
+        return 1
+    values = {"title": title, "scope": scope, "landing": landing}
+    for field, value in values.items():
+        if not value.strip() or value.splitlines() != [value] or "\x00" in value:
+            print(f"REFUSED: {field} must be one non-empty line")
+            return 1
+    for field in ("scope", "landing"):
+        for ref in values[field].split(","):
+            target = ref.strip().split("#", 1)[0].strip()
+            if not target or not (_REPO / target).exists():
+                print(f"REFUSED: {field} -> {target!r} does not exist")
+                return 1
+    path = _ACTIVE / f"{item_id}.md"
+    if path.exists() or any(_CLOSED.glob(f"*/{item_id}.md")):
+        print(f"REFUSED: item id {item_id!r} already exists")
+        return 1
+    text = f"""---
+id: {item_id}
+title: {title.strip()}
+scope: {scope.strip()}
+status: open
+landing: {landing.strip()}
+next: 执行者填写正文“下一步”的当前动作与前置；未定条件不直接执行。
+close_when: 新上下文按正文“关闭条件”核验落点与证据；有缺口不关闭。
+---
+
+## 当前范围
+
+TODO 目标、明确不做与当前阻塞；依赖与已存在的证据指针按需填 front matter，不造空记录。
+
+## 下一步
+
+1. TODO 执行者、当前动作、前置与可运行检查；复杂版本的探测链唯一归该版 PLAN。
+2. TODO 完成后置 pending_review，next 点名新上下文审核者与输入。
+
+## 关闭条件
+
+- **审核者与输入**：TODO 新上下文读取 landing、证据及以下判据。
+- **可观察验收**：TODO 什么必须成立、如何复读；未证不能写通过。
+- **交付与边界**：TODO 交给谁、哪些未完动作继续在办。
+- **结果处理**：通过审核后关闭；可修缺口退 in_progress，仅用户能解决的缺口置 blocked。
+"""
+    if not apply:
+        print(f"PREVIEW: {_rel(path)} (use --apply to write)")
+        print(text, end="")
+        return 0
+    try:
+        with path.open("x", encoding="utf-8", newline="\n") as stream:
+            stream.write(text)
+    except OSError as err:
+        print(f"REFUSED: {err}")
+        return 1
+    print(f"CREATED: {_rel(path)} (TODOs are not a completed plan)")
+    return 0
+
+
 _GOOD = """\
 ---
 id: {id}
@@ -755,12 +829,49 @@ def self_test() -> int:
             problems.append("the pointer scan read a dated evidence record")
         if any("placeholder" in hint for hint in pointers):
             problems.append("the pointer scan matched a placeholder path")
+        with contextlib.redirect_stdout(io.StringIO()):
+            before = {p: p.read_bytes() for p in root.rglob("*") if p.is_file()}
+            metadata = ("generated", "Generated item", "notes", "notes/rule.md#anchor")
+            command = ["--scaffold", metadata[0], "--title", metadata[1], "--scope", metadata[2],
+                       "--landing", metadata[3]]
+            if main(command) != 0:
+                problems.append("scaffold preview failed")
+            if before != {p: p.read_bytes() for p in root.rglob("*") if p.is_file()}:
+                problems.append("scaffold preview wrote a file")
+            if main([*command, "--apply"]) != 0:
+                problems.append("scaffold apply failed")
+            generated = _ACTIVE / "generated.md"
+            parsed, parse_problems = _parse(generated)
+            if parse_problems or parsed is None or parsed.fields.get("status") != "open":
+                problems.append(f"scaffold produced invalid front matter: {parse_problems}")
+            if parsed is not None and not all(f"## {s}" in parsed.body for s in ("下一步", "关闭条件")):
+                problems.append("scaffold omitted readable action/close sections")
+            original = generated.read_bytes()
+            if main([*command, "--apply"]) != 1 or generated.read_bytes() != original:
+                problems.append("scaffold overwrote an existing item")
+            for bad_id in ("../outside", "Bad_Id", "gone"):
+                if scaffold(bad_id, *metadata[1:], apply=True) != 1:
+                    problems.append(f"scaffold accepted unsafe or closed id: {bad_id!r}")
+            for bad_metadata in (("x\ninjected: true", "notes", "notes/rule.md"),
+                                 ("x", "missing", "notes/rule.md"),
+                                 ("x", "notes,", "notes/rule.md"),
+                                 ("x", "notes", "notes/missing.md")):
+                if scaffold("invalid-metadata", *bad_metadata, apply=True) != 1:
+                    problems.append(f"scaffold accepted invalid metadata: {bad_metadata!r}")
+            for separator in ("\n", "\r", "\v", "\f", "\x1c", "\x1d", "\x1e", "\x85", "\u2028", "\u2029"):
+                if main(["--scaffold", "multiline", "--title", f"Audit{separator}status: done",
+                         "--scope", "notes", "--landing", "notes/rule.md", "--apply"]) != 1:
+                    problems.append(f"scaffold accepted line separator: {separator!r}")
+                if (_ACTIVE / "multiline.md").exists():
+                    problems.append("scaffold wrote invalid multiline metadata")
+                    (_ACTIVE / "multiline.md").unlink()
+            generated.unlink()
         _REPO, _ACTIVE, _CLOSED, _RECORDS, BUDGET_BYTES, LIST_BYTES = saved
 
     for problem in problems:
         print(f"  FALSIFIER: {problem}")
     print(
-        "WORK_DOCS_SELF_TEST_OK (17 item + 3 record + 4 pointer fixtures)"
+        "WORK_DOCS_SELF_TEST_OK (17 item + 3 record + 4 pointer fixtures; scaffold checks)"
         if not problems
         else f"WORK_DOCS_SELF_TEST_DRIFT ({len(problems)})"
     )
@@ -778,7 +889,20 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--locate", metavar="KEY", help="print the item files matching KEY")
     parser.add_argument("--self-test", action="store_true", help="run the falsifiers")
+    parser.add_argument("--scaffold", metavar="ID", help="preview an open item skeleton")
+    parser.add_argument("--title", help="one-line title for --scaffold")
+    parser.add_argument("--scope", help="existing comma-separated paths for --scaffold")
+    parser.add_argument("--landing", help="existing comma-separated paths for --scaffold")
+    parser.add_argument("--apply", action="store_true", help="write --scaffold without overwriting")
     args = parser.parse_args(argv)
+    if args.scaffold is not None:
+        if args.list is not None or args.locate is not None or args.self_test:
+            parser.error("--scaffold cannot be combined with --list, --locate or --self-test")
+        if any(value is None for value in (args.title, args.scope, args.landing)):
+            parser.error("--scaffold requires --title, --scope and --landing")
+        return scaffold(args.scaffold, args.title, args.scope, args.landing, args.apply)
+    if args.apply or any(value is not None for value in (args.title, args.scope, args.landing)):
+        parser.error("--apply, --title, --scope and --landing require --scaffold")
     if args.self_test and self_test() != 0:
         return 1
     # --self-test FALLS THROUGH into the real check on purpose: it is the flag the daily offline suite
