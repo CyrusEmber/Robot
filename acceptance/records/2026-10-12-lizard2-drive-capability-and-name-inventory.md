@@ -546,12 +546,12 @@ E 的“绑定 + 首个真实消费者”切片：名表两套命名、`check_le
 
 - `run_head_press` 增加 `naming` 参数（缺省 `None` → 旧命名），足端由 `is_contact_body` 取，并在用之前核对**每条 leg 的命名末端 link 在所造 body 里**，缺则 `SystemExit`；`main` 的站立承重段把 `foot_ids(body_names, naming)` 传下去（该调用点原来会用空足端集合打印 `feet only 0.0000`）。CLI 加 `--naming`；名表以 `leg_names` 别名在 parser **之前**导入（`--naming` 的 choices 要用它，而本文件多个函数参数已叫 `joint_names`）。
 - 真跑（共享命名，全部跑完）：承重行列出四只脚（`load per body [N] (>1 N): lf_foot 197.0, rf_foot 193.4, rl_foot 146.4, rr_foot 143.6`）、`ok load/no-non-foot-carrier`、`ok head/press-bodies-resolved`、末行 `BASELINE_PROBE_OK` —— 足端集合非空即绑定生效。
-- 错配负例（`--naming split`）**本次未取得读数**：该次运行到提交时仍在跑，未观察到就不写结论；返回后补记（同一条拒绝在 `check_contact_ownership`/`foot_ids` 上已实测，但那是别的消费者，不替代本工具的读数）。
+- 错配负例（`--naming split`）**在测量前被拒**：`ValueError: 31 body name(s), none a .*_finger/.*_toe body of the naming 'split': ['base_link', 'chest_yaw', 'tail1_yaw', 'rr_hip']`（拒绝来自 `main` 站立承重段的 `foot_ids`；`run_head_press` 内的末端 link 核对是同一错配下的第二道）。
 
 **复读命令与实测**（`<PY>` = `python ablation_harness/host_paths.py --python`）：
 
 - `<PY> rl_exp\tools\verify\baseline_probe.py --headless --task Lizard2-Flat-v3 --num_envs 4 --steps 20 --head-press` → 上述四行读数，末行 `BASELINE_PROBE_OK`
-- `<PY> rl_exp\tools\verify\baseline_probe.py --headless --task Lizard2-Flat-v3 --num_envs 2 --steps 5 --head-press --naming split` → 提交时仍在跑，读数待补（预期拒绝：末端 link 不存在）
+- `<PY> rl_exp\tools\verify\baseline_probe.py --headless --num_envs 1 --steps 2 --head-press --naming split` → 上面那条 `ValueError`（退出码 1）
 
 ### 证据引用
 
