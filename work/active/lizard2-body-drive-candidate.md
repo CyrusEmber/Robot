@@ -3,8 +3,8 @@ id: lizard2-body-drive-candidate
 title: lizard2 机体与驱动候选：蜥蜴骨段朝向、人手式足掌、骨骼改名
 scope: rl_exp/blender, rl_exp/tools/pipeline, rl_exp/tools/verify, rl_exp/tools/diagnose, rl_exp/tasks, acceptance/records
 status: open
-landing: rl_exp/blender/lizard2_stance_candidate.py, rl_exp/blender/generate_urdf.py, rl_exp/tools/diagnose/gait_probe.py, rl_exp/tools/verify/check_leg_reachability.py, rl_exp/tasks/joint_names.py
-next: E 已落地绑定与首个消费者（名表 `rl_exp/tasks/joint_names.py` 的两套命名 + `rl_exp/tools/verify/check_leg_reachability.py` 的 `--naming` 绑定、链命名核对与同几何孪生自检；读数与破坏测试归 2026-10-12 记录追加六，本项不复述）。继续 E3 其余消费者：Blender 构建入口、`check_self_collision`/`check_joint_layout`/站姿与步态诊断、接触诊断与在线协议核对、报告 reader，逐条接到同一绑定并各自留一条真跑读数；E4.4 的运行时与报告验真未做。B 的能力约束取自 2026-10-12 记录，A 选 pivot/轴按线性对照进行，不新建驱动机制，那笔 velocity_limit 前置账仍归 B。E 接线前 A 可核对旧名源几何，但不让未接线工具测新名候选；C 可沿用现有机体开展。A/B/C 自检就绪后做 D 集成，一份记录，置 pending_review，请新上下文一次性审核。不动已训 v3，不覆盖 rl_exp/lizard2_candidate/，趴姿不在本项。声明面边界、既有自检覆盖和 gait_probe 的资产前提归 2026-10-12 记录；资产前提处置交 floor-contact-attribution 的 ⑤/⑪，不借 E 改资产或放宽断言。
+landing: rl_exp/blender/lizard2_stance_candidate.py, rl_exp/blender/generate_urdf.py, rl_exp/tools/diagnose/gait_probe.py, rl_exp/tools/verify/check_leg_reachability.py, rl_exp/tools/verify/check_self_collision.py, rl_exp/tasks/joint_names.py
+next: E 已完成绑定与前两个消费者（名表两套命名；`check_leg_reachability.py` 的 `--naming` 绑定 + 链命名核对 + 同几何孪生自检；`check_self_collision.py` 的 `--naming` + 按位次选角色 + 末端关节核对；读数与破坏测试归 2026-10-12 记录追加六/七，本项不复述）。继续 E3 其余消费者：Blender 构建入口、`check_joint_layout`、站姿与步态诊断、接触诊断与在线协议核对、报告 reader，逐条接到同一绑定并各自留一条真跑读数；E4.4 的运行时与报告验真未做。B 的能力约束取自 2026-10-12 记录，A 选 pivot/轴按线性对照进行，不新建驱动机制，那笔 velocity_limit 前置账仍归 B。E 接线前 A 可核对旧名源几何，但不让未接线工具测新名候选；C 可沿用现有机体开展。A/B/C 自检就绪后做 D 集成，一份记录，置 pending_review，请新上下文一次性审核。不动已训 v3，不覆盖 rl_exp/lizard2_candidate/，趴姿不在本项。声明面边界、既有自检覆盖和 gait_probe 的资产前提归 2026-10-12 记录；资产前提处置交 floor-contact-attribution 的 ⑤/⑪，不借 E 改资产或放宽断言。
 close_when: 新上下文对照 R1–R5 与本项 D 节记录审核：蜥蜴骨段朝向正反例、前后肢映射与改名落地一致、同一候选的完整周期（有向掌面、限位、实际网格碰撞）、承重动力学与真实驱动读回、躯干/尾部同条件对照；你确认候选外观与目标动作。通过后交 lizard2-family-landing；失败退回 in_progress 并指明节，只有用户能给的缺口置 blocked。静力/声明/源码支持不当动力学通过；未判定不关闭。
 evidence: acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory, acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, acceptance/records/2026-10-08-lizard2-joint-design-review-contract, acceptance/records/2026-10-08-lizard2-r1-numeric-reference-and-decision-drafts
 ---
@@ -79,7 +79,7 @@ evidence: acceptance/records/2026-10-12-lizard2-drive-capability-and-name-invent
 
 历史报告没有新字段时保留原 reader 及其旧协议语义，不伪补“已核机体”证据；新绑定 reader 缺来源或名称冲突则拒绝。诊断量/列名若会变更评测语义，先核协议边界并交 `lizard2-contact-protocol`，E 不重写旧协议。
 
-**接线现状**：第一行（URDF → FK/碰撞）的 `check_leg_reachability.py` 已按绑定接通并留有真跑与负例；其余各行仍按旧名默认运行，逐条按本表接，未接线前不得指向新命名候选。
+**接线现状**：URDF → FK/碰撞一行的 `check_leg_reachability.py` 与 `check_self_collision.py` 已按绑定接通并留有真跑读数、孪生等值与错配负例；其余各行仍按旧名默认运行，逐条按本表接，未接线前不得指向新命名候选。
 
 范围内残留硬编码逐点分成：要迁的名称选择、故意保留的旧协议/反例、几何或驱动假设。后两类不按字符串批量替换。实际漏点和延期站点只记验收记录；任何第一波必需消费者未接线，E 就不能交付。
 

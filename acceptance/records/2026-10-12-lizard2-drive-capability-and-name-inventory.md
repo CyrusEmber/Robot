@@ -382,3 +382,40 @@ E 的“绑定 + 首个真实消费者”切片：名表两套命名、`check_le
 - 孪生是**同几何改名**样本，不是候选几何/动力学证据，也不证明新命名已在任何真实资产上采用。
 - `_verify_chain` 的天花板：中途半改名（保留旧末端词根、改中间词根）的机体不会被拦，理由与升级路径写在函数内 `ponytail:` 注释。
 - `fold_reading` 的记录列名仍按旧词根取值（`{leg}_haa_joint` 等）——报告 reader 属 E3 未接线行，本次只把它的链与网格读取接入绑定，未改其列口径。
+
+## 追加七：E 第二切片 —— 碰撞扫描接入同一绑定（2026-10-12 同日）
+
+### 适用范围
+
+`check_self_collision.py`（家族腿可达集的网格级自碰撞扫描）接入绑定：按命名选角色、入口声明命名、错配即拒。读数为离线真跑（凸包 + FK + 包含判定，无仿真），主体是采用机体与其**同几何改名孪生**；不是候选几何/动力学结论。
+
+### 验收条件
+
+同一扫描在旧名机体与其改名孪生上给出同一组数（只有词汇不同），错配命名必须拒绝而不是扫出空集。
+
+### 结果
+
+- **接线**：`leg_joints`/`sweep_poses` 接收绑定，角色按**位次**取（根轴 = `roots[0]`、三铰 = `roots[1:4]`、膝 = `roots[2]`），不再按 `hip`/`hfe` 等词取；`_LEG_TOKENS` 常量删除；入口加 `--naming`（`shared`/`split`）并在首行印出绑定。
+- **绑定核对（新增）**：扫描前先核每条腿的命名末端关节存在，否则 `SystemExit` 并指出期望关节名——缺这一步时，错配命名找不到任何关节可扫，`leg_joints` 返回空、`sweep_poses` 出 0 个姿态，报告成"无边距/无穿透"的干净读数（实测：孪生按 `shared` 扫出 0 个姿态）。
+- **真跑对照**：采用机体按 `shared`、其改名孪生按 `split`，两条扫描的 `136` 对 link、`132` 个姿态、最小余量 `-222.86 mm`、穿透判词 `40` 条完全相同；差异只在词汇（`lf_foot` → `lf_finger`、`lf_hip_joint` → `lf_shoulder_swing_joint`）。这正是"同一套读者显式服务两套名"的读数形态。
+- **负例**：孪生按 `shared`、采用机体按 `split` 都在扫描前被拒，报出期望关节名（`no lf_foot_joint in the tree ...` / `no lf_finger_joint in the tree ...`）。
+- 顺带就地修了同文件的角色选择：`load_case_angles` 的折叠用例原按 `HINGE_ROOTS[-2:]` 词取，改为按命名位次（`roots[-3:-1]`），自检读数不变。
+
+**复读命令与实测**（`<PY>` = `python ablation_harness/host_paths.py --python` 给出的解释器；孪生由 `check_leg_reachability._renamed_twin(DEFAULT_URDF, naming_for('split'), <临时目录>)` 生成，与追加六同一构造）：
+
+- `<PY> rl_exp\tools\verify\check_self_collision.py --family lizard2` → `link pairs checked: 136 | poses: 132`；`minimum margin over all poses: -222.86 mm (['chest_pitch', 'lf_foot'], combined, {...-0.6, 0.6, 1.2, 1.6})`；`penetrating judgements: 40`
+- `<PY> rl_exp\tools\verify\check_self_collision.py --family lizard2 --naming split --urdf <孪生>.urdf` → 同 `136`/`132`/`-222.86 mm`/`40`，词汇为 `lf_finger`、`lf_shoulder_swing_joint`
+- 两条负例 → `no lf_foot_joint in the tree -- this body does not carry the naming 'shared'`（孪生）/ `no lf_finger_joint in the tree -- this body does not carry the naming 'split'`（采用机体）
+- 缺核对时的对照 → `poses the twin would sweep under the wrong naming: 0`（即"干净读数"的来源）
+- `rl_exp\tools\verify\run_offline_checks.bat` → `ALL_OFFLINE_CHECKS_PASSED (37/37 in 39.6s)`；`python rl_exp/tasks/joint_names.py` 通过
+
+### 证据引用
+
+- `rl_exp/tools/verify/check_self_collision.py` 的 `leg_joints` / `sweep_poses` / `main`（`--naming` + 末端关节核对）。
+- `rl_exp/tools/verify/check_leg_reachability.py` 的 `load_case_angles`（按命名位次选折叠对）与 `_renamed_twin`（孪生构造，追加六已记）。
+
+### 未覆盖边界
+
+- 该工具**不在离线清单**（采用机体当前是红的），故这一条只有人工复读，没有常驻机器入口；孪生对照是本次人工真跑。
+- 仍未接线：Blender 构建入口、`check_joint_layout`、站姿/步态诊断、接触诊断与在线协议核对、报告 reader；E4.4 的运行时与报告验真未做，E 仍未达第一波出口。
+- 扫描结论（-222.86 mm 与 40 条穿透）是**采用机体既存红项**的复读，不是本次改动引入或修复的问题；归 `floor-contact-attribution` 的资产前提。

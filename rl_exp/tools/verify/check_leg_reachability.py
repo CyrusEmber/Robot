@@ -495,7 +495,8 @@ def reflected_inertia(chain: list[dict], angles: list[float], inertials: dict[st
     return rows
 
 
-def load_case_angles(chain: list[dict]) -> dict[str, list[float]]:
+def load_case_angles(chain: list[dict],
+                     naming: dict[str, tuple[str, ...]] = joint_names.LEGACY_NAMING) -> dict[str, list[float]]:
     """The poses the inertia is read at: each joint driven to its OWN declared limits, one at a time.
 
     Nothing here is invented -- every angle below is a limit the URDF states, with the other joints left
@@ -503,6 +504,11 @@ def load_case_angles(chain: list[dict]) -> dict[str, list[float]]:
     the poses are named, and these are the ones the mechanism itself declares. The knee's straight pose
     is deliberately NOT a case: it sits outside this range (that is what keeps reverse bending
     unreachable), so posing there would be a configuration the leg cannot be in.
+
+    The folded case moves the two hinges the fold sum is made of, picked BY POSITION off the naming
+    (the last two of the three hinges) rather than by asking for ``hfe``/``kfe`` -- those words do not
+    exist on a renamed body, and a case list that silently folds one joint would read as a narrower
+    inertia range.
     """
     cases = {"zero": [0.0] * len(chain)}
     for index, joint in enumerate(chain):
@@ -519,8 +525,9 @@ def load_case_angles(chain: list[dict]) -> dict[str, list[float]]:
         cases[label] = [joint["limits"][take] for joint in chain]
     folded = [0.0] * len(chain)
     fold_side = 0 if straight_hfe(chain) > 0 else 1
+    fold_tokens = set(joint_names.roots_of(naming, chain[0]["name"].split("_")[0])[-3:-1])
     for index, joint in enumerate(chain):
-        if joint["token"] in joint_names.HINGE_ROOTS[-2:]:
+        if joint["token"] in fold_tokens:
             folded[index] = joint["limits"][fold_side]
     cases["fold"] = folded
     return cases

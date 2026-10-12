@@ -34,6 +34,12 @@ Usage (from the repo root):
 
     python rl_exp/tools/verify/check_self_collision.py --family lizard2
     python rl_exp/tools/verify/check_self_collision.py --family lizard --json <report.json>
+    python rl_exp/tools/verify/check_self_collision.py --family lizard2 --urdf <renamed>.urdf --naming split
+
+``--naming`` declares which words the swept body carries (``shared`` = every leg one root set, ``split``
+= the front/rear rename); the roles (root axis, the three hinges, the knee) are swept by POSITION off it,
+so the same body renamed sweeps the same poses and the two reports differ only in vocabulary. A body
+carrying no root axis (the old one) simply has none of those poses -- that is the body, not the naming.
 
 Exit code is 1 when a pose inside the limits overlaps or when the minimum clearance falls below
 ``--clearance`` mm.
@@ -61,7 +67,6 @@ if str(_REPO) not in sys.path:
 from check_leg_reachability import family_urdf  # noqa: E402 - one home for "which body a family reads"
 from rl_exp.tasks import joint_names  # noqa: E402 - one home for "what a leg is made of"
 _LEGS = ("lf", "rf", "rl", "rr")
-_LEG_TOKENS = joint_names.CHAIN_ROOTS
 
 
 def load_urdf(path: pathlib.Path) -> dict:
@@ -249,46 +254,59 @@ def pivot_region(joints: dict, a: str, b: str, span: int = 2) -> bool:
     return chain_distance(joints, a, b) <= span
 
 
-def leg_joints(joints: dict, leg: str) -> dict[str, tuple[float, float]]:
-    """``{token: (lo, hi)}`` for the joints this leg actually has (a family without a hip has none)."""
+def leg_joints(joints: dict, leg: str,
+               naming: dict[str, tuple[str, ...]] = joint_names.LEGACY_NAMING) -> dict[str, tuple[float, float]]:
+    """``{token: (lo, hi)}`` for the joints this leg actually has (a body without a root axis has none).
+
+    The tokens come from the naming the caller bound, not from a list this file carries: the roles are the
+    naming's positions, and a body that does not carry one (the old body has no root axis) simply has no
+    entry -- which is what keeps this the same sweep on both namings.
+    """
     out = {}
-    for token in _LEG_TOKENS:
-        name = f"{leg}_{token}_joint"
+    for token in joint_names.roots_of(naming, leg):
+        name = joint_names.joint_name(leg, token)
         if name in joints and joints[name]["limits"] is not None:
             out[token] = joints[name]["limits"]
     return out
 
 
-def sweep_poses(joints: dict) -> list[tuple[dict[str, float], str]]:
+def sweep_poses(joints: dict,
+                naming: dict[str, tuple[str, ...]] = joint_names.LEGACY_NAMING) -> list[tuple[dict[str, float], str]]:
     """The poses to check, each labelled ``single`` or ``combined``, all inside the URDF limits.
 
     Single-joint poses catch a link folding onto a neighbour (the foot onto the femur at the ankle
     extreme); combined poses catch what only two axes together reach -- which is the whole reason a
     new hip axis needs this check.
+
+    Roles are read BY POSITION off the naming (root, the three hinges, the knee), never as words here: a
+    renamed body sweeps the same poses and the two reports are the same sweep in two vocabularies.
     """
     poses: list[tuple[dict[str, float], str]] = []
     for leg in _LEGS:
-        limits = leg_joints(joints, leg)
+        roots = joint_names.roots_of(naming, leg)
+        root_token, knee_token = roots[0], roots[2]
+        limits = leg_joints(joints, leg, naming)
         if not limits:
             continue
         for token, (lo, hi) in limits.items():
-            name = f"{leg}_{token}_joint"
+            name = joint_names.joint_name(leg, token)
             for value in (lo, 0.0, hi):
                 poses.append(({name: value}, "single"))
-        hip = limits.get("hip")
-        others = [(f"{leg}_{t}_joint", limits[t]) for t in joint_names.HINGE_ROOTS if t in limits]
+        hip = limits.get(root_token)
+        others = [(joint_names.joint_name(leg, t), limits[t]) for t in roots[1:4] if t in limits]
         for level in (0, 1, 2):  # all-fold-min / neutral / all-fold-max
             fold = {name: (lo if level == 0 else hi if level == 2 else 0.0) for name, (lo, hi) in others}
             if hip is None:
                 poses.append((dict(fold), "combined"))
                 continue
             for value in (hip[0], 0.0, hip[1]):
-                poses.append(({f"{leg}_hip_joint": value, **fold}, "combined"))
+                poses.append(({joint_names.joint_name(leg, root_token): value, **fold}, "combined"))
         if hip is not None:
-            knee = limits.get("hfe")
+            knee = limits.get(knee_token)
             if knee is not None:
                 for hip_v, knee_v in itertools.product((hip[0], 0.0, hip[1]), (knee[0], 0.0, knee[1])):
-                    poses.append(({f"{leg}_hip_joint": hip_v, f"{leg}_hfe_joint": knee_v}, "combined"))
+                    poses.append(({joint_names.joint_name(leg, root_token): hip_v,
+                                   joint_names.joint_name(leg, knee_token): knee_v}, "combined"))
     return poses
 
 
@@ -298,6 +316,10 @@ def main() -> int:
     parser.add_argument("--urdf", type=pathlib.Path, default=None,
                         help="override the family's declared body (e.g. to sweep a retired one)")
     parser.add_argument("--clearance", type=float, default=5.0, help="minimum clearance to demand [mm]")
+    parser.add_argument("--naming", default="shared", choices=sorted(joint_names.NAMINGS),
+                        help="which words the swept body carries: 'shared' = every leg one root set "
+                             "(every asset today), 'split' = the front/rear rename. Declared, never read "
+                             "off the joint names -- the roles are swept by position either way")
     parser.add_argument("--json", help="write the full report here")
     args = parser.parse_args()
 
@@ -308,9 +330,19 @@ def main() -> int:
     if not urdf.exists():
         print(f"no urdf: {urdf}", file=sys.stderr)
         return 1
-    print(f"sweeping {urdf}  [body from: {source}]")
+    print(f"sweeping {urdf}  [body from: {source}]  [naming: {args.naming}]")
+    naming = joint_names.naming_for(args.naming)
     model = load_urdf(urdf)
     links, joints = model["links"], model["joints"]
+    # The binding is checked against the tree BEFORE anything is swept, on the same anchor the geometric
+    # reader uses: the naming's end root, per leg. Without this a mismatched naming finds no joint to
+    # sweep and reports "0 poses, no overlaps" -- a clean-looking reading of a body it never measured,
+    # which is exactly the failure this file exists to hand back as a counterexample.
+    for leg in _LEGS:
+        end = joint_names.joint_name(leg, joint_names.roots_of(naming, leg)[-1])
+        if end not in joints:
+            raise SystemExit(f"{urdf}: no {end} in the tree -- this body does not carry the naming "
+                             f"'{args.naming}'. Declare the naming it does carry (--naming)")
     movable = [name for name in links if links[name]["collision"] is not None]
     print(f"family {args.family}: {len(movable)} of {len(links)} links carry a collision mesh")
     print(f"  no collision (cannot be the penetrating side): {sorted(set(links) - set(movable))}")
@@ -325,7 +357,7 @@ def main() -> int:
 
     pairs = [(a, b) for a, b in itertools.combinations(sorted(movable), 2)
              if not pivot_region(joints, a, b)]
-    poses = sweep_poses(joints)
+    poses = sweep_poses(joints, naming)
     print(f"  link pairs checked: {len(pairs)} | poses: {len(poses)} (all inside the URDF limits)")
     print("  skipped as pivot regions (<=2 joints apart, meshes share the pivot by construction): "
           + ", ".join(f"{a}|{b}" for a, b in itertools.combinations(sorted(movable), 2)
