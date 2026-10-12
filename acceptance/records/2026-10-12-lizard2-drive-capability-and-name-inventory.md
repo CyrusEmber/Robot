@@ -277,3 +277,15 @@ python -B -c "import pathlib,re;pat=re.compile(r'(?<![A-Za-z0-9])(hip|haa|hfe|kf
 - 对拍：`git show HEAD:rl_exp/tools/diagnose/gait_probe.py` 的同一自检**同样红、同一组数** ⇒ 既存，非本轮引入。
 - 两家族网格非同一文件（md5 `032544db` vs `80145e27`，树也不同），但形状一致：都 48 面、0.16423 m²、2 mm 带 cap 均 0.1192821，仅 z 偏移差 ~4.4 mm（接地归一化后消失）。
 - 本脚本分不清两种解释：常数过期（候选掌面有意重做，钉的仍是旧 lizard2 机体的值）或候选声明树里的 `rl_foot_collision.obj` 退化成旧平底壳。判据在源 obj 与 `.blend`，归 A 节。
+
+### 判定（同日，只读）
+
+两种解释都不对。**这是一条前提已死的陈旧钉值**，与本次改名、与"候选壳被换错"都无关：
+
+- 钉值测的是"两家族、两棵树、两种形状"。`versions/lizard2/assets.json` 自己写着家族在 main/v3（提交 `4928ced`，2026-10-08）采用新机体、`meshes_dir` 换成 `lizard2_candidate/meshes`、旧机体版本退休 ⇒ **2026-09-28 那次读数量的旧机体树已被退休**，钉值随即失效，没人发现。
+- 今天盘上**三个** rl 壳读同一个值 0.119282（面积 0.16423、48 面）：退役 lizard 家族（`rl_exp/meshes/collision`，自 `91a876a` lizard-v8 未再动）、本地构建树 `rl_exp/lizard2_urdf/meshes`、采用机体 `rl_exp/lizard2_candidate/meshes`（sha256 `c3a4aa71…` == v3 `asset_lock.json` 的摘要 ⇒ 采用后未再动）。
+- ⇒ "修好的圆顶 0.013352"在盘上**任何树里都不存在**；断言的前提（两家族形状不同）没了，所以它今天无论隔离好坏都只能报错。
+
+**未决（归 A 节，git 查不出）**：圆顶是被有意放弃（新机体掌面另设计）还是换代时丢了。产生它的树是 `.git/info/exclude:7` 排除的本地构建树（`rl_exp/*_urdf/`），无 git 记录；钉值那次读数也没有记录文件。
+
+**这条自检的处置建议**（不动资产）：它今天已不能测它声称的东西 —— 要么改判成"两家族解析到不同目录、各自 usda 引用落在自己树里"（`check_dr_parity` 的 asset isolation 已在看这件事），要么改成对采用机体的读数、丢掉"两家族不同形状"的前提。它没有机器入口（`offline_suite.py:145` 只挂 `check_leg_reachability`），所以这类"前提死了"的红只能靠人偶然跑到。
