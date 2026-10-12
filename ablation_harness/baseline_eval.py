@@ -27,6 +27,8 @@ import traceback
 _REPO = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_REPO))
 
+from rl_exp.tasks import joint_names  # noqa: E402 - one home for "what a leg is made of"
+
 
 def yaw_of(quat: torch.Tensor) -> torch.Tensor:
     """Yaw [rad] of a world-frame orientation in the library's (x, y, z, w) layout.
@@ -51,7 +53,7 @@ def _gait_shape_joints(cfg, names: list[str]) -> list[str]:
     """
     actuators = getattr(cfg.scene.robot, "actuators", None) or {}
     spinal = getattr(actuators.get("spine"), "joint_names_expr", ()) or ()
-    tokens = ("_hip_joint", "_haa_joint", "_hfe_joint", "_kfe_joint", "_foot_joint")
+    tokens = joint_names.JOINT_SUFFIXES
     return [name for name in names
             if name.endswith(tokens) or any(re.fullmatch(pattern, name) for pattern in spinal)]
 

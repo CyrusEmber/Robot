@@ -53,7 +53,7 @@ from isaaclab_tasks.manager_based.locomotion.velocity.velocity_env_cfg import (
     LocomotionVelocityRoughEnvCfg,
 )
 
-from rl_exp.tasks import recipe_params
+from rl_exp.tasks import joint_names, recipe_params
 from rl_exp.tasks.play_utils import apply_play_wiring
 
 # this file lives at rl_exp/tasks/lizard2_env_cfg.py -> exp root is parents[1]
@@ -101,7 +101,7 @@ class Lizard2ActionsCfg(ActionsCfg):
     joint_pos = None
     joint_pos_legs = mdp.JointPositionActionCfg(
         asset_name="robot",
-        joint_names=[".*_hip_joint", ".*_haa_joint", ".*_hfe_joint", ".*_kfe_joint", ".*_foot_joint"],
+        joint_names=list(joint_names.JOINT_PATTERNS),
         scale=0.5,
         use_default_offset=True,
     )

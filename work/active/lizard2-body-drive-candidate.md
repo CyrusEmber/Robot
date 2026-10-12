@@ -3,10 +3,10 @@ id: lizard2-body-drive-candidate
 title: lizard2 机体与驱动候选：蜥蜴骨段朝向、人手式足掌、骨骼改名
 scope: rl_exp/blender, rl_exp/tools/pipeline, rl_exp/tools/verify, rl_exp/tools/diagnose, rl_exp/tasks, acceptance/records
 status: open
-landing: rl_exp/blender/lizard2_stance_candidate.py, rl_exp/blender/generate_urdf.py, rl_exp/tools/diagnose/gait_probe.py
-next: E 名表单点化先做（改名前置，与 B 能力表同时）；A/B/C 三节无先后依赖，可同时开始，A 的 Blender 改造用新名表；B 的能力表先出（小，供 A 选 pivot/轴），C 沿用现有机体不等 A。全部节自检完成后做 D 集成，一份记录，置 pending_review，请新上下文一次性审核。不动已训 v3，不覆盖 rl_exp/lizard2_candidate/，趴姿不在本项。
+landing: rl_exp/blender/lizard2_stance_candidate.py, rl_exp/blender/generate_urdf.py, rl_exp/tools/diagnose/gait_probe.py, rl_exp/tasks/joint_names.py
+next: E 名表单点化已落地（落点 `rl_exp/tasks/joint_names.py`；读数、破坏测试与未迁站点清单归 2026-10-12 记录，本项不复述；接触体名随采用那一次变更迁移，见同记录“未迁站点”节）。A/B/C 三节此时无先后依赖，可同时开始：A 的 Blender 改造用新名表，选 pivot/轴按线性对照进行（B 的能力表已出，判词、源码坐标与具名缺口归 2026-10-12 记录，本项只留约束与那笔 `velocity_limit` 账）；C 沿用现有机体不等 A。全部节自检完成后做 D 集成，一份记录，置 pending_review，请新上下文一次性审核。不动已训 v3，不覆盖 rl_exp/lizard2_candidate/，趴姿不在本项。
 close_when: 新上下文对照 R1–R5 与本项 D 节记录审核：蜥蜴骨段朝向正反例、前后肢映射与改名落地一致、同一候选的完整周期（有向掌面、限位、实际网格碰撞）、承重动力学与真实驱动读回、躯干/尾部同条件对照；你确认候选外观与目标动作。通过后交 lizard2-family-landing；失败退回 in_progress 并指明节，只有用户能给的缺口置 blocked。静力/声明/源码支持不当动力学通过；未判定不关闭。
-evidence: acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, acceptance/records/2026-10-08-lizard2-joint-design-review-contract, acceptance/records/2026-10-08-lizard2-r1-numeric-reference-and-decision-drafts
+evidence: acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory, acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, acceptance/records/2026-10-08-lizard2-joint-design-review-contract, acceptance/records/2026-10-08-lizard2-r1-numeric-reference-and-decision-drafts
 ---
 
 本项取代按 S0–S4 串联、逐级审核的安排：各节自检只用机器闸门与可复读检查，不置 `pending_review`；只在 D 集成后审核一次。需求与范围唯一归整体记录，判据归 R1–R5，本项只留动作、交付与顺序。
@@ -34,17 +34,17 @@ evidence: acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, ac
 
 ## E. 名表单点化（改名前置，先做，与 B 能力表同时）
 
-2026-10-10 实测（grep `rl_exp`、`ablation_harness` 的 `.py`，未含 yaml/json/md）：词根硬编码散在约 25 个文件，且同一份词根表被各自抄写至少 7 份（`check_joint_layout.py`/`check_self_collision.py`/`gait_probe.py` 的 `_LEG_TOKENS`、`check_leg_reachability.py` 的 `CHAIN`、`plot_joints.py` 的 `JOINTS`、`baseline_metrics.py`/`baseline_eval.py` 的 `_LEG_TOKENS`）。分布：
+名表盘点（真表清单、被证伪的旧说法、漏项、三种方言与计数口径）归
+`acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory.md` B 节，本项不复述读数。留给本项的四条决定：
 
-- Blender：`build_rig.py`、`fix_bones.py`、`generate_urdf.py`、`lizard2_stance_candidate.py`。`rename_flip_v8.py`、`rotate_rig.py`、`tools/pipeline/migrate_joint_names_v8.py`、`tools/archive/patch_stance.py` 为历史一次性脚本，不改。
-- 任务：`tasks/lizard2_env_cfg.py`（驱动分组正则）、`tasks/teacher_mdp.py`（`.*_foot` 接触体）。
-- 诊断：`debug_pose.py`、`diag_metrics.py`、`diagnose_support.py`、`gait_probe.py`、`plot_joints.py`、`stance_step_probe.py`。
-- 校验：`baseline_probe.py`、`check_actuator_budget.py`、`check_contact_ownership.py`、`check_dr_parity.py`（自测样例）、`check_joint_layout.py`、`check_leg_reachability.py`、`check_self_collision.py`、`fit_gait_target.py`、`obs_protocol_live.py`、`test_baseline_contract.py`。
-- 评测：`ablation_harness/baseline_eval.py`、`baseline_metrics.py`；协议 JSON 里的接触体名、yaml 的 `joint_order` 与正则组、OBS 等文档另行 grep。
+- **落点**：`rl_exp/tasks/joint_names.py`；先例是同目录的 `rl_exp/tasks/obs_protocol.py`（纯标准库、单一家的名表，`check_obs_protocol.py` 是它的消费者）。
+- **`rl_exp/versions/**` 在门外**：那里的 yaml/json 硬编码点被 `check_cfg_lock.py` 与 `check_golden_frozen.py` 钉住，改那里是**版本行为**（`versioning.mdc` §A），不是查找替换。
+- **`.*_foot` 是超载的**：它同时匹配关节 `*_foot_joint` 与 link `*_foot`（接触体集合与链端点查找各用一次）⇒ 拆 finger/toe 会静默改这两处；名表必须同时给出"接触体集合"接口，动作 2 的自检专门覆盖这一格。
+- **纯标准库是硬约束**：`rl_exp/blender/*` 跑在 Blender 自带解释器里，不得 import isaaclab/torch。
 
-动作：
+动作（**已落地 2026-10-12**：落点 `rl_exp/tasks/joint_names.py`，读数、破坏测试与未迁站点归那份记录；三条留作判据，不必重做）：
 
-1. 新建一个纯标准库的名表模块（Blender 的 Python 与 IsaacLab 解释器都能导入）；落点先查 `rl_exp/tools` 下现有共享模块的惯例，不另立体系。内容是：腿前后分组、关节词根按前/后肢的新旧对应、链顺序。各工具改为读它，删除各自抄写的词根表。
+1. 新建一个纯标准库的名表模块（Blender 的 Python 与 IsaacLab 解释器都能导入），落点 `rl_exp/tasks/joint_names.py`，照 `rl_exp/tasks/obs_protocol.py` 的先例，不另立体系。内容是：腿前后分组、关节词根按前/后肢的新旧对应、链顺序、接触体集合。各工具改为读它，删除各自抄写的词根表。
 2. 工具读取名表时按所面对的机体（新/旧）取名，不靠字符串猜；旧名机体上全部现有自测与闸门必须保持绿，新名只在候选上启用。
 3. 这是改名前置，不是独立交付：不单独审核，随 D 一起审；但完成后须有一条最小自检——用新、旧两套名分别通过链顺序与前后肢分组。
 
@@ -61,9 +61,9 @@ evidence: acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, ac
 
 ## B. 驱动（能力表先出，可与 A 同时）
 
-1. 调查当前 fork 的原生弹簧、限位、执行器、物理子步接口，出一页具名能力表：可表达恢复力、更新频率、力矩/限速入口、依据（源码/文档/运行）与未知项。线性 implicit PD 不冒称非线性弹性；缺渐硬实现则保留线性对照或暂缓弹性分支。复用现有实现，不新建驱动机制。
+1. 能力表已归 `acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory.md` A 节（判词、源码坐标与未知项），本项只留它给的**约束**：位置→力矩通路按构造就是线性 PD，**渐硬/渐变的趾端恢复力今天不可表达**（要么新增 Python 执行器子类、但丢掉本线特意选的物理步长 implicit PD；要么走每子步外力、可达性未验证）⇒ A 选 pivot/轴时**按线性对照**进行，或先回来重划弹性这一节的范围。不新建驱动机制、不改配方。
 2. A 给出候选后，在隔离诊断配置里实现腕踝与趾根驱动（分组，不整组降低 PD），与同几何线性基线比较偏转回位、承载与推进。读回与力矩能力分开，PD 请求量、估算与引擎实际量分开。
-3. 速度上限按整体记录“联动设计修订”第 4 条：启用须有速度—载荷—跟踪/稳定包线和同条件有/无限速对照，否则明确不启用并写工况边界。
+3. 速度上限按整体记录“联动设计修订”第 4 条：启用须有速度—载荷—跟踪/稳定包线和同条件有/无限速对照，否则明确不启用并写工况边界。**另有一笔前置的账**（具名缺口见 2026-10-12 记录的 A7 条，本项不复述）：implicit 执行器把配方设的 `velocity_limit` 静默作废，而 USD 关节 prim 是否自带限速未查 ⇒ "启不启用"这个问题本身还悬着；本轮不改配方。
 
 ## C. 躯干侧弯与拖尾（沿用现有机体，可立即开始）
 

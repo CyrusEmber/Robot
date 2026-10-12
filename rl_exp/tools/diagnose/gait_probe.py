@@ -97,14 +97,20 @@ import torch  # noqa: E402
 
 import diag_metrics  # noqa: E402
 
+from rl_exp.tasks import joint_names  # noqa: E402 - one home for "what a leg is made of"
+
 #: The suffixes that make a joint a leg joint. Everything else is trunk, which is how the report
 #: tells the two apart without a second declaration of the same fact.
-LEG_SUFFIXES = ("_hip_joint", "_haa_joint", "_hfe_joint", "_kfe_joint", "_foot_joint")
+LEG_SUFFIXES = joint_names.JOINT_SUFFIXES
 
 #: The leg joints the per-frame series carries: the whole chain, not the three the summary tables
 #: were built around. Exporting only the stride axis, the fore-aft hinge and the blade is what made
 #: "the thigh barely moves" unanswerable from a report that did not hold the joint that moves it.
-SERIES_TOKENS = ("hip", "haa", "hfe", "kfe", "foot")
+SERIES_TOKENS = joint_names.CHAIN_ROOTS
+
+#: The three the summary tables and the per-frame rows are keyed by: the root, the fore-aft hinge and
+#: the blade. Positional, so a rename cannot leave these columns reading a joint that is not there.
+REPORT_TOKENS = joint_names.REPORT_ROOTS
 
 from rl_exp.tools.runrecord import binding  # noqa: E402
 from rl_exp.tasks import obs_protocol  # noqa: E402
@@ -596,7 +602,7 @@ def summarise(foot: dict, contact_n: float, transition_frames: int = 2,
         "unloaded_pred_rotation_p50_m": (round(float(foot["pred_rotation_m"][unloaded].median()), 4)
                                          if bool(unloaded.any()) else None),
     }
-    for joint in ("hip", "hfe", "foot"):
+    for joint in REPORT_TOKENS:
         target, actual = foot[f"joint_target_{joint}"], foot[f"joint_actual_{joint}"]
         out[f"{joint}_target_p2p_rad"] = round(float(target.max() - target.min()), 4)
         out[f"{joint}_err_p50_rad"] = round(float((target - actual).abs().median()), 4)
@@ -808,7 +814,7 @@ def main() -> None:
     for term_name in live.action_manager.active_terms:
         action_term = live.action_manager.get_term(term_name)
         for position, joint_name in enumerate(action_term._joint_names):
-            if joint_name.endswith("_foot_joint"):
+            if joint_name.endswith(joint_names.JOINT_SUFFIXES[-1]):  # the blade, chain-end joint
                 frozen_foot_columns.append(action_offset + position)
         action_offset += len(action_term._joint_names)
     if action_offset != live.action_manager.total_action_dim:
@@ -817,7 +823,7 @@ def main() -> None:
     if args_cli.freeze_feet_action and not frozen_foot_columns:
         parser.error("--freeze-feet-action found no *_foot_joint in the action interface")
 
-    foot_columns = [i for i, name in enumerate(sensor.body_names) if name.endswith("_foot")]
+    foot_columns = [i for i, name in enumerate(sensor.body_names) if joint_names.is_contact_body(name)]
     foot_bodies = [sensor.body_names[i] for i in foot_columns]
     robot_foot_ids = [robot.body_names.index(name) for name in foot_bodies]
     # The shank each pad hangs off. A pad's orientation is the leg chain's, composed with the blade's
@@ -1013,7 +1019,7 @@ def main() -> None:
                    "pred_rotation_m": pred_rotation[alive, env_index, foot],
                    "contact_speed_horiz_mps": contact[alive, env_index, foot],
                    "foot_fore_aft_m": fore_aft[alive, env_index, foot]}
-            for joint in ("hip", "hfe", "foot"):
+            for joint in REPORT_TOKENS:
                 column = leg_joint_ids[joint][leg]
                 row[f"joint_target_{joint}"] = target[alive, env_index, column]
                 row[f"joint_actual_{joint}"] = actual[alive, env_index, column]

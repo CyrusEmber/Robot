@@ -33,11 +33,16 @@ Usage:
 
 import argparse
 import pathlib
+import re
 import sys
 
 _HERE = pathlib.Path(__file__).resolve()
 sys.path.insert(0, str(_HERE.parent))                 # diag_metrics
-sys.path.insert(0, str(_HERE.parents[3]))             # rl_exp.tools.verify.check_leg_reachability
+sys.path.insert(0, str(_HERE.parents[3]))             # rl_exp.tasks.joint_names + rl_exp.tools.verify
+
+#: The leg table, aliased: this file already has a local ``joint_names`` list (the asset's own joint
+#: names), and a bare import would be shadowed by it below.
+from rl_exp.tasks import joint_names as leg_names  # noqa: E402 - one home for "what a leg is made of"
 
 from isaaclab.app import AppLauncher  # noqa: E402
 
@@ -66,7 +71,7 @@ parser.add_argument("--drop-joints", default="kfe,foot",
 parser.add_argument("--self-collision", default="on", choices=("on", "off"),
                     help="the versioned config ships it off; a collision reading needs it on")
 parser.add_argument("--leg", default="lf", choices=("lf", "rf", "rl", "rr"), help="leg whose joint is ramped")
-parser.add_argument("--joint", default="hip", choices=("hip", "haa", "hfe", "kfe", "foot"),
+parser.add_argument("--joint", default=leg_names.CHAIN_ROOTS[0], choices=leg_names.CHAIN_ROOTS,
                     help="joint token of that leg; hip is the fore-aft stride axis")
 parser.add_argument("--amplitude", type=float, default=0.15, help="half-range of the ramp [rad]")
 parser.add_argument("--steps", type=int, default=120, help="control steps per ramp direction")
@@ -128,7 +133,8 @@ body_names = list(robot.data.body_names)
 _DEVICE = robot.data.body_pos_w.torch.device
 PAD_CLOUDS = PAD_CLOUDS.to(_DEVICE)  # the clouds are read from files, so they start on the CPU
 PAD_NORMAL = {leg: value.to(_DEVICE) for leg, value in PAD_NORMAL.items()}
-foot_names = [name for name in body_names if name.endswith("_foot")]
+foot_names = [name for name in body_names
+              if any(re.fullmatch(pattern, name) for pattern in leg_names.CONTACT_BODY_PATTERNS)]
 foot_ids = [body_names.index(name) for name in foot_names]
 non_foot_ids = [i for i in range(len(body_names)) if body_names[i] not in foot_names]
 target_joint = "%s_%s_joint" % (args_cli.leg, args_cli.joint)
@@ -163,10 +169,9 @@ _term, _column, _scale, _uses_default = carried[target_joint]
 default = robot.data.default_joint_pos.torch
 print("ACTION %s -> term=%s column=%d scale=%.4f use_default_offset=%s" % (
     target_joint, _term, _column, _scale, _uses_default))
-print("CARRIED leg joints: %s" % " ".join(sorted(n for n in carried if "_hip_joint" in n or "_haa_joint" in n
-                                                 or "_hfe_joint" in n or "_kfe_joint" in n or "_foot_joint" in n)))
+print("CARRIED leg joints: %s" % " ".join(sorted(n for n in carried if n.endswith(leg_names.JOINT_SUFFIXES))))
 print("UNCOMMANDED leg joints (PD holds their default target): %s" % " ".join(
-    sorted(n for n in joint_names if any(n.endswith("_%s_joint" % t) for t in ("hip", "haa", "hfe", "kfe", "foot"))
+    sorted(n for n in joint_names if n.endswith(leg_names.JOINT_SUFFIXES)
            and n not in carried)))
 
 

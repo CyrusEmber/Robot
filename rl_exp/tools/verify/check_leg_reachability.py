@@ -90,6 +90,12 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from check_dr_parity import _actuator_groups, _joint_owners  # noqa: E402
 
 _REPO = pathlib.Path(__file__).resolve().parents[3]
+# ``rl_exp`` is not an installed package, so the repo root joins sys.path beside the leg table it holds
+# (the same insert ``check_dr_parity`` does for the same reason) -- ``--self-check`` is stdlib-only and
+# runs on plain python.
+if str(_REPO) not in sys.path:
+    sys.path.insert(0, str(_REPO))
+from rl_exp.tasks import joint_names  # noqa: E402
 
 
 def family_urdf(rl_exp: pathlib.Path, family: str) -> tuple[pathlib.Path, str]:
@@ -117,11 +123,13 @@ def family_urdf(rl_exp: pathlib.Path, family: str) -> tuple[pathlib.Path, str]:
 #: be the adopted body, otherwise the pinned knee facts below would describe a body nothing runs. The
 #: first body stays reachable through ``--urdf``.
 DEFAULT_URDF = family_urdf(_REPO / "rl_exp", "lizard2")[0]
-#: The five joints of a leg, root to pad. The blade is the last one: the pad is rigid to it.
-CHAIN = ("hip", "haa", "hfe", "kfe", "foot")
+#: The five joints of a leg, root to pad. The blade is the last one: the pad is rigid to it. The chain
+#: itself lives in the name table, so a body that inserts a joint (or renames one) is this file's
+#: business only through that table.
+CHAIN = joint_names.CHAIN_ROOTS
 #: The three hinges that share one axis. Their plane is what ``hip`` can yaw and nothing can tilt,
 #: which is the structural claim :func:`hinge_vs_body_z` turns into a number.
-HINGES = CHAIN[1:4]
+HINGES = joint_names.HINGE_ROOTS
 LEGS = ("lf", "rf", "rl", "rr")
 
 #: The knee's own geometry, per leg: the ``hfe`` that makes thigh and shank collinear [deg, signed
@@ -224,7 +232,7 @@ def chain_joint_names(urdf: pathlib.Path, leg: str) -> tuple[str, ...]:
         if child in parent_of:
             raise SystemExit(f"{urdf}: link {child} has two parent joints")
         parent_of[child] = joint
-    names, link = [], f"{leg}_foot"
+    names, link = [], joint_names.end_link(leg)
     while link.startswith(f"{leg}_"):
         joint = parent_of.get(link)
         if joint is None:
@@ -232,7 +240,7 @@ def chain_joint_names(urdf: pathlib.Path, leg: str) -> tuple[str, ...]:
         names.append(joint.get("name"))
         link = joint.find("parent").get("link")
     if not names:
-        raise SystemExit(f"{urdf}: {leg}_foot has no joint of its own")
+        raise SystemExit(f"{urdf}: {joint_names.end_link(leg)} has no joint of its own")
     return tuple(reversed(names))
 
 
@@ -455,7 +463,7 @@ def load_case_angles(chain: list[dict]) -> dict[str, list[float]]:
     folded = [0.0] * len(chain)
     fold_side = 0 if straight_hfe(chain) > 0 else 1
     for index, joint in enumerate(chain):
-        if joint["token"] in ("hfe", "kfe"):
+        if joint["token"] in joint_names.HINGE_ROOTS[-2:]:
             folded[index] = joint["limits"][fold_side]
     cases["fold"] = folded
     return cases
@@ -501,7 +509,7 @@ def pad_mesh(urdf: pathlib.Path, leg: str) -> pathlib.Path:
     body's mesh, a candidate URDF reads a pad it does not have.
     """
     root = ET.parse(urdf).getroot()
-    link_name = f"{leg}_foot"
+    link_name = joint_names.end_link(leg)
     link = next((item for item in root.findall("link") if item.get("name") == link_name), None)
     if link is None:
         raise SystemExit(f"{urdf} has no link {link_name}")

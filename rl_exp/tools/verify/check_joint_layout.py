@@ -140,7 +140,7 @@ import isaaclab_tasks  # noqa: F401
 from isaaclab.utils.math import quat_apply, quat_apply_inverse
 from isaaclab.utils.string import string_to_callable
 
-from rl_exp.tasks import obs_protocol  # noqa: E402  (task -> family; a body's directory is not one)
+from rl_exp.tasks import joint_names, obs_protocol  # noqa: E402  (task -> family; the leg chain)
 
 INJECT_RAD = 0.3
 SETTLE_STEPS = args_cli.settle
@@ -189,8 +189,9 @@ def urdf_joints() -> dict:
 JOINTS = urdf_joints()
 
 # leg tokens, proximal -> distal. `hip` is lizard2's addition (a vertical axis at the leg root); a
-# family that inserts another joint adds a token here, which is the one line a new joint costs.
-_LEG_TOKENS = ("hip", "haa", "hfe", "kfe", "foot")
+# family that inserts another joint adds a token to the name table (rl_exp/tasks/joint_names.py),
+# which is the one line a new joint costs -- seven tools used to carry a copy of this list each.
+_LEG_TOKENS = joint_names.CHAIN_ROOTS
 
 
 def leg_probes() -> list[tuple[str, str, str]]:
@@ -201,9 +202,12 @@ def leg_probes() -> list[tuple[str, str, str]]:
             continue
         link = name[: -len("_joint")]
         prefix, _, token = link.rpartition("_")
-        if token not in _LEG_TOKENS or link not in body_names or f"{prefix}_foot" not in body_names:
+        # The chain's end link, read from the name table: ``.*_foot`` matches this link AND the joint
+        # that moves it, so the body a probe lands on is the table's business, not a suffix guess.
+        end = joint_names.end_link(prefix)
+        if token not in _LEG_TOKENS or link not in body_names or end not in body_names:
             continue
-        out.append((name, link, f"{prefix}_foot"))
+        out.append((name, link, end))
     return out
 
 
@@ -217,11 +221,11 @@ def pos_b():
 print("=== LAYOUT (base frame: sphere head=+x, antenna tail=-x, left=+y, up=+z) ===")
 p = pos_b()[0]
 base = p[body_names.index("base_link")]
-# The leg bodies are the asset's own (a family that inserted `hip` prints one more row per leg).
-_LEG_ORDER = ("hip", "haa", "hfe", "kfe", "foot")
+# The leg bodies are the asset's own (a family that inserted `hip` prints one more row per leg), drawn
+# in the chain's own order -- the second copy of that order this file used to carry is `_LEG_TOKENS`.
 for name in ("neck_pitch", "chest_pitch", "tail1_pitch", "tail3_pitch") + tuple(
         child for _, child, _ in sorted(leg_probes(),
-                                        key=lambda probe: (probe[1][:2], _LEG_ORDER.index(probe[1].rpartition("_")[2])))):
+                                        key=lambda probe: (probe[1][:2], _LEG_TOKENS.index(probe[1].rpartition("_")[2])))):
     i = body_names.index(name)
     print("BODY %-11s rel=(%7.3f, %7.3f, %7.3f)" % (name, p[i, 0] - base[0], p[i, 1] - base[1], p[i, 2] - base[2]))
 
@@ -311,7 +315,7 @@ for joint, child, endpoint in FK_PROBES:
 # The base is not re-solved during the sweep (`sim.forward()` updates kinematics only), so the body
 # stays at the settled height and only the leg moves.
 _SWEEP_A, _SWEEP_B = args_cli.sweep_a, args_cli.sweep_b
-_FOOT_LINK = f"{args_cli.sweep_leg}_foot"
+_FOOT_LINK = joint_names.end_link(args_cli.sweep_leg)
 for _token in (_SWEEP_A, _SWEEP_B):
     if f"{args_cli.sweep_leg}_{_token}_joint" not in JOINTS or _FOOT_LINK not in body_names:
         raise SystemExit(f"--sweep-leg {args_cli.sweep_leg} + --sweep-a/-b {_SWEEP_A}/{_SWEEP_B}: no such"

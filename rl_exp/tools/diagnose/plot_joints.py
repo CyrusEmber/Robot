@@ -26,14 +26,24 @@ air" do not look the same.
 import argparse
 import json
 import pathlib
+import sys
 
 import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
-#: Joint tokens the probe records per leg, in the order the panels are drawn.
-JOINTS = ("hip", "hfe", "foot")
+_REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
+# ``rl_exp`` is not an installed package, so the repo root joins sys.path beside the leg table it holds.
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+from rl_exp.tasks import joint_names  # noqa: E402
+
+#: Joint tokens the probe records per leg, in the order the panels are drawn. WHICH of the chain's
+#: joints are drawn is this plot's own choice (the probe's series carries three); the names and their
+#: order come from the chain, so a renamed or inserted joint cannot leave the panels drawing a row that
+#: does not exist while the figure still looks right.
+JOINTS = joint_names.REPORT_ROOTS
 
 
 def at_stop(actual: list[float], low: float, high: float, band: float) -> list[bool]:

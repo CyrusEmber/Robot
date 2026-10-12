@@ -40,10 +40,18 @@ from __future__ import annotations
 import argparse
 import json
 import pathlib
+import sys
 
 import torch
 
 from ablation_harness import baseline_frames, record
+
+# ``rl_exp`` is not an installed package, so the repo root joins sys.path beside the leg table it holds
+# -- the same insert ``record`` does just above, kept explicit here rather than relied on by import order.
+_REPO = pathlib.Path(__file__).resolve().parents[1]
+if str(_REPO) not in sys.path:
+    sys.path.insert(0, str(_REPO))
+from rl_exp.tasks import joint_names  # noqa: E402 - one home for "what a leg is made of"
 
 _BASE_COLUMNS = ("pos", "yaw", "velocity_yaw", "command_world", "terminated", "timeout")
 
@@ -863,7 +871,7 @@ def _nan_correlation(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
 #: carries the stride, and whether the thigh and the shank moved at all. Leaving `haa`/`kfe` out was
 #: tried and cost a round trip -- "the thigh barely moves" was unanswerable from a record that did not
 #: carry the joint that moves it.
-_LEG_TOKENS = ("_hip_joint", "_haa_joint", "_hfe_joint", "_kfe_joint", "_foot_joint")
+_LEG_TOKENS = joint_names.JOINT_SUFFIXES
 
 #: Forward command above which the window counts as "asked to move" [m/s]. The same floor the banded
 #: tracking criterion divides its bands with, so "moving" means one thing in this module.

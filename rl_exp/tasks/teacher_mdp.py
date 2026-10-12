@@ -42,6 +42,7 @@ from isaaclab.utils.configclass import configclass
 from isaaclab.utils.math import euler_xyz_from_quat, quat_apply_inverse, yaw_quat
 from isaaclab.utils.warp.kernels import raycast_mesh_masked_kernel
 
+from rl_exp.tasks import joint_names
 from rl_exp.tools.verify import terrain_split_probe
 
 # ponytail: RayCaster is deliberately NOT imported at module top. This module is
@@ -182,7 +183,10 @@ class FootContactNormalsTerm(ManagerTermBase):
         from isaaclab.sensors.ray_caster import RayCaster  # lazy: see module-top note
 
         self.robot = env.scene["robot"]
-        self.foot_ids, _ = self.robot.find_bodies(".*_foot")
+        # The bodies a foot is: the name table's contact pattern, not a literal ``.*_foot``. One string
+        # is the same vocabulary in both worlds (joint ``lf_foot_joint``, body ``lf_foot``), so a rename
+        # has to move the sensor's bodies and the chain's end together -- that is the table's business.
+        self.foot_ids, _ = self.robot.find_bodies(list(joint_names.CONTACT_BODY_PATTERNS))
         device = self.robot.device
         mesh_path = cfg.params.get("mesh_prim_path", "/World/ground")
         # the height scanner must have registered the terrain mesh already

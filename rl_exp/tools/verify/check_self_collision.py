@@ -54,9 +54,14 @@ from scipy.spatial import ConvexHull
 _REPO = pathlib.Path(__file__).resolve().parents[3]
 _RL_EXP = _REPO / "rl_exp"
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
+# ``rl_exp`` is not an installed package, so the repo root joins sys.path beside the table it holds --
+# the same insert ``check_dr_parity`` does for the same reason.
+if str(_REPO) not in sys.path:
+    sys.path.insert(0, str(_REPO))
 from check_leg_reachability import family_urdf  # noqa: E402 - one home for "which body a family reads"
+from rl_exp.tasks import joint_names  # noqa: E402 - one home for "what a leg is made of"
 _LEGS = ("lf", "rf", "rl", "rr")
-_LEG_TOKENS = ("hip", "haa", "hfe", "kfe", "foot")
+_LEG_TOKENS = joint_names.CHAIN_ROOTS
 
 
 def load_urdf(path: pathlib.Path) -> dict:
@@ -271,7 +276,7 @@ def sweep_poses(joints: dict) -> list[tuple[dict[str, float], str]]:
             for value in (lo, 0.0, hi):
                 poses.append(({name: value}, "single"))
         hip = limits.get("hip")
-        others = [(f"{leg}_{t}_joint", limits[t]) for t in ("haa", "hfe", "kfe") if t in limits]
+        others = [(f"{leg}_{t}_joint", limits[t]) for t in joint_names.HINGE_ROOTS if t in limits]
         for level in (0, 1, 2):  # all-fold-min / neutral / all-fold-max
             fold = {name: (lo if level == 0 else hi if level == 2 else 0.0) for name, (lo, hi) in others}
             if hip is None:

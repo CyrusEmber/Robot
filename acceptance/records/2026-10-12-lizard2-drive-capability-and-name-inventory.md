@@ -1,0 +1,240 @@
+# lizard2 驱动能力、名表存量与接触通道的勘察证据（2026-10-12）
+
+## 适用范围
+
+**这是勘察证据：不是阶段评审，不是设计通过，也不是任何落地决定。** 它固定 2026-10-12 一轮**源码通读**（读文件、不起仿真、不改仓库任何文件）的三份读数，
+交给三个在办事项当输入：`work/active/lizard2-body-drive-candidate.md` 的 B 节（驱动能力）与 E 节（名表单点化）、
+`work/active/lizard2-contact-protocol.md` 的动作 1（引擎能给的接触通道）。
+
+本记录只把**源码事实与坐标**钉下来，不从读数推出取舍：能力上限怎么绕、名表落哪里、协议收窄到什么程度，归上述事项。
+除明写"未验证"的条目外，每条都带 `文件:行`。被测仓为 `E:\Robot`；框架源码在 `E:\IsaacLab\source\`（首次给全路径，之后用唯一文件名坐标准）。
+
+**读数取自工作副本，而工作副本在本轮读取期间正被另一处改写。** 在途（未入库）的名表重构动的是同一批文件：
+新建 `rl_exp/tasks/joint_names.py`，并把 `rl_exp/tools/diagnose/*`、`rl_exp/tools/verify/*`、`ablation_harness/baseline_eval.py`、`ablation_harness/baseline_metrics.py` 里那些表换成对它的引用。
+B/C 两节的行号取自各次读取的快照，与 **HEAD `494fe73`** 相差 0–8 行（在途重构落了 2–8 行的位移；B1 给的是重构**前**的存量，因为那正是 E 节要消掉的对象）
+⇒ **判定依据是"符号↔文件"的对应，行号只作定位线索**；复读命令与 `git diff` 见"证据引用"。
+
+## 验收条件
+
+1. 每条读数必须带可打开的 `文件:行`，且是**源码**而不是文档或注释里的说法（注释与文档串只作为佐证并标明）。
+2. 与既有清单相矛盾的条目，必须给出**复读命令**，让下一个人能在同一棵树上重跑，而不是用一句"实测"覆盖。
+3. 本轮**不产生**运行读数、不改配方/锁/资产/阈值、不新增闸门；能力上限与缺口只写具名，不修。
+4. 不确定的必须留在"未覆盖边界"里具名，不许用"看起来可行"顶替。
+
+## 结果
+
+### A. 驱动能力（B 节输入）
+
+**A1 位置→力矩通路按构造就是线性的。**
+
+- `E:\IsaacLab\source\isaaclab\isaaclab\actuators\actuator_pd.py:137-141`（`ImplicitActuator.compute`）只有一行力矩：`:139`
+  `stiffness * error_pos + damping * error_vel + control_action.joint_efforts`（该行只存"近似力矩"给奖励，控制量原样返回求解器）。
+- 同一式子在下发的显式模型里再出现一次：`actuator_pd.py:190-195`，核心 `:193`。
+
+⇒ 两条通路都是 `k·(q*−q) + d·(q̇*−q̇) + τ_ff`。**非线性无处可写**：既没有"位置→力矩"的钩子，也没有可插的恢复力函数。
+
+**A2 唯一的表驱动模型也只用表截力矩。**`RemotizedPDActuator`（`actuator_pd.py:370`）持角度→传动比→最大力矩的查表
+（`:415-450`；cfg 字段 `actuator_pd_cfg.py:79` `joint_parameter_lookup`），但 `compute` 先调父类拿到**线性 PD** 的力矩（`:443`），
+再用查表插值出的上限做 `clamp`（`:445-449`）⇒ 表改的是**幅值**，不是**形状**。
+
+**A3 模型清单（修正任务描述里的枚举）。**`actuator_pd.py` 下只有 `ImplicitActuator:36`、`IdealPDActuator:150`、`DCMotor:203`、
+`DelayedPDActuator:310`、`RemotizedPDActuator:370`。**另有** `actuator_net.py:31,101` 的 `ActuatorNetLSTM` / `ActuatorNetMLP`（都是 `DCMotor` 子类）——
+两者都是**显式**模型（网络输出力矩），所以不改变 A4 的判词，但"只有这 5 个模型"的说法不完整。
+`rl_exp` 与 `ablation_harness` 下**没有**任何自定义 `ActuatorBase` 子类：grep `ActuatorBase` 只命中 `rl_exp/tools/verify/check_configclass_fields.py:302` 的类型判断。
+
+**A4 判词：今天无法表达渐硬/渐变的趾端恢复力。** 两条路都不便宜，且都不是"配一下"：
+
+- (a) 新增 Python `ActuatorBase` 子类覆写 `compute`：纯 Python、可写，但**只对显式执行器生效**，等于放弃本线特意选的物理步长 implicit PD
+  （选择理由在 `rl_exp/tasks/lizard2_recipe.py:120-122` 的文档串里：spine 上 50 Hz 显式力矩 PD 不稳定）。
+- (b) 走动作通路每子步加外力：**可达性未验证**（见"未覆盖边界"）。
+
+**A5 分组与增益。** 三组全部实例化为 `ImplicitActuatorCfg`（`rl_exp/tasks/lizard2_recipe.py:126-135`），数值来自
+`rl_exp/versions/lizard2/main/main_params.yaml:48-78`（腿 `800/40/180/10`、足 `200/12/70/6`、脊 `400/20/80/4`）。
+
+**A6 时间步。** `sim.dt` 0.005、`decimation` 4、`num_substeps: 1` ⇒ 策略 50 Hz / 物理 200 Hz
+（`rl_exp/tasks/lizard2_recipe.py:200-203`；`rl_exp/versions/lizard2/main/cfg_lock.json:98`）。
+
+**A7 具名缺口（另立一笔真缺陷）：`velocity_limit` 被静默作废。**
+
+- `actuator_pd.py:81-91`：当 `velocity_limit_sim is None and velocity_limit is not None` 时，先打警告
+  （"it was not getting used by implicit actuators … we continue to not use it"），随后 **`cfg.velocity_limit = None`（`:91`）**。
+- 而本仓正在设它：`rl_exp/tasks/lizard2_recipe.py:131` 把 yaml 的 `velocity_limit` 传进 `ImplicitActuatorCfg`；
+  `rl_exp/versions/lizard2/main/main_params.yaml:58,66,77` 给的是腿 10、足 6、脊 4 rad/s。
+- ⇒ **这三组速度上限到不了求解器**。USD 关节 prim 自己是否另带速度上限：**未验证**。
+
+本记录**不改任何配方**（`lizard2_recipe.py` 一行都不动）：A7 是账，不是修复；修不修、怎么修归 B 节决定。
+
+**A8 限位与裁切。** 限位是物理限位（USD/PhysX）加一条 0.95 软带（`rl_exp/tasks/lizard2_recipe.py:161` `soft_joint_pos_limit_factor=0.95`）；
+动作侧**不裁切**——用的是 `JointPositionActionCfg`（`rl_exp/tasks/lizard2_env_cfg.py:102-107`），不是 `ToLimits` 变体。
+
+### B. 名表存量（E 节输入，修正旧清单）
+
+**B1 真正的硬编码表：7 个符号 / 6 张表**（"表"按内容去重：前两张字面量相同）。**坐标 = HEAD `494fe73` 的存量**——
+先给存量，因为"同一份事实被抄 7 遍"正是 E 节要消掉的对象；工作副本上这份清单正被在途重构逐条换成对共享模块的引用。
+
+| # | 落点 | 符号 | 形态 |
+|---|---|---|---|
+| 1 | `rl_exp/tools/verify/check_joint_layout.py:193` | `_LEG_TOKENS` | 裸词根 `("hip","haa","hfe","kfe","foot")`；`:204` 又用 `f"{prefix}_foot"` 找链端点 link |
+| 2 | `rl_exp/tools/verify/check_self_collision.py:59` | `_LEG_TOKENS` | 同上（裸词根，内容与 #1 重复） |
+| 3 | `rl_exp/tools/verify/check_leg_reachability.py:121` | `CHAIN` | 裸词根；`:124` `HINGES = CHAIN[1:4]` 由它派生 |
+| 4 | `rl_exp/tools/diagnose/plot_joints.py:36` | `JOINTS` | 只有 3 个词根 `("hip","hfe","foot")` |
+| 5 | `rl_exp/tools/diagnose/gait_probe.py:102` | `LEG_SUFFIXES` | 带后缀 `"_hip_joint"` 等 |
+| 6 | `ablation_harness/baseline_metrics.py:866` | `_LEG_TOKENS` | 带后缀；`:894` 用 `name.endswith(_LEG_TOKENS)` |
+| 7 | `ablation_harness/baseline_eval.py:54` | 函数内本地 `tokens` | 带后缀，**不是**模块级符号 |
+
+另有 `rl_exp/tasks/obs_protocol.py:32` `_FOOT_SUFFIX = "_foot_ring"` 一处同类但不同种的表（观测协议的分组后缀）。
+
+**B2 旧清单里被证伪的四条。**复读命令见"证据引用"。
+
+| 旧说法 | 实测 |
+|---|---|
+| `gait_probe.py` 有 `_LEG_TOKENS` | 错：它叫 `LEG_SUFFIXES`（`:102`） |
+| `baseline_eval.py` 有 `_LEG_TOKENS` 符号 | 错：是函数内的本地元组 `tokens`（`:54`） |
+| `_LEG_TOKENS` 只出现在 2 个文件 | 错：**3 个**（`check_joint_layout.py:193`、`check_self_collision.py:59`、`baseline_metrics.py:866`）——本轮清单的符号枚举里它自己就出现了 3 次，与同一清单"只在 2 个文件"一条互相矛盾；以 grep 为准 |
+| 旧清单已穷尽 / "约 25 个文件"是要守的上限 | 数量随**拼写口径**变：窄口径（`_x_joint`/`_x`）22 个 `.py`，词级口径 49 个 ⇒ "≥30" 只在词级口径下成立，窄口径下不成立。**真正错的是枚举（符号名与漏项），不是量级**；量级不该被当成可守的读数 |
+
+**B3 旧清单漏掉的落点**（按 B2 的窄口径也扫得到，但旧清单只列到"任务 / 诊断 / 校验 / 评测"四类的一般项）：
+
+- Blender：`rl_exp/blender/build_rig.py`、`rl_exp/blender/generate_urdf.py`（`AXIS_MAP` / `leg_pivots`）。
+- 任务：`rl_exp/tasks/lizard2_env_cfg.py:104`；`rl_exp/tasks/teacher_mdp.py:185,1570,1635`；`rl_exp/tasks/obs_protocol.py`（`_FOOT_SUFFIX`）。
+- 校验：`rl_exp/tools/verify/check_actuator_budget.py:645-646`、`check_dr_parity.py:845-868`、`obs_protocol_live.py:51`、
+  `test_baseline_contract.py:48,516,564`。
+- 诊断：`rl_exp/tools/diagnose/stance_step_probe.py:166-167`、`diag_metrics.py:287`。
+- 评测：`ablation_harness/baseline_frames.py:69-90`。
+- 数据面：`rl_exp/ue/lizard_ue.json`、`rl_exp/versions/joint_order_runtime.json`。
+
+**B4 三种方言并存**：裸词根（#1/#2/#3/#4）、`_x_joint` 后缀（#5/#6/#7）、`.*_x_joint` 正则（配置与动作接口）。
+它们不是同一张表的三种写法：裸词根要能匹配"关节名、link 名、正则片段"，后缀版只匹配关节名 ⇒ 一张表统一它们必须**先定口径**，否则是把三件不同的事压成一个符号。
+
+**B5 `.*_foot` 是超载的，改名会静默改语义。** `.*_foot` 同时匹配**关节** `*_foot_joint` 和**刚体/link** `*_foot`
+（`rl_exp/tasks/teacher_mdp.py:185` `self.robot.find_bodies(".*_foot")`），而链端点也是按 `f"{prefix}_foot"` 找的
+（`check_joint_layout.py:204`）⇒ 拆成前肢 `finger` / 后肢 `toe` 会同时改掉**接触体集合**与**链端点查找**，两处都不报错、只是少/多匹配。
+这是 E 节动作 2"旧名机体上全部自测保持绿"要专门覆盖的一格。
+
+**B6 规模边界（必须写进 E 节动作）**：`rl_exp/versions/**` 下还有约 40 个 yaml 与 100+ 个 json 的硬编码点，被
+`rl_exp/tools/verify/check_cfg_lock.py` 与 `/check_golden_frozen.py` 钉住
+（后者按文件摘要钉 `rl_exp/versions/*/*/cfg_lock.json`：`check_golden_frozen.py:75-144,191`）⇒ **改那里=版本行为**（`.codemaker/rules/versioning.mdc` §A），
+不是查找替换；E 节的动作范围必须把这条写在门外。
+
+**B7 落点先例。** `rl_exp/tasks/obs_protocol.py` 就是本仓已有的"纯标准库、单一家的名表"：
+模块头写明"Stdlib only and no isaaclab import"（`:14-15`），导入只有 `functools/hashlib/json/pathlib/xml.etree`（`:24-28`），
+消费它的是 `rl_exp/tools/verify/check_obs_protocol.py`。名表照这个先例放 `rl_exp/tasks/`。
+另外 `rl_exp/blender/*` 跑在 Blender 自带解释器里，不能 import isaaclab/torch——这条约束决定名表必须是纯标准库。
+
+### C. 接触通道缺口（接触协议输入）
+
+**C1 今天能拿到的**：
+
+| 通道 | 落点 |
+|---|---|
+| `foot_lowest_point`（最深网格顶点，每帧） | 采集 `ablation_harness/baseline_eval.py:235-237`；实现 `rl_exp/tools/diagnose/diag_metrics.py:215-237` |
+| `foot_com_pos` / `foot_lin_vel` / `foot_ang_vel` | `ablation_harness/baseline_eval.py:238-240`（注释 `:230-233` 说明为何用 COM 而非 link 原点） |
+| 重建的 `foot_point_velocity`（`v_com + ω × (p − p_com)`） | `ablation_harness/baseline_metrics.py:563-574`，实现在 `rl_exp/tools/diagnose/diag_metrics.py:398-420`（`ponytail:` 上限写在 `:415-418`） |
+| body 级法向力 | `ablation_harness/baseline_eval.py:211-212`（`sensor.data.net_forces_w`，取 `[:, :, 2]`） |
+
+**C2 具名缺口（协议动作 1 需要的"通道存在性"答案）**：
+
+- **逐接触对的接触点位置**：`force_matrix_w` 在本仓**一次都没被读过**——只在 `diag_metrics.py:415-418` 的 `ponytail:` 注释里被点名为升级路径。
+  ⇒ 现在脚尖位置是"最深网格顶点"这个**几何猜测**，不是引擎给的接触点。
+- **逐接触对的材料点速度**、**逐对法向力**：无通道，也没有替代（最低顶点跳变不算材料点速度）。
+- **足端相对机身的摆幅**：没有报告项。
+- **运行期接触面法向**：现在**假定**来自 `meta.ground_source.normal`（`ablation_harness/baseline_metrics.py:585-587`），不是当帧读出的。
+
+**C3 滚动 vs 有效阶段：现有通道分不开。** `foot_slip_v1`（`baseline_metrics.py:633-651`）用切向速度阈值判滑移，
+载荷期滚动与真滑动在它眼里**同一种**读数（它只问"切向速度超阈值"）。
+
+**C4 报告项的依赖列检查是无条件跑的，但**对没有 `REPORT_ITEMS` 声明的名字会 `continue`：
+`ablation_harness/baseline_metrics.py:1094-1101`（`:1096-1097` 就是那个 `continue`）。
+而 `foot_yaw_deg`、`dof_torque_frac_of_limit` 被 v5 协议声明进 `report_only`
+（`ablation_harness/protocols/lizard2_flat_v5.json:165,167`），却**不在** `REPORT_ITEMS`（`ablation_harness/baseline_metrics.py:107-166`）
+⇒ 这两个报告项**被静默不检查**。这正是接触协议动作 4 要消掉的东西。
+
+**C5 `no_non_foot_carrier` 的 dwell 幅值无法按"异常承重体"标定**：`non_foot_fraction` 是逐体聚合，在时间之前被
+`any(dim=-1)` 压掉（`ablation_harness/baseline_metrics.py:300-310` 及其文档串：这个顺序**就是判据本身**——
+"轮流扛"会累加成一次持续读数，想读"某一个体单独扛住"是另一个观测）。
+
+**C6 采集器丢掉引擎已经给的历史**：`net_forces_w_history` 在别处被用（`rl_exp/tasks/teacher_mdp.py:631`、
+`rl_exp/tools/verify/baseline_probe.py:133,380`、`baseline_runtime.py:69`、`check_contact_ownership.py:204`），
+但 `ablation_harness/baseline_eval.py:211` 每帧只取当帧 `net_forces_w`。
+
+## 证据引用
+
+- 需求来源：2026-10-12 用户要求"驱动能力表 + 名表盘点 + 接触通道"三份勘察输入，不改仓库。
+- 上游事项：`work/active/lizard2-body-drive-candidate.md`（B/E 节）、`work/active/lizard2-contact-protocol.md`（动作 1）；
+  名表口径的上游决定在同事项"骨骼改名"节（2026-10-10 用户拍板）。
+- 框架源码：`E:\IsaacLab\source\isaaclab\isaaclab\actuators\actuator_pd.py`、`actuator_pd_cfg.py`、`actuator_net.py`；
+  `E:\IsaacLab\source\isaaclab_physx\isaaclab_physx\sim\schemas\schemas_cfg.py`（`:287-303`，`PhysxJointDrivePropertiesCfg`
+  文档串自述 "Currently empty after the consumption-gated split"，留作旧名的弃用别名目标）。
+- 本仓配方/版本：`rl_exp/tasks/lizard2_recipe.py`、`rl_exp/tasks/lizard2_env_cfg.py`、
+  `rl_exp/versions/lizard2/main/main_params.yaml`、`rl_exp/versions/lizard2/main/cfg_lock.json`。
+- **行号漂移的来源**（不是本轮的成果，也不在本轮评估范围内）：工作副本上有另一处未入库的名表重构在跑 ——
+  `rl_exp/tasks/joint_names.py` 新建，并把上列几个工具里抄写的表换成 `joint_names.CHAIN_ROOTS` / `JOINT_SUFFIXES`。
+  复读：
+
+```bat
+git log --oneline -1                      :: 本记录的锚点
+git status --short                        :: 在途文件清单
+git diff -U2 -- rl_exp/tools ablation_harness   :: 在途重构把哪几行表换成了引用
+```
+
+- 名表复读（B2/B3 的复读命令，在 `E:\Robot` 下跑）：
+
+```bat
+:: 符号在哪几个文件里（B2 第 3 行）
+rg -n "_LEG_TOKENS" -g "*.py" rl_exp ablation_harness
+:: 窄口径：带 _x_joint / _x 词根的文件数（本轮 = 22，已排除 versions/.git/__pycache__）
+python -B -c "import pathlib;toks=('_hip_joint','_haa_joint','_hfe_joint','_kfe_joint','_foot_joint','_hip','_haa','_hfe','_kfe');files=[p for p in pathlib.Path('.').rglob('*.py') if '.git' not in p.parts and '__pycache__' not in p.parts and 'versions' not in p.parts];print(len([p for p in files if any(t in p.read_text(encoding='utf-8',errors='replace') for t in toks)]))"
+:: 词级口径（本轮 = 49）
+python -B -c "import pathlib,re;pat=re.compile(r'\b(hip|haa|hfe|kfe|foot)\w*\b');files=[p for p in pathlib.Path('.').rglob('*.py') if '.git' not in p.parts and '__pycache__' not in p.parts and 'versions' not in p.parts and 'archive/2026' not in p.as_posix()];print(len([p for p in files if pat.search(p.read_text(encoding='utf-8',errors='replace'))]))"
+:: 接触通道（C2/C6 的复读）
+rg -n "force_matrix_w|net_forces_w_history" rl_exp ablation_harness
+:: 报告项声明与实现（C4）
+rg -n "foot_yaw_deg|dof_torque_frac_of_limit" ablation_harness/protocols/lizard2_flat_v5.json ablation_harness/baseline_metrics.py
+```
+
+- 相关既有记录（口径归属，本轮不改写）：`acceptance/records/2026-10-10-lizard2-v3-joint-velocity-limits.md`（速度上限话题的既有读数在那边）、
+  `acceptance/records/2026-10-10-lizard2-carrier-dwell-calibration.md`（`no_non_foot_carrier` 的 dwell 标定与缺口）。
+
+## 未覆盖边界
+
+**A 侧（驱动）**
+
+1. **没有 API 吃 `tau(q)`**：本轮只能证"现有通路是线性 PD + 截幅"，不能证"框架里绝对没有别的插入点"——`Articulation` 的动作/物理包装层（含 `_physics_handles_decimation`）
+   没读；**lizard2 的 `_physics_handles_decimation` 是否为真未验证**，而它决定"显式执行器是否真的每子步都算"。
+2. **每子步加外力的扩展点没追**：动作通路上能不能每物理子步施加外力，**未验证**（A4(b) 的可达性就是这条）。
+3. **A7 的 USD 侧未查**：`*_foot_joint` 的 prim 上是否另有 `physxJoint:maxJointVelocity` 之类的限速，未验证
+   （`PhysxJointDrivePropertiesCfg` 本身现在是空的，见证据引用）。
+4. **不对训练影响出结论**：A7 没跑，速度上限"丢掉"对已训 v3 与后续训练的影响量级是**未知**，只是账。
+5. **`ActuatorNet*` 只是出现在清单里**：它的 cfg 与显式力矩链没读，能否表达渐硬恢复力未判（本轮不判）。
+
+**B 侧（名表）**
+
+6. **计数不是判据**：22 / 49 两个数都只是同一把尺子的两个口径，且没有逐个确认命中是"表"还是散文/注释；**别把计数写成目标**。
+7. **yaml/json 侧的完整清单没做**：B6 只给了边界（约 40 yaml + 100+ json 在 `versions/**`），没有逐点枚举；`rl_exp/ue/lizard_ue.json`、`joint_order_runtime.json` 只作为点名前两个。
+8. **没有验证"新名表能同时服务新旧两套名"**：B7 只给先例与约束（纯标准库、Blender 可导入），接口形状、链顺序表达、接触体集合接口都还没设计。
+9. **`.*_foot` 之外是否还有别的超载正则**（例如 `.*_hip`、`chest_.*` 同时匹配关节与 link）没有逐条核。
+
+**C 侧（接触）**
+
+10. **没有起仿真**：C 全部是"代码里有没有这个通道"，不是"这个通道在 lizard2 上读数合理"。
+11. **`force_matrix_w` 能不能在本线加上**：配方不能动（会改冻结的 cfg 摘要，`work/active/floor-contact-attribution.md` 已记同一结论），
+    所以在诊断器自建 cfg 里建它是否可行、成本多少，未测。
+12. **滚动/有效阶段的区分口径**没有给出——C3 只说现有通道分不开，替代口径要接触协议事项自己定。
+13. **C4 只证"这两个项不被检查"**，没有穷举还有哪些协议声明项同样落在 `REPORT_ITEMS` 之外（本轮只按 v5 的两个点核）。
+
+## 追加：E 名表单点化落地（2026-10-12 同日）
+
+本节写于落地之后，**不改上面任何读数**：那些是读取当时的快照。但 **B 节的行号是重构前的存量**，重构已入库，复读时按符号名定位，不按行号。
+
+- 落点 `rl_exp/tasks/joint_names.py`：B1 的 7 处拷贝改读 `CHAIN_ROOTS`/`JOINT_SUFFIXES`；同文件里的第二份全链（`check_joint_layout.py` 的 `_LEG_ORDER`）、`check_self_collision.py` 的三个铰、`check_leg_reachability.py` 的 `HINGES` 与 `("hfe","kfe")`、`gait_probe.py`/`plot_joints.py` 的三列、`stance_step_probe.py` 的两条后缀串、`lizard2_env_cfg.py` 的动作正则表 → 一律表。
+- 表新增（B5 那格要求的接口）：`HINGE_ROOTS`、`REPORT_ROOTS`（位次推导，非字面词）、`CONTACT_BODY_PATTERNS` + `is_contact_body()`。`end_link()` 从此有消费者：`check_joint_layout.py` 的链端点、`check_leg_reachability.py` 的链走查与 pad 网格。
+- 读数：
+  ```bat
+  python -B rl_exp/tasks/joint_names.py        :: 四组断言：三方言 x 5 x 4、派生选择 + 接触体模式、计划名形状、stdlib 导入面
+  rl_exp\tools\verify\run_offline_checks.bat   :: 37/37 绿（含 [30] 配方逐字段 golden、[31] obs 协议声明、[37] 链口径）
+  ```
+- 破坏测试（确认新断言咬得住，不是摆设）：把 `CONTACT_BODY_PATTERNS` 的末根换成首根 ⇒ (b) 段以 `{'rr_foot', ...}` 失败；把前肢末端计划名 `finger` 改成 `toe` ⇒ (c) 段的跨组重名断言先命中。⇒ 为此**删掉**了一版"计划侧模式一分为二"的新断言：它只能在前一条已失败的状态下触发，即死代码。
+- 未迁站点，**归机体换代那一次变更**（本记录上游事项的用词就是"接触体名随名表同变更迁移"），静默与会报错的分开记：
+  - 静默（改名后不报错、只是少匹配）：按后缀找接触体 —— `rl_exp/tools/diagnose/diag_metrics.py:141`、`diagnose_support.py:427,447,817,822`、`rl_exp/tools/verify/baseline_probe.py:270-271`、`check_contact_ownership.py:209`、`obs_protocol_live.py:141`；按单词取值 —— `check_self_collision.py:278,288`（`limits.get("hip"/"hfe")`）、`gait_probe.py:878-879`（`group_effort` 的键）；CLI 默认值与显示过滤 —— `check_joint_layout.py:116,123`、`check_actuator_budget.py:528`。
+  - 会报错（迁移时自然暴露，不必先改）：`check_leg_reachability.py:816,1250`（`tokens.index("hfe")`）、`fit_gait_target.py:118-119`。
+  - 门外不计入：`rl_exp/versions/**`（B6）、`rl_exp/blender/*`（A 节候选，走计划名）、v8 一次性迁移脚本、测试里故意钉死的字面名。
