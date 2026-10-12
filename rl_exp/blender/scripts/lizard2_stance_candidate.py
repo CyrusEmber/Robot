@@ -523,6 +523,7 @@ def palm_p2_sample(args):
     parser.add_argument("--output_dir", required=True)
     parser.add_argument("--diagnostic_angles", required=True, help="Explicit approved degrees, comma separated")
     parser.add_argument("--regression_without_fix", action="store_true")
+    parser.add_argument("--palm_shape", choices=("halfpad", "claw"), default="halfpad")
     parser.add_argument("--check_only", action="store_true", help="Memory-only regression; no output directory created")
     options = parser.parse_args(args)
     angles = [float(x) for x in options.diagnostic_angles.split(",")]
@@ -535,6 +536,10 @@ def palm_p2_sample(args):
         raise FileExistsError("Refuse overwrite: " + str(output))
     repo = Path(_ASSET_DIR).parents[1]
     protected = [Path(BLEND_IN), Path(BLEND_OUT)]
+    baseline_dir = Path(_ASSET_DIR) / "lizard2_palm_p2_sample"
+    if options.palm_shape == "claw":
+        protected.extend(p for p in baseline_dir.iterdir() if p.is_file())
+        baseline = json.loads((baseline_dir / "measurements.json").read_text(encoding="utf-8"))
     for folder in ("assets", "versions", "lizard2_candidate", "meshes"):
         protected.extend(p for p in (repo / "rl_exp" / folder).rglob("*") if p.is_file())
     hashes = {str(p.relative_to(repo)): hashlib.sha256(p.read_bytes()).hexdigest() for p in protected}
@@ -679,8 +684,44 @@ def palm_p2_sample(args):
         for v in mesh.vertices:
             v.co += points[2] - cap_center
         mesh.update()
+        halfpad_mesh = mesh.copy() if options.palm_shape == "claw" else None
+        palm_bone_length = max(v.co.x for v in mesh.vertices) - points[2].x
+        if options.palm_shape == "claw":
+            # Trial recipe, NOT animal measurements or approved dimensions. No modifiers:
+            # explicit rounded cross-sections keep physical root indices stable.
+            length = palm_bone_length * 1.5
+            width, thickness = length * 0.8, length * 0.22
+            sections = ((0, .38, 1), (.18, .55, 1.05), (.48, .95, 1.15),
+                        (.78, 1, 1.1), (.94, .94, 1), (1, .72, .9))
+            ring = ((0, -.5), (.8, -.5), (1, -.3), (1, 0), (1, .3), (.8, .5),
+                    (0, .5), (-.8, .5), (-1, .3), (-1, 0), (-1, -.3), (-.8, -.5))
+            coords = []
+            for x, breadth, roof in sections:
+                for y, z in ring:
+                    # Plantar middle stays planar; dorsal arch changes only above midline.
+                    height = z * thickness * (roof if z > 0 else 1)
+                    coords.append(points[2] + Vector((x * length, y * breadth * width / 2, height)))
+            count = len(ring)
+            faces = [tuple(reversed(range(count)))]
+            for section in range(len(sections) - 1):
+                for i in range(count):
+                    a, b = section * count + i, section * count + (i + 1) % count
+                    faces.append((a, b, b + count, a + count))
+            faces.append(tuple(range((len(sections) - 1) * count, len(coords))))
+            mesh = bpy.data.meshes.new("P2_claw_no_digits")
+            mesh.from_pydata(coords, [], faces)
+            mesh.update()
+            palm.data = mesh
+            cap_ids = list(range(count))
+            report["palm_shape"] = "claw"
+            report["construction"] = "P2 unchanged except palm mesh: six capped rounded cross-sections; " \
+                "flat plantar middle, mildly arched roof, narrow root at unchanged wrist/ankle. No digits."
+            report["trial_recipe_NOT_approved"] = {
+                "length_from_halfpad": 1.5, "width_from_length": .8, "thickness_from_length": .22,
+                "sections_x_width_roof_factors": sections, "ring_y_z_factors": ring}
         mesh_objects.append((palm, names[3]))
         samples[leg] = {"points": points, "axis": axis, "names": names, "objects": mesh_objects,
+                        "palm_bone_length": palm_bone_length, "halfpad_mesh": halfpad_mesh,
                         "endpoints": endpoints, "palm": palm, "cap_ids": cap_ids,
                         "marker": wrist_marker, "root_parent": original_bones[f"{leg}_haa"][3]}
         report["rest"][leg] = {"old_joint_heads_m": [encode(p) for p in old],
@@ -709,8 +750,7 @@ def palm_p2_sample(args):
         swing.tail = swing.head + arm_inv.to_3x3() @ Vector((0, 0, 0.1))
         swing.parent = eb[sample["root_parent"]]
         previous = swing
-        palm_points = [v.co for v in sample["palm"].data.vertices]
-        palm_length = max(v.x for v in palm_points) - p[2].x
+        palm_length = sample["palm_bone_length"]
         for i, name in enumerate(names[1:]):
             bone = eb[name]
             bone.use_connect = False
@@ -736,6 +776,42 @@ def palm_p2_sample(args):
             bpy.context.view_layer.update()
             obj.matrix_world = world
     bpy.context.view_layer.update()
+    if options.palm_shape == "claw":
+        with bpy.data.libraries.load(str(baseline_dir / "sample_neutral.blend"), link=False) as (src, dst):
+            dst.armatures = src.armatures
+        prior_arm = dst.armatures[0]
+        assert set(prior_arm.bones.keys()) == set(arm.data.bones.keys()), "P2 joint count/names changed"
+        for bone in arm.data.bones:
+            prior = prior_arm.bones[bone.name]
+            assert bone.head_local == prior.head_local and bone.tail_local == prior.tail_local, "P2 bone points changed"
+            assert bone.matrix_local == prior.matrix_local, "P2 bone axis changed"
+            assert (bone.parent.name if bone.parent else None) == (prior.parent.name if prior.parent else None)
+        bpy.data.armatures.remove(prior_arm)
+        report["baseline_bone_points_axes_parents"] = "EXACTLY_UNCHANGED"
+        for leg, sample in samples.items():
+            assert report["rest"][leg]["new_joint_heads_m"] == baseline["rest"][leg]["new_joint_heads_m"]
+            source_lines[leg] = sample["points"] + [sample["points"][2] + Vector((sample["palm_bone_length"], 0, 0))]
+            source_meshes[leg] = []
+            for obj, parent in sample["objects"]:
+                if obj is sample["palm"]:
+                    data = sample["halfpad_mesh"]
+                else:
+                    data = bpy.data.meshes.new_from_object(obj.evaluated_get(bpy.context.evaluated_depsgraph_get()),
+                                                          depsgraph=bpy.context.evaluated_depsgraph_get())
+                    data.transform(obj.matrix_world)
+                source_meshes[leg].append(data)
+            report["rest"][leg]["before_halfpad_world_bounds_m"] = [
+                [min(v.co[i] for v in sample["halfpad_mesh"].vertices),
+                 max(v.co[i] for v in sample["halfpad_mesh"].vertices)] for i in range(3)]
+            report["rest"][leg]["baseline_palm_world_bounds_m"] = baseline["rest"][leg]["palm_world_bounds_m"]
+            bm = bmesh.new()
+            bm.from_mesh(sample["palm"].data)
+            assert all(e.is_manifold and e.is_contiguous for e in bm.edges), "claw not watertight/oriented"
+            volume = bm.calc_volume(signed=True)
+            assert volume > 0, "claw inward winding"
+            bm.free()
+            report["rest"][leg]["claw_topology"] = {"watertight_consistent_outward": True, "signed_volume_m3": volume,
+                "physical_cap_vertex_ids": sample["cap_ids"], "sections": len(sections)}
 
     def measure(leg):
         sample = samples[leg]
@@ -794,6 +870,15 @@ def palm_p2_sample(args):
 
     for leg in samples:
         report["rest"][leg].update(measure(leg))
+        if options.palm_shape == "claw":
+            bounds = report["rest"][leg]["palm_world_bounds_m"]
+            report["rest"][leg]["raw_length_width_thickness_m"] = [hi - lo for lo, hi in bounds]
+            coords = vertices(samples[leg]["palm"])
+            report["rest"][leg]["raw_section_x_width_thickness_m"] = [
+                [center(coords[s * count:(s + 1) * count]).x - samples[leg]["points"][2].x,
+                 max(p.y for p in coords[s * count:(s + 1) * count]) - min(p.y for p in coords[s * count:(s + 1) * count]),
+                 max(p.z for p in coords[s * count:(s + 1) * count]) - min(p.z for p in coords[s * count:(s + 1) * count])]
+                for s in range(len(sections))]
     if options.regression_without_fix:
         # Narrow inverse of the cap placement fix, memory only; actual geometry, not a fake fixture.
         sample = samples["lf"]
@@ -1017,8 +1102,8 @@ def palm_p2_sample(args):
             old_front, new_front = front + old_offset, front + new_offset
             if view != "turns":
                 up = camera.rotation_euler.to_matrix() @ Vector((0, 1, 0))
-                text("SOURCE", target + old_front + up * 0.58, 0.06)
-                text("P2 SAMPLE", target + new_front + up * 0.58, 0.06)
+                text("BEFORE halfpad" if options.palm_shape == "claw" else "SOURCE", target + old_front + up * 0.58, 0.06)
+                text("AFTER claw" if options.palm_shape == "claw" else "P2 SAMPLE", target + new_front + up * 0.58, 0.06)
             old = source_lines[leg]
             for i in range(len(old) - 1):
                 line(old[i] + old_front, old[i + 1] + old_front, (1, 0.35, 0.05, 1))
@@ -1030,7 +1115,8 @@ def palm_p2_sample(args):
             for i, role in enumerate(("root", "elbow" if leg == "lf" else "knee", "wrist" if leg == "lf" else "ankle")):
                 ball(p[i] + new_front, (0.1, 0.8, 1, 1))
                 text(role, p[i] + new_front + Vector((0.015, 0, 0.025)))
-            text("OLD ghost kfe > foot", old[2] + old_front + Vector((-0.15, 0, -0.16)), 0.03)
+            if options.palm_shape != "claw":
+                text("OLD ghost kfe > foot", old[2] + old_front + Vector((-0.15, 0, -0.16)), 0.03)
             if view == "turns":
                 # True evaluated vertex edges from independent -10/+10 single-joint snapshots.
                 for name, angle, color in ((sample["names"][2], -10.0, (1, 0.8, 0.1, 1)),

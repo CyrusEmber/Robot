@@ -4,16 +4,16 @@ title: lizard2 机体与驱动候选：蜥蜴骨段朝向、人手式足掌、�
 scope: rl_exp/blender, rl_exp/tools/pipeline, rl_exp/tools/verify, rl_exp/tools/diagnose, rl_exp/tasks, acceptance/records
 status: in_progress
 landing: rl_exp/blender/scripts/lizard2_stance_candidate.py, rl_exp/blender/scripts/generate_urdf.py, rl_exp/tools/diagnose/gait_probe.py, rl_exp/tools/diagnose/stance_step_probe.py, rl_exp/tools/diagnose/plot_joints.py, rl_exp/tools/verify/check_leg_reachability.py, rl_exp/tools/verify/check_self_collision.py, rl_exp/tools/verify/check_joint_layout.py, rl_exp/tools/verify/baseline_probe.py, rl_exp/tasks/joint_names.py, ablation_harness/baseline_metrics.py
-next: 用户看 P2 小样与测量记录，确认外观及位置/网格容差；未批准不扩四肢、不进 P3。
+next: 用户看无指爪掌外观及容差；连接方式已认可，未批准不扩四肢、不进 P3。
 close_when: 新上下文按正文“关闭条件”核验 R1–R5 与 D 记录，用户确认外观和动作；未判定不关闭。
-evidence: acceptance/records/2026-10-12-lizard2-palm-p2-sample.md, acceptance/records/2026-10-12-lizard2-palm-chain-p1.md, acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory, acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, acceptance/records/2026-10-08-lizard2-joint-design-review-contract, acceptance/records/2026-10-08-lizard2-r1-numeric-reference-and-decision-drafts
+evidence: acceptance/records/2026-10-12-lizard2-claw-palm-shape.md, acceptance/records/2026-10-12-lizard2-palm-p2-sample.md, acceptance/records/2026-10-12-lizard2-palm-chain-p1.md, acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory, acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, acceptance/records/2026-10-08-lizard2-joint-design-review-contract, acceptance/records/2026-10-08-lizard2-r1-numeric-reference-and-decision-drafts
 ---
 
-本项取代按 S0–S4 串联、逐级审核的安排：各节自检只用机器闸门与可复读检查，不置 `pending_review`；只在 D 集成后审核一次。整体需求见整体记录；足掌结构以本项 A 节的用户拍板（2026-10-12）为当前要求，覆盖旧记录及旧名表中的指/趾根候选约束。判据归 R1–R5 与 A 节的结构检查，本项只留动作、交付与顺序。
+本项取代 S0–S4 串联审核：各节仅自检，D 集成后一次审核。整体需求见整体记录；A 节用户拍板覆盖旧指/趾根约束。判据归 R1–R5/A，本项只留动作与交付顺序。
 
 ## 下一步
 
-1. **按 A 的探测链推进**：P1/P2 交接见本项具名记录；用户看两肢小样并确认外观及位置/网格容差，调整后再扩四肢与隔离导出；诊断转动不当限位/物理批准，旧链或合成契约通过不当几何通过，正式资产不动。
+1. **按 A 探测链推进**：两肢无指爪掌见本项 claw-palm-shape 记录；用户看外观及位置/网格容差，再调整、扩四肢、隔离导出。连接方式已认可；诊断不当限位/物理批准，契约不当几何通过，正式资产不动。
 2. **继续 E3 接线**：URDF → FK/碰撞、运行时、报告 reader、接触面（`diag_metrics.foot_ids`、`check_contact_ownership`、`obs_protocol_live`）与 `baseline_probe` 已接线并各有真跑读数与错配负例；当前改 Blender 构建入口与步态诊断。`diagnose_support.py` 归 `floor-contact-attribution`（该文件是它的 landing），E 只登记待接的四处行号，不代改。报告 **writer** 侧（`baseline_eval` 的关节列集合、`gait_probe` 报告字段）属评测协议面，先交 `lizard2-contact-protocol` 再动。E4 的运行时双命名对照做不了——运行时关节名还写在配方里（动作项/`joint_order`/默认位姿），改名须与采用同一次变更落地（归 S6），现在只验到"绑定被核对、错配被拒"。
 3. **并行边界**：A 选 pivot/轴消费 B 的能力约束，按线性对照进行，不新建驱动机制；有效限速前置仍归 B。E 接线前，A 只核对旧名源几何，不让未接线工具测新名候选；C 可用现有机体开展。
 4. **先解除资产前提**：`gait_probe` 的资产前提交 `floor-contact-attribution` 的 ⑤/⑪；不借 E 改资产或放宽断言。声明面边界与既有自检覆盖只取本项 2026-10-12 evidence。
