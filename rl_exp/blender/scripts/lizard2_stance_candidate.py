@@ -511,9 +511,569 @@ def contract_self_check(without_fix=False):
           "asset files hashed=%d unchanged; Python writes forbidden; geometry_proven=False" % len(before))
 
 
+def palm_p2_sample(args):
+    """Build two source-mesh samples; report diagnostic turns, never accept geometry or export."""
+    import argparse
+    import hashlib
+    import json
+    from pathlib import Path
+
+    parser = argparse.ArgumentParser(description=palm_p2_sample.__doc__)
+    parser.add_argument("--p2_sample", action="store_true")
+    parser.add_argument("--output_dir", required=True)
+    parser.add_argument("--diagnostic_angles", required=True, help="Explicit approved degrees, comma separated")
+    parser.add_argument("--regression_without_fix", action="store_true")
+    parser.add_argument("--check_only", action="store_true", help="Memory-only regression; no output directory created")
+    options = parser.parse_args(args)
+    angles = [float(x) for x in options.diagnostic_angles.split(",")]
+    if angles != [-10.0, 0.0, 10.0]:
+        raise ValueError("P2 approval covers diagnostic -10/0/+10 degrees ONLY")
+    output = Path(options.output_dir).resolve()
+    if output.parent != Path(_ASSET_DIR).resolve() or not output.name.startswith("lizard2_palm_p2_sample"):
+        raise ValueError("P2 output must be a new lizard2_palm_p2_sample* directory beside source")
+    if not options.check_only and output.exists():
+        raise FileExistsError("Refuse overwrite: " + str(output))
+    repo = Path(_ASSET_DIR).parents[1]
+    protected = [Path(BLEND_IN), Path(BLEND_OUT)]
+    for folder in ("assets", "versions", "lizard2_candidate", "meshes"):
+        protected.extend(p for p in (repo / "rl_exp" / folder).rglob("*") if p.is_file())
+    hashes = {str(p.relative_to(repo)): hashlib.sha256(p.read_bytes()).hexdigest() for p in protected}
+    report = {"status": "PROVISIONAL_SAMPLE_NOT_ACCEPTED", "angles_deg": angles,
+              "approval": "diagnostic turns only; no position/mesh tolerances, ROM, physics or adoption approval",
+              "units": "world coordinates and distances m; angles deg; body forward +X",
+              "source": str(Path(BLEND_IN).relative_to(repo)), "protected_sha256_before": hashes,
+              "construction": "lf/rl ONLY. Native upper/lower bone lengths; approved candidate directions. "
+              "Cylinder native cap rings fitted to bone endpoints, radial offsets preserved. "
+              "Evaluated source pad bisected at its body-X vertex centroid, forward half capped at source cross-section. "
+              "Cap centroid translated to wrist/ankle. No new primitive limb mesh, no scaling of pad. "
+              "Old unmeshed kfe->foot segment and foot bone removed; source kfe marker retained at new wrist. "
+              "No four-limb exporter contract claim.", "rest": {}, "turns": [], "negative_checks": {}}
+    scene, arm, arm_mw, bones, on_bone = load()
+    roles = leg_roles(arm_mw, bones, on_bone)
+    report["source_sample_pose_basis"] = {name: [list(row) for row in arm.pose.bones[name].matrix_basis]
+                                          for leg in LEFT_LEGS for name in (f"{leg}_{j}" for j in LEG_BONES)}
+    report["pose_handling"] = "Source contains nonzero pose basis despite rest-aligned object geometry. " \
+        "Only rebuilt lf/rl pose basis is cleared; other limbs and trunk are unchanged."
+    arm_inv = arm_mw.inverted()
+    original_bones = {n: (b.head_local.copy(), b.tail_local.copy(), b.matrix_local.copy(),
+                          b.parent.name if b.parent else None) for n, b in bones.items()}
+    original_world = {o.name: o.matrix_world.copy() for o in scene.objects if o.type == "MESH"}
+    original_right = {}
+
+    def vertices(obj):
+        evaluated = obj.evaluated_get(bpy.context.evaluated_depsgraph_get())
+        mesh = evaluated.to_mesh()
+        try:
+            return [evaluated.matrix_world @ v.co for v in mesh.vertices]
+        finally:
+            evaluated.to_mesh_clear()
+
+    for leg in ("rf", "rr"):
+        for pair in roles[leg].values():
+            for obj in pair:
+                if obj is not None:
+                    original_right[obj.name] = vertices(obj)
+
+    # Floating arithmetic sanity only: not an anatomical position/mesh acceptance tolerance.
+    # Blender stores geometry as float32. Bound scales with coordinates, not observed residuals.
+    def roundoff(points):
+        return 64 * (2 ** -23) * max(1.0, *(abs(x) for p in points for x in p))
+
+    def center(points):
+        return sum(points, Vector()) / len(points)
+
+    def encode(p):
+        return list(p)
+
+    def bake_world(obj):
+        evaluated = obj.evaluated_get(bpy.context.evaluated_depsgraph_get())
+        mesh = bpy.data.meshes.new_from_object(evaluated, depsgraph=bpy.context.evaluated_depsgraph_get())
+        mesh.transform(evaluated.matrix_world)
+        obj.modifiers.clear()
+        obj.parent = None
+        obj.matrix_world = Matrix.Identity(4)
+        obj.data = mesh
+        return mesh
+
+    samples = {}
+    source_lines = {}
+    source_meshes = {}
+    for leg in LEFT_LEGS:
+        source_meshes[leg] = []
+        for pair in roles[leg].values():
+            for obj in pair:
+                if obj is not None:
+                    evaluated = obj.evaluated_get(bpy.context.evaluated_depsgraph_get())
+                    data = bpy.data.meshes.new_from_object(evaluated, depsgraph=bpy.context.evaluated_depsgraph_get())
+                    data.transform(evaluated.matrix_world)
+                    source_meshes[leg].append(data)
+    for leg, params in LEFT_LEGS.items():
+        old = [arm_mw @ bones[f"{leg}_{j}"].head_local for j in LEG_BONES]
+        source_lines[leg] = old + [arm_mw @ bones[f"{leg}_foot"].tail_local]
+        dirs = [seg_dir(params["phi"][i], params["theta"]) for i in range(2)]
+        points = [old[0].copy()]
+        for i in range(2):
+            points.append(points[-1] + dirs[i] * (old[i + 1] - old[i]).length)
+        native = ("shoulder_swing", "shoulder_abduct", "elbow", "wrist") if leg == "lf" else (
+            "hip_swing", "hip_abduct", "knee", "ankle")
+        names = [f"{leg}_{r}" for r in native]
+        axis = dirs[0].cross(dirs[1]).normalized()
+        mesh_objects = []
+        endpoints = []
+        source_measure = {}
+        for i, joint in enumerate(("haa", "hfe")):
+            marker, segment = roles[leg][joint]
+            rotation = (old[i + 1] - old[i]).rotation_difference(dirs[i])
+            transform = rigid_about(old[i], points[i], rotation)
+            marker_world = transform @ original_world[marker.name]
+            mesh = bake_world(segment)
+            source_axis = (old[i + 1] - old[i]).normalized()
+            projections = [(v.co - old[i]).dot(source_axis) for v in mesh.vertices]
+            caps = [list(face.vertices) for face in mesh.polygons if len(face.vertices) > 4]
+            assert len(caps) == 2, "Expected two real native cylinder cap polygons"
+            caps.sort(key=lambda ids: center([mesh.vertices[k].co for k in ids]).dot(source_axis))
+            cap_centers = [center([mesh.vertices[k].co for k in ids]) for ids in caps]
+            lo, hi = [(c - old[i]).dot(source_axis) for c in cap_centers]
+            length = (old[i + 1] - old[i]).length
+            source_measure[joint] = {"axial_min_from_head_m": lo, "axial_max_from_head_m": hi,
+                                      "cap_centers_m": [encode(c) for c in cap_centers],
+                                      "bone_length_m": length, "distal_surface_gap_m": length - hi}
+            # Native cap-ring centers and topology, not object origins or extreme single vertices.
+            # Axial fit plus interpolated transverse recentering; preserve native radial offsets.
+            for v, distance in zip(mesh.vertices, projections):
+                fraction = (distance - lo) / (hi - lo)
+                native_center = cap_centers[0].lerp(cap_centers[1], fraction)
+                transverse = native_center - (old[i] + source_axis * distance)
+                v.co += source_axis * (length * fraction - distance) - transverse
+                v.co = transform @ v.co
+            mesh.update()
+            ends = caps
+            endpoints.append((segment, ends))
+            marker.parent = None
+            marker.matrix_world = marker_world
+            mesh_objects.extend([(marker, names[i + 1]), (segment, names[i + 1])])
+        wrist_marker = roles[leg]["kfe"][0]
+        wrist_marker.parent = None
+        wrist_marker.matrix_world = Matrix.Translation(points[2] - old[2]) @ original_world[wrist_marker.name]
+        mesh_objects.append((wrist_marker, names[3]))
+        palm = roles[leg]["foot"][0]
+        old_pad = vertices(palm)
+        old_center = center(old_pad)
+        old_bounds = [[min(p[i] for p in old_pad), max(p[i] for p in old_pad)] for i in range(3)]
+        mesh = bake_world(palm)
+        bm = bmesh.new()
+        bm.from_mesh(mesh)
+        cut = bmesh.ops.bisect_plane(bm, geom=list(bm.verts) + list(bm.edges) + list(bm.faces),
+                                   dist=0.000001, plane_co=old_center, plane_no=Vector((1, 0, 0)),
+                                   clear_inner=True, clear_outer=False)
+        boundary = [e for e in cut["geom_cut"] if isinstance(e, bmesh.types.BMEdge) and e.is_boundary]
+        if not boundary:
+            raise AssertionError("Source pad cut has no root boundary")
+        bmesh.ops.holes_fill(bm, edges=boundary, sides=0)
+        bmesh.ops.recalc_face_normals(bm, faces=list(bm.faces))
+        bm.to_mesh(mesh)
+        bm.free()
+        cap_ids = [v.index for v in mesh.vertices if abs(v.co.x - old_center.x) <= 0.000002]
+        assert len(cap_ids) >= 3, "No physical proximal cap"
+        cap_center = center([mesh.vertices[i].co for i in cap_ids])
+        for v in mesh.vertices:
+            v.co += points[2] - cap_center
+        mesh.update()
+        mesh_objects.append((palm, names[3]))
+        samples[leg] = {"points": points, "axis": axis, "names": names, "objects": mesh_objects,
+                        "endpoints": endpoints, "palm": palm, "cap_ids": cap_ids,
+                        "marker": wrist_marker, "root_parent": original_bones[f"{leg}_haa"][3]}
+        report["rest"][leg] = {"old_joint_heads_m": [encode(p) for p in old],
+                              "new_joint_heads_m": [encode(p) for p in points],
+                              "wrist_world_shift_m": (points[2] - old[2]).length,
+                              "wrist_vs_reposed_old_kfe_shift_m": 0.0,
+                              "removed_ghost_length_m": (old[3] - old[2]).length,
+                              "removed_foot_head_m": encode(old[3]), "native_pad_bounds_m": old_bounds,
+                              "native_pad_midpoint_m": encode(old_center), "native_cylinder": source_measure,
+                              "hinge_axis_world": encode(axis), "role_chain": names,
+                              "upper_direction": encode(dirs[0]), "lower_direction": encode(dirs[1]),
+                              "upper_side_tilt_deg": side_tilt(dirs[0]), "lower_side_tilt_deg": side_tilt(dirs[1])}
+
+    # All affected meshes are detached before rest edits; explicitly bind preserved world geometry after.
+    bpy.context.view_layer.objects.active = arm
+    bpy.ops.object.mode_set(mode="EDIT")
+    eb = arm.data.edit_bones
+    for leg, sample in samples.items():
+        p, names, axis = sample["points"], sample["names"], sample["axis"]
+        eb.remove(eb[f"{leg}_foot"])
+        for old_name, new_name in zip(("haa", "hfe", "kfe"), names[1:]):
+            eb[f"{leg}_{old_name}"].name = new_name
+        swing = eb.new(names[0])
+        swing.head = arm_inv @ p[0]
+        # Display stub only, same native old foot display length; no extra physical segment.
+        swing.tail = swing.head + arm_inv.to_3x3() @ Vector((0, 0, 0.1))
+        swing.parent = eb[sample["root_parent"]]
+        previous = swing
+        palm_points = [v.co for v in sample["palm"].data.vertices]
+        palm_length = max(v.x for v in palm_points) - p[2].x
+        for i, name in enumerate(names[1:]):
+            bone = eb[name]
+            bone.use_connect = False
+            bone.head = arm_inv @ p[i]
+            tail = p[i + 1] if i < 2 else p[2] + Vector((palm_length, 0, 0))
+            bone.tail = arm_inv @ tail
+            local_axis = arm_inv.to_3x3() @ axis
+            bone.align_roll(local_axis.cross((bone.tail - bone.head).normalized()))
+            bone.parent = previous
+            previous = bone
+    bpy.ops.object.mode_set(mode="OBJECT")
+    for sample in samples.values():
+        for name in sample["names"]:
+            arm.pose.bones[name].matrix_basis = Matrix.Identity(4)
+    bpy.context.view_layer.update()
+    for sample in samples.values():
+        for obj, name in sample["objects"]:
+            world = obj.matrix_world.copy()
+            obj.parent = arm
+            obj.parent_type = "BONE"
+            obj.parent_bone = name
+            obj.matrix_parent_inverse = Matrix.Identity(4)
+            bpy.context.view_layer.update()
+            obj.matrix_world = world
+    bpy.context.view_layer.update()
+
+    def measure(leg):
+        sample = samples[leg]
+        n = sample["names"]
+        root = arm_mw @ arm.pose.bones[n[3]].head
+        lower_tail = arm_mw @ arm.pose.bones[n[2]].tail
+        palm_points = vertices(sample["palm"])
+        cap = center([palm_points[i] for i in sample["cap_ids"]])
+        cap_vectors = [palm_points[i] - cap for i in sample["cap_ids"]]
+        cap_normal = next(a.cross(b).normalized() for a in cap_vectors for b in cap_vectors
+                          if a.cross(b).length > 1e-8)
+        marker_points = vertices(sample["marker"])
+        mesh_ends = []
+        for segment, indices in sample["endpoints"]:
+            v = vertices(segment)
+            mesh_ends.append([center([v[i] for i in group]) for group in indices])
+        return {"bone_root_m": encode(root), "lower_bone_tail_m": encode(lower_tail),
+                "physical_cap_center_m": encode(cap), "cap_root_residual_m": (cap - root).length,
+                "lower_mesh_distal_center_m": encode(mesh_ends[1][1]),
+                "lower_mesh_distal_to_root_m": (mesh_ends[1][1] - root).length,
+                "lower_mesh_distal_signed_distance_to_cap_plane_m": (mesh_ends[1][1] - cap).dot(cap_normal),
+                "physical_root_cap_planarity_residual_m": max(abs(v.dot(cap_normal)) for v in cap_vectors),
+                "physical_cap_normal_world": encode(cap_normal),
+                "upper_mesh_head_to_bone_m": (mesh_ends[0][0] - arm_mw @ arm.pose.bones[n[1]].head).length,
+                "upper_mesh_tail_to_elbow_m": (mesh_ends[0][1] - arm_mw @ arm.pose.bones[n[2]].head).length,
+                "lower_mesh_head_to_elbow_m": (mesh_ends[1][0] - arm_mw @ arm.pose.bones[n[2]].head).length,
+                "joint_marker_vertex_centroid_m": encode(center(marker_points)),
+                "marker_centroid_to_root_m": (center(marker_points) - root).length,
+                "segment_end_centers_m": [[encode(p) for p in pair] for pair in mesh_ends],
+                "palm_body_x_from_root_m": [min(p.x - root.x for p in palm_points),
+                                             max(p.x - root.x for p in palm_points)],
+                "palm_world_bounds_m": [[min(p[i] for p in palm_points), max(p[i] for p in palm_points)]
+                                         for i in range(3)],
+                "palm_vertices": len(palm_points), "palm_faces": len(sample["palm"].data.polygons),
+                "numeric_roundoff_bound_m_NOT_acceptance": roundoff(palm_points)}
+
+    def mechanical_check():
+        for leg, sample in samples.items():
+            names = sample["names"]
+            for parent, child in zip(names, names[1:]):
+                assert arm.data.bones[child].parent.name == parent, "wrong role parent: " + child
+            assert not arm.data.bones[names[-1]].children, "retained toe/distal joint"
+            assert all(f"{leg}_{j}" not in arm.data.bones for j in LEG_BONES), "retained old chain"
+            for obj, name in sample["objects"]:
+                assert obj.parent == arm and obj.parent_type == "BONE" and obj.parent_bone == name, "wrong mesh parent"
+            assert all(segment is not None and len(segment.data.polygons) > 0
+                       for segment, indices in sample["endpoints"]), "missing physical segment"
+            m = measure(leg)
+            eps = m["numeric_roundoff_bound_m_NOT_acceptance"]
+            assert m["cap_root_residual_m"] <= eps, "physical palm root mismatch: " + str(m)
+            assert m["palm_body_x_from_root_m"][0] >= -eps, "centered palm crosses behind pivot"
+            assert m["palm_body_x_from_root_m"][1] > eps, "no forward palm length"
+            assert m["lower_mesh_distal_to_root_m"] <= eps, "lower mesh ends before wrist"
+            assert max(m[key] for key in ("upper_mesh_head_to_bone_m", "upper_mesh_tail_to_elbow_m",
+                                         "lower_mesh_head_to_elbow_m")) <= eps, "physical segment cap mismatch"
+
+    for leg in samples:
+        report["rest"][leg].update(measure(leg))
+    if options.regression_without_fix:
+        # Narrow inverse of the cap placement fix, memory only; actual geometry, not a fake fixture.
+        sample = samples["lf"]
+        length = max(v.co.x for v in sample["palm"].data.vertices) - sample["points"][2].x
+        for v in sample["palm"].data.vertices:
+            v.co.x -= length / 2
+        sample["palm"].data.update()
+        bpy.context.view_layer.update()
+    mechanical_check()
+
+    def reject(label, mutate, restore):
+        mutate()
+        bpy.context.view_layer.update()
+        try:
+            mechanical_check()
+        except AssertionError as exc:
+            report["negative_checks"][label] = str(exc)
+        else:
+            raise AssertionError("Regression failed to detect: " + label)
+        finally:
+            restore()
+            bpy.context.view_layer.update()
+        mechanical_check()
+
+    palm = samples["lf"]["palm"]
+    reject("wrong_mesh_parent", lambda: setattr(palm, "parent_bone", samples["lf"]["names"][2]),
+           lambda: setattr(palm, "parent_bone", samples["lf"]["names"][3]))
+    segment, indices = samples["lf"]["endpoints"][1]
+    reject("missing_segment", lambda: samples["lf"]["endpoints"].__setitem__(1, (None, indices)),
+           lambda: samples["lf"]["endpoints"].__setitem__(1, (segment, indices)))
+    saved_inverse = palm.matrix_parent_inverse.copy()
+    reject("stale_inverse", lambda: setattr(palm, "matrix_parent_inverse", Matrix.Translation((0.01, 0, 0))),
+           lambda: setattr(palm, "matrix_parent_inverse", saved_inverse))
+    # Distal topology negative uses the actual sample armature, not P1's synthetic fixture.
+    def toe(add):
+        bpy.context.view_layer.objects.active = arm
+        bpy.ops.object.mode_set(mode="EDIT")
+        eb = arm.data.edit_bones
+        if add:
+            child = eb.new("rl_toe")
+            child.head, child.tail = (0, 0, 0), (0, 0, 0.1)
+            child.parent = eb[samples["rl"]["names"][3]]
+        else:
+            eb.remove(eb["rl_toe"])
+        bpy.ops.object.mode_set(mode="OBJECT")
+    reject("retained_toe", lambda: toe(True), lambda: toe(False))
+
+    neutral = {obj.name: vertices(obj) for sample in samples.values() for obj, name in sample["objects"]}
+    turn_geometry = {}
+    for leg, sample in samples.items():
+        for name in sample["names"][2:]:
+            pivot = arm_mw @ arm.data.bones[name].head_local
+            axis_local = arm.data.bones[name].matrix_local.to_3x3().inverted() @ (
+                arm_inv.to_3x3() @ sample["axis"])
+            downstream = {b.name for b in arm.data.bones[name].children_recursive} | {name}
+            for angle in angles:
+                pose = arm.pose.bones[name]
+                pose.rotation_mode = "QUATERNION"
+                from mathutils import Quaternion
+                pose.rotation_quaternion = Quaternion(axis_local, math.radians(angle))
+                bpy.context.view_layer.update()
+                rotation = Matrix.Rotation(math.radians(angle), 4, sample["axis"])
+                expected = Matrix.Translation(pivot) @ rotation @ Matrix.Translation(-pivot)
+                residuals = {}
+                for obj, parent in sample["objects"]:
+                    transform = expected if parent in downstream else Matrix.Identity(4)
+                    got = vertices(obj)
+                    residuals[obj.name] = max((actual - transform @ rest).length
+                                             for actual, rest in zip(got, neutral[obj.name]))
+                    assert residuals[obj.name] <= roundoff(got), "mesh drifts under turn: " + obj.name
+                measurement = measure(leg)
+                measurement.update({"leg": leg, "joint": name, "angle_deg": angle,
+                                    "rigid_vertex_residuals_m": residuals})
+                report["turns"].append(measurement)
+                if angle != 0:
+                    turn_geometry[(leg, name, angle)] = {obj.name: vertices(obj) for obj, parent in sample["objects"]}
+                pose.rotation_quaternion = Quaternion()
+                bpy.context.view_layer.update()
+    mechanical_check()
+    # A rest-aligned matrix can still drift only on turning: freeze palm world transform after pose.
+    name = samples["lf"]["names"][3]
+    pose = arm.pose.bones[name]
+    saved_basis = palm.matrix_basis.copy()
+    rest_world = palm.matrix_world.copy()
+    pose.rotation_quaternion = Quaternion(arm.data.bones[name].matrix_local.to_3x3().inverted() @
+                                         (arm_inv.to_3x3() @ samples["lf"]["axis"]), math.radians(10))
+    bpy.context.view_layer.update()
+    palm.matrix_world = rest_world
+    bpy.context.view_layer.update()
+    drift = max((a - b).length for a, b in zip(vertices(palm), turn_geometry[("lf", name, 10.0)][palm.name]))
+    assert drift > roundoff(vertices(palm)), "turn-only stale matrix negative not detected"
+    report["negative_checks"]["turn_only_stale_matrix"] = {"vertex_drift_m": drift}
+    pose.rotation_quaternion = Quaternion()
+    palm.matrix_basis = saved_basis
+    bpy.context.view_layer.update()
+    mechanical_check()
+
+    right_residual = max((a - b).length for obj_name, old_points in original_right.items()
+                         for a, b in zip(vertices(bpy.data.objects[obj_name]), old_points))
+    assert right_residual == 0, "untouched right meshes changed"
+    for n, (head, tail, matrix, parent) in original_bones.items():
+        if n.startswith(("lf_", "rl_")):
+            continue
+        b = arm.data.bones[n]
+        assert b.head_local == head and b.tail_local == tail and b.matrix_local == matrix, "other bone changed"
+    report["untouched_right_vertex_residual_m"] = right_residual
+    report["mechanical_invariants"] = "PASS only topology, physical cap construction and float32 rigid-parent arithmetic; NOT P2 geometry acceptance"
+    after = {str(p.relative_to(repo)): hashlib.sha256(p.read_bytes()).hexdigest() for p in protected}
+    assert hashes == after, "protected source/adopted/export/frozen files changed"
+    report["protected_sha256_after"] = after
+    print("P2 MECHANICAL CHECK OK; two real limbs; 12 single-joint measurements; negatives=5; NOT ACCEPTED")
+    if options.check_only:
+        print("P2 CHECK_ONLY: no files written; protected hashed=%d unchanged" % len(hashes))
+        return
+    output.mkdir()
+    arm["p2_sample"] = "lf and rl native palm only; rf/rr untouched old chain; NOT EXPORTABLE as four-limb palm"
+    arm["p2_approval"] = report["approval"]
+    scene["p2_report"] = "measurements.json"
+    scene["p2_status"] = report["status"]
+    bpy.ops.wm.save_as_mainfile(filepath=str(output / "sample_neutral.blend"))
+    # Diagnostic-only collection: overlay geometry never enters the source armature/meshes.
+    overlay = bpy.data.collections.new("P2_DIAGNOSTICS_NOT_EXPORT_OR_COLLISION")
+    scene.collection.children.link(overlay)
+    scene.render.engine = "BLENDER_WORKBENCH"
+    scene.render.resolution_x, scene.render.resolution_y = 1100, 750
+    scene.render.resolution_percentage = 100
+    scene.render.image_settings.file_format = "PNG"
+    scene.display.shading.light = "STUDIO"
+    scene.display.shading.color_type = "OBJECT"
+    scene.display.shading.show_shadows = False
+    scene.display.shading.show_cavity = True
+    scene.display.shading.background_type = "WORLD"
+    scene.world.color = (0.035, 0.035, 0.035)
+    camera_data = bpy.data.cameras.new("P2_camera")
+    camera_data.type = "ORTHO"
+    camera = bpy.data.objects.new("P2_camera", camera_data)
+    overlay.objects.link(camera)
+    scene.camera = camera
+    def label_material(name, color):
+        material = bpy.data.materials.new(name)
+        material.diffuse_color = color
+        return material
+    label_white = label_material("P2_label_white", (1, 1, 1, 1))
+    pngs = []
+
+    def overlay_link(obj):
+        for collection in list(obj.users_collection):
+            collection.objects.unlink(obj)
+        overlay.objects.link(obj)
+        obj["diagnostic_only"] = True
+        return obj
+
+    def line(a, b, color, radius=0.006):
+        curve = bpy.data.curves.new("diagnostic_line", "CURVE")
+        curve.dimensions = "3D"
+        curve.bevel_depth = radius
+        spline = curve.splines.new("POLY")
+        spline.points.add(1)
+        spline.points[0].co, spline.points[1].co = (*a, 1), (*b, 1)
+        obj = bpy.data.objects.new("diagnostic_line", curve)
+        overlay.objects.link(obj)
+        obj.color = color
+        obj["diagnostic_only"] = True
+
+    def ball(p, color):
+        bpy.ops.mesh.primitive_uv_sphere_add(segments=12, ring_count=6, radius=0.015, location=p)
+        obj = overlay_link(bpy.context.object)
+        obj.color = color
+
+    def text(label, position, size=0.035):
+        font = bpy.data.curves.new("diagnostic_label", "FONT")
+        font.body, font.size = label, size
+        font.materials.append(label_white)
+        obj = bpy.data.objects.new("diagnostic_label", font)
+        overlay.objects.link(obj)
+        obj.location = position
+        obj.rotation_euler = camera.rotation_euler
+        obj.color = (1, 1, 1, 1)
+        obj["diagnostic_only"] = True
+
+    def clear_overlay():
+        for obj in list(overlay.objects):
+            if obj is not camera:
+                bpy.data.objects.remove(obj, do_unlink=True)
+
+    for leg, sample in samples.items():
+        for view in ("side", "oblique", "turns"):
+            clear_overlay()
+            keep = {obj.name for obj, parent in sample["objects"]}
+            for obj in scene.objects:
+                if obj.type in ("MESH", "ARMATURE"):
+                    obj.hide_render = obj.name not in keep
+            p = sample["points"]
+            target = center(p)
+            direction = Vector((0, -1, 0)) if view != "oblique" else Vector((1.3, -2, 1.3))
+            camera.location = target + direction.normalized() * 4
+            camera.rotation_euler = (target - camera.location).to_track_quat("-Z", "Y").to_euler()
+            camera_data.ortho_scale = 1.8 if view == "turns" else 3.2
+            right = camera.rotation_euler.to_matrix() @ Vector((1, 0, 0))
+            old_offset = -right * 0.75 if view != "turns" else Vector()
+            new_offset = right * 0.75 if view != "turns" else Vector()
+            if view != "turns":
+                for obj, parent in sample["objects"]:
+                    obj.hide_render = True
+                    mesh = bpy.data.meshes.new_from_object(obj.evaluated_get(bpy.context.evaluated_depsgraph_get()),
+                                                          depsgraph=bpy.context.evaluated_depsgraph_get())
+                    mesh.transform(obj.matrix_world)
+                    display = bpy.data.objects.new("P2_new_mesh", mesh)
+                    overlay.objects.link(display)
+                    display.location = new_offset
+                    display.color = (0.25, 0.65, 0.7, 1)
+                    display["diagnostic_only"] = True
+                for mesh in source_meshes[leg]:
+                    display = bpy.data.objects.new("P2_source_mesh", mesh)
+                    overlay.objects.link(display)
+                    display.location = old_offset
+                    display.color = (0.65, 0.42, 0.22, 1)
+                    display["diagnostic_only"] = True
+            # Offset lines toward camera so bone geometry remains visible through opaque meshes.
+            front = (camera.location - target).normalized() * 0.5
+            old_front, new_front = front + old_offset, front + new_offset
+            if view != "turns":
+                up = camera.rotation_euler.to_matrix() @ Vector((0, 1, 0))
+                text("SOURCE", target + old_front + up * 0.58, 0.06)
+                text("P2 SAMPLE", target + new_front + up * 0.58, 0.06)
+            old = source_lines[leg]
+            for i in range(len(old) - 1):
+                line(old[i] + old_front, old[i + 1] + old_front, (1, 0.35, 0.05, 1))
+                ball(old[i] + old_front, (1, 0.35, 0.05, 1))
+            for i in range(2):
+                line(p[i] + new_front, p[i + 1] + new_front, (0.05, 1, 0.3, 1))
+            palm_tip = arm_mw @ arm.data.bones[sample["names"][3]].tail_local
+            line(p[2] + new_front, palm_tip + new_front, (0.1, 0.8, 1, 1))
+            for i, role in enumerate(("root", "elbow" if leg == "lf" else "knee", "wrist" if leg == "lf" else "ankle")):
+                ball(p[i] + new_front, (0.1, 0.8, 1, 1))
+                text(role, p[i] + new_front + Vector((0.015, 0, 0.025)))
+            text("OLD ghost kfe > foot", old[2] + old_front + Vector((-0.15, 0, -0.16)), 0.03)
+            if view == "turns":
+                # True evaluated vertex edges from independent -10/+10 single-joint snapshots.
+                for name, angle, color in ((sample["names"][2], -10.0, (1, 0.8, 0.1, 1)),
+                                           (sample["names"][2], 10.0, (1, 0.1, 0.6, 1)),
+                                           (sample["names"][3], -10.0, (0.2, 0.4, 1, 1)),
+                                           (sample["names"][3], 10.0, (0.7, 0.3, 1, 1))):
+                    coords = turn_geometry[(leg, name, angle)][sample["palm"].name]
+                    # Cut root and silhouette edges only: bounded diagnostic wire, actual mesh vertices.
+                    cap_ids = set(sample["cap_ids"])
+                    for edge in sample["palm"].data.edges:
+                        a, b = edge.vertices
+                        if a in cap_ids and b in cap_ids:
+                            line(coords[a] + front, coords[b] + front, color, 0.003)
+                    line(center([coords[i] for i in cap_ids]) + front,
+                         max(coords, key=lambda v: v.x) + front, color, 0.003)
+                text("elbow/knee: -10 yellow +10 pink\nwrist/ankle: -10 blue +10 purple", target + front + Vector((-0.7, 0, 0.4)), 0.03)
+            else:
+                up = camera.rotation_euler.to_matrix() @ Vector((0, 1, 0))
+                text("green NEW bones; orange OLD bones\ncyan palm rooted +body X; raw measurements only",
+                     target + front - right * 0.55 + up * 0.78, 0.045)
+            scene.render.filepath = str(output / f"{leg}_{view}.png")
+            bpy.ops.render.render(write_still=True)
+            pngs.append(str((output / f"{leg}_{view}.png").relative_to(repo)))
+    for obj in scene.objects:
+        obj.hide_render = False
+    report["pngs"] = pngs
+    report["blend"] = str((output / "sample_neutral.blend").relative_to(repo))
+    # Protected files checked again after save/render, not just construction.
+    assert hashes == {str(p.relative_to(repo)): hashlib.sha256(p.read_bytes()).hexdigest() for p in protected}
+    (output / "measurements.json").write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+    print("P2 OUTPUT " + str(output))
+
+
 if __name__ == "__main__":
     args = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
-    if "--contract_self_check" in args:
+    if "--p2_sample" in args:
+        try:
+            palm_p2_sample(args)
+        except Exception:
+            import traceback
+            traceback.print_exc()
+            raise SystemExit(1)
+    elif "--contract_self_check" in args:
         try:
             contract_self_check("--regression_without_fix" in args)
         except Exception:

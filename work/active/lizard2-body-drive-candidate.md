@@ -4,16 +4,16 @@ title: lizard2 机体与驱动候选：蜥蜴骨段朝向、人手式足掌、�
 scope: rl_exp/blender, rl_exp/tools/pipeline, rl_exp/tools/verify, rl_exp/tools/diagnose, rl_exp/tasks, acceptance/records
 status: in_progress
 landing: rl_exp/blender/scripts/lizard2_stance_candidate.py, rl_exp/blender/scripts/generate_urdf.py, rl_exp/tools/diagnose/gait_probe.py, rl_exp/tools/diagnose/stance_step_probe.py, rl_exp/tools/diagnose/plot_joints.py, rl_exp/tools/verify/check_leg_reachability.py, rl_exp/tools/verify/check_self_collision.py, rl_exp/tools/verify/check_joint_layout.py, rl_exp/tasks/joint_names.py, ablation_harness/baseline_metrics.py
-next: 执行者按 P1 记录交接后停在 P2 前，待新几何及容差/转动档确认；本轮不做整项审核或采用。
+next: 用户看 P2 小样与测量记录，确认外观及位置/网格容差；未批准不扩四肢、不进 P3。
 close_when: 新上下文按正文“关闭条件”核验 R1–R5 与 D 记录，用户确认外观和动作；未判定不关闭。
-evidence: acceptance/records/2026-10-12-lizard2-palm-chain-p1.md, acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory, acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, acceptance/records/2026-10-08-lizard2-joint-design-review-contract, acceptance/records/2026-10-08-lizard2-r1-numeric-reference-and-decision-drafts
+evidence: acceptance/records/2026-10-12-lizard2-palm-p2-sample.md, acceptance/records/2026-10-12-lizard2-palm-chain-p1.md, acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory, acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, acceptance/records/2026-10-08-lizard2-joint-design-review-contract, acceptance/records/2026-10-08-lizard2-r1-numeric-reference-and-decision-drafts
 ---
 
 本项取代按 S0–S4 串联、逐级审核的安排：各节自检只用机器闸门与可复读检查，不置 `pending_review`；只在 D 集成后审核一次。整体需求见整体记录；足掌结构以本项 A 节的用户拍板（2026-10-12）为当前要求，覆盖旧记录及旧名表中的指/趾根候选约束。判据归 R1–R5 与 A 节的结构检查，本项只留动作、交付与顺序。
 
 ## 下一步
 
-1. **按 A 的探测链推进**：P1 交接见本项 palm-chain-p1 记录；本轮止于 P2 前。后续按 A2 补前后肢几何小样及容差/转动档批准，再扩四肢与隔离导出；旧链或合成契约通过不当几何通过，已训版本与正式资产不动。
+1. **按 A 的探测链推进**：P1/P2 交接见本项具名记录；用户看两肢小样并确认外观及位置/网格容差，调整后再扩四肢与隔离导出；诊断转动不当限位/物理批准，旧链或合成契约通过不当几何通过，正式资产不动。
 2. **继续 E3 接线**：URDF → FK/碰撞、运行时、报告 reader 与接触面（`diag_metrics.foot_ids`、`check_contact_ownership`、`obs_protocol_live`）已接线并各有真跑读数与错配负例；当前改 Blender 构建入口、步态诊断，以及接触面余下两处（`baseline_probe`、`diagnose_support`）。报告 **writer** 侧（`baseline_eval` 的关节列集合、`gait_probe` 报告字段）属评测协议面，先交 `lizard2-contact-protocol` 再动。E4 的运行时双命名对照做不了——运行时关节名还写在配方里（动作项/`joint_order`/默认位姿），改名须与采用同一次变更落地（归 S6），现在只验到"绑定被核对、错配被拒"。
 3. **并行边界**：A 选 pivot/轴消费 B 的能力约束，按线性对照进行，不新建驱动机制；有效限速前置仍归 B。E 接线前，A 只核对旧名源几何，不让未接线工具测新名候选；C 可用现有机体开展。
 4. **先解除资产前提**：`gait_probe` 的资产前提交 `floor-contact-attribution` 的 ⑤/⑪；不借 E 改资产或放宽断言。声明面边界与既有自检覆盖只取本项 2026-10-12 evidence。
@@ -116,7 +116,7 @@ evidence: acceptance/records/2026-10-12-lizard2-palm-chain-p1.md, acceptance/rec
 
 ## A. 机体候选（Blender：目的、探测链与验收）
 
-写法复用 `rl_exp/tools/pipeline/declare_family.py` 的 `_plan_md()` 骨架（仅预览，不运行版本落位或锁更新）；方法见 `versioning.mdc` §A“复杂 PLAN 的探测链”。本节是隔离候选计划，不修订已训版本 PLAN；P1 交接只取具名记录，其余探测未执行。
+写法复用 `rl_exp/tools/pipeline/declare_family.py` 的 `_plan_md()` 骨架（仅预览，不运行版本落位或锁更新）；方法见 `versioning.mdc` §A“复杂 PLAN 的探测链”。本节是隔离候选计划，不修订已训版本 PLAN；P1/P2 交接取具名记录，后续探测未执行。
 
 ### A1. 目的与结构约束
 
@@ -134,8 +134,8 @@ evidence: acceptance/records/2026-10-12-lizard2-palm-chain-p1.md, acceptance/rec
 
 | 关键假设（可证伪） | 最小探测（输入/对照、入口与命令、观察判据） | 停止条件（失败/缺证时停哪一步、谁处理） |
 |---|---|---|
-| **P1：真实链能表达目标，不补回旧末端轴** | C0 复读旧基线；下方 P1 入口消费显式 `palm` 四角色及真实 Blender 父子树，旧 shared/split 不改义。判据与证据见 palm-chain-p1 记录。**声明一致，不证明几何**。 | 本轮止于 P2 前；新几何未提供，不将内存契约小样导出或采用。 |
-| **P2：骨架和网格在掌根连接，转动不脱节** | 一条前肢与一条后肢小样，对照修改前同腿；C1 补骨架叠加及肘/膝、腕/踝单关节转动，再扩四肢。共同坐标系量连接残差、掌骨方向、网格端点、镜像与运动连接残差；pivot 在掌根而非板中央。角度档、位置/镜像容差先按测量精度提出。**几何/运动行为**。 | C1 缺骨架叠加、转动检查，打印失败不反映退出码。执行者补原入口检查与容差/角度档，用户比较前确认；缺命令/批准、错位或脱节，停在小样回 A，不转换、不放宽容差。 |
+| **P1：真实链能表达目标，不补回旧末端轴** | C0 复读旧基线；下方 P1 入口消费显式 `palm` 四角色及真实 Blender 父子树，旧 shared/split 不改义。判据与证据见 palm-chain-p1 记录。**声明一致，不证明几何**。 | 不将内存契约小样导出或采用；两肢几何探测见 P2 记录。 |
+| **P2：骨架和网格在掌根连接，转动不脱节** | 一条前肢与一条后肢小样，对照修改前同腿；C1 补骨架叠加及肘/膝、腕/踝单关节转动，再扩四肢。共同坐标系量连接残差、掌骨方向、网格端点、镜像与运动连接残差；pivot 在掌根而非板中央。角度档、位置/镜像容差先按测量精度提出。**几何/运动行为**。 | 小样及诊断复读见 palm-p2-sample 记录；用户确认外观及位置/网格容差后再扩四肢。缺命令/批准、错位或脱节，停小样回 A；不转换、不放宽容差。 |
 | **P3：导出保留同一连接，轴与真实网格不冲突** | P2 及用户外观确认后，C2 出隔离 URDF，核对后 C3 转独立 USD。C4 复用真实树/FK/碰撞，核对 DCC—URDF—USD 的树、pivot、轴、末端、网格及质心/惯量。旧链 + 主动腕踝为零号对照；同一批准目标覆盖支撑—摆动周期与限位，判据引用上文目标及 R1–R5，导出误差容差先获准。**结构一致 + 几何行为**。 | FK `--pose` 固定旧链维度，旧 self-check 含机体专属断言，碰撞有位次/链距离假设。执行者补真实角色、实际碰撞对与 C4 命令；不硬套旧参数/删断言。缺命令、绑定错、漂移或碰撞失败，停隔离导出回 E/A，不进 B/D。 |
 | **P4：无指/趾轴的掌面承重能完成目标动作** | 交 B 的同几何线性对照、D 完整周期；目标、载荷、驱动、窗口相同，分记掌面接触、变形、滑移/滚动与推进。`stance_step_probe.py` 先接真实末端/动作通道；S5 比较前确认预算、幅度、窗口及性能判据。**动力学行为，FK/静力不能替代**。 | 缺新链隔离 cfg 与预算。执行者补原入口和精确命令，用户确认判据，接触口径交 `lizard2-contact-protocol`；缺证停 B/D 开跑前。失败回 A/B，不归因奖励、不自动加轴；额外自由度凭缺失能力请用户决策。 |
 
@@ -164,7 +164,7 @@ evidence: acceptance/records/2026-10-12-lizard2-palm-chain-p1.md, acceptance/rec
 "E:\SteamLibrary\steamapps\common\Blender\blender.exe" --background --python rl_exp\blender\scripts\lizard2_stance_candidate.py
 ```
 
-输入 `rl_exp/blender/lizard_stance.blend`；候选 blend/PNG 固定输出同目录，无只读/输出路径参数。执行者先确认输出非采用资产且无他人成果，源保持只读；旧入口几何不当新小样。P2 比较前补骨架叠加、转动及退出判定的复读方式。
+输入 `rl_exp/blender/lizard_stance.blend`；上式是旧入口，固定输出采用候选路径，**不用于 P2**。P2 走同脚本显式 `--p2_sample --output_dir --diagnostic_angles`，命令、回归与边界见 palm-p2-sample 记录；禁止覆盖采用资产。
 
 **C2：隔离 URDF 导出（先通过 P2）**
 
