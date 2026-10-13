@@ -6,7 +6,7 @@ status: in_progress
 landing: rl_exp/blender/scripts/lizard2_stance_candidate.py, rl_exp/blender/scripts/generate_urdf.py, rl_exp/tools/diagnose/gait_probe.py, rl_exp/tools/diagnose/stance_step_probe.py, rl_exp/tools/diagnose/plot_joints.py, rl_exp/tools/verify/check_leg_reachability.py, rl_exp/tools/verify/check_self_collision.py, rl_exp/tools/verify/check_joint_layout.py, rl_exp/tools/verify/baseline_probe.py, rl_exp/tasks/joint_names.py, ablation_harness/baseline_metrics.py
 next: 执行者按 E3/E4 补目标绑定、拒错和隔离验证，同时完成 A/P2；B/C 标定交 S5 确认阈值后做 D，未验不进 P3。
 close_when: 新上下文按正文“关闭条件”核验 R1–R5 与 D 记录，用户确认外观和动作；未判定不关闭。
-evidence: acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md, acceptance/records/2026-10-13-lizard2-natural-ground-tail.md, acceptance/records/2026-10-13-lizard2-lowered-body-vertical-shanks.md, acceptance/records/2026-10-12-lizard2-four-palms-lowered.md, acceptance/records/2026-10-12-lizard2-claw-palm-shape.md, acceptance/records/2026-10-12-lizard2-palm-p2-sample.md, acceptance/records/2026-10-12-lizard2-palm-chain-p1.md, acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory, acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, acceptance/records/2026-10-08-lizard2-joint-design-review-contract, acceptance/records/2026-10-08-lizard2-r1-numeric-reference-and-decision-drafts
+evidence: acceptance/records/2026-10-13-lizard2-a-implementation-plan-review.md, acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md, acceptance/records/2026-10-13-lizard2-natural-ground-tail.md, acceptance/records/2026-10-13-lizard2-lowered-body-vertical-shanks.md, acceptance/records/2026-10-12-lizard2-four-palms-lowered.md, acceptance/records/2026-10-12-lizard2-claw-palm-shape.md, acceptance/records/2026-10-12-lizard2-palm-p2-sample.md, acceptance/records/2026-10-12-lizard2-palm-chain-p1.md, acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory, acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, acceptance/records/2026-10-08-lizard2-joint-design-review-contract, acceptance/records/2026-10-08-lizard2-r1-numeric-reference-and-decision-drafts
 ---
 
 本项取代 S0–S4 串联审核：各节仅自检，D 集成后一次审核。整体需求见整体记录；A 节用户拍板覆盖旧指/趾根约束。判据归 R1–R5/A，本项只留动作与交付顺序。
@@ -116,6 +116,8 @@ evidence: acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md, accep
 ## A. 机体候选（Blender：目的、探测链与验收）
 
 写法复用 `rl_exp/tools/pipeline/declare_family.py` 的 `_plan_md()` 骨架（仅预览，不运行版本落位或锁更新）；方法见 `versioning.mdc` §A“复杂 PLAN 的探测链”。本节是隔离候选计划，不修订已训版本 PLAN；P1/P2 交接取具名记录，后续探测未执行。
+
+执行者先按 `acceptance/records/2026-10-13-lizard2-a-implementation-plan-review.md` F1 统一近端方向目标、构造与断言，再继续 P2；目标变更须有用户决定依据。
 
 ### A1. 目的与结构约束
 
