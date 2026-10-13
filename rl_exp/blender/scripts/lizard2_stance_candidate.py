@@ -520,10 +520,12 @@ def palm_body75_vertical(options):
     from mathutils.bvhtree import BVHTree
 
     repo = Path(_ASSET_DIR).parents[1]
-    source = Path(_ASSET_DIR) / "lizard2_palm_p2_sample_claw_all_lowered/sample_neutral.blend"
+    tail_ground = getattr(options, "tail_ground", False)
+    variant = "lizard2_palm_p2_sample_claw_all_lowered_body75_vertical"
+    source = Path(_ASSET_DIR) / ((variant if tail_ground else "lizard2_palm_p2_sample_claw_all_lowered") + "/sample_neutral.blend")
     output = Path(options.output_dir).resolve()
-    if output != Path(_ASSET_DIR).resolve() / "lizard2_palm_p2_sample_claw_all_lowered_body75_vertical":
-        raise ValueError("body75 output must be isolated lizard2_palm_p2_sample_claw_all_lowered_body75_vertical")
+    if output != Path(_ASSET_DIR).resolve() / (variant + ("_tail_ground" if tail_ground else "")):
+        raise ValueError("body75 output must be isolated " + variant + ("_tail_ground" if tail_ground else ""))
     if not options.check_only and output.exists():
         raise FileExistsError("Refuse overwrite: " + str(output))
     protected = {p for p in Path(_ASSET_DIR).rglob("*") if p.is_file() and output not in p.parents}
@@ -585,9 +587,352 @@ def palm_body75_vertical(options):
         samples[leg] = {"names": names, "palm": palm.name, "cylinders": [o.name for o in cylinders],
                         "caps": groups, "old_points": points, "attached": [[o.name for o in row] for row in attached]}
     soles = {leg: min(p.z for p in old_vertices[s["palm"]]) for leg, s in samples.items()}
-    ground = sum(soles.values()) / 4
+    ground = -.9711321443319321 if tail_ground else sum(soles.values()) / 4
     old_height = old_bones["base_link"][0].z - ground
     assert old_height > 0
+    def grounded_tail():
+        """Fit actual evaluated 3D support faces, then bake only the six tail frames."""
+        nonlocal arm, scene, objects
+        evaluated = arm.evaluated_get(bpy.context.evaluated_depsgraph_get())
+        actual_frames = {b.name: evaluated.matrix_world @ evaluated.pose.bones[b.name].matrix
+                         for b in arm.data.bones}
+        tail_names = [b.name for b in arm.data.bones if b.name.startswith("tail")]
+        pitch = [n for n in tail_names if n.endswith("pitch")]
+        assert pitch == ["tail1_pitch", "tail2_pitch", "tail3_pitch"]
+        source_frames = {n: tuple(v.copy() for v in old_pose[n]) for n in tail_names}
+        source_channels = {b.name: b.matrix_basis.copy() for b in arm.pose.bones}
+        source_topology = {n: ([tuple(e.vertices) for e in o.data.edges],
+                               [tuple(f.vertices) for f in o.data.polygons],
+                               [v.co.copy() for v in o.data.vertices]) for n, o in objects.items()}
+        attached = {n: [key for key in objects if bindings[key][2] == n] for n in tail_names}
+        cylinders = {n: next(key for key in attached[n]
+                      if sum(len(f.vertices) > 4 for f in objects[key].data.polygons) == 2) for n in pitch}
+        bound = eps([p for n in objects for p in old_vertices[n]])
+        candidates = {}
+        face_evidence = {}
+        down = Vector((0, 0, -1))
+        for n in pitch:
+            h, t, frame = source_frames[n]
+            axis = (t - h).normalized()
+            azimuth = math.atan2(axis.y, axis.x)
+            up = (Vector((0, 0, 1)) - axis * axis.z).normalized()
+            side = axis.cross(up).normalized()
+            bm = bmesh.new()
+            for p in old_vertices[cylinders[n]]:
+                bm.verts.new(p - h)
+            bm.verts.ensure_lookup_table()
+            bmesh.ops.convex_hull(bm, input=list(bm.verts), use_existing_faces=False)
+            bm.normal_update()
+            rows = []
+            for face in bm.faces:
+                normal = face.normal.copy()
+                if normal.dot(up) >= 0:
+                    continue
+                roll = math.degrees(math.atan2(normal.dot(side), -normal.dot(up)))
+                if abs(roll) > 15:
+                    continue
+                rotation = normal.rotation_difference(down)
+                direction = rotation @ axis
+                yaw = azimuth - math.atan2(direction.y, direction.x)
+                rotation = Quaternion((0, 0, 1), yaw) @ rotation
+                direction = rotation @ axis
+                angle = math.degrees(math.atan2(direction.z, math.hypot(direction.x, direction.y)))
+                if not -20 < angle < 0:
+                    continue
+                local = [rotation @ (p - h) for key in attached[n] for p in old_vertices[key]]
+                clearance = -min(p.z for p in local)
+                cv = [rotation @ (p - h) for p in old_vertices[cylinders[n]]]
+                near = [p for p in cv if abs(p.z + clearance) <= bound]
+                span = max((p.dot(direction) for p in near), default=0) - min((p.dot(direction) for p in near), default=0)
+                # A true face/edge has axial extent, unlike a lone tip; no pass-fraction threshold.
+                if len(near) < 2 or span <= bound:
+                    continue
+                if any(abs(row["angle_deg"] - angle) < 1e-4 and abs(row["roll_deg"] - roll) < 1e-4 for row in rows):
+                    continue
+                rows.append({"rotation": rotation, "angle_deg": angle, "roll_deg": roll,
+                             "head": clearance, "tip": clearance + arm.data.bones[n].length * direction.z,
+                             "span_m": span, "normal": list(normal)})
+            bm.free()
+            candidates[n] = rows
+            face_evidence[n] = [{k: v for k, v in row.items() if k != "rotation"} for row in rows]
+        bridge = "tail3_yaw"
+        bridge_axis = (source_frames[bridge][1] - source_frames[bridge][0]).normalized()
+        bridge_length = arm.data.bones[bridge].length
+        feasible = []
+        for a in candidates[pitch[1]]:
+            for z in candidates[pitch[2]]:
+                dz = z["head"] - a["tip"]
+                if abs(dz) <= bridge_length:
+                    feasible.append((abs(a["roll_deg"]) + abs(z["roll_deg"]), a, z, dz))
+        print("TAIL_3D_SUPPORTS", json.dumps(face_evidence, indent=2))
+        pair_contact = bool(feasible)
+        if not feasible:
+            # User asks distal grounding, not two exact supports. Keep tail3 on its real
+            # long face; tail2 descends gently towards it, measured without claiming support.
+            third = min(candidates[pitch[2]], key=lambda row: (-row["span_m"], abs(row["roll_deg"])))
+            base = min(candidates[pitch[1]], key=lambda row: abs(row["roll_deg"]))
+            h, t, _ = source_frames[pitch[1]]
+            axis = (base["rotation"] @ (t - h)).normalized()
+            tilt_axis = Vector((-axis.y, axis.x, 0)).normalized()
+            alternatives = []
+            for step in range(1, 301):
+                rotation = Quaternion(tilt_axis, math.radians(step / 100)) @ base["rotation"]
+                direction = (rotation @ (t - h)).normalized()
+                clearance = -min((rotation @ (p - h)).z for key in attached[pitch[1]] for p in old_vertices[key])
+                tip = clearance + arm.data.bones[pitch[1]].length * direction.z
+                gap = third["head"] - tip
+                if abs(gap) < bridge_length:
+                    row = dict(base, rotation=rotation, head=clearance, tip=tip,
+                               angle_deg=math.degrees(math.atan2(direction.z, math.hypot(direction.x, direction.y))),
+                               support_claim=False)
+                    alternatives.append((step, row, gap))
+            if not alternatives:
+                raise ValueError("Actual 3D distal support and gentle tail2 approach search failed; no scene mutation")
+            _, second, dz = alternatives[0]
+        else:
+            _, second, third, dz = min(feasible, key=lambda row: row[0])
+        moves = {n: Matrix.Identity(4) for n in objects}
+        frames = {}
+        root = source_frames["tail1_yaw"][0]
+        frames["tail1_yaw"] = source_frames["tail1_yaw"][2].copy()
+        head1 = source_frames["tail1_yaw"][1].copy()
+        yaw2 = source_frames["tail2_yaw"][1] - source_frames["tail2_yaw"][0]
+        target1tip = ground + second["head"] - yaw2.z
+        h, t, frame = source_frames[pitch[0]]
+        source_axis = (t - h).normalized()
+        slope = (target1tip - head1.z) / arm.data.bones[pitch[0]].length
+        assert -1 < slope < 0, "Fixed root/first pitch cannot reach support height"
+        horizontal = Vector((source_axis.x, source_axis.y, 0)).normalized()
+        direction1 = horizontal * math.sqrt(1 - slope * slope) + Vector((0, 0, slope))
+        rotations = {pitch[0]: source_axis.rotation_difference(direction1),
+                     pitch[1]: second["rotation"], pitch[2]: third["rotation"]}
+        heads = {pitch[0]: head1}
+        tip1 = head1 + direction1 * arm.data.bones[pitch[0]].length
+        heads[pitch[1]] = tip1 + yaw2
+        tip2 = heads[pitch[1]] + rotations[pitch[1]] @ (source_frames[pitch[1]][1] - source_frames[pitch[1]][0])
+        bridge_horizontal = Vector((bridge_axis.x, bridge_axis.y, 0)).normalized()
+        bridge_vector = bridge_horizontal * math.sqrt(bridge_length ** 2 - dz ** 2) + Vector((0, 0, dz))
+        heads[pitch[2]] = tip2 + bridge_vector
+        for n in pitch:
+            h, t, frame = source_frames[n]
+            transform = rigid_about(h, heads[n], rotations[n])
+            frames[n] = transform @ frame
+            for key in attached[n]:
+                moves[key] = transform
+        for n, head, vector in (("tail2_yaw", tip1, yaw2), (bridge, tip2, bridge_vector)):
+            h, t, frame = source_frames[n]
+            rotation = (t - h).rotation_difference(vector)
+            transform = rigid_about(h, head, rotation)
+            frames[n] = transform @ frame
+            for key in attached[n]:
+                moves[key] = transform
+        for key in attached["tail1_yaw"]:
+            moves[key] = Matrix.Identity(4)
+        # World frames come from actual source pose, not guessed cap/bone directions.
+        for n in tail_names:
+            parent = arm.data.bones[n].parent.name
+            if parent not in tail_names:
+                rest_parent = mw @ arm.data.bones[parent].matrix_local
+                correction = rest_parent @ old_pose[parent][2].inverted()
+            else:
+                correction = Matrix.Identity(4)
+            frames[n] = correction @ frames[n]
+        tail_meshes = {key for n in tail_names for key in attached[n]}
+        report = {"status": "STATIC_GEOMETRY_PASS_PENDING_REVIEW", "source": str(source.relative_to(repo)),
+                  "ground_z_m": ground, "body_height_m": old_height,
+                  "float32_coordinate_bound_m": bound,
+                  "protected_files": len(before_hashes),
+                  "pair_surface_support": pair_contact,
+                  "construction": "Actual 3D evaluated convex support planes within 15 degrees axial roll; original pitch azimuths and tail1/tail2 yaw retained. Tail3 real underside rests; tail2 gently approaches, not claimed as axial support. Tail-only source actual frames baked, no mesh edits or scaling.",
+                  "tail1_slope_deg": math.degrees(math.asin(slope)),
+                  "tail3_bridge_vector_m": list(bridge_vector),
+                  "source_tail_frames": {n: {"head_m": list(h), "tail_m": list(t),
+                      "matrix": [list(row) for row in matrix], "basis": [list(row) for row in old_basis[n]]}
+                      for n, (h, t, matrix) in source_frames.items()},
+                  "actual_3d_support_candidates": face_evidence,
+                  "selected_supports": {n: {k: v for k, v in row.items() if k != "rotation"}
+                                        for n, row in ((pitch[1], second), (pitch[2], third))},
+                  "negative_checks": {}, "protected_sha256_before": before_hashes,
+                  "approval": "Static tail candidate only; no ROM, physics, export, adoption or full self-collision approval."}
+        def geometry_contact():
+            result = {}
+            for n in pitch:
+                h, t, _ = source_frames[n]
+                expected_axis = (moves[cylinders[n]].to_3x3() @ (t - h)).normalized()
+                v = vertices(objects[cylinders[n]])
+                all_v = [p for key in attached[n] for p in vertices(objects[key])]
+                minimum = min(p.z for p in all_v)
+                assert minimum >= ground - bound, "tail mesh penetrates floor: " + n
+                contacts = [p for p in v if abs(p.z - ground) <= bound]
+                span = max((p.dot(expected_axis) for p in contacts), default=0) - min((p.dot(expected_axis) for p in contacts), default=0)
+                if n == pitch[2] or (pair_contact and n == pitch[1]):
+                    assert contacts and span > bound, "distal tail lacks surface/edge ground support: " + n
+                result[n] = {"all_attached_min_clearance_m": minimum - ground,
+                             "cylinder_min_clearance_m": min(p.z for p in v) - ground,
+                             "contact_vertices": len(contacts), "contact_axial_span_m": span}
+            for key in tail_meshes:
+                assert min(p.z for p in vertices(objects[key])) >= ground - bound, "tail mesh penetrates floor: " + key
+            return result
+        def check():
+            contact = geometry_contact()
+            evaluated = arm.evaluated_get(bpy.context.evaluated_depsgraph_get())
+            pose_residuals, mesh_residuals = {}, {}
+            for n, (h, t, matrix, parent) in old_bones.items():
+                bone = arm.data.bones[n]
+                assert (bone.parent.name if bone.parent else None) == parent, "bone parent changed: " + n
+                assert abs(bone.length - (t - h).length) <= bound, "bone length changed: " + n
+                if n not in tail_names:
+                    assert max(abs(bone.matrix_local[i][j] - matrix[i][j]) for i in range(4) for j in range(4)) == 0, "non-tail rest changed: " + n
+                    assert max(abs(arm.pose.bones[n].matrix_basis[i][j] - source_channels[n][i][j]) for i in range(4) for j in range(4)) == 0, "non-tail pose changed: " + n
+                    actual = evaluated.matrix_world @ evaluated.pose.bones[n].matrix
+                    residual = max(abs(actual[i][j] - actual_frames[n][i][j]) for i in range(4) for j in range(4))
+                    assert residual == 0, "non-tail actual frame changed: " + n
+                    pose_residuals[n] = residual
+                else:
+                    expected = moves[cylinders[n]] @ source_frames[n][2] if n in pitch else frames[n]
+                    actual = evaluated.matrix_world @ evaluated.pose.bones[n].matrix
+                    assert max(abs(actual[i][j] - expected[i][j]) for i in range(4) for j in range(4)) <= bound, "tail actual frame mismatch: " + n
+                    pb = evaluated.pose.bones[n]
+                    parent_pose = evaluated.pose.bones[parent]
+                    assert (evaluated.matrix_world @ pb.head - evaluated.matrix_world @ parent_pose.tail).length <= bound, "tail joint disconnected: " + n
+            assert abs(ends("base_link")[0].z - ground - old_height) <= bound, "body75 height changed"
+            for leg, sample in samples.items():
+                h, t = ends(sample["names"][2])
+                assert math.hypot(t.x - h.x, t.y - h.y) <= bound and t.z < h.z, "lower leg not vertical: " + leg
+                assert abs(min(p.z for p in vertices(objects[sample["palm"]])) - soles[leg]) <= bound, "sole height changed: " + leg
+            assert (evaluated.matrix_world @ evaluated.pose.bones["tail1_yaw"].head - root).length <= bound, "tail root moved"
+            for n in pitch:
+                pose = evaluated.pose.bones[n]
+                assert pose.tail.z < pose.head.z, "tail segment upturn: " + n
+            for key, obj in objects.items():
+                edges, faces, local = source_topology[key]
+                assert edges == [tuple(e.vertices) for e in obj.data.edges] and faces == [tuple(f.vertices) for f in obj.data.polygons], "mesh topology changed: " + key
+                assert len(local) == len(obj.data.vertices) and all((a - b.co).length == 0 for a, b in zip(local, obj.data.vertices)), "mesh data changed: " + key
+                assert (obj.parent.name if obj.parent else None, obj.parent_type, obj.parent_bone) == binding_names[key], "mesh binding changed: " + key
+                actual = vertices(obj)
+                residual = max((p - moves[key] @ q).length for p, q in zip(actual, old_vertices[key]))
+                assert residual <= eps(actual), "rigid mesh invariant failed: " + key
+                if key not in tail_meshes:
+                    assert residual == 0, "non-tail actual mesh changed: " + key
+                mesh_residuals[key] = residual
+            report["tail_contact"] = contact
+            report["actual_tail_frames"] = {n: {"head_m": list(evaluated.matrix_world @ evaluated.pose.bones[n].head),
+                "tail_m": list(evaluated.matrix_world @ evaluated.pose.bones[n].tail),
+                "matrix": [list(row) for row in evaluated.matrix_world @ evaluated.pose.bones[n].matrix]}
+                for n in tail_names}
+            report["non_tail_frame_residuals"] = pose_residuals
+            report["rigid_vertex_residuals_m"] = mesh_residuals
+            report["bone_lengths_m"] = {n: {"source": (t - h).length, "new": arm.data.bones[n].length}
+                                         for n, (h, t, _, _) in old_bones.items()}
+        binding_names = {n: (parent.name if parent else None, kind, bone) for n, (parent, kind, bone) in bindings.items()}
+        for key in tail_meshes:
+            objects[key].parent = None
+        bpy.context.view_layer.objects.active = arm
+        bpy.ops.object.mode_set(mode="EDIT")
+        for n in tail_names:
+            bone = arm.data.edit_bones[n]
+            bone.use_connect = False
+            bone.matrix = inv @ frames[n]
+            bone.length = (old_bones[n][1] - old_bones[n][0]).length
+        bpy.ops.object.mode_set(mode="OBJECT")
+        for n in tail_names:
+            arm.pose.bones[n].matrix_basis = Matrix.Identity(4)
+        bpy.context.view_layer.update()
+        for key in tail_meshes:
+            obj = objects[key]
+            parent, kind, bone = bindings[key]
+            obj.parent, obj.parent_type, obj.parent_bone = parent, kind, bone
+            obj.matrix_parent_inverse = Matrix.Identity(4)
+            bpy.context.view_layer.update()
+            obj.matrix_world = moves[key] @ old_world[key]
+        bpy.context.view_layer.update()
+        check()
+        # Real evaluated geometry mutations; saved objects restored, then full checks repeated.
+        def mutation(offset):
+            saved = {key: objects[key].matrix_world.copy() for key in tail_meshes}
+            for key in tail_meshes:
+                objects[key].matrix_world = Matrix.Translation((0, 0, offset)) @ saved[key]
+            bpy.context.view_layer.update()
+            return saved
+        for label, shift, message in (("raised_tail", .02, "distal tail lacks"),
+                                       ("lowered_tail", -.02, "tail mesh penetrates")):
+            saved = mutation(shift)
+            try:
+                geometry_contact()
+            except AssertionError as exc:
+                assert str(exc).startswith(message), "tail mutation masked: " + str(exc)
+                report["negative_checks"][label] = str(exc)
+            else:
+                raise AssertionError("Tail mutation not rejected: " + label)
+            finally:
+                for key, matrix in saved.items():
+                    objects[key].matrix_world = matrix
+                bpy.context.view_layer.update()
+            check()
+        if options.regression_without_fix:
+            mutation(.02)
+            geometry_contact()
+        assert hashes() == before_hashes, "Protected artifacts changed"
+        if options.check_only:
+            if (output / "sample_neutral.blend").exists():
+                bpy.ops.wm.open_mainfile(filepath=str(output / "sample_neutral.blend"))
+                scene = bpy.context.scene
+                arm = next(o for o in scene.objects if o.type == "ARMATURE")
+                objects = {n: bpy.data.objects[n] for n in old_vertices}
+                check()
+            print("TAIL_GROUND CHECK_ONLY PASS", json.dumps({k: report[k] for k in ("tail_contact", "negative_checks")}))
+            return
+        output.mkdir()
+        bpy.ops.wm.save_as_mainfile(filepath=str(output / "sample_neutral.blend"))
+        bpy.ops.wm.open_mainfile(filepath=str(output / "sample_neutral.blend"))
+        scene = bpy.context.scene
+        arm = next(o for o in scene.objects if o.type == "ARMATURE")
+        objects = {n: bpy.data.objects[n] for n in old_vertices}
+        check()
+        report["saved_reopened_independent_baseline_check"] = "PASS"
+        scene.render.engine = "BLENDER_WORKBENCH"
+        scene.render.resolution_x, scene.render.resolution_y = 1400, 900
+        scene.render.resolution_percentage = 100
+        scene.render.image_settings.file_format = "PNG"
+        scene.display.shading.light = "STUDIO"
+        scene.display.shading.color_type = "OBJECT"
+        scene.display.shading.show_shadows = False
+        scene.display.shading.show_cavity = True
+        scene.display.shading.background_type = "WORLD"
+        scene.world.color = (.035, .035, .035)
+        data = bpy.data.cameras.new("TAIL_GROUND_DIAGNOSTIC_CAMERA")
+        data.type = "ORTHO"
+        camera = bpy.data.objects.new(data.name, data)
+        scene.collection.objects.link(camera)
+        scene.camera = camera
+        mesh = bpy.data.meshes.new("TAIL_GROUND_DIAGNOSTIC_FLOOR")
+        mesh.from_pydata([(-5, -2, ground), (1, -2, ground), (1, 2, ground), (-5, 2, ground)], [], [(0, 1, 2, 3)])
+        floor = bpy.data.objects.new(mesh.name, mesh)
+        scene.collection.objects.link(floor)
+        floor.color = (.18, .18, .18, 1)
+        full = [p for key in objects for p in vertices(objects[key])]
+        close = [p for key in tail_meshes for p in vertices(objects[key])]
+        report["pngs"] = []
+        for name, direction, points, scale in (("full_side_ground", Vector((0, -1, 0)), full, 5.2),
+                ("tail_close_ground", Vector((0, -1, .08)), close, 2.2),
+                ("full_oblique_ground", Vector((1.3, -2, 1)), full, 5.2),
+                ("full_top", Vector((0, 0, 1)), full, 5.2)):
+            target = Vector(tuple((min(p[i] for p in points) + max(p[i] for p in points)) / 2 for i in range(3)))
+            camera.location = target + direction.normalized() * 8
+            camera.rotation_euler = (target - camera.location).to_track_quat("-Z", "Y").to_euler()
+            data.ortho_scale = scale
+            floor.hide_render = name == "full_top"
+            scene.render.filepath = str(output / (name + ".png"))
+            bpy.ops.render.render(write_still=True)
+            report["pngs"].append(str((output / (name + ".png")).relative_to(repo)))
+        report["blend"] = str((output / "sample_neutral.blend").relative_to(repo))
+        report["protected_sha256_after"] = hashes()
+        assert before_hashes == report["protected_sha256_after"]
+        (output / "measurements.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+        print("TAIL_GROUND OUTPUT PASS", json.dumps(report["tail_contact"]), output)
+
+    if tail_ground:
+        return grounded_tail()
     delta = Vector((0, 0, -old_height / 4))
     report = {"status": "PROVISIONAL_NOT_ACCEPTED", "source": str(source.relative_to(repo)),
               "body_reference": "Actual unique root base_link world rest head Z minus horizontal plane at mean of four evaluated palm sole minima; same fixed plane old/new",
@@ -967,8 +1312,11 @@ def palm_p2_sample(args):
     parser.add_argument("--all_legs", action="store_true", help="Mirror built left limbs into original right objects")
     parser.add_argument("--sole_at_ball_bottom", action="store_true", help="Lower claw body, retaining root ring at pivot")
     parser.add_argument("--body75_vertical", action="store_true", help="Latest four low palms; body ground height 75%, vertical lower bones")
+    parser.add_argument("--tail_ground", action="store_true", help="Generate isolated natural distal tail support from latest saved body75; actual 3D meshes, tail-only rigid frames")
     parser.add_argument("--check_only", action="store_true", help="Memory-only regression; no output directory created")
     options = parser.parse_args(args)
+    if options.tail_ground and not options.body75_vertical:
+        raise ValueError("--tail_ground requires --body75_vertical")
     if (options.all_legs or options.sole_at_ball_bottom) and options.palm_shape != "claw":
         raise ValueError("--all_legs and --sole_at_ball_bottom require --palm_shape claw")
     angles = [float(x) for x in options.diagnostic_angles.split(",")]

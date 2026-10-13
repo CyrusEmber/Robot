@@ -4,16 +4,16 @@ title: lizard2 机体与驱动候选：蜥蜴骨段朝向、人手式足掌、�
 scope: rl_exp/blender, rl_exp/tools/pipeline, rl_exp/tools/verify, rl_exp/tools/diagnose, rl_exp/tasks, acceptance/records
 status: in_progress
 landing: rl_exp/blender/scripts/lizard2_stance_candidate.py, rl_exp/blender/scripts/generate_urdf.py, rl_exp/tools/diagnose/gait_probe.py, rl_exp/tools/diagnose/stance_step_probe.py, rl_exp/tools/diagnose/plot_joints.py, rl_exp/tools/verify/check_leg_reachability.py, rl_exp/tools/verify/check_self_collision.py, rl_exp/tools/verify/check_joint_layout.py, rl_exp/tools/verify/baseline_probe.py, rl_exp/tasks/joint_names.py, ablation_harness/baseline_metrics.py
-next: 用户看降低机身离地高度与竖直下段的新隔离预览；新上下文复核几何与未验碰撞；未验不进 P3。
+next: 用户看自然贴地尾四图；执行者继续复核碰撞与其它 P2 前提，D 集成后再交新上下文审核；未验不进 P3。
 close_when: 新上下文按正文“关闭条件”核验 R1–R5 与 D 记录，用户确认外观和动作；未判定不关闭。
-evidence: acceptance/records/2026-10-13-lizard2-lowered-body-vertical-shanks.md, acceptance/records/2026-10-12-lizard2-four-palms-lowered.md, acceptance/records/2026-10-12-lizard2-claw-palm-shape.md, acceptance/records/2026-10-12-lizard2-palm-p2-sample.md, acceptance/records/2026-10-12-lizard2-palm-chain-p1.md, acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory, acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, acceptance/records/2026-10-08-lizard2-joint-design-review-contract, acceptance/records/2026-10-08-lizard2-r1-numeric-reference-and-decision-drafts
+evidence: acceptance/records/2026-10-13-lizard2-natural-ground-tail.md, acceptance/records/2026-10-13-lizard2-lowered-body-vertical-shanks.md, acceptance/records/2026-10-12-lizard2-four-palms-lowered.md, acceptance/records/2026-10-12-lizard2-claw-palm-shape.md, acceptance/records/2026-10-12-lizard2-palm-p2-sample.md, acceptance/records/2026-10-12-lizard2-palm-chain-p1.md, acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory, acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, acceptance/records/2026-10-08-lizard2-joint-design-review-contract, acceptance/records/2026-10-08-lizard2-r1-numeric-reference-and-decision-drafts
 ---
 
 本项取代 S0–S4 串联审核：各节仅自检，D 集成后一次审核。整体需求见整体记录；A 节用户拍板覆盖旧指/趾根约束。判据归 R1–R5/A，本项只留动作与交付顺序。
 
 ## 下一步
 
-1. **按 A 探测链推进**：当前候选与复读入口见 `acceptance/records/2026-10-13-lizard2-lowered-body-vertical-shanks.md`；旧低掌及两肢样本只读保留。用户看新姿态全身侧/前 ground 预览，新上下文复核几何与未验碰撞及位置/网格容差，再按 A2 处理隔离导出。连接方式此前已认可，新姿态角度不得沿用旧视觉认可；未验不进 P3。诊断不当限位/物理批准，契约不当几何通过，正式资产不动。
+1. **按 A 探测链推进**：自然远端贴地尾静态候选保持最新 body75 与四条竖直下段；产物、实际三维构造、保存重开、执行者独立对照与负例见 `acceptance/records/2026-10-13-lizard2-natural-ground-tail.md`。用户看四图确认外观，执行者继续碰撞及其它 P2 检查；D 集成后由新上下文审核。仅远端实体长跨度支撑，不把尾二局部接触当两段轴向支撑；旧窄路线失败披露在同一记录，不再作全局阻断。body75 与旧样本只读保留，未验不进 P3，正式资产不动。
 2. **继续 E3 接线**：URDF → FK/碰撞、运行时、报告 reader、接触面（`diag_metrics.foot_ids`、`check_contact_ownership`、`obs_protocol_live`）与 `baseline_probe` 已接线并各有真跑读数与错配负例；当前改 Blender 构建入口与步态诊断。`diagnose_support.py` 归 `floor-contact-attribution`（该文件是它的 landing），E 只登记待接的四处行号，不代改。报告 **writer** 侧（`baseline_eval` 的关节列集合、`gait_probe` 报告字段）属评测协议面，先交 `lizard2-contact-protocol` 再动。E4 的运行时双命名对照做不了——运行时关节名还写在配方里（动作项/`joint_order`/默认位姿），改名须与采用同一次变更落地（归 S6），现在只验到"绑定被核对、错配被拒"。
 3. **并行边界**：A 选 pivot/轴消费 B 的能力约束，按线性对照进行，不新建驱动机制；有效限速前置仍归 B。E 接线前，A 只核对旧名源几何，不让未接线工具测新名候选；C 可用现有机体开展。
 4. **先解除资产前提**：`gait_probe` 的资产前提交 `floor-contact-attribution` 的 ⑤/⑪；不借 E 改资产或放宽断言。声明面边界与既有自检覆盖只取本项 2026-10-12 evidence。
@@ -124,6 +124,8 @@ evidence: acceptance/records/2026-10-13-lizard2-lowered-body-vertical-shanks.md,
 **用户补充批准：2026-10-12**：四肢同步；脚板降低至接近腕/踝球底，其它比例、角度与掌轮廓视觉认可。pivot 保持不变，掌根实体过渡连接此前获准；本轮降低属几何摆放，不等于批准数值容差或物理。新隔离四肢产物及原始测量见 four-palms-lowered 记录，旧两肢产物不覆盖。
 
 **当前用户修订**：降低机身离地高度，不压薄机身；下段垂直地面，保留骨长与掌形，允许落掌 XY 随可达性改变。该姿态覆盖上段“其它角度视觉认可”，旧认可不自动延伸到新姿态；定量判据、实际产物、负例与碰撞边界只取 `acceptance/records/2026-10-13-lizard2-lowered-body-vertical-shanks.md`。外观与后续几何/物理仍待审核。
+
+**用户尾部选择（2026-10-13）**：远端尾段自然贴地，根连接、逐段下落，远端实体有沿轴向支持跨度，不做尾尖单点悬空休息；保留最新 body75/四条竖直下段与非尾 actual pose/rest frames、网格及骨长。实际预检和当前施工路线见 `acceptance/records/2026-10-13-lizard2-natural-ground-tail.md`；仅静态外观需求，不新增尾 ROM、物理、导出或采用批准。
 
 只回答：腕/踝移到前臂/小腿末端、掌段从掌根向前延伸后，能否在无指/趾根活动轴的情况下形成骨架—模型一致的承重候选？不预设答案是能，不用改名通过代替结构或物理通过。
 
