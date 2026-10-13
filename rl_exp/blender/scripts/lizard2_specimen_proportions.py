@@ -7,6 +7,8 @@
 Run with Blender --background --python-exit-code 1 --python this_file --
 --output_dir PATH. Existing outputs require --check_only. Ratios are from
 acceptance/records/2026-10-13-lizard2-specimen-hindlimb.md; this is not adoption.
+Use --restore_source_lengths to retain the original limb lengths and palms
+while solving the same four-sole ground constraint.
 """
 
 import argparse
@@ -49,6 +51,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output_dir", type=Path, required=True)
     parser.add_argument("--check_only", action="store_true")
+    parser.add_argument("--restore_source_lengths", action="store_true")
     parser.add_argument("--regression_without_fix", action="store_true")
     args = parser.parse_args(sys.argv[sys.argv.index("--") + 1:])
     output = args.output_dir.resolve()
@@ -93,8 +96,9 @@ def main():
     targets = {}
     for leg, s in samples.items():
         names, old = s["names"], s["old_points"]
-        factor = rear_proximal / sum(s["lengths"]) if leg in ("rl", "rr") else 1.0
-        palm_factor = rear_palm / s["palm_length"] if leg in ("rl", "rr") else 1.0
+        scale_hind = leg in ("rl", "rr") and not args.restore_source_lengths
+        factor = rear_proximal / sum(s["lengths"]) if scale_hind else 1.0
+        palm_factor = rear_palm / s["palm_length"] if scale_hind else 1.0
         lengths = [x * factor for x in s["lengths"]]
         ankle_z = GROUND_M - min(p.z - old[2].z for p in old_vertices[s["palm"]])
         dz = ankle_z + lengths[1] - old[0].z
@@ -140,9 +144,15 @@ def main():
             measured[leg] = dict(upper_m=lengths[0], lower_m=lengths[1], palm_m=palm_length,
                                  total_m=sum(lengths) + palm_length,
                                  sole_z_m=min(v.z for v in actual[s["palm"]]))
-        for leg in ("rl", "rr"):
-            assert abs(measured[leg]["total_m"] - front_total * HIND_TOTAL_CM / FORE_TOTAL_CM) < epsilon, "hind total ratio"
-            assert abs(measured[leg]["palm_m"] - rear_palm) < epsilon, "hind palm ratio"
+        if args.restore_source_lengths:
+            for leg, s in samples.items():
+                for key, expected_length in zip(("upper_m", "lower_m", "palm_m"),
+                                                [*s["lengths"], s["palm_length"]]):
+                    assert abs(measured[leg][key] - expected_length) < epsilon, "source length not restored: " + leg + ":" + key
+        else:
+            for leg in ("rl", "rr"):
+                assert abs(measured[leg]["total_m"] - front_total * HIND_TOTAL_CM / FORE_TOTAL_CM) < epsilon, "hind total ratio"
+                assert abs(measured[leg]["palm_m"] - rear_palm) < epsilon, "hind palm ratio"
         for leg, s in samples.items():
             assert abs(measured[leg]["sole_z_m"] - GROUND_M) < epsilon, "four soles not coplanar: " + leg
             bs = [arm.pose.bones[n] for n in s["names"][1:]]
@@ -184,8 +194,8 @@ def main():
         return measured
 
     if args.regression_without_fix:
-        check()  # The real unscaled source must fail the new ratio requirement.
-        raise AssertionError("Unscaled source was incorrectly accepted")
+        check()  # The source lacks either the requested scaling or coplanar soles.
+        raise AssertionError("Unmodified source was incorrectly accepted")
     if args.check_only:
         bpy.ops.wm.open_mainfile(filepath=str(output / "sample_neutral.blend"))
         arm = next(o for o in bpy.context.scene.objects if o.type == "ARMATURE")
@@ -229,6 +239,7 @@ def main():
         arm = next(o for o in bpy.context.scene.objects if o.type == "ARMATURE")
         objects = {n: bpy.data.objects[n] for n in old_vertices}
     report = dict(source=str(SOURCE), source_sha256=digest, ground_m=GROUND_M,
+                  geometry_mode="source_lengths" if args.restore_source_lengths else "specimen_ratios",
                   tolerance_m=epsilon, measured=check(), negatives={}, diagnostics=[])
     # Real geometry mutation, restored before diagnostics or preview rendering.
     palm = objects[samples["lf"]["palm"]]
