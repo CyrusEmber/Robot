@@ -4,7 +4,7 @@ title: lizard2 机体与驱动候选：蜥蜴骨段朝向、人手式足掌、�
 scope: rl_exp/blender, rl_exp/tools/pipeline, rl_exp/tools/verify, rl_exp/tools/diagnose, rl_exp/tasks, acceptance/records
 status: in_progress
 landing: rl_exp/blender/scripts/lizard2_specimen_proportions.py, rl_exp/blender/scripts/lizard2_stance_candidate.py, rl_exp/blender/scripts/generate_urdf.py, rl_exp/tools/diagnose/gait_probe.py, rl_exp/tools/diagnose/stance_step_probe.py, rl_exp/tools/diagnose/plot_joints.py, rl_exp/tools/verify/check_leg_reachability.py, rl_exp/tools/verify/check_self_collision.py, rl_exp/tools/verify/check_joint_layout.py, rl_exp/tools/verify/baseline_probe.py, rl_exp/tasks/joint_names.py, ablation_harness/baseline_metrics.py
-next: 执行者先定位本项当前问题记录中的运行时中立位置差异，再复核碰撞/惯量并重跑标定；E3/E4 接线继续，未判不定稿。
+next: 执行者按 lizard2-restored-limits-pd-validation 处理恢复模型验证前提与标定，E3/E4 接线继续；未判不定稿。
 close_when: 新上下文按正文“关闭条件”核验 R1–R5 与 D 记录，用户确认外观和动作；未判定不关闭。
 evidence: acceptance/records/2026-10-13-lizard2-restored-limits-pd-open-issues.md, acceptance/records/2026-10-13-lizard2-hindlimb-restored.md, acceptance/records/2026-10-13-lizard2-a-implementation-plan-review.md, acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md, acceptance/records/2026-10-13-lizard2-natural-ground-tail.md, acceptance/records/2026-10-13-lizard2-lowered-body-vertical-shanks.md, acceptance/records/2026-10-12-lizard2-four-palms-lowered.md, acceptance/records/2026-10-12-lizard2-claw-palm-shape.md, acceptance/records/2026-10-12-lizard2-palm-p2-sample.md, acceptance/records/2026-10-12-lizard2-palm-chain-p1.md, acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory, acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, acceptance/records/2026-10-08-lizard2-joint-design-review-contract, acceptance/records/2026-10-08-lizard2-r1-numeric-reference-and-decision-drafts
 ---
@@ -13,7 +13,7 @@ evidence: acceptance/records/2026-10-13-lizard2-restored-limits-pd-open-issues.m
 
 ## 下一步
 
-1. **恢复 A/B 探测前先处理阻断**：本轮按用户要求先记录问题，不继续执行标定；执行者恢复施工时先定位运行时中立位置对照、核对碰撞连接过滤与导入惯量，再确定需重跑的隔离检查。当前问题、已跑/未跑、失败读数及本机证据只取 `acceptance/records/2026-10-13-lizard2-restored-limits-pd-open-issues.md`；源几何取 hindlimb-restored 记录，旧样本只读保留。继续 A/P2/P3 与 B 所需检验、外观确认及步态目标范围验证，不把诊断导出或过滤对照当阶段验收；正式资产不动，D 后统一审核。
+1. **恢复 A/B 探测前先处理阻断**：执行步骤与专项关闭条件唯一归 `work/active/lizard2-restored-limits-pd-validation.md`；该项交回后按本项 A/B/C/D 继续。当前问题证据取 `acceptance/records/2026-10-13-lizard2-restored-limits-pd-open-issues.md`，源几何取 hindlimb-restored 记录。专项完成不替代 A/P2/P3、外观确认或 D 最终审核；正式资产不动。
 2. **完成 E 的必需消费者**：按 E3 清单补目标绑定与精确拒错、`gait_probe`、Blender 导出及报告 writer；运行时成对隔离配置由 E 交付，实际动作、默认位姿、传感器及 `joint_order` 与各自 USD 同绑定，不等 S6 正式采用。现有进展与未验范围只取审核记录“追加：E 执行情况核查”。
 3. **并行边界**：A 选 pivot/轴消费 B 的能力约束，按线性对照进行，不新建驱动机制；有效限速前置仍归 B。E 接线前，A 只核对旧名源几何，不让未接线工具测新名候选；C 可用现有机体开展。
 4. **先解除资产前提**：`gait_probe` 的资产前提交 `floor-contact-attribution` 的 ⑤/⑪；不借 E 改资产或放宽断言。声明面边界与既有自检覆盖只取本项 2026-10-12 evidence。
