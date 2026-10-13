@@ -4,10 +4,10 @@ title: lizard2 配方、动作接口与评测协议交付
 scope: rl_exp/versions/lizard2, rl_exp/tasks, rl_exp/tools/pipeline, rl_exp/tools/verify, ablation_harness
 status: open
 landing: rl_exp/versions/lizard2/main/main_params.yaml, rl_exp/tasks/lizard2_recipe.py, rl_exp/tools/pipeline/emit_diff_declaration.py, rl_exp/tools/verify/check_recipe_build.py
-next: 执行者先按 S5 整理机制落点，已审设计与协议齐备后再准备候选；S6 正式采用与开训须用户确认，当前不执行。
+next: 执行者先按 S5 阈值前置动作接收 B/C 标定并提请确认，回交 D；已审设计与协议齐备后做配方接入，S6 采用与开训另获用户确认。
 close_when: 新上下文按正文“关闭条件”核验完整 S5/S6 或用户明确不采用的出口；仅 S5 构建通过不关闭。
 depends_on: lizard2-body-drive-candidate, lizard2-contact-protocol
-evidence: acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, acceptance/records/2026-09-23-lizard2-v1-gait-skate, acceptance/records/2026-10-09-lizard2-limit-requirement-and-status-sync, acceptance/records/2026-10-09-lizard2-v3-pretrain-sanity, acceptance/records/2026-10-10-lizard2-v3-joint-velocity-limits
+evidence: acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md, acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, acceptance/records/2026-09-23-lizard2-v1-gait-skate, acceptance/records/2026-10-09-lizard2-limit-requirement-and-status-sync, acceptance/records/2026-10-09-lizard2-v3-pretrain-sanity, acceptance/records/2026-10-10-lizard2-v3-joint-velocity-limits
 ---
 
 ## 当前范围与交接
@@ -18,10 +18,20 @@ evidence: acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, ac
 
 ## S5 直接执行：配方与评测接入
 
-1. 先核对 `lizard2-body-drive-candidate` 与 `lizard2-contact-protocol` 的真实审核记录；未定目标仅可整理机制落点，不可直接采用。核对部署端对限位外位置参考的实际行为，区分物理禁区与动作裁剪。
-2. 按版本机制准备未冻结下一版本 PLAN/参数与差异声明，接入获准的腕踝动作、趾根驱动、足/掌承重分组和必要的有效限速；复用现有注册/执行器机制，不改已发布 term 或 v3 参数。驱动与奖励数值归版本配置，理由和依据归对应记录。
-3. 统一奖励和诊断的承重口径，再消费 `lizard2-body-drive-candidate` 的标定提出性能阈值（摆动脚数、净空、摆幅、滑移、柔顺）；用户确认后于比较前固定。只在证据支持时采用最小奖励项，不把奖励当反曲/翻掌/碰撞的硬保证，不让 S6 失败后的调阈值倒改验收。
-4. 采用 `lizard2-contact-protocol` 已审的具名新协议，绑定检查报告、reader 与锚点，旧协议不改写；阈值在此处固定，S6 按同尺复验，失败不事后放宽，换尺须新协议和同尺重评。
+`depends_on` 约束正式配方接入与本项完整交付；阈值前置动作只消费具名标定和测量口径，不要求上游已关闭或 D 已通过。修订依据见本项审核记录 F2/F4。
+
+### 阈值前置动作（B/C 标定后、D 最终比较前）
+
+1. 执行者接收 `lizard2-body-drive-candidate` B/C 的实际候选标定记录，以及 `lizard2-contact-protocol` 可复读的测量口径/样本。核对资产、代码、目标、载荷、驱动及工况身份；缺测量口径回协议项，缺标定回 B/C，不要求两项先关闭。首次标定的安全预算和设计不变量由候选项的“标定前置”负责，不等待本动作产出。
+2. 根据标定与目标提出摆动脚数、净空、摆幅、滑移、柔顺等性能判据及比较的幅度、窗口、覆盖要求，用户确认后固定；确认记录进 `acceptance/records/<日期>-lizard2-comparison-criteria.md`，存在后补 evidence 并交 D。不能从最终比较是否通过倒推阈值；需改口径时回协议项形成具名修订，受影响比较重跑。
+3. 本动作仅交付最终比较的判据，不批准机体、配方或 S6，不以标定宣告性能通过。D 按固定判据新跑比较并完成设计审核后，才进入下面的正式接入。
+
+### 正式配方接入（上游设计与协议已审后）
+
+1. 先核对 `lizard2-body-drive-candidate` D 与 `lizard2-contact-protocol` 的真实审核记录、阈值确认和同条件最终比较；未齐备只整理机制落点，不准备正式接入产物。核对部署端对限位外位置参考的实际行为，区分物理禁区与动作裁剪。
+2. 按版本机制准备未冻结下一版本 PLAN/参数与差异声明，接入获准的实际腕/踝动作、掌/跖末端承重分组和必要的有效限速；无指/趾根活动轴，不创建其驱动或空动作组。动作通道、`joint_order`、默认位姿及传感器与实际关节/link 集合逐项对表；复用 E 已验的隔离目标绑定及现有注册/执行器机制，不改已发布 term 或 v3 参数。驱动与奖励数值归版本配置，理由和依据归对应记录。
+3. 统一奖励和诊断的承重口径，消费阈值前置动作已固定且经 D 验证的判据。只在证据支持时采用最小奖励项，不把奖励当反曲/翻掌/碰撞的硬保证，不让 S6 失败后的调阈值倒改验收。
+4. 采用 `lizard2-contact-protocol` 已审的具名新协议，绑定检查报告、writer/reader 与锚点，旧协议不改写；沿用比较前固定的阈值，S6 按同尺复验，失败不事后放宽，换尺须新协议和同尺重评。
 5. 运行配方构建、注册/obs/action 对表、驱动单测及相关离线闸门；形成 S5 新记录并请新上下文审核候选接入和协议。全部产物能被复读后才允许进入 S6，S5 通过不关闭本项。
 
 S5 交付为未冻结候选版本的实际路径、配置/协议/测试及 `acceptance/records/<日期>-lizard2-s5-recipe-eval.md`；记录存在后才加入 evidence。需要回改骨骼或目标时交 `lizard2-body-drive-candidate`，受影响证据重新审核。
@@ -38,7 +48,7 @@ S5 交付为未冻结候选版本的实际路径、配置/协议/测试及 `acce
 ## 关闭条件
 
 - **审核者与输入**：执行者先置 pending_review；新上下文对照 S5/S6、已审上游交付和本项真实记录审核。
-- **S5 交付**：已审机体/驱动设计接入候选配方，新接触协议及标定落地，配置与协议产物可复读；仅配方构建通过不关闭。
+- **S5 交付**：阈值前置记录先于 D 最终比较，已审机体/驱动设计接入候选配方，新接触协议及标定落地，配置与协议产物可复读；仅阈值确认或配方构建通过不关闭。
 - **S6 采用与验收**：正式机体采用、改名迁移、旧机体冻结版本退休及版本证据齐备；完成用户批准工况下的实际训练、固定协议评测与目视验收。旧 v3 判决不替代本项。
 - **不采用出口**：用户明确不采用时记录理由与未完动作的去向，不把未验证说成通过。
 - **结果处理**：完整交付经审核通过，或用户明确不采用，才关闭；可修缺口退 in_progress，预算未批准或用户设计决定缺失置 blocked。未完 S6 继续在办，不随 S5 关闭。
