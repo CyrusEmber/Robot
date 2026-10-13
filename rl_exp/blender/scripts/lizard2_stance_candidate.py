@@ -511,6 +511,446 @@ def contract_self_check(without_fix=False):
           "asset files hashed=%d unchanged; Python writes forbidden; geometry_proven=False" % len(before))
 
 
+def palm_body75_vertical(options):
+    """Rigidly repose the actual latest low-palms blend; preserve sizes and sole heights [m]."""
+    import hashlib
+    import json
+    from pathlib import Path
+    from mathutils import Quaternion
+    from mathutils.bvhtree import BVHTree
+
+    repo = Path(_ASSET_DIR).parents[1]
+    source = Path(_ASSET_DIR) / "lizard2_palm_p2_sample_claw_all_lowered/sample_neutral.blend"
+    output = Path(options.output_dir).resolve()
+    if output != Path(_ASSET_DIR).resolve() / "lizard2_palm_p2_sample_claw_all_lowered_body75_vertical":
+        raise ValueError("body75 output must be isolated lizard2_palm_p2_sample_claw_all_lowered_body75_vertical")
+    if not options.check_only and output.exists():
+        raise FileExistsError("Refuse overwrite: " + str(output))
+    protected = {p for p in Path(_ASSET_DIR).rglob("*") if p.is_file() and output not in p.parents}
+    for folder in ("assets", "versions", "lizard2_candidate", "meshes"):
+        protected.update(p for p in (repo / "rl_exp" / folder).rglob("*") if p.is_file())
+    def hashes():
+        return {str(p.relative_to(repo)): hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(protected)}
+    before_hashes = hashes()
+    bpy.ops.wm.open_mainfile(filepath=str(source))
+    scene = bpy.context.scene
+    arm = next(o for o in scene.objects if o.type == "ARMATURE")
+    mw = arm.matrix_world.copy()
+    inv = mw.inverted()
+    def vertices(obj):
+        evaluated = obj.evaluated_get(bpy.context.evaluated_depsgraph_get())
+        mesh = evaluated.to_mesh()
+        try:
+            return [evaluated.matrix_world @ v.co for v in mesh.vertices]
+        finally:
+            evaluated.to_mesh_clear()
+    def center(points):
+        return sum(points, Vector()) / len(points)
+    def eps(points):
+        return 64 * 2 ** -23 * max(1.0, *(abs(x) for p in points for x in p))
+    def ends(name):
+        b = arm.data.bones[name]
+        return mw @ b.head_local, mw @ b.tail_local
+    def cap_groups(obj, direction):
+        groups = [list(f.vertices) for f in obj.data.polygons if len(f.vertices) > 4]
+        assert len(groups) == 2, "Expected two physical cylinder caps"
+        v = vertices(obj)
+        return sorted(groups, key=lambda ids: center([v[i] for i in ids]).dot(direction))
+    reflection = Matrix.Diagonal((1, -1, 1, 1))
+    old_bones = {b.name: (*ends(b.name), b.matrix_local.copy(), b.parent.name if b.parent else None)
+                 for b in arm.data.bones}
+    nonleg_bones = [n for n in old_bones if not n.startswith(("lf_", "rf_", "rl_", "rr_"))]
+    old_basis = {n: arm.pose.bones[n].matrix_basis.copy() for n in nonleg_bones}
+    evaluated_arm = arm.evaluated_get(bpy.context.evaluated_depsgraph_get())
+    old_pose = {n: (evaluated_arm.matrix_world @ evaluated_arm.pose.bones[n].head,
+                    evaluated_arm.matrix_world @ evaluated_arm.pose.bones[n].tail,
+                    evaluated_arm.matrix_world @ evaluated_arm.pose.bones[n].matrix)
+                for n in nonleg_bones}
+    old_vertices = {o.name: vertices(o) for o in scene.objects if o.type == "MESH"}
+    objects = {o.name: o for o in scene.objects if o.type == "MESH"}
+    old_world = {n: o.matrix_world.copy() for n, o in objects.items()}
+    bindings = {n: (o.parent, o.parent_type, o.parent_bone) for n, o in objects.items()}
+    roots = [b.name for b in arm.data.bones if b.parent is None]
+    assert roots == ["base_link"], "Body reference must be actual unique root base_link"
+    samples = {}
+    for leg in ("lf", "rf", "rl", "rr"):
+        roles = ("shoulder_swing", "shoulder_abduct", "elbow", "wrist") if leg.endswith("f") else (
+            "hip_swing", "hip_abduct", "knee", "ankle")
+        names = [leg + "_" + role for role in roles]
+        attached = [[o for o in objects.values() if o.parent_bone == name] for name in names]
+        palm = next(o for o in attached[3] if len(o.data.vertices) == 72)
+        cylinders = [next(o for o in attached[i] if sum(len(f.vertices) > 4 for f in o.data.polygons) == 2) for i in (1, 2)]
+        points = [ends(names[i])[0] for i in (1, 2, 3)]
+        groups = [cap_groups(o, points[i + 1] - points[i]) for i, o in enumerate(cylinders)]
+        samples[leg] = {"names": names, "palm": palm.name, "cylinders": [o.name for o in cylinders],
+                        "caps": groups, "old_points": points, "attached": [[o.name for o in row] for row in attached]}
+    soles = {leg: min(p.z for p in old_vertices[s["palm"]]) for leg, s in samples.items()}
+    ground = sum(soles.values()) / 4
+    old_height = old_bones["base_link"][0].z - ground
+    assert old_height > 0
+    delta = Vector((0, 0, -old_height / 4))
+    report = {"status": "PROVISIONAL_NOT_ACCEPTED", "source": str(source.relative_to(repo)),
+              "body_reference": "Actual unique root base_link world rest head Z minus horizontal plane at mean of four evaluated palm sole minima; same fixed plane old/new",
+              "ground_z_m": ground, "old_sole_z_m": soles,
+              "sole_offsets_from_ground_m": {leg: z - ground for leg, z in soles.items()},
+              "old_body_height_m": old_height, "target_body_height_m": old_height * .75,
+              "body_translation_m": list(delta), "rest": {}, "turns": [], "negative_checks": {},
+              "protected_sha256_before": before_hashes,
+              "arithmetic_bound": "64 float32 ulps times max(1, absolute coordinates); not approved anatomical tolerance",
+              "construction": "Latest actual blend; single rigid body/neck/tail translation, fixed bone lengths and palm geometry. Upper XY yaw/sign retained, solved Z; lower direction world (0,0,-1). Footprints may shift XY; old per-palm sole Z offsets retained.",
+              "approval": "Only -10/0/+10 single elbow/wrist/knee/ankle diagnostics. No ROM, physics, export, adoption or full self-collision acceptance."}
+    transforms = {n: Matrix.Translation(delta) for n in objects}
+    new_bones = {n: (h + delta, t + delta) for n, (h, t, _, _) in old_bones.items()}
+    for leg, s in samples.items():
+        names, old = s["names"], s["old_points"]
+        lengths = [(old[i + 1] - old[i]).length for i in range(2)]
+        root = old[0] + delta
+        elbow_z = old[2].z + lengths[1]
+        upper_z = elbow_z - root.z
+        if abs(upper_z) >= lengths[0]:
+            raise ValueError("Unreachable fixed-length vertical lower: " + leg)
+        yaw = old[1] - old[0]
+        yaw.z = 0
+        yaw.normalize()
+        upper = yaw * math.sqrt(lengths[0] ** 2 - upper_z ** 2) + Vector((0, 0, upper_z))
+        p = [root, root + upper]
+        p.append(p[1] + Vector((0, 0, -lengths[1])))
+        s["points"] = p
+        s["axis"] = upper.cross(Vector((0, 0, -1))).normalized()
+        if leg in MIRROR_OF:
+            s["axis"] = -(reflection.to_3x3() @ samples[MIRROR_OF[leg]]["axis"])
+        new_bones[names[0]] = (p[0], p[0] + old_bones[names[0]][1] - old_bones[names[0]][0])
+        for i in (1, 2):
+            new_bones[names[i]] = (p[i - 1], p[i])
+            rotation = (old[i] - old[i - 1]).rotation_difference(p[i] - p[i - 1])
+            for n in s["attached"][i]:
+                transforms[n] = rigid_about(old[i - 1], p[i - 1], rotation)
+        new_bones[names[3]] = (p[2], p[2] + old_bones[names[3]][1] - old_bones[names[3]][0])
+        for n in s["attached"][3]:
+            transforms[n] = Matrix.Translation(p[2] - old[2])
+    nonleg = [n for n, (_, _, bone) in bindings.items() if not bone.startswith(("lf_", "rf_", "rl_", "rr_"))]
+    if min((p + delta).z for n in nonleg for p in old_vertices[n]) <= ground:
+        raise ValueError("Rigidly lowered body/neck/tail intersects ground; stop")
+    # Detach before changing rest. Rebind unchanged mesh data via desired world transforms.
+    for o in objects.values():
+        o.parent = None
+    bpy.context.view_layer.objects.active = arm
+    bpy.ops.object.mode_set(mode="EDIT")
+    for n, (h, t) in new_bones.items():
+        b = arm.data.edit_bones[n]
+        b.use_connect = False
+        b.head, b.tail = inv @ h, inv @ t
+    for s in samples.values():
+        for n in s["names"][1:]:
+            b = arm.data.edit_bones[n]
+            b.align_roll((inv.to_3x3() @ s["axis"]).cross((b.tail - b.head).normalized()))
+    bpy.ops.object.mode_set(mode="OBJECT")
+    for s in samples.values():
+        for n in s["names"]:
+            arm.pose.bones[n].matrix_basis = Matrix.Identity(4)
+    # Nonleg pose channels stay untouched: assigning matrix_basis decomposes it and rounds rotations.
+    for n, o in objects.items():
+        parent, kind, bone = bindings[n]
+        o.parent, o.parent_type, o.parent_bone = parent, kind, bone
+        o.matrix_parent_inverse = Matrix.Identity(4)
+        bpy.context.view_layer.update()
+        o.matrix_world = transforms[n] @ old_world[n]
+    bpy.context.view_layer.update()
+    def overlap(a, b):
+        trees = []
+        for n in (a, b):
+            o = objects[n]
+            evaluated = o.evaluated_get(bpy.context.evaluated_depsgraph_get())
+            mesh = evaluated.to_mesh()
+            try:
+                trees.append(BVHTree.FromPolygons([evaluated.matrix_world @ v.co for v in mesh.vertices],
+                                                 [list(f.vertices) for f in mesh.polygons]))
+            finally:
+                evaluated.to_mesh_clear()
+        return len(trees[0].overlap(trees[1]))
+    def measure(leg):
+        s = samples[leg]
+        cap_centers = []
+        cap_residuals = []
+        for n, bone, groups in zip(s["cylinders"], s["names"][1:3], s["caps"]):
+            v = vertices(objects[n])
+            c = [center([v[i] for i in group]) for group in groups]
+            cap_centers.append(c)
+            b = arm.pose.bones[bone]
+            cap_residuals.extend([(c[0] - mw @ b.head).length, (c[1] - mw @ b.tail).length])
+        b = arm.pose.bones[s["names"][2]]
+        d = (mw @ b.tail - mw @ b.head).normalized()
+        axis = (cap_centers[1][1] - cap_centers[1][0]).normalized()
+        pv = vertices(objects[s["palm"]])
+        root = mw @ arm.pose.bones[s["names"][3]].head
+        return {"lower_bone_head_m": list(mw @ b.head), "lower_bone_tail_m": list(mw @ b.tail),
+                "lower_angle_to_horizontal_deg": math.degrees(math.atan2(abs(d.z), math.hypot(d.x, d.y))),
+                "lower_cap_axis_angle_to_horizontal_deg": math.degrees(math.atan2(abs(axis.z), math.hypot(axis.x, axis.y))),
+                "lower_horizontal_component": math.hypot(d.x, d.y),
+                "lower_cap_centers_m": [list(c) for c in cap_centers[1]],
+                "cap_endpoint_residuals_m": cap_residuals,
+                "palm_root_residual_m": (center(pv[:12]) - root).length,
+                "sole_z_m": min(p.z for p in pv),
+                "lower_palm_BVH_surface_overlap_pairs": overlap(s["cylinders"][1], s["palm"]),
+                "nonleg_ground_clearance_m": min(p.z for n in nonleg for p in vertices(objects[n])) - ground}
+    def check():
+        current_height = ends("base_link")[0].z - ground
+        bound = eps([old_bones["base_link"][0]])
+        assert abs(current_height - .75 * old_height) <= bound, "body ground height not 75%"
+        evaluated_arm = arm.evaluated_get(bpy.context.evaluated_depsgraph_get())
+        pose_checks = {}
+        for n, (h, t, matrix) in old_pose.items():
+            b = evaluated_arm.pose.bones[n]
+            basis = arm.pose.bones[n].matrix_basis
+            basis_residual = max(abs(basis[i][j] - old_basis[n][i][j]) for i in range(4) for j in range(4))
+            assert basis_residual == 0, "nonleg pose basis changed: " + n
+            a, z = evaluated_arm.matrix_world @ b.head, evaluated_arm.matrix_world @ b.tail
+            current = evaluated_arm.matrix_world @ b.matrix
+            head_residual, tail_residual = (a - h - delta).length, (z - t - delta).length
+            axes_residual = max(abs(current[i][j] - matrix[i][j]) for i in range(3) for j in range(3))
+            assert max(head_residual, tail_residual, axes_residual) <= eps([h, t, a, z]), "nonleg evaluated frame changed: " + n
+            pose_checks[n] = {"source_basis": [list(row) for row in old_basis[n]],
+                "new_basis": [list(row) for row in basis], "basis_residual": basis_residual,
+                "source_basis_identity_residual": max(abs(old_basis[n][i][j] - (i == j)) for i in range(4) for j in range(4)),
+                "source_head_m": list(h), "source_tail_m": list(t),
+                "new_head_m": list(a), "new_tail_m": list(z),
+                "head_translation_residual_m": head_residual, "tail_translation_residual_m": tail_residual,
+                "source_world_axes": [list(row)[:3] for row in matrix][:3],
+                "new_world_axes": [list(row)[:3] for row in current][:3], "world_axes_residual": axes_residual,
+                "source_pose_minus_rest_head_m": list(h - old_bones[n][0]),
+                "new_pose_minus_rest_head_m": list(a - ends(n)[0])}
+        report["nonleg_pose_preserved"] = pose_checks
+        old_actual_height = old_pose["base_link"][0].z - ground
+        actual_height = (evaluated_arm.matrix_world @ evaluated_arm.pose.bones["base_link"].head).z - ground
+        report["root_rest_vs_actual"] = {"source_rest_height_m": old_height,
+            "source_actual_height_m": old_actual_height, "source_actual_minus_rest_m": old_actual_height - old_height,
+            "new_rest_height_m": ends("base_link")[0].z - ground, "new_actual_height_m": actual_height,
+            "new_actual_minus_rest_m": actual_height - (ends("base_link")[0].z - ground),
+            "actual_height_ratio": actual_height / old_actual_height,
+            "reference": "Unchanged source root rest head and fixed sole plane; actual evaluated offset inherited, not redefined"}
+        assert abs(actual_height - old_actual_height - delta.z) <= eps([old_pose["base_link"][0]]), "actual root translation changed"
+        for leg, s in samples.items():
+            h, t = ends(s["names"][2])
+            assert math.hypot(t.x - h.x, t.y - h.y) <= bound and t.z < h.z, "lower leg not vertical: " + leg
+        for n, (h, t, _, parent) in old_bones.items():
+            a, b = ends(n)
+            assert abs((a - b).length - (h - t).length) <= bound, "bone length changed: " + n
+            assert (arm.data.bones[n].parent.name if arm.data.bones[n].parent else None) == parent
+            if not n.startswith(("lf_", "rf_", "rl_", "rr_")):
+                assert max((a - h - delta).length, (b - t - delta).length) <= bound, "nonleg rest not rigidly translated"
+        for n, o in objects.items():
+            assert (o.parent, o.parent_type, o.parent_bone) == bindings[n], "mesh binding changed"
+            v = vertices(o)
+            assert len(v) == len(old_vertices[n])
+            residual = max((p - transforms[n] @ q).length for p, q in zip(v, old_vertices[n]))
+            assert residual <= eps(v), "mesh shape/rest transform drift: " + n
+        for leg, s in samples.items():
+            m = measure(leg)
+            assert abs(m["sole_z_m"] - soles[leg]) <= bound, "sole height changed"
+            assert max(m["cap_endpoint_residuals_m"] + [m["palm_root_residual_m"]]) <= bound, "physical caps disconnected"
+            c = [Vector(v) for v in m["lower_cap_centers_m"]]
+            assert math.hypot(c[1].x - c[0].x, c[1].y - c[0].y) <= bound, "physical lower cylinder tilted"
+            assert m["nonleg_ground_clearance_m"] > 0, "body intersects floor"
+            a, b = ends(s["names"][1])
+            old = s["old_points"][1] - s["old_points"][0]
+            d = b - a
+            assert d.x * old.x > 0 and d.y * old.y > 0, "upper sagittal/outward sign changed"
+            assert abs(d.x * old.y - d.y * old.x) <= bound, "upper yaw changed"
+        report["mirror_vertex_residuals_m"] = {}
+        for right, left in MIRROR_OF.items():
+            for la, ra in zip(samples[left]["attached"], samples[right]["attached"]):
+                for ln, rn in zip(la, ra):
+                    a, b = vertices(objects[ln]), vertices(objects[rn])
+                    residual = max((reflection @ p - q).length for p, q in zip(a, b))
+                    assert residual <= eps(a + b), "mirror geometry drift"
+                    report["mirror_vertex_residuals_m"][rn] = residual
+    check()
+    nonzero = next(n for n, basis in old_basis.items()
+                   if max(abs(basis[i][j] - (i == j)) for i in range(4) for j in range(4)) > eps([old_bones[n][0]]))
+    pose = arm.pose.bones[nonzero]
+    channels = (pose.location.copy(), pose.scale.copy(), pose.rotation_euler.copy(),
+                pose.rotation_quaternion.copy(), tuple(pose.rotation_axis_angle))
+    pose.matrix_basis = Matrix.Identity(4)
+    bpy.context.view_layer.update()
+    try:
+        check()
+    except AssertionError as exc:
+        assert str(exc) == "nonleg pose basis changed: " + nonzero, "pose mutation masked: " + str(exc)
+        report["negative_checks"]["nonleg_nonzero_basis_reset"] = str(exc)
+    else:
+        raise AssertionError("Actual nonleg pose reset not rejected: " + nonzero)
+    finally:
+        pose.location, pose.scale, pose.rotation_euler, pose.rotation_quaternion, pose.rotation_axis_angle = channels
+        bpy.context.view_layer.update()
+    check()
+    # Real rest-bone mutations on BOTH front sides; named assertions run before mirror/mesh checks.
+    saved_rest = {n: ends(n) for s in samples.values() for n in s["names"][2:3]} | {"base_link": ends("base_link")}
+    def mutate(label, bad):
+        bpy.context.view_layer.objects.active = arm
+        bpy.ops.object.mode_set(mode="EDIT")
+        names = ["base_link"] if label == "height_unchanged" else [samples[l]["names"][2] for l in ("lf", "rf")]
+        for n in names:
+            h, t = saved_rest[n]
+            shift = -delta if label == "height_unchanged" else Vector((.02, 0, 0))
+            b = arm.data.edit_bones[n]
+            b.head, b.tail = inv @ h, inv @ (t + shift if bad else t)
+            if label == "height_unchanged":
+                b.head = inv @ (h + shift if bad else h)
+        bpy.ops.object.mode_set(mode="OBJECT")
+        bpy.context.view_layer.update()
+    for label, message in (("height_unchanged", "body ground height not 75%"), ("tilted_lower", "lower leg not vertical:")):
+        mutate(label, True)
+        try:
+            check()
+        except AssertionError as exc:
+            assert str(exc).startswith(message), "mutation masked by unrelated assertion: " + str(exc)
+            report["negative_checks"][label] = str(exc)
+        else:
+            raise AssertionError("Actual mutation not rejected: " + label)
+        finally:
+            mutate(label, False)
+        check()
+    if options.regression_without_fix:
+        mutate("height_unchanged", True)
+        check()
+    neutral = {n: vertices(o) for n, o in objects.items()}
+    turn_vertices = {}
+    for leg, s in samples.items():
+        report["rest"][leg] = measure(leg)
+        for name in s["names"][2:]:
+            pivot = ends(name)[0]
+            axis = s["axis"]
+            local = arm.data.bones[name].matrix_local.to_3x3().inverted() @ (inv.to_3x3() @ axis)
+            downstream = {name} | {b.name for b in arm.data.bones[name].children_recursive}
+            for angle in (-10, 0, 10):
+                pose = arm.pose.bones[name]
+                pose.rotation_mode = "QUATERNION"
+                pose.rotation_quaternion = Quaternion(local, math.radians(angle))
+                bpy.context.view_layer.update()
+                transform = rigid_about(pivot, pivot, Quaternion(axis, math.radians(angle)))
+                residuals = {}
+                for row in s["attached"]:
+                    for n in row:
+                        expected = transform if bindings[n][2] in downstream else Matrix.Identity(4)
+                        v = vertices(objects[n])
+                        residuals[n] = max((p - expected @ q).length for p, q in zip(v, neutral[n]))
+                        assert residuals[n] <= eps(v), "turn drift: " + n
+                m = measure(leg)
+                m.update(joint=name, leg=leg, angle_deg=angle, rigid_vertex_residuals_m=residuals)
+                report["turns"].append(m)
+                turn_vertices[(leg, s["names"].index(name), angle)] = {
+                    n: vertices(objects[n]) for row in s["attached"] for n in row}
+                pose.matrix_basis = Matrix.Identity(4)
+                bpy.context.view_layer.update()
+    report["same_angle_mirror_turn_residuals_m"] = {}
+    for right, left in MIRROR_OF.items():
+        for i in (2, 3):
+            for angle in (-10, 0, 10):
+                residual = max((reflection @ p - q).length
+                    for lr, rr in zip(samples[left]["attached"], samples[right]["attached"])
+                    for ln, rn in zip(lr, rr)
+                    for p, q in zip(turn_vertices[(left, i, angle)][ln], turn_vertices[(right, i, angle)][rn]))
+                assert residual <= eps([p for row in samples[left]["attached"] for n in row for p in neutral[n]]), "same-angle mirror turn drift"
+                report["same_angle_mirror_turn_residuals_m"][f"{right}_{i}_{angle}"] = residual
+    check()
+    exporter = str(Path(_SCRIPT_DIR) / "generate_urdf.py")
+    argv = sys.argv
+    sys.argv = [exporter, "--", "--robot", "lizard2_palm_contract", "--contract_check", "--memory_scene"]
+    namespace = {"__file__": exporter, "__name__": "__main__"}
+    try:
+        try:
+            exec(compile(Path(exporter).read_text(encoding="utf-8"), exporter, "exec"), namespace)
+        except SystemExit as exc:
+            assert exc.code == 0
+    finally:
+        sys.argv = argv
+    assert len(namespace["binding"]) == 4
+    report["real_exporter_memory_contract"] = "PASS; no export"
+    report["collision_limits"] = "Evaluated lower-cylinder/palm BVH surface crossings only, neutral + all24 single-joint snapshots; no depth/containment, trimming/filtering, full self-collision, ROM or physics acceptance. Nonleg vertex floor clearance also measured."
+    report["new_body_height_m"] = ends("base_link")[0].z - ground
+    report["body_height_ratio"] = report["new_body_height_m"] / old_height
+    report["bone_lengths_m"] = {n: {"old": (h - t).length, "new": (ends(n)[0] - ends(n)[1]).length,
+        "residual": abs((h - t).length - (ends(n)[0] - ends(n)[1]).length)}
+        for n, (h, t, _, _) in old_bones.items()}
+    report["palm_rigid_translation_checks"] = {leg: {
+        "translation_m": list(s["points"][2] - s["old_points"][2]),
+        "vertex_shape_residual_m": max((p - q - (s["points"][2] - s["old_points"][2])).length
+            for p, q in zip(vertices(objects[s["palm"]]), old_vertices[s["palm"]]))}
+        for leg, s in samples.items()}
+    report["nonleg_translation_vertex_residuals_m"] = {n: max((p - q - delta).length for p, q in zip(vertices(objects[n]), old_vertices[n])) for n in nonleg}
+    report["nonleg_object_positions"] = {n: {
+        "source_world_origin_m": list(old_world[n].translation),
+        "new_evaluated_world_origin_m": list(objects[n].evaluated_get(bpy.context.evaluated_depsgraph_get()).matrix_world.translation),
+        "translation_residual_m": (objects[n].evaluated_get(bpy.context.evaluated_depsgraph_get()).matrix_world.translation - old_world[n].translation - delta).length,
+        "source_origin_minus_evaluated_joint_head_m": list(old_world[n].translation - old_pose[bindings[n][2]][0]) if bindings[n][2] in old_pose else None}
+        for n in nonleg}
+    report["nonleg_alignment_scope"] = "Source evaluated frames, bases and mesh positions preserved under delta; inherited pose/rest and mesh-origin/joint offsets reported, not corrected or certified anatomical alignment."
+    assert hashes() == before_hashes, "Protected artifacts changed"
+    if options.check_only:
+        print("BODY75 CHECK_ONLY PASS", json.dumps({k: report[k] for k in ("body_height_ratio", "negative_checks", "rest")}))
+        return
+    output.mkdir()
+    binding_names = {n: (parent.name if parent else None, kind, bone) for n, (parent, kind, bone) in bindings.items()}
+    bpy.ops.wm.save_as_mainfile(filepath=str(output / "sample_neutral.blend"))
+    bpy.ops.wm.open_mainfile(filepath=str(output / "sample_neutral.blend"))
+    scene = bpy.context.scene
+    arm = next(o for o in scene.objects if o.type == "ARMATURE")
+    objects = {n: bpy.data.objects[n] for n in old_vertices}
+    # Object/armature handles are invalid after reopen; preserve baseline binding names independently.
+    bindings = {n: (bpy.data.objects[parent] if parent else None, kind, bone)
+                for n, (parent, kind, bone) in binding_names.items()}
+    check()
+    report["reopened_independent_baseline_geometry_check"] = "PASS actual saved vertices and rest bones vs preflight latest blend snapshots"
+    scene.render.engine = "BLENDER_WORKBENCH"
+    scene.render.resolution_x, scene.render.resolution_y = 1400, 900
+    scene.render.resolution_percentage = 100
+    scene.render.image_settings.file_format = "PNG"
+    scene.display.shading.light = "STUDIO"
+    scene.display.shading.color_type = "OBJECT"
+    scene.display.shading.show_shadows = False
+    scene.display.shading.show_cavity = True
+    scene.display.shading.background_type = "WORLD"
+    scene.world.color = (.035, .035, .035)
+    data = bpy.data.cameras.new("BODY75_DIAGNOSTIC_CAMERA")
+    data.type = "ORTHO"
+    camera = bpy.data.objects.new(data.name, data)
+    scene.collection.objects.link(camera)
+    scene.camera = camera
+    # Ground overlay only, added after neutral save; not part of robot/export geometry.
+    mesh = bpy.data.meshes.new("BODY75_DIAGNOSTIC_GROUND")
+    mesh.from_pydata([(-5, -2, ground), (1, -2, ground), (1, 2, ground), (-5, 2, ground)], [], [(0, 1, 2, 3)])
+    floor = bpy.data.objects.new(mesh.name, mesh)
+    scene.collection.objects.link(floor)
+    floor.color = (.18, .18, .18, 1)
+    curve = bpy.data.curves.new("BODY75_DIAGNOSTIC_GROUND_CROSS", "CURVE")
+    curve.dimensions, curve.bevel_depth = "3D", .004
+    for a, b in (((-5, 0, ground), (1, 0, ground)), ((-1.5, -2, ground), (-1.5, 2, ground))):
+        spline = curve.splines.new("POLY")
+        spline.points.add(1)
+        spline.points[0].co, spline.points[1].co = (*a, 1), (*b, 1)
+    ground_cross = bpy.data.objects.new(curve.name, curve)
+    scene.collection.objects.link(ground_cross)
+    ground_cross.color = (.9, .5, .15, 1)
+    full = [p for v in neutral.values() for p in v]
+    target = Vector(tuple((min(p[i] for p in full) + max(p[i] for p in full)) / 2 for i in range(3)))
+    views = [("full_side_ground", Vector((0, -1, 0))), ("full_front_ground", Vector((1, 0, 0))),
+             ("full_oblique_ground", Vector((1.3, -2, 1))), ("full_top", Vector((0, 0, 1)))]
+    report["pngs"] = []
+    for name, direction in views:
+        camera.location = target + direction.normalized() * 8
+        camera.rotation_euler = (target - camera.location).to_track_quat("-Z", "Y").to_euler()
+        data.ortho_scale = 5.2
+        floor.hide_render = name == "full_top"
+        scene.render.filepath = str(output / (name + ".png"))
+        bpy.ops.render.render(write_still=True)
+        report["pngs"].append(str((output / (name + ".png")).relative_to(repo)))
+    report["blend"] = str((output / "sample_neutral.blend").relative_to(repo))
+    report["protected_sha256_after"] = hashes()
+    assert before_hashes == report["protected_sha256_after"]
+    (output / "measurements.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+    print("BODY75 OUTPUT PASS", output, "ratio", report["body_height_ratio"])
+
+
 def palm_p2_sample(args):
     """Build isolated native-mesh P2 samples; opt in to four mirrored limbs and lowered claw bodies."""
     import argparse
@@ -526,6 +966,7 @@ def palm_p2_sample(args):
     parser.add_argument("--palm_shape", choices=("halfpad", "claw"), default="halfpad")
     parser.add_argument("--all_legs", action="store_true", help="Mirror built left limbs into original right objects")
     parser.add_argument("--sole_at_ball_bottom", action="store_true", help="Lower claw body, retaining root ring at pivot")
+    parser.add_argument("--body75_vertical", action="store_true", help="Latest four low palms; body ground height 75%, vertical lower bones")
     parser.add_argument("--check_only", action="store_true", help="Memory-only regression; no output directory created")
     options = parser.parse_args(args)
     if (options.all_legs or options.sole_at_ball_bottom) and options.palm_shape != "claw":
@@ -533,6 +974,11 @@ def palm_p2_sample(args):
     angles = [float(x) for x in options.diagnostic_angles.split(",")]
     if angles != [-10.0, 0.0, 10.0]:
         raise ValueError("P2 approval covers diagnostic -10/0/+10 degrees ONLY")
+    if options.body75_vertical:
+        if not (options.all_legs and options.sole_at_ball_bottom and options.palm_shape == "claw"):
+            raise ValueError("--body75_vertical requires --palm_shape claw --all_legs --sole_at_ball_bottom")
+        palm_body75_vertical(options)
+        return
     output = Path(options.output_dir).resolve()
     if output.parent != Path(_ASSET_DIR).resolve() or not output.name.startswith("lizard2_palm_p2_sample"):
         raise ValueError("P2 output must be a new lizard2_palm_p2_sample* directory beside source")
