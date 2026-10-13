@@ -2233,9 +2233,239 @@ def palm_p2_sample(args):
     print("P2 OUTPUT " + str(output))
 
 
+def palm_limit_probe(args):
+    """Scan proposed joint ranges on the saved palm candidate without exporting assets."""
+    import argparse
+    import hashlib
+    import itertools
+    import json
+    from pathlib import Path
+    from mathutils import Quaternion
+    from mathutils.bvhtree import BVHTree
+
+    parser = argparse.ArgumentParser(description=palm_limit_probe.__doc__)
+    parser.add_argument("--limit_probe", action="store_true")
+    parser.add_argument("--output_dir", required=True)
+    options = parser.parse_args(args)
+    source = Path(_ASSET_DIR) / "lizard2_palm_p2_sample_claw_all_lowered_body75_vertical_tail_ground/sample_neutral.blend"
+    output = Path(options.output_dir).resolve()
+    if output.parent != Path(_ASSET_DIR).resolve() or not output.name.startswith("lizard2_palm_limit_probe_"):
+        raise ValueError("Limit probe requires an isolated lizard2_palm_limit_probe_* output")
+    if output.exists():
+        raise FileExistsError("Refuse overwrite: " + str(output))
+    protected = {p: hashlib.sha256(p.read_bytes()).hexdigest()
+                 for p in Path(_ASSET_DIR).rglob("*") if p.is_file()}
+    bpy.ops.wm.open_mainfile(filepath=str(source))
+    arm = next(o for o in bpy.context.scene.objects if o.type == "ARMATURE")
+    bpy.context.view_layer.update()
+    names = [b.name for b in arm.data.bones]
+    parents = {b.name: b.parent.name if b.parent else None for b in arm.data.bones}
+    pivots = {n: arm.matrix_world @ arm.pose.bones[n].head for n in names}
+    frames = {n: arm.matrix_world @ arm.pose.bones[n].matrix for n in names}
+    assert all(max(abs(arm.pose.bones[n].matrix_basis[i][j] - (i == j))
+                   for i in range(4) for j in range(4)) == 0 for n in names), "Probe requires baked neutral pose"
+    exporter = os.path.join(_SCRIPT_DIR, "generate_urdf.py")
+    old_argv = sys.argv
+    namespace = {"__file__": exporter, "__name__": "__main__"}
+    try:
+        sys.argv = [exporter, "--", "--robot", "lizard2_palm_contract", "--contract_check", "--memory_scene"]
+        try:
+            exec(compile(Path(exporter).read_text(encoding="utf-8"), exporter, "exec"), namespace)
+        except SystemExit as exc:
+            assert exc.code == 0
+    finally:
+        sys.argv = old_argv
+    balls = namespace["BALL_MESHES"]
+    geometry, visual, palm_normals = {}, {}, {}
+    for obj in bpy.context.scene.objects:
+        if obj.type != "MESH":
+            continue
+        assert obj.parent_type == "BONE" and obj.parent_bone in names, "Unbound mesh: " + obj.name
+        evaluated = obj.evaluated_get(bpy.context.evaluated_depsgraph_get())
+        mesh = evaluated.to_mesh()
+        try:
+            mesh.calc_loop_triangles()
+            points = [evaluated.matrix_world @ v.co for v in mesh.vertices]
+            triangles = [tuple(t.vertices) for t in mesh.loop_triangles]
+            data = {"object": obj.name, "points": points, "triangles": triangles}
+            visual.setdefault(obj.parent_bone, []).append(data)
+            if obj.name not in balls:
+                geometry.setdefault(obj.parent_bone, []).append(data)
+            if obj.parent_bone.endswith(("_wrist", "_ankle")) and obj.name not in balls:
+                surfaces = []
+                for face in mesh.polygons:
+                    v = [points[i] for i in face.vertices]
+                    normal = sum((a.cross(b) for a, b in zip(v, v[1:] + v[:1])), Vector())
+                    if normal.length and normal.normalized().z < -.99:
+                        surfaces.append((normal.length, -normal.normalized()))
+                assert surfaces, "No actual downward sole face: " + obj.name
+                palm_normals[obj.parent_bone] = max(surfaces, key=lambda row: row[0])[1]
+        finally:
+            evaluated.to_mesh_clear()
+    axes, limits, knee_facts = {}, {}, {}
+    for leg in ("lf", "rf", "rl", "rr"):
+        roots = namespace["leg_names"].roots_of(namespace["leg_names"].PALM_NAMING, leg)
+        chain = [leg + "_" + r for r in roots]
+        u = (pivots[chain[2]] - pivots[chain[1]]).normalized()
+        v = (pivots[chain[3]] - pivots[chain[2]]).normalized()
+        hinge = u.cross(v).normalized()
+        if leg in MIRROR_OF:
+            left = axes[MIRROR_OF[leg] + "_" + roots[1]]
+            hinge = Vector((-left.x, left.y, -left.z))
+        axes[chain[0]] = Vector((0, 0, -1 if leg in MIRROR_OF else 1))
+        for n in chain[1:]:
+            axes[n] = hinge.copy()
+        for n, width in zip(chain, (.6, .6, 1.2, math.pi / 6)):
+            limits[n] = (-width, width)
+        fold = math.atan2(hinge.dot(u.cross(v)), u.dot(v))
+        knee_facts[chain[2]] = {"neutral_fold_deg": math.degrees(fold),
+            "straight_q_deg": -math.degrees(fold), "full_fold_q_deg": 180 - math.degrees(fold),
+            "extension_margin_deg": math.degrees(fold - 1.2)}
+    for n in names:
+        if n == "base_link" or n in axes:
+            continue
+        assert n.endswith(("_yaw", "_pitch")), "Unspecified role: " + n
+        axes[n] = (Vector((0, 0, 1)) if n.endswith("_yaw") else
+                   (frames[n].to_3x3() @ Vector((1, 0, 0))).normalized())
+        width = .6 if n.endswith("_yaw") else .5
+        limits[n] = (-width, width)
+    ground = -.9711321443319321
+    bound = 64 * 2 ** -23 * max(1.0, *(abs(x) for rows in visual.values()
+                  for row in rows for p in row["points"] for x in p))
+    def motion(pose):
+        result = {}
+        for n in names:
+            parent = result[parents[n]] if parents[n] else Matrix.Identity(4)
+            q = pose.get(n, 0)
+            local = (Matrix.Translation(pivots[n]) @ Matrix.Rotation(q, 4, axes[n])
+                     @ Matrix.Translation(-pivots[n])) if q else Matrix.Identity(4)
+            result[n] = parent @ local
+        return result
+    def bending_ok(n, q):
+        fold = math.radians(knee_facts[n]["neutral_fold_deg"]) + q
+        return 0 < fold < math.pi
+    negatives = {}
+    for n in knee_facts:
+        q = math.radians(knee_facts[n]["straight_q_deg"]) - .01
+        assert not bending_ok(n, q), "Reverse-bending oracle failed"
+        pb = arm.pose.bones[n]
+        mode, quat = pb.rotation_mode, pb.rotation_quaternion.copy()
+        pb.rotation_mode = "QUATERNION"
+        pb.rotation_quaternion = Quaternion(frames[n].to_3x3().inverted() @ axes[n], q)
+        bpy.context.view_layer.update()
+        upper = arm.pose.bones[parents[n]]
+        u = (arm.matrix_world @ pb.head - arm.matrix_world @ upper.head).normalized()
+        v = (arm.matrix_world @ pb.tail - arm.matrix_world @ pb.head).normalized()
+        actual_fold = math.atan2(axes[n].dot(u.cross(v)), u.dot(v))
+        assert actual_fold < 0, "Actual Blender reverse pose not rejected: " + n
+        negatives[n] = {"reverse_q_deg": math.degrees(q), "actual_signed_fold_deg": math.degrees(actual_fold),
+                        "rejected": True}
+        pb.rotation_quaternion, pb.rotation_mode = quat, mode
+        bpy.context.view_layer.update()
+    physical_residual = 0.0
+    for n in axes:
+        q = limits[n][1]
+        pb = arm.pose.bones[n]
+        mode, quat = pb.rotation_mode, pb.rotation_quaternion.copy()
+        pb.rotation_mode = "QUATERNION"
+        pb.rotation_quaternion = Quaternion(frames[n].to_3x3().inverted() @ axes[n], q)
+        bpy.context.view_layer.update()
+        transform = motion({n: q})
+        for child in [n] + [b.name for b in arm.data.bones[n].children_recursive]:
+            for row in visual.get(child, []):
+                obj = bpy.data.objects[row["object"]]
+                evaluated = obj.evaluated_get(bpy.context.evaluated_depsgraph_get())
+                mesh = evaluated.to_mesh()
+                try:
+                    residual = max((evaluated.matrix_world @ v.co - transform[child] @ p).length
+                                   for v, p in zip(mesh.vertices, row["points"]))
+                    physical_residual = max(physical_residual, residual)
+                    assert residual <= bound, "Actual Blender motion differs: " + n
+                finally:
+                    evaluated.to_mesh_clear()
+        pb.rotation_quaternion, pb.rotation_mode = quat, mode
+        bpy.context.view_layer.update()
+    poses = [("neutral", {})]
+    for n, (lo, hi) in limits.items():
+        poses.extend((n + ":" + str(q), {n: q}) for q in (lo, lo / 2, hi / 2, hi))
+    for leg in ("lf", "rf", "rl", "rr"):
+        chain = [n for n in names if n.startswith(leg + "_")]
+        for values in itertools.product((-1, 1), repeat=len(chain)):
+            poses.append((leg + ":corner:" + str(values),
+                          {n: limits[n][1] * s for n, s in zip(chain, values)}))
+    def tree_distance(a, b):
+        paths = []
+        for n in (a, b):
+            path = [n]
+            while parents[path[-1]] is not None:
+                path.append(parents[path[-1]])
+            paths.append(path)
+        common = next(n for n in paths[0] if n in paths[1])
+        return paths[0].index(common) + paths[1].index(common)
+    rows, pair_counts = [], {}
+    for label, pose in poses:
+        transforms = motion(pose)
+        trees, bounds = {}, {}
+        for n, objects in geometry.items():
+            points, triangles = [], []
+            for obj in objects:
+                start = len(points)
+                points.extend(transforms[n] @ p for p in obj["points"])
+                triangles.extend(tuple(start + i for i in t) for t in obj["triangles"])
+            trees[n] = BVHTree.FromPolygons(points, triangles, all_triangles=True, epsilon=0)
+            bounds[n] = (Vector(tuple(min(p[i] for p in points) for i in range(3))),
+                         Vector(tuple(max(p[i] for p in points) for i in range(3))))
+        hits = []
+        for a, b in itertools.combinations(trees, 2):
+            amin, amax = bounds[a]
+            bmin, bmax = bounds[b]
+            if any(amax[i] < bmin[i] or bmax[i] < amin[i] for i in range(3)):
+                continue
+            count = len(trees[a].overlap(trees[b]))
+            if count:
+                adjacent = parents[a] == b or parents[b] == a
+                hits.append({"links": [a, b], "surface_pairs": count, "direct_joint_pair": adjacent,
+                             "tree_distance_joints": tree_distance(a, b)})
+                pair_counts[(a, b)] = pair_counts.get((a, b), 0) + 1
+        facing = {n: (transforms[n].to_3x3() @ normal).z for n, normal in palm_normals.items()}
+        ground_min = {n: box[0].z - ground for n, box in bounds.items()}
+        rows.append({"label": label, "q_rad": pose, "mesh_surface_crossings": hits,
+                     "flipped_or_vertical_palms": {n: v for n, v in facing.items() if v <= 0},
+                     "floor_penetration_fixed_base_m": {n: v for n, v in ground_min.items() if v < -bound},
+                     "reverse_bending": [n for n in knee_facts if not bending_ok(n, pose.get(n, 0))]})
+    assert protected == {p: hashlib.sha256(p.read_bytes()).hexdigest() for p in protected}, "Source artifacts changed"
+    report = {"status": "PROPOSED_RANGES_NOT_ACCEPTED", "source": str(source),
+        "source_sha256": protected[source], "ground_z_m": ground, "naming": "palm",
+        "source_neutral_floor_clearance_m": {n: min(p.z - ground for obj in objects for p in obj["points"])
+                                              for n, objects in geometry.items()},
+        "axis_convention": "Functional proposal: left swing world +Z/right -Z; limb hinges from left upper cross lower, right axial reflection -R; spine yaw world +Z, pitch actual bone local +X. All axes world-neutral, transported by parents.",
+        "candidate_limits_rad": limits, "candidate_axes_world": {n: list(v) for n, v in axes.items()},
+        "knee_facts": knee_facts, "reverse_bending_negative_checks": negatives,
+        "actual_blender_motion_max_vertex_residual_m": physical_residual,
+        "float32_arithmetic_bound_m": bound, "samples": rows,
+        "crossing_pair_sample_counts": [{"links": list(pair), "samples": count} for pair, count in pair_counts.items()],
+        "protected_files_unchanged": len(protected),
+        "limits": "Finite single-joint and leg-box-corner scan, not continuous-box proof; BVH surface crossing only, misses pure containment. Direct joint crossings retained, no filter assumed. Ground violations use fixed base; they do not prove all floating-base motions impossible. No exporter/USD, anatomical ROM, control margin, PD or actual contact filtering validated."}
+    output.mkdir()
+    (output / "measurements.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+    print("LIMIT_PROBE", output, "samples", len(rows), "physical_residual_m", physical_residual)
+    print("KNEE_FACTS", json.dumps(knee_facts))
+    print("VIOLATIONS", json.dumps({"surface": sum(bool(r["mesh_surface_crossings"]) for r in rows),
+          "nonadjacent_surface": sum(any(not h["direct_joint_pair"] for h in r["mesh_surface_crossings"]) for r in rows),
+          "flipped_palms": sum(bool(r["flipped_or_vertical_palms"]) for r in rows),
+          "fixed_base_floor": sum(bool(r["floor_penetration_fixed_base_m"]) for r in rows)}))
+
+
 if __name__ == "__main__":
     args = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
-    if "--p2_sample" in args:
+    if "--limit_probe" in args:
+        try:
+            palm_limit_probe(args)
+        except Exception:
+            import traceback
+            traceback.print_exc()
+            raise SystemExit(1)
+    elif "--p2_sample" in args:
         try:
             palm_p2_sample(args)
         except Exception:
