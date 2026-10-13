@@ -1,0 +1,34 @@
+---
+description: work 事项的新建、修改、审核、关闭与验收记录归属；操作 work/ 或 acceptance/records/ 前读取。
+globs: work/**, acceptance/records/**
+alwaysApply: false
+---
+
+# Work 与证据
+
+## 定位与生成
+
+- `work/active/*.md` 一项一文件；关闭项在 `work/closed/<year>/`，按需检索。
+- `python rl_exp/tools/verify/check_work_docs.py --list` 列在办，`--locate <关键词>` 定位；迁移期间列表只覆盖已纳管事项，不代表全部待办。
+- 新建事项（含拆分、迁移新增）必须运行下列脚手架，再填状态、路由、证据和正文；禁止手写或复制文件创建，脚本失败先修原因，不能以事后格式检查替代生成。已有事项正常编辑，不删除重建。
+
+```text
+python rl_exp/tools/verify/check_work_docs.py --scaffold <id> --title "<标题>" --scope "<范围路径>" --landing "<落点路径>" --apply
+```
+
+- 完成后运行 `python rl_exp/tools/verify/check_work_docs.py`；字段与正文格式唯一规范为该工具模块文档。`next` / `close_when` 只写单行短路由，未完动作和审核判据分条放正文。
+
+## 状态与关闭
+
+- 执行者做完先置 `pending_review`，`next` 点名谁审、审什么。审核须用不带执笔历史的新上下文，对照 `close_when`、实际落点与证据，不依赖执笔总结。
+- 审核读数归 `acceptance/records/`；事项只留指针，记录与指针同次变更。记录存在不等于审核发生，格式闸门不证明实际审核，不新增“有记录即通过”的替代检查。
+- 未通过退 `in_progress`；只有用户能解除的缺口置 `blocked`。证据变化后重审。
+- 通过后将原文件移入 `work/closed/<year>/`，保留 id、去掉 `next`、补 `outcome`；未完成动作另立活跃项。
+- 迁移同次变更新建目标并删除被取代正文，保留 id 与指针。预算超额只报告，不自动取消、关闭或归档事项；取消是否合理由人审核。
+
+## 证据归属
+
+- 活跃事项只写当前状态和落点，不追加作废状态，不复制读数、摘要或完整结论。参数进配置、口径进实现与测试、不变式进断言。
+- 数值、摘要和完整结论唯一归 `acceptance/records/`；其它文档留指针。此为人工评审纪律，格式检查不能证明没有重复。
+- 版本 `NOTES.md` 保留“结果回填 + 结论”骨架，内容只放 run 路径、复读命令、报告路径与一句判定；run 本体在本机，引用不承诺其入仓。`PLAN.md` 修订行写变更、原因及证据指针；验收表写判据，不抄本次读数。版本细则见 `versioning.mdc`。
+- 验收复读入口必须保留且可使用；不能引用随后删除的一次性脚本。仓根临时文件由 `check_suite_banners.py:DECLARED_ROOT` 和 pre-commit 检查。

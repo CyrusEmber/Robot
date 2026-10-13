@@ -1,210 +1,26 @@
 # Agent Working Rules
 
-## Critical review
+- 审核要质疑方案：找隐藏缺陷、脆弱假设、长期风险，并说明如何实际验证；不迎合实现。
+- 修改前说明计划；单文件、无 API 变化且一句话可解释的小改动可直接做并自检。
+- 直接说明限制；错了承认，不确定就查证。
+- 按任务检索 `FILEMAP.md`、家族 `FAMILY.md` 和子系统文档，不整份通读。
+- 临时脚本不留仓根；可复读诊断进 `rl_exp/tools/diagnose/`，历史工具进 `rl_exp/tools/archive/`。
 
-When reviewing a solution, do not just agree or optimize for the implementation. Always challenge the approach:
+## Work 与证据
 
-- What is the biggest hidden flaw?
-- Where is this most likely to fail one year later?
-- What assumptions are fragile?
-- How can I validate this in practice?
+- 在办事项 `work/active/`，关闭归档 `work/closed/<year>/`，结果唯一归 `acceptance/records/`。
+- **新建 work 必须用 `check_work_docs.py --scaffold ... --apply`；禁止手工创建。**
+- 操作 work 或验收记录前，必读 [work-ledger](.codemaker/rules/work-ledger.mdc)；文件格式以 `rl_exp/tools/verify/check_work_docs.py` 模块文档为准。
 
-Be direct, critical, and practical. Help avoid shallow thinking, over-engineering, hidden dependencies, and long-term maintainability problems.
+## 按任务必读
 
-## Where the work lives
+以下规则按任务读取，不依赖编辑器自动加载 `.mdc`；不相关的不加载。
 
-- **在办事项** = `work/active/*.md`，一项一文件；证据 = `acceptance/records/`。
-  列举：`python rl_exp/tools/verify/check_work_docs.py --list`（会说明已迁移多少项）；
-  定位一条：`--locate <关键词>`；查形状或生成事项骨架：`check_work_docs.py --help`。
-  `next`/`close_when` 保留单行短路由；动作与审核判据按该工具的格式规范分条放正文，不压缩掉未完动作。
-- **新建 work 必须用脚本生成**（含拆分、迁移时新增的事项）：先执行
-  `python rl_exp/tools/verify/check_work_docs.py --scaffold <id> --title "<标题>" --scope "<范围路径>" --landing "<落点路径>" --apply`，
-  再编辑生成文件的状态、路由、证据与正文，完成后运行 `python rl_exp/tools/verify/check_work_docs.py`。
-  禁止手写、复制模板、`apply_patch` 或其它写文件方式直接创建事项；事后格式检查通过不能替代脚本生成。
-  脚本失败先处理失败原因，不绕过；已有事项正常编辑，关闭时按下述规则移动，不删除重建。
-- **已关闭** = `work/closed/<year>/`，不在默认读取链上：靠检索找，不靠通读。
-- 旧的总账式文档正在往这两棵树里分流。分流期间**工具只列它覆盖的部分**，别把它的输出当成完整待办。
-- **按任务取用，不要整份通读**：`FILEMAP.md`（目录职责 / 入口 / 闸门）与
-  `FAMILY.md`（家族事实 / 版本史）都按节查；某个子系统的事实归它自己的文档。
-- **事项的形状与关闭动作由闸门定**（`check_work_docs.py` 的模块文档即格式规范）：关闭 = 文件移进
-  `work/closed/<year>/`、去掉 `next`、补 `outcome`；没做完的动作另立活跃事项。
-- **关闭前先 `pending_review`**：执行者认为做完了就置该状态，并在 `next` 写明**谁审、审什么**；
-  审核由**新上下文**（不带执笔会话历史）对照 `close_when`、落点与证据来判，不看执笔者的总结。
-  不通过退回 `in_progress`（可就地修的缺口）或 `blocked`（只有用户能给的），证据变了要重审；
-  审核读数归 `acceptance/records/`，事项只留指针（记录与本项在**同一次变更**里落地：`evidence` 指向
-  不存在的路径即红，不能先写指针后补记录）。闸门只查形状、**不查审核是否真发生过**（记录存在
-  不等于被读过），故不设"无审核记录即红"的机器闸门。
-- **活跃事项只写当前状态**：不追加已作废状态，不复制数值/摘要/完整结论（归 `acceptance/records/`）；
-  **规则归机制** —— 参数进配置、口径进实现与测试、不变式进断言，事项只留落点引用。
-- **数值/摘要/结论只有一个家 = `acceptance/records/`**。其它文档留**指针**，不复述读数：
-  版本 `NOTES.md` 的骨架必含"结果回填 + 结论"（`versioning.mdc` §A），但那里放的是 **run 路径 + 复读命令、
-  报告路径、一句判定**（run 记录本体在机器本地、不进仓 ⇒ 引用只给路径）；`PLAN.md` 的修订行只讲
-  "变了什么 + 为什么 + 依据指向哪份记录"；验收表讲**判据的形状**，不讲这次测出的数。
-  本条是**散文纪律、无闸门**：2026-09-23 同一批读数曾同时出现在 NOTES 结果表、PLAN 修订行与活跃事项里，
-  收回到记录一处（`88a1ecb`）；下一次复制没有自动判据能发现，**发现靠评审**。
-- **迁移必须同一变更内建新删旧**（保留 id 与指针，不留两份正文）；预算超额时工具只报最大贡献项，
-  **不自动取消 / 关闭 / 归档**，由人决定，取消是否合理是保留的人工审查风险。
-- **一次性脚本不留仓根**：仓根只放声明项（`check_suite_banners.py:DECLARED_ROOT`，`hooks/pre-commit` 也跑
-  ⇒ 提交即截止线）。值得复读的读数工具进 `rl_exp/tools/diagnose/`、历史进 `rl_exp/tools/archive/`、其余
-  提交前删；验收记录别把一次性脚本写成"复读"路径 —— 那条路径只在本机，且随脚本一起消失
-  （2026-10-09：规则本来就有，无闸门，于是攒下 64 个 `_tmp_*`）。
-
-## Gates (offline suite)
-
-- **新闸门 = 一次真实缺陷 + 在该缺陷上的破坏测试**：写清它回应的是哪一次失败（commit 或
-  `acceptance/records/` 路径），"以防万一"不是准入理由；并标明它是查**声明一致**（文档 / 声明 / 锁之间
-  互查）还是查**行为成立**（构造、真跑、数值）——声明一致类不得单独作为某能力"已验证"的依据。
-  细则（含暂缓条件）见 `rl_exp/tools/verify/OFFLINE_CHECKS.md` §4，准入无机器闸门，判定由 review 做。
-
-## Before work
-
-- Show a plan before any code or file changes.
-- Trivial changes (single file, no API change, explainable in one sentence) are exempt: act directly, then self-check. When in doubt, show the plan.
-
-## Communication
-
-- Be direct about limits.
-- If wrong, admit it directly.
-- If unsure, say more research is needed.
-
-# IsaacLab Guidelines
-
-## Breaking API changes
-
-- **Breaking changes require a deprecation first.** Do not remove or rename public API symbols without deprecating them in a prior release.
-
-## API design rules (naming + structure)
-
-- **Group by common prefix for discoverability (autocomplete).**
-  - **Classes**: group by domain concept — `ActuatorNetLSTM`, `ActuatorNetMLP` (not `LSTMActuatorNet`, `MLPActuatorNet`).
-  - **Methods**: group by noun before modifier — `set_joint_position_target()` (not `set_target_joint_position()`).
-- **Method names are `snake_case`.**
-- **CLI arguments are `snake_case`.**
-- **Prefer nested classes when self-contained.**
-  - If a helper type or an enum is only meaningful inside one parent class and doesn't need a public identity, define it as a nested class instead of creating a new top-level class/module.
-- **Follow PEP 8 for Python code.**
-- **Use modern Python type-hint syntax.**
-  - Prefer PEP 604 unions: `x | y`, `x | None`. Do not use `typing.Union` or `typing.Optional`.
-- **Use specific type hints for public interfaces.**
-  - For torch tensors, annotate with `torch.Tensor`. For Warp arrays, annotate concrete dtypes (e.g., `wp.array(dtype=wp.vec3)`) rather than generic `object`.
-  - Prefer consistent parameter names across base/override APIs (e.g., `xforms`, `scales`, `colors`, `materials`).
-- **Use Google-style docstrings.**
-  - Write clear, concise docstrings that explain what the function does, its parameters, and its return value.
-  - Keep argument/return types in function annotations, not inline in docstrings.
-  - In `Args:` entries, use `name: description` (not `name (Type): description`).
-  - Use Sphinx cross-reference roles for symbol references (e.g. `:class:`, `:meth:`, `:attr:`, `:paramref:`), but keep targets as short as possible.
-  - Within the same class/module, prefer short local references (e.g. `:meth:\`set_joint_position_target\``, `:attr:\`num_joints\``) over fully qualified paths.
-  - If qualification is needed, prefer public API paths (e.g. `isaaclab.assets.Articulation`) and do not use internal `_src` or private module paths in Sphinx role targets.
-- **State SI units for all physical quantities in docstrings.**
-  - Use inline `[unit]` notation, e.g. `"""Particle positions [m], shape [particle_count, 3], float."""`.
-  - For joint-type-dependent quantities use `[m or rad, depending on joint type]`.
-  - For spatial vectors annotate both components, e.g. `[N, N·m]`.
-  - For compound arrays list per-component units, e.g. `[0] k_mu [Pa], [1] k_lambda [Pa], ...`.
-  - When a parameter's interpretation varies across solvers, document each solver's convention instead of a single unit.
-  - Skip non-physical fields (indices, keys, counts, flags).
-  - This rule applies to **public API docstrings only**, not test docstrings.
-- **Keep the documentation up-to-date.**
-  - When adding new files or symbols that are part of the public-facing API, make sure to keep the auto-generated documentation updated by running `./isaaclab.sh -d`.
-
-## Dependencies
-
-- **Avoid adding new required dependencies.** IsaacLab's core should remain lightweight and minimize external requirements.
-- **Strongly prefer not adding new optional dependencies.** If additional functionality requires a new package, carefully consider whether the benefit justifies the added complexity and maintenance burden. When possible, implement functionality using existing dependencies, including Warp functions and kernels, NumPy, or the standard library.
-
-## Tooling: prefer `./isaaclab.sh -p` for running, testing, and benchmarking
-
-We use a wrapped python call within `./isaaclab.sh`.
-
-- **Use `./isaaclab.sh -p -c` for inline Python**: When running one-off Python commands, use `./isaaclab.sh -p -c "..."` instead of `python3 -c "..."`.
-- **Use `./isaaclab.sh -p`** to run standalone Python scripts without a `pyproject.toml` (e.g., in CI after switching to a branch with no project files).
-
-### Run tests
-
-```bash
-# run all tests (extremely heavy, should be avoided).
-./isaaclab.sh -t
-
-# run a specific test file by name
-./isaaclab.sh -p -m pytest PATH_TO_TEST
-
-# run a specific example test
-./isaaclab.sh -p -m pytest PATH_TO_TEST::METHOD
-```
-
-## Changelog
-
-- **Do not edit `CHANGELOG.rst` or `config/extension.toml` directly.** Each PR adds a fragment file under `source/<package>/changelog.d/`; the changelog and version are compiled by the nightly CI workflow.
-- **Add one fragment per touched package.** Pick any short, unique slug for the filename — your branch name (with `/` replaced by `-`) is a good default. The filename suffix declares the bump tier; within a batch the highest tier wins for the package.
-
-  | Filename | Effect |
-  |---|---|
-  | `source/<pkg>/changelog.d/<slug>.rst` | patch bump |
-  | `source/<pkg>/changelog.d/<slug>.minor.rst` | minor bump |
-  | `source/<pkg>/changelog.d/<slug>.major.rst` | major bump |
-  | `source/<pkg>/changelog.d/<slug>.skip` | no entry, no bump (CI / docs / test-only) |
-
-- Use **past tense** matching the section header: "Added X", "Fixed Y", "Changed Z".
-- Place entries under the correct category: `Added`, `Changed`, `Deprecated`, `Removed`, or `Fixed`.
-- Avoid internal implementation details users wouldn't understand.
-- **For `Deprecated`, `Changed`, and `Removed` entries, include migration guidance.**
-  - Example: "Deprecated `Articulation.A` in favor of `Articulation.B`."
-- **Breaking changes** belong in `Changed`, prefixed with `**Breaking:**`.
-- Use Sphinx cross-reference roles for class/method/module names.
-
-### RST formatting reference
-
-```
-Added
-^^^^^
-
-* Added :class:`~package.ClassName` to support feature X.
-
-Fixed
-^^^^^
-
-* Fixed edge case in :meth:`~package.ClassName.method` where input was
-  not validated, causing ``AttributeError`` at runtime.
-```
-
-Key formatting rules:
-- Category heading: underline with `^` (carets), at least as long as the heading text.
-- Entries: `* ` prefix, continuation lines indented by 2 spaces.
-
-See `tools/changelog/test/integration/` for worked examples that double as integration-test fixtures.
-
-## Git
-
-Commit/push/branch/PR discipline lives in the `git-auto-sync` skill (`.codemaker/skills/tool/git-auto-sync/SKILL.md`) — run it at iteration close, before any commit or push.
-**Stage only what this iteration touched**: `git add -A` / `git add .` sweeps another session's work-in-progress
-into your commit (measured 2026-09-20: a doc migration landed inside two unrelated functional commits, losing
-attribution and coarsening rollback). Read `git status` first, add paths one by one, and leave anything whose
-owner you cannot name exactly where it is.
-
-## File headers and copyright
-
-- New files must use the current year (2026) in the SPDX copyright header:
-  ```
-  # Copyright (c) 2022-2026, The Isaac Lab Project Developers (https://github.com/isaac-sim/IsaacLab/blob/main/CONTRIBUTORS.md).
-  # All rights reserved.
-  #
-  # SPDX-License-Identifier: BSD-3-Clause
-  ```
-- Do not change the year in existing file headers.
-
-## GitHub Actions and CI/CD
-
-- Pin actions by major version tag (e.g. `actions/checkout@v6`). Use the same major version that other workflows in `.github/workflows/` already use — don't introduce a new major version without checking how it's used elsewhere.
-
-## Testing Guidelines
-
-- **Always verify regression tests fail without the fix.** When writing a regression test for a bug fix, temporarily revert the fix and run the test to confirm it fails. Then reapply the fix and verify the test passes. This ensures the test actually covers the bug.
-
-### Debugging Warp kernels
-
-**Do not add `wp.printf` to kernels in production code.** Debug prints in Warp kernels affect performance and can produce noisy test output. Use them only in standalone reproduction scripts during development, and always remove them before committing.
-
-To debug Warp kernel behavior:
-
-1. **Write a standalone reproduction script** and run it directly with `./isaaclab.sh -p -c "..."` or `./isaaclab.sh -p script.py`. This keeps stdout visible and avoids the test framework entirely.
-2. **Use high-precision format strings** for floating-point debugging (e.g., `wp.printf("val=%.15e\n", x)`) — the default `%f` format hides values smaller than ~1e-6 that can still affect control flow.
-3. **Remove all `wp.printf` calls before committing.**
+| 任务 | 入口 |
+|---|---|
+| 代码、API、依赖、测试、文件头、CI | [isaaclab-development](.codemaker/rules/isaaclab-development.mdc) |
+| 版本、配方、PLAN/NOTES/FAMILY | [versioning](.codemaker/rules/versioning.mdc) |
+| FILEMAP | [docs](.codemaker/rules/docs.mdc) |
+| 编写或修改 skill | [skill-authoring](.codemaker/rules/skill-authoring.mdc) |
+| 新增闸门 | `rl_exp/tools/verify/OFFLINE_CHECKS.md` §4：真实缺陷与破坏测试，区分声明一致和行为验证 |
+| 迭代收尾、提交、推送 | [git-auto-sync](.codemaker/skills/tool/git-auto-sync/SKILL.md)；只提交本轮文件，不用 `git add -A` / `git add .` |
