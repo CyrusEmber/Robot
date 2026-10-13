@@ -8,3 +8,5 @@
 家族事实与版本史见 [FAMILY.md](FAMILY.md)。后续几何/限位/动作周期由 `work/active/joint-limit-shape-and-range-pass.md` 承接，交付入口为 `work/active/lizard2-family-landing.md`。
 
 当前隔离候选的计划正文为 [lizard2-body-drive-candidate](../../../work/active/lizard2-body-drive-candidate.md) 的 E、A–D 节；交接顺序取[统筹路由](../../../work/active/joint-limit-shape-and-range-pass.md)，接收方为[接触协议](../../../work/active/lizard2-contact-protocol.md)与[S5/S6 交付](../../../work/active/lizard2-family-landing.md)。2026-10-13 按[审核记录](../../../acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md)修订候选验证及交接前置，避免隔离验证等正式采用、标定等最终比较；此处只补计划入口，不变更 v3 方案或建立新版本。
+
+2026-10-13 候选比例修订：按单标本科莫多的前后肢及手足比例放大后肢，并重求四掌共面的姿态；实施与边界见 [A 节计划](../../../work/active/lizard2-body-drive-candidate.md)及[比例记录](../../../acceptance/records/2026-10-13-lizard2-specimen-hindlimb.md)。
