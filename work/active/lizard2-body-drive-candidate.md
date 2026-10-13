@@ -6,14 +6,14 @@ status: in_progress
 landing: rl_exp/blender/scripts/lizard2_specimen_proportions.py, rl_exp/blender/scripts/lizard2_stance_candidate.py, rl_exp/blender/scripts/generate_urdf.py, rl_exp/tools/diagnose/gait_probe.py, rl_exp/tools/diagnose/stance_step_probe.py, rl_exp/tools/diagnose/plot_joints.py, rl_exp/tools/verify/check_leg_reachability.py, rl_exp/tools/verify/check_self_collision.py, rl_exp/tools/verify/check_joint_layout.py, rl_exp/tools/verify/baseline_probe.py, rl_exp/tasks/joint_names.py, ablation_harness/baseline_metrics.py
 next: 执行者按 E3/E4 补目标绑定、拒错和隔离验证，同时完成 A/P2；B/C 标定交 S5 确认阈值后做 D，未验不进 P3。
 close_when: 新上下文按正文“关闭条件”核验 R1–R5 与 D 记录，用户确认外观和动作；未判定不关闭。
-evidence: acceptance/records/2026-10-13-lizard2-specimen-hindlimb.md, acceptance/records/2026-10-13-lizard2-a-implementation-plan-review.md, acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md, acceptance/records/2026-10-13-lizard2-natural-ground-tail.md, acceptance/records/2026-10-13-lizard2-lowered-body-vertical-shanks.md, acceptance/records/2026-10-12-lizard2-four-palms-lowered.md, acceptance/records/2026-10-12-lizard2-claw-palm-shape.md, acceptance/records/2026-10-12-lizard2-palm-p2-sample.md, acceptance/records/2026-10-12-lizard2-palm-chain-p1.md, acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory, acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, acceptance/records/2026-10-08-lizard2-joint-design-review-contract, acceptance/records/2026-10-08-lizard2-r1-numeric-reference-and-decision-drafts
+evidence: acceptance/records/2026-10-13-lizard2-hindlimb-restored.md, acceptance/records/2026-10-13-lizard2-a-implementation-plan-review.md, acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md, acceptance/records/2026-10-13-lizard2-natural-ground-tail.md, acceptance/records/2026-10-13-lizard2-lowered-body-vertical-shanks.md, acceptance/records/2026-10-12-lizard2-four-palms-lowered.md, acceptance/records/2026-10-12-lizard2-claw-palm-shape.md, acceptance/records/2026-10-12-lizard2-palm-p2-sample.md, acceptance/records/2026-10-12-lizard2-palm-chain-p1.md, acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory, acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, acceptance/records/2026-10-08-lizard2-joint-design-review-contract, acceptance/records/2026-10-08-lizard2-r1-numeric-reference-and-decision-drafts
 ---
 
 本项取代 S0–S4 串联审核：各节仅自检，D 集成后一次审核。整体需求见整体记录；A 节用户拍板覆盖旧指/趾根约束。判据归 R1–R5/A，本项只留动作与交付顺序。
 
 ## 下一步
 
-1. **按 A 探测链推进**：用户确认后肢比例及四掌共面的隔离候选外观，执行者处置碰撞并完成其它 P2 检查；输入、当前产物、复读与边界只取 `acceptance/records/2026-10-13-lizard2-specimen-hindlimb.md`。natural-ground-tail、body75 与旧样本只读保留，未验不进 P3，正式资产不动；D 集成后由新上下文审核。
+1. **按 A 探测链推进**：用户确认恢复原后肢尺寸及四掌共面的隔离候选外观，执行者处置碰撞并完成其它 P2 检查；输入、当前产物、复读与边界只取 `acceptance/records/2026-10-13-lizard2-hindlimb-restored.md`。natural-ground-tail、body75 与旧样本只读保留，未验不进 P3，正式资产不动；D 集成后由新上下文审核。
 2. **完成 E 的必需消费者**：按 E3 清单补目标绑定与精确拒错、`gait_probe`、Blender 导出及报告 writer；运行时成对隔离配置由 E 交付，实际动作、默认位姿、传感器及 `joint_order` 与各自 USD 同绑定，不等 S6 正式采用。现有进展与未验范围只取审核记录“追加：E 执行情况核查”。
 3. **并行边界**：A 选 pivot/轴消费 B 的能力约束，按线性对照进行，不新建驱动机制；有效限速前置仍归 B。E 接线前，A 只核对旧名源几何，不让未接线工具测新名候选；C 可用现有机体开展。
 4. **先解除资产前提**：`gait_probe` 的资产前提交 `floor-contact-attribution` 的 ⑤/⑪；不借 E 改资产或放宽断言。声明面边界与既有自检覆盖只取本项 2026-10-12 evidence。
@@ -125,11 +125,11 @@ evidence: acceptance/records/2026-10-13-lizard2-specimen-hindlimb.md, acceptance
 
 **用户补充批准：2026-10-12**：四肢同步；脚板降低至接近腕/踝球底，其它比例、角度与掌轮廓视觉认可。pivot 保持不变，掌根实体过渡连接此前获准；本轮降低属几何摆放，不等于批准数值容差或物理。新隔离四肢产物及原始测量见 four-palms-lowered 记录，旧两肢产物不覆盖。
 
-**体高修订**：降低机身离地高度，不压薄机身；下段垂直地面，允许落掌 XY 随可达性改变。旧保留骨长与掌形要求由下方后肢比例修订覆盖。该姿态覆盖上段“其它角度视觉认可”，旧认可不自动延伸到新姿态；定量判据、实际产物、负例与碰撞边界只取 `acceptance/records/2026-10-13-lizard2-lowered-body-vertical-shanks.md`。外观与后续几何/物理仍待审核。
+**体高修订**：降低机身离地高度，不压薄机身；下段垂直地面，允许落掌 XY 随可达性改变。骨长与掌形取下方后肢恢复要求。该姿态覆盖上段“其它角度视觉认可”，旧认可不自动延伸到新姿态；定量判据、实际产物、负例与碰撞边界只取 `acceptance/records/2026-10-13-lizard2-lowered-body-vertical-shanks.md`。外观与后续几何/物理仍待审核。
 
 **用户尾部选择（2026-10-13）**：远端尾段自然贴地，根连接、逐段下落，远端实体有沿轴向支持跨度，不做尾尖单点悬空休息；保留最新 body75/四条竖直下段与非尾 actual pose/rest frames、网格及骨长。实际预检和当前施工路线见 `acceptance/records/2026-10-13-lizard2-natural-ground-tail.md`；仅静态外观需求，不新增尾 ROM、物理、导出或采用批准。
 
-**后肢比例修订（2026-10-13）**：按单标本前后肢总长及手足比例放大后肢，保持前肢尺度；大腿/小腿的分配保留源比例，掌体以无独立指趾的整体末端代理沿长轴延长，宽厚及腿径保留。重求站姿，四个掌底共用固定水平地面，保持体高、颈尾、近端前后方向及下段竖直。先生成隔离候选并核对保存重开后的骨段/实体/掌根、镜像、单关节转动和碰撞，再确认外观；未验不进 P3。比例口径、工程假设及读数唯一归 `acceptance/records/2026-10-13-lizard2-specimen-hindlimb.md`。
+**后肢恢复要求（2026-10-13）**：按用户最新决定恢复 natural-ground-tail 源的大腿、小腿与后掌尺寸，保持前肢尺度。重求站姿，四个掌底共用固定水平地面，保持体高、颈尾、近端前后方向及下段竖直。当前产物、复读、真实负例与未验边界唯一归 `acceptance/records/2026-10-13-lizard2-hindlimb-restored.md`；继续核对运动轴能力及碰撞，再确认外观，未验不进 P3。四掌共面只约束中立站姿，不锁定动作周期。
 
 只回答：腕/踝移到前臂/小腿末端、掌段从掌根向前延伸后，能否在无指/趾根活动轴的情况下形成骨架—模型一致的承重候选？不预设答案是能，不用改名通过代替结构或物理通过。
 
@@ -144,7 +144,7 @@ evidence: acceptance/records/2026-10-13-lizard2-specimen-hindlimb.md, acceptance
 | 关键假设（可证伪） | 最小探测（输入/对照、入口与命令、观察判据） | 停止条件（失败/缺证时停哪一步、谁处理） |
 |---|---|---|
 | **P1：真实链能表达目标，不补回旧末端轴** | C0 复读旧基线；下方 P1 入口消费显式 `palm` 四角色及真实 Blender 父子树，旧 shared/split 不改义。判据与证据见 palm-chain-p1 记录。**声明一致，不证明几何**。 | 不将内存契约小样导出或采用；两肢几何探测见 P2 记录。 |
-| **P2：骨架和网格在掌根连接，转动不脱节** | 旧一前一后小样只读保留；按用户批准四肢同步、降低掌体，C1 核实际镜像及肘/膝、腕/踝单关节转动。共同坐标系量连接残差、掌骨方向、网格端点、镜像、掌底与球底、运动连接残差及下段—掌表面交叉；pivot 在掌根而非板中央。获准诊断不当 ROM；位置/镜像容差另按测量精度提出。**几何/运动行为**。 | 当前产物取 specimen-hindlimb 记录，natural-ground-tail 及其 body75 为只读上游；执行者自检几何/碰撞，用户确认新姿态与工程容差，新上下文审核统一在 D 后。缺证、错位或脱节停 P2 回 A；旧角度认可不延伸到新姿态，未验不进 P3，不转换、不放宽容差。 |
+| **P2：骨架和网格在掌根连接，转动不脱节** | 旧一前一后小样只读保留；按用户批准四肢同步、降低掌体，C1 核实际镜像及肘/膝、腕/踝单关节转动。共同坐标系量连接残差、掌骨方向、网格端点、镜像、掌底与球底、运动连接残差及下段—掌表面交叉；pivot 在掌根而非板中央。获准诊断不当 ROM；位置/镜像容差另按测量精度提出。**几何/运动行为**。 | 当前产物取 hindlimb-restored 记录，natural-ground-tail 及其 body75 为只读上游；执行者自检几何/碰撞，用户确认新姿态与工程容差，新上下文审核统一在 D 后。缺证、错位或脱节停 P2 回 A；旧角度认可不延伸到新姿态，未验不进 P3，不转换、不放宽容差。 |
 | **P3：导出保留同一连接，轴与真实网格不冲突** | P2 及用户外观确认后，先补 C2 的真实 palm 导出目标及消费路径，再出隔离 URDF；核对后 C3 转独立 USD。C4 复用真实树/FK/碰撞，核对 DCC—URDF—USD 的树、pivot、轴、末端、网格及质心/惯量。旧链 + 主动腕踝为零号对照；同一批准目标覆盖支撑—摆动周期与限位，判据引用上文目标及 R1–R5，导出误差容差先获准。**结构一致 + 几何行为**。 | 执行者先在原导出器补获准 palm 轴/网格/惯量及写前拒错，再补 FK 真实角色、实际碰撞对与 C4 命令；旧链 `--pose`/位次/自检不得硬套。缺导出目标或命令、绑定错、漂移或碰撞失败，停回 E/A，不进 B/D；只读 contract 不能解除前置。 |
 | **P4：无指/趾轴的掌面承重能完成目标动作** | `stance_step_probe.py` 接真实末端/动作通道；B/C 先按下文“标定前置”形成同几何线性对照和协同标定，交 S5 阈值前置动作，不要求本项已审或关闭。用户固定最终性能判据后 D 以同目标、载荷、驱动、窗口跑完整周期比较，分记掌面接触、变形、滑移/滚动与推进。**动力学行为，FK/静力不能替代**。 | 缺实际候选隔离 cfg、精确命令、获准安全预算或接触测量口径，停 B/C 标定前；缺固定性能判据，停 D 最终比较前。失败回 A/B，不归因奖励、不自动加轴；额外自由度凭缺失能力请用户决策。 |
 
@@ -169,7 +169,7 @@ evidence: acceptance/records/2026-10-13-lizard2-specimen-hindlimb.md, acceptance
 
 **C1：当前隔离 Blender 入口**
 
-当前后肢比例候选使用 `lizard2_specimen_proportions.py --output_dir <独立目录>`；复读加 `--check_only`，真实旧几何反例加 `--regression_without_fix`。输入、实际命令与结果取 specimen-hindlimb 记录，natural-ground-tail 为固定只读源，诊断角仍按已有授权。不调用会写采用候选路径的无参数旧入口；早期两肢 P2 命令仅复读对应历史样本，不能生成当前整机候选。
+当前恢复候选使用 `lizard2_specimen_proportions.py --restore_source_lengths --output_dir <独立目录>`；复读加 `--check_only`，真实旧放大几何的拒错检查取记录命令。输入、实际命令与结果取 hindlimb-restored 记录，natural-ground-tail 为固定只读源，诊断角仍按已有授权。不调用会写采用候选路径的无参数旧入口；早期两肢 P2 命令仅复读对应历史样本，不能生成当前整机候选。
 
 **C2：真实 palm URDF 导出（待实现，先通过 P2）**
 
