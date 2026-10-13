@@ -17,6 +17,11 @@ Be direct, critical, and practical. Help avoid shallow thinking, over-engineerin
   列举：`python rl_exp/tools/verify/check_work_docs.py --list`（会说明已迁移多少项）；
   定位一条：`--locate <关键词>`；查形状或生成事项骨架：`check_work_docs.py --help`。
   `next`/`close_when` 保留单行短路由；动作与审核判据按该工具的格式规范分条放正文，不压缩掉未完动作。
+- **新建 work 必须用脚本生成**（含拆分、迁移时新增的事项）：先执行
+  `python rl_exp/tools/verify/check_work_docs.py --scaffold <id> --title "<标题>" --scope "<范围路径>" --landing "<落点路径>" --apply`，
+  再编辑生成文件的状态、路由、证据与正文，完成后运行 `python rl_exp/tools/verify/check_work_docs.py`。
+  禁止手写、复制模板、`apply_patch` 或其它写文件方式直接创建事项；事后格式检查通过不能替代脚本生成。
+  脚本失败先处理失败原因，不绕过；已有事项正常编辑，关闭时按下述规则移动，不删除重建。
 - **已关闭** = `work/closed/<year>/`，不在默认读取链上：靠检索找，不靠通读。
 - 旧的总账式文档正在往这两棵树里分流。分流期间**工具只列它覆盖的部分**，别把它的输出当成完整待办。
 - **按任务取用，不要整份通读**：`FILEMAP.md`（目录职责 / 入口 / 闸门）与
