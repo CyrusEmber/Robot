@@ -138,7 +138,7 @@ def tilt_cos(projected_gravity_b: torch.Tensor) -> torch.Tensor:
 
 
 def foot_ids(body_names: list[str],
-             naming: dict[str, tuple[str, ...]] = joint_names.LEGACY_NAMING) -> list[int]:
+             naming: dict[str, tuple[str, ...]] | None = None) -> list[int]:
     """Indices of the foot bodies in a sensor's body order, under the binding ``naming``.
 
     Args:
@@ -151,6 +151,13 @@ def foot_ids(body_names: list[str],
     Raises:
         ValueError: none of ``body_names`` is a foot of this naming.
     """
+    if naming is not None:
+        expected = set(joint_names.contact_body_names(naming))
+        ids = [i for i, name in enumerate(body_names) if joint_names.is_contact_body_bound(name, naming)]
+        if len(set(body_names)) != len(body_names) or len(ids) != 4 or {body_names[i] for i in ids} != expected:
+            raise ValueError(f"contact bodies {body_names} must contain exactly four bound feet {sorted(expected)}")
+        return ids
+    naming = joint_names.LEGACY_NAMING  # preserve the historical no-context public path
     ids = [index for index, name in enumerate(body_names) if joint_names.is_contact_body(name, naming)]
     if not ids:
         raise ValueError(

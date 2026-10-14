@@ -64,7 +64,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).parent))
 # the same insert ``check_dr_parity`` does for the same reason.
 if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
-from check_leg_reachability import family_urdf  # noqa: E402 - one home for "which body a family reads"
+from check_leg_reachability import family_urdf, diagnostic_urdf, chain_joint_names  # noqa: E402
 from rl_exp.tasks import joint_names  # noqa: E402 - one home for "what a leg is made of"
 _LEGS = ("lf", "rf", "rl", "rr")
 
@@ -316,17 +316,20 @@ def main() -> int:
     parser.add_argument("--urdf", type=pathlib.Path, default=None,
                         help="override the family's declared body (e.g. to sweep a retired one)")
     parser.add_argument("--clearance", type=float, default=5.0, help="minimum clearance to demand [mm]")
-    parser.add_argument("--naming", default="shared", choices=sorted(joint_names.NAMINGS),
+    parser.add_argument("--target_config", type=pathlib.Path)
+    parser.add_argument("--naming", default=None, choices=sorted(joint_names.NAMINGS),
                         help="which words the swept body carries: 'shared' = every leg one root set "
                              "(every asset today), 'split' = the front/rear rename. Declared, never read "
                              "off the joint names -- the roles are swept by position either way")
     parser.add_argument("--json", help="write the full report here")
     args = parser.parse_args()
 
-    if args.urdf is not None:
-        urdf, source = args.urdf, "--urdf override"
+    if args.target_config is not None or args.urdf is not None:
+        urdf, naming, source = diagnostic_urdf(args.target_config, args.urdf, args.naming)
     else:
         urdf, source = family_urdf(_RL_EXP, args.family)
+        naming = joint_names.naming_for(args.naming or "shared")
+    args.naming = joint_names.naming_id(naming)
     if not urdf.exists():
         print(f"no urdf: {urdf}", file=sys.stderr)
         return 1
@@ -339,10 +342,7 @@ def main() -> int:
     # sweep and reports "0 poses, no overlaps" -- a clean-looking reading of a body it never measured,
     # which is exactly the failure this file exists to hand back as a counterexample.
     for leg in _LEGS:
-        end = joint_names.joint_name(leg, joint_names.roots_of(naming, leg)[-1])
-        if end not in joints:
-            raise SystemExit(f"{urdf}: no {end} in the tree -- this body does not carry the naming "
-                             f"'{args.naming}'. Declare the naming it does carry (--naming)")
+        chain_joint_names(urdf, leg, naming)
     movable = [name for name in links if links[name]["collision"] is not None]
     print(f"family {args.family}: {len(movable)} of {len(links)} links carry a collision mesh")
     print(f"  no collision (cannot be the penetrating side): {sorted(set(links) - set(movable))}")
@@ -429,7 +429,8 @@ def main() -> int:
         globals()["_CONFIRMED"] = confirmed
     if args.json:
         pathlib.Path(args.json).write_text(json.dumps(
-            {"family": args.family, "poses": len(sweep_poses(joints)),
+            {"family": args.family, "target": str(urdf), "source": str(source), "naming": args.naming,
+             "poses": len(poses),
              "worst": worst, "overlaps": overlaps, "confirmed": globals().get("_CONFIRMED", []),
              "pairs": [list(p) for p in pairs], "movable": movable},
             ensure_ascii=False, indent=1) + "\n", encoding="utf-8")

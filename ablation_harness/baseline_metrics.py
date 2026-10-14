@@ -896,6 +896,8 @@ def _record_naming(artifact: dict, naming: dict[str, tuple[str, ...]]) -> None:
     names = list(artifact.get("axes", {}).get("joint_pos", ()))
     if not names:
         return
+    joint_names.validate_joint_names(
+        names, naming, target=artifact.get("meta", {}).get("task", "historical record"))
     suffixes = leg_suffixes(naming)
     if not any(name.endswith(suffixes) for name in names):
         raise ValueError(
@@ -1474,7 +1476,39 @@ def _score(artifact: dict, alive: torch.Tensor,
     }
 
 
-def judge(artifact: dict, naming: dict[str, tuple[str, ...]] = joint_names.LEGACY_NAMING) -> dict:
+def record_naming(artifact: dict, naming: dict[str, tuple[str, ...]] | None = None
+                  ) -> dict[str, tuple[str, ...]]:
+    """Resolve additive provenance; historical records retain the legacy reader path."""
+    meta = artifact.get("meta", {})
+    if "target_binding" not in meta:
+        if meta.get("target_binding_required") is True:
+            raise ValueError("target_binding_required record is missing target_binding")
+        resolved = joint_names.LEGACY_NAMING if naming is None else naming
+        _record_naming(artifact, resolved)
+        return resolved
+    bound = meta["target_binding"]
+    resolved = joint_names.naming_from_binding(bound, expected=naming)
+    names = artifact.get("axes", {}).get("joint_pos", [])
+    if "joint_names" not in bound or not names:
+        raise ValueError("target_binding requires declared joint_names and a joint_pos axis")
+    joint_names.validate_joint_names(names, resolved, target=bound["target"],
+                                     expected=bound["joint_names"])
+    leg_joints = {joint_names.joint_name(leg, root) for leg in joint_names.LEGS
+                  for root in joint_names.roots_of(resolved, leg)}
+    if not leg_joints <= set(names):
+        raise ValueError("target_binding joint_pos is missing declared leg joints")
+    ends = set(joint_names.contact_body_names(resolved))
+    for column in ("foot_contact", "foot_fraction", "foot_lowest_point", "foot_com_pos",
+                   "foot_lin_vel", "foot_ang_vel"):
+        labels = artifact.get("axes", {}).get(column, [])
+        if len(labels) != len(ends) or set(labels) != ends:
+            raise ValueError(f"target_binding {column} must carry exactly the four end links")
+    if set(meta.get("foot_geometry", {})) != ends:
+        raise ValueError("target_binding foot_geometry differs from the four end links")
+    return resolved
+
+
+def judge(artifact: dict, naming: dict[str, tuple[str, ...]] | None = None) -> dict:
     """Score one baseline record; a record that cannot carry a verdict comes back ``invalid``.
 
     Args:
@@ -1489,7 +1523,7 @@ def judge(artifact: dict, naming: dict[str, tuple[str, ...]] = joint_names.LEGAC
         where unjudged), ``metrics``, ``diagnostics``, the per-env evidence and ``judge`` -- the
         identity of the reader that decided, so a re-judged record says *who* re-judged it.
     """
-    _record_naming(artifact, naming)
+    naming = record_naming(artifact, naming)
     protocol = artifact["protocol"]
     names = gate_names(protocol)
     identity = judge_identity(protocol)
@@ -1524,7 +1558,7 @@ def main() -> None:
     parser.add_argument("record", type=pathlib.Path, help="a baseline_frames record (.pt)")
     parser.add_argument("--protocol", type=pathlib.Path,
                         help="judge under this protocol instead of the one the run was collected with")
-    parser.add_argument("--naming", default="shared", choices=sorted(joint_names.NAMINGS),
+    parser.add_argument("--naming", default=None, choices=sorted(joint_names.NAMINGS),
                         help="which words the record's body carries: 'shared' = every leg one root set "
                              "(every asset today), 'split' = the front/rear rename. Declared, and checked "
                              "against the record's own joint columns before anything is scored")
@@ -1532,9 +1566,12 @@ def main() -> None:
     artifact = baseline_frames.load(args.record)
     if args.protocol:
         artifact["protocol"] = json.loads(args.protocol.read_text(encoding="utf-8"))
-    result = judge(artifact, joint_names.naming_for(args.naming))
+    naming = record_naming(artifact, joint_names.naming_for(args.naming) if args.naming else None)
+    result = judge(artifact, naming)
     payload = {key: value for key, value in result.items() if key != "axes"}
-    payload["naming"] = args.naming
+    payload["naming"] = joint_names.naming_id(naming)
+    payload["binding_validation"] = ("target_binding" if "target_binding" in artifact.get("meta", {})
+                                     else "historical_unbound")
     payload["protocol_file"] = str(args.protocol) if args.protocol else "embedded in the record"
     payload["protocol_digest"] = record.file_sha256(args.protocol) if args.protocol else None
     print(json.dumps(payload, indent=2, ensure_ascii=False))

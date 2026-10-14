@@ -910,13 +910,55 @@ def test_probe_registered_entry():
     # above stops at the `env = ...` line and those guards run before it: `shot` alone for now
     # (its `and` short-circuits, so the renderer flag is never reached).
     namespace = {
-        "args_cli": NS(task="requested-play-task", num_envs=3, shot=False),
+        "args_cli": NS(task="requested-play-task", num_envs=3, shot=False, target_config=None, naming=None),
+        "obs_protocol": NS(load_diagnostic_target=lambda path, cfg, task, **kw: {"urdf": "fixture.urdf"}),
+        "leg_names": NS(naming_from_binding=lambda bound: {}, naming_id=lambda naming: "shared"),
         "resolve_task_cfg": lambda task: selected if task == "requested-play-task" else None,
         "BaselineFlatEnvCfg": lambda: wrong,
         "gym": NS(make=lambda task, cfg, **kw: NS()),
     }
     exec(compile(module, "<probe setup>", "exec"), namespace)
     assert namespace["main"]() is selected, "probe ignored the requested registered entry"
+
+
+def test_probe_isolated_observation_contract():
+    source = ast.parse((_REPO / "rl_exp/tools/verify/baseline_probe.py").read_text(encoding="utf-8"))
+    main = next(node for node in source.body if isinstance(node, ast.FunctionDef) and node.name == "main")
+    branch = next(node for node in main.body if isinstance(node, ast.If)
+                  and any(isinstance(child, ast.Constant) and child.value == "obs/isolated-policy-term-order"
+                          for child in ast.walk(node)))
+    code = compile(ast.Module(body=[branch], type_ignores=[]), "<probe observations>", "exec")
+    results = []
+    namespace = {
+        "args_cli": NS(task="fixture", target_config="fixture.json"),
+        "unwrapped": NS(observation_manager=NS(active_terms={"policy": ["position", "action"]},
+                     group_obs_term_dim={"policy": [(3,), (2,)]})),
+        "obs_protocol": NS(live_terms_for=lambda task, group: ["position", "action"],
+                           protocol_for=lambda task: "fixture-protocol"),
+        "target_binding": {"target": "fixture.usda", "source": "fixture.json"},
+        "policy": torch.zeros(4, 5), "num_envs": 4, "live_width": 5,
+        "approved_dims": None,
+        "check": lambda name, ok, detail="": results.append((name, bool(ok))),
+    }
+    exec(code, namespace)
+    assert results and all(ok for _, ok in results), results
+    namespace["policy"] = torch.zeros(4, 4)
+    results.clear()
+    exec(code, namespace)
+    assert any(not ok for _, ok in results), "isolated wrong width accepted"
+    namespace["policy"] = torch.zeros(4, 5)
+    namespace["unwrapped"].observation_manager.active_terms["policy"].reverse()
+    results.clear()
+    exec(code, namespace)
+    assert any(not ok for _, ok in results), "isolated reordered terms accepted"
+    namespace["args_cli"].target_config = None
+    results.clear()
+    exec(code, namespace)
+    assert results == [("obs/policy-width-approved", False)], "formal missing approval must stay red"
+    namespace["approved_dims"] = {"policy": 5}
+    results.clear()
+    exec(code, namespace)
+    assert results == [("obs/policy-5-dims-as-approved", True)], results
 
 
 def score_along_heading(yaw: float, *, steps: int = 20, speed: float = 0.5) -> dict:
@@ -1786,7 +1828,158 @@ def test_the_legacy_reader_refuses_thresholds_it_cannot_read():
         result["invalid_reasons"]
 
 
+def test_target_binding_report_roundtrip():
+    """Additive binding preserves readings, refuses mixed/missing/duplicate/unattributed columns."""
+    import copy
+    from ablation_harness import baseline_eval
+    from rl_exp.tasks import joint_names
+    from rl_exp.tools.diagnose import plot_joints
+
+    # Short historical chains stay readable; one valid suffix must not hide a foreign prefixed root.
+    historic = build(PROTOCOL, 20)
+    baseline_metrics.judge(historic)
+    assert plot_joints.report_naming({}) == joint_names.LEGACY_NAMING
+    assert plot_joints.report_naming({}, joint_names.SPLIT_NAMING) == joint_names.SPLIT_NAMING
+    mixed = copy.deepcopy(historic)
+    mixed["axes"]["joint_pos"][3] = "rr_knee_joint"
+    expect(ValueError, baseline_metrics._record_naming, mixed, joint_names.LEGACY_NAMING)
+    duplicate = copy.deepcopy(historic)
+    duplicate["axes"]["joint_pos"][3] = duplicate["axes"]["joint_pos"][2]
+    expect(ValueError, baseline_metrics._record_naming, duplicate, joint_names.LEGACY_NAMING)
+
+    gait_tree = ast.parse((_REPO / "rl_exp/tools/diagnose/gait_probe.py").read_text(encoding="utf-8"))
+    gait_functions = ast.Module(body=[node for node in gait_tree.body
+                                     if isinstance(node, ast.FunctionDef)
+                                     and node.name in ("_runs", "summarise")], type_ignores=[])
+    gait_scope = {"torch": torch, "REPORT_TOKENS": joint_names.REPORT_ROOTS}
+    exec(compile(gait_functions, "gait_probe.py", "exec"), gait_scope)
+    # Same raw trace, renamed columns only: the summary calculation must not depend on global tokens.
+    summary_values = []
+    for naming_id in ("shared", "split", "palm"):
+        naming = joint_names.naming_for(naming_id)
+        tokens = plot_joints.report_tokens(naming, "lf")
+        zeros = torch.zeros(8)
+        foot = {"body": joint_names.end_link("lf", naming), "report_tokens": tokens,
+                "force": zeros, "sole_clearance_m": zeros, "sole_clearance_target_m": zeros,
+                "foot_fore_aft_m": zeros, "contact_speed_horiz_mps": zeros,
+                "pred_linear_m": zeros, "pred_rotation_m": zeros,
+                "sole_contact_area_m2": zeros, "sole_through_area_m2": zeros,
+                "sole_area_m2": 0.1, "sole_cap_m2": 0.02,
+                "sole_tilt_deg": zeros, "sole_low_edge_xy": torch.zeros(8, 2)}
+        for token in tokens:
+            for field in ("target", "actual", "vel"):
+                foot[f"joint_{field}_{token}"] = zeros
+            for field, value in (("limits", (-1.0, 1.0)), ("default", 0.0),
+                                 ("kp_sim", 200.0), ("kd_sim", 12.0), ("effort_limit", 70.0)):
+                foot[f"joint_{field}_{token}"] = value
+        summary = gait_scope["summarise"](foot, 1.0, step_dt=0.02)
+        normalized = {}
+        for key, value in summary.items():
+            if key == "body":
+                continue
+            for index, token in enumerate(tokens):
+                if key.startswith(token + "_"):
+                    key = f"role{index}_" + key[len(token) + 1:]
+                    break
+            normalized[key] = value
+        summary_values.append(normalized)
+    assert summary_values[0] == summary_values[1] == summary_values[2]
+
+    readings = []
+    plots = []
+    for naming_id in ("shared", "split", "palm"):
+        naming = joint_names.naming_for(naming_id)
+        names = [joint_names.joint_name(leg, root) for leg in joint_names.LEGS
+                 for root in joint_names.roots_of(naming, leg)] + ["chest_yaw_joint"]
+        bound = joint_names.binding_for_target("fixture-task", "fixture URDF", naming, joint_names=names)
+        artifact = build(PROTOCOL, 20)
+        artifact["meta"]["task"] = "fixture-task"
+        artifact["meta"]["target_binding"] = bound
+        artifact["meta"]["target_binding_required"] = True
+        ends = list(joint_names.contact_body_names(naming))
+        for column in ("foot_contact", "foot_fraction", "foot_lowest_point", "foot_com_pos",
+                       "foot_lin_vel", "foot_ang_vel"):
+            artifact["axes"][column] = ends
+            artifact["frames"][column] = artifact["frames"][column].repeat(
+                *([1, 1, 2, 1] if artifact["frames"][column].ndim == 4 else [1, 1, 2]))
+        artifact["meta"]["foot_geometry"] = {
+            end: {**FOOT_GEOMETRY[FEET[0]], "obj": f"{end}_collision.obj"} for end in ends}
+        artifact["axes"]["joint_pos"] = names
+        wave = torch.sin(torch.arange(20, dtype=torch.float32))
+        artifact["frames"]["joint_pos"] = wave[:, None, None].expand(20, 1, len(names)).clone()
+        artifact["frames"]["foot_lowest_point"][..., 0] = (
+            artifact["frames"]["pos"][..., 0, None] + wave[:, None, None])
+        cfg = NS(scene=NS(robot=NS(actuators={"spine": NS(joint_names_expr=["chest_yaw_joint"])})))
+        assert baseline_eval._gait_shape_joints(cfg, names, naming) == names
+        with tempfile.TemporaryDirectory() as temp:
+            path = pathlib.Path(temp) / "bound.frames.pt"
+            baseline_frames.save(path, artifact)
+            loaded = baseline_frames.load(path)
+            result = baseline_metrics.judge(loaded)
+        readings.append({key: result[key] for key in ("verdict", "gates", "metrics", "diagnostics")})
+        assert baseline_metrics.record_naming(loaded) == naming
+        expect(ValueError, baseline_metrics.judge, loaded,
+               joint_names.SPLIT_NAMING if naming_id == "shared" else joint_names.LEGACY_NAMING)
+        for mutation in ("binding", "source", "roles", "missing", "mixed", "duplicate", "feet"):
+            broken = copy.deepcopy(loaded)
+            binding = broken["meta"]["target_binding"]
+            if mutation == "binding":
+                del broken["meta"]["target_binding"]
+            elif mutation == "source":
+                binding["source"] = ""
+            elif mutation == "roles":
+                binding["roles"]["lf"]["hip"] = "foreign"
+            elif mutation == "missing":
+                broken["axes"]["joint_pos"].pop()
+            elif mutation == "mixed":
+                broken["axes"]["joint_pos"][0] = "lf_foreign_joint"
+            elif mutation == "duplicate":
+                broken["axes"]["joint_pos"][1] = broken["axes"]["joint_pos"][0]
+            else:
+                broken["axes"]["foot_contact"][0] = "lf_foreign"
+            expect(ValueError, baseline_metrics.judge, broken)
+
+        entry = {"speed": 1.0, "feet": [], "joint_series": {}, "spine_series": {},
+                 "series": {"force": [[2.0] * 4 for _ in ends]}}
+        for leg, end in zip(joint_names.LEGS, ends):
+            foot = {"body": end}
+            for root in joint_names.roots_of(naming, leg):
+                for kind in ("actual", "target", "vel"):
+                    entry["joint_series"][f"{end}_{root}_{kind}"] = [0.0, 0.0, 1.0, 0.0]
+                if root in plot_joints.report_tokens(naming, leg):
+                    foot[f"{root}_limits_rad"] = [-1.0, 1.0]
+            entry["feet"].append(foot)
+        for kind in ("actual", "target", "vel"):
+            entry["spine_series"][f"chest_yaw_joint_{kind}"] = [0.0] * 4
+        report = {"task": "fixture-task", "target_binding": bound, "target_binding_required": True,
+                  "foot_bodies": ends, "envs": [entry]}
+        report = json.loads(json.dumps(report))
+        assert plot_joints.report_naming(report) == naming
+        with tempfile.TemporaryDirectory() as temp:
+            drawn = plot_joints.draw_band(entry, 1.0, 0.02, pathlib.Path(temp), naming_id, naming)
+            plots.append(list(drawn["joints"].values()))
+        for mutation in ("binding", "source", "missing", "mixed", "duplicate"):
+            broken = copy.deepcopy(report)
+            if mutation == "binding":
+                del broken["target_binding"]
+            elif mutation == "source":
+                broken["target_binding"]["source"] = ""
+            elif mutation == "missing":
+                broken["envs"][0]["joint_series"].pop(next(iter(entry["joint_series"])))
+            elif mutation == "mixed":
+                broken["envs"][0]["joint_series"]["lf_foreign_actual"] = [0.0] * 4
+            else:
+                broken["target_binding"]["joint_names"].append(names[0])
+            expect(ValueError, plot_joints.report_naming, broken)
+    assert readings[0] == readings[1] == readings[2], "binding must not change numerical measurements"
+    assert plots[0] == plots[1] == plots[2], "same joint frames must draw the same stop readings"
+
+
 def main():
+    if "--binding-only" in sys.argv:
+        test_target_binding_report_roundtrip()
+        print("TARGET_BINDING_REPORT_OK")
+        return
     if "--print-frozen" in sys.argv:
         print(json.dumps(frozen_digests(json.loads(_SEMANTICS_PATH.read_text(encoding="utf-8"))), indent=2))
         return

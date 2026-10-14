@@ -69,6 +69,7 @@ from __future__ import annotations
 import argparse
 import datetime
 import importlib.metadata
+import importlib.util
 import json
 import math
 import pathlib
@@ -77,10 +78,128 @@ import sys
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_REPO_ROOT / "ablation_harness"))
 
+def _load_binding_module(name: str):
+    """Load a stdlib binding module without importing the task registry."""
+    spec = importlib.util.spec_from_file_location(name, _REPO_ROOT / "rl_exp" / "tasks" / f"{name}.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+joint_names = _load_binding_module("joint_names")
+obs_protocol = _load_binding_module("obs_protocol")
+
+
+def _select_contacts(binding: dict, cfg, robot, sensor, manager) -> tuple:
+    """Validate the live target and align geometry to the sensor's runtime name order."""
+    obs_protocol.validate_diagnostic_runtime(binding, cfg, robot, sensor, manager)
+    naming = joint_names.naming_from_binding(binding)
+    patterns = list(joint_names.contact_body_patterns_bound(naming))
+    robot_ids, robot_names = robot.find_bodies(patterns, preserve_order=False)
+    sensor_ids, sensor_names = sensor.find_sensors(patterns, preserve_order=False)
+    expected = set(joint_names.contact_body_names(naming))
+    for label, ids, names in (("robot", robot_ids, robot_names), ("sensor", sensor_ids, sensor_names)):
+        if len(ids) != 4 or len(names) != 4 or set(names) != expected:
+            raise ValueError(f"{binding['target']}: {label} contact selection {names} != {sorted(expected)}")
+    by_name = dict(zip(robot_names, robot_ids))
+    return ([by_name[name] for name in sensor_names], list(sensor_names), sensor_ids,
+            [robot.body_names.index(name) for name in sensor.body_names])
+
+
+def _self_check_bindings() -> None:
+    """Run real selectors and ranking functions offline; no Kit, assets or checkpoint."""
+    import ast
+    import re
+    from types import SimpleNamespace as NS
+
+    import torch
+
+    source = ast.parse(pathlib.Path(__file__).read_text(encoding="utf-8"))
+    functions = [node for node in source.body if isinstance(node, ast.FunctionDef)
+                 and node.name in ("load_closure", "mesh_vertices")]
+    namespace = {"joint_names": joint_names, "GRAVITY": 9.81, "torch": torch,
+                 "diag_metrics": NS(mesh_vertices=lambda path: path)}
+    exec(compile(ast.Module(body=functions, type_ignores=[]), __file__, "exec"), namespace)
+
+    class Bodies:
+        def __init__(self, names, joints=()):
+            self.body_names, self.joint_names = list(names), list(joints)
+
+        def find_bodies(self, patterns, preserve_order=False):
+            assert preserve_order is False, "selection must retain runtime order"
+            ids = [i for i, name in enumerate(self.body_names)
+                   if any(re.fullmatch(pattern, name) for pattern in patterns)]
+            return ids, [self.body_names[i] for i in ids]
+
+        find_sensors = find_bodies
+
+    old_red = 0
+    for dialect in ("shared", "split", "palm"):
+        naming = joint_names.naming_for(dialect)
+        ends = list(joint_names.contact_body_names(naming))
+        joints = [joint_names.joint_name(leg, root) for leg in joint_names.LEGS
+                  for root in joint_names.roots_of(naming, leg)]
+        binding = joint_names.binding_for_target(dialect, "offline-self-check", naming, joint_names=joints)
+        robot = Bodies(["base_link", *reversed(ends)], joints)
+        sensor = Bodies([ends[2], "base_link", ends[0], ends[3], ends[1]])
+        cfg = NS(actions=NS(legs=NS(joint_names=joints, preserve_order=True)))
+        manager = NS(active_terms=["legs"], total_action_dim=len(joints),
+                     get_term=lambda name: NS(_joint_names=joints))
+        ids, names, sensor_ids, body_ids = _select_contacts(binding, cfg, robot, sensor, manager)
+        assert names == [name for name in sensor.body_names if name != "base_link"]
+        assert [robot.body_names[i] for i in ids] == [sensor.body_names[i] for i in sensor_ids] == names
+        assert [robot.body_names[i] for i in body_ids] == sensor.body_names
+        forces = torch.tensor([[2.0] * len(sensor.body_names)] * 2)
+        velocities = torch.zeros(2)
+        ranking = namespace["load_closure"](forces, sensor.body_names, 10.0, velocities, 0.02, naming=naming)
+        assert ranking["non_foot_loaded_bodies"] == ["base_link"]
+        assert [row["body"] for row in ranking["non_foot_top"]] == ["base_link"]
+        if dialect == "shared":
+            historical = namespace["load_closure"](forces, sensor.body_names, 10.0, velocities, 0.02)
+            assert historical == ranking
+        else:
+            # Historical snapshot: all four old filters must fail on the split/palm fixture.
+            old = namespace["load_closure"](forces, sensor.body_names, 10.0, velocities, 0.02)
+            assert old["non_foot_loaded_bodies"] != ranking["non_foot_loaded_bodies"]
+            assert old["non_foot_top"] != ranking["non_foot_top"]
+            assert robot.find_bodies([".*_foot"])[1] != names
+            assert sensor.find_sensors([".*_foot"])[1] != names
+            old_red += 4
+        for bad in (sensor.body_names[:-1], sensor.body_names + [ends[0]],
+                    sensor.body_names + ["foreign_" + ends[0].split("_", 1)[1]],
+                    sensor.body_names + ["lf_" + ends[2].split("_", 1)[1]]):
+            try:
+                _select_contacts(binding, cfg, robot, Bodies(bad), manager)
+            except ValueError:
+                pass
+            else:
+                raise AssertionError(f"{dialect}: accepted foreign/missing/duplicate contacts {bad}")
+        for bad_joints in (joints[:-1], joints + [joints[0]], joints + ["lf_wrong_joint"]):
+            try:
+                _select_contacts(binding, cfg, Bodies(robot.body_names, bad_joints), sensor, manager)
+            except ValueError:
+                pass
+            else:
+                raise AssertionError(f"{dialect}: accepted invalid runtime joints")
+        meshes = {"base_link": pathlib.Path(dialect) / "own_collision.obj"}
+        assert namespace["mesh_vertices"]("base_link", meshes) == meshes["base_link"]
+    print(f"PASS bindings: shared/split/palm, sensor permutation, negatives; old filters RED={old_red}; no Kit")
+
+
+if "--self_check_bindings" in sys.argv:
+    check_parser = argparse.ArgumentParser(description="Offline target selection regression (no Kit).")
+    check_parser.add_argument("--self_check_bindings", action="store_true")
+    check_parser.parse_args()
+    _self_check_bindings()
+    raise SystemExit(0)
+
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser(description="支撑异常诊断 (fixed ckpt, no training).")
 parser.add_argument("--task", type=str, default="Lizard2-Flat-v3")
+parser.add_argument("--target_config", type=str, default=None, help="隔离目标 manifest；task 必须精确一致。")
+parser.add_argument("--naming", choices=tuple(joint_names.NAMINGS), default=None,
+                    help="兼容检查：显式值必须与目标声明一致，不覆盖命名。")
 parser.add_argument(
     "--checkpoint", type=str, required=True,
     help="训练 run 的 model_*.pt（没有默认值：旧线那一版默认路径已随其日志目录退役）",
@@ -110,7 +229,7 @@ from rsl_rl.runners import OnPolicyRunner  # noqa: E402
 
 import metrics  # noqa: E402  (harness 纯函数库)
 import diag_metrics  # noqa: E402  (验收口径纯函数：与奖励核同用 yaw 帧)
-from rl_exp.tasks import obs_protocol  # noqa: E402  (task -> family, for the mesh tree)
+from baseline_eval import collision_assets  # noqa: E402  (target URDF collision paths)
 from components.dr_controller import apply_eval_mode  # noqa: E402
 
 # --- 几何常量（单级台阶网格） ---
@@ -167,13 +286,14 @@ def mesh_dir() -> pathlib.Path:
     return diag_metrics.collision_mesh_dir(obs_protocol.family_of(args_cli.task))
 
 
-def mesh_vertices(body: str) -> torch.Tensor:
-    """碰撞网格顶点（link 系）—— 碰撞体是 convexHull，最低点必在其顶点上。
+def mesh_vertices(body: str, meshes: dict[str, pathlib.Path] | None = None) -> torch.Tensor:
+    """碰撞网格顶点（link 系）——显式目标取 URDF 路径；旧调用保留历史家族入口。
 
     2026-09-21 加：此前用下面的 AABB 角点读"入地深度"，那是**上界**而非真值——link 系里角点与最低
     顶点同高，但机身一旋转，角点就不再是形体上的点，世界系里可以比任何真实顶点更低。
     """
-    return diag_metrics.mesh_vertices(mesh_dir() / f"{body}_collision.obj")
+    path = meshes[body] if meshes is not None else mesh_dir() / f"{body}_collision.obj"
+    return diag_metrics.mesh_vertices(path)
 
 
 def _pad_clouds(clouds: list[torch.Tensor]) -> torch.Tensor:
@@ -325,7 +445,7 @@ def run_case(case: Case, ctx: dict) -> dict:
             # 全 body 法向力（承重闭环）：阈值判据只回答"压没压上去"，加总才能对上 m·g
             "fz_all_body": fz[:, :, 2].clone(),
             # 全 body 世界 z（几何复核承重）：flat 列地面 z=0，撑地者应贴近 0.07 m
-            "body_z_all": data.body_pos_w.torch[:, :, 2].clone(),
+            "body_z_all": data.body_pos_w.torch[:, ctx["sensor_body_ids"], 2].clone(),
             # 碰撞网格角点世界最低 z（判"真撑地"还是"空中受力"）+ 尾 pitch 关节角
             "mesh_min_z": mesh_min_z(data.body_pos_w.torch, data.body_quat_w.torch,
                                      ctx["mesh_z_ids"], ctx["mesh_corners"]).clone(),
@@ -357,7 +477,8 @@ def run_case(case: Case, ctx: dict) -> dict:
             first_done[newly.nonzero(as_tuple=False).squeeze(-1)] = step
 
     valid = torch.arange(num_steps).unsqueeze(1) <= first_done.cpu().unsqueeze(0)  # (T, N)
-    return {"series": series, "first_done": first_done.tolist(), "valid": valid}
+    return {"series": series, "first_done": first_done.tolist(), "valid": valid,
+            "naming": ctx["naming"]}
 
 
 def stack(series: dict, key: str) -> torch.Tensor:
@@ -382,7 +503,8 @@ def mesh_min_z(body_pos_w: torch.Tensor, body_quat_w: torch.Tensor,
 def load_closure(fz_body: torch.Tensor, body_names: list[str], weight_n: float,
                  vel_w_z: torch.Tensor, step_dt: float,
                  body_z: torch.Tensor | None = None,
-                 body_mesh_z: dict[str, float] | None = None) -> dict:
+                 body_mesh_z: dict[str, float] | None = None, *,
+                 naming: dict[str, tuple[str, ...]] | None = None) -> dict:
     """承重闭环：全 body 法向力加总 vs m·g。
 
     Σfz(全部 body) 与 m·g 的差只有三个去处：① 非足 link 承重 ② 竖直动量 m·a_z
@@ -404,6 +526,7 @@ def load_closure(fz_body: torch.Tensor, body_names: list[str], weight_n: float,
         step_dt: 单步时长 [s]。
         body_z: 可选，(T, n_bodies) 逐 body 世界 z [m]，用于几何复核。
     """
+    naming = joint_names.LEGACY_NAMING if naming is None else naming
     tot = fz_body.sum(dim=1)                      # (T,) 时间序列
     per_body = fz_body.mean(dim=0)                # (nb,) 逐 body 时间均值
     z_mean = body_z.mean(dim=0) if body_z is not None else None
@@ -425,7 +548,7 @@ def load_closure(fz_body: torch.Tensor, body_names: list[str], weight_n: float,
     a_equiv = (weight_n - mean_n) / mass_kg                       # 需多大的 a_z 才能解释缺额
     dv_z = float(vel_w_z[-1] - vel_w_z[0])
     non_foot_loaded = [d["body"] for d in ranking
-                       if not d["body"].endswith("_foot") and d["mean_fz_n"] > 1.0]
+                       if not joint_names.is_contact_body_bound(d["body"], naming) and d["mean_fz_n"] > 1.0]
     return {
         "n_bodies": len(body_names),
         "sum_all_mean_n": round(mean_n, 1),
@@ -444,7 +567,7 @@ def load_closure(fz_body: torch.Tensor, body_names: list[str], weight_n: float,
                                     if body_mesh_z and b in body_mesh_z), default=None),
         "per_body_desc": ranking,
         # 直接回答"是不是尾巴/腹/头在承重"：逐 body 平均载荷排行（扣掉足部）
-        "non_foot_top": [d for d in ranking if not d["body"].endswith("_foot")][:8],
+        "non_foot_top": [d for d in ranking if not joint_names.is_contact_body_bound(d["body"], naming)][:8],
     }
 
 
@@ -488,7 +611,7 @@ def analyze_stand(res: dict, col: int, step_dt: float, stand_height: float,
         "foot_names": list(foot_names),
         # 承重闭环：阈值判据（belly/neck）回答"压没压上去"，这一组回答"差多少、差在哪"
         "load_closure": load_closure(fz_body, body_names, weight_n, vel_w_z, step_dt, body_z,
-                                     mesh_z_map),
+                                     mesh_z_map, naming=res["naming"]),
         "mesh_min_z_m": mesh_z_map,
         "tail_joint_pos_rad": [round(x, 3) for x in tail_j.mean(dim=0).tolist()],
         "fell": fell,
@@ -566,7 +689,7 @@ def analyze_flat(res: dict, col: int, step_dt: float, weight_n: float,
         "foot_names": list(foot_names),
         # 承重闭环：与 belly/neck 阈值项并列——阈值给事件，加总给缺额去处
         "load_closure": load_closure(fz_body, body_names, weight_n, vel_w_z, step_dt, body_z,
-                                     mesh_z_map),
+                                     mesh_z_map, naming=res["naming"]),
         "mesh_min_z_m": mesh_z_map,
         "tail_joint_pos_rad": [round(x, 3) for x in tail_j.mean(dim=0).tolist()],
         "ledger": ledger,
@@ -663,7 +786,7 @@ def measure_check(ctx: dict, seconds: float = 4.0, zero_action: bool = False) ->
         hist["q"].append(q)
         hist["fz"].append(contact.data.net_forces_w.torch[:, ctx["sensor_ids"]["feet"], 2].clone())
         hist["fz_all_body"].append(contact.data.net_forces_w.torch[:, :, 2].clone())
-        hist["body_z_all"].append(d.body_pos_w.torch[:, :, 2].clone())
+        hist["body_z_all"].append(d.body_pos_w.torch[:, ctx["sensor_body_ids"], 2].clone())
         hist["mesh_min_z"].append(mesh_min_z(d.body_pos_w.torch, d.body_quat_w.torch,
                                              ctx["mesh_z_ids"], ctx["mesh_corners"]).clone())
         hist["tail_joint_pos"].append(d.joint_pos.torch[:, ctx["tail_joint_ids"]].clone())
@@ -749,12 +872,12 @@ def measure_check(ctx: dict, seconds: float = 4.0, zero_action: bool = False) ->
     }
     # 6) 承重闭环：全窗口 / 与旧口径同窗口（末尾 30%）/ 下采样口径，三种都报
     out["load_closure"] = load_closure(fz_body_all[tail], body_names, weight_n,
-                                       vel_w_z[tail], step_dt, body_z_all[tail], mesh_z_map)
+                                       vel_w_z[tail], step_dt, body_z_all[tail], mesh_z_map, naming=ctx["naming"])
     out["load_closure_full_window"] = load_closure(fz_body_all, body_names, weight_n,
-                                                   vel_w_z, step_dt, body_z_all, mesh_z_map)
+                                                   vel_w_z, step_dt, body_z_all, mesh_z_map, naming=ctx["naming"])
     out["load_closure_downsampled"] = load_closure(fz_body_ds, body_names, weight_n,
                                                    vel_w_z[::SUBSAMPLE], step_dt * SUBSAMPLE,
-                                                   body_z_all[::SUBSAMPLE], mesh_z_map)
+                                                   body_z_all[::SUBSAMPLE], mesh_z_map, naming=ctx["naming"])
     out["mesh_min_z_m"] = mesh_z_map
     out["tail_joint_pos_rad"] = [round(x, 3) for x in tail_j_all.mean(dim=0).tolist()]
     # 3) 命名：出生步脚位置（base 系：+x 头侧=前，+y 左）
@@ -777,7 +900,7 @@ def measure_check(ctx: dict, seconds: float = 4.0, zero_action: bool = False) ->
         "body_vy_mean": round(vel_b_all[:, 1].mean().item(), 3),
         "world_vy_mean": round(vel_w_all[:, 1].mean().item(), 3),
     }
-    return out
+    return {**out, "target_binding": ctx["target_binding"]}
 
 
 def main():
@@ -801,6 +924,10 @@ def main():
     if args_cli.device is not None:
         env_cfg.sim.device = args_cli.device
     apply_eval_mode(env_cfg, "nominal")
+    target_binding = obs_protocol.load_diagnostic_target(
+        args_cli.target_config, env_cfg, args_cli.task, naming_override=args_cli.naming)
+    naming = joint_names.naming_from_binding(target_binding)
+    meshes, _ = collision_assets(pathlib.Path(target_binding["urdf"]))
     # 诊断专用分歧：出生 yaw 钉死 0（正对 +x 台阶）。基类默认 yaw ±π 随机会让
     # 体坐标命令往任意方向走（首跑实测：down_20 倒走 −6.5 m）。eval 协议保留
     # 随机 yaw 是因其 completion 方向无关；台阶通过率必须正对才可判。
@@ -814,12 +941,13 @@ def main():
     device = mbenv.device
 
     spine_ids, _ = robot.find_bodies(SPINE_BODIES, preserve_order=True)
-    foot_ids, foot_names = robot.find_bodies([".*_foot"], preserve_order=True)
+    foot_ids, foot_names, foot_sensor_ids, sensor_body_ids = _select_contacts(
+        target_binding, env_cfg, robot, contact, mbenv.action_manager)
     mesh_ids, mesh_names = robot.find_bodies(MESH_POINT_BODIES, preserve_order=True)
     tail_joint_ids, _ = robot.find_joints(TAIL_PITCH_JOINTS, preserve_order=True)
     sensor_ids = {
         "spine": contact.find_sensors(SPINE_BODIES, preserve_order=True)[0],
-        "feet": contact.find_sensors([".*_foot"], preserve_order=True)[0],
+        "feet": foot_sensor_ids,
         "base": contact.find_sensors(["base_link"], preserve_order=True)[0],
     }
     scanner = mbenv.scene.sensors.get("height_scanner", None)
@@ -844,9 +972,10 @@ def main():
         "contact": contact, "scanner": scanner, "center_ray": center_ray,
         "policy": policy, "device": mbenv.device, "step_dt": mbenv.step_dt,
         "body_ids": {"spine": spine_ids, "feet": foot_ids},
-        "foot_names": foot_names,
-        # 全 body 名单：接触力张量的第二维按 articulation body 顺序排列（承重闭环的归因基准）
-        "body_names": list(robot.body_names),
+        "foot_names": foot_names, "naming": naming, "target_binding": target_binding,
+        # Force columns retain sensor order; geometry uses the same names, never robot index guesses.
+        "body_names": list(contact.body_names),
+        "sensor_body_ids": sensor_body_ids,
         "sensor_ids": sensor_ids,
         # 承重几何复核：碰撞网格**顶点**表（link 系）+ 尾 pitch 关节（看尾巴是否被折下来撑地）
         # 顶点而不是 AABB 角点：碰撞体是 convexHull，最低点必在顶点上；AABB 角点在机身旋转后
@@ -854,7 +983,7 @@ def main():
         "mesh_z_ids": mesh_ids,
         "mesh_names": list(mesh_names),
         # 各 body 顶点数不同 ⇒ 按最大宽度补齐（空位用 +inf，不改 min 的结果）
-        "mesh_corners": _pad_clouds([mesh_vertices(n) for n in mesh_names]).to(device),
+        "mesh_corners": _pad_clouds([mesh_vertices(n, meshes) for n in mesh_names]).to(device),
         "tail_joint_ids": tail_joint_ids,
     }
 
@@ -879,8 +1008,8 @@ def main():
           f"(foot_body_mass_kg={[f'{m:.2f}' for m in robot.data.body_mass.torch[0, foot_ids].tolist()]})")
     print(f"[DIAG] instant foot contact sum={foot_sum_n:.1f} N (ratio {foot_sum_n / weight_n:.3f}) "
           f"stand_height={stand_height:.3f} m — 稳态交叉校验见 --phases 0")
-    print(f"[DIAG] contact sensor bodies: {len(robot.body_names)} "
-          f"(no-collision, force must be ~0: {NO_COLLISION_BODIES})")
+    print(f"[DIAG] contact sensor bodies: {len(contact.body_names)} "
+          f"(no-collision, force must be ~0: {[name for name in robot.body_names if name not in meshes]})")
     print(f"[DIAG] ledger terms: {[term_names[i] for i in term_idx.values()]}")
 
     if "0" in phases:
@@ -925,7 +1054,8 @@ def main():
     for case in cases:
         print(f"[DIAG] running {case.name} ...", flush=True)
         res = run_case(case, ctx)
-        rec = {"case": case.name, "cmd": case.cmd, "seed": case.seed, "stats": {}}
+        rec = {"case": case.name, "cmd": case.cmd, "seed": case.seed, "stats": {},
+               "target_binding": target_binding}
         for name, c in col_env.items():
             if case.name.startswith("p1"):
                 rec["stats"][name] = analyze_stand(res, c, ctx["step_dt"], stand_height,

@@ -32,7 +32,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--tasks", nargs="*", default=["Lizard2-Flat-v3"])
 parser.add_argument("--envs", type=int, default=2, help="envs to build (small on purpose)")
 parser.add_argument("--pin", action="store_true", help="record the measured runtime joint order")
-parser.add_argument("--naming", default="shared", choices=sorted(joint_names.NAMINGS),
+parser.add_argument("--target_config", type=pathlib.Path, default=None, help="isolated diagnostic JSON manifest (one task only; never --pin)")
+parser.add_argument("--naming", default=None, choices=sorted(joint_names.NAMINGS),
                     help="which words the spawned body carries: 'shared' = every leg one root set (every "
                          "asset today), 'split' = the front/rear rename. Declared, and checked against the "
                          "spawned bodies (a declared foot has to exist as the naming's chain-end link)")
@@ -107,6 +108,11 @@ def check_task(task_id: str, problems: list[str], warnings: list[str],
     module_name, _, cls_name = cfg.partition(":")
     env_cfg = getattr(__import__(module_name, fromlist=[cls_name]), cls_name)()
     env_cfg.scene.num_envs = args_cli.envs
+    binding = obs_protocol.load_diagnostic_target(
+        args_cli.target_config, env_cfg, task_id, naming_override=args_cli.naming)
+    naming = joint_names.naming_from_binding(binding)
+    if args_cli.target_config and args_cli.pin:
+        raise ValueError("isolated diagnostic manifests cannot pin frozen runtime orders")
     env = gym.make(task_id, cfg=env_cfg)
     try:
         obs, _ = env.reset()
@@ -115,7 +121,7 @@ def check_task(task_id: str, problems: list[str], warnings: list[str],
         declared = {
             group: entry for group, entry in obs_protocol.groups_for(task_id).items() if not entry.get("dropped")
         }
-        widths = obs_protocol.recorded_dims(task_id) or {}
+        widths = {} if args_cli.target_config else obs_protocol.recorded_dims(task_id) or {}
         live_groups = set(manager.active_terms)
         if live_groups != set(declared):
             problems.append(f"{task_id}: live groups {sorted(live_groups)} != declared {sorted(declared)}")
@@ -146,6 +152,11 @@ def check_task(task_id: str, problems: list[str], warnings: list[str],
         except obs_protocol.ProtocolError:
             feet = ()
         robot = unwrapped.scene["robot"]
+        obs_protocol.validate_diagnostic_runtime(binding, env_cfg, robot,
+            unwrapped.scene["contact_forces"], unwrapped.action_manager)
+        if args_cli.target_config:
+            feet = tuple(joint_names.LEGS)
+            print(f"  BOUND_FEET source={binding['source']} expected={binding['end_links']}")
         for foot in feet:
             # The body a declared foot names comes off the binding: ``_foot`` is one body's word, and the
             # declared ring term is the protocol's (its own vocabulary is frozen per protocol version).
@@ -156,6 +167,13 @@ def check_task(task_id: str, problems: list[str], warnings: list[str],
         # the recipe's joint_order (URDF tree order, what the deployment side reads) and the
         # articulation order the obs and the action use. Only the second one has to be pinned,
         # because a permutation there misaligns every checkpoint and nothing used to record it.
+        if args_cli.target_config:
+            order = binding.get("runtime_joint_order")
+            if order is None:
+                problems.append(f"{task_id}: manifest requires runtime_joint_order for live order check")
+            elif list(robot.joint_names) != order:
+                problems.append(f"{task_id}: live joints differ from manifest runtime_joint_order")
+            return f"{task_id}: {'/'.join(counts)} | four bound feet checked | source={binding['source']}"
         route = obs_protocol.task_route(task_id)
         path = params_path(route.get("line", ""), route.get("version"))
         live_joints = [_base(name) for name in robot.joint_names]
@@ -236,7 +254,9 @@ def main() -> int:
         print(f"OBS_PROTOCOL_LIVE_OK ({covered} declared task(s), all pinned; no env built)")
         return 0
     lines = []
-    naming = joint_names.naming_for(args_cli.naming)
+    if args_cli.target_config and (args_cli.all_tasks or len(args_cli.tasks) != 1):
+        raise ValueError("--target_config requires exactly one --tasks task and no --all-tasks")
+    naming = joint_names.LEGACY_NAMING
     for task_id in args_cli.tasks:
         try:
             lines.append(check_task(task_id, problems, warnings, naming))

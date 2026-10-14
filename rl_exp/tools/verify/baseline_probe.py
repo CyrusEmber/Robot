@@ -21,6 +21,7 @@ import math
 import os
 import pathlib
 import re
+import xml.etree.ElementTree as ET
 
 from isaaclab.app import AppLauncher
 
@@ -33,7 +34,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--task", default="Lizard2-Flat-v3")
 parser.add_argument("--num_envs", type=int, default=16)
 parser.add_argument("--steps", type=int, default=60, help="control steps to observe")
-parser.add_argument("--naming", default="shared", choices=sorted(leg_names.NAMINGS),
+parser.add_argument("--target_config", type=pathlib.Path, default=None, help="isolated diagnostic JSON manifest")
+parser.add_argument("--naming", default=None, choices=sorted(leg_names.NAMINGS),
                     help="which words the spawned body carries: 'shared' = every leg one root set "
                          "(every asset today), 'split' = the front/rear rename. Declared, and verified "
                          "against the spawned bodies -- the feet the load reading is attributed to are "
@@ -89,6 +91,15 @@ def _mesh_dir() -> pathlib.Path:
     Resolved from the task rather than fixed at the shared tree: a probe that measures one family's
     run against another family's mesh reports a geometry no simulation loaded.
     """
+    urdf = getattr(args_cli, "bound_urdf", None)
+    if urdf is not None:
+        meshes = [mesh for mesh in ET.parse(urdf).getroot().findall(".//collision/geometry/mesh")]
+        if not meshes:
+            raise ValueError(f"{urdf}: no collision meshes")
+        parents = {(pathlib.Path(urdf).parent / mesh.get("filename")).resolve().parent for mesh in meshes}
+        if len(parents) != 1:
+            raise ValueError(f"{urdf}: baseline mesh reader requires one collision directory: {parents}")
+        return parents.pop()
     return collision_mesh_dir(obs_protocol.family_of(args_cli.task))
 
 
@@ -277,12 +288,12 @@ def run_head_press(env, unwrapped, robot, body_names, joint_names, contact_senso
               "cannot run")
         return
     naming = naming or leg_names.LEGACY_NAMING
-    ids = [body_names.index(name) for name in head_bodies]
+    ids = [contact_sensor.body_names.index(name) for name in head_bodies]
     corners = pad_point_clouds([mesh_vertices(collider / f"{name}_collision.obj")
                                 for name in head_bodies]).to(unwrapped.device)
     # The feet under the declared binding, verified before use: an empty set here would make the
     # control run's "standing on its feet" check pass on nothing at all.
-    feet = [name for name in body_names if leg_names.is_contact_body(name, naming)]
+    feet = [name for name in body_names if leg_names.is_contact_body_bound(name, naming)]
     for leg in leg_names.LEGS:
         end = leg_names.end_link(leg, naming)
         if end not in body_names:
@@ -445,6 +456,11 @@ def main() -> int:
         return 2
     cfg = resolve_task_cfg(args_cli.task)
     cfg.scene.num_envs = args_cli.num_envs
+    target_binding = obs_protocol.load_diagnostic_target(
+        args_cli.target_config, cfg, args_cli.task, naming_override=args_cli.naming)
+    naming = leg_names.naming_from_binding(target_binding)
+    args_cli.naming = leg_names.naming_id(naming)
+    args_cli.bound_urdf = target_binding["urdf"]
     env = gym.make(args_cli.task, cfg=cfg, render_mode="rgb_array" if args_cli.shot else None)
     unwrapped = env.unwrapped
     num_envs = args_cli.num_envs
@@ -457,7 +473,7 @@ def main() -> int:
     params = recipe_params.load(cfg.params_line, cfg.params_version)
     command_ranges = params["commands"]
     body_patterns = params.get("names", {})
-    approved_dims = obs_protocol.recorded_dims(args_cli.task)
+    approved_dims = None if args_cli.target_config else obs_protocol.recorded_dims(args_cli.task)
     print(f"[probe] task {args_cli.task} -> line {cfg.params_line} {cfg.params_version}")
     print(f"  command ranges lin_vel_x {command_ranges['lin_vel_x']} lin_vel_y {command_ranges['lin_vel_y']} "
           f"ang_vel_z {command_ranges['ang_vel_z']}")
@@ -556,6 +572,11 @@ def main() -> int:
     joint_names = list(robot.joint_names)
     body_names = list(robot.body_names)
     contact_sensor = unwrapped.scene.sensors.get("contact_forces")
+    if contact_sensor is None:
+        raise ValueError(f"{target_binding['target']}: no contact_forces sensor")
+    obs_protocol.validate_diagnostic_runtime(target_binding, cfg, robot, contact_sensor,
+                                            unwrapped.action_manager)
+    sensor_ids = [contact_sensor.body_names.index(name) for name in body_names]
     load_readable = (contact_sensor is not None
                      and contact_sensor.data.net_forces_w.torch.shape[1] == len(body_names))
     spawn_z = robot.data.root_pos_w.torch[:, 2].mean().item()
@@ -582,7 +603,9 @@ def main() -> int:
     # default pose while the others are excited: the recipe claims they are held by their own PD at
     # the resting angle, and a channel that survived the edit (or a default offset that is not the
     # resting angle) looks identical in the config and only shows up as a moving target here.
-    declared_joints = declared_action_joints(params, joint_names)
+    declared_joints = ({name for term in vars(cfg.actions).values() if hasattr(term, "joint_names")
+                        for name in term.joint_names} if args_cli.target_config
+                       else declared_action_joints(params, joint_names))
     uncommanded_ids = [index for index, name in enumerate(joint_names) if name not in declared_joints]
     uncommanded_drift = 0.0
     soft_limits = robot.data.soft_joint_pos_limits.torch
@@ -637,7 +660,7 @@ def main() -> int:
             )
             qd_rows.append(robot.data.joint_vel.torch.abs().amax(dim=0).clone())
             if load_readable:
-                load_rows.append(contact_sensor.data.net_forces_w.torch.clone())
+                load_rows.append(contact_sensor.data.net_forces_w.torch[:, sensor_ids].clone())
                 mesh_rows.append(
                     mesh_min_z(robot.data.body_pos_w.torch, robot.data.body_quat_w.torch,
                                mesh_ids, mesh_corners)
@@ -664,7 +687,19 @@ def main() -> int:
     check("obs/single-policy-group", sorted(groups) == ["policy"], f"{sorted(groups)}")
     policy = groups.get("policy")
     live_width = None if policy is None else int(policy.shape[-1])
-    if approved_dims and "policy" in approved_dims:
+    if args_cli.target_config:
+        manager = unwrapped.observation_manager
+        expected_terms = obs_protocol.live_terms_for(args_cli.task, "policy")
+        actual_terms = list(manager.active_terms["policy"])
+        term_widths = [int(dim[0]) for dim in manager.group_obs_term_dim["policy"]]
+        check("obs/isolated-policy-term-order", actual_terms == expected_terms,
+              f"{target_binding['target']}: live {actual_terms} vs declared {expected_terms}")
+        check("obs/isolated-policy-width-from-live-terms",
+              len(term_widths) == len(actual_terms) and all(width > 0 for width in term_widths)
+              and tuple(policy.shape) == (num_envs, sum(term_widths)),
+              f"{target_binding['target']}: tensor {tuple(policy.shape)} vs live term widths {term_widths}")
+        print(f"  isolated width {live_width}, source={target_binding['source']}; not protocol approval")
+    elif approved_dims and "policy" in approved_dims:
         check(f"obs/policy-{approved_dims['policy']}-dims-as-approved", live_width == approved_dims["policy"],
               f"live {live_width} vs approved {approved_dims['policy']} "
               f"({obs_protocol.protocol_for(args_cli.task)})")

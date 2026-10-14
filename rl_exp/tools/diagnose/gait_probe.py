@@ -119,7 +119,13 @@ from isaaclab.app import AppLauncher  # noqa: E402
 
 parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
 parser.add_argument("--task", default="Lizard2-Flat-Play-v1")
-parser.add_argument("--checkpoint", default=None, help="required unless --self-check")
+parser.add_argument("--checkpoint", default=None, help="required in checkpoint policy mode")
+parser.add_argument("--policy_mode", choices=("checkpoint", "zero"), default="checkpoint",
+                    help="zero is checkpoint-free identity diagnostics, never a policy evaluation")
+parser.add_argument("--target_config", type=pathlib.Path, default=None,
+                    help="isolated diagnostic target manifest; must match --task")
+parser.add_argument("--naming", choices=sorted(joint_names.NAMINGS), default=None,
+                    help="optional consistency check against the declared target")
 parser.add_argument("--speeds", default="0.5,1.5,2.8", help="one env per speed [m/s]")
 parser.add_argument("--seconds", type=float, default=8.0)
 parser.add_argument("--seed", type=int, default=123)
@@ -602,7 +608,7 @@ def summarise(foot: dict, contact_n: float, transition_frames: int = 2,
         "unloaded_pred_rotation_p50_m": (round(float(foot["pred_rotation_m"][unloaded].median()), 4)
                                          if bool(unloaded.any()) else None),
     }
-    for joint in REPORT_TOKENS:
+    for joint in foot.get("report_tokens", REPORT_TOKENS):
         target, actual = foot[f"joint_target_{joint}"], foot[f"joint_actual_{joint}"]
         out[f"{joint}_target_p2p_rad"] = round(float(target.max() - target.min()), 4)
         out[f"{joint}_err_p50_rad"] = round(float((target - actual).abs().median()), 4)
@@ -782,6 +788,12 @@ def main() -> None:
     cfg = string_to_callable(spec.kwargs["env_cfg_entry_point"])()
     agent_cfg = string_to_callable(spec.kwargs["rsl_rl_cfg_entry_point"])()
     agent_cfg = handle_deprecated_rsl_rl_cfg(agent_cfg, importlib.metadata.version("rsl-rl-lib"))
+    from ablation_harness.baseline_eval import collision_assets
+    from rl_exp.tools.diagnose.plot_joints import report_naming, report_tokens
+
+    target_binding = obs_protocol.load_diagnostic_target(
+        args_cli.target_config, cfg, args_cli.task, naming_override=args_cli.naming)
+    naming = joint_names.naming_from_binding(target_binding)
     cfg.scene.num_envs = len(speeds)
     cfg.seed = args_cli.seed
     cfg.episode_length_s = args_cli.seconds
@@ -802,6 +814,7 @@ def main() -> None:
     live = env.unwrapped
     robot = live.scene["robot"]
     sensor = live.scene.sensors["contact_forces"]
+    obs_protocol.validate_diagnostic_runtime(target_binding, cfg, robot, sensor, live.action_manager)
 
     # Which columns of the concatenated action belong to the blade joints, read from the action
     # manager rather than assumed: both the term order and each term's joint order are the framework's,
@@ -810,34 +823,39 @@ def main() -> None:
     # (target = default + scale * action), which makes the mask self-verifying: the blade's commanded
     # offset in the report reads ~0 exactly when the mask took.
     frozen_foot_columns: list[int] = []
+    action_names: list[str] = []
+    blade_names = {joint_names.joint_name(leg, roles["foot"])
+                   for leg, roles in target_binding["roles"].items() if "foot" in roles}
     action_offset = 0
     for term_name in live.action_manager.active_terms:
         action_term = live.action_manager.get_term(term_name)
-        for position, joint_name in enumerate(action_term._joint_names):
-            if joint_name.endswith(joint_names.JOINT_SUFFIXES[-1]):  # the blade, chain-end joint
+        action_names.extend(action_term._joint_names)
+        for position, action_joint_name in enumerate(action_term._joint_names):
+            if action_joint_name in blade_names:
                 frozen_foot_columns.append(action_offset + position)
         action_offset += len(action_term._joint_names)
+    joint_names.validate_joint_names(action_names, naming, target=f"{args_cli.task} action channels")
+    if not set(action_names) <= set(robot.joint_names):
+        raise ValueError("action channels name joints absent from the live target")
     if action_offset != live.action_manager.total_action_dim:
         parser.error(f"action interface read as {action_offset} columns, manager says "
                      f"{live.action_manager.total_action_dim}: refusing to mask against a guess")
     if args_cli.freeze_feet_action and not frozen_foot_columns:
         parser.error("--freeze-feet-action found no *_foot_joint in the action interface")
 
-    foot_columns = [i for i, name in enumerate(sensor.body_names) if joint_names.is_contact_body(name)]
+    foot_columns = [i for i, name in enumerate(sensor.body_names)
+                    if joint_names.is_contact_body_bound(name, naming)]
     foot_bodies = [sensor.body_names[i] for i in foot_columns]
+    if len(foot_bodies) != 4 or set(foot_bodies) != set(joint_names.contact_body_names(naming)):
+        raise ValueError("contact sensor must resolve exactly the target's four end links")
     robot_foot_ids = [robot.body_names.index(name) for name in foot_bodies]
-    # The shank each pad hangs off. A pad's orientation is the leg chain's, composed with the blade's
-    # own angle, so a tilted sole cannot be attributed to either one without the shank's orientation.
-    robot_shank_ids = [robot.body_names.index(name.split("_")[0] + "_kfe") for name in foot_bodies]
-    # The tree this family declares, not a global one: a reading off another family's mesh is how a
-    # report silently stops describing the run it was taken from.
+    meshes, parents = collision_assets(pathlib.Path(target_binding["urdf"]))
+    robot_shank_ids = [robot.body_names.index(parents[name]) for name in foot_bodies]
     family = obs_protocol.family_of(args_cli.task)
-    family_mesh_dir = diag_metrics.collision_mesh_dir(family)
     clouds = diag_metrics.pad_point_clouds(
-        [diag_metrics.mesh_vertices(family_mesh_dir / f"{name}_collision.obj")
-         for name in foot_bodies]).to(live.device)
-    foot_meshes = torch.stack([diag_metrics.mesh_triangles(
-        family_mesh_dir / f"{name}_collision.obj") for name in foot_bodies]).to(live.device)
+        [diag_metrics.mesh_vertices(meshes[name]) for name in foot_bodies]).to(live.device)
+    foot_meshes = torch.stack([diag_metrics.mesh_triangles(meshes[name])
+                               for name in foot_bodies]).to(live.device)
     sole_areas = [diag_metrics.sole_area_m2(mesh) for mesh in foot_meshes]
     sole_band, sole_eps = args_cli.sole_band_mm / 1000.0, args_cli.sole_eps_mm / 1000.0
     # What each pad can put within the declared band when it rests flat, i.e. its own lowest point on
@@ -846,16 +864,18 @@ def main() -> None:
     sole_caps = [float(diag_metrics.ground_contact_area_m2(
         mesh - torch.tensor([0.0, 0.0, float(mesh[..., 2].min())], device=mesh.device),
         sole_band, 0.0)[0].sum()) for mesh in foot_meshes]
-    joint_names = list(robot.joint_names)
-    leg_joint_ids = {}
-    for joint in SERIES_TOKENS:
-        leg_joint_ids[joint] = {name.split("_")[0]: joint_names.index(f"{name.split('_')[0]}_{joint}_joint")
-                                for name in foot_bodies}
-    # The trunk: every joint that is not a leg joint, in the asset's own order. This is the same
-    # partition the protocol's gait-shape reading makes, and the probe needs it for the same reason --
-    # "the trunk does not swing" is a claim about joints nothing else in this report names.
-    spine_names = [name for name in joint_names if not name.endswith(LEG_SUFFIXES)]
-    spine_ids = [joint_names.index(name) for name in spine_names]
+    live_joint_names = list(robot.joint_names)
+    joint_names.validate_joint_names(live_joint_names, naming, target=args_cli.task)
+    expected_leg_joints = {joint_names.joint_name(leg, root) for leg in joint_names.LEGS
+                           for root in joint_names.roots_of(naming, leg)}
+    if not expected_leg_joints <= set(live_joint_names):
+        raise ValueError("live target is missing declared leg joints")
+    target_binding = {**target_binding, "joint_names": live_joint_names}
+    leg_joint_ids = {leg: {root: live_joint_names.index(joint_names.joint_name(leg, root))
+                           for root in joint_names.roots_of(naming, leg)}
+                     for leg in joint_names.LEGS}
+    spine_names = [name for name in live_joint_names if name not in expected_leg_joints]
+    spine_ids = [live_joint_names.index(name) for name in spine_names]
     # Position limits, because "the target asks for the sole below the floor" has two very different
     # readings: a pose the policy chose, or a target pressed against a stop it cannot pass.
     pos_limits = robot.data.joint_pos_limits.torch[0]  # (J, 2); the same for every env
@@ -875,15 +895,16 @@ def main() -> None:
         return float(getattr(actuator, "effort_limit_sim", None)
                      or getattr(actuator, "effort_limit", 0.0) or 0.0)
 
-    joint_effort = {"hip": group_effort("legs"), "hfe": group_effort("legs"),
-                    "foot": group_effort("feet")}
-
     command = torch.tensor([[speed, 0.0, 0.0] for speed in speeds], device=live.device)
     command_term = live.command_manager.get_term("base_velocity")
 
-    runner = OnPolicyRunner(wrapper, agent_cfg.to_dict(), log_dir=None, device=live.device)
-    runner.load(args_cli.checkpoint)
-    policy = runner.get_inference_policy(device=live.device)
+    if args_cli.policy_mode == "zero":
+        def policy(observations):
+            return torch.zeros(live.num_envs, live.action_manager.total_action_dim, device=live.device)
+    else:
+        runner = OnPolicyRunner(wrapper, agent_cfg.to_dict(), log_dir=None, device=live.device)
+        runner.load(args_cli.checkpoint)
+        policy = runner.get_inference_policy(device=live.device)
 
     steps = round(args_cli.seconds / live.step_dt)
     obs = wrapper.get_observations()
@@ -984,14 +1005,15 @@ def main() -> None:
     # (the failure branch exits non-zero before writing), and this makes the surviving one traceable.
     report = {"task": args_cli.task, "speeds": speeds, "step_dt": live.step_dt, "steps": steps,
               "family": family,
-              "mesh_dir": str(family_mesh_dir.relative_to(_REPO_ROOT)).replace("\\", "/"),
-              "mesh_digests": {name: binding.sha256_file(family_mesh_dir / f"{name}_collision.obj")
-                               for name in foot_bodies},
+              "target_binding": target_binding, "target_binding_required": True, "policy_mode": args_cli.policy_mode,
+              "mesh_dir": str(meshes[foot_bodies[0]].parent),
+              "mesh_digests": {name: binding.sha256_file(meshes[name]) for name in foot_bodies},
               "contact_n": args_cli.contact_n, "transition_frames": args_cli.transition_frames,
               "sole_band_m": sole_band, "sole_eps_m": sole_eps, "sole_area_m2": sole_areas,
               "sole_cap_m2": sole_caps,
-              "checkpoint": str(args_cli.checkpoint),
-              "checkpoint_sha256": binding.sha256_file(pathlib.Path(args_cli.checkpoint)),
+              "checkpoint": args_cli.checkpoint,
+              "checkpoint_sha256": (binding.sha256_file(pathlib.Path(args_cli.checkpoint))
+                                    if args_cli.checkpoint else None),
               "feet_overrides": {name: value for name, value in feet_overrides.items()
                                  if value is not None},
               "frozen_foot_columns": (frozen_foot_columns if args_cli.freeze_feet_action else []),
@@ -1019,8 +1041,9 @@ def main() -> None:
                    "pred_rotation_m": pred_rotation[alive, env_index, foot],
                    "contact_speed_horiz_mps": contact[alive, env_index, foot],
                    "foot_fore_aft_m": fore_aft[alive, env_index, foot]}
-            for joint in REPORT_TOKENS:
-                column = leg_joint_ids[joint][leg]
+            row["report_tokens"] = report_tokens(naming, leg)
+            for joint in row["report_tokens"]:
+                column = leg_joint_ids[leg][joint]
                 row[f"joint_target_{joint}"] = target[alive, env_index, column]
                 row[f"joint_actual_{joint}"] = actual[alive, env_index, column]
                 row[f"joint_vel_{joint}"] = vel[alive, env_index, column]
@@ -1028,7 +1051,9 @@ def main() -> None:
                 row[f"joint_default_{joint}"] = float(default_pos[column])
                 row[f"joint_kp_sim_{joint}"] = float(gains["kp"][env_index, column])
                 row[f"joint_kd_sim_{joint}"] = float(gains["kd"][env_index, column])
-                row[f"joint_effort_limit_{joint}"] = joint_effort[joint]
+                role = next(role for role, root in target_binding["roles"][leg].items()
+                            if root == joint)
+                row[f"joint_effort_limit_{joint}"] = group_effort("feet" if role == "foot" else "legs")
             entry["feet"].append(summarise(row, args_cli.contact_n, args_cli.transition_frames,
                                            live.step_dt))
         entry["series"] = {key: [[round(float(x), 5) for x in values[alive, env_index, foot].tolist()]
@@ -1049,8 +1074,8 @@ def main() -> None:
         # from the report without another rollout.
         entry["joint_series"] = {
             f"{name}_{joint}_{kind}": [round(float(x), 5) for x in values[
-                alive, env_index, leg_joint_ids[joint][name.split("_")[0]]].tolist()]
-            for name in foot_bodies for joint in SERIES_TOKENS
+                alive, env_index, leg_joint_ids[name.split("_")[0]][joint]].tolist()]
+            for name in foot_bodies for joint in joint_names.roots_of(naming, name.split("_")[0])
             for kind, values in (("target", target), ("actual", actual), ("vel", vel))}
         # The trunk, per frame, joint by joint. Exported because a vertebrate that undulates and one
         # that holds its spine still look identical in every reading above: they differ in a shape over
@@ -1062,6 +1087,7 @@ def main() -> None:
             for kind, values in (("target", target), ("actual", actual), ("vel", vel))}
         report["envs"].append(entry)
 
+    report_naming(report, naming)
     args_cli.out.parent.mkdir(parents=True, exist_ok=True)
     args_cli.out.write_text(json.dumps(report, indent=1), encoding="utf-8")
     print(json.dumps(report, indent=1))
@@ -1072,8 +1098,12 @@ if __name__ == "__main__":
     if args_cli.self_check:
         self_check()
     else:
-        if not args_cli.checkpoint:
-            parser.error("--checkpoint is required (or pass --self-check)")
+        if args_cli.policy_mode == "checkpoint" and not args_cli.checkpoint:
+            parser.error("--checkpoint is required in checkpoint policy mode (or pass --self-check)")
+        if args_cli.policy_mode == "zero" and args_cli.checkpoint:
+            parser.error("--policy_mode zero cannot accept a checkpoint")
+        if args_cli.seconds <= 0:
+            parser.error("--seconds must be positive")
         simulation_app = AppLauncher(args_cli).app
         try:
             main()

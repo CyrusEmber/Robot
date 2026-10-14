@@ -51,6 +51,48 @@ def report_tokens(naming: dict[str, tuple[str, ...]], leg: str) -> tuple[str, ..
     return tuple(roots[index] for index in REPORT_POSITIONS)
 
 
+def report_naming(report: dict, naming: dict[str, tuple[str, ...]] | None = None
+                  ) -> dict[str, tuple[str, ...]]:
+    """Validate every bound column before drawing; unbound historical reports remain explicit."""
+    if "target_binding" not in report:
+        if report.get("target_binding_required") is True:
+            raise ValueError("target_binding_required report is missing target_binding")
+        return joint_names.LEGACY_NAMING if naming is None else naming
+    bound = report["target_binding"]
+    resolved = joint_names.naming_from_binding(bound, expected=naming)
+    if "joint_names" not in bound:
+        raise ValueError("target_binding requires declared joint_names")
+    declared = bound["joint_names"]
+    joint_names.validate_joint_names(declared, resolved, target=bound["target"])
+    ends = set(joint_names.contact_body_names(resolved))
+    if len(report.get("foot_bodies", [])) != 4 or set(report["foot_bodies"]) != ends:
+        raise ValueError("target_binding foot_bodies must carry exactly four end links")
+    if not report.get("envs"):
+        raise ValueError("target_binding report has no environments")
+    expected_joints = {joint_names.joint_name(leg, root) for leg in joint_names.LEGS
+                       for root in joint_names.roots_of(resolved, leg)}
+    if not expected_joints <= set(declared):
+        raise ValueError("target_binding declared joint_names is missing leg joints")
+    expected_series = {f"{joint_names.end_link(leg, resolved)}_{root}_{kind}"
+                       for leg in joint_names.LEGS for root in joint_names.roots_of(resolved, leg)
+                       for kind in ("actual", "target", "vel")}
+    expected_spine = {f"{name}_{kind}" for name in declared if name not in expected_joints
+                      for kind in ("actual", "target", "vel")}
+    for entry in report["envs"]:
+        bodies = [foot["body"] for foot in entry["feet"]]
+        if len(bodies) != 4 or set(bodies) != ends:
+            raise ValueError("target_binding environment must carry exactly four end links")
+        if set(entry.get("joint_series", {})) != expected_series:
+            raise ValueError("target_binding joint_series columns differ from the per-leg chain")
+        if set(entry.get("spine_series", {})) != expected_spine:
+            raise ValueError("target_binding spine_series differs from declared joint_names")
+        for foot in entry["feet"]:
+            for token in report_tokens(resolved, foot["body"].split("_")[0]):
+                if f"{token}_limits_rad" not in foot:
+                    raise ValueError(f"target_binding summary missing {token}_limits_rad")
+    return resolved
+
+
 def at_stop(actual: list[float], low: float, high: float, band: float) -> list[bool]:
     """Frames where the joint sits within ``band`` of either stop -- the limit reading, per frame."""
     return [min(abs(value - low), abs(value - high)) <= band for value in actual]
@@ -179,7 +221,7 @@ def main() -> None:
     parser.add_argument("--at_stop_rad", type=float, default=0.02,
                         help="how close to a stop counts as 'at the stop'")
     parser.add_argument("--tag", default=None, help="figure prefix (default: the report's stem)")
-    parser.add_argument("--naming", default="shared", choices=sorted(joint_names.NAMINGS),
+    parser.add_argument("--naming", default=None, choices=sorted(joint_names.NAMINGS),
                         help="which words the record carries: 'shared' = every leg one root set (every "
                              "asset today), 'split' = the front/rear rename. Declared, and checked "
                              "against the report's own keys and foot bodies before anything is drawn")
@@ -193,7 +235,8 @@ def main() -> None:
 
     report = json.loads(args.report.read_text(encoding="utf-8"))
     tag = args.tag or args.report.stem
-    naming = joint_names.naming_for(args.naming)
+    naming = report_naming(report, joint_names.naming_for(args.naming) if args.naming else None)
+    args.naming = joint_names.naming_id(naming)
     # The foot bodies are checked against the naming before the bands are drawn: the probe records the
     # four legs in its own order, and a report written for another vocabulary would draw rows for feet
     # this binding does not name -- an empty-looking figure rather than an error.
@@ -206,6 +249,7 @@ def main() -> None:
                                                      for foot in env["feet"]})))
     args.out_dir.mkdir(parents=True, exist_ok=True)
     index = {"report": str(args.report), "at_stop_rad": args.at_stop_rad, "naming": args.naming,
+             "binding_validation": ("target_binding" if "target_binding" in report else "historical_unbound"),
              "bands": []}
     for entry in report["envs"]:
         drawn = draw_band(entry, report["contact_n"], args.at_stop_rad, args.out_dir, tag, naming)

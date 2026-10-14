@@ -123,7 +123,7 @@ parser.add_argument(
 )
 parser.add_argument(
     "--naming",
-    default="shared",
+    default=None,
     choices=sorted(leg_names.NAMINGS),
     help="which words the spawned asset carries: 'shared' = every leg one root set (every asset today), "
     "'split' = the front/rear rename. Declared, and verified against the spawned bodies before the "
@@ -148,6 +148,7 @@ parser.add_argument(
     help="fail unless every joint of the asset is carried by exactly one action term, in a vector of "
     "the expected width. Required when this run is the evidence that a new joint is commandable",
 )
+parser.add_argument("--target_config", type=pathlib.Path, default=None, help="isolated diagnostic JSON manifest")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 simulation_app = AppLauncher(args_cli).app
@@ -167,18 +168,24 @@ from rl_exp.tasks import obs_protocol  # noqa: E402  (task -> family; the body a
 # links this asset does not have. The module is aliased above because this script legitimately keeps the
 # asset's own joint-name list in a local called ``joint_names``; a bare import made that list shadow the
 # table and this tool died on ``'list' object has no attribute 'CHAIN_ROOTS'`` (2026-10-12).
-NAMING = leg_names.naming_for(args_cli.naming)
+# Naming is resolved from the final diagnostic target below.
 
 INJECT_RAD = 0.3
 SETTLE_STEPS = args_cli.settle
 
 cfg = string_to_callable(gym.spec(args_cli.task).kwargs["env_cfg_entry_point"])()
 cfg.scene.num_envs = 1
+target_binding = obs_protocol.load_diagnostic_target(
+    args_cli.target_config, cfg, args_cli.task, naming_override=args_cli.naming)
+NAMING = leg_names.naming_from_binding(target_binding)
+args_cli.naming = leg_names.naming_id(NAMING)
 env = gym.make(args_cli.task, cfg=cfg)
 env.reset()
 robot = env.unwrapped.scene["robot"]
 joint_names = list(robot.joint_names)
 body_names = list(robot.data.body_names)
+obs_protocol.validate_diagnostic_runtime(target_binding, cfg, robot,
+    env.unwrapped.scene["contact_forces"], env.unwrapped.action_manager)
 for _leg in leg_names.LEGS:
     _end = leg_names.end_link(_leg, NAMING)
     if _end not in body_names:
@@ -287,17 +294,17 @@ for name in ("neck_pitch", "chest_pitch", "tail1_pitch", "tail3_pitch") + tuple(
 # geometry for two versions) dies here
 assert p[body_names.index("neck_pitch"), 0] - base[0] > 1.0, "sphere head (neck_pitch) must sit at +x"
 assert p[body_names.index("tail3_pitch"), 0] - base[0] < -1.0, "antenna tail (tail3_pitch) must sit at -x"
-for n in (leg_names.link_name("lf", leg_names.roots_of(NAMING, "lf")[1]),
-          leg_names.link_name("rf", leg_names.roots_of(NAMING, "rf")[1])):
+for n in (leg_names.link_name("lf", target_binding["roles"]["lf"]["haa"]),
+          leg_names.link_name("rf", target_binding["roles"]["rf"]["haa"])):
     assert p[body_names.index(n), 0] - base[0] > 0, f"front leg {n} must be ahead of the root"
-for n in (leg_names.link_name("rl", leg_names.roots_of(NAMING, "rl")[1]),
-          leg_names.link_name("rr", leg_names.roots_of(NAMING, "rr")[1])):
+for n in (leg_names.link_name("rl", target_binding["roles"]["rl"]["haa"]),
+          leg_names.link_name("rr", target_binding["roles"]["rr"]["haa"])):
     assert p[body_names.index(n), 0] - base[0] < 0, f"rear leg {n} must be behind the root"
-for n in (leg_names.link_name("lf", leg_names.roots_of(NAMING, "lf")[1]),
-          leg_names.link_name("rl", leg_names.roots_of(NAMING, "rl")[1])):
+for n in (leg_names.link_name("lf", target_binding["roles"]["lf"]["haa"]),
+          leg_names.link_name("rl", target_binding["roles"]["rl"]["haa"])):
     assert p[body_names.index(n), 1] - base[1] > 0, f"left leg {n} must be on +y"
-for n in (leg_names.link_name("rf", leg_names.roots_of(NAMING, "rf")[1]),
-          leg_names.link_name("rr", leg_names.roots_of(NAMING, "rr")[1])):
+for n in (leg_names.link_name("rf", target_binding["roles"]["rf"]["haa"]),
+          leg_names.link_name("rr", target_binding["roles"]["rr"]["haa"])):
     assert p[body_names.index(n), 1] - base[1] < 0, f"right leg {n} must be on -y"
 print("LAYOUT_GATES PASSED (head +x / tail -x / legs anatomical)")
 
@@ -373,8 +380,8 @@ for joint, child, endpoint in FK_PROBES:
 # The base is not re-solved during the sweep (`sim.forward()` updates kinematics only), so the body
 # stays at the settled height and only the leg moves.
 _SWEEP_ROOTS = leg_names.roots_of(NAMING, args_cli.sweep_leg)
-_SWEEP_A = args_cli.sweep_a or _SWEEP_ROOTS[2]
-_SWEEP_B = args_cli.sweep_b or _SWEEP_ROOTS[3]
+_SWEEP_A = args_cli.sweep_a or target_binding["roles"][args_cli.sweep_leg]["hfe"]
+_SWEEP_B = args_cli.sweep_b or target_binding["roles"][args_cli.sweep_leg]["kfe"]
 _FOOT_LINK = leg_names.end_link(args_cli.sweep_leg, NAMING)
 for _flag, _token, _given in (("a", _SWEEP_A, args_cli.sweep_a), ("b", _SWEEP_B, args_cli.sweep_b)):
     if _given is not None and _token not in _SWEEP_ROOTS:

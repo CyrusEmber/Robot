@@ -42,7 +42,44 @@ def yaw_of(quat: torch.Tensor) -> torch.Tensor:
     return euler_xyz_from_quat(quat)[2]
 
 
-def _gait_shape_joints(cfg, names: list[str]) -> list[str]:
+def collision_assets(urdf: pathlib.Path) -> tuple[dict[str, pathlib.Path], dict[str, str]]:
+    """Resolve collision meshes and parent links from the target URDF, never a family tree.
+
+    Non-identity collision transforms are refused: existing mesh readers consume link-frame vertices.
+    """
+    import xml.etree.ElementTree as ET
+
+    root = ET.parse(urdf).getroot()
+    meshes = {}
+    for link in root.findall("link"):
+        collisions = link.findall("collision")
+        if not collisions:
+            continue
+        if len(collisions) != 1:
+            raise ValueError(f"{urdf}: {link.get('name')} needs one collision mesh")
+        collision = collisions[0]
+        mesh = collision.find("geometry/mesh")
+        if mesh is None:
+            raise ValueError(f"{urdf}: {link.get('name')} has no collision mesh")
+        origin = collision.find("origin")
+        for value, expected in ((mesh.get("scale", "1 1 1"), (1.0, 1.0, 1.0)),
+                                ((origin.get("xyz", "0 0 0") if origin is not None else "0 0 0"),
+                                 (0.0, 0.0, 0.0)),
+                                ((origin.get("rpy", "0 0 0") if origin is not None else "0 0 0"),
+                                 (0.0, 0.0, 0.0))):
+            if tuple(map(float, value.split())) != expected:
+                raise ValueError(f"{urdf}: {link.get('name')} collision transform is not identity")
+        path = (urdf.parent / mesh.attrib["filename"]).resolve()
+        if not path.is_file():
+            raise ValueError(f"{urdf}: missing collision mesh {path}")
+        meshes[link.attrib["name"]] = path
+    parents = {joint.find("child").attrib["link"]: joint.find("parent").attrib["link"]
+               for joint in root.findall("joint")}
+    return meshes, parents
+
+
+def _gait_shape_joints(cfg, names: list[str],
+                       naming: dict[str, tuple[str, ...]] = joint_names.LEGACY_NAMING) -> list[str]:
     """The joints a gait-shape reading needs: the spine's own group, plus one token per leg.
 
     Named rather than "all of them": a column nobody reads is what this harness refuses elsewhere, and
@@ -53,9 +90,10 @@ def _gait_shape_joints(cfg, names: list[str]) -> list[str]:
     """
     actuators = getattr(cfg.scene.robot, "actuators", None) or {}
     spinal = getattr(actuators.get("spine"), "joint_names_expr", ()) or ()
-    tokens = joint_names.JOINT_SUFFIXES
+    leg_joints = {joint_names.joint_name(leg, root) for leg in joint_names.LEGS
+                  for root in joint_names.roots_of(naming, leg)}
     return [name for name in names
-            if name.endswith(tokens) or any(re.fullmatch(pattern, name) for pattern in spinal)]
+            if name in leg_joints or any(re.fullmatch(pattern, name) for pattern in spinal)]
 
 
 def judged_or_recoverable(artifact: dict, frames_path: pathlib.Path | str) -> dict:
@@ -88,7 +126,7 @@ def run(args) -> dict:
 
     from ablation_harness import baseline_frames, baseline_metrics, record
     from rl_exp.tools.diagnose.diag_metrics import (
-        MESH_CHECK_BODIES, collision_mesh_dir, foot_ids, mesh_lowest_point, mesh_min_z, mesh_vertices,
+        MESH_CHECK_BODIES, mesh_lowest_point, mesh_min_z, mesh_vertices,
         pad_point_clouds, tilt_cos,
     )
     from rl_exp.tools.runrecord import provenance
@@ -96,13 +134,14 @@ def run(args) -> dict:
     from rl_exp.tools.verify.baseline_runtime import joint_reset_errors, resolve_task_cfg
     from rl_exp.tasks import obs_protocol
 
-    # The tree this task's family declares (2026-09-28): two families can carry different geometry,
-    # and the foot reading plus its `foot_geometry` meta have to come off the mesh the run loaded.
-    mesh_dir = collision_mesh_dir(obs_protocol.family_of(args.task))
-
     protocol_path = pathlib.Path(args.protocol)
     protocol = json.loads(protocol_path.read_text(encoding="utf-8"))
     cfg = resolve_task_cfg(args.task)
+    target_binding = obs_protocol.load_diagnostic_target(
+        getattr(args, "target_config", None), cfg, args.task,
+        naming_override=getattr(args, "naming", None))
+    naming = joint_names.naming_from_binding(target_binding)
+    meshes, _ = collision_assets(pathlib.Path(target_binding["urdf"]))
     judged = protocol.get("recipe_version", "v1")
     if cfg.params_version != judged:
         raise ValueError(f"this protocol judges baseline/{judged}, but the task resolves "
@@ -171,31 +210,40 @@ def run(args) -> dict:
         load_ids = [i for i, name in enumerate(names) if any(word in name.lower() for word in ("head", "neck", "tail"))]
         if not load_ids:
             raise RuntimeError("no head/neck/tail sensor bodies resolved: cannot report auxiliary support")
-        feet = foot_ids(names)
-        if not feet:
-            raise RuntimeError("no foot bodies resolved: cannot attribute standing to the legs")
+        feet = [i for i, name in enumerate(names) if joint_names.is_contact_body_bound(name, naming)]
+        if len(feet) != 4 or {names[i] for i in feet} != set(joint_names.contact_body_names(naming)):
+            raise RuntimeError("contact sensor must resolve exactly the target's four end links")
         non_foot = [i for i in range(len(names)) if i not in feet]
         mesh_present = [name for name in MESH_CHECK_BODIES if name in names]
-        mesh_ids = [names.index(name) for name in mesh_present]
+        mesh_ids = [robot.body_names.index(name) for name in mesh_present]
         if not mesh_present:
             raise RuntimeError(f"none of {MESH_CHECK_BODIES} is a body of this asset: cannot check the floor")
-        mesh_corners = pad_point_clouds([mesh_vertices(mesh_dir / f"{name}_collision.obj")
+        mesh_corners = pad_point_clouds([mesh_vertices(meshes[name])
                                         for name in mesh_present]).to(live.device)
         # The foot reading is taken off the asset's own collision meshes too: the geometry travels
         # with the record (below), so a later reader cannot substitute another family's foot.
         foot_names = [names[i] for i in feet]
-        foot_meshes = [f"{name}_collision.obj" for name in foot_names]
-        missing_meshes = [name for name in foot_meshes if not (mesh_dir / name).is_file()]
-        if missing_meshes:
-            raise RuntimeError(f"no collision mesh for {missing_meshes}: the foot clearance and the "
-                               "contact candidate are read off those files, not off the body origin")
-        foot_corners = pad_point_clouds([mesh_vertices(mesh_dir / name)
-                                        for name in foot_meshes]).to(live.device)
+        robot_foot_ids = [robot.body_names.index(name) for name in foot_names]
+        foot_meshes = [meshes[name] for name in foot_names]
+        foot_corners = pad_point_clouds([mesh_vertices(path)
+                                        for path in foot_meshes]).to(live.device)
         weight_n = float(robot.data.body_mass.torch[0].sum().item() * 9.81)
         # The joint reading: which joints, and in the asset's own order, so the axis labels and the
         # values they label cannot drift apart. Empty is refused here rather than stored as a column
         # with no axes -- a reading nobody can name is not evidence.
-        gait_joints = _gait_shape_joints(cfg, list(robot.joint_names))
+        live_joint_names = list(robot.joint_names)
+        joint_names.validate_joint_names(live_joint_names, naming, target=args.task)
+        expected_leg_joints = {joint_names.joint_name(leg, root) for leg in joint_names.LEGS
+                               for root in joint_names.roots_of(naming, leg)}
+        if not expected_leg_joints <= set(live_joint_names):
+            raise RuntimeError("live target is missing declared leg joints")
+        action_names = [name for term in live.action_manager.active_terms
+                        for name in live.action_manager.get_term(term)._joint_names]
+        joint_names.validate_joint_names(action_names, naming, target=f"{args.task} action channels")
+        if len(action_names) != live.action_manager.total_action_dim or not set(action_names) <= set(live_joint_names):
+            raise RuntimeError("action channels differ from the live target joint interface")
+        gait_joints = _gait_shape_joints(cfg, live_joint_names, naming)
+        target_binding = {**target_binding, "joint_names": gait_joints}
         if not gait_joints:
             raise RuntimeError("no leg-token or spine joint resolved: the gait-shape reading would "
                                "carry an empty axis")
@@ -236,10 +284,10 @@ def run(args) -> dict:
                 # `mesh_lowest_point` indexes and expands, so it needs plain tensors.
                 "foot_lowest_point": mesh_lowest_point(robot.data.body_pos_w.torch.clone(),
                                                        robot.data.body_quat_w.torch.clone(),
-                                                       feet, foot_corners).clone(),
-                "foot_com_pos": robot.data.body_com_pos_w.torch[:, feet],
-                "foot_lin_vel": robot.data.body_lin_vel_w.torch[:, feet],
-                "foot_ang_vel": robot.data.body_ang_vel_w.torch[:, feet],
+                                                       robot_foot_ids, foot_corners).clone(),
+                "foot_com_pos": robot.data.body_com_pos_w.torch[:, robot_foot_ids],
+                "foot_lin_vel": robot.data.body_lin_vel_w.torch[:, robot_foot_ids],
+                "foot_ang_vel": robot.data.body_ang_vel_w.torch[:, robot_foot_ids],
                 # The joint reading. `joint_pos` is the live deployed quantity (implicit PD drives
                 # against it), so a gait-shape reading taken from here is the same window the verdict
                 # is taken from, not a second rollout that happened to look similar.
@@ -329,6 +377,7 @@ def run(args) -> dict:
             artifact = recorder.artifact(
                 protocol=protocol, **start, task=args.task, seed=args.seed, num_envs=live.num_envs,
                 checkpoint=checkpoint, policy_mode=args.policy_mode if checkpoint else "zero_action",
+                target_binding=target_binding, target_binding_required=True,
                 body_weight_n=weight_n, **scene_conditions,
                 # Provenance of the two geometries the foot reading depends on: the ground the
                 # clearance is measured against, and the asset the sole geometry was taken off. Both
@@ -338,9 +387,9 @@ def run(args) -> dict:
                 # The tree is per-family now, so the file NAME no longer identifies the geometry --
                 # the digest does, and it is taken from the tree this family declares. No new key
                 # here: the frame format's meta shape is fixed for the life of the format.
-                foot_geometry={name: {"obj": mesh,
-                                      "sha256": record.file_sha256(mesh_dir / mesh),
-                                      "vertices": int(mesh_vertices(mesh_dir / mesh).shape[0])}
+                foot_geometry={name: {"obj": str(mesh),
+                                      "sha256": record.file_sha256(mesh),
+                                      "vertices": int(mesh_vertices(mesh).shape[0])}
                                for name, mesh in zip(foot_names, foot_meshes)})
             # Saved first, judged second: the window is the evidence, and the verdict is derivable
             # from it again offline -- so a judge defect cannot cost a completed collection.
@@ -352,7 +401,8 @@ def run(args) -> dict:
             "report_format": "baseline-eval-2", "protocol": protocol,
             "protocol_path": str(protocol_path),
             "protocol_digest": record.file_sha256(protocol_path),
-            "task": args.task, "seed": args.seed, "num_envs": live.num_envs,
+            "task": args.task, "target_binding": target_binding, "target_binding_required": True,
+            "seed": args.seed, "num_envs": live.num_envs,
             "timestamp": provenance.now(), "code": sources,
             "policy_mode": args.policy_mode if checkpoint else "zero_action", "checkpoint": checkpoint,
             "terminal_frames_captured": captured, "head_tail_sensor_bodies": [names[i] for i in load_ids],
@@ -376,6 +426,10 @@ def main() -> None:
     parser.add_argument("--protocol", type=pathlib.Path, required=True,
                         help="frozen protocol under protocols/; the report records its digest")
     parser.add_argument("--checkpoint")
+    parser.add_argument("--target_config", type=pathlib.Path, default=None,
+                        help="isolated diagnostic target manifest; must match --task")
+    parser.add_argument("--naming", choices=sorted(joint_names.NAMINGS), default=None,
+                        help="optional consistency check against the declared target")
     parser.add_argument("--policy_mode", choices=("deterministic", "sampled"), default="deterministic")
     parser.add_argument("--num_envs", type=int, default=16)
     parser.add_argument("--seed", type=int, default=0)

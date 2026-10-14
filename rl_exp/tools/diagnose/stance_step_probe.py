@@ -46,13 +46,7 @@ from rl_exp.tasks import joint_names as leg_names  # noqa: E402 - one home for "
 
 from isaaclab.app import AppLauncher  # noqa: E402
 
-# Declared-body calibration, resolved before the parser so the default is a real path and its source is
-# printable: the literal this replaced named the retired first body, which is P011's failure mode (the
-# calibration source and the spawned USD drifting apart silently). Stdlib-only import, so it is safe
-# ahead of the app launcher.
-from rl_exp.tools.verify.check_leg_reachability import family_urdf as _family_urdf  # noqa: E402
-
-_DEFAULT_URDF, _DEFAULT_URDF_SOURCE = _family_urdf(_HERE.parents[2], "lizard2")
+from rl_exp.tasks import obs_protocol  # noqa: E402
 
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument("--task", default="Lizard2-Flat-Play-v2",
@@ -61,7 +55,8 @@ parser.add_argument("--task", default="Lizard2-Flat-Play-v2",
                          "without touching a frozen one")
 parser.add_argument("--usd", default=None,
                     help="USD to spawn instead of the task's own asset (e.g. an isolated candidate USD)")
-parser.add_argument("--urdf", default=str(_DEFAULT_URDF),
+parser.add_argument("--target_config", type=pathlib.Path, default=None, help="isolated diagnostic JSON manifest")
+parser.add_argument("--urdf", default=None,
                     help="URDF the sole calibration is read from (pad mesh + contact-band normal); defaults "
                          "to the body this family declares and the header prints which file was read. Pass "
                          "the candidate's URDF together with its --usd when they are not the same body")
@@ -76,7 +71,7 @@ parser.add_argument("--joint", default=None,
                     help="joint token of that leg, in the naming's words; default is the naming's root "
                          "axis (the fore-aft stride axis). Checked against the naming, so a word the "
                          "bound naming does not carry is refused rather than looked for in the asset")
-parser.add_argument("--naming", default="shared", choices=sorted(leg_names.NAMINGS),
+parser.add_argument("--naming", default=None, choices=sorted(leg_names.NAMINGS),
                     help="which words this body carries: 'shared' = every leg one root set (every asset "
                          "today), 'split' = the front/rear rename. Declared, and verified against the "
                          "spawned asset before anything is measured")
@@ -87,21 +82,6 @@ parser.add_argument("--contact-n", type=float, default=5.0, help="force [N] abov
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 
-# The binding, resolved once here and carried down: which words this body carries is declared by the
-# caller (it is a property of the asset, not something a joint name can be asked about), and every role
-# below -- the ramped axis, the dropped joints, the contact bodies -- is read off it. A token the naming
-# does not carry is refused now rather than searched for in the asset and silently found nowhere.
-NAMING = leg_names.naming_for(args_cli.naming)
-_LEG_ROOTS = leg_names.roots_of(NAMING, args_cli.leg)
-if args_cli.joint is None:
-    args_cli.joint = _LEG_ROOTS[0]
-elif args_cli.joint not in _LEG_ROOTS:
-    raise SystemExit("%s: not one of this naming's roots for leg %s (%s)"
-                     % (args_cli.joint, args_cli.leg, ", ".join(_LEG_ROOTS)))
-if args_cli.drop_joints is None:
-    args_cli.drop_joints = ",".join(_LEG_ROOTS[-2:])
-_BOUND_SUFFIXES = tuple(dict.fromkeys(suffix for leg in leg_names.LEGS
-                                      for suffix in leg_names.suffixes_for(leg_names.roots_of(NAMING, leg))))
 simulation_app = AppLauncher(args_cli).app
 
 import gymnasium as gym  # noqa: E402
@@ -118,8 +98,19 @@ GRAVITY = 9.80665
 
 cfg = string_to_callable(gym.spec(args_cli.task).kwargs["env_cfg_entry_point"])()
 cfg.scene.num_envs = 1
-if args_cli.usd:
-    cfg.scene.robot.spawn.usd_path = str(pathlib.Path(args_cli.usd).resolve())
+target_binding = obs_protocol.load_diagnostic_target(
+    args_cli.target_config, cfg, args_cli.task, naming_override=args_cli.naming,
+    usd_override=args_cli.usd, urdf_override=args_cli.urdf)
+NAMING = leg_names.naming_from_binding(target_binding)
+args_cli.naming = leg_names.naming_id(NAMING)
+_LEG_ROOTS = leg_names.roots_of(NAMING, args_cli.leg)
+args_cli.joint = args_cli.joint or _LEG_ROOTS[0]
+if args_cli.joint not in _LEG_ROOTS:
+    raise SystemExit(f"{args_cli.joint}: not in bound roots {_LEG_ROOTS}")
+if args_cli.drop_joints is None:
+    args_cli.drop_joints = ",".join(_LEG_ROOTS[-2:])
+_BOUND_SUFFIXES = tuple(dict.fromkeys(suffix for leg in leg_names.LEGS
+                                      for suffix in leg_names.suffixes_for(leg_names.roots_of(NAMING, leg))))
 cfg.scene.robot.spawn.articulation_props.enabled_self_collisions = args_cli.self_collision == "on"
 
 # Taking a joint off the action interface leaves its drive holding the version's default target, which is
@@ -138,8 +129,8 @@ for _group in ("legs", "spine"):
         _term.scale = [_term.scale[i] for i, name in enumerate(_term.joint_names) if not name.endswith(DROP)]
     _term.joint_names = _names
 
-URDF = pathlib.Path(args_cli.urdf).resolve()
-URDF_SOURCE = _DEFAULT_URDF_SOURCE if URDF == _DEFAULT_URDF.resolve() else "--urdf override"
+URDF = pathlib.Path(target_binding["urdf"])
+URDF_SOURCE = target_binding["source"]
 PAD_NORMAL = {leg: torch.tensor(reach.pad_normal_in_link(URDF, leg, NAMING), dtype=torch.float32)
               for leg in ("lf", "rf", "rl", "rr")}
 PAD_CLOUDS = diag_metrics.pad_point_clouds([diag_metrics.mesh_vertices(reach.pad_mesh(URDF, leg, NAMING))
@@ -164,7 +155,8 @@ for leg in leg_names.LEGS:
         raise SystemExit("spawned asset %s has no %s, so it does not carry the naming '%s' -- declare the "
                          "naming of the asset it spawns" % (cfg.scene.robot.spawn.usd_path, end_joint,
                                                             args_cli.naming))
-CONTACT_PATTERNS = leg_names.contact_body_patterns(NAMING)
+obs_protocol.validate_diagnostic_runtime(target_binding, cfg, robot, sensor, manager)
+CONTACT_PATTERNS = leg_names.contact_body_patterns_bound(NAMING)
 pad_bodies = [leg_names.end_link(leg, NAMING) for leg in leg_names.LEGS]
 _DEVICE = robot.data.body_pos_w.torch.device
 PAD_CLOUDS = PAD_CLOUDS.to(_DEVICE)  # the clouds are read from files, so they start on the CPU
@@ -177,6 +169,9 @@ if sorted(foot_names) != sorted(pad_bodies):
                      % (args_cli.naming, CONTACT_PATTERNS,
                         sorted(n for n in body_names if n.split("_")[0] in leg_names.LEGS)))
 foot_ids = [body_names.index(name) for name in foot_names]
+sensor_ids = [sensor.body_names.index(name) for name in body_names]
+# Mesh clouds follow robot foot order, not the name table's leg order.
+PAD_CLOUDS = PAD_CLOUDS[[leg_names.LEGS.index(name[:2]) for name in foot_names]]
 non_foot_ids = [i for i in range(len(body_names)) if body_names[i] not in foot_names]
 target_joint = leg_names.joint_name(args_cli.leg, args_cli.joint)
 if target_joint not in joint_names:
@@ -250,7 +245,7 @@ def contact_speed():
 
 
 def sample():
-    forces = sensor.data.net_forces_w.torch[0]
+    forces = sensor.data.net_forces_w.torch[0, sensor_ids]
     tilt = sole_tilt_deg()
     speed = contact_speed()
     torque = (robot.data.joint_stiffness.torch[0] * (robot.data.joint_pos_target.torch[0]

@@ -84,6 +84,8 @@ URDF is expected to trip the knee assertions rather than to pass on borrowed num
 
 import argparse
 import contextlib
+import hashlib
+import re
 import io
 import itertools
 import json
@@ -105,6 +107,7 @@ _REPO = pathlib.Path(__file__).resolve().parents[3]
 if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 from rl_exp.tasks import joint_names  # noqa: E402
+from rl_exp.tools.runrecord import binding as file_binding  # noqa: E402
 
 
 def _naming_id(naming: dict[str, tuple[str, ...]]) -> str:
@@ -241,21 +244,12 @@ def _multiply(a, b):
 
 
 def _verify_chain(urdf: pathlib.Path, leg: str, tokens: tuple[str, ...], roots: tuple[str, ...]) -> None:
-    """Refuse a chain the declared naming cannot describe: the walk has to END where the naming says.
-
-    Two facts, and only these two, because the body owns the rest: the chain's last token is the naming's
-    last root -- the contact body and the pad link are read off that link, so a naming bound to another
-    body's words would measure the wrong link -- and the tokens the naming DOES name appear in the
-    naming's order. The tree may carry joints the naming does not know (a body that inserted one, which
-    is exactly how this file's own inserted-joint fixture reads); that is a body fact, not a mismatch.
-
-    ponytail: a body half-renamed in its MIDDLE roots while keeping the old end word satisfies both
-    checks (the naming's own roots still appear in order). The rename is atomic per limb group, so no
-    such body exists today; the upgrade path is a naming that declares what may sit between its roots,
-    and it is not worth a table until a body needs one.
-    """
+    """Reject recognized cross-namespace roots; retain unknown inserted joints and legacy missing hip."""
+    known = {root for naming in joint_names.NAMINGS.values() for chain in naming.values() for root in chain}
+    foreign = [token for token in tokens if token in known and token not in roots]
+    required = roots[1:] if roots == CHAIN and "hip" not in tokens else roots
     order = [roots.index(token) for token in tokens if token in roots]
-    if tokens[-1] != roots[-1] or order != sorted(order):
+    if not tokens or foreign or any(token not in tokens for token in required) or tokens[-1] != roots[-1] or order != sorted(set(order)):
         raise SystemExit(f"{urdf}: leg {leg} carries the chain {tokens}, which the declared naming "
                          f"{roots} does not describe -- it must end at {roots[-1]} with the naming's own "
                          "roots in order. Declare the naming this body carries (--naming)")
@@ -284,8 +278,11 @@ def chain_joint_names(urdf: pathlib.Path, leg: str,
         if child in parent_of:
             raise SystemExit(f"{urdf}: link {child} has two parent joints")
         parent_of[child] = joint
-    names, link = [], start
+    names, link, seen = [], start, set()
     while link.startswith(f"{leg}_"):
+        if link in seen:
+            raise SystemExit(f"{urdf}: cycle at {link}")
+        seen.add(link)
         joint = parent_of.get(link)
         if joint is None:
             raise SystemExit(f"{urdf}: no joint leads into link {link}")
@@ -931,6 +928,196 @@ def _renamed_twin(urdf: pathlib.Path, naming: dict[str, tuple[str, ...]], folder
     return path
 
 
+def diagnostic_urdf(path: pathlib.Path | None, urdf: pathlib.Path | None,
+                    naming_id: str | None) -> tuple[pathlib.Path, dict, str]:
+    """Resolve an offline manifest binding, refusing conflicting raw overrides."""
+    if path is None:
+        return (urdf or DEFAULT_URDF).resolve(), joint_names.naming_for(naming_id or "shared"), "CLI/default"
+    source = path.resolve()
+    document = json.loads(source.read_text(encoding="utf-8"))
+    bound = document.get("target_binding", document)
+    naming = joint_names.naming_from_binding(bound)
+    base = _REPO / "rl_exp"
+
+    def real(value):
+        candidate = pathlib.Path(value)
+        if candidate.parts and candidate.parts[0] == "rl_exp":
+            return (_REPO / candidate).resolve()
+        return (candidate if candidate.is_absolute() else base / candidate).resolve()
+
+    actual = real(bound["urdf"])
+    if real(bound["source"]) != source:
+        raise SystemExit(f"{source}: binding source differs from manifest")
+    if urdf is not None and actual != urdf.resolve():
+        raise SystemExit(f"{source}: --urdf conflicts with binding")
+    if naming_id is not None and naming_id != _naming_id(naming):
+        raise SystemExit(f"{source}: --naming conflicts with binding")
+    target = real(bound["target"])
+    if target.parent != actual.parent or target.stem != actual.stem or not target.is_file():
+        raise SystemExit(f"{source}: target USD/URDF must exist and be colocated with same stem")
+    for field, digest in document.get("sha256", {}).items():
+        if field not in ("target", "urdf") or file_binding.sha256_file(real(bound[field])) != digest:
+            raise SystemExit(f"{source}: invalid {field} sha256")
+    root = ET.parse(actual).getroot()
+    joints = [j.get("name") for j in root.findall("joint") if j.get("type") != "fixed"]
+    if "joint_names" not in bound:
+        raise SystemExit(f"{source}: exact joint_names required")
+    joint_names.validate_joint_names(joints, naming, target=str(actual), expected=bound["joint_names"])
+    if document.get("joint_order") != joints:
+        raise SystemExit(f"{source}: joint_order must match URDF order exactly")
+    links = [link.get("name") for link in root.findall("link")]
+    if len(links) != len(set(links)):
+        raise SystemExit(f"{actual}: duplicate links")
+    for leg in LEGS:
+        expected = tuple(joint_names.joint_name(leg, token) for token in joint_names.roots_of(naming, leg))
+        chain = chain_joint_names(actual, leg, naming)
+        legacy = _naming_id(naming) == "shared" and chain == expected[1:]
+        if chain != expected and not legacy:
+            raise SystemExit(f"{actual}: leg {leg} differs from bound roles: {chain}")
+        end = joint_names.end_link(leg, naming)
+        parents = [j for j in root.findall("joint") if j.find("child").get("link") == end]
+        if end not in links or len(parents) != 1 or parents[0].get("name") != expected[-1]:
+            raise SystemExit(f"{actual}: invalid parent of end link {end}")
+    return actual, naming, str(source)
+
+
+def _usd_twin(source: pathlib.Path, target: pathlib.Path, mapping: dict[str, str]) -> dict:
+    """Copy a flat USD with exact identifier/path-token renames; verify all authored values."""
+    from pxr import Sdf, Usd
+
+    stage = Usd.Stage.Open(str(source))
+    if stage is None:
+        raise ValueError(f"cannot open USD {source}")
+    if any(layer != stage.GetRootLayer() and layer != stage.GetSessionLayer()
+           for layer in stage.GetUsedLayers()):
+        raise ValueError("diagnostic copy requires a self-contained flat USD")
+    identifiers = dict(mapping)
+    for old, new in mapping.items():
+        for suffix in ("_visual", "_collision"):
+            identifiers[old + suffix] = new + suffix
+
+    def path_text(value):
+        return re.sub(r"[A-Za-z_][A-Za-z_0-9]*", lambda m: identifiers.get(m[0], m[0]), value)
+
+    text = stage.GetRootLayer().ExportToString()
+    text = re.sub(r'"([^"\n]*)"', lambda m: '"' + identifiers.get(m[1], m[1]) + '"', text)
+    text = re.sub(r"<([^>\n]*)>", lambda m: "<" + path_text(m[1]) + ">", text)
+    layer = Sdf.Layer.CreateAnonymous("diagnostic.usda")
+    if not layer.ImportFromString(text):
+        raise ValueError("renamed USD cannot be parsed")
+    layer.Export(str(target))
+    twin = Usd.Stage.Open(str(target))
+    attributes = relationships = numeric = 0
+
+    def mapped(value):
+        if isinstance(value, Sdf.Path):
+            return path_text(str(value))
+        if isinstance(value, str):
+            return identifiers.get(value, value)
+        return str(value)
+
+    source_prims = list(stage.TraverseAll())
+    if len(source_prims) != len(list(twin.TraverseAll())):
+        raise AssertionError("USD prim count changed")
+    for prim in source_prims:
+        other = twin.GetPrimAtPath(path_text(str(prim.GetPath())))
+        assert other and prim.GetTypeName() == other.GetTypeName(), prim.GetPath()
+        assert prim.GetAppliedSchemas() == other.GetAppliedSchemas(), prim.GetPath()
+        assert {p.GetName() for p in prim.GetProperties()} == {p.GetName() for p in other.GetProperties()}
+        for attr in prim.GetAttributes():
+            right = other.GetAttribute(attr.GetName())
+            assert attr.GetTypeName() == right.GetTypeName(), attr.GetPath()
+            times = attr.GetTimeSamples()
+            assert times == right.GetTimeSamples(), attr.GetPath()
+            for time in [Usd.TimeCode.Default(), *times]:
+                assert mapped(attr.Get(time)) == str(right.Get(time)), attr.GetPath()
+            assert [path_text(str(p)) for p in attr.GetConnections()] == [str(p) for p in right.GetConnections()]
+            attributes += 1
+            numeric += str(attr.GetTypeName()).rstrip("[]") not in ("string", "token", "asset")
+        for rel in prim.GetRelationships():
+            assert [path_text(str(p)) for p in rel.GetTargets()] == [str(p) for p in other.GetRelationship(rel.GetName()).GetTargets()], rel.GetPath()
+            relationships += 1
+    return {"prims": len(source_prims), "attributes": attributes, "numeric_attributes": numeric,
+            "relationships": relationships, "all_authored_values_equal": True}
+
+
+def prepare_diagnostic_twins(urdf: pathlib.Path, usd: pathlib.Path, folder: pathlib.Path,
+                             action_config: pathlib.Path | None = None) -> dict:
+    """Prepare isolated shared/split assets and loader manifests, never convert or adopt assets."""
+    from rl_exp.tasks import obs_protocol
+
+    folder = folder.resolve()
+    base = (_REPO / "rl_exp").resolve()
+    if base not in folder.parents or folder.relative_to(base).parts[0] != "out":
+        raise SystemExit("diagnostic twins must be isolated under rl_exp/out/")
+    if folder.exists():
+        raise SystemExit(f"refusing to overwrite existing diagnostic folder {folder}")
+    if not usd.is_file() or usd.parent != urdf.parent or usd.stem != urdf.stem:
+        raise SystemExit("source USD/URDF must exist and be colocated with same stem")
+    original = ET.parse(urdf).getroot()
+    old_joints = [j.get("name") for j in original.findall("joint") if j.get("type") != "fixed"]
+    joint_names.validate_joint_names(old_joints, joint_names.LEGACY_NAMING, target=str(urdf))
+    for leg in LEGS:
+        load_chain(urdf, leg)
+    if action_config is None:
+        found = obs_protocol._params_document("Lizard2-Flat-Play-v3")
+        if found is None:
+            raise SystemExit("task recipe unavailable; provide --action_config")
+        action_groups = found[0]["action"]["joints"]
+    else:
+        action_groups = json.loads(action_config.read_text(encoding="utf-8"))
+    # Recipe groups name the existing two action terms. No config construction or simulation needed.
+    if not isinstance(action_groups, dict) or set(action_groups) != {"legs", "spine"}:
+        raise SystemExit("action groups must explicitly provide legs and spine selections")
+    selections = {}
+    for group, patterns in action_groups.items():
+        if not isinstance(patterns, list) or not patterns or any(not any(re.fullmatch(p, j) for j in old_joints) for p in patterns):
+            raise SystemExit(f"{group}: invalid/unmatched action selection")
+        selections[group] = [j for j in old_joints if any(re.fullmatch(p, j) for p in patterns)]
+    # Ignore only machine-local products; do not change tracked repository ignore rules.
+    folder.mkdir(parents=True)
+    (folder / ".gitignore").write_text("*\n", encoding="utf-8")
+    proof = {"source": {"urdf": str(urdf), "target": str(usd)}, "twins": {}}
+    for naming_id in ("shared", "split"):
+        naming = joint_names.naming_for(naming_id)
+        twin_urdf = _renamed_twin(urdf, naming, folder)
+        tree = ET.parse(twin_urdf)
+        for mesh in tree.getroot().iter("mesh"):
+            mesh.set("filename", str((urdf.parent / mesh.get("filename")).resolve()))
+        tree.write(twin_urdf, encoding="utf-8", xml_declaration=True)
+        mapping = {}
+        for leg in LEGS:
+            for old, new in zip(CHAIN, joint_names.roots_of(naming, leg)):
+                for make in (joint_names.link_name, joint_names.joint_name):
+                    mapping[make(leg, old)] = make(leg, new)
+        twin_usd = twin_urdf.with_suffix(".usda")
+        identity = _usd_twin(usd, twin_usd, mapping)
+        order = [j.get("name") for j in tree.getroot().findall("joint") if j.get("type") != "fixed"]
+        manifest = folder / f"{naming_id}.json"
+        binding = joint_names.binding_for_target(str(twin_usd), str(manifest), naming, joint_names=order)
+        binding.update(task="Lizard2-Flat-Play-v3", urdf=str(twin_urdf))
+        digests = {"target": file_binding.sha256_file(twin_usd),
+                   "urdf": file_binding.sha256_file(twin_urdf)}
+        config = {f"actions.joint_pos_{group}.joint_names": [mapping.get(j, j) for j in joints]
+                  for group, joints in selections.items()}
+        document = {"target_binding": binding, "joint_order": order, "config": config, "sha256": digests}
+        manifest.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+        diagnostic_urdf(manifest, None, None)
+        for leg in LEGS:
+            left, right = load_chain(urdf, leg), load_chain(twin_urdf, leg, naming)
+            for a, b in zip(left, right):
+                assert all(a[key] == b[key] for key in ("origin", "rpy", "axis", "limits"))
+            assert pad_vertices(urdf, leg) == pad_vertices(twin_urdf, leg, naming)
+            pose = [0.31, -0.22, 0.44, -0.15, 0.2]
+            assert foot_pose(left, pose) == foot_pose(right, pose)
+        proof["twins"][naming_id] = {"manifest": str(manifest), "sha256": digests, "usd_identity": identity}
+    proof["source"]["sha256"] = {"target": file_binding.sha256_file(usd),
+                                    "urdf": file_binding.sha256_file(urdf)}
+    (folder / "identity.json").write_text(json.dumps(proof, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps(proof, indent=2))
+    return proof
+
+
 #: The legs the naming twin is read on: one front, one rear, so both directions of the split
 #: (``finger`` vs ``toe``) are covered rather than one leg standing for the pair.
 _TWIN_LEGS = ("lf", "rl")
@@ -945,6 +1132,15 @@ def _naming_twin_check(urdf: pathlib.Path) -> None:
     REFUSE the other's naming rather than quietly answer a chain no asset carries.
     """
     shared, split = joint_names.naming_for("shared"), joint_names.naming_for("split")
+    # Regression: an interior foreign role passed the historical end/order-only predicate.
+    mixed_tokens = CHAIN[:2] + (joint_names.roots_of(split, "lf")[2],) + CHAIN[2:]
+    try:
+        _verify_chain(urdf, "lf", mixed_tokens, CHAIN)
+    except SystemExit:
+        pass
+    else:
+        raise AssertionError("mixed middle namespace was accepted")
+    _verify_chain(urdf, "lf", CHAIN[1:], CHAIN)  # legacy body without hip remains legal
     poses = ([0.0] * len(joint_names.CHAIN_ROOTS), [0.31, -0.22, 0.44, -0.15, 0.2])
     for leg in _TWIN_LEGS:
         with tempfile.TemporaryDirectory() as folder:
@@ -962,6 +1158,14 @@ def _naming_twin_check(urdf: pathlib.Path) -> None:
             for pose in poses:
                 left, right = foot_pose(base, pose)[0], foot_pose(other, pose)[0]
                 assert all(abs(left[i] - right[i]) < 1e-12 for i in range(3)), (leg, pose, left, right)
+            comparison = io.StringIO()
+            with contextlib.redirect_stdout(comparison):
+                compare(urdf, twin, leg, 30.0, 0.9, 2, shared, split)
+            output = comparison.getvalue()
+            assert output.count("32 poses") == 2, (leg, output)
+            assert output.count("extra joints: none") == 2, (leg, output)
+            readings = [line.split("32 poses", 1)[1] for line in output.splitlines() if "32 poses" in line]
+            assert readings[0] == readings[1], (leg, readings)
             # The half a silent fallback would pass: each body must refuse the other's naming, and so must
             # a MIXED body -- link and joint renamed apart -- which is the one the end-root check is for.
             mixed = _renamed_twin(urdf, split, pathlib.Path(folder), rename_links=False)
@@ -1351,6 +1555,11 @@ def compare(urdf: pathlib.Path, candidate: pathlib.Path, leg: str, tol_deg: floa
     """
     candidate_naming = candidate_naming or naming
     reference, other = load_chain(urdf, leg, naming), load_chain(candidate, leg, candidate_naming)
+    for chain, bound in ((reference, naming), (other, candidate_naming)):
+        roles = dict(zip(CHAIN, joint_names.roots_of(bound, leg)))
+        by_root = {root: role for role, root in roles.items()}
+        for joint in chain:
+            joint["token"] = by_root.get(joint["token"], joint["token"])
     tokens_a = tuple(joint["token"] for joint in reference)
     tokens_b = tuple(joint["token"] for joint in other)
     shared = tuple(token for token in tokens_a if token in tokens_b)
@@ -1529,8 +1738,15 @@ def _rotation_about(axis, angle: float):
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--urdf", type=pathlib.Path, default=DEFAULT_URDF)
-    parser.add_argument("--naming", default="shared", choices=sorted(joint_names.NAMINGS),
+    parser.add_argument("--urdf", type=pathlib.Path, default=None)
+    parser.add_argument("--target_config", type=pathlib.Path)
+    parser.add_argument("--compare_target_config", type=pathlib.Path)
+    parser.add_argument("--prepare_diagnostic_twins", type=pathlib.Path,
+                        help="create shared/split URDF, USD and manifests in a NEW rl_exp/out/ folder")
+    parser.add_argument("--source_usd", type=pathlib.Path, help="colocated source USD; defaults to URDF stem.usda")
+    parser.add_argument("--action_config", type=pathlib.Path,
+                        help="optional JSON legs/spine action selections; default: v3 recipe")
+    parser.add_argument("--naming", default=None, choices=sorted(joint_names.NAMINGS),
                         help="which words the body at --urdf carries: 'shared' = every leg one root set "
                              "(every asset today), 'split' = the front/rear rename. Declared, never read "
                              "off the joint names: a body's chain is not evidence of its naming")
@@ -1539,7 +1755,7 @@ def main() -> None:
     parser.add_argument("--break-test", action="store_true",
                         help="perturb the readings --self-check's verdicts rest on: each one must "
                              "make it fail, or this reports the hole and exits non-zero")
-    parser.add_argument("--pose", nargs=5, type=float, metavar=("HIP", "HAA", "HFE", "KFE", "FOOT"),
+    parser.add_argument("--pose", nargs="+", type=float, metavar="ANGLE",
                         help="print one leg's pad pose at these joint angles [rad]")
     parser.add_argument("--leg", default="lf", choices=LEGS)
     parser.add_argument("--compare", type=pathlib.Path, default=None,
@@ -1559,22 +1775,26 @@ def main() -> None:
     parser.add_argument("--contact_n", type=float, default=1.0,
                         help="per-foot normal force above which the pad is called loaded [N]")
     args = parser.parse_args()
-    # Resolved once, here: the mesh check below compares the URDF's own tree with the path a mesh was
-    # read from, and a relative URDF would compare a relative parent against an absolute child.
-    args.urdf = args.urdf.resolve()
-    # The binding, resolved ONCE at the entry and handed down: which words the body carries is a
-    # property of the body (declared by the caller who chose it), not a question each reader re-answers.
-    naming = joint_names.naming_for(args.naming)
+    args.urdf, naming, source = diagnostic_urdf(args.target_config, args.urdf, args.naming)
+    args.naming = _naming_id(naming)
+    if args.prepare_diagnostic_twins is not None:
+        if args.target_config is not None or args.naming != "shared":
+            parser.error("preparation requires an original shared source URDF")
+        prepare_diagnostic_twins(args.urdf, (args.source_usd or args.urdf.with_suffix(".usda")).resolve(),
+                                 args.prepare_diagnostic_twins, args.action_config)
+        return
     if args.self_check:
         self_check(args.urdf)
         return
     if args.break_test:
         raise SystemExit(break_test(args.urdf))
-    if args.compare is not None:
+    if args.compare is not None or args.compare_target_config is not None:
+        candidate, candidate_naming, _ = diagnostic_urdf(args.compare_target_config, args.compare,
+                                                        args.compare_naming)
         print("ASSET legs bound to naming '%s' (%s); candidate '%s'"
-              % (args.naming, args.urdf, args.compare_naming or args.naming))
-        compare(args.urdf, args.compare.resolve(), args.leg, args.tol, args.base_z, args.samples,
-                naming, joint_names.naming_for(args.compare_naming or args.naming))
+              % (args.naming, args.urdf, _naming_id(candidate_naming)))
+        compare(args.urdf, candidate, args.leg, args.tol, args.base_z, args.samples,
+                naming, candidate_naming)
         return
     if args.frames is not None:
         fold_reading(args.frames, args.urdf, args.contact_n, naming)
@@ -1583,6 +1803,8 @@ def main() -> None:
         parser.error("nothing to do: pass --self-check, --compare, --frames or --pose")
     print("ASSET %s bound to naming '%s'" % (args.urdf, args.naming))
     chain = load_chain(args.urdf, args.leg, naming)
+    if len(args.pose) != len(chain):
+        parser.error(f"--pose needs {len(chain)} angles for this bound chain, got {len(args.pose)}")
     position, rotation = foot_pose(chain, args.pose)
     for i, row in enumerate(rotation):
         print("  row %d %s" % (i, ["%+.5f" % v for v in row]))

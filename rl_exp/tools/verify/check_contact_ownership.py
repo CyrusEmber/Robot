@@ -49,7 +49,8 @@ parser.add_argument("--task", default="Lizard2-Flat-v3")
 parser.add_argument("--num_envs", type=int, default=8)
 parser.add_argument("--steps", type=int, default=100, help="control steps of zero action to observe")
 parser.add_argument("--threshold", type=float, default=1.0, help="contact force counted as contact [N]")
-parser.add_argument("--naming", default="shared", choices=sorted(joint_names.NAMINGS),
+parser.add_argument("--target_config", type=pathlib.Path, default=None, help="isolated diagnostic JSON manifest")
+parser.add_argument("--naming", default=None, choices=sorted(joint_names.NAMINGS),
                     help="which words the spawned body carries: 'shared' = every leg one root set (every "
                          "asset today), 'split' = the front/rear rename. Declared, and checked against the "
                          "spawned bodies before the unpunished-body check -- an empty foot set would "
@@ -153,9 +154,14 @@ def penalised_bodies(env) -> dict:
 def main() -> int:
     cfg = resolve_task_cfg(args_cli.task)
     cfg.scene.num_envs = args_cli.num_envs
+    target_binding = obs_protocol.load_diagnostic_target(
+        args_cli.target_config, cfg, args_cli.task, naming_override=args_cli.naming)
+    naming = joint_names.naming_from_binding(target_binding)
+    args_cli.naming = joint_names.naming_id(naming)
     env = gym.make(args_cli.task, cfg=cfg).unwrapped
     robot = env.scene["robot"]
     sensor = env.scene.sensors["contact_forces"]
+    obs_protocol.validate_diagnostic_runtime(target_binding, cfg, robot, sensor, env.action_manager)
     num_envs = args_cli.num_envs
 
     usd_path = pathlib.Path(str(cfg.scene.robot.spawn.usd_path))
@@ -224,7 +230,7 @@ def main() -> int:
         if end not in robot.body_names:
             raise SystemExit(f"task {args_cli.task} has no {end} body, so it does not carry the naming "
                              f"'{args_cli.naming}' -- declare the naming of the body it spawns")
-    feet = {n for n in robot.body_names if joint_names.is_contact_body(n, naming)}
+    feet = {n for n in robot.body_names if joint_names.is_contact_body_bound(n, naming)}
     blind = [n for n in touching if n not in selected and n not in feet]
     check("no contacting body is invisible to the penalty stack", not blind,
           f"unpunished: {blind}" if blind else f"touching: {touching}")
@@ -238,7 +244,7 @@ def main() -> int:
     # --- the table: USD vs URDF, with what each body does at runtime --------------------------
     print(f"{'body':<18} {'usd approx':<12} {'usd verts':>9} {'usd extent':<24} "
           f"{'urdf extent':<24} {'penal':<6} {'peak N':>8}")
-    report = {"task": args_cli.task, "family": family, "usd": str(usd_path), "urdf": str(urdf),
+    report = {"target_binding": target_binding, "task": args_cli.task, "family": family, "usd": str(usd_path), "urdf": str(urdf),
               "robot_prim": str(robot_prim.GetPath()), "steps": args_cli.steps,
               "threshold": args_cli.threshold, "terms": terms, "no_collider": no_collider,
               "touching": touching, "blind": blind, "bodies": {}}

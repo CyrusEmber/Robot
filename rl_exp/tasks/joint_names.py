@@ -25,11 +25,10 @@ the file directly -- the idiom ``check_obs_protocol.py`` already uses
 (``importlib.util.spec_from_file_location``), or puts ``rl_exp/tasks`` on ``sys.path`` and does a plain
 ``import joint_names``.
 
-**The rename is data here, not active.** ``PLANNED_*`` is the 2026-10-10 user-approved front/rear split
-(``hip`` -> ``shoulder_swing``/``hip_swing``, ...). Nothing in this module returns it unless asked, the
-active names above are the OLD ones the assets and the checkpoints carry, and every existing gate must
-stay green on them. Flipping to the new names is the body-swap act
-(``work/active/lizard2-body-drive-candidate.md``, "骨骼改名"), not an edit here.
+**Stable namings never flip at adoption.** ``PLANNED_*`` preserves the five-role rename
+sample; ``palm`` declares the separate four-role chain. Existing constants remain the old
+shared vocabulary, while each consumer holds the target's explicit binding. ``PLANNED_ACTIVE``
+is retained for compatibility, not used to select or activate a naming.
 
 **A body's words are a BINDING, and there are two of them.** A consumer that has to serve the old body
 and a renamed twin in one run cannot ask this module for "the current name" -- the two answers differing
@@ -247,6 +246,68 @@ def naming_id(naming: dict[str, tuple[str, ...]]) -> str:
     raise KeyError(f"{naming}: not a declared naming ({sorted(NAMINGS)})")
 
 
+def contact_body_names(naming: dict[str, tuple[str, ...]]) -> tuple[str, ...]:
+    """Return the four exact contact links in declared leg order, not runtime index order."""
+    return tuple(end_link(leg, naming) for leg in LEGS)
+
+
+def contact_body_patterns_bound(naming: dict[str, tuple[str, ...]]) -> tuple[str, ...]:
+    """Return exact selectors; the framework keeps its own body order."""
+    return tuple(re.escape(name) for name in contact_body_names(naming))
+
+
+def is_contact_body_bound(name: str, naming: dict[str, tuple[str, ...]]) -> bool:
+    """Check membership in the declared contact links without suffix wildcards."""
+    return name in contact_body_names(naming)
+
+
+def validate_joint_names(names: list[str], naming: dict[str, tuple[str, ...]], *,
+                         target: str, expected: list[str] | None = None) -> None:
+    """Reject duplicate or foreign leg joints, and optionally require an exact declaration."""
+    if len(names) != len(set(names)):
+        raise ValueError(f"{target}: duplicate joint names: {names}")
+    foreign = [name for name in names if name.split("_", 1)[0] in LEGS
+               and name not in {joint_name(leg, root) for leg in LEGS
+                                for root in roots_of(naming, leg)}]
+    if foreign:
+        raise ValueError(f"{target}: foreign leg joints for {naming_id(naming)}: {foreign}")
+    if expected is not None and (not names or set(names) != set(expected)):
+        raise ValueError(f"{target}: joint declaration differs: missing={sorted(set(expected) - set(names))}, "
+                         f"extra={sorted(set(names) - set(expected))}")
+
+
+def binding_for_target(target: str, source: str, naming: dict[str, tuple[str, ...]], *,
+                       joint_names: list[str] | None = None) -> dict:
+    """Declare one target and its naming provenance as ordinary serializable data."""
+    bound = {"target": str(target), "source": str(source), "naming": naming_id(naming),
+             "roles": {leg: dict(zip(CHAIN_ROOTS, roots_of(naming, leg))) for leg in LEGS},
+             "end_links": dict(zip(LEGS, contact_body_names(naming)))}
+    if joint_names is not None:
+        bound["joint_names"] = list(joint_names)
+    naming_from_binding(bound)
+    return bound
+
+
+def naming_from_binding(bound: dict, *, expected: dict[str, tuple[str, ...]] | None = None
+                        ) -> dict[str, tuple[str, ...]]:
+    """Validate a target's source, roles and ends before returning its declared naming."""
+    if not isinstance(bound, dict) or any(not isinstance(bound.get(key), str) or not bound[key].strip()
+                                          for key in ("target", "source", "naming")):
+        raise ValueError("target binding requires nonempty target, source and naming")
+    naming = naming_for(bound["naming"])
+    if expected is not None and naming != expected:
+        raise ValueError(f"{bound['target']}: naming override conflicts with declared {bound['naming']}")
+    roles = {leg: dict(zip(CHAIN_ROOTS, roots_of(naming, leg))) for leg in LEGS}
+    if bound.get("roles") != roles or bound.get("end_links") != dict(zip(LEGS, contact_body_names(naming))):
+        raise ValueError(f"{bound['target']}: roles or end links differ from declared {bound['naming']}")
+    if "joint_names" in bound:
+        names = bound["joint_names"]
+        if not isinstance(names, list) or not names or any(not isinstance(name, str) for name in names):
+            raise ValueError(f"{bound['target']}: joint_names must be a nonempty list of names")
+        validate_joint_names(names, naming, target=bound["target"])
+    return naming
+
+
 def planned_root(leg: str, root: str) -> str:
     """The root ``root`` becomes on ``leg`` under the planned rename. Data, not the live answer.
 
@@ -396,6 +457,26 @@ def _self_check() -> None:
         pass
     else:
         raise AssertionError("'lf_finger': not a leg of this naming, so it must not be answered")
+
+    for key, naming in NAMINGS.items():
+        bound = binding_for_target("fixture.usda", "fixture.json", naming,
+                                   joint_names=[joint_name(leg, root) for leg in LEGS
+                                                for root in roots_of(naming, leg)])
+        assert naming_from_binding(bound) == naming
+        ends = contact_body_names(naming)
+        assert tuple(name for name in reversed(ends) if is_contact_body_bound(name, naming)) == tuple(reversed(ends))
+        for outsider in ("alien_wrist", "alien_finger", "lf_toe", "lf_ankle", "rr_wrist", "lf_foot_joint"):
+            if outsider not in ends:
+                assert not is_contact_body_bound(outsider, naming), (key, outsider)
+                assert not any(re.fullmatch(pattern, outsider) for pattern in contact_body_patterns_bound(naming))
+        for bad in ({**bound, "source": ""}, {**bound, "roles": {}},
+                    {**bound, "joint_names": bound["joint_names"] + [bound["joint_names"][0]]},
+                    {**bound, "joint_names": ["lf_foreign_joint"]}):
+            try:
+                naming_from_binding(bad)
+            except ValueError:
+                continue
+            raise AssertionError(f"invalid target binding accepted: {bad}")
 
     # (e) the import surface is the standard library
     assert hasattr(sys, "stdlib_module_names"), "python < 3.10 cannot read the stdlib list; this check is not running"

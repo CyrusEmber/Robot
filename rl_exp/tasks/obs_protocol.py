@@ -22,10 +22,17 @@ declared layout against the constructed cfg, which is what keeps the two from dr
 from __future__ import annotations
 
 import functools
+import importlib.util
 import hashlib
+import re
 import json
 import pathlib
 import xml.etree.ElementTree as ET
+
+_file_binding_spec = importlib.util.spec_from_file_location(
+    "file_binding", pathlib.Path(__file__).resolve().parents[1] / "tools" / "runrecord" / "binding.py")
+file_binding = importlib.util.module_from_spec(_file_binding_spec)
+_file_binding_spec.loader.exec_module(file_binding)
 
 DECLARATION = pathlib.Path(__file__).resolve().parents[2] / "rl_exp" / "versions" / "obs_protocols.json"
 ANCHORS = pathlib.Path(__file__).resolve().parents[2] / "rl_exp" / "versions" / "obs_protocol_anchors.json"
@@ -407,6 +414,434 @@ def body_for_task(task_id: str, base: pathlib.Path | None = None) -> dict:
     if not usd_rel:
         raise ProtocolError(f"{task_id}: its recipe declares no usd_path")
     return resolve_body(usd_rel, line.split("/")[0], base)
+
+
+def _joint_names_module():
+    """Load the shared stdlib table without importing the task registry."""
+    spec = importlib.util.spec_from_file_location("diagnostic_joint_names", pathlib.Path(__file__).with_name("joint_names.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_diagnostic_target(path, cfg, task, *, naming_override=None, usd_override=None,
+                           urdf_override=None) -> dict:
+    """Bind an instantiated diagnostic cfg to a declared USD/URDF pair.
+
+    Manifest paths are absolute or relative to ``rl_exp``. ``config`` contains existing
+    dotted cfg fields, never classes or callables; action joint lists and ``joint_order``
+    must be explicit. No recipe, registry, protocol or lock is written.
+    """
+    names = _joint_names_module()
+    base = _rl_exp().resolve()
+    family = family_of(task)
+    if not family:
+        raise ProtocolError(f"{task}: no declared family")
+
+    def real(value):
+        if not isinstance(value, (str, pathlib.Path)) or not str(value):
+            raise ProtocolError(f"{task}: missing file path {value!r}")
+        candidate = pathlib.Path(value)
+        if not candidate.is_absolute() and candidate.parts and candidate.parts[0] == "rl_exp":
+            return (base.parent / candidate).resolve()
+        return (candidate if candidate.is_absolute() else base / candidate).resolve()
+
+    actual = real(cfg.scene.robot.spawn.usd_path)
+    original = body_for_task(task)
+    document = None
+    if path is not None:
+        source = pathlib.Path(path).resolve()
+        try:
+            document = json.loads(source.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as err:
+            raise ProtocolError(f"{source}: cannot read diagnostic manifest: {err}") from err
+        if not isinstance(document, dict):
+            raise ProtocolError(f"{source}: manifest must be an object")
+        binding = dict(document.get("target_binding", document))
+        if binding.get("task") != task:
+            raise ProtocolError(f"{source}: task {binding.get('task')!r} != {task!r}")
+        if real(binding.get("source")) != source:
+            raise ProtocolError(f"{source}: target_binding.source must name this manifest")
+        naming = names.naming_from_binding(binding)
+        target = real(binding.get("target"))
+        key = _key(target, base, "diagnostic USD")
+        if key.split("/")[0] not in ("assets", "out"):
+            raise ProtocolError(f"{source}: diagnostic USD must be isolated under assets/ or out/")
+        body = resolve_body(key, family, base)
+        if real(binding.get("urdf")) != body["urdf"]:
+            raise ProtocolError(f"{source}: USD/URDF pair differs from resolved {body['urdf']}")
+        if body["urdf"].parent != body["usd"].parent:
+            raise ProtocolError(f"{source}: diagnostic URDF must be colocated with USD")
+        for ref in body["refs"]:
+            if not ref.is_file():
+                raise ProtocolError(f"{source}: missing mesh file {ref}")
+        for field, digest in document.get("sha256", {}).items():
+            if field not in ("target", "urdf") or not isinstance(digest, str):
+                raise ProtocolError(f"{source}: invalid sha256 field {field!r}")
+            if file_binding.sha256_file(real(binding[field])) != digest:
+                raise ProtocolError(f"{source}: {field} sha256 mismatch")
+    else:
+        if actual != original["usd"]:
+            raise ProtocolError(f"{task}: cfg USD {actual} differs from declared {original['usd']}")
+        body = original
+        naming = names.naming_for("shared")
+        params = _params_document(task)
+        if params is None:
+            raise ProtocolError(f"{task}: no parameters document for target binding source")
+        binding = names.binding_for_target(str(body["usd"]), str(params[1]), naming)
+        binding.update(task=task, urdf=str(body["urdf"]))
+    if naming_override is not None and names.naming_id(naming) != naming_override:
+        raise ProtocolError(f"{task}: --naming {naming_override} disagrees with target {names.naming_id(naming)}")
+    for override, field in ((usd_override, "usd"), (urdf_override, "urdf")):
+        if override is not None and real(override) != body[field]:
+            raise ProtocolError(f"{task}: raw {field} override differs from declared pair; use --target_config")
+
+    tree = ET.parse(body["urdf"]).getroot()
+    joints = [joint.get("name") for joint in tree.findall("joint") if joint.get("type") != "fixed"]
+    names.validate_joint_names(joints, naming, target=str(body["urdf"]),
+                               expected=binding.get("joint_names") if document is not None else None)
+    if document is not None and "joint_names" not in binding:
+        raise ProtocolError(f"{path}: target_binding needs exact joint_names")
+    links = [link.get("name") for link in tree.findall("link")]
+    if len(set(links)) != len(links):
+        raise ProtocolError(f"{body['urdf']}: duplicate links")
+    by_child = {}
+    for joint in tree.findall("joint"):
+        child = joint.find("child").get("link")
+        if child in by_child:
+            raise ProtocolError(f"{body['urdf']}: duplicate parent joints for {child}")
+        by_child[child] = joint
+    for leg in names.LEGS:
+        end = names.end_link(leg, naming)
+        parent_joint = names.joint_name(leg, names.roots_of(naming, leg)[-1])
+        if end not in links or end not in by_child or by_child[end].get("name") != parent_joint:
+            raise ProtocolError(f"{body['urdf']}: {end} must be child of {parent_joint}")
+        cursor, chain = end, []
+        while cursor in by_child:
+            if cursor in chain:
+                raise ProtocolError(f"{body['urdf']}: cycle at {cursor}")
+            chain.append(cursor)
+            cursor = by_child[cursor].find("parent").get("link")
+        for root in names.roots_of(naming, leg):
+            joint = names.joint_name(leg, root)
+            if joint not in joints and names.naming_id(naming) == "shared" and root == "hip":
+                continue  # legacy lizard has no root swing joint
+            if joint not in joints or names.link_name(leg, root) not in chain:
+                raise ProtocolError(f"{body['urdf']}: missing/disconnected role {leg}/{root}")
+    if document is None:
+        binding = names.binding_for_target(str(body["usd"]), binding["source"], naming, joint_names=joints)
+        binding.update(task=task, urdf=str(body["urdf"]))
+    declared_urdf_joints = binding.get("joint_names")
+    binding.update(target=str(body["usd"]), urdf=str(body["urdf"]),
+                   joint_names=list(declared_urdf_joints) if declared_urdf_joints is not None else joints)
+
+    if document is not None:
+        import copy
+
+        payload = document.get("config", {})
+        if not isinstance(payload, dict):
+            raise ProtocolError(f"{path}: config must be an object of dotted cfg fields")
+        order = document.get("joint_order")
+        if order != joints:
+            raise ProtocolError(f"{path}: joint_order must explicitly list exact URDF joint names in URDF order")
+        runtime_order = document.get("runtime_joint_order")
+        if runtime_order is not None and (not isinstance(runtime_order, list)
+                or len(runtime_order) != len(joints) or set(runtime_order) != set(joints)):
+            raise ProtocolError(f"{path}: runtime_joint_order must list exact URDF joint names")
+        draft = copy.deepcopy(cfg)
+        old_joints = [j.get("name") for j in ET.parse(original["urdf"]).getroot().findall("joint")
+                      if j.get("type") != "fixed"]
+        old_links = [link.get("name") for link in ET.parse(original["urdf"]).getroot().findall("link")]
+        mapping = {}
+        for leg in names.LEGS:
+            for role, new_root in binding["roles"][leg].items():
+                old_root = role
+                mapping[names.joint_name(leg, old_root)] = names.joint_name(leg, new_root)
+                mapping[names.link_name(leg, old_root)] = names.link_name(leg, new_root)
+
+        def remap(value, pool):
+            if isinstance(value, str):
+                if value in mapping:
+                    return mapping[value]
+                matched = [name for name in pool if re.fullmatch(value, name)]
+                if any(name in mapping for name in matched):
+                    return [mapping.get(name, name) for name in matched]
+                return value
+            if isinstance(value, (list, tuple)):
+                out = []
+                for item in value:
+                    changed = remap(item, pool)
+                    out.extend(changed if isinstance(changed, list) else [changed])
+                return out
+            if isinstance(value, dict):
+                out = {}
+                for key, item in value.items():
+                    keys = remap(key, pool)
+                    for changed in keys if isinstance(keys, list) else [keys]:
+                        if changed in out:
+                            raise ProtocolError(f"{path}: remapping duplicates {changed}")
+                        out[changed] = item
+                return out
+            return value
+
+        seen = set()
+
+        def visit(value):
+            if id(value) in seen:
+                return
+            seen.add(id(value))
+            fields = value if isinstance(value, dict) else vars(value) if hasattr(value, "__dict__") else {}
+            for field, item in list(fields.items()):
+                if field.startswith("_") or callable(item):
+                    continue
+                if field in ("joint_pos", "joint_vel", "joint_names", "joint_names_expr", "scale",
+                             "stiffness", "damping", "effort_limit", "velocity_limit", "armature",
+                             "body_names"):
+                    changed = remap(item, old_links if field == "body_names" else old_joints)
+                    if isinstance(value, dict):
+                        value[field] = changed
+                    else:
+                        setattr(value, field, changed)
+                elif field == "prim_path" and isinstance(item, str):
+                    prefix, separator, leaf = item.rpartition("/")
+                    if leaf in mapping:
+                        setattr(value, field, prefix + separator + mapping[leaf])
+                    elif any(re.fullmatch(leaf, name) and name in mapping for name in old_links):
+                        selected = remap(leaf, old_links)
+                        setattr(value, field, prefix + separator + "(" + "|".join(map(re.escape, selected)) + ")")
+                elif isinstance(item, (list, tuple)):
+                    for child in item:
+                        visit(child)
+                elif isinstance(item, dict) or hasattr(item, "__dict__"):
+                    visit(item)
+
+        for section in ("scene", "actions", "observations", "rewards", "terminations", "events"):
+            visit(getattr(draft, section, None))
+        for dotted, value in payload.items():
+            parts = dotted.split(".")
+            if len(parts) < 2 or parts[0] not in ("scene", "actions", "observations", "rewards", "terminations", "events") or any(p.startswith("_") for p in parts):
+                raise ProtocolError(f"{path}: unsupported config field {dotted}")
+            obj = draft
+            for part in parts[:-1]:
+                obj = obj[part] if isinstance(obj, dict) else getattr(obj, part)
+            field = parts[-1]
+            prior = obj[field] if isinstance(obj, dict) else getattr(obj, field)
+            if callable(prior) or field in ("func", "class_type", "usd_path"):
+                raise ProtocolError(f"{path}: config cannot replace {dotted}")
+            if isinstance(obj, dict):
+                obj[field] = value
+            else:
+                setattr(obj, field, value)
+        def validate_fields(value):
+            fields = value if isinstance(value, dict) else vars(value) if hasattr(value, "__dict__") else {}
+            for field, item in fields.items():
+                if field.startswith("_") or callable(item):
+                    continue
+                if field in ("joint_pos", "joint_vel", "joint_names", "joint_names_expr", "body_names"):
+                    patterns = list(item) if isinstance(item, (dict, list, tuple)) else [item] if isinstance(item, str) else []
+                    pool = links if field == "body_names" else joints
+                    for pattern in patterns:
+                        if not isinstance(pattern, str) or not any(re.fullmatch(pattern, name) for name in pool):
+                            raise ProtocolError(f"{path}: {field} selection {pattern!r} matches no target name; provide config")
+                elif isinstance(item, dict) or hasattr(item, "__dict__"):
+                    validate_fields(item)
+        for section in ("scene", "actions", "observations", "rewards", "terminations", "events"):
+            validate_fields(getattr(draft, section, None))
+        for term_name, term in vars(draft.actions).items():
+            if term is None or not hasattr(term, "joint_names"):
+                continue
+            dotted = f"actions.{term_name}.joint_names"
+            if dotted not in payload or not isinstance(term.joint_names, list) or not term.joint_names:
+                raise ProtocolError(f"{path}: explicit nonempty {dotted} required (cancel whole terms with null)")
+            names.validate_joint_names(term.joint_names, naming, target=dotted)
+            if not set(term.joint_names) <= set(joints):
+                raise ProtocolError(f"{path}: {dotted} names absent joints")
+        draft.scene.robot.spawn.usd_path = str(body["usd"])
+        cfg.__dict__.update(draft.__dict__)
+        binding["joint_order"] = list(order)
+        binding["runtime_joint_order"] = document.get("runtime_joint_order")
+    print(f"DIAGNOSTIC_TARGET task={task} target={binding['target']} urdf={binding['urdf']} source={binding['source']} naming={names.naming_id(naming)}")
+    return binding
+
+
+def validate_diagnostic_runtime(binding, cfg, robot, sensor, manager) -> None:
+    """Validate exact live joints, four feet and ordered action channels before measuring."""
+    names = _joint_names_module()
+    naming = names.naming_from_binding(binding)
+    names.validate_joint_names(list(robot.joint_names), naming, target=binding["target"],
+                               expected=binding["joint_names"])
+    expected = set(names.contact_body_names(naming))
+    for label, bodies in (("robot", list(robot.body_names)), ("sensor", list(sensor.body_names))):
+        allowed_links = {names.link_name(leg, root) for leg in names.LEGS
+                         for root in names.roots_of(naming, leg)}
+        end_roots = {names.roots_of(naming, leg)[-1] for leg in names.LEGS}
+        foreign = [body for body in bodies if (body.split("_", 1)[0] in names.LEGS
+                   and body not in allowed_links) or (any(body.endswith("_" + root) for root in end_roots)
+                   and body not in expected)]
+        if foreign:
+            raise ProtocolError(f"{binding['target']}: {label} foreign/cross-limb bodies {foreign}")
+        feet = [name for name in bodies if names.is_contact_body_bound(name, naming)]
+        if len(set(bodies)) != len(bodies) or len(feet) != 4 or set(feet) != expected:
+            raise ProtocolError(f"{binding['target']}: {label} feet {feet} != {sorted(expected)}")
+    if not set(sensor.body_names) <= set(robot.body_names):
+        raise ProtocolError(f"{binding['target']}: sensor contains foreign bodies")
+    carried = []
+    for term_name in manager.active_terms:
+        term = manager.get_term(term_name)
+        term_cfg = getattr(cfg.actions, term_name)
+        declared = term_cfg.joint_names
+        patterns = [declared] if isinstance(declared, str) else declared
+        if all(pattern in robot.joint_names for pattern in patterns) and getattr(term_cfg, "preserve_order", False):
+            expected_channels = list(patterns)
+        else:
+            expected_channels = [name for name in robot.joint_names if any(re.fullmatch(p, name) for p in patterns)]
+        actual = list(term._joint_names)
+        if not patterns or not actual or actual != expected_channels:
+            raise ProtocolError(f"{binding['target']}: {term_name} channels {actual} != nonempty cfg {expected_channels}")
+        carried.extend(actual)
+    names.validate_joint_names(carried, naming, target=binding["target"] + " action channels")
+    if len(carried) != manager.total_action_dim or not set(carried) <= set(robot.joint_names):
+        raise ProtocolError(f"{binding['target']}: action dimension/joint mismatch")
+    order = binding.get("runtime_joint_order")
+    if order is not None and list(robot.joint_names) != order:
+        raise ProtocolError(f"{binding['target']}: runtime joint order differs from manifest")
+
+
+def diagnostic_target_self_check() -> None:
+    """Offline loader regression: paired renamed trees, cfg remap and rejection paths."""
+    import copy
+    import tempfile
+    from types import SimpleNamespace as NS
+    from unittest.mock import patch
+
+    names = _joint_names_module()
+    with tempfile.TemporaryDirectory(prefix="diagnostic_target_") as folder:
+        base = pathlib.Path(folder)
+
+        def body(naming_id):
+            naming = names.naming_for(naming_id)
+            directory = base / "assets" / naming_id
+            directory.mkdir(parents=True)
+            usd = directory / f"{naming_id}.usda"
+            usd.write_text("#usda 1.0\n", encoding="utf-8")
+            tree = ET.Element("robot", name=naming_id)
+            ET.SubElement(tree, "link", name="base_link")
+            joints = []
+            for leg in names.LEGS:
+                parent = "base_link"
+                for root in names.roots_of(naming, leg):
+                    child = names.link_name(leg, root)
+                    ET.SubElement(tree, "link", name=child)
+                    joint_name = names.joint_name(leg, root)
+                    joints.append(joint_name)
+                    joint = ET.SubElement(tree, "joint", name=joint_name, type="revolute")
+                    ET.SubElement(joint, "parent", link=parent)
+                    ET.SubElement(joint, "child", link=child)
+                    parent = child
+            urdf = usd.with_suffix(".urdf")
+            ET.ElementTree(tree).write(urdf, encoding="unicode")
+            return usd, urdf, joints
+
+        original_usd, original_urdf, old_joints = body("shared")
+        cfg = NS(scene=NS(robot=NS(spawn=NS(usd_path=str(original_usd)),
+                 init_state=NS(joint_pos={".*_haa_joint": 0.2}),
+                 actuators={"legs": NS(joint_names_expr=[".*_hfe_joint"])}),
+                 foot_sensor=NS(prim_path="{ENV_REGEX_NS}/Robot/lf_foot")),
+                 actions=NS(legs=NS(joint_names=old_joints, scale=0.5, preserve_order=True)))
+        original = {"usd": original_usd, "urdf": original_urdf}
+        params_path = base / "fixture_params.yaml"
+        with patch.dict(globals(), _rl_exp=lambda: base, family_of=lambda task: "lizard2",
+                        body_for_task=lambda task: original,
+                        _params_document=lambda task: ({"robot": {"usd_path": str(original_usd)}}, params_path)):
+            bound = load_diagnostic_target(None, copy.deepcopy(cfg), "fixture")
+            assert bound["joint_names"] == old_joints
+            assert bound["source"] == str(params_path)
+            count = 0
+            for naming_id in ("shared", "split", "palm"):
+                usd, urdf, joints = (original_usd, original_urdf, old_joints) if naming_id == "shared" else body(naming_id)
+                manifest = base / f"{naming_id}.json"
+                binding = names.binding_for_target(str(usd), str(manifest), names.naming_for(naming_id), joint_names=joints)
+                binding.update(task="fixture", urdf=str(urdf))
+                document = {"target_binding": binding, "joint_order": joints,
+                            "runtime_joint_order": joints,
+                            "config": {"actions.legs.joint_names": joints}}
+                if naming_id == "palm":
+                    document["config"]["scene.foot_sensor.prim_path"] = "{ENV_REGEX_NS}/Robot/lf_wrist"
+                manifest.write_text(json.dumps(document), encoding="utf-8")
+                target_cfg = copy.deepcopy(cfg)
+                loaded = load_diagnostic_target(manifest, target_cfg, "fixture")
+                assert target_cfg.scene.robot.spawn.usd_path == str(usd)
+                assert target_cfg.scene.foot_sensor.prim_path.endswith(names.end_link("lf", names.naming_for(naming_id)))
+                assert cfg.scene.robot.spawn.usd_path == str(original_usd)
+                robot = NS(joint_names=joints, body_names=["base_link", *names.contact_body_names(names.naming_for(naming_id))])
+                sensor = NS(body_names=list(reversed(robot.body_names)))
+                manager = NS(active_terms=["legs"], total_action_dim=len(joints), get_term=lambda _: NS(_joint_names=joints))
+                validate_diagnostic_runtime(loaded, target_cfg, robot, sensor, manager)
+                mutations = [lambda d: d["target_binding"].update(task="wrong"),
+                             lambda d: d["target_binding"].update(source=str(base / "wrong.json")),
+                             lambda d: d["target_binding"].update(urdf=str(original_urdf) if naming_id != "shared" else str(base / "wrong.urdf")),
+                             lambda d: d["target_binding"].update(joint_names=joints[:-1]),
+                             lambda d: d["config"].clear(),
+                             lambda d: d["config"].update({"actions.legs.joint_names": []}),
+                             lambda d: d.update(joint_order=joints[:-1]),
+                             lambda d: d.update(joint_order=list(reversed(joints)))]
+                for mutate in mutations:
+                    bad = copy.deepcopy(document)
+                    mutate(bad)
+                    manifest.write_text(json.dumps(bad), encoding="utf-8")
+                    try:
+                        load_diagnostic_target(manifest, copy.deepcopy(cfg), "fixture")
+                    except (ValueError, KeyError):
+                        count += 1
+                    else:
+                        raise AssertionError("malformed manifest accepted")
+                manifest.write_text(json.dumps(document), encoding="utf-8")
+                urdf_text = urdf.read_text(encoding="utf-8")
+                for defect in ("duplicate_parent", "duplicate_link"):
+                    broken_tree = ET.fromstring(urdf_text)
+                    if defect == "duplicate_parent":
+                        duplicate = copy.deepcopy(broken_tree.find("joint"))
+                        duplicate.set("name", "duplicate_parent_fixed")
+                        duplicate.set("type", "fixed")
+                    else:
+                        duplicate = copy.deepcopy(broken_tree.find("link"))
+                    broken_tree.insert(0, duplicate)
+                    ET.ElementTree(broken_tree).write(urdf, encoding="unicode")
+                    try:
+                        load_diagnostic_target(manifest, copy.deepcopy(cfg), "fixture")
+                    except ValueError:
+                        count += 1
+                    else:
+                        raise AssertionError(f"{defect} accepted")
+                    finally:
+                        urdf.write_text(urdf_text, encoding="utf-8")
+                for bad in ([], joints + [joints[0]], joints + ["lf_foreign_joint"]):
+                    bad_cfg = copy.deepcopy(target_cfg)
+                    bad_cfg.actions.legs.joint_names = bad
+                    bad_manager = NS(active_terms=["legs"], total_action_dim=len(bad),
+                                     get_term=lambda _, carried=bad: NS(_joint_names=carried))
+                    try:
+                        validate_diagnostic_runtime(loaded, bad_cfg, robot, sensor, bad_manager)
+                    except ValueError:
+                        count += 1
+                    else:
+                        raise AssertionError("empty/duplicate/foreign action selection accepted")
+                sensor.body_names.remove(names.end_link("lf", names.naming_for(naming_id)))
+                try:
+                    validate_diagnostic_runtime(loaded, target_cfg, robot, sensor, manager)
+                except ValueError:
+                    count += 1
+                else:
+                    raise AssertionError("incomplete sensor accepted")
+            for options in ({"usd_override": str(base / "wrong.usda")}, {"naming_override": "split"}):
+                try:
+                    load_diagnostic_target(None, copy.deepcopy(cfg), "fixture", **options)
+                except ValueError:
+                    count += 1
+                else:
+                    raise AssertionError("unbound override accepted")
+            assert count == 44, count
+    print("DIAGNOSTIC_TARGET_SELF_CHECK_OK: shared/split/palm cfg and runtime; 44 negatives")
 
 
 def dims_for(task_id: str) -> dict[str, int]:
