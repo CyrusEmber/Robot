@@ -212,8 +212,16 @@ PALM_NAMING: dict[str, tuple[str, ...]] = {
     leg: roots[:-1] for leg, roots in SPLIT_NAMING.items()
 }
 
+#: Spatial palm candidate: add upper-limb axial rotation at the shoulder/hip,
+#: before the elbow/knee. The four-role palm and five-role split contracts stay intact.
+PALM_SPATIAL_NAMING: dict[str, tuple[str, ...]] = {
+    leg: roots[:2] + ("shoulder_twist" if leg in FRONT_LEGS else "hip_twist",) + roots[2:]
+    for leg, roots in PALM_NAMING.items()
+}
+
 NAMINGS: dict[str, dict[str, tuple[str, ...]]] = {
     "shared": LEGACY_NAMING, "split": SPLIT_NAMING, "palm": PALM_NAMING,
+    "palm_spatial": PALM_SPATIAL_NAMING,
 }
 
 
@@ -414,7 +422,7 @@ def _self_check() -> None:
 
     # (d) the binding: two namings, one shape of answer, and the split one IS the planned rename read per
     # leg -- which is how a consumer binds it, and how the two limb groups end at two different links.
-    assert set(NAMINGS) == {"shared", "split", "palm"}, sorted(NAMINGS)
+    assert set(NAMINGS) == {"shared", "split", "palm", "palm_spatial"}, sorted(NAMINGS)
     assert naming_for("shared") == LEGACY_NAMING and naming_for("split") == SPLIT_NAMING, sorted(NAMINGS)
     for naming_id, naming in NAMINGS.items():
         assert sorted(naming) == sorted(LEGS), (naming_id, sorted(naming))
@@ -428,6 +436,10 @@ def _self_check() -> None:
     assert end_link("lf", PALM_NAMING) == "lf_wrist"
     assert end_link("rl", PALM_NAMING) == "rl_ankle"
     assert contact_body_patterns(PALM_NAMING) == (".*_ankle", ".*_wrist")
+    for leg, roots in PALM_SPATIAL_NAMING.items():
+        assert roots[:2] + roots[3:] == PALM_NAMING[leg]
+        assert roots[2] == ("shoulder_twist" if leg in FRONT_LEGS else "hip_twist")
+        assert end_link(leg, PALM_SPATIAL_NAMING) == end_link(leg, PALM_NAMING)
     for leg in LEGS:
         assert roots_of(PALM_NAMING, leg) == roots_of(SPLIT_NAMING, leg)[:-1]
         for root in roots_of(PALM_NAMING, leg):
