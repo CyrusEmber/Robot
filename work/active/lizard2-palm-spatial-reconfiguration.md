@@ -4,14 +4,14 @@ title: 肩髋三轴掌链候选与缺失运动能力修复
 scope: rl_exp/blender/scripts, rl_exp/tools/diagnose, rl_exp/tasks/joint_names.py
 status: in_progress
 landing: rl_exp/blender/scripts, rl_exp/tools/diagnose
-next: 执行者按正文复核三轴隔离试作，再交总项 A/E 与限位 PD 专项。
+next: 执行者从试作检查点补组合轨迹、拒错与运行时接线，按正文分段交总项 A/E 与限位 PD 专项。
 close_when: 新上下文核验实际候选、行为证据与交接；有缺口不关闭。
-evidence: acceptance/records/2026-10-14-lizard2-palm-spatial-design-decision.md
+evidence: acceptance/records/2026-10-14-lizard2-palm-spatial-trial-checkpoint.md, acceptance/records/2026-10-14-lizard2-palm-spatial-design-decision.md
 ---
 
 ## 当前范围
 
-当前目标为肩／髋三个共中心串联轴，接肘／膝和腕／踝；无指／趾活动轴。当前只更新方案，在途代码和隔离试作尚待核验。总项 A/E 接收候选，正式采用仍走 D/S6。
+当前目标为肩／髋三个共中心串联轴，接肘／膝和腕／踝；无指／趾活动轴。隔离试作检查点、复读入口及验证边界归 trial-checkpoint 记录；当前继续补完整动作、碰撞拒错和运行时验证。总项 A/E 接收候选，正式采用仍走 D/S6。
 
 按总项“A–E 当前执行关系”分段交付：最小绑定和真实树先支撑 A 的运动学，实际候选再交 E 扩到运行时和报告链；不以本项关闭作为总项几何推进的前提。限位、承重 PD 及躯尾标定由专项与总项 B/C 承接，最终集成仍归 D。
 
