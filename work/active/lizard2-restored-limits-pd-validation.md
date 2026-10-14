@@ -4,7 +4,7 @@ title: lizard2 恢复模型：限位与 PD 验证前提及标定
 scope: rl_exp/blender, rl_exp/tools/diagnose, acceptance/records
 status: in_progress
 landing: rl_exp/blender/scripts/generate_urdf.py, rl_exp/blender/scripts/lizard2_stance_candidate.py, rl_exp/tools/diagnose/palm_motion_boundaries.py, rl_exp/tools/diagnose/palm_5b_targets.json, rl_exp/tools/diagnose/palm_motion_view.py
-next: 执行者按相位修订记录重做掌面拨动/滚动与地面接触几何；收口 1–4 后按 6 做 PD 与承重实测，再定最终范围。
+next: 执行者接收肩髋三轴重构候选并复核受影响的 1–4，再按相位推进 5/6 的动作、PD 与承重实测。
 close_when: 新上下文按正文关闭条件审核实际落点与证据，合格后交机体总项 B/C/D；缺证不关闭。
 evidence: acceptance/records/2026-10-14-lizard2-palm-phase-constraint-correction.md, acceptance/records/2026-10-14-lizard2-5b-motion-boundaries.md, acceptance/records/2026-10-14-lizard2-a-priority-review.md, acceptance/records/2026-10-14-lizard2-restored-validation-handoff.md, acceptance/records/2026-10-13-lizard2-restored-limits-pd-open-issues.md, acceptance/records/2026-10-13-lizard2-hindlimb-restored.md
 ---
@@ -13,11 +13,11 @@ evidence: acceptance/records/2026-10-14-lizard2-palm-phase-constraint-correction
 
 本项承接 `work/active/lizard2-body-drive-candidate.md` 的恢复模型限位与 PD 问题处理；整体结构目标、A/P2/P3 与最终 B/C/D 判据仍归总项。本项完成不等于正式采用或完整步态验收。输入身份、已有读数和未知项只取 evidence；不把诊断导出或历史过滤对照当合格资产。
 
-仅处理恢复原后肢尺寸的隔离候选。reward、冻结配方和正式资产保持不变；四掌共面是中立姿态要求。新参数进隔离配置，口径与拒错进实现/测试，测量结果进 `acceptance/records/`，本项只保留指针。需要改变骨架或增加自由度时，凭目标动作不可表达的证据交总项 A 决策。
+处理恢复原后肢尺寸、按 `work/active/lizard2-palm-spatial-reconfiguration.md` 重构肩髋的隔离候选；接收后重新绑定受影响的轴、动作列、惯量和连接碰撞，旧四轴读数只作对照。reward、冻结配方和正式资产保持不变；四掌共面是中立姿态要求。新参数进隔离配置，口径与拒错进实现/测试，测量结果进 `acceptance/records/`。结构决策及来源归重构事项；额外结构变更仍交总项 A。
 
 ## 执行顺序
 
-先收口 1/2，随后优先做 5a 并交 A；3/4 收口后才做 6 的承重动力学，5b 与 6 逐工况衔接。编号保留用于追溯，不表示必须串行完成 1–6。A 的几何结果无需等待本项关闭；转向、恢复与最终限位仍是未完动作。
+先接收重构事项的实际候选并收口 1/2，随后优先做 5a 并交 A；3/4 收口后才做 6 的承重动力学，5b 与 6 逐工况衔接。编号保留用于追溯，不表示必须串行完成 1–6。A 的几何结果无需等待本项关闭；转向、恢复与最终限位仍是未完动作。
 
 ## 下一步
 
@@ -31,7 +31,7 @@ evidence: acceptance/records/2026-10-14-lizard2-palm-phase-constraint-correction
 
 5. **动作能力与限位（分两次交付）**：
 
-   **5a：先两腿样本，再四肢周期（1/2 收口后）**。先用实际一前一后腿，固定身体做后摆—抬脚—前摆—落掌的闭合几何轨迹；这是身体坐标下的动作能力测试，不测支撑力或推进。执行者先提出体高、步长/侧向容许范围、抬脚高度、周期、掌面及肢段方向容差和采样/加密规则，需用户确认的取值集中一次提出。每腿四自由度不预设能独立控制任意足端六维位姿；区分必须满足的条件与容许区间，不额外锁死掌朝向，失败保留各项残差并复核初值/数值求解，不能直接判缺轴或事后放宽目标。
+   **5a：先两腿样本，再四肢周期（1/2 收口后）**。先用实际一前一后腿，固定身体做后摆—抬脚—前摆—落掌的闭合几何轨迹；这是身体坐标下的动作能力测试，不测支撑力或推进。执行者先提出体高、步长/侧向容许范围、抬脚高度、周期、掌面及肢段方向容差和采样/加密规则，需用户确认的取值集中一次提出。每腿五自由度仍不预设能独立控制任意足端六维位姿；区分必须满足的条件与容许区间，不额外锁死掌朝向，失败保留各项残差并复核初值/数值求解，不能直接判缺轴或事后放宽目标。
 
    限位可人工提出候选，但须绑定关节轴、零位、符号和单位，在同一隔离配置维护并核对导出；Blender 约束不当仿真限位。范围检查保留反曲/翻掌/干涉禁区，未解释边界留未判。两腿通过后，对实际另两腿复核镜像轴与限位符号，再按预定相位核四肢组合碰撞；检查关节轨迹连续、周期接缝及目标速度，明确非零步长/离地要求，原地静止不算迈步；用明确的根运动将支撑足转换到世界系检查落地与滑移，不能把固定身体下后摆当世界系无滑移。交轨迹、侧/俯视动画、余量及失败关节/阶段。只排除有几何依据的连接对；离散通过不称连续域证明，工程轨迹不称动物实测。两腿样本可先交 A，四肢周期仍须完成；不等 PD、转向/恢复或本项关闭，几何通过不代表承重能走。
 
