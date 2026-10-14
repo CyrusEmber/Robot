@@ -2,11 +2,11 @@
 id: lizard2-restored-limits-pd-validation
 title: lizard2 恢复模型：限位与 PD 验证前提及标定
 scope: rl_exp/blender, rl_exp/tools/diagnose, acceptance/records
-status: open
+status: in_progress
 landing: rl_exp/blender/scripts/generate_urdf.py, rl_exp/blender/scripts/lizard2_stance_candidate.py, rl_exp/tools/diagnose
-next: 执行者先按步骤 1 固定可复现输入与失败判定，再定位步骤 2 的中立位置对照；本轮只建计划。
+next: 执行者先读最新交接记录，落实步骤 1 的代码版本及最终复验，补步骤 2–4 缺证；工程包线确认且前提通过后继续步骤 5/6。
 close_when: 新上下文按正文关闭条件审核实际落点与证据，合格后交机体总项 B/C/D；缺证不关闭。
-evidence: acceptance/records/2026-10-13-lizard2-restored-limits-pd-open-issues.md, acceptance/records/2026-10-13-lizard2-hindlimb-restored.md
+evidence: acceptance/records/2026-10-14-lizard2-restored-validation-handoff.md, acceptance/records/2026-10-13-lizard2-restored-limits-pd-open-issues.md, acceptance/records/2026-10-13-lizard2-hindlimb-restored.md
 ---
 
 ## 范围与交接
@@ -17,7 +17,7 @@ evidence: acceptance/records/2026-10-13-lizard2-restored-limits-pd-open-issues.m
 
 ## 下一步
 
-1. **固定输入与失败判定（执行者）**：清点问题记录所用在办脚本、导出器改动、配置及本机产物，形成可复读的代码版本、输入绑定和不覆盖历史产物的命令。当前 `palm_pd_probe.py` 须先完成代码归属与版本落地，不能用本地存在冒充干净提交可复现。退出传播修复归 `work/active/exit-status-swallowed-by-app-close.md`，将该入口交其覆盖；本项验收真实成功/失败各一例，异常可见、退出状态正确，失败不得产生可误读为成功的报告。修复期间同时核对日志、报告身份与完成状态，不只看命令退出码。
+1. **固定输入与失败判定（执行者）**：恢复执行先读 `acceptance/records/2026-10-14-lizard2-restored-validation-handoff.md`；清点问题记录所用在办脚本、导出器改动、配置及本机产物，形成可复读的代码版本、输入绑定和不覆盖历史产物的命令。当前 `palm_pd_probe.py` 须先完成代码归属与版本落地，不能用本地存在冒充干净提交可复现。退出传播修复归 `work/active/exit-status-swallowed-by-app-close.md`，将该入口交其覆盖；本项验收真实成功/失败各一例，异常可见、退出状态正确，失败不得产生可误读为成功的报告。修复期间同时核对日志、报告身份与完成状态，不只看命令退出码。
 
 2. **中立位置与坐标对照（执行者，先于动力学结论）**：明确 Blender 世界、URDF 根/link、USD 及运行时 actor/质心 frame 的转换；登记初始化、状态写入、缓存刷新和物理步时点。逐 body 输出位置与姿态残差，并用实际关节状态构造对应 FK；先检验明确的零位快照，再检验运动后快照，禁止把已运动状态与零位混比。分清检查错误、读取时序或导出/导入偏差，在责任层修复；误差预算按精度与转换链预先说明，不能按失败读数放宽。真实错 pivot/轴/读取状态负例须被拒绝，修复前失败、修复后通过；据此界定历史报告重跑范围。
 
