@@ -3,10 +3,10 @@ id: lizard2-restored-limits-pd-validation
 title: lizard2 恢复模型：限位与 PD 验证前提及标定
 scope: rl_exp/blender, rl_exp/tools/diagnose, acceptance/records
 status: in_progress
-landing: rl_exp/blender/scripts/generate_urdf.py, rl_exp/blender/scripts/lizard2_stance_candidate.py, rl_exp/tools/diagnose
-next: 5a 两腿样本已交（见 a-priority-review 追加）；执行者收口 1/2 并核另两腿镜像，再做四肢周期；1–4 通过后按 6 做惯量初值与三个短测试。
+landing: rl_exp/blender/scripts/generate_urdf.py, rl_exp/blender/scripts/lizard2_stance_candidate.py, rl_exp/tools/diagnose/palm_motion_boundaries.py, rl_exp/tools/diagnose/palm_5b_targets.json, rl_exp/tools/diagnose/palm_motion_view.py
+next: 执行者按 5b 记录复核俯仰恢复与肘部干涉，交 A 决策；收口 1–4 后按 6 做 PD 与承重实测，复核最终策略范围。
 close_when: 新上下文按正文关闭条件审核实际落点与证据，合格后交机体总项 B/C/D；缺证不关闭。
-evidence: acceptance/records/2026-10-14-lizard2-a-priority-review.md, acceptance/records/2026-10-14-lizard2-restored-validation-handoff.md, acceptance/records/2026-10-13-lizard2-restored-limits-pd-open-issues.md, acceptance/records/2026-10-13-lizard2-hindlimb-restored.md
+evidence: acceptance/records/2026-10-14-lizard2-5b-motion-boundaries.md, acceptance/records/2026-10-14-lizard2-a-priority-review.md, acceptance/records/2026-10-14-lizard2-restored-validation-handoff.md, acceptance/records/2026-10-13-lizard2-restored-limits-pd-open-issues.md, acceptance/records/2026-10-13-lizard2-hindlimb-restored.md
 ---
 
 ## 范围与交接
@@ -36,6 +36,8 @@ evidence: acceptance/records/2026-10-14-lizard2-a-priority-review.md, acceptance
    限位可人工提出候选，但须绑定关节轴、零位、符号和单位，在同一隔离配置维护并核对导出；Blender 约束不当仿真限位。范围检查保留反曲/翻掌/干涉禁区，未解释边界留未判。两腿通过后，对实际另两腿复核镜像轴与限位符号，再按预定相位核四肢组合碰撞；检查关节轨迹连续、周期接缝及目标速度，明确非零步长/离地要求，原地静止不算迈步；用明确的根运动将支撑足转换到世界系检查落地与滑移，不能把固定身体下后摆当世界系无滑移。交轨迹、侧/俯视动画、余量及失败关节/阶段。只排除有几何依据的连接对；离散通过不称连续域证明，工程轨迹不称动物实测。两腿样本可先交 A，四肢周期仍须完成；不等 PD、转向/恢复或本项关闭，几何通过不代表承重能走。
 
    **5b：扩展工况并定范围（5a 后，保持在办）**。逐项补转向与恢复目标及组合碰撞，定位肘膝伸直/折叠和实体干涉边界；区分机械硬限位、策略目标范围与阶段约束。策略范围由可行动作包络及步骤 6 实测跟踪/恢复余量确定，允许非对称。首个直行周期只给该工况候选范围，不能代替全部工况定稿；不足回 A 检查轴/结构或修订目标。
+
+   当前几何交付见 `acceptance/records/2026-10-14-lizard2-5b-motion-boundaries.md`。执行者先复核记录中的俯仰恢复与肘部干涉，再向总项 A 交动作目标或结构修订；保持既定判据，不能把采样包络当独立关节安全盒。受推恢复、跟踪余量与最终范围继续由步骤 6 实测收口。
 
 6. **惯量初值与少量校准（1–4 通过、5a 四肢周期可行后）**：
 
