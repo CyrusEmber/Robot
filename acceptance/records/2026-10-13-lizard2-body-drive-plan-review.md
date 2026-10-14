@@ -182,3 +182,216 @@ F1–F4 和 E 执行核查的未完动作必须有当前计划落点及接收方
 ### 未覆盖边界
 
 这是计划回写自检，不是新上下文重新审核通过，也不是 E 代码修复、P3 实现、B/C 标定或 D 验收。实际缺口与运行红项仍待执行；用户没有在此批准新数值、机体采用或训练。其它会话工作树修改未纳入本次。
+
+## 追加：E 双目标实际消费者执行（2026-10-13）
+
+### 适用范围
+
+按主事项更新后的 E2–E4 执行。shared 旧链和 split 同几何改名样本用于验证命名、运行接线及真实 writer → reader；palm 仅验证四角色声明与拒错，不证明当前候选几何/动力学。不训练、不采用、不改冻结配方、协议、锁或资产断言。用户要求不再开子代理后，后续修改、复跑和本段回填均直接执行。
+
+工作树存在并行修改。本轮起点为 `acd5c59bd2fefe699b3381e58da1b002d5d1c9b8`；回填时 HEAD 为 `fa48465ae702cc25f3390b7ba804d63a388c7219`，**不是本轮代码已提交的证明**。本轮代码仍为 dirty 工作树，以下文件摘要才绑定实际实现；早期真跑与末段复跑分开记述。Blender 两个共用脚本另含其它会话 palm 工作，不将整份 diff 或 `lizard2_palm_diagnostic` 当本轮已审交付。
+
+实际源码 SHA256（由 `rl_exp/tools/runrecord/binding.py:sha256_file` 取得）：
+
+| 路径 | SHA256 |
+|---|---|
+| `rl_exp/tasks/joint_names.py` | `262030343b8d379388e8011892673ddff0e6df024c2e464a0fb2239f78f980e5` |
+| `rl_exp/tasks/obs_protocol.py` | `b64108dd2156fb1508e04eab0b06271a1d8589dcbeff6fb9df628831d268f967` |
+| `rl_exp/tools/verify/baseline_probe.py` | `ff1564679f3a04709dbc73896a8156206e5abc68f89fa070b3d6b8ee0489a0ba` |
+| `rl_exp/tools/verify/check_leg_reachability.py` | `5ce3c54c0712b40edd56803b1aa854a292f8a495de16753c696046632b60efb2` |
+| `rl_exp/tools/verify/check_self_collision.py` | `3425518c66192b60fad9edc44a586adf8b7b2dedcf9f73d27d792e9b6d8d7bf6` |
+| `rl_exp/tools/verify/test_baseline_contract.py` | `4287205c9f8f3e894bb66e78015fb5c27c198d5a65fd6987df81c834bd7ae741` |
+| `rl_exp/tools/diagnose/diagnose_support.py` | `68f550123f98b82d4f2fc1d28a6b80dca36578d5e92a9bc16c7ea03269655464` |
+| `rl_exp/tools/diagnose/gait_probe.py` | `0acaff8ee7f02ffd0590614e2b5170ea4cfe89f2b67bdc653432ec6f6a16075e` |
+| `rl_exp/tools/diagnose/plot_joints.py` | `b8d4e2576fc66d2f4f8c48bab2db2b14c049871a0ce46976c2c7f31cc694f25a` |
+| `ablation_harness/baseline_eval.py` | `5dad0f0d0564b546c2efbb68367a29405b27f83e837a075fcc1b512eefbe9a5b` |
+| `ablation_harness/baseline_metrics.py` | `fbd63fb5ec784488d568f0dd96e373d10a1f4ad8a4fb4b409c8730f77c1a3929` |
+| `rl_exp/blender/scripts/generate_urdf.py` | `b6f67578e493a942ed15632eabecc7b2348fde22bb9d54c2f3d33dc9db347bf8` |
+| `rl_exp/blender/scripts/lizard2_stance_candidate.py` | `1552583d6044c36010f4499050dabdc11b34ba5d326bd34827cc81cd900fd80b` |
+| `rl_exp/tools/verify/check_contact_ownership.py` | `0b8168c14eef0f0e7d7ef7713508e380cd17e0d10b467e7473246324287e8e7c` |
+| `rl_exp/tools/verify/check_joint_layout.py` | `330e0565b9f5038b5df4a0d16206431b14b2493f8d5c341ee9f0f198e1a940d4` |
+| `rl_exp/tools/verify/obs_protocol_live.py` | `c86b82fc88f584f2b3e05322ba164fe65674234e5eb48122213f222f6e402057` |
+| `rl_exp/tools/diagnose/diag_metrics.py` | `a8e71e08b7cb333a92f9f6d1eaae31054cfb1d635e94c8f352393f8164bca9ef` |
+| `rl_exp/tools/diagnose/stance_step_probe.py` | `ffdf52e13fcf4321ff0bbd1e66ec0d249e2a4fc4546f1275ae709f35d684ba0f` |
+
+### 验收条件
+
+沿用主事项 E2–E4，不降低出口：入口声明随实际目标传递；逐腿角色/末端、URDF 树、runtime joint order、动作和传感器精确核对；同几何改名经过同一实际消费者数值一致；错误绑定、混合/重名/缺项/空集拒绝；两套实际 writer 输出均经实际 reader。旧资产红项不放宽，受阻必需链不能凭“旧红”豁免。E 自检不是 D 后独立审核。
+
+### 结果
+
+**E 的双命名接线已大幅推进，但仍未达到第一波完整出口。** 两套旧几何样本的实际布局、站姿、步态、基线、在线协议和支撑测量均已运行；当前 palm 真实候选仍受 A 前提约束，接触所有权/资产自检及全仓闸门仍红，不宣布交付、不关闭事项、不提交未闭环代码。
+
+#### 1. 输入与隔离样本
+
+本机目录 `rl_exp/out/lizard2_e_20261013_final/`；其中 `shared.json` / `split.json` 为唯一目标来源，各有目标 USD/URDF、逐腿角色、精确末端、动作列表、URDF 顺序及实际运行测得的 `runtime_joint_order`。二者 task 都是 `Lizard2-Flat-Play-v3`。默认姿态、PD/动作尺度等由 deepcopy 后的诊断配置映射；不写冻结 yaml 或 runtime registry。
+
+| 本机输入 | SHA256 |
+|---|---|
+| `shared.json` | `3a6cea0372668b5a5b72f7b61bf306d9c307e851293de1ddcecd0ba521a9cbec` |
+| `split.json` | `743c0a489c6913b9053580421083515213f1bd1927ca1632a0dc8b38b0b3dc1b` |
+| `lizard2_candidate_shared.urdf` | `9c57fbb7af1558c7da86d19650c5a6bd28fdaafcd27b1517f0ff31db09baf1c7` |
+| `lizard2_candidate_shared.usda` | `cce0989b30fb642138aa8a20752a1d5042ed6499417ee70319135dc40c1fde6d` |
+| `lizard2_candidate_split.urdf` | `d758c56f69f7eb3d65684db37ca49f249630777c2757448ec47f3ae385e7aecd` |
+| `lizard2_candidate_split.usda` | `dc41586cf31eb89a38f69e2157804b78c8b009a823de6a212e47e22db9ac95a6` |
+
+`identity.json` 记录两份 USD 各 104 prim、2289 属性（1722 数值属性）、215 relationship，经名称/路径映射后已 authored 数据全等。复读 adopted 源摘要仍为 URDF `da05432efd5d3c3dd9302682286825869b289d5f912cb5703bd0d32642e0c52b`、USD `fceaf55be1f045572121c464cb32e1eb0ae7d5d0ba63dfbe9a0d943f84df3b6c`，未被本轮改写。
+
+真实 Blender 导出落在该目录 `blender_shared/lizard2_candidate.urdf` 与 `blender_split/lizard2_candidate_split.urdf`，分别 31 link / 30 joint；SHA256 分别 `da05432efd5d3c3dd9302682286825869b289d5f912cb5703bd0d32642e0c52b` / `e69b0290ee93d47a987d9ce5c6fa34c5f80b7c35de69ad75c35bd232af78ce5b`。各 80 个 OBJ/STL，摘要多重集合相同，树/轴/惯量按角色映射等值。源 `rl_exp/blender/lizard2_stance_candidate.blend` 摘要 `0a503c7069d665779392f7f8997c3839e807def9787df97cd0d1b2eb4cf41deb`。末段真实 Blender `--contract_self_check` 通过：旧消费者 3、split 1、memory-only palm 1、负例 10，388 个保护文件未变；此处 palm 正例明确 `geometry_proven=False`。
+
+#### 2. 实际消费者与最终补洞
+
+- `joint_names.py` 保留旧接口语义，新增精确 bound 接触接口、普通 binding 数据和校验；`PLANNED_ACTIVE` 不进入新选择路径。显式 `--naming` 仅作一致性检查，不能覆盖所选目标。
+- `obs_protocol.load_diagnostic_target` 复用既有路径解析，验证来源、目标 task、摘要、角色/父关节/连通、重 link/多父关节、明确 URDF 顺序及动作列表。默认入口来源改为实际参数文档。`validate_diagnostic_runtime` 对 actual robot/sensor/action 名称和顺序核对；最后补上 active term 空动作拒绝，取消整个动作项用显式 null，不把空匹配作为合法通道。
+- `gait_probe` 局部关节列表遮蔽模块的问题修复；shank 取真实末端父 link，网格取实际 URDF。不凭五轴链补 palm 不存在的 finger/toe。
+- `check_leg_reachability.compare` 原 shared/split 文本交集为空，实际只读 1 个零姿态。现先将局部 chain token 对齐稳定角色，真实双入口 lf/rl 各比较 32 个非零极值组合；两侧位置跨度、有向掌面及 hinge 读数相同，不冒充目标动作通过。
+- `baseline_probe` 原隔离入口主动不取 frozen approved width，却继续硬要求 approved，造成必红。现隔离分支核正式 term 顺序、每项正宽度及真实 observation tensor 总宽；明确打印 `not protocol approval`。正式无 approved 的原断言仍红。四环境而非单环境复跑，避免用 1 个样本证明 per-env 随机差异。
+- `diagnose_support` 精确选四端，保留 sensor 返回顺序，按名称映射 robot 几何索引；全 body 力与位置也同序。网格来自实际目标 URDF，非足排序使用 bound 谓词；无 collider 显示从实际 mesh 集合取得，不再输出旧 `_kfe` 名。
+- `check_self_collision` 使用各自声明和实际树，报告的姿态数改为此次实际 `poses` 长度，附目标/来源/命名，避免 split 报告又按 shared 重新计数。
+
+早期真实布局两目标 `LAYOUT_GATES PASSED`：30 actual joints、22 action channels，其余为该 cfg 显式未命令关节；站姿探针在每个目标完成 20 settle 与三段各 10 step，0.15 rad，根角色实际 action column 5 / scale 0.5，shared 为 `lf_hip_joint`、split 为 `lf_shoulder_swing_joint`。两目标 `obs_protocol_live` 都真实进入 `BOUND_FEET` 分支并退出 0，不是无 extero 造成空循环。
+
+末段最终源码两目标 `baseline_probe --num_envs 4 --steps 10` 均 `BASELINE_PROBE_OK`；实际 policy 宽 94，per-env sampled 检查通过。两目标 `diagnose_support --phases 0` 使用真实检查点 `E:/IsaacLab/logs/rsl_rl/lizard2_v3/2026-10-10_10-14-50/model_950.pt`，摘要 `16cb99de784fc2fde41736ca3358009ce14546fcf256d28ed2dab31bd89da3e0`，均退出 0。policy 与 zero-action 两个测量窗口全 body 承重比各为 1.001 / 1.0001；标量和具名 mesh 读数一致，非足列表名称随各自绑定不同，未把整份 JSON 宣称逐字相同。该旧检查点只用于同几何命名影响诊断，不作候选性能批准。
+
+#### 3. writer → reader 交接
+
+四份新 writer 均写 `target_binding` 与 `target_binding_required=True`，source 是各自 manifest。读者从报告取命名，拒绝缺来源/角色/列、混合名称、重名、冲突和 marked 新报告缺整个 binding；没有 marker/binding 的历史报告只走原历史分支。marker 不是防篡改签名，二者均被删除时无法单独证明产物不是历史报告。
+
+| 实际 writer 产物（样本目录内） | SHA256 |
+|---|---|
+| `shared_gait_final.json` | `25813c16f59f373bd541cd617b66d13a63be1b5640c485bc356e7181d55bd00e` |
+| `split_gait_final.json` | `df10fc6d207bd5baf4e8d5f6f38a0d24cb06703bd5ecf24a29a398843c415f63` |
+| `shared_baseline.json` | `e05a28042830ba90621a7fa730226e04c4931768a9becc44d58a4a655ad355dd` |
+| `split_baseline.json` | `b130e0a0668c438e6274cddcd71aa62fb43efca97bd7fb3e8c6f37688922dd79` |
+| `shared_baseline.frames.pt` | `951eb48437fb6b2bc19ba4390a605e5b5b1f6a0eeb803d18067b6c0d7bd116b0` |
+| `split_baseline.frames.pt` | `33e2301e15e0acdf7131791cffda8c776bd13a1f3012b5bea5e49a3fbc07fdf6` |
+
+gait 两目标均实际 zero policy 10 个控制步，两份 `series` 相同；末段 `plot_joints` 实读两份输出并绘图，退出 0。baseline writer 使用冻结 `ablation_harness/protocols/lizard2_flat_v5.json`；两份无 checkpoint 报告的判词是 **smoke_only**，不是 pass。两份 frames 都经实际 `baseline_metrics` 复读退出 0；复读输出的性能判词不作为该无策略 smoke 的批准。
+
+最终支撑产物 `rl_exp/tools/diagnose/out/lizard2_e_shared_final_20261013/p0_measure_check.json` / `lizard2_e_split_final_20261013/p0_measure_check.json`，摘要分别 `e5ec338360d03b2efb6155b677b882167e611d1caae00db93ac690d8edc9e746` / `8139af7cd49c893a73e107c4606d04dcb6546b8acc0a4da00fcd3bae25214d05`，同样写入目标 binding。
+
+#### 4. 回归及真实红项
+
+- `test_baseline_contract.py` 整套通过，含 shared/split/palm 同数据报告 roundtrip、真实 judge/plot 数值一致及混合、缺列、缺来源、重名等负例；原 acceptance metrics 5 项仍通过。
+- loader self-check 最终 44 个负例通过，含空 active action、缺/重复/foreign action。支撑自检 shared/split/palm 与 sensor 置换通过，旧四筛选在 split/palm 共 RED 8 次。
+- 修复前失败验证在内存中撤去对应修复，不改共用工作树：角色对齐撤去后 `32 poses` 断言失败（旧结果只有 1 pose）；隔离 observation 分支撤去后实际测试得到 `obs/policy-width-approved=False` 而失败；空动作检查撤去后 loader 测试报 `malformed manifest accepted`。恢复实现后三者通过。持久复读方法见下方。
+- 最终双碰撞实际各跑 132 pose、136 pair，40 个 hull 反例、32 个 mesh 确认，最差 hull margin -222.86016620166515 mm；二者都退出 1 / `SELF_COLLISION_COUNTEREXAMPLE`。按真实角色归一且消除名称排序后 pairs、overlaps、confirmed 全等。**数值同义验证通过，碰撞设计验收不通过**；不修改 clearance、姿态或网格抹红。产物 `shared_collision_final.json` / `split_collision_final.json` 摘要 `b2a782ec4b1c350f62fd6a336396715c044db1eafee97cb5c88b65de818845b2` / `70e7e2792b9bedee25aa92870ad29344353f084fe55882774b11072952e88ba4`。
+- 原 `gait_probe --self-check` 末段同条件仍退出 1：lizard2 cap 实读 `0.11928214877843857`，原断言 `0.013352`；交 `floor-contact-attribution`，未删或放宽。
+- 两目标真实 `check_contact_ownership` 都 `CONTACT_OWNERSHIP_FAILED (1)`：shared 罚选四个 `_kfe`、split 对应腕/踝 link 均无 collider。保留原罚选和同几何资产；这不是命名失败，但阻止该必需链按完整通过交付。
+- 最终 `offline_final.log`：37 项中 36 通过、1 失败、0 skipped。失败是 `check_record_bindings`，落在其它会话 `lizard2_specimen_proportions.py:61` 与 `palm_pd_probe.py:433` 的重复文件摘要实现；本轮 E 自有重复实现已复用单点，不替其它会话改稿、不绕 hook。`git diff --check` 通过。闸门红与共用脚本归属未闭环，未 stage/commit/push。
+
+### 证据引用
+
+所有命令从仓根运行，解释器为 `E:/IsaacLab/env_isaaclab/Scripts/python.exe`。本机样本和日志不承诺入仓。下面的 reader 与 self-check 可原样复读；writer 重采集须使用未存在的输出名，不能覆盖本段已绑定报告。
+
+```cmd
+set "PY=E:\IsaacLab\env_isaaclab\Scripts\python.exe"
+set "ECASE=rl_exp\out\lizard2_e_20261013_final"
+"%PY%" -B rl_exp\tools\verify\check_leg_reachability.py --self-check
+"%PY%" -B rl_exp\tools\verify\check_leg_reachability.py --break-test
+"%PY%" -B -c "import sys;sys.path.insert(0,'rl_exp/tasks');import obs_protocol;obs_protocol.diagnostic_target_self_check()"
+"%PY%" -B rl_exp\tools\verify\test_baseline_contract.py
+"%PY%" -B rl_exp\tools\diagnose\diagnose_support.py --self_check_bindings
+"E:\SteamLibrary\steamapps\common\Blender\blender.exe" --background --factory-startup --python-exit-code 1 --python rl_exp\blender\scripts\lizard2_stance_candidate.py -- --contract_self_check
+"%PY%" -B rl_exp\tools\verify\check_leg_reachability.py --target_config %ECASE%\shared.json --compare_target_config %ECASE%\split.json --leg lf --samples 2
+"%PY%" -B rl_exp\tools\verify\check_leg_reachability.py --target_config %ECASE%\shared.json --compare_target_config %ECASE%\split.json --leg rl --samples 2
+"%PY%" -B rl_exp\tools\verify\baseline_probe.py --task Lizard2-Flat-Play-v3 --target_config %ECASE%\shared.json --num_envs 4 --steps 10 --headless
+"%PY%" -B rl_exp\tools\verify\baseline_probe.py --task Lizard2-Flat-Play-v3 --target_config %ECASE%\split.json --num_envs 4 --steps 10 --headless
+"%PY%" -B rl_exp\tools\diagnose\plot_joints.py --report %ECASE%\shared_gait_final.json --out_dir %ECASE%\shared_plots_final
+"%PY%" -B rl_exp\tools\diagnose\plot_joints.py --report %ECASE%\split_gait_final.json --out_dir %ECASE%\split_plots_final
+"%PY%" -B -m ablation_harness.baseline_metrics %ECASE%\shared_baseline.frames.pt
+"%PY%" -B -m ablation_harness.baseline_metrics %ECASE%\split_baseline.frames.pt
+"%PY%" -B rl_exp\tools\diagnose\gait_probe.py --self-check
+"%PY%" -B rl_exp\tools\verify\offline_suite.py --python "%PY%" --jobs 4
+```
+
+真实重采集形状（shared 与 split 分别执行；以下 `_replay` 输出必须未存在）：
+
+```cmd
+"%PY%" -B rl_exp\tools\diagnose\gait_probe.py --task Lizard2-Flat-Play-v3 --target_config %ECASE%\split.json --policy_mode zero --speeds 0.5 --seconds 0.2 --headless --out %ECASE%\split_gait_replay.json
+"%PY%" -B ablation_harness\baseline_eval.py --task Lizard2-Flat-Play-v3 --target_config %ECASE%\split.json --protocol ablation_harness\protocols\lizard2_flat_v5.json --num_envs 1 --headless --output %ECASE%\split_baseline_replay.json
+"%PY%" -B rl_exp\tools\diagnose\diagnose_support.py --task Lizard2-Flat-Play-v3 --target_config %ECASE%\split.json --checkpoint "E:\IsaacLab\logs\rsl_rl\lizard2_v3\2026-10-10_10-14-50\model_950.pt" --phases 0 --headless --label lizard2_e_split_replay
+"%PY%" -B rl_exp\tools\verify\check_self_collision.py --family lizard2 --target_config %ECASE%\shared.json --json %ECASE%\shared_collision_replay.json
+"%PY%" -B rl_exp\tools\verify\check_self_collision.py --family lizard2 --target_config %ECASE%\split.json --json %ECASE%\split_collision_replay.json
+```
+
+两条碰撞命令分别跑；上一条红不得用 `&&` 使第二条漏验。重制双样本入口是 `check_leg_reachability.py --prepare_diagnostic_twins <新rl_exp/out目录>`，随后真实 runtime order 从新产物读回，不借 frozen registry。Blender 原样本导出命令为 `generate_urdf.py -- --robot lizard2_candidate` / `lizard2_candidate_split`，均带 `--blend rl_exp/blender/lizard2_stance_candidate.blend --out_dir <新隔离目录>`；错源/错目标、缺 out/已存在 out/隔离外写均须写前拒绝，palm contract 仍不可导出。
+
+修复前回归的持久复读：加载上述实际模块源码到内存，保留新增测试，分别撤去 `compare` 中 `for chain, bound ...` 到 `tokens_a` 前的角色对齐块、把 baseline AST 中 `if args_cli.target_config: manager = ...` 对应分支条件置 False、撤去 loader/runtime 的非空动作条件，再运行 `_naming_twin_check` / `test_probe_isolated_observation_contract` / `diagnostic_target_self_check`。本轮三次都实测非零；此操作只执行内存源码，不能覆盖共用工作树。正常代码复读同测试必须退出 0。
+
+早期日志为样本目录 `*_layout.log`、`*_stance.log`、`*_live.log`、`*_gait_final.log`、`*_baseline.log`、`*_contact.log`；末段最终复跑为 `*_probe_final.log`、`*_support_final.log`、`*_collision_final.log`、`offline_final.log`、`blender_contract_final.log`。接收方为 `lizard2-contact-protocol` 动作 7（字段契约及双报告）与 `floor-contact-attribution`（支撑绑定和未消除的资产前提），不等待 S6。
+
+### 未覆盖边界
+
+1. 当前恢复后肢的 palm 实际候选、P2/P3 几何/惯量/运动连接及后续承重标定仍未由本轮批准；其它会话的诊断导出不解除主事项 A 的停止条件。shared/split 孪生不是该四角色新几何。
+2. 资产 cap 与 contact ownership 红项仍阻止完整 E 出口；碰撞极值同义不证明动作周期无碰撞。不得借本段将旧红豁免或将第一波标为完成。
+3. `load_diagnostic_target` 对 deepcopy 配置的字段名递归映射仍有维护上限：未来新字段可能漏接或误接，本轮不扩张为通用转换框架；新增配置需显式声明并复跑 actual runtime。这一风险未被编译/声明一致检查消除。
+4. B 的有效限速和线性承重对照、C 协同标定、S5 用户阈值与 D 最终比较/独立审核均未完成。本段只为 E 实施自检，不提供完成整个事项或训练/采用的授权。
+5. 最终完整离线闸门仍红，代码和共用文件归属未形成可安全提交的闭环；未提交、未推送。解除真实缺口后须重跑受影响消费者及闸门，D 就绪后才按原流程独立审核。
+
+## 追加：E 双目标执行记录复核（2026-10-14）
+
+### 适用范围
+
+用户要求更新 E 双目标执行记录。本次复核上段源码/产物摘要、真实报告绑定并复跑离线自检及全仓套件；不修改实现，不重采集 Blender 或 IsaacLab 动力学，不覆盖既有日志。上段 2026-10-13 的结果保留为历史快照；当前闸门状态以本段为准。
+
+复核时 HEAD 为 `3f6dba3a73c5fad592b13672d3e2c01e8d352246`。上段列出的 18 份 E 源码仍有工作树改动，摘要逐一相同；HEAD 前进不表示这些代码已提交。主事项与两个接收方已引用本记录，本次不重复回写读数或改变 work 状态。
+
+### 验收条件
+
+沿用主事项 E2–E4 与第一波出口：源码及产物可复读，双目标报告绑定与数值一致；资产前提、必需消费者和完整闸门缺口不得豁免。离线复核不替代新候选实际运行或 D 后独立审核。
+
+### 结果
+
+**E 仍未达到第一波完整出口。** 当前确认如下：
+
+| 复核面 | 本次结果 | 证据边界 |
+|---|---|---|
+| 源码与已绑定产物 | 上段 18 份源码、6 份双样本输入、6 份 writer 产物，以及 2 份碰撞、2 份 Blender URDF、2 份支撑产物，摘要全部相同 | 共 18 份产物未变，不代表本次重跑物理或完整检查所有 mesh |
+| 正式资产保护 | adopted URDF/USD 摘要仍分别为 `da05432efd5d3c3dd9302682286825869b289d5f912cb5703bd0d32642e0c52b` / `fceaf55be1f045572121c464cb32e1eb0ae7d5d0ba63dfbe9a0d943f84df3b6c` | 未改正式资产、冻结配方、协议或锁 |
+| 双 writer 绑定 | 两份 gait 与两份 baseline JSON 均有 `target_binding_required=True`，source 分别指向实际 shared/split manifest；两份 gait 的 `envs[*].series` 全等 | 对既有实际 writer 产物复核，不是手工改名报告或新采集 |
+| 名表、FK、反证 | `joint_names.py`、FK `--self-check`、`--break-test` 均退出 0 | 纯模块与几何口径，不证明候选动力学 |
+| 入口与支撑绑定 | loader 自检退出 0，44 个负例；支撑自检退出 0，shared/split/palm、sensor 置换与负例通过，旧筛选 RED=8 | palm 仍仅声明/拒错覆盖，不证明真实四角色几何 |
+| 双报告 reader | 两份 `.frames.pt` 经实际 `baseline_metrics` 复读均退出 0，`binding_validation=target_binding`，分别识别 shared/split | 使用产物内嵌协议；原无 checkpoint writer 的 `smoke_only` 不因 reader 成功升格为 pass |
+| 原资产 cap | `gait_probe --self-check` 仍退出 1：实读 `0.11928214877843857`，原断言 `0.013352` | 未删除或放宽；继续交 `floor-contact-attribution` |
+| 当前完整离线套件 | 37 项中 36 通过、1 失败、0 skipped；退出 1，49.6 s，jobs=4。baseline 契约项通过，含 acceptance metrics 5 项；work 形状检查覆盖 87 项 | 唯一失败仍为 `check_record_bindings`，见下方；全套未绿 |
+
+**闸门缺口更新：** 当前 `check_record_bindings` 只报告 `rl_exp/blender/scripts/lizard2_specimen_proportions.py:61` 的文件摘要重复实现。上段历史日志还报告的 `rl_exp/tools/diagnose/palm_pd_probe.py:433` 已不在本次告警中；当前该探针调用 `binding.sha256_file`。这只证明该重复实现告警消失，不代表 palm 验证前提、PD 标定或候选验收完成。本次不改另一路实现以消红。
+
+当前套件相关源码绑定（摘要由 `rl_exp/tools/runrecord/binding.py:sha256_file` 取得）：
+
+| 路径 | SHA256 |
+|---|---|
+| `rl_exp/tools/diagnose/palm_pd_probe.py` | `9a8791baa79a1a090138932285253002ab00f801cb9e958636bcf7c7e5a274ad` |
+| `rl_exp/blender/scripts/lizard2_specimen_proportions.py` | `302e24cd0a86ec2b0286316dc7f5a86ec6e7740cd42365d4966c3836e3300cb9` |
+| `rl_exp/tools/verify/offline_suite.py` | `805d4d2eda33300741e33e892fb054568684092981bfd152041d3b5674db4dad` |
+| `rl_exp/tools/verify/check_record_bindings.py` | `8f537f1d7b92fadd78242677f8d57875002802365ea98d5ddf51477df4295268` |
+
+### 证据引用
+
+- 历史真跑、全部 E 源码与双样本/报告摘要：本记录“追加：E 双目标实际消费者执行”。本段只复核，不改其采集日期与判词。
+- 历史完整套件日志：`rl_exp/out/lizard2_e_20261013_final/offline_final.log`，SHA256 `c7d8a992bbd76d047b8e92d0c6e0ece6c455f4821009301682ae44dbab5a6f59`，仍包含当时两个重复实现告警；未用本次输出覆盖它。本次完整复跑输出来自命令终端，未另存日志，可按下方命令复读。
+- 当前动作与出口：`work/active/lizard2-body-drive-candidate.md` E2–E4；writer 契约接收方为 `work/active/lizard2-contact-protocol.md` 动作 7；cap/接触前提接收方为 `work/active/floor-contact-attribution.md`。
+- 所有命令从仓根运行；样本和日志仍为本机证据，不承诺入仓。
+
+```cmd
+set "PY=E:\IsaacLab\env_isaaclab\Scripts\python.exe"
+set "ECASE=rl_exp\out\lizard2_e_20261013_final"
+"%PY%" -B rl_exp\tasks\joint_names.py
+"%PY%" -B rl_exp\tools\verify\check_leg_reachability.py --self-check
+"%PY%" -B rl_exp\tools\verify\check_leg_reachability.py --break-test
+"%PY%" -B -c "import sys;sys.path.insert(0,'rl_exp/tasks');import obs_protocol;obs_protocol.diagnostic_target_self_check()"
+"%PY%" -B rl_exp\tools\diagnose\diagnose_support.py --self_check_bindings
+"%PY%" -B -m ablation_harness.baseline_metrics %ECASE%\shared_baseline.frames.pt
+"%PY%" -B -m ablation_harness.baseline_metrics %ECASE%\split_baseline.frames.pt
+"%PY%" -B rl_exp\tools\diagnose\gait_probe.py --self-check
+"%PY%" -B rl_exp\tools\verify\offline_suite.py --python "%PY%" --jobs 4
+```
+
+命令逐条执行，预期 cap 与完整套件仍非零，不能用 `&&` 隐去后续检查。摘要复核用既有 `binding.sha256_file` 与上段表逐项比较；gait 数值比较应取 `envs[*].series`，不是不存在的顶层 `series`。
+
+### 未覆盖边界
+
+1. 本次没有重跑双目标布局、站姿、在线传感器、writer、支撑动力学、全碰撞扫描或 Blender 导出；这些仅按上段真跑和未变产物引用。原 contact ownership 与碰撞红项未被解除。
+2. 当前恢复后肢的真实 palm 候选仍须完成 A/P2/P3 前提及 E/D 实际消费；B 的有效限速/线性承重、C 标定、S5 阈值与 D 比较/新上下文审核未由本次完成。
+3. 本次仅更新该记录；既有 work evidence 指针继续有效，不关闭事项。完整闸门仍红，E 实现与共用文件归属仍未闭环；本轮未 stage/commit/push，也不宣布交付、训练或采用。
