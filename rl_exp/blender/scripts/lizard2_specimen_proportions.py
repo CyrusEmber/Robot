@@ -12,7 +12,7 @@ while solving the same four-sole ground constraint.
 """
 
 import argparse
-import hashlib
+import importlib.util
 import json
 import math
 from pathlib import Path
@@ -22,6 +22,10 @@ import bpy
 from mathutils import Matrix, Quaternion, Vector
 from mathutils.bvhtree import BVHTree
 
+_binding_spec = importlib.util.spec_from_file_location(
+    "file_binding", Path(__file__).resolve().parents[2] / "tools" / "runrecord" / "binding.py")
+file_binding = importlib.util.module_from_spec(_binding_spec)
+_binding_spec.loader.exec_module(file_binding)
 
 SOURCE = Path(__file__).resolve().parents[1] / (
     "lizard2_palm_p2_sample_claw_all_lowered_body75_vertical_tail_ground/sample_neutral.blend"
@@ -58,7 +62,7 @@ def main():
     if output.exists() and not args.check_only:
         raise ValueError("Output exists; use --check_only or a new directory")
     assert output != SOURCE.parent.resolve()
-    digest = hashlib.sha256(SOURCE.read_bytes()).hexdigest()
+    digest = file_binding.sha256_file(SOURCE)
     assert digest == SOURCE_SHA256, "Unexpected source; review its geometry before rebuilding"
     bpy.ops.wm.open_mainfile(filepath=str(SOURCE))
     arm = next(o for o in bpy.context.scene.objects if o.type == "ARMATURE")
@@ -286,8 +290,8 @@ def main():
             bone.rotation_quaternion, bone.rotation_mode = old_quat, old_mode
             bpy.context.view_layer.update()
     check()
-    assert hashlib.sha256(SOURCE.read_bytes()).hexdigest() == digest
-    report["saved_sha256"] = hashlib.sha256((output / "sample_neutral.blend").read_bytes()).hexdigest()
+    assert file_binding.sha256_file(SOURCE) == digest
+    report["saved_sha256"] = file_binding.sha256_file(output / "sample_neutral.blend")
     if args.check_only:
         print("SPECIMEN CHECK PASS", json.dumps(report))
         return
