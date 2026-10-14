@@ -225,7 +225,11 @@ LIST_BYTES = 6144
 #: at the current 4000-byte item average this buys five more items. Two things do not change with the
 #: number: the note above already asked for a merge or a shave instead of a raise, and the alarm gets
 #: weaker every time this grows -- the next raise should carry one of those two, not this note again.
-BUDGET_BYTES = 120000
+#: Raised 120000 -> 150000 on 2026-10-14 at the user's explicit request to keep complete
+#: configuration plans in active items instead of moving them into decision records for space.
+#: Before restoration: 121493 bytes over 27 active items. Keep outcomes in acceptance records;
+#: this changes the aggregate alarm threshold, not the unfinished-work or review requirements.
+BUDGET_BYTES = 150000
 
 _SHA = re.compile(r"\bsha256:[0-9a-fA-F]{8,}")
 #: A prose reference to a ledger file, spelled the way a document writes it. Placeholders
