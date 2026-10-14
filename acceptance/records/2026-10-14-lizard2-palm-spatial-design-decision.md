@@ -24,6 +24,16 @@
 
 恢复正文后，活跃事项共 27 项、125187/150000 字节。提交前的 `check_suite_banners`、`framework_pin_check --strict --self-test`、`check_dr_parity --strict`、`check_version_docs`、`check_work_docs --self-test` 和 `check_obs_protocol --live` 均通过；框架检查提示 IsaacLab 工作树有既存未提交修改，版本检查提示历史版本缺 tag。本轮没有据此认定候选运动或物理通过。
 
+### A–E 联动修订
+
+用户继续指出 A–E 也需同步修改。复核发现：总项 A 的部分生成入口仍以恢复尺寸/四轴候选为当前对象；E 的完整出口仍主要覆盖同几何双命名，未把实际新链全程消费列为必需；B 缺少新增 twist 与共中心轴耦合的明确动作；C 的“沿用现有机体”可能把旧标定带入新构型；D 未明确禁止拼接不同构型的证据。
+
+本轮在总项正文补充 A–E 依赖表并逐节修订：A 以真实三轴候选验证实体随动与周期；E 最小绑定先供 A、真实新链运行和报告消费作为完整出口；B 增加五角色驱动与耦合检查；C 用同一新候选及驱动配置比较协同；D 绑定同一资产/接线/驱动/协同集合，再验证完整周期、转向和恢复。同步专项步骤 6 与重构事项交接边界。旧命名兼容、远端连接、自然接触相位、既有未完动作及独立审核要求继续保留。
+
+这次仍仅修订方案，未运行或验收三轴模型、PD 或步态；没有把五个诊断驱动角色自动定义为正式策略动作集合。
+
+联动修订后复跑提交前六项检查：`check_suite_banners`、`framework_pin_check --strict --self-test`、`check_dr_parity --strict`、`check_version_docs`、`check_work_docs`、`check_obs_protocol --live` 均通过，既存框架脏树和历史版本缺 tag 提示保留。活跃事项 27 项、130749/150000 字节；`git diff --check` 通过。没有执行模型生成或动力学验证。
+
 ## 证据引用
 
 - 决策来源：当前对话中用户对三个串联关节实现方式的明确选择。
