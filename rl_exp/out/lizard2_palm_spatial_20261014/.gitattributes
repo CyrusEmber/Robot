@@ -1,4 +1,4 @@
 # Preserve byte identities recorded by the trial's build and probe reports.
-/checkpoint_v3/** -text
-/checkpoint_v3_probe/** -text
-/checkpoint_v3_locked/** -text
+/checkpoint_v3/** -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+/checkpoint_v3_probe/** -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+/checkpoint_v3_locked/** -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol

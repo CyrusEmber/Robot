@@ -29,6 +29,8 @@
 
 暂存时另发现 Git 换行规范化会改变 URDF 字节、破坏报告哈希：修复前逐项对照 `git show :<文件>` 与 build.json，真实报告 `palm_spatial.urdf` 不匹配。已在试作目录的 `.gitattributes` 对本次三个输出目录设置 `-text`；重新暂存后，38 个候选文件以及 build/正反例报告、两个脚本的索引字节均与实测版本一致。此设置只保存检查点字节，不改变全仓换行约定；复读可用 `git show HEAD:<文件>` 的字节经统一 `binding.sha256_bytes` 与对应报告哈希比较。
 
+实际提交和索引共 43 个已绑定文件均通过字节核对。该包的空白检查显式认可原有 CRLF 行尾（`cr-at-eol`），仍检查尾随空格、文件末尾空行和 tab 前空格；全组提交的 `git diff --check` 通过。
+
 ## 证据引用
 
 - 生成与实际快照：`rl_exp/out/lizard2_palm_spatial_20261014/checkpoint_v3/build.json`。
