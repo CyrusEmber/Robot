@@ -4,18 +4,18 @@ title: lizard2 机体与驱动候选：蜥蜴骨段朝向、人手式足掌、�
 scope: rl_exp/blender, rl_exp/tools/pipeline, rl_exp/tools/verify, rl_exp/tools/diagnose, rl_exp/tasks, acceptance/records
 status: in_progress
 landing: rl_exp/blender/scripts/lizard2_specimen_proportions.py, rl_exp/blender/scripts/lizard2_stance_candidate.py, rl_exp/blender/scripts/generate_urdf.py, rl_exp/tools/diagnose/gait_probe.py, rl_exp/tools/diagnose/stance_step_probe.py, rl_exp/tools/diagnose/plot_joints.py, rl_exp/tools/verify/check_leg_reachability.py, rl_exp/tools/verify/check_self_collision.py, rl_exp/tools/verify/check_joint_layout.py, rl_exp/tools/verify/baseline_probe.py, rl_exp/tasks/joint_names.py, ablation_harness/baseline_metrics.py
-next: 执行者按 lizard2-restored-limits-pd-validation 处理恢复模型验证前提与标定，E3/E4 接线继续；未判不定稿。
+next: 执行者按专项步骤 1/2 收口坐标证据，优先交 A 的低速直行周期运动学结果；惯量、碰撞与 PD 按依赖续办。
 close_when: 新上下文按正文“关闭条件”核验 R1–R5 与 D 记录，用户确认外观和动作；未判定不关闭。
-evidence: acceptance/records/2026-10-13-lizard2-restored-limits-pd-open-issues.md, acceptance/records/2026-10-13-lizard2-hindlimb-restored.md, acceptance/records/2026-10-13-lizard2-a-implementation-plan-review.md, acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md, acceptance/records/2026-10-13-lizard2-natural-ground-tail.md, acceptance/records/2026-10-13-lizard2-lowered-body-vertical-shanks.md, acceptance/records/2026-10-12-lizard2-four-palms-lowered.md, acceptance/records/2026-10-12-lizard2-claw-palm-shape.md, acceptance/records/2026-10-12-lizard2-palm-p2-sample.md, acceptance/records/2026-10-12-lizard2-palm-chain-p1.md, acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory, acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, acceptance/records/2026-10-08-lizard2-joint-design-review-contract, acceptance/records/2026-10-08-lizard2-r1-numeric-reference-and-decision-drafts
+evidence: acceptance/records/2026-10-14-lizard2-a-priority-review.md, acceptance/records/2026-10-13-lizard2-restored-limits-pd-open-issues.md, acceptance/records/2026-10-13-lizard2-hindlimb-restored.md, acceptance/records/2026-10-13-lizard2-a-implementation-plan-review.md, acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md, acceptance/records/2026-10-13-lizard2-natural-ground-tail.md, acceptance/records/2026-10-13-lizard2-lowered-body-vertical-shanks.md, acceptance/records/2026-10-12-lizard2-four-palms-lowered.md, acceptance/records/2026-10-12-lizard2-claw-palm-shape.md, acceptance/records/2026-10-12-lizard2-palm-p2-sample.md, acceptance/records/2026-10-12-lizard2-palm-chain-p1.md, acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory, acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, acceptance/records/2026-10-08-lizard2-joint-design-review-contract, acceptance/records/2026-10-08-lizard2-r1-numeric-reference-and-decision-drafts
 ---
 
 本项取代 S0–S4 串联审核：各节仅自检，D 集成后一次审核。整体需求见整体记录；A 节用户拍板覆盖旧指/趾根约束。判据归 R1–R5/A，本项只留动作与交付顺序。
 
 ## 下一步
 
-1. **恢复 A/B 探测前先处理阻断**：执行步骤与专项关闭条件唯一归 `work/active/lizard2-restored-limits-pd-validation.md`；该项交回后按本项 A/B/C/D 继续。当前问题证据取 `acceptance/records/2026-10-13-lizard2-restored-limits-pd-open-issues.md`，源几何取 hindlimb-restored 记录。专项完成不替代 A/P2/P3、外观确认或 D 最终审核；正式资产不动。
+1. **先交 A 的运动能力结果**：按 `work/active/lizard2-restored-limits-pd-validation.md` 步骤 1/2 固定输入并收口坐标证据，随即执行步骤 5a 的低速直行周期；不等待该专项关闭、完整 PD 标定或转向/恢复验收。惯量与运行时连接碰撞继续按步骤 3/4 收口，仅阻断依赖它们的动力学。当前进展与复验边界见 a-priority-review 记录；正式资产不动。
 2. **完成 E 的必需消费者**：按 E3 清单补目标绑定与精确拒错、`gait_probe`、Blender 导出及报告 writer；运行时成对隔离配置由 E 交付，实际动作、默认位姿、传感器及 `joint_order` 与各自 USD 同绑定，不等 S6 正式采用。现有进展与未验范围只取审核记录“追加：E 执行情况核查”。
-3. **并行边界**：A 选 pivot/轴消费 B 的能力约束，按线性对照进行，不新建驱动机制；有效限速前置仍归 B。E 接线前，A 只核对旧名源几何，不让未接线工具测新名候选；C 可用现有机体开展。
+3. **并行边界**：A 选 pivot/轴消费 B 的能力约束，按线性对照进行，不新建驱动机制；有效限速前置仍归 B。A 使用已核 palm 绑定的隔离入口推进运动学，不等 E 全部消费者完成；未接线工具仍不得测新名候选。C 可用现有机体开展。
 4. **先解除资产前提**：`gait_probe` 的资产前提交 `floor-contact-attribution` 的 ⑤/⑪；不借 E 改资产或放宽断言。声明面边界与既有自检覆盖只取本项 2026-10-12 evidence。
 5. **标定、比较与审核**：A/E 前置成立后，B/C 在获准安全预算和设计不变量内形成标定记录，交 `lizard2-family-landing` S5 的阈值前置动作；该动作不等本项关闭。阈值由用户确认并固定后，D 才做最终比较；A/B/C/D 自检就绪再置 pending_review，next 点名新上下文审核者。已训 v3、采用资产与趴姿边界见本项“边界”。
 
@@ -139,18 +139,18 @@ evidence: acceptance/records/2026-10-13-lizard2-restored-limits-pd-open-issues.m
 
 ### A2. 关键假设 → 最小探测 → 停止条件
 
-按 P1 → P2 → P3 → P4 推进；每一步仅做探测必需的最小修补，先证高风险前提，再批量制作或转换。各判据仅在本表定义，A3 与关闭条件引用；数值读数只进具名验收记录。
+按 P1 → P2 → P3 → P4 推进；P3 的坐标/网格一致性收口后，优先执行专项步骤 5a 的周期运动学，不等待惯量、PD 或专项关闭。P3 剩余资产验证仍须在 P4 动力学前完成。每步只补当前探测必需的能力；判据在本表及所引专项各有唯一落点，读数归验收记录。
 
 | 关键假设（可证伪） | 最小探测（输入/对照、入口与命令、观察判据） | 停止条件（失败/缺证时停哪一步、谁处理） |
 |---|---|---|
 | **P1：真实链能表达目标，不补回旧末端轴** | C0 复读旧基线；下方 P1 入口消费显式 `palm` 四角色及真实 Blender 父子树，旧 shared/split 不改义。判据与证据见 palm-chain-p1 记录。**声明一致，不证明几何**。 | 不将内存契约小样导出或采用；两肢几何探测见 P2 记录。 |
-| **P2：骨架和网格在掌根连接，转动不脱节** | 旧一前一后小样只读保留；按用户批准四肢同步、降低掌体，C1 核实际镜像及肘/膝、腕/踝单关节转动。共同坐标系量连接残差、掌骨方向、网格端点、镜像、掌底与球底、运动连接残差及下段—掌表面交叉；pivot 在掌根而非板中央。获准诊断不当 ROM；位置/镜像容差另按测量精度提出。**几何/运动行为**。 | 当前产物取 hindlimb-restored 记录，natural-ground-tail 及其 body75 为只读上游；执行者自检几何/碰撞，用户确认新姿态与工程容差，新上下文审核统一在 D 后。缺证、错位或脱节停 P2 回 A；旧角度认可不延伸到新姿态，未验不进 P3，不转换、不放宽容差。 |
-| **P3：导出保留同一连接，轴与真实网格不冲突** | P2 及用户外观确认后，先补 C2 的真实 palm 导出目标及消费路径，再出隔离 URDF；核对后 C3 转独立 USD。C4 复用真实树/FK/碰撞，核对 DCC—URDF—USD 的树、pivot、轴、末端、网格及质心/惯量。旧链 + 主动腕踝为零号对照；同一批准目标覆盖支撑—摆动周期与限位，判据引用上文目标及 R1–R5，导出误差容差先获准。**结构一致 + 几何行为**。 | 执行者先在原导出器补获准 palm 轴/网格/惯量及写前拒错，再补 FK 真实角色、实际碰撞对与 C4 命令；旧链 `--pose`/位次/自检不得硬套。缺导出目标或命令、绑定错、漂移或碰撞失败，停回 E/A，不进 B/D；只读 contract 不能解除前置。 |
+| **P2：骨架和网格在掌根连接，转动不脱节** | 旧一前一后小样只读保留；按用户批准四肢同步、降低掌体，C1 核实际镜像及肘/膝、腕/踝单关节转动。共同坐标系量连接残差、掌骨方向、网格端点、镜像、掌底与球底、运动连接残差及下段—掌表面交叉；pivot 在掌根而非板中央。获准诊断不当 ROM；位置/镜像容差另按测量精度提出。**几何/运动行为**。 | 当前产物取 hindlimb-restored 记录，natural-ground-tail 及其 body75 为只读上游；执行者自检几何/碰撞，用户确认新姿态与工程容差，新上下文审核统一在 D 后。缺证、错位或脱节停 P2 回 A；旧角度认可不延伸到新姿态，未验不认定 P3 通过、不放宽容差；可复用现有隔离诊断件定位缺口，不作正式交付。 |
+| **P3：导出保留同一连接，轴与真实网格不冲突** | 复用 C2/C3 的本地诊断导出与隔离 USD，先核输入、代码归属及已有证据；诊断探测不代表 P2 或外观验收通过。C4 复用真实树/FK/碰撞，核对 DCC—URDF—USD 的树、pivot、轴、末端、网格及质心/惯量。旧链 + 主动腕踝为零号对照；坐标可信后先按专项步骤 5a 验一个直行周期，判据引用上文目标及 R1–R5，导出误差容差先获准。**结构一致 + 几何行为**。 | 执行者收口现有导出器的 palm 轴/网格/惯量及写前拒错，再补周期求解、实际碰撞对与 C4 命令；旧链 `--pose`/位次/自检不得硬套。缺导出目标或命令、绑定错、漂移或碰撞失败，停回 E/A，不进 B/D；只读 contract 不能解除前置。 |
 | **P4：无指/趾轴的掌面承重能完成目标动作** | `stance_step_probe.py` 接真实末端/动作通道；B/C 先按下文“标定前置”形成同几何线性对照和协同标定，交 S5 阈值前置动作，不要求本项已审或关闭。用户固定最终性能判据后 D 以同目标、载荷、驱动、窗口跑完整周期比较，分记掌面接触、变形、滑移/滚动与推进。**动力学行为，FK/静力不能替代**。 | 缺实际候选隔离 cfg、精确命令、获准安全预算或接触测量口径，停 B/C 标定前；缺固定性能判据，停 D 最终比较前。失败回 A/B，不归因奖励、不自动加轴；额外自由度凭缺失能力请用户决策。 |
 
 ### A3. 探测入口与计划命令
 
-从仓根运行；占位符替换为已核隔离路径，生成器会重建输出网格，禁止指向采用资产。C0 验旧工具，P1 只读验证契约；C1 取最新隔离分支记录。C2 尚需实现，C3 仅列转换器调用形状，待输入与驱动核验后使用；C4/P4 接线前不虚构命令。
+从仓根运行；占位符替换为已核隔离路径，生成器会重建输出网格，禁止指向采用资产。C0 验旧工具，P1 只读验证契约；C1 取最新隔离分支记录。C2/C3 优先复用已绑定的诊断产物，按证据差异决定是否重导；C4 周期求解与 P4 动力学接线未核前不虚构命令。
 
 **C0：旧工具基线（只读，不指定候选）**
 
@@ -171,23 +171,15 @@ evidence: acceptance/records/2026-10-13-lizard2-restored-limits-pd-open-issues.m
 
 当前恢复候选使用 `lizard2_specimen_proportions.py --restore_source_lengths --output_dir <独立目录>`；复读加 `--check_only`，真实旧放大几何的拒错检查取记录命令。输入、实际命令与结果取 hindlimb-restored 记录，natural-ground-tail 为固定只读源，诊断角仍按已有授权。不调用会写采用候选路径的无参数旧入口；早期两肢 P2 命令仅复读对应历史样本，不能生成当前整机候选。
 
-**C2：真实 palm URDF 导出（待实现，先通过 P2）**
+**C2/C3：收口现有 palm 诊断导出与隔离 USD**
 
-执行者在 `generate_urdf.py` 的 `ROBOT_SPECS` 及实际写出路径补当前四角色 palm 构建目标，消费获准的轴、源骨树、关节/link、网格归属和质量/惯量。以同一已核整机场景验证隔离导出，旧源/错目标须在写网格前拒绝；只读 `lizard2_palm_contract` 仍保留原契约含义，不能仅解除阻断或换 CLI 名充作实现。
+复用 `generate_urdf.py --robot lizard2_palm_diagnostic` 及 `palm_pd_probe.py` 的隔离转换/惯量修正入口；输入、命令和当前限制见 a-priority-review 与 restored-validation-handoff 记录。先固定代码、源骨树、轴、网格归属及报告绑定，再按专项步骤 1–4 收口。`lizard2_palm_contract` 仍只验契约；诊断导出不等于 P2/P3 验收或正式采用。
 
-完成后在具名记录中给出真实 `--robot`、`--blend`、`--out_dir` 命令和实际 URDF 路径，再供 C3 使用。旧 `lizard2_candidate` 绑定 shared 五轴链，不用于当前 palm；这里不预填尚不存在的可执行命令。
+只在源件、导出逻辑或转换设置改变时重建对应产物，使用新的隔离路径，不覆盖历史。旧 `lizard2_candidate` 的 shared 五轴链和家族 dev 驱动参数不能直接套到 palm；正式资产路径保持不变。
 
-**C3：隔离 USD 转换（先完成 P3 的 URDF 检查）**
+**C4：先做一个低速直行周期；P4 另验动力学**
 
-```cmd
-"E:\IsaacLab\env_isaaclab\Scripts\python.exe" rl_exp\tools\pipeline\convert_urdf.py --headless --robot lizard2 --urdf "<C2实际输出URDF完整路径>" --name <独立候选资产名>
-```
-
-`--robot lizard2` 仍读取该家族 dev yaml 的转换参数，不等于新链运行配置；执行者须先核对 palm 角色的驱动匹配，不符则补隔离转换参数入口后再执行，不改正式配方凑匹配。`--name` 决定 `rl_exp/assets/<独立候选资产名>/` 输出，禁止省略或与采用资产同名；转换后把实际 USD 绑定到 E 的隔离配置，清理仅限核实过的隔离输出。
-
-**C4 与 P4：待接线的真实候选检查**
-
-复用 `check_leg_reachability.py`、`check_self_collision.py`、`stance_step_probe.py`；执行者接真实角色/末端并核 CLI 后填 FK、碰撞对和隔离运行命令。不硬填旧五轴 pose/`split` 或未批准的默认 clearance/幅度；编译、help、名表自检不解除 A2 行为前提。
+坐标链通过后，按专项步骤 5a 的唯一判据交付周期轨迹、可视化及失败定位；复用真实树/FK/碰撞入口，仅补周期求解所缺能力。小角度快照和单关节扫描不替代周期验证。几何出口可先交 A，专项步骤 3/4 和完整关闭不作为它的等待条件；P4 仍须满足 B/C 标定前置。
 
 ### A4. 验收与交接
 
