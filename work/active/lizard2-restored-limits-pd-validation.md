@@ -4,7 +4,7 @@ title: lizard2 恢复模型：限位与 PD 验证前提及标定
 scope: rl_exp/blender, rl_exp/tools/diagnose, acceptance/records
 status: in_progress
 landing: rl_exp/blender/scripts/generate_urdf.py, rl_exp/blender/scripts/lizard2_stance_candidate.py, rl_exp/tools/diagnose
-next: 执行者收口 1/2 后按 5a 交两腿样本及四肢周期；1–4 通过后按 6 做惯量初值与三个短测试。
+next: 5a 两腿样本已交（见 a-priority-review 追加）；执行者收口 1/2 并核另两腿镜像，再做四肢周期；1–4 通过后按 6 做惯量初值与三个短测试。
 close_when: 新上下文按正文关闭条件审核实际落点与证据，合格后交机体总项 B/C/D；缺证不关闭。
 evidence: acceptance/records/2026-10-14-lizard2-a-priority-review.md, acceptance/records/2026-10-14-lizard2-restored-validation-handoff.md, acceptance/records/2026-10-13-lizard2-restored-limits-pd-open-issues.md, acceptance/records/2026-10-13-lizard2-hindlimb-restored.md
 ---

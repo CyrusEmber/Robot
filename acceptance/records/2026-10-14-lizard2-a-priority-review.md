@@ -53,10 +53,66 @@
 
 方法参考：[Isaac Sim Gain Tuner：Tuning Gains](https://docs.isaacsim.omniverse.nvidia.com/latest/robot_setup/ext_isaacsim_robot_setup_gain_tuner.html#tuning-gains) 的频率/阻尼比与惯量关系；只借用调参方法，不要求安装工具、升级当前框架或假定当前驱动字段与 latest 相同。本轮的三个短测试及两腿先行顺序是项目取舍。
 
+### 追加：步骤 4 过滤集合约束修复与复验
+
+执行者只改 `palm_pd_probe.py`：扫描得到的连接对在写入 `FilteredPairsAPI` 前，与 `approved` 六对做集合严格相等及无重复检查，不符即拒绝；新增 `--inject_error scan_extra`（向扫描结果追加 `lf_wrist ↔ rl_ankle`）。同次修了身份快照的缺陷：个别已加载模块的 `__file__` 不是真实文件，使代码快照写入中途 `FileNotFoundError`，现仅收录真实 `.py`。本次改动后脚本 SHA256 `0a98beb4d1c33f8495193372839ea42e8363f1e67ecae82be7adf3f1fc34bea1`，仓库 rev `0f9c2ee85361`，输入沿用上节 URDF/USD/probe 报告，命令形状同 handoff 记录，输出均在 `rl_exp/out/lizard2_palm_pd_restored_20261013/`，未覆盖旧文件。
+
+| 输出前缀 | 工况 | 结果 |
+|---|---|---|
+| `scan_v1_extra.*` | 扫描额外对（首次） | 快照缺陷致进程失败，无效；半成品保留，不作证据 |
+| `scan_v2_extra.*` | 扫描额外对，修复后 | 在写入前以 `AssertionError: Scanned connections differ from approved set` 拒绝，差集即注入对，进程退出码 1，无完成报告 |
+| `scan_v2_nofix_extra.*` | 对照：临时关闭该断言（已还原） | 同一注入对通过并写出完成报告，证明修复前该洞存在；**不是合格运行**，勿当成功读 |
+| `scan_v2_six.*` | 六对过滤正例 | 完成，`completed: true`，六对精确相等，中立位无残余力 |
+| `scan_v2_cross.*` | 六对过滤 + 跨腿负例 | 完成，`completed: true`，`lf_wrist ↔ rl_ankle` 实际接触力超过 1 N 断言 |
+
+边界：断言只约束“扫描集合 = 批准集合”这一层；`approved` 本身的具名连接依据仍是人工清单（树关系与无碰撞中间体由扫描分支校验）。以上是单次中立位、600 步以内的碰撞归因，不证明整个动作域安全；步骤 1/2 的退出传播（`exit-status-swallowed-by-app-close`）仍未验，本次退出状态靠 shell 返回码与日志双读，未验证 `AppLauncher` 关闭路径。步骤 3（质量/惯量）及动力学前提未因此解除。代码仍未入仓、仍有未归属的 E 接线改动，历史 `resume_v1_*` 报告对应旧脚本，过滤相关的重跑范围到此为止，其余几何/惯量/坐标报告不因本次改动重跑。
+
+### 追加：5a 一前一后两腿身体坐标样本
+
+用户确认配置后，执行者新增 `rl_exp/tools/diagnose/palm_gait_kinematics.py`（未跟踪、未入仓）。这是身体固定下的几何动作能力样本：不测承重、世界系滑移或推进，也不是动物实测。输入为上节 `lizard2_palm_diagnostic.urdf`（SHA256 `ec247886a6512e8cc70ba86261970eed8f205e92de98a70eba1dc577f3ce7cc2`）。
+
+**配置（用户确认，2026-10-14）**：样本腿 `lf` + `rr`；步长 0.20 m；抬脚 0.05 m；周期 1.0 s；支撑占比 0.6；采样 400 帧；位置容差 1e-4 m；掌面倾斜 ≤2°；限位余量 ≥0.02 rad；关节速度 ≤URDF 限速 50%；非批准过滤对间隙 ≥5 mm；帧间步长 ≤0.05 rad。足底参考点取零位最低顶点均值，掌面水平为本样本自选约束。
+
+**正式运行**：`rl_exp/out/lizard2_palm_gait_5a_20261014/final2/`（`report.json`、`trajectory.csv`、`side.gif`、`top.gif`），脚本 SHA256 `87207f0af37de9dfe0d315bae8f19e10a5b2cf676379cc77967d5e401efd3c11`，仓库 rev `0f9c2ee85361`。状态 `PASS_SAMPLED_NOT_CONTINUOUS_NOT_LOADED`：两腿位置残差约 1e-14 m、倾斜约 1e-6°、周期接缝约 1e-15 rad；最大帧间步长 0.0053 rad；最小限位余量 0.338 rad；最大关节速度 2.13 rad/s（限速 6–10 rad/s）。碰撞：81 对、100 个采样帧，非批准对在 160 mm 预筛选范围内无任何近邻，故无最近对读数。复读：同命令加 `--output_dir` 换新目录；`final`、`run3` 是更早的同配置运行（脚本哈希不同），不当最终证据。
+
+**反例与对照**（各自新目录，均在同目录下）：
+
+| 目录 | 工况 | 结果 |
+|---|---|---|
+| `run1` | 首版求解器 | `lf` 连续跟踪陷入局部最小值：残差 0.1 m、接缝 0.223 rad，失败；单帧多初值重解均得零残差，故目标可达，缺陷在求解器 |
+| `neg_axis_sign` | `rr` 一个轴取反 | 失败退出码 1：`rr` 位置残差 0.150 m、倾斜 11.5° |
+| `neg_step_long` | 步长 0.9 m | 失败退出码 1：残差、限位余量、速度均越界 |
+| `neg_collide_control` | 加 `chest_yaw=0.6`（live probe 已知使 `lf_wrist ↔ rl_ankle` 接触） | 失败：报出 `lf_wrist~rl_ankle` −29.6 mm，另有 `lf_elbow~rl_knee` −29.9 mm、`lf_elbow~rl_hip_abduct` −12.0 mm；证明碰撞检测能报出已知接触 |
+| `sens_clear300` | 间隙阈值 0.3 m | 无效：读到 −700 mm 级虚假穿透。`mesh_gap` 的符号只在近距离是包含证据（其文档已声明），远距离为平面侧伪影；已改为大于 30 mm 时取绝对距离。该目录保留，不当证据 |
+| `sens_clear80` / `sens_clear150` | 阈值 80 / 150 mm | 均通过，说明所有非批准对的间隙大于 150 mm（`collisions_closest` 仍为空） |
+
+**边界与未解决项**：
+- 样本离散（每 2.5 ms 一帧、碰撞 100 帧）通过，不称连续域证明；固定身体两腿后摆不是世界系支撑，不能当作可走。
+- `oracle` 与求解器共用 `Leg.pose`，只能抓住被扰动的轴/符号，抓不到共享的 FK 错误；FK 的外部对照仍是上节坐标快照与此前 `check_leg_reachability.py` 一致性，本次未重做。
+- `collide_control` 目前借 `chest_yaw` 构造接触，只验证检测器会报，不验证本样本腿在干涉边界上的余量；该余量要从负例 `neg_step_long` 之外的渐近步长扫描得到，未做。
+- 修复前失败：`run1` 与旧求解器即同一缺陷的修复前读数；碰撞检测灵敏度见 `neg_collide_control`。
+- 模块文档字符串之前把 `oracle` 说成“独立 FK”，已更正。
+
+### 追加：5a 四肢对角相位周期与镜像复核
+
+在同一脚本加 `--legs four`（`lf`+`rr` 相位 0，`rf`+`rl` 相位 0.5，即对角小跑相位）和镜像检查：由 URDF 轴按矢状面反射推出每个关节的符号，核对左右限位及左右运动。其余配置与上节相同。脚本现 SHA256 `5f1a74770605ceac0e857e394381bdb4603c466b1ec381f407c619729f4856e2`（上节 `final2` 的哈希已被取代，其结论由 `two_final3` 在新哈希下复现，`final2` 不再当最终证据）。
+
+| 目录 | 工况 | 结果 |
+|---|---|---|
+| `four_v1` | 四肢，正式 | 通过。四腿位置残差约 0、倾斜约 1e-6°、接缝约 0；`lf/rf` 与 `rl/rr` 四对关节符号均为 +1，限位失配 0，运动失配分别约 6e-8、3e-7 rad；非批准对 126 对、100 帧，160 mm 内无近邻 |
+| `four_neg_mirror` | 一对镜像符号取反 | 失败：`lf/rf` 运动差 0.446 rad、`rl/rr` 0.365 rad |
+| `four_neg_collide` | 四肢 + `chest_yaw=0.6` | 失败并报出 `lf_wrist~rl_ankle` −29.6 mm、`lf_elbow~rl_knee` −29.9 mm 等，阳性对照有效 |
+| `two_final3` | 两腿，回归 | 通过，同哈希 |
+
+读法：镜像符号全为 +1 表示左右腿在 URDF 中轴向互为矢状面镜像，限位对称；这是根据 URDF 推出的，不独立验证 Blender 骨骼本身。四肢周期仍是身体固定下的几何：对角两脚同时落地时，身体固定意味着没有重心、承重或世界系滑移的约束，不能当作可走；这些与转向、恢复一起交 5b 与步骤 6。
+
+**边界**：关节速度来自 400 帧有限差分，没有加速度或力矩检查；本节未对 `rf`/`rl` 单独做轴符号负例，只做了镜像整体负例。
+- 未做：转向、恢复、承重、滑移。
+
 ## 证据引用
 
-复读上列 JSON 的 `identity`、状态及对应日志，并对照 `rl_exp/tools/diagnose/palm_pd_probe.py`、`palm_asset_probe.py` 和 `rl_exp/blender/scripts/generate_urdf.py`；本次只修订 `work/active/lizard2-body-drive-candidate.md` 与 `work/active/lizard2-restored-limits-pd-validation.md`。
+复读上列 JSON 的 `identity`、状态及对应日志，并对照 `rl_exp/tools/diagnose/palm_pd_probe.py`、`palm_asset_probe.py`、`palm_gait_kinematics.py` 和 `rl_exp/blender/scripts/generate_urdf.py`；本次修订 `work/active/lizard2-body-drive-candidate.md` 与 `work/active/lizard2-restored-limits-pd-validation.md`。
 
 ## 未覆盖边界
 
-未执行新仿真或关闭审核，未修复过滤代码，未确定工程数值、限位或 PD；几何周期和承重行为仍待执行。
+未做关闭审核，未确定限位或 PD；5b 的转向/恢复、四肢周期和承重行为仍待执行。过滤集合约束与 5a 两腿样本的范围见上两节追加。

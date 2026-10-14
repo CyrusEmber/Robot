@@ -59,6 +59,9 @@
 | `rl_exp\tools\trainlog\probe_run.py` | 训练中巡检（只读 tfevents，秒级，不起仿真）：进度 / ETA / 趋势 / 终止计数 / 课程值 / 告警 |
 | `rl_exp\tools\trainlog\dump_tb.py` | TB 事件 → `vN\tb_scalars.csv`（按 tag 抽样、**保首尾**；`--csv_in` 重抽样不需 tensorboard） |
 | `rl_exp\tools\verify\view_terrain.py` | GUI 看机器人站**指定版本的真实地形**（每 env 头向箭头 + 接触点探针 vs 碰撞栈预算） |
+| `rl_exp\tools\diagnose\palm_asset_probe.py` | **Blender 内取 palm 候选的实际枢轴与绑定网格**（`blender --python`，只读源 `.blend`，不改源）；输出须在 `rl_exp\out` 下，供 `palm_pd_probe.py` 的 `--blender_snapshot` 对照 |
+| `rl_exp\tools\diagnose\palm_gait_kinematics.py` | **palm 候选身体固定下的步态几何样本**（无仿真）：`--legs two`（`lf`+`rr`）/ `four`（对角小跑相位），每腿 4 自由度解足底点 + 掌面水平，报残差 / 周期接缝 / 限位余量 / 关节速度 / 网格间隙 / 左右镜像；`--inject_error` 给轴符号、步长、碰撞、镜像负例。**不证明承重、滑移或能走** |
+| `rl_exp\tools\diagnose\palm_pd_probe.py` | **palm 候选的 USD/仿真身份绑定与诊断**（`env_isaaclab` 的 python，起 Isaac）：坐标 / 惯量 / 碰撞过滤 / PD 各自 `--*_only` 工况，报告含输入哈希与代码快照；`--inject_error` 给错 pivot/轴/状态/过滤的拒错负例。仅诊断，不是合格资产验收 |
 | `rl_exp\tools\diagnose\plot_joints.py` | 读探针报告出图（**不起仿真**）：逐关节实际/目标/两条限位 + 贴限位着色 + 逐关节"贴限位帧占比"柱图；`--at_stop_rad` 是判据带宽、**`--naming`（`shared`/`split`）声明该报告词根**（三条腿关节按链位次取，脚体与键名对不上即拒，否则画空行)；`--self-check` 手算边界 |
 | `rl_exp\tools\diagnose\pose_slider.py` | **交互摆姿器**（固定机身、无重力、无仿真）：四腿各 5 关节 + 机身高度滑块；读数 = 每腿倾角 / 最低顶点离地 / 足端偏移 / 末次触碰关节的轴向与导数（与 `check_leg_reachability.py` 同口径）。`limits` 只在**内存**里放宽，`reset`/`save`/`--load` 走 JSON（默认落 `rl_exp\tools\diagnose\out\pose_slider\`，gitignore）；`--self-check` 无界面可跑；需 `env_isaaclab` 的 python |
 | `rl_exp\tools\diagnose\stance_step_probe.py` | **静站承重 + 单关节小幅迈步的仿真读数**（PLAY 任务、1 env、无策略无 checkpoint）：先 `--settle` 步静置（零动作 = 未命令关节只由 PD 保持默认，即"取消动作通道"后的情形），再按**连续三角插值**把 `--leg`/`--joint` 的目标扫出去再扫回来，每控制步采样（base 高 / 四脚受力 / 标定后的足底法线倾角 / 接触点水平速度 / 力矩 / 非足体最大接触力）。`--usd`/`--urdf` 换资产与标定来源、**`--naming`（`shared`/`split`）声明所造资产词根并在造出后核对**（末端关节缺失或接触模式匹配不到 4 只脚即拒）、`--drop-joints` 摘关节（缺省取该命名末两位词根）；**口径限制**（力矩由 Kp/Kd 重建等）；"碰撞"指非足体接触力，自碰撞关时不证明无碰撞 |
