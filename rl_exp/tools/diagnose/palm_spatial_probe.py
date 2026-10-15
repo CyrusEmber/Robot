@@ -10,6 +10,11 @@ Historical fixed-point/level-palm +/-3 degree pitch is a regression diagnostic O
 requirement. Roll and yaw use the same amplitude as exploratory samples. No dynamics/adoption.
 --lock_twist is the fail-before control: the real added axes remain in the asset but are held zero.
 --inject_error twist_axis must fail the source/Blender checks, not produce a successful report.
+--static_slices samples lf/rr independently: twist lo/0/hi x elbow/knee 9 x wrist/ankle 5.
+Other movable joints stay zero, root rotation stays identity, and neutral palm mesh minima
+set one shared root height. Limits are URDF placeholders, not approved ROM. No trajectory,
+dynamics, safety clearance or safe-domain verdict. --self_check needs no candidate;
+--self_check --break_test <case> intentionally fails the corresponding regression assertion.
 """
 
 import argparse
@@ -119,11 +124,28 @@ def measure(leg, q, rotate):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--build_report', type=Path, required=True)
-    parser.add_argument('--output_dir', type=Path, required=True)
+    parser.add_argument('--build_report', type=Path)
+    parser.add_argument('--output_dir', type=Path)
+    parser.add_argument('--static_slices', action='store_true')
+    parser.add_argument('--self_check', action='store_true')
+    parser.add_argument('--break_test', choices=('misaligned', 'missing_twist', 'ground', 'solid', 'zero_trigger'))
     parser.add_argument('--lock_twist', action='store_true')
     parser.add_argument('--inject_error', choices=('twist_axis',))
     args = parser.parse_args()
+    if args.self_check:
+        if args.static_slices or args.lock_twist or args.inject_error:
+            parser.error('--self_check cannot be combined with sampling controls')
+        _static_self_check(args.break_test)
+        return
+    if args.break_test:
+        parser.error('--break_test requires --self_check')
+    if args.build_report is None or args.output_dir is None:
+        parser.error('--build_report and --output_dir are required unless --self_check')
+    if args.static_slices:
+        if args.lock_twist or args.inject_error:
+            parser.error('--static_slices cannot use historical regression controls')
+        _static_slices(args.build_report, args.output_dir)
+        return
     output = args.output_dir.resolve()
     assert REPO / 'rl_exp/out' in output.parents and not output.exists(), 'Fresh isolated output required'
     build = json.loads(args.build_report.read_text(encoding='utf-8'))
@@ -233,6 +255,244 @@ def main():
                       'collision_failures': sum(len(r['failures']) for r in collisions)}, indent=1), flush=True)
     if not regression:
         raise SystemExit('REGRESSION_REJECTED: fixed-point/normal diagnostic still fails')
+
+
+def _static_axes(model):
+    assert len(model.names) == len(model.chain) == len(model.lo) == len(model.hi), 'misaligned chain'
+    assert tuple(s['name'] for s in model.chain) == tuple(model.names), 'misaligned chain names'
+    assert np.isfinite(model.lo).all() and np.isfinite(model.hi).all()
+    assert np.all((model.lo < 0) & (model.hi > 0)), 'neutral zero must be inside limits'
+    roles = ('shoulder_twist', 'elbow', 'wrist') if model.leg in ('lf', 'rf') else ('hip_twist', 'knee', 'ankle')
+    indices = [model.names.index(f'{model.leg}_{role}_joint') for role in roles]
+    grids = []
+    for index, count in zip(indices, (3, 9, 5)):
+        lo, hi = model.lo[index], model.hi[index]
+        grid = np.array([lo, 0., hi]) if count == 3 else np.linspace(lo, hi, count)
+        # Preserve both endpoints and count for asymmetric placeholder limits; include exact zero.
+        if not np.any(grid == 0):
+            grid[np.argmin(np.abs(grid[1:-1])) + 1] = 0.
+        assert len(np.unique(grid)) == count and np.all(np.diff(grid) > 0)
+        grids.append(grid)
+    return indices, grids
+
+
+def _static_ground(vertices, pose, root):
+    world = vertices @ pose[:3, :3].T + pose[:3, 3]
+    world = world @ root[:3, :3].T + root[:3, 3]
+    assert len(world) and np.isfinite(world).all(), 'invalid collision vertices'
+    index = int(np.argmin(world[:, 2]))
+    return {'vertex_index': index, 'position_m': world[index].tolist(), 'height_m': float(world[index, 2])}
+
+
+def _static_pair_readings(rows):
+    solid = [r for r in rows if r.get('intersects', False) or r.get('contained', False)]
+    positive = [r for r in rows if r['gap_lower_m'] > 0 and r not in solid]
+    return solid, positive
+
+
+def _static_prepare(build_report):
+    build = json.loads(build_report.read_text(encoding='utf-8'))
+    assert build['naming'] == 'palm_spatial'
+    candidate = Path(build['candidate_urdf']).resolve()
+    files = build['candidate_files_sha256']
+    assert files, 'self-contained candidate hashes required'
+    bound = {}
+    for relative, sha in files.items():
+        path = (candidate.parent / relative).resolve()
+        assert candidate.parent in path.parents and sha and digest(path) == sha, relative
+        bound[path] = sha
+    assert bound.get(candidate) == build['candidate_sha256']
+    assert bound.get(candidate.with_suffix('.blend')) == build['candidate_blend_sha256']
+    # Only consumed candidate artifacts need rereading; source hashes remain provenance in build.json.
+    root_xml = ET.parse(candidate).getroot()
+    for mesh in root_xml.iter('mesh'):
+        assert (candidate.parent / mesh.get('filename')).resolve() in bound, 'unbound mesh'
+    motion.validate_geometry(candidate)
+    models = {leg: Leg(candidate, leg, names.PALM_SPATIAL_NAMING) for leg in names.LEGS}
+    urdf = csc.load_urdf(candidate)
+    movable = {j.get('name') for j in root_xml.findall('joint') if j.get('type') != 'fixed'}
+    assert movable == {n for n, s in urdf['joints'].items() if s['axis'] is not None}
+    for name in movable:
+        spec = urdf['joints'][name]
+        assert np.isfinite(spec['limits']).all() and spec['limits'][0] <= 0 <= spec['limits'][1], name
+        assert np.isfinite(spec['axis']).all() and np.linalg.norm(spec['axis']) > 0, name
+    zero = {n: 0. for n in sorted(movable)}
+    for model in models.values():
+        _static_axes(model)
+        mixed = np.linspace(.01, .05, len(model.names))
+        independent = model.root @ np.array(reach.chain_frames(model.chain, mixed)[-1])
+        assert np.max(np.abs(independent - model.pose(mixed))) < 1e-10, 'chain/FK mismatch'
+    blender = check_blender(build, urdf, False)
+    # Numerical trigger ONLY: clearance=0 skips all overlapping AABBs in Collision.check.
+    collision = motion.Collision(urdf, 1e-9)
+    remap = {d['abduct']: d['twist'] for d in build['definitions'].values()}
+    assert set(build['definitions']) == set(names.LEGS)
+    for leg, model in models.items():
+        d = build['definitions'][leg]
+        assert d['abduct'] + '_joint' in model.names and d['twist'] + '_joint' in model.names
+        assert urdf['joints'][d['twist'] + '_joint']['child'] == d['twist']
+    approved = {frozenset(remap.get(n, n) for n in p) for p in motion.gait.APPROVED}
+    # Reconstruct exact permitted set: do not inherit stale approved geometry exclusions.
+    import itertools
+    excluded, pairs = [], []
+    for a, b in itertools.combinations(sorted(collision.local), 2):
+        direct = csc.jointed_pair(urdf['joints'], a, b)
+        if direct or frozenset((a, b)) in approved:
+            excluded.append({'pair': [a, b], 'reason': 'direct_connected' if direct else 'approved_abduct_to_twist'})
+        else:
+            pairs.append((a, b))
+    collision.pairs = pairs
+    assert pairs, 'no checked collision pairs'
+    root = np.eye(4)
+    neutral = {leg: _static_ground(m.vertices, m.pose(np.zeros(len(m.names))), root)
+               for leg, m in models.items()}
+    root[2, 3] = -min(r['height_m'] for r in neutral.values())
+    code_paths = [Path(__file__), Path(motion.__file__), Path(motion.gait.__file__),
+                  Path(csc.__file__), Path(reach.__file__), Path(names.__file__),
+                  REPO / 'rl_exp/tools/runrecord/binding.py']
+    identity = {'build_report': str(build_report.resolve()), 'build_report_sha256': digest(build_report),
+                'candidate_files_sha256': files, 'source_input_sha256_provenance_only': build['input_sha256'],
+                'code_sha256': {str(p.resolve()): digest(p) for p in code_paths}}
+    assert all(identity['code_sha256'].values())
+    return build, models, urdf, zero, collision, excluded, root, neutral, blender, identity
+
+
+def _static_slices(build_report, output_dir):
+    output = output_dir.resolve()
+    assert REPO / 'rl_exp/out' in output.parents and not output.exists(), 'Fresh isolated output required'
+    build, models, urdf, zero, collision, excluded, root, neutral, blender, identity = _static_prepare(build_report)
+    rows, axes = [], {}
+    for leg in ('lf', 'rr'):
+        model = models[leg]
+        indices, grids = _static_axes(model)
+        axes[leg] = {model.names[i]: grid.tolist() for i, grid in zip(indices, grids)}
+        for ti, twist in enumerate(grids[0]):
+            for bi, bend in enumerate(grids[1]):
+                for wi, wrist in enumerate(grids[2]):
+                    q = zero.copy()
+                    q.update({model.names[i]: float(v) for i, v in zip(indices, (twist, bend, wrist))})
+                    chain_q = np.array([q[n] for n in model.names])
+                    pose = model.pose(chain_q)
+                    reference, normal = model.sole(chain_q)
+                    lowest = _static_ground(model.vertices, pose, root)
+                    all_lowest = {link: _static_ground(verts, csc.fk(urdf['joints'], link, q), root)
+                                  for link, (verts, _) in collision.local.items()}
+                    pair_rows = collision.check(q)  # root is a common rigid transform: pair distances unchanged
+                    solid, positive = _static_pair_readings(pair_rows)
+                    world_normal = root[:3, :3] @ normal
+                    rows.append({'leg': leg, 'grid_index': [ti, bi, wi], 'q_rad': q,
+                                 'twist_context': {'joint': model.names[indices[0]], 'angle_rad': float(twist)},
+                                 'bend_joint': model.names[indices[1]], 'bend_angle_rad': float(bend),
+                                 'distal_joint': model.names[indices[2]], 'distal_angle_rad': float(wrist),
+                                 'end_reference_point_m': (root[:3, :3] @ reference + root[:3, 3]).tolist(),
+                                 'end_reference_displacement_m': (root[:3, :3] @ (reference - model.neutral)).tolist(),
+                                 'palm_normal': world_normal.tolist(), 'directed_normal_z': float(world_normal[2]),
+                                 'back_side_up': bool(world_normal[2] < 0), 'palm_lowest_vertex': lowest,
+                                 'minimum_all_collision_height_m': min(r['height_m'] for r in all_lowest.values()),
+                                 'bone_geometry': {'thigh_shank_angle_deg': reach.thigh_shank_angle(model.chain, chain_q)},
+                                 'solid_pairs': solid, 'positive_gap_pairs': positive,
+                                 'zero_gap_non_solid_pairs': [r for r in pair_rows if r['gap_lower_m'] == 0 and r not in solid]})
+    assert len(rows) == 270
+    summary = {'mode': 'sampled_static_slices', 'sample_count': len(rows), 'identity': identity,
+               'axes_rad': axes, 'root_transform': root.tolist(), 'neutral_palm_minima_before_root': neutral,
+               'fixed_context': 'All other movable joints zero, including other legs, trunk and tail; identity root rotation.',
+               'excluded_pairs': excluded, 'checked_pairs': [list(p) for p in collision.pairs],
+               'numerical_geometry_trigger_m': collision.clearance, 'safety_clearance_m': None,
+               'blender': blender, 'rows': rows,
+               'limits': 'Sampled lf/rr slices only; URDF placeholder limits, not ROM. No trajectory, dynamics, PD, speed, continuous safety or safe-domain PASS. Positive gaps may be AABB lower bounds. Numerical trigger is not safety margin; directed normal and ground heights are readings, not tilt rejection.',
+               'candidate_limits': build['limits']}
+    # Serialize before writing: invalid/nonfinite results must not leave a success report.
+    payload = json.dumps(summary, indent=1, allow_nan=False)
+    output.mkdir(parents=True, exist_ok=False)
+    _static_plot(output, rows, axes)
+    (output / 'report.json').write_text(payload, encoding='utf-8')
+    print(json.dumps({'mode': summary['mode'], 'sample_count': len(rows),
+                      'solid_pose_count': sum(bool(r['solid_pairs']) for r in rows),
+                      'output_dir': str(output)}, indent=1), flush=True)
+
+
+def _static_plot(output, rows, axes):
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    fig, panels = plt.subplots(3, 2, figsize=(13, 11), constrained_layout=True)
+    values = [r['palm_lowest_vertex']['height_m'] for r in rows]
+    for col, leg in enumerate(('lf', 'rr')):
+        twist, bend, distal = axes[leg].values()
+        for ti in range(3):
+            data = np.empty((5, 9))
+            ax = panels[ti, col]
+            for row in rows:
+                t, b, w = row['grid_index']
+                if row['leg'] == leg and t == ti:
+                    data[w, b] = row['palm_lowest_vertex']['height_m']
+                    if row['solid_pairs']:
+                        ax.plot(b, w, 'kx', markersize=8)
+            image = ax.imshow(data, origin='lower', aspect='auto', vmin=min(values), vmax=max(values), cmap='coolwarm')
+            ax.set_xticks(range(9), [f'{np.degrees(v):.1f}' for v in bend], rotation=45)
+            ax.set_yticks(range(5), [f'{np.degrees(v):.1f}' for v in distal])
+            ax.set(title=f'{leg}: twist {np.degrees(twist[ti]):.1f} deg',
+                   xlabel='Elbow / knee [deg]', ylabel='Wrist / ankle [deg]')
+    fig.colorbar(image, ax=panels.ravel().tolist(), label='Minimum palm collision vertex z [m]; X = solid intersection/containment')
+    fig.suptitle('Sampled static slices only — no safe-domain verdict')
+    fig.savefig(output / 'static_slices.png', dpi=150)
+    plt.close(fig)
+
+
+def _static_self_check(break_test=None):
+    from types import SimpleNamespace
+    from unittest.mock import patch
+    ordered = ['lf_shoulder_swing_joint', 'lf_shoulder_abduct_joint', 'lf_shoulder_twist_joint',
+               'lf_elbow_joint', 'lf_wrist_joint']
+    # Deliberate extra joint and shifted indices: old hardcoded [2]/[3]/[4] cannot pass.
+    ordered.insert(2, 'lf_extra_joint')
+    chain = [{'name': n} for n in ordered]
+    model = SimpleNamespace(leg='lf', names=tuple(ordered), chain=chain,
+                            lo=np.full(6, -.6), hi=np.full(6, .9))
+    if break_test == 'misaligned':
+        model.chain = list(reversed(chain))
+    if break_test == 'missing_twist':
+        model.names = tuple(n.replace('shoulder_twist', 'missing') for n in model.names)
+        model.chain = [{'name': n} for n in model.names]
+    indices, grids = _static_axes(model)
+    assert indices == [3, 4, 5], 'named roles shifted'
+    assert [len(g) for g in grids] == [3, 9, 5]
+    assert all(0 in g and g[0] == -.6 and g[-1] == .9 for g in grids)
+    q = dict.fromkeys(ordered + ['tail_joint', 'rr_knee_joint'], 0.)
+    q.update({model.names[i]: float(v) for i, v in zip(indices, (.3, .2, -.1))})
+    assert q['lf_shoulder_twist_joint'] == .3 and q['lf_extra_joint'] == q['tail_joint'] == q['rr_knee_joint'] == 0
+    vertices = np.array([[1., 0., -2.], [0., 1., -1.], [0., 0., 3.]])
+    pose, root = np.eye(4), np.eye(4)
+    pose[2, 3], root[2, 3] = .5, 1.5
+    if break_test == 'ground':
+        root = np.eye(4)
+    ground = _static_ground(vertices, pose, root)
+    assert ground == {'vertex_index': 0, 'position_m': [1., 0., 0.], 'height_m': 0.}, 'root not applied to mesh'
+    root[:3, :3] = motion.gait.rotation(np.array([0., 1., 0.]), np.pi / 2)
+    assert _static_ground(vertices, pose, root)['vertex_index'] == 0
+    assert abs(_static_ground(vertices, pose, root)['height_m'] - .5) < 1e-12
+    # Closed outward tetrahedra: overlap, contained component and positive sub-margin gap.
+    tetra = np.array([[0., 0., 0.], [1., 0., 0.], [0., 1., 0.], [0., 0., 1.]])
+    faces = np.array([[0, 2, 1], [0, 1, 3], [0, 3, 2], [1, 2, 3]])
+    urdf = {'links': {'a': {'collision': 'a'}, 'b': {'collision': 'b'}}, 'joints': {}}
+    def make_collision(vb):
+        with patch.object(csc, 'read_obj_faces', side_effect=[(tetra, faces), (vb, faces)]):
+            return motion.Collision(urdf, 0. if break_test == 'zero_trigger' else 1e-9)
+    overlap = make_collision(tetra + .1).check({})
+    containment = make_collision(tetra * .1 + .1).check({})
+    near_collision = make_collision(tetra + [1.001, 0., 0.])
+    near_collision.clearance = .005  # Fixture reproduces historical proximity fail, not static safety policy.
+    near = near_collision.check({})
+    if break_test == 'solid':
+        # Reproduce wrong use of Collision.fail as a physical solid verdict.
+        solid = [r for r in near if r['fail']]
+    else:
+        solid, positive = _static_pair_readings(near)
+        assert positive and positive[0]['gap_lower_m'] > 0
+    assert not solid, 'proximity incorrectly classified as solid'
+    assert _static_pair_readings(overlap)[0], 'AABB overlap skipped geometry'
+    assert _static_pair_readings(containment)[0][0]['contained'], 'containment missed'
+    print('STATIC_SELF_CHECK_OK: named roles/full twist, ground mesh transform, intersection/containment vs positive gap', flush=True)
 
 
 def plot(output, old, new, rows):
