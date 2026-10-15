@@ -14,6 +14,10 @@ requirement. Roll and yaw use the same amplitude as exploratory samples. No dyna
 Other movable joints stay zero, root rotation stays identity, and neutral palm mesh minima
 set one shared root height. Limits are URDF placeholders, not approved ROM. No trajectory,
 dynamics, safety clearance or safe-domain verdict. --self_check needs no candidate;
+--local_path explores lf/rr separately with all five axes, using 1% of the shorter actual
+bone segment per task step. Eight points per phase, 1e-5 m numerical task tolerance,
+0.05 rad joint steps, three deterministic attempts of at most 200 actual residual calls.
+Endpoints and joint-linear midpoints are checked; failure stops that leg. No time mapping.
 --self_check --break_test <case> intentionally fails the corresponding regression assertion.
 """
 
@@ -126,16 +130,22 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--build_report', type=Path)
     parser.add_argument('--output_dir', type=Path)
+    parser.add_argument('--local_path', action='store_true')
     parser.add_argument('--static_slices', action='store_true')
     parser.add_argument('--refine_slices', action='store_true')
     parser.add_argument('--source_report', type=Path)
     parser.add_argument('--angle_resolution', type=float)
     parser.add_argument('--self_check', action='store_true')
     parser.add_argument('--break_test', choices=('misaligned', 'missing_twist', 'ground', 'solid', 'zero_trigger',
-                                               'refine_state', 'refine_shrink'))
+                                               'refine_state', 'refine_shrink', 'local_budget',
+                                               'local_ground', 'local_step', 'local_closure', 'local_stop'))
     parser.add_argument('--lock_twist', action='store_true')
     parser.add_argument('--inject_error', choices=('twist_axis',))
     args = parser.parse_args()
+    if args.local_path and (args.static_slices or args.refine_slices or args.self_check
+                            or args.lock_twist or args.inject_error
+                            or args.source_report is not None or args.angle_resolution is not None):
+        parser.error('--local_path cannot use other mode controls')
     if args.refine_slices:
         if args.static_slices or args.lock_twist or args.inject_error or args.self_check:
             parser.error('--refine_slices cannot use static/history/self_check controls')
@@ -154,6 +164,9 @@ def main():
         parser.error('--break_test requires --self_check')
     if args.build_report is None or args.output_dir is None:
         parser.error('--build_report and --output_dir are required unless --self_check')
+    if args.local_path:
+        _local_path(args.build_report, args.output_dir)
+        return
     if args.refine_slices:
         _refine_slices(args.build_report, args.source_report, args.output_dir, args.angle_resolution)
         return
@@ -601,7 +614,249 @@ def _static_plot(output, rows, axes):
     plt.close(fig)
 
 
+def _local_solve(residual, previous, lo, hi, config):
+    """Bound residual evaluations, including finite-difference calls; retain failed attempts."""
+    lower = np.maximum(lo, previous - config['joint_step_rad'])
+    upper = np.minimum(hi, previous + config['joint_step_rad'])
+    seeds = (previous, np.zeros(len(previous)), previous + np.linspace(-.01, .01, len(previous)))
+    attempts, candidate = [], previous.copy()
+    for seed in seeds:
+        count, best_error, best = 0, float('inf'), previous.copy()
+        exhausted = False
+
+        def counted(q):
+            nonlocal count, best_error, best
+            if count >= config['evaluations_per_attempt']:
+                raise StopIteration('residual evaluation budget')
+            count += 1
+            value = residual(q)
+            error = float(np.linalg.norm(value[:3]))
+            if error < best_error:
+                best_error, best = error, q.copy()
+            if error <= 1:
+                raise StopIteration('task tolerance reached')
+            return value
+
+        start = np.clip(seed, lower + 1e-12, upper - 1e-12)
+        if 0 < np.linalg.norm(start) < 1e-8 and np.all(lower < 0) and np.all(upper > 0):
+            start[:] = 0
+        try:
+            result = least_squares(counted, start, bounds=(lower, upper),
+                                   max_nfev=config['evaluations_per_attempt'],
+                                   xtol=1e-10, ftol=1e-10, gtol=1e-10)
+            candidate = result.x
+        except StopIteration as stop:
+            exhausted, candidate = str(stop) != 'task tolerance reached', best
+        attempts.append({'evaluations': count, 'budget_exhausted': exhausted,
+                         'best_scaled_position_error': best_error, 'q_rad': candidate.tolist()})
+        if not exhausted and best_error <= 1:
+            return candidate, attempts, False
+    return candidate, attempts, True
+
+
+def _local_failures(state, previous, target, config, contact=False, landing=False):
+    failures = []
+    tolerance = config['position_tolerance_m']
+    if target is not None and np.max(np.abs(np.array(state['task_m']) - target)) > tolerance:
+        failures.append('task residual')
+    if state['all_ground_min_m'] < -tolerance:
+        failures.append('ground penetration')
+    if contact and abs(state['task_m'][2]) > tolerance:
+        failures.append('contact residual')
+    if state['normal_z'] <= 0:
+        failures.append('back-side palm')
+    if state['reverse_bend']:
+        failures.append('reverse bend')
+    if state['solid_pairs']:
+        failures.append('solid intersection')
+    if previous is not None:
+        delta = np.max(np.abs(np.array(state['chain_q_rad']) - previous['chain_q_rad']))
+        if delta > config['joint_step_rad'] + 1e-12:
+            failures.append('joint step')
+        if landing and state['task_m'][2] > previous['task_m'][2] + tolerance:
+            failures.append('landing height increased')
+    return failures
+
+
+def _local_closed(final, initial, config):
+    """Check full joint branch and reference-point closure, not sole position alone."""
+    return (bool(np.max(np.abs(np.array(final['chain_q_rad']) - initial['chain_q_rad'])) <= 1e-12)
+            and bool(np.max(np.abs(np.array(final['reference_point_m']) - initial['reference_point_m']))
+                     <= config['position_tolerance_m']))
+
+
+def _local_path(build_report, output_dir):
+    output = output_dir.resolve()
+    assert REPO / 'rl_exp/out' in output.parents and not output.exists(), 'Fresh isolated output required'
+    build, models, urdf, zero, collision, excluded, root, neutral, blender, identity = _static_prepare(build_report)
+    config = {'segment_step_fraction': .01, 'points_per_phase': 8,
+              'position_tolerance_m': 1e-5, 'joint_step_rad': .05,
+              'evaluations_per_attempt': 200, 'attempts_per_point': 3,
+              'midpoint_check': True, 'path_parameter_only': True}
+    results = {}
+    for leg in ('lf', 'rr'):
+        model = models[leg]
+        knee_name = f"{leg}_{'elbow' if leg == 'lf' else 'knee'}_joint"
+        knee = model.names.index(knee_name)
+        frames = [model.root @ np.array(f) for f in reach.chain_frames(model.chain, np.zeros(len(model.names)))]
+        pivot = frames[knee + 1][:3, 3]
+        upper_length = next(float(np.linalg.norm(pivot - f[:3, 3])) for f in reversed(frames[:knee + 1])
+                            if np.linalg.norm(pivot - f[:3, 3]) > 1e-12)
+        lower_length = next(float(np.linalg.norm(f[:3, 3] - pivot)) for f in frames[knee + 2:]
+                            if np.linalg.norm(f[:3, 3] - pivot) > 1e-12)
+        step = min(upper_length, lower_length) * config['segment_step_fraction']
+        straight = reach.straight_hfe(model.chain)
+
+        def state(q):
+            named = {**zero, **dict(zip(model.names, map(float, q)))}
+            pose = model.pose(q)
+            independent = model.root @ np.array(reach.chain_frames(model.chain, q)[-1])
+            assert np.max(np.abs(pose - independent)) < 1e-10, 'local path FK mismatch'
+            point, normal = model.sole(q)
+            point = root[:3, :3] @ point + root[:3, 3]
+            lowest = _static_ground(model.vertices, pose, root)
+            ground = {link: _static_ground(v, csc.fk(urdf['joints'], link, named), root)
+                      for link, (v, _) in collision.local.items()}
+            pairs = collision.check(named)
+            solid, positive = _static_pair_readings(pairs)
+            return {'q_rad': named, 'chain_q_rad': q.tolist(),
+                    'task_m': [float(point[0]), float(point[1]), lowest['height_m']],
+                    'reference_point_m': point.tolist(), 'palm_lowest_vertex': lowest,
+                    'all_ground_min_m': min(g['height_m'] for g in ground.values()),
+                    'normal_z': float((root[:3, :3] @ normal)[2]),
+                    'palm_normal': (root[:3, :3] @ normal).tolist(),
+                    'thigh_shank_angle_deg': reach.thigh_shank_angle(model.chain, q),
+                    'reverse_bend': bool(q[knee] * np.sign(straight) >= abs(straight)),
+                    'solid_pairs': solid, 'positive_gap_pairs': positive}
+
+        previous = state(np.zeros(len(model.names)))
+        initial = previous.copy()
+        rows = [{'phase': 'neutral', 's': 0., 'state': initial}]
+        initial_failures = _local_failures(initial, None, None, config, contact=True)
+        failure = {'phase': 'neutral', 'failures': initial_failures} if initial_failures else None
+        if initial_failures:
+            rows[0]['failures'] = initial_failures
+        neutral_xy = np.array(initial['task_m'][:2])
+        phase_start_q = None
+        for phase in ('backward_contact', 'lift', 'forward_air', 'return_neutral'):
+            if failure is not None:
+                break
+            phase_start = np.array(previous['task_m'])
+            phase_start_q = np.array(previous['chain_q_rad'])
+            for index in range(1, config['points_per_phase'] + 1):
+                before = np.array(previous['chain_q_rad'])
+                if phase == 'return_neutral':
+                    q = phase_start_q * (1 - index / config['points_per_phase'])
+                    attempts, solve_failed, target = [], False, None
+                else:
+                    target = phase_start.copy()
+                    if phase == 'backward_contact':
+                        target[0] -= index * step
+                        target[2] = 0.
+                    elif phase == 'lift':
+                        target[2] += index * step
+                    else:
+                        target[0] += index * (neutral_xy[0] - phase_start[0]) / config['points_per_phase']
+                    def residual(q):
+                        pose = model.pose(q)
+                        p, _ = model.sole(q)
+                        p = root[:3, :3] @ p + root[:3, 3]
+                        height = _static_ground(model.vertices, pose, root)['height_m']
+                        task = np.array([p[0], p[1], height])
+                        return np.r_[(task - target) / config['position_tolerance_m'], (q - before) * 1e-4]
+                    q, attempts, solve_failed = _local_solve(residual, before, model.lo, model.hi, config)
+                endpoint = state(q)
+                midpoint = state((before + q) / 2)
+                contact = phase == 'backward_contact'
+                failed = _local_failures(endpoint, previous, target, config, contact, phase == 'return_neutral')
+                middle_failed = _local_failures(midpoint, previous, None, config, contact, phase == 'return_neutral')
+                if phase == 'return_neutral':
+                    failed.extend(_local_failures(endpoint, midpoint, None, config, landing=True))
+                if solve_failed:
+                    failed.append('solver budget or residual')
+                if phase in ('lift', 'forward_air') and endpoint['task_m'][2] <= config['position_tolerance_m']:
+                    failed.append('no resolved lift')
+                if phase == 'forward_air' and endpoint['task_m'][0] <= previous['task_m'][0] + config['position_tolerance_m']:
+                    failed.append('no resolved forward displacement')
+                if phase == 'backward_contact' and endpoint['task_m'][0] >= previous['task_m'][0] - config['position_tolerance_m']:
+                    failed.append('no resolved backward displacement')
+                if middle_failed:
+                    failed.append('midpoint geometry')
+                row = {'phase': phase, 'point': index, 's': (len(rows)) / 32,
+                       'target_m': None if target is None else target.tolist(),
+                       'state': endpoint, 'midpoint': midpoint, 'midpoint_failures': middle_failed,
+                       'attempts': attempts, 'failures': failed}
+                rows.append(row)
+                if failed:
+                    failure = row
+                    break
+                previous = endpoint
+            if failure is not None:
+                break
+        closed = failure is None and _local_closed(previous, initial, config)
+        results[leg] = {'bone_lengths_m': [upper_length, lower_length], 'exploration_step_m': step,
+                        'completed_local_loop': closed, 'rows': rows, 'failure_phase': None if failure is None else failure['phase'],
+                        'accepted_points': sum(not r.get('failures') for r in rows[1:]),
+                        'evaluations': sum(a['evaluations'] for r in rows for a in r.get('attempts', []))}
+    report = {'mode': 'budgeted_local_path', 'identity': identity, 'config': config,
+              'root_transform': root.tolist(), 'neutral_ground': neutral, 'blender': blender,
+              'checked_pairs': [list(p) for p in collision.pairs], 'excluded_pairs': excluded,
+              'forward_axis': '+X of URDF root; body fixed, not world no-slip stance', 'legs': results,
+              'limits': 'Local deterministic continuation only, not maximal capability, approved stride/height, safe domain, time, speed, PD or dynamics. Failure stops that leg, without widening tolerances. Midpoints are samples, not continuous proof. Lowest vertex identity is not contact material slip. Numerical ground tolerance is not mechanical permission.'}
+    payload = json.dumps(report, indent=1, allow_nan=False)
+    output.mkdir(parents=True, exist_ok=False)
+    (output / 'report.json').write_text(payload, encoding='utf-8')
+    print(json.dumps({leg: {k: result[k] for k in ('completed_local_loop', 'accepted_points', 'failure_phase', 'evaluations')}
+                      for leg, result in results.items()}, indent=1), flush=True)
+
+
+def _local_self_check(break_test=None):
+    from unittest.mock import patch
+    import inspect
+    changed = {'local_stop': (_local_solve, 'if error <= 1:', 'if False:'),
+               'local_budget': (_local_solve, "count >= config['evaluations_per_attempt']", 'False'),
+               'local_ground': (_local_failures, "state['all_ground_min_m'] < -tolerance", 'False'),
+               'local_step': (_local_failures, "delta > config['joint_step_rad'] + 1e-12", 'False'),
+               'local_closure': (_local_closed,
+                                 "np.max(np.abs(np.array(final['chain_q_rad']) - initial['chain_q_rad'])) <= 1e-12",
+                                 'True')}
+    if break_test in changed:
+        function, old, new = changed[break_test]
+        code = inspect.getsource(function)
+        assert old in code
+        scope = dict(globals())
+        exec(code.replace(old, new), scope)
+        with patch.dict(globals(), {function.__name__: scope[function.__name__]}):
+            return _local_self_check()
+    config = {'joint_step_rad': .05, 'evaluations_per_attempt': 12, 'position_tolerance_m': 1e-5}
+    _, ready_attempts, ready_failed = _local_solve(lambda q: np.r_[np.zeros(3), q * 1e-4],
+                                                 np.zeros(5), np.full(5, -.6), np.full(5, .6), config)
+    assert not ready_failed and ready_attempts[0]['evaluations'] == 1, 'task tolerance did not stop solver'
+    calls = 0
+    def unreachable(q):
+        nonlocal calls
+        calls += 1
+        return np.r_[np.ones(3) * 100 + q[:3], q * 1e-4]
+    _, attempts, failed = _local_solve(unreachable, np.zeros(5), np.full(5, -.6), np.full(5, .6), config)
+    assert failed and calls == sum(a['evaluations'] for a in attempts) <= 36
+    assert len(attempts) == 3 and all(a['evaluations'] <= 12 for a in attempts)
+    state = {'task_m': [0., 0., 0.], 'all_ground_min_m': 0., 'normal_z': 1.,
+             'reverse_bend': False, 'solid_pairs': [], 'chain_q_rad': [0.] * 5}
+    assert not _local_failures(state, None, np.zeros(3), config, True)
+    for broken, expected in (({**state, 'all_ground_min_m': -.001}, 'ground penetration'),
+                             ({**state, 'normal_z': -1.}, 'back-side palm'),
+                             ({**state, 'reverse_bend': True}, 'reverse bend'),
+                             ({**state, 'solid_pairs': [{'pair': ['a', 'b']}]}, 'solid intersection'),
+                             ({**state, 'chain_q_rad': [.051] * 5}, 'joint step')):
+        assert expected in _local_failures(broken, state, None, config), expected
+    closure = {**state, 'reference_point_m': [0., 0., 0.]}
+    assert _local_closed(closure, closure, config)
+    assert not _local_closed({**closure, 'chain_q_rad': [.01] * 5}, closure, config)
+    print('LOCAL_PATH_SELF_CHECK_OK: strict residual-call budget and geometry/joint-step/closure rejection', flush=True)
+
+
 def _static_self_check(break_test=None):
+    _local_self_check(break_test)
     from types import SimpleNamespace
     from unittest.mock import patch
     refine = _refine_bracket
