@@ -59,6 +59,7 @@
 | `rl_exp\tools\trainlog\probe_run.py` | 训练中巡检（只读 tfevents，秒级，不起仿真）：进度 / ETA / 趋势 / 终止计数 / 课程值 / 告警 |
 | `rl_exp\tools\trainlog\dump_tb.py` | TB 事件 → `vN\tb_scalars.csv`（按 tag 抽样、**保首尾**；`--csv_in` 重抽样不需 tensorboard） |
 | `rl_exp\tools\verify\view_terrain.py` | GUI 看机器人站**指定版本的真实地形**（每 env 头向箭头 + 接触点探针 vs 碰撞栈预算） |
+| `rl_exp\docs\leg_geometry_reuse.md` | 增轴／改轴／改几何后的探测复用入口与适用边界；决定沿用证据还是补受影响切片时选它 |
 | `rl_exp\tools\diagnose\palm_asset_probe.py` | **Blender 内取 palm 候选的实际枢轴与绑定网格**（`blender --python`，只读源 `.blend`，不改源）；输出须在 `rl_exp\out` 下，供 `palm_pd_probe.py` 的 `--blender_snapshot` 对照 |
 | `rl_exp\blender\scripts\lizard2_palm_spatial_candidate.py` | 肩髋共中心三轴隔离试作生成器（Blender）：输出 blend、相对网格引用 URDF 与身份报告，不写正式资产 |
 | `rl_exp\tools\diagnose\palm_spatial_probe.py` | 三轴试作的 Blender/FK 对照及历史固定落点诊断；`--lock_twist`、`--inject_error twist_axis` 复读失败对照，不验收步态或动力学 |
