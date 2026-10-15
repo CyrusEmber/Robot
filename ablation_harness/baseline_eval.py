@@ -187,6 +187,12 @@ def run(args) -> dict:
         steps = round(protocol["episode_length_s"] / live.step_dt)
         if abs(steps * live.step_dt - protocol["episode_length_s"]) > 1e-8:
             raise ValueError("protocol duration is not an integer number of control steps")
+        full_steps = steps
+        smoke_steps = getattr(args, "smoke_steps", None)
+        if smoke_steps is not None:
+            if args.checkpoint or smoke_steps < 1 or smoke_steps > full_steps:
+                raise ValueError("--smoke_steps requires zero policy and 1..full protocol steps")
+            steps = smoke_steps
         obs = wrapper.get_observations()
         checkpoint = None
         if args.checkpoint:
@@ -374,6 +380,10 @@ def run(args) -> dict:
                            "assignment": assignment.tolist(),
                            "resampling_frozen": True,
                            "seed": args.seed}}
+            if smoke_steps is not None:
+                scene_conditions["smoke"] = {"partial": steps < full_steps,
+                    "requested_steps": steps, "full_protocol_steps": full_steps,
+                    "scope": "zero-policy collection only; no performance verdict"}
             artifact = recorder.artifact(
                 protocol=protocol, **start, task=args.task, seed=args.seed, num_envs=live.num_envs,
                 checkpoint=checkpoint, policy_mode=args.policy_mode if checkpoint else "zero_action",
@@ -395,6 +405,21 @@ def run(args) -> dict:
             # from it again offline -- so a judge defect cannot cost a completed collection.
             baseline_frames.save(frames_path, artifact)
             result = judged_or_recoverable(artifact, frames_path)
+        if smoke_steps is not None:
+            expected_short_duration = (
+                f"the window is {steps} steps x {live.step_dt:g} s = {steps * live.step_dt:g} s, but the "
+                f"protocol declares {float(protocol['episode_length_s']):g} s")
+            collection_ok = contract_error is None and recorder.count == steps
+            reader_ok = result["verdict"] in ("pass", "fail") or (
+                steps < full_steps and result.get("invalid_reasons") == [expected_short_duration])
+            result = {**result,
+                      "verdict": "smoke_only" if collection_ok and reader_ok else "invalid",
+                      "metrics": {}, "diagnostics": {}, "per_env": {},
+                      "gates": {name: None for name in baseline_metrics.gate_names(protocol)},
+                      "reader_validation": result,
+                      "smoke": {"partial": steps < full_steps, "collected_steps": recorder.count,
+                                "full_protocol_steps": full_steps,
+                                "scope": "zero-policy collection only; no performance verdict"}}
         if checkpoint is None and result["verdict"] in ("pass", "fail"):
             result["verdict"] = "smoke_only"
         return {
@@ -426,6 +451,8 @@ def main() -> None:
     parser.add_argument("--protocol", type=pathlib.Path, required=True,
                         help="frozen protocol under protocols/; the report records its digest")
     parser.add_argument("--checkpoint")
+    parser.add_argument("--smoke_steps", type=int, default=None,
+                        help="zero-policy partial collection only; frozen protocol remains unchanged")
     parser.add_argument("--target_config", type=pathlib.Path, default=None,
                         help="isolated diagnostic target manifest; must match --task")
     parser.add_argument("--naming", choices=sorted(joint_names.NAMINGS), default=None,
@@ -436,6 +463,8 @@ def main() -> None:
     parser.add_argument("--output", type=pathlib.Path, required=True)
     AppLauncher.add_app_launcher_args(parser)
     args = parser.parse_args()
+    if args.smoke_steps is not None and (args.smoke_steps < 1 or args.checkpoint):
+        parser.error("--smoke_steps requires positive steps and no --checkpoint")
     if args.num_envs < 1:
         parser.error("--num_envs must be positive")
     if not args.protocol.is_file():

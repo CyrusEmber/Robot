@@ -406,6 +406,90 @@ def test_the_window_is_saved_before_it_is_judged():
         "defect would then cost a completed collection")
 
 
+def test_smoke_collection_preserves_invalid_and_metadata():
+    """Execute the live smoke branch and artifact kwargs; fixtures are not real rollout evidence."""
+    source = ast.parse((_REPO / "ablation_harness/baseline_eval.py").read_text(encoding="utf-8"))
+    run = next(node for node in source.body if isinstance(node, ast.FunctionDef) and node.name == "run")
+    branch = next(node for node in ast.walk(run) if isinstance(node, ast.If)
+                  and ast.unparse(node.test) == "smoke_steps is not None"
+                  and any(isinstance(child, ast.Constant) and child.value == "smoke_only"
+                          for child in ast.walk(node)))
+    code = compile(ast.fix_missing_locations(ast.Module(body=[branch], type_ignores=[])),
+                   "baseline smoke branch", "exec")
+    artifact_call = next(node for node in ast.walk(run) if isinstance(node, ast.Call)
+                         and ast.unparse(node.func) == "recorder.artifact")
+    conditions = next(node for node in ast.walk(run) if isinstance(node, ast.Assign)
+                      and any(isinstance(target, ast.Name) and target.id == "scene_conditions"
+                              for target in node.targets))
+    conditions_branch = next(node for node in ast.walk(run) if isinstance(node, ast.If)
+                             and ast.unparse(node.test) == "smoke_steps is not None"
+                             and any(isinstance(child, ast.Subscript)
+                                     and ast.unparse(child) == "scene_conditions['smoke']"
+                                     for child in ast.walk(node)))
+    metadata_code = compile(ast.fix_missing_locations(ast.Module(
+        body=[conditions, conditions_branch], type_ignores=[])), "baseline artifact metadata", "exec")
+    extra_kwargs = next(keyword.value for keyword in artifact_call.keywords
+                        if keyword.arg is None and ast.unparse(keyword.value) == "scene_conditions")
+    kwargs_code = compile(ast.Expression(body=extra_kwargs), "baseline artifact kwargs", "eval")
+    full_steps = 20
+    for smoke_steps in (None, 10, full_steps):
+        steps = full_steps if smoke_steps is None else smoke_steps
+        artifact = truncated(build(PROTOCOL, full_steps), steps)
+        artifact["meta"]["steps"] = steps
+        reader = baseline_metrics.judge(artifact)
+        states = [(None, reader, "smoke_only") if smoke_steps is not None else (None, reader, reader["verdict"])]
+        if smoke_steps is not None:
+            recorder = baseline_frames.BaselineFrames(num_envs=1, step_dt=1.0, axes=AXES)
+            bad_frame = default_frame(1)
+            del bad_frame["tilt_cos"]
+            error = expect(baseline_frames.FramesContractError, recorder.add, **bad_frame)
+            states.append((error, {"verdict": "invalid", "invalid_reasons": [f"collection contract: {error}"],
+                                  "gates": {name: None for name in baseline_metrics.gate_names(PROTOCOL)},
+                                  "metrics": {}, "diagnostics": {}, "per_env": {}}, "invalid"))
+            malformed = {**artifact, "meta": {**artifact["meta"], "body_weight_n": None}}
+            states.append((None, baseline_metrics.judge(malformed), "invalid"))
+        for contract_error, result, expected in states:
+            original = dict(result)
+            context = {"smoke_steps": smoke_steps, "steps": steps, "full_steps": full_steps,
+                       "contract_error": contract_error, "recorder": NS(count=steps),
+                       "protocol": PROTOCOL, "baseline_metrics": baseline_metrics, "result": result,
+                       "live": NS(step_dt=1.0), "scenes": None}
+            exec(code, context)
+            actual = context["result"]
+            if smoke_steps is None:
+                assert actual == original, actual
+                assert "smoke" not in actual
+            else:
+                assert actual["verdict"] == expected, (smoke_steps, original, actual)
+                assert actual["reader_validation"] == original, actual
+                assert actual["metrics"] == {} and all(value is None for value in actual["gates"].values())
+                assert actual["smoke"]["partial"] == (steps < full_steps)
+                assert actual["smoke"]["collected_steps"] == steps
+                assert actual["smoke"]["full_protocol_steps"] == full_steps
+                if expected == "invalid":
+                    assert actual["invalid_reasons"] == original["invalid_reasons"]
+            exec(metadata_code, context)
+            metadata = eval(kwargs_code, context)
+            fixture_recorder = baseline_frames.BaselineFrames(num_envs=1, step_dt=1.0, axes=AXES)
+            for index in range(steps):
+                fixture_recorder.add(**{name: values[index] for name, values in artifact["frames"].items()})
+            fixture_artifact = fixture_recorder.artifact(
+                protocol=PROTOCOL, body_weight_n=BODY_WEIGHT_N,
+                start_pos=torch.zeros(1, 3), start_yaw=torch.zeros(1),
+                ground_source=GROUND_SOURCE, foot_geometry=FOOT_GEOMETRY, **metadata)
+            with tempfile.TemporaryDirectory() as tmp:
+                path = pathlib.Path(tmp) / "smoke.frames.pt"
+                baseline_frames.save(path, fixture_artifact)
+                loaded = baseline_frames.load(path)
+            assert loaded["meta"].get("smoke") == metadata.get("smoke")
+            if smoke_steps is None:
+                assert "smoke" not in loaded["meta"]
+            else:
+                assert loaded["meta"]["smoke"]["partial"] == (steps < full_steps)
+                assert loaded["meta"]["smoke"]["full_protocol_steps"] == full_steps
+                assert loaded["meta"]["smoke"]["scope"] == actual["smoke"]["scope"]
+
+
 def test_a_judge_failure_names_the_record_to_retry_from():
     """A judge defect must not cost the window: the error names the file that re-judges it offline."""
     from ablation_harness import baseline_eval
@@ -1961,7 +2045,9 @@ def test_target_binding_report_roundtrip():
         with tempfile.TemporaryDirectory() as temp:
             drawn = plot_joints.draw_band(entry, 1.0, 0.02, pathlib.Path(temp), naming_id, naming)
             plots.append(list(drawn["joints"].values()))
-        for mutation in ("binding", "source", "missing", "mixed", "duplicate"):
+        for mutation in ("binding", "source", "missing", "mixed", "duplicate", "missingtwist"):
+            if mutation == "missingtwist" and naming_id != "palm_spatial":
+                continue
             broken = copy.deepcopy(report)
             if mutation == "binding":
                 del broken["target_binding"]
@@ -1971,11 +2057,132 @@ def test_target_binding_report_roundtrip():
                 broken["envs"][0]["joint_series"].pop(next(iter(entry["joint_series"])))
             elif mutation == "mixed":
                 broken["envs"][0]["joint_series"]["lf_foreign_actual"] = [0.0] * 4
+            elif mutation == "missingtwist":
+                del broken["envs"][0]["joint_series"]["lf_wrist_shoulder_twist_actual"]
             else:
                 broken["target_binding"]["joint_names"].append(names[0])
             expect(ValueError, plot_joints.report_naming, broken)
     assert all(value == readings[0] for value in readings), "binding must not change numerical measurements"
     assert all(value == plots[0] for value in plots), "same joint frames must draw the same stop readings"
+
+
+def test_gait_probe_first_frame_done_keeps_alive_empty():
+    """Execute the real writer block on a frozen regression input, not rollout evidence."""
+    # Extracted from the diagnostic report's done_series; regression input, not a measurement.
+    done_series = [True, True, True, True, True, False, True, False, False, False]
+    done = torch.tensor(done_series, dtype=torch.bool).unsqueeze(1)
+    source = getattr(sys.modules[__name__], "GAIT_SOURCE", _REPO / "rl_exp/tools/diagnose/gait_probe.py")
+    tree = ast.parse(pathlib.Path(source).read_text(encoding="utf-8"))
+    loop = next(node for node in ast.walk(tree) if isinstance(node, ast.For)
+                and ast.unparse(node.target) == "(env_index, speed)")
+    end = next(i for i, node in enumerate(loop.body) if isinstance(node, ast.For))
+    block = compile(ast.Module(body=loop.body[:end], type_ignores=[]), "gait_probe.py", "exec")
+    scope = {"torch": torch, "done": done, "env_index": 0, "speed": 1.0}
+    exec(block, scope)
+    entry = scope["entry"]
+    assert entry["frames_alive"] == 0, entry
+    assert not bool(scope["alive"].any()), "fallback must not resurrect the valid mask"
+    assert entry["frames_recorded"] == 10
+    assert entry["invalid_for_first_episode"] is True
+    assert entry["collection_scope"] == "diagnostic trace may include reset"
+    assert entry["summary_scope"] == "raw diagnostic full run; not performance"
+    assert entry["frames_alive_scope"] == "first episode strictly before first done"
+    assert entry["frames_recorded_scope"] == "series and summary rows; full-run fallback only diagnostic"
+    assert entry["done_series"] == done_series
+    assert entry["done_frames"] == sum(done_series)
+    assert entry["valid_series"] == [False] * 10
+
+
+def test_gait_probe_effort_limits_use_sim_joint_columns():
+    """Execute main's effort assignment, not a replacement reader, on per-joint readbacks."""
+    from rl_exp.tasks import joint_names
+    from rl_exp.tools.diagnose import plot_joints
+
+    source = getattr(sys.modules[__name__], "GAIT_SOURCE", _REPO / "rl_exp/tools/diagnose/gait_probe.py")
+    tree = ast.parse(pathlib.Path(source).read_text(encoding="utf-8"))
+    main = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "main")
+    assignment = next(node for node in ast.walk(main) if isinstance(node, ast.Assign)
+                      and ast.unparse(node.targets[0]) == "row[f'joint_effort_limit_{joint}']")
+    helpers = [node for node in main.body if isinstance(node, ast.FunctionDef)
+               and node.name == "group_effort"]  # Execute the old helper too, for the red run.
+    block = compile(ast.Module(body=helpers + [assignment], type_ignores=[]), "gait_probe.py", "exec")
+    naming = joint_names.PALM_SPATIAL_NAMING
+    names = [joint_names.joint_name(leg, root) for leg in joint_names.LEGS
+             for root in joint_names.roots_of(naming, leg)]
+    names += [f"{part}_{axis}_joint" for part in ("chest", "neck", "tail1", "tail2", "tail3")
+              for axis in ("yaw", "pitch")]
+    # Synthetic solver readbacks encode both environment and column, independently of cfg caps.
+    caps = torch.arange(2 * len(names), dtype=torch.float32).reshape(2, len(names)) + 71.0
+    data = NS(joint_effort_limits=NS(torch=caps))
+    for dictionary in (True, False):
+        actuators = {group: NS(effort_limit_sim=({".*": 180.0} if dictionary else 180.0))
+                     for group in ("legs", "feet")}
+        scope = {"cfg": NS(scene=NS(robot=NS(actuators=actuators))), "data": data,
+                 "robot": NS(data=data)}
+        for env_index in range(2):
+            for leg in joint_names.LEGS:
+                for joint in plot_joints.report_tokens(naming, leg):
+                    column = names.index(joint_names.joint_name(leg, joint))
+                    role = next(role for role, root in zip(joint_names.CHAIN_ROOTS,
+                                                          joint_names.roots_of(naming, leg))
+                                if root == joint)
+                    scope.update(row={}, joint=joint, column=column, env_index=env_index, role=role)
+                    exec(block, scope)
+                    assert scope["row"][f"joint_effort_limit_{joint}"] == float(caps[env_index, column])
+        # Missing columns fail at the tensor boundary; a valid but wrong index reads that column,
+        # not a name-aware lookup. The caller's live joint-name mapping supplies the identity.
+        scope.update(column=len(names))
+        expect(IndexError, exec, block, scope)
+        scope.update(column=0)
+        exec(block, scope)
+        assert scope["row"][f"joint_effort_limit_{joint}"] == float(caps[env_index, 0])
+        assert scope["row"][f"joint_effort_limit_{joint}"] != float(caps[env_index, column])
+
+
+def test_gait_probe_jacobian_body_and_dof_mapping():
+    """Execute the live prediction block on encoded fixed/floating CPU Jacobians."""
+    from rl_exp.tools.diagnose import diag_metrics
+
+    tree = ast.parse((_REPO / "rl_exp/tools/diagnose/gait_probe.py").read_text(encoding="utf-8"))
+    main = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "main")
+    loop = next(node for node in main.body if isinstance(node, ast.For)
+                and ast.unparse(node.target) == "step")
+    start = next(i for i, node in enumerate(loop.body) if isinstance(node, ast.Assign)
+                 and ast.unparse(node.targets[0]) in ("jacobian_w", "joint_error"))
+    end = next(i for i, node in enumerate(loop.body) if isinstance(node, ast.Assign)
+               and ast.unparse(node.targets[0]) == "(linear, rotation)")
+    block = compile(ast.Module(body=loop.body[start:end + 1], type_ignores=[]), "gait_probe.py", "exec")
+    for fixed in (True, False):
+        base_dofs = 0 if fixed else 6
+        jacobian = torch.zeros(2, 31 - int(fixed), 6, 30 + base_dofs)
+        for body in range(jacobian.shape[1]):
+            for row in range(6):
+                jacobian[:, body, row, :] = (
+                    (body + int(fixed)) * 1000 + row * 100 + torch.arange(30 + base_dofs))
+        pose = torch.zeros(2, 31, 3)
+        ids = [1, 8, 20, 30]  # Last body catches fixed-root row exclusion, not only padding.
+        target = torch.zeros(2, 30)
+        target[:, -1] = 2.0
+        data = NS(body_link_jacobian_w=NS(torch=jacobian),
+                  joint_pos_target=NS(torch=target), joint_pos=NS(torch=torch.zeros_like(target)))
+        scope = {"torch": torch, "diag_metrics": diag_metrics, "robot": NS(is_fixed_base=fixed),
+                 "data": data, "pose": pose, "robot_foot_ids": ids,
+                 "lowest": torch.tensor([0.0, 1.0, 0.0]).expand(2, 4, 3)}
+        exec(block, scope)
+        expected = torch.tensor([[2.0 * (body * 1000 + row * 100 + 29 + base_dofs)
+                                  for row in range(6)] for body in ids]).expand(2, 4, 6)
+        assert torch.equal(scope["linear"], expected[..., :3]), fixed
+        assert torch.equal(scope["rotation"], torch.stack(
+            (-expected[..., 5], torch.zeros(2, 4), expected[..., 3]), dim=-1)), fixed
+        assert scope["joint_error"].shape == (2, 1, 30 + base_dofs)
+        if not fixed:
+            assert not bool(scope["joint_error"][..., :6].any())
+        for shape in ((2, jacobian.shape[1] + 1, 6, jacobian.shape[-1]),
+                      (2, jacobian.shape[1], 5, jacobian.shape[-1]),
+                      (2, jacobian.shape[1], 6, jacobian.shape[-1] + 1)):
+            data.body_link_jacobian_w.torch = torch.zeros(shape)
+            err = expect(ValueError, exec, block, scope)
+            assert "Jacobian shape" in str(err), err
 
 
 def test_palm_solver_rejects_inserted_axis():
@@ -2005,6 +2212,9 @@ def test_palm_solver_rejects_inserted_axis():
 
 def main():
     if "--binding-only" in sys.argv:
+        test_gait_probe_first_frame_done_keeps_alive_empty()
+        test_gait_probe_effort_limits_use_sim_joint_columns()
+        test_gait_probe_jacobian_body_and_dof_mapping()
         test_palm_solver_rejects_inserted_axis()
         test_target_binding_report_roundtrip()
         print("TARGET_BINDING_REPORT_OK")

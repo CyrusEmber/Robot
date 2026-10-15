@@ -34,8 +34,8 @@ apart:
                             clips the composite torque, and it never reaches the data API.
   ``joint_torque_*``/``joint_target_off_default_*``  the same reconstruction over the STEADY part of each
                             stance, for every joint a leg carries -- the blade (``*_foot_joint``)
-                            included, against its OWN effort limit (70 N*m where the leg group's is
-                            180): how hard the joint is driven, what share of its limit that is, how
+                            included, against its OWN sim-side per-joint effort limit: how hard the
+                            joint is driven, what share of its limit that is, how
                             often the drive reaches the limit, and how far the policy commands the
                             joint away from the zero pose. Beside the command sits what the joint
                             ACTUALLY stands at, the peak rate it moves at while loaded, and how often
@@ -882,19 +882,6 @@ def main() -> None:
     # The zero pose the action offset is taken from (``use_default_offset``): the reference that turns
     # "how far the policy commands this joint from its resting angle" into a number instead of a pose.
     default_pos = robot.data.default_joint_pos.torch[0]  # (J,); the same for every env
-    # The effort limit each group's drive is clipped at. With position PD a target error is a torque, so
-    # this is the number every torque reading has to be compared against -- and it is per group, because
-    # the blade's cap (70 N*m) is not the leg's (180). Read from the instantiated actuator
-    # (``effort_limit_sim``, which the implicit cfg mirrors ``effort_limit`` into) rather than copied
-    # from the yaml. Gains are NOT read here: they come from the sim data below, because that is where
-    # gain randomization lands (``parkour_mdp._pd_torque`` does the same).
-    def group_effort(group: str) -> float:
-        """The effort limit the solver was given for one actuator group [N*m]."""
-        actuators = cfg.scene.robot.actuators if hasattr(cfg.scene.robot, "actuators") else {}
-        actuator = actuators.get(group)
-        return float(getattr(actuator, "effort_limit_sim", None)
-                     or getattr(actuator, "effort_limit", 0.0) or 0.0)
-
     command = torch.tensor([[speed, 0.0, 0.0] for speed in speeds], device=live.device)
     command_term = live.command_manager.get_term("base_velocity")
 
@@ -938,13 +925,23 @@ def main() -> None:
         trace["fore_aft"].append(diag_metrics.yaw_frame_offset(
             data.root_pos_w.torch, data.root_quat_w.torch, pose)[:, robot_foot_ids, 0].clone())
         # Where the sole would be if this step's joint targets were met, about the deepest vertex.
-        # The Jacobian's DoF axis leads with the six base columns; nothing commands the base, so they
-        # stay zero and the reading is "the joints met their targets, the base did not move".
+        # Fixed-base excludes the root body and has no base DoFs; floating-base includes both.
+        # Uncommanded floating-base columns stay zero: targets move joints, not the base.
+        jacobian_w = data.body_link_jacobian_w.torch
+        fixed_base = int(robot.is_fixed_base)
+        base_dofs = 0 if fixed_base else 6
+        expected_shape = (pose.shape[0], pose.shape[1] - fixed_base, 6,
+                          data.joint_pos.torch.shape[-1] + base_dofs)
+        if tuple(jacobian_w.shape) != expected_shape:
+            raise ValueError(f"Jacobian shape {tuple(jacobian_w.shape)} != {expected_shape}")
+        foot_jacobian_ids = [i - fixed_base for i in robot_foot_ids]
+        if any(i < 0 or i >= expected_shape[1] for i in foot_jacobian_ids):
+            raise ValueError("foot body has no Jacobian row")
         joint_error = torch.cat(
-            [torch.zeros(pose.shape[0], 1, 6, device=pose.device),
+            [pose.new_zeros(pose.shape[0], 1, base_dofs),
              (data.joint_pos_target.torch - data.joint_pos.torch).unsqueeze(1)], dim=-1)
         linear, rotation = diag_metrics.target_vertex_delta_parts(
-            data.body_link_jacobian_w.torch[:, robot_foot_ids], joint_error,
+            jacobian_w[:, foot_jacobian_ids], joint_error,
             lowest - pose[:, robot_foot_ids])
         trace["pred_linear"].append(linear[..., 2].clone())
         trace["pred_rotation"].append(rotation[..., 2].clone())
@@ -1023,40 +1020,50 @@ def main() -> None:
         # must not read like one -- `check_terrain_split_source` keys on the epsilon-plus-cumulative
         # shape as its renamed-copy fallback, and this mask tripped it (2026-09-23).
         alive = ~done[:, env_index].long().cummax(dim=0).values.bool()  # up to the first termination
-        if not bool(alive.any()):
-            alive = torch.ones_like(done[:, env_index])
+        # Post-wrapper reads have no pre-reset terminal capture. Keep the strict alive mask;
+        # an empty first episode may export the full trace only as reset-mixed diagnostics.
+        recorded = alive if bool(alive.any()) else torch.ones_like(alive)
         entry = {"speed": speed, "frames_alive": int(alive.sum()),
+                 "frames_recorded": int(recorded.sum()),
+                 "collection_scope": "diagnostic trace may include reset",
+                 "invalid_for_first_episode": not bool(alive.any()),
+                 "summary_scope": ("first episode excluding terminal; not performance"
+                                   if bool(alive.any()) else
+                                   "raw diagnostic full run; not performance"),
+                 "frames_alive_scope": "first episode strictly before first done",
+                 "frames_recorded_scope": "series and summary rows; full-run fallback only diagnostic",
+                 "done_series": done[:, env_index].bool().tolist(),
+                 "valid_series": alive.tolist(),
                  "done_frames": int(done[:, env_index].sum()), "feet": []}
         for foot, name in enumerate(foot_bodies):
             leg = name.split("_")[0]
-            row = {"body": name, "force": force[alive, env_index, foot],
-                   "sole_clearance_m": clearance[alive, env_index, foot],
-                   "sole_clearance_target_m": clearance_target[alive, env_index, foot],
-                   "sole_contact_area_m2": sole_contact[alive, env_index, foot],
-                   "sole_through_area_m2": sole_through[alive, env_index, foot],
+            row = {"body": name, "force": force[recorded, env_index, foot],
+                   "sole_clearance_m": clearance[recorded, env_index, foot],
+                   "sole_clearance_target_m": clearance_target[recorded, env_index, foot],
+                   "sole_contact_area_m2": sole_contact[recorded, env_index, foot],
+                   "sole_through_area_m2": sole_through[recorded, env_index, foot],
                    "sole_area_m2": sole_areas[foot], "sole_cap_m2": sole_caps[foot],
-                   "sole_tilt_deg": sole_tilt[alive, env_index, foot],
-                   "sole_low_edge_xy": sole_edge[alive, env_index, foot],
-                   "pred_linear_m": pred_linear[alive, env_index, foot],
-                   "pred_rotation_m": pred_rotation[alive, env_index, foot],
-                   "contact_speed_horiz_mps": contact[alive, env_index, foot],
-                   "foot_fore_aft_m": fore_aft[alive, env_index, foot]}
+                   "sole_tilt_deg": sole_tilt[recorded, env_index, foot],
+                   "sole_low_edge_xy": sole_edge[recorded, env_index, foot],
+                   "pred_linear_m": pred_linear[recorded, env_index, foot],
+                   "pred_rotation_m": pred_rotation[recorded, env_index, foot],
+                   "contact_speed_horiz_mps": contact[recorded, env_index, foot],
+                   "foot_fore_aft_m": fore_aft[recorded, env_index, foot]}
             row["report_tokens"] = report_tokens(naming, leg)
             for joint in row["report_tokens"]:
                 column = leg_joint_ids[leg][joint]
-                row[f"joint_target_{joint}"] = target[alive, env_index, column]
-                row[f"joint_actual_{joint}"] = actual[alive, env_index, column]
-                row[f"joint_vel_{joint}"] = vel[alive, env_index, column]
+                row[f"joint_target_{joint}"] = target[recorded, env_index, column]
+                row[f"joint_actual_{joint}"] = actual[recorded, env_index, column]
+                row[f"joint_vel_{joint}"] = vel[recorded, env_index, column]
                 row[f"joint_limits_{joint}"] = tuple(pos_limits[column].tolist())
                 row[f"joint_default_{joint}"] = float(default_pos[column])
                 row[f"joint_kp_sim_{joint}"] = float(gains["kp"][env_index, column])
                 row[f"joint_kd_sim_{joint}"] = float(gains["kd"][env_index, column])
-                role = next(role for role, root in target_binding["roles"][leg].items()
-                            if root == joint)
-                row[f"joint_effort_limit_{joint}"] = group_effort("feet" if role == "foot" else "legs")
+                # Actual solver cap [N*m], at the same live joint column as position and gains.
+                row[f"joint_effort_limit_{joint}"] = float(data.joint_effort_limits.torch[env_index, column])
             entry["feet"].append(summarise(row, args_cli.contact_n, args_cli.transition_frames,
                                            live.step_dt))
-        entry["series"] = {key: [[round(float(x), 5) for x in values[alive, env_index, foot].tolist()]
+        entry["series"] = {key: [[round(float(x), 5) for x in values[recorded, env_index, foot].tolist()]
                                  for foot in range(len(foot_bodies))]
                            for key, values in (("force", force), ("clearance", clearance),
                                                ("contact", contact), ("fore_aft", fore_aft),
@@ -1074,7 +1081,7 @@ def main() -> None:
         # from the report without another rollout.
         entry["joint_series"] = {
             f"{name}_{joint}_{kind}": [round(float(x), 5) for x in values[
-                alive, env_index, leg_joint_ids[name.split("_")[0]][joint]].tolist()]
+                recorded, env_index, leg_joint_ids[name.split("_")[0]][joint]].tolist()]
             for name in foot_bodies for joint in joint_names.roots_of(naming, name.split("_")[0])
             for kind, values in (("target", target), ("actual", actual), ("vel", vel))}
         # The trunk, per frame, joint by joint. Exported because a vertebrate that undulates and one
@@ -1082,7 +1089,7 @@ def main() -> None:
         # the stride, and a shape read off a table of medians is a shape nobody saw.
         entry["spine_series"] = {
             f"{name}_{kind}": [round(float(x), 5) for x in
-                               values[alive, env_index, spine_ids[index]].tolist()]
+                               values[recorded, env_index, spine_ids[index]].tolist()]
             for index, name in enumerate(spine_names)
             for kind, values in (("target", target), ("actual", actual), ("vel", vel))}
         report["envs"].append(entry)

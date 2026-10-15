@@ -277,5 +277,12 @@ def main() -> int:
 
 if __name__ == "__main__":
     code = main()
+    if code:
+        # Kit close may terminate with status 0; preserve real CLI rejection first.
+        import os
+        import sys
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(code)
     simulation_app.close()
     raise SystemExit(code)
