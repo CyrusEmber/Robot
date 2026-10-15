@@ -17,7 +17,8 @@ dynamics, safety clearance or safe-domain verdict. --self_check needs no candida
 --local_path explores lf/rr separately with all five axes, using 1% of the shorter actual
 bone segment per task step. Eight points per phase, 1e-5 m numerical task tolerance,
 0.05 rad joint steps, three deterministic attempts of at most 200 actual residual calls.
-Endpoints and joint-linear midpoints are checked; failure stops that leg. No time mapping.
+Endpoints and joint-linear midpoints are checked; contact solves both within the same call budget.
+Failure stops that leg. Midpoint contact does not establish contact along a whole segment. No time mapping.
 --self_check --break_test <case> intentionally fails the corresponding regression assertion.
 """
 
@@ -138,7 +139,8 @@ def main():
     parser.add_argument('--self_check', action='store_true')
     parser.add_argument('--break_test', choices=('misaligned', 'missing_twist', 'ground', 'solid', 'zero_trigger',
                                                'refine_state', 'refine_shrink', 'local_budget',
-                                               'local_ground', 'local_step', 'local_closure', 'local_stop'))
+                                               'local_ground', 'local_step', 'local_closure', 'local_stop',
+                                               'local_contact', 'local_task'))
     parser.add_argument('--lock_twist', action='store_true')
     parser.add_argument('--inject_error', choices=('twist_axis',))
     args = parser.parse_args()
@@ -614,8 +616,20 @@ def _static_plot(output, rows, axes):
     plt.close(fig)
 
 
+def _local_residual(model, q, previous, root, target, config, contact=False):
+    pose = model.pose(q)
+    point, _ = model.sole(q)
+    point = root[:3, :3] @ point + root[:3, 3]
+    height = _static_ground(model.vertices, pose, root)['height_m']
+    task = (np.array([point[0], point[1], height]) - target) / config['position_tolerance_m']
+    if contact:
+        middle_height = _static_ground(model.vertices, model.pose((previous + q) / 2), root)['height_m']
+        task = np.r_[task, middle_height / config['position_tolerance_m']]
+    return np.r_[task, (q - previous) * 1e-4]
+
+
 def _local_solve(residual, previous, lo, hi, config):
-    """Bound residual evaluations, including finite-difference calls; retain failed attempts."""
+    """Bound calls; task entries precede one regularizer entry per joint."""
     lower = np.maximum(lo, previous - config['joint_step_rad'])
     upper = np.minimum(hi, previous + config['joint_step_rad'])
     seeds = (previous, np.zeros(len(previous)), previous + np.linspace(-.01, .01, len(previous)))
@@ -630,7 +644,7 @@ def _local_solve(residual, previous, lo, hi, config):
                 raise StopIteration('residual evaluation budget')
             count += 1
             value = residual(q)
-            error = float(np.linalg.norm(value[:3]))
+            error = float(np.linalg.norm(value[:-len(previous)]))
             if error < best_error:
                 best_error, best = error, q.copy()
             if error <= 1:
@@ -692,7 +706,9 @@ def _local_path(build_report, output_dir):
     config = {'segment_step_fraction': .01, 'points_per_phase': 8,
               'position_tolerance_m': 1e-5, 'joint_step_rad': .05,
               'evaluations_per_attempt': 200, 'attempts_per_point': 3,
-              'midpoint_check': True, 'path_parameter_only': True}
+              'midpoint_check': True, 'path_parameter_only': True,
+              'contact_task': 'endpoint XY/minimum z plus joint-linear midpoint minimum z',
+              'solver_task_norm': 'L2 of all tolerance-scaled task entries; joint regularizer excluded'}
     results = {}
     for leg in ('lf', 'rr'):
         model = models[leg]
@@ -758,12 +774,8 @@ def _local_path(build_report, output_dir):
                     else:
                         target[0] += index * (neutral_xy[0] - phase_start[0]) / config['points_per_phase']
                     def residual(q):
-                        pose = model.pose(q)
-                        p, _ = model.sole(q)
-                        p = root[:3, :3] @ p + root[:3, 3]
-                        height = _static_ground(model.vertices, pose, root)['height_m']
-                        task = np.array([p[0], p[1], height])
-                        return np.r_[(task - target) / config['position_tolerance_m'], (q - before) * 1e-4]
+                        return _local_residual(model, q, before, root, target, config,
+                                               contact=phase == 'backward_contact')
                     q, attempts, solve_failed = _local_solve(residual, before, model.lo, model.hi, config)
                 endpoint = state(q)
                 midpoint = state((before + q) / 2)
@@ -813,7 +825,9 @@ def _local_path(build_report, output_dir):
 def _local_self_check(break_test=None):
     from unittest.mock import patch
     import inspect
-    changed = {'local_stop': (_local_solve, 'if error <= 1:', 'if False:'),
+    changed = {'local_contact': (_local_residual, 'if contact:', 'if False:'),
+               'local_task': (_local_solve, 'value[:-len(previous)]', 'value[:3]'),
+               'local_stop': (_local_solve, 'if error <= 1:', 'if False:'),
                'local_budget': (_local_solve, "count >= config['evaluations_per_attempt']", 'False'),
                'local_ground': (_local_failures, "state['all_ground_min_m'] < -tolerance", 'False'),
                'local_step': (_local_failures, "delta > config['joint_step_rad'] + 1e-12", 'False'),
@@ -829,6 +843,24 @@ def _local_self_check(break_test=None):
         with patch.dict(globals(), {function.__name__: scope[function.__name__]}):
             return _local_self_check()
     config = {'joint_step_rad': .05, 'evaluations_per_attempt': 12, 'position_tolerance_m': 1e-5}
+    _, contact_attempts, contact_failed = _local_solve(lambda q: np.r_[np.zeros(3), 10., q * 1e-4],
+                                                     np.zeros(5), np.full(5, -.6), np.full(5, .6), config)
+    assert contact_failed and contact_attempts[0]['best_scaled_position_error'] >= 10, 'midpoint task ignored'
+    from types import SimpleNamespace
+    def curved_pose(q):
+        pose = np.eye(4)
+        pose[2, 3] = q[2] + q[0] ** 2 + q[0] * q[3]
+        return pose
+    model = SimpleNamespace(vertices=np.zeros((1, 3)), pose=curved_pose,
+                            sole=lambda q: (np.array([q[0], q[1], 0.]), np.array([0., 0., 1.])))
+    q = np.array([.02, 0., -.0004, 0., 0.])
+    value = _local_residual(model, q, np.zeros(5), np.eye(4), np.array([.02, 0., 0.]), config, True)
+    assert len(value) == 9 and np.linalg.norm(value[:3]) < 1e-10
+    assert abs(value[3] + 10) < 1e-10, 'contact midpoint omitted from residual'
+    q[2], q[3] = 0., -.02
+    assert np.linalg.norm(_local_residual(model, q, np.zeros(5), np.eye(4),
+                                         np.array([.02, 0., 0.]), config, True)[:-5]) < 1e-10
+    assert len(_local_residual(model, q, np.zeros(5), np.eye(4), np.array([.02, 0., 0.]), config)) == 8
     _, ready_attempts, ready_failed = _local_solve(lambda q: np.r_[np.zeros(3), q * 1e-4],
                                                  np.zeros(5), np.full(5, -.6), np.full(5, .6), config)
     assert not ready_failed and ready_attempts[0]['evaluations'] == 1, 'task tolerance did not stop solver'
