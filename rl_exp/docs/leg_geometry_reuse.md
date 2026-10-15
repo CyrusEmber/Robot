@@ -17,7 +17,7 @@
 | 需要什么 | 复用入口 | 适用边界 |
 |---|---|---|
 | 从实际树取关节、根坐标系 FK、骨段夹角 | `rl_exp/tools/verify/check_leg_reachability.py`：`chain_joint_names`、`load_chain`、`chain_frames`、`straight_hfe`、`thigh_shank_angle` | 显式传 naming；共中心承载枢轴不是骨段。`straight_hfe` 的平面角不证明非平面骨段可以完全共线；该文件不是完整可达域扫描器 |
-| 实际五轴链端、掌网格与已保存 Blender 快照对照 | `rl_exp/tools/diagnose/palm_spatial_probe.py`：`Leg`、`check_blender` | `Leg` 可复用树、网格和姿态读点；向量须完整对应 `names`。`solve` 和 CLI 是历史固定参考点／水平掌回归任务，不是自然步态求解入口；掌参考点不是实时材料接触点 |
+| 实际五轴链端、掌网格、保存的 Blender 快照对照及增量静态切片 | `rl_exp/tools/diagnose/palm_spatial_probe.py`：`Leg`、`check_blender`、`--static_slices` | `Leg` 可复用树、网格和姿态读点；向量须完整对应 `names`。静态模式按具名 twist／肘膝／腕踝取候选端点和零位切片、其它关节零，输出网格地面读数与相交反例，不给安全域判词；`--self_check` 校验口径。`solve` 和默认 CLI 是历史固定参考点／水平掌回归任务，不是自然步态求解入口；掌参考点不是实时材料接触点 |
 | 网格距离、表面相交、包含与逐姿态碰撞 | `rl_exp/tools/diagnose/palm_motion_boundaries.py`：`surface_distance`、`surface_crosses`、`inside`、`Collision`、`validate_geometry` | 网格须满足闭合与绕序检查；先验证 FK 支持的 joint rpy、碰撞变换和缩放。`Collision` 继承现有批准对和直接连接排除，须核对新树下实际过滤集合；它不检查地面，也不证明连续域安全 |
 | 单关节扫描和失败转折加密 | `rl_exp/tools/diagnose/palm_motion_boundaries.py`：`hinge_boundaries` | 复用采样、逐姿态检查与转折括号方法；现函数按旧位次取肘膝，不可直接喂新链。先按具名角色适配，再声明其它轴固定上下文；未采到转折不证明区间内没有窄失败带 |
 | 旧机构的肘—腕耦合切片、平面解析 | `rl_exp/tools/diagnose/palm_recovery_constraints.py`：`coupled_map`、`plane_parameters` | 切片方法可参考；解析要求首轴竖直、其余轴平行。新增长轴 twist 不满足此前提，禁止绕过断言或将旧解析结论推广到新链 |
@@ -41,6 +41,7 @@
 从仓根运行。先用 `python -B ablation_harness/host_paths.py --python` 取得配置解释器，再以该解释器运行以下入口；这些是方法自检，不会替候选做完整扫描：
 
 ```text
+<配置解释器> -B rl_exp/tools/diagnose/palm_spatial_probe.py --self_check
 <配置解释器> -B rl_exp/tools/verify/check_leg_reachability.py --self-check
 <配置解释器> -B rl_exp/tools/verify/check_leg_reachability.py --break-test
 <配置解释器> -B rl_exp/tools/diagnose/palm_motion_boundaries.py --self_check

@@ -4,9 +4,9 @@ title: 肩髋三轴掌链候选与缺失运动能力修复
 scope: rl_exp/blender/scripts, rl_exp/tools/diagnose, rl_exp/tasks/joint_names.py
 status: in_progress
 landing: rl_exp/blender/scripts, rl_exp/tools/diagnose
-next: 执行者从试作检查点补组合轨迹、拒错与运行时接线，按正文分段交总项 A/E 与限位 PD 专项。
+next: 执行者从静态切片记录定位新增轴非零上下文的干涉转折，再补相位轨迹与运行时接线，按正文交总项 A/E 与专项。
 close_when: 新上下文核验实际候选、行为证据与交接；有缺口不关闭。
-evidence: acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-14-lizard2-palm-spatial-trial-checkpoint.md, acceptance/records/2026-10-14-lizard2-palm-spatial-design-decision.md
+evidence: acceptance/records/2026-10-15-lizard2-palm-spatial-static-slices.md, acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-14-lizard2-palm-spatial-trial-checkpoint.md, acceptance/records/2026-10-14-lizard2-palm-spatial-design-decision.md
 ---
 
 ## 当前范围
