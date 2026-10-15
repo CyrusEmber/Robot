@@ -4,9 +4,9 @@ title: 肩髋三轴掌链候选与缺失运动能力修复
 scope: rl_exp/blender/scripts, rl_exp/tools/diagnose, rl_exp/tasks/joint_names.py
 status: in_progress
 landing: rl_exp/blender/scripts, rl_exp/tools/diagnose
-next: 执行者消费限位 PD 专项步骤 5 的两腿相位契约，先补局部组合路径依据再定动作尺度；运行时接线与 A/E 交接继续。
+next: 执行者按局部路径记录定位后腿接地段的中点连续性缺口，补完整两腿轨迹；运行时接线与 A/E 交接继续。
 close_when: 新上下文核验实际候选、行为证据与交接；有缺口不关闭。
-evidence: acceptance/records/2026-10-15-lizard2-palm-phase-target-preparation.md, acceptance/records/2026-10-15-lizard2-palm-spatial-refined-boundaries.md, acceptance/records/2026-10-15-lizard2-palm-spatial-static-slices.md, acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-14-lizard2-palm-spatial-trial-checkpoint.md, acceptance/records/2026-10-14-lizard2-palm-spatial-design-decision.md
+evidence: acceptance/records/2026-10-15-lizard2-palm-local-path-probe.md, acceptance/records/2026-10-15-lizard2-palm-phase-target-preparation.md, acceptance/records/2026-10-15-lizard2-palm-spatial-refined-boundaries.md, acceptance/records/2026-10-15-lizard2-palm-spatial-static-slices.md, acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-14-lizard2-palm-spatial-trial-checkpoint.md, acceptance/records/2026-10-14-lizard2-palm-spatial-design-decision.md
 ---
 
 ## 当前范围
