@@ -6,7 +6,7 @@ status: in_progress
 landing: rl_exp/blender/scripts/generate_urdf.py, rl_exp/blender/scripts/lizard2_stance_candidate.py, rl_exp/tools/diagnose/palm_motion_boundaries.py, rl_exp/tools/diagnose/palm_5b_targets.json, rl_exp/tools/diagnose/palm_motion_view.py
 next: 执行者接收肩髋三轴重构候选并复核受影响的 1–4，再按相位推进 5/6 的动作、PD 与承重实测。
 close_when: 新上下文按正文关闭条件审核实际落点与证据，合格后交机体总项 B/C/D；缺证不关闭。
-evidence: acceptance/records/2026-10-14-lizard2-palm-phase-constraint-correction.md, acceptance/records/2026-10-14-lizard2-5b-motion-boundaries.md, acceptance/records/2026-10-14-lizard2-a-priority-review.md, acceptance/records/2026-10-14-lizard2-restored-validation-handoff.md, acceptance/records/2026-10-13-lizard2-restored-limits-pd-open-issues.md, acceptance/records/2026-10-13-lizard2-hindlimb-restored.md
+evidence: acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-14-lizard2-palm-phase-constraint-correction.md, acceptance/records/2026-10-14-lizard2-5b-motion-boundaries.md, acceptance/records/2026-10-14-lizard2-a-priority-review.md, acceptance/records/2026-10-14-lizard2-restored-validation-handoff.md, acceptance/records/2026-10-13-lizard2-restored-limits-pd-open-issues.md, acceptance/records/2026-10-13-lizard2-hindlimb-restored.md
 ---
 
 ## 范围与交接
@@ -38,6 +38,8 @@ evidence: acceptance/records/2026-10-14-lizard2-palm-phase-constraint-correction
    **5b：扩展工况并定范围（5a 后，保持在办）**。逐项补转向与恢复目标及组合碰撞，定位肘膝伸直/折叠和实体干涉边界；区分机械硬限位、策略目标范围与阶段约束。策略范围由可行动作包络及步骤 6 实测跟踪/恢复余量确定，允许非对称。首个直行周期只给该工况候选范围，不能代替全部工况定稿；不足回 A 检查轴/结构或修订目标。
 
    按 `acceptance/records/2026-10-14-lizard2-palm-phase-constraint-correction.md` 重做相位判据：共面只约束中立；允许掌面拨动，支撑、拨动、离地与重落掌分记接触点/边及有向掌面，不锁死掌底中心和全程倾角。先检验穿地、离地、滑移/滚动与组合干涉，再交步骤 6 承重实测。历史平掌样本不作为恢复能力或改轴依据，不把采样包络当安全盒。
+
+   **逐相位输入先收口**：执行者在同一隔离目标配置声明支撑、拨动、离地、重落掌各自的必须条件与容许区间，区分参考点与材料接触点，并明确根运动、掌面有向限制、接触边、净空及采样加密。工程数值仍按 5a 集中提请确认；缺目标、预算或可运行入口时停在新周期求解前，不沿用旧平掌残差补齐。复用现有树/FK与碰撞能力，五轴求解必须消费完整真实链；保留历史四轴入口作对照且不得消费 spatial。补允许倾掌但无穿地的正例，以及翻掌、穿地、漏 twist 和周期接缝负例；逐相位残差与独立 FK 共同复核，成功退出不替代碰撞详情。转向与恢复复用同一相位契约，不用恢复样本替代迈步。
 
 6. **惯量初值与少量校准（1–4 通过、5a 四肢周期可行后）**：
 
