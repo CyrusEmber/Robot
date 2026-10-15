@@ -127,11 +127,24 @@ def main():
     parser.add_argument('--build_report', type=Path)
     parser.add_argument('--output_dir', type=Path)
     parser.add_argument('--static_slices', action='store_true')
+    parser.add_argument('--refine_slices', action='store_true')
+    parser.add_argument('--source_report', type=Path)
+    parser.add_argument('--angle_resolution', type=float)
     parser.add_argument('--self_check', action='store_true')
-    parser.add_argument('--break_test', choices=('misaligned', 'missing_twist', 'ground', 'solid', 'zero_trigger'))
+    parser.add_argument('--break_test', choices=('misaligned', 'missing_twist', 'ground', 'solid', 'zero_trigger',
+                                               'refine_state', 'refine_shrink'))
     parser.add_argument('--lock_twist', action='store_true')
     parser.add_argument('--inject_error', choices=('twist_axis',))
     args = parser.parse_args()
+    if args.refine_slices:
+        if args.static_slices or args.lock_twist or args.inject_error or args.self_check:
+            parser.error('--refine_slices cannot use static/history/self_check controls')
+        if args.source_report is None or args.angle_resolution is None:
+            parser.error('--refine_slices requires --source_report and explicit --angle_resolution')
+        if not np.isfinite(args.angle_resolution) or args.angle_resolution <= 0:
+            parser.error('--angle_resolution must be finite and positive [rad]')
+    elif args.source_report is not None or args.angle_resolution is not None:
+        parser.error('--source_report and --angle_resolution require --refine_slices')
     if args.self_check:
         if args.static_slices or args.lock_twist or args.inject_error:
             parser.error('--self_check cannot be combined with sampling controls')
@@ -141,6 +154,9 @@ def main():
         parser.error('--break_test requires --self_check')
     if args.build_report is None or args.output_dir is None:
         parser.error('--build_report and --output_dir are required unless --self_check')
+    if args.refine_slices:
+        _refine_slices(args.build_report, args.source_report, args.output_dir, args.angle_resolution)
+        return
     if args.static_slices:
         if args.lock_twist or args.inject_error:
             parser.error('--static_slices cannot use historical regression controls')
@@ -411,6 +427,152 @@ def _static_slices(build_report, output_dir):
                       'output_dir': str(output)}, indent=1), flush=True)
 
 
+def _refine_bracket(low, high, resolution, check):
+    """Shrink an opposite-state endpoint bracket [rad], without assuming monotonicity."""
+    assert np.isfinite(resolution) and resolution > 0, 'invalid angle resolution'
+    assert low['angle_rad'] < high['angle_rad'], 'unordered bracket'
+    assert low['target_collision'] != high['target_collision'], 'same-state endpoints'
+    while high['angle_rad'] - low['angle_rad'] > resolution:
+        width = high['angle_rad'] - low['angle_rad']
+        angle = low['angle_rad'] + width / 2
+        assert low['angle_rad'] < angle < high['angle_rad'], 'resolution below float spacing'
+        middle = check(angle)
+        assert middle['angle_rad'] == angle and type(middle['target_collision']) is bool
+        if middle['target_collision'] == low['target_collision']:
+            low = middle
+        else:
+            high = middle
+        assert high['angle_rad'] - low['angle_rad'] < width, 'bracket did not shrink'
+        assert low['target_collision'] != high['target_collision'], 'lost opposite states'
+    return low, high
+
+
+def _refine_slices(build_report, source_report, output_dir, resolution):
+    output = output_dir.resolve()
+    assert np.isfinite(resolution) and resolution > 0, 'invalid angle resolution'
+    assert REPO / 'rl_exp/out' in output.parents and not output.exists(), 'Fresh isolated output required'
+    source = json.loads(source_report.read_text(encoding='utf-8'))
+    assert source['mode'] == 'sampled_static_slices' and source['sample_count'] == 270
+    build, models, urdf, zero, collision, excluded, root, neutral, blender, identity = _static_prepare(build_report)
+    old_identity = source['identity']
+    assert set(old_identity) == set(identity), 'source identity schema mismatch'
+    for key in identity.keys() - {'code_sha256'}:
+        assert old_identity[key] == identity[key], f'source identity mismatch: {key}'
+    old_code, current_code = old_identity['code_sha256'], identity['code_sha256']
+    assert set(old_code) == set(current_code), 'source dependency set mismatch'
+    for path, sha in old_code.items():
+        assert isinstance(sha, str) and len(sha) == 64 and all(c in '0123456789abcdef' for c in sha)
+        if path != str(Path(__file__).resolve()):
+            assert sha == current_code[path], f'source dependency changed: {path}'
+    assert source['root_transform'] == root.tolist(), 'source root mismatch'
+    assert source['neutral_palm_minima_before_root'] == neutral, 'source neutral mismatch'
+    assert source['excluded_pairs'] == excluded, 'source exclusions mismatch'
+    checked = [list(p) for p in collision.pairs]
+    assert source['checked_pairs'] == checked, 'source checked pair set mismatch'
+    assert source['numerical_geometry_trigger_m'] == collision.clearance
+    assert source['safety_clearance_m'] is None
+    axes, indexed = {}, {}
+    for leg in ('lf', 'rr'):
+        model = models[leg]
+        indices, grids = _static_axes(model)
+        axes[leg] = {model.names[i]: grid.tolist() for i, grid in zip(indices, grids)}
+    assert source['axes_rad'] == axes, 'source axes mismatch'
+    assert len(zero) == 30 and len(source['rows']) == 270, 'source joint/row count mismatch'
+    for row in source['rows']:
+        leg, index, q = row['leg'], row['grid_index'], row['q_rad']
+        assert leg in axes and len(index) == 3 and all(type(i) is int for i in index)
+        assert all(0 <= i < count for i, count in zip(index, (3, 9, 5)))
+        key = (leg, *index)
+        assert key not in indexed, 'duplicate source grid row'
+        expected = zero.copy()
+        expected.update({n: grid[i] for (n, grid), i in zip(axes[leg].items(), index)})
+        assert set(q) == set(zero) and all(type(v) in (int, float) and np.isfinite(v) for v in q.values())
+        assert q == expected, 'source full q disagrees with named grid/fixed zero'
+        twist, bend, distal = axes[leg]
+        assert row['twist_context'] == {'joint': twist, 'angle_rad': q[twist]}
+        assert row['bend_joint'] == bend and row['bend_angle_rad'] == q[bend]
+        assert row['distal_joint'] == distal and row['distal_angle_rad'] == q[distal]
+        assert all(urdf['joints'][n]['limits'][0] <= v <= urdf['joints'][n]['limits'][1] for n, v in q.items())
+        # All three partitions must account for every checked pair, once each.
+        partitions = [row[k] for k in ('solid_pairs', 'positive_gap_pairs', 'zero_gap_non_solid_pairs')]
+        readings = [p for group in partitions for p in group]
+        assert len(readings) == len(checked) and sorted(p['pair'] for p in readings) == sorted(checked)
+        assert all(type(p['gap_lower_m']) in (int, float) and np.isfinite(p['gap_lower_m'])
+                   and p['gap_lower_m'] >= 0 for p in readings)
+        solid, positive = _static_pair_readings(readings)
+        assert solid == partitions[0] and positive == partitions[1], 'source pair classification mismatch'
+        indexed[key] = row
+    assert len(indexed) == 270, 'incomplete source grids'
+    target = ['base_link', 'rr_ankle']
+    assert target in checked, 'target pair excluded'
+    def target_state(row):
+        return any(p['pair'] == target for p in row['solid_pairs'])
+    seeds = []
+    for key, row in indexed.items():
+        if key[0] != 'rr':
+            continue
+        for axis in range(3):
+            neighbor = list(key)
+            neighbor[axis + 1] += 1
+            other = indexed.get(tuple(neighbor))
+            if other is not None and target_state(row) != target_state(other):
+                seeds.append((row, other, list(axes['rr'])[axis]))
+    assert seeds, 'no opposite-state adjacent rr target edges'
+    model = models['rr']
+    def reading(q, joint, angle):
+        q = q.copy()
+        q[joint] = angle
+        pair_rows = collision.check(q)  # Never reduce collision.pairs to the target.
+        assert [p['pair'] for p in pair_rows] == checked, 'incomplete current pair check'
+        solid, _ = _static_pair_readings(pair_rows)
+        target_reading = next(p for p in pair_rows if p['pair'] == target)
+        chain_q = np.array([q[n] for n in model.names])
+        _, normal = model.sole(chain_q)
+        return {'angle_rad': angle, 'q_rad': q, 'solid_pairs': solid,
+                'target_collision': any(p['pair'] == target for p in solid),
+                'target_pair_reading': target_reading,
+                'palm_lowest_vertex': _static_ground(model.vertices, model.pose(chain_q), root),
+                'normal_z': float((root[:3, :3] @ normal)[2])}
+    brackets, verified = [], {}
+    for low_row, high_row, joint in seeds:
+        ends = []
+        for row in (low_row, high_row):
+            key = tuple(row['grid_index'])
+            if key not in verified:
+                value = reading(row['q_rad'], joint, row['q_rad'][joint])
+                assert value['target_collision'] == target_state(row), 'source target state changed'
+                assert value['solid_pairs'] == row['solid_pairs'], 'source full solid pairs/count changed'
+                verified[key] = value
+            value = verified[key].copy()
+            value['angle_rad'] = row['q_rad'][joint]
+            ends.append(value)
+        assert ends[0]['target_collision'] != ends[1]['target_collision']
+        low, high = _refine_bracket(*ends, resolution,
+                                   lambda angle: reading(low_row['q_rad'], joint, angle))
+        brackets.append({'joint': joint, 'source_grid_indices': [low_row['grid_index'], high_row['grid_index']],
+                         'source_angles_rad': [r['q_rad'][joint] for r in (low_row, high_row)],
+                         'low': low, 'high': high, 'angle_width_rad': high['angle_rad'] - low['angle_rad']})
+    summary = {'mode': 'refined_static_slices', 'identity': identity, 'source_identity': old_identity,
+               'source_report': str(source_report.resolve()), 'source_report_sha256': digest(source_report),
+               'source_sample_count': len(indexed),
+               'source_rr_solid_pose_count': sum(bool(r['solid_pairs']) for k, r in indexed.items() if k[0] == 'rr'),
+               'source_rr_target_pose_count': sum(target_state(r) for k, r in indexed.items() if k[0] == 'rr'),
+               'axes_rad': axes, 'root_transform': root.tolist(), 'excluded_pairs': excluded,
+               'checked_pairs': checked, 'angle_resolution_rad': resolution, 'target_pair': target,
+               'bracket_count': len(brackets), 'brackets': brackets, 'blender': blender,
+               'numerical_geometry_trigger_m': collision.clearance, 'safety_clearance_m': None,
+               'limits': 'Only opposite-state adjacent source rr edges for base_link/rr_ankle; other coordinates fixed. '
+                         'Same-state edges not scanned; narrow collision bands unknown. Endpoint angle width only, '
+                         'not contact accuracy, a continuous-domain or monotonic-domain claim. Nonmonotonic edges may '
+                         'contain multiple transitions; bisection retains one opposite-state bracket. Resolution larger '
+                         'than source edge leaves original rechecked bracket. No sampled absence implies safety; '
+                         'no safety margin, asset/ROM/PD change or actual motion. Positive gap may be AABB lower bound.'}
+    payload = json.dumps(summary, indent=1, allow_nan=False)
+    output.mkdir(parents=True, exist_ok=False)
+    (output / 'report.json').write_text(payload, encoding='utf-8')
+    print(json.dumps({'mode': summary['mode'], 'bracket_count': len(brackets), 'output_dir': str(output)}), flush=True)
+
+
 def _static_plot(output, rows, axes):
     import matplotlib
     matplotlib.use('Agg')
@@ -442,6 +604,39 @@ def _static_plot(output, rows, axes):
 def _static_self_check(break_test=None):
     from types import SimpleNamespace
     from unittest.mock import patch
+    refine = _refine_bracket
+    if break_test in ('refine_state', 'refine_shrink'):
+        # Mutate the actual helper in memory: same checks below, no extra files.
+        import inspect
+        code = inspect.getsource(_refine_bracket)
+        if break_test == 'refine_state':
+            code = code.replace("middle['target_collision'] == low['target_collision']",
+                                "middle['target_collision'] != low['target_collision']")
+        else:
+            code = code.replace('low = middle', 'low = low').replace('high = middle', 'high = high')
+        scope = {'np': np}
+        exec(code, scope)
+        refine = scope['_refine_bracket']
+    for state in (lambda x: x >= .375, lambda x: x < .375,
+                  lambda x: .25 <= x < .5 or x >= .75):
+        def check(angle):
+            return {'angle_rad': angle, 'target_collision': bool(state(angle))}
+        low, high = refine(check(0.), check(1.), .0625, check)
+        assert high['angle_rad'] - low['angle_rad'] <= .0625
+        assert low == check(low['angle_rad']) and high == check(high['angle_rad'])
+        assert low['target_collision'] != high['target_collision'], 'refine state misclassified'
+        if state(.375) != state(.374):
+            assert low['angle_rad'] <= .375 <= high['angle_rad'], 'step lost'
+        assert refine(check(0.), check(1.), 2., check) == (check(0.), check(1.))
+    # Same-state endpoints cannot expose an interior narrow band: reject, do not claim safety.
+    try:
+        refine({'angle_rad': 0., 'target_collision': False},
+               {'angle_rad': 1., 'target_collision': False}, .1, check)
+    except AssertionError:
+        pass
+    else:
+        raise AssertionError('same-state bracket accepted')
+    print('REFINE_SELF_CHECK_OK: both state directions, step bracket, nonmonotonic limits, coarse resolution', flush=True)
     ordered = ['lf_shoulder_swing_joint', 'lf_shoulder_abduct_joint', 'lf_shoulder_twist_joint',
                'lf_elbow_joint', 'lf_wrist_joint']
     # Deliberate extra joint and shifted indices: old hardcoded [2]/[3]/[4] cannot pass.
