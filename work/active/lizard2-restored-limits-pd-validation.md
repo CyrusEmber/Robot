@@ -4,9 +4,9 @@ title: lizard2 恢复模型：限位与 PD 验证前提及标定
 scope: rl_exp/blender, rl_exp/tools/diagnose, acceptance/records
 status: in_progress
 landing: rl_exp/blender/scripts/generate_urdf.py, rl_exp/blender/scripts/lizard2_stance_candidate.py, rl_exp/tools/diagnose/palm_motion_boundaries.py, rl_exp/tools/diagnose/palm_5b_targets.json, rl_exp/tools/diagnose/palm_motion_view.py
-next: 执行者接收肩髋三轴重构候选并复核受影响的 1–4，再按相位推进 5/6 的动作、PD 与承重实测。
+next: 执行者按步骤 5 的两腿相位契约提出局部路径探测口径和预算，确认后补组合路径；运行时与 PD 前提按 1–4/6 继续。
 close_when: 新上下文按正文关闭条件审核实际落点与证据，合格后交机体总项 B/C/D；缺证不关闭。
-evidence: acceptance/records/2026-10-15-lizard2-palm-spatial-refined-boundaries.md, acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-14-lizard2-palm-phase-constraint-correction.md, acceptance/records/2026-10-14-lizard2-5b-motion-boundaries.md, acceptance/records/2026-10-14-lizard2-a-priority-review.md, acceptance/records/2026-10-14-lizard2-restored-validation-handoff.md, acceptance/records/2026-10-13-lizard2-restored-limits-pd-open-issues.md, acceptance/records/2026-10-13-lizard2-hindlimb-restored.md
+evidence: acceptance/records/2026-10-15-lizard2-palm-phase-target-preparation.md, acceptance/records/2026-10-15-lizard2-palm-spatial-refined-boundaries.md, acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-14-lizard2-palm-phase-constraint-correction.md, acceptance/records/2026-10-14-lizard2-5b-motion-boundaries.md, acceptance/records/2026-10-14-lizard2-a-priority-review.md, acceptance/records/2026-10-14-lizard2-restored-validation-handoff.md, acceptance/records/2026-10-13-lizard2-restored-limits-pd-open-issues.md, acceptance/records/2026-10-13-lizard2-hindlimb-restored.md
 ---
 
 ## 范围与交接
@@ -40,6 +40,19 @@ evidence: acceptance/records/2026-10-15-lizard2-palm-spatial-refined-boundaries.
    按 `acceptance/records/2026-10-14-lizard2-palm-phase-constraint-correction.md` 重做相位判据：共面只约束中立；允许掌面拨动，支撑、拨动、离地与重落掌分记接触点/边及有向掌面，不锁死掌底中心和全程倾角。先检验穿地、离地、滑移/滚动与组合干涉，再交步骤 6 承重实测。历史平掌样本不作为恢复能力或改轴依据，不把采样包络当安全盒。
 
    **逐相位输入先收口**：执行者在同一隔离目标配置声明支撑、拨动、离地、重落掌各自的必须条件与容许区间，区分参考点与材料接触点，并明确根运动、掌面有向限制、接触边、净空及采样加密。工程数值仍按 5a 集中提请确认；缺目标、预算或可运行入口时停在新周期求解前，不沿用旧平掌残差补齐。复用现有树/FK与碰撞能力，五轴求解必须消费完整真实链；保留历史四轴入口作对照且不得消费 spatial。补允许倾掌但无穿地的正例，以及翻掌、穿地、漏 twist 和周期接缝负例；逐相位残差与独立 FK 共同复核，成功退出不替代碰撞详情。转向与恢复复用同一相位契约，不用恢复样本替代迈步。
+
+   **两腿相位契约（5a 的当前准备项）**：先分别处理 lf／rr，固定候选中立根姿态，其它腿和躯尾保持零；这只是身体坐标下的动作能力测试。使用无量纲路径参数 s 表示顺序，不先指定秒数、相位占比或速度。五个关节全部按具名真实链消费，不因静态切片只扫三轴而固定 swing／abduct；接触参考点、材料点和实际网格最低特征分别读出。各相位共同检查全体碰撞实体的地面间隙及非批准网格对，不以目标掌未穿地代替整个机体检查；肢段方向、反曲及有向掌面保留原禁区，未确定数值边界的项目标未判，不新增全程平掌限制。
+
+   | 顺序 | 必须满足 | 不额外强制 |
+   |---|---|---|
+   | 中立 → 支撑后摆 | 从绑定的中立姿态连续出发，掌参考轨迹相对机身有非零后向行程；实际掌网格保留几何地面接触且不穿地，记录最低特征及材料点身份 | 不锁死掌中心、不固定整片掌朝向；固定身体下的后摆不宣称无滑移或真实承重 |
+   | 拨动 → 离地 | 实体姿态连续，记录接触特征切换（顶点 index 可离散改变），随后整片掌碰撞网格最低高度转为正；必须有非零离地段，保留掌面有向读数和全部实体干涉判词 | 不强制趾尖接触或指定拨动角；最低点切换不自动叫滚动，不从静态方向判推进 |
+   | 前摆 | 离地段有非零前向行程，整片掌及其它碰撞实体不得穿地；关节连续，保留肘膝反曲及非相邻网格干涉检查 | 不强制掌面水平，不把五自由度当任意六维足端位姿控制；不以独立关节角盒替代组合验证 |
+   | 重落掌 → 中立 | 从离地侧连续接近地面，掌网格接触而不穿透；位置、掌面和完整关节分支回到起点，检查接缝及关节路径斜率 | 不将静止或只摆法线当闭合迈步；不由无量纲连续性声称速度、冲击或动力学合格 |
+
+   **取值依据与停止点**：既有固定 swing／abduct 的静态切片及高屈膝干涉括号只用于反例回放，不能导出合理步长／抬脚高度。复用五轴 FK、网格接触与连续初值，在中立附近先探接地后摆、离地和前摆的局部可行路径，记录完整组合姿态及失败阶段；探索增量、求解预算、数值接触／穿透判别、方向及加密规则先提出依据并集中确认。取值不是“静态最大位移乘比例”；局部求解失败也不能证明整个目标不可达。用上述路径证据再提出两腿行程和净空候选；共享目标取共同可行路径，不预设前后腿同值。没有可读相位路径证据时，尺寸只能给长度参照，步长和抬脚值继续未定。
+
+   周期及相位占比暂不定；先报告 q(s)、路径接缝与 dq/ds，获得有效限速及驱动依据后再定时间映射，不能引用 URDF 占位 velocity 反推出批准周期。当前仅准备契约，未批准新的数值、未接通五轴相位求解入口。缺目标取值、误差口径或执行预算时，继续提出依据与待决策项，但停在实际路径探测执行前；依据齐备后再收口隔离配置，保持本项在办。
 
 6. **惯量初值与少量校准（1–4 通过、5a 四肢周期可行后）**：
 
