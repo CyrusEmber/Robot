@@ -62,6 +62,7 @@
 | `rl_exp\docs\leg_geometry_reuse.md` | 增轴／改轴／改几何后的探测复用入口与适用边界；决定沿用证据还是补受影响切片时选它 |
 | `rl_exp\tools\diagnose\palm_asset_probe.py` | **Blender 内取 palm 候选的实际枢轴与绑定网格**（`blender --python`，只读源 `.blend`，不改源）；输出须在 `rl_exp\out` 下，供 `palm_pd_probe.py` 的 `--blender_snapshot` 对照 |
 | `rl_exp\blender\scripts\lizard2_palm_spatial_candidate.py` | 肩髋共中心三轴隔离试作生成器（Blender）：输出 blend、相对网格引用 URDF 与身份报告，不写正式资产 |
+| `rl_exp\tools\diagnose\palm_spatial_runtime.py` | 固定检查点的无承重接线诊断与 `--prepare_registered` 隔离消费者配置；`--verify_registered` 复读绑定/拒错，不判 PD 或复现正式配方 |
 | `rl_exp\tools\diagnose\palm_spatial_probe.py` | 三轴试作的 Blender/FK 对照、历史固定落点诊断、`--static_slices` 切片及 `--local_path` 预算内局部路径；自检／失败对照验证口径，不验收步态或动力学 |
 | `rl_exp\tools\diagnose\palm_gait_kinematics.py` | **palm 候选身体固定下的步态几何样本**（无仿真）：`--legs two`（`lf`+`rr`）/ `four`（对角小跑相位），每腿 4 自由度解足底点 + 掌面水平，报残差 / 周期接缝 / 限位余量 / 关节速度 / 网格间隙 / 左右镜像；`--inject_error` 给轴符号、步长、碰撞、镜像负例。**不证明承重、滑移或能走** |
 | `rl_exp\tools\diagnose\palm_pd_probe.py` | **palm 候选的 USD/仿真身份绑定与诊断**（`env_isaaclab` 的 python，起 Isaac）：坐标 / 惯量 / 碰撞过滤 / PD 各自 `--*_only` 工况，报告含输入哈希与代码快照；`--inject_error` 给错 pivot/轴/状态/过滤的拒错负例。仅诊断，不是合格资产验收 |

@@ -6,7 +6,7 @@ status: in_progress
 landing: rl_exp/blender/scripts/generate_urdf.py, rl_exp/blender/scripts/lizard2_stance_candidate.py, rl_exp/tools/diagnose/palm_motion_boundaries.py, rl_exp/tools/diagnose/palm_5b_targets.json, rl_exp/tools/diagnose/palm_motion_view.py
 next: 执行者整理两腿轨迹与侧俯视动画，补斜率接缝及接触连续性验证；运行时与 PD 前提按 1–4/6 继续。
 close_when: 新上下文按正文关闭条件审核实际落点与证据，合格后交机体总项 B/C/D；缺证不关闭。
-evidence: acceptance/records/2026-10-15-lizard2-palm-local-contact-repair.md, acceptance/records/2026-10-15-lizard2-palm-local-path-probe.md, acceptance/records/2026-10-15-lizard2-palm-phase-target-preparation.md, acceptance/records/2026-10-15-lizard2-palm-spatial-refined-boundaries.md, acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-14-lizard2-palm-phase-constraint-correction.md, acceptance/records/2026-10-14-lizard2-5b-motion-boundaries.md, acceptance/records/2026-10-14-lizard2-a-priority-review.md, acceptance/records/2026-10-14-lizard2-restored-validation-handoff.md, acceptance/records/2026-10-13-lizard2-restored-limits-pd-open-issues.md, acceptance/records/2026-10-13-lizard2-hindlimb-restored.md
+evidence: acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md, acceptance/records/2026-10-15-lizard2-palm-local-contact-repair.md, acceptance/records/2026-10-15-lizard2-palm-local-path-probe.md, acceptance/records/2026-10-15-lizard2-palm-phase-target-preparation.md, acceptance/records/2026-10-15-lizard2-palm-spatial-refined-boundaries.md, acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-14-lizard2-palm-phase-constraint-correction.md, acceptance/records/2026-10-14-lizard2-5b-motion-boundaries.md, acceptance/records/2026-10-14-lizard2-a-priority-review.md, acceptance/records/2026-10-14-lizard2-restored-validation-handoff.md, acceptance/records/2026-10-13-lizard2-restored-limits-pd-open-issues.md, acceptance/records/2026-10-13-lizard2-hindlimb-restored.md
 ---
 
 ## 范围与交接
@@ -20,6 +20,8 @@ evidence: acceptance/records/2026-10-15-lizard2-palm-local-contact-repair.md, ac
 先接收重构事项的实际候选并收口 1/2，随后优先做 5a 并交 A；3/4 收口后才做 6 的承重动力学，5b 与 6 逐工况衔接。编号保留用于追溯，不表示必须串行完成 1–6。A 的几何结果无需等待本项关闭；转向、恢复与最终限位仍是未完动作。
 
 ## 下一步
+
+**E 回交**：按 evidence 的 e-spatial-runtime-wiring 记录，步骤 2–4 归因 reset、连接碰撞与惯量，解除 baseline 采集前拒绝后回交 E；不跳过检查、不加 PD 或批量误滤。5a 仍并行。
 
 1. **固定输入与失败判定（执行者）**：先读 a-priority-review 的最新进展，再按 restored-validation-handoff 追溯原始问题；清点问题记录所用在办脚本、导出器改动、配置及本机产物，形成可复读的代码版本、输入绑定和不覆盖历史产物的命令。`palm_pd_probe.py`、`palm_asset_probe.py` 及相关导出片段须完成代码归属与版本落地。逐份比较报告代码/输入与最终版本，只重跑受行为变更影响或缺证的检查；不因日期或脚本哈希变化无差别重跑，也不混用不兼容版本。退出传播修复归 `work/active/exit-status-swallowed-by-app-close.md`，将该入口交其覆盖；本项验收真实成功/失败各一例，异常可见、退出状态正确，失败不得产生可误读为成功的报告。修复期间同时核对日志、报告身份与完成状态，不只看命令退出码。
 
