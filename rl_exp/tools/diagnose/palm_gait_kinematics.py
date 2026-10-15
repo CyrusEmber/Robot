@@ -83,6 +83,11 @@ class Leg:
         self.unsolved = False
         self.names = [f"{leg}_{r}_joint" for r in ROLES[leg]]
         self.link = f"{leg}_{ROLES[leg][-1]}"
+        actual = [name for name in csc.chain_up(urdf["joints"], self.link)
+                  if urdf["joints"][name]["child"].startswith(leg + "_")]
+        if actual != self.names:
+            raise ValueError(f"{leg}: historical four-axis palm solver cannot consume {actual}; "
+                             f"expected {self.names}. Use a verified palm_spatial solver.")
         self.spec = [urdf["joints"][n] for n in self.names]
         self.axes = [s["axis"] * (-1. if i == flip else 1.) for i, s in enumerate(self.spec)]
         self.lo = np.array([s["limits"][0] for s in self.spec])
@@ -359,8 +364,10 @@ def main():
         SAMPLE_LEGS = ("lf", "rf", "rl", "rr")
     out = args.output_dir.resolve()
     assert _REPO / "rl_exp/out" in out.parents, "output must stay under rl_exp/out"
-    out.mkdir(parents=True, exist_ok=False)
+    if out.exists():
+        raise ValueError("output directory already exists")
     report, q, legs, urdf, links, local = run(args)
+    out.mkdir(parents=True, exist_ok=False)
     report["identity"] = {"urdf": str(args.urdf), "urdf_sha256": binding.sha256_file(args.urdf),
                           "script_sha256": binding.sha256_file(_HERE), "revision": binding.git_rev(_REPO),
                           "inject_error": args.inject_error, "args": {k: str(v) for k, v in vars(args).items()}}

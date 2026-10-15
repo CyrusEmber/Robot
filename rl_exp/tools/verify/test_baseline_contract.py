@@ -1855,9 +1855,12 @@ def test_target_binding_report_roundtrip():
     exec(compile(gait_functions, "gait_probe.py", "exec"), gait_scope)
     # Same raw trace, renamed columns only: the summary calculation must not depend on global tokens.
     summary_values = []
-    for naming_id in ("shared", "split", "palm"):
+    for naming_id in ("shared", "split", "palm", "palm_spatial"):
         naming = joint_names.naming_for(naming_id)
         tokens = plot_joints.report_tokens(naming, "lf")
+        if naming_id == "palm_spatial":
+            assert tokens == ("shoulder_swing", "elbow", "wrist"), tokens
+            assert plot_joints.report_tokens(naming, "rr") == ("hip_swing", "knee", "ankle")
         zeros = torch.zeros(8)
         foot = {"body": joint_names.end_link("lf", naming), "report_tokens": tokens,
                 "force": zeros, "sole_clearance_m": zeros, "sole_clearance_target_m": zeros,
@@ -1883,11 +1886,11 @@ def test_target_binding_report_roundtrip():
                     break
             normalized[key] = value
         summary_values.append(normalized)
-    assert summary_values[0] == summary_values[1] == summary_values[2]
+    assert all(value == summary_values[0] for value in summary_values)
 
     readings = []
     plots = []
-    for naming_id in ("shared", "split", "palm"):
+    for naming_id in ("shared", "split", "palm", "palm_spatial"):
         naming = joint_names.naming_for(naming_id)
         names = [joint_names.joint_name(leg, root) for leg in joint_names.LEGS
                  for root in joint_names.roots_of(naming, leg)] + ["chest_yaw_joint"]
@@ -1971,12 +1974,38 @@ def test_target_binding_report_roundtrip():
             else:
                 broken["target_binding"]["joint_names"].append(names[0])
             expect(ValueError, plot_joints.report_naming, broken)
-    assert readings[0] == readings[1] == readings[2], "binding must not change numerical measurements"
-    assert plots[0] == plots[1] == plots[2], "same joint frames must draw the same stop readings"
+    assert all(value == readings[0] for value in readings), "binding must not change numerical measurements"
+    assert all(value == plots[0] for value in plots), "same joint frames must draw the same stop readings"
+
+
+def test_palm_solver_rejects_inserted_axis():
+    import numpy as np
+    from rl_exp.tools.diagnose import palm_gait_kinematics as gait
+
+    with tempfile.TemporaryDirectory() as temp:
+        mesh = pathlib.Path(temp) / "palm.obj"
+        mesh.write_text("v 0 0 0\nv 1 0 0\nv 0 1 0\n", encoding="utf-8")
+        for leg, roots in gait.ROLES.items():
+            names = [f"{leg}_{root}_joint" for root in roots]
+            joints = {}
+            for index, name in enumerate(names):
+                joints[name] = {"parent": "base_link" if index == 0 else joints[names[index - 1]]["child"],
+                                "child": f"{leg}_{roots[index]}", "origin": np.array([0., 0., -0.1]),
+                                "axis": np.array([1., 0., 0.]), "limits": (-1., 1.)}
+            urdf = {"joints": joints, "links": {f"{leg}_{roots[-1]}": {"collision": mesh}}}
+            assert gait.Leg(urdf, leg).names == names
+            twist = f"{leg}_{'shoulder_twist' if leg in ('lf', 'rf') else 'hip_twist'}"
+            changed = {name: dict(spec) for name, spec in joints.items()}
+            changed[twist + "_joint"] = {**changed[names[1]], "parent": changed[names[1]]["child"],
+                                         "child": twist, "origin": np.zeros(3)}
+            changed[names[2]]["parent"] = twist
+            error = expect(ValueError, gait.Leg, {**urdf, "joints": changed}, leg)
+            assert twist in str(error), error
 
 
 def main():
     if "--binding-only" in sys.argv:
+        test_palm_solver_rejects_inserted_axis()
         test_target_binding_report_roundtrip()
         print("TARGET_BINDING_REPORT_OK")
         return

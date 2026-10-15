@@ -503,10 +503,9 @@ def load_case_angles(chain: list[dict],
     is deliberately NOT a case: it sits outside this range (that is what keeps reverse bending
     unreachable), so posing there would be a configuration the leg cannot be in.
 
-    The folded case moves the two hinges the fold sum is made of, picked BY POSITION off the naming
-    (the last two of the three hinges) rather than by asking for ``hfe``/``kfe`` -- those words do not
-    exist on a renamed body, and a case list that silently folds one joint would read as a narrower
-    inertia range.
+    The folded case retains the legacy pair picked off the naming (``[-3:-1]``).
+    Spatial palm adds an axial twist before the elbow/knee; its folded case instead
+    moves elbow/wrist or knee/ankle, leaving that twist at zero.
     """
     cases = {"zero": [0.0] * len(chain)}
     for index, joint in enumerate(chain):
@@ -523,7 +522,9 @@ def load_case_angles(chain: list[dict],
         cases[label] = [joint["limits"][take] for joint in chain]
     folded = [0.0] * len(chain)
     fold_side = 0 if straight_hfe(chain) > 0 else 1
-    fold_tokens = set(joint_names.roots_of(naming, chain[0]["name"].split("_")[0])[-3:-1])
+    roots = joint_names.roots_of(naming, chain[0]["name"].split("_")[0])
+    # Spatial adds twist before elbow/knee: fold the distal hinges, never the twist.
+    fold_tokens = set(roots[-2:] if naming == joint_names.PALM_SPATIAL_NAMING else roots[-3:-1])
     for index, joint in enumerate(chain):
         if joint["token"] in fold_tokens:
             folded[index] = joint["limits"][fold_side]
@@ -784,26 +785,48 @@ def fold_tilt(normal: list[float], sigma: float, foot: float, yaw: float = 0.0) 
     return math.degrees(math.acos(max(-1.0, min(1.0, abs(fold_tilt_cos(normal, sigma, foot, yaw))))))
 
 
-def straight_hfe(chain: list[dict]) -> float:
-    """The ``hfe`` angle [rad] that makes thigh and shank collinear, signed about the joint's axis.
+def _knee_geometry(chain: list[dict], angles: list[float]):
+    """Knee index, unit segment directions and knee axis, all in base_link.
 
-    The thigh and shank are the two segments the chain's third and fourth origins span, so this is
-    where the knee IS straight. The asset states the knee's range as a symmetric +-1.2 rad around a
-    neutral pose that is already bent by this much, which is why the limit has to be compared with
-    this angle rather than with zero.
+    Colocated inserted pivots are not bone segments. Walk to the nearest distinct
+    upstream/downstream pivots; origins belong to parent frames, not their own rpy frames.
     """
-    thigh, shank, axis = _unit(chain[2]["origin"]), _unit(chain[3]["origin"]), _unit(chain[2]["axis"])
+    knees = [i for i, joint in enumerate(chain) if joint["token"] in ("hfe", "elbow", "knee")]
+    if len(knees) != 1:
+        raise ValueError("leg chain must carry exactly one hfe/elbow/knee joint")
+    knee = knees[0]
+    frames = chain_frames(chain, angles)
+    pivot = [frames[knee + 1][i][3] for i in range(3)]
+    segments = []
+    for indices, sign in ((range(knee, -1, -1), -1), (range(knee + 2, len(frames)), 1)):
+        for index in indices:
+            segment = [sign * (frames[index][i][3] - pivot[i]) for i in range(3)]
+            if sum(value * value for value in segment) > 1e-24:
+                segments.append(_unit(segment))
+                break
+        else:
+            raise ValueError(f"{chain[knee]['name']}: missing nonzero thigh or shank segment")
+    axis = [sum(frames[knee + 1][i][j] * chain[knee]["axis"][j] for j in range(3))
+            for i in range(3)]
+    return knee, *segments, _unit(axis)
+
+
+def straight_hfe(chain: list[dict]) -> float:
+    """The knee angle [rad] aligning thigh and shank, signed about its own axis.
+
+    The public name is retained for hfe/elbow/knee chains. Geometry comes from
+    zero-pose FK, so inserted pivots and rotated joint frames do not change roles.
+    This planar angle does not prove nonplanar segments can become collinear.
+    """
+    _, thigh, shank, axis = _knee_geometry(chain, [0.0] * len(chain))
     return math.atan2(sum(_cross(shank, thigh)[i] * axis[i] for i in range(3)),
                       sum(shank[i] * thigh[i] for i in range(3)))
 
 
 def thigh_shank_angle(chain: list[dict], angles: list[float]) -> float:
     """Angle [deg] between the thigh and shank segments: 0 = collinear, 180 = folded onto the thigh."""
-    frames = chain_frames(chain, angles)
-    thigh = [sum(frames[2][i][j] * chain[2]["origin"][j] for j in range(3)) for i in range(3)]
-    shank = [sum(frames[3][i][j] * chain[3]["origin"][j] for j in range(3)) for i in range(3)]
-    norm = math.sqrt(sum(v * v for v in thigh)) * math.sqrt(sum(v * v for v in shank))
-    return math.degrees(math.acos(max(-1.0, min(1.0, sum(thigh[i] * shank[i] for i in range(3)) / norm))))
+    _, thigh, shank, _ = _knee_geometry(chain, angles)
+    return math.degrees(math.acos(max(-1.0, min(1.0, sum(thigh[i] * shank[i] for i in range(3))))))
 
 
 def _smallest_eigenvector(cov) -> list[float]:
@@ -1188,8 +1211,56 @@ def _naming_twin_check(urdf: pathlib.Path) -> None:
 _GAIN_FAMILY = "lizard2"
 
 
+def _knee_geometry_check() -> None:
+    """Hand geometry across namings, zero-length inserted pivots and rotated joint frames."""
+    for naming_id in ("shared", "split", "palm", "palm_spatial"):
+        naming = joint_names.naming_for(naming_id)
+        for leg in ("lf", "rr"):
+            roots = joint_names.roots_of(naming, leg)
+            knee_token = "hfe" if naming_id == "shared" else ("elbow" if leg == "lf" else "knee")
+            knee = roots.index(knee_token)
+            chain = [{"name": f"{leg}_{token}_joint", "token": token,
+                      "origin": [0.0, 0.0, 0.0], "rpy": [0.0, 0.0, 0.0],
+                      "axis": [0.0, 0.0, 1.0], "limits": (-1.0, 1.0)} for token in roots]
+            chain[knee]["origin"] = [1.0, 0.0, 0.0]
+            chain[knee + 1]["origin"] = [0.0, 1.0, 0.0]
+            variants = [chain]
+            if naming_id == "shared":
+                variants.append(chain[1:])  # Old lizard has no hip.
+            for variant in variants:
+                index = next(i for i, joint in enumerate(variant) if joint["token"] == knee_token)
+                assert abs(straight_hfe(variant) + math.pi / 2) < 1e-12, naming_id
+                angles = [0.0] * len(variant)
+                assert abs(thigh_shank_angle(variant, angles) - 90.0) < 1e-10, naming_id
+                angles[index] = -math.pi / 2
+                assert thigh_shank_angle(variant, angles) < 1e-6, naming_id
+                cases = load_case_angles(variant, naming)
+                fold_roots = roots[-2:] if naming_id == "palm_spatial" else roots[-3:-1]
+                assert cases["fold"] == [1.0 if joint["token"] in fold_roots else 0.0
+                                         for joint in variant], (naming_id, cases["fold"])
+                # Insert a translated femoral joint before a now-colocated knee.
+                extra = {**variant[index], "name": f"{leg}_femoral_joint", "token": "femoral"}
+                extended = variant[:index] + [extra, {**variant[index], "origin": [0.0] * 3}] + variant[index + 1:]
+                assert abs(straight_hfe(extended) + math.pi / 2) < 1e-12, naming_id
+                assert abs(thigh_shank_angle(extended, [0.0] * len(extended)) - 90.0) < 1e-10, naming_id
+                # Knee rpy turns the shank, not the thigh; distal rpy cannot turn its own origin.
+                rotated = [{**joint, "rpy": list(joint["rpy"])} for joint in variant]
+                rotated[index]["rpy"] = [0.0, 0.0, math.pi / 2]
+                rotated[index + 1]["rpy"] = [0.0, 0.0, -math.pi / 2]
+                assert (_knee_geometry(rotated, [0.0] * len(rotated))[1]
+                        == _knee_geometry(variant, [0.0] * len(variant))[1])
+                assert abs(abs(straight_hfe(rotated)) - math.pi) < 1e-12, naming_id
+                assert abs(thigh_shank_angle(rotated, [0.0] * len(rotated)) - 180.0) < 1e-6, naming_id
+                # A rigid upstream frame change leaves all three readings unchanged.
+                rotated[0]["rpy"] = [0.3, -0.4, 0.2]
+                assert abs(abs(straight_hfe(rotated)) - math.pi) < 1e-12, naming_id
+                assert abs(thigh_shank_angle(rotated, [0.0] * len(rotated)) - 180.0) < 1e-6, naming_id
+    print("[KNEE-GEOMETRY] shared/split/palm/spatial, legacy short chain and rpy hand cases passed")
+
+
 def self_check(urdf: pathlib.Path) -> None:
     """Poses whose answers are hand arithmetic, not a second pass of the same matrix product."""
+    _knee_geometry_check()
     for leg in LEGS:
         chain = load_chain(urdf, leg)
         # Zero pose: every leg joint origin carries rpy="0 0 0", so the pad origin is their sum.
@@ -1647,8 +1718,8 @@ def break_test(urdf: pathlib.Path) -> int:
          {"downstream_links": lambda urdf, leg: {name: links[:1]
                                                  for name, links in real["downstream_links"](urdf, leg).items()}}),
         ("the load cases posed at zero (a sweep that never moved the leg)",
-         {"load_case_angles": lambda chain: {name: [0.0] * len(chain)
-                                             for name in real["load_case_angles"](chain)}}),
+         {"load_case_angles": lambda chain, naming=joint_names.LEGACY_NAMING:
+          {name: [0.0] * len(chain) for name in real["load_case_angles"](chain, naming)}}),
     ]
     holes = []
     for label, patches in cases:

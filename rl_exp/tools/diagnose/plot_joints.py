@@ -39,15 +39,15 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 from rl_exp.tasks import joint_names  # noqa: E402
 
-#: The chain POSITIONS the probe records per leg (root, first hinge, blade) -- by position, never by
-#: word, so the panels follow the binding: a report written for a renamed body draws its own joints
-#: instead of three empty rows, and one written for another vocabulary is refused (see :func:`draw_band`).
+#: Legacy report columns; spatial palm retains the knee panel after its inserted twist.
 REPORT_POSITIONS = (0, 2, -1)
 
 
 def report_tokens(naming: dict[str, tuple[str, ...]], leg: str) -> tuple[str, ...]:
-    """The three tokens a leg's panels are drawn for, in this binding's words."""
+    """The root, elbow/knee and end panels in this binding's words."""
     roots = joint_names.roots_of(naming, leg)
+    if naming == joint_names.PALM_SPATIAL_NAMING:
+        return roots[0], "elbow" if leg in joint_names.FRONT_LEGS else "knee", roots[-1]
     return tuple(roots[index] for index in REPORT_POSITIONS)
 
 
