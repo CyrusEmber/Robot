@@ -4,9 +4,9 @@ title: lizard2 恢复模型：限位与 PD 验证前提及标定
 scope: rl_exp/blender, rl_exp/tools/diagnose, acceptance/records
 status: in_progress
 landing: rl_exp/blender/scripts/generate_urdf.py, rl_exp/blender/scripts/lizard2_stance_candidate.py, rl_exp/tools/diagnose/palm_motion_boundaries.py, rl_exp/tools/diagnose/palm_5b_targets.json, rl_exp/tools/diagnose/palm_motion_view.py
-next: 执行者按局部路径记录处理后腿接地段中点偏离，再补完整两腿轨迹；运行时与 PD 前提按 1–4/6 继续。
+next: 执行者整理两腿轨迹与侧俯视动画，补斜率接缝及接触连续性验证；运行时与 PD 前提按 1–4/6 继续。
 close_when: 新上下文按正文关闭条件审核实际落点与证据，合格后交机体总项 B/C/D；缺证不关闭。
-evidence: acceptance/records/2026-10-15-lizard2-palm-local-path-probe.md, acceptance/records/2026-10-15-lizard2-palm-phase-target-preparation.md, acceptance/records/2026-10-15-lizard2-palm-spatial-refined-boundaries.md, acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-14-lizard2-palm-phase-constraint-correction.md, acceptance/records/2026-10-14-lizard2-5b-motion-boundaries.md, acceptance/records/2026-10-14-lizard2-a-priority-review.md, acceptance/records/2026-10-14-lizard2-restored-validation-handoff.md, acceptance/records/2026-10-13-lizard2-restored-limits-pd-open-issues.md, acceptance/records/2026-10-13-lizard2-hindlimb-restored.md
+evidence: acceptance/records/2026-10-15-lizard2-palm-local-contact-repair.md, acceptance/records/2026-10-15-lizard2-palm-local-path-probe.md, acceptance/records/2026-10-15-lizard2-palm-phase-target-preparation.md, acceptance/records/2026-10-15-lizard2-palm-spatial-refined-boundaries.md, acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-14-lizard2-palm-phase-constraint-correction.md, acceptance/records/2026-10-14-lizard2-5b-motion-boundaries.md, acceptance/records/2026-10-14-lizard2-a-priority-review.md, acceptance/records/2026-10-14-lizard2-restored-validation-handoff.md, acceptance/records/2026-10-13-lizard2-restored-limits-pd-open-issues.md, acceptance/records/2026-10-13-lizard2-hindlimb-restored.md
 ---
 
 ## 范围与交接
@@ -52,7 +52,7 @@ evidence: acceptance/records/2026-10-15-lizard2-palm-local-path-probe.md, accept
 
    **取值依据与停止点**：既有固定 swing／abduct 的静态切片及高屈膝干涉括号只用于反例回放，不能导出合理步长／抬脚高度。复用五轴 FK、网格接触与连续初值，在中立附近先探接地后摆、离地和前摆的局部可行路径，记录完整组合姿态及失败阶段；探索增量、求解预算、数值接触／穿透判别、方向及加密规则先提出依据并集中确认。取值不是“静态最大位移乘比例”；局部求解失败也不能证明整个目标不可达。用上述路径证据再提出两腿行程和净空候选；共享目标取共同可行路径，不预设前后腿同值。没有可读相位路径证据时，尺寸只能给长度参照，步长和抬脚值继续未定。
 
-   周期及相位占比暂不定；先报告 q(s)、路径接缝与 dq/ds，获得有效限速及驱动依据后再定时间映射，不能引用 URDF 占位 velocity 反推出批准周期。当前预算内局部入口为 `palm_spatial_probe.py --local_path`，执行身份与验证边界取本项 evidence 的局部路径记录；探索口径不升级为正式动作尺度。继续补后腿接地段分支与中点检查，以及未交付的轨迹动画；超出已确认口径或预算的动作先提出依据与待决策项，再执行，保持本项在办。
+   周期及相位占比暂不定；先报告 q(s)、路径接缝与 dq/ds，获得有效限速及驱动依据后再定时间映射，不能引用 URDF 占位 velocity 反推出批准周期。当前预算内局部入口为 `palm_spatial_probe.py --local_path`，执行身份与验证边界取本项 evidence 的局部路径记录；探索口径不升级为正式动作尺度。继续整理已采两腿轨迹及动画，补关节路径斜率、周期接缝与接触连续性验证；端点／中点通过不代替段内接地证明。超出已确认口径或预算的动作先提出依据与待决策项，再执行，保持本项在办。
 
 6. **惯量初值与少量校准（1–4 通过、5a 四肢周期可行后）**：
 
