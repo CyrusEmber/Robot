@@ -19,7 +19,7 @@ evidence: acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md, accep
 4. 整理 `report_only` 实现清单，移除 `dof_torque_frac_of_limit`（关节力矩留专项采集），未实现的 `foot_yaw_deg` 不进新清单。
 5. `no_non_foot_carrier` 的持续部分承重档补齐幅值标定：允许尾触地与异常载荷分别标定，不沿用旧分组；既有样本、复读方法和缺口见 `acceptance/records/2026-10-10-lizard2-carrier-dwell-calibration.md`。拖尾与新增掌跖段承重进入具名接触分组，样本和新报告消费 E 的实际目标绑定；当前 palm 接触端为腕/踝子 link，不能使用指/趾根占位，也不等正式采用才绑定。
 6. 声明固定命令序列、速度带、等待窗与覆盖要求，按新场景采集，不把历史随机场景读数当新证据。历史分桶只作参考。
-7. 承接 E3 的报告 writer 交接：当前实现、字段/列契约、双目标实际报告链与未验边界取 `acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md`“追加：E 双目标实际消费者执行”；后续新测量语义仍走本项具名新协议，不重解释旧协议。继续补样本标定和新口径；受资产前提阻碍的验收不得用已有同几何报告豁免，不等机体项关闭或 S6 采用。
+7. 承接 [接线专项 E3](lizard2-candidate-wiring.md#e3-消费者迁移与交接范围) 的报告 writer 交接：当前实现、字段/列契约、双目标实际报告链与未验边界取 `acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md`“追加：E 双目标实际消费者执行”；后续新测量语义仍走本项具名新协议，不重解释旧协议。继续补样本标定和新口径；受资产前提阻碍的验收不得用已有同几何报告豁免，不等机体项关闭或 S6 采用。
 8. 可复读的测量口径和样本先供 B/C 安全标定，再交 `lizard2-family-landing` S5 阈值前置动作；该交接无需本项先关闭。最终设计比较由 D 使用已确认判据，新协议完整发布仍按本项关闭条件审核。
 
 ## 关闭条件
