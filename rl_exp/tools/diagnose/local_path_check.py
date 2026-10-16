@@ -10,12 +10,16 @@ At most 64 new poses per leg; first geometry failure stops that leg. Original en
 midpoint verdicts remain source evidence. Reports new full-body ground/collision readings,
 contact residual, directed palm, bend and joint-limit/step checks. No continuous proof,
 time mapping, no-slip, dynamics, new collision exclusions or tolerance changes.
+--mirror checks the actual opposite legs with URDF-derived axis signs and mirrored limits.
+Each target adds neutral plus u=1/4, 1/2, 3/4, 1 for every accepted source segment, at most
+129 poses per leg. All target poses are rechecked; no source verdict is copied to the target.
 --self_check --break_test <case> must fail when the actual checking function is broken.
 """
 
 import argparse
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 
@@ -61,6 +65,70 @@ def _quarter_check(rows, evaluate, config, budget=64):
             'all_requested_quarters_pass': failure is None and completed == len(rows) - 1}
 
 
+def _mirror_mapping(left, right):
+    assert len(left.names) == len(right.names) and len(left.names), 'mirror chain mismatch'
+    assert [n.split('_', 1)[1] for n in left.names] == [n.split('_', 1)[1] for n in right.names]
+    axes = lambda model: SimpleNamespace(axes=[np.array(s['axis']) for s in model.chain])
+    signs = probe.motion.gait.mirror_signs(axes(left), axes(right))
+    assert np.isfinite(signs).all(), 'axes are not mirror-related'
+    intervals = np.sort(np.array([left.lo * signs, left.hi * signs]), axis=0)
+    assert np.allclose(intervals, [right.lo, right.hi], atol=1e-12, rtol=0), 'mirrored limits differ'
+    return signs
+
+
+def _mirror_check(rows, map_angles, evaluate, config, budget=129):
+    readings, failure, completed = [], None, 0
+    previous = initial = None
+    for segment, row in enumerate(rows):
+        if row.get('failures') or row.get('midpoint_failures'):
+            failure = {'segment': segment, 'failures': ['failed source segment']}
+            break
+        before = rows[max(segment - 1, 0)]
+        names = sorted(row['state']['q_rad'])
+        start = np.array([before['state']['q_rad'][n] for n in names])
+        end = np.array([row['state']['q_rad'][n] for n in names])
+        for u in ((0.,) if segment == 0 else (.25, .5, .75, 1.)):
+            if len(readings) >= budget:
+                failure = {'segment': segment, 'failures': ['sampling budget']}
+                break
+            source_q = dict(zip(names, start + u * (end - start)))
+            state = evaluate(map_angles(source_q))
+            phase = row['phase']
+            failures = probe._local_failures(state, previous, None, config,
+                                             contact=phase in ('neutral', 'backward_contact'),
+                                             landing=phase == 'return_neutral')
+            failures.extend(state.get('limit_failures', []))
+            if phase in ('lift', 'forward_air') and state['task_m'][2] <= config['position_tolerance_m']:
+                failures.append('no resolved lift')
+            if previous is not None and phase in ('backward_contact', 'forward_air'):
+                dx = state['task_m'][0] - previous['task_m'][0]
+                if (phase == 'backward_contact' and dx >= -config['position_tolerance_m']) or (
+                        phase == 'forward_air' and dx <= config['position_tolerance_m']):
+                    failures.append('no resolved directed displacement')
+            if segment and u == 1.:
+                delta = max(abs(end[n] - start[n]) for n in range(len(names)))
+                if delta > config['joint_step_rad'] + 1e-12:
+                    failures.append('source endpoint joint step')
+            reading = {'segment': segment, 'phase': phase, 'u': u,
+                       's': float(before['s'] + u * (row['s'] - before['s'])),
+                       'state': state, 'failures': failures}
+            readings.append(reading)
+            if failures:
+                failure = {k: reading[k] for k in ('segment', 'phase', 'u', 's', 'failures')}
+                break
+            if initial is None:
+                initial = state
+            previous = state
+        if failure is not None:
+            break
+        completed += bool(segment)
+    closed = bool(initial is not None and previous is not None
+                  and probe._local_closed(previous, initial, config))
+    return {'pose_count': len(readings), 'checked_segments': completed, 'failure': failure,
+            'completed_local_loop': bool(failure is None and completed == len(rows) - 1 and closed),
+            'rows': readings}
+
+
 def _state(model, q, root, urdf, collision, straight, bend):
     angles = np.array([q[n] for n in model.names])
     pose = model.pose(angles)
@@ -87,7 +155,7 @@ def _state(model, q, root, urdf, collision, straight, bend):
             'limit_failures': limits}
 
 
-def _run(source_path, output):
+def _run(source_path, output, mirror=False):
     assert REPO / 'rl_exp/out' in output.parents and not output.exists(), 'fresh isolated output required'
     source, _, _, _, tracks = view._load(source_path)
     build_path = Path(source['identity']['build_report'])
@@ -100,10 +168,10 @@ def _run(source_path, output):
     assert config['position_tolerance_m'] == 1e-5 and config['joint_step_rad'] == .05, 'unapproved tolerances'
     assert config['points_per_phase'] == 8 and config['midpoint_check'], 'unsupported source sampling'
     results = {}
+    if mirror:
+        assert set(tracks) == {'lf', 'rr'}, 'mirror mode requires the two source legs'
     for leg, (stats, _) in tracks.items():
         model = models[leg]
-        bend = model.names.index(build['definitions'][leg]['bend'] + '_joint')
-        straight = probe.reach.straight_hfe(model.chain)
         count = stats['accepted_points']
         rows = source['legs'][leg]['rows'][:count + 1]
         assert count <= 32, 'source exceeds approved sampling budget'
@@ -111,30 +179,56 @@ def _run(source_path, output):
             for state in [row['state']] + ([row['midpoint']] if 'midpoint' in row else []):
                 assert all(state['q_rad'][n] == 0 for n in zero.keys() - set(model.names)), 'other joints moved'
                 assert np.array_equal(np.array([state['q_rad'][n] for n in model.names]), state['chain_q_rad'])
-        result = _quarter_check(rows, lambda q: _state(model, q, root, urdf, collision, straight, bend), config)
-        result.update({'source_accepted_points': count, 'source_completed_local_loop': stats['completed_local_loop'],
-                       'source_failure_phase': stats['failure_phase'],
-                       'full_source_loop_quarters_pass': bool(count and stats['completed_local_loop']
-                                                               and result['all_requested_quarters_pass'])})
-        results[leg] = result
+        if mirror:
+            assert count == 32 and stats['completed_local_loop'], 'mirror requires a complete source loop'
+            target = {'lf': 'rf', 'rr': 'rl'}[leg]
+            other = models[target]
+            signs = _mirror_mapping(model, other)
+            bend = other.names.index(build['definitions'][target]['bend'] + '_joint')
+            straight = probe.reach.straight_hfe(other.chain)
+            def map_angles(q):
+                return {**zero, **{n: float(sign * q[m])
+                                  for m, n, sign in zip(model.names, other.names, signs)}}
+            result = _mirror_check(rows, map_angles,
+                                   lambda q: _state(other, q, root, urdf, collision, straight, bend), config)
+            result.update({'source_leg': leg, 'joint_mapping': [
+                {'source': m, 'target': n, 'sign': float(sign)}
+                for m, n, sign in zip(model.names, other.names, signs)]})
+            result.update({'source_accepted_points': count, 'source_completed_local_loop': True})
+            results[target] = result
+        else:
+            bend = model.names.index(build['definitions'][leg]['bend'] + '_joint')
+            straight = probe.reach.straight_hfe(model.chain)
+            result = _quarter_check(rows, lambda q: _state(model, q, root, urdf, collision, straight, bend), config)
+            result.update({'source_accepted_points': count, 'source_completed_local_loop': stats['completed_local_loop'],
+                           'source_failure_phase': stats['failure_phase'],
+                           'full_source_loop_quarters_pass': bool(count and stats['completed_local_loop']
+                                                                   and result['all_requested_quarters_pass'])})
+            results[leg] = result
     identity['code_sha256'].update({str(Path(p).resolve()): view.digest(p) for p in (__file__, view.__file__)})
-    report = {'mode': 'sampled_local_path_quarters', 'source_report': str(source_path),
+    sampling = ({'fractions': [0., .25, .5, .75, 1.], 'max_poses_per_leg': 129,
+                 'source_to_target': {'lf': 'rf', 'rr': 'rl'}} if mirror else
+                {'fractions': [.25, .75], 'max_new_poses_per_leg': 64})
+    sampling.update({'stop_on_first_failure': True, 'joint_linear': True})
+    report = {'mode': 'sampled_local_path_mirror' if mirror else 'sampled_local_path_quarters',
+              'source_report': str(source_path),
               'source_report_sha256': view.digest(source_path), 'identity': identity,
-              'source_config': config, 'sampling': {'fractions': [.25, .75], 'max_new_poses_per_leg': 64,
-                                                    'stop_on_first_failure': True, 'joint_linear': True},
+              'source_config': config, 'sampling': sampling,
               'root_transform': root.tolist(), 'checked_pairs': source['checked_pairs'], 'excluded_pairs': excluded,
               'numerical_geometry_trigger_m': collision.clearance, 'safety_clearance_m': None,
               'legs': results,
-              'limits': 'Only new quarter samples checked. Source endpoints/midpoints remain historical verdicts. '
-                        'Not continuous contact/collision proof, safe domain, maximal capability, time/speed, '
-                        'material no-slip, smooth seams, PD or dynamics. No solving, asset change or relaxed threshold. '
-                        'Ground tolerance is numerical, not physical permission. Positive gaps may be AABB lower bounds.'}
+              'limits': ('Actual opposite legs sampled independently; all target verdicts rechecked. '
+                         'No four-leg combination. ' if mirror else
+                         'Only new quarter samples checked. Source endpoints/midpoints remain historical verdicts. ')
+                        + 'Not continuous contact/collision proof, safe domain, maximal capability, time/speed, '
+                          'material no-slip, smooth seams, PD or dynamics. No solving, asset change or relaxed threshold. '
+                          'Ground tolerance is numerical, not physical permission. Positive gaps may be AABB lower bounds.'}
     payload = json.dumps(report, indent=1, allow_nan=False)
     output.mkdir(parents=True, exist_ok=False)
     (output / 'report.json').write_text(payload, encoding='utf-8')
-    print(json.dumps({leg: {k: result[k] for k in ('new_pose_count', 'checked_segments', 'failure',
-                                                 'full_source_loop_quarters_pass')}
-                      for leg, result in results.items()}, indent=1), flush=True)
+    summary = ('pose_count', 'checked_segments', 'failure', 'completed_local_loop') if mirror else (
+        'new_pose_count', 'checked_segments', 'failure', 'full_source_loop_quarters_pass')
+    print(json.dumps({leg: {k: result[k] for k in summary} for leg, result in results.items()}, indent=1), flush=True)
 
 
 def _self_check(break_test=None):
@@ -145,7 +239,13 @@ def _self_check(break_test=None):
                      'stop': (_quarter_check, 'if failures:', 'if False:'),
                      'budget': (_quarter_check, 'count >= budget', 'False'),
                      'landing': (_quarter_check, "following['task_m'][2] > state['task_m'][2]", '0 > 1'),
-                     'contact': (probe._local_failures, "contact and abs(state['task_m'][2]) > tolerance", 'False')}
+                     'contact': (probe._local_failures, "contact and abs(state['task_m'][2]) > tolerance", 'False'),
+                     'mirror_sign': (_mirror_mapping, 'return signs', 'return np.ones_like(signs)'),
+                     'mirror_limits': (_mirror_mapping, "assert np.allclose(intervals, [right.lo, right.hi], atol=1e-12, rtol=0)", 'assert True'),
+                     'mirror_stop': (_mirror_check, 'if failures:', 'if False:'),
+                     'mirror_budget': (_mirror_check, 'len(readings) >= budget', 'False'),
+                     'mirror_samples': (_mirror_check, '(.25, .5, .75, 1.)', '(.5, 1.)'),
+                     'mirror_closure': (_mirror_check, 'and closed)', ')')}
         function, old, new = mutations[break_test]
         code = inspect.getsource(function)
         assert old in code
@@ -166,6 +266,7 @@ def _self_check(break_test=None):
         calls.append(u)
         return state(q['joint'], .001 * u * (u - .5) * (u - 1))
     result = _quarter_check(rows, hidden_gap, config)
+    assert result['failure'] is not None, 'hidden contact gap or fail-stop lost'
     assert result['failure']['failures'] == ['contact residual'] and result['new_pose_count'] == 1
     assert calls == [.25] and result['failure']['s'] == .025, 'missed quarter or did not stop'
     result = _quarter_check(rows, lambda q: state(q['joint']), config)
@@ -183,8 +284,51 @@ def _self_check(break_test=None):
     rows[0]['state']['task_m'][2] = .02
     rows[1]['midpoint']['task_m'][2] = .01
     result = _quarter_check(rows, lambda q: state(q['joint'], .005), config)
+    assert result['failure'] is not None, 'landing increase missed'
     assert 'landing height increased toward next source sample' in result['failure']['failures']
-    print('LOCAL_PATH_QUARTERS_SELF_CHECK_OK: hidden contact gap, interpolation, fail-stop, budget, geometry, landing')
+    left = SimpleNamespace(names=['lf_swing_joint', 'lf_twist_joint'],
+                           chain=[{'axis': [0., 0., 1.]}, {'axis': [0., 1., 0.]}],
+                           lo=np.array([-.2, -.3]), hi=np.array([.4, .1]))
+    right = SimpleNamespace(names=['rf_swing_joint', 'rf_twist_joint'],
+                            chain=[{'axis': [0., 0., -1.]}, {'axis': [0., -1., 0.]}],
+                            lo=np.array([-.2, -.1]), hi=np.array([.4, .3]))
+    assert np.array_equal(_mirror_mapping(left, right), [1., -1.]), 'mirror sign lost'
+    right.hi[1] = .4
+    try:
+        _mirror_mapping(left, right)
+    except AssertionError as error:
+        assert str(error) == 'mirrored limits differ'
+    else:
+        raise AssertionError('wrong mirror limit accepted')
+    def mirror_state(q):
+        return {**state(q['joint']), 'reference_point_m': [q['joint'], 0., 0.]}
+    loop = [{'s': 0., 'phase': 'neutral', 'state': state(0.)},
+            {'s': .5, 'phase': 'backward_contact', 'state': state(.04)},
+            {'s': 1., 'phase': 'return_neutral', 'state': state(0.)}]
+    def contact_state(q):
+        reading = mirror_state(q)
+        reading['task_m'][0] = -q['joint']
+        return reading
+    result = _mirror_check(loop, lambda q: q, contact_state, config)
+    assert result['completed_local_loop'] and result['pose_count'] == 9
+    assert [r['u'] for r in result['rows']] == [0., .25, .5, .75, 1., .25, .5, .75, 1.]
+    limited = _mirror_check(loop, lambda q: q, contact_state, config, budget=1)
+    assert limited['pose_count'] == 1 and limited['failure']['failures'] == ['sampling budget']
+    def failed_state(q):
+        reading = contact_state(q)
+        if q['joint']:
+            reading['normal_z'] = -1.
+        return reading
+    failed = _mirror_check(loop, lambda q: q, failed_state, config)
+    assert failed['pose_count'] == 2 and failed['failure']['failures'] == ['back-side palm']
+    for change, expected in (({'all_ground_min_m': -2e-5}, 'ground penetration'),
+                             ({'solid_pairs': [{'pair': ['a', 'b']}]}, 'solid intersection'),
+                             ({'task_m': [0., 0., 2e-5]}, 'contact residual')):
+        failed = _mirror_check(loop, lambda q: q, lambda q: {**contact_state(q), **change}, config)
+        assert failed['pose_count'] == 1 and expected in failed['failure']['failures']
+    result = _mirror_check(loop[:2], lambda q: q, contact_state, config)
+    assert result['failure'] is None and not result['completed_local_loop'], 'false mirror closure'
+    print('LOCAL_PATH_QUARTERS_SELF_CHECK_OK: quarters, mirror signs/limits, actual target samples, fail-stop, closure')
 
 
 def main():
@@ -192,16 +336,19 @@ def main():
     parser.add_argument('--source_report', type=Path)
     parser.add_argument('--output_dir', type=Path)
     parser.add_argument('--self_check', action='store_true')
-    parser.add_argument('--break_test', choices=('fractions', 'stop', 'budget', 'landing', 'contact'))
+    parser.add_argument('--mirror', action='store_true')
+    parser.add_argument('--break_test', choices=('fractions', 'stop', 'budget', 'landing', 'contact',
+                                               'mirror_sign', 'mirror_limits', 'mirror_stop', 'mirror_budget',
+                                               'mirror_samples', 'mirror_closure'))
     args = parser.parse_args()
     if args.self_check:
-        if args.source_report is not None or args.output_dir is not None:
+        if args.source_report is not None or args.output_dir is not None or args.mirror:
             parser.error('--self_check cannot use input/output')
         _self_check(args.break_test)
     else:
         if args.break_test or args.source_report is None or args.output_dir is None:
             parser.error('--source_report and --output_dir required; --break_test requires --self_check')
-        _run(args.source_report.resolve(), args.output_dir.resolve())
+        _run(args.source_report.resolve(), args.output_dir.resolve(), mirror=args.mirror)
 
 
 if __name__ == '__main__':
