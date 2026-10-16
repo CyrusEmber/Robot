@@ -415,6 +415,32 @@ attempt06 实际退出 0，完成 marker 与报告 `completed=true`；报告同�
 
 新上下文只读审核核对记录、两个 JSON 与 reader/collector 源码，没有报告阻塞矛盾，确认短窗提前返回及终止分支未覆盖；该审核没有加载 pt 或独立复跑四负例，pt 张量与负例的实际核验归执行者直证，不将源码可拒绝代替已执行证据。审核输出误称报告无顶层 verdict；执行者直接读取已确认 `verdict=smoke_only`，不采纳该误读，其余局部范围结论不用于关闭 E。
 
+## 追加：正式导出交接核查（2026-10-16）
+
+用户选择先“核导出交接”，不接管 A 的共用生成器在办修改，不启动逐轴 PD。执行者读取 `generate_urdf.py` 当前源码与未提交 diff、试作生成器、checkpoint_v3 身份及实际 URDF；两次真实 Blender **只读 contract** 调用验证入口缺口，无导出、无 USD 重转、无正式资产写入。以下只记录交接核查，不称正式导出修复已完成。
+
+### 两个真实入口反例
+
+- 绑定的五轴 `palm_spatial.blend` 传入既有 `lizard2_palm_contract --contract_check`：实际重开 Blender 源后退出 1，`ValueError: lf: source bones missing=[] extra=['lf_shoulder_twist']`。这证明现有四轴入口保留拒错，不能借它省掉新增轴；不是五轴正确目标的正例。
+- 同一输入传入未声明的 `--robot lizard2_palm_spatial --contract_check`：退出 1，`KeyError: 'lizard2_palm_spatial'`，发生在读源/写出之前。该名字只是核查时的未注册目标请求，未批准为正式目标名，不能把 KeyError 当完整的错源/错目标验收。
+
+日志分别为 `rl_exp/out/lizard2_e_registered_20261015/export_spatial_as_palm_contract_20261016.log`（SHA `76084f8c32eff3ea1398f24cb13f144ec5a44db0309487d6d6568cbc9d51862c`）和 `export_missing_spatial_target_20261016.log`（SHA `f5be9b282b4b2db0936aadc09ec5a83ce5e1978d586d76db1171ca320f1fab93`）。使用 Blender 5.2.2 LTS，命令 `--background --factory-startup --python-exit-code 1 --python rl_exp/blender/scripts/generate_urdf.py -- --robot <上述目标> --blend rl_exp/out/lizard2_palm_spatial_20261014/checkpoint_v3/palm_spatial.blend --contract_check`；未传 out_dir，不触发任何 mesh 写出分支。38 个 checkpoint 文件在调用后重新核原 SHA，全部未变。
+
+### 已有试作与真实重导出的区别
+
+`lizard2_palm_spatial_candidate.py` 已真实打开 Blender、增骨与重绑上段 mesh、保存重开，并采集独立运动快照；不能否认这部分 Blender 证据。但其 URDF 是在原四轴 XML 上增轴/换 parent，mesh 文件按哈希**复制**源 OBJ，并不是从五轴保存源重新导出完整 mesh/惯量。build.json 的 `axes_neutral` 已有全部 30 个 child-link 键；不需要重复采一套轴作为名表声明。它没有当前四轴 diagnostic 入口使用的 `candidate_limits_rad` 和 `candidate_axes_world` 字段，后者可由既有绑定轴显式衔接，不能靠 family 或旧角色槽猜值。
+
+实际 checkpoint 31 links / 30 joints、总质量 72.0004 kg；四腿 swing/abduct 两个无 collider 载体各 0.025 kg，实体上段 mesh/惯量属于 twist，下游 elbow/knee/wrist/ankle 保持父子链。现通用导出器默认给每个 meshless link `MICRO_MASS=0.05`，再从实体表面积预算分配质量；直接补 spatial 名字并套默认导出会重新分配实体质量/惯量，不是同一候选重导出。该差异不能悄悄消化为“导出误差”或继续引用旧 PD 前提。
+
+### 交 A 的最小接线缺口与 E 接收条件
+
+1. **明确构建目标与实际骨链**：在既有 ROBOT_SPECS 接 spatial 源/目标与五角色全部骨链；当前 `source_roles` 对非 palm 默认为 `CHAIN_ROOTS[1:]`，会漏 swing，不能只加 `source_naming=palm_spatial`。旧 shared/split/palm 分支及其原语义不改。
+2. **输入身份、轴/限位和写前拒错**：固定保存源 blend 与所属 build/report 摘要，全部具名轴与 URDF 限位显式衔接；零位/全骨 parent、三轴共中心、mesh 的实际 bone ownership 均在写目录之前验真。正确目标真实导出须有正例，再补错源、错目标及缺轴/错归属负例；本次只读拒绝不替代它们。
+3. **质量/惯量政策不隐式变化**：明确保持当前 link 张量与载体拆分，或由 A 说明新的重算政策并交限位 PD 专项复验。通用 0.05 kg 载体和旧实体面积分配不能未经交接直接套用；完整张量与 USD 主轴表示仍分别核对，不拿质量总数相等证明惯量等价。
+4. **真实重导出后再接运行时**：从绑定保存源生成隔离 URDF/相对 mesh 与新身份，核树/轴/网格/张量的实际变化；受影响的 USD/固定根/具名过滤与运行时消费者重验。现 `palm_spatial_runtime.check_build` 有意 pin checkpoint_v3 的路径与摘要，不为接受新导出而删除身份保护；待 A 交新产物后再显式接新身份，并只复验受影响链。正式采用仍归 D/S6，不建第二套导出器或重写旧检查点。
+
+共用在办文件本轮未修改、未暂存：`generate_urdf.py` SHA `b6f67578e493a942ed15632eabecc7b2348fde22bb9d54c2f3d33dc9db347bf8`、`lizard2_stance_candidate.py` SHA `1552583d6044c36010f4499050dabdc11b34ba5d326bd34827cc81cd900fd80b`；试作 builder SHA `f443d35c1a59a482cb35f09cf4af67a03b5109ff12bf29a61b1cd44c32e4a395` 与 checkpoint builder 绑定相同。build.json SHA `59473f8c345dce48e8ee379c0972c928184f768be85afca948ac812a666fa6f8`。当前核查基于工作树在办导出器，不能声称这些改动全部已发布，也不能把离线闸门绿当导出已通。
+
 ## 未覆盖边界
 
 - 当前隔离 manifest 的正常 reset、中立首物理步及 baseline 十帧实际 writer/reader 已核；完整 20 s 评测、终止帧 hook 实测和任何性能结论仍未覆盖，不以短窗 smoke 宣布 E 完成。

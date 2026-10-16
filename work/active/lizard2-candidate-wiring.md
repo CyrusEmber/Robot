@@ -4,7 +4,7 @@ title: lizard2 候选接线与真实消费者验证
 scope: rl_exp/blender, rl_exp/tasks, rl_exp/tools, ablation_harness
 status: in_progress
 landing: rl_exp/tasks/joint_names.py, rl_exp/tools/diagnose/palm_spatial_runtime.py, rl_exp/tools/verify/obs_protocol_live.py, ablation_harness/baseline_metrics.py
-next: E 执行者接 A 的正式导出接口，继续受控逐轴验证及出口清点；真实报告链边界取 evidence，限位 PD 专项接惯量与工况前提。
+next: A 按 evidence 的正式导出交接核查补目标与质量惯量政策；E 接新身份后复验受影响链，继续受控逐轴验证及出口清点。
 close_when: E 自检就绪后随总项 D 由新上下文一次审核；必需链缺证不关闭。
 evidence: acceptance/records/2026-10-16-lizard2-candidate-doc-organization.md, acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md, acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md, acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory.md
 ---
