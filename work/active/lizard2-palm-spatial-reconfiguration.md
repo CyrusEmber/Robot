@@ -15,6 +15,8 @@ evidence: acceptance/records/2026-10-16-lizard2-local-path-quarters.md, acceptan
 
 按总项“A–E 当前执行关系”分段交付：最小绑定和真实树先支撑 A 的运动学，实际候选再交 E 扩到运行时和报告链；不以本项关闭作为总项几何推进的前提。限位、承重 PD 及躯尾标定由专项与总项 B/C 承接，最终集成仍归 D。
 
+采样与证明范围按 `acceptance/records/2026-10-16-lizard2-local-path-quarters.md` 的“用户确认的验证范围”执行；关闭审核按同一范围，不另加连续域证明前置。
+
 ## 构型与实现方案
 
 
