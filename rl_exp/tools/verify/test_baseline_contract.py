@@ -2,7 +2,7 @@
 # All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
-"""Offline regressions for baseline fixed-window collection, judgement, and startup checks."""
+"""Baseline regressions; --render_matrix adds the full four-naming PNG matrix."""
 
 import ast
 import importlib
@@ -128,22 +128,20 @@ def build(protocol: dict, steps: int, *, num_envs: int = 1, series: dict | None 
     recorder = baseline_frames.BaselineFrames(
         num_envs=num_envs, step_dt=step_dt,
         axes={name: labels for name, labels in AXES.items() if name in declared}, fmt=fmt)
+    # The real recorder snapshots every column in add(); only the input buffers are reused.
+    defaults = default_frame(num_envs, recorder.columns)
+    defaults["velocity_yaw"][:, 0] = forward
+    defaults["command_world"][:, 0] = forward
+    defaults["tilt_cos"][:] = 1.0
+    defaults["mesh_min_z"][:] = 0.5
+    defaults["foot_contact"][:] = 1.0
+    defaults["foot_fraction"][:] = 0.25
     for step in range(steps):
-        frame = default_frame(num_envs, recorder.columns)
         # Metres, not frame counts: one step of a 100-frame window is 0.2 s, so a robot on command
         # at 2 m/s really has moved 0.4 m by frame 1.
-        frame["pos"][:] = torch.tensor([(step + 1) * forward * step_dt, 0.0, 0.0])
-        frame["velocity_yaw"][:] = torch.tensor([forward, 0.0, 0.0])
-        frame["command_world"][:] = torch.tensor([forward, 0.0, 0.0])
-        frame["tilt_cos"][:] = 1.0
-        frame["mesh_min_z"][:] = 0.5
-        frame["foot_contact"][:] = 1.0
-        frame["foot_fraction"][:] = 0.25
-        frame["timeout"][:] = 1.0 if step == steps - 1 else 0.0
-        if "foot_lowest_point" in frame:
-            # A foot resting on the plane: its deepest mesh vertex sits at ground z, and the foot is
-            # neither lifting nor sliding -- the reading the newest format adds, at its zero point.
-            frame["foot_lowest_point"][..., 2] = 0.0
+        defaults["pos"][:, 0] = (step + 1) * forward * step_dt
+        defaults["timeout"][:] = 1.0 if step == steps - 1 else 0.0
+        frame = dict(defaults)  # Replacing an override must not replace a default buffer.
         for name, override in (series or {}).items():
             frame[name] = override(step)
         recorder.add(**frame)
@@ -194,6 +192,33 @@ def test_collector_refuses_frames_that_do_not_fit_the_contract():
     frame["undeclared"] = torch.zeros(2)
     err = expect(baseline_frames.FramesContractError, recorder.add, **frame)
     assert "undeclared" in str(err), err
+
+
+def test_build_reused_inputs_keep_frame_and_call_isolation():
+    """Overrides may reuse a mutable view; the real collector must snapshot each frame."""
+    shared = torch.zeros(2, 3)
+    seen = []
+
+    def position(step):
+        seen.append(step)
+        shared.fill_(step + 1)
+        return shared[:, :]
+
+    for fmt in baseline_frames.format_names():
+        seen.clear()
+        artifact = build(PROTOCOL, 4, num_envs=2, fmt=fmt, series={"pos": position})
+        assert seen == list(range(4)), "every frame must run its override"
+        shared.fill_(-99)
+        frames = artifact["frames"]
+        assert set(frames) == set(baseline_frames.format_spec(fmt)["columns"])
+        assert all(values.shape[:2] == (4, 2) for values in frames.values())
+        assert torch.equal(frames["pos"], torch.arange(1., 5.).view(4, 1, 1).expand(4, 2, 3))
+        assert torch.equal(frames["timeout"], torch.tensor([[0., 0.], [0., 0.], [0., 0.], [1., 1.]]))
+        frames["tilt_cos"].zero_()
+        clean = build(PROTOCOL, 4, num_envs=2, fmt=fmt)["frames"]
+        assert torch.equal(clean["tilt_cos"], torch.ones(4, 2)), "calls must not share defaults"
+        assert torch.equal(clean["pos"][..., 1:], torch.zeros(4, 2, 2)), "overrides must not leak"
+        assert torch.equal(clean["pos"][-1, :, 0], torch.full((2,), 10.0))
 
 
 def test_axis_labels_must_agree_with_the_values():
@@ -1912,8 +1937,8 @@ def test_the_legacy_reader_refuses_thresholds_it_cannot_read():
         result["invalid_reasons"]
 
 
-def test_target_binding_report_roundtrip():
-    """Additive binding preserves readings, refuses mixed/missing/duplicate/unattributed columns."""
+def test_target_binding_report_roundtrip(*, render_matrix=False):
+    """Check all binding readers; render the four-naming PNG matrix only when requested."""
     import copy
     from ablation_harness import baseline_eval
     from rl_exp.tasks import joint_names
@@ -2042,9 +2067,15 @@ def test_target_binding_report_roundtrip():
                   "foot_bodies": ends, "envs": [entry]}
         report = json.loads(json.dumps(report))
         assert plot_joints.report_naming(report) == naming
-        with tempfile.TemporaryDirectory() as temp:
-            drawn = plot_joints.draw_band(entry, 1.0, 0.02, pathlib.Path(temp), naming_id, naming)
-            plots.append(list(drawn["joints"].values()))
+        for foot in entry["feet"]:
+            for token in plot_joints.report_tokens(naming, foot["body"].split("_")[0]):
+                actual = entry["joint_series"][f"{foot['body']}_{token}_actual"]
+                assert plot_joints.at_stop(actual, *foot[f"{token}_limits_rad"], 0.02) == [False, False, True, False]
+        if render_matrix:
+            with tempfile.TemporaryDirectory() as temp:
+                drawn = plot_joints.draw_band(entry, 1.0, 0.02, pathlib.Path(temp), naming_id, naming)
+                assert pathlib.Path(drawn["panels"]).is_file() and pathlib.Path(drawn["stops"]).is_file()
+                plots.append(list(drawn["joints"].values()))
         for mutation in ("binding", "source", "missing", "mixed", "duplicate", "missingtwist"):
             if mutation == "missingtwist" and naming_id != "palm_spatial":
                 continue
@@ -2063,7 +2094,9 @@ def test_target_binding_report_roundtrip():
                 broken["target_binding"]["joint_names"].append(names[0])
             expect(ValueError, plot_joints.report_naming, broken)
     assert all(value == readings[0] for value in readings), "binding must not change numerical measurements"
-    assert all(value == plots[0] for value in plots), "same joint frames must draw the same stop readings"
+    if render_matrix:
+        assert len(plots) == 4 and all(value == plots[0] for value in plots), \
+            "same joint frames must draw the same stop readings"
 
 
 def test_gait_probe_first_frame_done_keeps_alive_empty():
@@ -2211,6 +2244,10 @@ def test_palm_solver_rejects_inserted_axis():
 
 
 def main():
+    if "--render_matrix" in sys.argv:
+        test_target_binding_report_roundtrip(render_matrix=True)
+        print("TARGET_BINDING_RENDER_MATRIX_OK (4 namings, 8 PNGs)")
+        return
     if "--binding-only" in sys.argv:
         test_gait_probe_first_frame_done_keeps_alive_empty()
         test_gait_probe_effort_limits_use_sim_joint_columns()

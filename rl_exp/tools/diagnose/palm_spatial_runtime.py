@@ -67,9 +67,20 @@ def close_values(actual, expected, budget, label):
 def pair_binding(sensor_paths, filter_paths, source, owners, shape):
     """Validate actual registered single-body rows and single-owner columns before naming forces."""
     def singleton(paths):
-        return [p if isinstance(p, str) else p[0] if len(p) == 1 else None for p in paths]
-    rows, columns = singleton(sensor_paths), singleton(filter_paths)
+        require(isinstance(paths, (list, tuple)), "contact pair path container mismatch")
+        return [p if isinstance(p, str) else p[0]
+                if isinstance(p, (list, tuple)) and len(p) == 1 and isinstance(p[0], str)
+                else None for p in paths]
+    rows = singleton(sensor_paths)
     require(rows == [source], "contact pair source binding mismatch")
+    require(isinstance(filter_paths, (list, tuple)), "contact pair filter container mismatch")
+    # Actual backend layout: one sensor row containing its filter columns, not singleton columns.
+    if (len(filter_paths) == 1 and isinstance(filter_paths[0], (list, tuple))
+            and len(filter_paths[0]) == len(owners)
+            and all(isinstance(p, str) for p in filter_paths[0])):
+        columns = list(filter_paths[0])
+    else:
+        columns = singleton(filter_paths)
     require(len(columns) == len(owners) and len(set(columns)) == len(columns)
             and set(columns) == set(owners), "contact pair filter binding mismatch")
     require(tuple(shape) == (1, len(columns), 3), "contact pair matrix shape mismatch")
@@ -134,6 +145,23 @@ def self_check():
         except ValueError:
             pair_negatives += 1
     require(pair_negatives == 4, "contact binding destructive test escaped")
+    # Frozen attempt05/contact_pair_raw_01.json: backend returns one sensor row, 18 body paths.
+    actual_owners = ["/World/envs/env_0/Robot/Geometry/" + name for name in (
+        "base_link", "chest_pitch", "tail1_pitch", "rl_hip_twist", "rr_hip_twist",
+        "neck_pitch", "tail2_pitch", "rl_knee", "rr_knee", "lf_shoulder_twist",
+        "rf_shoulder_twist", "rl_ankle", "rr_ankle", "lf_elbow", "rf_elbow",
+        "tail3_pitch", "lf_wrist", "rf_wrist")]
+    actual_columns = pair_binding([actual_owners[0]], [actual_owners], actual_owners[0],
+                                  actual_owners, (1, 18, 3))
+    require(actual_columns == actual_owners, "actual backend column order changed")
+    actual_negatives = 0
+    for cols in ([actual_owners] * 18, [[actual_owners]], [actual_owners[:-1]],
+                 [actual_owners[:-1] + actual_owners[:1]]):
+        try:
+            pair_binding([actual_owners[0]], cols, actual_owners[0], actual_owners, (1, 18, 3))
+        except ValueError:
+            actual_negatives += 1
+    require(actual_negatives == 4, "actual backend binding destructive test escaped")
     import subprocess
     source = Path(__file__).read_text(encoding="utf-8")
     function = next(n for n in ast.parse(source).body
@@ -180,6 +208,8 @@ def self_check():
     print(json.dumps({"self_check": "PASS", "files_verified": len(doc["candidate_files_sha256"]),
                       "negative_cases": broken, "loader_negatives": loader_negatives,
                       "pair_binding_negative_cases": pair_negatives,
+                      "actual_backend_binding": {"sensor_count": 1, "filter_count": len(actual_columns),
+                                                 "layout": "one_sensor_row", "negative_cases": actual_negatives},
                       "exit_branch_codes": exit_checks,
                       "exit_branch_scope": "actual AST handler/finally; stub close exits 0; not PhysX negative",
                       "pair_scope": "CPU column encoding only; not PhysX mapping proof"}), flush=True)
