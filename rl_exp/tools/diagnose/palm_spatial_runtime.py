@@ -64,6 +64,18 @@ def close_values(actual, expected, budget, label):
                 for a, b in zip(actual, expected)), label + " readback mismatch")
 
 
+def pair_binding(sensor_paths, filter_paths, source, owners, shape):
+    """Validate actual registered single-body rows and single-owner columns before naming forces."""
+    def singleton(paths):
+        return [p if isinstance(p, str) else p[0] if len(p) == 1 else None for p in paths]
+    rows, columns = singleton(sensor_paths), singleton(filter_paths)
+    require(rows == [source], "contact pair source binding mismatch")
+    require(len(columns) == len(owners) and len(set(columns)) == len(columns)
+            and set(columns) == set(owners), "contact pair filter binding mismatch")
+    require(tuple(shape) == (1, len(columns), 3), "contact pair matrix shape mismatch")
+    return columns
+
+
 def self_check():
     doc = check_build(BUILD)
     names = [j.get("name") for j in ET.parse(BUILD.parent / "palm_spatial.urdf").getroot().findall("joint")]
@@ -108,8 +120,69 @@ def self_check():
                 loader_negatives[task] = str(error)
             else:
                 raise ValueError("loader accepted dedicated diagnostic as " + task)
+    owners = ["/Robot/a", "/Robot/b"]
+    columns = pair_binding([[owners[0]]], [[owners[1]], [owners[0]]], owners[0], owners, (1, 2, 3))
+    encoded = {name: force for name, force in zip(columns, [202, 101])}
+    require(encoded == {owners[0]: 101, owners[1]: 202}, "encoded contact column shift")
+    pair_negatives = 0
+    for rows, cols, shape in (([owners[1]], owners, (1, 2, 3)),
+                              ([owners[0]], [owners[0], owners[0]], (1, 2, 3)),
+                              ([owners[0]], owners, (2, 1, 3)),
+                              ([owners[0]], [[owners[0], owners[1]], [owners[1]]], (1, 2, 3))):
+        try:
+            pair_binding(rows, cols, owners[0], owners, shape)
+        except ValueError:
+            pair_negatives += 1
+    require(pair_negatives == 4, "contact binding destructive test escaped")
+    import subprocess
+    source = Path(__file__).read_text(encoding="utf-8")
+    function = next(n for n in ast.parse(source).body
+                    if isinstance(n, ast.FunctionDef) and n.name == "reset_probe")
+    actual_branch = next(n for n in function.body if isinstance(n, ast.Try))
+    writer = next(n for n in ast.parse(source).body
+                  if isinstance(n, ast.FunctionDef) and n.name == "write_json")
+    exit_checks = {}
+    with TemporaryDirectory(prefix="palm_spatial_exit_branch_") as temporary:
+        for variant, expected_code in (("before", 0), ("after", 1), ("success", 0)):
+            branch = copy.deepcopy(actual_branch)
+            branch.body = ast.parse("pass" if variant == "success" else
+                                    "raise ValueError('exit-branch-only')").body
+            if variant == "before":
+                handler = branch.handlers[0]
+                persist = next(i for i, n in enumerate(handler.body)
+                               if isinstance(n, ast.Expr) and isinstance(n.value, ast.Call)
+                               and isinstance(n.value.func, ast.Name) and n.value.func.id == "write_json")
+                handler.body = handler.body[:persist + 1] + [ast.Raise()]
+            out = Path(temporary) / variant
+            out.mkdir()
+            program = ("import os, sys, json, traceback\nfrom pathlib import Path\n"
+                       "from types import SimpleNamespace as NS\n"
+                       f"out = Path({str(out)!r})\nargs = NS(contact_pairs=True)\n"
+                       "result = {'completed': True, 'stage': 'exit_branch_only'}\n"
+                       "env = NS(close=lambda: print('ENV_CLOSE', flush=True))\n"
+                       "def close():\n    print('APP_CLOSE', flush=True)\n    os._exit(0)\n"
+                       "app = NS(close=close)\n" + ast.unparse(writer) + "\n" + ast.unparse(branch))
+            child = subprocess.run([sys.executable, "-B", "-c", program],
+                                   capture_output=True, text=True, timeout=30)
+            require(child.returncode == expected_code, variant + " exit branch wrong code")
+            failure = out / "reset_probe_failure.json"
+            if variant != "success":
+                saved = json.loads(failure.read_text(encoding="utf-8"))
+                require(not saved["completed"] and saved["contact_pairs"]["status"] == "unknown"
+                        and "exit-branch-only" in saved["traceback"], "exit failure persistence mismatch")
+            require(("APP_CLOSE" in child.stdout) == (variant != "after"), "close branch mismatch")
+            require(("ENV_CLOSE" in child.stdout) == (variant != "after"), "env close branch mismatch")
+            require(("RUNTIME_FAILED" in child.stdout) == (variant == "after"), "failure print mismatch")
+            require(variant != "after" or "ValueError: exit-branch-only" in child.stderr,
+                    "failure traceback missing")
+            require(variant != "success" or not failure.exists(), "success wrote failure")
+            exit_checks[variant] = child.returncode
     print(json.dumps({"self_check": "PASS", "files_verified": len(doc["candidate_files_sha256"]),
-                      "negative_cases": broken, "loader_negatives": loader_negatives}), flush=True)
+                      "negative_cases": broken, "loader_negatives": loader_negatives,
+                      "pair_binding_negative_cases": pair_negatives,
+                      "exit_branch_codes": exit_checks,
+                      "exit_branch_scope": "actual AST handler/finally; stub close exits 0; not PhysX negative",
+                      "pair_scope": "CPU column encoding only; not PhysX mapping proof"}), flush=True)
 
 
 def write_json(path, value):
@@ -691,6 +764,9 @@ def reset_probe(args, result):
     result["hook_calls"] = []
     live = None
     phase = "gym_make"
+    pair_views = {}
+    owner_colliders = {}
+    ancestry = {}
 
     def tensor(value):
         if hasattr(value, "torch"):
@@ -716,6 +792,66 @@ def reset_probe(args, result):
                "backend_root_pose_xyzw": tensor(robot.root_view.get_root_transforms()).cpu().tolist(),
                "body_pose_xyzw": robot.data.body_link_pose_w.torch.cpu().tolist(),
                "strict_reset_errors": joint_reset_errors(robot)}
+        if args.contact_pairs:
+            row["contact_pairs"] = {"status": "not_current", "reason":
+                "no force read outside the two post-physics-step stages"}
+            if label in ("post_1_physics_step", "explicit_default_post_1_physics_step"):
+                result["stage"] = "contact_pair_sample_" + label
+                matrices, nets, nonzero, checks = {}, {}, [], []
+                main_forces = live.scene["contact_forces"].data.net_forces_w.torch[0].clone()
+                for source, view in pair_views.items():
+                    matrix = tensor(view.get_contact_force_matrix(dt=live.physics_dt)).clone()
+                    net = tensor(view.get_net_contact_forces(dt=live.physics_dt)).clone()
+                    columns = pair_binding(view.sensor_paths, view.filter_paths, source,
+                                           owner_colliders, matrix.shape)
+                    require(tuple(net.shape) == (1, 3), "contact net force shape mismatch")
+                    require(bool(torch.isfinite(matrix).all() and torch.isfinite(net).all()),
+                            "nonfinite contact forces")
+                    matrices[source] = {path: force for path, force in zip(columns, matrix[0])}
+                    nets[source] = net[0]
+                    name = source.rsplit("/", 1)[-1]
+                    sensor_net = main_forces[live.scene["contact_forces"].body_names.index(name)]
+                    summed = matrix[0].sum(dim=0)
+                    budget = 64 * torch.finfo(torch.float32).eps * max(
+                        1., float(matrix.abs().sum()), float(net.abs().sum()), float(sensor_net.abs().sum()))
+                    checks.append({"source": name, "source_path": source, "columns_actual": columns,
+                        "matrix_shape": list(matrix.shape), "source_net_force_n": net[0].cpu().tolist(),
+                        "filtered_sum_n": summed.cpu().tolist(),
+                        "sum_minus_net_n": (summed - net[0]).cpu().tolist(),
+                        "sum_residual_norm_n": float((summed - net[0]).norm()),
+                        "main_sensor_same_step_n": sensor_net.cpu().tolist(),
+                        "main_sensor_residual_norm_n": float((sensor_net - net[0]).norm()),
+                        "float32_comparison_budget_n": budget})
+                    for partner, force in matrices[source].items():
+                        if bool((force != 0).any()):
+                            other = partner.rsplit("/", 1)[-1]
+                            a, b = ancestry[name], ancestry[other]
+                            common = next(n for n in a if n in b)
+                            nonzero.append({"source": name, "target": other,
+                                "source_owner_path": source, "target_owner_path": partner,
+                                "source_collision_path": owner_colliders[source],
+                                "target_collision_path": owner_colliders[partner],
+                                "force_world_n": force.cpu().tolist(), "norm_n": float(force.norm()),
+                                "source_net_force_n": net[0].cpu().tolist(),
+                                "parent_related": name in b or other in a,
+                                "urdf_graph_distance": a.index(common) + b.index(common)})
+                reciprocity = []
+                paths = list(pair_views)
+                for i, source in enumerate(paths):
+                    for partner in paths[i + 1:]:
+                        f, r = matrices[source][partner], matrices[partner][source]
+                        if bool((f != 0).any() or (r != 0).any()):
+                            reciprocity.append({"bodies": [source.rsplit("/", 1)[-1], partner.rsplit("/", 1)[-1]],
+                                "fij_plus_fji_n": (f + r).cpu().tolist(), "residual_norm_n": float((f + r).norm())})
+                row["contact_pairs"] = {"status": "observed" if nonzero else "unknown",
+                    "dt_s": live.physics_dt, "coverage": [p.rsplit("/", 1)[-1] for p in paths],
+                    "owner_count": len(paths), "directed_slots": len(paths) ** 2,
+                    "nonzero": nonzero, "source_checks": checks, "unordered_reciprocity": reciprocity,
+                    "scope": "normal-force aggregates at body-owner level; one collider per owner; "
+                             "no contact points/friction; zero does not prove no self-contact; "
+                             "sum excludes non-owner contacts; ancestry is not filter approval"}
+                write_json(out / (label + "_contact_pairs.json"), row["contact_pairs"])
+                result["contact_pairs"]["sample_labels"].append(label)
         result["stages"].append(row)
         write_json(out / f"stage_{len(result['stages']):02d}.json", row)
         print("RESET_STAGE", json.dumps({k: row[k] for k in
@@ -812,6 +948,52 @@ def reset_probe(args, result):
             require(all(result["live_readbacks"]["gravity_disabled"].values()), "live gravity enabled")
             require(robot.is_fixed_base, "root is not fixed")
             write_json(out / "collision_ownership.json", result["collision_ownership"])
+            if args.contact_pairs:
+                from isaaclab_physx.physics import PhysxManager as SimulationManager
+                result["stage"] = "contact_pair_initialization"
+                result["contact_pairs"] = {"status": "unknown", "sample_labels": [],
+                    "mapping": [], "physics_filters_changed": False}
+                require(not unclaimed and len(collisions) == 18, "expected 18 claimed collision prims")
+                for collision in collisions:
+                    path = collision["nearest_body"]
+                    require(path not in owner_colliders and collision["enabled"],
+                            "expected one enabled collider per owner")
+                    owner_colliders[path] = collision["prim"]
+                require(len(robot.body_names) == 31, "expected 31 runtime bodies")
+                parents = {j.find("child").get("link"): j.find("parent").get("link")
+                           for j in ET.parse(target["urdf"]).getroot().findall("joint")}
+                for name in robot.body_names:
+                    chain = [name]
+                    while chain[-1] in parents:
+                        require(parents[chain[-1]] not in chain, "URDF ancestry cycle")
+                        chain.append(parents[chain[-1]])
+                    ancestry[name] = chain
+                budget = sensor.cfg.max_contact_data_count_per_prim
+                require(isinstance(budget, int) and budget > 0, "invalid existing per-body contact capacity")
+                result["contact_pairs"]["capacity_per_owner"] = budget
+                sim_view = SimulationManager.get_physics_sim_view()
+                for source in owner_colliders:
+                    require(source.rsplit("/", 1)[-1] in robot.body_names, "foreign collider owner")
+                    view = sim_view.create_rigid_contact_view(source,
+                        filter_patterns=list(owner_colliders), max_contact_data_count=budget)
+                    pair_views[source] = view
+                    api_path = Path(inspect.getfile(type(view)))
+                    mapping = {"source_exact_pattern": source,
+                        "filter_exact_patterns": list(owner_colliders),
+                        "sensor_paths_actual": view.sensor_paths, "filter_paths_actual": view.filter_paths,
+                        "sensor_count": view.sensor_count, "filter_count": view.filter_count,
+                        "max_contact_data_count": view.max_contact_data_count,
+                        "api_source": str(api_path), "api_sha256": binding.sha256_file(api_path),
+                        "binding_status": "unverified"}
+                    result["contact_pairs"]["mapping"].append(mapping)
+                    write_json(out / f"contact_pair_raw_{len(pair_views):02d}.json", mapping)
+                    mapping["columns_actual"] = pair_binding(view.sensor_paths, view.filter_paths, source,
+                        owner_colliders, (view.sensor_count, view.filter_count, 3))
+                    mapping["binding_status"] = "verified"
+                require(live.physics_dt == .005, "unexpected physics dt")
+                result["contact_pairs"]["status"] = "registered_paths_verified"
+                result["collision_ownership"]["contact_pair"] = "see per-stage body-owner force observations"
+                write_json(out / "contact_pair_mapping.json", result["contact_pairs"])
 
             def traced_method(name, original):
                 def call(obj, *a, **kw):
@@ -856,6 +1038,18 @@ def reset_probe(args, result):
         result.update(completed=True, stage="completed")
         write_json(out / "reset_probe_report.json", result)
         print("RESET_PROBE_COMPLETED", result["status"], binding.sha256_file(out / "reset_probe_report.json"), flush=True)
+    except BaseException as error:
+        result.update(completed=False, error=repr(error), traceback=traceback.format_exc())
+        if args.contact_pairs:
+            result.setdefault("contact_pairs", {})["status"] = "unknown"
+        # Report and exit before close(): Kit shutdown can otherwise swallow failure with code 0.
+        write_json(out / "reset_probe_failure.json", result)
+        print("RUNTIME_FAILED", json.dumps({key: result.get(key) for key in
+              ("stage", "error", "output", "samples_completed")}), flush=True)
+        traceback.print_exc()
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(1)
     finally:
         if env is not None:
             env.close()
@@ -873,6 +1067,8 @@ def main():
                         help="offline re-read of a prepared registered manifest")
     parser.add_argument("--self_check", action="store_true")
     parser.add_argument("--reset_probe", type=Path, help="registered manifest reset/first-step attribution")
+    parser.add_argument("--contact_pairs", action="store_true",
+                        help="observe exact collider-owner body pairs during --reset_probe only")
     if "--verify_registered" in sys.argv:
         verify_registered(parser.parse_args().verify_registered)
         return
@@ -885,6 +1081,8 @@ def main():
     from isaaclab.app import AppLauncher
     AppLauncher.add_app_launcher_args(parser)
     args = parser.parse_args()
+    if args.contact_pairs and args.reset_probe is None:
+        parser.error("--contact_pairs requires --reset_probe")
     result = {"completed": False, "stage": "startup",
               "scope": "dedicated unregistered config, NOT registered task/v3 and NOT load_diagnostic_target replay; "
                        "fixed base, gravity disabled, zero gains/armature; no PD, tracking or support verdict"}
