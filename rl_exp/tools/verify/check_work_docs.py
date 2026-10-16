@@ -229,7 +229,9 @@ LIST_BYTES = 6144
 #: configuration plans in active items instead of moving them into decision records for space.
 #: Before restoration: 121493 bytes over 27 active items. Keep outcomes in acceptance records;
 #: this changes the aggregate alarm threshold, not the unfinished-work or review requirements.
-BUDGET_BYTES = 150000
+#: Raised 150000 -> 180000 on 2026-10-16 at the user's explicit request to allow the
+#: precheck plan update without removing unfinished work. LIST_BYTES and review rules stay unchanged.
+BUDGET_BYTES = 180000
 
 _SHA = re.compile(r"\bsha256:[0-9a-fA-F]{8,}")
 #: A prose reference to a ledger file, spelled the way a document writes it. Placeholders
