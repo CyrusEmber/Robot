@@ -13,6 +13,9 @@ time mapping, no-slip, dynamics, new collision exclusions or tolerance changes.
 --mirror checks the actual opposite legs with URDF-derived axis signs and mirrored limits.
 Each target adds neutral plus u=1/4, 1/2, 3/4, 1 for every accepted source segment, at most
 129 poses per leg. All target poses are rechecked; no source verdict is copied to the target.
+--combined checks at most 129 full-body poses: lf/rr in phase, rf/rl offset by half a
+path cycle. Body stays fixed; each pose checks all four palms and all collision pairs once.
+No solving, smoothing, time mapping, world no-slip or support-force verdict.
 --self_check --break_test <case> must fail when the actual checking function is broken.
 """
 
@@ -129,7 +132,20 @@ def _mirror_check(rows, map_angles, evaluate, config, budget=129):
             'rows': readings}
 
 
-def _state(model, q, root, urdf, collision, straight, bend):
+def _body_state(q, root, urdf, collision):
+    ground = {link: probe._static_ground(v, probe.csc.fk(urdf['joints'], link, q), root)
+              for link, (v, _) in collision.local.items()}
+    pairs = collision.check(q)
+    solid, positive = probe._static_pair_readings(pairs)
+    limits = [f'joint limit: {n}' for n, value in q.items()
+              if not urdf['joints'][n]['limits'][0] <= value <= urdf['joints'][n]['limits'][1]]
+    return {'all_ground_min_m': min(g['height_m'] for g in ground.values()), 'ground_by_link': ground,
+            'solid_pairs': solid, 'positive_gap_pairs': positive,
+            'zero_gap_non_solid_pairs': [r for r in pairs if r['gap_lower_m'] == 0 and r not in solid],
+            'limit_failures': limits}
+
+
+def _state(model, q, root, urdf, collision, straight, bend, geometry=None):
     angles = np.array([q[n] for n in model.names])
     pose = model.pose(angles)
     independent = model.root @ np.array(probe.reach.chain_frames(model.chain, angles)[-1])
@@ -137,25 +153,119 @@ def _state(model, q, root, urdf, collision, straight, bend):
     point, normal = model.sole(angles)
     point = root[:3, :3] @ point + root[:3, 3]
     lowest = probe._static_ground(model.vertices, pose, root)
-    ground = {link: probe._static_ground(v, probe.csc.fk(urdf['joints'], link, q), root)
-              for link, (v, _) in collision.local.items()}
-    pairs = collision.check(q)
-    solid, positive = probe._static_pair_readings(pairs)
-    limits = [f'joint limit: {n}' for n, value in q.items()
-              if not urdf['joints'][n]['limits'][0] <= value <= urdf['joints'][n]['limits'][1]]
+    geometry = _body_state(q, root, urdf, collision) if geometry is None else geometry
     return {'q_rad': {n: float(v) for n, v in q.items()}, 'chain_q_rad': angles.tolist(),
             'task_m': [float(point[0]), float(point[1]), lowest['height_m']],
             'reference_point_m': point.tolist(), 'palm_lowest_vertex': lowest,
-            'all_ground_min_m': min(g['height_m'] for g in ground.values()), 'ground_by_link': ground,
             'normal_z': float((root[:3, :3] @ normal)[2]), 'palm_normal': (root[:3, :3] @ normal).tolist(),
             'thigh_shank_angle_deg': probe.reach.thigh_shank_angle(model.chain, angles),
-            'reverse_bend': bool(angles[bend] * np.sign(straight) >= abs(straight)),
-            'solid_pairs': solid, 'positive_gap_pairs': positive,
-            'zero_gap_non_solid_pairs': [r for r in pairs if r['gap_lower_m'] == 0 and r not in solid],
-            'limit_failures': limits}
+            'reverse_bend': bool(angles[bend] * np.sign(straight) >= abs(straight)), **geometry}
 
 
-def _run(source_path, output, mirror=False):
+def _phase_angles(rows, joint_names, s):
+    assert 0 <= s < 1 and rows[0]['s'] == 0 and rows[-1]['s'] == 1, 'invalid periodic path'
+    parameters = np.array([row['s'] for row in rows])
+    if s == 0:
+        return np.array([rows[0]['state']['q_rad'][n] for n in joint_names]), 'neutral'
+    index = int(np.searchsorted(parameters, s, side='left'))
+    before, after = rows[index - 1], rows[index]
+    u = (s - before['s']) / (after['s'] - before['s'])
+    start = np.array([before['state']['q_rad'][n] for n in joint_names])
+    end = np.array([after['state']['q_rad'][n] for n in joint_names])
+    return start + u * (end - start), after['phase']
+
+
+def _combined_angles(s, tracks, plans, zero):
+    q, phases = zero.copy(), {}
+    for leg, (source, joint_names, offset, signs) in plans.items():
+        local_s = (s + offset) % 1.
+        angles, phase = _phase_angles(tracks[source], joint_names, local_s)
+        target_names = plans[leg][1] if leg == source else [n.replace(source + '_', leg + '_', 1)
+                                                          for n in joint_names]
+        q.update(dict(zip(target_names, map(float, angles * signs))))
+        phases[leg] = {'phase': phase, 'local_s': local_s}
+    return q, phases
+
+
+def _combined_check(parameters, evaluate, config, budget=129):
+    rows, failure, previous = [], None, None
+    for s in parameters:
+        if len(rows) >= budget:
+            failure = {'s': float(s), 'failures': ['sampling budget']}
+            break
+        reading = evaluate(float(s))
+        failures = []
+        for leg, item in reading['legs'].items():
+            state, phase = item['state'], item['phase']
+            before = None if previous is None else previous['legs'][leg]['state']
+            reasons = probe._local_failures(state, before, None, config,
+                                            contact=phase in ('neutral', 'backward_contact'),
+                                            landing=phase == 'return_neutral')
+            reasons.extend(state.get('limit_failures', []))
+            if phase in ('lift', 'forward_air') and state['task_m'][2] <= config['position_tolerance_m']:
+                reasons.append('no resolved lift')
+            if before is not None and phase in ('backward_contact', 'forward_air'):
+                dx = state['task_m'][0] - before['task_m'][0]
+                if (phase == 'backward_contact' and dx >= -config['position_tolerance_m']) or (
+                        phase == 'forward_air' and dx <= config['position_tolerance_m']):
+                    reasons.append('no resolved directed displacement')
+            failures.extend(f'{leg}: {reason}' for reason in reasons)
+        row = {'s': float(s), **reading, 'failures': failures}
+        rows.append(row)
+        if failures:
+            failure = {'s': float(s), 'failures': failures}
+            break
+        previous = reading
+    closed = bool(rows and previous is not None and rows[0]['q_rad'] == previous['q_rad']
+                  and all(probe._local_closed(previous['legs'][leg]['state'], item['state'], config)
+                          for leg, item in rows[0]['legs'].items()))
+    return {'pose_count': len(rows), 'failure': failure,
+            'completed_combined_loop': bool(failure is None and len(rows) == len(parameters) and closed),
+            'rows': rows}
+
+
+def _combined_run(source, models, zero, root, urdf, collision, build, config):
+    assert set(source['legs']) == {'lf', 'rr'}, 'combined mode requires the two source legs'
+    tracks = {leg: data['rows'] for leg, data in source['legs'].items()}
+    for leg, rows in tracks.items():
+        assert source['legs'][leg]['completed_local_loop'] and len(rows) == 33, 'complete source loop required'
+        assert np.array_equal([r['s'] for r in rows], np.linspace(0, 1, 33)), 'unsupported source grid'
+        for row in rows:
+            assert not row.get('failures') and not row.get('midpoint_failures'), 'failed source segment'
+            assert all(row['state']['q_rad'][n] == 0 for n in zero.keys() - set(models[leg].names))
+    plans = {'lf': ('lf', models['lf'].names, 0., np.ones(5)),
+             'rr': ('rr', models['rr'].names, 0., np.ones(5)),
+             'rf': ('lf', models['lf'].names, .5, _mirror_mapping(models['lf'], models['rf'])),
+             'rl': ('rr', models['rr'].names, .5, _mirror_mapping(models['rr'], models['rl']))}
+    geometry_fields = ('all_ground_min_m', 'ground_by_link', 'solid_pairs', 'positive_gap_pairs',
+                       'zero_gap_non_solid_pairs', 'limit_failures')
+    def evaluate(s):
+        q, phases = _combined_angles(s, tracks, plans, zero)
+        geometry = _body_state(q, root, urdf, collision)
+        legs = {}
+        for leg, model in models.items():
+            bend = model.names.index(build['definitions'][leg]['bend'] + '_joint')
+            straight = probe.reach.straight_hfe(model.chain)
+            state = _state(model, q, root, urdf, collision, straight, bend, geometry)
+            legs[leg] = {**phases[leg], 'state': state}
+        return {'q_rad': q, 'geometry': geometry, 'legs': legs}
+    result = _combined_check(np.linspace(0, 1, 129), evaluate, config)
+    for row in result['rows']:
+        for item in row['legs'].values():
+            for key in ('q_rad', *geometry_fields):
+                item['state'].pop(key)
+    result['phase_offsets'] = {leg: plan[2] for leg, plan in plans.items()}
+    result['joint_mapping'] = {leg: [{'source': n, 'target': n.replace(plan[0] + '_', leg + '_', 1),
+                                    'sign': float(sign)} for n, sign in zip(plan[1], plan[3])]
+                               for leg, plan in plans.items()}
+    result['geometric_contact_legs'] = [
+        {'s': r['s'], 'legs': [leg for leg, item in r['legs'].items()
+                              if abs(item['state']['task_m'][2]) <= config['position_tolerance_m']]}
+        for r in result['rows']]
+    return result
+
+
+def _run(source_path, output, mirror=False, combined=False):
     assert REPO / 'rl_exp/out' in output.parents and not output.exists(), 'fresh isolated output required'
     source, _, _, _, tracks = view._load(source_path)
     build_path = Path(source['identity']['build_report'])
@@ -168,9 +278,11 @@ def _run(source_path, output, mirror=False):
     assert config['position_tolerance_m'] == 1e-5 and config['joint_step_rad'] == .05, 'unapproved tolerances'
     assert config['points_per_phase'] == 8 and config['midpoint_check'], 'unsupported source sampling'
     results = {}
+    if combined:
+        results['combined'] = _combined_run(source, models, zero, root, urdf, collision, build, config)
     if mirror:
         assert set(tracks) == {'lf', 'rr'}, 'mirror mode requires the two source legs'
-    for leg, (stats, _) in tracks.items():
+    for leg, (stats, _) in ({} if combined else tracks).items():
         model = models[leg]
         count = stats['accepted_points']
         rows = source['legs'][leg]['rows'][:count + 1]
@@ -209,15 +321,20 @@ def _run(source_path, output, mirror=False):
     sampling = ({'fractions': [0., .25, .5, .75, 1.], 'max_poses_per_leg': 129,
                  'source_to_target': {'lf': 'rf', 'rr': 'rl'}} if mirror else
                 {'fractions': [.25, .75], 'max_new_poses_per_leg': 64})
+    if combined:
+        sampling = {'fractions': [0., .25, .5, .75, 1.], 'max_combined_poses': 129,
+                    'phase_offsets': results['combined']['phase_offsets']}
     sampling.update({'stop_on_first_failure': True, 'joint_linear': True})
-    report = {'mode': 'sampled_local_path_mirror' if mirror else 'sampled_local_path_quarters',
+    report = {'mode': 'sampled_local_path_combined' if combined else
+                     'sampled_local_path_mirror' if mirror else 'sampled_local_path_quarters',
               'source_report': str(source_path),
               'source_report_sha256': view.digest(source_path), 'identity': identity,
               'source_config': config, 'sampling': sampling,
               'root_transform': root.tolist(), 'checked_pairs': source['checked_pairs'], 'excluded_pairs': excluded,
               'numerical_geometry_trigger_m': collision.clearance, 'safety_clearance_m': None,
               'legs': results,
-              'limits': ('Actual opposite legs sampled independently; all target verdicts rechecked. '
+              'limits': ('Four-leg combined sampled geometry with fixed body; no support-force verdict. ' if combined else
+                         'Actual opposite legs sampled independently; all target verdicts rechecked. '
                          'No four-leg combination. ' if mirror else
                          'Only new quarter samples checked. Source endpoints/midpoints remain historical verdicts. ')
                         + 'Not continuous contact/collision proof, safe domain, maximal capability, time/speed, '
@@ -226,7 +343,8 @@ def _run(source_path, output, mirror=False):
     payload = json.dumps(report, indent=1, allow_nan=False)
     output.mkdir(parents=True, exist_ok=False)
     (output / 'report.json').write_text(payload, encoding='utf-8')
-    summary = ('pose_count', 'checked_segments', 'failure', 'completed_local_loop') if mirror else (
+    summary = ('pose_count', 'failure', 'completed_combined_loop') if combined else (
+        'pose_count', 'checked_segments', 'failure', 'completed_local_loop') if mirror else (
         'new_pose_count', 'checked_segments', 'failure', 'full_source_loop_quarters_pass')
     print(json.dumps({leg: {k: result[k] for k in summary} for leg, result in results.items()}, indent=1), flush=True)
 
@@ -245,7 +363,13 @@ def _self_check(break_test=None):
                      'mirror_stop': (_mirror_check, 'if failures:', 'if False:'),
                      'mirror_budget': (_mirror_check, 'len(readings) >= budget', 'False'),
                      'mirror_samples': (_mirror_check, '(.25, .5, .75, 1.)', '(.5, 1.)'),
-                     'mirror_closure': (_mirror_check, 'and closed)', ')')}
+                     'mirror_closure': (_mirror_check, 'and closed)', ')'),
+                     'combined_offset': (_combined_angles, '(s + offset) % 1.', 's % 1.'),
+                     'combined_interpolation': (_phase_angles, 'start + u * (end - start)', 'end'),
+                     'combined_pairs': (_body_state, 'pairs = collision.check(q)', 'pairs = []'),
+                     'combined_stop': (_combined_check, 'if failures:', 'if False:'),
+                     'combined_budget': (_combined_check, 'len(rows) >= budget', 'False'),
+                     'combined_closure': (_combined_check, 'and closed)', ')')}
         function, old, new = mutations[break_test]
         code = inspect.getsource(function)
         assert old in code
@@ -328,7 +452,41 @@ def _self_check(break_test=None):
         assert failed['pose_count'] == 1 and expected in failed['failure']['failures']
     result = _mirror_check(loop[:2], lambda q: q, contact_state, config)
     assert result['failure'] is None and not result['completed_local_loop'], 'false mirror closure'
-    print('LOCAL_PATH_QUARTERS_SELF_CHECK_OK: quarters, mirror signs/limits, actual target samples, fail-stop, closure')
+    sample = [{'s': 0., 'phase': 'neutral', 'state': {'q_rad': {'lf_a': 0.}}},
+              {'s': .5, 'phase': 'lift', 'state': {'q_rad': {'lf_a': .04}}},
+              {'s': 1., 'phase': 'return_neutral', 'state': {'q_rad': {'lf_a': 0.}}}]
+    q, phase = _phase_angles(sample, ['lf_a'], .25)
+    assert q[0] == .02 and phase == 'lift', 'combined interpolation changed'
+    plans = {'lf': ('lf', ['lf_a'], 0., np.ones(1)), 'rf': ('lf', ['lf_a'], .5, -np.ones(1))}
+    q, phases = _combined_angles(0., {'lf': sample}, plans, {'lf_a': 0., 'rf_a': 0., 'tail': 0.})
+    assert q == {'lf_a': 0., 'rf_a': -.04, 'tail': 0.} and phases['rf']['local_s'] == .5, 'phase offset lost'
+    end, _ = _combined_angles(1., {'lf': sample}, plans, q)
+    assert end == q, 'periodic offset closure lost'
+    def combined_state(s, failed=False, close=True):
+        value = 0. if s == 1. and close else s * .04
+        q = {'joint': value}
+        reading = {**state(value), 'reference_point_m': [value, 0., 0.]}
+        if failed and s > 0:
+            reading['solid_pairs'] = [{'pair': ['lf_body', 'rr_body']}]
+        return {'q_rad': q, 'legs': {'lf': {'phase': 'neutral', 'state': reading}}}
+    complete = _combined_check([0., .5, 1.], combined_state, config)
+    assert complete['completed_combined_loop'] and complete['pose_count'] == 3
+    failed = _combined_check([0., .5, 1.], lambda s: combined_state(s, failed=True), config)
+    assert failed['pose_count'] == 2 and failed['failure'] is not None, 'combined fail-stop lost'
+    assert failed['failure']['failures'] == ['lf: solid intersection']
+    limited = _combined_check([0., .5, 1.], combined_state, config, budget=1)
+    assert limited['pose_count'] == 1 and limited['failure']['failures'] == ['sampling budget']
+    open_cycle = _combined_check([0., .5, 1.], lambda s: combined_state(s, close=False), config)
+    assert not open_cycle['completed_combined_loop'] and open_cycle['failure'] is None, 'false combined closure'
+    from unittest.mock import patch
+    collision = SimpleNamespace(local={'body': (np.zeros((1, 3)), None)},
+                                check=lambda q: [{'pair': ['a', 'b'], 'gap_lower_m': 0.,
+                                                  'intersects': True, 'contained': False}])
+    with patch.object(probe.csc, 'fk', return_value=np.eye(4)):
+        geometry = _body_state({'joint': 0.}, np.eye(4),
+                               {'joints': {'joint': {'limits': [-1., 1.]}}}, collision)
+    assert geometry['solid_pairs'] and geometry['all_ground_min_m'] == 0., 'combined collision scan lost'
+    print('LOCAL_PATH_QUARTERS_SELF_CHECK_OK: quarters, mirror and combined mapping, phases, interpolation, fail-stop, closure')
 
 
 def main():
@@ -337,18 +495,23 @@ def main():
     parser.add_argument('--output_dir', type=Path)
     parser.add_argument('--self_check', action='store_true')
     parser.add_argument('--mirror', action='store_true')
+    parser.add_argument('--combined', action='store_true')
     parser.add_argument('--break_test', choices=('fractions', 'stop', 'budget', 'landing', 'contact',
                                                'mirror_sign', 'mirror_limits', 'mirror_stop', 'mirror_budget',
-                                               'mirror_samples', 'mirror_closure'))
+                                               'mirror_samples', 'mirror_closure', 'combined_offset',
+                                               'combined_interpolation', 'combined_pairs', 'combined_stop',
+                                               'combined_budget', 'combined_closure'))
     args = parser.parse_args()
+    if args.mirror and args.combined:
+        parser.error('--mirror and --combined are separate modes')
     if args.self_check:
-        if args.source_report is not None or args.output_dir is not None or args.mirror:
+        if args.source_report is not None or args.output_dir is not None or args.mirror or args.combined:
             parser.error('--self_check cannot use input/output')
         _self_check(args.break_test)
     else:
         if args.break_test or args.source_report is None or args.output_dir is None:
             parser.error('--source_report and --output_dir required; --break_test requires --self_check')
-        _run(args.source_report.resolve(), args.output_dir.resolve(), mirror=args.mirror)
+        _run(args.source_report.resolve(), args.output_dir.resolve(), mirror=args.mirror, combined=args.combined)
 
 
 if __name__ == '__main__':
