@@ -131,9 +131,60 @@ E5 五项均不宣布完整完成：导出目标仍归 A/共用生成器执行�
 
 独立局部审核核代码和实际产物；首轮曾把修复前 `execution_record.json` 当成最新状态、漏读最终日志，并误判已存在负例会覆盖。随后新上下文直接读取 `gait_final.log` 与终版报告，确认实际 writer 输出、首局零有效帧与无 traceback；核 `if path.exists(): require(equality) else: write` 后撤回覆盖判定。日志本身不含退出码，exit 0 仍依据执行命令结果，不伪称日志可单独证明它。此局部审核不关闭 E 或总事项，baseline reset 仍按独立实际失败日志留在办。
 
+## 追加：reset 阶段与实际 collider 归属
+
+### 范围与方法
+
+用户批准先攻 baseline 阻塞，追踪 reset 写入、缓存和物理步，同时核 collider 归属；不改网格、惯量、碰撞过滤或检查阈值。新增 `palm_spatial_runtime.py --reset_probe` 持久入口，消费原注册 manifest，输出新 `attempt02`；实际启动一次仿真，记录九个阶段，诊断 hooks 自动恢复。输入 manifest、固定 USD 与原候选 38 文件摘要未变。
+
+### 阶段实测与判定
+
+| 阶段 | max q-default [rad] | max qd-default [rad/s] |
+|---|---:|---:|
+| gym.make 返回 | 0.134496257 | 19.841339111 |
+| wrapper reset 返回 | 0.134496257 | 19.841339111 |
+| 原状态首物理步前 | 0.134496257 | 19.841339111 |
+| 原状态首物理步后 | 0.183123186 | 10.115932465 |
+| 诊断写绑定默认值并 forward | 0 | 0 |
+| 上述写入后的一个物理步 | 0.047132555 | 10.003413200 |
+
+全部阶段缓存与 backend 的位置/速度差为零；`forward()` 不推进物理。本 fork 使用 xyzw，实际 backend root 一直为 [0,0,2,0,0,0,1]，不支持 quaternion 顺序错误或根被旋转的猜测。
+
+`RslRlVecEnvWrapper` 确实调用 `env.reset()`；reset events 全禁用时，scene/articulation reset 仅清 actuator/wrench，实测 wrapper reset 没有调用关节状态 writer。PhysX startup warmup 在 gym.make 返回前推进物理，偏移因此保留到严格 reset 检查。**这不是漏调用 wrapper.reset 或缓存陈旧。**
+
+诊断仅写回已经绑定的零默认关节状态，原严格检查立即通过；下一物理步又失败。该同场景反事实不清除 solver 历史，也不是 baseline 修复或验收。写零后首步 base_link net contact force 范数约 75,814.647 N；不能据净力推出碰撞 pair 或地面接触。self-contact、fixed-world-joint solver 与惯量各自贡献仍未知；fixed joint 的 authored local origin 与实际根保持 z=2 并存，尚未验证 solver-frame 解释，不能据前者宣称根锁错。
+
+### 实际 collider 归属
+
+实际生成场景中读取 18 个 collision prim、18 个 nearest rigid-body owner，未认领 collider 为零；sensor 有 31 个 body。前肢上/下/掌分别归 shoulder_twist、elbow、wrist；后肢分别归 hip_twist、knee、ankle。其它 owner 为 base_link、chest_pitch、neck_pitch、tail1/2/3_pitch。
+
+四个腕/踝体都有实际 collider 与 sensor ID；实际 reward resolved bodies 中无缺 collider 的空处罚对象。报告保存每个完整 prim、nearest owner、approximation、enabled、transform 与 URDF 网格摘要。mesh-local extent 未拿来证明不同坐标系尺寸相等。**本切片补齐静态实际 ownership，不证明地面接触归属、碰撞过滤合理、旧资产问题解除或承重合格。**
+
+### 证据与复读
+
+本机产物为 `rl_exp/out/lizard2_e_registered_20261015/attempt02/`：
+
+| 对象 | SHA256 |
+|---|---|
+| reset_probe_report.json | `928dd7811619b28b98ba8f49df1e23a1ac1b1ebe6a3c572ed8b5195a4efb7b96` |
+| collision_ownership.json | `8329f33e4c9b57a1758aee6bc9825816a12af138cf99540b8ea8a9b0d05facc3` |
+| reset_attribution.json | `88889b03313f962682fa1925d8930d84e4ff63a12f865842fe2581f1122268ff` |
+| 诊断源码与快照 | `0547df46357033697ce470f474362a2e30d2bd2ebec2a4c66ec27df17285dece` |
+| 父目录 reset_probe_attempt02.log | `0707facf651034da9c1bc3516440a8249d2603d24b33d751d05ed3e42eb41add` |
+
+实际命令输出 `RESET_PROBE_COMPLETED blocked`，表示诊断采集完成、baseline 仍被阻塞，不表示性能通过。执行者直接复核报告 completed/status、代码摘要、全部缓存/backend 差与 ownership 计数通过；自检仍核 38 文件、五个破坏案例与两个诊断身份拒绝。baseline 未重跑十步，未改 evaluator/checker 或配方。
+
+```cmd
+"E:\IsaacLab\env_isaaclab\Scripts\python.exe" -u rl_exp\tools\diagnose\palm_spatial_runtime.py --reset_probe rl_exp\out\lizard2_e_registered_20261015\attempt01\registered_manifest.json --out rl_exp\out\lizard2_e_registered_20261015\reset_replay01 --viz none --device cuda:0
+```
+
+后续接触对采集探索超时，未生成新的 attempt03 或提交任何接触对适配；因此具体 pair 保持未知。超时不当作无 API 或无碰撞的证明。
+
+独立局部复核确认实际 ownership、缓存/backend、未改物理及 counterfactual 边界。审核曾在本仓搜索框架字段后误判 `_sim_step_counter` 不存在；执行者直接查框架 `manager_based_env.py:159` 与报告，九阶段该环境计数实为零而非 None。此环境计数只记录 env.step 推进，不计诊断直接 sim.step 或 warmup，因此不能当累计物理步数；阶段标签和 cache 时间分别记录本次直接步进。具体碰撞对与物理贡献仍未验，不关闭事项。本轮完整离线套件退出 0：37/37、56.5 s；诊断代码提交 `447d922` 的 pre-commit 全部通过。
+
 ## 未覆盖边界
 
-- baseline 实际十帧 writer/评测 reader 仍受 reset 位置/速度拒绝；先交限位 PD 专项步骤 3/4 定位源候选自碰撞、惯量及加载状态，不为完成 E 绕过检查。
-- 注册在线协议非空足端分支及 gait 诊断 writer/绘图已核；实际 collider 所有权、逐轴受控驱动、非零有效首局、PD 跟踪、承重、连续安全域和行走均未完成。
+- baseline 实际十帧 writer/评测 reader 仍受 reset 位置/速度拒绝；reset 未写状态与下一物理步偏离是两个缺口。先核实际碰撞 pairs、约束/惯量归因，不为完成 E 绕过检查。
+- 注册在线协议非空足端分支、实际 nearest-body collider ownership 及 gait 诊断 writer/绘图已核；实际接触对归属、逐轴受控驱动、非零有效首局、PD 跟踪、承重、连续安全域和行走均未完成。
 - 未接正式 Blender 导出目标或验证其错源/错目标；旧资产 cap/contact ownership 缺口仍由 `floor-contact-attribution` 回交，不用新候选读数解除旧资产前提。
 - A 的树/轴/零位/网格/惯量/命名变化后按变化重验受影响链，不外推检查点结果。总事项维持 in_progress，最终仍随 D 由新上下文审核。

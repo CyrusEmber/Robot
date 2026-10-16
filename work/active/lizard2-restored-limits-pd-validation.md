@@ -21,7 +21,7 @@ evidence: acceptance/records/2026-10-16-lizard2-local-path-postprocess.md, accep
 
 ## 下一步
 
-**E 回交**：按 evidence 的 e-spatial-runtime-wiring 记录，步骤 2–4 归因 reset、连接碰撞与惯量，解除 baseline 采集前拒绝后回交 E；不跳过检查、不加 PD 或批量误滤。5a 仍并行。
+**E 回交**：按 evidence 的 e-spatial-runtime-wiring 阶段诊断，步骤 2–4 核实际接触对、约束和惯量，再处理 reset 接线并回交 baseline；不跳过检查、不加 PD 或误滤。5a 仍并行。
 
 1. **固定输入与失败判定（执行者）**：先读 a-priority-review 的最新进展，再按 restored-validation-handoff 追溯原始问题；清点问题记录所用在办脚本、导出器改动、配置及本机产物，形成可复读的代码版本、输入绑定和不覆盖历史产物的命令。`palm_pd_probe.py`、`palm_asset_probe.py` 及相关导出片段须完成代码归属与版本落地。逐份比较报告代码/输入与最终版本，只重跑受行为变更影响或缺证的检查；不因日期或脚本哈希变化无差别重跑，也不混用不兼容版本。退出传播修复归 `work/active/exit-status-swallowed-by-app-close.md`，将该入口交其覆盖；本项验收真实成功/失败各一例，异常可见、退出状态正确，失败不得产生可误读为成功的报告。修复期间同时核对日志、报告身份与完成状态，不只看命令退出码。
 
