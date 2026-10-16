@@ -11,6 +11,13 @@ contact samples, or converts s to seconds. GIF duration is display pacing only. 
 paths render their accepted prefix; neither a failed endpoint nor a fictitious closing
 segment is inserted. Source collision verdicts remain historical, not revalidated here.
 --self_check exercises nonuniform s, slope jumps, partial paths and record validation.
+Also reads sampled_local_path_combined and sampled_local_path_support_schedule: one
+full-body side/top replay of accepted recorded poses, all four palm markers and phases.
+Recorded analytic dq/dc is distinct from sample secants. Root-translation prerequisites
+use the SAME material vertices at adjacent recorded poses, not changing lowest centroids;
+no root is applied and no no-slip, force, speed or physical period is approved.
+--drive_report optionally binds an existing same-candidate reset report's named solver
+velocity caps; outputs only a velocity-cap period lower bound, never a selected period.
 """
 
 import argparse
@@ -95,9 +102,159 @@ def _track(data):
     return stats, frames
 
 
+def _combined_tracks(data):
+    rows = data['rows']
+    assert rows and rows[0]['s'] == 0 and data['pose_count'] == len(rows)
+    names = sorted(rows[0]['q_rad'])
+    assert names and set(rows[0]['legs']) == {'lf', 'rf', 'rl', 'rr'}
+    accepted = []
+    for row in rows:
+        assert sorted(row['q_rad']) == names and np.isfinite(list(row['q_rad'].values())).all()
+        assert set(row['legs']) == {'lf', 'rf', 'rl', 'rr'}
+        assert not accepted or row['s'] > accepted[-1]['s'], 'invalid combined parameter'
+        if row['failures']:
+            break
+        accepted.append(row)
+    closed = bool(data['completed_combined_loop'])
+    assert not closed or len(accepted) == len(rows), 'failed combined loop'
+    tracks = {}
+    for leg in rows[0]['legs']:
+        frames = [{'s': row['s'], 'phase': row['legs'][leg]['phase'], 'kind': 'recorded combined pose',
+                   'state': {**row['legs'][leg]['state'], 'q_rad': row['q_rad']},
+                   'q': np.array([row['q_rad'][n] for n in names])} for row in accepted]
+        assert frames, 'no accepted combined poses'
+        stats = _path_stats(np.array([f['s'] for f in frames]), np.array([f['q'] for f in frames]),
+                            [f['phase'] for f in frames], closed)
+        stats.update({'joint_names': names, 'completed_local_loop': closed,
+                      'accepted_points': len(frames) - 1,
+                      'failure_phase': None if data['failure'] is None else 'combined failure',
+                      'frames': [{'s': f['s'], 'phase': f['phase'], 'kind': f['kind'],
+                                  'reference_point_m': f['state']['reference_point_m'],
+                                  'palm_normal': f['state']['palm_normal'],
+                                  'lowest_vertex': f['state']['palm_lowest_vertex']} for f in frames],
+                      'sample_secants_not_analytic_derivatives': True})
+        if 'schedule' in data:
+            stats['analytic_joint_names'] = [m['target'] for m in data['joint_mapping'][leg]]
+            stats['recorded_dq_dc_rad'] = [row['legs'][leg]['dq_dc_rad'] for row in accepted]
+            stats['recorded_d2q_dc2_rad'] = [row['legs'][leg]['d2q_dc2_rad'] for row in accepted]
+            for key in ('recorded_dq_dc_rad', 'recorded_d2q_dc2_rad'):
+                values = np.asarray(stats[key])
+                assert values.shape == (len(accepted), len(stats['analytic_joint_names'])) and np.isfinite(values).all(), key
+        tracks[leg] = stats, frames
+    return tracks
+
+
+def _translation_fit(displacements):
+    delta = np.asarray(displacements, dtype=float)
+    assert delta.ndim == 2 and delta.shape[1] == 3 and len(delta) and np.isfinite(delta).all()
+    translation = -delta.mean(axis=0)
+    residual = delta + translation
+    return {'root_translation_candidate_m': translation.tolist(),
+            'max_material_residual_m': float(np.linalg.norm(residual, axis=1).max()),
+            'rms_material_residual_m': float(np.sqrt(np.mean(np.sum(residual ** 2, axis=1))))}
+
+
+def _material_delta(before, after, index):
+    assert before.shape == after.shape and before.ndim == 2 and before.shape[1] == 3
+    assert isinstance(index, int) and 0 <= index < len(before)
+    return after[index] - before[index]
+
+
+def _rate_prerequisites(report):
+    if report['mode'] != 'sampled_local_path_support_schedule':
+        return None
+    source = json.loads(Path(report['source_report']).read_text(encoding='utf-8'))
+    data = report['legs']['combined']
+    fractions = data['schedule']['phase_fractions']
+    assert len(fractions) == 4 and np.isfinite(fractions).all() and min(fractions) > 0 and sum(fractions) == 1
+    rows = []
+    for leg, mapping in data['joint_mapping'].items():
+        original = source['legs'][mapping[0]['source'].split('_', 1)[0]]['rows']
+        assert len(original) == 33
+        for item in mapping:
+            values = np.array([r['state']['q_rad'][item['source']] for r in original])
+            delta = abs(np.diff(values))
+            rate = np.repeat(8 / np.array(fractions), 8)
+            rows.append({'joint': item['target'],
+                         'analytic_max_abs_dq_dc_rad': float(np.max(delta * rate * 15 / 8)),
+                         'analytic_max_abs_d2q_dc2_rad': float(np.max(delta * rate ** 2 * 10 / np.sqrt(3)))})
+    return {'joints': rows, 'physical_period_s': None, 'effective_velocity_limits_rad_s': None,
+            'formula': 'For constant c=t/T: max|qd|=max|dq/dc|/T; max|qdd|=max|d2q/dc2|/T^2. '
+                       'T must satisfy each bound against measured/approved effective limits; none assumed here.',
+            'limits': 'Analytic quintic maxima over recorded original joint segments, not sampled peak estimates. '
+                      'No solver limit readback, motor tracking, support or physical period approval.'}
+
+
+def _drive_prerequisites(report, path, rates):
+    assert rates is not None, 'drive readback requires support schedule'
+    drive = json.loads(path.read_text(encoding='utf-8'))
+    build = json.loads(Path(report['identity']['build_report']).read_text(encoding='utf-8'))
+    assert drive['completed'] and drive['input']['urdf_sha256'] == build['candidate_sha256'], 'drive candidate mismatch'
+    manifest = Path(drive['input']['manifest'])
+    assert digest(manifest) == drive['input']['manifest_sha256'], 'drive manifest changed'
+    binding = json.loads(manifest.read_text(encoding='utf-8'))
+    target = Path(binding['target_binding']['target'])
+    assert digest(target) == drive['input']['usd_sha256'], 'drive USD changed'
+    names = drive['joint_names']
+    limits = drive['live_readbacks']['fields']['joint_vel_limits']
+    assert len(names) == len(set(names)) and len(limits) == 1 and len(limits[0]) == len(names)
+    assert np.isfinite(limits).all() and np.min(limits) > 0, 'invalid readback limits'
+    by_name = dict(zip(names, limits[0]))
+    assert rates['joints'] and {r['joint'] for r in rates['joints']} <= set(names), 'missing drive joint'
+    rows = [{**row, 'readback_velocity_cap_rad_s': by_name[row['joint']],
+             'velocity_only_period_lower_bound_s': row['analytic_max_abs_dq_dc_rad'] / by_name[row['joint']]}
+            for row in rates['joints']]
+    return {'drive_report': str(path), 'drive_report_sha256': digest(path), 'input': drive['input'],
+            'joints': rows,
+            'velocity_only_period_lower_bound_s': max(row['velocity_only_period_lower_bound_s'] for row in rows),
+            'physical_period_approved': False,
+            'limits': 'Existing fixed-base zero-gain solver cap readback, not effective loaded tracking or a selected period. '
+                      'No cap activation test, acceleration/torque approval, new simulation or root motion.'}
+
+
+def _root_prerequisites(report, urdf, meshes, root, tracks):
+    legs = sorted(tracks)
+    frames = {leg: tracks[leg][1] for leg in legs}
+    end_links = json.loads(Path(report['identity']['build_report']).read_text(encoding='utf-8'))['definitions']
+    readings = []
+    tolerance = report['source_config']['position_tolerance_m']
+    for i in range(1, len(frames[legs[0]])):
+        displacements, contacts, references = [], [], []
+        for leg in legs:
+            before, after = frames[leg][i - 1], frames[leg][i]
+            a, b = before['state'], after['state']
+            if abs(a['palm_lowest_vertex']['height_m']) > tolerance or abs(b['palm_lowest_vertex']['height_m']) > tolerance:
+                continue
+            link = end_links[leg]['end']
+            vertices = meshes[link][0]
+            poses = [root @ csc.fk(urdf['joints'], link, state['q_rad']) for state in (a, b)]
+            worlds = [vertices @ pose[:3, :3].T + pose[:3, 3] for pose in poses]
+            index = b['palm_lowest_vertex']['vertex_index']
+            delta = _material_delta(worlds[0], worlds[1], index)
+            displacements.append(delta)
+            references.append(np.array(b['reference_point_m']) - a['reference_point_m'])
+            contacts.append({'leg': leg, 'vertex_index_at_after': index,
+                             'same_vertex_displacement_m': delta.tolist(),
+                             'lowest_vertex_changed': index != a['palm_lowest_vertex']['vertex_index']})
+        if displacements:
+            readings.append({'before_c': frames[legs[0]][i - 1]['s'], 'after_c': frames[legs[0]][i]['s'],
+                             'contacts': contacts, 'material_translation_fit': _translation_fit(displacements),
+                             'reference_translation_fit': _translation_fit(references)})
+    return {'mode': 'recorded_adjacent_material_vertex_translation_compatibility',
+            'rows': readings,
+            'root_applied': False, 'physical_period_s': None,
+            'limits': 'Selected after-pose lowest vertex is the SAME material vertex at both poses. '
+                      'Contact feature may switch; this is a translation-only prerequisite, not no-slip proof. '
+                      'No root rotation/trajectory, support forces, new poses or collision checks.'}
+
+
 def _load(source):
     report = json.loads(source.read_text(encoding='utf-8'))
-    assert report['mode'] == 'budgeted_local_path', 'unsupported report schema'
+    combined = report['mode'] in ('sampled_local_path_combined', 'sampled_local_path_support_schedule')
+    assert combined or report['mode'] == 'budgeted_local_path', 'unsupported report schema'
+    if combined:
+        original = Path(report['source_report'])
+        assert digest(original) == report['source_report_sha256'], 'source path changed'
     identity = report['identity']
     build_path = Path(identity['build_report'])
     assert digest(build_path) == identity['build_report_sha256'], 'build changed'
@@ -132,7 +289,8 @@ def _load(source):
         meshes[link] = (vertices, faces)
     assert meshes and report['legs'], 'empty rendering input'
     movable = sorted(n for n, joint in urdf['joints'].items() if joint['axis'] is not None)
-    tracks = {leg: _track(data) for leg, data in report['legs'].items()}
+    tracks = _combined_tracks(report['legs']['combined']) if combined else {
+        leg: _track(data) for leg, data in report['legs'].items()}
     for leg, (stats, frames) in tracks.items():
         assert leg.isidentifier() and leg in build['definitions'], 'unknown leg'
         assert stats['joint_names'] == movable, 'report/URDF joint mismatch'
@@ -143,6 +301,8 @@ def _load(source):
         reference_local = (np.array(first['reference_point_m']) - first_pose[:3, 3]) @ first_pose[:3, :3]
         for frame in frames:
             state = frame['state']
+            for key in ('reference_point_m', 'palm_normal', 'task_m'):
+                assert np.asarray(state[key]).shape == (3,) and np.isfinite(state[key]).all(), key
             pose = root @ csc.fk(urdf['joints'], end, state['q_rad'])
             world = meshes[end][0] @ pose[:3, :3].T + pose[:3, 3]
             lowest = state['palm_lowest_vertex']
@@ -169,12 +329,16 @@ def _plot(output, leg, stats, plt):
     for i in moving:
         name = stats['joint_names'][i]
         axes[0].plot(s, q[:, i], label=name)
-        if len(s) > 1:
+        if len(s) > 1 and 'recorded_dq_dc_rad' not in stats:
             axes[1].stairs(np.array(stats['segment_slope_rad_per_s_parameter'])[:, i], s, label=name)
+    if 'recorded_dq_dc_rad' in stats:
+        for i, name in enumerate(stats['analytic_joint_names']):
+            axes[1].plot(s, np.array(stats['recorded_dq_dc_rad'])[:, i], label=name)
     if len(moving):
         axes[0].legend(fontsize=8)
     axes[0].set_ylabel('joint angle [rad]')
-    axes[1].set_ylabel('dq/ds [rad / path parameter]')
+    axes[1].set_ylabel('recorded analytic dq/dc [rad/c]' if 'recorded_dq_dc_rad' in stats else
+                       'sample secant dq/ds [rad / path parameter]')
     frames = stats['frames']
     sample_s = [f['s'] for f in frames]
     reference = np.array([f['reference_point_m'] for f in frames])
@@ -189,12 +353,13 @@ def _plot(output, leg, stats, plt):
         for seam in stats['internal_seams']:
             if seam['incoming_phase'] != seam['outgoing_phase']:
                 ax.axvline(seam['s'], color='gray', alpha=.4)
-    fig.suptitle(f'{leg}: recorded path / piecewise-linear slopes; no speed verdict')
+    fig.suptitle(f'{leg}: recorded path / ' + ('analytic dq/dc samples' if 'recorded_dq_dc_rad' in stats else
+                                             'piecewise-linear secants') + '; no speed verdict')
     fig.savefig(output / f'{leg}_trajectory.png', dpi=120)
     plt.close(fig)
 
 
-def _render(output, leg, stats, frames, urdf, meshes, root, plt):
+def _render(output, leg, stats, frames, urdf, meshes, root, plt, combined_tracks=None):
     from matplotlib.collections import PolyCollection
     from PIL import Image
 
@@ -209,6 +374,13 @@ def _render(output, leg, stats, frames, urdf, meshes, root, plt):
         reference, = ax.plot([], [], 'ko', ms=4, label='reference (not material contact)')
         lowest, = ax.plot([], [], 'mo', ms=4, label='recorded lowest vertex')
         normal, = ax.plot([], [], 'm-', lw=1)
+        if combined_tracks is not None:
+            markers = {}
+            for name, color in zip(sorted(combined_tracks), ('orange', 'green', 'purple', 'red')):
+                point, = ax.plot([], [], 'o', color=color, ms=4, label=name + ' reference')
+                contact, = ax.plot([], [], 'x', color=color, ms=5)
+                arrow, = ax.plot([], [], '-', color=color, lw=1)
+                markers[name] = point, contact, arrow
         ax.set_xlim(lo[x], hi[x])
         ax.set_ylim(lo[y], hi[y])
         ax.set_aspect('equal')
@@ -218,7 +390,7 @@ def _render(output, leg, stats, frames, urdf, meshes, root, plt):
             ax.axhline(0, color='gray', lw=.7)
         ax.legend(fontsize=7, loc='lower left')
         images = []
-        for f, world in zip(frames, worlds):
+        for frame_index, (f, world) in enumerate(zip(frames, worlds)):
             faces = np.concatenate([world[link][indices] for link, (_, indices) in meshes.items()])
             colors = np.concatenate([np.tile([1., .35, .15] if link.startswith(leg + '_') else [.2, .4, .7],
                                               (len(indices), 1)) for link, (_, indices) in meshes.items()])
@@ -235,13 +407,31 @@ def _render(output, leg, stats, frames, urdf, meshes, root, plt):
             status = 'local closed samples' if stats['completed_local_loop'] else 'accepted prefix ONLY'
             ax.set_title(f'{leg} {status} | {f["phase"]} | s={f["s"]:.5f} {f["kind"]}\n'
                          f'vertex={state["palm_lowest_vertex"]["vertex_index"]}; collision triangles; playback NOT time')
+            if combined_tracks is not None:
+                reference.set_data([], [])
+                lowest.set_data([], [])
+                normal.set_data([], [])
+                phases = []
+                for name, (_, leg_frames) in combined_tracks.items():
+                    item = leg_frames[frame_index]
+                    value = item['state']
+                    p = np.array(value['reference_point_m'])
+                    v = np.array(value['palm_lowest_vertex']['position_m'])
+                    tip = p + np.array(value['palm_normal']) * .08
+                    a, b, arrow = markers[name]
+                    a.set_data([p[x]], [p[y]])
+                    b.set_data([v[x]], [v[y]])
+                    arrow.set_data([p[x], tip[x]], [p[y], tip[y]])
+                    phases.append(name + ':' + item['phase'])
+                ax.set_title(f'four-leg recorded {status} | c={f["s"]:.5f}\n'
+                             + ' '.join(phases) + '\nfixed root; playback NOT physical time')
             fig.canvas.draw()
             images.append(Image.fromarray(np.asarray(fig.canvas.buffer_rgba())[..., :3].copy()))
         images[0].save(output / f'{leg}_{view}.gif', save_all=True, append_images=images[1:], duration=100, loop=0)
         plt.close(fig)
 
 
-def _run(source, output):
+def _run(source, output, drive_report=None):
     assert REPO / 'rl_exp/out' in output.parents and not output.exists(), 'fresh isolated output required'
     report, urdf, meshes, root, tracks = _load(source)
     import matplotlib
@@ -249,20 +439,32 @@ def _run(source, output):
     import matplotlib.pyplot as plt
     import PIL
 
+    combined = report['mode'] != 'budgeted_local_path'
+    prerequisites = _root_prerequisites(report, urdf, meshes, root, tracks) if combined else None
+    rates = _rate_prerequisites(report) if combined else None
+    drive = _drive_prerequisites(report, drive_report, rates) if drive_report is not None else None
     output.mkdir(parents=True, exist_ok=False)
     for leg, (stats, frames) in tracks.items():
         assert leg.isidentifier(), 'unsafe leg output name'
         _plot(output, leg, stats, plt)
-        _render(output, leg, stats, frames, urdf, meshes, root, plt)
-    result = {'mode': 'recorded_local_path_analysis',
+        if not combined:
+            _render(output, leg, stats, frames, urdf, meshes, root, plt)
+    if combined:
+        stats, frames = next(iter(tracks.values()))
+        _render(output, 'combined', stats, frames, urdf, meshes, root, plt, tracks)
+    result = {'mode': 'recorded_combined_path_analysis' if combined else 'recorded_local_path_analysis',
               'source_report': str(source), 'source_report_sha256': digest(source),
               'source_identity': report['identity'],
               'postprocess_code_sha256': {str(Path(p).resolve()): digest(Path(p))
                                            for p in (__file__, csc.__file__, REPO / 'rl_exp/tools/runrecord/binding.py')},
               'render_versions': {'numpy': np.__version__, 'matplotlib': matplotlib.__version__, 'Pillow': PIL.__version__},
               'render': {'geometry': 'actual collision triangles, orthographic projection',
-                         'frame_selection': 'all recorded accepted endpoints and midpoints; no added poses',
+                         'frame_selection': ('all accepted recorded combined poses; no added poses' if combined else
+                                             'all recorded accepted endpoints and midpoints; no added poses'),
                          'display_duration_ms': 100, 'display_loop_only': True},
+              'root_motion_prerequisites': prerequisites,
+              'time_mapping_prerequisites': rates,
+              'drive_limit_prerequisites': drive,
               'legs': {leg: stats for leg, (stats, _) in tracks.items()},
               'artifacts_sha256': {p.name: digest(p) for p in sorted(output.iterdir())},
               'limits': 'No new collision/contact validation, continuous-domain proof, smoothing, time mapping, '
@@ -282,12 +484,20 @@ def _self_check(break_test=None):
         mutations = {'slope_scale': (_path_stats, 'delta / ds[:, None]', 'delta'),
                      'cycle_sign': (_path_stats, 'slopes[0] - slopes[-1]', 'slopes[-1] - slopes[0]'),
                      'midpoint': (_track, "<= 1e-12, 'wrong midpoint'", "<= 1., 'wrong midpoint'"),
-                     'world': (_world, '+ root[:3, 3]', '+ 0')}
+                     'world': (_world, '+ root[:3, 3]', '+ 0'),
+                     'combined_stop': (_combined_tracks, "if row['failures']:", 'if False:'),
+                     'translation_sign': (_translation_fit, '-delta.mean(axis=0)', 'delta.mean(axis=0)'),
+                     'translation_residual': (_translation_fit, 'residual = delta + translation', 'residual = delta * 0'),
+                     'material_index': (_material_delta, 'after[index] - before[index]', 'after[index] - before[0]'),
+                     'rate_peak': (_rate_prerequisites, 'rate * 15 / 8', 'rate'),
+                     'acceleration_peak': (_rate_prerequisites, '10 / np.sqrt(3)', '1.'),
+                     'drive_period': (_drive_prerequisites, "/ by_name[row['joint']]", "* by_name[row['joint']]"),
+                     'drive_identity': (_drive_prerequisites, "drive['input']['urdf_sha256'] == build['candidate_sha256']", 'True')}
         function, old, new = mutations[break_test]
         code = inspect.getsource(function)
         assert old in code
-        scope = dict(globals())
-        exec(code.replace(old, new), scope)
+        scope = {}
+        exec(code.replace(old, new), globals(), scope)
         with patch.dict(globals(), {function.__name__: scope[function.__name__]}):
             _self_check()
         return
@@ -326,6 +536,45 @@ def _self_check(break_test=None):
     root = np.eye(4)
     root[2, 3] = 2.
     assert np.array_equal(_world(urdf, meshes, root, {})['tip'], [[1., 0., 2.]])
+    combined = {'completed_combined_loop': False, 'failure': {'s': .5}, 'pose_count': 3,
+                'rows': [{'s': s, 'q_rad': {'joint': q}, 'failures': failure,
+                          'legs': {leg: {'phase': 'backward_contact', 'state': state(q)}
+                                   for leg in ('lf', 'rf', 'rl', 'rr')}}
+                         for s, q, failure in ((0., 0., []), (.25, .1, []), (.5, .2, ['failed']))]}
+    tracks = _combined_tracks(combined)
+    assert all(len(frames) == 2 and not stats['completed_local_loop']
+               for stats, frames in tracks.values()), 'combined failed frame rendered'
+    assert np.allclose(_translation_fit([[1., 0., 0.], [1., 0., 0.]])['root_translation_candidate_m'], [-1., 0., 0.])
+    assert _translation_fit([[1., 0., 0.], [-1., 0., 0.]])['max_material_residual_m'] == 1.
+    assert np.array_equal(_material_delta(np.array([[9., 0., 0.], [1., 0., 0.]]),
+                                         np.array([[1., 0., 0.], [3., 0., 0.]]), 1), [2., 0., 0.])
+    from unittest.mock import patch
+    original = {'legs': {'lf': {'rows': [{'state': {'q_rad': {'lf_joint': i / 32}}}
+                                       for i in range(33)]}}}
+    with patch.object(Path, 'read_text', return_value=json.dumps(original)):
+        rates = _rate_prerequisites({'mode': 'sampled_local_path_support_schedule', 'source_report': 'unused',
+                                     'legs': {'combined': {'schedule': {'phase_fractions': [.625, .125, .125, .125]},
+                                                           'joint_mapping': {'lf': [{'source': 'lf_joint', 'target': 'lf_joint'}]}}}})
+    assert rates['joints'][0]['analytic_max_abs_dq_dc_rad'] == 3.75
+    assert np.isclose(rates['joints'][0]['analytic_max_abs_d2q_dc2_rad'], 1280 / np.sqrt(3))
+    fixture = {'completed': True, 'input': {'urdf_sha256': 'candidate', 'manifest': 'manifest',
+                                          'manifest_sha256': 'hash', 'usd_sha256': 'hash'},
+               'joint_names': ['lf_joint'], 'live_readbacks': {'fields': {'joint_vel_limits': [[5.]]}}}
+    def text(path, **kwargs):
+        if str(path) == 'manifest':
+            return json.dumps({'target_binding': {'target': 'usd'}})
+        if str(path) in ('candidate', 'foreign'):
+            return json.dumps({'candidate_sha256': str(path)})
+        return json.dumps(fixture)
+    with patch.object(Path, 'read_text', text), patch.dict(globals(), {'digest': lambda p: 'hash'}):
+        result = _drive_prerequisites({'identity': {'build_report': 'candidate'}}, Path('drive'), rates)
+        assert result['velocity_only_period_lower_bound_s'] == .75
+        try:
+            _drive_prerequisites({'identity': {'build_report': 'foreign'}}, Path('drive'), rates)
+        except AssertionError:
+            pass
+        else:
+            raise AssertionError('foreign drive identity accepted')
     assert 'palm_spatial_probe' not in sys.modules, 'postprocessor imported solver'
     print('LOCAL_PATH_VIEW_SELF_CHECK_OK: nonuniform slopes, seams, partial prefix, midpoint and mesh FK')
 
@@ -334,11 +583,15 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source_report', type=Path)
     parser.add_argument('--output_dir', type=Path)
+    parser.add_argument('--drive_report', type=Path)
     parser.add_argument('--self_check', action='store_true')
-    parser.add_argument('--break_test', choices=('slope_scale', 'cycle_sign', 'midpoint', 'world'))
+    parser.add_argument('--break_test', choices=('slope_scale', 'cycle_sign', 'midpoint', 'world',
+                                               'combined_stop', 'translation_sign', 'translation_residual',
+                                               'material_index', 'rate_peak', 'acceleration_peak',
+                                               'drive_period', 'drive_identity'))
     args = parser.parse_args()
     if args.self_check:
-        if args.source_report is not None or args.output_dir is not None:
+        if args.source_report is not None or args.output_dir is not None or args.drive_report is not None:
             parser.error('--self_check cannot use input/output')
         _self_check(args.break_test)
     else:
@@ -346,7 +599,8 @@ def main():
             parser.error('--break_test requires --self_check')
         if args.source_report is None or args.output_dir is None:
             parser.error('--source_report and --output_dir required')
-        _run(args.source_report.resolve(), args.output_dir.resolve())
+        _run(args.source_report.resolve(), args.output_dir.resolve(),
+             None if args.drive_report is None else args.drive_report.resolve())
 
 
 if __name__ == '__main__':
