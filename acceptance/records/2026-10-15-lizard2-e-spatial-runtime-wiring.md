@@ -317,9 +317,69 @@ attempt06 实际退出 0，完成 marker 与报告 `completed=true`；报告同�
 "E:\IsaacLab\env_isaaclab\Scripts\python.exe" -B rl_exp\tools\verify\offline_suite.py --python E:\IsaacLab\env_isaaclab\Scripts\python.exe --jobs 4
 ```
 
+## 追加：隔离 reset 与中立首步修复（2026-10-16）
+
+### 授权范围与停止点
+
+用户批准恢复确定性 reset、核六个连接区后做具名过滤对照和跨腿负例；固定基座、禁重力、零增益，一个环境，最多三次短启动。正式资产、网格、惯量、PD、奖励与原检查阈值不变。三次启动包括一次 USD 层生命周期崩溃，预算用尽后用户选择“停在当前证据”，因此没有再启动 baseline 十步采集；不能宣称 baseline writer/reader 已通。
+
+### reset 的实际修复
+
+根因在 `palm_spatial_runtime.py` 注册隔离配置生成处：原实现将全部 events 置 None，连正常 reset 的根状态和关节状态 writer 一起取消。修复只改变新生成的 v2 诊断 manifest，保留 `reset_base` / `reset_robot_joints`，显式钉零根偏移与速度、关节位置缩放 [1,1] 和速度缩放 [0,0]；其余随机事件仍取消。使用框架真实 `reset_root_state_uniform` / `reset_joints_by_scale`，不在 evaluator 里临时写零，不修改冻结母本。旧 manifest 与旧证据不覆盖，仍可用原诊断口径读取。
+
+未过滤对照 `reset_unfiltered_20261016` 退出 0、completed=true、status=blocked：gym.make 后仍偏移 0.134496257 rad / 19.841339111 rad/s；wrapper 的正常 reset 确实调用关节 position/velocity writer，返回后两项误差均为 0，backend/cache 差为 0。随后一个 0.005 s 物理步又偏移 0.047132555 rad / 10.005182266 rad/s。此对照区分“reset 接线已修”和“碰撞响应仍在”，不拿 reset 成功掩盖首步异常。原 attempt02/06 的无 writer、同位置偏移是修复前真实反证。
+
+### 六个连接区与过滤边界
+
+`--connection_geometry` 复用实际 URDF/FK、闭合真实网格的三角面交叉与 solid-angle containment，实扫所有中立非直接连接网格对。扫描连接集合须严格等于现有 APPROVED 经实际 build 的 abduct→twist 映射所得六对；任何额外非相邻干涉拒绝，不仅比较生成列表与写入列表。肩髋新链实际树距为 **3**，并非旧四轴的 2；中间 swing、abduct 两个 link 均无 collider，三轴枢轴共点，实体属于 twist 下游。尾段仍为树距 2、一个无 collider 的 yaw 载体，两个枢轴相隔约 5 mm。逐对真实面交叉与归属保存在 geometry 报告；该机构理由仅授权当前中立诊断的具名连接排除，不推导整个 ROM 无干涉。
+
+实际隔离副本只新增以下六对 `FilteredPairsAPI`：base↔rl/rr hip_twist、chest↔lf/rf shoulder_twist、base↔tail1_pitch、tail1_pitch↔tail2_pitch。去掉新增 relation 并恢复原 apiSchemas listOp 后，USD 整个根层文本与强引用保留的源 stage **逐字相等**，核无其它几何、惯量或物理属性差异；实际运行时全部 authored filters 也须与六对严格相等。源 USD 与 checkpoint 38 文件保持原摘要，自碰撞仍开启。`--repair_connections` 只写新 attempt，不覆盖源件。
+
+第一次过滤启动 `connections_fixed_20261016` 在物理初始化前发生 native fatal：`attempted member lookup on NULL TfWeakPtr<SdfLayer>`，退出 2147483651，**没有成功报告**。错误来自我新增差异核验的 `Usd.Stage.Open(...).GetRootLayer()` 临时 stage 被释放、layer 仅持 weak reference；改为持有 `source_stage` 强引用，并恢复原 schema listOp 后离线核 delta，随后第三次启动复验。失败日志原样保留，不补造 Python exception 报告，也不将该次算物理反例。
+
+### 修复后的真实正反例
+
+`connections_verified_20261016` 退出 0、completed=true、status=reset_and_neutral_first_step_verified。与未过滤对照使用相同候选、根高、默认 q/qd、零驱动、步长和阶段顺序，各自独立进程/solver 历史；仅过滤副本有上述六对差异。gym.make、wrapper reset、正常首物理步及写回默认后的首步，q/qd 最大误差均为 **0**，cache/backend 差均为 0。中立观测的全 18×18 owner 法向力矩阵无非零项；这不是全轨迹无碰撞证明。两阶段在各自运行内部仍共用历史，不冒充四个独立实验。
+
+保留碰撞负例用同一五轴资产：除 `chest_yaw_joint=+0.6 rad` 外其它关节零，离线确认 `lf_wrist↔rl_ankle` 真三角面交叉；运行后该跨腿 pair 实测 **107.647354 N**，两方向大小相同、反向，非祖先关系、树距 12，不在六对过滤中。随后正常 `live.reset()` 将激励后的 q/qd 恢复为零，严格 reset 检查通过。该负例证明没有关闭所有自碰撞或误滤这组跨腿接触，不证明全部非相邻接触均完整保留。
+
+### 验证入口与输入绑定
+
+新增检查留在诊断脚本及显式 `--verify_registered` / `--self_check`，**没有增加默认闸门或默认测试函数**。真实 loader 正例与重复动作、缺 twist、外来末端、错 SHA、缺 reset writer 五类拒错通过；filter 集合缺对、重复、跨腿追加三类 self-check 拒绝。实际 before/after 物理对照承担碰撞修复的行为反证，不将 CPU 集合检查冒充 PhysX 行为。最终源码 `d531bc5293dac6ae42db4a02b3d6f8d4ccbad655203a8e529bdf49acff7665ae` 相比成功启动源码只追加 manifest 缺 reset writer 拒错；物理分支未改，另完成最终 self-check 与 loader 复读。
+
+本机证据都在 `rl_exp/out/lizard2_e_registered_20261015/`，以下摘要逐文件复读；产物本机保存，不承诺 clone 携带资产二进制。
+
+| 文件（相对上述目录） | SHA256 |
+|---|---|
+| reset_fixed_20261016/registered_manifest.json | `745b6953c10cf2ae4c9a39a13e9020ffc8dc0ed01ce94a286599bc5c56a9c7ac` |
+| reset_unfiltered_20261016/reset_probe_report.json | `f2b46799fd391fcf9d8a454b89779923612ba3428a6312bd541cd5678c9ab7da` |
+| reset_unfiltered_20261016.log | `72452fdcda7c5a25fbfe0de29824401945059c88ed78150d42c9bc4f08eec0bb` |
+| connections_fixed_20261016.log | `0d687ea4af67bda034836e336555d47bc2e6d1befc7d57c6f239c6fce984dc48` |
+| connections_verified_20261016/reset_probe_report.json | `923298e61278a9186be1fa202ce6257b333528347ce9f1f32359ad311499083f` |
+| connections_verified_20261016.log | `f23ec167f7c43d90106089ca6836b5e946fb3fa03ff8e5218c806747219d2ff2` |
+| connections_verified_20261016/registered_manifest.json | `eb58101306a1f27f931a63c6e24f00267946d91596a1c8e55b07f4490bbd9b62` |
+| connections_verified_20261016/palm_spatial.usda | `62f430ee78fbfa45bf65d43d34f3f8bd332316cf0e68919511a2a8fb6dbfcb19` |
+| connections_verified_20261016/connection_geometry.json | `64023ff37a77dd40f8922aac68a53797a3446ad5c3f965a2ed3611e92baeb7f7` |
+| connections_verified_20261016/post_1_physics_step_contact_pairs.json | `5e6ae8fb134400caddfd585de6a1b535482acba62d2cfb936114571e0cb416ae` |
+| connections_verified_20261016/cross_leg_post_1_physics_step_contact_pairs.json | `99da9c3123b62180880be31fc55fad5308e234c2e8046b13ee6162aa897f451d` |
+
+未过滤运行源码 `b22b43b33884f7af2215b802fe9f36eef5542ac049017ba610cbf059abc78a48`，成功过滤运行源码 `5de9d720ddc755d712e8c4911852bf109e5479952f3fbb674ea5d2d196bd3299`，各保留 `reset_probe_source.py`。两者之间只修改了输入 pin、额外 USD 差异核验及枢轴集合选择，未改 reset/状态/步进顺序或驱动。原值完整保留，不用最终源码摘要代替采集版本。
+
+最终默认完整离线套件退出 0：37/37、52.4 s，baseline contract 波内 16.3 s；无新增默认条目、无预算调整。新上下文局部审核直接对照代码、两个实际报告、geometry、负例及活跃路由，未发现阻塞矛盾；此审核只覆盖本轮 reset/中立首步切片，不关闭 E，不冒称亲自逐字比较采集源码。执行者随后实际 unified diff 确认成功采集到最终源码仅新增上述缺 reset writer 拒错。
+
+显式复读入口（启动须另获预算，输出用新目录）：
+
+```cmd
+"E:\IsaacLab\env_isaaclab\Scripts\python.exe" -B rl_exp\tools\diagnose\palm_spatial_runtime.py --connection_geometry
+"E:\IsaacLab\env_isaaclab\Scripts\python.exe" -B rl_exp\tools\diagnose\palm_spatial_runtime.py --prepare_registered --out rl_exp\out\lizard2_e_registered_20261015\reset_repair_replay01
+"E:\IsaacLab\env_isaaclab\Scripts\python.exe" -B rl_exp\tools\diagnose\palm_spatial_runtime.py --reset_probe rl_exp\out\lizard2_e_registered_20261015\reset_repair_replay01\registered_manifest.json --contact_pairs --out rl_exp\out\lizard2_e_registered_20261015\unfiltered_replay01 --viz none --device cuda:0
+"E:\IsaacLab\env_isaaclab\Scripts\python.exe" -B rl_exp\tools\diagnose\palm_spatial_runtime.py --reset_probe rl_exp\out\lizard2_e_registered_20261015\reset_repair_replay01\registered_manifest.json --contact_pairs --repair_connections --out rl_exp\out\lizard2_e_registered_20261015\filtered_replay01 --viz none --device cuda:0
+"E:\IsaacLab\env_isaaclab\Scripts\python.exe" -B rl_exp\tools\diagnose\palm_spatial_runtime.py --verify_registered rl_exp\out\lizard2_e_registered_20261015\connections_verified_20261016\registered_manifest.json
+```
+
 ## 未覆盖边界
 
-- baseline 实际十帧 writer/评测 reader 仍受 reset 位置/速度拒绝；reset 未写状态与下一物理步偏离是两个缺口。接触视图映射及实际强接触对已核，下一步按步骤 4 核具名连接区几何理由与过滤负例，再做同条件对照；不为完成 E 绕过检查。
-- 注册在线协议非空足端分支、实际 collider/body-owner 接触归属及 gait 诊断 writer/绘图已核；过滤合理性、逐轴受控驱动、非零有效首局、PD 跟踪、承重、连续安全域和行走均未完成。
+- 当前隔离 manifest 的正常 reset 与中立首物理步已验证；baseline 实际十帧 writer/评测 reader **仍未复跑**。用户预算到点选择停在当前证据，下一次采集须明确启动授权；不以本诊断解除全部 baseline 采集前提或宣布 E 完成。
+- 注册在线协议非空足端分支、实际 collider/body-owner 接触归属及 gait 诊断 writer/绘图已核；具名过滤仅核当前中立及一组跨腿负例，不证明全 ROM。逐轴受控驱动、非零有效首局、惯量一致性、PD 跟踪、承重、连续安全域和行走均未完成。
 - 未接正式 Blender 导出目标或验证其错源/错目标；旧资产 cap/contact ownership 缺口仍由 `floor-contact-attribution` 回交，不用新候选读数解除旧资产前提。
 - A 的树/轴/零位/网格/惯量/命名变化后按变化重验受影响链，不外推检查点结果。总事项维持 in_progress，最终仍随 D 由新上下文审核。
