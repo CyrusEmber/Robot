@@ -650,6 +650,218 @@ def run(args, result):
     app.close()
 
 
+def reset_probe(args, result):
+    """Trace registered reset and one physical step without changing the replay inputs."""
+    import inspect
+    from unittest.mock import patch
+
+    manifest = args.reset_probe.resolve()
+    require(binding.sha256_file(manifest) ==
+            "30209cfc6237f8d0a6b1a3cbce6d5911c5c5a5e66113cb7473b204f561dab68f",
+            "reset probe manifest changed")
+    check_build(BUILD)
+    out = args.out.resolve()
+    require(out.parent == REGISTERED_OUT.resolve() and not out.exists(), "fresh registered attempt required")
+    out.mkdir(exist_ok=False)
+    result.update(output=str(out), stage="app_launch", scope=
+                  "registered reset attribution only; explicit-default counterfactual is NOT baseline acceptance")
+    shutil.copyfile(Path(__file__), out / "reset_probe_source.py")
+    result["input"] = {"manifest": str(manifest), "manifest_sha256": binding.sha256_file(manifest),
+                       "usd_sha256": FIXED_USD_HASH, "urdf_sha256": URDF_HASH}
+    result["code_sha256"] = binding.sha256_file(Path(__file__))
+    from isaaclab.app import AppLauncher
+    app = AppLauncher(args).app
+    import gymnasium as gym
+    import torch
+    import warp as wp
+    import rl_exp.tasks
+    from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper
+    from isaaclab.envs import ManagerBasedRLEnv
+    from isaaclab.assets import AssetBaseCfg
+    from pxr import Usd, UsdPhysics, UsdGeom
+    from rl_exp.tools.verify.baseline_runtime import resolve_task_cfg, joint_reset_errors
+
+    cfg = copy.deepcopy(resolve_task_cfg(REGISTERED_TASK))
+    target = obs_protocol.load_diagnostic_target(manifest, cfg, REGISTERED_TASK)
+    cfg.sim.device = args.device
+    result["offline_contract"] = check_registered_manifest(manifest)
+    result["quaternion_convention"] = {"order": "xyzw", "source": inspect.getfile(AssetBaseCfg),
+                                        "default": list(AssetBaseCfg.InitialStateCfg().rot)}
+    result["stages"] = []
+    result["hook_calls"] = []
+    live = None
+    phase = "gym_make"
+
+    def tensor(value):
+        if hasattr(value, "torch"):
+            return value.torch
+        return value if isinstance(value, torch.Tensor) else wp.to_torch(value)
+
+    def sample(label, robot=None):
+        robot = robot if robot is not None else live.scene["robot"]
+        q = tensor(robot.root_view.get_dof_positions()).clone()
+        qd = tensor(robot.root_view.get_dof_velocities()).clone()
+        cq, cv = robot.data.joint_pos.torch.clone(), robot.data.joint_vel.torch.clone()
+        row = {"label": label, "phase": phase, "cache_time_s": float(robot.data._sim_timestamp),
+               "env_physics_steps": getattr(live, "_sim_step_counter", None),
+               "backend_q_rad": q.cpu().tolist(), "backend_qd_rad_s": qd.cpu().tolist(),
+               "cache_q_rad": cq.cpu().tolist(), "cache_qd_rad_s": cv.cpu().tolist(),
+               "default_q_rad": robot.data.default_joint_pos.torch.cpu().tolist(),
+               "default_qd_rad_s": robot.data.default_joint_vel.torch.cpu().tolist(),
+               "q_error_max_rad": float((q - robot.data.default_joint_pos.torch).abs().max()),
+               "qd_error_max_rad_s": float((qd - robot.data.default_joint_vel.torch).abs().max()),
+               "cache_backend_q_error": float((cq - q).abs().max()),
+               "cache_backend_qd_error": float((cv - qd).abs().max()),
+               "root_pose_xyzw": robot.data.root_link_pose_w.torch.cpu().tolist(),
+               "backend_root_pose_xyzw": tensor(robot.root_view.get_root_transforms()).cpu().tolist(),
+               "body_pose_xyzw": robot.data.body_link_pose_w.torch.cpu().tolist(),
+               "strict_reset_errors": joint_reset_errors(robot)}
+        result["stages"].append(row)
+        write_json(out / f"stage_{len(result['stages']):02d}.json", row)
+        print("RESET_STAGE", json.dumps({k: row[k] for k in
+              ("label", "q_error_max_rad", "qd_error_max_rad_s", "cache_backend_q_error",
+               "cache_backend_qd_error", "cache_time_s", "strict_reset_errors")}), flush=True)
+
+    def traced_reset(env, *a, **kw):
+        original_reset(env, *a, **kw)
+        sample("after_reset_idx", env.scene["robot"])
+
+    original_reset = ManagerBasedRLEnv._reset_idx
+    env = None
+    try:
+        result["stage"] = "gym_make"
+        with patch.object(ManagerBasedRLEnv, "_reset_idx", traced_reset):
+            env = gym.make(REGISTERED_TASK, cfg=cfg)
+            live = env.unwrapped
+            robot = live.scene["robot"]
+            sample("post_gym_make")
+            result["joint_names"] = list(robot.joint_names)
+            result["body_names"] = list(robot.body_names)
+            result["dt_s"] = live.physics_dt
+            result["decimation"] = cfg.decimation
+            robot_type = type(robot)
+            result["framework_sources"] = {}
+            for obj in (robot_type, type(robot.data), type(live), type(live.sim.physics_manager),
+                        RslRlVecEnvWrapper):
+                path = Path(inspect.getfile(obj))
+                result["framework_sources"][str(path)] = binding.sha256_file(path)
+            result["live_readbacks"] = {"fixed_base": bool(robot.is_fixed_base),
+                "events": list(live.event_manager.available_modes),
+                "fields": {name: getattr(robot.data, name).torch.cpu().tolist() for name in
+                    ("joint_stiffness", "joint_damping", "joint_armature", "joint_effort_target",
+                     "joint_pos_target", "joint_vel_target", "joint_effort_limits", "joint_vel_limits")},
+                "wrench_active": {name: bool(getattr(robot, name).active) for name in
+                    ("_instantaneous_wrench_composer", "_permanent_wrench_composer")}}
+            for name in ("joint_stiffness", "joint_damping", "joint_armature", "joint_effort_target"):
+                require(bool((getattr(robot.data, name).torch == 0).all()), "nonzero live " + name)
+
+            owner_path = REPO / "rl_exp/tools/verify/check_contact_ownership.py"
+            nodes = [n for n in ast.parse(owner_path.read_text(encoding="utf-8")).body
+                     if isinstance(n, ast.FunctionDef) and n.name in ("usd_collisions", "penalised_bodies")]
+            scope = {"Usd": Usd, "UsdPhysics": UsdPhysics}
+            exec(compile(ast.Module(body=nodes, type_ignores=[]), str(owner_path), "exec"), scope)
+            root = live.sim.stage.GetPrimAtPath("/World/envs/env_0/Robot")
+            owners = scope["usd_collisions"](root)
+            collisions, unclaimed, fixed = [], [], []
+            for prim in Usd.PrimRange(root):
+                if prim.IsA(UsdPhysics.FixedJoint):
+                    joint = UsdPhysics.FixedJoint(prim)
+                    fixed.append({"prim": str(prim.GetPath()), "body0": list(map(str, joint.GetBody0Rel().GetTargets())),
+                        "body1": list(map(str, joint.GetBody1Rel().GetTargets())),
+                        "local_pos0": list(joint.GetLocalPos0Attr().Get()),
+                        "local_pos1": list(joint.GetLocalPos1Attr().Get()),
+                        "local_rot0": str(joint.GetLocalRot0Attr().Get()),
+                        "local_rot1": str(joint.GetLocalRot1Attr().Get()),
+                        "enabled": joint.GetJointEnabledAttr().Get()})
+                if not prim.HasAPI(UsdPhysics.CollisionAPI):
+                    continue
+                body = prim
+                while body and not body.HasAPI(UsdPhysics.RigidBodyAPI):
+                    body = body.GetParent()
+                row = {"prim": str(prim.GetPath()), "nearest_body": str(body.GetPath()) if body else None,
+                       "enabled": UsdPhysics.CollisionAPI(prim).GetCollisionEnabledAttr().Get(),
+                       "mesh_local_extent": str(prim.GetAttribute("extent").Get()),
+                       "local_to_world": str(UsdGeom.Xformable(prim).ComputeLocalToWorldTransform(Usd.TimeCode.Default()))}
+                collisions.append(row)
+                if not body:
+                    unclaimed.append(row)
+            terms = scope["penalised_bodies"](live)
+            sensor = live.scene["contact_forces"]
+            links = ET.parse(target["urdf"]).getroot().findall("link")
+            urdf_meshes = {link.get("name"): [
+                {"path": str((Path(target["urdf"]).parent / mesh.get("filename")).resolve()),
+                 "sha256": binding.sha256_file((Path(target["urdf"]).parent / mesh.get("filename")).resolve()),
+                 "scale": mesh.get("scale", "1 1 1"),
+                 "origin_xyz": c.find("origin").get("xyz") if c.find("origin") is not None else "0 0 0",
+                 "origin_rpy": c.find("origin").get("rpy", "0 0 0") if c.find("origin") is not None else "0 0 0"}
+                for c in link.findall("collision") for mesh in c.findall("geometry/mesh")]
+                for link in links}
+            result["collision_ownership"] = {"source_sha256": binding.sha256_file(owner_path),
+                "by_body": owners, "collisions": collisions, "unclaimed": unclaimed,
+                "urdf_meshes": urdf_meshes, "reward_selected": terms,
+                "dead_reward_bodies": sorted({n for ns in terms.values() for n in ns if not owners.get(n)}),
+                "sensor_bodies": list(sensor.body_names),
+                "feet": {n: {"colliders": owners.get(n, []), "sensor_id": sensor.body_names.index(n)}
+                         for n in target["end_links"].values()},
+                "bbox_scope": "mesh-local extents only; no cross-frame size equality claim",
+                "contact_pair": "unknown: no filters changed; net force is not a contact pair"}
+            result["fixed_joints"] = fixed
+            result["live_readbacks"]["gravity_disabled"] = {
+                str(p.GetPath()): p.GetAttribute("physxRigidBody:disableGravity").Get()
+                for p in Usd.PrimRange(root) if p.HasAPI(UsdPhysics.RigidBodyAPI)}
+            require(all(result["live_readbacks"]["gravity_disabled"].values()), "live gravity enabled")
+            require(robot.is_fixed_base, "root is not fixed")
+            write_json(out / "collision_ownership.json", result["collision_ownership"])
+
+            def traced_method(name, original):
+                def call(obj, *a, **kw):
+                    result["hook_calls"].append({"phase": phase, "method": name})
+                    answer = original(obj, *a, **kw)
+                    if name.startswith("write_joint"):
+                        sample("after_" + name, obj)
+                    return answer
+                return call
+
+            with patch.object(robot_type, "write_joint_position_to_sim_index", traced_method(
+                    "write_joint_position_to_sim_index", robot_type.write_joint_position_to_sim_index)), \
+                 patch.object(robot_type, "write_joint_velocity_to_sim_index", traced_method(
+                    "write_joint_velocity_to_sim_index", robot_type.write_joint_velocity_to_sim_index)):
+                phase = "wrapper_reset"
+                wrapper = RslRlVecEnvWrapper(env, clip_actions=None)
+                sample("post_wrapper_reset")
+                phase = "original_first_physics_step"
+                live.scene.write_data_to_sim()
+                sample("pre_physical_step")
+                live.sim.step(render=False)
+                live.scene.update(live.physics_dt)
+                sample("post_1_physics_step")
+                result["original_first_step_net_force_n"] = sensor.data.net_forces_w.torch.cpu().tolist()
+                # Counterfactual writes exactly the bound defaults, not a new pose, gain or asset.
+                phase = "explicit_bound_default_write_not_baseline"
+                robot.write_joint_position_to_sim_index(position=robot.data.default_joint_pos.torch.clone())
+                robot.write_joint_velocity_to_sim_index(velocity=robot.data.default_joint_vel.torch.clone())
+                live.scene.write_data_to_sim()
+                live.sim.forward()
+                sample("explicit_default_after_forward")
+                phase = "explicit_default_first_physics_step_not_baseline"
+                live.sim.step(render=False)
+                live.scene.update(live.physics_dt)
+                sample("explicit_default_post_1_physics_step")
+                result["default_first_step_net_force_n"] = sensor.data.net_forces_w.torch.cpu().tolist()
+            result["status"] = "blocked" if result["stages"][-1]["strict_reset_errors"] else "requires_reset_wiring_review"
+            result["baseline_10step"] = "not run: original strict reset gate fails; counterfactual is not acceptance"
+        check_build(BUILD)
+        require(binding.sha256_file(manifest) == result["input"]["manifest_sha256"], "manifest modified")
+        require(binding.sha256_file(Path(target["target"])) == FIXED_USD_HASH, "USD modified")
+        result.update(completed=True, stage="completed")
+        write_json(out / "reset_probe_report.json", result)
+        print("RESET_PROBE_COMPLETED", result["status"], binding.sha256_file(out / "reset_probe_report.json"), flush=True)
+    finally:
+        if env is not None:
+            env.close()
+        app.close()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--build", type=Path, default=BUILD)
@@ -660,6 +872,7 @@ def main():
     parser.add_argument("--verify_registered", type=Path,
                         help="offline re-read of a prepared registered manifest")
     parser.add_argument("--self_check", action="store_true")
+    parser.add_argument("--reset_probe", type=Path, help="registered manifest reset/first-step attribution")
     if "--verify_registered" in sys.argv:
         verify_registered(parser.parse_args().verify_registered)
         return
@@ -676,7 +889,10 @@ def main():
               "scope": "dedicated unregistered config, NOT registered task/v3 and NOT load_diagnostic_target replay; "
                        "fixed base, gravity disabled, zero gains/armature; no PD, tracking or support verdict"}
     try:
-        run(args, result)
+        if args.reset_probe is not None:
+            reset_probe(args, result)
+        else:
+            run(args, result)
     except BaseException as error:
         result["completed"] = False
         result["error"] = repr(error)
