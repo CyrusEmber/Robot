@@ -182,9 +182,56 @@ E5 五项均不宣布完整完成：导出目标仍归 A/共用生成器执行�
 
 独立局部复核确认实际 ownership、缓存/backend、未改物理及 counterfactual 边界。审核曾在本仓搜索框架字段后误判 `_sim_step_counter` 不存在；执行者直接查框架 `manager_based_env.py:159` 与报告，九阶段该环境计数实为零而非 None。此环境计数只记录 env.step 推进，不计诊断直接 sim.step 或 warmup，因此不能当累计物理步数；阶段标签和 cache 时间分别记录本次直接步进。具体碰撞对与物理贡献仍未验，不关闭事项。本轮完整离线套件退出 0：37/37、56.5 s；诊断代码提交 `447d922` 的 pre-commit 全部通过。
 
+## 追加：单体观测接触对尝试（2026-10-16）
+
+### 范围与入口
+
+用户批准每 collider owner 单独建立接触观测视图，避免 PhysX 多体 filtered sensor 限制；保持同一资产、零驱动、固定基座、禁重力、物理过滤不变。新增 `--reset_probe ... --contact_pairs`；每个 exact body 单行对目标 owner 列采集法向力，只有列名/行名/shape 对照真实路径通过后才赋予 body 名。路径或 shape 不匹配不得降级猜列。
+
+框架来源为 `isaaclab_physx/sensors/contact_sensor/contact_sensor.py:324` 的 `create_rigid_contact_view` 与 `:380` 的力读点；`isaaclab/sensors/contact_sensor/contact_sensor_cfg.py:83` 明确 filtered 单体限制。接口与 mock 的形状说明仅用于选入口，不能代替实际 PhysX 列映射。`get_contact_data` 未消费，不冒称捕获 collider point、separation 或摩擦。
+
+### 真实尝试与停止点
+
+| 本机尝试 | 观察 | 当前边界 |
+|---|---|---|
+| attempt03 | 仅到 post_gym_make，退出码 0，但无完成 marker 或主报告 | 当时诊断错误要求容量为 64，实际 backend 默认为 4；关闭应用又吞掉异常。日志没保存 exception，容量原因是源码定位，不伪称已捕获该 live 异常 |
+| attempt04（用户追加授权） | 使用实际正整数容量 4；真实退出 1，完成 marker=false，失败 marker=true；`ValueError('contact pair filter binding mismatch')` | 行/列绑定初始化失败，两个 post-step 采力阶段未到达；无 pair 力、sum、reciprocity 或验证通过的 mapping |
+
+actual stage 仍读到 18 个启用 collider/18 owners、31 个 runtime body、原 q/qd 偏差；输入 manifest、USD、URDF 及候选 38 文件保持摘要。**接触对仍全部未知**；不能拿矩阵尚未采集或零结果否认 self-contact，不能据本次失败推定 backend 不支持接触对。
+
+### 诊断修复与测试边界
+
+容量不再硬编码，复用实际 sensor 配置并拒绝非正整数。内部异常先保存 `reset_probe_failure.json`、打印 traceback、flush 并退出 1，避免 finally/app.close 吞掉错误；成功路径仍关闭。
+
+自检通过原 38 文件核对、五个映射/读回/哈希破坏例、两个诊断身份拒错和新增四个接触行列/shape 负例。退出回归执行实际 handler/finally 的 AST 子进程，stub close 退出 0：修复前 code=0，修复后 code=1，成功 code=0；该回归只证明退出分支，真实 PhysX 失败证据另取 attempt04，不混称。
+
+attempt04 修订后增加“每视图 raw mapping 在验证前落盘”：独占文件记录实际 sensor_paths/filter_paths/count 与 API 源摘要，初态 unverified，只有验证通过后才改内存状态为 verified；这是为下一次确定接口语义留证，**该终版改动本轮未再起仿真**。不覆盖 attempt03/04，也不为补证伪造旧 mapping。
+
+### 本机绑定与复读
+
+| 对象 | SHA256 |
+|---|---|
+| attempt03 运行源码快照 | `0acd5f87906c119685014b37d0f9e94ff3f23a7af34e750bc416e2d34ae202a9` |
+| attempt04 运行源码快照 | `befecc4933c10eacb6c4a01c1d826188d16f28d90fa8cad69ff74f335a7e50db` |
+| attempt04/reset_probe_failure.json | `7899ba03d5d615d8a526e92a3ea532bb3fc4c3d4c4a9723426c426da1a2d85a4` |
+| attempt04/capture_observation.json | `6261093b3ef06d9713f708cf0c5d6e67f91c8f2c6b296fff3a7820966d548353` |
+| 父目录 attempt04_capture.log | `6c70329dc68fc761fc736f73552b1aefe4d16d8551de775f190b4141388ca512` |
+| raw mapping 留证终版源码 | `15684c7f47641c70d5ef9a7eb8102eb4a6d5e381eeeac2cf419b7adeabb75ba7` |
+
+执行者直接读取并核对本机 observation 的 observed_exit_code、marker、错误阶段与失败工件摘要，自检/AST/空白检查通过。独立审核核代码侧拒错、raw 文件唯一性及测试边界；其上下文未能读取本机 out，不能宣称其完成实测证据审核。实际 attempt04 的失败判定以直接采集的 observation/log/failure 三者为依据，不以源码支持替代。
+
+本轮完整离线套件退出 0：37/37、60.1 s；代码提交 `e66a16b` 的 pre-commit 全部通过。套件通过不代表接触对采集通过。
+
+下一步只读确认实际 TensorAPI filter_paths 返回语义；再次仿真须新获预算并用新目录，不能复用 attempt04 成功身份。复读入口如下，命令用于获准后的新尝试，不表示本轮已经执行：
+
+```cmd
+"E:\IsaacLab\env_isaaclab\Scripts\python.exe" -B rl_exp\tools\diagnose\palm_spatial_runtime.py --self_check
+"E:\IsaacLab\env_isaaclab\Scripts\python.exe" -B rl_exp\tools\diagnose\palm_spatial_runtime.py --reset_probe rl_exp\out\lizard2_e_registered_20261015\attempt01\registered_manifest.json --contact_pairs --out rl_exp\out\lizard2_e_registered_20261015\pairs_replay01 --viz none --device cuda:0
+```
+
 ## 未覆盖边界
 
-- baseline 实际十帧 writer/评测 reader 仍受 reset 位置/速度拒绝；reset 未写状态与下一物理步偏离是两个缺口。先核实际碰撞 pairs、约束/惯量归因，不为完成 E 绕过检查。
+- baseline 实际十帧 writer/评测 reader 仍受 reset 位置/速度拒绝；reset 未写状态与下一物理步偏离是两个缺口。接触视图列映射仍在初始化拒绝，先核接口语义、实际 pairs、约束/惯量归因，不为完成 E 绕过检查。
 - 注册在线协议非空足端分支、实际 nearest-body collider ownership 及 gait 诊断 writer/绘图已核；实际接触对归属、逐轴受控驱动、非零有效首局、PD 跟踪、承重、连续安全域和行走均未完成。
 - 未接正式 Blender 导出目标或验证其错源/错目标；旧资产 cap/contact ownership 缺口仍由 `floor-contact-attribution` 回交，不用新候选读数解除旧资产前提。
 - A 的树/轴/零位/网格/惯量/命名变化后按变化重验受影响链，不外推检查点结果。总事项维持 in_progress，最终仍随 D 由新上下文审核。
