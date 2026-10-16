@@ -4,7 +4,7 @@ title: lizard2 候选接线与真实消费者验证
 scope: rl_exp/blender, rl_exp/tasks, rl_exp/tools, ablation_harness
 status: in_progress
 landing: rl_exp/tasks/joint_names.py, rl_exp/tools/diagnose/palm_spatial_runtime.py, rl_exp/tools/verify/obs_protocol_live.py, ablation_harness/baseline_metrics.py
-next: E 执行者按证据中的隔离修复配置待下次授权补 baseline 写读链，继续逐轴验证及出口清点；限位 PD 专项接惯量与工况边界。
+next: E 执行者接 A 的正式导出接口，继续受控逐轴验证及出口清点；真实报告链边界取 evidence，限位 PD 专项接惯量与工况前提。
 close_when: E 自检就绪后随总项 D 由新上下文一次审核；必需链缺证不关闭。
 evidence: acceptance/records/2026-10-16-lizard2-candidate-doc-organization.md, acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md, acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md, acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory.md
 ---
@@ -113,7 +113,7 @@ E 当前重点是补齐实际 `palm_spatial` 候选的完整消费链。已有�
 | **新候选真实报告链** | 新候选实际采集 → writer → 绘图/评测 reader；保留目标身份及具名关节列，验证 twist 与肘膝、腕踝不会被旧位次误读，缺列/混名/缺来源须拒绝。测试样本不能代替真实采集，绘图展示选列与原始记录完整性分开核对 | 报告契约和读写拒错可先做；实际采集等运行接线成立，字段/评测语义交接触协议项，不改写历史协议 |
 | **完整出口核对** | 对照 E3 清点每条必需链的真实输入、消费者、正反例、复读命令及未完项；补受影响的旧基线回归。按 E4 分段交接，完整出口需所有必需链有证据，最终随 D 独立审核 | 不等 A/B/C 全部步态和承重性能验收才交接口；也不以离线套件通过替代新候选运行证据 |
 
-**当前并行切片（用户选择：2026-10-15）**：A 继续构型、组合轨迹及几何；E 本轮维护 `rl_exp/tools/diagnose/palm_spatial_runtime.py`，只消费 trial-checkpoint 记录绑定的只读 `checkpoint_v3`。当前运行切片与限制只取 `acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md`。E 下一步在下次启动授权内使用记录绑定的隔离修复 manifest 补 baseline 实际写读链，再补受控逐轴验证及出口清点；reset、具名连接过滤对照及跨腿负例的适用边界取同一记录，限位 PD 专项继续步骤 3 与其它工况验证。专用诊断身份不得当 v3 配方加载，注册诊断必须使用独立显式配置。A 后续输出使用新目录并说明变化，E 中间结果不自动外推。
+**当前并行切片（用户选择：2026-10-15）**：A 继续构型、组合轨迹及几何；E 本轮维护 `rl_exp/tools/diagnose/palm_spatial_runtime.py`，只消费 trial-checkpoint 记录绑定的只读 `checkpoint_v3`。当前运行切片与限制只取 `acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md`。E 下一步接 A 的正式导出接口、补受控逐轴验证及出口清点；baseline 实际写读链、reset、具名连接过滤对照及跨腿负例的适用边界取同一记录，限位 PD 专项继续步骤 3 与其它工况验证。专用诊断身份不得当 v3 配方加载，注册诊断必须使用独立显式配置。A 后续输出使用新目录并说明变化，E 中间结果不自动外推。
 
 **本轮共用文件归属**：`lizard2_palm_spatial_candidate.py`、`generate_urdf.py`、`lizard2_stance_candidate.py`、`joint_names.py`、`palm_spatial_probe.py` 与 FK/碰撞核心由 A/各原执行者维护，E 不同时修改。E 将读回异常交限位 PD 专项步骤 3/4 归因，不借接线改网格或正式驱动；本轮用户授权的具名过滤只写记录绑定的隔离副本，集合与适用边界取同一证据。真实末端归属和旧资产解除证据继续按本表各自回交。
 

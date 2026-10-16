@@ -21,7 +21,7 @@ evidence: acceptance/records/2026-10-16-lizard2-local-path-mirror.md, acceptance
 
 ## 下一步
 
-**E 回交**：步骤 4 按 evidence 的 e-spatial-runtime-wiring“隔离 reset 与中立首步修复”使用具名过滤及负例证据；该边界不外推全 ROM。继续步骤 3 的约束/惯量与受影响工况复验，baseline 真实写读由 E 待下次启动授权执行；不加 PD 压异常或扩大过滤，5a 并行。
+**E 回交**：步骤 4 按 evidence 的 e-spatial-runtime-wiring“隔离 reset 与中立首步修复”使用具名过滤及负例证据；该边界不外推全 ROM。继续步骤 3 的约束/惯量与受影响工况复验，E 的 baseline 实际写读链取同记录追加节，后续逐轴驱动仍需本项前提；不加 PD 压异常或扩大过滤，5a 并行。
 
 1. **固定输入与失败判定（执行者）**：先读 a-priority-review 的最新进展，再按 restored-validation-handoff 追溯原始问题；清点问题记录所用在办脚本、导出器改动、配置及本机产物，形成可复读的代码版本、输入绑定和不覆盖历史产物的命令。`palm_pd_probe.py`、`palm_asset_probe.py` 及相关导出片段须完成代码归属与版本落地。逐份比较报告代码/输入与最终版本，只重跑受行为变更影响或缺证的检查；不因日期或脚本哈希变化无差别重跑，也不混用不兼容版本。退出传播修复归 `work/active/exit-status-swallowed-by-app-close.md`，将该入口交其覆盖；本项验收真实成功/失败各一例，异常可见、退出状态正确，失败不得产生可误读为成功的报告。修复期间同时核对日志、报告身份与完成状态，不只看命令退出码。
 

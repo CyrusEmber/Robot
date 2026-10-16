@@ -377,9 +377,47 @@ attempt06 实际退出 0，完成 marker 与报告 `completed=true`；报告同�
 "E:\IsaacLab\env_isaaclab\Scripts\python.exe" -B rl_exp\tools\diagnose\palm_spatial_runtime.py --verify_registered rl_exp\out\lizard2_e_registered_20261015\connections_verified_20261016\registered_manifest.json
 ```
 
+## 追加：baseline 十步真实写读闭环（2026-10-16）
+
+用户随后批准一次十步 baseline 短仿真，失败即停；只使用上述 `connections_verified_20261016/registered_manifest.json`（摘要 `eb58101306a1f27f931a63c6e24f00267946d91596a1c8e55b07f4490bbd9b62`），未改正式资产、PD、具名过滤集合或阈值。运行前核 manifest、USD 与 geometry 摘要，读取此前完成的 reset/过滤正反例；输出选全新文件名，不覆盖任何已有采集。没有修改采集、collector 或 reader 源码，也没有新增默认检查。
+
+### 实际消费者与结果
+
+真实 `baseline_eval.py` → 正常 `RslRlVecEnvWrapper` reset → `joint_reset_errors` → `BaselineFrames.add` / `save` → `baseline_metrics.judge` 完成，命令退出 0、报告 `smoke_only`。严格 reset 检查在采集前保持原实现；有记录表明该分支未拒绝，不将其等同于额外采集了 reset 数值。随后独立进程从磁盘 `.frames.pt` 调同一 reader 的 CLI，判定字段与报告内原始 `reader_validation` 全等；函数复读含 axes 也全等。
+
+实际记录为 `baseline-frames-3`，一个环境、十个 0.02 s 控制步（0.2 s），17 列均为十个真实快照，全部有限。`joint_pos` shape=(10,1,30)，实际运行序的 20 个腿关节与 10 个躯尾关节完整、唯一，包含四条 twist；六类足端轴均为 `rl_ankle / rr_ankle / lf_wrist / rf_wrist`。terminated 与 timeout 十帧均零，使用真实 reader `_alive` 核十帧全部在首局内，无 reset-mixed 数据。所有关节位置最大绝对值为 0 rad：固定基座、禁重力、零动作/零 PD 下的中立采集，**不证明驱动跟踪或步态**。
+
+正式协议仍是冻结 `lizard2_flat_v5.json` 的 20 s / 1000 步，reader 原判定为 `invalid`，唯一原因是 `the window is 10 steps x 0.02 s = 0.2 s, but the protocol declares 20 s`。smoke 包装保留原判定，全部性能 gates=None、metrics/diagnostics/per_env 为空；不能据此引用任何成绩。reader 因短时长在契约阶段返回，不会自动执行 `_data_reasons`；执行者另对实际记录调用原 `_data_reasons(artifact, _alive(...))` 得到空列表，并独立核所有列有限、shape 和身份，未改协议缩短窗口“变绿”。
+
+`terminal_frames_captured=0` 且本窗无 done，因此没有应捕获的终止帧；该次**未覆盖终止 hook**，不能证明 hook 存活。这个事实不同于有 done 却捕获 0 的失配，不能拿十帧首局通过解除终止分支的专项验证。
+
+实际记录的内存副本分别破坏来源、twist 声明、关节命名、足端轴后，经真实 `baseline_metrics.judge` 拒绝：缺 source；缺 `lf_shoulder_twist_joint` 声明与实际轴冲突；`lf_hip_joint` 混入 spatial；`lf_ankle` 混入足端。原始 pt/report 完全不改。既有四命名及共享缺陷回归继续由默认测试守护，本轮未因复验新增默认负担。
+
+### 身份与复读
+
+采集版本及工作树来源在报告 `code` 中保存；共享工作树含其它 A 在办改动，不宣称整树 clean。三个实际消费者文件在本轮采集前后无本轮改动，分别 SHA：baseline_eval=`6b4ea3f3868b37fd39e7782b0ca7e3c9f2afa79331199f88b1c383b019fdb3aa`、baseline_frames=`3c2b9adc8949929cdde9a96b0f9a2ec08ccef5f5055238a5a695d9e3e5cbf39d`、baseline_metrics=`fbd63fb5ec784488d568f0dd96e373d10a1f4ad8a4fb4b409c8730f77c1a3929`。协议 SHA=`db5f92ba56586907837f49081ba640d0239ff92a2692277371b3ae8b79aa138a`，内容与 pt 内协议全等。
+
+证据相对 `rl_exp/out/lizard2_e_registered_20261015/`，本机产物不承诺随 clone 入仓：
+
+| 文件 | SHA256 |
+|---|---|
+| baseline_smoke_20261016.log | `52124ce9bde4baeb6dbab6dc899f709c6962d6573388ca70984f36927c3d3fcf` |
+| connections_verified_20261016/baseline_smoke_20261016.json | `c55c1dffaf168a89096bbdfcaed227c08370d3f01252eb1641f3344b2aec83a6` |
+| connections_verified_20261016/baseline_smoke_20261016.frames.pt | `34f490be00d64fecdb4946a8875de12b746b44930dda3a26e847faf32cf2eda6` |
+| connections_verified_20261016/baseline_smoke_20261016.reader.json | `6e86e2745c070ba1f897935b0aa0e959c52a99bc739986814ee0ff821c8109e7` |
+
+```cmd
+"E:\IsaacLab\env_isaaclab\Scripts\python.exe" -B ablation_harness\baseline_eval.py --task Lizard2-Flat-Play-v3 --target_config rl_exp\out\lizard2_e_registered_20261015\connections_verified_20261016\registered_manifest.json --protocol ablation_harness\protocols\lizard2_flat_v5.json --num_envs 1 --smoke_steps 10 --viz none --output rl_exp\out\lizard2_e_registered_20261015\connections_verified_20261016\baseline_smoke_replay01.json
+"E:\IsaacLab\env_isaaclab\Scripts\python.exe" -B -m ablation_harness.baseline_metrics rl_exp\out\lizard2_e_registered_20261015\connections_verified_20261016\baseline_smoke_20261016.frames.pt --protocol ablation_harness\protocols\lizard2_flat_v5.json --naming palm_spatial
+```
+
+第一条为本次成功采集的同参数复读，输出改新路径；重新起仿真须另获预算。第二条已独立进程执行，仅读盘，不启动仿真。该闭环仅解除先前缺真实 baseline 产物的接线缺口，不解除 E 其它必需链或动力学前提。
+
+新上下文只读审核核对记录、两个 JSON 与 reader/collector 源码，没有报告阻塞矛盾，确认短窗提前返回及终止分支未覆盖；该审核没有加载 pt 或独立复跑四负例，pt 张量与负例的实际核验归执行者直证，不将源码可拒绝代替已执行证据。审核输出误称报告无顶层 verdict；执行者直接读取已确认 `verdict=smoke_only`，不采纳该误读，其余局部范围结论不用于关闭 E。
+
 ## 未覆盖边界
 
-- 当前隔离 manifest 的正常 reset 与中立首物理步已验证；baseline 实际十帧 writer/评测 reader **仍未复跑**。用户预算到点选择停在当前证据，下一次采集须明确启动授权；不以本诊断解除全部 baseline 采集前提或宣布 E 完成。
-- 注册在线协议非空足端分支、实际 collider/body-owner 接触归属及 gait 诊断 writer/绘图已核；具名过滤仅核当前中立及一组跨腿负例，不证明全 ROM。逐轴受控驱动、非零有效首局、惯量一致性、PD 跟踪、承重、连续安全域和行走均未完成。
+- 当前隔离 manifest 的正常 reset、中立首物理步及 baseline 十帧实际 writer/reader 已核；完整 20 s 评测、终止帧 hook 实测和任何性能结论仍未覆盖，不以短窗 smoke 宣布 E 完成。
+- 注册在线协议非空足端分支、实际 collider/body-owner 接触归属及 gait 诊断 writer/绘图已核；具名过滤仅核当前中立及一组跨腿负例，不证明全 ROM。baseline 当前十帧均为首局有效采集，但不是运动；逐轴受控驱动、惯量一致性、PD 跟踪、承重、连续安全域和行走均未完成。
 - 未接正式 Blender 导出目标或验证其错源/错目标；旧资产 cap/contact ownership 缺口仍由 `floor-contact-attribution` 回交，不用新候选读数解除旧资产前提。
 - A 的树/轴/零位/网格/惯量/命名变化后按变化重验受影响链，不外推检查点结果。总事项维持 in_progress，最终仍随 D 由新上下文审核。
