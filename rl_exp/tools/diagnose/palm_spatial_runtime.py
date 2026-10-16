@@ -162,6 +162,16 @@ def self_check():
         except ValueError:
             actual_negatives += 1
     require(actual_negatives == 4, "actual backend binding destructive test escaped")
+    approved_filters = [["base_link", "tail1_pitch"], ["tail1_pitch", "tail2_pitch"]]
+    check_filter_pairs(approved_filters, approved_filters)
+    for bad in (approved_filters[:-1], approved_filters + [["lf_wrist", "rl_ankle"]],
+                [approved_filters[0], approved_filters[0]]):
+        try:
+            check_filter_pairs(bad, approved_filters)
+        except ValueError:
+            pass
+        else:
+            raise ValueError("filter set negative escaped")
     import subprocess
     source = Path(__file__).read_text(encoding="utf-8")
     function = next(n for n in ast.parse(source).body
@@ -265,7 +275,23 @@ def check_registered_manifest(path):
     require(robot.spawn.rigid_props.disable_gravity is True, "gravity enabled")
     require(robot.spawn.articulation_props.fix_root_link is None, "fixed root adapter override")
     require(robot.spawn.articulation_props.enabled_self_collisions is True, "self collision disabled")
-    require(all(term is None for term in vars(cfg.events).values()), "active reset/randomization event")
+    document = json.loads(path.read_text(encoding="utf-8"))
+    repaired = document.get("format") == "palm-spatial-registered-diagnostic-v2"
+    if repaired:
+        from isaaclab.envs import mdp
+        resets = {"reset_base", "reset_robot_joints"}
+        require({name for name, term in vars(cfg.events).items() if term is not None} == resets,
+                "unexpected reset/randomization event")
+        root, joints = cfg.events.reset_base, cfg.events.reset_robot_joints
+        require(root.func is mdp.reset_root_state_uniform and root.mode == "reset", "root reset writer mismatch")
+        require(joints.func is mdp.reset_joints_by_scale and joints.mode == "reset", "joint reset writer mismatch")
+        require(joints.params["position_range"] == [1., 1.]
+                and joints.params["velocity_range"] == [0., 0.], "joint reset is not deterministic")
+        for field in ("pose_range", "velocity_range"):
+            require(root.params[field] == {axis: [0., 0.] for axis in
+                    ("x", "y", "z", "roll", "pitch", "yaw")}, "root reset is not deterministic")
+    else:
+        require(all(term is None for term in vars(cfg.events).values()), "active reset/randomization event")
     require(target["end_links"] == dict(zip(joint_names.LEGS, joint_names.contact_body_names(joint_names.PALM_SPATIAL_NAMING))),
             "foreign end link")
     require(target["runtime_joint_order"] == json.loads(
@@ -338,8 +364,17 @@ def prepare_registered(args):
         config.update({prefix + "joint_names": selected, prefix + "scale": 1., prefix + "offset": 0.,
                        prefix + "preserve_order": True, prefix + "use_default_offset": True,
                        prefix + "clip": None})
-    config.update({"events." + name: None for name in vars(mother.events)})
-    document = {"format": "palm-spatial-registered-diagnostic-v1", "target_binding": target,
+    config.update({"events." + name: None for name in vars(mother.events)
+                   if name not in ("reset_base", "reset_robot_joints")})
+    config.update({
+        "events.reset_robot_joints.params.position_range": [1., 1.],
+        "events.reset_robot_joints.params.velocity_range": [0., 0.],
+        "events.reset_base.params.pose_range": {axis: [0., 0.] for axis in
+                                               ("x", "y", "z", "roll", "pitch", "yaw")},
+        "events.reset_base.params.velocity_range": {axis: [0., 0.] for axis in
+                                                   ("x", "y", "z", "roll", "pitch", "yaw")},
+    })
+    document = {"format": "palm-spatial-registered-diagnostic-v2", "target_binding": target,
                 "joint_order": names, "runtime_joint_order": runtime, "config": config,
                 "sha256": {"target": FIXED_USD_HASH, "urdf": URDF_HASH},
                 "scope": "registered mother routing only; isolated deepcopy; no recipe/PD/support/performance verdict",
@@ -359,7 +394,10 @@ def verify_registered(manifest):
     legs = document["config"]["actions.joint_pos_legs.joint_names"]
     positive = check_registered_manifest(manifest)
     negatives = {}
-    for defect in ("duplicate_joint", "missing_twist", "foreign_end", "mismatch_sha"):
+    defects = ["duplicate_joint", "missing_twist", "foreign_end", "mismatch_sha"]
+    if document.get("format") == "palm-spatial-registered-diagnostic-v2":
+        defects.append("missing_reset_writer")
+    for defect in defects:
         broken = copy.deepcopy(document)
         path = out / ("negative_" + defect + ".json")
         broken["target_binding"]["source"] = str(path)
@@ -369,6 +407,11 @@ def verify_registered(manifest):
             broken["target_binding"]["joint_names"].remove("lf_shoulder_twist_joint")
         elif defect == "foreign_end":
             broken["target_binding"]["end_links"]["lf"] = "lf_ankle"
+        elif defect == "missing_reset_writer":
+            for field in list(broken["config"]):
+                if field.startswith("events.reset_robot_joints."):
+                    del broken["config"][field]
+            broken["config"]["events.reset_robot_joints"] = None
         else:
             broken["sha256"]["target"] = "0" * 64
         if path.exists():
@@ -753,15 +796,96 @@ def run(args, result):
     app.close()
 
 
+def connection_geometry():
+    """Scan actual neutral meshes before allowing exactly the six connected pairs [m]."""
+    import itertools
+    import numpy as np
+    from rl_exp.tools.diagnose import palm_motion_boundaries as motion
+
+    doc = check_build(BUILD)
+    csc = motion.gait.csc
+    model = csc.load_urdf(BUILD.parent / "palm_spatial.urdf")
+    collision = motion.Collision(model, 1e-9)
+    remap = {d["abduct"]: d["twist"] for d in doc["definitions"].values()}
+    expected = {frozenset(remap.get(n, n) for n in pair) for pair in motion.gait.APPROVED}
+    parents = {s["child"]: s["parent"] for s in model["joints"].values()}
+    frames = {n: csc.fk(model["joints"], n, {}) for n in model["links"]}
+    world = {n: v @ frames[n][:3, :3].T + frames[n][:3, 3]
+             for n, (v, _) in collision.local.items()}
+    rows, scanned = [], set()
+    for a, b in itertools.combinations(sorted(world), 2):
+        va, vb = world[a], world[b]
+        if np.any(va.min(0) > vb.max(0)) or np.any(vb.min(0) > va.max(0)):
+            continue
+        fa, fb = collision.local[a][1], collision.local[b][1]
+        crossing = motion.surface_crosses(va, fa, vb, fb) or motion.surface_crosses(vb, fb, va, fa)
+        contained = any(motion.inside(va[i], vb, fb) for i in collision.representatives[a]) or any(
+            motion.inside(vb[i], va, fa) for i in collision.representatives[b])
+        if not crossing and not contained:
+            continue
+        if csc.jointed_pair(model["joints"], a, b):
+            continue
+        endpoint, ancestor = (a, b) if b in csc.depths(model["joints"], a) else (b, a)
+        chain = [endpoint]
+        while chain[-1] != ancestor and chain[-1] in parents:
+            chain.append(parents[chain[-1]])
+        intermediates = chain[1:-1]
+        connected = chain[-1] == ancestor and bool(intermediates) and all(
+            model["links"][n]["collision"] is None for n in intermediates)
+        pivots = [frames[n][:3, 3] for n in chain[:-1]]
+        span = max(float(np.linalg.norm(x - y)) for x in pivots for y in pivots) if pivots else 0.
+        pair = frozenset((a, b))
+        if connected:
+            scanned.add(pair)
+        rows.append({"pair": [a, b], "surface_crossing": bool(crossing), "containment": bool(contained),
+                     "child_to_ancestor": chain, "collider_free_intermediates": intermediates,
+                     "connected": connected, "joint_pivots_m": [p.tolist() for p in pivots],
+                     "pivot_span_m": span, "approved": pair in expected})
+    require(len(expected) == 6 and scanned == expected, "neutral connected scan differs from six approved pairs")
+    require(all(row["approved"] for row in rows), "unapproved nonadjacent neutral interference")
+    twist_links = {d["twist"] for d in doc["definitions"].values()}
+    require(all(row["pivot_span_m"] < (1e-6 if set(row["pair"]) & twist_links else .006)
+                for row in rows), "connection pivots differ from bound mechanism")
+    pose = {"chest_yaw_joint": .6}
+    a, b = "lf_wrist", "rl_ankle"
+    negative_world = {}
+    for n in (a, b):
+        frame = csc.fk(model["joints"], n, pose)
+        negative_world[n] = collision.local[n][0] @ frame[:3, :3].T + frame[:3, 3]
+    negative_crossing = motion.surface_crosses(negative_world[a], collision.local[a][1],
+                                              negative_world[b], collision.local[b][1]) or motion.surface_crosses(
+        negative_world[b], collision.local[b][1], negative_world[a], collision.local[a][1])
+    require(negative_crossing and frozenset((a, b)) not in expected, "cross-leg negative geometry absent")
+    return {"pairs": rows, "negative": {"pose_rad": pose, "pair": [a, b], "surface_crossing": True},
+            "scope": "neutral real-mesh intersections, collider-free mechanism and pivots; not full ROM approval",
+            "sources": {str(Path(m.__file__)): binding.sha256_file(Path(m.__file__))
+                        for m in (motion, motion.gait, csc)}}
+
+
+def check_filter_pairs(actual, approved):
+    require(len(actual) == len(approved)
+            and {frozenset(pair) for pair in actual} == {frozenset(pair) for pair in approved},
+            "unexpected collision filter pair")
+
+
 def reset_probe(args, result):
-    """Trace registered reset and one physical step without changing the replay inputs."""
+    """Trace registered reset and one physical step on an explicitly bound isolated replay."""
     import inspect
     from unittest.mock import patch
 
     manifest = args.reset_probe.resolve()
-    require(binding.sha256_file(manifest) ==
-            "30209cfc6237f8d0a6b1a3cbce6d5911c5c5a5e66113cb7473b204f561dab68f",
-            "reset probe manifest changed")
+    document = json.loads(manifest.read_text(encoding="utf-8"))
+    repaired = document.get("format") == "palm-spatial-registered-diagnostic-v2"
+    if not repaired:
+        require(binding.sha256_file(manifest) ==
+                "30209cfc6237f8d0a6b1a3cbce6d5911c5c5a5e66113cb7473b204f561dab68f",
+                "reset probe manifest changed")
+    else:
+        prepared = json.loads((manifest.parent / "prepare_report.json").read_text(encoding="utf-8"))
+        require(prepared["manifest_sha256"] == binding.sha256_file(manifest), "prepared reset manifest changed")
+        require(Path(document["target_binding"]["target"]).resolve() == REGISTERED_INPUT / "palm_spatial.usda"
+                and document["sha256"]["target"] == FIXED_USD_HASH, "reset repair must start with fixed source USD")
+    require(not args.repair_connections or repaired, "connection repair requires deterministic reset manifest")
     check_build(BUILD)
     out = args.out.resolve()
     require(out.parent == REGISTERED_OUT.resolve() and not out.exists(), "fresh registered attempt required")
@@ -784,9 +908,49 @@ def reset_probe(args, result):
     from pxr import Usd, UsdPhysics, UsdGeom
     from rl_exp.tools.verify.baseline_runtime import resolve_task_cfg, joint_reset_errors
 
+    geometry = None
+    if args.repair_connections:
+        geometry = connection_geometry()
+        write_json(out / "connection_geometry.json", geometry)
+        for name in ("palm_spatial.urdf", "palm_spatial.usda"):
+            shutil.copyfile(REGISTERED_INPUT / name, out / name)
+        shutil.copytree(REGISTERED_INPUT / "meshes", out / "meshes")
+        isolated = Usd.Stage.Open(str(out / "palm_spatial.usda"))
+        bodies = {p.GetName(): p for p in isolated.Traverse() if p.HasAPI(UsdPhysics.RigidBodyAPI)}
+        approved = [row["pair"] for row in geometry["pairs"]]
+        original_schema_ops = {a: isolated.GetRootLayer().GetPrimAtPath(bodies[a].GetPath()).GetInfo("apiSchemas")
+                               for a, _ in approved}
+        require(not any(p.HasAPI(UsdPhysics.FilteredPairsAPI) for p in isolated.Traverse()),
+                "source already has authored filters")
+        for a, b in approved:
+            UsdPhysics.FilteredPairsAPI.Apply(bodies[a]).CreateFilteredPairsRel().AddTarget(bodies[b].GetPath())
+        isolated.GetRootLayer().Save()
+        delta_layer = isolated.GetRootLayer().ExportToString()
+        for a in original_schema_ops:
+            prim = bodies[a]
+            prim.RemoveProperty("physics:filteredPairs")
+            isolated.GetRootLayer().GetPrimAtPath(prim.GetPath()).SetInfo("apiSchemas", original_schema_ops[a])
+        source_stage = Usd.Stage.Open(str(REGISTERED_INPUT / "palm_spatial.usda"))
+        require(isolated.GetRootLayer().ExportToString() == source_stage.GetRootLayer().ExportToString(),
+                "repaired USD changed fields other than six named filters")
+        require(isolated.GetRootLayer().ImportFromString(delta_layer), "cannot restore isolated filters")
+        result["only_named_filter_delta_verified"] = True
+        repaired_document = copy.deepcopy(document)
+        repaired_manifest = out / "registered_manifest.json"
+        repaired_document["target_binding"].update(target=str(out / "palm_spatial.usda"),
+            urdf=str(out / "palm_spatial.urdf"), source=str(repaired_manifest))
+        repaired_document["sha256"]["target"] = binding.sha256_file(out / "palm_spatial.usda")
+        repaired_document["connection_filter"] = {"pairs": approved, "geometry": str(out / "connection_geometry.json"),
+            "geometry_sha256": binding.sha256_file(out / "connection_geometry.json"),
+            "source_usd_sha256": FIXED_USD_HASH,
+            "scope": "six named connections only; neutral reset/first-step diagnostic, no ROM or PD verdict"}
+        write_json(repaired_manifest, repaired_document)
+        manifest = repaired_manifest
     cfg = copy.deepcopy(resolve_task_cfg(REGISTERED_TASK))
     target = obs_protocol.load_diagnostic_target(manifest, cfg, REGISTERED_TASK)
     cfg.sim.device = args.device
+    result["replay_manifest"] = str(manifest)
+    result["replay_manifest_sha256"] = binding.sha256_file(manifest)
     result["offline_contract"] = check_registered_manifest(manifest)
     result["quaternion_convention"] = {"order": "xyzw", "source": inspect.getfile(AssetBaseCfg),
                                         "default": list(AssetBaseCfg.InitialStateCfg().rot)}
@@ -825,7 +989,7 @@ def reset_probe(args, result):
         if args.contact_pairs:
             row["contact_pairs"] = {"status": "not_current", "reason":
                 "no force read outside the two post-physics-step stages"}
-            if label in ("post_1_physics_step", "explicit_default_post_1_physics_step"):
+            if label in ("post_1_physics_step", "explicit_default_post_1_physics_step", "cross_leg_post_1_physics_step"):
                 result["stage"] = "contact_pair_sample_" + label
                 matrices, nets, nonzero, checks = {}, {}, [], []
                 main_forces = live.scene["contact_forces"].data.net_forces_w.torch[0].clone()
@@ -927,6 +1091,14 @@ def reset_probe(args, result):
             scope = {"Usd": Usd, "UsdPhysics": UsdPhysics}
             exec(compile(ast.Module(body=nodes, type_ignores=[]), str(owner_path), "exec"), scope)
             root = live.sim.stage.GetPrimAtPath("/World/envs/env_0/Robot")
+            actual_filters = [[p.GetName(), target.name] for p in Usd.PrimRange(root)
+                              if p.HasAPI(UsdPhysics.FilteredPairsAPI)
+                              for target in UsdPhysics.FilteredPairsAPI(p).GetFilteredPairsRel().GetTargets()]
+            approved_filters = document.get("connection_filter", {}).get("pairs", [])
+            if geometry is not None:
+                approved_filters = [row["pair"] for row in geometry["pairs"]]
+            check_filter_pairs(actual_filters, approved_filters)
+            result["physics_filter_readback"] = actual_filters
             owners = scope["usd_collisions"](root)
             collisions, unclaimed, fixed = [], [], []
             for prim in Usd.PrimRange(root):
@@ -982,7 +1154,7 @@ def reset_probe(args, result):
                 from isaaclab_physx.physics import PhysxManager as SimulationManager
                 result["stage"] = "contact_pair_initialization"
                 result["contact_pairs"] = {"status": "unknown", "sample_labels": [],
-                    "mapping": [], "physics_filters_changed": False}
+                    "mapping": [], "physics_filters_changed": bool(approved_filters)}
                 require(not unclaimed and len(collisions) == 18, "expected 18 claimed collision prims")
                 for collision in collisions:
                     path = collision["nearest_body"]
@@ -1060,11 +1232,41 @@ def reset_probe(args, result):
                 live.scene.update(live.physics_dt)
                 sample("explicit_default_post_1_physics_step")
                 result["default_first_step_net_force_n"] = sensor.data.net_forces_w.torch.cpu().tolist()
-            result["status"] = "blocked" if result["stages"][-1]["strict_reset_errors"] else "requires_reset_wiring_review"
-            result["baseline_10step"] = "not run: original strict reset gate fails; counterfactual is not acceptance"
+            first = next(row for row in result["stages"] if row["label"] == "post_1_physics_step")
+            reset = next(row for row in result["stages"] if row["label"] == "post_wrapper_reset")
+            if repaired:
+                require(not reset["strict_reset_errors"], "deterministic wrapper reset failed")
+                require(any(call["phase"] == "wrapper_reset" and call["method"].startswith("write_joint")
+                            for call in result["hook_calls"]), "reset did not invoke joint writer")
+            if geometry is not None:
+                require(not first["strict_reset_errors"], "filtered neutral first physics step still moves")
+                require(not result["stages"][-1]["strict_reset_errors"], "filtered explicit first step still moves")
+                require(args.contact_pairs, "filter repair requires actual pair observation")
+                phase = "cross_leg_negative"
+                live.reset()
+                q = robot.data.default_joint_pos.torch.clone()
+                q[0, robot.joint_names.index("chest_yaw_joint")] = .6
+                robot.write_joint_state_to_sim(q, robot.data.default_joint_vel.torch.clone())
+                live.scene.write_data_to_sim()
+                live.sim.forward()
+                live.sim.step(render=False)
+                live.scene.update(live.physics_dt)
+                sample("cross_leg_post_1_physics_step")
+                contact = result["stages"][-1]["contact_pairs"]
+                kept = [row for row in contact["nonzero"] if {row["source"], row["target"]} == {"lf_wrist", "rl_ankle"}]
+                require(kept and max(row["norm_n"] for row in kept) > 1., "required real cross-leg contact missing")
+                result["preserved_contact_negative"] = kept
+                phase = "reset_after_negative"
+                live.reset()
+                sample("reset_after_cross_leg_negative")
+                require(not result["stages"][-1]["strict_reset_errors"], "reset after excitation failed")
+            result["status"] = "reset_and_neutral_first_step_verified" if geometry is not None else (
+                "blocked" if first["strict_reset_errors"] else "requires_reset_wiring_review")
+            result["baseline_10step"] = "separate real baseline consumer required"
         check_build(BUILD)
-        require(binding.sha256_file(manifest) == result["input"]["manifest_sha256"], "manifest modified")
-        require(binding.sha256_file(Path(target["target"])) == FIXED_USD_HASH, "USD modified")
+        require(binding.sha256_file(args.reset_probe.resolve()) == result["input"]["manifest_sha256"], "input manifest modified")
+        require(binding.sha256_file(REGISTERED_INPUT / "palm_spatial.usda") == FIXED_USD_HASH, "source USD modified")
+        require(binding.sha256_file(manifest) == result["replay_manifest_sha256"], "replay manifest modified")
         result.update(completed=True, stage="completed")
         write_json(out / "reset_probe_report.json", result)
         print("RESET_PROBE_COMPLETED", result["status"], binding.sha256_file(out / "reset_probe_report.json"), flush=True)
@@ -1096,6 +1298,8 @@ def main():
     parser.add_argument("--verify_registered", type=Path,
                         help="offline re-read of a prepared registered manifest")
     parser.add_argument("--self_check", action="store_true")
+    parser.add_argument("--connection_geometry", action="store_true", help="offline exact six-pair geometry and negative")
+    parser.add_argument("--repair_connections", action="store_true", help="isolated six-pair repair with preserved-contact negative")
     parser.add_argument("--reset_probe", type=Path, help="registered manifest reset/first-step attribution")
     parser.add_argument("--contact_pairs", action="store_true",
                         help="observe exact collider-owner body pairs during --reset_probe only")
@@ -1108,11 +1312,16 @@ def main():
     if "--self_check" in sys.argv:
         self_check()
         return
+    if "--connection_geometry" in sys.argv:
+        print(json.dumps(connection_geometry(), indent=2), flush=True)
+        return
     from isaaclab.app import AppLauncher
     AppLauncher.add_app_launcher_args(parser)
     args = parser.parse_args()
     if args.contact_pairs and args.reset_probe is None:
         parser.error("--contact_pairs requires --reset_probe")
+    if args.repair_connections and (args.reset_probe is None or not args.contact_pairs):
+        parser.error("--repair_connections requires --reset_probe and --contact_pairs")
     result = {"completed": False, "stage": "startup",
               "scope": "dedicated unregistered config, NOT registered task/v3 and NOT load_diagnostic_target replay; "
                        "fixed base, gravity disabled, zero gains/armature; no PD, tracking or support verdict"}
