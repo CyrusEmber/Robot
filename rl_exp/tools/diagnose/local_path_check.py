@@ -16,6 +16,11 @@ Each target adds neutral plus u=1/4, 1/2, 3/4, 1 for every accepted source segme
 --combined checks at most 129 full-body poses: lf/rr in phase, rf/rl offset by half a
 path cycle. Body stays fixed; each pose checks all four palms and all collision pairs once.
 No solving, smoothing, time mapping, world no-slip or support-force verdict.
+--support_schedule with --combined preserves each original joint-line segment, assigns
+5/8 of dimensionless cycle c to contact and 1/8 to each remaining phase, and traverses
+segments with 10u^3-15u^4+6u^5. Every original node has zero dq/dc and d2q/dc2;
+this stop-at-each-node C2 retiming is not geometric smoothing or physical speed approval.
+At most 129 combined poses; at least two palms must meet the original contact tolerance.
 --self_check --break_test <case> must fail when the actual checking function is broken.
 """
 
@@ -175,19 +180,57 @@ def _phase_angles(rows, joint_names, s):
     return start + u * (end - start), after['phase']
 
 
-def _combined_angles(s, tracks, plans, zero):
+def _support_map(c):
+    boundaries = np.array([0., 5 / 8, 3 / 4, 7 / 8, 1.])
+    assert 0 <= c < 1, 'invalid cycle parameter'
+    phase = min(int(np.searchsorted(boundaries, c, side='right')) - 1, 3)
+    duration = boundaries[phase + 1] - boundaries[phase]
+    coordinate = (c - boundaries[phase]) / duration * 8
+    segment = min(int(coordinate), 7)
+    u = coordinate - segment
+    h = u ** 3 * (10 + u * (-15 + 6 * u))
+    dh = 30 * u ** 2 * (1 - u) ** 2
+    d2h = 60 * u * (1 - u) * (1 - 2 * u)
+    rate = 8 / duration
+    return {'source_s': (phase * 8 + segment + h) / 32,
+            'ds_dc': dh * rate / 32, 'd2s_dc2': d2h * rate ** 2 / 32,
+            'phase_index': phase, 'segment': phase * 8 + segment + 1, 'u': u}
+
+
+def _support_samples():
+    boundaries = np.array([0., 5 / 8, 3 / 4, 7 / 8, 1.])
+    nodes = np.r_[np.concatenate([np.linspace(a, b, 9)[:-1]
+                                  for a, b in zip(boundaries, boundaries[1:])]), 1.]
+    shifted = (nodes[:-1] - .5) % 1.
+    knots = np.unique(np.r_[nodes, shifted])
+    mids = (knots[:-1] + knots[1:]) / 2
+    samples = np.unique(np.r_[knots, mids])
+    assert len(samples) <= 129, 'support sampling exceeds approved budget'
+    return samples
+
+
+def _combined_angles(s, tracks, plans, zero, support_schedule=False):
     q, phases = zero.copy(), {}
     for leg, (source, joint_names, offset, signs) in plans.items():
         local_s = (s + offset) % 1.
-        angles, phase = _phase_angles(tracks[source], joint_names, local_s)
+        mapping = _support_map(local_s) if support_schedule else None
+        source_s = mapping['source_s'] if mapping is not None else local_s
+        angles, phase = _phase_angles(tracks[source], joint_names, source_s)
         target_names = plans[leg][1] if leg == source else [n.replace(source + '_', leg + '_', 1)
                                                           for n in joint_names]
         q.update(dict(zip(target_names, map(float, angles * signs))))
-        phases[leg] = {'phase': phase, 'local_s': local_s}
+        phases[leg] = {'phase': phase, 'local_s': source_s}
+        if mapping is not None:
+            before, after = tracks[source][mapping['segment'] - 1: mapping['segment'] + 1]
+            slope = np.array([after['state']['q_rad'][n] - before['state']['q_rad'][n]
+                              for n in joint_names]) * 32 * signs
+            phases[leg].update({'local_c': local_s, 'mapping': mapping,
+                               'dq_dc_rad': (slope * mapping['ds_dc']).tolist(),
+                               'd2q_dc2_rad': (slope * mapping['d2s_dc2']).tolist()})
     return q, phases
 
 
-def _combined_check(parameters, evaluate, config, budget=129):
+def _combined_check(parameters, evaluate, config, budget=129, require_support=False):
     rows, failure, previous = [], None, None
     for s in parameters:
         if len(rows) >= budget:
@@ -210,6 +253,11 @@ def _combined_check(parameters, evaluate, config, budget=129):
                         phase == 'forward_air' and dx <= config['position_tolerance_m']):
                     reasons.append('no resolved directed displacement')
             failures.extend(f'{leg}: {reason}' for reason in reasons)
+        if require_support:
+            contact_legs = [leg for leg, item in reading['legs'].items()
+                            if abs(item['state']['task_m'][2]) <= config['position_tolerance_m']]
+            if len(contact_legs) < 2:
+                failures.append('fewer than two geometric palm contacts')
         row = {'s': float(s), **reading, 'failures': failures}
         rows.append(row)
         if failures:
@@ -224,7 +272,7 @@ def _combined_check(parameters, evaluate, config, budget=129):
             'rows': rows}
 
 
-def _combined_run(source, models, zero, root, urdf, collision, build, config):
+def _combined_run(source, models, zero, root, urdf, collision, build, config, support_schedule=False):
     assert set(source['legs']) == {'lf', 'rr'}, 'combined mode requires the two source legs'
     tracks = {leg: data['rows'] for leg, data in source['legs'].items()}
     for leg, rows in tracks.items():
@@ -240,7 +288,7 @@ def _combined_run(source, models, zero, root, urdf, collision, build, config):
     geometry_fields = ('all_ground_min_m', 'ground_by_link', 'solid_pairs', 'positive_gap_pairs',
                        'zero_gap_non_solid_pairs', 'limit_failures')
     def evaluate(s):
-        q, phases = _combined_angles(s, tracks, plans, zero)
+        q, phases = _combined_angles(s, tracks, plans, zero, support_schedule)
         geometry = _body_state(q, root, urdf, collision)
         legs = {}
         for leg, model in models.items():
@@ -249,7 +297,16 @@ def _combined_run(source, models, zero, root, urdf, collision, build, config):
             state = _state(model, q, root, urdf, collision, straight, bend, geometry)
             legs[leg] = {**phases[leg], 'state': state}
         return {'q_rad': q, 'geometry': geometry, 'legs': legs}
-    result = _combined_check(np.linspace(0, 1, 129), evaluate, config)
+    parameters = _support_samples() if support_schedule else np.linspace(0, 1, 129)
+    result = _combined_check(parameters, evaluate, config, require_support=support_schedule)
+    if support_schedule:
+        result['schedule'] = {'cycle_parameter': 'dimensionless c, not seconds',
+                              'phase_fractions': [5 / 8, 1 / 8, 1 / 8, 1 / 8],
+                              'segment_interpolation': '10u^3-15u^4+6u^5',
+                              'node_dq_dc_rad': 0., 'node_d2q_dc2_rad': 0.,
+                              'physical_speed_or_acceleration_approved': False,
+                              'minimum_geometric_contact_palms': 2,
+                              'planned_pose_count': len(parameters)}
     for row in result['rows']:
         for item in row['legs'].values():
             for key in ('q_rad', *geometry_fields):
@@ -265,7 +322,7 @@ def _combined_run(source, models, zero, root, urdf, collision, build, config):
     return result
 
 
-def _run(source_path, output, mirror=False, combined=False):
+def _run(source_path, output, mirror=False, combined=False, support_schedule=False):
     assert REPO / 'rl_exp/out' in output.parents and not output.exists(), 'fresh isolated output required'
     source, _, _, _, tracks = view._load(source_path)
     build_path = Path(source['identity']['build_report'])
@@ -279,7 +336,8 @@ def _run(source_path, output, mirror=False, combined=False):
     assert config['points_per_phase'] == 8 and config['midpoint_check'], 'unsupported source sampling'
     results = {}
     if combined:
-        results['combined'] = _combined_run(source, models, zero, root, urdf, collision, build, config)
+        results['combined'] = _combined_run(source, models, zero, root, urdf, collision, build, config,
+                                            support_schedule)
     if mirror:
         assert set(tracks) == {'lf', 'rr'}, 'mirror mode requires the two source legs'
     for leg, (stats, _) in ({} if combined else tracks).items():
@@ -324,8 +382,14 @@ def _run(source_path, output, mirror=False, combined=False):
     if combined:
         sampling = {'fractions': [0., .25, .5, .75, 1.], 'max_combined_poses': 129,
                     'phase_offsets': results['combined']['phase_offsets']}
+    if support_schedule:
+        sampling = {'max_combined_poses': 129, 'actual_planned_poses': len(_support_samples()),
+                    'phase_offsets': results['combined']['phase_offsets'],
+                    'cycle_parameters': _support_samples().tolist(),
+                    'joint_linear': True, 'segment_parameter_quintic': True}
     sampling.update({'stop_on_first_failure': True, 'joint_linear': True})
-    report = {'mode': 'sampled_local_path_combined' if combined else
+    report = {'mode': 'sampled_local_path_support_schedule' if support_schedule else
+                     'sampled_local_path_combined' if combined else
                      'sampled_local_path_mirror' if mirror else 'sampled_local_path_quarters',
               'source_report': str(source_path),
               'source_report_sha256': view.digest(source_path), 'identity': identity,
@@ -333,7 +397,9 @@ def _run(source_path, output, mirror=False, combined=False):
               'root_transform': root.tolist(), 'checked_pairs': source['checked_pairs'], 'excluded_pairs': excluded,
               'numerical_geometry_trigger_m': collision.clearance, 'safety_clearance_m': None,
               'legs': results,
-              'limits': ('Four-leg combined sampled geometry with fixed body; no support-force verdict. ' if combined else
+              'limits': ('Fixed-body support schedule with C2 node-stopping dimensionless retiming, not geometric '
+                         'smoothing or physical speed/dynamics approval. ' if support_schedule else
+                         'Four-leg combined sampled geometry with fixed body; no support-force verdict. ' if combined else
                          'Actual opposite legs sampled independently; all target verdicts rechecked. '
                          'No four-leg combination. ' if mirror else
                          'Only new quarter samples checked. Source endpoints/midpoints remain historical verdicts. ')
@@ -369,7 +435,12 @@ def _self_check(break_test=None):
                      'combined_pairs': (_body_state, 'pairs = collision.check(q)', 'pairs = []'),
                      'combined_stop': (_combined_check, 'if failures:', 'if False:'),
                      'combined_budget': (_combined_check, 'len(rows) >= budget', 'False'),
-                     'combined_closure': (_combined_check, 'and closed)', ')')}
+                     'combined_closure': (_combined_check, 'and closed)', ')'),
+                     'support_fraction': (_support_map, '5 / 8, 3 / 4, 7 / 8', '1 / 4, 1 / 2, 3 / 4'),
+                     'support_curve': (_support_map, 'u ** 3 * (10 + u * (-15 + 6 * u))', 'u'),
+                     'support_derivative': (_support_map, '30 * u ** 2 * (1 - u) ** 2', '1.'),
+                     'support_gate': (_combined_check, 'len(contact_legs) < 2', 'False'),
+                     'support_samples': (_support_samples, 'nodes, shifted', 'nodes')}
         function, old, new = mutations[break_test]
         code = inspect.getsource(function)
         assert old in code
@@ -486,7 +557,28 @@ def _self_check(break_test=None):
         geometry = _body_state({'joint': 0.}, np.eye(4),
                                {'joints': {'joint': {'limits': [-1., 1.]}}}, collision)
     assert geometry['solid_pairs'] and geometry['all_ground_min_m'] == 0., 'combined collision scan lost'
-    print('LOCAL_PATH_QUARTERS_SELF_CHECK_OK: quarters, mirror and combined mapping, phases, interpolation, fail-stop, closure')
+    assert _support_map(5 / 8)['source_s'] == .25 and np.isclose(_support_map(.5)['source_s'], 6.31744 / 32)
+    assert np.isclose(_support_map(5 / 8 + 1 / 256)['source_s'], (8 + .103515625) / 32), 'quintic map lost'
+    knots = np.unique(np.r_[np.linspace(0, 5 / 8, 9), np.linspace(5 / 8, 3 / 4, 9),
+                            np.linspace(3 / 4, 7 / 8, 9), np.linspace(7 / 8, 1, 9)])
+    for c in knots[:-1]:
+        item = _support_map(float(c))
+        assert item['ds_dc'] == item['d2s_dc2'] == 0., 'node derivatives not zero'
+    for c in np.linspace(0, 1, 1025)[:-1]:
+        a, b = _support_map(float(c)), _support_map(float((c + .5) % 1.))
+        assert a['source_s'] <= .25 or b['source_s'] <= .25, 'scheduled support gap'
+    samples = _support_samples()
+    assert samples[0] == 0 and samples[-1] == 1 and len(samples) <= 129
+    assert all(c in samples for c in knots) and all(float((c - .5) % 1.) in samples for c in knots[:-1])
+    unsupported = _combined_check([0., .5, 1.], combined_state, config, require_support=True)
+    assert unsupported['pose_count'] == 1 and unsupported['failure'] is not None, 'support gate lost'
+    assert 'fewer than two geometric palm contacts' in unsupported['failure']['failures']
+    def supported(s):
+        reading = combined_state(s)
+        reading['legs']['rf'] = reading['legs']['lf']
+        return reading
+    assert _combined_check([0., .5, 1.], supported, config, require_support=True)['completed_combined_loop']
+    print('LOCAL_PATH_QUARTERS_SELF_CHECK_OK: quarters, mirror, combination and support schedule, C2 retiming, fail-stop')
 
 
 def main():
@@ -496,12 +588,16 @@ def main():
     parser.add_argument('--self_check', action='store_true')
     parser.add_argument('--mirror', action='store_true')
     parser.add_argument('--combined', action='store_true')
+    parser.add_argument('--support_schedule', action='store_true')
     parser.add_argument('--break_test', choices=('fractions', 'stop', 'budget', 'landing', 'contact',
                                                'mirror_sign', 'mirror_limits', 'mirror_stop', 'mirror_budget',
                                                'mirror_samples', 'mirror_closure', 'combined_offset',
                                                'combined_interpolation', 'combined_pairs', 'combined_stop',
-                                               'combined_budget', 'combined_closure'))
+                                               'combined_budget', 'combined_closure', 'support_fraction',
+                                               'support_curve', 'support_derivative', 'support_gate', 'support_samples'))
     args = parser.parse_args()
+    if args.support_schedule and not args.combined:
+        parser.error('--support_schedule requires --combined')
     if args.mirror and args.combined:
         parser.error('--mirror and --combined are separate modes')
     if args.self_check:
@@ -511,7 +607,8 @@ def main():
     else:
         if args.break_test or args.source_report is None or args.output_dir is None:
             parser.error('--source_report and --output_dir required; --break_test requires --self_check')
-        _run(args.source_report.resolve(), args.output_dir.resolve(), mirror=args.mirror, combined=args.combined)
+        _run(args.source_report.resolve(), args.output_dir.resolve(), mirror=args.mirror, combined=args.combined,
+             support_schedule=args.support_schedule)
 
 
 if __name__ == '__main__':
