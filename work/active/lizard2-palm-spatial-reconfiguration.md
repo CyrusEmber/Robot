@@ -4,9 +4,9 @@ title: 肩髋三轴掌链候选与缺失运动能力修复
 scope: rl_exp/blender/scripts, rl_exp/tools/diagnose, rl_exp/tasks/joint_names.py
 status: in_progress
 landing: rl_exp/blender/scripts, rl_exp/tools/diagnose
-next: 执行者按四分点记录提出接缝处理及另两腿镜像／四肢组合的相位与预算；运行时与 A/E 交接继续。
+next: 执行者按镜像记录提出接缝处理及四肢组合的相位、根运动与预算；运行时与 A/E 交接继续。
 close_when: 新上下文核验实际候选、行为证据与交接；有缺口不关闭。
-evidence: acceptance/records/2026-10-16-lizard2-local-path-quarters.md, acceptance/records/2026-10-16-lizard2-local-path-postprocess.md, acceptance/records/2026-10-15-lizard2-palm-local-contact-repair.md, acceptance/records/2026-10-15-lizard2-palm-local-path-probe.md, acceptance/records/2026-10-15-lizard2-palm-phase-target-preparation.md, acceptance/records/2026-10-15-lizard2-palm-spatial-refined-boundaries.md, acceptance/records/2026-10-15-lizard2-palm-spatial-static-slices.md, acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-14-lizard2-palm-spatial-trial-checkpoint.md, acceptance/records/2026-10-14-lizard2-palm-spatial-design-decision.md
+evidence: acceptance/records/2026-10-16-lizard2-local-path-mirror.md, acceptance/records/2026-10-16-lizard2-local-path-quarters.md, acceptance/records/2026-10-16-lizard2-local-path-postprocess.md, acceptance/records/2026-10-15-lizard2-palm-local-contact-repair.md, acceptance/records/2026-10-15-lizard2-palm-local-path-probe.md, acceptance/records/2026-10-15-lizard2-palm-phase-target-preparation.md, acceptance/records/2026-10-15-lizard2-palm-spatial-refined-boundaries.md, acceptance/records/2026-10-15-lizard2-palm-spatial-static-slices.md, acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-14-lizard2-palm-spatial-trial-checkpoint.md, acceptance/records/2026-10-14-lizard2-palm-spatial-design-decision.md
 ---
 
 ## 当前范围
@@ -15,7 +15,7 @@ evidence: acceptance/records/2026-10-16-lizard2-local-path-quarters.md, acceptan
 
 按总项“A–E 当前执行关系”分段交付：最小绑定和真实树先支撑 A 的运动学，实际候选再交 E 扩到运行时和报告链；不以本项关闭作为总项几何推进的前提。限位、承重 PD 及躯尾标定由专项与总项 B/C 承接，最终集成仍归 D。
 
-采样与证明范围按 `acceptance/records/2026-10-16-lizard2-local-path-quarters.md` 的“用户确认的验证范围”执行；关闭审核按同一范围，不另加连续域证明前置。
+采样与证明范围按 `acceptance/records/2026-10-16-lizard2-local-path-quarters.md` 的“用户确认的验证范围”执行；关闭审核按同一范围，不另加连续域证明前置。另两腿局部镜像的覆盖与未完边界取 evidence 的镜像记录，当前继续接缝及四肢组合；单腿镜像不替代组合验证。
 
 ## 构型与实现方案
 

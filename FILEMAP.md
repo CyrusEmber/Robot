@@ -64,7 +64,7 @@
 | `rl_exp\blender\scripts\lizard2_palm_spatial_candidate.py` | 肩髋共中心三轴隔离试作生成器（Blender）：输出 blend、相对网格引用 URDF 与身份报告，不写正式资产 |
 | `rl_exp\tools\diagnose\palm_spatial_runtime.py` | 无承重接线与隔离配置绑定；`--reset_probe` 查 reset/首物理步及 collider 归属，`--contact_pairs` 采具名观测并严格拒错；不判 PD 或复现正式配方 |
 | `rl_exp\tools\diagnose\palm_spatial_probe.py` | 三轴试作的 Blender/FK 对照、历史固定落点诊断、`--static_slices` 切片及 `--local_path` 预算内局部路径；自检／失败对照验证口径，不验收步态或动力学 |
-| `rl_exp\tools\diagnose\local_path_check.py` | 已采局部路径的独立四分点几何检查：限预算、失败即停，保留地面与碰撞读数；不求解、不平滑、不证明连续域 |
+| `rl_exp\tools\diagnose\local_path_check.py` | 已采局部路径的独立几何检查：四分点或 `--mirror` 实际另两腿，限预算、失败即停；不求解、不平滑、不证明连续域 |
 | `rl_exp\tools\diagnose\local_path_view.py` | 局部路径报告的独立后处理：真实碰撞网格侧／俯视 GIF、轨迹与路径斜率接缝；不重求解、不新增接地采样、不判动力学 |
 | `rl_exp\tools\diagnose\palm_gait_kinematics.py` | **palm 候选身体固定下的步态几何样本**（无仿真）：`--legs two`（`lf`+`rr`）/ `four`（对角小跑相位），每腿 4 自由度解足底点 + 掌面水平，报残差 / 周期接缝 / 限位余量 / 关节速度 / 网格间隙 / 左右镜像；`--inject_error` 给轴符号、步长、碰撞、镜像负例。**不证明承重、滑移或能走** |
 | `rl_exp\tools\diagnose\palm_pd_probe.py` | **palm 候选的 USD/仿真身份绑定与诊断**（`env_isaaclab` 的 python，起 Isaac）：坐标 / 惯量 / 碰撞过滤 / PD 各自 `--*_only` 工况，报告含输入哈希与代码快照；`--inject_error` 给错 pivot/轴/状态/过滤的拒错负例。仅诊断，不是合格资产验收 |
