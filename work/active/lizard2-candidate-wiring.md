@@ -4,7 +4,7 @@ title: lizard2 候选接线与真实消费者验证
 scope: rl_exp/blender, rl_exp/tasks, rl_exp/tools, ablation_harness
 status: in_progress
 landing: rl_exp/tasks/joint_names.py, rl_exp/tools/diagnose/palm_spatial_runtime.py, rl_exp/tools/verify/obs_protocol_live.py, ablation_harness/baseline_metrics.py
-next: E 执行者按 E5 将运行异常交限位 PD 专项归因，再补实际报告链、逐轴验证与必需消费者清点。
+next: E 执行者按实测接触对交限位 PD 专项核连接区与过滤负例；回交后补 baseline 写读链、逐轴验证和出口清点。
 close_when: E 自检就绪后随总项 D 由新上下文一次审核；必需链缺证不关闭。
 evidence: acceptance/records/2026-10-16-lizard2-candidate-doc-organization.md, acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md, acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md, acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory.md
 ---

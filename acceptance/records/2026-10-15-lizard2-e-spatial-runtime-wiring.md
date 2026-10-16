@@ -229,9 +229,97 @@ attempt04 修订后增加“每视图 raw mapping 在验证前落盘”：独占
 "E:\IsaacLab\env_isaaclab\Scripts\python.exe" -B rl_exp\tools\diagnose\palm_spatial_runtime.py --reset_probe rl_exp\out\lizard2_e_registered_20261015\attempt01\registered_manifest.json --contact_pairs --out rl_exp\out\lizard2_e_registered_20261015\pairs_replay01 --viz none --device cuda:0
 ```
 
+## 追加：真实接触路径修复与采力（2026-10-16）
+
+### 验证对象与根修复
+
+用户批准最多两次短检查：先保存实际路径结构，再最小修复复验；资产、驱动、物理过滤仍保持不变。真实安装入口已定位为 `isaacsim/extscache/omni.physics.tensors-110.1.11+110.1.1.wx64.r.cp312.u7f4/omni/physics/tensors/api.py`。`create_rigid_contact_view` 的单 sensor/多 filter 说明在 :393，`filter_paths` :4898 直接转发 backend，未规定 Python 嵌套形状；不能据框架 mock 猜列。
+
+attempt05 用原 helper 真复现退出 1，raw 文件记录 `sensor_paths=[body]`、`filter_paths=[[18 个 body 路径]]`、counts=1/18。原 helper 将外层 sensor 行误当 singleton filter 列，把十八项行变为 None。新增精确单 sensor 行展开，仍核实际 source、owners 集合、重复与 `(1,18,3)` shape；不递归猜测、没有把不匹配改为默认成功。
+
+实际 raw 输入对旧 helper 真 ValueError，新 helper 返回十八列；固化该结构后旧 self_check 退出 1，新 self_check 退出 0。原四个 pair 拒错保留，新增四个嵌套/歧义/缺列/重复负例通过。CPU 对照仅证明 helper，运行 mapping 另由 attempt06 验证。
+
+### 实际采集与交叉读点
+
+attempt06 实际退出 0，完成 marker 与报告 `completed=true`；报告同时 `status=blocked`，baseline 没有被宣布通过。18 个单体 view 均取得实际路径并 verified，每个力矩阵 `(1,18,3)`，capacity 沿用 4，dt=0.005 s。declared patterns 与 resolved columns 分开保存；raw 文件验证前状态 unverified 与汇总 verified 各自有身份。
+
+以下两阶段共享 solver 历史，不是独立过滤对照。
+
+| unordered body pair | 原状态下一步法向力范数 [kN] | 同历史写绑定零位后下一步 [kN] | URDF 距离 |
+|---|---:|---:|---:|
+| base_link ↔ tail1_pitch | 46.939 | 52.836 | 2 |
+| base_link ↔ rl_hip_twist | 29.482 | 56.709 | 3 |
+| base_link ↔ rr_hip_twist | 26.265 | 56.203 | 3 |
+| chest_pitch ↔ lf_shoulder_twist | 45.209 | 24.818 | 3 |
+| chest_pitch ↔ rf_shoulder_twist | 45.172 | 50.099 | 3 |
+| tail1_pitch ↔ tail2_pitch | 本次未报非零聚合值 | 1.617 | 2 |
+
+第一阶段五个 unordered 对，第二阶段六个，不是两个文件 pair 集合完全相同。两阶段所有非零 pair 的互反残差为 0 N，同一步主 sensor 对照残差为 0 N；matrix sum−net 最大分别 0 N 与 0.00208594 N。最大 body net 约 57.803/75.815 kN；与当前净力异常一致，实证这些 body 之间存在强 self-contact，但不证明全部响应只来自它们。
+
+力为 normal aggregate，不含摩擦/接触点/穿透深度；每 owner 一个 collider 的对应依据来自实际 USD nearest RigidBodyAPI，而非字符串猜 collider。零列不证明整个轨迹无碰撞。第二阶段沿用同一 solver 历史，仅写回绑定默认值，不是独立过滤对照。关节状态和 reset 阻塞与 attempt02 相同，下一物理步仍偏离。
+
+### 与已有几何排除的对照
+
+`palm_gait_kinematics.py:43` 的六对 APPROVED 被 `palm_spatial_probe.py:359-372` 明确按 abduct→twist 重映射；上述六对 union 恰好命中当前离线几何排除，不是凭两三层 ancestry 批准。原列表也用于旧四轴 `palm_pd_probe.py:382` 的诊断过滤。
+
+执行者直接读取本机固定 USD 文本并核 SHA，未见 authored `FilteredPairsAPI`/`filteredPairs` 字段。此项只描述该输入层，不拿来推断全部运行时自动相邻过滤。实际非零 pair 另证明本次运行这些 body 接触在报告中存在。**几何排除命中不等于新三轴运行时过滤自动获准**；新载体/实体归属、连接区几何理由、应保留的非相邻及跨腿接触反例仍由限位 PD 专项步骤 4 核验，不在本轮写入过滤。
+
+### 绑定与复读
+
+| 对象 | SHA256 |
+|---|---|
+| 最终运行源码及快照 | `1588d503e82b1ef70f79c7d3791e23d246295119f636dc26344df6e017535900` |
+| attempt06/reset_probe_report.json | `36344c8af1ccf56552c931d252008fb50a9b6951265e8fe083f2079bd340d115` |
+| attempt06/contact_pair_mapping.json | `ab36809e2bafdb3b634579ffcb27ae7fd3e8545e58f88fa959d08683dd8fa576` |
+| attempt06/post_1_physics_step_contact_pairs.json | `3b784d059d2c9bf6266d4916c3c2b5366c7171275c9feca2eaa28f29ec34ecc4` |
+| attempt06/explicit_default_post_1_physics_step_contact_pairs.json | `b0509faa794c8eca0f700addda0cc150a775dcd4c5843fdb81d91f29a328520d` |
+| 父目录 attempt06_observation.json | `f4eb3e09893a23bcfc0315bf495fb4b5156b6a519807ebf6532f49afbe10446a` |
+| 父目录 attempt06_capture.log | `47d81bea6cfe8511e12aa5d88f45ae889cfd402eb4c20a81f9dfe72f64406a30` |
+| 实际 TensorAPI api.py | `be558e31693e0d48a7003134a777c306bc3b080ce5e7ce6ebabc418fb680f9ca` |
+
+这些 attempt 均位于 `rl_exp/out/lizard2_e_registered_20261015/`，与早先专用 runtime 的同名 attempt06 不同，不混用目录。输入 manifest、USD、URDF 与 38 文件摘要仍保持原绑定。执行者直接复核观测退出码、主报告、全部 mapping、两阶段 force/交叉对照及源码快照摘要通过；旧失败产物保留原身份。
+
+复读仍使用上一节 `--reset_probe ... --contact_pairs` 命令，必须新输出目录。当前脚本可采集接触对，不意味着该检查点动力学、baseline 或完整 E 已验收。
+
+独立局部审核直接读取 attempt05 raw 路径、attempt06 observation 及两阶段 pair 产物，确认精确绑定、真实采力、第一五对/第二六对和同历史边界；未替执行者核源码/输入摘要，不冒称总 E 审核。两份 pair 文件均在注册诊断的 `attempt06/` 下，父目录不存在同名 pair 文件。
+
+本轮完整离线套件行为检查全部通过，但成本闸门退出 1：`test_baseline_contract.py` 波内 28.5 s、自动单独复核 25.2 s，超过既有 25 s 预算。当前只改接触诊断 helper，不改该 contract 检查；不能因此直接归为接触修复造成，也不能删测试或抬预算。执行者随后逐测试计时和 profile：最贵为 frozen judge semantics 与四种命名实际绘图 roundtrip，AST/读文件开销很小；未删除测试、mock 绘图或改预算。原脚本再次单独实测 21.262 s，75+5 项通过，期间主机 CPU 仍忙，不能称安静、不能单凭较低读数宣布退化已消失；随后 runner 全套复核行为仍全通过，但再次成本拒绝：波内 28.9 s、自动单独 31.8 s，预算保持 25 s。当前检查点修复和真实采集已留证，提交/推送暂停，不能靠重复跑到绿或预算豁免收尾；下一步需处理该独立成本阻塞。
+
+## 追加：默认回归与完整绘图矩阵成本拆分
+
+### 用户决策与执行范围
+
+用户选择先修成本再提交；随后批准最小拆分：默认闸门保留共享缺陷回归和全部报告拒错，完整绘图矩阵移到显式专项。不改变套件条数、单条预算、冻结协议、生产 reader 或真实数据判词，不跳提交钩子。
+
+线程假设先实测：同一完整脚本默认 8 线程为 22.667 s，单线程为 24.172 s，两者行为均通过，**没有证据支持限制线程更快，未设置线程上限**。前成本超限 25.2/31.8 s 保留原记录，不无痕抹去。
+
+### 最小实现
+
+- 默认 `test_target_binding_report_roundtrip()` 仍对 shared/split/palm/palm_spatial 全四种命名实际 save/load、judge 数值等价、词根/索引选择及缺列/混名/缺来源/重复等负例；检查真实 `at_stop` 数值，不用 mock 绘图代替它。
+- `test_baseline_contract.py --render_matrix` 显式执行同一完整矩阵，真实调用四次 `draw_band`、生成八张 PNG，并核文件存在与绘图返回数值等价。不新增默认清单条目；`--binding-only` 继续核轻量绑定，完整渲染须另跑此专项。
+- 夹具 `build()` 每帧仍调用真实 `BaselineFrames.add`，只复用输入默认缓冲并逐帧替换 override；`add` 自己 clone 保存，不缓存生产判词、不绕过逐帧契约。新增小测试核可变 override、帧快照和跨次调用隔离。
+
+### 等价与成本证据
+
+取 Git HEAD 旧 build 与当前实现，在同一 scope 通过真实 recorder 比较：三格式 × 一/二环境 × clean/可变 override，共十二组合，计时前后各验一次。所有列、shape、tensor bytes、protocol/meta/axes 与完整 judge 结果全等，零排除字段。累计 48,000 次真实 add 委托原实现；每一千帧 `default_frame()` 调用从 1000 降到 1，不冒称 recorder clone 分配也减少。
+
+同进程八线程微基准三轮交替先后顺序，旧为 0.574035/0.579304/0.664462 s，新为 0.369797/0.360980/0.362726 s；最小值 0.574035→0.360980 s。该比较只证明夹具等价与开销下降，不是修复前行为失败的回归。
+
+默认真实 main 定向运行退出 0，76 个 baseline 加五个 acceptance 测试完成；冻结摘要通过，draw_band 路由 guard 调用为零，wall 14.714 s。显式 `--render_matrix` 退出 0，wall 9.553 s（含短路由负例），四种命名真实四次 draw、八张 PNG，signature/文件存在/数值等价核对通过；专项 raising guard 错误向外传播，不吞异常。
+
+定向计时包含 instrumentation，不能当安静主机稳定成本；随后默认 runner 完整复核退出 0：37/37、63.7 s，baseline contract 波内 19.5 s，不触发单独超限复核；预算/条数均未修改。结构独立审核确认默认共享回归、四命名读写/拒错与真 collector clone 保留，完整画图数值等价只由显式专项保护；该审核不冒称亲自重跑定向计时。
+
+定向运行测试源码为 `3fa1fbdb8418a577a98e0ff3ecc03f286401d673d1fae4ab5bc49ca44a660f67`；随后新选项按 snake_case 改为 `--render_matrix`，不影响默认执行集合，终版另复验专项入口。终版测试源码 SHA256 为 `115469d25f48637935015effbb5ddc335cc4567c0b4e8dd0506ddcb1e00685bd`，专项 CLI 退出 0，确实生成四命名八图。代码提交 `3af140b` 的提交钩子全部通过；不存在成本豁免或跳钩子。生产接触采集源码与上一节绑定不变。复读命令：
+
+```cmd
+"E:\IsaacLab\env_isaaclab\Scripts\python.exe" -B rl_exp\tools\verify\test_baseline_contract.py
+"E:\IsaacLab\env_isaaclab\Scripts\python.exe" -B rl_exp\tools\verify\test_baseline_contract.py --render_matrix
+"E:\IsaacLab\env_isaaclab\Scripts\python.exe" -B rl_exp\tools\verify\offline_suite.py --python E:\IsaacLab\env_isaaclab\Scripts\python.exe --jobs 4
+```
+
 ## 未覆盖边界
 
-- baseline 实际十帧 writer/评测 reader 仍受 reset 位置/速度拒绝；reset 未写状态与下一物理步偏离是两个缺口。接触视图列映射仍在初始化拒绝，先核接口语义、实际 pairs、约束/惯量归因，不为完成 E 绕过检查。
-- 注册在线协议非空足端分支、实际 nearest-body collider ownership 及 gait 诊断 writer/绘图已核；实际接触对归属、逐轴受控驱动、非零有效首局、PD 跟踪、承重、连续安全域和行走均未完成。
+- baseline 实际十帧 writer/评测 reader 仍受 reset 位置/速度拒绝；reset 未写状态与下一物理步偏离是两个缺口。接触视图映射及实际强接触对已核，下一步按步骤 4 核具名连接区几何理由与过滤负例，再做同条件对照；不为完成 E 绕过检查。
+- 注册在线协议非空足端分支、实际 collider/body-owner 接触归属及 gait 诊断 writer/绘图已核；过滤合理性、逐轴受控驱动、非零有效首局、PD 跟踪、承重、连续安全域和行走均未完成。
 - 未接正式 Blender 导出目标或验证其错源/错目标；旧资产 cap/contact ownership 缺口仍由 `floor-contact-attribution` 回交，不用新候选读数解除旧资产前提。
 - A 的树/轴/零位/网格/惯量/命名变化后按变化重验受影响链，不外推检查点结果。总事项维持 in_progress，最终仍随 D 由新上下文审核。
