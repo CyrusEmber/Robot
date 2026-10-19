@@ -113,18 +113,36 @@ def _load_lift_plan(path):
     assert plan['lift_settings'] == LIFT_SETTINGS
     prior = json.loads(standing_path.read_text(encoding='utf-8'))
     assert prior['completed'] and prior['status'] == 'standing_verified'
+    if 'keyframes' in plan:
+        assert all(set(frame['q_rad']) == set(prior['joint_names']) for frame in plan['keyframes'])
+        assert all(q == 0. for frame in (plan['keyframes'][0], plan['keyframes'][-1]) for q in frame['q_rad'].values())
     manifest = Path(prior['manifest'])
     assert wiring.binding.sha256_file(manifest) == prior['manifest_sha256']
     return plan, prior, manifest, csc.load_urdf(Path(prior['target']['urdf']))
+
+
+def _lift_target(t, plan):
+    if 'keyframes' not in plan:
+        return {n: _lift_fraction(t)*q for n, q in plan['target_q_rad'].items()}
+    frames = plan['keyframes']
+    assert frames[0]['t_s'] == 0 and frames[-1]['t_s'] == plan['duration_s']
+    for before, after in zip(frames, frames[1:]):
+        assert before['t_s'] < after['t_s']
+        if t <= after['t_s']:
+            u = np.clip((t-before['t_s'])/(after['t_s']-before['t_s']), 0., 1.)
+            f = u**3*(10-15*u+6*u*u)
+            return {n: float(q+f*(after['q_rad'][n]-q)) for n, q in before['q_rad'].items()}
+    return frames[-1]['q_rad'].copy()
 
 
 def _lift_verdict(samples, plan, feet, weight):
     hold_start = LIFT_SETTINGS['settle_s'] + LIFT_SETTINGS['rise_s']
     hold_end = hold_start + LIFT_SETTINGS['hold_s']
     duration = sum(LIFT_SETTINGS[k] for k in ('settle_s', 'rise_s', 'hold_s', 'fall_s', 'recover_s'))
-    hold = [s for s in samples if hold_end-1 <= s['t_s'] <= hold_end]
-    recovery = [s for s in samples if s['t_s'] >= duration-1]
-    baseline = [s for s in samples if LIFT_SETTINGS['settle_s']-1 <= s['t_s'] <= LIFT_SETTINGS['settle_s']]
+    windows = plan.get('windows', dict(hold=[hold_end-1, hold_end], recovery=[duration-1, duration],
+                                     baseline=[LIFT_SETTINGS['settle_s']-1, LIFT_SETTINGS['settle_s']]))
+    select = lambda key: [s for s in samples if windows[key][0] <= s['t_s'] <= windows[key][1]]
+    hold, recovery, baseline = select('hold'), select('recovery'), select('baseline')
     foot = plan['foot']
     def stable(rows, loaded):
         return bool(rows) and all(
@@ -141,11 +159,17 @@ def _lift_verdict(samples, plan, feet, weight):
                   no_deep_mesh_penetration=min(s['lifted_mesh_min_m'] for s in samples) >= LIFT_SETTINGS['minimum_mesh_height_m'])
     mean_support = float(np.mean([sum(f[2] for f in s['ground_forces_n'].values()) for s in recovery])) if recovery else None
     checks['recovered_weight_balance'] = mean_support is not None and abs(mean_support-weight) <= SETTINGS['weight_relative_error']*weight
+    transfer_force = None
+    if 'transfer' in windows:
+        transfer = select('transfer')
+        baseline_force = float(np.mean([s['ground_forces_n'][foot][2] for s in baseline])) if baseline else 0.
+        transfer_force = float(np.mean([s['ground_forces_n'][foot][2] for s in transfer])) if transfer else None
+        checks['transferred_load'] = bool(transfer) and baseline_force > SETTINGS['foot_load_n'] and transfer_force < .75*baseline_force
     checks = {name: bool(value) for name, value in checks.items()}
     return dict(checks=checks, passed=all(checks.values()),
                 hold_min_clearance_m=min((s['lifted_mesh_min_m'] for s in hold), default=None),
                 hold_max_ground_force_n=max((float(np.linalg.norm(s['ground_forces_n'][foot])) for s in hold), default=None),
-                recovery_mean_support_n=mean_support)
+                recovery_mean_support_n=mean_support, transfer_mean_lifted_foot_force_n=transfer_force)
 
 
 def _self_check(break_failure_handler=False):
@@ -166,6 +190,19 @@ def _self_check(break_failure_handler=False):
     still_loaded[1]['ground_forces_n']['lf'] = [0., 0., 5.]
     assert not _lift_verdict(still_loaded, {'foot': 'lf'}, feet, 200.)['passed']
     assert not _lift_verdict(rows[:2], {'foot': 'lf'}, feet, 200.)['passed']
+    timed = dict(keyframes=[dict(t_s=0., q_rad={'j': 0.}), dict(t_s=3., q_rad={'j': 1.}),
+                           dict(t_s=6., q_rad={'j': 0.})], duration_s=6.)
+    assert [_lift_target(t, timed)['j'] for t in (0., 1.5, 3., 4.5, 6.)] == [0., .5, 1., .5, 0.]
+    transfer_rows = copy.deepcopy(rows)
+    transfer_rows[1]['t_s'], transfer_rows[2]['t_s'] = 12.5, 21.5
+    transfer = copy.deepcopy(transfer_rows[0])
+    transfer['t_s'] = 7.5
+    transfer['ground_forces_n']['lf'][2] = 25.
+    transfer_rows.insert(1, transfer)
+    transfer_plan = dict(foot='lf', windows=dict(baseline=[4., 5.], transfer=[7., 8.], hold=[12., 13.], recovery=[21., 22.]))
+    assert _lift_verdict(transfer_rows, transfer_plan, feet, 200.)['passed']
+    transfer_rows[1]['ground_forces_n']['lf'][2] = 50.
+    assert not _lift_verdict(transfer_rows, transfer_plan, feet, 200.)['passed']
     # Exercise the real exception suite in a child process, even if persistence itself fails.
     syntax = ast.parse(Path(__file__).read_text(encoding='utf-8'))
     run = next(n for n in syntax.body if isinstance(n, ast.FunctionDef) and n.name == '_run')
@@ -366,7 +403,7 @@ def _run(args):
             assert set(plan['target_q_rad']) == set(names)
             lifted_vertices = csc.read_obj(model['links'][plan['foot']]['collision'])
             lifted_id = body_names.index(plan['foot'])
-            duration = sum(LIFT_SETTINGS[k] for k in ('settle_s', 'rise_s', 'hold_s', 'fall_s', 'recover_s'))
+            duration = plan.get('duration_s', sum(LIFT_SETTINGS[k] for k in ('settle_s', 'rise_s', 'hold_s', 'fall_s', 'recover_s')))
         else:
             duration = SETTINGS['duration_s']
         start_z = float(robot.data.root_link_pose_w.torch[0, 2])
@@ -376,8 +413,9 @@ def _run(args):
             desired = np.zeros(len(names))
             action = zero.clone()
             if args.lift_plan:
+                target_q = _lift_target(t, plan)
                 for k, name in enumerate(names):
-                    desired[k] = _lift_fraction(t)*plan['target_q_rad'][name]
+                    desired[k] = target_q[name]
                     action[0, action_names.index(name)] = desired[k]
             live.action_manager.process_action(action)
             live.action_manager.apply_action()
@@ -399,7 +437,13 @@ def _run(args):
             if args.lift_plan:
                 actual = robot.data.body_link_pose_w.torch[0, lifted_id].cpu().numpy()
                 row['lifted_mesh_min_m'] = float((lifted_vertices @ _rotation(actual[3:]).T + actual[:3])[:,2].min())
-                row['lift_fraction'] = _lift_fraction(t)
+                if 'keyframes' not in plan:
+                    row['lift_fraction'] = _lift_fraction(t)
+                if 'sole_local_m' in plan:
+                    row['sole_positions_w_m'] = {}
+                    for leg, local in plan['sole_local_m'].items():
+                        pose = robot.data.body_link_pose_w.torch[0, body_names.index(target['end_links'][leg])].cpu().numpy()
+                        row['sole_positions_w_m'][leg] = (_rotation(pose[3:])@local+pose[:3]).tolist()
             result['samples'].append(row)
             assert np.isfinite(q).all() and np.isfinite(root_pose).all(), 'non-finite state'
             checks = {'root_drop': row['root_drop_m'] > SETTINGS['stop_drop_m'], 'root_tilt': tilt > SETTINGS['stop_tilt_rad'],
