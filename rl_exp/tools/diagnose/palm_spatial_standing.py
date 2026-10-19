@@ -32,6 +32,8 @@ LIFT_SETTINGS = dict(settle_s=5., rise_s=3., hold_s=2., fall_s=3., recover_s=3.,
                      minimum_mesh_height_m=-.005, max_tracking_error_rad=.1,
                      geometry_samples=33, max_physical_attempts=3)
 
+POSTURE_SETTINGS = dict(chest_level_rad=float(np.radians(1.)))
+
 
 def _lift_fraction(t):
     start = LIFT_SETTINGS['settle_s']
@@ -111,14 +113,29 @@ def _load_lift_plan(path):
     standing_path = Path(plan['standing_report'])
     assert wiring.binding.sha256_file(standing_path) == plan['standing_report_sha256']
     assert plan['lift_settings'] == LIFT_SETTINGS
-    prior = json.loads(standing_path.read_text(encoding='utf-8'))
-    assert prior['completed'] and prior['status'] == 'standing_verified'
+    prior, manifest, model = _load_standing(standing_path)
     if 'keyframes' in plan:
         assert all(set(frame['q_rad']) == set(prior['joint_names']) for frame in plan['keyframes'])
         assert all(q == 0. for frame in (plan['keyframes'][0], plan['keyframes'][-1]) for q in frame['q_rad'].values())
+    return plan, prior, manifest, model
+
+
+def _load_standing(path):
+    prior = json.loads(path.read_text(encoding='utf-8'))
+    assert prior['completed'] and prior['status'] == 'standing_verified'
     manifest = Path(prior['manifest'])
     assert wiring.binding.sha256_file(manifest) == prior['manifest_sha256']
-    return plan, prior, manifest, csc.load_urdf(Path(prior['target']['urdf']))
+    assert wiring.binding.sha256_file(Path(prior['target']['urdf'])) == wiring.URDF_HASH
+    return prior, manifest, csc.load_urdf(Path(prior['target']['urdf']))
+
+
+def _posture_verdict(samples, windows):
+    maxima = {}
+    for name, (start, end) in windows.items():
+        rows = [s for s in samples if start <= s['t_s'] <= end]
+        maxima[name] = max((s['chest_tilt_rad'] for s in rows), default=None)
+    return dict(max_chest_tilt_rad=maxima,
+                passed=all(value is not None and value <= POSTURE_SETTINGS['chest_level_rad'] for value in maxima.values()))
 
 
 def _lift_target(t, plan):
@@ -173,6 +190,9 @@ def _lift_verdict(samples, plan, feet, weight):
 
 
 def _self_check(break_failure_handler=False):
+    assert _posture_verdict([dict(t_s=4.5, chest_tilt_rad=0.)], {'standing': [4., 5.]})['passed']
+    assert not _posture_verdict([dict(t_s=4.5, chest_tilt_rad=float(np.radians(2.)))], {'standing': [4., 5.]})['passed']
+    assert not _posture_verdict([], {'standing': [4., 5.]})['passed']
     assert [_lift_fraction(t) for t in (0, 5, 8, 10, 13, 16)] == [0, 0, 1, 1, 0, 0]
     feet, rows = ['lf', 'rf', 'rl', 'rr'], []
     for t in (4.5, 9.5, 15.5):
@@ -280,7 +300,7 @@ def _run(args):
     assert wiring.REPO / 'rl_exp/out' in out.parents and not out.exists()
     out.mkdir(parents=True)
     shutil.copyfile(__file__, out/'source.py')
-    input_path = args.lift_plan if args.lift_plan else args.tracking_report
+    input_path = args.lift_plan or args.standing_reference or args.tracking_report
     result = dict(completed=False, stage='startup', settings=SETTINGS,
                   input={str(input_path): wiring.binding.sha256_file(input_path)},
                   code_sha256=wiring.binding.sha256_file(Path(__file__)), samples=[])
@@ -317,12 +337,15 @@ def _run(args):
                 document['target_binding']['source'] = str(manifest)
                 wiring.write_json(manifest, document)
             result.update(lift_plan=plan, lift_settings=LIFT_SETTINGS)
+        elif args.standing_reference:
+            prior, manifest, model = _load_standing(args.standing_reference)
+            adapter = copy.deepcopy(prior['standing_adapter'])
         elif args.leg_frequency_hz != 1:
             assert args.leg_frequency_hz == 6 and args.load_reference
             load = json.loads(args.load_reference.read_text(encoding='utf-8'))
             assert load['completed'] and load['status'] == 'standing_failed' and load['stop_reason'] == ['joint_motion']
             result['input'][str(args.load_reference)] = wiring.binding.sha256_file(args.load_reference)
-        if not args.lift_plan and args.neck_frequency_hz != 1:
+        if args.tracking_report and args.neck_frequency_hz != 1:
             assert args.neck_frequency_hz == 2 and args.neck_load_reference and args.leg_frequency_hz == 6
             neck_load = json.loads(args.neck_load_reference.read_text(encoding='utf-8'))
             assert neck_load['completed'] and neck_load['status'] == 'standing_failed' and neck_load['stop_reason'] is None
@@ -330,8 +353,25 @@ def _run(args):
             bad = [n for n, value in zip(neck_load['joint_names'], abs(late_q).max(axis=0)) if value > SETTINGS['standing_joint_rad']]
             assert bad == ['neck_pitch_joint']
             result['input'][str(args.neck_load_reference)] = wiring.binding.sha256_file(args.neck_load_reference)
-        if not args.lift_plan:
+        if args.tracking_report:
             prior, manifest, model, adapter = _prepare(args.tracking_report, out, args.leg_frequency_hz, args.neck_frequency_hz)
+        chest_scale = (args.chest_frequency_hz or adapter.get('chest_frequency_hz', 1.))/adapter.get('chest_frequency_hz', 1.)
+        lf_wrist_scale = args.lf_wrist_frequency_hz/adapter.get('lf_wrist_frequency_hz', 1.)
+        if chest_scale != 1 or lf_wrist_scale != 1:
+            document = json.loads(manifest.read_text(encoding='utf-8'))
+            document['posture_gain_source'] = dict(manifest=str(manifest), sha256=wiring.binding.sha256_file(manifest))
+            for field, power in (('stiffness', 2), ('damping', 1)):
+                document['config'][f'scene.robot.actuators.spine.{field}']['chest_pitch_joint'] *= chest_scale**power
+                document['config'][f'scene.robot.actuators.feet.{field}']['lf_wrist_joint'] *= lf_wrist_scale**power
+            adapter['chest_frequency_hz'] = args.chest_frequency_hz or adapter.get('chest_frequency_hz', 1.)
+            adapter['lf_wrist_frequency_hz'] = args.lf_wrist_frequency_hz
+            document['standing_adapter'] = adapter
+            manifest = out/'posture_manifest.json'
+            document['target_binding']['source'] = str(manifest)
+            wiring.write_json(manifest, document)
+        require_posture = bool(args.standing_reference or 'chest_frequency_hz' in adapter)
+        if require_posture:
+            result['posture_settings'] = POSTURE_SETTINGS
         result.update(standing_adapter=adapter, manifest=str(manifest), manifest_sha256=wiring.binding.sha256_file(manifest))
         cfg = copy.deepcopy(resolve_task_cfg(wiring.REGISTERED_TASK))
         target = wiring.obs_protocol.load_diagnostic_target(manifest, cfg, wiring.REGISTERED_TASK)
@@ -351,15 +391,21 @@ def _run(args):
         leg_names = cfg.scene.robot.actuators['legs'].joint_names_expr
         for k, name in enumerate(names):
             if name in leg_names:
-                scale = lift_leg_scale if args.lift_plan else args.leg_frequency_hz
+                scale = lift_leg_scale if args.lift_plan else (1. if args.standing_reference else args.leg_frequency_hz)
                 expected_kp[k] *= scale**2
                 expected_kd[k] *= scale
             elif name == 'neck_pitch_joint':
                 expected_kp[k] *= args.neck_frequency_hz**2
                 expected_kd[k] *= args.neck_frequency_hz
+            elif name == 'chest_pitch_joint':
+                expected_kp[k] *= chest_scale**2
+                expected_kd[k] *= chest_scale
             if args.lift_plan and name.endswith('wrist_joint'):
                 expected_kp[k] *= args.wrist_frequency_hz**2
                 expected_kd[k] *= args.wrist_frequency_hz
+            if name == 'lf_wrist_joint':
+                expected_kp[k] *= lf_wrist_scale**2
+                expected_kd[k] *= lf_wrist_scale
         assert np.allclose(kp, expected_kp, rtol=1e-6) and np.allclose(kd, expected_kd, rtol=1e-6)
         bodies = {p.GetName(): p for p in live.sim.stage.Traverse()
                   if p.HasAPI(UsdPhysics.RigidBodyAPI) and p.GetName() in body_names}
@@ -407,6 +453,7 @@ def _run(args):
         else:
             duration = SETTINGS['duration_s']
         start_z = float(robot.data.root_link_pose_w.torch[0, 2])
+        chest_id = body_names.index('chest_pitch')
         stop = None
         for step in range(1, int(duration/SETTINGS['dt_s'])+1):
             t = step*SETTINGS['dt_s']
@@ -445,6 +492,13 @@ def _run(args):
                         pose = robot.data.body_link_pose_w.torch[0, body_names.index(target['end_links'][leg])].cpu().numpy()
                         row['sole_positions_w_m'][leg] = (_rotation(pose[3:])@local+pose[:3]).tolist()
             result['samples'].append(row)
+            chest_pose = robot.data.body_link_pose_w.torch[0, chest_id].cpu().numpy()
+            row['chest_tilt_rad'] = float(np.arccos(np.clip(_rotation(chest_pose[3:])[2, 2], -1, 1)))
+            if args.lift_plan and require_posture and abs(t-LIFT_SETTINGS['settle_s']) < 1e-9:
+                windows = {'baseline': [LIFT_SETTINGS['settle_s']-1, LIFT_SETTINGS['settle_s']]}
+                if not _posture_verdict(result['samples'], windows)['passed']:
+                    stop = ['chest_level_before_lift']
+                    break
             assert np.isfinite(q).all() and np.isfinite(root_pose).all(), 'non-finite state'
             checks = {'root_drop': row['root_drop_m'] > SETTINGS['stop_drop_m'], 'root_tilt': tilt > SETTINGS['stop_tilt_rad'],
                       'joint_motion': abs(q-desired).max() > SETTINGS['stop_joint_rad'],
@@ -468,6 +522,15 @@ def _run(args):
             result['lift_verdict'] = _lift_verdict(result['samples'], plan, feet, weight)
             passed = stop is None and result['lift_verdict']['passed']
             result['status'] = 'single_leg_lift_verified' if passed else 'single_leg_lift_failed'
+        if require_posture:
+            windows = {'standing': [SETTINGS['duration_s']-1, SETTINGS['duration_s']]}
+            if args.lift_plan:
+                windows = dict(baseline=[4., 5.], hold=[9., 10.], recovery=[15., 16.])
+                windows.update({k: v for k, v in plan.get('windows', {}).items() if k != 'transfer'})
+            result['posture_verdict'] = _posture_verdict(result['samples'], windows)
+            passed = passed and result['posture_verdict']['passed']
+            if not passed:
+                result['status'] = 'single_leg_lift_failed' if args.lift_plan else 'standing_failed'
         wiring.write_json(out/'report.json', result)
         print('STANDING_COMPLETED', result['status'], 'stop', stop, 'last_t', result['samples'][-1]['t_s'], flush=True)
         if not passed:
@@ -497,6 +560,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--tracking_report', type=Path)
     parser.add_argument('--lift_plan', type=Path)
+    parser.add_argument('--standing_reference', type=Path)
+    parser.add_argument('--chest_frequency_hz', type=float, choices=(1., 2.))
+    parser.add_argument('--lf_wrist_frequency_hz', type=float, choices=(1., 6.), default=1.)
     parser.add_argument('--wrist_frequency_hz', type=float, choices=(1., 6.), default=1.)
     parser.add_argument('--out', type=Path)
     parser.add_argument('--leg_frequency_hz', type=float, choices=(1., 6., 12.))
@@ -512,8 +578,12 @@ if __name__ == '__main__':
         from isaaclab.app import AppLauncher
         AppLauncher.add_app_launcher_args(parser)
         args = parser.parse_args()
-        if not args.out or bool(args.tracking_report) == bool(args.lift_plan) or args.break_failure_handler:
-            parser.error('select exactly one of tracking_report and lift_plan, and provide out')
+        if not args.out or sum(bool(p) for p in (args.tracking_report, args.lift_plan, args.standing_reference)) != 1 or args.break_failure_handler:
+            parser.error('select exactly one of tracking_report, lift_plan and standing_reference, and provide out')
+        if args.standing_reference and (args.leg_frequency_hz is not None or args.wrist_frequency_hz != 1 or args.neck_frequency_hz != 1 or args.load_reference or args.neck_load_reference or args.lf_wrist_frequency_hz != 1):
+            parser.error('standing_reference permits only a chest frequency override')
+        if args.tracking_report and (args.chest_frequency_hz is not None or args.lf_wrist_frequency_hz != 1):
+            parser.error('chest/LF overrides require standing_reference or lift_plan')
         if args.tracking_report:
             args.leg_frequency_hz = args.leg_frequency_hz or 1.
             if args.leg_frequency_hz == 12 or args.wrist_frequency_hz != 1:
