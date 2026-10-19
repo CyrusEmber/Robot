@@ -4,9 +4,9 @@ title: 肩髋三轴掌链候选与缺失运动能力修复
 scope: rl_exp/blender/scripts, rl_exp/tools/diagnose, rl_exp/tasks/joint_names.py
 status: in_progress
 landing: rl_exp/blender/scripts, rl_exp/tools/diagnose
-next: A 执行者按支持相位记录交组合回放与根运动方案，限位 PD 专项接有效限速与时间映射前提；运行时与 A/E 继续。
+next: A 按总项 A4 复用四肢动画交付，补机身前移与滑动检查后交几何候选；E 与限位 PD 专项接后续前提。
 close_when: 新上下文核验实际候选、行为证据与交接；有缺口不关闭。
-evidence: acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md, acceptance/records/2026-10-16-lizard2-support-schedule.md, acceptance/records/2026-10-16-lizard2-local-path-combined.md, acceptance/records/2026-10-16-lizard2-local-path-mirror.md, acceptance/records/2026-10-16-lizard2-local-path-quarters.md, acceptance/records/2026-10-16-lizard2-local-path-postprocess.md, acceptance/records/2026-10-15-lizard2-palm-local-contact-repair.md, acceptance/records/2026-10-15-lizard2-palm-local-path-probe.md, acceptance/records/2026-10-15-lizard2-palm-phase-target-preparation.md, acceptance/records/2026-10-15-lizard2-palm-spatial-refined-boundaries.md, acceptance/records/2026-10-15-lizard2-palm-spatial-static-slices.md, acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-14-lizard2-palm-spatial-trial-checkpoint.md, acceptance/records/2026-10-14-lizard2-palm-spatial-design-decision.md
+evidence: acceptance/records/2026-10-19-lizard2-a-delivery-plan.md, acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md, acceptance/records/2026-10-16-lizard2-support-schedule.md, acceptance/records/2026-10-16-lizard2-local-path-combined.md, acceptance/records/2026-10-16-lizard2-local-path-mirror.md, acceptance/records/2026-10-16-lizard2-local-path-quarters.md, acceptance/records/2026-10-16-lizard2-local-path-postprocess.md, acceptance/records/2026-10-15-lizard2-palm-local-contact-repair.md, acceptance/records/2026-10-15-lizard2-palm-local-path-probe.md, acceptance/records/2026-10-15-lizard2-palm-phase-target-preparation.md, acceptance/records/2026-10-15-lizard2-palm-spatial-refined-boundaries.md, acceptance/records/2026-10-15-lizard2-palm-spatial-static-slices.md, acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-14-lizard2-palm-spatial-trial-checkpoint.md, acceptance/records/2026-10-14-lizard2-palm-spatial-design-decision.md
 ---
 
 ## 当前范围
@@ -36,9 +36,11 @@ evidence: acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md, acc
 
 ## 下一步
 
-1. 审查 `rl_exp/blender/scripts/lizard2_palm_spatial_candidate.py`、`rl_exp/tools/diagnose/palm_spatial_probe.py` 与名表增量；绑定源 blend、URDF、轴／限位、代码及网格哈希，使用新隔离输出目录。旧 shared/split/palm 作为兼容对照，新目标显式绑定 palm_spatial。
+当前交付顺序与检查边界唯一按[总项 A4](lizard2-body-drive-candidate.md#a4-交接)：先复用已有四肢回放交用户，再补机身前移与世界接触检查，随后交几何候选。以下是按变更或缺证补齐的责任清单，不是每轮从头执行的前置链；转向/恢复、运行时及承重继续各自交接，不阻塞已有几何的展示。
+
+1. 对照已绑定证据审查 `rl_exp/blender/scripts/lizard2_palm_spatial_candidate.py`、`rl_exp/tools/diagnose/palm_spatial_probe.py` 与名表增量；绑定源 blend、URDF、轴／限位、代码及网格哈希，确需重建时使用新隔离输出目录。旧 shared/split/palm 作为兼容对照，新目标显式绑定 palm_spatial。
 2. 一前一后再四肢核验共中心、长轴方向、真实随动与镜像。纯扭转时肘／膝中心不漂移，下段和掌转出腿平面；新轴置零复现旧运动。保存重开 Blender 后对照独立 FK；错轴、错 pivot、未重绑网格必须拒绝，锁轴对照须失去对应能力。
-3. 按 `rl_exp/docs/leg_geometry_reuse.md` 先选择可复用读点与证据，只补新增轴影响的非零上下文和耦合切片；未适配的旧位次扫描不得消费新链。按正文构型约束检查组合动作、奇异性、轨迹连续与限位余量；按接触相位验证迈步、转向、回正及反曲／翻掌／穿地／自碰撞。先按限位 PD 专项步骤 5 收口逐相位目标和获准工程取值，再实现五轴求解与独立 FK 对照；旧四轴求解器不得测新候选。历史平掌样本只作对照，局部满秩或离散通过不证明完整安全域。
+3. 按 `rl_exp/docs/leg_geometry_reuse.md` 先选择可复用读点与证据，只补新增轴影响的非零上下文和耦合切片；未适配的旧位次扫描不得消费新链。按正文构型约束检查当前交付动作的奇异性、轨迹连续与限位余量，保留反曲／翻掌／穿地／自碰撞判据。复用现有五轴路径与独立 FK，仅对真实动作缺口补求解；工程取值仍归限位 PD 专项步骤 5，转向/回正归其 5b 后续工况。旧四轴求解器不得测新候选，历史平掌样本只作对照，局部满秩或离散通过不证明完整安全域。
 4. 扩展实际导出与运行时消费者；导出接口与写前拒错缺口取 `acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md`“正式导出交接核查”。共用导出器仍由 A 维护，先明确五角色目标与载体／实体质量惯量政策，再交 E 新身份复验。核对树、轴、质量惯量、动作／观测列和接触体；逐轴与组合运动实测虚拟承载 link 稳定性、驱动耦合。将受影响的坐标、惯量、连接碰撞和动作映射交 `work/active/lizard2-restored-limits-pd-validation.md` 重验；其完整周期、承重、PD 与最终范围保持在办。
 5. 结果进验收记录并同步指针；候选修复和交接齐备后置 pending_review，交不带执笔历史的新上下文审核。
 
