@@ -18,6 +18,10 @@ use the SAME material vertices at adjacent recorded poses, not changing lowest c
 no root is applied and no no-slip, force, speed or physical period is approved.
 --drive_report optionally binds an existing same-candidate reset report's named solver
 velocity caps; outputs only a velocity-cap period lower bound, never a selected period.
+--root_translation applies cumulative least-squares horizontal contact translations at
+the recorded combined poses, preserving root height/orientation and all joint angles.
+Residuals track the same material vertex; contact-feature changes are reported separately.
+This measured candidate is not a no-slip solution or a physical-period approval.
 """
 
 import argparse
@@ -235,6 +239,10 @@ def _root_prerequisites(report, urdf, meshes, root, tracks):
             references.append(np.array(b['reference_point_m']) - a['reference_point_m'])
             contacts.append({'leg': leg, 'vertex_index_at_after': index,
                              'same_vertex_displacement_m': delta.tolist(),
+                             'same_vertex_before_height_m': float(worlds[0][index, 2]),
+                             'same_vertex_after_height_m': float(worlds[1][index, 2]),
+                             'same_vertex_contact_at_both': bool(abs(worlds[0][index, 2]) <= tolerance
+                                                                 and abs(worlds[1][index, 2]) <= tolerance),
                              'lowest_vertex_changed': index != a['palm_lowest_vertex']['vertex_index']})
         if displacements:
             readings.append({'before_c': frames[legs[0]][i - 1]['s'], 'after_c': frames[legs[0]][i]['s'],
@@ -246,6 +254,44 @@ def _root_prerequisites(report, urdf, meshes, root, tracks):
             'limits': 'Selected after-pose lowest vertex is the SAME material vertex at both poses. '
                       'Contact feature may switch; this is a translation-only prerequisite, not no-slip proof. '
                       'No root rotation/trajectory, support forces, new poses or collision checks.'}
+
+
+def _root_translation(prerequisites, frames):
+    """Apply sampled horizontal root offsets and measure material residuals [m]."""
+    intervals = prerequisites['rows']
+    assert len(frames) > 1 and len(intervals) == len(frames) - 1 and frames[0]['s'] == 0, 'incomplete root intervals'
+    offset = np.zeros(3)
+    offsets = [offset.tolist()]
+    rows = []
+    for i, item in enumerate(intervals, 1):
+        assert (item['before_c'], item['after_c']) == (frames[i - 1]['s'], frames[i]['s']), 'root interval gap'
+        contacts = item['contacts']
+        delta = np.asarray([c['same_vertex_displacement_m'] for c in contacts], dtype=float)
+        assert delta.ndim == 2 and delta.shape[1] == 3 and len(delta) and np.isfinite(delta).all()
+        step = np.r_[-delta[:, :2].mean(axis=0), 0.]
+        offset = offset + step
+        offsets.append(offset.tolist())
+        residual = delta + step
+        rows.append({'before_c': item['before_c'], 'after_c': item['after_c'],
+                     'root_step_m': step.tolist(), 'root_offset_m': offset.tolist(),
+                     'contacts': [{**c, 'world_material_displacement_m': r.tolist(),
+                                   'horizontal_material_displacement_m': float(np.linalg.norm(r[:2]))}
+                                  for c, r in zip(contacts, residual)]})
+    contacts = [c for row in rows for c in row['contacts']]
+    persistent = [c for c in contacts if c['same_vertex_contact_at_both']]
+    return {'mode': 'sampled_horizontal_material_translation_candidate', 'root_applied': True,
+            'c': [f['s'] for f in frames], 'offsets_m': offsets, 'rows': rows,
+            'net_translation_m': offset.tolist(),
+            'max_horizontal_material_displacement_m': max(c['horizontal_material_displacement_m'] for c in contacts),
+            'max_persistent_contact_displacement_m': (max(c['horizontal_material_displacement_m'] for c in persistent)
+                                                      if persistent else None),
+            'persistent_contact_readings': len(persistent), 'all_contact_readings': len(contacts),
+            'limits': 'Equal weight per contacting leg; after-pose lowest vertex kept at both endpoints. '
+                      'A vertex outside the before-pose contact band is not a persistent contact reading. '
+                      'Horizontal-only root translation preserves all sampled heights and internal collisions; '
+                      'those source verdicts are reused, not rerun. Residuals are interval displacements, not '
+                      'physical slip speeds or an approved no-slip threshold. No new poses, rotation or IK. '
+                      'The world path advances; GIF restart is a reset, not a closing world segment.'}
 
 
 def _load(source):
@@ -359,11 +405,14 @@ def _plot(output, leg, stats, plt):
     plt.close(fig)
 
 
-def _render(output, leg, stats, frames, urdf, meshes, root, plt, combined_tracks=None):
+def _render(output, leg, stats, frames, urdf, meshes, root, plt, combined_tracks=None, root_offsets=None):
     from matplotlib.collections import PolyCollection
     from PIL import Image
 
-    worlds = [_world(urdf, meshes, root, f['state']['q_rad']) for f in frames]
+    offsets = np.zeros((len(frames), 3)) if root_offsets is None else np.asarray(root_offsets, dtype=float)
+    assert offsets.shape == (len(frames), 3) and np.isfinite(offsets).all()
+    worlds = [{link: vertices + shift for link, vertices in _world(urdf, meshes, root, f['state']['q_rad']).items()}
+              for f, shift in zip(frames, offsets)]
     points = np.concatenate([v for world in worlds for v in world.values()])
     lo, hi = points.min(axis=0) - .08, points.max(axis=0) + .08
     lo[2], hi[2] = min(lo[2], -.08), max(hi[2], .08)
@@ -398,8 +447,9 @@ def _render(output, leg, stats, frames, urdf, meshes, root, plt, combined_tracks
             triangles.set_verts(faces[order][:, :, [x, y]])
             triangles.set_facecolors(colors[order])
             state = f['state']
-            point = np.array(state['reference_point_m'])
-            contact = np.array(state['palm_lowest_vertex']['position_m'])
+            shift = offsets[frame_index]
+            point = np.array(state['reference_point_m']) + shift
+            contact = np.array(state['palm_lowest_vertex']['position_m']) + shift
             tip = point + np.array(state['palm_normal']) * .08
             reference.set_data([point[x]], [point[y]])
             lowest.set_data([contact[x]], [contact[y]])
@@ -415,23 +465,25 @@ def _render(output, leg, stats, frames, urdf, meshes, root, plt, combined_tracks
                 for name, (_, leg_frames) in combined_tracks.items():
                     item = leg_frames[frame_index]
                     value = item['state']
-                    p = np.array(value['reference_point_m'])
-                    v = np.array(value['palm_lowest_vertex']['position_m'])
+                    p = np.array(value['reference_point_m']) + shift
+                    v = np.array(value['palm_lowest_vertex']['position_m']) + shift
                     tip = p + np.array(value['palm_normal']) * .08
                     a, b, arrow = markers[name]
                     a.set_data([p[x]], [p[y]])
                     b.set_data([v[x]], [v[y]])
                     arrow.set_data([p[x], tip[x]], [p[y], tip[y]])
                     phases.append(name + ':' + item['phase'])
+                root_label = ('fixed root' if root_offsets is None else
+                              f'root x={shift[0]:.5f} m; restart is reset')
                 ax.set_title(f'four-leg recorded {status} | c={f["s"]:.5f}\n'
-                             + ' '.join(phases) + '\nfixed root; playback NOT physical time')
+                             + ' '.join(phases) + '\n' + root_label + '; playback NOT physical time')
             fig.canvas.draw()
             images.append(Image.fromarray(np.asarray(fig.canvas.buffer_rgba())[..., :3].copy()))
         images[0].save(output / f'{leg}_{view}.gif', save_all=True, append_images=images[1:], duration=100, loop=0)
         plt.close(fig)
 
 
-def _run(source, output, drive_report=None):
+def _run(source, output, drive_report=None, apply_root_translation=False):
     assert REPO / 'rl_exp/out' in output.parents and not output.exists(), 'fresh isolated output required'
     report, urdf, meshes, root, tracks = _load(source)
     import matplotlib
@@ -440,7 +492,10 @@ def _run(source, output, drive_report=None):
     import PIL
 
     combined = report['mode'] != 'budgeted_local_path'
+    assert combined or not apply_root_translation, 'root translation requires combined poses'
     prerequisites = _root_prerequisites(report, urdf, meshes, root, tracks) if combined else None
+    translation = (_root_translation(prerequisites, next(iter(tracks.values()))[1])
+                   if apply_root_translation else None)
     rates = _rate_prerequisites(report) if combined else None
     drive = _drive_prerequisites(report, drive_report, rates) if drive_report is not None else None
     output.mkdir(parents=True, exist_ok=False)
@@ -451,7 +506,23 @@ def _run(source, output, drive_report=None):
             _render(output, leg, stats, frames, urdf, meshes, root, plt)
     if combined:
         stats, frames = next(iter(tracks.values()))
-        _render(output, 'combined', stats, frames, urdf, meshes, root, plt, tracks)
+        _render(output, 'combined', stats, frames, urdf, meshes, root, plt, tracks,
+                None if translation is None else translation['offsets_m'])
+        if translation is not None:
+            fig, (ax, residual_ax) = plt.subplots(2, 1, figsize=(8, 5), constrained_layout=True)
+            for i, axis in enumerate('xyz'):
+                ax.plot(translation['c'], np.array(translation['offsets_m'])[:, i], label=axis)
+            ax.set_ylabel('root offset [m]')
+            ax.legend()
+            for leg in sorted(tracks):
+                values = [(row['after_c'], c['horizontal_material_displacement_m'])
+                          for row in translation['rows'] for c in row['contacts'] if c['leg'] == leg]
+                if values:
+                    residual_ax.scatter(*zip(*values), s=7, label=leg)
+            residual_ax.set(xlabel='cycle parameter c (not seconds)', ylabel='material delta per interval [m]')
+            residual_ax.legend()
+            fig.savefig(output / 'root_translation.png', dpi=120)
+            plt.close(fig)
     result = {'mode': 'recorded_combined_path_analysis' if combined else 'recorded_local_path_analysis',
               'source_report': str(source), 'source_report_sha256': digest(source),
               'source_identity': report['identity'],
@@ -463,6 +534,7 @@ def _run(source, output, drive_report=None):
                                              'all recorded accepted endpoints and midpoints; no added poses'),
                          'display_duration_ms': 100, 'display_loop_only': True},
               'root_motion_prerequisites': prerequisites,
+              'root_translation': translation,
               'time_mapping_prerequisites': rates,
               'drive_limit_prerequisites': drive,
               'legs': {leg: stats for leg, (stats, _) in tracks.items()},
@@ -493,6 +565,11 @@ def _self_check(break_test=None):
                      'acceleration_peak': (_rate_prerequisites, '10 / np.sqrt(3)', '1.'),
                      'drive_period': (_drive_prerequisites, "/ by_name[row['joint']]", "* by_name[row['joint']]"),
                      'drive_identity': (_drive_prerequisites, "drive['input']['urdf_sha256'] == build['candidate_sha256']", 'True')}
+        mutations.update({
+            'root_accumulate': (_root_translation, 'offset = offset + step', 'offset = step'),
+            'root_horizontal': (_root_translation, "np.r_[-delta[:, :2].mean(axis=0), 0.]", '-delta.mean(axis=0)'),
+            'root_residual': (_root_translation, 'residual = delta + step', 'residual = delta * 0'),
+        })
         function, old, new = mutations[break_test]
         code = inspect.getsource(function)
         assert old in code
@@ -548,6 +625,20 @@ def _self_check(break_test=None):
     assert _translation_fit([[1., 0., 0.], [-1., 0., 0.]])['max_material_residual_m'] == 1.
     assert np.array_equal(_material_delta(np.array([[9., 0., 0.], [1., 0., 0.]]),
                                          np.array([[1., 0., 0.], [3., 0., 0.]]), 1), [2., 0., 0.])
+    intervals = {'rows': [{'before_c': a, 'after_c': b,
+                          'contacts': [{'same_vertex_displacement_m': delta, 'same_vertex_contact_at_both': True}
+                                       for delta in ([-2., 1., .1], [-4., -1., -.2])]}
+                         for a, b in ((0., .4), (.4, 1.))]}
+    translated = _root_translation(intervals, [{'s': c} for c in (0., .4, 1.)])
+    assert np.allclose(translated['offsets_m'], [[0., 0., 0.], [3., 0., 0.], [6., 0., 0.]])
+    assert np.isclose(translated['max_persistent_contact_displacement_m'], np.sqrt(2))
+    assert translated['rows'][0]['contacts'][0]['world_material_displacement_m'] == [1., 1., .1]
+    try:
+        _root_translation(intervals, [{'s': c} for c in (0., .3, 1.)])
+    except AssertionError:
+        pass
+    else:
+        raise AssertionError('root interval gap accepted')
     from unittest.mock import patch
     original = {'legs': {'lf': {'rows': [{'state': {'q_rad': {'lf_joint': i / 32}}}
                                        for i in range(33)]}}}
@@ -584,14 +675,17 @@ def main():
     parser.add_argument('--source_report', type=Path)
     parser.add_argument('--output_dir', type=Path)
     parser.add_argument('--drive_report', type=Path)
+    parser.add_argument('--root_translation', action='store_true')
     parser.add_argument('--self_check', action='store_true')
     parser.add_argument('--break_test', choices=('slope_scale', 'cycle_sign', 'midpoint', 'world',
                                                'combined_stop', 'translation_sign', 'translation_residual',
                                                'material_index', 'rate_peak', 'acceleration_peak',
-                                               'drive_period', 'drive_identity'))
+                                               'drive_period', 'drive_identity', 'root_accumulate',
+                                               'root_horizontal', 'root_residual'))
     args = parser.parse_args()
     if args.self_check:
-        if args.source_report is not None or args.output_dir is not None or args.drive_report is not None:
+        if (args.source_report is not None or args.output_dir is not None or args.drive_report is not None
+                or args.root_translation):
             parser.error('--self_check cannot use input/output')
         _self_check(args.break_test)
     else:
@@ -600,7 +694,7 @@ def main():
         if args.source_report is None or args.output_dir is None:
             parser.error('--source_report and --output_dir required')
         _run(args.source_report.resolve(), args.output_dir.resolve(),
-             None if args.drive_report is None else args.drive_report.resolve())
+             None if args.drive_report is None else args.drive_report.resolve(), args.root_translation)
 
 
 if __name__ == '__main__':
