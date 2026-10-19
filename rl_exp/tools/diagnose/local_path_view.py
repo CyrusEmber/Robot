@@ -256,10 +256,14 @@ def _root_prerequisites(report, urdf, meshes, root, tracks):
                       'No root rotation/trajectory, support forces, new poses or collision checks.'}
 
 
-def _root_translation(prerequisites, frames):
+def _root_translation(prerequisites, frames, prescribed_offsets=None):
     """Apply sampled horizontal root offsets and measure material residuals [m]."""
     intervals = prerequisites['rows']
     assert len(frames) > 1 and len(intervals) == len(frames) - 1 and frames[0]['s'] == 0, 'incomplete root intervals'
+    if prescribed_offsets is not None:
+        prescribed_offsets = np.asarray(prescribed_offsets, dtype=float)
+        assert prescribed_offsets.shape == (len(frames), 3) and np.isfinite(prescribed_offsets).all()
+        assert np.all(prescribed_offsets[:, 2] == 0) and np.all(prescribed_offsets[0] == 0)
     offset = np.zeros(3)
     offsets = [offset.tolist()]
     rows = []
@@ -268,7 +272,8 @@ def _root_translation(prerequisites, frames):
         contacts = item['contacts']
         delta = np.asarray([c['same_vertex_displacement_m'] for c in contacts], dtype=float)
         assert delta.ndim == 2 and delta.shape[1] == 3 and len(delta) and np.isfinite(delta).all()
-        step = np.r_[-delta[:, :2].mean(axis=0), 0.]
+        step = (np.r_[-delta[:, :2].mean(axis=0), 0.] if prescribed_offsets is None else
+                prescribed_offsets[i] - prescribed_offsets[i - 1])
         offset = offset + step
         offsets.append(offset.tolist())
         residual = delta + step
@@ -281,12 +286,14 @@ def _root_translation(prerequisites, frames):
     persistent = [c for c in contacts if c['same_vertex_contact_at_both']]
     return {'mode': 'sampled_horizontal_material_translation_candidate', 'root_applied': True,
             'c': [f['s'] for f in frames], 'offsets_m': offsets, 'rows': rows,
-            'net_translation_m': offset.tolist(),
+            'net_translation_m': offset.tolist(), 'prescribed_offsets': prescribed_offsets is not None,
             'max_horizontal_material_displacement_m': max(c['horizontal_material_displacement_m'] for c in contacts),
             'max_persistent_contact_displacement_m': (max(c['horizontal_material_displacement_m'] for c in persistent)
                                                       if persistent else None),
             'persistent_contact_readings': len(persistent), 'all_contact_readings': len(contacts),
-            'limits': 'Equal weight per contacting leg; after-pose lowest vertex kept at both endpoints. '
+            'limits': ('Equal weight per contacting leg; ' if prescribed_offsets is None else
+                       'Prescribed source root offsets, not refitted to corrected contacts; ')
+                      + 'after-pose lowest vertex kept at both endpoints. '
                       'A vertex outside the before-pose contact band is not a persistent contact reading. '
                       'Horizontal-only root translation preserves all sampled heights and internal collisions; '
                       'those source verdicts are reused, not rerun. Residuals are interval displacements, not '
@@ -296,7 +303,8 @@ def _root_translation(prerequisites, frames):
 
 def _load(source):
     report = json.loads(source.read_text(encoding='utf-8'))
-    combined = report['mode'] in ('sampled_local_path_combined', 'sampled_local_path_support_schedule')
+    combined = report['mode'] in ('sampled_local_path_combined', 'sampled_local_path_support_schedule',
+                                 'sampled_contact_corrected_path')
     assert combined or report['mode'] == 'budgeted_local_path', 'unsupported report schema'
     if combined:
         original = Path(report['source_report'])
@@ -494,8 +502,13 @@ def _run(source, output, drive_report=None, apply_root_translation=False):
     combined = report['mode'] != 'budgeted_local_path'
     assert combined or not apply_root_translation, 'root translation requires combined poses'
     prerequisites = _root_prerequisites(report, urdf, meshes, root, tracks) if combined else None
-    translation = (_root_translation(prerequisites, next(iter(tracks.values()))[1])
-                   if apply_root_translation else None)
+    frames = next(iter(tracks.values()))[1]
+    saved_offsets = report.get('root_offsets_m')
+    if saved_offsets is not None:
+        assert len(saved_offsets) == report['legs']['combined']['pose_count'], 'root/pose count mismatch'
+        saved_offsets = saved_offsets[:len(frames)]
+    translation = (_root_translation(prerequisites, frames, saved_offsets)
+                   if apply_root_translation or 'root_offsets_m' in report else None)
     rates = _rate_prerequisites(report) if combined else None
     drive = _drive_prerequisites(report, drive_report, rates) if drive_report is not None else None
     output.mkdir(parents=True, exist_ok=False)
@@ -633,6 +646,10 @@ def _self_check(break_test=None):
     assert np.allclose(translated['offsets_m'], [[0., 0., 0.], [3., 0., 0.], [6., 0., 0.]])
     assert np.isclose(translated['max_persistent_contact_displacement_m'], np.sqrt(2))
     assert translated['rows'][0]['contacts'][0]['world_material_displacement_m'] == [1., 1., .1]
+    prescribed = _root_translation(intervals, [{'s': c} for c in (0., .4, 1.)],
+                                    [[0., 0., 0.], [1., 0., 0.], [2., 0., 0.]])
+    assert prescribed['net_translation_m'] == [2., 0., 0.]
+    assert prescribed['rows'][0]['contacts'][0]['world_material_displacement_m'] == [-1., 1., .1]
     try:
         _root_translation(intervals, [{'s': c} for c in (0., .3, 1.)])
     except AssertionError:
