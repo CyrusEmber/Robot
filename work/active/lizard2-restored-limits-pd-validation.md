@@ -3,10 +3,10 @@ id: lizard2-restored-limits-pd-validation
 title: lizard2 恢复模型：限位与 PD 验证前提及标定
 scope: rl_exp/blender, rl_exp/tools/diagnose, acceptance/records
 status: in_progress
-landing: rl_exp/blender/scripts/generate_urdf.py, rl_exp/blender/scripts/lizard2_stance_candidate.py, rl_exp/tools/diagnose/palm_motion_boundaries.py, rl_exp/tools/diagnose/palm_5b_targets.json, rl_exp/tools/diagnose/palm_motion_view.py
-next: 接接触边修正记录的新轨迹；按新 q(c) 明确插值、时间映射与承重 PD，A 交用户确认动作。
+landing: rl_exp/blender/scripts/generate_urdf.py, rl_exp/blender/scripts/lizard2_stance_candidate.py, rl_exp/tools/diagnose/palm_motion_boundaries.py, rl_exp/tools/diagnose/palm_5b_targets.json, rl_exp/tools/diagnose/palm_motion_view.py, rl_exp/tools/diagnose/palm_spatial_inertia.py
+next: 执行者按惯量修正记录准备固定机身小幅 PD 跟踪配置，再接新轨迹时间映射与承重。
 close_when: 新上下文按正文关闭条件审核实际落点与证据，合格后交机体总项 B/C/D；缺证不关闭。
-evidence: acceptance/records/2026-10-19-lizard2-contact-path-correction.md, acceptance/records/2026-10-19-lizard2-a-geometry-replay.md, acceptance/records/2026-10-19-lizard2-a-delivery-plan.md, acceptance/records/2026-10-16-lizard2-support-schedule.md, acceptance/records/2026-10-16-lizard2-local-path-combined.md, acceptance/records/2026-10-16-lizard2-local-path-mirror.md, acceptance/records/2026-10-16-lizard2-local-path-quarters.md, acceptance/records/2026-10-16-lizard2-local-path-postprocess.md, acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md, acceptance/records/2026-10-15-lizard2-palm-local-contact-repair.md, acceptance/records/2026-10-15-lizard2-palm-local-path-probe.md, acceptance/records/2026-10-15-lizard2-palm-phase-target-preparation.md, acceptance/records/2026-10-15-lizard2-palm-spatial-refined-boundaries.md, acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-14-lizard2-palm-phase-constraint-correction.md, acceptance/records/2026-10-14-lizard2-5b-motion-boundaries.md, acceptance/records/2026-10-14-lizard2-a-priority-review.md, acceptance/records/2026-10-14-lizard2-restored-validation-handoff.md, acceptance/records/2026-10-13-lizard2-restored-limits-pd-open-issues.md, acceptance/records/2026-10-13-lizard2-hindlimb-restored.md
+evidence: acceptance/records/2026-10-19-lizard2-spatial-inertia-repair.md, acceptance/records/2026-10-19-lizard2-contact-path-correction.md, acceptance/records/2026-10-19-lizard2-a-geometry-replay.md, acceptance/records/2026-10-19-lizard2-a-delivery-plan.md, acceptance/records/2026-10-16-lizard2-support-schedule.md, acceptance/records/2026-10-16-lizard2-local-path-combined.md, acceptance/records/2026-10-16-lizard2-local-path-mirror.md, acceptance/records/2026-10-16-lizard2-local-path-quarters.md, acceptance/records/2026-10-16-lizard2-local-path-postprocess.md, acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md, acceptance/records/2026-10-15-lizard2-palm-local-contact-repair.md, acceptance/records/2026-10-15-lizard2-palm-local-path-probe.md, acceptance/records/2026-10-15-lizard2-palm-phase-target-preparation.md, acceptance/records/2026-10-15-lizard2-palm-spatial-refined-boundaries.md, acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-14-lizard2-palm-phase-constraint-correction.md, acceptance/records/2026-10-14-lizard2-5b-motion-boundaries.md, acceptance/records/2026-10-14-lizard2-a-priority-review.md, acceptance/records/2026-10-14-lizard2-restored-validation-handoff.md, acceptance/records/2026-10-13-lizard2-restored-limits-pd-open-issues.md, acceptance/records/2026-10-13-lizard2-hindlimb-restored.md
 ---
 
 ## 范围与交接
@@ -21,9 +21,9 @@ evidence: acceptance/records/2026-10-19-lizard2-contact-path-correction.md, acce
 
 ## 下一步
 
-**当前几何交付**按[总项 A4](lizard2-body-drive-candidate.md#a4-交接)执行，候选及具名缺口接[本轮回放记录](../../acceptance/records/2026-10-19-lizard2-contact-path-correction.md)；A 交用户确认修正动作，5a 保留技术判据。已有两腿、镜像、组合与支持相位证据按输入/行为变化复用；转向/恢复、完整限位和承重仍按 5b/6 在办，下面步骤按具体缺口执行。
+**当前几何交付**按[总项 A4](lizard2-body-drive-candidate.md#a4-交接)执行，候选及具名缺口接[本轮回放记录](../../acceptance/records/2026-10-19-lizard2-contact-path-correction.md)；继续按当前候选推进驱动前提，最终外观/动作确认仍保留。已有两腿、镜像、组合与支持相位证据按输入/行为变化复用；转向/恢复、完整限位和承重仍按 5b/6 在办，下面步骤按具体缺口执行。
 
-**E 回交**：步骤 4 按 evidence 的 e-spatial-runtime-wiring“隔离 reset 与中立首步修复”使用具名过滤及负例证据；该边界不外推全 ROM。继续步骤 3 的约束/惯量与受影响工况复验，E 的 baseline 实际写读链取同记录追加节，后续逐轴驱动仍需本项前提；不加 PD 压异常或扩大过滤，5a 并行。
+**B/E 接续**：步骤 3 的当前隔离修正目标、惯量读回及 PD 系数取[惯量修正记录](../../acceptance/records/2026-10-19-lizard2-spatial-inertia-repair.md)；后续动力学绑定该记录的新身份，先准备步骤 6 的固定机身小幅跟踪配置，比较前固定数值与预算，需要用户决策的取值集中提出。步骤 4 的具名过滤及负例、E 的 baseline 实际写读链仍取 e-spatial-runtime-wiring 原边界，不外推全 ROM；正式导出链继续修正来源，逐轴驱动与承重仍待实际验证。不加 PD 压异常或扩大过滤，不重新从几何探索起步。
 
 1. **固定输入与失败判定（执行者）**：先读 a-priority-review 的最新进展，再按 restored-validation-handoff 追溯原始问题；清点问题记录所用在办脚本、导出器改动、配置及本机产物，形成可复读的代码版本、输入绑定和不覆盖历史产物的命令。`palm_pd_probe.py`、`palm_asset_probe.py` 及相关导出片段须完成代码归属与版本落地。逐份比较报告代码/输入与最终版本，只重跑受行为变更影响或缺证的检查；不因日期或脚本哈希变化无差别重跑，也不混用不兼容版本。退出传播修复归 `work/active/exit-status-swallowed-by-app-close.md`，将该入口交其覆盖；本项验收真实成功/失败各一例，异常可见、退出状态正确，失败不得产生可误读为成功的报告。修复期间同时核对日志、报告身份与完成状态，不只看命令退出码。
 

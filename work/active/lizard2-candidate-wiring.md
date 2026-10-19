@@ -4,9 +4,9 @@ title: lizard2 候选接线与真实消费者验证
 scope: rl_exp/blender, rl_exp/tasks, rl_exp/tools, ablation_harness
 status: in_progress
 landing: rl_exp/tasks/joint_names.py, rl_exp/tools/diagnose/palm_spatial_runtime.py, rl_exp/tools/verify/obs_protocol_live.py, ablation_harness/baseline_metrics.py
-next: A 按 evidence 的正式导出交接核查补目标与质量惯量政策；E 接新身份后复验受影响链，继续受控逐轴验证及出口清点。
+next: E 接惯量修正记录的新隔离身份，联同 B 准备受控驱动；A 继续正式导出接线并防止主轴错误复发。
 close_when: E 自检就绪后随总项 D 由新上下文一次审核；必需链缺证不关闭。
-evidence: acceptance/records/2026-10-16-lizard2-candidate-doc-organization.md, acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md, acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md, acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory.md
+evidence: acceptance/records/2026-10-19-lizard2-spatial-inertia-repair.md, acceptance/records/2026-10-16-lizard2-candidate-doc-organization.md, acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md, acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md, acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory.md
 ---
 
 ## 当前范围
@@ -16,6 +16,8 @@ evidence: acceptance/records/2026-10-16-lizard2-candidate-doc-organization.md, a
 ## 下一步
 
 E 执行者按 E5 当前切片推进；E2 是绑定要求，E3 是消费者范围，E4 是验证与分段出口。A 更新树、轴、零位、网格/惯量或命名时复验受影响链，不等待本项关闭才交 A 最小绑定。
+
+后续动力学目标取[惯量修正记录](../../acceptance/records/2026-10-19-lizard2-spatial-inertia-repair.md)绑定的隔离 manifest；原接线及具名过滤证据只在原边界复用。正式导出链须接回惯量主轴修正并核新身份，固定机身状态写读不替代五角色真实驱动；受控驱动与 B 的下一测试共用候选，避免两套输入。
 
 ## 骨骼改名（用户拍板：2026-10-10；足掌结构修订：2026-10-12）
 
@@ -113,7 +115,7 @@ E 当前重点是补齐实际 `palm_spatial` 候选的完整消费链。已有�
 | **新候选真实报告链** | 新候选实际采集 → writer → 绘图/评测 reader；保留目标身份及具名关节列，验证 twist 与肘膝、腕踝不会被旧位次误读，缺列/混名/缺来源须拒绝。测试样本不能代替真实采集，绘图展示选列与原始记录完整性分开核对 | 报告契约和读写拒错可先做；实际采集等运行接线成立，字段/评测语义交接触协议项，不改写历史协议 |
 | **完整出口核对** | 对照 E3 清点每条必需链的真实输入、消费者、正反例、复读命令及未完项；补受影响的旧基线回归。按 E4 分段交接，完整出口需所有必需链有证据，最终随 D 独立审核 | 不等 A/B/C 全部步态和承重性能验收才交接口；也不以离线套件通过替代新候选运行证据 |
 
-**当前并行切片（用户选择：2026-10-15）**：A 继续构型、组合轨迹及几何；E 本轮维护 `rl_exp/tools/diagnose/palm_spatial_runtime.py`，只消费 trial-checkpoint 记录绑定的只读 `checkpoint_v3`。当前运行切片与限制只取 `acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md`。E 下一步接 A 的正式导出接口、补受控逐轴验证及出口清点；baseline 实际写读链、reset、具名连接过滤对照及跨腿负例的适用边界取同一记录，限位 PD 专项继续步骤 3 与其它工况验证。专用诊断身份不得当 v3 配方加载，注册诊断必须使用独立显式配置。A 后续输出使用新目录并说明变化，E 中间结果不自动外推。
+**当前并行切片**：A 维护正式导出接线，E 维护 `rl_exp/tools/diagnose/palm_spatial_runtime.py` 的真实消费者；后续与 B 共用惯量修正记录的新隔离身份。baseline 实际写读链、reset、具名连接过滤对照及跨腿负例的适用边界仍取 `acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md`，只补受输入变化影响或缺证的部分。E 接 A 的正式导出接口，补受控逐轴验证及出口清点；限位 PD 专项接小幅跟踪及后续工况。专用诊断身份不得当 v3 配方加载，注册诊断必须使用独立显式配置。后续输出使用新目录并说明变化，中间结果不自动外推。
 
 **本轮共用文件归属**：`lizard2_palm_spatial_candidate.py`、`generate_urdf.py`、`lizard2_stance_candidate.py`、`joint_names.py`、`palm_spatial_probe.py` 与 FK/碰撞核心由 A/各原执行者维护，E 不同时修改。E 将读回异常交限位 PD 专项步骤 3/4 归因，不借接线改网格或正式驱动；本轮用户授权的具名过滤只写记录绑定的隔离副本，集合与适用边界取同一证据。真实末端归属和旧资产解除证据继续按本表各自回交。
 
