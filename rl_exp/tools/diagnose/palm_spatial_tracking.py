@@ -4,7 +4,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Bounded fixed-base spatial PD tracking through the registered action manager.
 
-No gravity or support claim. Angles [rad], time [s], force [N], torque [N*m].
+Default: no gravity or support claim. --level_leg_plan tests LF self-weight with the
+base fixed and other joints constrained at neutral. Angles [rad], time [s], force [N], torque [N*m].
 """
 import argparse
 import copy
@@ -25,6 +26,9 @@ SETTINGS = dict(frequency_hz=1., damping_ratio=1., amplitude_rad=.02, ramp_s=2.,
                 hold_s=1., dt_s=.005, max_error_rad=.012, hold_error_rad=.002,
                 max_other_joint_rad=.01, stop_position_rad=.1, stop_contact_n=1.,
                 max_full_runs=2, velocity_target='zero')
+
+LEVEL_SETTINGS = dict(settle_s=5., fixture_half_range_rad=1e-6, level_tolerance=1e-5,
+                      max_absolute_error_rad=.1, stop_absolute_error_rad=.35)
 
 
 def _target(t, amplitude):
@@ -73,6 +77,47 @@ def _entity_snapshot(robot, model):
                 actor_poses_xyzw=actors.tolist(), actor_fk_max_error=errors)
 
 
+def _level_verdict(q, target, axes, times, baseline, level_errors):
+    relative = _verdict(q-baseline, target, axes, times)
+    relative['max_absolute_error_rad'] = float(abs(q[:, axes]-target[:, axes]).max())
+    relative['max_chest_level_error'] = float(max(level_errors))
+    relative['passed'] = bool(relative['passed'] and relative['max_absolute_error_rad'] <= LEVEL_SETTINGS['max_absolute_error_rad']
+                             and relative['max_chest_level_error'] <= LEVEL_SETTINGS['level_tolerance'])
+    return relative
+
+
+def _level_fixture(document, out, plan_path):
+    from pxr import Usd, UsdPhysics
+    plan = json.loads(plan_path.read_text(encoding='utf-8'))
+    assert plan['leg'] == 'lf' and 'keyframes' not in plan, 'only the original single-leg pose is accepted'
+    assert wiring.binding.sha256_file(Path(plan['pose_report'])) == plan['pose_report_sha256']
+    assert set(plan['target_q_rad']) == set(document['target_binding']['joint_names'])
+    old_usd, old_urdf = Path(document['target']), Path(document['urdf'])
+    assert wiring.binding.sha256_file(old_usd) == document['sha256']['target']
+    assert wiring.binding.sha256_file(old_urdf) == wiring.URDF_HASH
+    stage = Usd.Stage.Open(str(old_usd))
+    constrained = []
+    for prim in stage.Traverse():
+        if prim.IsA(UsdPhysics.RevoluteJoint) and not prim.GetName().startswith('lf_'):
+            joint = UsdPhysics.RevoluteJoint(prim)
+            limit = np.degrees(LEVEL_SETTINGS['fixture_half_range_rad'])
+            joint.GetLowerLimitAttr().Set(-float(limit))
+            joint.GetUpperLimitAttr().Set(float(limit))
+            constrained.append(prim.GetName())
+    assert len(constrained) == 25
+    (out/'palm_spatial.usda').write_text(stage.GetRootLayer().ExportToString(), encoding='utf-8')
+    shutil.copyfile(old_urdf, out/'palm_spatial.urdf')
+    shutil.copytree(old_usd.parent/'meshes', out/'meshes')
+    for key, filename in (('target', 'palm_spatial.usda'), ('urdf', 'palm_spatial.urdf')):
+        document[key] = document['target_binding'][key] = str(out/filename)
+        document['sha256'][key] = wiring.binding.sha256_file(out/filename)
+    document['config']['scene.robot.spawn.rigid_props.disable_gravity'] = False
+    document['level_fixture'] = dict(constrained_joints=constrained, settings=LEVEL_SETTINGS,
+                                    original_manifest_target=str(old_usd), original_urdf_limits_retained=True,
+                                    scope='USD fixture ranges only; fixed base at z=2m; LF self-weight, no ground support')
+    return plan
+
+
 def _self_check():
     assert _target(0, .02) == _target(6, .02) == 0
     assert _target(2, .02) == _target(3, .02) == .02
@@ -86,6 +131,12 @@ def _self_check():
     combined = np.column_stack((target[:, 0], -target[:, 0], target[:, 1]))
     assert _verdict(combined, combined, [0, 1], times)['passed']
     assert not _verdict(np.zeros_like(combined), combined, [0, 1], times)['passed']
+    baseline = np.array([.03, 0.])
+    level = np.zeros(len(times))
+    assert _level_verdict(target+baseline, target, [0], times, baseline, level)['passed']
+    assert not _level_verdict(np.tile(baseline, (len(times), 1)), target, [0], times, baseline, level)['passed']
+    assert not _level_verdict(target+baseline, target, [0], times, baseline, level+.001)['passed']
+    assert not _level_verdict(target+baseline+.2, target, [0], times, baseline+.2, level)['passed']
     print('SPATIAL_TRACKING_SELF_CHECK_OK')
 
 
@@ -104,7 +155,7 @@ def _run(args):
     kd = {n: float(2*SETTINGS['damping_ratio']*i*omega) for n, i in inertias.items()}
     gain_source = None
     if args.gain_reference:
-        assert args.combined
+        assert args.combined or args.level_leg_plan
         gained = json.loads(args.gain_reference.read_text(encoding='utf-8'))
         assert gained['completed'] and gained['status'] == 'standing_verified'
         gain_manifest = Path(gained['manifest'])
@@ -113,6 +164,9 @@ def _run(args):
         assert gained['joint_names'] == neutral['joint_names']
         kp = dict(zip(gained['joint_names'], gained['readbacks']['kp']))
         kd = dict(zip(gained['joint_names'], gained['readbacks']['kd']))
+        if args.level_leg_plan:
+            kp['lf_wrist_joint'] *= args.wrist_frequency_hz**2
+            kd['lf_wrist_joint'] *= args.wrist_frequency_hz
         gain_source = dict(report=str(args.gain_reference), sha256=wiring.binding.sha256_file(args.gain_reference),
                            leg_frequency_hz=gained['standing_adapter']['leg_frequency_hz'],
                            neck_frequency_hz=gained['standing_adapter']['neck_frequency_hz'])
@@ -145,6 +199,11 @@ def _run(args):
         tracked = copy.deepcopy(source)
         tracked_manifest = out / 'tracking_manifest.json'
         tracked['target_binding']['source'] = str(tracked_manifest)
+        if args.level_leg_plan:
+            plan = _level_fixture(tracked, out, args.level_leg_plan)
+            result.update(level_settings=LEVEL_SETTINGS, level_fixture=tracked['level_fixture'],
+                          scope=tracked['level_fixture']['scope'], level_leg_plan=plan, wrist_frequency_hz=args.wrist_frequency_hz)
+            result['input'][str(args.level_leg_plan)] = wiring.binding.sha256_file(args.level_leg_plan)
         for group in ('legs', 'feet', 'spine'):
             names = tracked['config'][f'scene.robot.actuators.{group}.joint_names_expr']
             tracked['config'][f'scene.robot.actuators.{group}.stiffness'] = {n: kp[n] for n in names}
@@ -179,6 +238,15 @@ def _run(args):
                                    velocity_caps=backend(robot.root_view.get_dof_max_velocities()).tolist(),
                                    effort_caps=robot.data.joint_effort_limits.torch[0].cpu().tolist(),
                                    position_limits=robot.data.joint_pos_limits.torch[0].cpu().tolist())
+        if args.level_leg_plan:
+            from palm_spatial_inertia import _rotation
+            constrained_ids = [names.index(n) for n in tracked['level_fixture']['constrained_joints']]
+            limits = np.array(result['readbacks']['position_limits'])[constrained_ids]
+            assert np.allclose(limits, [-LEVEL_SETTINGS['fixture_half_range_rad'], LEVEL_SETTINGS['fixture_half_range_rad']], atol=1e-10)
+            gravity = {p.GetName(): p.GetAttribute('physxRigidBody:disableGravity').Get() for p in live.sim.stage.Traverse() if p.HasAPI(UsdPhysics.RigidBodyAPI)}
+            assert gravity and all(value is False for value in gravity.values())
+            result['readbacks'].update(fixed_base=robot.is_fixed_base, gravity=cfg.sim.gravity, body_disable_gravity=gravity)
+            chest_id = robot.body_names.index('chest_pitch')
         action_names, action_ids = [], []
         for term_name in live.action_manager.active_terms:
             term = live.action_manager.get_term(term_name)
@@ -204,8 +272,13 @@ def _run(args):
                 cases['neck_pitch'] = ['neck_pitch_joint']
         else:
             cases = {n: [n] for n in cases}
+        if args.level_leg_plan:
+            from palm_spatial_inertia import csc
+            model = csc.load_urdf(Path(target['urdf']))
+            cases = {'lf_level_self_weight': [n for n in cases if n.startswith('lf_')]}
         dt = SETTINGS['dt_s']
-        times = np.arange(1, int((2*SETTINGS['ramp_s'] + 2*SETTINGS['hold_s'])/dt)+1)*dt
+        settle = LEVEL_SETTINGS['settle_s'] if args.level_leg_plan else 0.
+        times = np.arange(1, int((settle+2*SETTINGS['ramp_s'] + 2*SETTINGS['hold_s'])/dt)+1)*dt
         sensor = live.scene['contact_forces']
         for case, commanded in cases.items():
             result['stage'] = case
@@ -214,13 +287,16 @@ def _run(args):
             axes = [names.index(n) for n in commanded]
             amplitudes = {n: SETTINGS['amplitude_rad'] * (1 if bounds[n][1] >= SETTINGS['amplitude_rad']+.005 else -1)
                           for n in commanded}
+            if args.level_leg_plan:
+                amplitudes = {n: plan['target_q_rad'][n] for n in commanded}
             assert all(bounds[n][0] <= min(0, a) and max(0, a) <= bounds[n][1] for n, a in amplitudes.items())
             rows, q_rows, target_rows, entities, max_contact = [], [], [], [], 0.
+            level_errors, baseline, stop = [], None, None
             for t in times:
                 action = torch.zeros((1, len(action_names)), device=args.device)
                 desired = np.zeros(len(names))
                 for name, amplitude in amplitudes.items():
-                    desired[names.index(name)] = _target(t, amplitude)
+                    desired[names.index(name)] = _target(max(t-settle, 0.), amplitude)
                     action[0, action_names.index(name)] = desired[names.index(name)]
                 live.action_manager.process_action(action)
                 live.action_manager.apply_action()
@@ -232,18 +308,42 @@ def _run(args):
                 force = float(sensor.data.net_forces_w.torch.norm(dim=-1).max())
                 max_contact = max(max_contact, force)
                 assert np.isfinite(q).all() and np.isfinite(v).all()
-                assert abs(q).max() < SETTINGS['stop_position_rad'] and force <= SETTINGS['stop_contact_n'], 'unsafe response/contact'
+                if not args.level_leg_plan:
+                    assert abs(q).max() < SETTINGS['stop_position_rad'] and force <= SETTINGS['stop_contact_n'], 'unsafe response/contact'
                 assert np.all(abs(v) < np.asarray(result['readbacks']['velocity_caps'])*.5), 'unexpected speed'
                 requested = read_kp*(desired-q)-read_kd*v
                 rows.append(dict(t_s=float(t), q_rad=q.tolist(), velocity_rad_s=v.tolist(), target_rad=desired.tolist(),
                                  reconstructed_pd_request_nm=requested.tolist(), max_contact_n=force))
-                q_rows.append(q)
-                target_rows.append(desired)
-                if model is not None and (abs(t-2.9) < 1e-9 or abs(t-5.9) < 1e-9):
+                if args.level_leg_plan:
+                    pose = robot.data.body_link_pose_w.torch[0, chest_id].cpu().numpy()
+                    level_error = float(abs(_rotation(pose[3:])[:, 2]-[0., 0., 1.]).max())
+                    rows[-1]['chest_pose_xyzw'] = pose.tolist()
+                    rows[-1]['chest_level_error'] = level_error
+                    level_errors.append(level_error)
+                    if abs(t-settle) < 1e-9:
+                        baseline = q.copy()
+                    if level_error > LEVEL_SETTINGS['level_tolerance']:
+                        stop = 'chest_not_level'
+                    elif abs(q[axes]-desired[axes]).max() > LEVEL_SETTINGS['stop_absolute_error_rad']:
+                        stop = 'leg_absolute_error'
+                    elif force > SETTINGS['stop_contact_n']:
+                        stop = 'contact'
+                    if stop:
+                        break
+                if t > settle:
+                    q_rows.append(q)
+                    target_rows.append(desired)
+                if model is not None and (abs(t-settle-2.9) < 1e-9 or abs(t-settle-5.9) < 1e-9):
                     entities.append(dict(t_s=float(t), **_entity_snapshot(robot, model)))
-            verdict = _verdict(np.array(q_rows), np.array(target_rows), axes, times)
+            if args.level_leg_plan:
+                verdict = dict(passed=False, stop_reason=stop, completed_trajectory=False) if stop else _level_verdict(
+                    np.array(q_rows), np.array(target_rows), axes, times[times > settle]-settle, baseline, level_errors)
+                verdict.update(baseline_q_rad=None if baseline is None else baseline.tolist(), completed_trajectory=stop is None,
+                               max_chest_level_error=float(max(level_errors)))
+            else:
+                verdict = _verdict(np.array(q_rows), np.array(target_rows), axes, times)
             verdict.update(joint=case, commanded_joints=commanded, amplitudes_rad=amplitudes, max_contact_n=max_contact)
-            if not args.combined:
+            if not args.combined and not args.level_leg_plan:
                 verdict['amplitude_rad'] = amplitudes[commanded[0]]
             if entities:
                 verdict['entity_fk_max_error'] = max(max(e['actor_fk_max_error'].values()) for e in entities)
@@ -255,6 +355,8 @@ def _run(args):
                 break
         passed = len(result['cases']) == len(cases) and all(c['passed'] for c in result['cases'])
         result.update(completed=True, stage='completed', status=('combined_tracking_verified' if args.combined else 'small_tracking_verified') if passed else 'tracking_failed')
+        if args.level_leg_plan:
+            result['status'] = 'level_leg_tracking_verified' if passed else 'level_leg_tracking_failed'
         wiring.write_json(out / 'report.json', result)
         print('TRACKING_COMPLETED', result['status'], flush=True)
         if not passed:
@@ -283,6 +385,8 @@ if __name__ == '__main__':
     parser.add_argument('--self_check', action='store_true')
     parser.add_argument('--combined', action='store_true')
     parser.add_argument('--gain_reference', type=Path)
+    parser.add_argument('--level_leg_plan', type=Path)
+    parser.add_argument('--wrist_frequency_hz', type=float, choices=(1., 6.), default=1.)
     if '--self_check' in sys.argv:
         _self_check()
     else:
@@ -291,4 +395,8 @@ if __name__ == '__main__':
         args = parser.parse_args()
         if not args.inertia_report or not args.out:
             parser.error('inertia_report and out are required')
+        if args.level_leg_plan and (not args.gain_reference or args.combined):
+            parser.error('level_leg_plan requires gain_reference and excludes combined')
+        if not args.level_leg_plan and args.wrist_frequency_hz != 1:
+            parser.error('wrist override requires level_leg_plan')
         sys.exit(0 if _run(args) else 1)
