@@ -41,6 +41,7 @@ def _target(t, amplitude):
 
 
 def _verdict(q, target, axis, times):
+    axis = np.atleast_1d(axis)
     error = np.abs(q[:, axis] - target[:, axis])
     plateau = (times >= SETTINGS['ramp_s'] + .8*SETTINGS['hold_s']) & (times <= SETTINGS['ramp_s'] + SETTINGS['hold_s'])
     final = times >= 2*SETTINGS['ramp_s'] + 1.8*SETTINGS['hold_s']
@@ -54,6 +55,24 @@ def _verdict(q, target, axis, times):
     return values
 
 
+def _entity_snapshot(robot, model):
+    from palm_spatial_inertia import _rotation, csc
+    names = list(robot.joint_names)
+    q = robot.data.joint_pos.torch[0].cpu().numpy().copy()
+    actors = robot.data.body_link_pose_w.torch[0].cpu().numpy().copy()
+    actual = {}
+    for name, pose in zip(robot.body_names, actors):
+        transform = np.eye(4)
+        transform[:3, :3], transform[:3, 3] = _rotation(pose[3:]), pose[:3]
+        actual[name] = transform
+    root = actual['base_link']
+    errors = {n: float(abs(actual[n] - root @ csc.fk(model['joints'], n, dict(zip(names, q)))).max())
+              for n in robot.body_names}
+    assert max(errors.values()) < 1e-5, 'actual actor/FK mismatch'
+    return dict(joint_names=names, q_rad=q.tolist(), body_names=list(robot.body_names),
+                actor_poses_xyzw=actors.tolist(), actor_fk_max_error=errors)
+
+
 def _self_check():
     assert _target(0, .02) == _target(6, .02) == 0
     assert _target(2, .02) == _target(3, .02) == .02
@@ -64,6 +83,9 @@ def _self_check():
     assert _verdict(target, target, 0, times)['passed']
     assert not _verdict(np.zeros_like(target), target, 0, times)['passed']
     assert not _verdict(target[:, ::-1], target, 0, times)['passed']
+    combined = np.column_stack((target[:, 0], -target[:, 0], target[:, 1]))
+    assert _verdict(combined, combined, [0, 1], times)['passed']
+    assert not _verdict(np.zeros_like(combined), combined, [0, 1], times)['passed']
     print('SPATIAL_TRACKING_SELF_CHECK_OK')
 
 
@@ -80,6 +102,20 @@ def _run(args):
     omega = 2*math.pi*SETTINGS['frequency_hz']
     kp = {n: float(i*omega**2) for n, i in inertias.items()}
     kd = {n: float(2*SETTINGS['damping_ratio']*i*omega) for n, i in inertias.items()}
+    gain_source = None
+    if args.gain_reference:
+        assert args.combined
+        gained = json.loads(args.gain_reference.read_text(encoding='utf-8'))
+        assert gained['completed'] and gained['status'] == 'standing_verified'
+        gain_manifest = Path(gained['manifest'])
+        assert wiring.binding.sha256_file(gain_manifest) == gained['manifest_sha256']
+        assert json.loads(gain_manifest.read_text(encoding='utf-8'))['sha256']['urdf'] == wiring.URDF_HASH
+        assert gained['joint_names'] == neutral['joint_names']
+        kp = dict(zip(gained['joint_names'], gained['readbacks']['kp']))
+        kd = dict(zip(gained['joint_names'], gained['readbacks']['kd']))
+        gain_source = dict(report=str(args.gain_reference), sha256=wiring.binding.sha256_file(args.gain_reference),
+                           leg_frequency_hz=gained['standing_adapter']['leg_frequency_hz'],
+                           neck_frequency_hz=gained['standing_adapter']['neck_frequency_hz'])
     out = args.out.resolve()
     assert wiring.REPO / 'rl_exp/out' in out.parents and not out.exists()
     out.mkdir(parents=True)
@@ -87,8 +123,12 @@ def _run(args):
     result = dict(completed=False, stage='startup', settings=SETTINGS,
                   input={str(args.inertia_report): wiring.binding.sha256_file(args.inertia_report),
                          str(manifest): wiring.binding.sha256_file(manifest)},
-                  code_sha256=wiring.binding.sha256_file(Path(__file__)), cases=[],
+                  code_sha256=wiring.binding.sha256_file(Path(__file__)), cases=[], combined=args.combined,
                   scope='fixed base at z=2m; zero gravity; registered action manager; zero target velocity; no support')
+    if gain_source:
+        result['gain_source'] = gain_source
+        result['settings'] = {**SETTINGS, 'frequency_hz': None, 'gain_source': 'verified standing readback'}
+        result['input'][str(args.gain_reference)] = gain_source['sha256']
     app, env = None, None
     try:
         from isaaclab.app import AppLauncher
@@ -154,21 +194,34 @@ def _run(args):
         cases = [wiring.joint_names.joint_name(leg, root) for leg in wiring.joint_names.LEGS
                  for root in wiring.joint_names.roots_of(wiring.joint_names.PALM_SPATIAL_NAMING, leg)]
         assert len(cases) == 20 and len(set(cases)) == 20
+        model = None
+        if args.combined:
+            from palm_spatial_inertia import csc
+            model = csc.load_urdf(Path(target['urdf']))
+            cases = {leg + '_proximal': [n for n in cases if n.startswith(leg + '_')][:(4 if gain_source else 3)]
+                     for leg in wiring.joint_names.LEGS}
+            if gain_source:
+                cases['neck_pitch'] = ['neck_pitch_joint']
+        else:
+            cases = {n: [n] for n in cases}
         dt = SETTINGS['dt_s']
         times = np.arange(1, int((2*SETTINGS['ramp_s'] + 2*SETTINGS['hold_s'])/dt)+1)*dt
         sensor = live.scene['contact_forces']
-        for case in cases:
+        for case, commanded in cases.items():
             result['stage'] = case
             live.reset()
             assert not joint_reset_errors(robot)
-            axis = names.index(case)
-            amplitude = SETTINGS['amplitude_rad'] * (1 if bounds[case][1] >= SETTINGS['amplitude_rad']+.005 else -1)
-            assert bounds[case][0] <= min(0, amplitude) and max(0, amplitude) <= bounds[case][1]
-            rows, q_rows, target_rows, max_contact = [], [], [], 0.
+            axes = [names.index(n) for n in commanded]
+            amplitudes = {n: SETTINGS['amplitude_rad'] * (1 if bounds[n][1] >= SETTINGS['amplitude_rad']+.005 else -1)
+                          for n in commanded}
+            assert all(bounds[n][0] <= min(0, a) and max(0, a) <= bounds[n][1] for n, a in amplitudes.items())
+            rows, q_rows, target_rows, entities, max_contact = [], [], [], [], 0.
             for t in times:
-                target_value = _target(t, amplitude)
                 action = torch.zeros((1, len(action_names)), device=args.device)
-                action[0, action_names.index(case)] = target_value
+                desired = np.zeros(len(names))
+                for name, amplitude in amplitudes.items():
+                    desired[names.index(name)] = _target(t, amplitude)
+                    action[0, action_names.index(name)] = desired[names.index(name)]
                 live.action_manager.process_action(action)
                 live.action_manager.apply_action()
                 live.scene.write_data_to_sim()
@@ -176,8 +229,6 @@ def _run(args):
                 live.scene.update(dt)
                 q = robot.data.joint_pos.torch[0].cpu().numpy().copy()
                 v = robot.data.joint_vel.torch[0].cpu().numpy().copy()
-                desired = np.zeros(len(names))
-                desired[axis] = target_value
                 force = float(sensor.data.net_forces_w.torch.norm(dim=-1).max())
                 max_contact = max(max_contact, force)
                 assert np.isfinite(q).all() and np.isfinite(v).all()
@@ -188,18 +239,28 @@ def _run(args):
                                  reconstructed_pd_request_nm=requested.tolist(), max_contact_n=force))
                 q_rows.append(q)
                 target_rows.append(desired)
-            verdict = _verdict(np.array(q_rows), np.array(target_rows), axis, times)
-            verdict.update(joint=case, amplitude_rad=amplitude, max_contact_n=max_contact)
+                if model is not None and (abs(t-2.9) < 1e-9 or abs(t-5.9) < 1e-9):
+                    entities.append(dict(t_s=float(t), **_entity_snapshot(robot, model)))
+            verdict = _verdict(np.array(q_rows), np.array(target_rows), axes, times)
+            verdict.update(joint=case, commanded_joints=commanded, amplitudes_rad=amplitudes, max_contact_n=max_contact)
+            if not args.combined:
+                verdict['amplitude_rad'] = amplitudes[commanded[0]]
+            if entities:
+                verdict['entity_fk_max_error'] = max(max(e['actor_fk_max_error'].values()) for e in entities)
             result['cases'].append(verdict)
-            wiring.write_json(out / (case + '.json'), dict(summary=verdict, samples=rows))
+            wiring.write_json(out / (case + '.json'), dict(summary=verdict, samples=rows, entities=entities))
             wiring.write_json(out / f'progress_{len(result["cases"]):02d}.json', result)
             print('TRACKING_CASE', json.dumps(verdict), flush=True)
             if not verdict['passed']:
                 break
         passed = len(result['cases']) == len(cases) and all(c['passed'] for c in result['cases'])
-        result.update(completed=True, stage='completed', status='small_tracking_verified' if passed else 'tracking_failed')
+        result.update(completed=True, stage='completed', status=('combined_tracking_verified' if args.combined else 'small_tracking_verified') if passed else 'tracking_failed')
         wiring.write_json(out / 'report.json', result)
         print('TRACKING_COMPLETED', result['status'], flush=True)
+        if not passed:
+            sys.stdout.flush()
+            sys.stderr.flush()
+            os._exit(1)  # App.close may terminate the process before main can return failure.
     except BaseException as error:
         result.update(error=repr(error), traceback=traceback.format_exc())
         wiring.write_json(out / 'failure.json', result)
@@ -220,6 +281,8 @@ if __name__ == '__main__':
     parser.add_argument('--inertia_report', type=Path)
     parser.add_argument('--out', type=Path)
     parser.add_argument('--self_check', action='store_true')
+    parser.add_argument('--combined', action='store_true')
+    parser.add_argument('--gain_reference', type=Path)
     if '--self_check' in sys.argv:
         _self_check()
     else:
