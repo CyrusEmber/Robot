@@ -1,4 +1,6 @@
-# lizard2 胸俯仰 PD 静站保持：未满足水平前提
+# lizard2 胸俯仰 PD 静站保持：历史水平试验与条件撤销
+
+> 下列原试验保留当时判据、读数及退出状态；当前执行条件以末节“用户修订：胸部水平不再作为门槛”为准。
 
 ## 适用范围
 
@@ -54,21 +56,32 @@
 
 原输入报告 SHA256 仍为 `f415264793731a71091ed9e167edd6bce1cfe4ad615772b94c080cef579a20e2`；索引绑定本轮报告、参数、源码、汇总、接口实现文件哈希及破坏日志。初版 comparison_summary.json 的自由/固定字段名不当，最终以 comparison_summary_final.json 的 fixed_base_readback=false 为准，原数值没有改变。
 
-从仓根 PowerShell 复读，out 必须为新目录：
+从仓根 PowerShell 按当前代码复读同一物理候选，out 必须为新目录。当前代码已撤销胸部水平门槛，不能预先承诺与历史报告相同的判词或退出码；原水平阈值破坏测试只适用于实现提交 `b31502e`，历史日志由上方 evidence_index 绑定，不再调用已删除的阈值字段。
 
 ```powershell
 & E:/IsaacLab/env_isaaclab/Scripts/python.exe -B rl_exp/tools/diagnose/palm_spatial_standing.py --standing_reference rl_exp/out/lizard2_b_standing_neck2_20261019/report.json --chest_frequency_hz 2 --out rl_exp/out/lizard2_chest2_standing_replay --viz none --device cuda:0
 & E:/IsaacLab/env_isaaclab/Scripts/python.exe -B rl_exp/tools/diagnose/palm_spatial_standing.py --self_check
-@'
-import sys, numpy as np
-sys.path.insert(0, 'rl_exp/tools/diagnose')
-import palm_spatial_standing as s
-s.POSTURE_SETTINGS['chest_level_rad'] = float(np.radians(3.))
-s._self_check()
-'@ | & E:/IsaacLab/env_isaaclab/Scripts/python.exe -B -
-# 第一条候选预期判词失败并退出 1；普通自检退出 0；最后的破坏对照预期退出 1。
+# 普通自检预期退出 0；物理候选按当前原静站安全判据判定，本次未重跑。
 ```
 
 ## 未覆盖边界
 
 未获得自由承重下胸部满足 1° 的通过结果，未运行胸部候选与左前腕参数组合后的实际抬腿，也未独立测得 motor torque 或饱和余量。新增的后续抬腿前水平检查及左前腕参数接回路径尚未在该候选上真跑，不以准备好入口代替行为验证。没有新增移重、尾部控制、实际力矩传感器项目或更大的驱动上限；原事项保持在办，不关闭、不取消其它未完动作。
+
+## 用户修订：胸部水平不再作为门槛
+
+用户拍板：2026-10-19，撤销自由基座静站与后续承重抬腿的胸部世界倾角 ≤1° 条件，并同步修正代码与事项；本轮不自动启动物理测试。该条件不是生物学要求，也不是现有零目标关节 PD 必须满足的驱动能力定义。允许胸部俯仰或侧倾，不代表取消整机支撑、安全和动作目标判据。
+
+`rl_exp/tools/diagnose/palm_spatial_standing.py` 删除抬腿前胸部水平中止分支与最终通过门槛，逐步胸部世界姿态及分窗口最大倾角继续输出，仅作观测。原根倾角/下沉、关节偏差、速度、支撑载荷、非法接触、离地/卸载/落掌及失败退出条件保留。CLI 增益覆盖入口保留，但本次未调整任何 PD、力矩/速度上限、资产或正式配方。夹具左前腿测试的严格水平条件仍用于核验隔离夹具，不迁移成自由整机前提。
+
+回归在原 `--self_check` 内，以构造样本提取并执行真实 `_run` 中胸部倾角赋值之后的安全停止分支和最终判定，不覆盖此前的仿真采样/状态读取链：胸部 2°、其它条件满足时静站与抬腿均应通过；失去支撑、根下沉/倾斜、关节偏差、竖直速度、非法接触超限及既有停止状态仍应失败。原胸部门槛保留时同一回归报 `AssertionError: ('benign chest tilt rejected', False, …)`；撤销后输出 `STANDING_LIFT_SELF_CHECK_OK`。这验证代码判定，不替代仿真中的实际抬落。
+
+修订实现提交 `6a1b631`，源码 SHA256 `10e2950d0dbcd0c726d0f4af6b00045288d6b1e9eededa9da2fcc8a460e0e53b`。本轮自检及事项格式检查通过，全套离线检查通过（37/37）；代码提交的 pre-commit 静态闸门通过，不作为新增物理通过证据。独立上下文已对本切片审查，反馈的旧阈值复读命令与测试覆盖表述已修正；不替代原事项关闭审核。
+
+当前自检复读：
+
+```powershell
+& E:/IsaacLab/env_isaaclab/Scripts/python.exe -B rl_exp/tools/diagnose/palm_spatial_standing.py --self_check
+```
+
+原始报告仍保持 `standing_failed` 和当时退出 1，不修改历史产物或伪造新通过报告。此前读数只证明未达到当时人为水平条件，不能由此认定抬腿必然失败、实际电机饱和或驱动不合格。胸俯仰 2 Hz 候选不因撤销条件自动升级基线；后续沿用已绑定的合格静站配置，并显式声明腕部覆盖及载荷条件。实际力矩通道和其它原有未完动作继续保留。
