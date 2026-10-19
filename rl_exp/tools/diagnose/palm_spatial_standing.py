@@ -32,8 +32,6 @@ LIFT_SETTINGS = dict(settle_s=5., rise_s=3., hold_s=2., fall_s=3., recover_s=3.,
                      minimum_mesh_height_m=-.005, max_tracking_error_rad=.1,
                      geometry_samples=33, max_physical_attempts=3)
 
-POSTURE_SETTINGS = dict(chest_level_rad=float(np.radians(1.)))
-
 
 def _lift_fraction(t):
     start = LIFT_SETTINGS['settle_s']
@@ -134,8 +132,7 @@ def _posture_verdict(samples, windows):
     for name, (start, end) in windows.items():
         rows = [s for s in samples if start <= s['t_s'] <= end]
         maxima[name] = max((s['chest_tilt_rad'] for s in rows), default=None)
-    return dict(max_chest_tilt_rad=maxima,
-                passed=all(value is not None and value <= POSTURE_SETTINGS['chest_level_rad'] for value in maxima.values()))
+    return dict(max_chest_tilt_rad=maxima)
 
 
 def _lift_target(t, plan):
@@ -190,9 +187,7 @@ def _lift_verdict(samples, plan, feet, weight):
 
 
 def _self_check(break_failure_handler=False):
-    assert _posture_verdict([dict(t_s=4.5, chest_tilt_rad=0.)], {'standing': [4., 5.]})['passed']
-    assert not _posture_verdict([dict(t_s=4.5, chest_tilt_rad=float(np.radians(2.)))], {'standing': [4., 5.]})['passed']
-    assert not _posture_verdict([], {'standing': [4., 5.]})['passed']
+    assert _posture_verdict([], {'standing': [4., 5.]}) == dict(max_chest_tilt_rad={'standing': None})
     assert [_lift_fraction(t) for t in (0, 5, 8, 10, 13, 16)] == [0, 0, 1, 1, 0, 0]
     feet, rows = ['lf', 'rf', 'rl', 'rr'], []
     for t in (4.5, 9.5, 15.5):
@@ -223,9 +218,48 @@ def _self_check(break_failure_handler=False):
     assert _lift_verdict(transfer_rows, transfer_plan, feet, 200.)['passed']
     transfer_rows[1]['ground_forces_n']['lf'][2] = 50.
     assert not _lift_verdict(transfer_rows, transfer_plan, feet, 200.)['passed']
-    # Exercise the real exception suite in a child process, even if persistence itself fails.
     syntax = ast.parse(Path(__file__).read_text(encoding='utf-8'))
     run = next(n for n in syntax.body if isinstance(n, ast.FunctionDef) and n.name == '_run')
+    body = next(n for n in run.body if isinstance(n, ast.Try)).body
+    loop = next(n for n in body if isinstance(n, ast.For) and ast.unparse(n.target) == 'step')
+    chest = next(n for n in loop.body if isinstance(n, ast.Assign)
+                 and ast.unparse(n.targets[0]) == "row['chest_tilt_rad']")
+    # Execute production pre-lift/safety branches and final decisions without simulation.
+    replay = ast.parse("for row in result['samples']:\n t = row['t_s']\n q = np.array(row['q_rad'])\n desired = np.array(row['target_q_rad'])\n root_pose = np.zeros(7)\n tilt = row['tilt_rad']\n forbidden = row['forbidden_ground_n']").body[0]
+    replay.body.extend(loop.body[loop.body.index(chest)+1:])
+    start = next(n for n in body if isinstance(n, ast.Assign) and ast.unparse(n.targets[0]) == 'late')
+    end = next(n for n in body if isinstance(n, ast.Expr) and isinstance(n.value, ast.Call)
+               and ast.unparse(n.value.func) == 'wiring.write_json')
+    decisions = compile(ast.fix_missing_locations(ast.Module(
+        body=[replay]+body[body.index(start):body.index(end)], type_ignores=[])), __file__, 'exec')
+    from types import SimpleNamespace
+    for lifting in (False, True):
+        samples = copy.deepcopy(rows if lifting else [rows[0]])
+        samples.insert(1, dict(copy.deepcopy(samples[0]), t_s=5.))
+        for row in samples:
+            row.update(chest_tilt_rad=float(np.radians(2.)), forbidden_ground_n=0.)
+        def decide(state, stop=None):
+            scope = dict(globals(), args=SimpleNamespace(lift_plan=lifting), require_posture=True,
+                         result=dict(samples=state), stop=stop, duration=16. if lifting else 5.,
+                         feet=feet, weight=200., robot=None, model=None, plan={'foot': 'lf'},
+                         _entity_snapshot=lambda *_: {})
+            exec(decisions, scope)
+            return scope['passed'], scope['result']
+        passed, result = decide(samples)
+        assert passed, ('benign chest tilt rejected', lifting, result)
+        assert result['status'] == ('single_leg_lift_verified' if lifting else 'standing_verified')
+        assert max(result['posture_verdict']['max_chest_tilt_rad'].values()) == float(np.radians(2.))
+        for field, value in (('root_drop_m', .03), ('tilt_rad', .11), ('q_rad', [.11]),
+                             ('root_velocity', [0., 0., .06, 0., 0., 0.]),
+                             ('forbidden_ground_n', 6.)):
+            unstable = copy.deepcopy(samples)
+            unstable[-1][field] = value
+            assert not decide(unstable)[0], (lifting, field)
+        unsupported = copy.deepcopy(samples)
+        unsupported[-1]['ground_forces_n']['rf'][2] = 0.
+        assert not decide(unsupported)[0], ('missing support', lifting)
+        assert not decide(samples, ['root_drop'])[0]
+    # Exercise the real exception suite in a child process, even if persistence itself fails.
     handler = next(n for n in run.body if isinstance(n, ast.Try)).handlers[0]
     if break_failure_handler:
         guarded = next(n for n in handler.body if isinstance(n, ast.Try))
@@ -369,9 +403,6 @@ def _run(args):
             manifest = out/'posture_manifest.json'
             document['target_binding']['source'] = str(manifest)
             wiring.write_json(manifest, document)
-        require_posture = bool(args.standing_reference or 'chest_frequency_hz' in adapter)
-        if require_posture:
-            result['posture_settings'] = POSTURE_SETTINGS
         result.update(standing_adapter=adapter, manifest=str(manifest), manifest_sha256=wiring.binding.sha256_file(manifest))
         cfg = copy.deepcopy(resolve_task_cfg(wiring.REGISTERED_TASK))
         target = wiring.obs_protocol.load_diagnostic_target(manifest, cfg, wiring.REGISTERED_TASK)
@@ -494,11 +525,6 @@ def _run(args):
             result['samples'].append(row)
             chest_pose = robot.data.body_link_pose_w.torch[0, chest_id].cpu().numpy()
             row['chest_tilt_rad'] = float(np.arccos(np.clip(_rotation(chest_pose[3:])[2, 2], -1, 1)))
-            if args.lift_plan and require_posture and abs(t-LIFT_SETTINGS['settle_s']) < 1e-9:
-                windows = {'baseline': [LIFT_SETTINGS['settle_s']-1, LIFT_SETTINGS['settle_s']]}
-                if not _posture_verdict(result['samples'], windows)['passed']:
-                    stop = ['chest_level_before_lift']
-                    break
             assert np.isfinite(q).all() and np.isfinite(root_pose).all(), 'non-finite state'
             checks = {'root_drop': row['root_drop_m'] > SETTINGS['stop_drop_m'], 'root_tilt': tilt > SETTINGS['stop_tilt_rad'],
                       'joint_motion': abs(q-desired).max() > SETTINGS['stop_joint_rad'],
@@ -522,15 +548,11 @@ def _run(args):
             result['lift_verdict'] = _lift_verdict(result['samples'], plan, feet, weight)
             passed = stop is None and result['lift_verdict']['passed']
             result['status'] = 'single_leg_lift_verified' if passed else 'single_leg_lift_failed'
-        if require_posture:
-            windows = {'standing': [SETTINGS['duration_s']-1, SETTINGS['duration_s']]}
-            if args.lift_plan:
-                windows = dict(baseline=[4., 5.], hold=[9., 10.], recovery=[15., 16.])
-                windows.update({k: v for k, v in plan.get('windows', {}).items() if k != 'transfer'})
-            result['posture_verdict'] = _posture_verdict(result['samples'], windows)
-            passed = passed and result['posture_verdict']['passed']
-            if not passed:
-                result['status'] = 'single_leg_lift_failed' if args.lift_plan else 'standing_failed'
+        windows = {'standing': [SETTINGS['duration_s']-1, SETTINGS['duration_s']]}
+        if args.lift_plan:
+            windows = dict(baseline=[4., 5.], hold=[9., 10.], recovery=[15., 16.])
+            windows.update({k: v for k, v in plan.get('windows', {}).items() if k != 'transfer'})
+        result['posture_verdict'] = _posture_verdict(result['samples'], windows)
         wiring.write_json(out/'report.json', result)
         print('STANDING_COMPLETED', result['status'], 'stop', stop, 'last_t', result['samples'][-1]['t_s'], flush=True)
         if not passed:
