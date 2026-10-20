@@ -4,7 +4,7 @@ title: lizard2 候选接线与真实消费者验证
 scope: rl_exp/blender, rl_exp/tasks, rl_exp/tools, ablation_harness
 status: in_progress
 landing: rl_exp/tasks/joint_names.py, rl_exp/tools/diagnose/palm_spatial_runtime.py, rl_exp/tools/verify/obs_protocol_live.py, ablation_harness/baseline_metrics.py
-next: B 以新输入固定基惯量交接受控默认驱动；E 补后端实体响应、obs 非零语义及 gait/终止等剩余消费者，最终交 D，不手工调步态。
+next: B/C 以全部关节小幅实测接适度组合及已知载荷验证；E 补 obs 非零语义、gait/终止等剩余消费者，最终交 D，不手工调步态。
 close_when: E 自检就绪后随总项 D 由新上下文一次审核；必需链缺证不关闭。
 evidence: acceptance/records/2026-10-19-lizard2-a-delivery-plan.md, acceptance/records/2026-10-19-lizard2-chest-standing-pd.md, acceptance/records/2026-10-19-lizard2-loaded-standing.md, acceptance/records/2026-10-19-lizard2-spatial-small-tracking.md, acceptance/records/2026-10-19-lizard2-spatial-inertia-repair.md, acceptance/records/2026-10-16-lizard2-candidate-doc-organization.md, acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md, acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md, acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory.md
 ---
@@ -109,13 +109,13 @@ E 当前重点是补齐实际 `palm_spatial` 候选的完整消费链。已有�
 
 | 剩余动作 | 交付内容与完成判据 | 与 A 的依赖 |
 |---|---|---|
-| **新隔离输入的动力学接续** | 新导出身份、USD、主轴及 reset 切片取[新输入验收](../../acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md#追加新正式导出身份接入隔离-usd-与真实消费者2026-10-20)；新输入两姿态固定基惯量取[当前复验](../../acceptance/records/2026-10-19-lizard2-spatial-inertia-repair.md#新正式导出输入的运行时惯量复验2026-10-20)，B/E 接后端实体响应及受控默认驱动，源／转换/约束设置有变再局部重验 | A 维护正式 URDF 源；原检查点保护不删除，不混用旧 USD 或旧动力学判词 |
-| **后端 drive 与实体响应** | 全部通道真实 action/cache、reset 的已验范围取新输入验收；尚须核后端目标及对应实体响应，腿五角色与胸颈尾不漏项。零增益目标缓存不算驱动跟踪，按 B 工况复用其受控动作与实体读点，不重建手工控制器 | 使用新实测 manifest；动力学输入与停止条件核验后执行，未经前提核验不做承重结论 |
+| **新隔离输入的动力学接续** | 新导出身份、USD、主轴及 reset 切片取[新输入验收](../../acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md#追加新正式导出身份接入隔离-usd-与真实消费者2026-10-20)；新输入两姿态固定基惯量取[当前复验](../../acceptance/records/2026-10-19-lizard2-spatial-inertia-repair.md#新正式导出输入的运行时惯量复验2026-10-20)，全部关节 backend 目标/小幅实体响应取[当前跟踪切片](../../acceptance/records/2026-10-19-lizard2-spatial-small-tracking.md#新导出输入全部关节小幅驱动复验2026-10-20)，B/C 接组合与已知载荷，源／转换/约束设置有变再局部重验 | A 维护正式 URDF 源；原检查点保护不删除，不混用旧 USD 或旧动力学判词 |
+| **受控驱动工况接续** | 全部关节 backend 目标、实际小幅角度与有符号 actor 随动取当前跟踪切片；B/C 接适度组合、已知载荷保持/跟踪及有效边界。小幅无重力通过不升级受载、实际力矩或限速行为；不重建手工控制器 | 接新跟踪输入与工况；载荷/支撑及停止预算核验后执行，不拼接旧 USD 结论 |
 | **在线足端声明与旧对象回交** | 新输入实际 collider/owner、末端传感器及具名接触正反例取新输入验收；新输入独立在线布局与非空四足端分支取[前置验收](../../acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md#追加新输入运行时惯量与独立在线观测前置2026-10-20)，非零 obs 数值/语义仍未核；旧资产 cap/contact ownership 缺口由 `floor-contact-attribution` 按原对象回交 | 已验接触切片不升级全 ROM；阻塞需注明对象，不能混用旧资产与新候选判词 |
 | **其余报告消费者与终止分支** | 新 baseline 实际 writer/reader 与绑定拒错取新输入验收；gait writer/绘图、其它 E3 必需链按变化复验或给明确复用依据；终止 hook 保留未测，不能以没有 done 的短窗解除。非零 twist 数值映射不能用全零采集证明 | 原始记录完整性与展示选列分开核对；字段/评测语义交接触协议项，不改写历史协议 |
 | **完整出口核对** | 对照 E3 清点每条必需链的真实输入、消费者、正反例、复读命令及未完项；补受影响的旧基线回归。按 E4 分段交接，完整出口需所有必需链有证据，最终随 D 独立审核 | 不等学习策略步态/协调性能才交接口；声明载荷下默认驱动安全验证仍由 B 交付，不以离线套件通过替代新候选运行证据 |
 
-**当前并行切片**：A 维护已交正式 URDF 导出入口与源件回修，E/B 接[新输入验收](../../acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md#追加新正式导出身份接入隔离-usd-与真实消费者2026-10-20)的实测 manifest；不改原 pin 放行、不混用旧 USD。新 baseline 写读、reset/action-cache、具名接触切片按该记录复用，两姿态固定基惯量与独立在线布局取前置验收，后端实体响应及其余消费者仍补证；工况/增益另由 B 明确，不把零增益接线当承重或驱动通过。E 接 A 的正式导出接口及其它消费者出口，限位 PD 专项接声明载荷下默认驱动稳定性与约束验证；轨迹样本仅作诊断，协调与抬腿成功由 S6 训练策略验收。专用诊断身份不得当 v3 配方加载，注册诊断必须使用独立显式配置。后续输出使用新目录并说明变化，中间结果不自动外推。
+**当前并行切片**：按本表引用的实测 manifest 与工况接续，已验切片只补变化/缺证，不混用旧 USD、不删 pin。A 维护源件；B/C 接组合/载荷，E 接剩余消费者，D 最终审核，S6 验学习策略协调。诊断必须独立显式配置，不当正式 v3；输出用新目录，中间结果不自动外推。
 
 **本轮共用文件归属**：`lizard2_palm_spatial_candidate.py`、`generate_urdf.py`、`lizard2_stance_candidate.py`、`joint_names.py`、`palm_spatial_probe.py` 与 FK/碰撞核心由 A/各原执行者维护，E 不同时修改。E 将读回异常交限位 PD 专项步骤 3/4 归因，不借接线改网格或正式驱动；本轮用户授权的具名过滤只写记录绑定的隔离副本，集合与适用边界取同一证据。真实末端归属和旧资产解除证据继续按本表各自回交。
 
