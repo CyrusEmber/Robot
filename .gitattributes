@@ -20,3 +20,7 @@
 *.stl -text
 *.blend -text
 *.pt -text
+
+# Diagnostic evidence hashes bind original bytes, including historical CRLF reports.
+/rl_exp/out/** -text
+/rl_exp/tools/diagnose/out/** -text

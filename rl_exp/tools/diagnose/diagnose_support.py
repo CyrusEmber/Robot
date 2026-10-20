@@ -911,7 +911,7 @@ def main():
     out_dir = _REPO_ROOT / "rl_exp" / "tools" / "diagnose" / "out" / (
         args_cli.label or f"diag_{args_cli.task}_{datetime.datetime.now():%m%d_%H%M%S}"
     )
-    out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir.mkdir(parents=True, exist_ok=False)
 
     terrain_cfg, columns = build_terrain(heights)
     spec = gym.spec(args_cli.task)

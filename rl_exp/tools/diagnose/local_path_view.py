@@ -11,6 +11,7 @@ contact samples, or converts s to seconds. GIF duration is display pacing only. 
 paths render their accepted prefix; neither a failed endpoint nor a fictitious closing
 segment is inserted. Source collision verdicts remain historical, not revalidated here.
 --self_check exercises nonuniform s, slope jumps, partial paths and record validation.
+Python optimization (-O/-OO or PYTHONOPTIMIZE) is refused before input reads.
 Also reads sampled_local_path_combined and sampled_local_path_support_schedule: one
 full-body side/top replay of accepted recorded poses, all four palm markers and phases.
 Recorded analytic dq/dc is distinct from sample secants. Root-translation prerequisites
@@ -28,6 +29,11 @@ import argparse
 import json
 from pathlib import Path
 import sys
+
+# Identity checks below rely on assertions, including when _load is imported directly.
+if sys.flags.optimize != 0:
+    raise RuntimeError('local_path_view does not support Python optimization (-O/-OO or PYTHONOPTIMIZE); '
+                       'identity validation requires assertions')
 
 import numpy as np
 
