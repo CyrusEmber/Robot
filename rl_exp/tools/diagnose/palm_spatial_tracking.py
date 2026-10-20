@@ -118,6 +118,145 @@ def _level_fixture(document, out, plan_path):
     return plan
 
 
+def _fresh_inputs(args):
+    from types import SimpleNamespace as NS
+    from palm_spatial_inertia import _validate_inputs, _comparison
+    assert args.all_joints, 'fresh inertia requires all_joints'
+    assert not any(getattr(args, n, None) for n in (
+        'combined', 'gain_reference', 'level_leg_plan', 'self_weight_joint',
+        'settle_video', 'all_joints_video', 'free_base_video', 'video_path', 'enable_cameras'))
+    assert getattr(args, 'wrist_frequency_hz', 1.) == 1.
+    assert wiring.binding.sha256_file(args.inertia_report) == args.approved_inertia_sha256, 'inertia approval mismatch'
+    reference = json.loads(args.inertia_report.read_text(encoding='utf-8'))
+    assert reference['completed'] and reference['status'] == 'authored_inertia_and_mass_matrix_verified'
+    approvals = reference['approvals']
+    def approved_path(key):
+        matches = [Path(p) for p, digest in reference['input'].items() if digest == approvals[key]]
+        assert len(matches) == 1, 'approval input must be unique'
+        return matches[0]
+    reset, manifest, pose, _, fresh = _validate_inputs(NS(
+        reset_report=approved_path('reset_report_sha256'), pose_report=approved_path('pose_report_sha256'),
+        approved_reset_sha256=approvals['reset_report_sha256'], approved_pose_sha256=approvals['pose_report_sha256'],
+        out=args.out, repair_inertia=False))
+    assert fresh and manifest.resolve() == Path(reference['replay_manifest']).resolve()
+    assert wiring.binding.sha256_file(manifest) == reference['replay_manifest_sha256'] == reset['replay_manifest_sha256']
+    source = json.loads(manifest.read_text(encoding='utf-8'))
+    names = reference['snapshots'][0]['joint_names']
+    assert len(names) == len(set(names)) == 30 and set(names) == set(source['target_binding']['joint_names'])
+    snapshots = reference['snapshots']
+    assert len(snapshots) == 2 and {s['label'] for s in snapshots} == {'neutral', 'existing_c_0.25'}
+    for snapshot in snapshots:
+        assert snapshot['joint_names'] == names and snapshot['runtime_fixed_base']
+        assert len(snapshot['body_names']) == len(set(snapshot['body_names'])) == 31
+        assert set(snapshot['body_names']) == {'base_link'} | {n.removesuffix('_joint') for n in names}
+        matrix = np.asarray(snapshot['mass_matrix'])
+        assert matrix.shape == (30, 30) and np.isfinite(matrix).all()
+        assert _comparison(matrix, matrix.T)['within_roundoff_budget'] and np.linalg.eigvalsh(matrix).min() > 0
+        assert all(snapshot['mass_matrix_checks'][k]['within_roundoff_budget'] for k in ('urdf', 'usd', 'raw_actor'))
+        assert snapshot['actor_fk_max_error_m_or_rotation'] < 1e-5
+        q = np.asarray(snapshot['q_rad'])
+        expected = np.zeros(30) if snapshot['label'] == 'neutral' else np.array([pose['q_rad'][n] for n in names])
+        assert q.shape == (30,) and np.isfinite(q).all() and abs(q-expected).max() < 1e-5
+    return reference
+
+
+def _tracking_cases(names, all_joints):
+    cases = list(names) if all_joints else [
+        wiring.joint_names.joint_name(leg, root) for leg in wiring.joint_names.LEGS
+        for root in wiring.joint_names.roots_of(wiring.joint_names.PALM_SPATIAL_NAMING, leg)]
+    assert len(cases) == len(set(cases)) == (30 if all_joints else 20)
+    return cases
+
+
+def _drive_targets(robot, backend, desired):
+    from palm_spatial_inertia import _comparison
+    position = backend(robot.root_view.get_dof_position_targets()).copy()
+    velocity = backend(robot.root_view.get_dof_velocity_targets()).copy()
+    checks = dict(position=_comparison(position, desired), velocity=_comparison(velocity, np.zeros_like(desired)))
+    assert all(c['within_roundoff_budget'] for c in checks.values()), 'backend Drive target mismatch'
+    return dict(joint_names=list(robot.joint_names), position_rad=position.tolist(), velocity_rad_s=velocity.tolist(), checks=checks)
+
+
+def _motion_evidence(entities, commanded, model):
+    assert len(entities) == 3 and [e['t_s'] for e in entities] == [0., 2.9, 5.9]
+    neutral, plateau = entities[:2]
+    motion = {}
+    for name in commanded:
+        child = model['joints'][name]['child']
+        index = neutral['body_names'].index(child)
+        delta = float(abs(np.array(plateau['actor_poses_xyzw'][index])-neutral['actor_poses_xyzw'][index]).max())
+        assert delta > 0., 'commanded child actor did not move: ' + child
+        motion[child] = delta
+    return motion
+
+
+def _fresh_self_check(args):
+    from unittest.mock import patch
+    _fresh_inputs(args)
+    for changes in ({'approved_inertia_sha256': '0'*64}, {'all_joints': False}, {'combined': True}, {'gain_reference': args.inertia_report}):
+        candidate = copy.copy(args)
+        vars(candidate).update(changes)
+        try:
+            _fresh_inputs(candidate)
+        except (AssertionError, ValueError):
+            pass
+        else:
+            raise AssertionError('invalid fresh input accepted')
+    reference = json.loads(args.inertia_report.read_text(encoding='utf-8'))
+    names = reference['snapshots'][0]['joint_names']
+    cases = _tracking_cases(names, args.all_joints)
+    assert cases == names and all(n in cases for n in names if n.startswith(('chest_', 'neck_', 'tail')))
+    times = np.arange(1, 1201)*SETTINGS['dt_s']
+    for axis in range(30):
+        desired = np.zeros((1200, 30))
+        desired[:, axis] = [_target(t, .02) for t in times]
+        assert _verdict(desired, desired, axis, times)['passed']
+        assert not _verdict(np.zeros_like(desired), desired, axis, times)['passed']
+        assert not _verdict(np.roll(desired, 1, axis=1), desired, axis, times)['passed']
+    # Exercise real input branches with altered JSON reads; approved artifacts stay untouched.
+    original = Path.read_text
+    for mutate in (lambda r: r['snapshots'][0]['mass_matrix'][0].__setitem__(0, -1.),
+                   lambda r: r['snapshots'][1]['joint_names'].__setitem__(0, 'missing'),
+                   lambda r: r['snapshots'][0]['mass_matrix_checks']['urdf'].update(within_roundoff_budget=False)):
+        broken = copy.deepcopy(reference)
+        mutate(broken)
+        def read(path, *a, **kw):
+            return json.dumps(broken) if path.resolve() == args.inertia_report.resolve() else original(path, *a, **kw)
+        with patch.object(Path, 'read_text', read):
+            try:
+                _fresh_inputs(args)
+            except (AssertionError, ValueError):
+                pass
+            else:
+                raise AssertionError('invalid matrix/name/check accepted')
+    from types import SimpleNamespace as NS
+    position, velocity = np.full(30, .02), np.zeros(30)
+    robot = NS(joint_names=names, root_view=NS(get_dof_position_targets=lambda: position,
+                                             get_dof_velocity_targets=lambda: velocity))
+    _drive_targets(robot, lambda x: x, position.copy())
+    for actual in (np.zeros(30), np.full(30, np.nan), np.full(29, .02)):
+        with patch.object(robot.root_view, 'get_dof_position_targets', return_value=actual):
+            try:
+                _drive_targets(robot, lambda x: x, position)
+            except AssertionError:
+                pass
+            else:
+                raise AssertionError('invalid actual Drive target accepted')
+    # Child actor motion is checked independently of FK generation.
+    model = {'joints': {'hinge': {'child': 'tip'}}}
+    entities = [dict(t_s=t, body_names=['tip'], actor_poses_xyzw=[[0., 0., 0., 0., 0., 0., 1.]]) for t in (0., 2.9, 5.9)]
+    entities[1]['actor_poses_xyzw'][0][3] = .01
+    _motion_evidence(entities, ['hinge'], model)
+    entities[1]['actor_poses_xyzw'][0][3] = 0.
+    try:
+        _motion_evidence(entities, ['hinge'], model)
+    except AssertionError:
+        pass
+    else:
+        raise AssertionError('static child actor accepted')
+    print('SPATIAL_TRACKING_FRESH_INPUT_CHECK_OK')
+
+
 def _self_check():
     assert _target(0, .02) == _target(6, .02) == 0
     assert _target(2, .02) == _target(3, .02) == .02
@@ -141,12 +280,14 @@ def _self_check():
 
 
 def _run(args):
-    reference = json.loads(args.inertia_report.read_text(encoding='utf-8'))
+    fresh = bool(args.approved_inertia_sha256)
+    assert not args.all_joints or fresh, 'all_joints requires approved_inertia_sha256'
+    reference = _fresh_inputs(args) if fresh else json.loads(args.inertia_report.read_text(encoding='utf-8'))
     assert reference['completed'] and reference['status'] == 'authored_inertia_and_mass_matrix_verified'
     manifest = Path(reference['replay_manifest'])
     assert wiring.binding.sha256_file(manifest) == reference['replay_manifest_sha256']
     source = json.loads(manifest.read_text(encoding='utf-8'))
-    assert source['sha256']['urdf'] == wiring.URDF_HASH
+    assert source['sha256']['urdf'] == (source['input']['urdf_sha256'] if fresh else wiring.URDF_HASH)
     neutral = next(s for s in reference['snapshots'] if s['label'] == 'neutral')
     assert neutral['runtime_fixed_base'] and neutral['mass_matrix_checks']['urdf']['within_roundoff_budget']
     inertias = dict(zip(neutral['joint_names'], np.diag(neutral['mass_matrix'])))
@@ -173,12 +314,19 @@ def _run(args):
     out = args.out.resolve()
     assert wiring.REPO / 'rl_exp/out' in out.parents and not out.exists()
     out.mkdir(parents=True)
-    shutil.copyfile(__file__, out / 'source.py')
+    # compile+exec candidates retain the original __file__ for imports, not source identity.
+    source_path = Path(globals().get('__candidate_source__', __file__))
+    shutil.copyfile(source_path, out / 'source.py')
     result = dict(completed=False, stage='startup', settings=SETTINGS,
                   input={str(args.inertia_report): wiring.binding.sha256_file(args.inertia_report),
                          str(manifest): wiring.binding.sha256_file(manifest)},
-                  code_sha256=wiring.binding.sha256_file(Path(__file__)), cases=[], combined=args.combined,
+                  code_sha256=wiring.binding.sha256_file(source_path), cases=[], combined=args.combined,
                   scope='fixed base at z=2m; zero gravity; registered action manager; zero target velocity; no support')
+    if fresh:
+        result.update(settings={**SETTINGS, 'max_full_runs': 1}, all_joints=True,
+                      approvals={'inertia_report_sha256': args.approved_inertia_sha256, **reference['approvals']},
+                      full_runs_started=1, retry_allowed=False)
+        result['input'].update(reference['input'])
     if gain_source:
         result['gain_source'] = gain_source
         result['settings'] = {**SETTINGS, 'frequency_hz': None, 'gain_source': 'verified standing readback'}
@@ -195,7 +343,7 @@ def _run(args):
         from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper
         from pxr import UsdPhysics
         from rl_exp.tools.verify.baseline_runtime import resolve_task_cfg, joint_reset_errors
-        wiring.check_registered_manifest(manifest)
+        wiring.check_registered_manifest(manifest, measured_order=not fresh)
         tracked = copy.deepcopy(source)
         tracked_manifest = out / 'tracking_manifest.json'
         tracked['target_binding']['source'] = str(tracked_manifest)
@@ -259,10 +407,17 @@ def _run(args):
         result['action_names'] = action_names
         tree = ET.parse(target['urdf']).getroot()
         bounds = {j.get('name'): [float(j.find('limit').get(k)) for k in ('lower', 'upper')] for j in tree.findall('joint')}
-        cases = [wiring.joint_names.joint_name(leg, root) for leg in wiring.joint_names.LEGS
-                 for root in wiring.joint_names.roots_of(wiring.joint_names.PALM_SPATIAL_NAMING, leg)]
-        assert len(cases) == 20 and len(set(cases)) == 20
+        cases = _tracking_cases(names, args.all_joints)
         model = None
+        if fresh:
+            from palm_spatial_inertia import csc
+            model = csc.load_urdf(Path(target['urdf']))
+            assert robot.is_fixed_base and len(robot.body_names) == 31
+            gravity = {p.GetName(): p.GetAttribute('physxRigidBody:disableGravity').Get()
+                       for p in live.sim.stage.Traverse() if p.HasAPI(UsdPhysics.RigidBodyAPI)}
+            assert len(gravity) == 31 and all(v is True for v in gravity.values())
+            result['readbacks'].update(fixed_base=True, body_disable_gravity=gravity)
+            assert np.allclose(result['readbacks']['position_limits'], [bounds[n] for n in names], atol=1e-6)
         if args.combined:
             from palm_spatial_inertia import csc
             model = csc.load_urdf(Path(target['urdf']))
@@ -292,6 +447,8 @@ def _run(args):
             assert all(bounds[n][0] <= min(0, a) and max(0, a) <= bounds[n][1] for n, a in amplitudes.items())
             rows, q_rows, target_rows, entities, max_contact = [], [], [], [], 0.
             level_errors, baseline, stop = [], None, None
+            if fresh:
+                entities.append(dict(t_s=0., **_entity_snapshot(robot, model)))
             for t in times:
                 action = torch.zeros((1, len(action_names)), device=args.device)
                 desired = np.zeros(len(names))
@@ -301,6 +458,7 @@ def _run(args):
                 live.action_manager.process_action(action)
                 live.action_manager.apply_action()
                 live.scene.write_data_to_sim()
+                drive = _drive_targets(robot, backend, desired) if fresh else None
                 live.sim.step(render=False)
                 live.scene.update(dt)
                 q = robot.data.joint_pos.torch[0].cpu().numpy().copy()
@@ -314,6 +472,8 @@ def _run(args):
                 requested = read_kp*(desired-q)-read_kd*v
                 rows.append(dict(t_s=float(t), q_rad=q.tolist(), velocity_rad_s=v.tolist(), target_rad=desired.tolist(),
                                  reconstructed_pd_request_nm=requested.tolist(), max_contact_n=force))
+                if fresh:
+                    rows[-1]['backend_drive_targets'] = drive
                 if args.level_leg_plan:
                     pose = robot.data.body_link_pose_w.torch[0, chest_id].cpu().numpy()
                     level_error = float(abs(_rotation(pose[3:])[:, 2]-[0., 0., 1.]).max())
@@ -345,6 +505,9 @@ def _run(args):
             verdict.update(joint=case, commanded_joints=commanded, amplitudes_rad=amplitudes, max_contact_n=max_contact)
             if not args.combined and not args.level_leg_plan:
                 verdict['amplitude_rad'] = amplitudes[commanded[0]]
+            if fresh:
+                assert len(rows) == 1200
+                verdict['commanded_child_actor_motion'] = _motion_evidence(entities, commanded, model)
             if entities:
                 verdict['entity_fk_max_error'] = max(max(e['actor_fk_max_error'].values()) for e in entities)
             result['cases'].append(verdict)
@@ -383,12 +546,17 @@ if __name__ == '__main__':
     parser.add_argument('--inertia_report', type=Path)
     parser.add_argument('--out', type=Path)
     parser.add_argument('--self_check', action='store_true')
+    parser.add_argument('--approved_inertia_sha256')
+    parser.add_argument('--all_joints', action='store_true')
     parser.add_argument('--combined', action='store_true')
     parser.add_argument('--gain_reference', type=Path)
     parser.add_argument('--level_leg_plan', type=Path)
     parser.add_argument('--wrist_frequency_hz', type=float, choices=(1., 6.), default=1.)
     if '--self_check' in sys.argv:
+        args = parser.parse_args()
         _self_check()
+        if args.approved_inertia_sha256:
+            _fresh_self_check(args)
     else:
         from isaaclab.app import AppLauncher
         AppLauncher.add_app_launcher_args(parser)
