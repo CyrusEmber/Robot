@@ -26,6 +26,19 @@
 
 历史四轴 `rl_exp/tools/diagnose/palm_gait_kinematics.py:Leg` 核对真实树并拒绝额外轴。保留它作旧样本对照，不为接新资产而关闭拒错，也不靠补数组长度代替角色、坐标系和任务迁移。
 
+## 通用 precheck 接入与复用
+
+机体预检选 `rl_exp/tools/diagnose/body_precheck.py`，不再复制腿数扫描、FK、碰撞器或另建报告框架；先按模块文档核支持域，再用同目录 `body_precheck_lizard2.json` 看普通数据接线。配置中的真实链、角色、完整关节姿态、根位姿、需求与过滤须重新绑定自身输入，不能只换 naming 或沿用样例判词。
+
+- **已有方法**：`joint_limits`、`self_collision` 为采样几何基线；`end_position`、`ground` 只检查显式位置/平面；`contact_pairs` 仅免正工程间隙，不免相交。`role_consistency` 消费独立角色批准；`source_consistency` 消费独立全 link 姿态；`source_geometry` 消费已有保存重开源枢轴与视觉网格样点。参数、源格式、支持矩阵唯一归模块文档，反例唯一归 `rl_exp/tools/verify/test_body_precheck.py`。
+- **源样本接线**：`inputs.source_evidence` 绑定已审样本文件；`source_geometry.params.source_cases` 映射本任务与源快照，完整 q 须一致。源 q 缺项只有显式零复位来源才补零；视觉网格及 blend 从证据中的批准摘要核身份。源对象索引不等于导出索引，最近顶点比较不是一对一随动证明。
+- **缺证出口**：源几何样点不替代完整朝向、实体归属/角色独立性或连接区域判据。未知源格式、不支持变换具名拒绝，必需缺证/未执行保持未判；采样覆盖不等于任务通过。不从同一 FK 生成“独立”源姿态，不排除连接对来取得通过。
+- **变化复验**：需求/角色重绑受影响行；轴、pivot、树变化涉及全部后代链和组合；网格/归属变化涉及实体对、环境及源样点；新正式导出核新身份与支持域，旧检查点不自动沿用。责任路由取 `work/active/robot-body-precheck.md`，结果只取验收记录。
+
+只有一个本地真实构型时，继续用它接实际需求、消费证据及拒错，不为凑跨构型验收下载/生成或改名复制第二机体。另一真实构型是关闭前置，不是所有增量施工的前置；输入与自身任务到位后先预查支持域，再复用同一入口。接口未满足的新能力仅增量扩既有入口，不造平行工具。
+
+当前入口及源样本切片证据见 `acceptance/records/2026-10-20-robot-body-precheck-entry.md`、`acceptance/records/2026-10-20-robot-body-precheck-plan-fixes.md`、`acceptance/records/2026-10-20-robot-body-precheck-source-geometry.md`。复读命令及失败类别在记录，不在指南复制数值或通过数。
+
 ## 最小增量探测
 
 1. **绑定输入**：明确源／候选 URDF、网格、轴／限位、代码、命名与地面／根姿态。摘要复用 `rl_exp/tools/runrecord/binding.py`。先核已有报告身份与覆盖，再决定哪些证据直接沿用；若需新输出，使用隔离的新目录，不覆盖历史产物。
