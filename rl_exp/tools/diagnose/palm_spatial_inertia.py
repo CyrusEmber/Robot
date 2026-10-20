@@ -76,6 +76,44 @@ def _principal_repair(diagonal, quat, expected):
     return inverse
 
 
+def repair_fresh_stage(stage, urdf):
+    """Check fresh converted mass/COM/tensors; repair only explained principal axes."""
+    from pxr import Gf, UsdPhysics
+    links = {link.get('name'): link for link in ET.parse(urdf).getroot().findall('link')}
+    bodies = [p for p in stage.Traverse() if p.HasAPI(UsdPhysics.RigidBodyAPI)]
+    assert len(bodies) == len(links) == 31 and {p.GetName() for p in bodies} == set(links)
+    original = stage.GetRootLayer().ExportToString()
+    changes, pending = [], []
+    for prim in bodies:
+        link = links[prim.GetName()]
+        origin = link.find('inertial/origin')
+        assert np.all(np.fromstring(origin.get('rpy', '0 0 0'), sep=' ') == 0)
+        api = UsdPhysics.MassAPI(prim)
+        assert _comparison(float(api.GetMassAttr().Get()), float(link.find('inertial/mass').get('value')))['within_roundoff_budget'], 'mass mismatch'
+        assert _comparison(list(api.GetCenterOfMassAttr().Get()), np.fromstring(origin.get('xyz'), sep=' '))['within_roundoff_budget'], 'COM mismatch'
+        spec = link.find('inertial/inertia')
+        expected = np.array([[float(spec.get(k)) for k in row]
+                             for row in (('ixx', 'ixy', 'ixz'), ('ixy', 'iyy', 'iyz'), ('ixz', 'iyz', 'izz'))])
+        diagonal = np.diag(list(api.GetDiagonalInertiaAttr().Get()))
+        old = api.GetPrincipalAxesAttr().Get()
+        quat = [*old.GetImaginary(), old.GetReal()]
+        replacement = _principal_repair(diagonal, quat, expected)
+        if replacement is not None:
+            pending.append((api.GetPrincipalAxesAttr(), old, replacement, prim.GetName()))
+    # No stage writes until every tensor has an explanation.
+    for attr, old, replacement, name in pending:
+        attr.Set(Gf.Quatf(float(replacement[3]), Gf.Vec3f(*map(float, replacement[:3]))))
+        changes.append({'link': name, 'before_xyzw': [*old.GetImaginary(), old.GetReal()],
+                        'after_xyzw': replacement.tolist()})
+    corrected = stage.GetRootLayer().ExportToString()
+    for attr, old, _, _ in pending:
+        attr.Set(old)
+    assert stage.GetRootLayer().ExportToString() == original, 'fields beyond principal axes changed'
+    assert stage.GetRootLayer().ImportFromString(corrected)
+    return {'links_verified': len(bodies), 'changes': changes, 'only_principal_axes_delta_verified': True,
+            'scope': 'fresh authored mass/COM/tensors only; runtime mass matrix remains unverified'}
+
+
 def _repair_manifest(manifest, out):
     from pxr import Gf, Usd, UsdPhysics
     document = json.loads(manifest.read_text(encoding='utf-8'))
@@ -212,8 +250,17 @@ def _self_check(break_projection=False):
     bodies = {'tip': {'mass': 2., 'com': np.array([.5, 0., 0.]), 'inertia': np.diag([.1, .2, .3])}}
     assert np.allclose(_project(joints, {'tip': np.eye(4)}, ['hinge'], bodies), [[.8]])
     assert not _comparison([1.], [2.])['within_roundoff_budget']
-    fixed = _principal_repair(np.diag([.13, .17, .24]), [.5, .5, .5, .5], np.diag([.17, .24, .13]))
+    diagonal = np.diag([.13, .17, .24])
+    assert _principal_repair(diagonal, [0., 0., 0., 1.], diagonal) is None
+    fixed = _principal_repair(diagonal, [.5, .5, .5, .5], np.diag([.17, .24, .13]))
     assert np.array_equal(fixed, [-.5, -.5, -.5, .5])
+    for expected in (diagonal + np.eye(3), np.full((3, 3), np.nan)):
+        try:
+            _principal_repair(diagonal, [.5, .5, .5, .5], expected)
+        except AssertionError:
+            pass
+        else:
+            raise AssertionError('unexplained/nonfinite inertia accepted')
     print('SPATIAL_INERTIA_SELF_CHECK_OK')
 
 

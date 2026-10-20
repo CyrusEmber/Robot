@@ -52,6 +52,148 @@ def check_build(path):
     return doc
 
 
+def check_export(path, approved_report, approved_urdf):
+    """Bind explicit approval to every export file before copying or starting Kit."""
+    path = path.resolve()
+    require(path.is_relative_to((REPO / "rl_exp/out").resolve()), "export report must be isolated")
+    require(approved_report and approved_urdf, "independent export and URDF approvals required")
+    require(binding.sha256_file(path) == approved_report, "export report approval mismatch")
+    doc = json.loads(path.read_text(encoding="utf-8"))
+    require(doc["status"] == "KINEMATIC_CANDIDATE_NOT_ADOPTED"
+            and doc["naming"] == "palm_spatial" and doc["robot"] == "lizard2_palm_spatial",
+            "export identity mismatch")
+    require(doc["mass_policy"] == "reference_full_link_inertial"
+            and doc["links"] == 31 and doc["joints"] == 30, "export structure mismatch")
+    approved_sources = {"build_report": (BUILD, "59473f8c345dce48e8ee379c0972c928184f768be85afca948ac812a666fa6f8"),
+                        "source_blend": (BUILD.parent / "palm_spatial.blend", BLEND_HASH),
+                        "reference_urdf": (BUILD.parent / "palm_spatial.urdf", URDF_HASH)}
+    for field, (source, digest) in approved_sources.items():
+        require(Path(doc[field]).resolve() == source.resolve(), "export source path mismatch: " + field)
+        require(doc["input_sha256"].get(doc[field]) == digest
+                and binding.sha256_file(source) == digest, "export source hash mismatch: " + field)
+    check_build(BUILD)
+    files = doc["files_sha256"]
+    urdf_name = "lizard2_palm_spatial.urdf"
+    require(files.get(urdf_name) == approved_urdf, "export URDF approval mismatch")
+    sources = set()
+    for name, digest in files.items():
+        relative = Path(name)
+        source = (path.parent / relative).resolve()
+        require(not relative.is_absolute() and ".." not in relative.parts
+                and source.is_relative_to(path.parent) and source not in sources,
+                "export file path escape/alias")
+        require(name == urdf_name or (relative.parts[0] == "meshes" and relative.suffix in (".obj", ".stl")),
+                "unexpected export file")
+        sources.add(source)
+        require(binding.sha256_file(source) == digest, "export file hash mismatch: " + name)
+    tree = ET.parse(path.parent / urdf_name).getroot()
+    reference = ET.parse(BUILD.parent / "palm_spatial.urdf").getroot()
+    def attributes(element):
+        require(element is not None, "missing export/reference XML element")
+        # Attribute order and whitespace text/tails are serialization, not URDF values.
+        require(not (element.text or "").strip(), "unexpected URDF element text")
+        return element.tag, dict(element.attrib), [attributes(child) for child in element]
+
+    require([attributes(j) for j in tree.findall("joint")] ==
+            [attributes(j) for j in reference.findall("joint")], "export joint definitions differ")
+    links = tree.findall("link")
+    require([l.get("name") for l in links] == [l.get("name") for l in reference.findall("link")],
+            "export link order differs")
+    for actual, expected in zip(links, reference.findall("link")):
+        require(attributes(actual.find("inertial")) == attributes(expected.find("inertial")),
+                "export full inertia differs: " + actual.get("name"))
+    refs = set()
+    for mesh in tree.findall(".//mesh"):
+        name = mesh.get("filename")
+        require(name in files and Path(name).parts[0] == "meshes", "unbound export mesh")
+        refs.add(name)
+    require(refs and len(files) == 73, "export file coverage mismatch")
+    return doc
+
+
+def fresh_export_out(out, source):
+    out = out.resolve()
+    root = (REPO / "rl_exp/out").resolve()
+    require(out.is_relative_to(root) and out != root and not out.exists()
+            and not source.resolve().is_relative_to(out), "fresh isolated export output required")
+    require(out.parent.is_dir(), "output parent must already exist")
+    return out
+
+
+def export_self_check(args):
+    """Exercise approved files and real corruptions offline; temporary copies are removed."""
+    from tempfile import TemporaryDirectory
+    from unittest.mock import patch
+
+    path = args.export_report.resolve()
+    approved = args.approved_export_sha256
+    urdf_hash = args.approved_urdf_sha256
+    doc = check_export(path, approved, urdf_hash)
+    negatives = {}
+
+    def rejected(label, operation, expected):
+        try:
+            operation()
+        except (ValueError, FileNotFoundError) as error:
+            require(expected in str(error), label + " unexpected rejection: " + str(error))
+            negatives[label] = str(error)
+        else:
+            raise ValueError("export destructive test escaped: " + label)
+
+    # Approval must fail before report/URDF parsing, not merely later validation.
+    with patch.object(json, "loads", side_effect=AssertionError("parsed unapproved report")):
+        rejected("wrong_report_approval", lambda: check_export(path, "0" * 64, urdf_hash),
+                 "export report approval mismatch")
+    with patch.object(ET, "parse", side_effect=AssertionError("parsed unapproved URDF")):
+        rejected("wrong_urdf_approval", lambda: check_export(path, approved, "0" * 64),
+                 "export URDF approval mismatch")
+    with TemporaryDirectory(prefix="palm_export_check_", dir=REPO / "rl_exp/out") as temporary:
+        root = Path(temporary)
+        copied = root / "export.json"
+        for name in doc["files_sha256"]:
+            target = root / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(path.parent / name, target)
+        shutil.copyfile(path, copied)
+        check_export(copied, approved, urdf_hash)
+        mesh = next(name for name in doc["files_sha256"] if name.endswith(".obj"))
+        (root / mesh).unlink()
+        rejected("missing_artifact", lambda: check_export(copied, approved, urdf_hash), mesh)
+        shutil.copyfile(path.parent / mesh, root / mesh)
+        name = "lizard2_palm_spatial.urdf"
+        # Reapprove each corrupted report/URDF: semantic checks, not hashes, must reject it.
+        for element, key in (("inertia", "ixx"), ("inertia", "iyy"), ("inertia", "izz"),
+                             ("inertia", "ixy"), ("inertia", "ixz"), ("inertia", "iyz"),
+                             ("mass", "value"), ("origin", "xyz"), ("origin", "rpy")):
+            tree = ET.parse(path.parent / name)
+            spec = tree.getroot().find("link/inertial/" + element)
+            require(spec is not None, "self-check missing inertial element")
+            spec.set(key, "1 2 3" if element == "origin" else str(float(spec.get(key)) + 1.))
+            tree.write(root / name, encoding="utf-8", xml_declaration=True)
+            broken = copy.deepcopy(doc)
+            digest = binding.sha256_file(root / name)
+            broken["files_sha256"][name] = digest
+            copied.write_text(json.dumps(broken), encoding="utf-8")
+            rejected("full_inertial_" + key,
+                     lambda: check_export(copied, binding.sha256_file(copied), digest),
+                     "export full inertia differs")
+        broken = copy.deepcopy(doc)
+        broken["input_sha256"][broken["source_blend"]] = "0" * 64
+        copied.write_text(json.dumps(broken), encoding="utf-8")
+        rejected("old_source_binding", lambda: check_export(copied, binding.sha256_file(copied), urdf_hash),
+                 "export source hash mismatch")
+        require(fresh_export_out(root / "fresh", path.parent) == root / "fresh", "fresh output positive failed")
+        for label, out, source in (("existing_output", root, path.parent),
+                                   ("source_inside_output", root / "fresh", root / "fresh/source"),
+                                   ("outside_output", REPO / "unauthorized", path.parent),
+                                   ("missing_parent", root / "missing/fresh", path.parent)):
+            rejected(label, lambda: fresh_export_out(out, source),
+                     "output parent" if label == "missing_parent" else "fresh isolated")
+    print(json.dumps({"export_self_check": "PASS", "files_verified": len(doc["files_sha256"]),
+                      "approved_export_sha256": approved, "approved_urdf_sha256": urdf_hash,
+                      "negatives": negatives, "scope": "real export validation; no USD conversion/runtime"}), flush=True)
+
+
 def exact_channels(expected, names, ids, runtime):
     require(len(names) == len(set(names)) and set(names) == set(expected), "action coverage/duplicate mismatch")
     require(len(ids) == len(names), "action ids width mismatch")
@@ -236,7 +378,7 @@ REGISTERED_INPUT = OUT / "attempt06"
 FIXED_USD_HASH = "40f37d124d17f69b201c06f49173681367370a66a38431bcbda3d5e1192f3f79"
 
 
-def check_registered_manifest(path):
+def check_registered_manifest(path, *, measured_order=True):
     """Exercise the real registered loader offline, including drive/action coverage."""
     import rl_exp.tasks
     from rl_exp.tools.verify.baseline_runtime import resolve_task_cfg
@@ -294,9 +436,12 @@ def check_registered_manifest(path):
         require(all(term is None for term in vars(cfg.events).values()), "active reset/randomization event")
     require(target["end_links"] == dict(zip(joint_names.LEGS, joint_names.contact_body_names(joint_names.PALM_SPATIAL_NAMING))),
             "foreign end link")
-    require(target["runtime_joint_order"] == json.loads(
-        (REGISTERED_INPUT / "runtime_report.json").read_text())["mapping"]["runtime_joint_order"],
-        "runtime order not measured input")
+    if measured_order:
+        require(target["runtime_joint_order"] == json.loads(
+            (REGISTERED_INPUT / "runtime_report.json").read_text())["mapping"]["runtime_joint_order"],
+            "runtime order not measured input")
+    else:
+        require(target["runtime_joint_order"] is None, "fresh export must not inherit old runtime order")
     return {"status": "PASS", "task": REGISTERED_TASK, "joints": len(names),
             "actions": len(actions), "actuators": list(robot.actuators), "feet": target["end_links"]}
 
@@ -324,6 +469,21 @@ def prepare_registered(args):
     target = joint_names.binding_for_target(str(usd), str(manifest), joint_names.PALM_SPATIAL_NAMING,
                                            joint_names=names)
     target.update(task=REGISTERED_TASK, urdf=str(urdf), runtime_joint_order=runtime)
+    config = registered_config(names, joints)
+    document = {"format": "palm-spatial-registered-diagnostic-v2", "target_binding": target,
+                "joint_order": names, "runtime_joint_order": runtime, "config": config,
+                "sha256": {"target": FIXED_USD_HASH, "urdf": URDF_HASH},
+                "scope": "registered mother routing only; isolated deepcopy; no recipe/PD/support/performance verdict",
+                "input": {"runtime_report": str(report_path), "runtime_report_sha256": binding.sha256_file(report_path),
+                          "old_manifest_sha256": binding.sha256_file(REGISTERED_INPUT / "manifest.json"),
+                          "build": str(BUILD), "build_sha256": binding.sha256_file(BUILD)}}
+    out.mkdir(parents=True, exist_ok=False)
+    write_json(manifest, document)
+    verify_registered(manifest)
+
+
+def registered_config(names, joints):
+    """Reuse the deterministic zero-gain mother routing; no runtime order is inferred."""
     legs = [n for n in names if n.split("_", 1)[0] in joint_names.LEGS]
     ends = [joint_names.joint_name(leg, joint_names.roots_of(joint_names.PALM_SPATIAL_NAMING, leg)[-1])
             for leg in joint_names.LEGS]
@@ -374,16 +534,7 @@ def prepare_registered(args):
         "events.reset_base.params.velocity_range": {axis: [0., 0.] for axis in
                                                    ("x", "y", "z", "roll", "pitch", "yaw")},
     })
-    document = {"format": "palm-spatial-registered-diagnostic-v2", "target_binding": target,
-                "joint_order": names, "runtime_joint_order": runtime, "config": config,
-                "sha256": {"target": FIXED_USD_HASH, "urdf": URDF_HASH},
-                "scope": "registered mother routing only; isolated deepcopy; no recipe/PD/support/performance verdict",
-                "input": {"runtime_report": str(report_path), "runtime_report_sha256": binding.sha256_file(report_path),
-                          "old_manifest_sha256": binding.sha256_file(REGISTERED_INPUT / "manifest.json"),
-                          "build": str(BUILD), "build_sha256": binding.sha256_file(BUILD)}}
-    out.mkdir(parents=True, exist_ok=False)
-    write_json(manifest, document)
-    verify_registered(manifest)
+    return config
 
 
 def verify_registered(manifest):
@@ -435,20 +586,34 @@ def verify_registered(manifest):
 
 def run(args, result):
     result["stage"] = "input"
-    doc = check_build(args.build)
-    out = args.out.resolve()
-    require(out == OUT.resolve() or out.parent == OUT.resolve(), "only authorized output tree allowed")
+    exported = args.export_report is not None
+    if exported:
+        doc = check_export(args.export_report, args.approved_export_sha256, args.approved_urdf_sha256)
+        source = args.export_report.resolve().parent
+        files = doc["files_sha256"]
+        out = fresh_export_out(args.out, source)
+    else:
+        doc = check_build(args.build)
+        source, files = BUILD.parent, doc["candidate_files_sha256"]
+        out = args.out.resolve()
+        require(out == OUT.resolve() or out.parent == OUT.resolve(), "only authorized output tree allowed")
     out.mkdir(exist_ok=False)
     result["output"] = str(out)
     result["input"] = {"build": str(BUILD), "build_sha256": binding.sha256_file(BUILD),
-                       "candidate_files_sha256": doc["candidate_files_sha256"]}
+                       "candidate_files_sha256": files}
+    if exported:
+        result["input"].update(export_report=str(args.export_report.resolve()),
+            export_report_sha256=args.approved_export_sha256, urdf_sha256=args.approved_urdf_sha256)
     result["code"] = {"path": str(Path(__file__).resolve()), "sha256": binding.sha256_file(Path(__file__)),
                       "revision": binding.git_rev(REPO)}
-    for name in doc["candidate_files_sha256"]:
+    for name in files:
         target = out / name
         target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(BUILD.parent / name, target)
-        require(binding.sha256_file(target) == doc["candidate_files_sha256"][name], "copy mismatch")
+        shutil.copyfile(source / name, target)
+        require(binding.sha256_file(target) == files[name], "copy mismatch")
+    if exported:
+        shutil.copyfile(out / "lizard2_palm_spatial.urdf", out / "palm_spatial.urdf")
+        shutil.copyfile(args.export_report, out / "input_export.json")
     shutil.copyfile(BUILD, out / "input_build.json")
     shutil.copyfile(Path(__file__), out / "runtime_source.py")
     tree = ET.parse(out / "palm_spatial.urdf").getroot()
@@ -536,7 +701,8 @@ def run(args, result):
     except ValueError as error:
         adapter["without_residual_fix"].update(status="REJECTED", error=str(error))
     else:
-        raise ValueError("without-fix snapshot did not reproduce residual root defect")
+        require(exported, "without-fix snapshot did not reproduce residual root defect")
+        adapter["without_residual_fix"]["status"] = "ALREADY_CORRECT"
     adapter["removed_residual_schemas"] = []
     if base.HasAPI(UsdPhysics.ArticulationRootAPI):
         # Multi-physics importer metadata may re-include PhysicsArticulationRootAPI.
@@ -562,6 +728,33 @@ def run(args, result):
     isolated.GetRootLayer().Save()
     adapter["usd_sha256_after"] = binding.sha256_file(usd)
     write_json(out / "fixed_root_adapter.json", adapter)
+    if exported:
+        from palm_spatial_inertia import repair_fresh_stage
+        result["inertia_repair"] = repair_fresh_stage(isolated, out / "palm_spatial.urdf")
+        isolated.GetRootLayer().Save()
+        require(len([p for p in isolated.Traverse() if p.IsA(UsdPhysics.RevoluteJoint)]) == 30,
+                "fresh USD joint count mismatch")
+        manifest = out / "registered_manifest.json"
+        target = joint_names.binding_for_target(str(usd), str(manifest),
+            joint_names.PALM_SPATIAL_NAMING, joint_names=names)
+        target.update(task=REGISTERED_TASK, urdf=str(out / "palm_spatial.urdf"))
+        document = {"format": "palm-spatial-registered-diagnostic-v2", "target_binding": target,
+                    "joint_order": names, "config": registered_config(names, joints),
+                    "sha256": {"target": binding.sha256_file(usd), "urdf": args.approved_urdf_sha256},
+                    "input": result["input"], "inertia_repair": result["inertia_repair"],
+                    "scope": "fresh export conversion; runtime order/reset/action/contact/collectors NOT yet measured"}
+        write_json(manifest, document)
+        result["offline_contract"] = check_registered_manifest(manifest, measured_order=False)
+        result.update(completed=True, stage="prepared", manifest=str(manifest),
+                      manifest_sha256=binding.sha256_file(manifest),
+                      status="fresh_export_prepared_runtime_unverified")
+        check_export(args.export_report, args.approved_export_sha256, args.approved_urdf_sha256)
+        result["artifacts"] = {str(p.relative_to(out)): binding.sha256_file(p)
+                               for p in sorted(out.rglob("*")) if p.is_file()}
+        write_json(out / "prepare_report.json", result)
+        print("EXPORT_PREPARED", str(manifest), result["manifest_sha256"], flush=True)
+        app.close()
+        return
     target = joint_names.binding_for_target(str(usd), str(out / "manifest.json"),
                                           joint_names.PALM_SPATIAL_NAMING, joint_names=names)
     target.update(task=DIAGNOSTIC_TASK, urdf=str(out / "palm_spatial.urdf"))
@@ -796,7 +989,7 @@ def run(args, result):
     app.close()
 
 
-def connection_geometry():
+def connection_geometry(urdf=None):
     """Scan actual neutral meshes before allowing exactly the six connected pairs [m]."""
     import itertools
     import numpy as np
@@ -804,7 +997,7 @@ def connection_geometry():
 
     doc = check_build(BUILD)
     csc = motion.gait.csc
-    model = csc.load_urdf(BUILD.parent / "palm_spatial.urdf")
+    model = csc.load_urdf(urdf if urdf is not None else BUILD.parent / "palm_spatial.urdf")
     collision = motion.Collision(model, 1e-9)
     remap = {d["abduct"]: d["twist"] for d in doc["definitions"].values()}
     expected = {frozenset(remap.get(n, n) for n in pair) for pair in motion.gait.APPROVED}
@@ -874,9 +1067,32 @@ def reset_probe(args, result):
     from unittest.mock import patch
 
     manifest = args.reset_probe.resolve()
+    exported = args.export_manifest_sha256 is not None
+    if exported:
+        require(args.export_report is not None, "fresh reset requires explicit export report")
+        check_export(args.export_report, args.approved_export_sha256, args.approved_urdf_sha256)
+        require(binding.sha256_file(manifest) == args.export_manifest_sha256, "fresh manifest approval mismatch")
     document = json.loads(manifest.read_text(encoding="utf-8"))
     repaired = document.get("format") == "palm-spatial-registered-diagnostic-v2"
-    if not repaired:
+    if exported:
+        prepared = json.loads((manifest.parent / "prepare_report.json").read_text(encoding="utf-8"))
+        require(prepared["completed"] and prepared["status"] == "fresh_export_prepared_runtime_unverified"
+                and prepared["manifest_sha256"] == args.export_manifest_sha256, "fresh preparation binding mismatch")
+        require(document["input"]["export_report"] == str(args.export_report.resolve())
+                and document["input"]["export_report_sha256"] == args.approved_export_sha256
+                and document["sha256"]["urdf"] == args.approved_urdf_sha256, "fresh export lineage mismatch")
+        usd = Path(document["target_binding"]["target"]).resolve()
+        urdf = Path(document["target_binding"]["urdf"]).resolve()
+        require(usd == manifest.parent / "palm_spatial.usda" and urdf == manifest.parent / "palm_spatial.urdf"
+                and manifest.is_relative_to((REPO / "rl_exp/out").resolve()), "fresh replay path mismatch")
+        require(binding.sha256_file(usd) == document["sha256"]["target"]
+                and binding.sha256_file(urdf) == args.approved_urdf_sha256, "fresh replay file mismatch")
+        for name, digest in prepared["artifacts"].items():
+            source = (manifest.parent / name).resolve()
+            require(source.is_relative_to(manifest.parent) and binding.sha256_file(source) == digest,
+                    "fresh prepared artifact mismatch: " + name)
+        check_registered_manifest(manifest, measured_order=False)
+    elif not repaired:
         require(binding.sha256_file(manifest) ==
                 "30209cfc6237f8d0a6b1a3cbce6d5911c5c5a5e66113cb7473b204f561dab68f",
                 "reset probe manifest changed")
@@ -888,13 +1104,17 @@ def reset_probe(args, result):
     require(not args.repair_connections or repaired, "connection repair requires deterministic reset manifest")
     check_build(BUILD)
     out = args.out.resolve()
-    require(out.parent == REGISTERED_OUT.resolve() and not out.exists(), "fresh registered attempt required")
+    if exported:
+        out = fresh_export_out(out, manifest.parent)
+    else:
+        require(out.parent == REGISTERED_OUT.resolve() and not out.exists(), "fresh registered attempt required")
     out.mkdir(exist_ok=False)
     result.update(output=str(out), stage="app_launch", scope=
                   "registered reset attribution only; explicit-default counterfactual is NOT baseline acceptance")
     shutil.copyfile(Path(__file__), out / "reset_probe_source.py")
     result["input"] = {"manifest": str(manifest), "manifest_sha256": binding.sha256_file(manifest),
-                       "usd_sha256": FIXED_USD_HASH, "urdf_sha256": URDF_HASH}
+                       "usd_sha256": document["sha256"]["target"] if exported else FIXED_USD_HASH,
+                       "urdf_sha256": args.approved_urdf_sha256 if exported else URDF_HASH}
     result["code_sha256"] = binding.sha256_file(Path(__file__))
     from isaaclab.app import AppLauncher
     app = AppLauncher(args).app
@@ -910,11 +1130,12 @@ def reset_probe(args, result):
 
     geometry = None
     if args.repair_connections:
-        geometry = connection_geometry()
+        source_dir = manifest.parent if exported else REGISTERED_INPUT
+        geometry = connection_geometry(source_dir / "palm_spatial.urdf" if exported else None)
         write_json(out / "connection_geometry.json", geometry)
         for name in ("palm_spatial.urdf", "palm_spatial.usda"):
-            shutil.copyfile(REGISTERED_INPUT / name, out / name)
-        shutil.copytree(REGISTERED_INPUT / "meshes", out / "meshes")
+            shutil.copyfile(source_dir / name, out / name)
+        shutil.copytree(source_dir / "meshes", out / "meshes")
         isolated = Usd.Stage.Open(str(out / "palm_spatial.usda"))
         bodies = {p.GetName(): p for p in isolated.Traverse() if p.HasAPI(UsdPhysics.RigidBodyAPI)}
         approved = [row["pair"] for row in geometry["pairs"]]
@@ -930,7 +1151,7 @@ def reset_probe(args, result):
             prim = bodies[a]
             prim.RemoveProperty("physics:filteredPairs")
             isolated.GetRootLayer().GetPrimAtPath(prim.GetPath()).SetInfo("apiSchemas", original_schema_ops[a])
-        source_stage = Usd.Stage.Open(str(REGISTERED_INPUT / "palm_spatial.usda"))
+        source_stage = Usd.Stage.Open(str(source_dir / "palm_spatial.usda"))
         require(isolated.GetRootLayer().ExportToString() == source_stage.GetRootLayer().ExportToString(),
                 "repaired USD changed fields other than six named filters")
         require(isolated.GetRootLayer().ImportFromString(delta_layer), "cannot restore isolated filters")
@@ -942,7 +1163,7 @@ def reset_probe(args, result):
         repaired_document["sha256"]["target"] = binding.sha256_file(out / "palm_spatial.usda")
         repaired_document["connection_filter"] = {"pairs": approved, "geometry": str(out / "connection_geometry.json"),
             "geometry_sha256": binding.sha256_file(out / "connection_geometry.json"),
-            "source_usd_sha256": FIXED_USD_HASH,
+            "source_usd_sha256": result["input"]["usd_sha256"],
             "scope": "six named connections only; neutral reset/first-step diagnostic, no ROM or PD verdict"}
         write_json(repaired_manifest, repaired_document)
         manifest = repaired_manifest
@@ -951,7 +1172,7 @@ def reset_probe(args, result):
     cfg.sim.device = args.device
     result["replay_manifest"] = str(manifest)
     result["replay_manifest_sha256"] = binding.sha256_file(manifest)
-    result["offline_contract"] = check_registered_manifest(manifest)
+    result["offline_contract"] = check_registered_manifest(manifest, measured_order=not exported)
     result["quaternion_convention"] = {"order": "xyzw", "source": inspect.getfile(AssetBaseCfg),
                                         "default": list(AssetBaseCfg.InitialStateCfg().rot)}
     result["stages"] = []
@@ -1262,10 +1483,51 @@ def reset_probe(args, result):
                 require(not result["stages"][-1]["strict_reset_errors"], "reset after excitation failed")
             result["status"] = "reset_and_neutral_first_step_verified" if geometry is not None else (
                 "blocked" if first["strict_reset_errors"] else "requires_reset_wiring_review")
+            if exported:
+                # Existing ±0.05 rad wiring budget, zero gain; no added physics steps.
+                phase = "fresh_action_wiring_no_physics_steps"
+                manager = live.action_manager
+                obs_protocol.validate_diagnostic_runtime(target, cfg, robot, sensor, manager)
+                runtime = list(robot.joint_names)
+                channels, ids = [], []
+                for name in manager.active_terms:
+                    term = manager.get_term(name)
+                    selected = list(range(len(runtime)))[term._joint_ids] if isinstance(term._joint_ids, slice) else list(term._joint_ids)
+                    channels.extend(term._joint_names)
+                    ids.extend(int(i) for i in selected)
+                exact_channels(target["joint_names"], channels, ids, runtime)
+                action_samples = []
+                bounds = {j.get("name"): [float(j.find("limit").get(k)) for k in ("lower", "upper")]
+                          for j in ET.parse(target["urdf"]).getroot().findall("joint")}
+                for name in channels:
+                    require(bounds[name][0] <= -.05 <= .05 <= bounds[name][1], "action injection outside limits")
+                    for angle in (-.05, .05):
+                        action = torch.zeros((1, len(channels)), device=live.device)
+                        action[0, channels.index(name)] = angle
+                        manager.process_action(action)
+                        manager.apply_action()
+                        live.scene.write_data_to_sim()
+                        expected = [angle if n == name else 0. for n in runtime]
+                        actual = robot.data.joint_pos_target.torch[0].cpu().tolist()
+                        close_values(actual, expected, 1e-6, "fresh action target")
+                        action_samples.append({"joint": name, "angle_rad": angle, "target_rad": actual})
+                live.reset()
+                require(not joint_reset_errors(robot), "reset after action wiring failed")
+                result["action_wiring"] = {"runtime_joint_order": runtime, "channels": channels,
+                    "samples": action_samples, "scope": "real process/apply/cache targets; no tracking or added physics steps"}
+                replay = copy.deepcopy(json.loads(manifest.read_text(encoding="utf-8")))
+                measured = out / "measured_manifest.json"
+                replay["target_binding"].update(source=str(measured), runtime_joint_order=runtime)
+                replay["runtime_joint_order"] = runtime
+                replay["scope"] = "fresh export measured reset/action/contact routing; no PD/support/collector verdict"
+                write_json(measured, replay)
+                result["measured_manifest"] = str(measured)
+                result["measured_manifest_sha256"] = binding.sha256_file(measured)
             result["baseline_10step"] = "separate real baseline consumer required"
         check_build(BUILD)
         require(binding.sha256_file(args.reset_probe.resolve()) == result["input"]["manifest_sha256"], "input manifest modified")
-        require(binding.sha256_file(REGISTERED_INPUT / "palm_spatial.usda") == FIXED_USD_HASH, "source USD modified")
+        original_usd = Path(document["target_binding"]["target"]) if exported else REGISTERED_INPUT / "palm_spatial.usda"
+        require(binding.sha256_file(original_usd) == result["input"]["usd_sha256"], "source USD modified")
         require(binding.sha256_file(manifest) == result["replay_manifest_sha256"], "replay manifest modified")
         result.update(completed=True, stage="completed")
         write_json(out / "reset_probe_report.json", result)
@@ -1303,28 +1565,59 @@ def main():
     parser.add_argument("--reset_probe", type=Path, help="registered manifest reset/first-step attribution")
     parser.add_argument("--contact_pairs", action="store_true",
                         help="observe exact collider-owner body pairs during --reset_probe only")
-    if "--verify_registered" in sys.argv:
-        verify_registered(parser.parse_args().verify_registered)
+    parser.add_argument("--export_report", type=Path, help="independently approved isolated export report")
+    parser.add_argument("--approved_export_sha256", help="independent approval of export report bytes")
+    parser.add_argument("--approved_urdf_sha256", help="independent approval of exported URDF bytes")
+    parser.add_argument("--export_manifest_sha256", help="independent approval of fresh prepared reset manifest")
+    parser.add_argument("--export_self_check", action="store_true", help="offline real export positive/negative checks")
+    offline = any(flag in sys.argv for flag in ("--verify_registered", "--prepare_registered", "--self_check",
+                                               "--connection_geometry", "--export_self_check"))
+    # Validate new options before importing AppLauncher, including invalid runtime invocations.
+    preliminary, _ = parser.parse_known_args()
+    export_options = (preliminary.export_report, preliminary.approved_export_sha256,
+                      preliminary.approved_urdf_sha256)
+    if any(value is not None for value in export_options) and not all(export_options):
+        parser.error("--export_report requires nonempty --approved_export_sha256 and --approved_urdf_sha256")
+    for field in ("approved_export_sha256", "approved_urdf_sha256", "export_manifest_sha256"):
+        value = getattr(preliminary, field)
+        if value is not None and (len(value) != 64 or any(c not in "0123456789abcdef" for c in value)):
+            parser.error("--" + field + " must be a nonempty lowercase SHA256")
+    if preliminary.export_manifest_sha256 is not None and not (preliminary.reset_probe and all(export_options)):
+        parser.error("--export_manifest_sha256 requires --reset_probe and approved export parameters")
+    if preliminary.export_report and preliminary.reset_probe and preliminary.export_manifest_sha256 is None:
+        parser.error("fresh export --reset_probe requires --export_manifest_sha256")
+    if preliminary.export_self_check and (not all(export_options) or preliminary.reset_probe):
+        parser.error("--export_self_check requires approved export parameters without --reset_probe")
+    if preliminary.export_report and offline and not preliminary.export_self_check:
+        parser.error("export parameters are only valid for fresh conversion/reset or --export_self_check")
+    if not offline:
+        from isaaclab.app import AppLauncher
+        AppLauncher.add_app_launcher_args(parser)
+    args = parser.parse_args()
+    if args.export_self_check:
+        export_self_check(args)
         return
-    if "--prepare_registered" in sys.argv:
-        prepare_registered(parser.parse_args())
+    if args.verify_registered:
+        verify_registered(args.verify_registered)
         return
-    if "--self_check" in sys.argv:
+    if args.prepare_registered:
+        prepare_registered(args)
+        return
+    if args.self_check:
         self_check()
         return
-    if "--connection_geometry" in sys.argv:
+    if args.connection_geometry:
         print(json.dumps(connection_geometry(), indent=2), flush=True)
         return
-    from isaaclab.app import AppLauncher
-    AppLauncher.add_app_launcher_args(parser)
-    args = parser.parse_args()
     if args.contact_pairs and args.reset_probe is None:
         parser.error("--contact_pairs requires --reset_probe")
     if args.repair_connections and (args.reset_probe is None or not args.contact_pairs):
         parser.error("--repair_connections requires --reset_probe and --contact_pairs")
+    scope = ("registered mother configuration with isolated diagnostic override, NOT the frozen v3 recipe; "
+             if args.export_report else
+             "dedicated unregistered config, NOT registered task/v3 and NOT load_diagnostic_target replay; ")
     result = {"completed": False, "stage": "startup",
-              "scope": "dedicated unregistered config, NOT registered task/v3 and NOT load_diagnostic_target replay; "
-                       "fixed base, gravity disabled, zero gains/armature; no PD, tracking or support verdict"}
+              "scope": scope + "fixed base, gravity disabled, zero gains/armature; no PD, tracking or support verdict"}
     try:
         if args.reset_probe is not None:
             reset_probe(args, result)
