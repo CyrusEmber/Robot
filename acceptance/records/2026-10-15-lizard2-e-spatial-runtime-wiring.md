@@ -447,3 +447,89 @@ attempt06 实际退出 0，完成 marker 与报告 `completed=true`；报告同�
 - 注册在线协议非空足端分支、实际 collider/body-owner 接触归属及 gait 诊断 writer/绘图已核；具名过滤仅核当前中立及一组跨腿负例，不证明全 ROM。baseline 当前十帧均为首局有效采集，但不是运动；逐轴受控驱动、惯量一致性、PD 跟踪、承重、连续安全域和行走均未完成。
 - 未接正式 Blender 导出目标或验证其错源/错目标；旧资产 cap/contact ownership 缺口仍由 `floor-contact-attribution` 回交，不用新候选读数解除旧资产前提。
 - A 的树/轴/零位/网格/惯量/命名变化后按变化重验受影响链，不外推检查点结果。总事项维持 in_progress，最终仍随 D 由新上下文审核。
+
+## 追加：新正式导出身份接入隔离 USD 与真实消费者（2026-10-20）
+
+### 适用范围与预算
+
+用户批准开始 A/E 剩余：补新导出资产接线、真实几何缺证和读写链，已有证据按输入变化复用；不调 PD、不训练、不替换正式资产、不代填外观批准或 D 审核。随后明确本切片预算：一次隔离 USD 转换；一个固定基座、无重力、零 stiffness/damping/armature 环境核 reset/接触；每关节 ±0.05 rad 只核真实 action 目标缓存、不加跟踪物理步；另采十个 baseline 控制步，失败即停。本节完成这一切片，不称整个 E 完成。
+
+### 验收条件与实现
+
+- `palm_spatial_runtime.py` 新 `--export_report` 分支接调用方独立批准的报告与 URDF SHA；解析报告前核批准摘要，核全部 73 工件、旧批准源身份、完整 joint/inertial 属性及 mesh 引用后，才创建新 `rl_exp/out/` 子目录并启动转换。旧 `check_build`、检查点/原 USD pin 和旧入口语义保留。
+- 复用原 UrdfConverter、flatten 与 fixed-root adapter，不拼接旧 USD。新 `repair_fresh_stage()` 对所有 body 的 mass/COM/完整 tensor 先验真，仅修改可解释的主轴表示；回退后整层一致，不重算材料分布或默认驱动。
+- 新 manifest 不继承旧 runtime order；reset 入口须有独立批准的 fresh manifest SHA，核准备工件清单并从实际 runtime 测量顺序。复用原六具名连接过滤、正常 reset 和跨腿接触负例；不得过滤所有自碰撞代替修复。
+- 实际 `process_action/apply_action/write_data_to_sim` 覆盖全部 30 通道，±0.05 rad 目标缓存按实际 name/id 对表；零增益下不声称实体驱动响应。真实 baseline writer/reader 使用新资产身份，短窗不改协议判绿。
+
+抽取 `registered_config()` 复用既有零增益配置；独立 AST 对照原配置构造块一致。实际是注册母配置的隔离 diagnostic-v2 override，不是执行 v3 冻结配方。原 prepare 报告顶层沿用了 dedicated/unregistered 旧描述，保留原采集文件不改写；最终代码按新分支纠正该 scope 文义。此处修正不修改配置或物理执行。
+
+### 实际缺陷与离线拒错
+
+初版新身份验证用 `ET.tostring()` 比较 XML，把格式 tail 空白误当 joint/inertial 差异；正确批准的新导出真实入口失败 `export joint definitions differ`。执行者核到 61 个序列化差异均来自 tail，移除 tail 后零语义差异；改为递归核 tag、全部 attributes、child 结构并拒非空文本。修复后同一正确报告通过，完整惯量不因忽略格式而遗漏。修复前输出由实现上下文保存，未保存带旧源码摘要的红例工件，不声称旧源码身份已独立认证。
+
+持久入口 `--export_self_check` 实际验证 73 工件正例及 17 负例：错误 report/URDF 批准、缺工件、六项 tensor、mass/COM/RPY、旧源绑定和四类非法 fresh 路径。内存/临时副本破坏通过真实 `check_export` 分支拒绝；原批准工件不改。惯量自检核无需修复、可解释/不可解释/非有限主轴及原投影破坏；旧 runtime 自检保持通过。五个非法 CLI 参数组合在 AppLauncher 导入前拒绝。无新增默认闸门或依赖。
+
+### 真实转换、reset 与动作目标结果
+
+转换命令退出 0，`fresh_export_prepared_runtime_unverified`；新 USD 有 31 rigid bodies、30 revolute joints 和一个 world fixed joint。五个 `tail1_pitch/lf_elbow/rf_elbow/rl_knee/rr_knee` 主轴四元数取逆后，全部 31 link mass/COM/完整惯量张量与 URDF 满足既定 float32 复读预算；没有把旧修正 USD 直接复制过来。准备报告绑定 83 个实际工件，只有报告自身未自列。
+
+独立前置审核 `adfdd813-259b-42b7-ab19-1b138a8c2e95` 直接复算准备工件、USD、完整惯量和 mesh 引用，批准已授权有限 reset 测试。随后真实 reset/contact 命令退出 0，`completed=true`、`reset_and_neutral_first_step_verified`：wrapper reset、中立首物理步及负例后 reset 的位置/速度默认误差为零。18 个 collider owner 有归属，31 body 全部禁重力、固定根实际存在；四足端为 `lf_wrist/rf_wrist/rl_ankle/rr_ankle`，近端载体不计足端。
+
+fresh OBJ 重新做六具名连接几何核，geometry 摘要与原证据相同；仅对六对连接设置过滤。`lf_wrist↔rl_ankle` 跨腿负例双向实际力 114.56851959228516 N，pair 互反及 pair 求和/main sensor 残差为零，证明该实测外来接触没有被过滤。中立非零列表为空但缺接触观测的状态仍保留 unknown，不称全 ROM 无自接触。
+
+真实动作目标共 60 样本：四腿 20、胸 2、颈 2、尾 6 通道各有 ±0.05 rad，非目标通道均零；读回实际 `joint_pos_target` 与期望 name/id 一致，随后 reset 通过。**未物理推进跟踪，也未读取后端实际 drive target，因此只解除 action-manager/cache 映射缺证，不证明关节发力、实体转向、跟踪或有效力矩/速度限制。**
+
+独立切片审核 `15935908-b068-43b9-bb8a-5a5c18ee38a5` 直接读 diff、工件、pair 数据并运行只读 Python/PXR：83 工件一致；原转换到最终 USD 的 342 项几何/变换属性一致；内存撤回五处主轴后整层精确恢复惯量前 adapter 中间摘要；撤回六过滤后整层精确恢复准备 USD。批准本节有限转换/reset/action-cache/contact 切片，无阻塞。fixed-root/schema/world joint 还有预期变化，不能把“只改主轴”扩展成整个转换链只改五属性；adapter after 摘要是惯量修正前中间层，不是最终 USD。
+
+### 新身份 baseline 十步真实写读
+
+实际 `baseline_eval.py` → wrapper reset → `BaselineFrames` writer → 保存 `.frames.pt` → `baseline_metrics.judge` 完成，退出 0、`smoke_only`。独立 CLI 读盘及新上下文 `5dad6616-43de-4d6c-bcd0-10e96ec0a42e` 直接加载 pt，核 `baseline-frames-3` 的 17 列、1320 标量全部 finite，shape 匹配；`joint_pos=(10,1,30)` 完整，四 twist 位次来自实测 runtime；六足端列轴及四网格摘要匹配 fresh manifest/磁盘资产。
+
+原协议仍 20 s/1000 步，真实窗 10×0.02 s=0.2 s；原 reader 返回 invalid，唯一原因仍是短窗。独立 `judge()` 与报告内 `reader_validation` 完整相等。另显式调用 `_alive/_data_reasons`，首局十帧均有效、terminated/timeout 零、data reasons 空；不依赖短窗前退自动检查数据。四个内存破坏经同一真实 judge 早于短窗拒绝：空 source、删 twist 标签及数值列、强制旧 split、足端混入 `lf_finger`。120 个目标目录文件及 hash 前后不变。
+
+本窗状态均中立恒定、接触载荷零，8 个性能 gate 全 null；`terminal_frames_captured=0` 且没有 done。只核新身份 writer/reader 连通，**不证明非零 twist 数值映射、终止 hook、驱动或运动性能**。reader 的空 source 拒错不等于核任意非空来源路径/摘要真实性，此次由独立工件核对补足，不伪称 reader 自带此行为。
+
+### 身份与证据
+
+本机工件引用不承诺入仓；所有旧工件保持不变。prepare/reset 实际采集 `runtime_source.py/reset_probe_source.py` 摘要为 `887a0b7585bee292d6548f032464ca5b5ca812946dac102a29f92ced21131c63`；最终 runtime 仅改上述 scope 文义，摘要 `74630b7bb807ffb32234de5a70cba097599a586942cd326f3a5cff86b9a7cdac`，不以最终摘要冒充采集版本。惯量脚本摘要 `8efedefd018e22494d909cdcc1c1bb98196476f5f2beca169dcd3c6305775aff`。
+
+| 工件 | SHA256 |
+|---|---|
+| 批准新 `lizard2_spatial_export_cli_verified_20261019/export.json` | `1f69bcd41330df40c9034c68973e687049f1294697924940cbef264bafe0e36a` |
+| 新 URDF（源导出及运行副本） | `e8896feb8b0dbdbeaa35e74a01c2ffcb4ab38d89b52f221831b3f287943edd00` |
+| `lizard2_e_fresh_prepare_20261020/prepare_report.json` | `166fe4681097abe11c23e173e846e747e5cedec5ee0c8f7cc0c37db8eda5d480` |
+| 同目录 `registered_manifest.json` | `b48f99efcb298860db4f8dfaf12b134c994c54df08bbe192bfbb8465d6efa6e1` |
+| 同目录 `palm_spatial.usda`（惯量修正、未加六过滤） | `c6139807c45d9c3fd96dffc40e7d4600d9d4fb1a58314edd8b83b5767d500297` |
+| `lizard2_e_fresh_reset_20261020/reset_probe_report.json` | `22cd55fe9d38a4325b50eac774b86a7686728f4611fb29f5705d212524e0ba0b` |
+| 同目录 `measured_manifest.json` | `d876713b1a4aa6a4fef51f39bed284f4a15a01d562815eefefcf74eebfb77137` |
+| 同目录 `palm_spatial.usda`（六过滤） | `0c5ffd157b39faf9b65907877badbe069ae5af69585124a1097f94956df3fe76` |
+| 同目录 `connection_geometry.json` | `64023ff37a77dd40f8922aac68a53797a3446ad5c3f965a2ed3611e92baeb7f7` |
+| 同目录 `baseline_smoke_20261020.json` | `35c22ef6fd917dfd36a19ad2ea5b01eb133b4f05e136a9c5cb345c768df3219d` |
+| 同目录 `baseline_smoke_20261020.frames.pt` | `5b9ca5f79f14de8a2e2a2f55c2c66b6fecf93f1930681d1ea98610c97a4efba3` |
+| `lizard2_e_fresh_prepare_20261020.log` | `78ac5a64f7a0cf39db6f712653c1a5f8eae6881949e29a7973ff30c550dde65a` |
+| `lizard2_e_fresh_reset_20261020.log` | `46c8201541bef57898b6edfdaa6bebb200ce2f5f6e35dbfd8366cd30cdf74555` |
+| `lizard2_e_fresh_baseline_20261020.log` | `c8acb6c1f477d7039bd465f7c14067d28349231411efc0df81e1467dc9e7b285` |
+
+路径均相对 `rl_exp/out/`。真实已执行命令如下；重新执行须改新输出目录及绑定新的 prepare manifest，不能照抄覆盖：
+
+```cmd
+"E:\IsaacLab\env_isaaclab\Scripts\python.exe" -B rl_exp\tools\diagnose\palm_spatial_runtime.py --export_self_check --export_report rl_exp\out\lizard2_spatial_export_cli_verified_20261019\export.json --approved_export_sha256 1f69bcd41330df40c9034c68973e687049f1294697924940cbef264bafe0e36a --approved_urdf_sha256 e8896feb8b0dbdbeaa35e74a01c2ffcb4ab38d89b52f221831b3f287943edd00
+"E:\IsaacLab\env_isaaclab\Scripts\python.exe" -B rl_exp\tools\diagnose\palm_spatial_runtime.py --headless --device cuda:0 --export_report rl_exp\out\lizard2_spatial_export_cli_verified_20261019\export.json --approved_export_sha256 1f69bcd41330df40c9034c68973e687049f1294697924940cbef264bafe0e36a --approved_urdf_sha256 e8896feb8b0dbdbeaa35e74a01c2ffcb4ab38d89b52f221831b3f287943edd00 --out rl_exp\out\lizard2_e_fresh_prepare_20261020
+"E:\IsaacLab\env_isaaclab\Scripts\python.exe" -B rl_exp\tools\diagnose\palm_spatial_runtime.py --reset_probe rl_exp\out\lizard2_e_fresh_prepare_20261020\registered_manifest.json --export_report rl_exp\out\lizard2_spatial_export_cli_verified_20261019\export.json --approved_export_sha256 1f69bcd41330df40c9034c68973e687049f1294697924940cbef264bafe0e36a --approved_urdf_sha256 e8896feb8b0dbdbeaa35e74a01c2ffcb4ab38d89b52f221831b3f287943edd00 --export_manifest_sha256 b48f99efcb298860db4f8dfaf12b134c994c54df08bbe192bfbb8465d6efa6e1 --contact_pairs --repair_connections --out rl_exp\out\lizard2_e_fresh_reset_20261020 --viz none --device cuda:0
+"E:\IsaacLab\env_isaaclab\Scripts\python.exe" -B ablation_harness\baseline_eval.py --task Lizard2-Flat-Play-v3 --target_config rl_exp\out\lizard2_e_fresh_reset_20261020\measured_manifest.json --protocol ablation_harness\protocols\lizard2_flat_v5.json --num_envs 1 --smoke_steps 10 --viz none --output rl_exp\out\lizard2_e_fresh_reset_20261020\baseline_smoke_20261020.json
+"E:\IsaacLab\env_isaaclab\Scripts\python.exe" -B -m ablation_harness.baseline_metrics rl_exp\out\lizard2_e_fresh_reset_20261020\baseline_smoke_20261020.frames.pt --protocol ablation_harness\protocols\lizard2_flat_v5.json --naming palm_spatial
+```
+
+### 回填审核与提交阻塞
+
+独立回填审核 `95ebace0-9bc3-4f91-b64c-3ef3e3b7a621` 直接核四文档 diff、14 项工件摘要、导出/prepare 清单、采集到最终源码差异、复读参数与锚点，批准本切片回填，无阻塞；不代替前述物理/PXR/pt 审计，不扩成全 E/D。两修改源码编译与本次路径 `git diff --check`、限定六文件后的 `git hook run pre-commit` 均通过。
+
+完整离线套件首次因仓根 `budget` 未声明而失败（其余后续 fail-fast 跳过）；实际读取及属性核对为本轮期间生成的零字节未跟踪文件，确认非版本文件后删除，不取消或放宽卫生闸门。重跑卫生项通过，但完整套件仍失败：36 项通过、一项失败、零跳过，43.4 s。`RECORD_BINDING_SINGLE_SOURCE_VIOLATED` 指向 `rl_exp/tools/diagnose/body_precheck.py:580` 与 `rl_exp/tools/verify/test_body_precheck.py:475` 的本地文件摘要实现。这两文件不属本轮授权修改/提交集合，当前源码刻意摘要已消费 bytes，不能随手替换成二次读文件造成来源竞态；本轮不修改它们、不豁免闸门。当时因全仓闸门未通过，代码/证据暂未提交或推送。2026-10-20 用户知悉该阻塞后明确授权“可以提交本次改动”；据此仅提交本轮两个接线源码、验收记录与三个路由文件，不收其它事项改动。提交前完整套件再次返回 1：36 项通过、一项失败、零跳过，39.2 s；仍为同一单一来源冲突，当前位置 `body_precheck.py:598`、`test_body_precheck.py:518`，未改闸门或修这两文件。限定六文件的 `git hook run pre-commit` 再次返回 0；提交正常运行钩子，不使用 `--no-verify`。该用户授权只覆盖本轮提交，不把全仓失败改称通过；冲突仍由对应执行者解除后复跑完整套件。
+
+### 本切片后保留动作
+
+- B/E 接上述 measured manifest；B 仍须核新输入运行时质量矩阵、全部关节默认驱动及已知载荷，E 尚缺后端实际 drive/实体响应证据。本轮不加非零增益、不外推旧动力学结论。
+- 新输入的独立在线 obs 非空足端分支、gait writer/绘图及其它 E3 必需消费者按变化复验/明确复用依据；已有旧目标证据不一律作废，也不能只以新 baseline 读通宣布全部链完成。
+- 终止帧 hook 尚未实测；十步无 done 不能解除它，也不需要在本轮擅自跑完整性能协议。
+- A 仅补具名真实几何缺证/变更；当前样本和导出切片不升级全机械安全域，不重开手工步态或全 ROM 扫描。用户当前回放确认不代填外观批准；D 集成/关闭审核尚未做。
+- 旧资产 cap/contact ownership 缺口仍按原对象回交，不用新候选证据自动解除。正式资产/配方/v3 均未修改，所有事项继续在办；本切片审核不等于整个 E/D 或开训批准。
