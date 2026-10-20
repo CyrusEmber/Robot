@@ -8,9 +8,9 @@ Configured Python -B rl_exp/tools/verify/test_body_precheck.py
 Add --break_zero_aabb to inject the historical zero-clearance early return
 INTO run()'s pair consumer. The SAME overlap assertion must then fail (exit 1).
 Add --break_fix {binding,error_rows,roles,params,coverage,config_digest,mesh,
-touching,contact_policy,role_semantics} to restore
+touching,contact_policy,role_semantics,source_geometry} to restore
 one historical blocker in memory; identical regression assertions must fail.
---plan_gap {rotation,contact,roles} runs one focused counterexample group.
+--plan_gap {rotation,contact,roles,source_geometry} runs one focused counterexample group.
 Assets, configs, CLI reports and compile outputs live only in system temp.
 """
 
@@ -296,6 +296,214 @@ def plan_gap_suite(group):
             check(result.returncode == 0 and json.loads(report_path.read_text())['coverage']['role_semantics'] == 'pass',
                   'role evidence consumed through real CLI')
         print(f'PASS plan gap {group}: {COUNT} assertions')
+
+
+def source_geometry_suite(format_group=None):
+    """Independent analytic pivots/vertices, not a second use of shared FK."""
+    import math
+    from unittest.mock import patch
+    with tempfile.TemporaryDirectory(prefix='body_precheck_source_') as temp:
+        cfg, base, analytic = fixture(Path(temp) / 'source', chain_count=2, fork=True)
+        path = base / 'machine.urdf'
+        tree = ET.parse(path)
+        for link in tree.getroot().findall('link'):
+            if link.find('collision') is not None:
+                link.append(copy.deepcopy(link.find('collision')))
+                link[-1].tag = 'visual'
+        tree.write(path, encoding='unicode')
+        cfg['inputs']['urdf']['sha256'] = pre.binding.sha256_file(path)
+        blend = base / 'saved.blend'
+        blend.write_bytes(b'independent analytic fixture, not Blender execution')
+        points = [[x, y, z] for z in (-.1, .1) for y in (-.1, .1) for x in (-.1, .1)]
+        source = {'candidate_urdf': str(path), 'candidate_sha256': cfg['inputs']['urdf']['sha256'],
+                  'candidate_blend_sha256': pre.binding.sha256_file(blend),
+                  'candidate_files_sha256': {'machine.urdf': cfg['inputs']['urdf']['sha256'],
+                                            'saved.blend': pre.binding.sha256_file(blend),
+                                            'solid.obj': pre.binding.sha256_file(base / 'solid.obj')},
+                  'builder_sha256': '1' * 64, 'source_blend': 'analytic fixture specification',
+                  'snapshots': [{'case': 'analytic', 'q_rad': copy.deepcopy(cfg['tasks']['cases'][0]['q_rad']),
+                                 'pivots': {n: [m[i][3] + [3., -2., 5.][i] for i in range(3)]
+                                            for n, m in analytic.items()}, 'meshes': {}}]}
+        snap = source['snapshots'][0]
+        for name in cfg['body']['collision_entities']:
+            m = analytic[name]
+            snap['meshes'][f'object:{name}'] = {
+                'link': name, 'vertex_count': 8, 'indices': list(range(8)),
+                'points': [[sum(m[i][j] * p[j] for j in range(3)) + m[i][3] + [3., -2., 5.][i]
+                            for i in range(3)] for p in points]}
+        evidence_path = base / 'source.json'
+        req = {'id': 'source_geometry', 'check': 'source_geometry', 'required': True,
+               'cases': ['neutral'], 'chains': list(cfg['body']['chains']),
+               'params': {'tolerance_m': 1e-10, 'source_cases': {'neutral': 'analytic'}}}
+        cfg['tasks']['requirements'].append(req)
+
+        def save():
+            evidence_path.write_text(json.dumps(source), encoding='utf-8')
+            cfg['inputs']['source_evidence'] = {'path': evidence_path.name,
+                                               'sha256': pre.binding.sha256_file(evidence_path)}
+
+        save()
+        out = exercise(cfg, base)
+        check(row(out, 'source_geometry')['state'] == 'pass', 'independent geometry must be consumed')
+        check(out['coverage']['source_geometry'] == 'pass', 'geometry has separate coverage')
+        check(out['coverage']['source_pose_consistency'] == 'not_evaluated'
+              and out['coverage']['role_semantics'] == 'not_evaluated', 'samples cannot certify roles/full poses')
+        object_name = next(iter(snap['meshes']))
+        # Rebind altered source assets: format rejection, not hash mismatch.
+        original_urdf = path.read_text(encoding='utf-8')
+        visual_mesh = base / 'visual.obj'
+        original_mesh = (base / 'solid.obj').read_text(encoding='utf-8')
+        formats = [('origin', None), ('geometry', None),
+                   ('vertex_garbage', ' garbage'), ('vertex_homogeneous', ' 2')]
+        for kind, suffix in formats:
+            if format_group and ((format_group == 'xml') != (suffix is None)):
+                continue
+            root = ET.fromstring(original_urdf)
+            visual = root.find('link/visual')
+            if suffix is None:
+                if kind == 'origin':
+                    ET.SubElement(visual, 'origin', xyz='0 0 0', rpy='0 0 0')
+                    ET.SubElement(visual, 'origin', xyz='1 0 0', rpy='0 0 0')
+                else:
+                    visual.append(copy.deepcopy(visual.find('geometry')))
+            else:
+                visual_mesh.write_text(original_mesh.replace('v -0.1 -0.1 -0.1',
+                                                             'v -0.1 -0.1 -0.1' + suffix, 1), encoding='utf-8')
+                visual.find('geometry/mesh').set('filename', visual_mesh.name)
+                source['candidate_files_sha256'][visual_mesh.name] = pre.binding.sha256_file(visual_mesh)
+            ET.ElementTree(root).write(path, encoding='unicode')
+            cfg['inputs']['urdf']['sha256'] = pre.binding.sha256_file(path)
+            source['candidate_sha256'] = cfg['inputs']['urdf']['sha256']
+            source['candidate_files_sha256']['machine.urdf'] = source['candidate_sha256']
+            save()
+            try:
+                out = pre.run(cfg, base)
+                result = row(out, 'source_geometry')
+                check(out['status'] == 'fail' and result['state'] == 'not_supported',
+                      f"source format {kind} must reject, got {out['status']}/{result['state']}")
+                check(row(out, 'self_collision')['state'] == 'pass', 'visual format must not alter collisions')
+                check(out['coverage']['source_pose_consistency'] == 'not_evaluated',
+                      'format rejection must not certify full source poses')
+            finally:
+                path.write_text(original_urdf, encoding='utf-8')
+                cfg['inputs']['urdf']['sha256'] = pre.binding.sha256_file(path)
+                source['candidate_sha256'] = cfg['inputs']['urdf']['sha256']
+                source['candidate_files_sha256']['machine.urdf'] = source['candidate_sha256']
+                source['candidate_files_sha256'].pop(visual_mesh.name, None)
+                save()
+        if format_group:
+            print(f'PASS source format {format_group}: {COUNT} assertions')
+            return
+        snap['meshes'][object_name]['points'][0][0] += .02
+        save()
+        out = exercise(cfg, base, 'fail')
+        check(row(out, 'source_geometry')['state'] == 'fail', 'wrong source point must fail numerically')
+        check(row(out, 'source_geometry')['detail']['objects'][object_name]['max_error_m'] > .01,
+              'per-object numerical error is reported')
+        snap['meshes'][object_name]['points'][0][0] -= .02
+        save()
+        # Axis mutation has separately rebound candidate identity, unchanged independent samples.
+        mutated, _, original = edit_xml(cfg, base, lambda r: r.find('joint/axis').set('xyz', '1 0 0'))
+        cfg_before = cfg
+        cfg = mutated
+        source['candidate_sha256'] = cfg['inputs']['urdf']['sha256']
+        source['candidate_files_sha256']['machine.urdf'] = source['candidate_sha256']
+        save()
+        out = exercise(cfg, base, 'fail')
+        check(row(out, 'source_geometry')['state'] == 'fail', 'reapproved wrong axis still fails saved geometry')
+        path.write_text(original, encoding='utf-8')
+        cfg = cfg_before
+        source['candidate_sha256'] = cfg['inputs']['urdf']['sha256']
+        source['candidate_files_sha256']['machine.urdf'] = source['candidate_sha256']
+        save()
+        cfg['tasks']['cases'][0]['root_transform'] = [
+            [math.cos(.3), -math.sin(.3), 0., 12.], [math.sin(.3), math.cos(.3), 0., -7.],
+            [0., 0., 1., 4.], [0., 0., 0., 1.]]
+        cfg['tasks']['requirements'] = [r for r in cfg['tasks']['requirements']
+                                       if r['check'] in ('joint_limits', 'self_collision', 'source_geometry')]
+        exercise(cfg, base)
+        config_path, report_path = base / 'config.json', base / 'source_cli.json'
+        config_path.write_text(json.dumps(cfg), encoding='utf-8')
+        result = subprocess.run([sys.executable, '-B', str(pre.HERE), '--config', str(config_path),
+                                 '--output', str(report_path)], capture_output=True, text=True)
+        cli = json.loads(report_path.read_text(encoding='utf-8'))
+        check(result.returncode == 0 and row(cli, 'source_geometry')['state'] == 'pass',
+              'source geometry consumed through real CLI')
+        req['params']['sparse_zero_reset'] = True
+        req['params']['reset_reference'] = 'analytic fixture has complete q; explicit reset declaration'
+        exercise(cfg, base)
+        req['params']['reset_reference'] = ''
+        exercise(cfg, base, 'fail')
+        req['params'].pop('sparse_zero_reset')
+        req['params'].pop('reset_reference')
+        good = copy.deepcopy(source)
+        mutations = [lambda s: s['snapshots'][0]['pivots'].pop('anchor'),
+                     lambda s: s['snapshots'][0]['meshes'].pop(object_name),
+                     lambda s: s['snapshots'][0]['meshes'][object_name].update(link='not_a_link'),
+                     lambda s: s['snapshots'][0]['meshes'][object_name]['indices'].__setitem__(0, 999),
+                     lambda s: s['snapshots'][0]['q_rad'].update(common_yaw=.9),
+                     lambda s: s['snapshots'][0]['q_rad'].update(unknown_axis=0.),
+                     lambda s: s['snapshots'].append(copy.deepcopy(s['snapshots'][0])),
+                     lambda s: s['candidate_files_sha256'].pop('solid.obj'),
+                     lambda s: s.update(candidate_sha256='0' * 64),
+                     lambda s: s.update(candidate_urdf=str(base / 'other.urdf')),
+                     lambda s: s.update(candidate_blend_sha256='0' * 64)]
+        for mutate in mutations:
+            source = copy.deepcopy(good)
+            mutate(source)
+            save()
+            exercise(cfg, base, 'fail')
+        source = copy.deepcopy(good)
+        save()
+        source['snapshots'][0]['q_rad'].pop('common_yaw')
+        save()
+        exercise(cfg, base, 'fail')  # Missing q is not implicitly zero.
+        source = copy.deepcopy(good)
+        source['snapshots'][0]['q_rad'] = {n: v for n, v in snap['q_rad'].items()}
+        save()
+        req['params']['source_cases']['neutral'] = 'missing'
+        exercise(cfg, base, 'fail')
+        req['params']['source_cases']['neutral'] = 'analytic'
+        missing = copy.deepcopy(cfg)
+        missing['inputs'].pop('source_evidence')
+        check(row(exercise(missing, base, 'fail'), 'source_geometry')['state'] == 'not_evaluated',
+              'no evidence is unmeasured')
+        missing['tasks']['requirements'][-1]['required'] = False
+        exercise(missing, base)
+        cfg['inputs']['source_evidence']['path'] = 'absent.json'
+        cfg['tasks']['requirements'][-1]['required'] = False
+        check(row(exercise(cfg, base), 'source_geometry')['state'] == 'not_evaluated',
+              'absent optional source file does not corrupt other checks')
+        cfg['tasks']['requirements'][-1]['required'] = True
+        save()
+        evidence_path.write_text('{"snapshots": [], "snapshots": []}', encoding='utf-8')
+        cfg['inputs']['source_evidence']['sha256'] = pre.binding.sha256_file(evidence_path)
+        exercise(cfg, base, 'fail')
+        source = {'arbitrary_exporter': True}
+        save()
+        check(row(exercise(cfg, base, 'fail'), 'source_geometry')['state'] == 'not_supported',
+              'unknown source format explicitly unsupported')
+        source = copy.deepcopy(good)
+        save()
+        import check_self_collision as csc
+        consumer = csc.read_obj
+        original_mesh = (base / 'solid.obj').read_bytes()
+
+        def drift(mesh):
+            result = consumer(mesh)
+            (base / 'solid.obj').write_bytes(original_mesh + b'# drift\n')
+            return result
+
+        with patch.object(csc, 'read_obj', drift):
+            exercise(cfg, base, 'fail')
+        (base / 'solid.obj').write_bytes(original_mesh)
+        save()
+        evidence_path.write_text('{}', encoding='utf-8')
+        exercise(cfg, base, 'fail')  # Bound report drift.
+        save()
+        blend.write_bytes(b'changed blend')
+        exercise(cfg, base, 'fail')
+        print(f'PASS plan gap source_geometry: {COUNT} assertions')
 
 
 def run_suite(break_zero=False, break_fix=None):
@@ -709,13 +917,39 @@ def run_suite(break_zero=False, break_fix=None):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--break_zero_aabb', action='store_true')
+    parser.add_argument('--source_format', choices=['xml', 'obj'])
     parser.add_argument('--break_fix', choices=['binding', 'error_rows', 'roles', 'params', 'coverage', 'config_digest',
-                                               'mesh', 'touching', 'contact_policy', 'role_semantics'])
-    parser.add_argument('--plan_gap', choices=['rotation', 'contact', 'roles'])
+                                               'mesh', 'touching', 'contact_policy', 'role_semantics', 'source_geometry',
+                                               'source_format'])
+    parser.add_argument('--plan_gap', choices=['rotation', 'contact', 'roles', 'source_geometry'])
     args = parser.parse_args()
-    if args.plan_gap:
+    if args.break_fix == 'source_format':
+        source = pre.HERE.read_text(encoding='utf-8')
+        guards = [('len(geometries) != 1 or len(origins) > 1 or ', ''),
+                  ('        validate_obj(file)\n        vertices = csc.read_obj(file)',
+                   '        vertices = csc.read_obj(file)')]
+        for old, new in guards:
+            check(source.count(old) == 1, 'source format break guard must match exactly once')
+            source = source.replace(old, new)
+        exec(compile(source, str(pre.HERE), 'exec'), pre.__dict__)
+        source_geometry_suite(args.source_format)
+    elif args.source_format:
+        source_geometry_suite(args.source_format)
+    elif args.break_fix == 'source_geometry':
+        original_evaluate = pre.evaluate
+
+        def bypass_source(check_name, *values, **kwargs):
+            state, detail = original_evaluate(check_name, *values, **kwargs)
+            return ('pass', detail) if check_name == 'source_geometry' else (state, detail)
+
+        pre.evaluate = bypass_source
+        source_geometry_suite()
+    elif args.plan_gap == 'source_geometry':
+        source_geometry_suite()
+    elif args.plan_gap:
         plan_gap_suite(args.plan_gap)
     else:
         run_suite(args.break_zero_aabb, args.break_fix)
         for group in ('rotation', 'contact', 'roles'):
             plan_gap_suite(group)
+        source_geometry_suite()

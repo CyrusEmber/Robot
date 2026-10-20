@@ -12,7 +12,16 @@ must be fresh, under repository rl_exp/out or system temp. Exit 0 only for pass,
 Contract (three blocks, no inferred q, roles, approvals or exclusions):
 inputs: identity (nonempty label), units='SI', urdf={path, sha256},
         meshes=[{path, sha256}], threshold_basis={approved_by, reference},
-        optional role_evidence={path, sha256}.
+        optional role_evidence={path, sha256}, source_evidence={path, sha256}.
+        Source evidence is the existing saved/reopened pose-sample JSON payload:
+        candidate_urdf (resolved actual path), candidate_sha256,
+        candidate_blend_sha256, candidate_files_sha256, builder_sha256,
+        snapshots=[{case,q_rad,pivots:{ALL links:[x,y,z]},meshes:{object_name:
+        {link,vertex_count,indices,points}}}]. Hash binds exact bytes read once;
+        consumed visual OBJ and saved candidate blend hashes come from that file.
+        Source object indices refer to source vertices, NOT exported vertex indices;
+        counts need not equal welded/merged exported counts. Every visual link and
+        every supplied object is checked; object inventory is stable across snapshots.
 body: chains={id: {root_link, end_link, joint_roles={exact_joint: role},
                   contact_links=[link]}}, other_joints={exact_joint: role},
       collision_entities=[link], excluded_entities=[{link, reason}],
@@ -44,6 +53,15 @@ Checks/params:
           allowed_contacts:{link:{max_penetration_m,max_gap_m}}}.
    Unit normal; signed distance normal.dot(world_vertex)-height_m [m]. Contact
    minima must be in [-max_penetration_m,max_gap_m]; all other minima >=min_gap_m.
+ source_geometry: {tolerance_m, source_cases:{case_id:source_snapshot_name},
+   optional sparse_zero_reset:bool, reset_reference:nonempty provenance}.
+   Reuses palm_spatial_probe.check_blender's independent pivot and nearest visual
+   vertex readings, without importing its solver. World-neutral exporter frame:
+   subtract source root pivot, then apply case root_transform to observations.
+   Missing source q means zero ONLY with explicit sparse_zero_reset=true and
+   reset_reference; effective complete q must equal selected case. No full source
+   orientation, role/axis correctness, connection region, mass/dynamics or continuous
+   proof. Absent optional evidence is not_evaluated; unknown payload not_supported.
  source_consistency: {approved_by, reference, tolerance_m, tolerance_rad,
    snapshots:{case_id:{q_rad,root_transform,link_poses:{ALL links:4x4 SE3}}}}.
    Explicit externally approved snapshots, never an independent FK claim.
@@ -101,7 +119,8 @@ sys.path.insert(0, str(REPO / 'rl_exp/tools/runrecord'))
 import binding  # noqa: E402
 
 SUPPORT = __doc__
-CHECKS = {'joint_limits', 'end_position', 'self_collision', 'ground', 'source_consistency', 'role_consistency'}
+CHECKS = {'joint_limits', 'end_position', 'self_collision', 'ground', 'source_consistency', 'role_consistency',
+          'source_geometry'}
 
 
 def need(condition, reason):
@@ -175,6 +194,10 @@ def revalidate_inputs(report):
     records += report['inputs'].get('meshes', [])
     if 'role_evidence' in report['inputs']:
         records.append(report['inputs']['role_evidence'])
+    if 'source_evidence' in report['inputs']:
+        records.append(report['inputs']['source_evidence'])
+    records += report['inputs'].get('source_visuals', [])
+    records += report['inputs'].get('source_blends', [])
     for record in records:
         record['actual_sha256'] = binding.sha256_file(Path(record['path']))
         record['binding_state'] = ('pass' if record['actual_sha256'] == record['approved_sha256'] else 'fail')
@@ -380,8 +403,184 @@ def pair_evaluate(a, b, world, meshes, clearance, np, triangles):
             'method': 'triangle_surface_solid_angle', 'state': 'fail' if failed else 'pass'}
 
 
+def source_geometry_prepare(spec, base, path, report, root_link, np, csc):
+    """Read saved/reopened pose samples once; bind consumed visuals and blend [m]."""
+    from scipy.spatial import cKDTree
+    evidence_path = (base / text(spec.get('path'), 'source evidence path')).resolve()
+    need(evidence_path.is_file(), 'independent source evidence file absent')
+    # Unlike path-only geometry readers, source JSON is decoded from these exact bytes.
+    raw = evidence_path.read_bytes()
+    digest = text(spec.get('sha256'), 'source evidence sha256')
+    need(len(digest) == 64 and all(c in '0123456789abcdef' for c in digest), 'bare lowercase sha256 required')
+    record = {'path': str(evidence_path), 'approved_sha256': digest,
+              'actual_sha256': binding.sha256_bytes(raw)}
+    report['inputs']['source_evidence'] = record
+    need(record['actual_sha256'] == digest, 'source evidence hash mismatch')
+    source = json.loads(raw.decode('utf-8'), object_pairs_hook=unique_object)
+    need(isinstance(source, dict), 'source evidence object required')
+    fields = {'candidate_urdf', 'candidate_sha256', 'candidate_blend_sha256',
+              'candidate_files_sha256', 'snapshots', 'builder_sha256'}
+    if not fields <= set(source):
+        raise NotImplementedError('source evidence requires saved/reopened pose-sample payload')
+    finite_data(source)
+    need((evidence_path.parent / text(source['candidate_urdf'], 'source candidate path')).resolve() == path,
+         'source candidate path differs from actual URDF')
+    need(source['candidate_sha256'] == report['inputs']['urdf']['approved_sha256'],
+         'source evidence belongs to a different URDF')
+    producer = text(source['builder_sha256'], 'source producer sha256')
+    need(len(producer) == 64 and all(c in '0123456789abcdef' for c in producer), 'source producer bare sha256 required')
+    files = source['candidate_files_sha256']
+    need(isinstance(files, dict), 'source candidate file hashes object required')
+    approved = {}
+    for name, digest in files.items():
+        file = (path.parent / text(name, 'candidate file')).resolve()
+        need(file not in approved, 'duplicate resolved source candidate file')
+        approved[file] = digest
+    need(approved.get(path) == source['candidate_sha256'], 'source candidate file URDF binding absent')
+    blends = [file for file in approved if file.suffix.lower() == '.blend'
+              and approved[file] == source['candidate_blend_sha256']]
+    need(len(blends) == 1, 'exact source candidate blend binding required')
+    _, blend_record = bound_input({'path': str(blends[0]), 'sha256': approved[blends[0]]}, path.parent)
+    report['inputs']['source_blends'] = [blend_record]
+    report['source_provenance'] = {
+        'evidence_sha256': record['approved_sha256'], 'producer_sha256': producer,
+        'candidate_urdf': str(path), 'candidate_sha256': source['candidate_sha256'],
+        'candidate_blend_sha256': source['candidate_blend_sha256'],
+        'source_blend': source.get('source_blend'), 'source_urdf': source.get('source_urdf'),
+        'input_sha256': source.get('input_sha256'),
+        'independence': 'saved source observations; producer/origin independence remains auditor prerequisite'}
+    revalidate_inputs(report)
+    root = ET.parse(path).getroot()
+    revalidate_inputs(report)
+    visual_paths = {}
+    for link in root.findall('link'):
+        visuals = link.findall('visual')
+        if not visuals:
+            continue
+        if len(visuals) != 1:
+            raise NotImplementedError('source geometry supports one visual mesh per link')
+        visual = visuals[0]
+        geometries, origins = visual.findall('geometry'), visual.findall('origin')
+        geometry = geometries[0] if geometries else None
+        mesh = visual.find('geometry/mesh')
+        if (len(geometries) != 1 or len(origins) > 1 or mesh is None or geometry is None or len(list(geometry)) != 1
+                or xml_vector(visual.find('origin'), 'xyz', '0 0 0') != [0., 0., 0.]
+                or xml_vector(visual.find('origin'), 'rpy', '0 0 0') != [0., 0., 0.]
+                or xml_vector(mesh, 'scale', '1 1 1') != [1., 1., 1.]):
+            raise NotImplementedError('source geometry requires zero-origin unit-scale visual OBJ')
+        filename = text(mesh.get('filename'), 'source visual filename')
+        if '://' in filename or Path(filename).suffix.lower() != '.obj':
+            raise NotImplementedError('source geometry requires local visual OBJ')
+        visual_paths[link.get('name')] = (path.parent / filename).resolve()
+    need(bool(visual_paths), 'source geometry requires actual visual assets')
+    records = {}
+    for file in visual_paths.values():
+        need(file in approved, f'unbound source visual mesh: {file}')
+        if file not in records:
+            _, records[file] = bound_input({'path': str(file), 'sha256': approved[file]}, path.parent)
+    report['inputs']['source_visuals'] = list(records.values())
+    trees = {}
+    for name, file in visual_paths.items():
+        revalidate_inputs(report)
+        validate_obj(file)
+        vertices = csc.read_obj(file)
+        need(vertices.ndim == 2 and vertices.shape[1] == 3 and len(vertices) > 0
+             and np.isfinite(vertices).all(), 'finite nonempty visual vertices required')
+        trees[name] = cKDTree(vertices)
+        revalidate_inputs(report)
+    need(isinstance(source['snapshots'], list) and bool(source['snapshots']), 'source snapshots list required')
+    snapshots = {}
+    for snap in source['snapshots']:
+        need(isinstance(snap, dict), 'source snapshot object required')
+        name = text(snap['case'], 'source snapshot case')
+        need(name not in snapshots, 'duplicate source snapshot case')
+        snapshots[name] = snap
+    inventory = None
+    for snap in snapshots.values():
+        objects = snap['meshes']
+        need(isinstance(objects, dict) and bool(objects), 'source mesh samples object required')
+        current = {}
+        for name, sample in objects.items():
+            text(name, 'source object name')
+            need(isinstance(sample, dict), 'source object sample required')
+            current[name] = (sample['link'], sample['vertex_count'], sample['indices'])
+        need(inventory is None or current == inventory, 'source object inventory/link/count/indices changed across snapshots')
+        inventory = current
+    return snapshots, trees, root_link
+
+
+def source_geometry_evaluate(params, case, poses, context, np):
+    """Reuse pivot + nearest visual vertex readings, never infer full source poses [m]."""
+    need(set(params) <= {'tolerance_m', 'source_cases', 'sparse_zero_reset', 'reset_reference'},
+         'unknown source_geometry params')
+    tolerance = number(params['tolerance_m'], 'source geometry tolerance_m', 0)
+    need(context is not None, 'independent inputs.source_evidence required')
+    if isinstance(context, dict):
+        if context['state'] == 'not_supported':
+            raise NotImplementedError(context['reason'])
+        raise ValueError(context['reason'])
+    snapshots, trees, root = context
+    need(isinstance(params['source_cases'], dict), 'source_cases mapping required')
+    snap_name = text(params['source_cases'][case['id']], 'selected source case')
+    snap = snapshots[snap_name]
+    q = snap['q_rad']
+    need(isinstance(q, dict) and set(q) <= set(case['q_rad']), 'source q contains unknown joints')
+    q = {n: number(v, 'source q_rad') for n, v in q.items()}
+    sparse = params.get('sparse_zero_reset', False)
+    need(type(sparse) is bool, 'sparse_zero_reset must be boolean')
+    if sparse:
+        text(params['reset_reference'], 'explicit source zero-reset provenance required')
+        q = {n: q.get(n, 0.) for n in case['q_rad']}
+    need(q == case['q_rad'], 'source effective q does not match complete case q')
+    pivots = snap['pivots']
+    need(isinstance(pivots, dict) and set(pivots) == set(poses), 'source pivots require every actual link')
+    pivots = {n: np.array(vector(p, f'source pivot {n}')) for n, p in pivots.items()}
+    # Shared exporter convention: world-neutral orientations, base head subtracted.
+    base_origin = pivots[root]
+    root_pose = se3(case['root_transform'], 'source case root_transform', np)
+    link_rows = {}
+    for name, point in pivots.items():
+        expected = root_pose[:3, :3] @ (point - base_origin) + root_pose[:3, 3]
+        actual = poses[name][:3, 3]
+        error = float(np.linalg.norm(actual - expected))
+        link_rows[name] = {'actual_m': actual.tolist(), 'source_world_m': point.tolist(),
+                           'expected_m': expected.tolist(), 'error_m': error}
+    objects = snap['meshes']
+    need(isinstance(objects, dict) and bool(objects), 'source mesh samples object required')
+    need({r['link'] for r in objects.values() if isinstance(r, dict)} == set(trees),
+         'source sample links must cover every actual visual asset')
+    object_rows = {}
+    for name, sample in objects.items():
+        text(name, 'source object name')
+        need(isinstance(sample, dict) and sample['link'] in trees, 'source object link mismatch')
+        count, indices, points = sample['vertex_count'], sample['indices'], sample['points']
+        need(type(count) is int and count > 0, 'source vertex_count positive integer required')
+        need(isinstance(indices, list) and bool(indices) and all(type(i) is int and 0 <= i < count for i in indices)
+             and len(set(indices)) == len(indices), 'source sample indices duplicate/out of range')
+        need(isinstance(points, list) and len(points) == len(indices), 'source points/indices coverage mismatch')
+        points = np.array([vector(p, f'source sample {name}') for p in points])
+        frame = poses[sample['link']]
+        expected = (points - base_origin) @ root_pose[:3, :3].T + root_pose[:3, 3]
+        local = (expected - frame[:3, 3]) @ frame[:3, :3]
+        distances, _ = trees[sample['link']].query(local)
+        index = int(np.argmax(distances))
+        object_rows[name] = {'link': sample['link'], 'source_vertex_count': count, 'samples_checked': len(points),
+                             'max_error_m': float(distances[index]), 'worst_source_index': indices[index],
+                             'worst_source_world_m': points[index].tolist(),
+                             'state': 'pass' if float(distances[index]) <= tolerance else 'fail'}
+    passed = all(r['error_m'] <= tolerance for r in link_rows.values()) and all(r['state'] == 'pass' for r in object_rows.values())
+    return ('pass' if passed else 'fail'), {
+        'source_snapshot': snap_name, 'effective_source_q_rad': q, 'sparse_zero_reset': sparse,
+        'reset_reference': params.get('reset_reference'), 'root_transform': case['root_transform'],
+        'source_base_origin_m': base_origin.tolist(), 'tolerance_m': tolerance,
+        'links': link_rows, 'objects': object_rows, 'visual_links_checked': len(trees),
+        'samples_checked': sum(r['samples_checked'] for r in object_rows.values()),
+        'scope': 'independent pivots + sampled visual geometry; nearest vertex, not one-to-one; '
+                 'no full orientation, role, axis correctness, mass, dynamics or continuous proof'}
+
+
 def evaluate(check, params, case, selected, chains, model, poses, world, meshes, pairs, np, triangles,
-             collision_world=None, role_context=None):
+             collision_world=None, role_context=None, source_context=None):
     q = case['q_rad']
     need(isinstance(params, dict), 'check params object required')
     if check == 'joint_limits':
@@ -389,6 +588,8 @@ def evaluate(check, params, case, selected, chains, model, poses, world, meshes,
         bounds = {n: {'q_rad': q[n], 'lower_rad': s['limits'][0], 'upper_rad': s['limits'][1]}
                   for n, s in model['joints'].items() if n in q}
         return ('pass' if all(s['lower_rad'] <= s['q_rad'] <= s['upper_rad'] for s in bounds.values()) else 'fail'), {'joints': bounds}
+    if check == 'source_geometry':
+        return source_geometry_evaluate(params, case, poses, source_context, np)
     if check == 'end_position':
         need(set(params) <= {'expected_m', 'tolerance_m'}, 'unknown end_position params')
         tolerance = number(params['tolerance_m'], 'tolerance_m', 0)
@@ -479,7 +680,7 @@ def run(config: dict, config_dir: Path, max_cases: int | None = None) -> dict:
     """Evaluate approved sampled poses [m, rad]; return JSON-safe, fail-closed report."""
     report = {'schema': 'body_precheck_v1', 'status': 'fail', 'support': SUPPORT,
               'inputs': {}, 'coverage': {'whole_machine': 'not_evaluated', 'role_semantics': 'not_evaluated',
-                                        'source_pose_consistency': 'not_evaluated'},
+                                        'source_pose_consistency': 'not_evaluated', 'source_geometry': 'not_evaluated'},
               'results': [], 'counters': {'cases_evaluated': 0, 'pairs_evaluated': 0},
               'code_sha256': {'body_precheck': binding.sha256_file(HERE)}}
     try:
@@ -598,6 +799,14 @@ def run(config: dict, config_dir: Path, max_cases: int | None = None) -> dict:
             normalization = report['mesh_normalization'][name] = {}
             meshes[name] = mesh_prepare(mesh_paths[name], np, csc, triangles, normalization)
             revalidate_inputs(report)
+        source_context = None
+        if any(r['check'] == 'source_geometry' for r in requirements) and 'source_evidence' in inputs:
+            try:
+                need(isinstance(inputs['source_evidence'], dict), 'source evidence binding object required')
+                source_context = source_geometry_prepare(inputs['source_evidence'], config_dir, path, report, root, np, csc)
+            except (NotImplementedError, ValueError, KeyError, TypeError, OSError) as exc:
+                source_context = {'state': 'not_supported' if isinstance(exc, NotImplementedError) else 'not_evaluated',
+                                  'reason': f'{type(exc).__name__}: {exc}'}
         report['body'] = {'root_link': root, 'chains': chain_records, 'other_joints': body['other_joints'],
                           'movable_joints': sorted(movable), 'collision_entities': entities,
                           'excluded_entities': exclusions, 'checked_pairs': [list(p) for p in pairs],
@@ -641,17 +850,21 @@ def run(config: dict, config_dir: Path, max_cases: int | None = None) -> dict:
                     else:
                         state, detail = evaluate(req['check'], req['params'], case, req['chains'], chains,
                                                  model, poses, world, meshes, pairs, np, triangles,
-                                                 collision_world=collision_world, role_context=role_context)
+                                                 collision_world=collision_world, role_context=role_context,
+                                                 source_context=source_context)
                         finite_data(detail)
                         row.update(state=state, detail=detail)
                         if req['check'] == 'self_collision':
                             report['counters']['pairs_evaluated'] += len(detail['pairs'])
+                except NotImplementedError as exc:
+                    row.update(state='not_supported', reason=str(exc))
                 except (KeyError, TypeError, ValueError, OverflowError) as exc:
                     row.update(state='not_evaluated', reason=f'invalid/missing check data: {exc}')
                 report['results'].append(row)
         report['coverage'] = {'whole_machine': 'pass' if all(c['state'] == 'pass' for c in coverage.values()) else 'fail',
                               'cases': coverage, 'movable_role_coverage': 'pass', 'collision_entity_coverage': 'pass'}
-        for label, method in (('role_semantics', 'role_consistency'), ('source_pose_consistency', 'source_consistency')):
+        for label, method in (('role_semantics', 'role_consistency'), ('source_pose_consistency', 'source_consistency'),
+                              ('source_geometry', 'source_geometry')):
             states = []
             for cid in case_ids:
                 rows = [r for r in report['results'] if r['case_id'] == cid and r['check'] == method
