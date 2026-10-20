@@ -1,0 +1,67 @@
+{
+  "inputs": {
+    "identity": "lizard2_checkpoint_v3_sampled_geometry_only",
+    "units": "SI",
+    "urdf": {"path": "../../out/lizard2_palm_spatial_20261014/checkpoint_v3/palm_spatial.urdf", "sha256": "2c78117020458d5e7934219a2064bf7241430b81c2a736acd8cc0761c7a1461f"},
+    "meshes": [
+      {"path": "../../out/lizard2_palm_spatial_20261014/checkpoint_v3/meshes/2dd79f3f59636cafab95fdf1f5ec3f147f9a539594015d6226a43d7a48018f6b.obj", "sha256": "2dd79f3f59636cafab95fdf1f5ec3f147f9a539594015d6226a43d7a48018f6b"},
+      {"path": "../../out/lizard2_palm_spatial_20261014/checkpoint_v3/meshes/31107e3ed866b696ece3f0d4d1f2fd656c91f23877b460aba8c9a749c29a3e61.obj", "sha256": "31107e3ed866b696ece3f0d4d1f2fd656c91f23877b460aba8c9a749c29a3e61"},
+      {"path": "../../out/lizard2_palm_spatial_20261014/checkpoint_v3/meshes/47b0bce406c7f1d0c48a3ad3d402c95019402f4dd7f0cb41002a616f4ac1247d.obj", "sha256": "47b0bce406c7f1d0c48a3ad3d402c95019402f4dd7f0cb41002a616f4ac1247d"},
+      {"path": "../../out/lizard2_palm_spatial_20261014/checkpoint_v3/meshes/4a595e5e5778ffe312b3b8ea8efb6bd34d7647e9e2c43195b6494e5ed969fa04.obj", "sha256": "4a595e5e5778ffe312b3b8ea8efb6bd34d7647e9e2c43195b6494e5ed969fa04"},
+      {"path": "../../out/lizard2_palm_spatial_20261014/checkpoint_v3/meshes/5cc143594243181551ccdd291c00924a6b94b924803a5e036092a98e2ce299f7.obj", "sha256": "5cc143594243181551ccdd291c00924a6b94b924803a5e036092a98e2ce299f7"},
+      {"path": "../../out/lizard2_palm_spatial_20261014/checkpoint_v3/meshes/63c83d113366ee7f211adea5ffb3e983ad2e24de25f4efc248927a8c84cd95f1.obj", "sha256": "63c83d113366ee7f211adea5ffb3e983ad2e24de25f4efc248927a8c84cd95f1"},
+      {"path": "../../out/lizard2_palm_spatial_20261014/checkpoint_v3/meshes/6453e755ebc3f037bd14ab66cdd9f1e07a197eff9fc780efeafdbb0dd8d9c49f.obj", "sha256": "6453e755ebc3f037bd14ab66cdd9f1e07a197eff9fc780efeafdbb0dd8d9c49f"},
+      {"path": "../../out/lizard2_palm_spatial_20261014/checkpoint_v3/meshes/70bc5a70c1f8a089600f2abd7d49c461a307d29aa45ad725906cbbc59b163cb0.obj", "sha256": "70bc5a70c1f8a089600f2abd7d49c461a307d29aa45ad725906cbbc59b163cb0"},
+      {"path": "../../out/lizard2_palm_spatial_20261014/checkpoint_v3/meshes/7aab07149240a7be7d43293ff746c42d3f5ed749ae4595883cb92648d8c4f62a.obj", "sha256": "7aab07149240a7be7d43293ff746c42d3f5ed749ae4595883cb92648d8c4f62a"},
+      {"path": "../../out/lizard2_palm_spatial_20261014/checkpoint_v3/meshes/7e2824a4dc7de7545f0c209af1ddbb0a899833ba588f155d390f155c4df9e786.obj", "sha256": "7e2824a4dc7de7545f0c209af1ddbb0a899833ba588f155d390f155c4df9e786"},
+      {"path": "../../out/lizard2_palm_spatial_20261014/checkpoint_v3/meshes/87d3fa9522336bd811cfda6d7504761e63018a76a0036c2c3d1f5ced4585e98e.obj", "sha256": "87d3fa9522336bd811cfda6d7504761e63018a76a0036c2c3d1f5ced4585e98e"},
+      {"path": "../../out/lizard2_palm_spatial_20261014/checkpoint_v3/meshes/96e53bd271241a91e39e593fa01529500d9b9f1aa6c758e3aa96736f990397d6.obj", "sha256": "96e53bd271241a91e39e593fa01529500d9b9f1aa6c758e3aa96736f990397d6"},
+      {"path": "../../out/lizard2_palm_spatial_20261014/checkpoint_v3/meshes/a2d54f30bc209de2e171133e91856c13e79c262f5749bf97b5ecff2694f5c772.obj", "sha256": "a2d54f30bc209de2e171133e91856c13e79c262f5749bf97b5ecff2694f5c772"},
+      {"path": "../../out/lizard2_palm_spatial_20261014/checkpoint_v3/meshes/a380b4cb51aa32c5e006e8156f27bfde3f1c344523965e99c186c17afd01e98a.obj", "sha256": "a380b4cb51aa32c5e006e8156f27bfde3f1c344523965e99c186c17afd01e98a"},
+      {"path": "../../out/lizard2_palm_spatial_20261014/checkpoint_v3/meshes/a8b511e93149c124557fcfbd7ee648139dffde03e36d2a304d4618654a59b18e.obj", "sha256": "a8b511e93149c124557fcfbd7ee648139dffde03e36d2a304d4618654a59b18e"},
+      {"path": "../../out/lizard2_palm_spatial_20261014/checkpoint_v3/meshes/ce545be42c025d221837b2b9565ce5ffb3d5c29029331aff1009d6ec1852f11e.obj", "sha256": "ce545be42c025d221837b2b9565ce5ffb3d5c29029331aff1009d6ec1852f11e"},
+      {"path": "../../out/lizard2_palm_spatial_20261014/checkpoint_v3/meshes/e43174a7856857f7e6ef77b6a6ec9c1e13a6ea0a33f564636235ad8a66d9a9b9.obj", "sha256": "e43174a7856857f7e6ef77b6a6ec9c1e13a6ea0a33f564636235ad8a66d9a9b9"},
+      {"path": "../../out/lizard2_palm_spatial_20261014/checkpoint_v3/meshes/fd4a5d6cd15bcd4bc00aed202173ce1fd49fb00bf14fae066e9db686ec38f10c.obj", "sha256": "fd4a5d6cd15bcd4bc00aed202173ce1fd49fb00bf14fae066e9db686ec38f10c"}
+    ],
+    "threshold_basis": {
+      "approved_by": "existing_checkpoint_diagnostic_contract",
+      "reference": "acceptance/records/2026-10-14-lizard2-palm-spatial-trial-checkpoint.md; sampled 1e-5 m source comparison, zero geometric clearance; no mechanical-ROM/adoption verdict"
+    }
+  },
+  "body": {
+    "chains": {
+      "lf": {"root_link": "chest_pitch", "end_link": "lf_wrist", "joint_roles": {"lf_shoulder_swing_joint": "shoulder_swing", "lf_shoulder_abduct_joint": "shoulder_abduct", "lf_shoulder_twist_joint": "shoulder_twist", "lf_elbow_joint": "elbow", "lf_wrist_joint": "wrist"}, "contact_links": ["lf_wrist"]},
+      "rf": {"root_link": "chest_pitch", "end_link": "rf_wrist", "joint_roles": {"rf_shoulder_swing_joint": "shoulder_swing", "rf_shoulder_abduct_joint": "shoulder_abduct", "rf_shoulder_twist_joint": "shoulder_twist", "rf_elbow_joint": "elbow", "rf_wrist_joint": "wrist"}, "contact_links": ["rf_wrist"]},
+      "rl": {"root_link": "base_link", "end_link": "rl_ankle", "joint_roles": {"rl_hip_swing_joint": "hip_swing", "rl_hip_abduct_joint": "hip_abduct", "rl_hip_twist_joint": "hip_twist", "rl_knee_joint": "knee", "rl_ankle_joint": "ankle"}, "contact_links": ["rl_ankle"]},
+      "rr": {"root_link": "base_link", "end_link": "rr_ankle", "joint_roles": {"rr_hip_swing_joint": "hip_swing", "rr_hip_abduct_joint": "hip_abduct", "rr_hip_twist_joint": "hip_twist", "rr_knee_joint": "knee", "rr_ankle_joint": "ankle"}, "contact_links": ["rr_ankle"]}
+    },
+    "other_joints": {"chest_pitch_joint": "chest_pitch", "chest_yaw_joint": "chest_yaw", "neck_pitch_joint": "neck_pitch", "neck_yaw_joint": "neck_yaw", "tail1_pitch_joint": "tail1_pitch", "tail1_yaw_joint": "tail1_yaw", "tail2_pitch_joint": "tail2_pitch", "tail2_yaw_joint": "tail2_yaw", "tail3_pitch_joint": "tail3_pitch", "tail3_yaw_joint": "tail3_yaw"},
+    "collision_entities": ["base_link", "chest_pitch", "lf_elbow", "lf_shoulder_twist", "lf_wrist", "neck_pitch", "rf_elbow", "rf_shoulder_twist", "rf_wrist", "rl_ankle", "rl_hip_twist", "rl_knee", "rr_ankle", "rr_hip_twist", "rr_knee", "tail1_pitch", "tail2_pitch", "tail3_pitch"],
+    "excluded_entities": [],
+    "allowed_pairs": []
+  },
+  "tasks": {
+    "cases": [
+      {
+        "id": "neutral", "phase": "source_saved_pose",
+        "q_rad": {"chest_pitch_joint": 0, "chest_yaw_joint": 0, "lf_elbow_joint": 0, "lf_shoulder_abduct_joint": 0, "lf_shoulder_swing_joint": 0, "lf_shoulder_twist_joint": 0, "lf_wrist_joint": 0, "neck_pitch_joint": 0, "neck_yaw_joint": 0, "rf_elbow_joint": 0, "rf_shoulder_abduct_joint": 0, "rf_shoulder_swing_joint": 0, "rf_shoulder_twist_joint": 0, "rf_wrist_joint": 0, "rl_ankle_joint": 0, "rl_hip_abduct_joint": 0, "rl_hip_swing_joint": 0, "rl_hip_twist_joint": 0, "rl_knee_joint": 0, "rr_ankle_joint": 0, "rr_hip_abduct_joint": 0, "rr_hip_swing_joint": 0, "rr_hip_twist_joint": 0, "rr_knee_joint": 0, "tail1_pitch_joint": 0, "tail1_yaw_joint": 0, "tail2_pitch_joint": 0, "tail2_yaw_joint": 0, "tail3_pitch_joint": 0, "tail3_yaw_joint": 0},
+        "root_transform": [[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]]
+      },
+      {
+        "id": "combined", "phase": "source_saved_pose",
+        "q_rad": {"chest_pitch_joint": -0.04, "chest_yaw_joint": 0.04, "lf_elbow_joint": 0.04, "lf_shoulder_abduct_joint": -0.04, "lf_shoulder_swing_joint": 0.04, "lf_shoulder_twist_joint": 0.04, "lf_wrist_joint": -0.04, "neck_pitch_joint": -0.04, "neck_yaw_joint": 0.04, "rf_elbow_joint": 0.04, "rf_shoulder_abduct_joint": -0.04, "rf_shoulder_swing_joint": 0.04, "rf_shoulder_twist_joint": -0.04, "rf_wrist_joint": -0.04, "rl_ankle_joint": -0.04, "rl_hip_abduct_joint": -0.04, "rl_hip_swing_joint": 0.04, "rl_hip_twist_joint": 0.04, "rl_knee_joint": 0.04, "rr_ankle_joint": -0.04, "rr_hip_abduct_joint": -0.04, "rr_hip_swing_joint": 0.04, "rr_hip_twist_joint": -0.04, "rr_knee_joint": 0.04, "tail1_pitch_joint": -0.04, "tail1_yaw_joint": 0.04, "tail2_pitch_joint": -0.04, "tail2_yaw_joint": 0.04, "tail3_pitch_joint": -0.04, "tail3_yaw_joint": 0.04},
+        "root_transform": [[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]]
+      }
+    ],
+    "requirements": [
+      {"id": "limits", "check": "joint_limits", "required": true, "cases": ["neutral", "combined"], "chains": ["lf", "rf", "rl", "rr"], "params": {}},
+      {"id": "source_endpoints", "check": "end_position", "required": true, "cases": ["neutral", "combined"], "chains": ["lf", "rf", "rl", "rr"], "params": {
+        "expected_m": {
+          "neutral": {"lf": [0.31132757663726807,0.8239184256804748,-0.5237630009651184], "rf": [0.31132763624191284,-0.8239186171280579,-0.523763120174408], "rl": [-0.4338057041168213,0.8002961512816711,-0.5237386226654053], "rr": [-0.4338057041168213,-0.800296402333899,-0.5237386226654053]},
+          "combined": {"lf": [0.2648364305496216,0.8251351352942748,-0.4919206500053406], "rf": [0.32992982864379883,-0.801332152246161,-0.4919207692146301], "rl": [-0.466011643409729,0.814218306185083,-0.5036035180091858], "rr": [-0.466011643409729,-0.8142185572373108,-0.5036035180091858]}
+        }, "tolerance_m": 0.00001
+      }},
+      {"id": "all_pairs_no_inherited_exclusions", "check": "self_collision", "required": true, "cases": ["neutral", "combined"], "chains": ["lf", "rf", "rl", "rr"], "params": {"clearance_m": 0}}
+    ]
+  }
+}
