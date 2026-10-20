@@ -41,7 +41,7 @@ evidence: acceptance/records/2026-10-19-lizard2-spatial-inertia-repair.md, accep
 1. 对照已绑定证据审查 `rl_exp/blender/scripts/lizard2_palm_spatial_candidate.py`、`rl_exp/tools/diagnose/palm_spatial_probe.py` 与名表增量；绑定源 blend、URDF、轴／限位、代码及网格哈希，确需重建时使用新隔离输出目录。旧 shared/split/palm 作为兼容对照，新目标显式绑定 palm_spatial。
 2. 一前一后再四肢核验共中心、长轴方向、真实随动与镜像。纯扭转时肘／膝中心不漂移，下段和掌转出腿平面；新轴置零复现旧运动。保存重开 Blender 后对照独立 FK；错轴、错 pivot、未重绑网格必须拒绝，锁轴对照须失去对应能力。
 3. 按 `rl_exp/docs/leg_geometry_reuse.md` 先选择可复用读点与证据，只补新增轴影响的非零上下文和耦合切片；未适配的旧位次扫描不得消费新链。按真实构型及已批准代表姿态核轴退化、完整链随动、限位余量与实体连接，保留反曲／翻掌／穿地／自碰撞判据。复用现有五轴 FK 与具名证据，仅补真实机构缺口，不求解手工步态；几何与机械限位取值仍归限位 PD 专项步骤 5，转向/回正的动态性能交 S6 学习策略验收。旧四轴求解器不得测新候选，历史平掌样本只作对照，局部满秩或离散通过不证明完整安全域。
-4. 导出身份及新隔离 USD/reset/action-cache/接触切片取[新输入验收](../../acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md#追加新正式导出身份接入隔离-usd-与真实消费者2026-10-20)，不再重复挂账已交接口与转换；原检查点保护保留。共用导出器仍由 A 维护，树／轴／质量惯量政策或源件有变化才按影响重验。E/B 以实测 manifest 补后端实体响应、运行时惯量及其余消费者，逐轴与组合运动实测虚拟承载 link 稳定性、驱动耦合；零增益目标缓存不代替此项。将受影响的坐标、惯量、连接碰撞和动作映射交 `work/active/lizard2-restored-limits-pd-validation.md` 重验；其默认受载驱动、机械限位与几何缺口保持在办，完整周期承重及协同性能交 S6，不作为本项驱动交接前置。
+4. 导出身份及新隔离 USD/reset/action-cache/接触切片取[新输入验收](../../acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md#追加新正式导出身份接入隔离-usd-与真实消费者2026-10-20)，不再重复挂账已交接口与转换；原检查点保护保留。共用导出器仍由 A 维护，树／轴／质量惯量政策或源件有变化才按影响重验。E/B 复用[新输入固定基惯量复验](../../acceptance/records/2026-10-19-lizard2-spatial-inertia-repair.md#新正式导出输入的运行时惯量复验2026-10-20)，以实测 manifest 补后端实体响应及其余消费者，逐轴与组合运动实测虚拟承载 link 稳定性、驱动耦合；零增益目标缓存不代替此项。将受影响的坐标、惯量、连接碰撞和动作映射交 `work/active/lizard2-restored-limits-pd-validation.md` 重验；其默认受载驱动、机械限位与几何缺口保持在办，完整周期承重及协同性能交 S6，不作为本项驱动交接前置。
 5. 结果进验收记录并同步指针；候选修复和交接齐备后置 pending_review，交不带执笔历史的新上下文审核。
 
 ## 关闭条件

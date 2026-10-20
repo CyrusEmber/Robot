@@ -533,3 +533,23 @@ fresh OBJ 重新做六具名连接几何核，geometry 摘要与原证据相同�
 - 终止帧 hook 尚未实测；十步无 done 不能解除它，也不需要在本轮擅自跑完整性能协议。
 - A 仅补具名真实几何缺证/变更；当前样本和导出切片不升级全机械安全域，不重开手工步态或全 ROM 扫描。用户当前回放确认不代填外观批准；D 集成/关闭审核尚未做。
 - 旧资产 cap/contact ownership 缺口仍按原对象回交，不用新候选证据自动解除。正式资产/配方/v3 均未修改，所有事项继续在办；本切片审核不等于整个 E/D 或开训批准。
+
+## 追加：新输入运行时惯量与独立在线观测前置（2026-10-20）
+
+用户确认下一步仅各单环境一次启动、固定基座/无重力/零增益，复用 neutral 与已有非零姿态；不调 PD、不训练、不替换资产。新输入两姿态完整运行时质量矩阵与惯量切片已实测并由独立新上下文复算批准，读数、工件身份和严格边界唯一归 `acceptance/records/2026-10-19-lizard2-spatial-inertia-repair.md`“新正式导出输入的运行时惯量复验”。不把无命令物理步的状态写读当驱动能力通过。
+
+独立 `obs_protocol_live.py` 真实启动、reset，退出 0：`OBS_PROTOCOL_LIVE_OK (1 task(s), 0 warning(s))`。日志 `rl_exp/out/lizard2_e_fresh_obs_20261020.log` SHA256 `ed04e7c68f594a6a01ea9228bf18b6e4306a747bb33881816f8afe080658240f`；检查入口源码 `c4c8e5df486db33ccb1d50c47229dca4d30ebe1a28a772f163284410c53090a0`。实测 source 为原 measured manifest `d876713b1a4aa6a4fef51f39bed284f4a15a01d562815eefefcf74eebfb77137`，未改正式 runtime order 或 pin；实际 USD/URDF hash 与 manifest 一致。
+
+真实 manager 动作维度为腿 20＋躯体 10=30；policy 七项宽度 `3+3+3+3+30+30+30=102`，实际校验 shape `(1,102)` 成功。`BOUND_FEET` 明确四足端 `lf_wrist/rf_wrist/rl_ankle/rr_ankle`，执行非空足端声明、robot/sensor 集合与实际有序动作通道校验，不是 feet 空集合过零。diagnostic 分支日志特意写 `policy=102(unapproved)`：它不比较已审冻结宽度，不把此次接线检查升级成新配方/协议批准。
+
+独立审核 `252960c9-ae23-484f-9f39-91af4ee46cae` 直接核 inertia diff、实测输入、自检日志、obs 代码和真实日志，离线重跑十输入负例；批准新惯量输入验证及在线布局有限切片。该审核只核观测顺序/宽度/shape/四足端及绑定，**未验证 obs 数值全 finite/语义正确、足端受力或非零值映射**；`0 warning(s)` 仅检查器 warnings，不是框架日志无警告。哈希后再读取的现有 TOCTOU 边界保留，不声称并发不可替换。
+
+真实已执行在线命令可复读；新采集日志应另选路径，不覆盖本机证据：
+
+```cmd
+"E:\IsaacLab\env_isaaclab\Scripts\python.exe" -B rl_exp\tools\verify\obs_protocol_live.py --headless --device cuda:0 --tasks Lizard2-Flat-Play-v3 --envs 1 --target_config rl_exp\out\lizard2_e_fresh_reset_20261020\measured_manifest.json --naming palm_spatial
+```
+
+本轮完整离线套件返回 0：`ALL_OFFLINE_CHECKS_PASSED (37/37 in 42.1s)`，原摘要单一来源项当前工作树检查通过；本执行者未修改该项文件或闸门，历史失败不改写，也不代做其它事项修复审核。本轮惯量源码自检与当前路径 diff 格式通过。独立回填审核 `3522f1d4-f641-4684-8bb6-8273b46ef626` 直接核两份验收记录、四份 work diff、15 项实际摘要、CLI 参数/锚点及未完边界，批准本轮回填，无阻塞；未重跑仿真或代替矩阵独立审计。提交前惯量源码编译及审核摘要复算一致，限定本轮七文件后的 `git hook run pre-commit` 返回 0，未跳过钩子。
+
+当前解除新输入的两姿态固定基 M 及独立在线布局缺证，**不解除后端驱动/实体响应、默认受载 PD、有效力矩/速度行为、obs 非零语义、gait writer/绘图、终止 hook、其余 E3 消费者或 D 集成审核**。A 不重开手工步态，全 ROM/连续安全域不新增；各项继续在办，不改已训 v3。
