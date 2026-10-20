@@ -50,6 +50,7 @@ Run:
         --python rl_exp/blender/scripts/lizard2_stance_candidate.py
 """
 
+import importlib.util
 import math
 import os
 import sys
@@ -59,6 +60,10 @@ import bpy
 from mathutils import Matrix, Vector
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_file_binding_spec = importlib.util.spec_from_file_location(
+    "file_binding", os.path.join(_SCRIPT_DIR, "..", "..", "tools", "runrecord", "binding.py"))
+file_binding = importlib.util.module_from_spec(_file_binding_spec)
+_file_binding_spec.loader.exec_module(file_binding)
 #: The ``.blend`` assets stay one level up: this folder holds scripts, not assets.
 _ASSET_DIR = os.path.dirname(_SCRIPT_DIR)
 BLEND_IN = os.path.join(_ASSET_DIR, "lizard_stance.blend")
@@ -382,7 +387,7 @@ def contract_self_check(without_fix=False):
     watched = [root / name for name in ("blender", "assets", "versions")]
 
     def snapshot():
-        return {str(p): hashlib.sha256(p.read_bytes()).hexdigest()
+        return {str(p): file_binding.sha256_file(p)
                 for directory in watched for p in directory.rglob("*") if p.is_file()}
 
     before = snapshot()
@@ -424,8 +429,15 @@ def contract_self_check(without_fix=False):
     # The existing geometry-role reader and exporter both consume the real old .blend, read-only.
     scene, arm, arm_mw, bones, on_bone = load()
     assert len(leg_roles(arm_mw, bones, on_bone)) == 4
-    for robot in ("lizard", "lizard2", "lizard2_candidate"):
-        consume(robot, memory=True)
+    for robot in ("lizard", "lizard2", "lizard2_candidate", "lizard2_candidate_split"):
+        exported = consume(robot, memory=True)
+        if robot == "lizard2_candidate_split":
+            for leg, bound in exported["binding"].items():
+                assert tuple(bound["roles"]) == exported["leg_names"].CHAIN_ROOTS
+                for role, item in bound["roles"].items():
+                    assert item["source_bone"] == (None if role == "hip" else f"{leg}_{role}")
+                assert bound["end_link"] == exported["leg_names"].end_link(
+                    leg, exported["leg_names"].SPLIT_NAMING)
     try:
         consume("lizard2_palm_contract", memory=True)
     except ValueError as exc:
@@ -507,8 +519,206 @@ def contract_self_check(without_fix=False):
         raise AssertionError("source/target mismatch accepted")
     after = snapshot()
     assert before == after, "watched asset tree changed"
-    print("P1 PASS: old consumers=3; palm positive=1; negatives=10; "
+    print("P1 PASS: old consumers=3; split rename consumer=1; palm positive=1; negatives=10; "
           "asset files hashed=%d unchanged; Python writes forbidden; geometry_proven=False" % len(before))
+
+
+def spatial_export_self_check(blend, build_report, output_dir, *, build_report_sha256,
+                              regression_only=None):
+    """Exercise the real saved-source export and prewrite rejection in Blender."""
+    import json
+    from pathlib import Path
+    import xml.etree.ElementTree as ET
+
+    exporter = Path(_SCRIPT_DIR) / "generate_urdf.py"
+    output = Path(output_dir).resolve()
+    root = Path(_SCRIPT_DIR).parents[1] / "out"
+    assert root.resolve() in output.parents and not output.exists()
+    report_path = Path(build_report).resolve()
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    reference = Path(report["candidate_urdf"])
+    protected = {p: file_binding.sha256_file(p)
+                 for directory in (report_path.parent, Path(_ASSET_DIR),
+                                   Path(_SCRIPT_DIR).parents[1] / "assets",
+                                   Path(_SCRIPT_DIR).parents[1] / "versions",
+                                   Path(_SCRIPT_DIR).parents[1] / "lizard2_candidate")
+                 for p in directory.rglob("*") if p.is_file() and p.suffix != ".py"}
+    assert file_binding.sha256_file(report_path) == build_report_sha256
+    code = exporter.read_text(encoding="utf-8")
+    original_open = bpy.ops.wm.open_mainfile
+
+    def consume(destination, robot="lizard2_palm_spatial", source=blend, mutate=None,
+                reference_mutation=None, approved_sha=build_report_sha256):
+        old_argv = sys.argv
+        sys.argv = [str(exporter), "--", "--robot", robot, "--blend", str(source),
+                    "--build_report", str(report_path), "--out_dir", str(destination)]
+        if approved_sha is not None:
+            sys.argv.extend(("--build_report_sha256", approved_sha))
+        namespace = {"__file__": str(exporter), "__name__": "__main__"}
+        # Replace only the load boundary: validation/export still run the normal write entry.
+        def load_then_mutate(**kwargs):
+            result = original_open(**kwargs)
+            if reference_mutation:
+                reference_mutation(namespace["REFERENCE_ROOT"])
+            if mutate:
+                mutate()
+                bpy.context.view_layer.update()
+            return result
+        load_statement = "bpy.ops.wm.open_mainfile(filepath=_BLEND_IN)"
+        assert code.count(load_statement) == 1
+        test_code = code.replace(load_statement, "load_then_mutate(filepath=_BLEND_IN)")
+        if regression_only:
+            test_code = test_code.replace("os.makedirs(OUT_DIR, exist_ok=False)",
+                                          "raise AssertionError('prewrite accepted ' + regression_only)")
+            namespace["regression_only"] = regression_only
+        namespace["load_then_mutate"] = load_then_mutate
+        try:
+            exec(compile(test_code, str(exporter), "exec"), namespace)
+        finally:
+            sys.argv = old_argv
+
+    def reject(label, **kwargs):
+        destination = output.with_name(output.name + "_negative_" + label)
+        assert not destination.exists()
+        try:
+            consume(destination, **kwargs)
+        except ValueError as exc:
+            print("SPATIAL NEGATIVE %s: %s" % (label, exc))
+        else:
+            raise AssertionError("write entry accepted " + label)
+        assert not destination.exists(), "negative created output: " + label
+
+    def bad_mass(tree):
+        tree.find("link/inertial/mass").set("value", "nan")
+
+    def forged_report():
+        # Real tampered JSON bytes; retain original externally supplied approval hash.
+        # No source file mutation: replace only this report's read at the trust boundary.
+        from unittest.mock import patch
+        import io
+        forged = dict(report, total_mass_kg=-123,
+                      candidate_sha256=file_binding.sha256_file(reference),
+                      candidate_blend_sha256=file_binding.sha256_file(Path(blend)),
+                      candidate_files_sha256={name: file_binding.sha256_file(report_path.parent / name)
+                                              for name in report["candidate_files_sha256"]})
+        forged_bytes = json.dumps(forged).encode("utf-8")
+        original_open_path = Path.open
+        def open_path(path, mode="r", *args, **kwargs):
+            if path.resolve() == report_path:
+                return io.BytesIO(forged_bytes) if "b" in mode else io.StringIO(forged_bytes.decode("utf-8"))
+            return original_open_path(path, mode, *args, **kwargs)
+        import builtins
+        original_builtin_open = builtins.open
+        def builtin_open(path, mode="r", *args, **kwargs):
+            if isinstance(path, (str, os.PathLike)) and Path(path).resolve() == report_path:
+                return io.BytesIO(forged_bytes) if "b" in mode else io.StringIO(forged_bytes.decode("utf-8"))
+            return original_builtin_open(path, mode, *args, **kwargs)
+        with patch.object(Path, "open", open_path), patch.object(builtins, "open", builtin_open):
+            reject("forgedreport", mutate=None)
+
+    if regression_only:
+        assert regression_only in ("forgedreport", "nonfinite_mass")
+        if regression_only == "forgedreport":
+            forged_report()
+        else:
+            reject("nonfinite_mass", reference_mutation=bad_mass)
+        return
+
+    consume(output)
+    actual = ET.parse(output / "lizard2_palm_spatial.urdf").getroot()
+    expected = ET.parse(reference).getroot()
+    assert len(actual.findall("link")) == 31 and len(actual.findall("joint")) == 30
+    def attributes(element):
+        return [(node.tag, dict(node.attrib)) for node in element.iter()]
+    expected_links = {node.get("name"): node for node in expected.findall("link")}
+    for node in actual.findall("link"):
+        assert attributes(node.find("inertial")) == attributes(expected_links[node.get("name")].find("inertial"))
+    expected_joints = {node.get("name"): node for node in expected.findall("joint")}
+    for node in actual.findall("joint"):
+        assert attributes(node) == attributes(expected_joints[node.get("name")])
+    for mesh in actual.iter("mesh"):
+        assert (output / mesh.get("filename")).is_file()
+    assert json.loads((output / "export.json").read_text())["mass_policy"] == "reference_full_link_inertial"
+    print("SPATIAL POSITIVE: actual meshes; links=31 joints=30; full inertials/joints unchanged")
+
+    def arm():
+        return next(o for o in bpy.context.scene.objects if o.type == "ARMATURE")
+    def edit(change):
+        bpy.context.view_layer.objects.active = arm()
+        bpy.ops.object.mode_set(mode="EDIT")
+        change(arm().data.edit_bones)
+        bpy.ops.object.mode_set(mode="OBJECT")
+    def wrong_mesh():
+        obj = next(o for o in bpy.context.scene.objects if o.type == "MESH")
+        obj.parent_bone = "lf_wrist" if obj.parent_bone != "lf_wrist" else "base_link"
+    def changed_geometry():
+        obj = next(o for o in bpy.context.scene.objects if o.type == "MESH")
+        obj.data.vertices[0].co.x += .01
+        obj.data.update()
+    def wrong_basis():
+        arm().pose.bones["lf_shoulder_twist"].matrix_basis = Matrix.Rotation(.1, 4, "X")
+    cases = {
+        "missingaxis": lambda: edit(lambda eb: eb.remove(eb["lf_shoulder_twist"])),
+        "mesh_ownership": wrong_mesh,
+        "geometry": changed_geometry,
+        "basis": wrong_basis,
+        "pivot": lambda: edit(lambda eb: setattr(eb["lf_shoulder_twist"], "head", eb["lf_shoulder_twist"].head + Vector((.01, 0, 0)))),
+        "body_parent": lambda: edit(lambda eb: setattr(eb["neck_pitch"], "parent", eb["base_link"])),
+    }
+    for label in (*cases, "wrongtarget", "wrongsource"):
+        reject(label, robot="lizard2_palm_contract" if label == "wrongtarget" else "lizard2_palm_spatial",
+               source=BLEND_IN if label == "wrongsource" else blend, mutate=cases.get(label))
+    forged_report()
+    for label, value in (("missingapproval", None), ("malformedapproval", "unknown"),
+                         ("wrongapproval", "0" * 64)):
+        reject(label, approved_sha=value)
+    # Approved bytes authenticated above; probe declaration schema without touching disk.
+    from unittest.mock import patch
+    original_read = Path.read_text
+    for label in ("missingdeclsource", "missingdeclurdf", "malformeddigest", "unknownactual"):
+        modified = json.loads(json.dumps(report))
+        declared = modified["candidate_files_sha256"]
+        if label.startswith("missingdecl"):
+            name = "palm_spatial.blend" if label == "missingdeclsource" else "palm_spatial.urdf"
+            declared.pop(name)
+            modified.pop("candidate_blend_sha256" if label == "missingdeclsource" else "candidate_sha256")
+        elif label == "malformeddigest":
+            declared["palm_spatial.blend"] = "unknown"
+        else:
+            declared["absent_source.obj"] = None
+        def read(path, *args, **kwargs):
+            return json.dumps(modified) if path.resolve() == report_path else original_read(path, *args, **kwargs)
+        with patch.object(Path, "read_text", read):
+            reject(label)
+    inertial_cases = {"nonfinite_mass": bad_mass}
+    for key in ("xyz", "rpy"):
+        for bad in ("nan 0 0", "inf 0 0", "0 0"):
+            inertial_cases[key + "_" + bad.replace(" ", "_")] = (
+                lambda tree, key=key, bad=bad: tree.find("link/inertial/origin").set(key, bad))
+    for key in ("ixx", "ixy", "ixz", "iyy", "iyz", "izz"):
+        inertial_cases["nonfinite_" + key] = (
+            lambda tree, key=key: tree.find("link/inertial/inertia").set(key, "nan"))
+    inertial_cases["missing_tensor_key"] = lambda tree: tree.find("link/inertial/inertia").attrib.pop("iyz")
+    inertial_cases["zero_mass"] = lambda tree: tree.find("link/inertial/mass").set("value", "0")
+    for label, change in inertial_cases.items():
+        reject(label, reference_mutation=change)
+    # Actual writer must preserve nonzero cross terms, not merely an all-zero reference.
+    sentinel = output.with_name(output.name + "_tensor_sentinel")
+    def cross_terms(tree):
+        tensor = tree.find("link/inertial/inertia")
+        for key in ("ixy", "ixz", "iyz"):
+            tensor.set(key, "0.000001")
+    consume(sentinel, reference_mutation=cross_terms)
+    serialized = ET.parse(sentinel / "lizard2_palm_spatial.urdf").find("link/inertial/inertia")
+    assert all(serialized.get(key) == "0.000001" for key in ("ixy", "ixz", "iyz"))
+    assert all(file_binding.sha256_file(p) == value for p, value in protected.items())
+    results = {"status": "PASS", "positive": 2, "negatives": 16 + len(inertial_cases),
+               "build_report_sha256": build_report_sha256,
+               "code_sha256": {p.name: file_binding.sha256_file(p) for p in (exporter, Path(__file__))},
+               "protected_files": len(protected), "protected_sha256": {str(p): h for p, h in protected.items()},
+               "negative_outputs_absent": True, "nonzero_offdiagonal_writer": "PASS"}
+    (output / "self_check.json").write_text(json.dumps(results, indent=2), encoding="utf-8")
+    print("SPATIAL PASS:", json.dumps({k: v for k, v in results.items() if k != "protected_sha256"}))
 
 
 def palm_body75_vertical(options):
@@ -532,7 +742,7 @@ def palm_body75_vertical(options):
     for folder in ("assets", "versions", "lizard2_candidate", "meshes"):
         protected.update(p for p in (repo / "rl_exp" / folder).rglob("*") if p.is_file())
     def hashes():
-        return {str(p.relative_to(repo)): hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(protected)}
+        return {str(p.relative_to(repo)): file_binding.sha256_file(p) for p in sorted(protected)}
     before_hashes = hashes()
     bpy.ops.wm.open_mainfile(filepath=str(source))
     scene = bpy.context.scene
@@ -1345,7 +1555,7 @@ def palm_p2_sample(args):
         baseline = json.loads((baseline_dir / "measurements.json").read_text(encoding="utf-8"))
     for folder in ("assets", "versions", "lizard2_candidate", "meshes"):
         protected.extend(p for p in (repo / "rl_exp" / folder).rglob("*") if p.is_file())
-    hashes = {str(p.relative_to(repo)): hashlib.sha256(p.read_bytes()).hexdigest() for p in protected}
+    hashes = {str(p.relative_to(repo)): file_binding.sha256_file(p) for p in protected}
     report = {"status": "PROVISIONAL_SAMPLE_NOT_ACCEPTED", "angles_deg": angles,
               "approval": "diagnostic turns only; no position/mesh tolerances, ROM, physics or adoption approval",
               "units": "world coordinates and distances m; angles deg; body forward +X",
@@ -1990,7 +2200,7 @@ def palm_p2_sample(args):
         "Pair counts are not penetration depths or clearance. Containment not detected. Root surfaces still intersect; " \
         "no shank trimming, ball rescaling, collision filtering, ROM, full-cycle, physics or self-collision acceptance."
     report["mechanical_invariants"] = "PASS only topology, physical cap construction and float32 rigid-parent arithmetic; NOT P2 geometry acceptance"
-    after = {str(p.relative_to(repo)): hashlib.sha256(p.read_bytes()).hexdigest() for p in protected}
+    after = {str(p.relative_to(repo)): file_binding.sha256_file(p) for p in protected}
     assert hashes == after, "protected source/adopted/export/frozen files changed"
     report["protected_sha256_after"] = after
     print("P2 MECHANICAL CHECK OK; %d real limbs; %d single-joint measurements; negatives=%d; NOT ACCEPTED" %
@@ -2228,7 +2438,7 @@ def palm_p2_sample(args):
     report["pngs"] = pngs
     report["blend"] = str((output / "sample_neutral.blend").relative_to(repo))
     # Protected files checked again after save/render, not just construction.
-    assert hashes == {str(p.relative_to(repo)): hashlib.sha256(p.read_bytes()).hexdigest() for p in protected}
+    assert hashes == {str(p.relative_to(repo)): file_binding.sha256_file(p) for p in protected}
     (output / "measurements.json").write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
     print("P2 OUTPUT " + str(output))
 
@@ -2246,14 +2456,16 @@ def palm_limit_probe(args):
     parser = argparse.ArgumentParser(description=palm_limit_probe.__doc__)
     parser.add_argument("--limit_probe", action="store_true")
     parser.add_argument("--output_dir", required=True)
+    parser.add_argument("--blend", type=Path)
+    parser.add_argument("--boundary_samples", type=int, default=0)
     options = parser.parse_args(args)
-    source = Path(_ASSET_DIR) / "lizard2_palm_p2_sample_claw_all_lowered_body75_vertical_tail_ground/sample_neutral.blend"
+    source = (options.blend or Path(_ASSET_DIR) / "lizard2_palm_p2_sample_claw_all_lowered_body75_vertical_tail_ground/sample_neutral.blend").resolve()
     output = Path(options.output_dir).resolve()
     if output.parent != Path(_ASSET_DIR).resolve() or not output.name.startswith("lizard2_palm_limit_probe_"):
         raise ValueError("Limit probe requires an isolated lizard2_palm_limit_probe_* output")
     if output.exists():
         raise FileExistsError("Refuse overwrite: " + str(output))
-    protected = {p: hashlib.sha256(p.read_bytes()).hexdigest()
+    protected = {p: file_binding.sha256_file(p)
                  for p in Path(_ASSET_DIR).rglob("*") if p.is_file()}
     bpy.ops.wm.open_mainfile(filepath=str(source))
     arm = next(o for o in bpy.context.scene.objects if o.type == "ARMATURE")
@@ -2393,6 +2605,14 @@ def palm_limit_probe(args):
         for values in itertools.product((-1, 1), repeat=len(chain)):
             poses.append((leg + ":corner:" + str(values),
                           {n: limits[n][1] * s for n, s in zip(chain, values)}))
+    if options.boundary_samples:
+        if options.boundary_samples < 2:
+            raise ValueError("boundary_samples must be at least 2")
+        for n, (lo, hi) in limits.items():
+            for step in range(1, options.boundary_samples + 1):
+                poses.extend(("boundary:" + n + ":" + str(q), {n: q})
+                             for q in (lo * step / options.boundary_samples,
+                                       hi * step / options.boundary_samples))
     def tree_distance(a, b):
         paths = []
         for n in (a, b):
@@ -2433,7 +2653,7 @@ def palm_limit_probe(args):
                      "flipped_or_vertical_palms": {n: v for n, v in facing.items() if v <= 0},
                      "floor_penetration_fixed_base_m": {n: v for n, v in ground_min.items() if v < -bound},
                      "reverse_bending": [n for n in knee_facts if not bending_ok(n, pose.get(n, 0))]})
-    assert protected == {p: hashlib.sha256(p.read_bytes()).hexdigest() for p in protected}, "Source artifacts changed"
+    assert protected == {p: file_binding.sha256_file(p) for p in protected}, "Source artifacts changed"
     report = {"status": "PROPOSED_RANGES_NOT_ACCEPTED", "source": str(source),
         "source_sha256": protected[source], "ground_z_m": ground, "naming": "palm",
         "source_neutral_floor_clearance_m": {n: min(p.z - ground for obj in objects for p in obj["points"])
