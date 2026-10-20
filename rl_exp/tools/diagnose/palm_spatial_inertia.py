@@ -237,7 +237,59 @@ def _snapshot(robot, live, target, label, source_q):
                       'Raw tensor frame hypotheses are measurements, not assumed conventions.'}
 
 
-def _self_check(break_projection=False):
+def _validate_inputs(args):
+    """Validate approved fresh inputs before JSON parsing, output writes or Kit startup."""
+    reset_hash = getattr(args, 'approved_reset_sha256', None)
+    pose_hash = getattr(args, 'approved_pose_sha256', None)
+    fresh = reset_hash is not None or pose_hash is not None
+    if fresh:
+        wiring.require(reset_hash and pose_hash, 'fresh reset and pose approvals both required')
+        wiring.require(not args.repair_inertia, 'fresh reset cannot use legacy inertia repair')
+        for path, digest, label in ((args.reset_report, reset_hash, 'reset'), (args.pose_report, pose_hash, 'pose')):
+            wiring.require(wiring.binding.sha256_file(path) == digest, label + ' approval mismatch')
+    source = json.loads(args.reset_report.read_text(encoding='utf-8'))
+    assert source['completed'] and source['status'] == 'reset_and_neutral_first_step_verified'
+    manifest = Path(source['replay_manifest'])
+    assert wiring.binding.sha256_file(manifest) == source['replay_manifest_sha256'], 'replay manifest hash mismatch'
+    pose_report = json.loads(args.pose_report.read_text(encoding='utf-8'))
+    assert pose_report['legs']['combined']['completed_combined_loop']
+    # The approved old pose remains a state sample, not a new asset or gait approval.
+    assert pose_report['identity']['candidate_files_sha256']['palm_spatial.urdf'] == wiring.URDF_HASH, 'pose source URDF mismatch'
+    pose = next(r for r in pose_report['legs']['combined']['rows'] if r['s'] == .25)
+    assert not pose['failures']
+    out = args.out.resolve()
+    assert wiring.REPO / 'rl_exp/out' in out.parents and not out.exists(), 'fresh isolated output required'
+    wiring.check_build(wiring.BUILD)
+    if fresh:
+        document = json.loads(manifest.read_text(encoding='utf-8'))
+        approved_urdf = source['input']['urdf_sha256']
+        exported = wiring.check_export(Path(document['input']['export_report']),
+                                       document['input']['export_report_sha256'], approved_urdf)
+        wiring.require(document['sha256']['urdf'] == document['input']['urdf_sha256'] == approved_urdf,
+                       'fresh URDF lineage mismatch')
+        wiring.require(document['input']['candidate_files_sha256'] == exported['files_sha256'],
+                       'fresh export file binding mismatch')
+        wiring.require(document['connection_filter']['source_usd_sha256'] == source['input']['usd_sha256'],
+                       'fresh USD reset binding mismatch')
+        root = Path(document['target_binding']['urdf']).resolve().parent
+        for name, digest in exported['files_sha256'].items():
+            if name == 'lizard2_palm_spatial.urdf':
+                path = Path(document['target_binding']['urdf'])
+            else:
+                path = (root / name).resolve()
+                wiring.require(path.is_relative_to(root), 'fresh mesh path escape')
+            wiring.require(wiring.binding.sha256_file(path) == digest, 'fresh replay file hash mismatch: ' + name)
+        # The real approved replay has no measured order. Do not substitute measured_manifest
+        # or drop the order check to accommodate it: that is a distinct report-bound input.
+        wiring.check_registered_manifest(manifest, measured_order=False)
+        q = pose['q_rad']
+        wiring.require(set(q) == set(document['target_binding']['joint_names'])
+                       and np.isfinite(list(q.values())).all() and any(v != 0. for v in q.values()),
+                       'fresh c=0.25 state mismatch')
+    return source, manifest, pose, out, fresh
+
+
+def _self_check(break_projection=False, args=None):
     from unittest.mock import patch
     if break_projection:
         scope = {}
@@ -261,28 +313,59 @@ def _self_check(break_projection=False):
             pass
         else:
             raise AssertionError('unexplained/nonfinite inertia accepted')
+    if args is not None and (args.approved_reset_sha256 is not None or args.approved_pose_sha256 is not None):
+        _, manifest, _, _, fresh = _validate_inputs(args)
+        assert fresh
+        def rejected(label, candidate):
+            try:
+                _validate_inputs(candidate)
+            except (AssertionError, ValueError):
+                print('INERTIA_INPUT_REJECTED', label)
+            else:
+                raise AssertionError('invalid input accepted: ' + label)
+        for label, changes in (
+                ('wrong_reset_approval', {'approved_reset_sha256': '0' * 64}),
+                ('wrong_pose_approval', {'approved_pose_sha256': '0' * 64}),
+                ('partial_approval', {'approved_pose_sha256': None}),
+                ('fresh_legacy_repair', {'repair_inertia': True}),
+                ('output_escape', {'out': wiring.REPO / 'not_an_inertia_output'}),
+                ('output_exists', {'out': args.reset_report.parent})):
+            candidate = copy.copy(args)
+            vars(candidate).update(changes)
+            rejected(label, candidate)
+        read_text = Path.read_text
+        # Mutate only in-memory reads; approved artifacts remain untouched. Real validators run.
+        for label, path, mutate in (
+                ('wrong_pose_source', args.pose_report,
+                 lambda d: d['identity']['candidate_files_sha256'].update({'palm_spatial.urdf': '0' * 64})),
+                ('wrong_manifest', args.reset_report,
+                 lambda d: d.update(replay_manifest=d['measured_manifest'])),
+                ('wrong_fresh_urdf', manifest,
+                 lambda d: d['sha256'].update(urdf='0' * 64)),
+                ('inherited_runtime_order', manifest,
+                 lambda d: d.update(runtime_joint_order=d['joint_order']))):
+            document = json.loads(read_text(path, encoding='utf-8'))
+            mutate(document)
+            text = json.dumps(document)
+            def altered(p, *a, **kw):
+                return text if p.resolve() == path.resolve() else read_text(p, *a, **kw)
+            with patch.object(Path, 'read_text', altered):
+                rejected(label, args)
+        print('SPATIAL_INERTIA_FRESH_INPUT_CHECK_OK')
     print('SPATIAL_INERTIA_SELF_CHECK_OK')
 
 
 def _run(args):
-    source = json.loads(args.reset_report.read_text(encoding='utf-8'))
-    assert source['completed'] and source['status'] == 'reset_and_neutral_first_step_verified'
-    manifest = Path(source['replay_manifest'])
-    assert wiring.binding.sha256_file(manifest) == source['replay_manifest_sha256']
-    pose_report = json.loads(args.pose_report.read_text(encoding='utf-8'))
-    assert pose_report['legs']['combined']['completed_combined_loop']
-    assert pose_report['identity']['candidate_files_sha256']['palm_spatial.urdf'] == wiring.URDF_HASH
-    pose = next(r for r in pose_report['legs']['combined']['rows'] if r['s'] == .25)
-    assert not pose['failures']
-    out = args.out.resolve()
-    assert wiring.REPO / 'rl_exp/out' in out.parents and not out.exists()
-    wiring.check_build(wiring.BUILD)
+    source, manifest, pose, out, fresh = _validate_inputs(args)
     out.mkdir(parents=True, exist_ok=False)
     shutil.copyfile(__file__, out / 'source.py')
     result = {'completed': False, 'stage': 'app_startup', 'input': {
         str(p): wiring.binding.sha256_file(p) for p in (args.reset_report, args.pose_report, manifest)},
         'code_sha256': wiring.binding.sha256_file(Path(__file__)), 'snapshots': [],
         'scope': 'one startup; fixed-base zero gains; neutral and existing c=0.25 state; no commanded physics steps'}
+    if fresh:
+        result['approvals'] = {'reset_report_sha256': args.approved_reset_sha256,
+                               'pose_report_sha256': args.approved_pose_sha256}
     app, env = None, None
     try:
         from isaaclab.app import AppLauncher
@@ -296,7 +379,10 @@ def _run(args):
             manifest, result['inertia_repair'] = _repair_manifest(manifest, out)
         result['replay_manifest'] = str(manifest)
         result['replay_manifest_sha256'] = wiring.binding.sha256_file(manifest)
-        wiring.check_registered_manifest(manifest)
+        if fresh:
+            wiring.check_registered_manifest(manifest, measured_order=False)
+        else:
+            wiring.check_registered_manifest(manifest)
         cfg = copy.deepcopy(resolve_task_cfg(wiring.REGISTERED_TASK))
         target = wiring.obs_protocol.load_diagnostic_target(manifest, cfg, wiring.REGISTERED_TASK)
         cfg.sim.device = args.device
@@ -349,9 +435,13 @@ if __name__ == '__main__':
     parser.add_argument('--self_check', action='store_true')
     parser.add_argument('--break_projection', action='store_true')
     parser.add_argument('--repair_inertia', action='store_true')
+    parser.add_argument('--approved_reset_sha256', help='explicit fresh reset report approval; requires pose approval')
+    parser.add_argument('--approved_pose_sha256', help='explicit existing c=0.25 pose report approval')
     if '--self_check' in sys.argv:
         args = parser.parse_args()
-        _self_check(args.break_projection)
+        if (args.approved_reset_sha256 is not None or args.approved_pose_sha256 is not None) and not all((args.reset_report, args.pose_report, args.out)):
+            parser.error('fresh input self_check requires reset_report, pose_report and out')
+        _self_check(args.break_projection, args)
     else:
         from isaaclab.app import AppLauncher
         AppLauncher.add_app_launcher_args(parser)
