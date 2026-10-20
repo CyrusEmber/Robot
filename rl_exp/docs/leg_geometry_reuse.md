@@ -16,6 +16,7 @@
 
 | 需要什么 | 复用入口 | 适用边界 |
 |---|---|---|
+| 普通数据声明任意链数/轴数，复验具名完整姿态与整机碰撞 | `rl_exp/tools/diagnose/body_precheck.py`：`--config`、`--output`、`--max_cases`；输入契约与支持范围见模块文档，真实候选样例为同目录 `body_precheck_lizard2.json` | 最小采样入口，复用现有 FK/三角网格算法；完整关节、链角色、资产摘要与实体覆盖须显式。限位/整机碰撞为采样几何基线，地面、端点及外部源姿态仅按需求选；不继承相邻/旧白名单。当前只支持 revolute/fixed 树、零 rpy/碰撞变换、单位缩放及单个闭合一致绕序三角 OBJ；缺参/预算未判，不支持拒绝。样例无排除，不能当候选合格或正式采用批准 |
 | 从实际树取关节、根坐标系 FK、骨段夹角 | `rl_exp/tools/verify/check_leg_reachability.py`：`chain_joint_names`、`load_chain`、`chain_frames`、`straight_hfe`、`thigh_shank_angle` | 显式传 naming；共中心承载枢轴不是骨段。`straight_hfe` 的平面角不证明非平面骨段可以完全共线；该文件不是完整可达域扫描器 |
 | 实际五轴链端、掌网格、保存的 Blender 快照对照及增量静态切片 | `rl_exp/tools/diagnose/palm_spatial_probe.py`：`Leg`、`check_blender`、`--static_slices` | `Leg` 可复用树、网格和姿态读点；向量须完整对应 `names`。静态模式按具名 twist／肘膝／腕踝取候选端点和零位切片、其它关节零，输出网格地面读数与相交反例，不给安全域判词；`--self_check` 校验口径。`solve` 和默认 CLI 是历史固定参考点／水平掌回归任务，不是自然步态求解入口；掌参考点不是实时材料接触点 |
 | 网格距离、表面相交、包含与逐姿态碰撞 | `rl_exp/tools/diagnose/palm_motion_boundaries.py`：`surface_distance`、`surface_crosses`、`inside`、`Collision`、`validate_geometry` | 网格须满足闭合与绕序检查；先验证 FK 支持的 joint rpy、碰撞变换和缩放。`Collision` 继承现有批准对和直接连接排除，须核对新树下实际过滤集合；它不检查地面，也不证明连续域安全 |
