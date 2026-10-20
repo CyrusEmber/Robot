@@ -11,11 +11,13 @@ must be fresh, under repository rl_exp/out or system temp. Exit 0 only for pass,
 
 Contract (three blocks, no inferred q, roles, approvals or exclusions):
 inputs: identity (nonempty label), units='SI', urdf={path, sha256},
-        meshes=[{path, sha256}], threshold_basis={approved_by, reference}.
+        meshes=[{path, sha256}], threshold_basis={approved_by, reference},
+        optional role_evidence={path, sha256}.
 body: chains={id: {root_link, end_link, joint_roles={exact_joint: role},
                   contact_links=[link]}}, other_joints={exact_joint: role},
       collision_entities=[link], excluded_entities=[{link, reason}],
-      allowed_pairs=[{pair:[link,link], reason}].
+      allowed_pairs=[{pair:[link,link], reason}] (legacy WHOLE-PAIR EXCLUSIONS,
+      deprecated for contact permissions; retained for existing configurations).
 tasks: cases=[{id, phase, q_rad={ALL movable joints: radians},
                root_transform:4x4 SE3}],
        requirements=[{id, check, required:bool, cases:[case_id], chains:[id],
@@ -24,8 +26,20 @@ Checks/params:
  joint_limits: {} (actual URDF bounds, whole machine).
  end_position: {expected_m:{case_id:{chain_id:[x,y,z]}}, tolerance_m}.
    Position is end-link origin in world, NOT an inferred sole/contact point.
- self_collision: {clearance_m}; all declared entities, all pairs unless allowed.
-   Zero-clearance touching allowed; penetration fails, even at clearance=0.
+ self_collision: {clearance_m, optional contact_pairs:[{pair:[link,link],reason}]}.
+   Contact pairs remain checked with zero clearance; they waive ONLY the positive
+   engineering margin, never the intersection test. Pair exclusions and contact
+   permissions must not overlap. No inherited joint-neighbour exclusions.
+   A separating face plane certifies nonpenetration to floating-point resolution.
+   Predicate tolerance is 64 * float64 epsilon * pair extent [m], NOT an approved
+   penetration allowance. Concave contacts without a separating face plane retain
+   the conservative shared intersection result; no general contact classifier.
+ role_consistency: {}. Requires inputs.role_evidence, an externally approved JSON:
+   {schema:'body_precheck_roles_v1', urdf_sha256, joint_roles:{ALL joints:role},
+    approved_by, reference}. ALL means movable joints including other_joints.
+   Evidence is read once, hash-bound and compared against the actual URDF identity.
+   This checks adapter role semantics against the external mapping, NOT physical
+   axis/pivot or entity motion. Use independent source_consistency poses for those.
  ground: {normal:[x,y,z], height_m, min_gap_m,
           allowed_contacts:{link:{max_penetration_m,max_gap_m}}}.
    Unit normal; signed distance normal.dot(world_vertex)-height_m [m]. Contact
@@ -39,6 +53,10 @@ Five row states: pass/fail/not_evaluated/not_supported/not_applicable. NA only
 for self_collision with one entity (explicit mathematical reason). Every case
 needs required joint_limits + self_collision over ALL chains. Ground and
 end_position apply only to explicitly selected cases/chains; neither is inferred.
+coverage.role_semantics and coverage.source_pose_consistency separately report
+full-selection checks across every case; absent evidence stays not_evaluated.
+The role evidence's independence and approval remain caller/auditor prerequisites;
+copying the adapter mapping into another file is not independent validation.
 Whole-machine coverage means sampled limits + collision geometry only, not task
 completion. Optional rows cannot replace mandatory ones. Case budget leaves
 rows not_evaluated; validation still covers ALL cases before sampling.
@@ -58,6 +76,8 @@ triangle algorithms; nonzero double-area must exceed 1e-14 m^2 and at least one
 finite-area face is required. Topology checks do NOT certify self-intersection
 absence or a meaningful physical solid; sampled results assume exported solid
 surfaces. No polygon truncation.
+Self collision is evaluated in the robot root frame, so a common world transform
+does not change its predicate; ground/endpoints/source poses use the world frame.
 Excluded meshes are not consumed or checked. No asset rewrite, Blender,
 continuous proof, dynamics, stability or reachability solving. Shared FK and
 triangle algorithms retain floating-point tolerances; boundary touching may
@@ -81,7 +101,7 @@ sys.path.insert(0, str(REPO / 'rl_exp/tools/runrecord'))
 import binding  # noqa: E402
 
 SUPPORT = __doc__
-CHECKS = {'joint_limits', 'end_position', 'self_collision', 'ground', 'source_consistency'}
+CHECKS = {'joint_limits', 'end_position', 'self_collision', 'ground', 'source_consistency', 'role_consistency'}
 
 
 def need(condition, reason):
@@ -153,6 +173,8 @@ def bound_input(spec, base):
 def revalidate_inputs(report):
     records = ([report['inputs']['urdf']] if 'urdf' in report['inputs'] else [])
     records += report['inputs'].get('meshes', [])
+    if 'role_evidence' in report['inputs']:
+        records.append(report['inputs']['role_evidence'])
     for record in records:
         record['actual_sha256'] = binding.sha256_file(Path(record['path']))
         record['binding_state'] = ('pass' if record['actual_sha256'] == record['approved_sha256'] else 'fail')
@@ -304,6 +326,35 @@ def mesh_prepare(path, np, csc, triangles, normalization=None):
     return vertices, faces, representatives
 
 
+def separating_face(va, fa, vb, fb, np):
+    """Return a supporting-plane witness [m], never infer overlap from hulls.
+
+    All vertices must be on opposite sides of a candidate face normal. This
+    sufficient separation test also works for concave solids; failure to find
+    a plane says nothing about penetration. Recenter before projection. The
+    numerical envelope covers normalization/projection roundoff, not mechanical
+    tolerance; features below this envelope are not resolved.
+    """
+    a, b = va - va[0], vb - va[0]
+    extent = max(float(np.linalg.norm(a, axis=1).max()), float(np.linalg.norm(b, axis=1).max()))
+    tolerance = 64 * np.finfo(float).eps * extent
+    for vertices, faces in ((a, fa), (b, fb)):
+        tri = vertices[faces]
+        normals = np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0])
+        lengths = np.linalg.norm(normals, axis=1)
+        normals = normals[lengths > 0] / lengths[lengths > 0, None]
+        normals = np.unique(normals, axis=0)
+        for start in range(0, len(normals), 32):
+            axes = normals[start:start + 32]
+            pa, pb = a @ axes.T, b @ axes.T
+            gaps = np.maximum(pb.min(0) - pa.max(0), pa.min(0) - pb.max(0))
+            index = int(np.argmax(gaps))
+            if gaps[index] >= -tolerance:
+                return {'projected_gap_m': float(gaps[index]), 'numeric_tolerance_m': tolerance,
+                        'axis_root': axes[index].tolist()}
+    return None
+
+
 def pair_evaluate(a, b, world, meshes, clearance, np, triangles):
     va, vb = world[a], world[b]
     lower = float(np.linalg.norm(np.maximum(0., np.maximum(va.min(0) - vb.max(0), vb.min(0) - va.max(0)))))
@@ -315,6 +366,11 @@ def pair_evaluate(a, b, world, meshes, clearance, np, triangles):
         return {'pair': [a, b], 'gap_lower_m': lower, 'method': 'aabb_lower_bound', 'state': 'pass'}
     _, fa, ra = meshes[a]
     _, fb, rb = meshes[b]
+    if clearance == 0:
+        witness = separating_face(va, fa, vb, fb, np)
+        if witness is not None:
+            return {'pair': [a, b], 'method': 'separating_face_plane', 'state': 'pass',
+                    'separation_witness': witness}
     crosses = triangles.surface_crosses(va, fa, vb, fb) or triangles.surface_crosses(vb, fb, va, fa)
     contained = (any(triangles.inside(va[i], vb, fb) for i in ra)
                  or any(triangles.inside(vb[i], va, fa) for i in rb))
@@ -324,7 +380,8 @@ def pair_evaluate(a, b, world, meshes, clearance, np, triangles):
             'method': 'triangle_surface_solid_angle', 'state': 'fail' if failed else 'pass'}
 
 
-def evaluate(check, params, case, selected, chains, model, poses, world, meshes, pairs, np, triangles):
+def evaluate(check, params, case, selected, chains, model, poses, world, meshes, pairs, np, triangles,
+             collision_world=None, role_context=None):
     q = case['q_rad']
     need(isinstance(params, dict), 'check params object required')
     if check == 'joint_limits':
@@ -343,12 +400,40 @@ def evaluate(check, params, case, selected, chains, model, poses, world, meshes,
             actual[name] = {'actual_m': point.tolist(), 'expected_m': expected.tolist(), 'error_m': error}
         return ('pass' if all(s['error_m'] <= tolerance for s in actual.values()) else 'fail'), {'chains': actual, 'tolerance_m': tolerance}
     if check == 'self_collision':
-        need(set(params) <= {'clearance_m'}, 'unknown self_collision params')
+        need(set(params) <= {'clearance_m', 'contact_pairs'}, 'unknown self_collision params')
         clearance = number(params['clearance_m'], 'clearance_m', 0)
-        rows = [pair_evaluate(a, b, world, meshes, clearance, np, triangles) for a, b in pairs]
+        permissions = params.get('contact_pairs', [])
+        need(isinstance(permissions, list), 'contact_pairs list required')
+        contact_pairs = {}
+        for item in permissions:
+            need(isinstance(item, dict) and set(item) == {'pair', 'reason'}, 'contact pair/reason required')
+            pair = distinct_names(item['pair'], 'contact pair')
+            need(len(pair) == 2, 'contact pair requires two entities')
+            key = tuple(sorted(pair))
+            need(key in pairs, 'contact pair must be checked, not excluded or unknown')
+            need(key not in contact_pairs, 'duplicate contact pair')
+            contact_pairs[key] = text(item['reason'], 'contact reason')
+        points = world if collision_world is None else collision_world
+        rows = []
+        for a, b in pairs:
+            margin = 0. if (a, b) in contact_pairs else clearance
+            result = pair_evaluate(a, b, points, meshes, margin, np, triangles)
+            result['required_clearance_m'] = margin
+            if (a, b) in contact_pairs:
+                result['contact_permission'] = contact_pairs[(a, b)]
+            rows.append(result)
         if len(meshes) == 1:
             return 'not_applicable', {'reason': 'one checked collision entity: no possible pair', 'pairs': rows}
         return ('fail' if any(r['state'] == 'fail' for r in rows) else 'pass'), {'pairs': rows, 'clearance_m': clearance}
+    if check == 'role_consistency':
+        need(not params, 'role_consistency params must be empty')
+        need(role_context is not None, 'independent inputs.role_evidence required')
+        declared, evidence = role_context
+        mismatches = {name: {'declared': role, 'expected': evidence['joint_roles'][name]}
+                      for name, role in declared.items() if role != evidence['joint_roles'][name]}
+        return ('fail' if mismatches else 'pass'), {
+            'mismatches': mismatches, 'approved_by': evidence['approved_by'], 'reference': evidence['reference'],
+            'scope': 'all movable joint role labels only; physical axes/entity motion not certified'}
     if check == 'ground':
         need(set(params) <= {'normal', 'height_m', 'min_gap_m', 'allowed_contacts'}, 'unknown ground params')
         normal = np.array(vector(params['normal'], 'ground normal'))
@@ -393,7 +478,8 @@ def evaluate(check, params, case, selected, chains, model, poses, world, meshes,
 def run(config: dict, config_dir: Path, max_cases: int | None = None) -> dict:
     """Evaluate approved sampled poses [m, rad]; return JSON-safe, fail-closed report."""
     report = {'schema': 'body_precheck_v1', 'status': 'fail', 'support': SUPPORT,
-              'inputs': {}, 'coverage': {'whole_machine': 'not_evaluated'},
+              'inputs': {}, 'coverage': {'whole_machine': 'not_evaluated', 'role_semantics': 'not_evaluated',
+                                        'source_pose_consistency': 'not_evaluated'},
               'results': [], 'counters': {'cases_evaluated': 0, 'pairs_evaluated': 0},
               'code_sha256': {'body_precheck': binding.sha256_file(HERE)}}
     try:
@@ -437,6 +523,23 @@ def run(config: dict, config_dir: Path, max_cases: int | None = None) -> dict:
             covered.update(moving)
             chain_records[name] = {**chain, 'actual_joints': names, 'actual_links': members}
         role_map(body['other_joints'], movable - covered, 'other_joints')
+        role_context = None
+        if 'role_evidence' in inputs:
+            evidence_path, record = bound_input(inputs['role_evidence'], config_dir)
+            report['inputs']['role_evidence'] = record
+            raw = evidence_path.read_bytes()
+            need(binding.sha256_bytes(raw) == record['approved_sha256'], 'role evidence changed while reading')
+            evidence = json.loads(raw.decode('utf-8'), object_pairs_hook=unique_object)
+            need(isinstance(evidence, dict), 'role evidence object required')
+            finite_data(evidence)
+            need(evidence['schema'] == 'body_precheck_roles_v1', 'unsupported role evidence schema')
+            need(evidence['urdf_sha256'] == report['inputs']['urdf']['approved_sha256'],
+                 'role evidence belongs to a different URDF')
+            text(evidence['approved_by'], 'role evidence approved_by')
+            text(evidence['reference'], 'role evidence reference')
+            role_map(evidence['joint_roles'], movable, 'source joint_roles')
+            role_context = ({**joint_roles, **body['other_joints']}, evidence)
+            revalidate_inputs(report)
         entities = distinct_names(body['collision_entities'], 'collision_entities')
         exclusions = body['excluded_entities']
         need(isinstance(exclusions, list), 'excluded_entities list required')
@@ -499,6 +602,9 @@ def run(config: dict, config_dir: Path, max_cases: int | None = None) -> dict:
                           'movable_joints': sorted(movable), 'collision_entities': entities,
                           'excluded_entities': exclusions, 'checked_pairs': [list(p) for p in pairs],
                           'excluded_pairs': [{'pair': list(p), 'reason': reason} for p, reason in allowed.items()]}
+        if allowed:
+            report['warnings'] = ['body.allowed_pairs is a legacy whole-pair exclusion, not contact validation; '
+                                  'use self_collision.params.contact_pairs for touch-only permission']
         report['cases'] = cases
         report['requirements'] = requirements
         report['max_cases'] = max_cases
@@ -515,9 +621,12 @@ def run(config: dict, config_dir: Path, max_cases: int | None = None) -> dict:
             budget = max_cases is not None and index >= max_cases
             if not budget:
                 root_pose = se3(case['root_transform'], 'root_transform', np)
-                poses = {n: root_pose @ csc.fk(model['joints'], n, case['q_rad']) for n in links}
+                local_poses = {n: csc.fk(model['joints'], n, case['q_rad']) for n in links}
+                poses = {n: root_pose @ pose for n, pose in local_poses.items()}
                 need(all(np.isfinite(p).all() for p in poses.values()), 'nonfinite FK result')
                 world = {n: vertices @ poses[n][:3, :3].T + poses[n][:3, 3] for n, (vertices, _, _) in meshes.items()}
+                collision_world = {n: vertices @ local_poses[n][:3, :3].T + local_poses[n][:3, 3]
+                                   for n, (vertices, _, _) in meshes.items()}
                 report['counters']['cases_evaluated'] += 1
             for req in requirements:
                 if cid not in req['cases']:
@@ -531,7 +640,8 @@ def run(config: dict, config_dir: Path, max_cases: int | None = None) -> dict:
                         row.update(state='not_supported', reason=f"unknown check: {req['check']}")
                     else:
                         state, detail = evaluate(req['check'], req['params'], case, req['chains'], chains,
-                                                 model, poses, world, meshes, pairs, np, triangles)
+                                                 model, poses, world, meshes, pairs, np, triangles,
+                                                 collision_world=collision_world, role_context=role_context)
                         finite_data(detail)
                         row.update(state=state, detail=detail)
                         if req['check'] == 'self_collision':
@@ -541,6 +651,15 @@ def run(config: dict, config_dir: Path, max_cases: int | None = None) -> dict:
                 report['results'].append(row)
         report['coverage'] = {'whole_machine': 'pass' if all(c['state'] == 'pass' for c in coverage.values()) else 'fail',
                               'cases': coverage, 'movable_role_coverage': 'pass', 'collision_entity_coverage': 'pass'}
+        for label, method in (('role_semantics', 'role_consistency'), ('source_pose_consistency', 'source_consistency')):
+            states = []
+            for cid in case_ids:
+                rows = [r for r in report['results'] if r['case_id'] == cid and r['check'] == method
+                        and set(r['chains']) == set(chains)]
+                states.append('fail' if any(r['state'] == 'fail' for r in rows) else
+                              'pass' if rows and all(r['state'] == 'pass' for r in rows) else 'not_evaluated')
+            report['coverage'][label] = ('fail' if 'fail' in states else
+                                         'pass' if all(s == 'pass' for s in states) else 'not_evaluated')
         revalidate_inputs(report)
         mandatory = [r for r in report['results'] if r['required']]
         report['status'] = ('pass' if mandatory and all(r['state'] in ('pass', 'not_applicable') for r in mandatory)

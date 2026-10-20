@@ -61,7 +61,9 @@
           "combined": {"lf": [0.2648364305496216,0.8251351352942748,-0.4919206500053406], "rf": [0.32992982864379883,-0.801332152246161,-0.4919207692146301], "rl": [-0.466011643409729,0.814218306185083,-0.5036035180091858], "rr": [-0.466011643409729,-0.8142185572373108,-0.5036035180091858]}
         }, "tolerance_m": 0.00001
       }},
-      {"id": "all_pairs_no_inherited_exclusions", "check": "self_collision", "required": true, "cases": ["neutral", "combined"], "chains": ["lf", "rf", "rl", "rr"], "params": {"clearance_m": 0}}
+      {"id": "all_pairs_no_inherited_exclusions", "check": "self_collision", "required": true, "cases": ["neutral", "combined"], "chains": ["lf", "rf", "rl", "rr"], "params": {"clearance_m": 0}},
+      {"id": "independent_role_semantics", "check": "role_consistency", "required": true, "cases": ["neutral", "combined"], "chains": ["lf", "rf", "rl", "rr"], "params": {}},
+      {"id": "full_source_entity_poses", "check": "source_consistency", "required": true, "cases": ["neutral", "combined"], "chains": ["lf", "rf", "rl", "rr"], "params": {}}
     ]
   }
 }

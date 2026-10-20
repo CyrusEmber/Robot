@@ -7,8 +7,10 @@
 Configured Python -B rl_exp/tools/verify/test_body_precheck.py
 Add --break_zero_aabb to inject the historical zero-clearance early return
 INTO run()'s pair consumer. The SAME overlap assertion must then fail (exit 1).
-Add --break_fix {binding,error_rows,roles,params,coverage,config_digest,mesh} to restore
+Add --break_fix {binding,error_rows,roles,params,coverage,config_digest,mesh,
+touching,contact_policy,role_semantics} to restore
 one historical blocker in memory; identical regression assertions must fail.
+--plan_gap {rotation,contact,roles} runs one focused counterexample group.
 Assets, configs, CLI reports and compile outputs live only in system temp.
 """
 
@@ -163,6 +165,139 @@ def rejected_xml(cfg, folder, change, state='not_supported'):
         path.write_text(original, encoding='utf-8')
 
 
+def plan_gap_suite(group):
+    """Behavioral counterexamples for contact policy and independent role evidence."""
+    import math
+    with tempfile.TemporaryDirectory(prefix='body_precheck_plan_') as temp:
+        cfg, base, _ = fixture(Path(temp) / 'pair', chain_count=1, direct=True)
+        cfg['tasks']['requirements'] = [r for r in cfg['tasks']['requirements']
+                                       if r['check'] in ('joint_limits', 'self_collision')]
+        cfg['tasks']['cases'][0]['q_rad']['axis_0_0'] = 0.
+        pair = ['branch_0_0', 'connected_solid']
+
+        def offset(value):
+            path = base / 'machine.urdf'
+            root = ET.parse(path).getroot()
+            root.find("joint[@name='weld']/origin").set('xyz', f'{value} 0 0')
+            ET.ElementTree(root).write(path, encoding='unicode')
+            cfg['inputs']['urdf']['sha256'] = pre.binding.sha256_file(path)
+
+        if group == 'rotation':
+            offset(.2)
+            for angle in (0., math.pi / 4, -.27):
+                c, s = math.cos(angle), math.sin(angle)
+                cfg['tasks']['cases'][0]['root_transform'] = [
+                    [c, -s, 0, 12.], [s, c, 0, -7.], [0, 0, 1, 3.], [0, 0, 0, 1.]]
+                exercise(cfg, base)  # SAME contact under a common rigid transform.
+            # Rotate the pair inside the root frame too; root cancellation alone
+            # does not implement touching semantics for joint-driven poses.
+            cfg['tasks']['cases'][0]['q_rad']['axis_0_0'] = .31
+            exercise(cfg, base)
+            offset(.199)
+            exercise(cfg, base, 'fail')
+        elif group == 'contact':
+            collision = cfg['tasks']['requirements'][1]
+            collision['params'] = {'clearance_m': .05, 'contact_pairs': [
+                {'pair': pair, 'reason': 'fixture permits touching, never overlap'}]}
+            offset(.2)
+            out = exercise(cfg, base)
+            details = row(out, 'self_collision')['detail']['pairs']
+            check(len(details) == 1 and details[0]['pair'] == pair, 'contact pair must still be checked')
+            check(not out['body']['excluded_pairs'], 'contact is not an exclusion')
+            offset(.199)
+            exercise(cfg, base, 'fail')
+            offset(0.)
+            exercise(cfg, base, 'fail')
+            offset(.2)
+            collision['params']['contact_pairs'] = []
+            exercise(cfg, base, 'fail')  # Positive engineering margin still enforced.
+            collision['params']['contact_pairs'] = [{'pair': pair, 'reason': ''}]
+            exercise(cfg, base, 'fail')
+            collision['params']['contact_pairs'] = [{'pair': pair, 'reason': 'touch'}]
+            cfg['body']['allowed_pairs'] = [{'pair': pair, 'reason': 'legacy exemption'}]
+            exercise(cfg, base, 'fail')  # Conflicting contact and exclusion must reject.
+            # Touch permission for one pair must not waive another pair's margin.
+            other, location, _ = fixture(Path(temp) / 'three', chain_count=2, direct=True)
+            path = location / 'machine.urdf'
+            root = ET.parse(path).getroot()
+            root.find("joint[@name='weld']/origin").set('xyz', '.2 0 0')
+            root.find("joint[@name='axis_1_0']/origin").set('xyz', '.85 .2 1')
+            root.find("joint[@name='axis_1_1']/origin").set('xyz', '0 0 0')
+            ET.ElementTree(root).write(path, encoding='unicode')
+            other['inputs']['urdf']['sha256'] = pre.binding.sha256_file(path)
+            other['tasks']['cases'][0]['q_rad'] = {n: 0. for n in other['tasks']['cases'][0]['q_rad']}
+            other['tasks']['requirements'] = [r for r in other['tasks']['requirements']
+                                              if r['check'] in ('joint_limits', 'self_collision')]
+            other['tasks']['requirements'][1]['params'] = {
+                'clearance_m': .1, 'contact_pairs': [{'pair': pair, 'reason': 'touch only here'}]}
+            out = exercise(other, location, 'fail')
+            details = row(out, 'self_collision')['detail']['pairs']
+            check(len(details) == 3 and next(r for r in details if r['pair'] == pair)['state'] == 'pass',
+                  'only declared contact has zero required margin')
+            check(any(r['state'] == 'fail' and r['required_clearance_m'] == .1 for r in details),
+                  'other-pair margin remains enforced')
+        elif group == 'roles':
+            offset(.3)
+            role_req = {'id': 'roles', 'check': 'role_consistency', 'required': True,
+                        'cases': ['neutral'], 'chains': ['arm#0'], 'params': {}}
+            cfg['tasks']['requirements'].append(role_req)
+            missing = exercise(cfg, base, 'fail')
+            check(row(missing, 'roles')['state'] == 'not_evaluated', 'missing role evidence is unmeasured')
+            roles_path = base / 'source_roles.json'
+            evidence = {'schema': 'body_precheck_roles_v1',
+                        'urdf_sha256': cfg['inputs']['urdf']['sha256'],
+                        'approved_by': 'fixture-source-author', 'reference': 'independent fixture specification',
+                        'joint_roles': {'axis_0_0': 'hinge_0'}}
+
+            def save_evidence():
+                roles_path.write_text(json.dumps(evidence), encoding='utf-8')
+                cfg['inputs']['role_evidence'] = {
+                    'path': roles_path.name, 'sha256': pre.binding.sha256_file(roles_path)}
+
+            save_evidence()
+            out = exercise(cfg, base)
+            check(out['coverage']['role_semantics'] == 'pass', 'explicit semantic coverage')
+            check(out['coverage']['source_pose_consistency'] == 'not_evaluated',
+                  'role mapping is not entity motion evidence')
+            cfg['body']['chains']['arm#0']['joint_roles']['axis_0_0'] = 'wrong_semantic_role'
+            out = exercise(cfg, base, 'fail')
+            check(row(out, 'roles')['state'] == 'fail', 'same names with wrong roles must fail')
+            cfg['body']['chains']['arm#0']['joint_roles']['axis_0_0'] = 'hinge_0'
+            evidence['urdf_sha256'] = '0' * 64
+            save_evidence()
+            exercise(cfg, base, 'fail')
+            evidence['urdf_sha256'] = cfg['inputs']['urdf']['sha256']
+            evidence['joint_roles'] = {}
+            save_evidence()
+            exercise(cfg, base, 'fail')
+            evidence['joint_roles'] = {'axis_0_0': 'hinge_0'}
+            save_evidence()
+            roles_path.write_text('{}', encoding='utf-8')
+            exercise(cfg, base, 'fail')
+            save_evidence()
+            consumer = pre.revalidate_inputs
+            mutated = False
+
+            def mutate_evidence(report):
+                nonlocal mutated
+                if 'role_evidence' in report['inputs'] and not mutated:
+                    roles_path.write_text('{}', encoding='utf-8')
+                    mutated = True
+                return consumer(report)
+
+            from unittest.mock import patch
+            with patch.object(pre, 'revalidate_inputs', mutate_evidence):
+                exercise(cfg, base, 'fail')
+            save_evidence()
+            config_path, report_path = base / 'config.json', base / 'roles_report.json'
+            config_path.write_text(json.dumps(cfg), encoding='utf-8')
+            result = subprocess.run([sys.executable, '-B', str(pre.HERE), '--config', str(config_path),
+                                     '--output', str(report_path)], capture_output=True, text=True)
+            check(result.returncode == 0 and json.loads(report_path.read_text())['coverage']['role_semantics'] == 'pass',
+                  'role evidence consumed through real CLI')
+        print(f'PASS plan gap {group}: {COUNT} assertions')
+
+
 def run_suite(break_zero=False, break_fix=None):
     broken_source = None
     if break_fix:
@@ -181,6 +316,9 @@ def run_suite(break_zero=False, break_fix=None):
             'mesh': ("    need(np.all((double_area == 0) | (double_area > 1e-14)) and np.any(double_area > 1e-14),",
                      "    need(original_count == len(faces) and np.all(double_area > 1e-14),"),
             'config_digest': ("'sha256': digest}", "'sha256': binding.sha256_file(args.config)}"),
+            'touching': ("witness = separating_face(va, fa, vb, fb, np)", "witness = None"),
+            'contact_policy': ("margin = 0. if (a, b) in contact_pairs else clearance", "margin = clearance"),
+            'role_semantics': ("return ('fail' if mismatches else 'pass'), {", "return 'pass', {"),
         }
         old, new = changes[break_fix]
         check(source.count(old) == 1, 'break injection must match exactly once')
@@ -571,6 +709,13 @@ def run_suite(break_zero=False, break_fix=None):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--break_zero_aabb', action='store_true')
-    parser.add_argument('--break_fix', choices=['binding', 'error_rows', 'roles', 'params', 'coverage', 'config_digest', 'mesh'])
+    parser.add_argument('--break_fix', choices=['binding', 'error_rows', 'roles', 'params', 'coverage', 'config_digest',
+                                               'mesh', 'touching', 'contact_policy', 'role_semantics'])
+    parser.add_argument('--plan_gap', choices=['rotation', 'contact', 'roles'])
     args = parser.parse_args()
-    run_suite(args.break_zero_aabb, args.break_fix)
+    if args.plan_gap:
+        plan_gap_suite(args.plan_gap)
+    else:
+        run_suite(args.break_zero_aabb, args.break_fix)
+        for group in ('rotation', 'contact', 'roles'):
+            plan_gap_suite(group)
