@@ -279,6 +279,215 @@ def _self_check():
     print('SPATIAL_TRACKING_SELF_CHECK_OK')
 
 
+def _gravity_design(reference, urdf):
+    from palm_spatial_inertia import csc
+    model = csc.load_urdf(urdf)
+    names = reference['snapshots'][0]['joint_names']
+    links = ET.parse(urdf).getroot().findall('link')
+    masses = {l.get('name'): float(l.find('inertial/mass').get('value')) for l in links}
+    centers = {l.get('name'): np.fromstring(l.find('inertial/origin').get('xyz'), sep=' ') for l in links}
+    chains = {n: csc.chain_up(model['joints'], n) for n in masses}
+    poses = [{}] + [{n: a} for n in names for a in (-.02, .02)]
+    moments = []
+    for q in poses:
+        frames = {n: csc.fk(model['joints'], n, q) for n in masses}
+        com = {n: frames[n][:3, :3] @ centers[n] + frames[n][:3, 3] for n in masses}
+        row = []
+        for n in names:
+            spec = model['joints'][n]
+            frame = frames[spec['child']]
+            axis = frame[:3, :3] @ spec['axis']
+            axis /= np.linalg.norm(axis)
+            row.append(sum(float(axis @ np.cross(com[l]-frame[:3, 3], [0., 0., -9.81*masses[l]]))
+                           for l in masses if n in chains[l]))
+        moments.append(row)
+    moments = np.asarray(moments)
+    inertia = np.diag(next(s['mass_matrix'] for s in reference['snapshots'] if s['label'] == 'neutral'))
+    load = np.abs(moments).max(axis=0)
+    kp = np.maximum(inertia*(2*math.pi)**2, load/.03)
+    kd = 2*np.sqrt(inertia*kp)
+    chest = names.index('chest_pitch_joint')
+    assert load[chest] < 280. and moments[0, chest] != 0
+    return dict(joint_names=names, sampled_gravity_torque_nm=moments.tolist(),
+                max_gravity_torque_nm=load.tolist(), neutral_inertia_diagonal=inertia.tolist(),
+                kp=kp.tolist(), kd=kd.tolist(), gravity_m_s2=[0., 0., -9.81], static_error_scale_rad=.03,
+                subtree_mass_kg={n: sum(masses[l] for l in masses if n in chains[l]) for n in names},
+                chest_amplitude_rad=float(-np.sign(moments[0, chest])*.02),
+                scope='fixed-root downstream self-weight at neutral and single-axis +/-0.02 rad; not contact support')
+
+
+def _chest_verdict(rows, names):
+    times = np.asarray([r['t_s'] for r in rows])
+    q = np.asarray([r['q_rad'] for r in rows])
+    desired = np.asarray([r['target_rad'] for r in rows])
+    assert len(rows) == 2200 and np.isfinite(q).all() and np.isfinite(desired).all()
+    baseline = q[np.flatnonzero(np.isclose(times, 5.))[-1]]
+    settling = (times >= 4.8) & (times <= 5.)
+    active = times > 5.
+    relative = _verdict(q[active]-baseline, desired[active], names.index('chest_pitch_joint'), times[active]-5.)
+    drift = float(np.ptp(q[settling], axis=0).max())
+    static_error = float(np.abs(q[settling]).max())
+    absolute = float(np.abs(q-desired).max())
+    relative.update(baseline_q_rad=baseline.tolist(), settle_drift_rad=drift,
+                    settle_absolute_error_rad=static_error, max_absolute_error_rad=absolute)
+    relative['passed'] = bool(relative['passed'] and drift <= .002 and static_error <= .1 and absolute <= .1)
+    return relative
+
+
+def _chest_self_check(args):
+    reference = _fresh_inputs(args)
+    manifest = json.loads(Path(reference['replay_manifest']).read_text(encoding='utf-8'))
+    design = _gravity_design(reference, Path(manifest['target_binding']['urdf']))
+    names = design['joint_names']
+    axis = names.index('chest_pitch_joint')
+    times = np.arange(1, 2201)*.005
+    target = np.zeros((2200, 30))
+    target[:, axis] = [_target(max(t-5., 0.), design['chest_amplitude_rad']) for t in times]
+    baseline = np.zeros(30)
+    baseline[axis] = -.03*np.sign(design['chest_amplitude_rad'])
+    def samples(q):
+        return [dict(t_s=float(t), q_rad=a.tolist(), target_rad=b.tolist()) for t, a, b in zip(times, q, target)]
+    assert _chest_verdict(samples(target+baseline), names)['passed']
+    assert not _chest_verdict(samples(np.tile(baseline, (2200, 1))), names)['passed']
+    assert not _chest_verdict(samples(-target+baseline), names)['passed']
+    assert not _chest_verdict(samples(target+baseline+.2), names)['passed']
+    assert design['max_gravity_torque_nm'][axis] > 80.
+    assert abs(design['subtree_mass_kg']['chest_pitch_joint']-39.9396) < 1e-5
+    print('CHEST_280_SELF_CHECK_OK', json.dumps(design), flush=True)
+
+
+def _run_chest280(args):
+    reference = _fresh_inputs(args)
+    manifest = Path(reference['replay_manifest'])
+    wiring.check_registered_manifest(manifest, measured_order=False)
+    original = json.loads(manifest.read_text(encoding='utf-8'))
+    design = _gravity_design(reference, Path(original['target_binding']['urdf']))
+    out = args.out.resolve()
+    assert out.parent.is_dir() and wiring.REPO / 'rl_exp/out' in out.parents and not out.exists()
+    out.mkdir(exist_ok=False)
+    source_path = Path(globals().get('__candidate_source__', __file__))
+    shutil.copyfile(source_path, out/'source.py')
+    result = dict(completed=False, stage='startup', code_sha256=wiring.binding.sha256_file(source_path),
+                  input={str(args.inertia_report): args.approved_inertia_sha256,
+                         str(manifest): wiring.binding.sha256_file(manifest)}, design=design,
+                  scope='one fixed-root chest self-weight hold/lift/return; all bodies gravity; no fixture or ground support',
+                  chest_effort_limit_nm=280., settings={**SETTINGS, 'max_full_runs': 1, 'settle_s': 5.,
+                      'max_absolute_error_rad': .1, 'settle_drift_rad': .002, 'stop_absolute_error_rad': .35},
+                  full_runs_started=1, retry_allowed=False, samples=[], entities=[])
+    env, app = None, None
+    try:
+        from isaaclab.app import AppLauncher
+        app = AppLauncher(args).app
+        import gymnasium as gym
+        import torch
+        import warp as wp
+        import rl_exp.tasks
+        from pxr import UsdPhysics
+        from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper
+        from rl_exp.tools.verify.baseline_runtime import resolve_task_cfg, joint_reset_errors
+        from palm_spatial_inertia import csc
+        document = copy.deepcopy(original)
+        tracking = out/'tracking_manifest.json'
+        document['target_binding']['source'] = str(tracking)
+        document['config']['scene.robot.spawn.rigid_props.disable_gravity'] = False
+        for group in ('legs', 'feet', 'spine'):
+            selected = document['config'][f'scene.robot.actuators.{group}.joint_names_expr']
+            for field in ('stiffness', 'damping'):
+                values = design['kp' if field == 'stiffness' else 'kd']
+                document['config'][f'scene.robot.actuators.{group}.{field}'] = {n: values[design['joint_names'].index(n)] for n in selected}
+            for field in ('effort_limit', 'effort_limit_sim'):
+                key = f'scene.robot.actuators.{group}.{field}'
+                if 'chest_pitch_joint' in selected:
+                    document['config'][key]['chest_pitch_joint'] = 280.
+        wiring.write_json(tracking, document)
+        cfg = copy.deepcopy(resolve_task_cfg(wiring.REGISTERED_TASK))
+        target = wiring.obs_protocol.load_diagnostic_target(tracking, cfg, wiring.REGISTERED_TASK)
+        cfg.sim.device, cfg.sim.dt, cfg.sim.gravity, cfg.seed = args.device, .005, (0., 0., -9.81), 0
+        env = gym.make(wiring.REGISTERED_TASK, cfg=cfg)
+        wrapper = RslRlVecEnvWrapper(env, clip_actions=None)
+        live, robot = env.unwrapped, env.unwrapped.scene['robot']
+        assert robot.is_fixed_base and not joint_reset_errors(robot)
+        names = list(robot.joint_names)
+        assert names == design['joint_names']
+        chest = names.index('chest_pitch_joint')
+        backend = lambda x: wp.to_torch(x).cpu().numpy()[0]
+        kp, kd = backend(robot.root_view.get_dof_stiffnesses()), backend(robot.root_view.get_dof_dampings())
+        assert np.allclose(kp, design['kp'], rtol=1e-5) and np.allclose(kd, design['kd'], rtol=1e-5)
+        caps = backend(robot.root_view.get_dof_max_forces())
+        tree = ET.parse(target['urdf']).getroot()
+        expected = {j.get('name'): float(j.find('limit').get('effort')) for j in tree.findall('joint')}
+        expected['chest_pitch_joint'] = 280.
+        assert np.allclose(caps, [expected[n] for n in names], rtol=1e-6)
+        speeds = backend(robot.root_view.get_dof_max_velocities())
+        gravity = {p.GetName(): p.GetAttribute('physxRigidBody:disableGravity').Get()
+                   for p in live.sim.stage.Traverse() if p.HasAPI(UsdPhysics.RigidBodyAPI)}
+        assert len(gravity) == 31 and all(v is False for v in gravity.values())
+        assert np.all(robot.data.joint_armature.torch.cpu().numpy() == 0)
+        action_names, action_ids = [], []
+        for term_name in live.action_manager.active_terms:
+            term = live.action_manager.get_term(term_name)
+            ids = list(range(30))[term._joint_ids] if isinstance(term._joint_ids, slice) else list(term._joint_ids)
+            action_names.extend(term._joint_names)
+            action_ids.extend(map(int, ids))
+            assert np.all(np.asarray(torch.as_tensor(term._scale).cpu()) == 1)
+            assert np.all(np.asarray(torch.as_tensor(term._offset).cpu()) == 0)
+        wiring.exact_channels(names, action_names, action_ids, names)
+        result.update(tracking_manifest=str(tracking), tracking_manifest_sha256=wiring.binding.sha256_file(tracking),
+                      joint_names=names, action_names=action_names,
+                      readbacks=dict(kp=kp.tolist(), kd=kd.tolist(), effort_caps=caps.tolist(), velocity_caps=speeds.tolist(),
+                                     fixed_base=robot.is_fixed_base, body_disable_gravity=gravity, gravity=cfg.sim.gravity))
+        model = csc.load_urdf(Path(target['urdf']))
+        result['stage'] = 'chest_pitch_self_weight'
+        for t in np.arange(1, 2201)*.005:
+            desired = np.zeros(30)
+            desired[chest] = _target(max(t-5., 0.), design['chest_amplitude_rad'])
+            action = torch.tensor([[desired[names.index(n)] for n in action_names]], device=args.device, dtype=torch.float32)
+            live.action_manager.process_action(action)
+            live.action_manager.apply_action()
+            live.scene.write_data_to_sim()
+            drive = _drive_targets(robot, backend, desired)
+            live.sim.step()
+            live.scene.update(.005)
+            q = robot.data.joint_pos.torch[0].cpu().numpy().copy()
+            velocity = robot.data.joint_vel.torch[0].cpu().numpy().copy()
+            contact = float(torch.linalg.vector_norm(live.scene['contact_forces'].data.net_forces_w, dim=-1).max())
+            result['samples'].append(dict(t_s=float(t), q_rad=q.tolist(), velocity_rad_s=velocity.tolist(),
+                target_rad=desired.tolist(), max_contact_n=contact, backend_drive_targets=drive,
+                reconstructed_pd_request_nm=(kp*(desired-q)-kd*velocity).tolist()))
+            assert np.isfinite(q).all() and np.isfinite(velocity).all() and np.isfinite(contact), 'nonfinite state'
+            assert abs(q-desired).max() <= .35 and abs(q).max() <= .35, 'self-weight unsafe absolute error'
+            assert np.all(abs(velocity) < speeds*.5) and contact <= 1., 'unsafe speed/contact'
+            if any(abs(t-s) < 1e-9 for s in (5., 7.9, 10.9)):
+                result['entities'].append(dict(t_s=float(t), **_entity_snapshot(robot, model)))
+            if abs(t-5.) < 1e-9:
+                settled = np.array([r['q_rad'] for r in result['samples'] if r['t_s'] >= 4.8])
+                assert abs(settled).max() <= .1 and np.ptp(settled, axis=0).max() <= .002, 'self-weight hold not verified'
+        result['verdict'] = _chest_verdict(result['samples'], names)
+        assert len(result['entities']) == 3
+        result.update(completed=True, stage='completed', status='chest_self_weight_tracking_verified' if result['verdict']['passed'] else 'chest_self_weight_tracking_failed')
+        assert wiring.binding.sha256_file(manifest) == result['input'][str(manifest)]
+        assert wiring.binding.sha256_file(args.inertia_report) == args.approved_inertia_sha256
+        wiring.write_json(out/'report.json', result)
+        print('CHEST_280_COMPLETED', result['status'], flush=True)
+        if not result['verdict']['passed']:
+            sys.stdout.flush()
+            sys.stderr.flush()
+            os._exit(1)
+    except BaseException as error:
+        result.update(error=repr(error), traceback=traceback.format_exc())
+        wiring.write_json(out/'failure.json', result)
+        traceback.print_exc()
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(1)
+    finally:
+        if env is not None:
+            env.close()
+        if app is not None:
+            app.close()
+    return True
+
+
 def _run(args):
     fresh = bool(args.approved_inertia_sha256)
     assert not args.all_joints or fresh, 'all_joints requires approved_inertia_sha256'
@@ -548,6 +757,7 @@ if __name__ == '__main__':
     parser.add_argument('--self_check', action='store_true')
     parser.add_argument('--approved_inertia_sha256')
     parser.add_argument('--all_joints', action='store_true')
+    parser.add_argument('--chest_self_weight_280', action='store_true')
     parser.add_argument('--combined', action='store_true')
     parser.add_argument('--gain_reference', type=Path)
     parser.add_argument('--level_leg_plan', type=Path)
@@ -557,6 +767,8 @@ if __name__ == '__main__':
         _self_check()
         if args.approved_inertia_sha256:
             _fresh_self_check(args)
+        if args.chest_self_weight_280:
+            _chest_self_check(args)
     else:
         from isaaclab.app import AppLauncher
         AppLauncher.add_app_launcher_args(parser)
@@ -567,4 +779,6 @@ if __name__ == '__main__':
             parser.error('level_leg_plan requires gain_reference and excludes combined')
         if not args.level_leg_plan and args.wrist_frequency_hz != 1:
             parser.error('wrist override requires level_leg_plan')
-        sys.exit(0 if _run(args) else 1)
+        if args.chest_self_weight_280 and not args.approved_inertia_sha256:
+            parser.error('chest_self_weight_280 requires approved fresh inertia')
+        sys.exit(0 if (_run_chest280(args) if args.chest_self_weight_280 else _run(args)) else 1)
