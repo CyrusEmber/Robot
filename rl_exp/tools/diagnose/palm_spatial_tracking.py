@@ -316,6 +316,212 @@ def _gravity_design(reference, urdf):
                 scope='fixed-root downstream self-weight at neutral and single-axis +/-0.02 rad; not contact support')
 
 
+def _self_weight_cases(names):
+    cases = {n: [n] for n in names if n != 'chest_pitch_joint'}
+    for prefix in ('lf_', 'rf_', 'rl_', 'rr_', 'neck_', 'tail'):
+        selected = [n for n in names if n.startswith(prefix)]
+        assert len(selected) == (5 if prefix in ('lf_', 'rf_', 'rl_', 'rr_') else 2 if prefix == 'neck_' else 6)
+        cases[prefix.rstrip('_') + '_combined'] = selected
+    assert len(cases) == 35 and set(n for group in cases.values() for n in group) == set(names)-{'chest_pitch_joint'}
+    return cases
+
+
+def _self_weight_precision_only(verdict):
+    """Identify a hold-precision-only failure without relaxing any verdict."""
+    return bool(not verdict['passed'] and verdict['settle_drift_rad'] <= .002
+                and verdict['settle_absolute_error_rad'] <= .1
+                and verdict['max_absolute_error_rad'] <= .1
+                and len(verdict['directions']) == 2
+                and all(d['max_error_rad'] <= SETTINGS['max_error_rad']
+                        and d['final_error_rad'] <= SETTINGS['hold_error_rad']
+                        and d['max_other_joint_rad'] <= SETTINGS['max_other_joint_rad']
+                        and np.isfinite(d['plateau_error_rad'])
+                        for d in verdict['directions'])
+                and any(d['plateau_error_rad'] > SETTINGS['hold_error_rad']
+                        for d in verdict['directions']))
+
+
+def _self_weight_axes_resume(args, cases, reference):
+    """Validate the completed prefix; select only the remaining 17 single axes."""
+    path = args.resume_self_weight
+    assert path and args.approved_resume_sha256, 'continuation needs approved report'
+    assert wiring.binding.sha256_file(path) == args.approved_resume_sha256, 'continuation approval mismatch'
+    previous = json.loads(path.read_text(encoding='utf-8'))
+    assert previous['completed'] and previous['status'] == 'self_weight_suite_failed'
+    assert previous['stage'] == 'completed' and 'error' not in previous
+    assert previous['planned_cases'] == cases and previous['retry_allowed'] is False
+    assert previous['design']['joint_names'] == reference['snapshots'][0]['joint_names']
+    original_args = copy.copy(args)
+    original_args.continue_self_weight_axes = False
+    original_args.resume_self_weight = Path(previous['resume']['report'])
+    original_args.approved_resume_sha256 = previous['resume']['report_sha256']
+    original, _ = _self_weight_resume(original_args, cases, reference)
+    assert original == previous['resume'], 'original two-case recovery changed'
+    first = json.loads(original_args.resume_self_weight.read_text(encoding='utf-8'))
+    assert previous['input'] == first['input'] and previous['design'] == first['design']
+    assert previous['settings'] == first['settings'] and previous['chest_effort_limit_nm'] == 280.
+    assert previous['steps_completed'] == 10*3400 and len(previous['cases']) == 10
+    names = previous['joint_names']
+    assert names == previous['design']['joint_names']
+    assert list(previous['readbacks']['effort_caps']) == list(first['readbacks']['effort_caps'])
+    hashes = {}
+    for i, (item, expected) in enumerate(zip(previous['cases'], list(cases)[2:12])):
+        assert item['case'] == expected and item['commanded_joints'] == cases[expected]
+        assert item['samples_completed'] == 3400
+        sample_path = path.parent/(expected+'.json')
+        data = json.loads(sample_path.read_text(encoding='utf-8'))
+        assert data['summary'] == item
+        verdict = _self_weight_verdict(data['samples'], names, cases[expected])
+        assert verdict == {k: v for k, v in item.items()
+                           if k not in ('case', 'commanded_joints', 'samples_completed')}
+        assert verdict['passed'] if i < 9 else _self_weight_precision_only(verdict)
+        rows = data['samples']
+        q = np.asarray([r['q_rad'] for r in rows])
+        desired = np.asarray([r['target_rad'] for r in rows])
+        v = np.asarray([r['velocity_rad_s'] for r in rows])
+        contact = np.asarray([r['max_contact_n'] for r in rows])
+        assert np.isfinite(v).all() and np.isfinite(contact).all()
+        assert abs(q).max() <= .35 and abs(q-desired).max() <= .35
+        assert np.all(abs(v) < np.asarray(previous['readbacks']['velocity_caps'])*.5)
+        assert contact.max() <= 1. and len(data['entities']) == 5
+        hashes[str(sample_path)] = wiring.binding.sha256_file(sample_path)
+    assert previous['verdict'] == {k: v for k, v in previous['cases'][-1].items()
+                                  if k not in ('case', 'commanded_joints', 'samples_completed')}
+    for p, h in previous['input'].items():
+        assert wiring.binding.sha256_file(Path(p)) == h
+    assert wiring.binding.sha256_file(path.parent/'source.py') == previous['code_sha256']
+    assert wiring.binding.sha256_file(path.parent/'tracking_manifest.json') == previous['tracking_manifest_sha256']
+    completed = original['cases'] + previous['cases']
+    assert [c['case'] for c in completed] == list(cases)[:12]
+    remaining = {n: group for n, group in cases.items()
+                 if n.endswith('_joint') and n not in {c['case'] for c in completed}}
+    assert len(remaining) == 17 and next(iter(remaining)) == 'rr_hip_twist_joint'
+    return dict(report=str(path), report_sha256=args.approved_resume_sha256, cases=completed,
+                files_sha256=hashes, source_sha256=previous['code_sha256'],
+                tracking_manifest_sha256=previous['tracking_manifest_sha256'],
+                deferred_cases=[n for n in cases if n.endswith('_combined')],
+                policy='17 remaining axes only; preserve precision failures; stop all other failures'), remaining
+
+
+def _self_weight_resume(args, cases, reference):
+    if getattr(args, 'continue_self_weight_axes', False):
+        return _self_weight_axes_resume(args, cases, reference)
+    path = getattr(args, 'resume_self_weight', None)
+    approved = getattr(args, 'approved_resume_sha256', None)
+    assert bool(path) == bool(approved), 'resume report and approval required together'
+    if path is None:
+        return {}, cases
+    assert wiring.binding.sha256_file(path) == approved, 'resume approval mismatch'
+    previous = json.loads(path.read_text(encoding='utf-8'))
+    assert not previous['completed'] and previous['error'] == "FileExistsError(17, 'File exists')"
+    assert previous['input'][str(args.inertia_report)] == args.approved_inertia_sha256
+    assert previous['design']['joint_names'] == reference['snapshots'][0]['joint_names']
+    assert previous['planned_cases'] == cases and previous['retry_allowed'] is False
+    assert previous['settings'] == {**SETTINGS, 'max_full_runs': 1, 'settle_s': 5.,
+        'max_absolute_error_rad': .1, 'settle_drift_rad': .002, 'stop_absolute_error_rad': .35}
+    hashes = {}
+    for item, expected in zip(previous['cases'], list(cases)):
+        assert item['case'] == expected and item['passed'] and item['samples_completed'] == 3400
+        sample_path = path.parent/(expected+'.json')
+        data = json.loads(sample_path.read_text(encoding='utf-8'))
+        assert data['summary'] == item
+        assert _self_weight_verdict(data['samples'], previous['joint_names'], cases[expected]) == {
+            k: v for k, v in item.items() if k not in ('case', 'commanded_joints', 'samples_completed')}
+        hashes[str(sample_path)] = wiring.binding.sha256_file(sample_path)
+    assert len(hashes) == len(previous['cases']) == 2
+    for p, h in previous['input'].items():
+        assert wiring.binding.sha256_file(Path(p)) == h
+    assert wiring.binding.sha256_file(path.parent/'tracking_manifest.json') == previous['tracking_manifest_sha256']
+    old_source = path.parent/'source.py'
+    assert wiring.binding.sha256_file(old_source) == previous['code_sha256']
+    remainder = {k: v for k, v in cases.items() if k not in {c['case'] for c in previous['cases']}}
+    assert len(remainder) == 33
+    return dict(report=str(path), report_sha256=approved, cases=previous['cases'],
+                files_sha256=hashes, tracking_manifest_sha256=previous['tracking_manifest_sha256'],
+                source_sha256=previous['code_sha256']), remainder
+
+
+def _write_self_weight_case(out, result, summary):
+    case = summary['case']
+    wiring.write_json(out/(case+'.json'), dict(summary=summary, samples=result['samples'], entities=result['entities']))
+    wiring.write_json(out/f'progress_{len(result["cases"]):02d}.json', {k: v for k, v in result.items() if k not in ('samples', 'entities')})
+
+
+def _self_weight_verdict(rows, names, commanded):
+    times = np.asarray([r['t_s'] for r in rows])
+    q = np.asarray([r['q_rad'] for r in rows])
+    desired = np.asarray([r['target_rad'] for r in rows])
+    assert len(rows) in (2200, 3400) and q.shape == desired.shape == (len(rows), len(names))
+    assert np.isfinite(q).all() and np.isfinite(desired).all()
+    assert np.allclose(times, np.arange(1, len(rows)+1)*SETTINGS['dt_s'], atol=1e-12, rtol=0)
+    baseline = q[999]
+    settling = (times >= 4.8) & (times <= 5.)
+    axes = [names.index(n) for n in commanded]
+    directions = []
+    for start in (5., 11.)[:1 if len(rows) == 2200 else 2]:
+        active = (times > start) & (times <= start+6.)
+        directions.append(_verdict(q[active]-baseline, desired[active], axes, times[active]-start))
+    drift = float(np.ptp(q[settling], axis=0).max())
+    static_error = float(np.abs(q[settling]).max())
+    absolute = float(np.abs(q-desired).max())
+    return dict(passed=bool(all(d['passed'] for d in directions) and drift <= .002 and static_error <= .1 and absolute <= .1),
+                directions=directions, baseline_q_rad=baseline.tolist(), settle_drift_rad=drift,
+                settle_absolute_error_rad=static_error, max_absolute_error_rad=absolute)
+
+
+def _self_weight_self_check(args):
+    _fresh_inputs(args)
+    names = list(_fresh_inputs(args)['snapshots'][0]['joint_names'])
+    cases = _self_weight_cases(names)
+    assert set(n for n in cases if n.endswith('_joint')) == set(names)-{'chest_pitch_joint'}
+    times = np.arange(1, 3401)*.005
+    baseline = np.full(30, .03)
+    for commanded in ([names[0]], cases['lf_combined'], cases['neck_combined'], cases['tail_combined']):
+        target = np.zeros((3400, 30))
+        for n in commanded:
+            target[:, names.index(n)] = [_target(max(t-5., 0.), .02) if t <= 11. else _target(t-11., -.02) for t in times]
+        def rows(q):
+            return [dict(t_s=float(t), q_rad=a.tolist(), target_rad=b.tolist()) for t, a, b in zip(times, q, target)]
+        assert _self_weight_verdict(rows(target+baseline), names, commanded)['passed']
+        assert not _self_weight_verdict(rows(np.tile(baseline, (3400, 1))), names, commanded)['passed']
+        assert not _self_weight_verdict(rows(-target+baseline), names, commanded)['passed']
+        assert not _self_weight_verdict(rows(target+baseline+.2), names, commanded)['passed']
+        broken = target+baseline
+        broken[times > 11.] = baseline
+        assert not _self_weight_verdict(rows(broken), names, commanded)['passed']
+    import tempfile
+    with tempfile.TemporaryDirectory() as directory:
+        out = Path(directory)
+        state = dict(samples=[], entities=[], cases=[])
+        for label in ('first', 'second'):
+            summary = dict(case=label, passed=True)
+            state['cases'].append(summary)
+            _write_self_weight_case(out, state, summary)
+        assert (out/'progress_01.json').is_file() and (out/'progress_02.json').is_file()
+        try:
+            _write_self_weight_case(out, state, summary)
+        except FileExistsError:
+            pass
+        else:
+            raise AssertionError('case writer overwrote existing evidence')
+    if getattr(args, 'resume_self_weight', None):
+        resume, remaining = _self_weight_resume(args, cases, _fresh_inputs(args))
+        assert (len(resume['cases']), len(remaining)) == ((12, 17) if getattr(args, 'continue_self_weight_axes', False) else (2, 33))
+    example = dict(passed=False, settle_drift_rad=0., settle_absolute_error_rad=.03,
+                   max_absolute_error_rad=.04, directions=[dict(passed=False, max_error_rad=.005,
+                   plateau_error_rad=.00276, final_error_rad=.00001, max_other_joint_rad=.001)]*2)
+    assert _self_weight_precision_only(example)
+    for field, value in (('max_error_rad', .02), ('final_error_rad', .003),
+                         ('max_other_joint_rad', .02), ('plateau_error_rad', float('nan'))):
+        broken = copy.deepcopy(example)
+        broken['directions'][1][field] = value
+        assert not _self_weight_precision_only(broken), field
+    for field, value in (('settle_drift_rad', .003), ('settle_absolute_error_rad', .11),
+                         ('max_absolute_error_rad', .11)):
+        assert not _self_weight_precision_only({**example, field: value}), field
+    print('SELF_WEIGHT_SUITE_CHECK_OK', len(cases), 'cases; bidirectional verdict and exclusive progress writer checked')
+
+
 def _chest_verdict(rows, names):
     times = np.asarray([r['t_s'] for r in rows])
     q = np.asarray([r['q_rad'] for r in rows])
@@ -357,11 +563,18 @@ def _chest_self_check(args):
 
 
 def _run_chest280(args):
+    suite = bool(getattr(args, 'self_weight_suite', False))
+    assert not (suite and args.chest_self_weight_280), 'self-weight modes are exclusive'
     reference = _fresh_inputs(args)
     manifest = Path(reference['replay_manifest'])
     wiring.check_registered_manifest(manifest, measured_order=False)
     original = json.loads(manifest.read_text(encoding='utf-8'))
     design = _gravity_design(reference, Path(original['target_binding']['urdf']))
+    planned = _self_weight_cases(design['joint_names']) if suite else {}
+    resume, remaining = _self_weight_resume(args, planned, reference) if suite else ({}, {})
+    if resume:
+        prior = json.loads(Path(resume['report']).read_text(encoding='utf-8'))
+        assert prior['design'] == design
     out = args.out.resolve()
     assert out.parent.is_dir() and wiring.REPO / 'rl_exp/out' in out.parents and not out.exists()
     out.mkdir(exist_ok=False)
@@ -374,6 +587,10 @@ def _run_chest280(args):
                   chest_effort_limit_nm=280., settings={**SETTINGS, 'max_full_runs': 1, 'settle_s': 5.,
                       'max_absolute_error_rad': .1, 'settle_drift_rad': .002, 'stop_absolute_error_rad': .35},
                   full_runs_started=1, retry_allowed=False, samples=[], entities=[])
+    if suite:
+        result.update(scope='29 joints and six group combinations, bidirectional downstream self-weight; fixed root; no fixture/ground support',
+                      planned_cases=planned, selected_cases=remaining, planned_max_steps=len(remaining)*3400, cases=[], resume=resume,
+                      continue_precision_only=bool(getattr(args, 'continue_self_weight_axes', False)))
     env, app = None, None
     try:
         from isaaclab.app import AppLauncher
@@ -437,39 +654,77 @@ def _run_chest280(args):
                       readbacks=dict(kp=kp.tolist(), kd=kd.tolist(), effort_caps=caps.tolist(), velocity_caps=speeds.tolist(),
                                      fixed_base=robot.is_fixed_base, body_disable_gravity=gravity, gravity=cfg.sim.gravity))
         model = csc.load_urdf(Path(target['urdf']))
-        result['stage'] = 'chest_pitch_self_weight'
-        for t in np.arange(1, 2201)*.005:
-            desired = np.zeros(30)
-            desired[chest] = _target(max(t-5., 0.), design['chest_amplitude_rad'])
-            action = torch.tensor([[desired[names.index(n)] for n in action_names]], device=args.device, dtype=torch.float32)
-            live.action_manager.process_action(action)
-            live.action_manager.apply_action()
-            live.scene.write_data_to_sim()
-            drive = _drive_targets(robot, backend, desired)
-            live.sim.step()
-            live.scene.update(.005)
-            q = robot.data.joint_pos.torch[0].cpu().numpy().copy()
-            velocity = robot.data.joint_vel.torch[0].cpu().numpy().copy()
-            contact = float(torch.linalg.vector_norm(live.scene['contact_forces'].data.net_forces_w, dim=-1).max())
-            result['samples'].append(dict(t_s=float(t), q_rad=q.tolist(), velocity_rad_s=velocity.tolist(),
-                target_rad=desired.tolist(), max_contact_n=contact, backend_drive_targets=drive,
-                reconstructed_pd_request_nm=(kp*(desired-q)-kd*velocity).tolist()))
-            assert np.isfinite(q).all() and np.isfinite(velocity).all() and np.isfinite(contact), 'nonfinite state'
-            assert abs(q-desired).max() <= .35 and abs(q).max() <= .35, 'self-weight unsafe absolute error'
-            assert np.all(abs(velocity) < speeds*.5) and contact <= 1., 'unsafe speed/contact'
-            if any(abs(t-s) < 1e-9 for s in (5., 7.9, 10.9)):
-                result['entities'].append(dict(t_s=float(t), **_entity_snapshot(robot, model)))
-            if abs(t-5.) < 1e-9:
-                settled = np.array([r['q_rad'] for r in result['samples'] if r['t_s'] >= 4.8])
-                assert abs(settled).max() <= .1 and np.ptp(settled, axis=0).max() <= .002, 'self-weight hold not verified'
-        result['verdict'] = _chest_verdict(result['samples'], names)
-        assert len(result['entities']) == 3
-        result.update(completed=True, stage='completed', status='chest_self_weight_tracking_verified' if result['verdict']['passed'] else 'chest_self_weight_tracking_failed')
+        cases = remaining if suite else {'chest_pitch_self_weight': ['chest_pitch_joint']}
+        bounds = {j.get('name'): [float(j.find('limit').get(k)) for k in ('lower', 'upper')] for j in tree.findall('joint')}
+        failed = False
+        for case, commanded in cases.items():
+            if suite:
+                live.reset()
+                assert not joint_reset_errors(robot), 'self-weight case reset mismatch'
+            result.update(stage=case, samples=[], entities=[], commanded_joints=commanded)
+            sign = 1. if suite else np.sign(design['chest_amplitude_rad'])
+            assert all(bounds[n][0] <= -.02 and bounds[n][1] >= .02 for n in commanded)
+            count = 3400 if suite else 2200
+            checkpoints = (5., 7.9, 10.9, 13.9, 16.9) if suite else (5., 7.9, 10.9)
+            for t in np.arange(1, count+1)*.005:
+                desired = np.zeros(30)
+                angle = _target(max(t-5., 0.), sign*.02) if t <= 11. else _target(t-11., -.02)
+                for n in commanded:
+                    desired[names.index(n)] = angle
+                action = torch.tensor([[desired[names.index(n)] for n in action_names]], device=args.device, dtype=torch.float32)
+                live.action_manager.process_action(action)
+                live.action_manager.apply_action()
+                live.scene.write_data_to_sim()
+                drive = _drive_targets(robot, backend, desired)
+                live.sim.step()
+                live.scene.update(.005)
+                q = robot.data.joint_pos.torch[0].cpu().numpy().copy()
+                velocity = robot.data.joint_vel.torch[0].cpu().numpy().copy()
+                contact = float(torch.linalg.vector_norm(live.scene['contact_forces'].data.net_forces_w, dim=-1).max())
+                result['samples'].append(dict(t_s=float(t), q_rad=q.tolist(), velocity_rad_s=velocity.tolist(),
+                    target_rad=desired.tolist(), max_contact_n=contact, backend_drive_targets=drive,
+                    reconstructed_pd_request_nm=(kp*(desired-q)-kd*velocity).tolist()))
+                assert np.isfinite(q).all() and np.isfinite(velocity).all() and np.isfinite(contact), 'nonfinite state'
+                assert abs(q-desired).max() <= .35 and abs(q).max() <= .35, 'self-weight unsafe absolute error'
+                assert np.all(abs(velocity) < speeds*.5) and contact <= 1., 'unsafe speed/contact'
+                if any(abs(t-s) < 1e-9 for s in checkpoints):
+                    result['entities'].append(dict(t_s=float(t), **_entity_snapshot(robot, model)))
+                if abs(t-5.) < 1e-9:
+                    settled = np.array([r['q_rad'] for r in result['samples'] if r['t_s'] >= 4.8])
+                    assert abs(settled).max() <= .1 and np.ptp(settled, axis=0).max() <= .002, 'self-weight hold not verified'
+            result['verdict'] = (_self_weight_verdict(result['samples'], names, commanded) if suite
+                                 else _chest_verdict(result['samples'], names))
+            assert len(result['entities']) == len(checkpoints)
+            if suite:
+                summary = dict(case=case, commanded_joints=commanded, samples_completed=len(result['samples']), **result['verdict'])
+                result['cases'].append(summary)
+                _write_self_weight_case(out, result, summary)
+                print('SELF_WEIGHT_CASE', case, result['verdict']['passed'], flush=True)
+            failed = not result['verdict']['passed']
+            if failed and not (getattr(args, 'continue_self_weight_axes', False)
+                                   and _self_weight_precision_only(result['verdict'])):
+                break
+        if suite:
+            result.pop('samples')
+            result.pop('entities')
+            result['steps_completed'] = sum(c['samples_completed'] for c in result['cases'])
+            finished = len(result['cases']) == len(cases)
+            passed = finished and all(c['passed'] for c in result['cases'])
+            result.update(all_selected_cases_passed=passed, selected_cases_completed=finished,
+                          precision_unmet_cases=[c['case'] for c in result['cases'] if _self_weight_precision_only(c)])
+            status = 'self_weight_suite_verified' if passed else 'self_weight_suite_failed'
+            if getattr(args, 'continue_self_weight_axes', False):
+                status = ('self_weight_axes_verified' if passed else
+                          'self_weight_axes_completed_precision_unmet' if finished else 'self_weight_axes_failed')
+        else:
+            passed = not failed
+            status = 'chest_self_weight_tracking_verified' if passed else 'chest_self_weight_tracking_failed'
+        result.update(completed=True, stage='completed', status=status)
         assert wiring.binding.sha256_file(manifest) == result['input'][str(manifest)]
         assert wiring.binding.sha256_file(args.inertia_report) == args.approved_inertia_sha256
         wiring.write_json(out/'report.json', result)
         print('CHEST_280_COMPLETED', result['status'], flush=True)
-        if not result['verdict']['passed']:
+        if not passed:
             sys.stdout.flush()
             sys.stderr.flush()
             os._exit(1)
@@ -486,7 +741,6 @@ def _run_chest280(args):
         if app is not None:
             app.close()
     return True
-
 
 def _run(args):
     fresh = bool(args.approved_inertia_sha256)
@@ -758,6 +1012,10 @@ if __name__ == '__main__':
     parser.add_argument('--approved_inertia_sha256')
     parser.add_argument('--all_joints', action='store_true')
     parser.add_argument('--chest_self_weight_280', action='store_true')
+    parser.add_argument('--self_weight_suite', action='store_true')
+    parser.add_argument('--resume_self_weight', type=Path)
+    parser.add_argument('--approved_resume_sha256')
+    parser.add_argument('--continue_self_weight_axes', action='store_true')
     parser.add_argument('--combined', action='store_true')
     parser.add_argument('--gain_reference', type=Path)
     parser.add_argument('--level_leg_plan', type=Path)
@@ -769,6 +1027,8 @@ if __name__ == '__main__':
             _fresh_self_check(args)
         if args.chest_self_weight_280:
             _chest_self_check(args)
+        if args.self_weight_suite:
+            _self_weight_self_check(args)
     else:
         from isaaclab.app import AppLauncher
         AppLauncher.add_app_launcher_args(parser)
@@ -779,6 +1039,12 @@ if __name__ == '__main__':
             parser.error('level_leg_plan requires gain_reference and excludes combined')
         if not args.level_leg_plan and args.wrist_frequency_hz != 1:
             parser.error('wrist override requires level_leg_plan')
-        if args.chest_self_weight_280 and not args.approved_inertia_sha256:
-            parser.error('chest_self_weight_280 requires approved fresh inertia')
-        sys.exit(0 if (_run_chest280(args) if args.chest_self_weight_280 else _run(args)) else 1)
+        if args.continue_self_weight_axes and not (args.self_weight_suite and args.resume_self_weight and args.approved_resume_sha256):
+            parser.error('17-axis continuation requires self_weight_suite and approved prior report')
+        if (args.resume_self_weight or args.approved_resume_sha256) and not args.self_weight_suite:
+            parser.error('resume is only valid for self_weight_suite')
+        if args.chest_self_weight_280 and args.self_weight_suite:
+            parser.error('self-weight modes are exclusive')
+        if (args.chest_self_weight_280 or args.self_weight_suite) and not args.approved_inertia_sha256:
+            parser.error('self-weight tracking requires approved fresh inertia')
+        sys.exit(0 if (_run_chest280(args) if args.chest_self_weight_280 or args.self_weight_suite else _run(args)) else 1)
