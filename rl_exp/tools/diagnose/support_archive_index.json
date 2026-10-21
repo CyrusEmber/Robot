@@ -1,0 +1,35 @@
+{
+  "format": 1,
+  "packages": [
+    {
+      "old_root": "rl_exp/tools/diagnose/out/smoke_p1c",
+      "new_relative_root": "rl_exp/out/archive/lizard-v10-support/smoke_p1c",
+      "schema": "smoke_p1c",
+      "files": {
+        "p1a_zero_action_5s.json": "3d3d68cef6cce245836b808def4a677a5ffa62374bc3240ea2848309d1cf586e",
+        "p1b_policy_still_10s.json": "67da25a8e76fafe50d43a84d8f78c68f7ae4584e49ee3ac0e102a4baf44d22c4",
+        "summary.md": "5f2e687360081dbff831cd306d094739a6d5c38a8dcd4d0279c12a9e2beea2b3"
+      },
+      "producer_source": {
+        "relative_path": "rl_exp/out/archive/lizard-v10-support/metadata/smoke_p1c_producer.py",
+        "commit": "d5ff5ce791262f7825fcb6836e2f6fe353b3a551",
+        "sha256": "a2c8e807b1c0741fae0ea3aefddca879937ec3edfd6bbd65b6d4a9a7b83c7009"
+      }
+    },
+    {
+      "old_root": "rl_exp/tools/diagnose/out/smoke_p1d",
+      "new_relative_root": "rl_exp/out/archive/lizard-v10-support/smoke_p1d",
+      "schema": "smoke_p1d",
+      "files": {
+        "p1a_zero_action_5s.json": "1f920f86b86db00e7fe446a0e2e3faf7659395a4901bca71a5cf3f7abf1aab46",
+        "p1b_policy_still_10s.json": "334195374fd400d3a509bbc81f9b4857296952656863b2f56df9a232b1b28b7f",
+        "summary.md": "f85ad15a2668fe6f6692a20fdab4e62fb28771c869d86df4b3d941b8cc64a849"
+      },
+      "producer_source": {
+        "relative_path": "rl_exp/out/archive/lizard-v10-support/metadata/smoke_p1d_producer.py",
+        "commit": "29deefe0acf735b8af4359d221fb21a888734668",
+        "sha256": "c4a02e0f5ed8acbc7b25237bb7fbf4c5a58c6f3367a69d1f5452890431b9bd32"
+      }
+    }
+  ]
+}

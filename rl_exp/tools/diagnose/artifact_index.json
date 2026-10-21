@@ -1,0 +1,2910 @@
+{
+  "format": 1,
+  "scope": "root entries observed 2026-10-20; container children not fully classified",
+  "limitations": [
+    "document mentions are not executable consumption",
+    "pending includes unverified variants; no deletion authorized",
+    "writer status unknown unless specifically verified",
+    "other producer output roots not covered"
+  ],
+  "packages": [
+    {
+      "logical_root": "rl_exp/out/archive",
+      "current_location": "rl_exp/out/archive",
+      "classification": "container",
+      "owner": "diagnostic-artifact-lifecycle",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/body_precheck_lizard2_20261020.json",
+      "current_location": "rl_exp/out/body_precheck_lizard2_20261020.json",
+      "classification": "pending",
+      "owner": "robot-body-precheck",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-20-robot-body-precheck-entry.md"
+      ],
+      "report_metadata": {
+        "status": "fail",
+        "has_identity": false
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/body_precheck_plan_fix_20261020",
+      "current_location": "rl_exp/out/body_precheck_plan_fix_20261020",
+      "classification": "pending",
+      "owner": "robot-body-precheck",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-20-robot-body-precheck-plan-fixes.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/body_precheck_source_samples_20261020.json",
+      "current_location": "rl_exp/out/body_precheck_source_samples_20261020.json",
+      "classification": "pending",
+      "owner": "robot-body-precheck",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": {
+        "status": "fail",
+        "has_identity": false
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/body_precheck_source_samples_checked_20261020.json",
+      "current_location": "rl_exp/out/body_precheck_source_samples_checked_20261020.json",
+      "classification": "pending",
+      "owner": "robot-body-precheck",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-20-robot-body-precheck-source-geometry.md"
+      ],
+      "report_metadata": {
+        "status": "fail",
+        "has_identity": false
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/body_precheck_source_samples_final_20261020.json",
+      "current_location": "rl_exp/out/body_precheck_source_samples_final_20261020.json",
+      "classification": "pending",
+      "owner": "robot-body-precheck",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": {
+        "status": "fail",
+        "has_identity": false
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_a_contact_converged_20261019",
+      "current_location": "rl_exp/out/lizard2_a_contact_converged_20261019",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": {
+        "mode": "sampled_contact_corrected_path",
+        "has_identity": true
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_a_contact_corrected_20261019",
+      "current_location": "rl_exp/out/lizard2_a_contact_corrected_20261019",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": {
+        "mode": "sampled_contact_corrected_path",
+        "has_identity": true
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_a_contact_corrected_source_seed_20261019",
+      "current_location": "rl_exp/out/lizard2_a_contact_corrected_source_seed_20261019",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": {
+        "mode": "sampled_contact_corrected_path",
+        "has_identity": true
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_a_contact_delivery_20261019",
+      "current_location": "rl_exp/out/lizard2_a_contact_delivery_20261019",
+      "classification": "current_dependency",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": "rl_exp/tools/verify/test_local_path_optimization.py:24",
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-a-delivery-plan.md",
+        "acceptance/records/2026-10-19-lizard2-contact-path-correction.md",
+        "acceptance/records/2026-10-19-lizard2-load-transfer-lift.md",
+        "acceptance/records/2026-10-19-lizard2-single-leg-lift.md",
+        "acceptance/records/2026-10-19-lizard2-spatial-inertia-repair.md"
+      ],
+      "report_metadata": {
+        "mode": "sampled_contact_corrected_path",
+        "has_identity": true
+      },
+      "consumer_verification": "direct_code_reference",
+      "retention_reason": "preserve bound input",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_a_contact_delivery_view_20261019",
+      "current_location": "rl_exp/out/lizard2_a_contact_delivery_view_20261019",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-a-delivery-plan.md",
+        "acceptance/records/2026-10-19-lizard2-contact-path-correction.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_a_contact_edge_20261019",
+      "current_location": "rl_exp/out/lizard2_a_contact_edge_20261019",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": {
+        "mode": "sampled_contact_corrected_path",
+        "has_identity": true
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_a_contact_edge_heading_20261019",
+      "current_location": "rl_exp/out/lizard2_a_contact_edge_heading_20261019",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": {
+        "mode": "sampled_contact_corrected_path",
+        "has_identity": true
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_a_contact_heading_20261019",
+      "current_location": "rl_exp/out/lizard2_a_contact_heading_20261019",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": {
+        "mode": "sampled_contact_corrected_path",
+        "has_identity": true
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_a_contact_patch_20261019",
+      "current_location": "rl_exp/out/lizard2_a_contact_patch_20261019",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": {
+        "mode": "sampled_contact_corrected_path",
+        "has_identity": true
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_a_contact_rocking_20261019",
+      "current_location": "rl_exp/out/lizard2_a_contact_rocking_20261019",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": {
+        "mode": "sampled_contact_corrected_path",
+        "has_identity": true
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_a_fixed_replay_20261019",
+      "current_location": "rl_exp/out/lizard2_a_fixed_replay_20261019",
+      "classification": "historical_control",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": "acceptance/records/2026-10-19-lizard2-a-geometry-replay.md",
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-a-geometry-replay.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "preserve original failure or historical measurement",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_a_geometry_delivery_20261019",
+      "current_location": "rl_exp/out/lizard2_a_geometry_delivery_20261019",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-a-geometry-replay.md",
+        "acceptance/records/2026-10-19-lizard2-contact-path-correction.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_a_root_replay_20261019",
+      "current_location": "rl_exp/out/lizard2_a_root_replay_20261019",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_all_joints_video_20261020",
+      "current_location": "rl_exp/out/lizard2_b_all_joints_video_20261020",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_all_joints_video_20261020.log",
+      "current_location": "rl_exp/out/lizard2_b_all_joints_video_20261020.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_all_joints_video_full_20261020",
+      "current_location": "rl_exp/out/lizard2_b_all_joints_video_full_20261020",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_all_joints_video_full_20261020.log",
+      "current_location": "rl_exp/out/lizard2_b_all_joints_video_full_20261020.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_all_joints_video_observe_20261020",
+      "current_location": "rl_exp/out/lizard2_b_all_joints_video_observe_20261020",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": {
+        "status": "settle_observation_completed",
+        "has_identity": true
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_all_joints_video_observe_20261020.log",
+      "current_location": "rl_exp/out/lizard2_b_all_joints_video_observe_20261020.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_chest2_standing_20261019",
+      "current_location": "rl_exp/out/lizard2_b_chest2_standing_20261019",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-chest-standing-pd.md"
+      ],
+      "report_metadata": {
+        "status": "standing_failed",
+        "has_identity": true
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_chest2_standing_20261019.log",
+      "current_location": "rl_exp/out/lizard2_b_chest2_standing_20261019.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_chest2_wrist1_lift_20261019",
+      "current_location": "rl_exp/out/lizard2_b_chest2_wrist1_lift_20261019",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-chest-standing-pd.md"
+      ],
+      "report_metadata": {
+        "status": "single_leg_lift_failed",
+        "has_identity": true
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_chest2_wrist1_lift_20261019.log",
+      "current_location": "rl_exp/out/lizard2_b_chest2_wrist1_lift_20261019.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-chest-standing-pd.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_chest_level_guard_broken_20261019.log",
+      "current_location": "rl_exp/out/lizard2_b_chest_level_guard_broken_20261019.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_combined_tracking_20261019",
+      "current_location": "rl_exp/out/lizard2_b_combined_tracking_20261019",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-loaded-standing.md"
+      ],
+      "report_metadata": {
+        "status": "combined_tracking_verified",
+        "has_identity": true
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_combined_tracking_20261019.log",
+      "current_location": "rl_exp/out/lizard2_b_combined_tracking_20261019.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_inertia_20261019",
+      "current_location": "rl_exp/out/lizard2_b_inertia_20261019",
+      "classification": "historical_control",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": "acceptance/records/2026-10-19-lizard2-spatial-inertia-repair.md",
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-spatial-inertia-repair.md"
+      ],
+      "report_metadata": {
+        "status": "captured_inertia_mismatch",
+        "has_identity": true
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "preserve original failure or historical measurement",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_inertia_20261019.log",
+      "current_location": "rl_exp/out/lizard2_b_inertia_20261019.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_inertia_repaired_20261019",
+      "current_location": "rl_exp/out/lizard2_b_inertia_repaired_20261019",
+      "classification": "current_dependency",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": "acceptance/records/2026-10-19-lizard2-spatial-inertia-repair.md",
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-a-delivery-plan.md",
+        "acceptance/records/2026-10-19-lizard2-level-leg-pd.md",
+        "acceptance/records/2026-10-19-lizard2-loaded-standing.md",
+        "acceptance/records/2026-10-19-lizard2-spatial-inertia-repair.md",
+        "acceptance/records/2026-10-19-lizard2-spatial-small-tracking.md"
+      ],
+      "report_metadata": {
+        "status": "authored_inertia_and_mass_matrix_verified",
+        "has_identity": true
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "preserve bound input",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_inertia_repaired_20261019.log",
+      "current_location": "rl_exp/out/lizard2_b_inertia_repaired_20261019.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_level_leg_guard_broken_20261019.log",
+      "current_location": "rl_exp/out/lizard2_b_level_leg_guard_broken_20261019.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_level_leg_original_20261019",
+      "current_location": "rl_exp/out/lizard2_b_level_leg_original_20261019",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-level-leg-pd.md"
+      ],
+      "report_metadata": {
+        "status": "level_leg_tracking_failed",
+        "has_identity": true
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_level_leg_original_20261019.log",
+      "current_location": "rl_exp/out/lizard2_b_level_leg_original_20261019.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_level_leg_wrist6_20261019",
+      "current_location": "rl_exp/out/lizard2_b_level_leg_wrist6_20261019",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-level-leg-pd.md"
+      ],
+      "report_metadata": {
+        "status": "level_leg_tracking_verified",
+        "has_identity": true
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_level_leg_wrist6_20261019.log",
+      "current_location": "rl_exp/out/lizard2_b_level_leg_wrist6_20261019.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_lf_lift_20261019_run01",
+      "current_location": "rl_exp/out/lizard2_b_lf_lift_20261019_run01",
+      "classification": "historical_control",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": "acceptance/records/2026-10-19-lizard2-single-leg-lift.md",
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-single-leg-lift.md"
+      ],
+      "report_metadata": {
+        "read_status": "unknown"
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "preserve original failure or historical measurement",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_lf_lift_20261019_run01.log",
+      "current_location": "rl_exp/out/lizard2_b_lf_lift_20261019_run01.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_lf_lift_legs12_20261019",
+      "current_location": "rl_exp/out/lizard2_b_lf_lift_legs12_20261019",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-single-leg-lift.md"
+      ],
+      "report_metadata": {
+        "status": "single_leg_lift_failed",
+        "has_identity": true
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_lf_lift_legs12_20261019.log",
+      "current_location": "rl_exp/out/lizard2_b_lf_lift_legs12_20261019.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_lf_lift_wrist6_20261019",
+      "current_location": "rl_exp/out/lizard2_b_lf_lift_wrist6_20261019",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-single-leg-lift.md"
+      ],
+      "report_metadata": {
+        "status": "single_leg_lift_failed",
+        "has_identity": true
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_lf_lift_wrist6_20261019.log",
+      "current_location": "rl_exp/out/lizard2_b_lf_lift_wrist6_20261019.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_lift_plan_20261019",
+      "current_location": "rl_exp/out/lizard2_b_lift_plan_20261019",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-single-leg-lift.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_lift_plan_wrist6_20261019",
+      "current_location": "rl_exp/out/lizard2_b_lift_plan_wrist6_20261019",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-chest-standing-pd.md",
+        "acceptance/records/2026-10-19-lizard2-level-leg-pd.md",
+        "acceptance/records/2026-10-19-lizard2-single-leg-lift.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_loaded_pd_regression_20261019",
+      "current_location": "rl_exp/out/lizard2_b_loaded_pd_regression_20261019",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-loaded-standing.md"
+      ],
+      "report_metadata": {
+        "status": "combined_tracking_verified",
+        "has_identity": true
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_loaded_pd_regression_20261019.log",
+      "current_location": "rl_exp/out/lizard2_b_loaded_pd_regression_20261019.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_rf_wrist6_20261020",
+      "current_location": "rl_exp/out/lizard2_b_rf_wrist6_20261020",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": {
+        "status": "joint_self_weight_tracking_verified",
+        "has_identity": true
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_rf_wrist6_20261020.log",
+      "current_location": "rl_exp/out/lizard2_b_rf_wrist6_20261020.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_rf_wrist_original_20261020",
+      "current_location": "rl_exp/out/lizard2_b_rf_wrist_original_20261020",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": {
+        "status": "joint_self_weight_tracking_failed",
+        "has_identity": true
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_rf_wrist_original_20261020.log",
+      "current_location": "rl_exp/out/lizard2_b_rf_wrist_original_20261020.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_rf_wrist_settle_video_20261020",
+      "current_location": "rl_exp/out/lizard2_b_rf_wrist_settle_video_20261020",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": {
+        "status": "settle_observation_completed",
+        "has_identity": true
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_rf_wrist_settle_video_20261020.log",
+      "current_location": "rl_exp/out/lizard2_b_rf_wrist_settle_video_20261020.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_standing_20261019_run01",
+      "current_location": "rl_exp/out/lizard2_b_standing_20261019_run01",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_standing_20261019_run01.log",
+      "current_location": "rl_exp/out/lizard2_b_standing_20261019_run01.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_standing_20261019_run02",
+      "current_location": "rl_exp/out/lizard2_b_standing_20261019_run02",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-loaded-standing.md"
+      ],
+      "report_metadata": {
+        "status": "standing_failed",
+        "has_identity": true
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_standing_20261019_run02.log",
+      "current_location": "rl_exp/out/lizard2_b_standing_20261019_run02.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_standing_exitfix_20261019",
+      "current_location": "rl_exp/out/lizard2_b_standing_exitfix_20261019",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-loaded-standing.md"
+      ],
+      "report_metadata": {
+        "status": "standing_failed",
+        "has_identity": true
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_standing_exitfix_20261019.log",
+      "current_location": "rl_exp/out/lizard2_b_standing_exitfix_20261019.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_standing_legs6_20261019",
+      "current_location": "rl_exp/out/lizard2_b_standing_legs6_20261019",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-loaded-standing.md"
+      ],
+      "report_metadata": {
+        "status": "standing_failed",
+        "has_identity": true
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_standing_legs6_20261019.log",
+      "current_location": "rl_exp/out/lizard2_b_standing_legs6_20261019.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_standing_neck2_20261019",
+      "current_location": "rl_exp/out/lizard2_b_standing_neck2_20261019",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-chest-standing-pd.md",
+        "acceptance/records/2026-10-19-lizard2-level-leg-pd.md",
+        "acceptance/records/2026-10-19-lizard2-load-transfer-lift.md",
+        "acceptance/records/2026-10-19-lizard2-loaded-standing.md",
+        "acceptance/records/2026-10-19-lizard2-single-leg-lift.md"
+      ],
+      "report_metadata": {
+        "status": "standing_verified",
+        "has_identity": true
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_standing_neck2_20261019.log",
+      "current_location": "rl_exp/out/lizard2_b_standing_neck2_20261019.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_tracking_20261019",
+      "current_location": "rl_exp/out/lizard2_b_tracking_20261019",
+      "classification": "historical_control",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": "acceptance/records/2026-10-19-lizard2-spatial-small-tracking.md",
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-spatial-small-tracking.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "preserve original failure or historical measurement",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_tracking_20261019.log",
+      "current_location": "rl_exp/out/lizard2_b_tracking_20261019.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_tracking_20261019_run01",
+      "current_location": "rl_exp/out/lizard2_b_tracking_20261019_run01",
+      "classification": "historical_control",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": "acceptance/records/2026-10-19-lizard2-spatial-small-tracking.md",
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-spatial-small-tracking.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "preserve original failure or historical measurement",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_tracking_20261019_run01.log",
+      "current_location": "rl_exp/out/lizard2_b_tracking_20261019_run01.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_tracking_20261019_run02",
+      "current_location": "rl_exp/out/lizard2_b_tracking_20261019_run02",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-spatial-small-tracking.md"
+      ],
+      "report_metadata": {
+        "status": "small_tracking_verified",
+        "has_identity": true
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_tracking_20261019_run02.log",
+      "current_location": "rl_exp/out/lizard2_b_tracking_20261019_run02.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_transfer_lift_20261019",
+      "current_location": "rl_exp/out/lizard2_b_transfer_lift_20261019",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-load-transfer-lift.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_transfer_lift_20261019.log",
+      "current_location": "rl_exp/out/lizard2_b_transfer_lift_20261019.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_transfer_plan_20261019",
+      "current_location": "rl_exp/out/lizard2_b_transfer_plan_20261019",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-load-transfer-lift.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_transfer_tail_lift_20261019",
+      "current_location": "rl_exp/out/lizard2_b_transfer_tail_lift_20261019",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-load-transfer-lift.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_transfer_tail_lift_20261019.log",
+      "current_location": "rl_exp/out/lizard2_b_transfer_tail_lift_20261019.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_transfer_tail_plan_20261019",
+      "current_location": "rl_exp/out/lizard2_b_transfer_tail_plan_20261019",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-load-transfer-lift.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_e_20261013_final",
+      "current_location": "rl_exp/out/lizard2_e_20261013_final",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_e_fresh_baseline_20261020.log",
+      "current_location": "rl_exp/out/lizard2_e_fresh_baseline_20261020.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_e_fresh_inertia_20261020",
+      "current_location": "rl_exp/out/lizard2_e_fresh_inertia_20261020",
+      "classification": "current_dependency",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": "acceptance/records/2026-10-19-lizard2-spatial-inertia-repair.md",
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-spatial-inertia-repair.md"
+      ],
+      "report_metadata": {
+        "status": "authored_inertia_and_mass_matrix_verified",
+        "has_identity": true
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "preserve bound input",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_e_fresh_inertia_20261020.log",
+      "current_location": "rl_exp/out/lizard2_e_fresh_inertia_20261020.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-spatial-inertia-repair.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_e_fresh_inertia_selfcheck_20261020.log",
+      "current_location": "rl_exp/out/lizard2_e_fresh_inertia_selfcheck_20261020.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-spatial-inertia-repair.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_e_fresh_obs_20261020.log",
+      "current_location": "rl_exp/out/lizard2_e_fresh_obs_20261020.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_e_fresh_prepare_20261020",
+      "current_location": "rl_exp/out/lizard2_e_fresh_prepare_20261020",
+      "classification": "current_dependency",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": "acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md",
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "preserve bound input",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_e_fresh_prepare_20261020.log",
+      "current_location": "rl_exp/out/lizard2_e_fresh_prepare_20261020.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_e_fresh_reset_20261020",
+      "current_location": "rl_exp/out/lizard2_e_fresh_reset_20261020",
+      "classification": "current_dependency",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": "acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md",
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-spatial-inertia-repair.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "preserve bound input",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_e_fresh_reset_20261020.log",
+      "current_location": "rl_exp/out/lizard2_e_fresh_reset_20261020.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_e_fresh_tracking_20261020",
+      "current_location": "rl_exp/out/lizard2_e_fresh_tracking_20261020",
+      "classification": "current_dependency",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": "acceptance/records/2026-10-19-lizard2-spatial-small-tracking.md",
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-spatial-small-tracking.md"
+      ],
+      "report_metadata": {
+        "status": "small_tracking_verified",
+        "has_identity": true
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "preserve bound input",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_e_fresh_tracking_20261020.log",
+      "current_location": "rl_exp/out/lizard2_e_fresh_tracking_20261020.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-spatial-small-tracking.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_e_registered_20261015",
+      "current_location": "rl_exp/out/lizard2_e_registered_20261015",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md",
+        "acceptance/records/2026-10-19-lizard2-spatial-inertia-repair.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_e_spatial_20261015",
+      "current_location": "rl_exp/out/lizard2_e_spatial_20261015",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_palm_combined_view_20261016",
+      "current_location": "rl_exp/out/lizard2_palm_combined_view_20261016",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-a-delivery-plan.md",
+        "acceptance/records/2026-10-19-lizard2-a-geometry-replay.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_palm_combined_view_20261016_drive",
+      "current_location": "rl_exp/out/lizard2_palm_combined_view_20261016_drive",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_palm_combined_view_20261016_final",
+      "current_location": "rl_exp/out/lizard2_palm_combined_view_20261016_final",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-a-delivery-plan.md",
+        "acceptance/records/2026-10-19-lizard2-a-geometry-replay.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_palm_gait_5a_20261014",
+      "current_location": "rl_exp/out/lizard2_palm_gait_5a_20261014",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-14-lizard2-a-priority-review.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_palm_local_combined_20261016",
+      "current_location": "rl_exp/out/lizard2_palm_local_combined_20261016",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-16-lizard2-local-path-combined.md"
+      ],
+      "report_metadata": {
+        "mode": "sampled_local_path_combined",
+        "has_identity": true
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_palm_local_mirror_20261016",
+      "current_location": "rl_exp/out/lizard2_palm_local_mirror_20261016",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-16-lizard2-local-path-mirror.md"
+      ],
+      "report_metadata": {
+        "mode": "sampled_local_path_mirror",
+        "has_identity": true
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_palm_local_path_20261015",
+      "current_location": "rl_exp/out/lizard2_palm_local_path_20261015",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-15-lizard2-palm-local-path-probe.md",
+        "acceptance/records/2026-10-16-lizard2-local-path-postprocess.md"
+      ],
+      "report_metadata": {
+        "mode": "budgeted_local_path",
+        "has_identity": true
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_palm_local_path_20261015_v2",
+      "current_location": "rl_exp/out/lizard2_palm_local_path_20261015_v2",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": {
+        "mode": "budgeted_local_path",
+        "has_identity": true
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_palm_local_path_20261015_v3",
+      "current_location": "rl_exp/out/lizard2_palm_local_path_20261015_v3",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-15-lizard2-palm-local-path-probe.md",
+        "acceptance/records/2026-10-16-lizard2-local-path-postprocess.md"
+      ],
+      "report_metadata": {
+        "mode": "budgeted_local_path",
+        "has_identity": true
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_palm_local_path_contact_20261015",
+      "current_location": "rl_exp/out/lizard2_palm_local_path_contact_20261015",
+      "classification": "current_dependency",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": "acceptance/records/2026-10-15-lizard2-palm-local-contact-repair.md",
+      "document_mentions": [
+        "acceptance/records/2026-10-15-lizard2-palm-local-contact-repair.md",
+        "acceptance/records/2026-10-16-lizard2-local-path-combined.md",
+        "acceptance/records/2026-10-16-lizard2-local-path-mirror.md",
+        "acceptance/records/2026-10-16-lizard2-local-path-postprocess.md",
+        "acceptance/records/2026-10-16-lizard2-local-path-quarters.md",
+        "acceptance/records/2026-10-16-lizard2-support-schedule.md"
+      ],
+      "report_metadata": {
+        "mode": "budgeted_local_path",
+        "has_identity": true
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "preserve bound input",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_palm_local_path_contact_before_20261015",
+      "current_location": "rl_exp/out/lizard2_palm_local_path_contact_before_20261015",
+      "classification": "historical_control",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": "acceptance/records/2026-10-15-lizard2-palm-local-contact-repair.md",
+      "document_mentions": [
+        "acceptance/records/2026-10-15-lizard2-palm-local-contact-repair.md"
+      ],
+      "report_metadata": {
+        "mode": "budgeted_local_path",
+        "has_identity": true
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "preserve original failure or historical measurement",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_palm_local_path_partial_view_20261015",
+      "current_location": "rl_exp/out/lizard2_palm_local_path_partial_view_20261015",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-16-lizard2-local-path-postprocess.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_palm_local_path_view_20261015",
+      "current_location": "rl_exp/out/lizard2_palm_local_path_view_20261015",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-16-lizard2-local-path-postprocess.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_palm_local_path_view_20261015_v2",
+      "current_location": "rl_exp/out/lizard2_palm_local_path_view_20261015_v2",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-16-lizard2-local-path-postprocess.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_palm_local_quarters_20261016",
+      "current_location": "rl_exp/out/lizard2_palm_local_quarters_20261016",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-16-lizard2-local-path-quarters.md"
+      ],
+      "report_metadata": {
+        "mode": "sampled_local_path_quarters",
+        "has_identity": true
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_palm_motion_5b_20261014",
+      "current_location": "rl_exp/out/lizard2_palm_motion_5b_20261014",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-14-lizard2-5b-motion-boundaries.md",
+        "acceptance/records/2026-10-14-lizard2-palm-phase-constraint-correction.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_palm_pd_restored_20261013",
+      "current_location": "rl_exp/out/lizard2_palm_pd_restored_20261013",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-13-lizard2-restored-limits-pd-open-issues.md",
+        "acceptance/records/2026-10-14-lizard2-5b-motion-boundaries.md",
+        "acceptance/records/2026-10-14-lizard2-a-priority-review.md",
+        "acceptance/records/2026-10-14-lizard2-palm-spatial-trial-checkpoint.md",
+        "acceptance/records/2026-10-14-lizard2-restored-validation-handoff.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_palm_spatial_20261014",
+      "current_location": "rl_exp/out/lizard2_palm_spatial_20261014",
+      "classification": "current_dependency",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": "rl_exp/tools/diagnose/palm_spatial_runtime.py:27",
+      "document_mentions": [
+        "acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md",
+        "acceptance/records/2026-10-14-lizard2-palm-spatial-trial-checkpoint.md",
+        "acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md",
+        "acceptance/records/2026-10-15-lizard2-palm-local-contact-repair.md",
+        "acceptance/records/2026-10-15-lizard2-palm-local-path-probe.md",
+        "acceptance/records/2026-10-15-lizard2-palm-spatial-refined-boundaries.md",
+        "acceptance/records/2026-10-15-lizard2-palm-spatial-static-slices.md",
+        "acceptance/records/2026-10-16-lizard2-local-path-combined.md",
+        "acceptance/records/2026-10-16-lizard2-local-path-mirror.md",
+        "acceptance/records/2026-10-16-lizard2-support-schedule.md",
+        "acceptance/records/2026-10-19-lizard2-a-delivery-plan.md",
+        "acceptance/records/2026-10-20-diagnostic-artifact-plan-review.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "direct_code_reference",
+      "retention_reason": "preserve bound input",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_palm_spatial_refined_20261015",
+      "current_location": "rl_exp/out/lizard2_palm_spatial_refined_20261015",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-15-lizard2-palm-spatial-refined-boundaries.md"
+      ],
+      "report_metadata": {
+        "mode": "refined_static_slices",
+        "has_identity": true
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_palm_spatial_static_20261015",
+      "current_location": "rl_exp/out/lizard2_palm_spatial_static_20261015",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-15-lizard2-palm-spatial-refined-boundaries.md",
+        "acceptance/records/2026-10-15-lizard2-palm-spatial-static-slices.md"
+      ],
+      "report_metadata": {
+        "mode": "sampled_static_slices",
+        "has_identity": true
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_palm_support_schedule_20261016",
+      "current_location": "rl_exp/out/lizard2_palm_support_schedule_20261016",
+      "classification": "current_dependency",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": "acceptance/records/2026-10-16-lizard2-support-schedule.md",
+      "document_mentions": [
+        "acceptance/records/2026-10-16-lizard2-support-schedule.md",
+        "acceptance/records/2026-10-19-lizard2-a-geometry-replay.md",
+        "acceptance/records/2026-10-19-lizard2-contact-path-correction.md"
+      ],
+      "report_metadata": {
+        "mode": "sampled_local_path_support_schedule",
+        "has_identity": true
+      },
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "preserve bound input",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_spatial_export_cli_20261019",
+      "current_location": "rl_exp/out/lizard2_spatial_export_cli_20261019",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_spatial_export_cli_verified_20261019",
+      "current_location": "rl_exp/out/lizard2_spatial_export_cli_verified_20261019",
+      "classification": "current_dependency",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": "acceptance/records/2026-10-19-lizard2-a-delivery-plan.md",
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-a-delivery-plan.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "preserve bound input",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_spatial_export_cli_verified_20261019.log",
+      "current_location": "rl_exp/out/lizard2_spatial_export_cli_verified_20261019.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-a-delivery-plan.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_spatial_export_final_20261019",
+      "current_location": "rl_exp/out/lizard2_spatial_export_final_20261019",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_spatial_export_green2_20261019",
+      "current_location": "rl_exp/out/lizard2_spatial_export_green2_20261019",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_spatial_export_green_20261019",
+      "current_location": "rl_exp/out/lizard2_spatial_export_green_20261019",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_spatial_export_green_20261019_negative_missingaxis",
+      "current_location": "rl_exp/out/lizard2_spatial_export_green_20261019_negative_missingaxis",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_spatial_export_missingaxis_verified_20261019.log",
+      "current_location": "rl_exp/out/lizard2_spatial_export_missingaxis_verified_20261019.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-a-delivery-plan.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_spatial_export_oldcontract_verified_20261019.log",
+      "current_location": "rl_exp/out/lizard2_spatial_export_oldcontract_verified_20261019.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-a-delivery-plan.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_spatial_export_red_forgedreport_20261019.log",
+      "current_location": "rl_exp/out/lizard2_spatial_export_red_forgedreport_20261019.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-a-delivery-plan.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_spatial_export_red_nonfinite_mass_20261019.log",
+      "current_location": "rl_exp/out/lizard2_spatial_export_red_nonfinite_mass_20261019.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-a-delivery-plan.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_spatial_export_verified_20261019",
+      "current_location": "rl_exp/out/lizard2_spatial_export_verified_20261019",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-a-delivery-plan.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_spatial_export_verified_20261019.log",
+      "current_location": "rl_exp/out/lizard2_spatial_export_verified_20261019.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-a-delivery-plan.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_spatial_export_verified_20261019_tensor_sentinel",
+      "current_location": "rl_exp/out/lizard2_spatial_export_verified_20261019_tensor_sentinel",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-a-delivery-plan.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_transfer_default_after_20261019",
+      "current_location": "rl_exp/out/lizard2_transfer_default_after_20261019",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_transfer_default_after_20261019.log",
+      "current_location": "rl_exp/out/lizard2_transfer_default_after_20261019.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_transfer_default_before_20261019.log",
+      "current_location": "rl_exp/out/lizard2_transfer_default_before_20261019.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_transfer_tail_after_20261019",
+      "current_location": "rl_exp/out/lizard2_transfer_tail_after_20261019",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_transfer_tail_after_20261019.log",
+      "current_location": "rl_exp/out/lizard2_transfer_tail_after_20261019.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/palm_spatial_tracking_HEAD.py.txt",
+      "current_location": "rl_exp/out/palm_spatial_tracking_HEAD.py.txt",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/palm_spatial_tracking_HEAD_check.log",
+      "current_location": "rl_exp/out/palm_spatial_tracking_HEAD_check.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-spatial-small-tracking.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/palm_spatial_tracking_HEAD_check.py",
+      "current_location": "rl_exp/out/palm_spatial_tracking_HEAD_check.py",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/palm_spatial_tracking_HEAD_new.diff",
+      "current_location": "rl_exp/out/palm_spatial_tracking_HEAD_new.diff",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-19-lizard2-spatial-small-tracking.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/palm_spatial_tracking_HEAD_new.py.txt",
+      "current_location": "rl_exp/out/palm_spatial_tracking_HEAD_new.py.txt",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/palm_spatial_tracking_after.diff",
+      "current_location": "rl_exp/out/palm_spatial_tracking_after.diff",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/palm_spatial_tracking_before.diff",
+      "current_location": "rl_exp/out/palm_spatial_tracking_before.diff",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/palm_spatial_tracking_before.py.txt",
+      "current_location": "rl_exp/out/palm_spatial_tracking_before.py.txt",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/palm_spatial_tracking_chest280_HEAD.diff",
+      "current_location": "rl_exp/out/palm_spatial_tracking_chest280_HEAD.diff",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/palm_spatial_tracking_chest280_HEAD.py.txt",
+      "current_location": "rl_exp/out/palm_spatial_tracking_chest280_HEAD.py.txt",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/palm_spatial_tracking_commit_20261020.index",
+      "current_location": "rl_exp/out/palm_spatial_tracking_commit_20261020.index",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/palm_spatial_tracking_new.diff",
+      "current_location": "rl_exp/out/palm_spatial_tracking_new.diff",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/out/runs",
+      "current_location": "rl_exp/out/runs",
+      "classification": "container",
+      "owner": "diagnostic-artifact-lifecycle",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/tools/diagnose/out/baseline_v1_headcheck",
+      "current_location": "rl_exp/tools/diagnose/out/baseline_v1_headcheck",
+      "classification": "pending",
+      "owner": "diagnostic-artifact-lifecycle",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-09-20-baseline-flat-eval-protocol.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/tools/diagnose/out/baseline_v1_verts",
+      "current_location": "rl_exp/tools/diagnose/out/baseline_v1_verts",
+      "classification": "pending",
+      "owner": "diagnostic-artifact-lifecycle",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/tools/diagnose/out/gait_probe",
+      "current_location": "rl_exp/tools/diagnose/out/gait_probe",
+      "classification": "pending",
+      "owner": "diagnostic-artifact-lifecycle",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-09-23-gait-probe-exit-status.md",
+        "acceptance/records/2026-09-23-lizard2-v1-gait-skate.md",
+        "acceptance/records/2026-09-28-lizard2-foot-hull-and-asset-isolation.md",
+        "acceptance/records/2026-09-29-gait-shape-in-the-eval-flow.md",
+        "acceptance/records/2026-09-29-lizard2-hfe-knee-limit.md",
+        "acceptance/records/2026-09-29-lizard2-pad-leveling-unreachable.md",
+        "acceptance/records/2026-09-29-lizard2-v2-eval.md",
+        "acceptance/records/2026-09-29-lizard2-v2-gait-five-claims.md",
+        "acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory.md",
+        "acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md",
+        "acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md",
+        "acceptance/records/2026-10-14-lizard2-restored-validation-handoff.md",
+        "acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md",
+        "work/active/lizard2-candidate-wiring.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/tools/diagnose/out/joint_plots",
+      "current_location": "rl_exp/tools/diagnose/out/joint_plots",
+      "classification": "pending",
+      "owner": "diagnostic-artifact-lifecycle",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-09-29-lizard2-pad-leveling-unreachable.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/tools/diagnose/out/lizard2_e_shared_20261013",
+      "current_location": "rl_exp/tools/diagnose/out/lizard2_e_shared_20261013",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/tools/diagnose/out/lizard2_e_shared_final_20261013",
+      "current_location": "rl_exp/tools/diagnose/out/lizard2_e_shared_final_20261013",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [
+        "acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/tools/diagnose/out/lizard2_e_split_20261013",
+      "current_location": "rl_exp/tools/diagnose/out/lizard2_e_split_20261013",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/tools/diagnose/out/lizard2_e_split_final_20261013",
+      "current_location": "rl_exp/tools/diagnose/out/lizard2_e_split_final_20261013",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/tools/diagnose/out/run_loadclosure.log",
+      "current_location": "rl_exp/tools/diagnose/out/run_loadclosure.log",
+      "classification": "pending",
+      "owner": "diagnostic-artifact-lifecycle",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/tools/diagnose/out/run_meshz.log",
+      "current_location": "rl_exp/tools/diagnose/out/run_meshz.log",
+      "classification": "pending",
+      "owner": "diagnostic-artifact-lifecycle",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/tools/diagnose/out/run_tailz_p2.log",
+      "current_location": "rl_exp/tools/diagnose/out/run_tailz_p2.log",
+      "classification": "pending",
+      "owner": "diagnostic-artifact-lifecycle",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/tools/diagnose/out/smoke_p1",
+      "current_location": "rl_exp/tools/diagnose/out/smoke_p1",
+      "classification": "pending",
+      "owner": "diagnostic-artifact-lifecycle",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/tools/diagnose/out/smoke_p1b",
+      "current_location": "rl_exp/tools/diagnose/out/smoke_p1b",
+      "classification": "pending",
+      "owner": "diagnostic-artifact-lifecycle",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "unverified value or unfinished experiment; preserve",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/tools/diagnose/out/v10_loadclosure",
+      "current_location": "rl_exp/tools/diagnose/out/v10_loadclosure",
+      "classification": "historical_control",
+      "owner": "diagnostic-artifact-lifecycle",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": "rl_exp/versions/lizard/main/v10/DIAGNOSE.md:108",
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "preserve original failure or historical measurement",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/tools/diagnose/out/v10_meas",
+      "current_location": "rl_exp/tools/diagnose/out/v10_meas",
+      "classification": "historical_control",
+      "owner": "diagnostic-artifact-lifecycle",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": "rl_exp/versions/lizard/main/v10/DIAGNOSE.md:106",
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "preserve original failure or historical measurement",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/tools/diagnose/out/v10_meshz",
+      "current_location": "rl_exp/tools/diagnose/out/v10_meshz",
+      "classification": "historical_control",
+      "owner": "diagnostic-artifact-lifecycle",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": "rl_exp/versions/lizard/main/v10/DIAGNOSE.md:109",
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "preserve original failure or historical measurement",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/tools/diagnose/out/v10_run1",
+      "current_location": "rl_exp/tools/diagnose/out/v10_run1",
+      "classification": "historical_control",
+      "owner": "diagnostic-artifact-lifecycle",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": "rl_exp/versions/lizard/main/v10/DIAGNOSE.md:107",
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "preserve original failure or historical measurement",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/tools/diagnose/out/v10_run2",
+      "current_location": "rl_exp/tools/diagnose/out/v10_run2",
+      "classification": "historical_control",
+      "owner": "diagnostic-artifact-lifecycle",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": "rl_exp/versions/lizard/main/v10/DIAGNOSE.md:107",
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "preserve original failure or historical measurement",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/tools/diagnose/out/v10_run3",
+      "current_location": "rl_exp/tools/diagnose/out/v10_run3",
+      "classification": "historical_control",
+      "owner": "diagnostic-artifact-lifecycle",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": "rl_exp/versions/lizard/main/v10/DIAGNOSE.md:107",
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "preserve original failure or historical measurement",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/tools/diagnose/out/v10_run5",
+      "current_location": "rl_exp/tools/diagnose/out/v10_run5",
+      "classification": "historical_control",
+      "owner": "diagnostic-artifact-lifecycle",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": "rl_exp/versions/lizard/main/v10/DIAGNOSE.md:105",
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "preserve original failure or historical measurement",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/tools/diagnose/out/v10_tailz_p2",
+      "current_location": "rl_exp/tools/diagnose/out/v10_tailz_p2",
+      "classification": "historical_control",
+      "owner": "diagnostic-artifact-lifecycle",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": "rl_exp/versions/lizard/main/v10/DIAGNOSE.md:111",
+      "document_mentions": [],
+      "report_metadata": null,
+      "consumer_verification": "document_mentions_only",
+      "retention_reason": "preserve original failure or historical measurement",
+      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+    },
+    {
+      "logical_root": "rl_exp/tools/diagnose/out/smoke_p1c",
+      "current_location": "rl_exp/out/archive/lizard-v10-support/smoke_p1c",
+      "classification": "historical_control",
+      "owner": "diagnostic-artifact-lifecycle",
+      "action": "archived",
+      "writer_status": "no_running_producer_observed_and_files_verified",
+      "storage": "local_single_copy_no_backup",
+      "basis": "rl_exp/versions/lizard/main/v10/DIAGNOSE.md:106-107",
+      "retention_reason": "invalidated measurement; retain failure comparison, not valid current evidence",
+      "next": "preserve files and pinned producer snapshots; external backup still required",
+      "read_command": "python -B rl_exp/tools/diagnose/archived_support_read.py --index rl_exp/tools/diagnose/support_archive_index.json --package rl_exp/tools/diagnose/out/smoke_p1c"
+    },
+    {
+      "logical_root": "rl_exp/tools/diagnose/out/smoke_p1d",
+      "current_location": "rl_exp/out/archive/lizard-v10-support/smoke_p1d",
+      "classification": "historical_control",
+      "owner": "diagnostic-artifact-lifecycle",
+      "action": "archived",
+      "writer_status": "no_running_producer_observed_and_files_verified",
+      "storage": "local_single_copy_no_backup",
+      "basis": "rl_exp/versions/lizard/main/v10/DIAGNOSE.md:106-107",
+      "retention_reason": "invalidated measurement; retain failure comparison, not valid current evidence",
+      "next": "preserve files and pinned producer snapshots; external backup still required",
+      "read_command": "python -B rl_exp/tools/diagnose/archived_support_read.py --index rl_exp/tools/diagnose/support_archive_index.json --package rl_exp/tools/diagnose/out/smoke_p1d"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_b_chest280_selfcheck_20261020.log",
+      "current_location": "rl_exp/out/lizard2_b_chest280_selfcheck_20261020.log",
+      "classification": "pending",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": null,
+      "document_mentions": [],
+      "consumer_verification": "not_verified",
+      "retention_reason": "new output observed during classification; preserve unfinished experiment",
+      "next": "original producer confirms completion, source identity and evidence value before any move"
+    }
+  ]
+}
