@@ -3,10 +3,10 @@ id: diagnostic-artifact-lifecycle
 title: 诊断产物整理、证据复用与收尾管理
 scope: rl_exp/out, rl_exp/tools/diagnose
 status: in_progress
-landing: rl_exp/tools/diagnose/artifact_index.json, rl_exp/tools/diagnose/support_archive_index.json, rl_exp/tools/diagnose/archived_support_read.py, rl_exp/tools/diagnose/artifact_inventory.py, acceptance/records
-next: 整理执行者继续核定 pending 与新增路由，按最新记录承接未具名变体、传递定位和备份；未齐不搬活跃链、不清理。
+landing: rl_exp/tools/diagnose/artifact_index.json, rl_exp/tools/diagnose/support_archive_index.json, rl_exp/tools/diagnose, acceptance/records
+next: 整理执行者按最新记录处理 pending、新增和混合子树，补传递定位与备份；未齐不搬活跃链、不清理。
 close_when: 不带执行历史的新上下文核验清单闭合、证据可复用、迁移可恢复及新运行收尾机制；缺证不关闭。
-evidence: acceptance/records/2026-10-21-diagnostic-artifact-second-archive.md, acceptance/records/2026-10-20-diagnostic-artifact-first-archive.md, acceptance/records/2026-10-20-diagnostic-artifact-preflight.md, acceptance/records/2026-10-20-diagnostic-artifact-plan-review.md
+evidence: acceptance/records/2026-10-21-diagnostic-artifact-drive-runtime-retention.md, acceptance/records/2026-10-21-diagnostic-artifact-second-archive.md, acceptance/records/2026-10-20-diagnostic-artifact-first-archive.md, acceptance/records/2026-10-20-diagnostic-artifact-preflight.md, acceptance/records/2026-10-20-diagnostic-artifact-plan-review.md
 ---
 
 ## 当前范围
