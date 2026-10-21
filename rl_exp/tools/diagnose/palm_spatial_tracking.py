@@ -668,6 +668,19 @@ def _self_weight_left_knee_design(design):
     return changed
 
 
+def _self_weight_symmetric_knee_elbow_design(design):
+    """Set both knees and elbows to Kp 220 [N*m/rad], retaining nominal damping ratios.
+
+    This user-selected candidate does not transfer left-knee behavioral verification.
+    """
+    changed = copy.deepcopy(design)
+    for name in ('rl_knee_joint', 'rr_knee_joint', 'lf_elbow_joint', 'rf_elbow_joint'):
+        i = design['joint_names'].index(name)
+        changed['kp'][i] = 220.
+        changed['kd'][i] *= math.sqrt(220./design['kp'][i])
+    return changed
+
+
 def _self_weight_left_knee_verdict(rows, names, commanded):
     """Keep incremental diagnostics; require left knee absolute hold/return precision."""
     verdict = _self_weight_verdict(rows, names, commanded)
@@ -996,6 +1009,10 @@ def _run_chest280(args):
         design = _self_weight_knee30_design(design)
     elif gain_trial:
         design = _self_weight_gain_design(design, remaining)
+    symmetric_pd = bool(getattr(args, 'symmetric_knee_elbow_pd', False))
+    if symmetric_pd:
+        assert knee_trial, 'symmetric PD overlay requires the left-knee trial input chain'
+        design = _self_weight_symmetric_knee_elbow_design(design)
     out = args.out.resolve()
     assert out.parent.is_dir() and wiring.REPO / 'rl_exp/out' in out.parents and not out.exists()
     out.mkdir(exist_ok=False)
@@ -1030,6 +1047,13 @@ def _run_chest280(args):
             result.update(scope='left rear knee PD calibration: one five-axis combination and one single-axis case',
                           left_knee_absolute_trial=dict(baseline_design=baseline_design, changed_joints=['rl_knee_joint'],
                               kp=220., absolute_hold_return_error_rad=.002, incremental_diagnostic_retained=True))
+        if symmetric_pd:
+            result.update(scope='symmetric knee/elbow PD candidate; existing two left-knee cases only',
+                          symmetric_knee_elbow_pd=dict(kp=220., nominal_damping_ratio_preserved=True,
+                              changed_joints=[n for i, n in enumerate(design['joint_names'])
+                                  if design['kp'][i] != baseline_design['kp'][i] or design['kd'][i] != baseline_design['kd'][i]],
+                              prior_left_knee_verification_transferred=False,
+                              absolute_precision_joints=['rl_knee_joint']))
     env, app = None, None
     try:
         from isaaclab.app import AppLauncher
@@ -1177,6 +1201,8 @@ def _run_chest280(args):
         else:
             passed = not failed
             status = 'chest_self_weight_tracking_verified' if passed else 'chest_self_weight_tracking_failed'
+        if symmetric_pd:
+            status = status.replace('left_knee_absolute_trial', 'symmetric_pd_left_knee_trial')
         result.update(completed=True, stage='completed', status=status)
         assert wiring.binding.sha256_file(manifest) == result['input'][str(manifest)]
         assert wiring.binding.sha256_file(args.inertia_report) == args.approved_inertia_sha256
@@ -1479,6 +1505,8 @@ if __name__ == '__main__':
     parser.add_argument('--calibrate_precision', action='store_true')
     parser.add_argument('--calibrated_combinations', action='store_true')
     parser.add_argument('--left_knee_absolute_trial', action='store_true')
+    parser.add_argument('--symmetric_knee_elbow_pd', action='store_true',
+                        help='Use Kp=220 for both knees/elbows; retains the existing left-knee-only case selection')
     parser.add_argument('--combined', action='store_true')
     parser.add_argument('--gain_reference', type=Path)
     parser.add_argument('--level_leg_plan', type=Path)
@@ -1502,6 +1530,8 @@ if __name__ == '__main__':
             parser.error('level_leg_plan requires gain_reference and excludes combined')
         if not args.level_leg_plan and args.wrist_frequency_hz != 1:
             parser.error('wrist override requires level_leg_plan')
+        if args.symmetric_knee_elbow_pd and not args.left_knee_absolute_trial:
+            parser.error('symmetric knee/elbow PD requires left_knee_absolute_trial; it does not extend its verification scope')
         if args.left_knee_absolute_trial and (args.calibrated_combinations or args.calibrate_precision or args.left_knee_kp30 or args.precision_gain_trial or args.continue_self_weight_axes or not (args.self_weight_suite and args.resume_self_weight and args.approved_resume_sha256)):
             parser.error('left knee absolute trial requires approved combinations report and excludes other trial selectors')
         if args.calibrated_combinations and (args.calibrate_precision or args.left_knee_kp30 or args.precision_gain_trial or args.continue_self_weight_axes or not (args.self_weight_suite and args.resume_self_weight and args.approved_resume_sha256)):
