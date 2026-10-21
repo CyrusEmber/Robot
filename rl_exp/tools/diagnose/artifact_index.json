@@ -1,6 +1,6 @@
 {
   "format": 1,
-  "scope": "root entries observed 2026-10-20; container children not fully classified",
+  "scope": "root routes observed 2026-10-20; selected E/A/baseline routes reviewed 2026-10-21; new entries and container children not fully classified",
   "limitations": [
     "document mentions are not executable consumption",
     "pending includes unverified variants; no deletion authorized",
@@ -137,20 +137,21 @@
     {
       "logical_root": "rl_exp/out/lizard2_a_contact_corrected_20261019",
       "current_location": "rl_exp/out/lizard2_a_contact_corrected_20261019",
-      "classification": "pending",
+      "classification": "historical_control",
       "owner": "lizard2-body-drive-candidate",
       "action": "hold",
       "writer_status": "unknown",
       "storage": "local_single_copy_no_backup",
-      "basis": null,
+      "basis": "rl_exp/out/lizard2_a_contact_corrected_20261019/report.json:legs.combined.failure",
       "document_mentions": [],
       "report_metadata": {
         "mode": "sampled_contact_corrected_path",
         "has_identity": true
       },
-      "consumer_verification": "document_mentions_only",
-      "retention_reason": "unverified value or unfinished experiment; preserve",
-      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+      "consumer_verification": "accepted prefix read by local_path_view._load",
+      "retention_reason": "preserve recorded solver/contact/ground failure; no valid-loop claim and no duplicate inference",
+      "next": "retain failure and source identity in place; transitive resolver and variant settings needed before archive",
+      "producer": "local_path_contact lineage; exact historical variant argv not verified"
     },
     {
       "logical_root": "rl_exp/out/lizard2_a_contact_corrected_source_seed_20261019",
@@ -197,20 +198,20 @@
     {
       "logical_root": "rl_exp/out/lizard2_a_contact_delivery_view_20261019",
       "current_location": "rl_exp/out/lizard2_a_contact_delivery_view_20261019",
-      "classification": "pending",
+      "classification": "historical_control",
       "owner": "lizard2-body-drive-candidate",
       "action": "hold",
       "writer_status": "unknown",
       "storage": "local_single_copy_no_backup",
-      "basis": null,
+      "basis": "acceptance/records/2026-10-19-lizard2-a-delivery-plan.md:55",
       "document_mentions": [
         "acceptance/records/2026-10-19-lizard2-a-delivery-plan.md",
         "acceptance/records/2026-10-19-lizard2-contact-path-correction.md"
       ],
       "report_metadata": null,
-      "consumer_verification": "document_mentions_only",
-      "retention_reason": "unverified value or unfinished experiment; preserve",
-      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+      "consumer_verification": "bound report digest verified; recorded caller route checked",
+      "retention_reason": "retain confirmed historical replay; no gait supervision or physical performance approval",
+      "next": "preserve report, images and upstream identity at current location until transitive recovery verified"
     },
     {
       "logical_root": "rl_exp/out/lizard2_a_contact_edge_20261019",
@@ -251,38 +252,40 @@
     {
       "logical_root": "rl_exp/out/lizard2_a_contact_heading_20261019",
       "current_location": "rl_exp/out/lizard2_a_contact_heading_20261019",
-      "classification": "pending",
+      "classification": "historical_control",
       "owner": "lizard2-body-drive-candidate",
       "action": "hold",
       "writer_status": "unknown",
       "storage": "local_single_copy_no_backup",
-      "basis": null,
+      "basis": "rl_exp/out/lizard2_a_contact_heading_20261019/report.json:legs.combined.failure",
       "document_mentions": [],
       "report_metadata": {
         "mode": "sampled_contact_corrected_path",
         "has_identity": true
       },
-      "consumer_verification": "document_mentions_only",
-      "retention_reason": "unverified value or unfinished experiment; preserve",
-      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+      "consumer_verification": "JSON readable; real replay refuses no accepted combined poses",
+      "retention_reason": "preserve recorded solver/contact/ground failure; no valid-loop claim and no duplicate inference",
+      "next": "retain failure and source identity in place; transitive resolver and variant settings needed before archive",
+      "producer": "local_path_contact lineage; exact historical variant argv not verified"
     },
     {
       "logical_root": "rl_exp/out/lizard2_a_contact_patch_20261019",
       "current_location": "rl_exp/out/lizard2_a_contact_patch_20261019",
-      "classification": "pending",
+      "classification": "historical_control",
       "owner": "lizard2-body-drive-candidate",
       "action": "hold",
       "writer_status": "unknown",
       "storage": "local_single_copy_no_backup",
-      "basis": null,
+      "basis": "rl_exp/out/lizard2_a_contact_patch_20261019/report.json:legs.combined.failure",
       "document_mentions": [],
       "report_metadata": {
         "mode": "sampled_contact_corrected_path",
         "has_identity": true
       },
-      "consumer_verification": "document_mentions_only",
-      "retention_reason": "unverified value or unfinished experiment; preserve",
-      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+      "consumer_verification": "JSON readable; real replay refuses no accepted combined poses",
+      "retention_reason": "preserve recorded solver/contact/ground failure; no valid-loop claim and no duplicate inference",
+      "next": "retain failure and source identity in place; transitive resolver and variant settings needed before archive",
+      "producer": "local_path_contact lineage; exact historical variant argv not verified"
     },
     {
       "logical_root": "rl_exp/out/lizard2_a_contact_rocking_20261019",
@@ -322,20 +325,20 @@
     {
       "logical_root": "rl_exp/out/lizard2_a_geometry_delivery_20261019",
       "current_location": "rl_exp/out/lizard2_a_geometry_delivery_20261019",
-      "classification": "pending",
+      "classification": "current_dependency",
       "owner": "lizard2-body-drive-candidate",
       "action": "hold",
       "writer_status": "unknown",
       "storage": "local_single_copy_no_backup",
-      "basis": null,
+      "basis": "acceptance/records/2026-10-19-lizard2-contact-path-correction.md:54,65",
       "document_mentions": [
         "acceptance/records/2026-10-19-lizard2-a-geometry-replay.md",
         "acceptance/records/2026-10-19-lizard2-contact-path-correction.md"
       ],
       "report_metadata": null,
-      "consumer_verification": "document_mentions_only",
-      "retention_reason": "unverified value or unfinished experiment; preserve",
-      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+      "consumer_verification": "bound report digest verified; recorded caller route checked",
+      "retention_reason": "retain prescribed root path used as actual correction input",
+      "next": "preserve report, images and upstream identity at current location until transitive recovery verified"
     },
     {
       "logical_root": "rl_exp/out/lizard2_a_root_replay_20261019",
@@ -2533,19 +2536,31 @@
     {
       "logical_root": "rl_exp/tools/diagnose/out/baseline_v1_headcheck",
       "current_location": "rl_exp/tools/diagnose/out/baseline_v1_headcheck",
-      "classification": "pending",
+      "classification": "historical_control",
       "owner": "diagnostic-artifact-lifecycle",
       "action": "hold",
       "writer_status": "unknown",
       "storage": "local_single_copy_no_backup",
-      "basis": null,
+      "basis": "acceptance/records/2026-09-20-baseline-flat-eval-protocol.md:69",
       "document_mentions": [
         "acceptance/records/2026-09-20-baseline-flat-eval-protocol.md"
       ],
-      "report_metadata": null,
+      "report_metadata": {
+        "cases": [
+          "p1a_zero_action_5s",
+          "p1b_policy_still_10s",
+          "p2_flat_v0.5_r0",
+          "p2_flat_v0.5_r1",
+          "p2_flat_v0.5_r2"
+        ],
+        "has_stored_stats": true,
+        "has_downsampled_series": true,
+        "target_binding_present": false
+      },
       "consumer_verification": "document_mentions_only",
-      "retention_reason": "unverified value or unfinished experiment; preserve",
-      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+      "retention_reason": "preserve recorded baseline head-load check and original reporting schema",
+      "next": "pin historical renderer and exact report dependencies before archive",
+      "producer": "rl_exp/tools/diagnose/diagnose_support.py --phases 1,2 --speeds 0.5"
     },
     {
       "logical_root": "rl_exp/tools/diagnose/out/baseline_v1_verts",
@@ -2612,64 +2627,98 @@
     {
       "logical_root": "rl_exp/tools/diagnose/out/lizard2_e_shared_20261013",
       "current_location": "rl_exp/tools/diagnose/out/lizard2_e_shared_20261013",
-      "classification": "pending",
-      "owner": "lizard2-body-drive-candidate",
+      "classification": "historical_control",
+      "owner": "lizard2-candidate-wiring",
       "action": "hold",
       "writer_status": "unknown",
       "storage": "local_single_copy_no_backup",
-      "basis": null,
-      "document_mentions": [],
-      "report_metadata": null,
-      "consumer_verification": "document_mentions_only",
-      "retention_reason": "unverified value or unfinished experiment; preserve",
-      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
-    },
-    {
-      "logical_root": "rl_exp/tools/diagnose/out/lizard2_e_shared_final_20261013",
-      "current_location": "rl_exp/tools/diagnose/out/lizard2_e_shared_final_20261013",
-      "classification": "pending",
-      "owner": "lizard2-body-drive-candidate",
-      "action": "hold",
-      "writer_status": "unknown",
-      "storage": "local_single_copy_no_backup",
-      "basis": null,
+      "basis": "acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md:254,271",
       "document_mentions": [
         "acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md"
       ],
       "report_metadata": null,
-      "consumer_verification": "document_mentions_only",
-      "retention_reason": "unverified value or unfinished experiment; preserve",
-      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+      "consumer_verification": "record hash checked; target binding inspected, runtime not revalidated",
+      "retention_reason": "record-bound shared/split naming measurement; preserve two byte-identical routes without deleting either copy",
+      "next": "preserve original pair and source manifest; verify transitive asset recovery before any move",
+      "producer": "rl_exp/tools/diagnose/diagnose_support.py --phases 0",
+      "identity": {
+        "report_sha256": "e5ec338360d03b2efb6155b677b882167e611d1caae00db93ac690d8edc9e746",
+        "naming": "shared",
+        "source": "E:\\Robot\\rl_exp\\out\\lizard2_e_20261013_final\\shared.json",
+        "target": "E:\\Robot\\rl_exp\\out\\lizard2_e_20261013_final\\lizard2_candidate_shared.usda"
+      }
+    },
+    {
+      "logical_root": "rl_exp/tools/diagnose/out/lizard2_e_shared_final_20261013",
+      "current_location": "rl_exp/tools/diagnose/out/lizard2_e_shared_final_20261013",
+      "classification": "historical_control",
+      "owner": "lizard2-candidate-wiring",
+      "action": "hold",
+      "writer_status": "unknown",
+      "storage": "local_single_copy_no_backup",
+      "basis": "acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md:254,271",
+      "document_mentions": [
+        "acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md"
+      ],
+      "report_metadata": null,
+      "consumer_verification": "record hash checked; target binding inspected, runtime not revalidated",
+      "retention_reason": "record-bound shared/split naming measurement; preserve two byte-identical routes without deleting either copy",
+      "next": "preserve original pair and source manifest; verify transitive asset recovery before any move",
+      "producer": "rl_exp/tools/diagnose/diagnose_support.py --phases 0",
+      "identity": {
+        "report_sha256": "e5ec338360d03b2efb6155b677b882167e611d1caae00db93ac690d8edc9e746",
+        "naming": "shared",
+        "source": "E:\\Robot\\rl_exp\\out\\lizard2_e_20261013_final\\shared.json",
+        "target": "E:\\Robot\\rl_exp\\out\\lizard2_e_20261013_final\\lizard2_candidate_shared.usda"
+      }
     },
     {
       "logical_root": "rl_exp/tools/diagnose/out/lizard2_e_split_20261013",
       "current_location": "rl_exp/tools/diagnose/out/lizard2_e_split_20261013",
-      "classification": "pending",
-      "owner": "lizard2-body-drive-candidate",
+      "classification": "historical_control",
+      "owner": "lizard2-candidate-wiring",
       "action": "hold",
       "writer_status": "unknown",
       "storage": "local_single_copy_no_backup",
-      "basis": null,
-      "document_mentions": [],
+      "basis": "acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md:254,271",
+      "document_mentions": [
+        "acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md"
+      ],
       "report_metadata": null,
-      "consumer_verification": "document_mentions_only",
-      "retention_reason": "unverified value or unfinished experiment; preserve",
-      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+      "consumer_verification": "record hash checked; target binding inspected, runtime not revalidated",
+      "retention_reason": "record-bound shared/split naming measurement; preserve two byte-identical routes without deleting either copy",
+      "next": "preserve original pair and source manifest; verify transitive asset recovery before any move",
+      "producer": "rl_exp/tools/diagnose/diagnose_support.py --phases 0",
+      "identity": {
+        "report_sha256": "8139af7cd49c893a73e107c4606d04dcb6546b8acc0a4da00fcd3bae25214d05",
+        "naming": "split",
+        "source": "E:\\Robot\\rl_exp\\out\\lizard2_e_20261013_final\\split.json",
+        "target": "E:\\Robot\\rl_exp\\out\\lizard2_e_20261013_final\\lizard2_candidate_split.usda"
+      }
     },
     {
       "logical_root": "rl_exp/tools/diagnose/out/lizard2_e_split_final_20261013",
       "current_location": "rl_exp/tools/diagnose/out/lizard2_e_split_final_20261013",
-      "classification": "pending",
-      "owner": "lizard2-body-drive-candidate",
+      "classification": "historical_control",
+      "owner": "lizard2-candidate-wiring",
       "action": "hold",
       "writer_status": "unknown",
       "storage": "local_single_copy_no_backup",
-      "basis": null,
-      "document_mentions": [],
+      "basis": "acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md:254,271",
+      "document_mentions": [
+        "acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md"
+      ],
       "report_metadata": null,
-      "consumer_verification": "document_mentions_only",
-      "retention_reason": "unverified value or unfinished experiment; preserve",
-      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+      "consumer_verification": "record hash checked; target binding inspected, runtime not revalidated",
+      "retention_reason": "record-bound shared/split naming measurement; preserve two byte-identical routes without deleting either copy",
+      "next": "preserve original pair and source manifest; verify transitive asset recovery before any move",
+      "producer": "rl_exp/tools/diagnose/diagnose_support.py --phases 0",
+      "identity": {
+        "report_sha256": "8139af7cd49c893a73e107c4606d04dcb6546b8acc0a4da00fcd3bae25214d05",
+        "naming": "split",
+        "source": "E:\\Robot\\rl_exp\\out\\lizard2_e_20261013_final\\split.json",
+        "target": "E:\\Robot\\rl_exp\\out\\lizard2_e_20261013_final\\lizard2_candidate_split.usda"
+      }
     },
     {
       "logical_root": "rl_exp/tools/diagnose/out/run_loadclosure.log",
@@ -2808,33 +2857,35 @@
     },
     {
       "logical_root": "rl_exp/tools/diagnose/out/v10_run2",
-      "current_location": "rl_exp/tools/diagnose/out/v10_run2",
+      "current_location": "rl_exp/out/archive/lizard-v10-support/v10_run2",
       "classification": "historical_control",
       "owner": "diagnostic-artifact-lifecycle",
-      "action": "hold",
-      "writer_status": "unknown",
+      "action": "archived",
+      "writer_status": "no_running_producer_observed_and_files_verified",
       "storage": "local_single_copy_no_backup",
       "basis": "rl_exp/versions/lizard/main/v10/DIAGNOSE.md:107",
       "document_mentions": [],
       "report_metadata": null,
       "consumer_verification": "document_mentions_only",
       "retention_reason": "preserve original failure or historical measurement",
-      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+      "next": "preserve original evidence and pinned sources; external backup remains required",
+      "read_command": "python -B rl_exp/tools/diagnose/archived_support_read.py --index rl_exp/tools/diagnose/support_archive_index.json --package rl_exp/tools/diagnose/out/v10_run2"
     },
     {
       "logical_root": "rl_exp/tools/diagnose/out/v10_run3",
-      "current_location": "rl_exp/tools/diagnose/out/v10_run3",
+      "current_location": "rl_exp/out/archive/lizard-v10-support/v10_run3",
       "classification": "historical_control",
       "owner": "diagnostic-artifact-lifecycle",
-      "action": "hold",
-      "writer_status": "unknown",
+      "action": "archived",
+      "writer_status": "no_running_producer_observed_and_files_verified",
       "storage": "local_single_copy_no_backup",
       "basis": "rl_exp/versions/lizard/main/v10/DIAGNOSE.md:107",
       "document_mentions": [],
       "report_metadata": null,
       "consumer_verification": "document_mentions_only",
       "retention_reason": "preserve original failure or historical measurement",
-      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+      "next": "preserve original evidence and pinned sources; external backup remains required",
+      "read_command": "python -B rl_exp/tools/diagnose/archived_support_read.py --index rl_exp/tools/diagnose/support_archive_index.json --package rl_exp/tools/diagnose/out/v10_run3"
     },
     {
       "logical_root": "rl_exp/tools/diagnose/out/v10_run5",
@@ -2876,7 +2927,7 @@
       "storage": "local_single_copy_no_backup",
       "basis": "rl_exp/versions/lizard/main/v10/DIAGNOSE.md:106-107",
       "retention_reason": "invalidated measurement; retain failure comparison, not valid current evidence",
-      "next": "preserve files and pinned producer snapshots; external backup still required",
+      "next": "preserve original evidence and pinned sources; external backup remains required",
       "read_command": "python -B rl_exp/tools/diagnose/archived_support_read.py --index rl_exp/tools/diagnose/support_archive_index.json --package rl_exp/tools/diagnose/out/smoke_p1c"
     },
     {
@@ -2889,7 +2940,7 @@
       "storage": "local_single_copy_no_backup",
       "basis": "rl_exp/versions/lizard/main/v10/DIAGNOSE.md:106-107",
       "retention_reason": "invalidated measurement; retain failure comparison, not valid current evidence",
-      "next": "preserve files and pinned producer snapshots; external backup still required",
+      "next": "preserve original evidence and pinned sources; external backup remains required",
       "read_command": "python -B rl_exp/tools/diagnose/archived_support_read.py --index rl_exp/tools/diagnose/support_archive_index.json --package rl_exp/tools/diagnose/out/smoke_p1d"
     },
     {

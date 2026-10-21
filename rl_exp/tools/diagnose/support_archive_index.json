@@ -30,6 +30,38 @@
         "commit": "29deefe0acf735b8af4359d221fb21a888734668",
         "sha256": "c4a02e0f5ed8acbc7b25237bb7fbf4c5a58c6f3367a69d1f5452890431b9bd32"
       }
+    },
+    {
+      "old_root": "rl_exp/tools/diagnose/out/v10_run2",
+      "new_relative_root": "rl_exp/out/archive/lizard-v10-support/v10_run2",
+      "schema": "v10_run2",
+      "files": {
+        "p3_steps_r0.json": "fbba29381f63f98ce31c7456b64604d43b64c09ce79aab15a02691e0a80748ea",
+        "p3_steps_r1.json": "05ae61393bb9098b0f6b99816789278858eb9263bb86cd27ec6fb88bb7e51bd3",
+        "p3_steps_r2.json": "cfcbbeb30223b5684bf229325cc8c5e44fae19b4db3db1884c08187432ac7cf9",
+        "summary.md": "271290642f2a2c0118162c1016dcbb85aa7b60abae56d50632676dd5c9f40ba5"
+      },
+      "producer_source": {
+        "relative_path": "rl_exp/out/archive/lizard-v10-support/metadata/smoke_p1c_producer.py",
+        "commit": "d5ff5ce791262f7825fcb6836e2f6fe353b3a551",
+        "sha256": "a2c8e807b1c0741fae0ea3aefddca879937ec3edfd6bbd65b6d4a9a7b83c7009"
+      }
+    },
+    {
+      "old_root": "rl_exp/tools/diagnose/out/v10_run3",
+      "new_relative_root": "rl_exp/out/archive/lizard-v10-support/v10_run3",
+      "schema": "v10_run3",
+      "files": {
+        "p3_steps_r0.json": "c1ff331d5b758b0bf89e7f57f78e3f87571dfdc8ef8a2ce8ba68f8c0a29896b3",
+        "p3_steps_r1.json": "503fc2be284ffeb473ac3b5ad53cdbb65714aa40e8a5f1dc374df0130ab252f1",
+        "p3_steps_r2.json": "f1386ebd6d26cef8ee28b5f794161f8284efa50d5153ae53a7187b5913779775",
+        "summary.md": "b194e382c4370a524767b204e0acf08b0d8718a9bae08327a8791016e74d1da8"
+      },
+      "producer_source": {
+        "relative_path": "rl_exp/out/archive/lizard-v10-support/metadata/smoke_p1c_producer.py",
+        "commit": "d5ff5ce791262f7825fcb6836e2f6fe353b3a551",
+        "sha256": "a2c8e807b1c0741fae0ea3aefddca879937ec3edfd6bbd65b6d4a9a7b83c7009"
+      }
     }
   ]
 }

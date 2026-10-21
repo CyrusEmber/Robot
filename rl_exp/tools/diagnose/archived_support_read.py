@@ -3,10 +3,10 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""Read two invalidated Phase 1 archives without Kit or original output paths.
+"""Read four invalidated Phase 1/3 archives without Kit or original output paths.
 
 Index format 1: ``packages`` is a list of entries containing ``old_root`` (the
-logical repo-relative name), ``new_relative_root``, ``schema`` (smoke_p1c/d),
+logical repo-relative name), ``new_relative_root``, ``schema`` (smoke_p1c/d or v10_run2/3),
 ``files`` (relative filename -> bare SHA256), and ``producer_source`` with
 ``relative_path`` (relative to storage_root, outside package), ``commit`` and
 ``sha256``. Sources must be verbatim ``git show <commit>:<producer path>`` bytes.
@@ -41,8 +41,14 @@ PINS = {
         "c4a02e0f5ed8acbc7b25237bb7fbf4c5a58c6f3367a69d1f5452890431b9bd32",
     ),
 }
+PINS.update({name: PINS["smoke_p1c"] for name in ("v10_run2", "v10_run3")})
 LOGICAL_ROOTS = {f"rl_exp/tools/diagnose/out/{name}": name for name in PINS}
 FILES = {"p1a_zero_action_5s.json", "p1b_policy_still_10s.json", "summary.md"}
+FILE_SETS = {
+    name: ({f"p3_steps_r{rep}.json" for rep in range(3)} | {"summary.md"}
+           if name.startswith("v10_run") else FILES)
+    for name in PINS
+}
 
 
 def _inside(root: pathlib.Path, relative: str) -> pathlib.Path:
@@ -72,8 +78,8 @@ def _assigned(node: ast.AST, name: str) -> bool:
             and isinstance(node.targets[0], ast.Name) and node.targets[0].id == name)
 
 
-def _phase1_ast(source: str) -> ast.Module:
-    """Select only actual historical Phase 1 renderer, never imports/main rollout."""
+def _phase1_ast(source: str, phase: int = 1) -> ast.Module:
+    """Select pinned Phase 1 or 3 summary statements, never imports/main rollout."""
     tree = ast.parse(source)
     mains = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "main"]
     if len(mains) != 1:
@@ -95,9 +101,18 @@ def _phase1_ast(source: str) -> ast.Module:
             or not _assigned(segment[-1], "summary")):
         raise ValueError("unrecognized Phase 1 AST")
     # Source hash is pinned before parsing: no caller/JSON-supplied code reaches exec.
-    # Skip timestamp expression, Phase 2/3 branches and every simulator statement.
-    return ast.fix_missing_locations(ast.Module(
-        body=[segment[1], segment[2], segment[-1]], type_ignores=[]))
+    # Builtins below are renderer dependencies, not a sandbox; the whole-source pin
+    # is the code trust boundary. Skip timestamp and every simulator statement.
+    if phase == 3:
+        if (not isinstance(segment[6], ast.If)
+                or ast.dump(segment[6].test) != ast.dump(ast.Name(id="p3", ctx=ast.Load()))):
+            raise ValueError("unrecognized Phase 3 AST")
+        selected = [segment[5], segment[6], segment[-1]]
+    elif phase == 1:
+        selected = [segment[1], segment[2], segment[-1]]
+    else:
+        raise ValueError("unsupported summary phase")
+    return ast.fix_missing_locations(ast.Module(body=selected, type_ignores=[]))
 
 
 def read_archive(index: pathlib.Path, package: str, storage_root: pathlib.Path = REPO) -> str:
@@ -123,10 +138,11 @@ def read_archive(index: pathlib.Path, package: str, storage_root: pathlib.Path =
     new_root = _inside(root, entry["new_relative_root"])
     if new_root == _inside(root, package):
         raise ValueError("archive mapping must not read old root")
+    expected_files = FILE_SETS[schema]
     files = entry.get("files")
-    if not isinstance(files, dict) or set(files) != FILES:
-        raise ValueError("file set must contain exactly two case JSONs and summary.md")
-    if not new_root.is_dir() or {p.name for p in new_root.iterdir()} != FILES:
+    if not isinstance(files, dict) or set(files) != expected_files:
+        raise ValueError(f"file set mismatch for {schema}")
+    if not new_root.is_dir() or {p.name for p in new_root.iterdir()} != expected_files:
         raise ValueError("archive file set mismatch")
     for name, digest in files.items():
         _checked_file(_inside(new_root, name), digest)
@@ -137,24 +153,41 @@ def read_archive(index: pathlib.Path, package: str, storage_root: pathlib.Path =
     if source_path.is_relative_to(new_root):
         raise ValueError("producer metadata must be outside package")
     _checked_file(source_path, producer["sha256"])
-    renderer = _phase1_ast(source_path.read_text(encoding="utf-8"))
+    phase = 3 if schema.startswith("v10_run") else 1
+    renderer = _phase1_ast(source_path.read_text(encoding="utf-8"), phase)
     original = (new_root / "summary.md").read_bytes().decode("utf-8")
     header = original.split("\n", 1)[0]
     if not re.fullmatch(r"# v10 支撑诊断 summary（\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}）", header):
         raise ValueError("unrecognized original timestamp header")
     records = {}
-    for name in sorted(FILES - {"summary.md"}):
+    for name in sorted(expected_files - {"summary.md"}):
         record = json.loads((new_root / name).read_text(encoding="utf-8"))
         case = record.get("case")
         if case != pathlib.Path(name).stem or case in records:
             raise ValueError("case identity mismatch")
         # Only renderer inputs: never feed series_json to execution.
         records[case] = {"case": case, "stats": record["stats"]}
-    order = re.findall(r"^\| (p1[^ |]+) \|", original, re.MULTILINE)
-    if len(order) != len(records) or set(order) != set(records):
-        raise ValueError("summary case rows mismatch")
-    namespace = {"results": [records[case] for case in order], "lines": [header, ""]}
-    exec(compile(renderer, str(source_path), "exec"), {"__builtins__": {}}, namespace)
+    namespace = {"lines": [header, ""]}
+    if phase == 1:
+        order = re.findall(r"^\| (p1[^ |]+) \|", original, re.MULTILINE)
+        if len(order) != len(records) or set(order) != set(records):
+            raise ValueError("summary case rows mismatch")
+    else:
+        order = sorted(records)  # Fixed r0/r1/r2 file set is producer repetition order.
+        rows = re.findall(r"^\| ([1-9]\d*)cm \| (up|down) \|", original, re.MULTILINE)
+        tags = [tag for tag, direction in rows if direction == "up"]
+        if (not tags or len(tags) != len(set(tags))
+                or rows != [(tag, direction) for tag in tags for direction in ("up", "down")]):
+            raise ValueError("summary height rows mismatch")
+        stat_keys = {"flat"} | {f"{direction}_{tag}" for tag, direction in rows}
+        if any(set(record["stats"]) != stat_keys for record in records.values()):
+            raise ValueError("stats height keys mismatch")
+        # Explicit historical table order, checked against every stored stats key set.
+        namespace["heights"] = [int(tag) / 100 for tag in tags]
+    namespace["results"] = [records[case] for case in order]
+    exec(compile(renderer, str(source_path), "exec"),
+         {"__builtins__": {"str": str, "int": int, "round": round, "set": set,
+                           "sorted": sorted, "len": len}}, namespace)
     rendered = namespace["summary"]
     if rendered != original:
         raise ValueError("stored stats do not reproduce historical summary")

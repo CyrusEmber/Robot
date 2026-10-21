@@ -53,9 +53,16 @@ def deny_old_roots(storage_root):
 class ArchivedSupportReadTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        cls.pins = dict(reader.PINS)
+        cls.packages = {f"rl_exp/tools/diagnose/out/{name}": name for name in cls.pins}
+        cls.file_sets = {
+            name: ({f"p3_steps_r{rep}.json" for rep in range(3)} | {"summary.md"}
+                   if name.startswith("v10_run") else reader.FILES)
+            for name in cls.pins
+        }
         cls.sources = {
             schema: subprocess.check_output(["git", "show", f"{pin[0]}:{reader.PRODUCER_PATH}"], cwd=REPO)
-            for schema, pin in reader.PINS.items()
+            for schema, pin in cls.pins.items() if schema.startswith("smoke_")
         }
         archive_index = REPO / "rl_exp/tools/diagnose/support_archive_index.json"
         mappings = (json.loads(archive_index.read_text(encoding="utf-8"))["packages"]
@@ -63,8 +70,8 @@ class ArchivedSupportReadTest(unittest.TestCase):
         locations = {entry["old_root"]: REPO / entry["new_relative_root"] for entry in mappings}
         cls.originals = {
             logical: {name: ((REPO / logical if (REPO / logical).is_dir() else locations[logical]) / name).read_bytes()
-                      for name in reader.FILES}
-            for logical in reader.LOGICAL_ROOTS
+                      for name in cls.file_sets[schema]}
+            for logical, schema in cls.packages.items()
         }
 
     def setUp(self):
@@ -74,22 +81,23 @@ class ArchivedSupportReadTest(unittest.TestCase):
         self.root.mkdir()
         self.index = self.root / "rl_exp/out/archived_support/index.json"
         entries = []
-        for logical, schema in reader.LOGICAL_ROOTS.items():
+        for logical, schema in self.packages.items():
             relative = f"rl_exp/out/archived_support/packages/{schema}"
             target = self.root / relative
             target.mkdir(parents=True)
             for name, payload in self.originals[logical].items():
                 (target / name).write_bytes(payload)
-            source_relative = f"rl_exp/out/archived_support/metadata/{schema}_producer.py"
+            producer_schema = "smoke_p1c" if schema.startswith("v10_run") else schema
+            source_relative = f"rl_exp/out/archived_support/metadata/{producer_schema}_producer.py"
             source = self.root / source_relative
             source.parent.mkdir(parents=True, exist_ok=True)
-            source.write_bytes(self.sources[schema])
+            source.write_bytes(self.sources[producer_schema])
             entries.append({
                 "old_root": logical, "new_relative_root": relative, "schema": schema,
-                "files": {name: reader.sha256_file(target / name) for name in sorted(reader.FILES)},
+                "files": {name: reader.sha256_file(target / name) for name in sorted(self.file_sets[schema])},
                 "producer_source": {
-                    "relative_path": source_relative, "commit": reader.PINS[schema][0],
-                    "sha256": reader.PINS[schema][1],
+                    "relative_path": source_relative, "commit": self.pins[schema][0],
+                    "sha256": self.pins[schema][1],
                 },
             })
         self.data = {"format": 1, "packages": entries}
@@ -102,6 +110,32 @@ class ArchivedSupportReadTest(unittest.TestCase):
         self.save()
         with deny_old_roots(self.root):
             return reader.read_archive(self.index, logical or next(iter(reader.LOGICAL_ROOTS)), self.root)
+
+    def test_phase3_stored_stats_only_and_height_order(self):
+        for entry in self.data["packages"][2:]:
+            logical = entry["old_root"]
+            root = self.root / entry["new_relative_root"]
+            summary = root / "summary.md"
+            expected = self.originals[logical]["summary.md"]
+            self.assertEqual(self.read(logical).encode("utf-8"), expected)
+            case = root / "p3_steps_r0.json"
+            record = json.loads(case.read_bytes())
+            record["series_json"] = {"nonsense": "__import__('os').abort()"}
+            case.write_text(json.dumps(record), encoding="utf-8")
+            entry["files"][case.name] = reader.sha256_file(case)
+            self.assertEqual(self.read(logical).encode("utf-8"), expected)
+            record["stats"]["up_5"]["progress_m"] += 1
+            case.write_text(json.dumps(record), encoding="utf-8")
+            entry["files"][case.name] = reader.sha256_file(case)
+            with self.assertRaisesRegex(ValueError, "do not reproduce"):
+                self.read(logical)
+            case.write_bytes(self.originals[logical][case.name])
+            entry["files"][case.name] = reader.sha256_file(case)
+            lines = expected.decode("utf-8").splitlines(keepends=True)
+            lines[7:15] = lines[13:15] + lines[7:13]
+            summary.write_bytes("".join(lines).encode("utf-8"))
+            entry["files"][summary.name] = reader.sha256_file(summary)
+            self.assertEqual(self.read(logical), "".join(lines))
 
     def test_real_baseline_failure_then_both_schemas_restore(self):
         # Actual pre-feature consumer fails when old root is inaccessible, even on host.
@@ -222,11 +256,11 @@ class ArchivedSupportReadTest(unittest.TestCase):
         git(self.root, "config", "user.email", "archive-test@example.invalid")
         paths = [".gitattributes", self.index.relative_to(self.root).as_posix()]
         for entry in self.data["packages"]:
-            paths += [f"{entry['new_relative_root']}/{name}" for name in sorted(reader.FILES)]
+            paths += [f"{entry['new_relative_root']}/{name}" for name in sorted(entry["files"])]
             paths.append(entry["producer_source"]["relative_path"])
-        git(self.root, "add", "--", *paths)
+        git(self.root, "add", "--", *sorted(set(paths)))
         git(self.root, "commit", "-m", "Isolated archive recovery fixture")
-        self.assertEqual(len(git(self.root, "ls-files").stdout.splitlines()), 10)
+        self.assertEqual(len(git(self.root, "ls-files").stdout.splitlines()), 18)
         index_relative = self.index.relative_to(self.root)
         checkouts = {}
         for setting in ("true", "false"):
@@ -252,11 +286,17 @@ class ArchivedSupportReadTest(unittest.TestCase):
                         rendered = reader.read_archive(restored_index, logical, checkout)
                     self.assertEqual(rendered.encode("utf-8"), self.originals[logical]["summary.md"])
                     cli = subprocess.run([
-                        sys.executable, str(pathlib.Path(reader.__file__)), "--index", str(restored_index),
-                        "--package", logical, "--storage_root", str(checkout),
+                        sys.executable, "-c",
+                        "import pathlib,runpy,sys; "
+                        "sys.path.insert(0,sys.argv.pop(1)); "
+                        "from test_archived_support_read import deny_old_roots; "
+                        "guard=deny_old_roots(pathlib.Path(sys.argv[-1])); guard.__enter__(); "
+                        "sys.argv=sys.argv[1:]; runpy.run_path(sys.argv[0],run_name='__main__')",
+                        str(pathlib.Path(__file__).parent), str(pathlib.Path(reader.__file__)),
+                        "--index", str(restored_index), "--package", logical, "--storage_root", str(checkout),
                     ], check=True, capture_output=True)
                     self.assertEqual(cli.stdout.decode("utf-8").replace("\r\n", "\n"), rendered)
-                print(f"GIT_RECOVERY_OK core.autocrlf={setting}: 6 evidence + 2 sources + index")
+                print(f"GIT_RECOVERY_OK core.autocrlf={setting}: 14 evidence + 2 sources + index")
 
 
 if __name__ == "__main__":
