@@ -668,6 +668,51 @@ def _self_weight_left_knee_design(design):
     return changed
 
 
+def _joint_force_probe_binding(stage, robot, backend):
+    """Bind force readout columns to USD child-joint axes without changing the drive."""
+    from pxr import UsdPhysics
+    joints = {}
+    for prim in stage.Traverse():
+        if prim.IsA(UsdPhysics.RevoluteJoint):
+            name = prim.GetName()
+            assert name not in joints, 'ambiguous joint name for force projection'
+            joint = UsdPhysics.RevoluteJoint(prim)
+            child = joint.GetBody1Rel().GetTargets()
+            assert len(child) == 1
+            joints[name] = dict(child_body=child[0].name, axis=str(joint.GetAxisAttr().Get()),
+                                drive_type=str(UsdPhysics.DriveAPI(prim, 'angular').GetTypeAttr().Get()))
+    names, bodies = list(robot.joint_names), list(robot.body_names)
+    assert set(joints) == set(names) and len(bodies) == 31
+    for spec in joints.values():
+        assert spec['child_body'] in bodies and spec['axis'] in ('X', 'Y', 'Z')
+        assert spec['drive_type'] == 'force'
+        spec['child_index'] = bodies.index(spec['child_body'])
+        spec['torque_component'] = 3+('X', 'Y', 'Z').index(spec['axis'])
+    return dict(joint_names=names, body_names=bodies, joints=joints,
+                friction_properties=backend(robot.root_view.get_dof_friction_properties()).tolist(),
+                armatures=backend(robot.root_view.get_dof_armatures()).tolist(),
+                position_limits_rad=backend(robot.root_view.get_dof_limits()).tolist(),
+                tendon_prims=[str(p.GetPath()) for p in stage.Traverse()
+                    if any('Tendon' in s for s in p.GetAppliedSchemas())],
+                sampling='post physics step; incoming wrench in child joint frame; step-average',
+                scope='projected transmitted joint effort, not local PD shadow; drive attribution requires audit')
+
+
+def _joint_force_probe_sample(view, backend, binding):
+    """Read raw transmitted joint wrench [N, N*m] and applied effort inputs [N*m]."""
+    incoming = np.array(backend(view.get_link_incoming_joint_force()), copy=True)
+    projected = np.array(backend(view.get_dof_projected_joint_forces()), copy=True)
+    explicit = np.array(backend(view.get_dof_actuation_forces()), copy=True)
+    names = binding['joint_names']
+    assert incoming.shape == (len(binding['body_names']), 6)
+    assert projected.shape == explicit.shape == (len(names),)
+    assert all(np.isfinite(x).all() for x in (incoming, projected, explicit))
+    manual = [incoming[binding['joints'][n]['child_index'], binding['joints'][n]['torque_component']]
+              for n in names]
+    return dict(incoming_child_joint_wrench=incoming.tolist(), projected_joint_effort_nm=projected.tolist(),
+                explicit_actuation_input_nm=explicit.tolist(), manual_axis_projection_nm=list(map(float, manual)))
+
+
 def _self_weight_symmetric_knee_elbow_design(design):
     """Set both knees and elbows to Kp 220 [N*m/rad], retaining nominal damping ratios.
 
@@ -1116,6 +1161,9 @@ def _run_chest280(args):
                       joint_names=names, action_names=action_names,
                       readbacks=dict(kp=kp.tolist(), kd=kd.tolist(), effort_caps=caps.tolist(), velocity_caps=speeds.tolist(),
                                      fixed_base=robot.is_fixed_base, body_disable_gravity=gravity, gravity=cfg.sim.gravity))
+        force_probe = bool(getattr(args, 'joint_force_probe', False))
+        if force_probe:
+            result['joint_force_probe'] = _joint_force_probe_binding(live.sim.stage, robot, backend)
         model = csc.load_urdf(Path(target['urdf']))
         cases = remaining if suite else {'chest_pitch_self_weight': ['chest_pitch_joint']}
         bounds = {j.get('name'): [float(j.find('limit').get(k)) for k in ('lower', 'upper')] for j in tree.findall('joint')}
@@ -1147,6 +1195,9 @@ def _run_chest280(args):
                 result['samples'].append(dict(t_s=float(t), q_rad=q.tolist(), velocity_rad_s=velocity.tolist(),
                     target_rad=desired.tolist(), max_contact_n=contact, backend_drive_targets=drive,
                     reconstructed_pd_request_nm=(kp*(desired-q)-kd*velocity).tolist()))
+                if force_probe:
+                    result['samples'][-1]['joint_force_probe'] = _joint_force_probe_sample(
+                        robot.root_view, backend, result['joint_force_probe'])
                 assert np.isfinite(q).all() and np.isfinite(velocity).all() and np.isfinite(contact), 'nonfinite state'
                 assert abs(q-desired).max() <= .35 and abs(q).max() <= .35, 'self-weight unsafe absolute error'
                 assert np.all(abs(velocity) < speeds*.5) and contact <= 1., 'unsafe speed/contact'
@@ -1203,6 +1254,8 @@ def _run_chest280(args):
             status = 'chest_self_weight_tracking_verified' if passed else 'chest_self_weight_tracking_failed'
         if symmetric_pd:
             status = status.replace('left_knee_absolute_trial', 'symmetric_pd_left_knee_trial')
+        if force_probe:
+            status = 'joint_force_probe_' + status
         result.update(completed=True, stage='completed', status=status)
         assert wiring.binding.sha256_file(manifest) == result['input'][str(manifest)]
         assert wiring.binding.sha256_file(args.inertia_report) == args.approved_inertia_sha256
@@ -1505,6 +1558,8 @@ if __name__ == '__main__':
     parser.add_argument('--calibrate_precision', action='store_true')
     parser.add_argument('--calibrated_combinations', action='store_true')
     parser.add_argument('--left_knee_absolute_trial', action='store_true')
+    parser.add_argument('--joint_force_probe', action='store_true',
+                        help='Collect raw PhysX joint forces during the symmetric-PD left-knee cases')
     parser.add_argument('--symmetric_knee_elbow_pd', action='store_true',
                         help='Use Kp=220 for both knees/elbows; retains the existing left-knee-only case selection')
     parser.add_argument('--combined', action='store_true')
@@ -1530,6 +1585,8 @@ if __name__ == '__main__':
             parser.error('level_leg_plan requires gain_reference and excludes combined')
         if not args.level_leg_plan and args.wrist_frequency_hz != 1:
             parser.error('wrist override requires level_leg_plan')
+        if args.joint_force_probe and not (args.left_knee_absolute_trial and args.symmetric_knee_elbow_pd):
+            parser.error('joint_force_probe requires left_knee_absolute_trial and symmetric_knee_elbow_pd')
         if args.symmetric_knee_elbow_pd and not args.left_knee_absolute_trial:
             parser.error('symmetric knee/elbow PD requires left_knee_absolute_trial; it does not extend its verification scope')
         if args.left_knee_absolute_trial and (args.calibrated_combinations or args.calibrate_precision or args.left_knee_kp30 or args.precision_gain_trial or args.continue_self_weight_axes or not (args.self_weight_suite and args.resume_self_weight and args.approved_resume_sha256)):
