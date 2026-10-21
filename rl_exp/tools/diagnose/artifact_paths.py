@@ -10,6 +10,9 @@ relative names to SHA256. current_location is relative to storage_root. Mapped
 files MUST exist at the new location and match their stored digest; an old copy
 is never a fallback. Unmapped paths retain their existing meaning. This is a
 trusted local routing file, not permission to accept new asset identities.
+Repository identity comparisons recognize only the current storage root and old
+repository roots derivable from exact logical-root suffixes in those routes.
+They compare the complete relative path, never a basename or unbound suffix.
 """
 
 from __future__ import annotations
@@ -58,6 +61,7 @@ class ArtifactPaths:
         if doc.get('format') != 1 or not isinstance(doc.get('packages'), list):
             raise ValueError('expected diagnostic artifact index format 1')
         self.routes = []
+        self.repository_roots = {self.root}
         for entry in doc['packages']:
             if 'relocation' not in entry:
                 continue
@@ -67,6 +71,8 @@ class ArtifactPaths:
             if not original.is_absolute():
                 raise ValueError('artifact original identity must be absolute')
             original = original.absolute()
+            if Path(*original.parts[-len(logical.parts):]) == logical:
+                self.repository_roots.add(original.parents[len(logical.parts) - 1].resolve())
             current = _unlinked(self.root, _relative(entry['current_location']))
             files = location['files']
             if not isinstance(files, dict) or not files:
@@ -90,6 +96,19 @@ class ArtifactPaths:
                 if path.is_relative_to(alias):
                     return original / path.relative_to(alias)
         return path
+
+    def _identity_key(self, path: Path) -> tuple[str, Path]:
+        path = self.logical(Path(path)).resolve()
+        # A restored checkout may itself sit inside an old repository. Its exact
+        # root is the more specific namespace; do not strip an arbitrary suffix.
+        for root in sorted(self.repository_roots, key=lambda p: len(p.parts), reverse=True):
+            if path.is_relative_to(root):
+                return 'repository', path.relative_to(root)
+        return 'absolute', path
+
+    def same_identity(self, first: Path, second: Path) -> bool:
+        """Compare full logical identities across explicitly known repository roots."""
+        return self._identity_key(first) == self._identity_key(second)
 
     def resolve(self, path: Path, expected: str | None = None) -> Path:
         """Return a verified relocated file; missing/corrupt mappings fail closed."""

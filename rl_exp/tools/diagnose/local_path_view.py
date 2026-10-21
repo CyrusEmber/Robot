@@ -199,7 +199,10 @@ def _rate_prerequisites(report):
 
 def _drive_prerequisites(report, path, rates):
     assert rates is not None, 'drive readback requires support schedule'
-    drive = json.loads(artifact_path(path).read_text(encoding='utf-8'))
+    location = artifact_path(path)
+    drive = json.loads(location.read_text(encoding='utf-8'))
+    drive_digest = digest(location)
+    assert drive_digest, 'drive report unreadable'
     build = json.loads(artifact_path(Path(report['identity']['build_report'])).read_text(encoding='utf-8'))
     assert drive['completed'] and drive['input']['urdf_sha256'] == build['candidate_sha256'], 'drive candidate mismatch'
     manifest = artifact_path(Path(drive['input']['manifest']))
@@ -216,7 +219,8 @@ def _drive_prerequisites(report, path, rates):
     rows = [{**row, 'readback_velocity_cap_rad_s': by_name[row['joint']],
              'velocity_only_period_lower_bound_s': row['analytic_max_abs_dq_dc_rad'] / by_name[row['joint']]}
             for row in rates['joints']]
-    return {'drive_report': str(path), 'drive_report_sha256': digest(path), 'input': drive['input'],
+    return {'drive_report': str(path), 'drive_report_location': str(location),
+            'drive_report_sha256': drive_digest, 'input': drive['input'],
             'joints': rows,
             'velocity_only_period_lower_bound_s': max(row['velocity_only_period_lower_bound_s'] for row in rows),
             'physical_period_approved': False,
@@ -332,8 +336,10 @@ def _load(source):
         assert candidate.parent in path.parents and sha and digest(path) == sha, 'candidate changed'
         bound[path] = sha
     assert bound.get(candidate) == build['candidate_sha256'], 'unbound URDF'
-    original_fk = identity['code_sha256'].get(str(Path(csc.__file__).resolve()))
-    assert original_fk and digest(Path(csc.__file__)) == original_fk, 'FK changed since collection'
+    original_fk = [sha for name, sha in identity['code_sha256'].items()
+                   if paths.same_identity(Path(name), Path(csc.__file__))]
+    assert (len(original_fk) == 1 and original_fk[0]
+            and digest(Path(csc.__file__)) == original_fk[0]), 'FK changed since collection'
     root = np.array(report['root_transform'], dtype=float)
     assert root.shape == (4, 4) and np.isfinite(root).all()
     assert np.allclose(root[3], [0, 0, 0, 1], atol=1e-12, rtol=0)
