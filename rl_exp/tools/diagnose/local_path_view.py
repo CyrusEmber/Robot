@@ -42,6 +42,8 @@ sys.path.insert(0, str(REPO / 'rl_exp/tools/verify'))
 import check_self_collision as csc  # noqa: E402
 sys.path.insert(0, str(REPO / 'rl_exp/tools/runrecord'))
 from binding import sha256_file as digest  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from artifact_paths import ArtifactPaths, artifact_path  # noqa: E402
 
 
 def _path_stats(s, q, phases, closed):
@@ -173,7 +175,7 @@ def _material_delta(before, after, index):
 def _rate_prerequisites(report):
     if report['mode'] != 'sampled_local_path_support_schedule':
         return None
-    source = json.loads(Path(report['source_report']).read_text(encoding='utf-8'))
+    source = json.loads(artifact_path(Path(report['source_report']), report['source_report_sha256']).read_text(encoding='utf-8'))
     data = report['legs']['combined']
     fractions = data['schedule']['phase_fractions']
     assert len(fractions) == 4 and np.isfinite(fractions).all() and min(fractions) > 0 and sum(fractions) == 1
@@ -197,13 +199,13 @@ def _rate_prerequisites(report):
 
 def _drive_prerequisites(report, path, rates):
     assert rates is not None, 'drive readback requires support schedule'
-    drive = json.loads(path.read_text(encoding='utf-8'))
-    build = json.loads(Path(report['identity']['build_report']).read_text(encoding='utf-8'))
+    drive = json.loads(artifact_path(path).read_text(encoding='utf-8'))
+    build = json.loads(artifact_path(Path(report['identity']['build_report'])).read_text(encoding='utf-8'))
     assert drive['completed'] and drive['input']['urdf_sha256'] == build['candidate_sha256'], 'drive candidate mismatch'
-    manifest = Path(drive['input']['manifest'])
+    manifest = artifact_path(Path(drive['input']['manifest']))
     assert digest(manifest) == drive['input']['manifest_sha256'], 'drive manifest changed'
     binding = json.loads(manifest.read_text(encoding='utf-8'))
-    target = Path(binding['target_binding']['target'])
+    target = artifact_path(Path(binding['target_binding']['target']))
     assert digest(target) == drive['input']['usd_sha256'], 'drive USD changed'
     names = drive['joint_names']
     limits = drive['live_readbacks']['fields']['joint_vel_limits']
@@ -225,7 +227,7 @@ def _drive_prerequisites(report, path, rates):
 def _root_prerequisites(report, urdf, meshes, root, tracks):
     legs = sorted(tracks)
     frames = {leg: tracks[leg][1] for leg in legs}
-    end_links = json.loads(Path(report['identity']['build_report']).read_text(encoding='utf-8'))['definitions']
+    end_links = json.loads(artifact_path(Path(report['identity']['build_report'])).read_text(encoding='utf-8'))['definitions']
     readings = []
     tolerance = report['source_config']['position_tolerance_m']
     for i in range(1, len(frames[legs[0]])):
@@ -308,18 +310,20 @@ def _root_translation(prerequisites, frames, prescribed_offsets=None):
 
 
 def _load(source):
+    paths = ArtifactPaths()
+    source = paths.resolve(source)
     report = json.loads(source.read_text(encoding='utf-8'))
     combined = report['mode'] in ('sampled_local_path_combined', 'sampled_local_path_support_schedule',
                                  'sampled_contact_corrected_path')
     assert combined or report['mode'] == 'budgeted_local_path', 'unsupported report schema'
     if combined:
-        original = Path(report['source_report'])
+        original = paths.resolve(Path(report['source_report']))
         assert digest(original) == report['source_report_sha256'], 'source path changed'
     identity = report['identity']
-    build_path = Path(identity['build_report'])
+    build_path = paths.resolve(Path(identity['build_report']))
     assert digest(build_path) == identity['build_report_sha256'], 'build changed'
     build = json.loads(build_path.read_text(encoding='utf-8'))
-    candidate = Path(build['candidate_urdf']).resolve()
+    candidate = paths.resolve(Path(build['candidate_urdf'])).resolve()
     assert identity['candidate_files_sha256'] == build['candidate_files_sha256']
     files = identity['candidate_files_sha256']
     bound = {}
@@ -499,6 +503,7 @@ def _render(output, leg, stats, frames, urdf, meshes, root, plt, combined_tracks
 
 def _run(source, output, drive_report=None, apply_root_translation=False):
     assert REPO / 'rl_exp/out' in output.parents and not output.exists(), 'fresh isolated output required'
+    source = artifact_path(source)
     report, urdf, meshes, root, tracks = _load(source)
     import matplotlib
     matplotlib.use('Agg')
@@ -665,8 +670,10 @@ def _self_check(break_test=None):
     from unittest.mock import patch
     original = {'legs': {'lf': {'rows': [{'state': {'q_rad': {'lf_joint': i / 32}}}
                                        for i in range(33)]}}}
-    with patch.object(Path, 'read_text', return_value=json.dumps(original)):
+    with patch.object(Path, 'read_text', return_value=json.dumps(original)), \
+            patch.dict(globals(), {'artifact_path': lambda p, *args: p}):
         rates = _rate_prerequisites({'mode': 'sampled_local_path_support_schedule', 'source_report': 'unused',
+                                     'source_report_sha256': 'fixture',
                                      'legs': {'combined': {'schedule': {'phase_fractions': [.625, .125, .125, .125]},
                                                            'joint_mapping': {'lf': [{'source': 'lf_joint', 'target': 'lf_joint'}]}}}})
     assert rates['joints'][0]['analytic_max_abs_dq_dc_rad'] == 3.75
@@ -680,7 +687,8 @@ def _self_check(break_test=None):
         if str(path) in ('candidate', 'foreign'):
             return json.dumps({'candidate_sha256': str(path)})
         return json.dumps(fixture)
-    with patch.object(Path, 'read_text', text), patch.dict(globals(), {'digest': lambda p: 'hash'}):
+    with patch.object(Path, 'read_text', text), patch.dict(globals(), {
+            'digest': lambda p: 'hash', 'artifact_path': lambda p, *args: p}):
         result = _drive_prerequisites({'identity': {'build_report': 'candidate'}}, Path('drive'), rates)
         assert result['velocity_only_period_lower_bound_s'] == .75
         try:

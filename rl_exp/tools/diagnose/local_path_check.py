@@ -324,8 +324,9 @@ def _combined_run(source, models, zero, root, urdf, collision, build, config, su
 
 def _run(source_path, output, mirror=False, combined=False, support_schedule=False):
     assert REPO / 'rl_exp/out' in output.parents and not output.exists(), 'fresh isolated output required'
+    source_path = view.artifact_path(source_path)
     source, _, _, _, tracks = view._load(source_path)
-    build_path = Path(source['identity']['build_report'])
+    build_path = view.artifact_path(Path(source['identity']['build_report']))
     build, models, urdf, zero, collision, excluded, root, neutral, blender, identity = probe._static_prepare(build_path)
     assert source['identity'] == identity, 'geometry/collection code identity changed'
     assert source['root_transform'] == root.tolist(), 'root changed'

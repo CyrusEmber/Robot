@@ -20,6 +20,7 @@ REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO))
 sys.path.insert(0, str(REPO / "rl_exp/tasks"))
 from rl_exp.tools.runrecord import binding
+from rl_exp.tools.diagnose.artifact_paths import ArtifactPaths
 import joint_names
 import obs_protocol
 import xml.etree.ElementTree as ET
@@ -37,14 +38,16 @@ def require(condition, message):
 
 
 def check_build(path):
-    require(path.resolve() == BUILD.resolve(), "only checkpoint_v3/build.json is authorized")
+    paths = ArtifactPaths()
+    require(paths.logical(path).resolve() == BUILD.resolve(), "only checkpoint_v3/build.json is authorized")
+    path = paths.resolve(path)
     doc = json.loads(path.read_text(encoding="utf-8"))
     require(doc["naming"] == "palm_spatial", "wrong naming")
     files = doc["candidate_files_sha256"]
     require(len(files) == 38, "checkpoint must bind 38 files")
     require(doc["candidate_sha256"] == files["palm_spatial.urdf"] == URDF_HASH, "URDF binding mismatch")
     require(doc["candidate_blend_sha256"] == files["palm_spatial.blend"] == BLEND_HASH, "blend binding mismatch")
-    require(Path(doc["candidate_urdf"]).resolve() == path.parent / "palm_spatial.urdf", "candidate path mismatch")
+    require(Path(doc["candidate_urdf"]).resolve() == BUILD.parent / "palm_spatial.urdf", "candidate path mismatch")
     for name, digest in files.items():
         source = (path.parent / name).resolve()
         require(source.is_relative_to(path.parent.resolve()), "checkpoint path escape")

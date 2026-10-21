@@ -95,6 +95,7 @@ def _solve_contact(residual, seed, lo, hi, config):
 
 def _run(source_path, root_path, output, anchor='front_contact', early_stop=False, orientation='contact_heading'):
     assert view.REPO / 'rl_exp/out' in output.parents and not output.exists(), 'fresh isolated output required'
+    source_path, root_path = view.artifact_path(source_path), view.artifact_path(root_path)
     source, _, _, _, _ = view._load(source_path)
     assert source['mode'] == 'sampled_local_path_support_schedule'
     root_report = json.loads(root_path.read_text(encoding='utf-8'))
@@ -109,7 +110,7 @@ def _run(source_path, root_path, output, anchor='front_contact', early_stop=Fals
     shifts = np.array(root_data['offsets_m'], dtype=float)
     assert shifts.shape == (len(rows), 3) and np.isfinite(shifts).all()
     assert np.all(shifts[:, 2] == 0) and np.all(shifts[0] == 0)
-    build_path = Path(source['identity']['build_report'])
+    build_path = view.artifact_path(Path(source['identity']['build_report']))
     build, models, urdf, zero, collision, excluded, root, _, _, identity = probe._static_prepare(build_path)
     assert all(value == source['identity'][key] for key, value in identity.items() if key != 'code_sha256')
     assert all(source['identity']['code_sha256'].get(path) == sha for path, sha in identity['code_sha256'].items())
