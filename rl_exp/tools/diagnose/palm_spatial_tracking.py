@@ -603,7 +603,65 @@ def _self_weight_calibrated_resume(args, cases, reference):
                 tracking_manifest_sha256=previous['tracking_manifest_sha256']), {n: [n] for n in names}
 
 
+def _self_weight_combinations_resume(args, cases, reference):
+    """Revalidate the calibrated 30-axis run, then select only six groups."""
+    path = args.resume_self_weight
+    assert path and wiring.binding.sha256_file(path) == args.approved_resume_sha256
+    previous = json.loads(path.read_text(encoding='utf-8'))
+    assert previous['completed'] and previous['selected_cases_completed'] and previous['all_selected_cases_passed']
+    assert previous['status'] == 'calibrated_precision_verified'
+    assert previous['steps_completed'] == previous['planned_max_steps'] == 102000
+    assert len(previous['cases']) == 30 and previous['retry_allowed'] is False
+    seed = copy.copy(args)
+    seed.calibrated_combinations = False
+    seed.calibrate_precision = True
+    seed.resume_self_weight = Path(previous['resume']['report'])
+    seed.approved_resume_sha256 = previous['resume']['report_sha256']
+    original, selected = _self_weight_calibrated_resume(seed, cases, reference)
+    assert original == previous['resume'] and selected == previous['selected_cases']
+    prior = json.loads(seed.resume_self_weight.read_text(encoding='utf-8'))
+    assert previous['design'] == _self_weight_calibrated_design(prior['design'], original['calibration_cases'])
+    assert previous['precision_calibration']['baseline_design'] == prior['design']
+    assert previous['settings'] == prior['settings'] and previous['input'] == prior['input']
+    assert previous['joint_names'] == prior['joint_names']
+    for key, value in previous['readbacks'].items():
+        if key in ('kp', 'kd'):
+            assert np.array_equal(np.asarray(value), np.asarray(previous['design'][key], dtype=np.float32))
+        else:
+            assert value == prior['readbacks'][key]
+    hashes = {}
+    for summary, expected in zip(previous['cases'], selected):
+        assert summary['case'] == expected and summary['commanded_joints'] == [expected]
+        assert summary['samples_completed'] == 3400
+        sample = path.parent/(expected+'.json')
+        data = json.loads(sample.read_text(encoding='utf-8'))
+        assert data['summary'] == summary
+        verdict = _self_weight_verdict(data['samples'], previous['joint_names'], [expected])
+        assert verdict == {k: v for k, v in summary.items() if k not in ('case', 'commanded_joints', 'samples_completed')}
+        assert verdict['passed']
+        q = np.asarray([s['q_rad'] for s in data['samples']])
+        target = np.asarray([s['target_rad'] for s in data['samples']])
+        velocity = np.asarray([s['velocity_rad_s'] for s in data['samples']])
+        contact = np.asarray([s['max_contact_n'] for s in data['samples']])
+        assert np.isfinite(velocity).all() and np.isfinite(contact).all()
+        assert abs(q).max() <= .35 and abs(q-target).max() <= .35
+        assert np.all(abs(velocity) < np.asarray(previous['readbacks']['velocity_caps'])*.5)
+        assert contact.max() <= 1. and len(data['entities']) == 5
+        hashes[str(sample)] = wiring.binding.sha256_file(sample)
+    for p, h in previous['input'].items():
+        assert wiring.binding.sha256_file(Path(p)) == h
+    assert wiring.binding.sha256_file(path.parent/'source.py') == previous['code_sha256']
+    assert wiring.binding.sha256_file(path.parent/'tracking_manifest.json') == previous['tracking_manifest_sha256']
+    remaining = {n: group for n, group in cases.items() if n.endswith('_combined')}
+    assert list(remaining) == ['lf_combined', 'rf_combined', 'rl_combined', 'rr_combined', 'neck_combined', 'tail_combined']
+    return dict(report=str(path), report_sha256=args.approved_resume_sha256, cases=previous['cases'],
+                files_sha256=hashes, source_sha256=previous['code_sha256'],
+                tracking_manifest_sha256=previous['tracking_manifest_sha256']), remaining
+
+
 def _self_weight_resume(args, cases, reference):
+    if getattr(args, 'calibrated_combinations', False):
+        return _self_weight_combinations_resume(args, cases, reference)
     if getattr(args, 'calibrate_precision', False):
         return _self_weight_calibrated_resume(args, cases, reference)
     if getattr(args, 'left_knee_kp30', False):
@@ -712,11 +770,16 @@ def _self_weight_self_check(args):
             raise AssertionError('case writer overwrote existing evidence')
     if getattr(args, 'resume_self_weight', None):
         resume, remaining = _self_weight_resume(args, cases, _fresh_inputs(args))
-        expected = ((1, 30) if getattr(args, 'calibrate_precision', False) else
+        expected = ((30, 6) if getattr(args, 'calibrated_combinations', False) else
+                    (1, 30) if getattr(args, 'calibrate_precision', False) else
                     (8, 1) if getattr(args, 'left_knee_kp30', False) else
                     (29, 8) if getattr(args, 'precision_gain_trial', False) else
                     (12, 17) if getattr(args, 'continue_self_weight_axes', False) else (2, 33))
         assert (len(resume['cases']), len(remaining)) == expected
+        if getattr(args, 'calibrated_combinations', False):
+            assert list(remaining) == ['lf_combined', 'rf_combined', 'rl_combined', 'rr_combined', 'neck_combined', 'tail_combined']
+            assert [len(v) for v in remaining.values()] == [5, 5, 5, 5, 2, 6]
+            assert set(n for group in remaining.values() for n in group) == set(names)-{'chest_pitch_joint', 'chest_yaw_joint'}
         if getattr(args, 'calibrate_precision', False):
             previous = json.loads(args.resume_self_weight.read_text(encoding='utf-8'))
             design = previous['design']
@@ -810,11 +873,16 @@ def _run_chest280(args):
     resume, remaining = _self_weight_resume(args, planned, reference) if suite else ({}, {})
     knee30 = bool(getattr(args, 'left_knee_kp30', False))
     calibrated = bool(getattr(args, 'calibrate_precision', False))
+    combinations = bool(getattr(args, 'calibrated_combinations', False))
+    if combinations:
+        planned = copy.deepcopy(remaining)
     if calibrated:
         planned = {n: [n] for n in design['joint_names']}
     if resume:
         prior = json.loads(Path(resume['report']).read_text(encoding='utf-8'))
-        if calibrated:
+        if combinations:
+            design = copy.deepcopy(prior['design'])
+        elif calibrated:
             seed = json.loads(Path(prior['resume']['report']).read_text(encoding='utf-8'))
             assert seed['precision_gain_trial']['baseline_design'] == design
             design = copy.deepcopy(prior['design'])
@@ -846,7 +914,7 @@ def _run_chest280(args):
     if suite:
         result.update(scope='29 joints and six group combinations, bidirectional downstream self-weight; fixed root; no fixture/ground support',
                       planned_cases=planned, selected_cases=remaining, planned_max_steps=len(remaining)*3400, cases=[], resume=resume,
-                      continue_precision_only=bool(getattr(args, 'continue_self_weight_axes', False) or gain_trial))
+                      continue_precision_only=bool(getattr(args, 'continue_self_weight_axes', False) or gain_trial or combinations))
         if gain_trial and not (knee30 or calibrated):
             result.update(scope='eight original hold-precision failures; one +20% Kp trial; no combinations',
                           precision_gain_trial=dict(kp_factor=1.2, kd_factor=math.sqrt(1.2),
@@ -858,6 +926,9 @@ def _run_chest280(args):
             result.update(scope='all 30 single axes, bidirectional self-weight; individually calibrated eight failing axes',
                           precision_calibration=dict(baseline_design=baseline_design, stiffness_margin_factor=1.05,
                               changed_joints=[c['case'] for c in resume['calibration_cases']]))
+        if combinations:
+            result.update(scope='six calibrated self-weight group combinations; gains unchanged from all-axis verification',
+                          combination_verification=dict(baseline_design=baseline_design))
     env, app = None, None
     try:
         from isaaclab.app import AppLauncher
@@ -968,7 +1039,7 @@ def _run_chest280(args):
                 _write_self_weight_case(out, result, summary)
                 print('SELF_WEIGHT_CASE', case, result['verdict']['passed'], flush=True)
             failed = not result['verdict']['passed']
-            if failed and not ((getattr(args, 'continue_self_weight_axes', False) or gain_trial)
+            if failed and not ((getattr(args, 'continue_self_weight_axes', False) or gain_trial or combinations)
                                    and _self_weight_precision_only(result['verdict'])):
                 break
         if suite:
@@ -992,6 +1063,9 @@ def _run_chest280(args):
             if calibrated:
                 status = ('calibrated_precision_verified' if passed else
                           'calibrated_precision_completed_unmet' if finished else 'calibrated_precision_failed')
+            if combinations:
+                status = ('calibrated_combinations_verified' if passed else
+                          'calibrated_combinations_completed_precision_unmet' if finished else 'calibrated_combinations_failed')
         else:
             passed = not failed
             status = 'chest_self_weight_tracking_verified' if passed else 'chest_self_weight_tracking_failed'
@@ -1295,6 +1369,7 @@ if __name__ == '__main__':
     parser.add_argument('--precision_gain_trial', action='store_true')
     parser.add_argument('--left_knee_kp30', action='store_true')
     parser.add_argument('--calibrate_precision', action='store_true')
+    parser.add_argument('--calibrated_combinations', action='store_true')
     parser.add_argument('--combined', action='store_true')
     parser.add_argument('--gain_reference', type=Path)
     parser.add_argument('--level_leg_plan', type=Path)
@@ -1318,6 +1393,8 @@ if __name__ == '__main__':
             parser.error('level_leg_plan requires gain_reference and excludes combined')
         if not args.level_leg_plan and args.wrist_frequency_hz != 1:
             parser.error('wrist override requires level_leg_plan')
+        if args.calibrated_combinations and (args.calibrate_precision or args.left_knee_kp30 or args.precision_gain_trial or args.continue_self_weight_axes or not (args.self_weight_suite and args.resume_self_weight and args.approved_resume_sha256)):
+            parser.error('calibrated combinations require approved all-axis report and exclude other trial selectors')
         if args.calibrate_precision and (args.left_knee_kp30 or args.precision_gain_trial or args.continue_self_weight_axes or not (args.self_weight_suite and args.resume_self_weight and args.approved_resume_sha256)):
             parser.error('precision calibration requires approved knee30 report and excludes other trial selectors')
         if args.left_knee_kp30 and (args.precision_gain_trial or args.continue_self_weight_axes or not (args.self_weight_suite and args.resume_self_weight and args.approved_resume_sha256)):
