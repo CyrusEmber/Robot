@@ -403,7 +403,73 @@ def _self_weight_axes_resume(args, cases, reference):
                 policy='17 remaining axes only; preserve precision failures; stop all other failures'), remaining
 
 
+def _self_weight_gain_design(design, selected):
+    """Apply the single approved gain increment to the eight failed axes only."""
+    assert len(selected) == 8 and set(selected) <= set(design['joint_names'])
+    changed = copy.deepcopy(design)
+    for i, name in enumerate(design['joint_names']):
+        if name in selected:
+            changed['kp'][i] *= 1.2
+            changed['kd'][i] *= math.sqrt(1.2)
+    return changed
+
+
+def _self_weight_gain_resume(args, cases, reference):
+    """Re-read all original axes and select only hold-precision failures."""
+    path = args.resume_self_weight
+    assert path and wiring.binding.sha256_file(path) == args.approved_resume_sha256
+    previous = json.loads(path.read_text(encoding='utf-8'))
+    assert previous['completed'] and previous['selected_cases_completed']
+    assert previous['status'] == 'self_weight_axes_completed_precision_unmet'
+    assert previous['steps_completed'] == previous['planned_max_steps'] == 57800
+    assert len(previous['cases']) == 17 and not previous['retry_allowed']
+    seed = copy.copy(args)
+    seed.precision_gain_trial = False
+    seed.continue_self_weight_axes = True
+    seed.resume_self_weight = Path(previous['resume']['report'])
+    seed.approved_resume_sha256 = previous['resume']['report_sha256']
+    original, remaining = _self_weight_resume(seed, cases, reference)
+    assert original == previous['resume'] and previous['selected_cases'] == remaining
+    prior = json.loads(seed.resume_self_weight.read_text(encoding='utf-8'))
+    assert previous['design'] == prior['design'] and previous['settings'] == prior['settings']
+    assert previous['input'] == prior['input'] and previous['readbacks'] == prior['readbacks']
+    hashes = {}
+    for summary, expected in zip(previous['cases'], remaining):
+        assert summary['case'] == expected and summary['samples_completed'] == 3400
+        sample_path = path.parent/(expected+'.json')
+        data = json.loads(sample_path.read_text(encoding='utf-8'))
+        assert data['summary'] == summary and summary['commanded_joints'] == [expected]
+        verdict = _self_weight_verdict(data['samples'], previous['joint_names'], [expected])
+        assert verdict == {k:v for k,v in summary.items()
+                           if k not in ('case','commanded_joints','samples_completed')}
+        assert verdict['passed'] or _self_weight_precision_only(verdict)
+        q = np.asarray([r['q_rad'] for r in data['samples']])
+        target = np.asarray([r['target_rad'] for r in data['samples']])
+        velocity = np.asarray([r['velocity_rad_s'] for r in data['samples']])
+        contact = np.asarray([r['max_contact_n'] for r in data['samples']])
+        assert np.isfinite(velocity).all() and np.isfinite(contact).all()
+        assert abs(q).max() <= .35 and abs(q-target).max() <= .35
+        assert np.all(abs(velocity) < np.asarray(previous['readbacks']['velocity_caps'])*.5)
+        assert contact.max() <= 1. and len(data['entities']) == 5
+        hashes[str(sample_path)] = wiring.binding.sha256_file(sample_path)
+    for p,h in previous['input'].items():
+        assert wiring.binding.sha256_file(Path(p)) == h
+    assert wiring.binding.sha256_file(path.parent/'source.py') == previous['code_sha256']
+    assert wiring.binding.sha256_file(path.parent/'tracking_manifest.json') == previous['tracking_manifest_sha256']
+    completed = original['cases']+previous['cases']
+    assert len(completed) == 29 and [c['case'] for c in completed] == list(cases)[:29]
+    selected = {c['case']: [c['case']] for c in completed if not c['passed']}
+    assert set(selected) == {'rl_hip_twist_joint','rr_hip_twist_joint','rl_knee_joint','rr_knee_joint',
+                             'lf_shoulder_twist_joint','rf_shoulder_twist_joint','lf_elbow_joint','rf_elbow_joint'}
+    assert all(c['passed'] or _self_weight_precision_only(c) for c in completed)
+    return dict(report=str(path),report_sha256=args.approved_resume_sha256,cases=completed,
+                files_sha256=hashes,source_sha256=previous['code_sha256'],
+                tracking_manifest_sha256=previous['tracking_manifest_sha256']), selected
+
+
 def _self_weight_resume(args, cases, reference):
+    if getattr(args, 'precision_gain_trial', False):
+        return _self_weight_gain_resume(args, cases, reference)
     if getattr(args, 'continue_self_weight_axes', False):
         return _self_weight_axes_resume(args, cases, reference)
     path = getattr(args, 'resume_self_weight', None)
@@ -506,7 +572,16 @@ def _self_weight_self_check(args):
             raise AssertionError('case writer overwrote existing evidence')
     if getattr(args, 'resume_self_weight', None):
         resume, remaining = _self_weight_resume(args, cases, _fresh_inputs(args))
-        assert (len(resume['cases']), len(remaining)) == ((12, 17) if getattr(args, 'continue_self_weight_axes', False) else (2, 33))
+        expected = ((29, 8) if getattr(args, 'precision_gain_trial', False) else
+                    (12, 17) if getattr(args, 'continue_self_weight_axes', False) else (2, 33))
+        assert (len(resume['cases']), len(remaining)) == expected
+        if getattr(args, 'precision_gain_trial', False):
+            design = dict(joint_names=names, kp=[float(i+1) for i in range(30)], kd=[float(i+2) for i in range(30)])
+            changed = _self_weight_gain_design(design, remaining)
+            for i,n in enumerate(names):
+                assert changed['kp'][i] == design['kp'][i]*(1.2 if n in remaining else 1.)
+                assert changed['kd'][i] == design['kd'][i]*(math.sqrt(1.2) if n in remaining else 1.)
+            assert design['kp'] == [float(i+1) for i in range(30)]
     example = dict(passed=False, settle_drift_rad=0., settle_absolute_error_rad=.03,
                    max_absolute_error_rad=.04, directions=[dict(passed=False, max_error_rad=.005,
                    plateau_error_rad=.00276, final_error_rad=.00001, max_other_joint_rad=.001)]*2)
@@ -575,6 +650,10 @@ def _run_chest280(args):
     if resume:
         prior = json.loads(Path(resume['report']).read_text(encoding='utf-8'))
         assert prior['design'] == design
+    gain_trial = bool(getattr(args, 'precision_gain_trial', False))
+    baseline_design = copy.deepcopy(design)
+    if gain_trial:
+        design = _self_weight_gain_design(design, remaining)
     out = args.out.resolve()
     assert out.parent.is_dir() and wiring.REPO / 'rl_exp/out' in out.parents and not out.exists()
     out.mkdir(exist_ok=False)
@@ -590,7 +669,11 @@ def _run_chest280(args):
     if suite:
         result.update(scope='29 joints and six group combinations, bidirectional downstream self-weight; fixed root; no fixture/ground support',
                       planned_cases=planned, selected_cases=remaining, planned_max_steps=len(remaining)*3400, cases=[], resume=resume,
-                      continue_precision_only=bool(getattr(args, 'continue_self_weight_axes', False)))
+                      continue_precision_only=bool(getattr(args, 'continue_self_weight_axes', False) or gain_trial))
+        if gain_trial:
+            result.update(scope='eight original hold-precision failures; one +20% Kp trial; no combinations',
+                          precision_gain_trial=dict(kp_factor=1.2, kd_factor=math.sqrt(1.2),
+                                                    baseline_design=baseline_design, changed_joints=list(remaining)))
     env, app = None, None
     try:
         from isaaclab.app import AppLauncher
@@ -701,7 +784,7 @@ def _run_chest280(args):
                 _write_self_weight_case(out, result, summary)
                 print('SELF_WEIGHT_CASE', case, result['verdict']['passed'], flush=True)
             failed = not result['verdict']['passed']
-            if failed and not (getattr(args, 'continue_self_weight_axes', False)
+            if failed and not ((getattr(args, 'continue_self_weight_axes', False) or gain_trial)
                                    and _self_weight_precision_only(result['verdict'])):
                 break
         if suite:
@@ -716,6 +799,9 @@ def _run_chest280(args):
             if getattr(args, 'continue_self_weight_axes', False):
                 status = ('self_weight_axes_verified' if passed else
                           'self_weight_axes_completed_precision_unmet' if finished else 'self_weight_axes_failed')
+            if gain_trial:
+                status = ('self_weight_gain_trial_verified' if passed else
+                          'self_weight_gain_trial_completed_precision_unmet' if finished else 'self_weight_gain_trial_failed')
         else:
             passed = not failed
             status = 'chest_self_weight_tracking_verified' if passed else 'chest_self_weight_tracking_failed'
@@ -1016,6 +1102,7 @@ if __name__ == '__main__':
     parser.add_argument('--resume_self_weight', type=Path)
     parser.add_argument('--approved_resume_sha256')
     parser.add_argument('--continue_self_weight_axes', action='store_true')
+    parser.add_argument('--precision_gain_trial', action='store_true')
     parser.add_argument('--combined', action='store_true')
     parser.add_argument('--gain_reference', type=Path)
     parser.add_argument('--level_leg_plan', type=Path)
@@ -1039,6 +1126,8 @@ if __name__ == '__main__':
             parser.error('level_leg_plan requires gain_reference and excludes combined')
         if not args.level_leg_plan and args.wrist_frequency_hz != 1:
             parser.error('wrist override requires level_leg_plan')
+        if args.precision_gain_trial and (args.continue_self_weight_axes or not (args.self_weight_suite and args.resume_self_weight and args.approved_resume_sha256)):
+            parser.error('gain trial requires approved prior axes report; excludes axes continuation')
         if args.continue_self_weight_axes and not (args.self_weight_suite and args.resume_self_weight and args.approved_resume_sha256):
             parser.error('17-axis continuation requires self_weight_suite and approved prior report')
         if (args.resume_self_weight or args.approved_resume_sha256) and not args.self_weight_suite:
