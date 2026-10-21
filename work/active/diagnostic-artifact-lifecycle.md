@@ -3,17 +3,17 @@ id: diagnostic-artifact-lifecycle
 title: 诊断产物整理、证据复用与收尾管理
 scope: rl_exp/out, rl_exp/tools/diagnose
 status: in_progress
-landing: rl_exp/tools/diagnose/artifact_inventory.py, rl_exp/tools/diagnose, rl_exp/tools/runrecord, .gitignore, .gitattributes, acceptance/records
-next: 整理执行者按首批记录核定盘点归属及在写状态，补消费者迁移定位和恢复验证；前置未齐不得迁移清理。
+landing: rl_exp/tools/diagnose/artifact_index.json, rl_exp/tools/diagnose/support_archive_index.json, rl_exp/tools/diagnose/archived_support_read.py, rl_exp/tools/diagnose/artifact_inventory.py, acceptance/records
+next: 整理执行者核定剩余 pending 归属与在写状态，补活跃链迁移定位和备份；未齐不搬该链、不清理。
 close_when: 不带执行历史的新上下文核验清单闭合、证据可复用、迁移可恢复及新运行收尾机制；缺证不关闭。
-evidence: acceptance/records/2026-10-20-diagnostic-artifact-preflight.md, acceptance/records/2026-10-20-diagnostic-artifact-plan-review.md
+evidence: acceptance/records/2026-10-20-diagnostic-artifact-first-archive.md, acceptance/records/2026-10-20-diagnostic-artifact-preflight.md, acceptance/records/2026-10-20-diagnostic-artifact-plan-review.md
 ---
 
 ## 当前范围
 
 整理 `rl_exp/out/` 与 `rl_exp/tools/diagnose/out/` 的存量产物，并追踪生产者发现其它实际输出根，让后续诊断在运行结束时完成归属、保留或清理。目标是能按问题找到适用证据，保住必要输入和失败对照，停止无主产物持续堆积。
 
-首批盘点与前置修复已进入执行，落点及验证边界见首批 evidence；存量归属、迁移定位和恢复前置仍未齐，未执行迁移或清理。范围包括生产者、消费者、路径引用、Git 边界及收尾；不改机器人构型、驱动参数或诊断判据，不代替原专项验收。
+存量路由与限定历史归档已落地，验证范围见最新 evidence；其余归属、活跃链迁移定位和备份仍未齐，未执行清理。范围包括生产者、消费者、路径引用、Git 边界及收尾；不改机器人构型、驱动参数或诊断判据，不代替原专项验收。
 
 协调入口：[机体与驱动总项](lizard2-body-drive-candidate.md)、[候选接线](lizard2-candidate-wiring.md)、[限位与 PD 验证](lizard2-restored-limits-pd-validation.md)。迁移其依赖前确认使用状态；正在写入的目录不得搬移或清理，未完成实验仍归原事项。
 
