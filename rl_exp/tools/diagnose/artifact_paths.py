@@ -56,8 +56,8 @@ class ArtifactPaths:
 
     def __init__(self, index: Path | None = None, storage_root: Path = REPO) -> None:
         self.root = storage_root.resolve()
-        index = index if index is not None else REPO / 'rl_exp/tools/diagnose/artifact_index.json'
-        doc = json.loads(index.read_text(encoding='utf-8'))
+        self.index = (index if index is not None else self.root / 'rl_exp/tools/diagnose/artifact_index.json').resolve()
+        doc = json.loads(self.index.read_text(encoding='utf-8'))
         if doc.get('format') != 1 or not isinstance(doc.get('packages'), list):
             raise ValueError('expected diagnostic artifact index format 1')
         self.routes = []
@@ -109,6 +109,18 @@ class ArtifactPaths:
     def same_identity(self, first: Path, second: Path) -> bool:
         """Compare full logical identities across explicitly known repository roots."""
         return self._identity_key(first) == self._identity_key(second)
+
+    def describe(self, path: Path, expected: str | None = None) -> dict:
+        """Bind identity and current storage separately, with a nonempty digest."""
+        location = self.resolve(path, expected).resolve()
+        digest = sha256_file(location)
+        if not digest:
+            raise ValueError(f'unreadable artifact: {location}')
+        key_type, key = self._identity_key(Path(path))
+        return {'identity': str(self.logical(Path(path))),
+                'logical_path': key.as_posix() if key_type == 'repository' else None,
+                'location': location.relative_to(self.root).as_posix()
+                if location.is_relative_to(self.root) else str(location), 'sha256': digest}
 
     def resolve(self, path: Path, expected: str | None = None) -> Path:
         """Return a verified relocated file; missing/corrupt mappings fail closed."""

@@ -23,9 +23,14 @@ velocity caps; outputs only a velocity-cap period lower bound, never a selected 
 the recorded combined poses, preserving root height/orientation and all joint angles.
 Residuals track the same material vertex; contact-feature changes are reported separately.
 This measured candidate is not a no-slip solution or a physical-period approval.
+Each run registers in artifact_index.json before writing plots and ends with a
+run.json input/code/output manifest. --topic, --work_id, --owner and
+--retention_reason override ownership defaults. Inspect completion with
+artifact_run.py --inspect_run <output_dir>; failures require a fresh run name.
 """
 
 import argparse
+import getpass
 import json
 from pathlib import Path
 import sys
@@ -44,6 +49,7 @@ sys.path.insert(0, str(REPO / 'rl_exp/tools/runrecord'))
 from binding import sha256_file as digest  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from artifact_paths import ArtifactPaths, artifact_path  # noqa: E402
+from artifact_run import ArtifactRun  # noqa: E402
 
 
 def _path_stats(s, q, phases, closed):
@@ -507,10 +513,59 @@ def _render(output, leg, stats, frames, urdf, meshes, root, plt, combined_tracks
         plt.close(fig)
 
 
-def _run(source, output, drive_report=None, apply_root_translation=False):
+def _run_metadata(paths, source, drive_report, output, apply_root_translation, options):
+    """Capture this reader's complete bound input closure before loading arrays."""
+    inputs = []
+
+    def bind(path, expected=None):
+        row = paths.describe(Path(path), expected)
+        if row not in inputs:
+            inputs.append(row)
+        return json.loads(paths.resolve(Path(path), expected).read_text(encoding='utf-8'))
+
+    report = bind(source)
+    if report.get('source_report'):
+        bind(report['source_report'], report['source_report_sha256'])
+    build = bind(report['identity']['build_report'], report['identity']['build_report_sha256'])
+    for name, sha in build['candidate_files_sha256'].items():
+        inputs.append(paths.describe(Path(build['candidate_urdf']).parent / name, sha))
+    if drive_report is not None:
+        drive = bind(drive_report)
+        manifest = bind(drive['input']['manifest'], drive['input']['manifest_sha256'])
+        inputs.append(paths.describe(Path(manifest['target_binding']['target']), drive['input']['usd_sha256']))
+    runtime_root = Path(__file__).resolve().parents[3]
+    # Imported reachability defaults read this declaration even with an explicit candidate.
+    declaration = runtime_root / 'rl_exp/versions/lizard2/assets.json'
+    inputs.append(paths.describe(declaration))
+    files = {Path(module.__file__).resolve() for module in tuple(sys.modules.values())
+             if getattr(module, '__file__', None) and str(module.__file__).endswith('.py')
+             and Path(module.__file__).resolve().is_relative_to(runtime_root)}
+    files.add(Path(__file__).resolve())  # Also when invoked as __main__.
+    code = [paths.describe(p) for p in sorted(files)]
+    metadata = {'topic': 'local-path-view', 'work_id': 'diagnostic-artifact-lifecycle',
+                'owner': getpass.getuser(), 'retention_reason': 'Recorded path replay and bound drive/root analysis.'}
+    metadata.update(options or {})
+    command = ['python', '-B', 'rl_exp/tools/diagnose/local_path_view.py',
+               '--source_report', str(source), '--output_dir', str(output)]
+    if drive_report is not None:
+        command.extend(['--drive_report', str(drive_report)])
+    if apply_root_translation:
+        command.append('--root_translation')
+    for key in ('topic', 'work_id', 'owner', 'retention_reason'):
+        command.extend(['--' + key, metadata[key]])
+    metadata.update(command=command, inputs=inputs, code=code)
+    return metadata
+
+
+def _run(source, output, drive_report=None, apply_root_translation=False, run_options=None):
     assert REPO / 'rl_exp/out' in output.parents and not output.exists(), 'fresh isolated output required'
-    source = artifact_path(source)
+    paths = ArtifactPaths()
+    source_identity = source
+    source = paths.resolve(source)
+    source_digest = digest(source)
     report, urdf, meshes, root, tracks = _load(source)
+    metadata = _run_metadata(paths, source_identity, drive_report, output, apply_root_translation, run_options)
+    assert source_digest and metadata['inputs'][0]['sha256'] == source_digest, 'source changed while loading'
     import matplotlib
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
@@ -528,7 +583,18 @@ def _run(source, output, drive_report=None, apply_root_translation=False):
                    if apply_root_translation or 'root_offsets_m' in report else None)
     rates = _rate_prerequisites(report) if combined else None
     drive = _drive_prerequisites(report, drive_report, rates) if drive_report is not None else None
-    output.mkdir(parents=True, exist_ok=False)
+    required = [leg + '_trajectory.png' for leg in tracks] + ['analysis.json']
+    required += (['combined_side.gif', 'combined_top.gif'] if combined else
+                 [leg + '_' + angle + '.gif' for leg in tracks for angle in ('side', 'top')])
+    if combined and translation is not None:
+        required.append('root_translation.png')
+    with ArtifactRun(output, paths, metadata, required):
+        _write_replay(source, output, report, urdf, meshes, root, tracks, combined,
+                      prerequisites, translation, rates, drive, plt, matplotlib, PIL, metadata['inputs'])
+
+
+def _write_replay(source, output, report, urdf, meshes, root, tracks, combined,
+                  prerequisites, translation, rates, drive, plt, matplotlib, PIL, inputs):
     for leg, (stats, frames) in tracks.items():
         assert leg.isidentifier(), 'unsafe leg output name'
         _plot(output, leg, stats, plt)
@@ -554,6 +620,7 @@ def _run(source, output, drive_report=None, apply_root_translation=False):
             fig.savefig(output / 'root_translation.png', dpi=120)
             plt.close(fig)
     result = {'mode': 'recorded_combined_path_analysis' if combined else 'recorded_local_path_analysis',
+              'run_record': 'run.json', 'input_bindings': inputs,
               'source_report': str(source), 'source_report_sha256': digest(source),
               'source_identity': report['identity'],
               'postprocess_code_sha256': {str(Path(p).resolve()): digest(Path(p))
@@ -568,7 +635,7 @@ def _run(source, output, drive_report=None, apply_root_translation=False):
               'time_mapping_prerequisites': rates,
               'drive_limit_prerequisites': drive,
               'legs': {leg: stats for leg, (stats, _) in tracks.items()},
-              'artifacts_sha256': {p.name: digest(p) for p in sorted(output.iterdir())},
+              'artifacts_sha256': {p.name: digest(p) for p in sorted(output.iterdir()) if p.name != 'run.json'},
               'limits': 'No new collision/contact validation, continuous-domain proof, smoothing, time mapping, '
                         'physical speed, acceleration, no-slip, PD or dynamics verdict. Slopes use endpoints and '
                         'dimensionless s, not display pacing. Partial-path GIF repeats are not closing segments.'}
@@ -713,6 +780,10 @@ def main():
     parser.add_argument('--output_dir', type=Path)
     parser.add_argument('--drive_report', type=Path)
     parser.add_argument('--root_translation', action='store_true')
+    parser.add_argument('--topic', default='local-path-view')
+    parser.add_argument('--work_id', default='diagnostic-artifact-lifecycle')
+    parser.add_argument('--owner', default=getpass.getuser())
+    parser.add_argument('--retention_reason', default='Recorded path replay and bound drive/root analysis.')
     parser.add_argument('--self_check', action='store_true')
     parser.add_argument('--break_test', choices=('slope_scale', 'cycle_sign', 'midpoint', 'world',
                                                'combined_stop', 'translation_sign', 'translation_residual',
@@ -731,7 +802,8 @@ def main():
         if args.source_report is None or args.output_dir is None:
             parser.error('--source_report and --output_dir required')
         _run(args.source_report.resolve(), args.output_dir.resolve(),
-             None if args.drive_report is None else args.drive_report.resolve(), args.root_translation)
+             None if args.drive_report is None else args.drive_report.resolve(), args.root_translation,
+             {key: getattr(args, key) for key in ('topic', 'work_id', 'owner', 'retention_reason')})
 
 
 if __name__ == '__main__':

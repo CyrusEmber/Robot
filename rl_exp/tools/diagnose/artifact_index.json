@@ -4042,6 +4042,15 @@
       "consumer_verification": "top-level refresh only; not an independent physical acceptance",
       "retention_reason": "unreviewed runtime material; triage into canonical evidence, mergeable history or disposable output",
       "next": "inspect producer and live consumers; eliminate duplicate copies, migrate dependencies after read verification, delete superseded material"
+    },
+    {
+      "logical_root": "rl_exp/out/runs/local-path-view/support-drive-root-20261021-final",
+      "current_location": "rl_exp/out/runs/local-path-view/support-drive-root-20261021-final",
+      "run_record": "rl_exp/out/runs/local-path-view/support-drive-root-20261021-final/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
     }
   ]
 }

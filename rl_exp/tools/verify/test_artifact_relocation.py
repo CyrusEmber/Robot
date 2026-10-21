@@ -244,6 +244,7 @@ class RelocationTest(unittest.TestCase):
             (source / 'artifact_index.json').write_bytes(self.index.read_bytes())
             # Include real code and its import dependencies, not parent-process modules.
             tracked = git_boundary.git(REPO, 'ls-files', '-z', '--', 'rl_exp').stdout.decode().split('\0')
+            tracked = sorted(set(tracked) | {'rl_exp/tools/diagnose/artifact_run.py'})
             for name in tracked:
                 if not name or (Path(name).suffix != '.py'
                                 and not (name.startswith('rl_exp/versions/') and name.endswith('.json'))):
@@ -350,11 +351,18 @@ class RelocationTest(unittest.TestCase):
         def missing_old(path):
             return None if Path(path).resolve() == drive_path.resolve() else raw_digest(path)
         # Only plotting is stubbed. Parsing, rates, drive binding and JSON writer are real.
+        def plots(output, leg, *args):
+            (output / (leg + '_trajectory.png')).write_bytes(b'test plot')
+
+        def render(output, leg, *args):
+            for angle in ('side', 'top'):
+                (output / (leg + '_' + angle + '.gif')).write_bytes(b'test render')
+
         with patch.object(view, 'REPO', self.root), \
                 patch.object(view, 'ArtifactPaths', lambda: self.paths), \
                 patch.object(view, 'artifact_path', self.paths.resolve), \
                 patch.object(view, 'digest', missing_old), \
-                patch.object(view, '_plot'), patch.object(view, '_render'), \
+                patch.object(view, '_plot', plots), patch.object(view, '_render', render), \
                 self.isolated(), redirect_stdout(io.StringIO()):
             view._run(source_path, output, drive_report=drive_path)
         result = json.loads((output / 'analysis.json').read_text())
