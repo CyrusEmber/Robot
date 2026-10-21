@@ -3,21 +3,21 @@ id: diagnostic-artifact-lifecycle
 title: 诊断产物整理、证据复用与收尾管理
 scope: rl_exp/out, rl_exp/tools/diagnose
 status: in_progress
-landing: rl_exp/tools/diagnose/artifact_index.json, rl_exp/tools/diagnose/support_archive_index.json, rl_exp/tools/diagnose, acceptance/records
-next: 整理执行者按最新记录处理 pending、新增和混合子树，补传递定位与备份；未齐不搬活跃链、不清理。
+landing: rl_exp/tools/diagnose/artifact_index.json, rl_exp/tools/diagnose/artifact_paths.py, rl_exp/tools/diagnose/self_weight_audit.py, rl_exp/tools/diagnose/support_archive_index.json, acceptance/records
+next: 整理执行者沿已接通的读取路由拆分活跃依赖，合并重复工具并清理已替代材料；继续补齐其余消费者与运行收尾。
 close_when: 不带执行历史的新上下文核验清单闭合、证据可复用、迁移可恢复及新运行收尾机制；缺证不关闭。
-evidence: acceptance/records/2026-10-21-diagnostic-artifact-drive-runtime-retention.md, acceptance/records/2026-10-21-diagnostic-artifact-second-archive.md, acceptance/records/2026-10-20-diagnostic-artifact-first-archive.md, acceptance/records/2026-10-20-diagnostic-artifact-preflight.md, acceptance/records/2026-10-20-diagnostic-artifact-plan-review.md
+evidence: acceptance/records/2026-10-21-diagnostic-artifact-decoupling-cleanup.md, acceptance/records/2026-10-21-diagnostic-artifact-drive-runtime-retention.md, acceptance/records/2026-10-21-diagnostic-artifact-second-archive.md, acceptance/records/2026-10-20-diagnostic-artifact-first-archive.md, acceptance/records/2026-10-20-diagnostic-artifact-preflight.md, acceptance/records/2026-10-20-diagnostic-artifact-plan-review.md
 ---
 
 ## 当前范围
 
-整理 `rl_exp/out/` 与 `rl_exp/tools/diagnose/out/` 的存量产物，并追踪生产者发现其它实际输出根，让后续诊断在运行结束时完成归属、保留或清理。目标是能按问题找到适用证据，保住必要输入和失败对照，停止无主产物持续堆积。
+整理两个输出根及生产者发现的其它落点，保住必要输入、失败对照与复读入口；通过解耦和运行收尾停止无主产物堆积。
 
-存量路由与限定历史归档已落地，验证范围见最新 evidence；其余归属、活跃链迁移定位和备份仍未齐，未执行清理。范围包括生产者、消费者、路径引用、Git 边界及收尾；不改机器人构型、驱动参数或诊断判据，不代替原专项验收。
+用户已撤销“不删除、不搬活跃链”限制，要求实际解耦、合并、重构和删除。已接通的依赖按批迁移，已替代材料清理；其它消费者、混合子树和运行收尾继续推进，不永久留置 pending。处置见最新 evidence；机器人、驱动参数与诊断判据归原专项。
 
-协调入口：[机体与驱动总项](lizard2-body-drive-candidate.md)、[候选接线](lizard2-candidate-wiring.md)、[限位与 PD 验证](lizard2-restored-limits-pd-validation.md)。迁移其依赖前确认使用状态；正在写入的目录不得搬移或清理，未完成实验仍归原事项。
+协调入口：[机体与驱动总项](lizard2-body-drive-candidate.md)、[候选接线](lizard2-candidate-wiring.md)、[限位与 PD 验证](lizard2-restored-limits-pd-validation.md)。按实际读写关系确定迁移批次；正在写入的目录先协调停写，接通消费者并复验后迁移，未完成实验仍归原事项。
 
-读数与结论归 `acceptance/records/`，本项同次维护 `evidence`。方案审核与首批实施记录各按自身边界取用，不代表全事项实现或关闭通过。
+记录按自身边界取用，局部实施不代表全事项关闭。
 
 ## 分类与保留原则
 
@@ -34,14 +34,14 @@ evidence: acceptance/records/2026-10-21-diagnostic-artifact-drive-runtime-retent
 ## 目标落点与复用
 
 - 运行产物按 `rl_exp/out/runs/<主题>/<运行编号>/`、`archive/<主题>/<运行编号>/`、`tmp/` 分流；日期进入运行编号或元数据。旧路径分批迁移，不要求一次全改。
-- 沿用已有 manifest、哈希与绑定工具，补一个轻量索引，只记身份、用途、位置、依赖、关联事项/验收记录和保留理由，不建立第二份结果账本。具体索引路径在盘点后确定并补入 `landing`。
+- 复用 manifest、绑定工具与既有索引，记录身份、用途、位置、依赖、归属和保留理由；结果唯一归验收记录。
 - 诊断索引须能回答“验证什么、不能证明什么、对应何种资产/配置/工况、怎样读取与复跑、是否仍适用”。复用前核对这些前提；输入变化只补受影响检查，不能将旧资产或旧驱动证据外推。
 - 源码、配置、索引、验收记录及必要的最小回归样本纳入 Git；运行输出默认忽略。已跟踪产物逐项处理，必要的长期诊断基准迁出临时输出区，不自动升级为正式机器人资产。
-- 唯一或昂贵的证据包注明存储位置、完整性校验与恢复方式；本机单副本如实标记。建立可靠恢复方式前不得清掉唯一证据，忽略规则不等于备份。
+- 唯一或昂贵证据注明存储、校验及恢复方式；核验恢复后清原副本，外部备份与本机保留分开标记。
 
 ## 迁移前必须补齐
 
-以下由整理执行者与脚本维护者落实，定位见 `evidence`；文档修订不解除前置。
+以下由整理执行者与脚本维护者按受影响链落实，已完成切片见最新 `evidence`；其它链的缺口不阻止已验证批次迁移和清理，文档修订不能代替行为证明。
 
 | 缺口 | 必须落实的动作与验收 |
 |---|---|
