@@ -3,10 +3,10 @@ id: diagnostic-artifact-lifecycle
 title: 诊断产物整理、证据复用与收尾管理
 scope: rl_exp/out, rl_exp/tools/diagnose
 status: in_progress
-landing: rl_exp/tools/diagnose/artifact_index.json, rl_exp/tools/diagnose/artifact_paths.py, rl_exp/tools/diagnose/self_weight_audit.py, rl_exp/tools/diagnose/support_archive_index.json, acceptance/records
-next: 新上下文复审三项迁移修复；整理执行者与脚本维护者继续 local_path_view 真实 CLI 创建、收尾和换根闭环，再推广及清存量。
+landing: rl_exp/tools/diagnose/artifact_index.json, rl_exp/tools/diagnose/artifact_run.py, rl_exp/docs/diagnostic_artifacts.md, rl_exp/tools/diagnose/self_weight_audit.py, rl_exp/tools/diagnose/support_archive_index.json, acceptance/records
+next: 新上下文复审试点及迁移修复；脚本维护者推广新增入口，整理执行者按批次清存量。
 close_when: 不带执行历史的新上下文核验清单闭合、证据可复用、迁移可恢复及新运行收尾机制；缺证不关闭。
-evidence: acceptance/records/2026-10-21-diagnostic-artifact-review-fixes.md, acceptance/records/2026-10-21-diagnostic-artifact-review.md, acceptance/records/2026-10-21-diagnostic-artifact-decoupling-cleanup.md, acceptance/records/2026-10-21-diagnostic-artifact-drive-runtime-retention.md, acceptance/records/2026-10-21-diagnostic-artifact-second-archive.md, acceptance/records/2026-10-20-diagnostic-artifact-first-archive.md, acceptance/records/2026-10-20-diagnostic-artifact-preflight.md, acceptance/records/2026-10-20-diagnostic-artifact-plan-review.md
+evidence: acceptance/records/2026-10-21-diagnostic-producer-lifecycle.md, acceptance/records/2026-10-21-diagnostic-artifact-review-fixes.md, acceptance/records/2026-10-21-diagnostic-artifact-review.md, acceptance/records/2026-10-21-diagnostic-artifact-decoupling-cleanup.md, acceptance/records/2026-10-21-diagnostic-artifact-drive-runtime-retention.md, acceptance/records/2026-10-21-diagnostic-artifact-second-archive.md, acceptance/records/2026-10-20-diagnostic-artifact-first-archive.md, acceptance/records/2026-10-20-diagnostic-artifact-preflight.md, acceptance/records/2026-10-20-diagnostic-artifact-plan-review.md
 ---
 
 ## 当前范围
@@ -58,9 +58,9 @@ evidence: acceptance/records/2026-10-21-diagnostic-artifact-review-fixes.md, acc
 
 按阶段推进；缺口未闭合，不以扩大盘点、分类或框架代替交付。验收入口闭环和完成批次，不以目录数、记录数或节省空间计进度。
 
-1. **首个生产闭环——整理执行者与脚本维护者负责。** 以 `local_path_view.py` CLI 为试点，取已有支持相位报告及配套 drive 输入，带 `--drive_report` 和 `--root_translation` 实际生成分析、图像；不重新采集物理。只盘点该链完整依赖，修复最新审核缺口，复用既有入口和绑定能力。
-   - 写入前登记主题、关联事项、执行者、输入/代码身份与复跑命令，独占创建运行目录；正常结束明确产物清单及保留决定，失败或中断保留现场、归属和下一步，无法写收尾时下次检查能识别未完成，不能当成功或自动删除。
-   - **退出条件**：真实成功运行完成登记与收尾；同名重跑在写前拒绝且原文件集/摘要不变；写入中失败及登记/收尾失败有恢复或保留对照；按前置表在新根完整复读并生成绑定非空且正确的新报告。图像检查内容，不只查文件存在；恢复目录核验后清理。
+1. **复审试点与迁移修复——不带执行历史的新上下文负责。** 对照最新 evidence、真实落点和操作入口复核 `local_path_view.py` 生产闭环及前次三项审核修复；记录存在不代表通过。缺口由整理执行者和脚本维护者修复，不重新采物理。
+   - 核写前主题/事项/执行者、输入/代码身份、复跑命令、独占目录和索引登记；核正常收尾清单与保留决定，以及失败/中断和记录不可写时的现场、归属、下一步及只读未完成识别。
+   - **退出条件**：真实 CLI 同带 drive 与根平移生成分析和图像；同名重跑原文件集/摘要和索引不变；故障留存反例成立；按前置表新根完整复读，绑定非空正确。检查图像内容及再生成一致，核恢复临时目录和替代输出清理；缺证不得据此宣称全覆盖。
 2. **推广新增入口——脚本维护者接入，实验执行者使用。** 枚举两个输出根及其它发现落点的生产入口，区分继续使用、保留的历史入口与未覆盖入口，逐一落实具名维护者和动作。将试点机制用于继续使用的入口；`diagnose_support.py` 的另一输出根和同名真实写入路径必须覆盖。子系统文档留操作入口，FILEMAP 仅路由；公开 API 按弃用规则处理。
    - **退出条件**：每个继续使用的入口完成一次真实创建与收尾，并覆盖其特有写入失败；实验执行者能依文档独立操作，后续正常运行无需整理执行者手改索引。历史入口不得误宣称已退休；未覆盖入口及新增产物仍有归属，不以试点通过代表全覆盖。
 3. **分批消化存量——整理执行者负责，消费者维护者核对。** 明确存量清单的截点，后续新增走阶段 2；关闭前对差异补核。每批限定文件集与依赖闭包，记录大小、哈希、Git 状态、生产/消费者、事项、保留理由、动作和回退；执行前刷新文件与 writer 状态。展开代码、配置、报告、资源的传递引用，不反复全仓扫描代替处置。
