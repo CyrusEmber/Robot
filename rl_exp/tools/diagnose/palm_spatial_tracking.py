@@ -467,7 +467,71 @@ def _self_weight_gain_resume(args, cases, reference):
                 tracking_manifest_sha256=previous['tracking_manifest_sha256']), selected
 
 
+def _self_weight_knee30_design(design):
+    """Set only the left rear knee stiffness to 30 N*m/rad, retaining its damping ratio."""
+    changed = copy.deepcopy(design)
+    i = design['joint_names'].index('rl_knee_joint')
+    changed['kp'][i] = 30.
+    changed['kd'][i] *= math.sqrt(30./design['kp'][i])
+    return changed
+
+
+def _self_weight_knee30_resume(args, cases, reference):
+    path = args.resume_self_weight
+    assert path and wiring.binding.sha256_file(path) == args.approved_resume_sha256
+    previous = json.loads(path.read_text(encoding='utf-8'))
+    assert previous['completed'] and previous['selected_cases_completed']
+    assert previous['status'] == 'self_weight_gain_trial_completed_precision_unmet'
+    assert previous['steps_completed'] == previous['planned_max_steps'] == 27200
+    assert len(previous['cases']) == 8 and previous['retry_allowed'] is False
+    seed = copy.copy(args)
+    seed.left_knee_kp30 = False
+    seed.precision_gain_trial = True
+    seed.resume_self_weight = Path(previous['resume']['report'])
+    seed.approved_resume_sha256 = previous['resume']['report_sha256']
+    original, selected = _self_weight_gain_resume(seed, cases, reference)
+    assert original == previous['resume'] and selected == previous['selected_cases']
+    baseline = json.loads(seed.resume_self_weight.read_text(encoding='utf-8'))
+    assert previous['design'] == _self_weight_gain_design(baseline['design'], selected)
+    assert previous['precision_gain_trial']['baseline_design'] == baseline['design']
+    assert previous['settings'] == baseline['settings'] and previous['input'] == baseline['input']
+    assert previous['joint_names'] == baseline['joint_names']
+    for key,value in previous['readbacks'].items():
+        if key in ('kp','kd'):
+            assert np.array_equal(np.asarray(value), np.asarray(previous['design'][key],dtype=np.float32))
+        else:
+            assert value == baseline['readbacks'][key]
+    hashes = {}
+    for summary,expected in zip(previous['cases'],selected):
+        assert summary['case'] == expected and summary['commanded_joints'] == [expected]
+        assert summary['samples_completed'] == 3400
+        sample = path.parent/(expected+'.json')
+        data = json.loads(sample.read_text(encoding='utf-8'))
+        assert data['summary'] == summary
+        verdict = _self_weight_verdict(data['samples'], previous['joint_names'], [expected])
+        assert verdict == {k:v for k,v in summary.items() if k not in ('case','commanded_joints','samples_completed')}
+        assert _self_weight_precision_only(verdict)
+        q = np.asarray([s['q_rad'] for s in data['samples']])
+        target = np.asarray([s['target_rad'] for s in data['samples']])
+        velocity = np.asarray([s['velocity_rad_s'] for s in data['samples']])
+        contact = np.asarray([s['max_contact_n'] for s in data['samples']])
+        assert np.isfinite(velocity).all() and np.isfinite(contact).all()
+        assert abs(q).max() <= .35 and abs(q-target).max() <= .35
+        assert np.all(abs(velocity) < np.asarray(previous['readbacks']['velocity_caps'])*.5)
+        assert contact.max() <= 1. and len(data['entities']) == 5
+        hashes[str(sample)] = wiring.binding.sha256_file(sample)
+    for p,h in previous['input'].items():
+        assert wiring.binding.sha256_file(Path(p)) == h
+    assert wiring.binding.sha256_file(path.parent/'source.py') == previous['code_sha256']
+    assert wiring.binding.sha256_file(path.parent/'tracking_manifest.json') == previous['tracking_manifest_sha256']
+    return dict(report=str(path),report_sha256=args.approved_resume_sha256,cases=previous['cases'],
+                files_sha256=hashes,source_sha256=previous['code_sha256'],
+                tracking_manifest_sha256=previous['tracking_manifest_sha256']), {'rl_knee_joint':['rl_knee_joint']}
+
+
 def _self_weight_resume(args, cases, reference):
+    if getattr(args, 'left_knee_kp30', False):
+        return _self_weight_knee30_resume(args, cases, reference)
     if getattr(args, 'precision_gain_trial', False):
         return _self_weight_gain_resume(args, cases, reference)
     if getattr(args, 'continue_self_weight_axes', False):
@@ -572,9 +636,17 @@ def _self_weight_self_check(args):
             raise AssertionError('case writer overwrote existing evidence')
     if getattr(args, 'resume_self_weight', None):
         resume, remaining = _self_weight_resume(args, cases, _fresh_inputs(args))
-        expected = ((29, 8) if getattr(args, 'precision_gain_trial', False) else
+        expected = ((8, 1) if getattr(args, 'left_knee_kp30', False) else
+                    (29, 8) if getattr(args, 'precision_gain_trial', False) else
                     (12, 17) if getattr(args, 'continue_self_weight_axes', False) else (2, 33))
         assert (len(resume['cases']), len(remaining)) == expected
+        if getattr(args, 'left_knee_kp30', False):
+            design = dict(joint_names=names,kp=[20.]*30,kd=[4.]*30)
+            changed = _self_weight_knee30_design(design)
+            for i,n in enumerate(names):
+                assert changed['kp'][i] == (30. if n == 'rl_knee_joint' else 20.)
+                assert changed['kd'][i] == 4.*(math.sqrt(1.5) if n == 'rl_knee_joint' else 1.)
+            assert design['kp'] == [20.]*30 and list(remaining) == ['rl_knee_joint']
         if getattr(args, 'precision_gain_trial', False):
             design = dict(joint_names=names, kp=[float(i+1) for i in range(30)], kd=[float(i+2) for i in range(30)])
             changed = _self_weight_gain_design(design, remaining)
@@ -647,12 +719,19 @@ def _run_chest280(args):
     design = _gravity_design(reference, Path(original['target_binding']['urdf']))
     planned = _self_weight_cases(design['joint_names']) if suite else {}
     resume, remaining = _self_weight_resume(args, planned, reference) if suite else ({}, {})
+    knee30 = bool(getattr(args, 'left_knee_kp30', False))
     if resume:
         prior = json.loads(Path(resume['report']).read_text(encoding='utf-8'))
-        assert prior['design'] == design
-    gain_trial = bool(getattr(args, 'precision_gain_trial', False))
+        if knee30:
+            assert prior['precision_gain_trial']['baseline_design'] == design
+            design = copy.deepcopy(prior['design'])
+        else:
+            assert prior['design'] == design
+    gain_trial = bool(getattr(args, 'precision_gain_trial', False) or knee30)
     baseline_design = copy.deepcopy(design)
-    if gain_trial:
+    if knee30:
+        design = _self_weight_knee30_design(design)
+    elif gain_trial:
         design = _self_weight_gain_design(design, remaining)
     out = args.out.resolve()
     assert out.parent.is_dir() and wiring.REPO / 'rl_exp/out' in out.parents and not out.exists()
@@ -670,10 +749,13 @@ def _run_chest280(args):
         result.update(scope='29 joints and six group combinations, bidirectional downstream self-weight; fixed root; no fixture/ground support',
                       planned_cases=planned, selected_cases=remaining, planned_max_steps=len(remaining)*3400, cases=[], resume=resume,
                       continue_precision_only=bool(getattr(args, 'continue_self_weight_axes', False) or gain_trial))
-        if gain_trial:
+        if gain_trial and not knee30:
             result.update(scope='eight original hold-precision failures; one +20% Kp trial; no combinations',
                           precision_gain_trial=dict(kp_factor=1.2, kd_factor=math.sqrt(1.2),
                                                     baseline_design=baseline_design, changed_joints=list(remaining)))
+        if knee30:
+            result.update(scope='left rear knee only, Kp=30 and matched damping; other current gains unchanged',
+                          left_knee_kp30=dict(baseline_design=baseline_design,changed_joints=['rl_knee_joint']))
     env, app = None, None
     try:
         from isaaclab.app import AppLauncher
@@ -802,6 +884,9 @@ def _run_chest280(args):
             if gain_trial:
                 status = ('self_weight_gain_trial_verified' if passed else
                           'self_weight_gain_trial_completed_precision_unmet' if finished else 'self_weight_gain_trial_failed')
+            if knee30:
+                status = ('left_knee_kp30_verified' if passed else
+                          'left_knee_kp30_precision_unmet' if _self_weight_precision_only(result['verdict']) else 'left_knee_kp30_failed')
         else:
             passed = not failed
             status = 'chest_self_weight_tracking_verified' if passed else 'chest_self_weight_tracking_failed'
@@ -1103,6 +1188,7 @@ if __name__ == '__main__':
     parser.add_argument('--approved_resume_sha256')
     parser.add_argument('--continue_self_weight_axes', action='store_true')
     parser.add_argument('--precision_gain_trial', action='store_true')
+    parser.add_argument('--left_knee_kp30', action='store_true')
     parser.add_argument('--combined', action='store_true')
     parser.add_argument('--gain_reference', type=Path)
     parser.add_argument('--level_leg_plan', type=Path)
@@ -1126,6 +1212,8 @@ if __name__ == '__main__':
             parser.error('level_leg_plan requires gain_reference and excludes combined')
         if not args.level_leg_plan and args.wrist_frequency_hz != 1:
             parser.error('wrist override requires level_leg_plan')
+        if args.left_knee_kp30 and (args.precision_gain_trial or args.continue_self_weight_axes or not (args.self_weight_suite and args.resume_self_weight and args.approved_resume_sha256)):
+            parser.error('left knee 30 requires approved gain trial report and excludes other trial selectors')
         if args.precision_gain_trial and (args.continue_self_weight_axes or not (args.self_weight_suite and args.resume_self_weight and args.approved_resume_sha256)):
             parser.error('gain trial requires approved prior axes report; excludes axes continuation')
         if args.continue_self_weight_axes and not (args.self_weight_suite and args.resume_self_weight and args.approved_resume_sha256):
