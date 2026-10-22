@@ -2466,6 +2466,138 @@ def test_palm_solver_rejects_inserted_axis():
             assert twist in str(error), error
 
 
+def test_reachability_parent_frame_cli():
+    """A front-leg parent is translated and rotated; CLI must report base_link coordinates."""
+    import contextlib
+    import io
+    import xml.etree.ElementTree as ET
+    from unittest.mock import patch
+    from rl_exp.tools.verify import check_leg_reachability as reach
+
+    with tempfile.TemporaryDirectory() as tmp:
+        folder = pathlib.Path(tmp)
+        mesh = folder / "pad.obj"
+        mesh.write_text("v 0 0 0\nv 1 0 0\nv 0 1 0\n", encoding="utf-8")
+        robot = ET.Element("robot", name="parent_frame_fixture")
+        for link in ("base_link", "mount", "chest_pitch"):
+            ET.SubElement(robot, "link", name=link)
+
+        def joint(name, parent, child, kind, xyz, rpy="0 0 0", axis="0 1 0"):
+            node = ET.SubElement(robot, "joint", name=name, type=kind)
+            ET.SubElement(node, "parent", link=parent)
+            ET.SubElement(node, "child", link=child)
+            ET.SubElement(node, "origin", xyz=xyz, rpy=rpy)
+            if kind != "fixed":
+                ET.SubElement(node, "axis", xyz=axis)
+                ET.SubElement(node, "limit", lower="-2", upper="2")
+            return node
+
+        joint("mount_joint", "base_link", "mount", "fixed", "0.4 -0.2 0.3", "0 0 0.4")
+        joint("chest_joint", "mount", "chest_pitch", "revolute", "0 0 0", "0.2 0 0")
+        parent = "chest_pitch"
+        for index, token in enumerate(reach.joint_names.PALM_SPATIAL_NAMING["lf"]):
+            child = "lf_" + token
+            link = ET.SubElement(robot, "link", name=child)
+            joint(child + "_joint", parent, child, "revolute", "0 0 -0.1")
+            parent = child
+        geometry = ET.SubElement(ET.SubElement(link, "collision"), "geometry")
+        ET.SubElement(geometry, "mesh", filename=mesh.name)
+        urdf = folder / "fixture.urdf"
+        ET.ElementTree(robot).write(urdf)
+        naming = reach.joint_names.PALM_SPATIAL_NAMING
+        chain = reach.load_chain(urdf, "lf", naming)
+        zero = [0.0] * len(chain)
+        # Closed form: T(.4,-.2,.3) Rz(.4) Rx(.2) [0,0,-.5,1].
+        expected = [0.4 - math.sin(0.4) * math.sin(0.2) * 0.5,
+                    -0.2 + math.cos(0.4) * math.sin(0.2) * 0.5,
+                    0.3 - math.cos(0.2) * 0.5]
+        output = io.StringIO()
+        argv = ["reach", "--urdf", str(urdf), "--naming", "palm_spatial", "--pose", *map(str, zero)]
+        with patch.object(sys, "argv", argv), contextlib.redirect_stdout(output):
+            reach.main()
+        match = re.search(r"pad origin in base_link (\[.*\])", output.getvalue())
+        actual = ast.literal_eval(match[1])
+        assert max(abs(float(a) - b) for a, b in zip(actual, expected)) < 5.1e-7, output.getvalue()
+        assert reach.foot_pose(chain, zero)[0] == [0.0, 0.0, -0.5], "legacy local API changed"
+        assert "upstream joints held at zero" in output.getvalue()
+        transform = reach.chain_parent_transform(urdf, "lf", naming)
+        normal, vertices = [0., 0., -1.], [[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]]
+        state = reach.pad_state(chain, zero, normal, vertices, 0.9, parent_transform=transform)
+        assert max(abs(a - b) for a, b in zip(state["position"], expected)) < 1e-12
+        assert abs(state["facing_cos"] - math.cos(0.2)) < 1e-12
+        assert abs(state["lowest_z"] - (0.9 + expected[2])) < 1e-12
+        tokens = tuple(joint["token"] for joint in chain)
+        read = reach._candidate_read(urdf, chain, tokens, "lf", (), 1, 0.9, naming)
+        assert read["spans"] == [(value, value) for value in state["position"]]
+        assert abs(read["facings"][0] - math.cos(0.2)) < 1e-12
+        # Independent closed form for nonzero upstream angle (Rz Rx Ry), plus body roll.
+        angle, roll = 0.3, -0.25
+        transform = reach.chain_parent_transform(urdf, "lf", naming, {"chest_joint": angle})
+        state = reach.pad_state(chain, zero, normal, vertices, 0.9, (roll, 0., 0.),
+                                 parent_transform=transform)
+        cx, sx = math.cos(.2), math.sin(.2)
+        cz, sz, cy, sy = math.cos(.4), math.sin(.4), math.cos(angle), math.sin(angle)
+        columns = [[cz * cy - sz * sx * sy, sz * cy + cz * sx * sy, -cx * sy],
+                   [-sz * cx, cz * cx, sx],
+                   [cz * sy + sz * sx * cy, sz * sy - cz * sx * cy, cx * cy]]
+        position = [offset - 0.5 * columns[2][i] for i, offset in enumerate([.4, -.2, .3])]
+        world_z = lambda point: .9 + math.sin(roll) * point[1] + math.cos(roll) * point[2]
+        points = [[position[i] + sum(columns[j][i] * v[j] for j in range(3)) for i in range(3)]
+                  for v in vertices]
+        assert max(abs(a - b) for a, b in zip(state["position"], position)) < 1e-12
+        assert abs(state["lowest_z"] - min(map(world_z, points))) < 1e-12
+        facing = math.sin(roll) * columns[2][1] + math.cos(roll) * columns[2][2]
+        assert abs(state["facing_cos"] - facing) < 1e-12
+        # The spatial twist is inserted, not a rename of elbow. Keep the actual elbow/wrist paired.
+        palm = ET.fromstring(ET.tostring(robot))
+        palm.remove(next(j for j in palm.findall("joint") if j.get("name") == "lf_shoulder_twist_joint"))
+        palm.remove(next(link for link in palm.findall("link") if link.get("name") == "lf_shoulder_twist"))
+        elbow = next(j for j in palm.findall("joint") if j.get("name") == "lf_elbow_joint")
+        elbow.find("parent").set("link", "lf_shoulder_abduct")
+        old_path = folder / "four_axis.urdf"
+        ET.ElementTree(palm).write(old_path)
+        comparison = io.StringIO()
+        with patch.object(reach, "_candidate_read", wraps=reach._candidate_read) as reader, \
+                contextlib.redirect_stdout(comparison):
+            reach.compare(old_path, urdf, "lf", 10., .9, 2, reach.joint_names.PALM_NAMING, naming)
+        assert "extra shoulder_twist" in comparison.getvalue(), comparison.getvalue()
+        assert "extra foot " not in comparison.getvalue(), comparison.getvalue()
+        for call in reader.call_args_list:
+            by_role = {joint["token"]: joint["name"] for joint in call.args[1]}
+            assert by_role["hfe"] == "lf_elbow_joint" and by_role["kfe"] == "lf_wrist_joint"
+        for angles in ({"typo": .1}, {"lf_shoulder_joint": .1}, {"mount_joint": .1},
+                       {"chest_joint": float("nan")}):
+            expect(ValueError, reach.chain_parent_transform, urdf, "lf", naming, angles)
+        chest = next(j for j in robot.findall("joint") if j.get("name") == "chest_joint")
+        for parent in ("orphan", "chest_pitch"):
+            chest.find("parent").set("link", parent)
+            ET.ElementTree(robot).write(urdf)
+            expect(ValueError, reach.chain_parent_transform, urdf, "lf", naming)
+        chest.find("parent").set("link", "mount")
+        chest.set("type", "prismatic")
+        ET.ElementTree(robot).write(urdf)
+        expect(ValueError, reach.chain_parent_transform, urdf, "lf", naming)
+
+
+def test_reachability_hinge_axis_own_rpy():
+    """Axis must include its own joint origin rotation, before applying the parent frame."""
+    from rl_exp.tools.verify import check_leg_reachability as reach
+    chain = [{"origin": [0., 0., 0.], "axis": [0., 1., 0.], "rpy": [math.pi / 2, 0., 0.]}]
+    assert abs(reach.hinge_vs_body_z(chain, [0.], 0)) < 1e-7
+    # Parent roll cancels the joint origin roll: the axis is back to reference y.
+    parent = reach._matrix([0., 0., 0.], [1., 0., 0.], -math.pi / 2)
+    assert abs(reach.hinge_vs_body_z(chain, [0.], 0, parent_transform=parent) - 90) < 1e-7
+
+
+def test_reachability_joint_effect_axis_own_rpy():
+    from rl_exp.tools.verify import check_leg_reachability as reach
+    chain = [{"origin": [0., 0., 0.], "axis": [0., 1., 0.], "rpy": [math.pi / 2, 0., 0.]}]
+    dp, dn, axis, _ = reach.joint_effect(chain, [0.], 0, [0., 0., -1.], [[0., 0., 0.]])
+    assert max(abs(a - b) for a, b in zip(axis, [0., 0., 1.])) < 1e-12
+    assert dp == [0., 0., 0.]
+    assert max(abs(a - b) for a, b in zip(dn, [-1., 0., 0.])) < 1e-9
+
+
 def main():
     if "--render_matrix" in sys.argv:
         test_target_binding_report_roundtrip(render_matrix=True)

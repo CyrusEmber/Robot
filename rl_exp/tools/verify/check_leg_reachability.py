@@ -32,9 +32,11 @@ A third reading is separated here because it is what "a level pad" is actually a
   direction is a separate read (:func:`faces_down` on ``facing_cos``), and the review's counterexample
   -- inside the limits -- is refused by it.
 
-The pad's facing and the pad's height are read in the WORLD frame: ``base_link`` may carry roll and
-pitch, so :func:`pad_state` takes the body's own attitude instead of assuming a level body (the body
-frame's ``-z`` is the world's down only when it is level).
+The leg-only FK is relative to the first joint's PARENT link, which can be ``chest_pitch`` rather
+than ``base_link``. :func:`chain_parent_transform` supplies the missing upstream transform when a
+base/world reading is needed. :func:`pad_state` then applies the base attitude and height; without
+that explicit transform its base arguments describe the chain parent's pose, as in the local API.
+The pose and comparison CLI compose upstream joints at zero before reporting base/world readings.
 
 Which body a reading belongs to is not guessed either. The pad's collision mesh is resolved from the
 URDF's own ``<leg>_foot`` link -- the convention ``check_joint_layout.py`` already uses -- so a
@@ -45,7 +47,7 @@ missing; joints carry their own ``rpy``, so an inserted joint may sit on a rotat
 ``--compare`` reads two candidates at the same body pose, height and tolerance, reporting a joint only
 one of them has on its own rather than folding it into the shared numbers.
 
-The chain, per leg, is a 5-revolute serial chain off ``base_link``
+The legacy chain, per leg, is a 5-revolute serial chain off its own parent link
 (``*_hip`` -> ``*_haa`` -> ``*_hfe`` -> ``*_kfe`` -> ``*_foot``); the URDF gives each joint's origin,
 axis and position limits, so nothing here is transcribed from the asset by hand.
 
@@ -56,7 +58,7 @@ rotated about the hip's own axis. Both are hand arithmetic, not a re-run of the 
 ``--break-test`` perturbs the readings those verdicts rest on and fails if the self-check stays green.
 
 :func:`chain_frames` and :func:`pad_vertices` are the two things a display needs out of this module:
-the frame each joint turns in (an axis drawn in ``base_link``) and the pad's own mesh.
+the frames relative to the chain parent (or an explicitly supplied transform) and the pad's own mesh.
 
 Run it from the repo root -- the repo tree does not live inside the IsaacLab install. Standard library
 only (``-m`` works from any cwd when the venv's ``rl_exp.pth`` points at the repo); ``--frames`` is the
@@ -323,13 +325,62 @@ def load_chain(urdf: pathlib.Path, leg: str,
     return chain
 
 
-def chain_frames(chain: list[dict], angles: list[float]):
-    """Every frame up the chain: ``[base_link, after joint 0, ..., after the last joint]``.
+def chain_parent_transform(urdf: pathlib.Path, leg: str,
+                           naming: dict[str, tuple[str, ...]] = joint_names.LEGACY_NAMING,
+                           joint_angles: dict[str, float] | None = None) -> list[list[float]]:
+    """Transform from the leg parent's frame to base_link [m, rad].
 
-    Element ``k`` is the frame joint ``k`` turns in, so ``frames[k]`` is what an axis has to be
-    composed with to be drawn in ``base_link`` -- the URDF states an axis in its own joint frame.
+    Ancestor revolute/continuous angles default to zero. Supplied names must belong to that
+    ancestor path; fixed joints need no axis/limit. Disconnected/cyclic ancestry and unsupported
+    joint types are refused rather than silently treated as an identity transform.
+    """
+    root = ET.parse(urdf).getroot()
+    by_name, by_child = {}, {}
+    for joint in root.findall("joint"):
+        name, child = joint.get("name"), joint.find("child").get("link")
+        if name in by_name or child in by_child:
+            raise ValueError(f"{urdf}: duplicate joint name or child {name}/{child}")
+        by_name[name], by_child[child] = joint, joint
+    first = by_name[chain_joint_names(urdf, leg, naming)[0]]
+    link, ancestors, seen = first.find("parent").get("link"), [], set()
+    while link != "base_link":
+        if link in seen or link not in by_child:
+            raise ValueError(f"{urdf}: invalid ancestry from {link} to base_link")
+        seen.add(link)
+        joint = by_child[link]
+        ancestors.append(joint)
+        link = joint.find("parent").get("link")
+    angles = joint_angles or {}
+    unknown = set(angles) - {joint.get("name") for joint in ancestors}
+    if unknown:
+        raise ValueError(f"{urdf}: angles outside leg ancestor path: {sorted(unknown)}")
+    transform = [[1.0 if i == j else 0.0 for j in range(4)] for i in range(4)]
+    for joint in reversed(ancestors):
+        kind, name = joint.get("type"), joint.get("name")
+        angle = float(angles.get(name, 0.0))
+        if kind not in ("fixed", "revolute", "continuous") or not math.isfinite(angle):
+            raise ValueError(f"{urdf}: unsupported ancestor joint or angle: {name}/{kind}/{angle}")
+        if kind == "fixed" and angle != 0.0:
+            raise ValueError(f"{urdf}: fixed ancestor {name} cannot move")
+        origin, axis = joint.find("origin"), joint.find("axis")
+        xyz = _floats(origin.get("xyz") or "0 0 0", 3) if origin is not None else [0.0] * 3
+        rpy = _floats(origin.get("rpy") or "0 0 0", 3) if origin is not None else [0.0] * 3
+        direction = _floats(axis.get("xyz"), 3) if axis is not None and kind != "fixed" else [1., 0., 0.]
+        transform = _multiply(transform, _matrix(xyz, direction, angle, rpy))
+    return transform
+
+
+def chain_frames(chain: list[dict], angles: list[float], *,
+                  parent_transform: list[list[float]] | None = None):
+    """Chain frames [m, rad], starting in its parent or an explicitly supplied reference frame.
+
+    Default: ``[identity, after joint 0, ..., after last joint]`` in the first joint's parent
+    frame. Supply :func:`chain_parent_transform` to express these frames in base_link. A joint's
+    axis also needs its own origin/rpy composed after ``frames[k]`` (before its joint rotation).
     """
     transform = [[1.0 if i == j else 0.0 for j in range(4)] for i in range(4)]
+    if parent_transform is not None:
+        transform = [list(row) for row in parent_transform]
     frames = [transform]
     for joint, angle in zip(chain, angles):
         transform = _multiply(transform, _matrix(joint["origin"], joint["axis"], angle,
@@ -556,9 +607,10 @@ def inertia_range(chain: list[dict], cases: dict[str, list[float]], inertials: d
     return rows
 
 
-def foot_pose(chain: list[dict], angles: list[float]):
-    """The pad link's pose in ``base_link``: ``(position, 3x3 rotation)`` for the given joint angles."""
-    transform = chain_frames(chain, angles)[-1]
+def foot_pose(chain: list[dict], angles: list[float], *,
+               parent_transform: list[list[float]] | None = None):
+    """Pad pose [m, rad] in the chain parent, or the supplied transform's reference frame."""
+    transform = chain_frames(chain, angles, parent_transform=parent_transform)[-1]
     position = [transform[i][3] for i in range(3)]
     rotation = [[transform[i][j] for j in range(3)] for i in range(3)]
     return position, rotation
@@ -637,30 +689,32 @@ def pad_normal_in_link(urdf: pathlib.Path, leg: str,
 
 def pad_state(chain: list[dict], angles: list[float], normal: list[float],
               vertices: list[list[float]], base_z: float,
-              base_rpy: tuple[float, float, float] = (0.0, 0.0, 0.0)) -> dict:
+              base_rpy: tuple[float, float, float] = (0.0, 0.0, 0.0), *,
+              parent_transform: list[list[float]] | None = None) -> dict:
     """One leg's pad read out for a pose: where it is, which way it FACES, and how far off the ground.
 
     Read in the WORLD frame: the pad's facing and its height are taken through the body's own attitude
-    ``base_rpy``, because ``base_link``'s ``-z`` is the world's down only while the body is level, and
-    a pad that has to meet the ground while the body rolls is not answered by a body-frame lean.
+    ``base_rpy``. To interpret that attitude/height as base_link's, supply the chain parent's
+    transform in base_link; the unchanged default interprets them as the chain parent's pose.
 
     Args:
         chain: as :func:`load_chain` returns it.
         angles: one angle per joint [rad].
         normal: unit pad normal in the foot link's frame -- :func:`pad_normal_in_link`.
         vertices: pad mesh vertices in the foot link's frame -- :func:`pad_vertices`.
-        base_z: the body's height above the ground [m]; the ground is the plane ``z = 0``.
-        base_rpy: the body's own roll, pitch, yaw [rad] -- the attitude the world is read through.
+        base_z: reference-frame height above ground [m]; ground is the plane ``z = 0``.
+        base_rpy: reference-frame roll, pitch, yaw [rad].
+        parent_transform: optional chain-parent transform in that reference frame [m, rad].
 
     Returns:
         ``frames`` (as :func:`chain_frames`); ``position`` and ``normal``, the pad origin and pad
-        normal in ``base_link`` (what a display draws); ``world_normal``, that normal in the world
+        normal in the reference frame (chain parent by default); ``world_normal``, that normal in the world
         frame; ``facing_cos``, its cosine with the world's down, SIGNED -- ``+1`` flat on the sole,
         ``-1`` flat on its back; ``tilt_deg``, the same read as an angle off the world's down
         (0 = facing down, 180 = facing straight up); and ``lowest_z``, the lowest pad vertex above the
         ground [m], negative when the pad is through it.
     """
-    frames = chain_frames(chain, angles)
+    frames = chain_frames(chain, angles, parent_transform=parent_transform)
     rotation = [[frames[-1][i][j] for j in range(3)] for i in range(3)]
     position = [frames[-1][i][3] for i in range(3)]
     body_normal = [sum(rotation[i][k] * normal[k] for k in range(3)) for i in range(3)]
@@ -686,17 +740,20 @@ def faces_down(facing_cos: float, tol_deg: float) -> bool:
     return facing_cos >= math.cos(math.radians(tol_deg))
 
 
-def hinge_vs_body_z(chain: list[dict], angles: list[float], index: int) -> float:
-    """The angle [deg] between joint ``index``'s axis and the body's z, both in ``base_link``.
+def hinge_vs_body_z(chain: list[dict], angles: list[float], index: int, *,
+                    parent_transform: list[list[float]] | None = None) -> float:
+    """Angle [deg] between joint axis and reference z (chain parent by default).
 
     90 means the joint's motion plane can never be tilted out of a plane that contains the body's z --
     the invariant the current asset's three hinges hold exactly, over the hip's whole range. A joint
     inserted along the femur drives its downstream hinges off 90, which is the structural difference
     an added femoral rotation buys; measured here rather than argued from an axis name.
     """
-    frames = chain_frames(chain, angles)
+    frames = chain_frames(chain, angles, parent_transform=parent_transform)
+    frame = _multiply(frames[index], _matrix(chain[index]["origin"], chain[index]["axis"],
+                                             0.0, chain[index].get("rpy")))
     axis = _unit(chain[index]["axis"])
-    turned = [sum(frames[index][i][k] * axis[k] for k in range(3)) for i in range(3)]
+    turned = [sum(frame[i][k] * axis[k] for k in range(3)) for i in range(3)]
     return math.degrees(math.acos(max(-1.0, min(1.0, abs(turned[2])))))
 
 
@@ -704,11 +761,11 @@ def joint_effect(chain: list[dict], angles: list[float], index: int, normal: lis
                  vertices: list[list[float]], eps: float = 1e-5):
     """How joint ``index`` moves the pad, per radian, at these angles.
 
-    Returns ``(dp/dq, dn/dq, axis, d_tilt/dq)`` with ``axis`` in ``base_link`` and the tilt
-    derivative in deg/rad. ``dn/dq`` is a rotation axis of length ``dtheta/dq``: its direction is the
-    axis the pad turns about and its magnitude the angle per radian of joint travel. That separates
-    "which way does this joint spin the pad" from "how far does the pad move" -- reading only the
-    second is how a vertical-axis joint gets mistaken for one that could level a pad.
+    Returns ``(dp/dq, dn/dq, axis, d_tilt/dq)`` in the chain-parent frame, with the tilt
+    derivative in deg/rad. ``dn/dq`` is the unit normal's derivative per radian, not the rotation
+    axis: it vanishes when the normal is parallel to that axis. ``axis`` is the unit joint axis,
+    including the joint's own origin/rpy rotation. These distinguish rotation from translation
+    without treating a normal's derivative as the axis it rotates about.
 
     ``base_z`` does not enter either derivative (a derivative of a translation cannot depend on it),
     so :func:`pad_state` is asked with ``0.0``.
@@ -721,7 +778,8 @@ def joint_effect(chain: list[dict], angles: list[float], index: int, normal: lis
     dp = [(high["position"][i] - low["position"][i]) / (2 * eps) for i in range(3)]
     dn = [(high["normal"][i] - low["normal"][i]) / (2 * eps) for i in range(3)]
     d_tilt = (high["tilt_deg"] - low["tilt_deg"]) / (2 * eps)
-    rotation = high["frames"][index]
+    rotation = _multiply(high["frames"][index], _matrix(chain[index]["origin"], chain[index]["axis"],
+                                                       0.0, chain[index].get("rpy")))
     axis = [sum(rotation[i][k] * _unit(chain[index]["axis"])[k] for k in range(3)) for i in range(3)]
     return dp, dn, axis, d_tilt
 
@@ -786,7 +844,7 @@ def fold_tilt(normal: list[float], sigma: float, foot: float, yaw: float = 0.0) 
 
 
 def _knee_geometry(chain: list[dict], angles: list[float]):
-    """Knee index, unit segment directions and knee axis, all in base_link.
+    """Knee index, unit segment directions and knee axis, all in the chain-parent frame.
 
     Colocated inserted pivots are not bone segments. Walk to the nearest distinct
     upstream/downstream pivots; origins belong to parent frames, not their own rpy frames.
@@ -1573,21 +1631,25 @@ def _candidate_read(path: pathlib.Path, chain: list[dict], tokens: tuple[str, ..
                     naming: dict[str, tuple[str, ...]] = joint_names.LEGACY_NAMING) -> dict:
     """One chain over the grid: where its pad reaches, which way it faces, and its hinge-vs-body-z."""
     normal, vertices = pad_normal_in_link(path, leg, naming), pad_vertices(path, leg, naming)
+    parent_transform = chain_parent_transform(path, leg, naming)
     spans = [[], [], []]
     facings, hinges = [], []
     for angles in _grid_poses(chain, grid_tokens, samples):
-        state = pad_state(chain, list(angles), normal, vertices, base_z)
+        state = pad_state(chain, list(angles), normal, vertices, base_z,
+                          parent_transform=parent_transform)
         for i in range(3):
             spans[i].append(state["position"][i])
         facings.append(state["facing_cos"])
         for token in HINGES:
             if token in grid_tokens:
-                hinges.append((hinge_vs_body_z(chain, list(angles), tokens.index(token)), token))
+                hinges.append((hinge_vs_body_z(chain, list(angles), tokens.index(token),
+                                               parent_transform=parent_transform), token))
     return {"poses": len(facings), "spans": [(min(values), max(values)) for values in spans],
             "facings": facings, "hinge_worst": min(hinges) if hinges else None}
 
 
-def _extra_read(chain: list[dict], tokens: tuple[str, ...], extra: list[str], samples: int) -> None:
+def _extra_read(chain: list[dict], tokens: tuple[str, ...], extra: list[str], samples: int,
+                *, parent_transform=None) -> None:
     """The joints only this chain has, each swept ALONE: its own effect, not a pose the other can take."""
     for token in extra:
         low, high = next(joint for joint in chain if joint["token"] == token)["limits"]
@@ -1599,8 +1661,10 @@ def _extra_read(chain: list[dict], tokens: tuple[str, ...], extra: list[str], sa
             angles[tokens.index(token)] = value
             for hinge in HINGES:
                 if hinge in tokens:
-                    worst = min(worst, (hinge_vs_body_z(chain, angles, tokens.index(hinge)), hinge, value))
-        own = hinge_vs_body_z(chain, [0.0] * len(tokens), tokens.index(token))
+                    worst = min(worst, (hinge_vs_body_z(chain, angles, tokens.index(hinge),
+                                                       parent_transform=parent_transform), hinge, value))
+        own = hinge_vs_body_z(chain, [0.0] * len(tokens), tokens.index(token),
+                              parent_transform=parent_transform)
         print("  extra %-19s its own axis sits %.1f deg off the body's z at rest; swept alone over "
               "%.2f..%.2f it drives the worst hinge (%s) to %.4f deg at %s=%+.2f"
               % (token, own, low, high, worst[1], worst[0], token, worst[2]))
@@ -1627,7 +1691,11 @@ def compare(urdf: pathlib.Path, candidate: pathlib.Path, leg: str, tol_deg: floa
     candidate_naming = candidate_naming or naming
     reference, other = load_chain(urdf, leg, naming), load_chain(candidate, leg, candidate_naming)
     for chain, bound in ((reference, naming), (other, candidate_naming)):
-        roles = dict(zip(CHAIN, joint_names.roots_of(bound, leg)))
+        roots = joint_names.roots_of(bound, leg)
+        if _naming_id(bound) == "palm_spatial":
+            # Keep the four palm roles aligned; the inserted axial joint is an extra of its own.
+            roots = roots[:2] + roots[3:]
+        roles = dict(zip(CHAIN, roots))
         by_root = {root: role for role, root in roles.items()}
         for joint in chain:
             joint["token"] = by_root.get(joint["token"], joint["token"])
@@ -1638,6 +1706,7 @@ def compare(urdf: pathlib.Path, candidate: pathlib.Path, leg: str, tol_deg: floa
           % (leg, base_z, tol_deg, samples))
     print("  namings: reference %s | candidate %s" % (_naming_id(naming), _naming_id(candidate_naming)))
     print("  shared joints (gridded): %s" % " ".join(shared))
+    print("  upstream joints held at zero; spans and axes in base_link")
     for name, path, chain, tokens, bound in (
             (urdf.name + " (reference)", urdf, reference, tokens_a, naming),
             (candidate.name + " (candidate)", candidate, other, tokens_b, candidate_naming)):
@@ -1653,7 +1722,8 @@ def compare(urdf: pathlib.Path, candidate: pathlib.Path, leg: str, tol_deg: floa
                  read["hinge_worst"][0] if read["hinge_worst"] else float("nan")))
         extra = [token for token in tokens if token not in shared]
         if extra:
-            _extra_read(chain, tokens, extra, samples)
+            _extra_read(chain, tokens, extra, samples,
+                        parent_transform=chain_parent_transform(path, leg, bound))
         else:
             print("  %-26s extra joints: none" % "")
     print("  not a verdict: reachability and the hinge plane only -- no target action, no bone length "
@@ -1876,12 +1946,15 @@ def main() -> None:
     chain = load_chain(args.urdf, args.leg, naming)
     if len(args.pose) != len(chain):
         parser.error(f"--pose needs {len(chain)} angles for this bound chain, got {len(args.pose)}")
-    position, rotation = foot_pose(chain, args.pose)
+    parent_transform = chain_parent_transform(args.urdf, args.leg, naming)
+    position, rotation = foot_pose(chain, args.pose, parent_transform=parent_transform)
+    print("  upstream joints held at zero; rotation and origin in base_link")
     for i, row in enumerate(rotation):
         print("  row %d %s" % (i, ["%+.5f" % v for v in row]))
     print("  pad origin in base_link %s" % ["%+.6f" % v for v in position])
     state = pad_state(chain, list(args.pose), pad_normal_in_link(args.urdf, args.leg, naming),
-                      pad_vertices(args.urdf, args.leg, naming), args.base_z)
+                      pad_vertices(args.urdf, args.leg, naming), args.base_z,
+                      parent_transform=parent_transform)
     print("  pad faces %+.4f of the world's down (%.2f deg off it: 0 faces down, 180 faces up)"
           % (state["facing_cos"], state["tilt_deg"]))
 
