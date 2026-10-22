@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Reject optimized local-path replay before identity assertions can disappear.
 
-Uses two historical reports read-only; bad identity fixtures live in temporary dirs.
+Uses two historical reports and their exact archived FK read-only; bad identity fixtures live in temporary dirs.
 Runs production _load and CLI main in subprocesses, never renders or starts simulation.
 This is a local-path import-chain regression, not coverage of all diagnostic probes.
 """
@@ -53,9 +53,9 @@ class LocalPathOptimizationTest(unittest.TestCase):
         print(f'{mode}: {args}\nexit={result.returncode}\n{result.stdout}{result.stderr}', flush=True)
         return result
 
-    def assert_rejected(self, result, mode):
+    def assert_rejected(self, result, mode, expected_error=None):
         self.assertNotEqual(result.returncode, 0, result.stdout)
-        self.assertIn('AssertionError: build changed' if mode == 'normal' else ERROR, result.stderr)
+        self.assertIn((expected_error or 'AssertionError: build changed') if mode == 'normal' else ERROR, result.stderr)
         self.assertNotIn('RENDER_REACHED', result.stderr)
         self.assertNotIn('ACCEPTED', result.stdout)
 
@@ -63,12 +63,31 @@ class LocalPathOptimizationTest(unittest.TestCase):
         code = """
 import sys
 from pathlib import Path
+import importlib.util, json, tempfile, zipfile
 sys.path.insert(0, sys.argv[1])
-from local_path_view import _load
-report, urdf, meshes, root, tracks = _load(Path(sys.argv[2]))
-if not urdf or not meshes or not tracks:
-    raise RuntimeError('empty real report')
-print('ACCEPTED', report['mode'], len(tracks))
+import local_path_view as view
+from artifact_paths import ArtifactPaths, sha256_file
+repo = Path(view.__file__).resolve().parents[3]
+with tempfile.TemporaryDirectory(prefix='historical-fk-', dir=repo / 'rl_exp/out') as temporary:
+    folder = Path(temporary)
+    fk = folder / 'check_self_collision.py'
+    with zipfile.ZipFile(repo / 'rl_exp/out/archive/palm-local-path/history-20261015.zip') as package:
+        fk.write_bytes(package.read('blobs/3425518c66192b60fad9edc44a586adf8b7b2dedcf9f73d27d792e9b6d8d7bf6'))
+    assert sha256_file(fk) == '3425518c66192b60fad9edc44a586adf8b7b2dedcf9f73d27d792e9b6d8d7bf6'
+    doc = json.loads(ArtifactPaths().index.read_text())
+    doc['packages'].append({'logical_root':'rl_exp/tools/verify',
+        'current_location':folder.relative_to(repo).as_posix(), 'relocation':{
+            'original_absolute_root':str(repo / 'rl_exp/tools/verify'),
+            'files':{'check_self_collision.py':sha256_file(fk)}}})
+    index = folder / 'index.json'; index.write_text(json.dumps(doc))
+    spec = importlib.util.spec_from_file_location('bound_historical_fk', fk)
+    module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+    view.csc = module
+    view.ArtifactPaths = lambda: ArtifactPaths(index, repo)
+    report, urdf, meshes, root, tracks = view._load(Path(sys.argv[2]))
+    if not urdf or not meshes or not tracks:
+        raise RuntimeError('empty real report')
+    print('ACCEPTED', report['mode'], len(tracks))
 """
         for report in REPORTS:
             for mode in MODES:
@@ -111,7 +130,9 @@ with patch.object(Path, 'mkdir', side_effect=RuntimeError('WRITE_REACHED')), \\
         with tempfile.TemporaryDirectory(prefix='local_path_optimization_', dir=REPO / 'rl_exp/out') as temporary:
             for index, report in enumerate(REPORTS):
                 fixture = Path(temporary) / f'bad-{index}.json'
-                data = json.loads(report.read_text(encoding='utf-8'))
+                sys.path.insert(0, str(DIAGNOSE))
+                from artifact_paths import artifact_path
+                data = json.loads(artifact_path(report).read_text(encoding='utf-8'))
                 data['identity']['build_report_sha256'] = '0' * 64
                 fixture.write_text(json.dumps(data), encoding='utf-8')
                 for mode in MODES:
@@ -121,7 +142,8 @@ with patch.object(Path, 'mkdir', side_effect=RuntimeError('WRITE_REACHED')), \\
                         with self.subTest(report=report, mode=mode, entry=module):
                             output = Path(temporary) / f'out-{index}-{mode}-{module}'
                             result = self.run_child(mode, cli_code, DIAGNOSE, module, fixture, output)
-                            self.assert_rejected(result, mode)
+                            self.assert_rejected(result, mode, 'ValueError: unbound artifact file or identity mismatch:'
+                                                 if module == 'local_path_check' else None)
                             self.assertFalse(output.exists(), f'CLI created output: {output}')
 
     def test_optimized_import_before_input_or_numpy(self):

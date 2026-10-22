@@ -499,6 +499,37 @@ class RelocationTest(unittest.TestCase):
 
 
 class ArchiveDamageTest(unittest.TestCase):
+    def test_local_archive_retains_fk_images_and_every_historical_control(self):
+        archive = REPO / 'rl_exp/out/archive/palm-local-path/history-20261015.zip'
+        manifest, _ = _archive_bytes(archive, 'palm-local-path-history')
+        with zipfile.ZipFile(archive) as source:
+            members = {name: source.read(name) for name in source.namelist()}
+        fk = 'blobs/' + manifest['files'][manifest['historical_fk_source']]['sha256']
+        gif = 'blobs/' + next(row['sha256'] for name,row in manifest['files'].items() if name.endswith('.gif'))
+        with tempfile.TemporaryDirectory(prefix='local-archive-damage-') as temporary:
+            for defect in ('missing_fk', 'corrupt_gif', 'duplicate_blob', 'omit_control'):
+                with self.subTest(defect=defect):
+                    rows = dict(members)
+                    if defect == 'missing_fk':
+                        del rows[fk]
+                    elif defect == 'corrupt_gif':
+                        raw = rows[gif]; rows[gif] = bytes([raw[0] ^ 1]) + raw[1:]
+                    elif defect == 'omit_control':
+                        doc = json.loads(rows['manifest.json']); doc['local_controls'].pop()
+                        rows['manifest.json'] = json.dumps(doc).encode()
+                    damaged = Path(temporary) / (defect + '.zip')
+                    with zipfile.ZipFile(damaged, 'w') as target:
+                        for name,raw in rows.items(): target.writestr(name,raw)
+                        if defect == 'duplicate_blob':
+                            with self.assertWarns(UserWarning): target.writestr(fk,rows[fk])
+                    with self.assertRaises(ValueError):
+                        if defect == 'omit_control':
+                            verify_consolidated_archive(
+                                REPO / 'rl_exp/out/archive/palm-spatial/history-20261014.zip',
+                                Path(temporary) / 'proof', local_archive=damaged)
+                        else:
+                            _archive_bytes(damaged, 'palm-local-path-history')
+
     def test_real_export_archive_rejects_lost_or_corrupt_controls(self):
         archive = REPO / 'rl_exp/out/archive/palm-spatial/exports-20261019.zip'
         manifest, _ = _archive_bytes(archive, 'palm-spatial-export-history')
@@ -728,6 +759,54 @@ if manifest.get('export_controls'):
     assert not attempts, attempts
     print('EXPORT_ARCHIVE_RECOVERY_OK ' + json.dumps({'controls':outcomes,
         'conflicting_old_copy_ignored':True, 'corrupt_and_missing_route_rejected':True, 'old_reads':0}))
+if manifest.get('local_controls'):
+    import importlib.util
+    import local_path_view as view
+    fk = Path(view.csc.__file__)
+    current_fk = fk.read_bytes()
+    original_module = view.csc
+    historical_fk = paths.resolve(original / manifest['historical_fk_source']).read_bytes()
+    assert routes.sha256_file(paths.resolve(original / manifest['historical_fk_source'])) == '3425518c66192b60fad9edc44a586adf8b7b2dedcf9f73d27d792e9b6d8d7bf6'
+    outcomes = []
+    try:
+        # Only the owned clone changes: execute the exact archived FK at its logical code path.
+        fk.write_bytes(historical_fk)
+        spec = importlib.util.spec_from_file_location('restored_historical_fk', fk)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        view.csc = module
+        for control in manifest['local_controls']:
+            source = paths.resolve(original / control['report'])
+            assert routes.sha256_file(source) == control['sha256']
+            document, urdf, meshes, transform, tracks = view._load(source)
+            actual = {leg:{key:stats[key] for key in ('accepted_points', 'completed_local_loop', 'failure_phase')}
+                      for leg,(stats,frames) in tracks.items()}
+            assert actual == control['legs'], (actual, control['legs'])
+            assert meshes and urdf
+            raw = source.read_bytes()
+            bad = json.loads(raw); bad['identity']['build_report_sha256'] = '0' * 64
+            source.write_text(json.dumps(bad))
+            try:
+                try: view._load(source)
+                except (AssertionError, ValueError): pass
+                else: raise AssertionError('bad local report accepted')
+            finally: source.write_bytes(raw)
+            outcomes.append(actual)
+    finally:
+        view.csc = original_module
+        fk.write_bytes(current_fk)
+    from PIL import Image
+    image_count = frame_count = 0
+    for name in manifest['files']:
+        if name.endswith(('.gif', '.png')) and any(Path(name).is_relative_to(Path(r)) for r in manifest['local_roots']):
+            with Image.open(paths.resolve(original / name)) as picture:
+                for frame in range(getattr(picture, 'n_frames', 1)):
+                    picture.seek(frame); picture.convert('RGB').load(); frame_count += 1
+            image_count += 1
+    assert not attempts, attempts
+    print('LOCAL_ARCHIVE_RECOVERY_OK ' + json.dumps({'verdicts':outcomes, 'old_reads':0,
+          'historical_fk_executed':True, 'bad_digest_rejected':True,
+          'images_decoded':image_count, 'frames_decoded':frame_count}))
 print('CONSOLIDATED_RECOVERY_OK ' + json.dumps({'old_reads': 0, 'baseline_reads': 2,
       'real_cli_replays': 2, 'authorization_negatives': True, 'missing_mapping_and_corruption_rejected': True}))
 '''
@@ -806,7 +885,8 @@ def _archive_bytes(archive: Path, topic: str) -> tuple[dict, dict[str, bytes]]:
 
 
 def verify_consolidated_archive(archive: Path, proof: Path, body_reference: Path | None = None,
-                                blender: Path | None = None, export_archive: Path | None = None) -> None:
+                                blender: Path | None = None, export_archive: Path | None = None,
+                                local_archive: Path | None = None) -> None:
     """Restore existing archives, clone exact bytes, and replay real spatial consumers."""
     require = runtime.require
     require(not proof.exists(), 'proof directory must be fresh')
@@ -847,6 +927,34 @@ def verify_consolidated_archive(archive: Path, proof: Path, body_reference: Path
         require(all(row['report_sha256'] == exported_manifest['files'][row['report']]['sha256']
                     for row in controls), 'export control identity differs')
         export_members = len(exported_bytes)
+    local_members = 0
+    if local_archive is not None:
+        local_manifest, local_bytes = _archive_bytes(local_archive, 'palm-local-path-history')
+        require(local_manifest['original_repository'] == manifest['original_repository'], 'local archive roots differ')
+        dependency = routes._relative(local_manifest['checkpoint_root'])
+        archived_checkpoint = {Path(name).relative_to(dependency).as_posix(): raw
+                               for name, raw in local_bytes.items() if Path(name).is_relative_to(dependency)}
+        require(archived_checkpoint == {p.relative_to(checkpoint).as_posix():p.read_bytes()
+                for p in checkpoint.rglob('*') if p.is_file()}, 'local checkpoint closure differs')
+        for name, raw in local_bytes.items():
+            if Path(name).is_relative_to(dependency):
+                continue
+            require(name not in blobs, 'local archive paths overlap')
+            blobs[name] = raw
+            manifest['files'][name] = local_manifest['files'][name]
+        manifest['historical_roots'] += local_manifest['historical_roots']
+        manifest['local_roots'] = local_manifest['historical_roots']
+        manifest['dependency_roots'] += local_manifest['dependency_roots']
+        for key in ('historical_fk_source', 'local_controls'):
+            manifest[key] = local_manifest[key]
+        controls = local_manifest['local_controls']
+        expected = {root + '/report.json' for root in local_manifest['historical_roots']
+                    if root + '/report.json' in local_manifest['files']}
+        require(len(controls) == len(expected) == 4 and {r['report'] for r in controls} == expected,
+                'local control coverage incomplete')
+        require(all(r['sha256'] == local_manifest['files'][r['report']]['sha256'] for r in controls),
+                'local control identity differs')
+        local_members = len(local_bytes)
     if body_reference is not None:
         manifest['checkpoint_consumers'] = True
         manifest['body_reference'] = json.loads(body_reference.read_text(encoding='utf-8'))
@@ -899,7 +1007,7 @@ def verify_consolidated_archive(archive: Path, proof: Path, body_reference: Path
             for path in sorted(checkpoint.rglob('*')):
                 if path.is_file():
                     suffix = path.relative_to(checkpoint).as_posix()
-                    raw = archived_checkpoint[suffix] if export_archive is not None else path.read_bytes()
+                    raw = archived_checkpoint[suffix] if export_archive is not None or local_archive is not None else path.read_bytes()
                     files[suffix] = runtime.binding.sha256_bytes(raw)
                     put((location / suffix).as_posix(), raw)
             packages.append({'logical_root': runtime.BUILD.parent.relative_to(REPO).as_posix(),
@@ -985,6 +1093,8 @@ def verify_consolidated_archive(archive: Path, proof: Path, body_reference: Path
                 require('CHECKPOINT_CONSUMERS_OK ' in child.stdout, 'checkpoint consumers not exercised')
             if export_archive is not None:
                 require('EXPORT_ARCHIVE_RECOVERY_OK ' in child.stdout, 'export history consumers not exercised')
+            if local_archive is not None:
+                require('LOCAL_ARCHIVE_RECOVERY_OK ' in child.stdout, 'local history consumers not exercised')
             if blender is not None:
                 native = subprocess.run([str(blender), '--background', '--factory-startup', '--python-exit-code', '1',
                                          '--python-expr', BLENDER_RECOVERY_CHILD, '--', str(clone), str(old_repo)],
@@ -995,12 +1105,15 @@ def verify_consolidated_archive(archive: Path, proof: Path, body_reference: Path
                         native.stdout + native.stderr)
             results.append({'autocrlf': autocrlf, 'files_raw_blob_checkout_equal': len(names),
                             'archive_members_restored': len(blobs), 'child_passed': True,
-                            'blender_passed': blender is not None, 'export_archive_members_restored': export_members})
+                            'blender_passed': blender is not None, 'export_archive_members_restored': export_members,
+                            'local_archive_members_restored': local_members})
     result = {'archive_sha256': routes.sha256_file(archive), 'results': results}
     if body_reference is not None:
         result['body_reference_sha256'] = routes.sha256_file(body_reference)
     if export_archive is not None:
         result['export_archive_sha256'] = routes.sha256_file(export_archive)
+    if local_archive is not None:
+        result['local_archive_sha256'] = routes.sha256_file(local_archive)
     (proof / 'checks.json').write_text(json.dumps(result, indent=2), encoding='utf-8')
     print('CONSOLIDATED_ARCHIVE_OK ' + json.dumps(result), flush=True)
 
@@ -1012,6 +1125,7 @@ if __name__ == '__main__':
     parser.add_argument('--body_reference', type=Path)
     parser.add_argument('--blender', type=Path)
     parser.add_argument('--export_archive', type=Path)
+    parser.add_argument('--local_archive', type=Path)
     options, remaining = parser.parse_known_args()
     if options.archive is not None:
         if options.proof_root is None or remaining:
@@ -1019,9 +1133,9 @@ if __name__ == '__main__':
         if (options.blender is not None or options.export_archive is not None) and options.body_reference is None:
             parser.error('--blender and --export_archive require --body_reference')
         verify_consolidated_archive(options.archive.resolve(), options.proof_root.resolve(),
-                                    options.body_reference, options.blender, options.export_archive)
+                                    options.body_reference, options.blender, options.export_archive, options.local_archive)
     else:
         if any(option is not None for option in (options.body_reference, options.proof_root,
-                                               options.blender, options.export_archive)):
+                                               options.blender, options.export_archive, options.local_archive)):
             parser.error('recovery options require --archive')
         unittest.main(argv=[sys.argv[0], *remaining])

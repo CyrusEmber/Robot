@@ -25,8 +25,10 @@ At most 129 combined poses; at least two palms must meet the original contact to
 """
 
 import argparse
+import getpass
 import json
 from pathlib import Path
+import sys
 from types import SimpleNamespace
 
 import numpy as np
@@ -322,13 +324,33 @@ def _combined_run(source, models, zero, root, urdf, collision, build, config, su
     return result
 
 
-def _run(source_path, output, mirror=False, combined=False, support_schedule=False):
-    assert REPO / 'rl_exp/out' in output.parents and not output.exists(), 'fresh isolated output required'
+def _run(source_path, output, mirror=False, combined=False, support_schedule=False, run_options=None):
+    output = output.resolve()
+    if output.exists():
+        raise FileExistsError(17, 'fresh isolated output required', str(output))
+    paths = view.ArtifactPaths(storage_root=REPO)
+    options = dict(topic='local-path-check', work_id='diagnostic-artifact-lifecycle',
+                   owner=getpass.getuser(), retention_reason='Bound local-path geometry reread.')
+    options.update(run_options or {})
+    metadata = view._run_metadata(paths, source_path, None, output, False, options)
+    command = [sys.executable, '-B', 'rl_exp/tools/diagnose/local_path_check.py',
+               '--source_report', str(source_path), '--output_dir', str(output)]
+    for flag, enabled in (('mirror', mirror), ('combined', combined), ('support_schedule', support_schedule)):
+        if enabled:
+            command.append('--' + flag)
+    for key in ('work_id', 'owner', 'retention_reason'):
+        command.extend(['--' + key, options[key]])
+    metadata['command'] = command
+    with view.ArtifactRun(output, paths, metadata, ['report.json']):
+        _collect(source_path, output, mirror=mirror, combined=combined, support_schedule=support_schedule)
+
+
+def _collect(source_path, output, mirror=False, combined=False, support_schedule=False):
     source_path = view.artifact_path(source_path)
     source, _, _, _, tracks = view._load(source_path)
     build_path = view.artifact_path(Path(source['identity']['build_report']))
     build, models, urdf, zero, collision, excluded, root, neutral, blender, identity = probe._static_prepare(build_path)
-    assert source['identity'] == identity, 'geometry/collection code identity changed'
+    _source_identity(source['identity'], identity)
     assert source['root_transform'] == root.tolist(), 'root changed'
     assert source['checked_pairs'] == [list(p) for p in collision.pairs], 'pair set changed'
     assert source['excluded_pairs'] == excluded, 'exclusions changed'
@@ -408,12 +430,30 @@ def _run(source_path, output, mirror=False, combined=False, support_schedule=Fal
                           'material no-slip, smooth seams, PD or dynamics. No solving, asset change or relaxed threshold. '
                           'Ground tolerance is numerical, not physical permission. Positive gaps may be AABB lower bounds.'}
     payload = json.dumps(report, indent=1, allow_nan=False)
-    output.mkdir(parents=True, exist_ok=False)
     (output / 'report.json').write_text(payload, encoding='utf-8')
     summary = ('pose_count', 'failure', 'completed_combined_loop') if combined else (
         'pose_count', 'checked_segments', 'failure', 'completed_local_loop') if mirror else (
         'new_pose_count', 'checked_segments', 'failure', 'full_source_loop_quarters_pass')
     print(json.dumps({leg: {k: result[k] for k in summary} for leg, result in results.items()}, indent=1), flush=True)
+
+
+def _source_identity(original, current):
+    """Compare complete logical identities and every collection dependency digest."""
+    paths = view.ArtifactPaths(storage_root=REPO)
+    assert original.keys() == current.keys(), 'geometry identity schema changed'
+    for key in current.keys() - {'code_sha256'}:
+        if key == 'build_report':
+            assert paths.same_identity(Path(original[key]), Path(current[key])), 'geometry build identity changed'
+        else:
+            assert original[key] == current[key], 'geometry identity changed: ' + key
+    old_code, new_code = original['code_sha256'], current['code_sha256']
+    assert len(old_code) == len(new_code), 'collection dependency set changed'
+    matched = set()
+    for name, sha in old_code.items():
+        matches = [p for p in new_code if paths.same_identity(Path(name), Path(p))]
+        assert len(matches) == 1 and matches[0] not in matched, 'collection dependency identity changed'
+        matched.add(matches[0])
+        assert sha == new_code[matches[0]], 'collection code changed: ' + name
 
 
 def _self_check(break_test=None):
@@ -590,6 +630,9 @@ def main():
     parser.add_argument('--mirror', action='store_true')
     parser.add_argument('--combined', action='store_true')
     parser.add_argument('--support_schedule', action='store_true')
+    parser.add_argument('--work_id', default='diagnostic-artifact-lifecycle')
+    parser.add_argument('--owner', default=getpass.getuser())
+    parser.add_argument('--retention_reason', default='Bound local-path geometry reread.')
     parser.add_argument('--break_test', choices=('fractions', 'stop', 'budget', 'landing', 'contact',
                                                'mirror_sign', 'mirror_limits', 'mirror_stop', 'mirror_budget',
                                                'mirror_samples', 'mirror_closure', 'combined_offset',
@@ -609,7 +652,8 @@ def main():
         if args.break_test or args.source_report is None or args.output_dir is None:
             parser.error('--source_report and --output_dir required; --break_test requires --self_check')
         _run(args.source_report.resolve(), args.output_dir.resolve(), mirror=args.mirror, combined=args.combined,
-             support_schedule=args.support_schedule)
+             support_schedule=args.support_schedule, run_options={
+                 key: getattr(args, key) for key in ('work_id', 'owner', 'retention_reason')})
 
 
 if __name__ == '__main__':

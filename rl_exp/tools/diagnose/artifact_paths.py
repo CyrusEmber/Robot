@@ -82,6 +82,15 @@ class ArtifactPaths:
                 if not isinstance(digest, str) or not re.fullmatch('[0-9a-f]{64}', digest):
                     raise ValueError(f'invalid relocation digest: {name}')
             aliases = {original, self.root / logical, current}
+            previous_locations = location.get('original_absolute_locations', [])
+            if not isinstance(previous_locations, list):
+                raise ValueError('artifact previous locations must be an explicit list')
+            for previous in previous_locations:
+                if not isinstance(previous, str) or not Path(previous).is_absolute():
+                    raise ValueError('artifact previous location must be absolute')
+                aliases.add(Path(previous).absolute())
+            if any(a != b and a.is_relative_to(b) for a in aliases for b in aliases):
+                raise ValueError('overlapping aliases within artifact relocation root')
             for previous, _, _ in self.routes:
                 if any(a == b or a.is_relative_to(b) or b.is_relative_to(a)
                        for a in aliases for b in previous):

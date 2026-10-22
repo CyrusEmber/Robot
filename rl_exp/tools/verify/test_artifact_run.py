@@ -57,19 +57,38 @@ for read in (lambda: builtins.open(probe, 'rb'), lambda: io.FileIO(probe),
 blocked_probes = len(attempts)
 attempts.clear()
 script = root / command[2]
+if script.stem == 'local_path_check':
+    import local_path_check as check
+    from unittest.mock import patch
+    source = Path(command[command.index('--source_report') + 1])
+    destination = Path(command[command.index('--output_dir') + 1]).with_name('raw-identity-red')
+    def old_comparison(first, second):
+        assert first == second, 'RAW_IDENTITY_MISMATCH'
+    with patch.object(check, '_source_identity', old_comparison):
+        try:
+            check._run(source, destination, mirror='--mirror' in command,
+                       combined='--combined' in command, support_schedule='--support_schedule' in command)
+        except AssertionError as error:
+            assert str(error) == 'RAW_IDENTITY_MISMATCH'
+        else:
+            raise AssertionError('original path comparison unexpectedly accepted relocation')
+    assert not (destination / 'report.json').exists()
+    assert json.loads((destination / 'run.json').read_text())['state'] == 'failed'
 sys.argv = [str(script), *command[3:]]
 runpy.run_path(str(script), run_name='__main__')
 from artifact_paths import ArtifactPaths
 from artifact_run import inspect_run
 output = Path(command[command.index('--output_dir') + 1])
 result = inspect_run(output, ArtifactPaths())
-analysis = json.loads((output / 'analysis.json').read_text())
-assert analysis['root_translation']['root_applied']
-assert analysis['drive_limit_prerequisites']['drive_report_sha256']
-assert all(r['sha256'] for r in analysis['input_bindings'])
+check_report = script.stem == 'local_path_check'
+analysis = json.loads((output / ('report.json' if check_report else 'analysis.json')).read_text())
+if not check_report:
+    assert analysis['root_translation']['root_applied']
+    assert analysis['drive_limit_prerequisites']['drive_report_sha256']
+    assert all(r['sha256'] for r in analysis['input_bindings'])
 assert not attempts, attempts
 print('REAL_RECOVERY_OK ' + json.dumps(dict(result, blocked_probes=blocked_probes,
-      positive_old_reads=len(attempts), drive_sha256=analysis['drive_limit_prerequisites']['drive_report_sha256'])))
+      positive_old_reads=len(attempts), drive_sha256=None if check_report else analysis['drive_limit_prerequisites']['drive_report_sha256'])))
 '''
 
 
@@ -99,12 +118,13 @@ def verify_real_recovery(run):
                 location = Path(row['location'])
                 if location.is_absolute() or not row['logical_path']:
                     raise ValueError('recovery requires repository-relative bound locations')
-                files[location.as_posix()] = (repo / location).read_bytes()
+                destination = row['logical_path'] if row in record['code'] else location.as_posix()
+                files[destination] = (repo / location).read_bytes()
             # A bound execution snapshot is evidence, including a dirty CRLF
             # checkout such as binding.py. Do not silently canonicalize its code.
             attributes = (repo / '.gitattributes').read_bytes()
             attributes += b'\n# Preserve exact source bytes bound by the restored run.\n'
-            attributes += ''.join('/' + row['location'] + ' -text\n' for row in record['code']).encode()
+            attributes += ''.join('/' + name + ' -text\n' for name in files).encode()
             files['.gitattributes'] = attributes
             # Derive disjoint parent routes solely from the complete input closure.
             parents = {Path(row['identity']).parent for row in record['inputs']}
@@ -121,9 +141,11 @@ def verify_real_recovery(run):
                     manifest[suffix.as_posix()] = row['sha256']
                 if len(destinations) != 1:
                     raise ValueError('inconsistent recovery route')
+                destination = destinations.pop()
                 packages.append({'logical_root': parent.relative_to(repo).as_posix(),
-                                 'current_location': destinations.pop().as_posix(),
-                                 'relocation': {'original_absolute_root': str(parent), 'files': manifest}})
+                                 'current_location': destination.as_posix(),
+                                 'relocation': {'original_absolute_root': str(parent), 'files': manifest,
+                                                'original_absolute_locations': [str(repo / destination)]}})
             files['rl_exp/tools/diagnose/artifact_index.json'] = json.dumps(
                 {'format': 1, 'packages': packages}, indent=2).encode()
             for name, raw in files.items():
@@ -168,13 +190,41 @@ def verify_real_recovery(run):
                         second.seek(frame)
                         if ImageChops.difference(first.convert('RGB'), second.convert('RGB')).getbbox():
                             raise AssertionError('restored image pixels changed: ' + name)
-            original_analysis = json.loads((run / 'analysis.json').read_text())
-            restored_analysis = json.loads((output / 'analysis.json').read_text())
-            for field in ('root_translation', 'root_motion_prerequisites', 'time_mapping_prerequisites', 'legs'):
-                if original_analysis[field] != restored_analysis[field]:
-                    raise AssertionError('restored analysis changed: ' + field)
-            result.update(autocrlf=autocrlf, git_files=len(files), all_image_pixels_equal=True,
-                          same_name_rejected_unchanged=True)
+            if record['topic'] == 'local-path-check':
+                def normalized(value, root):
+                    if isinstance(value, dict):
+                        return {normalized(k, root): normalized(v, root) for k, v in value.items()}
+                    if isinstance(value, list):
+                        return [normalized(v, root) for v in value]
+                    if isinstance(value, str):
+                        value = value.replace('\\', '/')
+                        for known in (repo, clone):
+                            prefix = known.as_posix()
+                            if value == prefix or value.startswith(prefix + '/'):
+                                return '$REPO' + value[len(prefix):]
+                    return value
+                first = normalized(json.loads((run / 'report.json').read_text()), repo)
+                second = normalized(json.loads((output / 'report.json').read_text()), clone)
+                if first != second:
+                    def difference(a, b, path='report'):
+                        if isinstance(a, dict) and isinstance(b, dict) and a.keys() == b.keys():
+                            return next(difference(a[k], b[k], path + '.' + k) for k in a if a[k] != b[k])
+                        if isinstance(a, list) and isinstance(b, list) and len(a) == len(b):
+                            return next(difference(x, y, path + '[' + str(i) + ']')
+                                        for i,(x,y) in enumerate(zip(a,b)) if x != y)
+                        return path, a, b
+                    raise AssertionError('restored full geometry report changed: ' + repr(difference(first, second)))
+            else:
+                original_analysis = json.loads((run / 'analysis.json').read_text())
+                restored_analysis = json.loads((output / 'analysis.json').read_text())
+                for field in ('root_translation', 'root_motion_prerequisites', 'time_mapping_prerequisites', 'legs'):
+                    if original_analysis[field] != restored_analysis[field]:
+                        raise AssertionError('restored analysis changed: ' + field)
+            result.update(autocrlf=autocrlf, git_files=len(files), same_name_rejected_unchanged=True)
+            if record['topic'] == 'local-path-check':
+                result.update(full_geometry_report_equal=True, raw_identity_comparison_rejected=True)
+            else:
+                result['all_image_pixels_equal'] = True
             results.append(result)
             print('RECOVERY_PROOF ' + json.dumps(result), flush=True)
     print('RECOVERY_CLEANED ' + json.dumps({'temporary_root_removed': not owned.exists()}), flush=True)

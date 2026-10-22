@@ -2444,13 +2444,13 @@
     },
     {
       "logical_root": "rl_exp/out/lizard2_palm_local_path_20261015",
-      "current_location": "rl_exp/out/lizard2_palm_local_path_20261015",
-      "classification": "pending",
+      "current_location": "rl_exp/out/archive/palm-local-path/history-20261015.zip",
+      "classification": "historical_control",
       "owner": "lizard2-body-drive-candidate",
-      "action": "hold",
-      "writer_status": "unknown",
-      "storage": "local_single_copy_no_backup",
-      "basis": null,
+      "action": "consolidated_archive",
+      "writer_status": "old_copy_removed_after_verified_restore",
+      "storage": "local_verified_archive",
+      "basis": "acceptance/records/2026-10-22-diagnostic-local-path-consolidation.md",
       "document_mentions": [
         "acceptance/records/2026-10-15-lizard2-palm-local-path-probe.md",
         "acceptance/records/2026-10-16-lizard2-local-path-postprocess.md"
@@ -2459,37 +2459,39 @@
         "mode": "budgeted_local_path",
         "has_identity": true
       },
-      "consumer_verification": "document_mentions_only",
-      "retention_reason": "unverified value or unfinished experiment; preserve",
-      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+      "consumer_verification": "Raw/blob/checkout bytes equal; historical reports read with exact FK; restored images fully decoded. No claim of rerendering old images.",
+      "retention_reason": "Historical sampled-path failure, comparison or image; exact original bytes retained without physical approval.",
+      "next": "Restore manifest paths explicitly into an isolated root with the archived dependencies; use acceptance replay command.",
+      "archive_member_root": "rl_exp/out/lizard2_palm_local_path_20261015"
     },
     {
       "logical_root": "rl_exp/out/lizard2_palm_local_path_20261015_v2",
-      "current_location": "rl_exp/out/lizard2_palm_local_path_20261015_v2",
-      "classification": "pending",
+      "current_location": "rl_exp/out/archive/palm-local-path/history-20261015.zip",
+      "classification": "historical_control",
       "owner": "lizard2-body-drive-candidate",
-      "action": "hold",
-      "writer_status": "unknown",
-      "storage": "local_single_copy_no_backup",
-      "basis": null,
+      "action": "consolidated_archive",
+      "writer_status": "old_copy_removed_after_verified_restore",
+      "storage": "local_verified_archive",
+      "basis": "acceptance/records/2026-10-22-diagnostic-local-path-consolidation.md",
       "document_mentions": [],
       "report_metadata": {
         "mode": "budgeted_local_path",
         "has_identity": true
       },
-      "consumer_verification": "document_mentions_only",
-      "retention_reason": "unverified value or unfinished experiment; preserve",
-      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+      "consumer_verification": "Raw/blob/checkout bytes equal; historical reports read with exact FK; restored images fully decoded. No claim of rerendering old images.",
+      "retention_reason": "Historical sampled-path failure, comparison or image; exact original bytes retained without physical approval.",
+      "next": "Restore manifest paths explicitly into an isolated root with the archived dependencies; use acceptance replay command.",
+      "archive_member_root": "rl_exp/out/lizard2_palm_local_path_20261015_v2"
     },
     {
       "logical_root": "rl_exp/out/lizard2_palm_local_path_20261015_v3",
-      "current_location": "rl_exp/out/lizard2_palm_local_path_20261015_v3",
-      "classification": "pending",
+      "current_location": "rl_exp/out/archive/palm-local-path/regression-input-20261015",
+      "classification": "historical_control",
       "owner": "lizard2-body-drive-candidate",
-      "action": "hold",
-      "writer_status": "unknown",
-      "storage": "local_single_copy_no_backup",
-      "basis": null,
+      "action": "relocated_regression_input",
+      "writer_status": "old_copy_removed_after_verified_restore",
+      "storage": "local_verified_input_no_external_backup",
+      "basis": "acceptance/records/2026-10-22-diagnostic-local-path-consolidation.md",
       "document_mentions": [
         "acceptance/records/2026-10-15-lizard2-palm-local-path-probe.md",
         "acceptance/records/2026-10-16-lizard2-local-path-postprocess.md"
@@ -2498,9 +2500,16 @@
         "mode": "budgeted_local_path",
         "has_identity": true
       },
-      "consumer_verification": "document_mentions_only",
-      "retention_reason": "unverified value or unfinished experiment; preserve",
-      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+      "consumer_verification": "Exact historical FK and real _load restore in both checkout modes; original verdicts retained; legacy optimization fixture uses mapped input.",
+      "retention_reason": "Historical sampled-path failure, comparison or image; exact original bytes retained without physical approval.",
+      "next": "Use the existing logical identity and matching archived FK for historical regression; do not treat this failure as current collection.",
+      "relocation": {
+        "original_absolute_root": "E:\\Robot\\rl_exp\\out\\lizard2_palm_local_path_20261015_v3",
+        "files": {
+          "report.json": "74fbdd6905b4b08c96989a80c865b69c28108ef896c3f82cf2282bfc5f614e5b"
+        }
+      },
+      "historical_archive": "rl_exp/out/archive/palm-local-path/history-20261015.zip"
     },
     {
       "logical_root": "rl_exp/out/lizard2_palm_local_path_contact_20261015",
@@ -2535,13 +2544,13 @@
     },
     {
       "logical_root": "rl_exp/out/lizard2_palm_local_path_contact_before_20261015",
-      "current_location": "rl_exp/out/lizard2_palm_local_path_contact_before_20261015",
+      "current_location": "rl_exp/out/archive/palm-local-path/history-20261015.zip",
       "classification": "historical_control",
       "owner": "lizard2-body-drive-candidate",
-      "action": "hold",
-      "writer_status": "unknown",
-      "storage": "local_single_copy_no_backup",
-      "basis": "acceptance/records/2026-10-15-lizard2-palm-local-contact-repair.md",
+      "action": "consolidated_archive",
+      "writer_status": "old_copy_removed_after_verified_restore",
+      "storage": "local_verified_archive",
+      "basis": "acceptance/records/2026-10-22-diagnostic-local-path-consolidation.md",
       "document_mentions": [
         "acceptance/records/2026-10-15-lizard2-palm-local-contact-repair.md"
       ],
@@ -2549,60 +2558,64 @@
         "mode": "budgeted_local_path",
         "has_identity": true
       },
-      "consumer_verification": "document_mentions_only",
-      "retention_reason": "preserve original failure or historical measurement",
-      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+      "consumer_verification": "Raw/blob/checkout bytes equal; historical reports read with exact FK; restored images fully decoded. No claim of rerendering old images.",
+      "retention_reason": "Historical sampled-path failure, comparison or image; exact original bytes retained without physical approval.",
+      "next": "Restore manifest paths explicitly into an isolated root with the archived dependencies; use acceptance replay command.",
+      "archive_member_root": "rl_exp/out/lizard2_palm_local_path_contact_before_20261015"
     },
     {
       "logical_root": "rl_exp/out/lizard2_palm_local_path_partial_view_20261015",
-      "current_location": "rl_exp/out/lizard2_palm_local_path_partial_view_20261015",
-      "classification": "pending",
+      "current_location": "rl_exp/out/archive/palm-local-path/history-20261015.zip",
+      "classification": "historical_control",
       "owner": "lizard2-body-drive-candidate",
-      "action": "hold",
-      "writer_status": "unknown",
-      "storage": "local_single_copy_no_backup",
-      "basis": null,
+      "action": "consolidated_archive",
+      "writer_status": "old_copy_removed_after_verified_restore",
+      "storage": "local_verified_archive",
+      "basis": "acceptance/records/2026-10-22-diagnostic-local-path-consolidation.md",
       "document_mentions": [
         "acceptance/records/2026-10-16-lizard2-local-path-postprocess.md"
       ],
       "report_metadata": null,
-      "consumer_verification": "document_mentions_only",
-      "retention_reason": "unverified value or unfinished experiment; preserve",
-      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+      "consumer_verification": "Raw/blob/checkout bytes equal; historical reports read with exact FK; restored images fully decoded. No claim of rerendering old images.",
+      "retention_reason": "Historical sampled-path failure, comparison or image; exact original bytes retained without physical approval.",
+      "next": "Restore manifest paths explicitly into an isolated root with the archived dependencies; use acceptance replay command.",
+      "archive_member_root": "rl_exp/out/lizard2_palm_local_path_partial_view_20261015"
     },
     {
       "logical_root": "rl_exp/out/lizard2_palm_local_path_view_20261015",
-      "current_location": "rl_exp/out/lizard2_palm_local_path_view_20261015",
-      "classification": "pending",
+      "current_location": "rl_exp/out/archive/palm-local-path/history-20261015.zip",
+      "classification": "historical_control",
       "owner": "lizard2-body-drive-candidate",
-      "action": "hold",
-      "writer_status": "unknown",
-      "storage": "local_single_copy_no_backup",
-      "basis": null,
+      "action": "consolidated_archive",
+      "writer_status": "old_copy_removed_after_verified_restore",
+      "storage": "local_verified_archive",
+      "basis": "acceptance/records/2026-10-22-diagnostic-local-path-consolidation.md",
       "document_mentions": [
         "acceptance/records/2026-10-16-lizard2-local-path-postprocess.md"
       ],
       "report_metadata": null,
-      "consumer_verification": "document_mentions_only",
-      "retention_reason": "unverified value or unfinished experiment; preserve",
-      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+      "consumer_verification": "Raw/blob/checkout bytes equal; historical reports read with exact FK; restored images fully decoded. No claim of rerendering old images.",
+      "retention_reason": "Historical sampled-path failure, comparison or image; exact original bytes retained without physical approval.",
+      "next": "Restore manifest paths explicitly into an isolated root with the archived dependencies; use acceptance replay command.",
+      "archive_member_root": "rl_exp/out/lizard2_palm_local_path_view_20261015"
     },
     {
       "logical_root": "rl_exp/out/lizard2_palm_local_path_view_20261015_v2",
-      "current_location": "rl_exp/out/lizard2_palm_local_path_view_20261015_v2",
-      "classification": "pending",
+      "current_location": "rl_exp/out/archive/palm-local-path/history-20261015.zip",
+      "classification": "historical_control",
       "owner": "lizard2-body-drive-candidate",
-      "action": "hold",
-      "writer_status": "unknown",
-      "storage": "local_single_copy_no_backup",
-      "basis": null,
+      "action": "consolidated_archive",
+      "writer_status": "old_copy_removed_after_verified_restore",
+      "storage": "local_verified_archive",
+      "basis": "acceptance/records/2026-10-22-diagnostic-local-path-consolidation.md",
       "document_mentions": [
         "acceptance/records/2026-10-16-lizard2-local-path-postprocess.md"
       ],
       "report_metadata": null,
-      "consumer_verification": "document_mentions_only",
-      "retention_reason": "unverified value or unfinished experiment; preserve",
-      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+      "consumer_verification": "Raw/blob/checkout bytes equal; historical reports read with exact FK; restored images fully decoded. No claim of rerendering old images.",
+      "retention_reason": "Historical sampled-path failure, comparison or image; exact original bytes retained without physical approval.",
+      "next": "Restore manifest paths explicitly into an isolated root with the archived dependencies; use acceptance replay command.",
+      "archive_member_root": "rl_exp/out/lizard2_palm_local_path_view_20261015_v2"
     },
     {
       "logical_root": "rl_exp/out/lizard2_palm_local_quarters_20261016",
@@ -4559,6 +4572,265 @@
       "consumer_verification": "Complete byte restore plus actual historical export controls in two checkout modes; dependency bytes included; five archive corruption cases rejected.",
       "retention_reason": "Historical exports and logs with complete checkpoint input closure; explicit restore only, no transparent ZIP route or production approval.",
       "next": "Use manifest.json and blobs/<sha256>; replay test_artifact_relocation.py --archive with --export_archive and --body_reference. Local archive is not external backup."
+    },
+    {
+      "logical_root": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/current-source",
+      "current_location": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/current-source",
+      "run_record": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/current-source/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-green/quarters",
+      "current_location": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-green/quarters",
+      "run_record": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-green/quarters/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-green/mirror",
+      "current_location": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-green/mirror",
+      "run_record": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-green/mirror/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-green/combined",
+      "current_location": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-green/combined",
+      "run_record": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-green/combined/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-green/support",
+      "current_location": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-green/support",
+      "run_record": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-green/support/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-green/failed",
+      "current_location": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-green/failed",
+      "run_record": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-green/failed/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final/quarters",
+      "current_location": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final/quarters",
+      "run_record": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final/quarters/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final/mirror",
+      "current_location": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final/mirror",
+      "run_record": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final/mirror/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final/combined",
+      "current_location": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final/combined",
+      "run_record": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final/combined/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final/support",
+      "current_location": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final/support",
+      "run_record": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final/support/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final/failed",
+      "current_location": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final/failed",
+      "run_record": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final/failed/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v2/quarters",
+      "current_location": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v2/quarters",
+      "run_record": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v2/quarters/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v2/mirror",
+      "current_location": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v2/mirror",
+      "run_record": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v2/mirror/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v2/combined",
+      "current_location": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v2/combined",
+      "run_record": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v2/combined/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v2/support",
+      "current_location": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v2/support",
+      "run_record": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v2/support/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v2/failed",
+      "current_location": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v2/failed",
+      "run_record": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v2/failed/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v3/quarters",
+      "current_location": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v3/quarters",
+      "run_record": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v3/quarters/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v3/mirror",
+      "current_location": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v3/mirror",
+      "run_record": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v3/mirror/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v3/combined",
+      "current_location": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v3/combined",
+      "run_record": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v3/combined/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v3/support",
+      "current_location": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v3/support",
+      "run_record": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v3/support/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v3/failed",
+      "current_location": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v3/failed",
+      "run_record": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v3/failed/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v4/quarters",
+      "current_location": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v4/quarters",
+      "run_record": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v4/quarters/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v4/mirror",
+      "current_location": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v4/mirror",
+      "run_record": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v4/mirror/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v4/combined",
+      "current_location": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v4/combined",
+      "run_record": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v4/combined/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v4/support",
+      "current_location": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v4/support",
+      "run_record": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v4/support/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v4/failed",
+      "current_location": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v4/failed",
+      "run_record": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-local-path-consolidation/real-final-v4/failed/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/out/archive/palm-local-path/history-20261015.zip",
+      "current_location": "rl_exp/out/archive/palm-local-path/history-20261015.zip",
+      "classification": "historical_control",
+      "owner": "diagnostic-artifact-lifecycle",
+      "action": "consolidated_archive",
+      "writer_status": "sealed_after_verified_restore",
+      "storage": "local_verified_archive",
+      "basis": "acceptance/records/2026-10-22-diagnostic-local-path-consolidation.md",
+      "document_mentions": [],
+      "source_roots": [
+        "rl_exp/out/lizard2_palm_local_path_20261015",
+        "rl_exp/out/lizard2_palm_local_path_20261015_v2",
+        "rl_exp/out/lizard2_palm_local_path_20261015_v3",
+        "rl_exp/out/lizard2_palm_local_path_contact_before_20261015",
+        "rl_exp/out/lizard2_palm_local_path_partial_view_20261015",
+        "rl_exp/out/lizard2_palm_local_path_view_20261015",
+        "rl_exp/out/lizard2_palm_local_path_view_20261015_v2"
+      ],
+      "sha256": "081236772189bd16fa02b3a4d79c31bc4075972711786bdeeb4f3c2fd945e728",
+      "size": 11362619,
+      "consumer_verification": "Complete bytes restored under both checkout modes; exact archived FK preserves four original report verdicts; all image frames decoded.",
+      "retention_reason": "Historical path and rendering evidence with checkpoint, contact report and exact FK source closure; local retention only.",
+      "next": "Explicit manifest/blob restore via test_artifact_relocation.py --archive with --local_archive; no transparent ZIP route or external backup."
     }
   ]
 }
