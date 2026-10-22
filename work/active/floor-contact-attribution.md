@@ -4,32 +4,32 @@ title: 地面接触归属：谁在滑、谁在牵引、穿透容忍度
 scope: rl_exp/tools/diagnose, rl_exp/assets
 status: open
 landing: rl_exp/tools/diagnose/diagnose_support.py, rl_exp/tools/diagnose/diag_metrics.py, ablation_harness/protocols/baseline_flat_v2.json
-next: ① **已交付 2026-09-23（诊断侧）**：接触点切向速度 `v_com + ω × r` 落在 `diag_metrics.contact_point_velocity`，`r` 取最深网格顶点且已标 `ponytail:` 上限，配套 `mesh_lowest_point`（`mesh_min_z` 改为复用它）；口径以 **COM** 为参考点——框架 `body_lin_vel_w` 是 `body_com_lin_vel_w` 的别名，与 `body_pos_w` 混用会把 `ω × r` 算错。读数见 `acceptance/records/2026-09-23-lizard2-v1-gait-skate` 的 ⑤。余下：诊断器（`diagnose_support.py`）与验收器复用同一函数，不得各写一份；② 用带 `filter_prim_paths_expr` 的传感器（`force_matrix_w`）把**与地面的接触**和**自碰撞**分开——`net_forces_w` 是该 body 全部接触的合力，配方 `baseline_recipe.py:146` 未声明 filter 且不能加（会动冻结的 cfg 摘要）⇒ 在诊断器自建 cfg 里建；③ 用切向力**方向**区分"牵引"与"被拖着走"：颈 82–90 N 只说明它受力，不说明它在提供前向牵引；④ 穿透容忍度：先做受控对照（时间步 / 求解迭代 / 接触参数），再拍板；⑤ **已交付 2026-09-28（诊断侧）**：脚掌**贴地面积**与**姿态**——`diag_metrics.mesh_triangles` / `sole_area_m2` / `clip_area_below_z`（精确三角面裁剪）/ `ground_contact_area_m2`（带内与带下分开、下缘严格）/ `body_down_in_link`，驱动 `gait_probe.py` 的 `--sole_band_mm` / `--sole_eps_mm` 与 `sole_*` 读数。读数见同记录的 ⑪：每只脚只贴到自身上限的 0.3%–7.5%、翘 13–25° ⇒ "脚边承重"成立；新事实：`rl` 脚碰撞网格与另三只**不同形**（平板 vs 穹面，cap 0.119 vs 0.013 m²）——**⚠️ 已由同日资产修复改写：`rl` 修为 `rr` 的 y 镜像（cap 0.013352，与另三只同形），修复与"家族资产隔离"一起验收并归档在 `acceptance/records/2026-09-28-lizard2-foot-hull-and-asset-isolation.md`；⑪ 那条读数属**修前**状态，引用前先看记录 ⑫ 的"资产前提"节**。**这条不与②③④抢顺序，但它给的下一步是相关而不是因果**：把"占上限低"与已测的滑移/净空做同口径相关读数，再决定要不要把它变成奖励项；⑥ **已交付 2026-09-28（诊断侧）**：脚板关节**承重期用了多少力**——重构力矩 `Kp(q*−q) − Kd q̇` 的稳态中位/最大值、**逐关节按自身** `effort_limit` 归一的占比与饱和帧占比、承重期命令偏离零位幅度，落在 `gait_probe.py` 的 `*_foot_joint` 读数（口径自检含手算饱和例，已抓过一处逐关节上限被覆盖的真错）。读数见同记录 ⑫。**它证的是"机制真实存在且处于饱和工作点"，不是因果**：饱和最重的脚不是稳态滑移最坏的脚 ⇒ "降足部力量"与"固定脚板目标"两项试验的**判据形状**（脚选择性、大扰动且拿掉一个饱和执行器）写在 ⑫ 末节，做不做由这条链的下一次决定；本节不复制数值。**2026-10-12 复读：⑪ 那条的资产前提已不成立** —— 采用机体的四只壳 cap 已不是当时验收的那一组（rl 专用钉值因此使 `gait_probe --self-check` 既存红）；逐脚读数、勘误与归属理由见 `acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory.md` 追加四。
-close_when: (a) 报告给出逐接触 body 的接触点切向速度、摩擦利用率与切向力方向，且结论与位移、逐脚 duty 自洽；(b) 穿透容忍度有一句明确决定，且该决定引用受控对照的读数——不得以"实测 5 mm"直接当作"允许 5 mm"。两项齐了才关
-evidence: acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md, acceptance/records/2026-09-21-baseline-eval-measurement-contract.md, acceptance/records/2026-09-23-lizard2-v1-gait-skate.md
+next: 接触执行者核旧资产 cap 与处罚对象前提，完成地面归属及测量对照后按正文回交 E。
+close_when: 新上下文按正文关闭条件审核接触测量、穿透容忍度与旧对象回交；缺口保留在办。
+evidence: acceptance/records/2026-10-22-lizard2-e-legacy-exit.md, acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md, acceptance/records/2026-09-21-baseline-eval-measurement-contract.md, acceptance/records/2026-09-23-lizard2-v1-gait-skate.md
 ---
 
-## 问题与本次范围
+## 当前范围
 
-"头在地上划、而且确实穿插"拆成三个可分别回答的问题：**谁在滑**、**谁在牵引**、**穿透多少算允许**。
+区分谁在滑、谁在牵引、允许多少穿透。接触点速度、最低网格点、接触面积和脚板关节负载的既有方法与结果取本项 evidence；实现口径归 `diag_metrics.py`，不在本项复制读数。
 
-1. `|F_tang| / F_normal` **单独回答不了"谁在滑"**：它给的是摩擦预算用了多少，不是有没有相对滑动。
-   滑动的定义要靠接触点切向速度；刚体原点速度不够（纯转动时原点为零、接触点在滑），需含 `ω × r`。
-2. 受力方向有别：颈承重 82–90 N ≠ 颈在提供前向牵引，它也可能只是被拖着走（产生阻力）。
-   三维合力已有（`net_forces_w[..., :3]`，此前只读了 z），切向分量与方向今天就能算。
-3. 接触对象要分清：`net_forces_w` 汇的是该 body 的**全部**接触（含自碰撞），不区分地面。
-4. `contact_offset` **不是允许穿透深度**：它控制提前生成接触的距离，由它推不出"5 mm 穿插合理"，
-   也不能默认可通过调小它改善穿透。已实测的 5 mm 是求解器在有限速度下的稳态穿插，是**观测值**，
-   不是验收依据；容忍度需要受控对照（时间步 / 求解迭代 / 接触参数）才能拍板。
-
-摩擦本身已有实测（逐 shape 静/动 1.0、地面 1.0、`combine=multiply` ⇒ µ ≈ 1.0），"无摩擦滑行"不成立；
-待答的是摩擦**姿态**（牵引还是刮擦）。
+旧 shared 资产 cap 及同几何 shared/split 的处罚对象回交以[对象核对与出口表](../../acceptance/records/2026-10-22-lizard2-e-legacy-exit.md)为入口；历史资产修复边界另取 `acceptance/records/2026-09-28-lizard2-foot-hull-and-asset-isolation.md`。当前 palm_spatial 接触正例不解除这些旧对象缺口。
 
 ## 下一步
 
-E 的支撑目标绑定回交、同几何双报告与资产前提边界见 `acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md`“追加：E 双目标实际消费者执行”。继续处理 ⑤/⑪ 的 cap 资产前提并回交 E；不在接线改动中改网格或放宽断言，原接触归属及受控对照动作仍按上方 next 执行。
+1. 绑定旧 shared 的实际声明、URDF/USD 和逐脚网格，核 cap 与旧断言的对象前提；由接触/资产执行者判断需修实现口径还是资产。保留原失败与对照，不能在 E 接线改动中改网格或放宽断言。
+2. 对照原 shared/split 真实报告的 resolved 处罚对象和 collider，核空处罚通道。若修改配置，明确资产/配方边界；回交 E 须给同一对象的实际入口、碰撞归属、正反例及复读命令，不能替换为新候选同词根对象。
+3. 诊断器与验收器复用 `diag_metrics.contact_point_velocity` / `mesh_lowest_point`，不各写一份。接触点切向速度以 COM 为参考，区分 body 原点与 COM；最低顶点近似及点切换限制继续声明。
+4. 在诊断自建 cfg 中采过滤力，区分地面接触与自碰撞；不能只用 `net_forces_w` 推断接触对象，不改冻结配方摘要来补传感器过滤。
+5. 用切向力方向区分牵引与被拖动，按逐 body 接触速度、位移和逐脚 duty 交叉核验；法向力或摩擦预算占比不能单独证明牵引/滑动。
+6. 做时间步、求解迭代与接触参数的受控对照，再明确穿透容忍度。`contact_offset` 不是允许穿透深度，观测到穿透也不自动形成许可。
+7. 在 cap 资产前提核实后，按同一口径关联贴地面积/姿态、滑移和净空；再决定是否进入奖励，不把相关读数当作因果。
+8. 保留脚板关节负载、逐关节 effort 上限归一及饱和帧诊断；足部选择性扰动与移除饱和执行器的试验是否执行，由本链依据既有证据中的判据形状决定，不自动取消或转成 E 的手工步态门槛。
+
+## 关闭条件
+
+由新上下文核对本项 close_when、实际输入与记录：报告须给出逐接触 body 的接触点切向速度、摩擦利用率及切向力方向，并与位移/逐脚 duty 自洽；穿透容忍度须有引用受控对照的明确决定。旧对象前提和 E 回交按上述动作落实；未完动作保留在办，不以新候选接线或格式通过代替审核。
 
 ## 未覆盖边界
 
-不覆盖资产改造（改 URDF/USD 或接触参数属资产线，本项只把问题与证据递过去）；不覆盖脚板被动移动
-（见 `baseline-v2-recipe` 的资产不动假设）；µ 的组合方式由框架基座声明，本项不能改。
+资产改造、URDF/USD 或接触参数变更由资产线负责，本项提供问题与证据；脚板被动移动边界仍取 `baseline-v2-recipe` 的资产不动假设。摩擦组合由框架基座声明，本项不更改。手工卸载、移重、步态协调或恢复不构成 E/D 的前置门槛，学习策略评测归 S6。
