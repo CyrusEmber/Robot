@@ -17,10 +17,21 @@ import palm_spatial_runtime as wiring
 from palm_spatial_inertia import csc, _rotation
 
 
-def audit(path):
+def audit(path, velocity_probe=False):
     report = json.loads(path.read_text(encoding='utf-8'))
     assert report['completed'] and report['stage'] == 'completed'
-    assert report['status'] in ('standing_force_observation_standing_verified',
+    status = report['status']
+    if velocity_probe:
+        assert status.startswith('velocity_observation_')
+        status = status.removeprefix('velocity_observation_')
+        assert report['readbacks']['force_timing'] is True
+        assert report['physics_before']['enable_external_forces_every_iteration'] is False
+        assert report['physics_after']['enable_external_forces_every_iteration'] is True
+        assert report['physics_before'].keys() == report['physics_after'].keys()
+        for key in report['physics_before']:
+            if key != 'enable_external_forces_every_iteration':
+                assert report['physics_before'][key] == report['physics_after'][key]
+    assert status in ('standing_force_observation_standing_verified',
                                 'standing_force_observation_standing_failed')
     assert report['retry_allowed'] is False and report['full_runs_started'] == 1
     assert report['code_sha256'] == wiring.binding.sha256_file(path.parent/'source.py')
@@ -129,7 +140,7 @@ def audit(path):
         if abs(mean_support-report['weight_n']) > settings['weight_relative_error']*report['weight_n']:
             failures.append('total_ground_support')
     passed = stop is None and not failures
-    assert passed == (report['status'] == 'standing_force_observation_standing_verified')
+    assert passed == (status == 'standing_force_observation_standing_verified')
     assert mean_support == report['late_mean_ground_support_n']
     joints = []
     for i, name in enumerate(names):
@@ -162,9 +173,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--report', type=Path, required=True)
     parser.add_argument('--out', type=Path, required=True)
+    parser.add_argument('--velocity_probe', action='store_true', help='Explicit opt-in for the isolated per-iteration velocity observation')
     args = parser.parse_args()
     assert args.out.parent.is_dir() and not args.out.exists()
-    result = audit(args.report.resolve())
+    result = audit(args.report.resolve(), args.velocity_probe)
     wiring.write_json(args.out, result)
     print('STANDING_FORCE_AUDIT_OK', result['status'], result['duration_s'], result['stop_reason'])
     for row in result['joints'][:6]:

@@ -438,6 +438,17 @@ def _run(args):
         cfg = copy.deepcopy(resolve_task_cfg(wiring.REGISTERED_TASK))
         target = wiring.obs_protocol.load_diagnostic_target(manifest, cfg, wiring.REGISTERED_TASK)
         cfg.sim.device, cfg.sim.dt, cfg.seed = args.device, SETTINGS['dt_s'], 0
+        if args.velocity_observation_probe:
+            from isaaclab_physx.physics import PhysxCfg
+            if cfg.sim.physics is None:
+                cfg.sim.physics = PhysxCfg()
+            elif not hasattr(cfg.sim.physics, 'class_type') and hasattr(cfg.sim.physics, 'default'):
+                cfg.sim.physics = cfg.sim.physics.default
+            assert cfg.sim.physics.solver_type == 1
+            assert cfg.sim.physics.enable_external_forces_every_iteration is False
+            result['physics_before'] = cfg.sim.physics.to_dict()
+            cfg.sim.physics.enable_external_forces_every_iteration = True
+            result['physics_after'] = cfg.sim.physics.to_dict()
         assert cfg.scene.terrain.terrain_type == 'plane'
         result['runtime_overrides'] = {'sim.dt': cfg.sim.dt, 'sim.device': cfg.sim.device, 'seed': cfg.seed}
         env = gym.make(wiring.REGISTERED_TASK, cfg=cfg)
@@ -504,6 +515,14 @@ def _run(args):
                                   np.asarray(prior['readbacks']['velocity_caps']))
             result['readbacks']['effort_caps'] = caps.tolist()
             result['joint_force_probe'] = _joint_force_probe_binding(live.sim.stage, robot, backend)
+            if args.velocity_observation_probe:
+                physics_scene = live.sim.stage.GetPrimAtPath(cfg.sim.physics_prim_path)
+                result['readbacks']['force_timing'] = physics_scene.GetAttribute(
+                    'physxScene:enableExternalForcesEveryIteration').Get()
+                assert result['readbacks']['force_timing'] is True
+                source = Path(__file__).with_name('palm_velocity_probe.py')
+                shutil.copyfile(source, out/source.name)
+                result['dependency_sha256'][source.name] = wiring.binding.sha256_file(source)
         zero = torch.zeros((1, live.action_manager.total_action_dim), device=args.device)
         action_names, action_ids = [], []
         for term_name in live.action_manager.active_terms:
@@ -555,6 +574,15 @@ def _run(args):
             if args.force_reference:
                 row['backend_drive_targets'] = drive
                 row['joint_force_probe'] = _joint_force_probe_sample(robot.root_view, backend, result['joint_force_probe'])
+                if args.velocity_observation_probe:
+                    row['backend_q_rad'] = backend(robot.root_view.get_dof_positions()).tolist()
+                    row['backend_velocity_rad_s'] = backend(robot.root_view.get_dof_velocities()).tolist()
+                    assert np.array_equal(q, row['backend_q_rad']) and np.array_equal(v, row['backend_velocity_rad_s'])
+                    row['root_com_pose_xyzw'] = robot.data.root_com_pose_w.torch[0].cpu().tolist()
+                    row['backend_root_com_velocity_w'] = backend(robot.root_view.get_root_velocities()).tolist()
+                    if step % 20 == 0:
+                        from palm_velocity_probe import observation_sample
+                        row['observation'] = observation_sample(live, q, v, desired, names)
             if args.lift_plan:
                 actual = robot.data.body_link_pose_w.torch[0, lifted_id].cpu().numpy()
                 row['lifted_mesh_min_m'] = float((lifted_vertices @ _rotation(actual[3:]).T + actual[:3])[:,2].min())
@@ -600,6 +628,8 @@ def _run(args):
         result['posture_verdict'] = _posture_verdict(result['samples'], windows)
         if args.force_reference:
             result['status'] = 'standing_force_observation_' + ('standing_verified' if passed else 'standing_failed')
+            if args.velocity_observation_probe:
+                result['status'] = 'velocity_observation_' + result['status']
         wiring.write_json(out/'report.json', result)
         print('STANDING_COMPLETED', result['status'], 'stop', stop, 'last_t', result['samples'][-1]['t_s'], flush=True)
         if not passed:
@@ -630,6 +660,8 @@ if __name__ == '__main__':
     parser.add_argument('--tracking_report', type=Path)
     parser.add_argument('--force_reference', type=Path, help='Verified symmetric-PD force report; one unchanged-gain standing observation')
     parser.add_argument('--approved_force_sha256')
+    parser.add_argument('--velocity_observation_probe', action='store_true',
+                        help='Isolated per-iteration TGS force timing plus raw velocity and policy observation sampling')
     parser.add_argument('--lift_plan', type=Path)
     parser.add_argument('--standing_reference', type=Path)
     parser.add_argument('--chest_frequency_hz', type=float, choices=(1., 2.))
@@ -649,6 +681,8 @@ if __name__ == '__main__':
         from isaaclab.app import AppLauncher
         AppLauncher.add_app_launcher_args(parser)
         args = parser.parse_args()
+        if args.velocity_observation_probe and not args.force_reference:
+            parser.error('velocity_observation_probe requires force_reference; no gain overrides')
         if not args.out or sum(bool(p) for p in (args.force_reference, args.tracking_report, args.lift_plan, args.standing_reference)) != 1 or args.break_failure_handler:
             parser.error('select exactly one input reference and provide out')
         if args.force_reference:
