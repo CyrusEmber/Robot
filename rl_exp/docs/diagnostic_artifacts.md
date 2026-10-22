@@ -1,6 +1,6 @@
 # 诊断运行的创建与收尾
 
-当前已接入口：`rl_exp/tools/diagnose/local_path_view.py`、`diagnose_support.py`、`palm_spatial_probe.py`。其它生产入口仍按
+当前已接入口：`rl_exp/tools/diagnose/local_path_view.py`、`diagnose_support.py`、`palm_spatial_probe.py`、`local_path_check.py`。其它生产入口仍按
 `work/active/diagnostic-artifact-lifecycle.md` 推广，不能由本入口推定全覆盖。
 
 从仓根用配置解释器运行；输入取已有报告，不重新采集物理：
@@ -13,6 +13,10 @@
 `diagnostic-artifact-lifecycle` 承接归属核对，不能据此冒称原实验已经交接。
 无需手工补索引：入口在第一份图像写入前创建 `run.json` 并向现有
 `artifact_index.json` 注册位置。索引只指向运行记录，状态和保留决定归运行记录。
+
+恢复包可在既有 relocation 中显式列 `original_absolute_locations`，将报告保存过的旧物理目录
+作为同一逻辑身份的别名。每个别名必须为绝对路径，继续受同一逐文件摘要清单约束；同路由及
+跨路由的父子重叠均拒绝。不根据目录后缀或同名文件猜测身份。
 
 运行记录保存输入、代码的逻辑身份、当前位置、摘要及复跑参数；新分析同时保存
 `input_bindings`，历史绝对路径不再是唯一读点。`analysis.json` 的图像绑定不包含
@@ -158,3 +162,32 @@ ZIP 为本机归档，不随 Git 检出；异机须先取得同摘要归档。�
 导出迁移、历史对照的实际判定及 reset 验证边界见
 `acceptance/records/2026-10-22-diagnostic-export-consolidation.md`。
 原机体预检的失败与缺证按原报告保留；运行时复制只验证至物理应用启动边界。
+
+## 局部路径复读生产与旧数据
+
+`local_path_check.py` 的四分点、镜像、组合、支持调度共用已有登记与收尾；原参数、
+几何判据及采样预算保持，新目录必须不存在。这些模式仍仅是历史几何复读工具。
+
+```text
+<python> -B rl_exp/tools/diagnose/local_path_check.py --source_report <bound_local_path_report.json> --output_dir rl_exp/out/runs/local-path-check/<new_run> --combined --support_schedule --work_id <active_work_id> --owner <executor> --retention_reason "<why retain this report>"
+<python> -B rl_exp/tools/diagnose/artifact_run.py --inspect_run rl_exp/out/runs/local-path-check/<new_run>
+<python> -B rl_exp/tools/verify/test_local_path_output.py
+<python> -B rl_exp/tools/verify/test_local_path_output.py --real_source <bound_local_path_report.json> --proof_dir rl_exp/out/runs/diagnostic-artifact-lifecycle/<new_proof>
+<python> -B rl_exp/tools/verify/test_artifact_run.py --real_run <completed_local_path_check_run>
+```
+
+写入失败保留报告与 `failed` 记录，同名在采集前拒绝。输入及每项集合源码摘要都核验；
+换根比较完整逻辑身份，不跳过采集器版本。源码改变后旧记录须恢复原字节复读。
+真实验证入口另保存精确执行源码快照；一般运行记录仍不是不可变执行快照。
+
+旧报告和图像位于 `rl_exp/out/archive/palm-local-path/history-20261015.zip`，按清单显式恢复。
+仍供历史回归使用的 v3 原字节迁至 `rl_exp/out/archive/palm-local-path/regression-input-20261015/`，
+原逻辑身份由既有映射解析。历史源绑定的 FK 与当前实现不同；归档含精确旧源码，
+验证在隔离检出副本执行，不删除版本检查来放行。
+
+```text
+<python> -B rl_exp/tools/verify/test_artifact_relocation.py --archive rl_exp/out/archive/palm-spatial/history-20261014.zip --local_archive rl_exp/out/archive/palm-local-path/history-20261015.zip --proof_root rl_exp/out/runs/diagnostic-artifact-lifecycle/<new_local_recovery>
+```
+
+归档、原记录和配置解释器须另行取得；源码检出不等于产物有外部备份。
+处置及验证边界见 `acceptance/records/2026-10-22-diagnostic-local-path-consolidation.md`。
