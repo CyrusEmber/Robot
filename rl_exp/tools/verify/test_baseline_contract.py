@@ -515,6 +515,92 @@ def test_smoke_collection_preserves_invalid_and_metadata():
                 assert loaded["meta"]["smoke"]["scope"] == actual["smoke"]["scope"]
 
 
+def test_baseline_terminal_hook_preserves_pre_reset_snapshot():
+    """Execute the actual hook/merge; late capture and whole-batch replacement must fail."""
+    source = ast.parse((_REPO / "ablation_harness/baseline_eval.py").read_text(encoding="utf-8"))
+    run = next(n for n in source.body if isinstance(n, ast.FunctionDef) and n.name == "run")
+    hook = next(n for n in ast.walk(run) if isinstance(n, ast.FunctionDef) and n.name == "capture_reset")
+    merge = next(n for n in ast.walk(run) if isinstance(n, ast.If)
+                 and ast.unparse(n.test) == "pending is not None")
+
+    def exercise(hook_node, merge_node):
+        skeleton = ast.parse("def harness(snapshot, original_reset, env_ids):\n"
+                             "    terminal = {}\n    pending = None\n    captured = 0\n")
+        skeleton.body[0].body.extend([hook_node, *ast.parse(
+            "capture_reset(env_ids)\nreturn terminal, pending, captured").body])
+        scope = {}
+        exec(compile(ast.fix_missing_locations(skeleton), "actual baseline capture hook", "exec"), scope)
+        state = {name: torch.arange(6, dtype=torch.float32).reshape(2, 3) + i + 1
+                 for i, name in enumerate(("joint_pos", "command_world"))}
+        before = {name: value.clone() for name, value in state.items()}
+
+        def reset(env_ids):
+            for value in state.values():
+                value[env_ids] = 0.
+
+        terminal, pending, captured = scope["harness"](
+            lambda: {name: value.clone() for name, value in state.items()}, reset, torch.tensor([1]))
+        # The nonterminal env's post-step sample must survive selective replacement.
+        frame = {name: value.clone() + 100. for name, value in state.items()}
+        unchanged = {name: value[0].clone() for name, value in frame.items()}
+        context = dict(frame=frame, terminal=terminal, pending=pending)
+        exec(compile(ast.fix_missing_locations(ast.Module(body=[merge_node], type_ignores=[])),
+                     "actual baseline terminal merge", "exec"), context)
+        assert captured == 1 and context["pending"] is None
+        for name in frame:
+            assert torch.equal(frame[name][1], before[name][1]), "terminal frame lost pre-reset values"
+            assert torch.equal(frame[name][0], unchanged[name]), "nonterminal env was replaced"
+
+    exercise(hook, merge)
+    # A deliberate ordering mutation demonstrates that the fixture distinguishes reset states.
+    import copy
+    late = copy.deepcopy(hook)
+    late.body.insert(1, late.body.pop())  # original_reset before snapshot, after nonlocal
+    expect(AssertionError, exercise, late, merge)
+    wrong_batch = copy.deepcopy(merge)
+    for node in ast.walk(wrong_batch):
+        if isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Name) and node.slice.id == "pending":
+            node.slice = ast.Slice()
+    expect(AssertionError, exercise, hook, wrong_batch)
+
+
+def test_terminal_probe_replay_accepts_collector_digest():
+    """Use the collector's sha256: spelling, then exercise all saved-data negatives."""
+    from rl_exp.tools.diagnose import palm_baseline_terminal as terminal
+    from rl_exp.tools.runrecord import binding
+
+    artifact = build(PROTOCOL, 3)
+    names = artifact["axes"]["joint_pos"]
+    marker = torch.arange(1, len(names) + 1).unsqueeze(0).float() * .001
+    artifact["meta"]["step_dt"] = .02
+    artifact["frames"]["joint_pos"][1] = marker
+    artifact["frames"]["command_world"][1] = torch.tensor([[.17, 0., 0.]])
+    artifact["frames"]["terminated"].zero_()
+    artifact["frames"]["timeout"][:, 0] = torch.tensor([0., 1., 0.])
+    probe = dict(completed=True, scope="offline fixture", joint_names=names, marker_q_rad=marker.tolist(),
+                 code_sha256=binding.sha256_bytes(b"probe fixture"),
+                 collector_sha256=binding.sha256_bytes(b"collector fixture"),
+                 resets=[dict(env_ids=[0], control_step=2, pre_backend_q_rad=marker.tolist(),
+                              post_backend_q_rad=torch.zeros_like(marker).tolist(),
+                              pre_command=[[.17, 0., 0.]], post_command=[[0., 0., 0.]])])
+    artifact["meta"]["terminal_probe"] = {"scope": probe["scope"]}
+    with tempfile.TemporaryDirectory() as tmp:
+        root = pathlib.Path(tmp)
+        frames_path = root / "report.frames.pt"
+        baseline_frames.save(frames_path, artifact)
+        (root / "source.py").write_bytes(b"probe fixture")
+        (root / "baseline_eval.py").write_bytes(b"collector fixture")
+        report = dict(terminal_probe=probe, terminal_frames_captured=1, smoke={"collected_steps": 3},
+                      frames_path=str(frames_path), frames_sha256=record.file_sha256(frames_path),
+                      reader_validation=baseline_metrics.judge(artifact))
+        path = root / "report.json"
+        raw = json.dumps(report).encode("utf-8")
+        path.write_bytes(raw)
+        result = terminal.replay(path, binding.sha256_bytes(raw))
+        assert result["rejected"] == ["post_reset", "wrong_joint", "timeout", "command"]
+        expect(ValueError, terminal.replay, path, "0" * 64)
+
+
 def test_a_judge_failure_names_the_record_to_retry_from():
     """A judge defect must not cost the window: the error names the file that re-judges it offline."""
     from ablation_harness import baseline_eval
