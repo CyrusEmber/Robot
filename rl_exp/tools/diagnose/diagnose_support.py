@@ -986,6 +986,10 @@ def main():
     env_cfg = string_to_callable(spec.kwargs["env_cfg_entry_point"])()
     env_cfg.scene.terrain = terrain_cfg
     env_cfg.scene.num_envs = len(columns)
+    # This bounded diagnostic grid uses independent USD copies and PhysX parsing.
+    # The native replication fast path can access-violate before views exist on this stack.
+    # Keep all terrain columns and authored physics; trade initialization speed for reliability.
+    env_cfg.scene.replicate_physics = False
     env_cfg.episode_length_s = 30.0
     env_cfg.seed = args_cli.base_seed
     env_cfg.curriculum.terrain_levels = None
@@ -1013,10 +1017,12 @@ def main():
     paths = ArtifactPaths(storage_root=_REPO_ROOT)
     metadata = _support_metadata(paths, target_binding, env_cfg, agent_cfg)
     with ArtifactRun(out_dir, paths, metadata, required), ExitStack() as resources:
-        _run_session(env_cfg, agent_cfg, target_binding, naming, meshes, columns, phases, cases, out_dir, resources)
+        _run_session(env_cfg, agent_cfg, target_binding, naming, meshes, columns, heights,
+                     phases, cases, out_dir, resources)
 
 
-def _run_session(env_cfg, agent_cfg, target_binding, naming, meshes, columns, phases, cases, out_dir, resources):
+def _run_session(env_cfg, agent_cfg, target_binding, naming, meshes, columns, heights,
+                 phases, cases, out_dir, resources):
 
     gym_env = gym.make(args_cli.task, cfg=env_cfg)
     resources.callback(gym_env.close)

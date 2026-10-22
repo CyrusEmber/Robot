@@ -9,6 +9,7 @@ import builtins
 from contextlib import redirect_stdout
 from contextlib import redirect_stderr
 from contextlib import ExitStack
+from dataclasses import dataclass
 import datetime
 import getpass
 import io
@@ -32,6 +33,11 @@ sys.path.insert(0, str(_TOOL.parents[1] / "verify"))
 from artifact_paths import ArtifactPaths, _relative, _unlinked
 from artifact_run import ArtifactRun, inspect_run
 import cfg_snapshot
+
+
+@dataclass(init=False)
+class Config(NS):
+    """Fixture with the same snapshot traversal contract as framework configs."""
 
 
 class SimValue:
@@ -98,7 +104,7 @@ class OutputTest(unittest.TestCase):
         gym_env = NS(unwrapped=env, close=Mock())
         self.gym_env = gym_env
         wrapper = NS(reset=lambda: None, step=lambda action: (None, None, None, None))
-        cfg = NS(scene=NS(), curriculum=NS(), sim=NS(),
+        cfg = Config(scene=Config(replicate_physics=True), curriculum=NS(), sim=NS(),
                  events=NS(reset_base=NS(params={"pose_range": {}})))
         agent = NS(device="cpu", to_dict=lambda: {})
         lc = {"sum_all_ratio": 1.0, "residual_n": 0.0, "a_z_equiv_mps2": 0.0,
@@ -143,7 +149,8 @@ class OutputTest(unittest.TestCase):
             "torch": NS(zeros=lambda *a, **k: tensor), "GRAVITY": 9.81, "LEDGER_KEYS": (),
             "measure_check": self.measure, "run_case": self.rollout,
             "analyze_stand": lambda *a: dict(stats),
-            "series_to_json": lambda res, columns: {"flat": {"sample": [1.0, 2.0]}},
+            "series_to_json": lambda res, columns: {
+                "columns": columns, "series": {name: {"sample": [1.0, 2.0]} for name in columns}},
         }
         # Execute whole production main unchanged, including mkdir, open, json.dump and summary.
         # Top-level CLI/AppLauncher and simulation imports are never executed.
@@ -182,7 +189,8 @@ class OutputTest(unittest.TestCase):
         self.assertEqual(count, 5)
         report = json.loads(files["p1a_zero_action_5s.json"])
         self.assertEqual(report["case"], "p1a_zero_action_5s")
-        self.assertEqual(report["series_json"], {"flat": {"sample": [1.0, 2.0]}})
+        self.assertEqual(report["series_json"],
+                         {"columns": ["flat"], "series": {"flat": {"sample": [1.0, 2.0]}}})
         self.assertEqual(report["stats"]["flat"]["foot_load_frac"], [0.25] * 4)
         measure = json.loads(files["p0_measure_check.json"])
         self.assertIn("zero_action", measure)
@@ -341,6 +349,55 @@ class OutputTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "step height"):
             self.run_main()
         self.assertFalse(self.out.exists())
+
+    def test_phase_three_finishes_step_summary_and_closes(self):
+        self.args.phases = "3"
+        self.args.heights = "0.05,0.10"
+        columns = ["flat", "up_5", "down_5", "up_10", "down_10"]
+        self.terrain.return_value = (None, columns)
+        self.namespace["analyze_flat"] = lambda *a: {}
+        self.namespace["analyze_step"] = lambda *a: {
+            "progress_m": 4.5, "crossed": True, "belly_contact_s": 0.0,
+            "fwd_speed_during_belly": None, "spine_bodies_touched": []}
+
+        self.run_main()
+
+        self.terrain.assert_called_once_with([0.05, 0.10])
+        summary = (self.out / "summary.md").read_text(encoding="utf-8")
+        for height in (5, 10):
+            for direction in ("up", "down"):
+                self.assertIn(f"| {height}cm | {direction} | 4.5 | 1/1 |", summary)
+        case = json.loads((self.out / "p3_steps_r0.json").read_text())
+        self.assertEqual(set(case["stats"]), set(columns))
+        self.assertEqual(case["series_json"]["columns"], columns)
+        self.assertEqual(set(case["series_json"]["series"]), set(columns))
+        self.assertEqual(inspect_run(self.out, ArtifactPaths(self.index, self.repo))["state"], "completed")
+        self.gym_env.close.assert_called_once()
+
+    def test_multienvironment_uses_independent_physics_parsing(self):
+        columns = ["flat", "up_5", "down_5"]
+        self.terrain.return_value = (None, columns)
+        original_make = self.namespace["gym"].make
+        configurations = []
+
+        def make(task, *, cfg):
+            configurations.append(cfg)
+            self.assertEqual(cfg.scene.num_envs, len(columns))
+            self.assertFalse(cfg.scene.replicate_physics,
+                             "support diagnostics must not enter the crashing native replicator")
+            return original_make(task, cfg=cfg)
+
+        self.namespace["gym"].make = make
+        self.run_main()
+        self.assertEqual(len(configurations), 1)
+        case = json.loads((self.out / "p1a_zero_action_5s.json").read_text())
+        self.assertEqual(set(case["stats"]), set(columns))
+        self.assertEqual(case["series_json"]["columns"], columns)
+        self.assertEqual(set(case["series_json"]["series"]), set(columns))
+        record = json.loads((self.out / "run.json").read_text())
+        self.assertIs(record["config"]["env"]["scene"]["replicate_physics"], False)
+        self.assertEqual(record["state"], "completed")
+        self.gym_env.close.assert_called_once()
 
 
 if __name__ == "__main__":
