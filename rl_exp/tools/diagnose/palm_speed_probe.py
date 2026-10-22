@@ -8,7 +8,8 @@ Prepare sampled full-body geometry before physics. Five nominal peak target
 speeds [rad/s], fixed base/self-weight and 50 Hz position updates. All new runs
 use zero velocity targets. The old nonzero-velocity comparison is replay-only.
 Actual speed is a measured result, never inferred from the command.
-No gain scan, force-timing switch, cap override, training or automatic retry.
+Only --cap_comparison permits the three approved low-cap diagnostic overrides.
+No gain scan, force-timing switch, training or automatic retry.
 """
 from __future__ import annotations
 
@@ -24,6 +25,7 @@ import traceback
 
 import numpy as np
 import palm_spatial_runtime as wiring
+import palm_cap_comparison as cap_test
 
 REPO = wiring.REPO
 REFERENCE_SHA = "13929c53eccdb51d454ade60cf071c3eaa614bf5c90684dd2e06f4017d2485ef"
@@ -116,10 +118,13 @@ def cases():
 def experiment_schedule(document):
     """Keep historical staged trials separate from the two-case causal test."""
     kind = document.get("experiment", "staged_speed")
-    require(kind in ("staged_speed", "velocity_reference_comparison"), "unsupported experiment")
+    require(kind in ("staged_speed", "velocity_reference_comparison", cap_test.EXPERIMENT), "unsupported experiment")
     settings = dict(SETTINGS)
     if kind == "staged_speed":
         return settings, cases()
+    if kind == cap_test.EXPERIMENT:
+        require(selected_joint(document) == JOINT, "low-cap comparison only budgeted for left rear knee")
+        return cap_test.schedule(settings, cases()[2])
     require(selected_joint(document) == "lf_elbow_joint", "comparison only budgeted for left elbow")
     schedule = [dict(cases()[-1], velocity_target_mode=mode)
                 for mode in ("zero", "reference_derivative")]
@@ -137,7 +142,7 @@ def validate_plan(plan):
 def validate_physical_plan(plan):
     """Enforce the current zero-velocity-target drive decision before startup."""
     settings, schedule = validate_plan(plan)
-    require(plan.get("experiment", "staged_speed") == "staged_speed" and
+    require(plan.get("experiment", "staged_speed") in ("staged_speed", cap_test.EXPERIMENT) and
             all(c.get("velocity_target_mode", "zero") == "zero" for c in schedule),
             "nonzero velocity targets are historical replay only; current target velocity is always zero")
     return settings, schedule
@@ -187,7 +192,8 @@ def prepare(args):
     config = dict(inputs=dict(identity=f"{joint} staged speed preflight", units="SI",
         urdf=dict(path=str(urdf), sha256=manifest["sha256"]["urdf"]),
         meshes=[dict(path=str(p), sha256=wiring.binding.sha256_file(p)) for p in meshes.values()],
-        threshold_basis=dict(approved_by="user: staged speed trial to 8 rad/s",
+        threshold_basis=dict(approved_by=("user: three-case left-knee low-cap comparison" if args.cap_comparison else
+                                         "user: staged speed trial to 8 rad/s"),
                              reference="existing intersection predicate and named connection filters; no positive clearance claim")),
         body=dict(chains=chains, other_joints={n: n for n in names if n not in covered},
                   collision_entities=list(meshes), excluded_entities=[], allowed_pairs=allowed),
@@ -205,6 +211,11 @@ def prepare(args):
                 geometry_config_sha256=wiring.binding.sha256_file(args.out/"geometry_config.json"),
                 code_sha256=wiring.binding.sha256_file(Path(__file__)),
                 geometry_scope="43 sampled selected-joint poses; other joints zero; no continuous safety claim")
+    if args.cap_comparison:
+        plan["experiment"] = cap_test.EXPERIMENT
+        plan["settings"], plan["cases"] = experiment_schedule(plan)
+        plan["cap_consumer_sha256"] = wiring.binding.sha256_file(Path(cap_test.__file__))
+        plan["approval_basis"] = "2026-10-22 user: continue approved A10/180, B2/180, C10/5; 6264 collection steps"
     wiring.write_json(args.out/"plan.json", plan)
     require(plan["completed"], "sampled geometry failed; no physics authorized by this plan")
     print("SPEED_PLAN_PREPARED", sum(c["steps"] for c in plan["cases"]), flush=True)
@@ -286,6 +297,28 @@ def self_check():
         for index in range(2):
             save_progress(directory, dict(cases=list(range(index+1))), index)
         require(len(list(directory.glob("progress*.json"))) == 2, "progress snapshots were overwritten")
+    cap_settings, cap_cases = experiment_schedule(dict(joint=JOINT, experiment=cap_test.EXPERIMENT))
+    cap_plan = dict(completed=True, joint=JOINT, experiment=cap_test.EXPERIMENT,
+                    settings=cap_settings, cases=cap_cases)
+    validate_physical_plan(cap_plan)
+    require(sum(c["steps"] for c in cap_cases) == 6264, "cap budget changed")
+    for defect in ("wrong_joint", "changed_cap", "nonzero_velocity", "changed_budget"):
+        bad = copy.deepcopy(cap_plan)
+        if defect == "wrong_joint":
+            bad["joint"] = "lf_elbow_joint"
+        elif defect == "changed_cap":
+            bad["cases"][1]["velocity_cap_rad_s"] = 3.
+        elif defect == "nonzero_velocity":
+            bad["cases"][1]["velocity_target_mode"] = "reference_derivative"
+        else:
+            bad["settings"]["max_steps"] += 1
+        try:
+            validate_physical_plan(bad)
+        except ValueError:
+            pass
+        else:
+            raise ValueError("unapproved cap plan accepted: "+defect)
+    cap_test.self_check()
     print("SPEED_PROBE_SELF_CHECK_OK", flush=True)
 
 
@@ -302,6 +335,10 @@ def run(args):
     plan = json.loads(args.plan.read_text(encoding="utf-8"))
     joint = selected_joint(plan)
     settings, schedule = validate_physical_plan(plan)
+    if plan.get("experiment") == cap_test.EXPERIMENT:
+        require(wiring.binding.sha256_file(Path(__file__)) == plan["code_sha256"] and
+                wiring.binding.sha256_file(Path(cap_test.__file__)) == plan["cap_consumer_sha256"],
+                "approved cap execution code changed")
     geometry_path = args.plan.parent/"geometry_report.json"
     require(wiring.binding.sha256_file(geometry_path) == plan["geometry_report_sha256"], "geometry changed")
     require(wiring.binding.sha256_file(args.plan.parent/"geometry_config.json") == plan["geometry_config_sha256"],
@@ -335,8 +372,11 @@ def run(args):
                       prior_run=dict(report=str(args.resume.resolve()), sha256=args.approved_resume_sha256,
                                      code_sha256=prefix["code_sha256"]))
         elapsed_before = prefix["elapsed_wall_s"]
-    app = env = None
+    app = env = cap_runtime = None
     active = None
+    cap_mode = result["experiment"] == cap_test.EXPERIMENT
+    cap_raw = []
+    exit_code = 0
     start = time.monotonic()
     try:
         from isaaclab.app import AppLauncher
@@ -357,6 +397,8 @@ def run(args):
         env = gym.make(wiring.REGISTERED_TASK, cfg=cfg)
         wrapper = RslRlVecEnvWrapper(env, clip_actions=None)
         live, robot = env.unwrapped, env.unwrapped.scene["robot"]
+        if cap_mode:
+            result["sim_steps_at_env_ready"] = live.sim.get_physics_step_count()
         live.reset()
         require(robot.is_fixed_base and not joint_reset_errors(robot), "fixed-base reset invalid")
         names = list(robot.joint_names)
@@ -379,6 +421,10 @@ def run(args):
         result["readbacks"]["body_disable_gravity"] = gravity
         force_binding = _joint_force_probe_binding(live.sim.stage, robot, backend)
         result["joint_force_probe"] = force_binding
+        if cap_mode:
+            require(not np.asarray(force_binding["friction_properties"]).any() and
+                    not np.asarray(force_binding["armatures"]).any() and not force_binding["tendon_prims"],
+                    "unexpected joint force contributors")
         action_names, ids = [], []
         for term_name in live.action_manager.active_terms:
             term = live.action_manager.get_term(term_name)
@@ -399,18 +445,33 @@ def run(args):
             dest = args.out/("dependency_"+source.name)
             shutil.copyfile(source, dest)
             result["dependencies"][dest.name] = wiring.binding.sha256_file(source)
+        if cap_mode:
+            require(wiring.binding.sha256_file(Path(cap_test.__file__)) == plan["cap_consumer_sha256"],
+                    "approved cap consumer changed")
+            shutil.copyfile(cap_test.__file__, args.out/"dependency_palm_cap_comparison.py")
+            result["dependencies"]["dependency_palm_cap_comparison.py"] = plan["cap_consumer_sha256"]
+            cap_runtime = cap_test.Runtime(robot, backend, torch, args.device, result["readbacks"], knee)
+            result["cap_restorations"] = []
         first_case = len(result["cases"])
         for index in range(first_case, len(plan["cases"])):
             case = plan["cases"][index]
+            if cap_mode:
+                result["cap_restorations"].append(cap_runtime.restore())
             live.reset()
             active = dict(index=index, **case, completed=False, rows=[])
             result["cases"].append(active)
             previous = backend(robot.root_view.get_dof_positions())
             active["initial_q_rad"] = previous.tolist()
+            if cap_mode:
+                initial_v = backend(robot.root_view.get_dof_velocities())
+                cap_runtime.initial(previous, initial_v)
+                active.update(initial_velocity_rad_s=initial_v.tolist(), sim_steps_at_start=live.sim.get_physics_step_count())
             desired = np.zeros(30)
             for step in range(case["steps"]):
                 require(elapsed_before+time.monotonic()-start < settings["wall_budget_s"], "wall-clock budget exhausted")
                 require(result["physics_steps"] < settings["max_steps"], "physical-step budget exhausted")
+                if cap_mode and step == 1000:
+                    active["override_event"] = cap_runtime.activate(case, previous, backend(robot.root_view.get_dof_velocities()))
                 if step % 4 == 0:
                     desired = np.zeros(30)
                     desired[knee] = target(step*.005, case["ramp_s"])
@@ -433,6 +494,8 @@ def run(args):
                     position_delta_velocity_rad_s=fd, target_rad=desired.copy(),
                     backend_position_target_rad=drive["position_rad"], backend_velocity_target_rad_s=drive["velocity_rad_s"],
                     contact_n=contact, **force)
+                if cap_mode:
+                    row.update(cap_runtime.sample(case, step >= 1000))
                 active["rows"].append(row)
                 require(all(np.isfinite(value).all() for value in row.values()), "non-finite sample")
                 require(np.array_equal(q, robot.data.joint_pos.torch[0].cpu().numpy()) and
@@ -447,15 +510,36 @@ def run(args):
             active["completed"] = True
             active["entities_final"] = _entity_snapshot(robot, model)
             save_case(args.out, active, knee)
+            if cap_mode:
+                active["sim_steps_at_end"] = live.sim.get_physics_step_count()
+                with np.load(active["raw"], allow_pickle=False) as raw:
+                    data = dict(raw)
+                cap_test.check_case(data, active, result["readbacks"], knee, force_binding)
+                cap_raw.append(data)
+                result["cap_restorations"].append(cap_runtime.restore())
+                require(index != 0 or cap_test.baseline_excited(data, knee), "baseline excitation insufficient; no cap comparisons")
             active = None
             print("SPEED_CASE_COMPLETED", index, result["cases"][-1]["summary"], flush=True)
             save_progress(args.out, result, index)
         result.update(completed=True, status="speed_observation_completed", elapsed_wall_s=elapsed_before+time.monotonic()-start)
+        if cap_mode:
+            result["cap_verdict"] = cap_test.verdict(cap_raw, result["cases"], knee, force_binding, True)
+            result["status"] = "low_cap_comparison_passed" if result["cap_verdict"]["passed"] else "low_cap_comparison_criteria_unmet"
+            result["sim_steps_at_end"] = live.sim.get_physics_step_count()
+            result["non_collection_sim_context_steps"] = result["sim_steps_at_end"]-result["physics_steps"]
+            result["sim_step_count_scope"] = "SimulationContext monotonic step calls; SDK internal initialization is not claimed as command collection"
+            exit_code = 0 if result["cap_verdict"]["passed"] else 1
         wiring.write_json(args.out/"report.json", result)
     except BaseException as error:
         result.update(status="stopped", error=repr(error), traceback=traceback.format_exc(), elapsed_wall_s=elapsed_before+time.monotonic()-start)
-        if active is not None and active["rows"]:
+        if active is not None and active.get("rows"):
             save_case(args.out, active, names.index(joint))
+        if cap_mode and cap_runtime is not None:
+            try:
+                result["cap_restorations"].append(cap_runtime.restore())
+                result["sim_steps_at_end"] = live.sim.get_physics_step_count()
+            except BaseException as restore_error:
+                result["cap_restore_error"] = repr(restore_error)
         wiring.write_json(args.out/"failure.json", result)
         traceback.print_exc()
         sys.stdout.flush(); sys.stderr.flush()
@@ -464,7 +548,10 @@ def run(args):
         if env is not None:
             env.close()
         if app is not None:
-            app.close()
+            if cap_mode:
+                app.close(exit_code=exit_code)
+            else:
+                app.close()
 
 
 def save_case(out, case, knee):
@@ -602,6 +689,16 @@ def replay(path, digest):
         require(wiring.binding.sha256_file(Path(prefix["report"]).parent/"source.py") == prefix["code_sha256"],
                 "prefix source changed")
     totals, summaries, negatives, constraints, responses, pair_raw, chest_loads = 0, [], [], [], [], [], []
+    cap_mode = report.get("experiment") == cap_test.EXPERIMENT
+    cap_raw = []
+    if cap_mode:
+        require(wiring.binding.sha256_file(path.parent/"dependency_palm_cap_comparison.py") == plan["cap_consumer_sha256"],
+                "cap consumer snapshot changed")
+        for restored in report["cap_restorations"]:
+            cap_test.check_readbacks(restored, reference["readbacks"])
+        require(bool(report["cap_restorations"]) and not report.get("cap_restore_error"), "original caps not restored")
+        if report["completed"]:
+            require(len(report["cap_restorations"]) == 6, "missing pre/post-case restoration")
     for index, case in enumerate(report["cases"]):
         require(index < len(schedule) and case["index"] == index and
                 all(case[k] == schedule[index][k] for k in schedule[index]),
@@ -611,6 +708,18 @@ def replay(path, digest):
             data = dict(raw)
         summaries.append(audit_case(data, case, report["joint_names"], joint))
         axis = report["joint_names"].index(joint)
+        if cap_mode:
+            cap_test.check_case(data, case, report["readbacks"], axis, report["joint_force_probe"])
+            cap_raw.append(data)
+            cap_test.match_state(case["initial_q_rad"], report["cases"][0]["initial_q_rad"])
+            cap_test.match_state(case["initial_velocity_rad_s"], report["cases"][0]["initial_velocity_rad_s"])
+            if len(data["t_s"]) > 1000:
+                event = case["override_event"]
+                require(event["t_s"] == 5., "cap override time changed")
+                cap_test.match_state(event["settled_q_rad"], data["q_rad"][999])
+                cap_test.match_state(event["settled_velocity_rad_s"], data["velocity_rad_s"][999])
+                cap_test.check_readbacks(event["before"], reference["readbacks"])
+                cap_test.check_readbacks(event["after"], cap_test.expected_readbacks(reference["readbacks"], case, axis))
         responses.append(response_diagnostics(data, case, axis, report["readbacks"]["kp"][axis],
                                               report["readbacks"]["kd"][axis]))
         chest_loads.append(chest_gravity_diagnostics(data, case, report["joint_names"], manifest))
@@ -623,7 +732,7 @@ def replay(path, digest):
         require(np.allclose(projected, manual, atol=64*np.finfo(np.float32).eps*max(1., float(abs(projected).max())), rtol=0),
                 "joint load projection differs")
         require(not data["explicit_actuation_input_nm"].any(), "explicit effort input appeared")
-        ratios = abs(projected)/np.asarray(report["readbacks"]["effort_caps"])
+        ratios = abs(projected)/(data["runtime_effort_caps"] if cap_mode else np.asarray(report["readbacks"]["effort_caps"]))
         peak_step, peak_joint = np.unravel_index(np.argmax(ratios), ratios.shape)
         settled = data["t_s"] > SETTINGS["settle_s"]
         constraints.append(dict(min_position_margin_rad=float(margin.min()),
@@ -633,7 +742,8 @@ def replay(path, digest):
             global_peak_load_nm=float(projected[peak_step, peak_joint]),
             post_settle_max_load_to_cap_ratio=float(ratios[settled].max()) if settled.any() else None,
             samples_any_axis_above_99pct=int(np.any(ratios >= .99, axis=1).sum()),
-            max_backend_speed_to_cap_ratio=float((abs(data["velocity_rad_s"])/np.asarray(report["readbacks"]["velocity_caps"])).max())))
+            max_backend_speed_to_cap_ratio=float((abs(data["velocity_rad_s"])/
+                (data["runtime_velocity_caps"] if cap_mode else np.asarray(report["readbacks"]["velocity_caps"]))).max())))
         totals += len(data["t_s"])
         if not negatives:
             for defect in ("fake_achieved_speed", "wrong_target_column", "wrong_time", "wrong_velocity_target"):
@@ -657,6 +767,14 @@ def replay(path, digest):
         require(len(report["cases"]) == len(schedule) and all(c["completed"] for c in report["cases"]) and
                 totals == sum(c["steps"] for c in schedule), "completed verdict without full schedule")
     comparison = None
+    cap_verdict = None
+    if cap_mode:
+        cap_verdict = cap_test.verdict(cap_raw, report["cases"], axis, report["joint_force_probe"], report["completed"])
+        if report["completed"]:
+            require(cap_verdict == report["cap_verdict"], "saved cap verdict differs from actual data")
+            require(report["status"] == ("low_cap_comparison_passed" if cap_verdict["passed"] else "low_cap_comparison_criteria_unmet"),
+                    "cap trial status differs")
+        require(report["sim_steps_at_end"] >= totals, "simulation counter below collected steps")
     if pair_raw:
         source = plan["baseline_source"]
         require(source["sha256"] == ELBOW_REPORT_SHA and
@@ -679,12 +797,14 @@ def replay(path, digest):
     return dict(completed=report["completed"], joint=joint, physics_steps=totals, summaries=summaries,
                 chest_gravity_diagnostics=chest_loads,
                 response_diagnostics=responses, velocity_reference_comparison=comparison,
+                low_cap_comparison=cap_verdict,
                 constraint_readbacks=constraints, negative_cases_rejected=negatives, stop_reason=report.get("error"))
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--prepare", action="store_true")
+    parser.add_argument("--cap_comparison", action="store_true", help="prepare only: approved left-knee A10/180 B2/180 C10/5")
     parser.add_argument("--joint", choices=JOINTS, help="prepare only; execution/replay use the bound plan joint")
     parser.add_argument("--reference", type=Path, default=REPO/"rl_exp/out/lizard2_b_joint_force_probe_20261021/report.json")
     parser.add_argument("--plan", type=Path)
@@ -700,6 +820,8 @@ def main():
         AppLauncher.add_app_launcher_args(parser)
     args = parser.parse_args()
     require(args.joint is None or args.prepare, "--joint is only valid with --prepare")
+    require(not args.cap_comparison or (args.prepare and args.joint in (None, JOINT)),
+            "--cap_comparison is only valid for left-knee preparation")
     if args.self_check:
         self_check()
         return
