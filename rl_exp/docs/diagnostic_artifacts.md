@@ -129,3 +129,22 @@ off 模式关闭报告器并同样禁止旧转储和启动上传。实验的 `co
 现代模式绑定候选自包含文件、build/源报告和实际源码；原始源输入只作溯源，历史对照仍真实核读旧机构输入。
 使用既有可信索引映射后，build 和源报告可从当前位置调用；身份比较按完整逻辑路径，摘要按实际读取文件。
 实际覆盖、旧根隔离和失败注入复读参数见事项最新验收记录，不外推其它消费者或整机异地恢复。
+
+空间探针旧目录的历史基准与归档路由：
+
+| 用途 | 当前落点与读取方式 |
+|---|---|
+| 当前候选输入 | `rl_exp/out/lizard2_palm_spatial_20261014/checkpoint_v3/`；仍由现有消费者读取 |
+| 原 v3 几何正反例 | `rl_exp/tools/diagnose/baselines/palm-spatial-20261014/{probe,locked}/`；原逻辑路径由 `ArtifactPaths` 解析 |
+| 早期历史构建与对照 | `rl_exp/out/archive/palm-spatial/history-20261014.zip`；按 `manifest.json` 将 `blobs/<sha256>` 恢复到清单路径 |
+
+ZIP 为本机归档，不随 Git 检出；异机须先取得同摘要归档。索引未提供 ZIP 透明读取。
+恢复验证使用全新证明目录，将代码与输入一并换根，在旧仓不可读的子进程中执行实际几何入口：
+
+```text
+<python> -B rl_exp/tools/verify/test_artifact_relocation.py --archive rl_exp/out/archive/palm-spatial/history-20261014.zip --proof_root rl_exp/out/runs/diagnostic-artifact-lifecycle/<new_recovery>
+```
+
+这条命令验证恢复并清理自身临时副本；正式恢复按清单操作，不覆盖已有目录。
+处置结果与早期报告的复读边界见 `acceptance/records/2026-10-22-diagnostic-spatial-consolidation.md`。
+当前输入的其它消费者迁移仍由原事项推进。
