@@ -5,7 +5,9 @@
 """Bounded fixed-base spatial PD tracking through the registered action manager.
 
 Default: no gravity or support claim. --level_leg_plan tests LF self-weight with the
-base fixed and other joints constrained at neutral. Angles [rad], time [s], force [N], torque [N*m].
+base fixed and other joints constrained at neutral. --self_weight_joint isolates RF wrist.
+--settle_video observes five seconds at zero target, without the diagnostic angle stop or a PD verdict.
+Angles [rad], time [s], force [N], torque [N*m].
 """
 import argparse
 import copy
@@ -86,11 +88,16 @@ def _level_verdict(q, target, axes, times, baseline, level_errors):
     return relative
 
 
-def _level_fixture(document, out, plan_path):
+def _level_fixture(document, out, plan_path, joint=None):
     from pxr import Usd, UsdPhysics
-    plan = json.loads(plan_path.read_text(encoding='utf-8'))
-    assert plan['leg'] == 'lf' and 'keyframes' not in plan, 'only the original single-leg pose is accepted'
-    assert wiring.binding.sha256_file(Path(plan['pose_report'])) == plan['pose_report_sha256']
+    if joint:
+        assert joint == 'rf_wrist_joint' and joint in document['target_binding']['joint_names']
+        plan = dict(joint=joint, target_q_rad={n: SETTINGS['amplitude_rad'] if n == joint else 0.
+                                             for n in document['target_binding']['joint_names']})
+    else:
+        plan = json.loads(plan_path.read_text(encoding='utf-8'))
+        assert plan['leg'] == 'lf' and 'keyframes' not in plan, 'only the original single-leg pose is accepted'
+        assert wiring.binding.sha256_file(Path(plan['pose_report'])) == plan['pose_report_sha256']
     assert set(plan['target_q_rad']) == set(document['target_binding']['joint_names'])
     old_usd, old_urdf = Path(document['target']), Path(document['urdf'])
     assert wiring.binding.sha256_file(old_usd) == document['sha256']['target']
@@ -98,13 +105,13 @@ def _level_fixture(document, out, plan_path):
     stage = Usd.Stage.Open(str(old_usd))
     constrained = []
     for prim in stage.Traverse():
-        if prim.IsA(UsdPhysics.RevoluteJoint) and not prim.GetName().startswith('lf_'):
-            joint = UsdPhysics.RevoluteJoint(prim)
+        if prim.IsA(UsdPhysics.RevoluteJoint) and (prim.GetName() != joint if joint else not prim.GetName().startswith('lf_')):
+            limit_joint = UsdPhysics.RevoluteJoint(prim)
             limit = np.degrees(LEVEL_SETTINGS['fixture_half_range_rad'])
-            joint.GetLowerLimitAttr().Set(-float(limit))
-            joint.GetUpperLimitAttr().Set(float(limit))
+            limit_joint.GetLowerLimitAttr().Set(-float(limit))
+            limit_joint.GetUpperLimitAttr().Set(float(limit))
             constrained.append(prim.GetName())
-    assert len(constrained) == 25
+    assert set(constrained) == set(plan['target_q_rad']) - ({joint} if joint else {n for n in plan['target_q_rad'] if n.startswith('lf_')})
     (out/'palm_spatial.usda').write_text(stage.GetRootLayer().ExportToString(), encoding='utf-8')
     shutil.copyfile(old_urdf, out/'palm_spatial.urdf')
     shutil.copytree(old_usd.parent/'meshes', out/'meshes')
@@ -114,7 +121,8 @@ def _level_fixture(document, out, plan_path):
     document['config']['scene.robot.spawn.rigid_props.disable_gravity'] = False
     document['level_fixture'] = dict(constrained_joints=constrained, settings=LEVEL_SETTINGS,
                                     original_manifest_target=str(old_usd), original_urdf_limits_retained=True,
-                                    scope='USD fixture ranges only; fixed base at z=2m; LF self-weight, no ground support')
+                                    scope=('USD fixture ranges only; fixed base at z=2m; RF wrist self-weight, no ground support'
+                                           if joint else 'USD fixture ranges only; fixed base at z=2m; LF self-weight, no ground support'))
     return plan
 
 
@@ -177,8 +185,8 @@ def _drive_targets(robot, backend, desired):
     return dict(joint_names=list(robot.joint_names), position_rad=position.tolist(), velocity_rad_s=velocity.tolist(), checks=checks)
 
 
-def _motion_evidence(entities, commanded, model):
-    assert len(entities) == 3 and [e['t_s'] for e in entities] == [0., 2.9, 5.9]
+def _motion_evidence(entities, commanded, model, time_offset=0.):
+    assert len(entities) == 3 and np.allclose([e['t_s'] for e in entities], np.array([0., 2.9, 5.9])+time_offset)
     neutral, plateau = entities[:2]
     motion = {}
     for name in commanded:
@@ -276,6 +284,48 @@ def _self_check():
     assert not _level_verdict(np.tile(baseline, (len(times), 1)), target, [0], times, baseline, level)['passed']
     assert not _level_verdict(target+baseline, target, [0], times, baseline, level+.001)['passed']
     assert not _level_verdict(target+baseline+.2, target, [0], times, baseline+.2, level)['passed']
+    from tempfile import TemporaryDirectory
+    from types import SimpleNamespace as NS
+    from unittest.mock import patch
+    class Joint:
+        def __init__(self, name):
+            self.name, self.lower, self.upper = name, NS(value=None), NS(value=None)
+            self.lower.Set = lambda value: setattr(self.lower, 'value', value)
+            self.upper.Set = lambda value: setattr(self.upper, 'value', value)
+        def GetName(self):
+            return self.name
+        def IsA(self, kind):
+            return True
+        def GetLowerLimitAttr(self):
+            return self.lower
+        def GetUpperLimitAttr(self):
+            return self.upper
+    names = ['rf_wrist_joint', 'lf_wrist_joint'] + [f'fixture_{i}_joint' for i in range(28)]
+    joints = [Joint(n) for n in names]
+    stage = NS(Traverse=lambda: joints, GetRootLayer=lambda: NS(ExportToString=lambda: 'fixture'))
+    pxr = NS(Usd=NS(Stage=NS(Open=lambda path: stage)),
+             UsdPhysics=NS(RevoluteJoint=lambda prim=None: prim))
+    with TemporaryDirectory(prefix='rf_wrist_fixture_') as temporary:
+        parent = Path(temporary)
+        source, out = parent/'source', parent/'out'
+        source.mkdir()
+        out.mkdir()
+        (source/'meshes').mkdir()
+        (source/'palm_spatial.usda').write_text('source', encoding='utf-8')
+        (source/'palm_spatial.urdf').write_text('urdf', encoding='utf-8')
+        document = dict(target=str(source/'palm_spatial.usda'), urdf=str(source/'palm_spatial.urdf'),
+                        sha256=dict(target='fixture', urdf='fixture'),
+                        target_binding=dict(joint_names=names), config={})
+        with patch.dict(sys.modules, pxr=pxr), patch.object(wiring.binding, 'sha256_file', return_value='fixture'), \
+                patch.object(wiring, 'URDF_HASH', 'fixture'):
+            plan = _level_fixture(document, out, None, 'rf_wrist_joint')
+        assert plan['target_q_rad']['rf_wrist_joint'] == SETTINGS['amplitude_rad']
+        assert all(a == 0. for n, a in plan['target_q_rad'].items() if n != 'rf_wrist_joint')
+        assert set(document['level_fixture']['constrained_joints']) == set(names)-{'rf_wrist_joint'}
+        assert joints[0].lower.value is None and joints[0].upper.value is None
+        assert all(j.lower.value == -np.degrees(LEVEL_SETTINGS['fixture_half_range_rad'])
+                   and j.upper.value == np.degrees(LEVEL_SETTINGS['fixture_half_range_rad']) for j in joints[1:])
+        assert document['config']['scene.robot.spawn.rigid_props.disable_gravity'] is False
     print('SPATIAL_TRACKING_SELF_CHECK_OK')
 
 
@@ -1279,7 +1329,10 @@ def _run_chest280(args):
             app.close()
     return True
 
+
 def _run(args):
+    self_weight = bool(args.level_leg_plan or args.self_weight_joint)
+    gravity_observation = self_weight or args.all_joints_video
     fresh = bool(args.approved_inertia_sha256)
     assert not args.all_joints or fresh, 'all_joints requires approved_inertia_sha256'
     reference = _fresh_inputs(args) if fresh else json.loads(args.inertia_report.read_text(encoding='utf-8'))
@@ -1296,7 +1349,7 @@ def _run(args):
     kd = {n: float(2*SETTINGS['damping_ratio']*i*omega) for n, i in inertias.items()}
     gain_source = None
     if args.gain_reference:
-        assert args.combined or args.level_leg_plan
+        assert args.combined or gravity_observation
         gained = json.loads(args.gain_reference.read_text(encoding='utf-8'))
         assert gained['completed'] and gained['status'] == 'standing_verified'
         gain_manifest = Path(gained['manifest'])
@@ -1305,16 +1358,25 @@ def _run(args):
         assert gained['joint_names'] == neutral['joint_names']
         kp = dict(zip(gained['joint_names'], gained['readbacks']['kp']))
         kd = dict(zip(gained['joint_names'], gained['readbacks']['kd']))
-        if args.level_leg_plan:
-            kp['lf_wrist_joint'] *= args.wrist_frequency_hz**2
-            kd['lf_wrist_joint'] *= args.wrist_frequency_hz
+        if self_weight:
+            wrist = args.self_weight_joint or 'lf_wrist_joint'
+            kp[wrist] *= args.wrist_frequency_hz**2
+            kd[wrist] *= args.wrist_frequency_hz
         gain_source = dict(report=str(args.gain_reference), sha256=wiring.binding.sha256_file(args.gain_reference),
                            leg_frequency_hz=gained['standing_adapter']['leg_frequency_hz'],
                            neck_frequency_hz=gained['standing_adapter']['neck_frequency_hz'])
-    out = args.out.resolve()
-    assert wiring.REPO / 'rl_exp/out' in out.parents and not out.exists()
-    out.mkdir(parents=True)
-    # compile+exec candidates retain the original __file__ for imports, not source identity.
+    if args.free_base_video:
+        source = json.loads(gain_manifest.read_text(encoding='utf-8'))
+        assert source['standing_adapter']['only_joint_enabled_delta_verified']
+    if args.video_path:
+        import tempfile
+        video_path = args.video_path.resolve()
+        assert video_path.parent.is_dir() and not video_path.exists(), 'video destination must be new in an existing directory'
+        out = Path(tempfile.mkdtemp(prefix='lizard2_free_base_video_'))
+    else:
+        out = args.out.resolve()
+        assert wiring.REPO / 'rl_exp/out' in out.parents and not out.exists()
+        out.mkdir(parents=True)
     source_path = Path(globals().get('__candidate_source__', __file__))
     shutil.copyfile(source_path, out / 'source.py')
     result = dict(completed=False, stage='startup', settings=SETTINGS,
@@ -1331,7 +1393,7 @@ def _run(args):
         result['gain_source'] = gain_source
         result['settings'] = {**SETTINGS, 'frequency_hz': None, 'gain_source': 'verified standing readback'}
         result['input'][str(args.gain_reference)] = gain_source['sha256']
-    app, env = None, None
+    app, env, video = None, None, None
     try:
         from isaaclab.app import AppLauncher
         app = AppLauncher(args).app
@@ -1347,11 +1409,20 @@ def _run(args):
         tracked = copy.deepcopy(source)
         tracked_manifest = out / 'tracking_manifest.json'
         tracked['target_binding']['source'] = str(tracked_manifest)
-        if args.level_leg_plan:
-            plan = _level_fixture(tracked, out, args.level_leg_plan)
+        if self_weight:
+            plan = _level_fixture(tracked, out, args.level_leg_plan, args.self_weight_joint)
             result.update(level_settings=LEVEL_SETTINGS, level_fixture=tracked['level_fixture'],
-                          scope=tracked['level_fixture']['scope'], level_leg_plan=plan, wrist_frequency_hz=args.wrist_frequency_hz)
-            result['input'][str(args.level_leg_plan)] = wiring.binding.sha256_file(args.level_leg_plan)
+                          scope=tracked['level_fixture']['scope'], level_leg_plan=plan,
+                          self_weight_joint=args.self_weight_joint, wrist_frequency_hz=args.wrist_frequency_hz)
+            if args.level_leg_plan:
+                result['input'][str(args.level_leg_plan)] = wiring.binding.sha256_file(args.level_leg_plan)
+        if args.all_joints_video:
+            tracked['config']['scene.robot.spawn.rigid_props.disable_gravity'] = False
+            result['scope'] = ('free base near ground; all 30 joints retain original limits; gravity enabled; zero target'
+                               if args.free_base_video else 'fixed base at z=2m; all 30 joints retain original limits; gravity enabled; zero target; no support')
+            if args.free_base_video:
+                result['input'][str(gain_manifest)] = wiring.binding.sha256_file(gain_manifest)
+                result['standing_adapter'] = source['standing_adapter']
         for group in ('legs', 'feet', 'spine'):
             names = tracked['config'][f'scene.robot.actuators.{group}.joint_names_expr']
             tracked['config'][f'scene.robot.actuators.{group}.stiffness'] = {n: kp[n] for n in names}
@@ -1364,10 +1435,34 @@ def _run(args):
         cfg.seed = 0
         result['runtime_overrides'] = {'sim.dt': cfg.sim.dt, 'seed': cfg.seed, 'sim.device': cfg.sim.device}
         assert all(isinstance(a, ImplicitActuatorCfg) for a in cfg.scene.robot.actuators.values())
-        env = gym.make(wiring.REGISTERED_TASK, cfg=cfg)
+        if args.settle_video:
+            from palm_spatial_inertia import csc
+            neutral_model = csc.load_urdf(Path(target['urdf']))
+            if args.free_base_video:
+                cfg.viewer.eye, cfg.viewer.lookat = (3., -4., 2.), (0., 0., .4)
+            elif args.all_joints_video:
+                cfg.viewer.eye, cfg.viewer.lookat = (4.5, -6., 4.), (0., 0., 1.7)
+            else:
+                center = csc.fk(neutral_model['joints'], 'rf_wrist', {})[:3, 3] + [0., 0., 2.]
+                cfg.viewer.eye = tuple(center + [.65, -1.1, .45])
+                cfg.viewer.lookat = tuple(center)
+            cfg.video_recorder.window_width, cfg.video_recorder.window_height = 960, 720
+            result['video'] = dict(path=str(video_path if args.video_path else out/('all_joints_settle.mp4' if args.all_joints_video else 'rf_wrist_settle.mp4')), fps=25, duration_s=5.,
+                                   eye=cfg.viewer.eye, lookat=cfg.viewer.lookat,
+                                   observation_only=True, diagnostic_angle_stop=False,
+                                   half_velocity_stop=not args.all_joints_video,
+                                   contact_stop=not args.all_joints_video, zero_target=True)
+        env = gym.make(wiring.REGISTERED_TASK, cfg=cfg, render_mode='rgb_array' if args.settle_video else None)
         wrapper = RslRlVecEnvWrapper(env, clip_actions=None)
         live, robot = env.unwrapped, env.unwrapped.scene['robot']
-        assert robot.is_fixed_base and not joint_reset_errors(robot)
+        assert robot.is_fixed_base is not args.free_base_video and not joint_reset_errors(robot)
+        if args.free_base_video:
+            fixed = [UsdPhysics.FixedJoint(p) for p in live.sim.stage.Traverse() if p.IsA(UsdPhysics.FixedJoint)
+                     and (not UsdPhysics.FixedJoint(p).GetBody0Rel().GetTargets()
+                          or not UsdPhysics.FixedJoint(p).GetBody1Rel().GetTargets())]
+            assert len(fixed) == 1 and fixed[0].GetJointEnabledAttr().Get() is False
+            assert abs(cfg.scene.robot.init_state.pos[2] - source['standing_adapter']['root_height_m']) < 1e-8
+            result['readback_world_fixed_joint_enabled'] = False
         names = list(robot.joint_names)
         assert names == neutral['joint_names']
         result.update(target=target, tracking_manifest=str(tracked_manifest),
@@ -1386,7 +1481,7 @@ def _run(args):
                                    velocity_caps=backend(robot.root_view.get_dof_max_velocities()).tolist(),
                                    effort_caps=robot.data.joint_effort_limits.torch[0].cpu().tolist(),
                                    position_limits=robot.data.joint_pos_limits.torch[0].cpu().tolist())
-        if args.level_leg_plan:
+        if self_weight:
             from palm_spatial_inertia import _rotation
             constrained_ids = [names.index(n) for n in tracked['level_fixture']['constrained_joints']]
             limits = np.array(result['readbacks']['position_limits'])[constrained_ids]
@@ -1395,6 +1490,10 @@ def _run(args):
             assert gravity and all(value is False for value in gravity.values())
             result['readbacks'].update(fixed_base=robot.is_fixed_base, gravity=cfg.sim.gravity, body_disable_gravity=gravity)
             chest_id = robot.body_names.index('chest_pitch')
+        if args.all_joints_video:
+            gravity = {p.GetName(): p.GetAttribute('physxRigidBody:disableGravity').Get() for p in live.sim.stage.Traverse() if p.HasAPI(UsdPhysics.RigidBodyAPI)}
+            assert gravity and all(value is False for value in gravity.values())
+            result['readbacks'].update(fixed_base=robot.is_fixed_base, gravity=cfg.sim.gravity, body_disable_gravity=gravity)
         action_names, action_ids = [], []
         for term_name in live.action_manager.active_terms:
             term = live.action_manager.get_term(term_name)
@@ -1427,13 +1526,17 @@ def _run(args):
                 cases['neck_pitch'] = ['neck_pitch_joint']
         else:
             cases = {n: [n] for n in cases}
-        if args.level_leg_plan:
+        if self_weight:
             from palm_spatial_inertia import csc
             model = csc.load_urdf(Path(target['urdf']))
-            cases = {'lf_level_self_weight': [n for n in cases if n.startswith('lf_')]}
+            cases = ({'rf_wrist_self_weight': [args.self_weight_joint]} if args.self_weight_joint
+                     else {'lf_level_self_weight': [n for n in cases if n.startswith('lf_')]})
+        if args.all_joints_video:
+            assert np.allclose(result['readbacks']['position_limits'], [bounds[n] for n in names], atol=1e-6)
+            cases = {'all_joints_self_weight': names}
         dt = SETTINGS['dt_s']
-        settle = LEVEL_SETTINGS['settle_s'] if args.level_leg_plan else 0.
-        times = np.arange(1, int((settle+2*SETTINGS['ramp_s'] + 2*SETTINGS['hold_s'])/dt)+1)*dt
+        settle = LEVEL_SETTINGS['settle_s'] if gravity_observation else 0.
+        times = np.arange(1, int((settle if args.settle_video else settle+2*SETTINGS['ramp_s'] + 2*SETTINGS['hold_s'])/dt)+1)*dt
         sensor = live.scene['contact_forces']
         for case, commanded in cases.items():
             result['stage'] = case
@@ -1442,13 +1545,24 @@ def _run(args):
             axes = [names.index(n) for n in commanded]
             amplitudes = {n: SETTINGS['amplitude_rad'] * (1 if bounds[n][1] >= SETTINGS['amplitude_rad']+.005 else -1)
                           for n in commanded}
-            if args.level_leg_plan:
+            if self_weight:
                 amplitudes = {n: plan['target_q_rad'][n] for n in commanded}
+            if args.settle_video:
+                amplitudes = {n: 0. for n in commanded}
             assert all(bounds[n][0] <= min(0, a) and max(0, a) <= bounds[n][1] for n, a in amplitudes.items())
             rows, q_rows, target_rows, entities, max_contact = [], [], [], [], 0.
             level_errors, baseline, stop = [], None, None
             if fresh:
                 entities.append(dict(t_s=0., **_entity_snapshot(robot, model)))
+            video = None
+            if args.settle_video:
+                import imageio_ffmpeg
+                for _ in range(8):
+                    frame = live.render()
+                assert frame is not None and frame.shape == (720, 960, 3) and frame.std() > 1, 'empty video frame'
+                video = imageio_ffmpeg.write_frames(result['video']['path'], (960, 720), fps=25, codec='libx264')
+                video.send(None)
+                result['video']['frames'] = 0
             for t in times:
                 action = torch.zeros((1, len(action_names)), device=args.device)
                 desired = np.zeros(len(names))
@@ -1461,20 +1575,31 @@ def _run(args):
                 drive = _drive_targets(robot, backend, desired) if fresh else None
                 live.sim.step(render=False)
                 live.scene.update(dt)
+                if video is not None and round(t/dt) % 8 == 0:
+                    frame = live.render()
+                    assert frame is not None and frame.shape == (720, 960, 3), 'missing video frame'
+                    video.send(np.ascontiguousarray(frame))
+                    result['video']['frames'] += 1
                 q = robot.data.joint_pos.torch[0].cpu().numpy().copy()
                 v = robot.data.joint_vel.torch[0].cpu().numpy().copy()
                 force = float(sensor.data.net_forces_w.torch.norm(dim=-1).max())
                 max_contact = max(max_contact, force)
                 assert np.isfinite(q).all() and np.isfinite(v).all()
-                if not args.level_leg_plan:
+                if not gravity_observation:
                     assert abs(q).max() < SETTINGS['stop_position_rad'] and force <= SETTINGS['stop_contact_n'], 'unsafe response/contact'
-                assert np.all(abs(v) < np.asarray(result['readbacks']['velocity_caps'])*.5), 'unexpected speed'
+                if not args.all_joints_video:
+                    assert np.all(abs(v) < np.asarray(result['readbacks']['velocity_caps'])*.5), 'unexpected speed'
                 requested = read_kp*(desired-q)-read_kd*v
                 rows.append(dict(t_s=float(t), q_rad=q.tolist(), velocity_rad_s=v.tolist(), target_rad=desired.tolist(),
                                  reconstructed_pd_request_nm=requested.tolist(), max_contact_n=force))
                 if fresh:
                     rows[-1]['backend_drive_targets'] = drive
-                if args.level_leg_plan:
+                if args.free_base_video:
+                    root_pose = robot.data.root_pose_w.torch[0].cpu().numpy()
+                    root_velocity = robot.data.root_vel_w.torch[0].cpu().numpy()
+                    assert np.isfinite(root_pose).all() and np.isfinite(root_velocity).all()
+                    rows[-1].update(root_pose_xyzw=root_pose.tolist(), root_velocity=root_velocity.tolist())
+                if self_weight:
                     pose = robot.data.body_link_pose_w.torch[0, chest_id].cpu().numpy()
                     level_error = float(abs(_rotation(pose[3:])[:, 2]-[0., 0., 1.]).max())
                     rows[-1]['chest_pose_xyzw'] = pose.tolist()
@@ -1484,7 +1609,7 @@ def _run(args):
                         baseline = q.copy()
                     if level_error > LEVEL_SETTINGS['level_tolerance']:
                         stop = 'chest_not_level'
-                    elif abs(q[axes]-desired[axes]).max() > LEVEL_SETTINGS['stop_absolute_error_rad']:
+                    elif not args.settle_video and abs(q[axes]-desired[axes]).max() > LEVEL_SETTINGS['stop_absolute_error_rad']:
                         stop = 'leg_absolute_error'
                     elif force > SETTINGS['stop_contact_n']:
                         stop = 'contact'
@@ -1495,7 +1620,14 @@ def _run(args):
                     target_rows.append(desired)
                 if model is not None and (abs(t-settle-2.9) < 1e-9 or abs(t-settle-5.9) < 1e-9):
                     entities.append(dict(t_s=float(t), **_entity_snapshot(robot, model)))
-            if args.level_leg_plan:
+            if video is not None:
+                video.close()
+            if args.settle_video:
+                verdict = dict(passed=stop is None, observation_only=True, stop_reason=stop,
+                               observed_duration_s=float(rows[-1]['t_s']),
+                               max_absolute_error_rad=float(max(abs(np.array(r['q_rad'])[axes]).max() for r in rows)))
+                assert all(np.count_nonzero(r['target_rad']) == 0 for r in rows)
+            elif self_weight:
                 verdict = dict(passed=False, stop_reason=stop, completed_trajectory=False) if stop else _level_verdict(
                     np.array(q_rows), np.array(target_rows), axes, times[times > settle]-settle, baseline, level_errors)
                 verdict.update(baseline_q_rad=None if baseline is None else baseline.tolist(), completed_trajectory=stop is None,
@@ -1503,7 +1635,7 @@ def _run(args):
             else:
                 verdict = _verdict(np.array(q_rows), np.array(target_rows), axes, times)
             verdict.update(joint=case, commanded_joints=commanded, amplitudes_rad=amplitudes, max_contact_n=max_contact)
-            if not args.combined and not args.level_leg_plan:
+            if not args.combined and not gravity_observation:
                 verdict['amplitude_rad'] = amplitudes[commanded[0]]
             if fresh:
                 assert len(rows) == 1200
@@ -1518,8 +1650,12 @@ def _run(args):
                 break
         passed = len(result['cases']) == len(cases) and all(c['passed'] for c in result['cases'])
         result.update(completed=True, stage='completed', status=('combined_tracking_verified' if args.combined else 'small_tracking_verified') if passed else 'tracking_failed')
-        if args.level_leg_plan:
-            result['status'] = 'level_leg_tracking_verified' if passed else 'level_leg_tracking_failed'
+        if args.settle_video:
+            result['status'] = 'settle_observation_completed' if passed else 'settle_observation_stopped'
+            result['scope'] += '; zero-target five-second observation, no drive performance verdict'
+        elif self_weight:
+            result['status'] = (('joint_self_weight_tracking_verified' if passed else 'joint_self_weight_tracking_failed')
+                                if args.self_weight_joint else 'level_leg_tracking_verified' if passed else 'level_leg_tracking_failed')
         wiring.write_json(out / 'report.json', result)
         print('TRACKING_COMPLETED', result['status'], flush=True)
         if not passed:
@@ -1527,6 +1663,8 @@ def _run(args):
             sys.stderr.flush()
             os._exit(1)  # App.close may terminate the process before main can return failure.
     except BaseException as error:
+        if video is not None:
+            video.close()
         result.update(error=repr(error), traceback=traceback.format_exc())
         wiring.write_json(out / 'failure.json', result)
         traceback.print_exc()
@@ -1565,6 +1703,11 @@ if __name__ == '__main__':
     parser.add_argument('--combined', action='store_true')
     parser.add_argument('--gain_reference', type=Path)
     parser.add_argument('--level_leg_plan', type=Path)
+    parser.add_argument('--self_weight_joint', choices=('rf_wrist_joint',))
+    parser.add_argument('--settle_video', action='store_true')
+    parser.add_argument('--all_joints_video', action='store_true')
+    parser.add_argument('--free_base_video', action='store_true')
+    parser.add_argument('--video_path', type=Path)
     parser.add_argument('--wrist_frequency_hz', type=float, choices=(1., 6.), default=1.)
     if '--self_check' in sys.argv:
         args = parser.parse_args()
@@ -1579,12 +1722,23 @@ if __name__ == '__main__':
         from isaaclab.app import AppLauncher
         AppLauncher.add_app_launcher_args(parser)
         args = parser.parse_args()
-        if not args.inertia_report or not args.out:
-            parser.error('inertia_report and out are required')
-        if args.level_leg_plan and (not args.gain_reference or args.combined):
-            parser.error('level_leg_plan requires gain_reference and excludes combined')
-        if not args.level_leg_plan and args.wrist_frequency_hz != 1:
-            parser.error('wrist override requires level_leg_plan')
+        if args.free_base_video:
+            args.all_joints_video = True
+        if args.video_path and not args.free_base_video:
+            parser.error('video_path requires free_base_video')
+        if not args.inertia_report or not (args.out or args.video_path):
+            parser.error('inertia_report and out or video_path are required')
+        if args.all_joints_video:
+            if not args.gain_reference or args.self_weight_joint or args.level_leg_plan or args.combined or args.wrist_frequency_hz != 1:
+                parser.error('all_joints_video requires gain_reference and excludes fixtures or gain overrides')
+            args.settle_video = True
+        if args.settle_video and (not args.enable_cameras or (not args.all_joints_video and (args.self_weight_joint != 'rf_wrist_joint' or args.wrist_frequency_hz != 1))):
+            parser.error('settle_video requires enable_cameras and original-gain RF fixture or all_joints_video')
+        if args.level_leg_plan or args.self_weight_joint:
+            if not args.gain_reference or args.combined or (args.level_leg_plan and args.self_weight_joint):
+                parser.error('self-weight tracking requires gain_reference and excludes combined or both fixture modes')
+        elif args.wrist_frequency_hz != 1:
+            parser.error('wrist override requires self-weight tracking')
         if args.joint_force_probe and not (args.left_knee_absolute_trial and args.symmetric_knee_elbow_pd):
             parser.error('joint_force_probe requires left_knee_absolute_trial and symmetric_knee_elbow_pd')
         if args.symmetric_knee_elbow_pd and not args.left_knee_absolute_trial:
