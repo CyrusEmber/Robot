@@ -62,14 +62,21 @@ import ast
 import pathlib
 import subprocess
 import sys
+import tempfile
 import warnings
 
 _REPO = pathlib.Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(_REPO))
+from rl_exp.tools.runrecord import binding  # noqa: E402
+
 HOME = _REPO / "rl_exp" / "tools" / "runrecord" / "binding.py"
 #: The one home of the identity spelling, exempt alongside :data:`HOME`: it is where the recorded
 #: spelling is chosen, so the scan can only be pointed at a second one elsewhere.
 IDENTITY_HOME = _REPO / "rl_exp" / "tools" / "runrecord" / "provenance.py"
 ROOTS = ("rl_exp", "ablation_harness")
+# The default scope is version-controlled source plus non-ignored new files.
+# Ignored runtime evidence may contain byte-exact OLD implementations. Explicit
+# --root remains an unfiltered scan, including ignored files when requested.
 #: Prefixes that mean "this is an rsl_rl identity" -- the spelling ``rsl_rl_id`` owns.
 IDENTITY_PREFIXES = ("source:", "installed:")
 
@@ -345,7 +352,52 @@ def self_test() -> list[str]:
         found = problems_in(source)
         if bool(found) != expected:
             problems.append(f"{label}: expected {'a finding' if expected else 'no finding'}, got {found}")
+    problems.extend(_source_scope_self_test())
     return problems
+
+
+def _source_paths(repo: pathlib.Path) -> list[pathlib.Path]:
+    """List existing tracked and non-ignored new Python sources, failing closed."""
+    listing = binding.git_run(repo, "ls-files", "--cached", "--others", "--exclude-standard",
+                              "-z", "--", *ROOTS)
+    paths = sorted({repo / name for name in listing.split("\0")
+                    if name.endswith(".py") and (repo / name).is_file()})
+    if not paths:
+        raise RuntimeError(f"cannot inventory Python source under {repo}")
+    return paths
+
+
+def _source_scope_self_test() -> list[str]:
+    """Real Git scope controls: evidence ignored, active copies still detected."""
+    with tempfile.TemporaryDirectory() as temporary:
+        repo = pathlib.Path(temporary)
+        evidence = repo / "rl_exp/out/executed-sources"
+        evidence.mkdir(parents=True)
+        (repo / ".gitignore").write_text("rl_exp/out/\n", encoding="utf-8")
+        bad = "def f(p):\n    return hashlib.sha256(p.read_bytes()).hexdigest()\n"
+        tracked, new = repo / "rl_exp/tracked.py", repo / "rl_exp/new.py"
+        snapshot, forced = evidence / "old.py", evidence / "tracked.py"
+        for path in (tracked, new, snapshot, forced):
+            path.write_text(bad, encoding="utf-8")
+        binding.git_run(repo, "init", "--quiet")
+        binding.git_run(repo, "add", "--", ".gitignore", "rl_exp/tracked.py")
+        binding.git_run(repo, "add", "--force", "--", "rl_exp/out/executed-sources/tracked.py")
+        paths = _source_paths(repo)
+        problems = []
+        if set(paths) != {tracked, new, forced}:
+            problems.append(f"source scope omitted active files or included ignored evidence: {paths}")
+        _, findings = scan(paths, ())
+        if len(findings) != 3:
+            problems.append("source scope failed to detect a tracked or untracked active duplicate")
+        if not scan([snapshot], ())[1]:
+            problems.append("explicit root failed to detect an ignored historical duplicate")
+        try:
+            _source_paths(repo / "missing")
+        except RuntimeError:
+            pass
+        else:
+            problems.append("missing Git inventory silently passed")
+        return problems
 
 
 def scan(roots: list[pathlib.Path], homes: tuple[pathlib.Path, ...]) -> tuple[int, list[tuple[str, list[str]]]]:
@@ -379,7 +431,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--home", default=None, help="exempt this file instead of the repo's two homes")
     args = parser.parse_args(argv)
 
-    roots = [pathlib.Path(root) for root in args.root] if args.root else [_REPO / root for root in ROOTS]
+    try:
+        roots = [pathlib.Path(root) for root in args.root] if args.root else _source_paths(_REPO)
+    except RuntimeError as error:
+        print(f"RECORD_BINDING_SINGLE_SOURCE_VIOLATED (source inventory: {error})")
+        return 1
     homes = (pathlib.Path(args.home),) if args.home else (HOME, IDENTITY_HOME)
 
     self_test_problems = self_test()
