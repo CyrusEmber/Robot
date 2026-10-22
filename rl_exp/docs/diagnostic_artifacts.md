@@ -1,6 +1,6 @@
 # 诊断运行的创建与收尾
 
-当前入口：`rl_exp/tools/diagnose/local_path_view.py`。其它生产入口仍按
+当前已接入口：`rl_exp/tools/diagnose/local_path_view.py`、`diagnose_support.py`。其它生产入口仍按
 `work/active/diagnostic-artifact-lifecycle.md` 推广，不能由本入口推定全覆盖。
 
 从仓根用配置解释器运行；输入取已有报告，不重新采集物理：
@@ -53,3 +53,30 @@
 
 输出默认本机保留且被 Git 忽略；索引、源码与验收记录入仓不等于运行字节有外部备份。
 恢复证明的范围、结果及已知边界见事项的验收记录指针。
+
+## 支撑诊断入口
+
+`diagnose_support.py` 使用同一索引和收尾机制，输出根保留为
+`rl_exp/tools/diagnose/out/`。默认 label 放进 `runs/support/`；显式 `--label`
+仍相对该根定位，必须是安全的新目录。原 case JSON、原始下采样时序和摘要继续输出，
+各报告通过相邻 `run.json` 找到绑定；完成生产不代表资产或物理表现通过验收。
+
+```text
+<python> -B rl_exp/tools/diagnose/diagnose_support.py --headless --task Lizard2-Flat-v3 --checkpoint <existing_checkpoint.pt> --phases 0,1 --heights "" --label runs/support/<new_run> --work_id <active_work_id> --owner <executor> --retention_reason "<why retain this run>"
+<python> -B rl_exp/tools/diagnose/artifact_run.py --inspect_run rl_exp/tools/diagnose/out/runs/support/<new_run>
+<python> -B rl_exp/tools/verify/test_diagnose_support_output.py
+```
+
+空高度只选择平地单环境，Phase 3 必须指定台阶高度；原多高度默认值保持。checkpoint、
+目标声明、USD/URDF 及引用网格、配方/命名声明和实际仓内源码绑定在运行记录中，解析后的
+环境与 runner 配置用已有配置序列化器保存。外部 checkpoint 仍按实际外部位置校验，
+本入口不自动备份或搬迁 checkpoint，也不宣称已有支撑仿真的完整异机恢复机制。
+
+写 case/摘要失败会保留已写报告；Phase 0 的提前返回也经过收尾。环境通过退出栈关闭，
+CLI 将错误码传给 Kit 原生快速关闭，控制台采用 UTF-8，避免成功写报告却丢失失败状态。
+原生进程崩溃无法执行 Python 收尾，保留的 `running` 必须视为未完成。
+当前多环境复制的已知原生故障及复验范围见事项最新验收记录；不能用单环境完成外推多环境。
+
+绑定校验在创建和读取端共用：输入、源码、身份、位置、摘要及归属不可擦空；命令首项
+必须有效，后续参数允许合法空字符串。源码采集只把绝对仓内 Python 来源当文件绑定，
+框架动态模块的相对伪文件名不会被拼成仓内源文件；真实绝对源码缺失仍拒绝。
