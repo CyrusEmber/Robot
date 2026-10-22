@@ -67,6 +67,7 @@
 | `rl_exp\tools\diagnose\palm_joint_force_audit.py` | 左膝两例关节力矩离线复读：轴投影、重力平衡及上限占比；不起仿真，不测极限负载 |
 | `rl_exp\tools\diagnose\palm_velocity_limit_audit.py` | 当前候选速度上限的离线逐关节核对；读取 manifest/URDF/backend，不测触限行为 |
 | `rl_exp\tools\diagnose\palm_speed_probe.py` | 零速度目标的肘膝升速诊断；`--replay` 复算历史速度对照及胸部自重载荷 |
+| `rl_exp\tools\diagnose\palm_spatial_standing.py` | 自由根静站与抬腿检查；`--prepare_current_lift` 核当前输入，`--replay_current_lift` 复读离地/载荷与早停 |
 | `rl_exp\tools\diagnose\palm_spatial_probe.py` | 三轴试作的 Blender/FK 对照、历史固定落点诊断、`--static_slices` 切片及 `--local_path` 预算内局部路径；自检／失败对照验证口径，不验收步态或动力学 |
 | `rl_exp\tools\diagnose\local_path_check.py` | 已采路径几何复验：四分点、`--mirror`、`--combined`；`--support_schedule` 保几何调支持占比及节点参数接缝；限预算、失败即停，不判动力学 |
 | `rl_exp\tools\diagnose\local_path_view.py` | 局部路径报告的独立后处理：真实碰撞网格侧／俯视 GIF、轨迹与路径斜率接缝；不重求解、不新增接地采样、不判动力学 |
