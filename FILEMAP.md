@@ -71,7 +71,7 @@
 | `rl_exp\tools\diagnose\palm_spatial_standing.py` | 自由根静站诊断与历史抬腿复读；抬腿性能归 RL/S6，不作默认驱动验收 |
 | `rl_exp\tools\diagnose\palm_spatial_probe.py` | 三轴试作的 Blender/FK 对照、历史固定落点诊断、`--static_slices` 切片及 `--local_path` 预算内局部路径；自检／失败对照验证口径，不验收步态或动力学 |
 | `rl_exp\tools\diagnose\local_path_check.py` | 已采路径几何复验：四分点、`--mirror`、`--combined`；`--support_schedule` 保几何调支持占比及节点参数接缝；限预算、失败即停，不判动力学 |
-| `rl_exp\tools\diagnose\local_path_view.py` | 局部路径报告的独立后处理：真实碰撞网格侧／俯视 GIF、轨迹与路径斜率接缝；不重求解、不新增接地采样、不判动力学 |
+| `rl_exp\tools\diagnose\local_path_view.py` | 已采单腿／四肢组合网格回放与导数图；材料点根平移兼容、`--drive_report` 限速读回周期下界；不重采、不应用根运动、不批准动力学 |
 | `rl_exp\tools\diagnose\palm_gait_kinematics.py` | **palm 候选身体固定下的步态几何样本**（无仿真）：`--legs two`（`lf`+`rr`）/ `four`（对角小跑相位），每腿 4 自由度解足底点 + 掌面水平，报残差 / 周期接缝 / 限位余量 / 关节速度 / 网格间隙 / 左右镜像；`--inject_error` 给轴符号、步长、碰撞、镜像负例。**不证明承重、滑移或能走** |
 | `rl_exp\tools\diagnose\palm_pd_probe.py` | **palm 候选的 USD/仿真身份绑定与诊断**（`env_isaaclab` 的 python，起 Isaac）：坐标 / 惯量 / 碰撞过滤 / PD 各自 `--*_only` 工况，报告含输入哈希与代码快照；`--inject_error` 给错 pivot/轴/状态/过滤的拒错负例。仅诊断，不是合格资产验收 |
 | `rl_exp\tools\diagnose\plot_joints.py` | 读探针报告出图（**不起仿真**）：逐关节实际/目标/两条限位 + 贴限位着色 + 逐关节"贴限位帧占比"柱图；`--at_stop_rad` 是判据带宽、**`--naming`（`shared`/`split`）声明该报告词根**（三条腿关节按链位次取，脚体与键名对不上即拒，否则画空行)；`--self-check` 手算边界 |
