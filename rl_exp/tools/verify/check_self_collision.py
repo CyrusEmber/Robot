@@ -278,13 +278,16 @@ def sweep_poses(joints: dict,
     extreme); combined poses catch what only two axes together reach -- which is the whole reason a
     new hip axis needs this check.
 
-    Roles are read BY POSITION off the naming (root, the three hinges, the knee), never as words here: a
-    renamed body sweeps the same poses and the two reports are the same sweep in two vocabularies.
+    Legacy namings retain their original root/hinge positions. Spatial palm inserts a twist
+    before the elbow/knee: pair the root with that actual distal hinge and include all four
+    non-root axes (including wrist/ankle) in combined corners. These finite corners do not
+    establish collision freedom throughout the reachable set.
     """
     poses: list[tuple[dict[str, float], str]] = []
     for leg in _LEGS:
         roots = joint_names.roots_of(naming, leg)
-        root_token, knee_token = roots[0], roots[2]
+        spatial = naming == joint_names.PALM_SPATIAL_NAMING
+        root_token, knee_token = roots[0], roots[-2] if spatial else roots[2]
         limits = leg_joints(joints, leg, naming)
         if not limits:
             continue
@@ -293,7 +296,8 @@ def sweep_poses(joints: dict,
             for value in (lo, 0.0, hi):
                 poses.append(({name: value}, "single"))
         hip = limits.get(root_token)
-        others = [(joint_names.joint_name(leg, t), limits[t]) for t in roots[1:4] if t in limits]
+        other_tokens = roots[1:] if spatial else roots[1:4]
+        others = [(joint_names.joint_name(leg, t), limits[t]) for t in other_tokens if t in limits]
         for level in (0, 1, 2):  # all-fold-min / neutral / all-fold-max
             fold = {name: (lo if level == 0 else hi if level == 2 else 0.0) for name, (lo, hi) in others}
             if hip is None:

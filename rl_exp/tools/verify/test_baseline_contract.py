@@ -1212,17 +1212,60 @@ _YAW_EXTRACTIONS_ALLOWED = {
 }
 
 
+def test_quat_yaw_scan_distinguishes_source_from_ignored_evidence():
+    """Historical A/B bytes may be wrong; new/force-tracked source must still be checked."""
+    from unittest.mock import patch
+    from rl_exp.tools.runrecord import binding
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = pathlib.Path(tmp)
+        binding.git_run(root, "init", "-q")
+        (root / ".gitignore").write_text("_tmp_*\nrl_exp/tools/diagnose/out/\n", encoding="utf-8")
+        source = root / "rl_exp/tools/diagnose/new_consumer.py"
+        history = root / "rl_exp/tools/diagnose/out/sources/before.py"
+        temporary = root / "rl_exp/tools/diagnose/_tmp_support_native_fixture.py"
+        history.parent.mkdir(parents=True)
+        source.write_text("value = yaw_quat(q)\n", encoding="utf-8")
+        wrong = "value = q[:, 0] * q[:, 3]\n"
+        history.write_text(wrong, encoding="utf-8")
+        temporary.write_text(wrong, encoding="utf-8")
+        before = history.read_bytes(), temporary.read_bytes()
+        with patch.dict(globals(), _REPO=root):
+            # This is the actual gate, not a second fixture-only scanner.
+            test_no_hand_rolled_quat_yaw()
+            source.write_text(wrong, encoding="utf-8")
+            error = expect(AssertionError, test_no_hand_rolled_quat_yaw)
+            assert "new_consumer.py" in str(error) and "before.py" not in str(error)
+            source.write_text("value = yaw_quat(q)\n", encoding="utf-8")
+            binding.git_run(root, "add", "-f", "--", history.relative_to(root).as_posix())
+            error = expect(AssertionError, test_no_hand_rolled_quat_yaw)
+            assert "before.py" in str(error), "tracked source must be scanned even under an ignored directory"
+            with patch.object(binding, "git_run", return_value=""):
+                error = expect(AssertionError, test_no_hand_rolled_quat_yaw)
+                assert "cannot enumerate source files" in str(error)
+        assert (history.read_bytes(), temporary.read_bytes()) == before
+
+
 def test_no_hand_rolled_quat_yaw():
     """Only the library may turn a quaternion into an angle; a second opinion is a second truth."""
+    from rl_exp.tools.runrecord import binding
+
     offenders = []
-    for root in ("rl_exp", "ablation_harness"):
-        for path in sorted((_REPO / root).rglob("*.py")):
-            key = path.relative_to(_REPO).as_posix()
-            if key == "rl_exp/tools/verify/test_baseline_contract.py" or key in _YAW_EXTRACTIONS_ALLOWED:
-                continue
-            text = path.read_text(encoding="utf-8")
-            if any(pattern.search(text) for pattern in _WXYZ_YAW):
-                offenders.append(key)
+    # Include untracked source under development, but not ignored evidence snapshots.
+    # --cached also retains force-added files under ignored directories. Do not silently
+    # pass if Git cannot enumerate the source tree.
+    listed = binding.git_run(_REPO, "ls-files", "--cached", "--others", "--exclude-standard", "-z",
+                             "--", "rl_exp", "ablation_harness")
+    assert listed, "cannot enumerate source files for quaternion yaw scan"
+    for key in sorted(set(listed.split("\0"))):
+        path = _REPO / key
+        if not key.endswith(".py") or not path.is_file():
+            continue
+        if key == "rl_exp/tools/verify/test_baseline_contract.py" or key in _YAW_EXTRACTIONS_ALLOWED:
+            continue
+        text = path.read_text(encoding="utf-8")
+        if any(pattern.search(text) for pattern in _WXYZ_YAW):
+            offenders.append(key)
     assert not offenders, (
         "hand-rolled quaternion yaw found; call yaw_quat / euler_xyz_from_quat instead: "
         f"{offenders}"
@@ -2185,6 +2228,100 @@ def test_target_binding_report_roundtrip(*, render_matrix=False):
             "same joint frames must draw the same stop readings"
 
 
+def test_self_collision_spatial_combined_roles():
+    """A twist is not a knee; new combined corners must include the wrist/ankle."""
+    from rl_exp.tasks import joint_names
+    from rl_exp.tools.verify import check_self_collision as collision
+    from rl_exp.tools.runrecord import binding
+
+    def model(naming):
+        return {joint_names.joint_name(leg, root): {"limits": (-(i+1), i+2)}
+                for leg in joint_names.LEGS for i, root in enumerate(joint_names.roots_of(naming, leg))}
+
+    # Captured before this fix; includes the original selection, values and ordering.
+    historical = {"shared": "37be2c71652563ad179bbf335d12dad32f9c48f1e41cb4021df816d211837661",
+                  "split": "9608c6ea2db166648a70932c57ebf99ebee873526bb1491d46eb38444bb02e71",
+                  "palm": "28dfd13a423d772daba13919f58d38590ac6a709b015e121a43e6d7c0cafecb7"}
+    for key, expected in historical.items():
+        naming = joint_names.NAMINGS[key]
+        poses = collision.sweep_poses(model(naming), naming)
+        raw = json.dumps(poses, sort_keys=True, separators=(",", ":")).encode()
+        assert binding.sha256_bytes(raw) == expected, key
+    naming = joint_names.PALM_SPATIAL_NAMING
+    joints = model(naming)
+    poses = collision.sweep_poses(joints, naming)
+    failures = []
+    for leg in joint_names.LEGS:
+        roots = joint_names.roots_of(naming, leg)
+        root, knee = (joint_names.joint_name(leg, roots[i]) for i in (0, -2))
+        pair = [q for q, kind in poses if kind == "combined" and set(q) == {root, knee}]
+        complete = {joint_names.joint_name(leg, token) for token in roots}
+        corners = [q for q, kind in poses if kind == "combined" and set(q) == complete]
+        if len(pair) != 9:
+            failures.append(f"{leg}: hip/elbow-knee pairs {len(pair)} != 9")
+        if len(corners) != 9:
+            failures.append(f"{leg}: full five-axis corners {len(corners)} != 9")
+    assert not failures, failures
+    assert len(poses) == 132
+    assert all(joints[name]["limits"][0] <= value <= joints[name]["limits"][1]
+               for q, _ in poses for name, value in q.items())
+
+
+def test_nonzero_gait_wiring_report_replay():
+    """Different runtime/action orders expose value swaps hidden by zero fixtures."""
+    from rl_exp.tasks import joint_names
+    from rl_exp.tools.diagnose import palm_gait_wiring as wiring, plot_joints
+    from rl_exp.tools.runrecord import binding
+
+    naming = joint_names.PALM_SPATIAL_NAMING
+    legs = {joint_names.joint_name(leg, root): f"{joint_names.end_link(leg, naming)}_{root}"
+            for leg in joint_names.LEGS for root in joint_names.roots_of(naming, leg)}
+    spine = [f"{part}_{axis}_joint" for part in ("chest", "neck", "tail1", "tail2", "tail3")
+             for axis in ("yaw", "pitch")]
+    names = list(reversed([*legs, *spine]))
+    channels = names[7:] + names[:7]
+    bound = joint_names.binding_for_target("fixture.usda", "fixture.json", naming, joint_names=names)
+    samples = []
+    for step in range(4):
+        sign = -1. if step % 2 else 1.
+        q = torch.arange(1, 31).unsqueeze(0).float() * sign * .0001
+        dq = q * 2.
+        action = torch.arange(30, 0, -1).unsqueeze(0).float() * sign * .00015
+        target = torch.zeros_like(q)
+        for column, name in enumerate(channels):
+            target[0, names.index(name)] = action[0, column]
+        samples.append(dict(step=step, done=step == 3, raw_action=action.tolist(),
+            backend_q_rad=q.tolist(), cache_q_rad=q.tolist(), backend_dq_rad_s=dq.tolist(),
+            cache_dq_rad_s=dq.tolist(), backend_target_rad=target.tolist(), cache_target_rad=target.tolist(),
+            backend_velocity_target_rad_s=torch.zeros_like(q).tolist()))
+    entry = dict(done_series=[False, False, False, True], valid_series=[True, True, True, False],
+                 frames_alive=3, frames_recorded=3, joint_series={}, spine_series={}, feet=[])
+    for index, name in enumerate(names):
+        series = entry["joint_series"] if name in legs else entry["spine_series"]
+        for kind, field in (("actual", "backend_q_rad"), ("target", "backend_target_rad"),
+                            ("vel", "backend_dq_rad_s")):
+            series[legs.get(name, name) + "_" + kind] = [round(row[field][0][index], 5) for row in samples[:3]]
+    for leg in joint_names.LEGS:
+        entry["feet"].append(dict(body=joint_names.end_link(leg, naming),
+            **{token + "_limits_rad": [-1., 1.] for token in plot_joints.report_tokens(naming, leg)}))
+    report = dict(target_binding=bound, target_binding_required=True, steps=4, policy_mode="injected_wiring",
+                  foot_bodies=list(joint_names.contact_body_names(naming)), envs=[entry],
+                  wiring_probe=dict(completed=True, scope="offline fixture", samples=samples,
+                                    joint_names=names, action_names=channels, snapshots={}))
+    assert wiring.audit(report)["verified_series"] == 90
+    with tempfile.TemporaryDirectory() as tmp:
+        path = pathlib.Path(tmp) / "report.json"
+        for name in ("source.py", "gait_probe.py", "manifest.json"):
+            payload = ("fixture " + name).encode("utf-8")
+            (path.parent / name).write_bytes(payload)
+            report["wiring_probe"]["snapshots"][name] = binding.sha256_bytes(payload)
+        raw = json.dumps(report).encode("utf-8")
+        path.write_bytes(raw)
+        result = wiring.replay(path, binding.sha256_bytes(raw))
+        assert result["rejected"] == ["swap_twist", "zero_velocity", "wrong_target", "missing_twist", "source"]
+        expect(ValueError, wiring.replay, path, "0" * 64)
+
+
 def test_gait_probe_first_frame_done_keeps_alive_empty():
     """Execute the real writer block on a frozen regression input, not rollout evidence."""
     # Extracted from the diagnostic report's done_series; regression input, not a measurement.
@@ -2335,6 +2472,8 @@ def main():
         print("TARGET_BINDING_RENDER_MATRIX_OK (4 namings, 8 PNGs)")
         return
     if "--binding-only" in sys.argv:
+        test_self_collision_spatial_combined_roles()
+        test_nonzero_gait_wiring_report_replay()
         test_gait_probe_first_frame_done_keeps_alive_empty()
         test_gait_probe_effort_limits_use_sim_joint_columns()
         test_gait_probe_jacobian_body_and_dof_mapping()
