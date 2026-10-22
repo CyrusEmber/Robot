@@ -395,8 +395,8 @@ def self_check_sole_area() -> None:
     assert torch.allclose(tilted, torch.tensor([[[0.0, -math.sin(theta), -math.cos(theta)]]]),
                           atol=1e-6), tilted
 
-    # The asset's own four feet, identity orientation, floor at each mesh's lowest vertex: what a flat
-    # floor can give this shape at all. Measured 2026-09-28 -- 1 mm band 0.003422 m^2, 2 mm 0.013352,
+    # The CURRENT asset's four feet, identity orientation, floor at each mesh's lowest vertex.
+    # The front pad retains this 2026-09-28 calibration: 1 mm band 0.003422 m^2, 2 mm 0.013352,
     # 5 mm 0.051689, 10 mm 0.116479 of a 0.164180 m^2 denominator. The pad is curved and its faces are
     # ~2 cm across, so the reading steps rather than slides: its lowest vertices sit at 0, 1.668,
     # 5.302 and 9.845 mm, and each ring a band crosses adds a whole triangle's area (~0.01 m^2), which
@@ -411,7 +411,7 @@ def self_check_sole_area() -> None:
         areas[name] = diag_metrics.sole_area_m2(mesh)
         grounded = mesh - torch.tensor([0.0, 0.0, float(mesh[..., 2].min())])
         flat[name] = {band: float(diag_metrics.ground_contact_area_m2(grounded, band, 0.0)[0].sum())
-                      for band in (0.001, 0.005)}
+                      for band in (0.001, 0.002, 0.005)}
     assert all(abs(area - 0.16418) < 2e-4 for area in areas.values()), areas
     assert abs(flat["lf"][0.001] - 0.003422) < 1e-6, flat["lf"]
     assert abs(flat["lf"][0.005] - 0.051689) < 1e-6, flat["lf"]
@@ -419,19 +419,25 @@ def self_check_sole_area() -> None:
           f"45 deg toe support 1e-4 m^2, and the four feet read {flat['lf'][0.001]:.6f} m^2 at a 1 mm "
           f"band against a {areas['lf']:.6f} m^2 denominator")
 
-    # Two families, two trees, on purpose (2026-09-28): the retired lizard family's rl hull is the
-    # flat one its own physics still carries, and lizard2's is the repaired dome. This asserts the
-    # isolation itself -- resolution per family plus the difference it exists to preserve -- so a
-    # later change that points both at one tree fails here rather than in a report nobody re-reads.
-    for family, expected_cap in (("lizard", 0.119282), ("lizard2", 0.013352)):
-        tree = diag_metrics.collision_mesh_dir(family)
-        assert tree.is_dir(), tree
-        hull = diag_metrics.mesh_triangles(tree / "rl_foot_collision.obj")
+    # Historical calibration belongs to its fixed mesh, not to a mutable family declaration.
+    # The approved 2026-10-08 candidate replaced lizard2's dome with flat rear pads. Requiring the
+    # September cap on that different asset falsely rejected it; raising its threshold would also
+    # erase the dome regression. Keep BOTH original numeric controls at their original locations.
+    root = pathlib.Path(__file__).resolve().parents[2]
+    for mesh_path, expected_cap in (
+            (root / "meshes/collision/rl_foot_collision.obj", 0.119282),
+            (root / "versions/lizard2/meshes/collision/rl_foot_collision.obj", 0.013352)):
+        hull = diag_metrics.mesh_triangles(mesh_path)
         grounded = hull - torch.tensor([0.0, 0.0, float(hull[..., 2].min())])
         cap = float(diag_metrics.ground_contact_area_m2(grounded, 0.002, 0.0)[0].sum())
-        assert abs(cap - expected_cap) < 1e-6, (family, tree, cap, expected_cap)
-    print("[SELF-CHECK] family isolation: lizard still reads its flat rl hull (0.119282 m^2 cap), "
-          "lizard2 the repaired one (0.013352) -- one declaration per family, two trees")
+        assert abs(cap - expected_cap) < 1e-6, (mesh_path, cap, expected_cap)
+    trees = {family: diag_metrics.collision_mesh_dir(family).resolve()
+             for family in ("lizard", "lizard2")}
+    assert all(tree.is_dir() for tree in trees.values()), trees
+    assert trees["lizard"] != trees["lizard2"], ("family trees alias", trees)
+    print("[SELF-CHECK] historical flat/dome caps retain 0.119282/0.013352 m^2; "
+          f"current families resolve separate trees {trees}; current lizard2 2 mm caps "
+          f"{ {name: bands[0.002] for name, bands in flat.items()} }")
 
 
 def self_check_clip_saturation() -> None:

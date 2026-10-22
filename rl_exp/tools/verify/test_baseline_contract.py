@@ -2322,6 +2322,42 @@ def test_nonzero_gait_wiring_report_replay():
         expect(ValueError, wiring.replay, path, "0" * 64)
 
 
+def test_gait_sole_calibration_keeps_asset_identity():
+    import contextlib
+    import io
+    import math
+    import pathlib
+    from unittest.mock import patch
+    from rl_exp.tools.diagnose import diag_metrics
+    from rl_exp.tasks import obs_protocol
+
+    current = _REPO / "rl_exp/tools/diagnose/gait_probe.py"
+    source = getattr(sys.modules[__name__], "GAIT_SOURCE", current)
+    tree = ast.parse(source.read_text(encoding="utf-8"))
+    function = next(n for n in tree.body if isinstance(n, ast.FunctionDef)
+                    and n.name == "self_check_sole_area")
+    scope = {"__file__": str(current), "torch": torch, "math": math, "pathlib": pathlib,
+             "diag_metrics": diag_metrics, "obs_protocol": obs_protocol}
+    exec(compile(ast.Module(body=[function], type_ignores=[]), str(current), "exec"), scope)
+    run = scope["self_check_sole_area"]
+    with contextlib.redirect_stdout(io.StringIO()):
+        run()  # The actual adopted candidate must pass without altering either historical cap.
+        retired_tree = diag_metrics.collision_mesh_dir("lizard")
+        with patch.object(diag_metrics, "collision_mesh_dir", return_value=retired_tree):
+            expect(AssertionError, run)  # A declaration alias still fails when rear caps coincide.
+        original = diag_metrics.mesh_triangles
+        historical = (_REPO / "rl_exp/versions/lizard2/meshes/collision/rl_foot_collision.obj").resolve()
+
+        def swapped(path):
+            return original(retired_tree / "rl_foot_collision.obj" if path.resolve() == historical else path)
+
+        with patch.object(diag_metrics, "mesh_triangles", side_effect=swapped):
+            expect(AssertionError, run)  # Replacing the calibrated dome with a flat pad is detected.
+        with patch.object(diag_metrics, "ground_contact_area_m2",
+                          return_value=(torch.zeros(1), torch.zeros(1))):
+            expect(AssertionError, run)  # Broken clipping cannot hide behind correct declarations.
+
+
 def test_gait_probe_first_frame_done_keeps_alive_empty():
     """Execute the real writer block on a frozen regression input, not rollout evidence."""
     # Extracted from the diagnostic report's done_series; regression input, not a measurement.
