@@ -14,12 +14,15 @@ ordering cases matter most, because a same-members-different-order edit is exact
 
 from __future__ import annotations
 
+import ast
 import copy
 import hashlib
 import json
 import pathlib
 import sys
 import tempfile
+from types import SimpleNamespace as NS
+from unittest.mock import patch
 
 sys.path.insert(0, ".")
 sys.path.insert(0, "rl_exp/tools/verify")
@@ -58,8 +61,53 @@ def task_of(document: dict, protocol: str) -> str:
     raise AssertionError(f"no task references {protocol}")
 
 
+def live_value_regression() -> None:
+    """Run the actual live entry with a reset tensor, without starting Kit."""
+    import torch
+
+    path = pathlib.Path("rl_exp/tools/verify/obs_protocol_live.py")
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    functions = [n for n in tree.body if isinstance(n, ast.FunctionDef)]
+    joints = ["a", "b"]
+    protocol = NS(
+        load_diagnostic_target=lambda *a, **k: {"runtime_joint_order": joints, "source": "fixture", "end_links": {}},
+        groups_for=lambda _: {"policy": {}}, live_terms_for=lambda *a: ["joint_pos"],
+        feet_for=lambda *a: (), validate_diagnostic_runtime=lambda *a: None)
+    names = NS(LEGACY_NAMING={}, naming_from_binding=lambda _: {}, LEGS=())
+    tensor = torch.zeros(1, 2)
+    manager = NS(active_terms={"policy": ["joint_pos"]}, group_obs_term_dim={"policy": [(2,)]})
+    cfg = NS(scene=NS(num_envs=1))
+    robot = NS(joint_names=joints)
+    live = NS(observation_manager=manager, scene={"robot": robot, "contact_forces": None}, action_manager=None)
+    env = NS(reset=lambda: ({"policy": tensor}, {}), unwrapped=live, close=lambda: None)
+    scope = {"pathlib": pathlib, "joint_names": names, "obs_protocol": protocol,
+             "gym": NS(spec=lambda _: NS(kwargs={"env_cfg_entry_point": "fixture_obs_cfg:Cfg"}),
+                       make=lambda *a, **k: env),
+             "args_cli": NS(envs=1, target_config=pathlib.Path("fixture"), naming=None, pin=False,
+                            value_report=None)}
+    exec(compile(ast.Module(body=functions, type_ignores=[]), str(path), "exec"), scope)
+    with patch.dict(sys.modules, fixture_obs_cfg=NS(Cfg=lambda: cfg)):
+        for value in (0., float("nan"), float("inf")):
+            tensor[0, 1] = value
+            problems = []
+            scope["check_task"]("fixture", problems, [])
+            check(f"live/finite-reset-{value}", bool(problems) == (value != 0.), str(problems))
+    sample = torch.tensor([[.01, -.02, .03]])
+    check("live/nonzero-values", scope["compare_values"](sample, sample.clone(), "fixture") == 0.)
+    for label, broken in (("permutation", sample.flip([1])), ("sign", -sample),
+                          ("shape", sample[:, :2]), ("nan", sample * float("nan")),
+                          ("inf", sample * float("inf"))):
+        try:
+            scope["compare_values"](broken, sample, label)
+        except ValueError:
+            check(f"live/nonzero-rejects-{label}", True)
+        else:
+            check(f"live/nonzero-rejects-{label}", False)
+
+
 def main() -> int:
     PROBLEMS.clear()
+    live_value_regression()
     # --- the real declaration is clean on both halves it can run offline ---------------
     check("real/self-consistent", g.check_self(DECLARED) == [], f"{g.check_self(DECLARED)}")
     check("real/anchors-approved", g.check_anchors(DECLARED, ANCHORED) == [], f"{g.check_anchors(DECLARED, ANCHORED)}")
