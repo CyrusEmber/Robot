@@ -89,3 +89,24 @@ CLI 将错误码传给 Kit 原生快速关闭，控制台采用 UTF-8，避免�
 绑定校验在创建和读取端共用：输入、源码、身份、位置、摘要及归属不可擦空；命令首项
 必须有效，后续参数允许合法空字符串。源码采集只把绝对仓内 Python 来源当文件绑定，
 框架动态模块的相对伪文件名不会被拼成仓内源文件；真实绝对源码缺失仍拒绝。
+
+## 支撑原生复制的历史对照
+
+`support_native_ab.py` 从 Git 读取旧、新完整入口，使用当前绑定输入配对运行至 Phase 0，
+用于定位初始化故障。先确保参考运行的输入和辅助源码仍可校验，再使用全新输出目录：
+
+```text
+<python> -B rl_exp/tools/diagnose/support_native_ab.py --output_dir E:/Robot/rl_exp/tools/diagnose/out/runs/support-native-ab/<new_run> --crash_reporter off
+<python> -B rl_exp/tools/diagnose/support_native_ab.py --output_dir E:/Robot/rl_exp/tools/diagnose/out/runs/support-native-ab/<another_new_run> --crash_reporter local
+<python> -B rl_exp/tools/diagnose/support_native_ab.py --inspect_results E:/Robot/rl_exp/tools/diagnose/out/runs/support-native-ab/<completed_run>
+```
+
+`--reference_run` 可显式指定输入绑定来源；`--before`、`--after` 指定历史源码版本。
+local 模式先验证报告器启用、上传 URL 为空、跳过旧转储上传、禁止启动上传；校验失败即停止。
+off 模式关闭报告器并同样禁止旧转储和启动上传。实验的 `completed` 只表示全部试验已记录，
+逐次物理结果须读 `report.json`。`--inspect_results` 只读核验原证据，保留原分类并给出当前分类器判读。
+
+源码归档在 `sources/`，驱动归档在 `driver.py`，实际命令保留临时 sibling 路径；
+不能直接从归档目录执行原脚本，因为它依赖相对仓根和 sibling imports。复跑优先用本工具创建新运行，
+单次重放须按记录恢复相同源码位置并换新 label。实验期间不要同时跑全仓源码扫描，以免碰到临时源清理。
+本工具不修改生产入口或原生回调，比较范围与结果归事项最新验收记录；不把小样本运行当作底层故障修复。
