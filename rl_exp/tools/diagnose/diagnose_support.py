@@ -1207,6 +1207,7 @@ def _run_session(env_cfg, agent_cfg, target_binding, naming, meshes, columns, he
                          f"{s['fwd_yaw_mean']} | {s['overshoot_frac']} | {s['overshoot_abs_frac']} | "
                          f"{s['fwd_mae_mps']} | {s['fwd_speed_std']} | {s['fwd_speed_mean']} | "
                          f"{s['slip_y_mean']} | {s['slip_y_abs_mean']} | "
+                         f"{s['yaw_drift_deg']} | {s['turn_rate_deg_s']} | "
                          f"{s['drift_x_m']} | {s['drift_y_m']} | {s['crab_deg_mean']}° | "
                          f"{s['v_world_mean']} | {s['tilt_max_deg']} | {s['feet_below2_frac']} | "
                          f"{s['foot_duty']} | {s['foot_load_frac']} | {lc['sum_all_ratio']} | "

@@ -399,6 +399,37 @@ class OutputTest(unittest.TestCase):
         self.assertEqual(record["state"], "completed")
         self.gym_env.close.assert_called_once()
 
+    def test_phase_two_summary_columns_match_metric_meanings(self):
+        self.args.phases = "2"
+        metrics = {
+            "fwd_yaw_mean": 1.1, "overshoot_frac": 2.2, "overshoot_abs_frac": 3.3,
+            "fwd_mae_mps": 4.4, "fwd_speed_std": 5.5, "fwd_speed_mean": 6.6,
+            "slip_y_mean": 7.7, "slip_y_abs_mean": 8.8, "yaw_drift_deg": 9.9,
+            "turn_rate_deg_s": 10.1, "drift_x_m": 11.2, "drift_y_m": 12.3,
+            "crab_deg_mean": 13.4, "v_world_mean": [14.5, 15.6, 16.7],
+            "tilt_max_deg": 17.8, "feet_below2_frac": 18.9,
+            "foot_duty": [0.1, 0.2, 0.3, 0.4], "foot_load_frac": [0.5, 0.6, 0.7, 0.8],
+            "load_closure": {"sum_all_ratio": 19.1, "non_foot_top": []},
+            "neck_support_frac": 20.2, "belly_gt10n_frac": 21.3, "ledger": {"term": 22.4}}
+        self.namespace["analyze_flat"] = lambda *a: metrics
+        self.run_main()
+
+        lines = (self.out / "summary.md").read_text(encoding="utf-8").splitlines()
+        header = next(line for line in lines if line.startswith("| case | cmd |"))
+        row = next(line for line in lines if line.startswith("| p2_flat_v0.3_r0 |"))
+        names = [cell.strip() for cell in header.split("|")[1:-1]]
+        values = [cell.strip() for cell in row.split("|")[1:-1]]
+        self.assertEqual(len(values), len(names))
+        self.assertEqual(dict(zip(names, values)), {
+            "case": "p2_flat_v0.3_r0", "cmd": "0.3", "fwd_yaw": "1.1", "overshoot": "2.2",
+            "overshoot_abs": "3.3", "fwd_mae": "4.4", "fwd_std": "5.5", "fwd_b": "6.6",
+            "slip_y": "7.7", "slip_abs": "8.8", "yaw_drift": "9.9", "turn_rate": "10.1",
+            "drift_x": "11.2", "drift_y": "12.3", "crab": "13.4°", "v_world": "[14.5, 15.6, 16.7]",
+            "tilt_max": "17.8", "feet<2": "18.9", "foot_duty": "[0.1, 0.2, 0.3, 0.4]",
+            "foot_load_frac": "[0.5, 0.6, 0.7, 0.8]", "ΣF_body/mg": "19.1", "非足top3": "",
+            "neck_frac": "20.2", "belly_frac": "21.3", "ledger": '{"term": 22.4}'})
+        self.assertEqual(inspect_run(self.out, ArtifactPaths(self.index, self.repo))["state"], "completed")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
