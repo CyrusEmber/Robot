@@ -4,9 +4,9 @@ title: 诊断产物整理、证据复用与收尾管理
 scope: rl_exp/out, rl_exp/tools/diagnose
 status: in_progress
 landing: rl_exp/tools/diagnose/artifact_index.json, rl_exp/tools/diagnose/artifact_run.py, rl_exp/tools/diagnose/diagnose_support.py, rl_exp/docs/diagnostic_artifacts.md, rl_exp/tools/diagnose/self_weight_audit.py, rl_exp/tools/diagnose/support_archive_index.json, acceptance/records
-next: Codex 诊断维护者复验 support 多环境原生故障并推广其余入口；整理执行者按批次清存量。
+next: Codex 诊断维护者跟进原生复制故障并推广其余入口；整理执行者按批次清存量。
 close_when: 不带执行历史的新上下文核验清单闭合、证据可复用、迁移可恢复及新运行收尾机制；缺证不关闭。
-evidence: acceptance/records/2026-10-22-diagnostic-support-producer.md, acceptance/records/2026-10-22-diagnostic-producer-review-followup.md, acceptance/records/2026-10-22-diagnostic-producer-review.md, acceptance/records/2026-10-21-diagnostic-producer-lifecycle.md, acceptance/records/2026-10-21-diagnostic-artifact-review-fixes.md, acceptance/records/2026-10-21-diagnostic-artifact-review.md, acceptance/records/2026-10-21-diagnostic-artifact-decoupling-cleanup.md, acceptance/records/2026-10-21-diagnostic-artifact-drive-runtime-retention.md, acceptance/records/2026-10-21-diagnostic-artifact-second-archive.md, acceptance/records/2026-10-20-diagnostic-artifact-first-archive.md, acceptance/records/2026-10-20-diagnostic-artifact-preflight.md, acceptance/records/2026-10-20-diagnostic-artifact-plan-review.md
+evidence: acceptance/records/2026-10-22-diagnostic-support-multienv.md, acceptance/records/2026-10-22-diagnostic-support-producer.md, acceptance/records/2026-10-22-diagnostic-producer-review-followup.md, acceptance/records/2026-10-22-diagnostic-producer-review.md, acceptance/records/2026-10-21-diagnostic-producer-lifecycle.md, acceptance/records/2026-10-21-diagnostic-artifact-review-fixes.md, acceptance/records/2026-10-21-diagnostic-artifact-review.md, acceptance/records/2026-10-21-diagnostic-artifact-decoupling-cleanup.md, acceptance/records/2026-10-21-diagnostic-artifact-drive-runtime-retention.md, acceptance/records/2026-10-21-diagnostic-artifact-second-archive.md, acceptance/records/2026-10-20-diagnostic-artifact-first-archive.md, acceptance/records/2026-10-20-diagnostic-artifact-preflight.md, acceptance/records/2026-10-20-diagnostic-artifact-plan-review.md
 ---
 
 ## 当前范围
@@ -60,7 +60,7 @@ evidence: acceptance/records/2026-10-22-diagnostic-support-producer.md, acceptan
 
 1. **已接入口维护——Codex 诊断维护者负责。** `local_path_view.py` 与 `diagnose_support.py` 的操作入口见 landing，复审与适用范围归最新 evidence。继续修改须复核受影响绑定、故障留存、真实写入和恢复路径；记录存在不代替行为证明，不外推未覆盖模式。
 2. **推广新增入口——脚本维护者接入，实验执行者使用。** 枚举两个输出根及其它发现落点的生产入口，区分继续使用、保留的历史入口与未覆盖入口，逐一落实具名维护者和动作。将试点机制用于继续使用的入口；`diagnose_support.py` 的另一输出根和同名真实写入路径必须覆盖。子系统文档留操作入口，FILEMAP 仅路由；公开 API 按弃用规则处理。
-   - Codex 诊断维护者继续定位 support 多环境 PhysX 原生故障，保留现场，复验受影响模式；其它入口逐项推广。平地闭环不替代多环境或其余入口验收。
+   - Codex 诊断维护者跟进底层 PhysX 原生复制故障，保留现场；support 独立解析模式的复验入口见 landing，修改须复验受影响模式，其它入口逐项推广。入口规避不等于底层修复，试点闭环不替代其余入口验收。
    - **退出条件**：每个继续使用的入口完成一次真实创建与收尾，并覆盖其特有写入失败；实验执行者能依文档独立操作，后续正常运行无需整理执行者手改索引。历史入口不得误宣称已退休；未覆盖入口及新增产物仍有归属，不以试点通过代表全覆盖。
 3. **分批消化存量——整理执行者负责，消费者维护者核对。** 明确存量清单的截点，后续新增走阶段 2；关闭前对差异补核。每批限定文件集与依赖闭包，记录大小、哈希、Git 状态、生产/消费者、事项、保留理由、动作和回退；执行前刷新文件与 writer 状态。展开代码、配置、报告、资源的传递引用，不反复全仓扫描代替处置。
    - **退出条件**：同批完成接线、迁移、真实消费者复验、恢复验证与旧副本处置；ZIP 解包复读，无唯一证据或活跃输入损失才删除。先无用整包后重复资产，可独立修改副本不共享可写文件；核删除绝对范围并清理隔离副本。缺口留该批、具名责任人和动作，不无限追加同类半成品批次。
