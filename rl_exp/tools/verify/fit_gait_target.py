@@ -44,6 +44,10 @@ inserted joint at zero, so its reachable set provably contains A's answer and B 
 for solver reasons. A B that merely ties A means this target does not ask for the axis; it is not
 evidence about the structure.
 
+This legacy solver uses the shared hip/haa/hfe/kfe/foot roles, including its explicit
+inserted-axis fixture. palm/palm_spatial inputs require their own bound solver;
+shared chain validation runs before any scaled copy is written.
+
 Usage:
 
     python rl_exp/tools/verify/fit_gait_target.py --self-check
@@ -198,7 +202,9 @@ def solve(chain, normal, vertices, base_z, phase, target, point, facing_required
 
     def descend(score_of, current, current_score):
         best_here, best_score = current, current_score
-        for step in (0.08, 0.025, 0.008):
+        # Refine below 8 mrad so a reachable FK control need not stall above
+        # the existing 2 mm check.
+        for step in (0.08, 0.025, 0.008, 0.002):
             for _ in range(60):
                 improved = False
                 for index in range(len(chain)):
@@ -592,7 +598,8 @@ def sweep_cells(target, leg, base_z, args, reference, cells) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--target", type=pathlib.Path, default=DEFAULT_TARGET)
-    parser.add_argument("--urdf", type=pathlib.Path, default=K.DEFAULT_URDF)
+    parser.add_argument("--urdf", type=pathlib.Path, default=K.DEFAULT_URDF,
+                        help="shared-role chain; palm/palm_spatial are outside this solver's scope")
     parser.add_argument("--leg", default=None, help="default: the target's own leg")
     parser.add_argument("--candidate-b", type=pathlib.Path, default=None,
                         help="default: the asset plus one revolute along the femur, built as a fixture")
@@ -631,6 +638,9 @@ def main() -> None:
         low, high = (float(value) for value in args.posture_azim.split(":"))
         target["posture"].update({"femur_azim_min_deg": low, "femur_azim_max_deg": high})
     leg = args.leg or target["meta"]["leg"]
+    K.chain_joint_names(args.urdf, leg)
+    if args.candidate_b is not None:
+        K.chain_joint_names(args.candidate_b, leg)
     if args.scale:
         scales = {token: float(factor) for token, factor in
                   (cell.split("=") for cell in args.scale.split(","))}

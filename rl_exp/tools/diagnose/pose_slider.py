@@ -24,6 +24,11 @@ tilt is about x" is a fact you read there, not one you infer from two slider pos
 Sliders are clamped to the URDF limits by default; the ``limits`` button lifts them in memory only --
 nothing on disk is touched -- and every joint outside its limit is called out on the readout line.
 
+The slider uses shared hip/haa/hfe/kfe/foot columns. palm/palm_spatial require a
+separate bound UI. Saved poses carry a URDF digest and joint names; loading checks
+them against the selected target. Historical files without binding retain their
+legacy unverified reading, with any declared URDF still checked for a mismatch.
+
 The view is yours to keep. Left or middle drag rotates the whole scene -- the axes box and its ticks
 *are* the coordinate system here, so they turn with it -- and the right button zooms. There is no
 pan: matplotlib's 3D pan moves the data limits, which slides the model inside a fixed frame and
@@ -61,6 +66,7 @@ from rl_exp.tools.verify.check_leg_reachability import (  # noqa: E402
     CHAIN,
     DEFAULT_URDF,
     LEGS,
+    chain_joint_names,
     joint_effect,
     load_chain,
     pad_faces,
@@ -69,6 +75,7 @@ from rl_exp.tools.verify.check_leg_reachability import (  # noqa: E402
     pad_vertices,
     self_check as fk_self_check,
 )
+from rl_exp.tools.runrecord.binding import sha256_file  # noqa: E402
 
 #: Body height at zero action in the settled simulator pose [m]: the ADOPTED body's, from the PLAY
 #: zero-action window of ``acceptance/records/2026-10-08-lizard2-v3-landing.md`` (60 steps, 2 envs,
@@ -120,6 +127,12 @@ def _norm(vector: list[float]) -> float:
     return math.sqrt(sum(value * value for value in vector))
 
 
+def _pose_binding(urdf: pathlib.Path) -> dict:
+    """Bind the shared-role slider columns to this URDF's bytes and actual joint order."""
+    return {"urdf_sha256": sha256_file(urdf),
+            "joint_names": {leg: list(chain_joint_names(urdf, leg)) for leg in LEGS}}
+
+
 def _format_pose(angles: dict, base_z: float, free: bool, margin_deg: float, urdf: pathlib.Path,
                  note: str = "") -> dict:
     """The on-disk pose: the angles, plus what the tool was showing when they were saved."""
@@ -128,14 +141,26 @@ def _format_pose(angles: dict, base_z: float, free: bool, margin_deg: float, urd
         "margin_deg": margin_deg,
         "limits_extended": free,
         "angles_rad": {leg: list(angles[leg]) for leg in LEGS},
-        "urdf": str(urdf),
+        "urdf": str(urdf.resolve()),
+        "pose_binding": _pose_binding(urdf),
         "note": note,
     }
 
 
-def read_pose(path: pathlib.Path, fallback_base_z: float) -> tuple[dict, float, bool]:
-    """Angles, body height and whether the limits were lifted, from a saved pose."""
+def read_pose(path: pathlib.Path, fallback_base_z: float, *,
+              urdf: pathlib.Path | None = None) -> tuple[dict, float, bool]:
+    """Read angles [rad] and height [m]; an explicit URDF checks saved identity and column order.
+
+    Historical files without binding remain legacy unverified inputs. When present,
+    their saved URDF must match. New files additionally pin bytes and joint names.
+    """
     saved = json.loads(path.read_text(encoding="utf-8"))
+    if urdf is not None:
+        declared = saved.get("urdf")
+        if declared is not None and pathlib.Path(declared).resolve() != urdf.resolve():
+            raise SystemExit(f"{path}: saved URDF {declared} != slider target {urdf}")
+        if "pose_binding" in saved and (declared is None or saved["pose_binding"] != _pose_binding(urdf)):
+            raise SystemExit(f"{path}: saved URDF digest or joint order differs from slider target {urdf}")
     missing = [leg for leg in LEGS if leg not in saved["angles_rad"]]
     if missing:
         raise SystemExit(f"{path} has no angles for {missing}")
@@ -143,7 +168,12 @@ def read_pose(path: pathlib.Path, fallback_base_z: float) -> tuple[dict, float, 
     for leg in LEGS:
         if len(angles[leg]) != len(CHAIN):
             raise SystemExit(f"{path}: {leg} has {len(angles[leg])} angles, expected {len(CHAIN)}")
-    return angles, float(saved.get("base_z", fallback_base_z)), bool(saved.get("limits_extended", False))
+        if not all(math.isfinite(value) for value in angles[leg]):
+            raise SystemExit(f"{path}: {leg} has nonfinite angles")
+    base_z = float(saved.get("base_z", fallback_base_z))
+    if not math.isfinite(base_z):
+        raise SystemExit(f"{path}: nonfinite body height")
+    return angles, base_z, bool(saved.get("limits_extended", False))
 
 
 def view_self_check(args) -> None:
@@ -194,7 +224,7 @@ def self_check(args) -> None:
     with tempfile.TemporaryDirectory() as folder:
         path = pathlib.Path(folder) / "pose.json"
         path.write_text(json.dumps(_format_pose(posed, 0.95, True, 20.0, args.urdf)), encoding="utf-8")
-        back, base_z, free = read_pose(path, DEFAULT_BASE_Z)
+        back, base_z, free = read_pose(path, DEFAULT_BASE_Z, urdf=args.urdf)
     assert back == posed and base_z == 0.95 and free is True, (back, base_z, free)
     print("[SELF-CHECK] FK caliber passes, clamps hold at the limit and release in free mode, "
           "and a saved pose reads back as written")
@@ -219,7 +249,7 @@ def build(args, show: bool = True):
     base_z = args.base_z
     free = args.free
     if args.load is not None:
-        angles, base_z, free = read_pose(args.load, args.base_z)
+        angles, base_z, free = read_pose(args.load, args.base_z, urdf=args.urdf)
 
     state = {"active": None, "note": "", "silent": False, "drawn": False}
     zero = {leg: pad_state(chains[leg], [0.0] * len(CHAIN), normals[leg], vertices[leg], base_z)["position"]
@@ -423,7 +453,8 @@ def build(args, show: bool = True):
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--urdf", type=pathlib.Path, default=DEFAULT_URDF)
+    parser.add_argument("--urdf", type=pathlib.Path, default=DEFAULT_URDF,
+                        help="shared-role chain used by the slider columns")
     parser.add_argument("--base-z", type=float, default=DEFAULT_BASE_Z,
                         help="body height above the ground [m]; the ground is z = -base_z in the body frame")
     parser.add_argument("--margin-deg", type=float, default=20.0,

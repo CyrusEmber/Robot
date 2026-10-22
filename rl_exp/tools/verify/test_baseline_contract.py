@@ -2521,6 +2521,95 @@ def test_probe_cli_closes_app_before_exit():
     assert not problems, problems
 
 
+def test_shared_fitter_reaches_its_fk_control():
+    from rl_exp.tools.verify import fit_gait_target as fit
+
+    target = fit.load_target(fit.DEFAULT_TARGET)
+    leg, base_z = target["meta"]["leg"], target["body"]["base_z_m"]
+    chain, normal, vertices, zero, _ = fit.zero_pose(fit.K.DEFAULT_URDF, leg, base_z)
+    pose = [.3, -.2, .4, -.5, .1][:len(chain)]
+    assert all(joint["limits"][0] <= value <= joint["limits"][1] for joint, value in zip(chain, pose))
+    point = fit.K.pad_state(chain, pose, normal, vertices, base_z)["position"]
+    found = fit.solve(chain, normal, vertices, base_z, target["phases"][0], fit._position_only(target),
+                      point, False, zero)
+    assert all(joint["limits"][0] <= value <= joint["limits"][1] for joint, value in zip(chain, found))
+    error = fit._distance(fit.K.foot_pose(chain, found)[0], point)
+    assert error <= .002, error  # Existing self-check tolerance [m], unchanged.
+
+
+def test_shared_fitter_rejects_before_derivation():
+    import contextlib
+    import io
+    from unittest.mock import patch
+    from rl_exp.tools.verify import fit_gait_target as fit
+
+    with tempfile.TemporaryDirectory() as directory:
+        root = pathlib.Path(directory)
+        urdf = root / "spatial.urdf"
+        urdf.write_text('<robot><link name="base_link"/><link name="rl_hip_twist"/>'
+                        '<joint name="rl_hip_twist_joint" type="revolute">'
+                        '<parent link="base_link"/><child link="rl_hip_twist"/>'
+                        '</joint></robot>', encoding="utf-8")
+        arguments = [fit.__file__, "--urdf", str(urdf), "--scale", "hip_twist=1.001", "--asset-only"]
+        with patch.object(sys, "argv", arguments), patch.object(tempfile, "gettempdir", return_value=directory), \
+                patch.object(fit, "with_length_scale", side_effect=AssertionError("derive before binding")) as derive, \
+                contextlib.redirect_stdout(io.StringIO()):
+            expect(SystemExit, fit.main)
+        derive.assert_not_called()
+        assert not (root / "rl_gait_scaled").exists()
+
+
+def test_shared_pose_load_checks_asset_and_order():
+    import copy
+    import tempfile
+    from rl_exp.tools.diagnose import pose_slider as slider
+
+    with tempfile.TemporaryDirectory() as directory:
+        root = pathlib.Path(directory)
+        urdf = root / "shared.urdf"
+        parts = ['<robot name="pose_fixture"><link name="base_link"/>']
+        for leg in slider.LEGS:
+            parent = "base_link"
+            for token in slider.CHAIN:
+                child = f"{leg}_{token}"
+                parts.append(f'<link name="{child}"/><joint name="{child}_joint" type="revolute">'
+                             f'<parent link="{parent}"/><child link="{child}"/>'
+                             '<origin xyz="0 0 0"/><axis xyz="0 1 0"/>'
+                             '<limit lower="-1" upper="1" effort="1" velocity="1"/></joint>')
+                parent = child
+        urdf.write_text("".join(parts) + "</robot>", encoding="utf-8")
+        angles = {leg: [.01 * (i + 1) for i in range(5)] for leg in slider.LEGS}
+        saved = slider._format_pose(angles, .9, False, 20., urdf)
+        pose = root / "pose.json"
+
+        def read(document):
+            pose.write_text(json.dumps(document), encoding="utf-8")
+            return slider.read_pose(pose, .9253, urdf=urdf)
+
+        assert read(saved) == (angles, .9, False)
+        legacy = {key: value for key, value in saved.items() if key != "pose_binding"}
+        assert read(legacy) == (angles, .9, False)
+        assert read({key: value for key, value in legacy.items() if key != "urdf"}) == (angles, .9, False)
+        foreign = copy.deepcopy(legacy)
+        foreign["urdf"] = str(root / "spatial.urdf")  # Same five angles; wrong actual machine.
+        expect(SystemExit, read, foreign)
+        for defect in ("digest", "order", "partial", "nan", "height"):
+            bad = copy.deepcopy(saved)
+            if defect == "digest":
+                bad["pose_binding"]["urdf_sha256"] = "0" * 64
+            elif defect == "order":
+                bad["pose_binding"]["joint_names"][slider.LEGS[0]].reverse()
+            elif defect == "partial":
+                del bad["pose_binding"]["joint_names"]
+            elif defect == "nan":
+                bad["angles_rad"][slider.LEGS[0]][0] = float("nan")
+            else:
+                bad["base_z"] = float("inf")
+            expect(SystemExit, read, bad)
+        urdf.write_text(urdf.read_text(encoding="utf-8") + "\n<!-- changed identity -->", encoding="utf-8")
+        expect(SystemExit, read, saved)
+
+
 def test_entry_observer_bounds_real_step_calls():
     from rl_exp.tools.diagnose import palm_entry_wiring as observer
 
