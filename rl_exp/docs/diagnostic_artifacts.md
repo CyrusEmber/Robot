@@ -134,7 +134,7 @@ off 模式关闭报告器并同样禁止旧转储和启动上传。实验的 `co
 
 | 用途 | 当前落点与读取方式 |
 |---|---|
-| 当前候选输入 | `rl_exp/out/lizard2_palm_spatial_20261014/checkpoint_v3/`；仍由现有消费者读取 |
+| 当前候选输入 | `rl_exp/tools/diagnose/baselines/palm-spatial-20261014/checkpoint/`；旧逻辑路径经既有映射读取 |
 | 原 v3 几何正反例 | `rl_exp/tools/diagnose/baselines/palm-spatial-20261014/{probe,locked}/`；原逻辑路径由 `ArtifactPaths` 解析 |
 | 早期历史构建与对照 | `rl_exp/out/archive/palm-spatial/history-20261014.zip`；按 `manifest.json` 将 `blobs/<sha256>` 恢复到清单路径 |
 
@@ -147,4 +147,8 @@ ZIP 为本机归档，不随 Git 检出；异机须先取得同摘要归档。�
 
 这条命令验证恢复并清理自身临时副本；正式恢复按清单操作，不覆盖已有目录。
 处置结果与早期报告的复读边界见 `acceptance/records/2026-10-22-diagnostic-spatial-consolidation.md`。
-当前输入的其它消费者迁移仍由原事项推进。
+当前输入迁移及消费者复验见 `acceptance/records/2026-10-22-diagnostic-checkpoint-relocation.md`。
+导出校验、运行时准备、Blender 空间导出及机体预检沿用原参数，逻辑身份与批准摘要不随存储位置改变。
+完整消费者恢复在上述命令上增加 `--body_reference <migration_before_body_report.json>` 和
+`--blender <blender.exe>`，使用记录中的迁移前报告；它还需要本机原导出、注册输入及历史 Git 对象。
+原机体预检的失败与缺证按原报告保留；运行时复制只验证至物理应用启动边界。

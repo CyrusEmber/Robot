@@ -6,18 +6,18 @@ status: in_progress
 landing: rl_exp/tools/diagnose/artifact_index.json, rl_exp/tools/diagnose/artifact_run.py, rl_exp/tools/diagnose/diagnose_support.py, rl_exp/docs/diagnostic_artifacts.md, rl_exp/tools/diagnose/self_weight_audit.py, rl_exp/tools/diagnose/support_archive_index.json, acceptance/records
 next: Codex 诊断维护者跟进原生复制故障并推广其余入口；整理执行者按批次清存量。
 close_when: 不带执行历史的新上下文核验清单闭合、证据可复用、迁移可恢复及新运行收尾机制；缺证不关闭。
-evidence: acceptance/records/2026-10-22-diagnostic-spatial-consolidation.md, acceptance/records/2026-10-22-diagnostic-spatial-producer.md, acceptance/records/2026-10-22-diagnostic-support-native-ab.md, acceptance/records/2026-10-22-diagnostic-support-multienv.md, acceptance/records/2026-10-22-diagnostic-support-producer.md, acceptance/records/2026-10-22-diagnostic-producer-review-followup.md, acceptance/records/2026-10-22-diagnostic-producer-review.md, acceptance/records/2026-10-21-diagnostic-producer-lifecycle.md, acceptance/records/2026-10-21-diagnostic-artifact-review-fixes.md, acceptance/records/2026-10-21-diagnostic-artifact-review.md, acceptance/records/2026-10-21-diagnostic-artifact-decoupling-cleanup.md, acceptance/records/2026-10-21-diagnostic-artifact-drive-runtime-retention.md, acceptance/records/2026-10-21-diagnostic-artifact-second-archive.md, acceptance/records/2026-10-20-diagnostic-artifact-first-archive.md, acceptance/records/2026-10-20-diagnostic-artifact-preflight.md, acceptance/records/2026-10-20-diagnostic-artifact-plan-review.md
+evidence: acceptance/records/2026-10-22-diagnostic-checkpoint-relocation.md, acceptance/records/2026-10-22-diagnostic-spatial-consolidation.md, acceptance/records/2026-10-22-diagnostic-spatial-producer.md, acceptance/records/2026-10-22-diagnostic-support-native-ab.md, acceptance/records/2026-10-22-diagnostic-support-multienv.md, acceptance/records/2026-10-22-diagnostic-support-producer.md, acceptance/records/2026-10-22-diagnostic-producer-review-followup.md, acceptance/records/2026-10-22-diagnostic-producer-review.md, acceptance/records/2026-10-21-diagnostic-producer-lifecycle.md, acceptance/records/2026-10-21-diagnostic-artifact-review-fixes.md, acceptance/records/2026-10-21-diagnostic-artifact-review.md, acceptance/records/2026-10-21-diagnostic-artifact-decoupling-cleanup.md, acceptance/records/2026-10-21-diagnostic-artifact-drive-runtime-retention.md, acceptance/records/2026-10-21-diagnostic-artifact-second-archive.md, acceptance/records/2026-10-20-diagnostic-artifact-first-archive.md, acceptance/records/2026-10-20-diagnostic-artifact-preflight.md, acceptance/records/2026-10-20-diagnostic-artifact-plan-review.md
 ---
 
 ## 当前范围
 
-先管新增再清存量；覆盖两输出根及其它落点，保留输入、失败对照与复读入口。
+覆盖两输出根及其它落点，保留输入、失败对照与复读入口。
 
-按依赖解耦、合并、重构、迁移活跃链并删除替代材料，处置归 evidence；机器人、驱动与判据归原专项，新增与存量按下述阶段推进。
+按依赖解耦、合并、重构、迁移活跃链并删除替代材料，处置归 evidence；机器人、驱动与判据归原专项。
 
 协调入口：[机体与驱动总项](lizard2-body-drive-candidate.md)、[候选接线](lizard2-candidate-wiring.md)、[限位与 PD 验证](lizard2-restored-limits-pd-validation.md)。按实际读写关系确定迁移批次；正在写入的目录先协调停写，接通消费者并复验后迁移，未完成实验仍归原事项。
 
-未覆盖消费者、混合子树、外部备份和收尾仍须推进。
+未覆盖项按下述阶段推进。
 
 ## 分类与保留原则
 
