@@ -14,6 +14,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 import traceback
 
 import numpy as np
@@ -32,6 +33,140 @@ LIFT_SETTINGS = dict(settle_s=5., rise_s=3., hold_s=2., fall_s=3., recover_s=3.,
                      minimum_clearance_m=.01, unloaded_force_n=1., landing_height_m=.005,
                      minimum_mesh_height_m=-.005, max_tracking_error_rad=.1,
                      geometry_samples=33, max_physical_attempts=3)
+CURRENT_LIFT_FORMAT = 'current-lift-zero-velocity-v1'
+CURRENT_STANDING_SHA = '5a4c6a3f4572ab8db566637c64c67933ee5aa3857092b1fe7ed1b102724453c6'
+
+
+def _unit_rotation(quaternion):
+    """Normalize recorded float32 quaternion roundoff before SE(3) precheck."""
+    value = np.asarray(quaternion, dtype=float)
+    assert np.isfinite(value).all() and np.linalg.norm(value) > 0.
+    return _rotation(value/np.linalg.norm(value))
+
+
+def _load_current_standing(path):
+    """Reuse the audited current standing sample without upgrading its verdict."""
+    from palm_standing_force_audit import audit
+    from palm_speed_probe import load_reference
+    assert wiring.binding.sha256_file(path) == CURRENT_STANDING_SHA, 'current standing identity mismatch'
+    checked = audit(path)
+    assert checked['stop_reason'] is None and checked['steps'] == 1000
+    prior = json.loads(path.read_text(encoding='utf-8'))
+    force_path = Path(next(iter(prior['input'])))
+    reference, _, _ = load_reference(force_path)
+    for key in ('kp', 'kd', 'effort_caps', 'velocity_caps'):
+        assert prior['readbacks'][key] == reference['readbacks'][key]
+    manifest = Path(prior['manifest'])
+    return prior, manifest, csc.load_urdf(Path(prior['target']['urdf']))
+
+
+def _make_current_lift_plan(standing_path, out):
+    """Precheck one current left-elbow lift at the measured loaded root pose."""
+    import body_precheck
+    import xml.etree.ElementTree as ET
+    from scipy.spatial import ConvexHull
+    prior, manifest_path, model = _load_current_standing(standing_path)
+    document = json.loads(manifest_path.read_text(encoding='utf-8'))
+    out = out.resolve()
+    assert out.is_relative_to(wiring.REPO/'rl_exp/out') and not out.exists()
+    out.mkdir(parents=True)
+    names, foot = prior['joint_names'], prior['target']['end_links']['lf']
+    entities = prior['final_entities']
+    initial = dict(zip(entities['joint_names'], entities['q_rad']))
+    base = entities['actor_poses_xyzw'][entities['body_names'].index('base_link')]
+    root = np.eye(4); root[:3, :3] = _unit_rotation(base[3:]); root[:3, 3] = base[:3]
+    meshes = {n: s['collision'] for n, s in model['links'].items() if s['collision']}
+    direct = {tuple(sorted((j['parent'], j['child']))) for j in model['joints'].values()}
+    connections = {tuple(sorted(p)) for p in document['connection_filter']['pairs']}
+    allowed = [dict(pair=list(p), reason='existing direct-joint collision exclusion')
+               for p in sorted(direct) if set(p) <= set(meshes)]
+    allowed += [dict(pair=list(p), reason='existing six named connection filters')
+                for p in sorted(connections-direct)]
+    chains, covered = {}, set()
+    for leg, end in prior['target']['end_links'].items():
+        path = csc.chain_up(model['joints'], end); covered.update(path)
+        chains[leg] = dict(root_link='base_link', end_link=end,
+                           joint_roles={n: n.removesuffix('_joint') for n in path}, contact_links=[end])
+    loaded = [n for n, force in prior['samples'][-1]['ground_forces_n'].items()
+              if force[2] >= SETTINGS['foot_load_n']]
+    for tail in [n for n in loaded if n.startswith('tail')]:
+        path = csc.chain_up(model['joints'], tail); covered.update(path)
+        chains['support_'+tail] = dict(root_link='base_link', end_link=tail,
+            joint_roles={n: n.removesuffix('_joint') for n in path}, contact_links=[tail])
+    contact = {n: dict(max_penetration_m=.005, max_gap_m=1. if n == foot else .005) for n in loaded}
+    samples = []
+    for index, fraction in enumerate(np.linspace(0., 1., LIFT_SETTINGS['geometry_samples'])):
+        q = initial.copy(); q['lf_elbow_joint'] += float(fraction)*(.768-initial['lf_elbow_joint'])
+        samples.append(dict(id=f'lift_{index:02d}', phase='loaded-root single-elbow bridge',
+                            q_rad=q, root_transform=root.tolist()))
+    config = dict(inputs=dict(identity='current left-front lift, unchanged PD and zero velocity targets', units='SI',
+        urdf=dict(path=prior['target']['urdf'], sha256=document['sha256']['urdf']),
+        meshes=[dict(path=str(p), sha256=wiring.binding.sha256_file(p)) for p in meshes.values()],
+        threshold_basis=dict(approved_by='user: perform current lift check; reuse prior lift timing/stops',
+                             reference='existing 5 mm lift penetration budget, named filters and actual loaded root')),
+        body=dict(chains=chains, other_joints={n: n for n in names if n not in covered},
+                  collision_entities=list(meshes), excluded_entities=[], allowed_pairs=allowed),
+        tasks=dict(cases=samples, requirements=[dict(id=kind, check=kind, required=True,
+            cases=[s['id'] for s in samples], chains=list(chains), params=params)
+            for kind, params in [('joint_limits', {}), ('self_collision', dict(clearance_m=0.)),
+                ('ground', dict(normal=[0., 0., 1.], height_m=0., min_gap_m=0., allowed_contacts=contact))]]))
+    geometry = body_precheck.run(config, out, max_cases=33)
+    wiring.write_json(out/'geometry_config.json', config)
+    wiring.write_json(out/'geometry_report.json', geometry)
+    assert geometry['status'] == 'pass', 'current lift geometry failed'
+    vertices = csc.read_obj(meshes[foot])
+    pose = root@csc.fk(model['joints'], foot, samples[-1]['q_rad'])
+    clearance = float((vertices@pose[:3, :3].T+pose[:3, 3])[:, 2].min())
+    assert clearance >= LIFT_SETTINGS['minimum_clearance_m'], 'nominal endpoint does not clear ground'
+    links = {p.get('name'): p for p in ET.parse(prior['target']['urdf']).getroot().findall('link')}
+    points, mass, com = [], 0., np.zeros(3)
+    for name, actual in zip(entities['body_names'], entities['actor_poses_xyzw']):
+        link = links[name]; weight = float(link.find('inertial/mass').get('value'))
+        center = np.fromstring(link.find('inertial/origin').get('xyz'), sep=' ')
+        rotation, position = _unit_rotation(actual[3:]), np.asarray(actual[:3])
+        mass += weight; com += weight*(rotation@center+position)
+        if name != foot and name in loaded:
+            cloud = csc.read_obj(meshes[name])@rotation.T+position
+            points.extend(cloud[cloud[:, 2] <= cloud[:, 2].min()+.005, :2].tolist())
+    com /= mass
+    hull = ConvexHull(np.asarray(points))
+    margin = -float(np.max(hull.equations[:, :2]@com[:2]+hull.equations[:, 2]))
+    assert margin > 0., 'remaining actual contact hull misses COM projection'
+    target = {n: .768 if n == 'lf_elbow_joint' else 0. for n in names}
+    plan = dict(format=CURRENT_LIFT_FORMAT, completed=True, leg='lf', foot=foot,
+        standing_report=str(standing_path.resolve()), standing_report_sha256=CURRENT_STANDING_SHA,
+        manifest=str(manifest_path), manifest_sha256=prior['manifest_sha256'],
+        lift_settings=LIFT_SETTINGS, target_q_rad=target, duration_s=16., control_dt_s=.02,
+        max_steps=3200, max_physical_attempts=1, wall_budget_s=900.,
+        geometry_config_sha256=wiring.binding.sha256_file(out/'geometry_config.json'),
+        geometry_report_sha256=wiring.binding.sha256_file(out/'geometry_report.json'),
+        nominal_endpoint_clearance_m=clearance, remaining_contact_hull_margin_m=margin,
+        support_scope='three feet plus actually loaded tail; geometry only, no dynamic stability proof',
+        verdict_scope='actual clearance/unloading/support/recovery; legacy posture verdict retained separately',
+        code_sha256=wiring.binding.sha256_file(Path(__file__)))
+    wiring.write_json(out/'plan.json', plan)
+    print('CURRENT_LIFT_PLAN_READY', clearance, margin, flush=True)
+
+
+def _current_lift_verdict(samples, plan, feet, weight, stop):
+    """Report lift mechanics separately from the unchanged legacy posture gate."""
+    select = lambda a, b: [s for s in samples if a <= s['t_s'] <= b]
+    hold, recovery = select(9., 10.), select(15., 16.)
+    foot = plan['foot']
+    checks = dict(full_window=bool(samples) and len(samples) == 3200 and stop is None,
+        actual_clearance=bool(hold) and min(s['lifted_mesh_min_m'] for s in hold) >= .01,
+        actual_unloaded=bool(hold) and max(np.linalg.norm(s['ground_forces_n'][foot]) for s in hold) <= 1.,
+        remaining_support=bool(hold) and all(s['ground_forces_n'][n][2] >= 5. for s in hold for n in feet if n != foot),
+        recovered_support=bool(recovery) and all(s['ground_forces_n'][n][2] >= 5. for s in recovery for n in feet),
+        returned_to_ground=bool(recovery) and max(s['lifted_mesh_min_m'] for s in recovery) <= .005,
+        no_deep_mesh_penetration=bool(samples) and min(s['lifted_mesh_min_m'] for s in samples) >= -.005)
+    mean_support = float(np.mean([sum(f[2] for f in s['ground_forces_n'].values()) for s in recovery])) if recovery else None
+    checks['recovered_weight_balance'] = mean_support is not None and abs(mean_support-weight) <= .2*weight
+    checks = {n: bool(v) for n, v in checks.items()}
+    return dict(checks=checks, passed=all(checks.values()),
+        hold_min_clearance_m=min((s['lifted_mesh_min_m'] for s in hold), default=None),
+        hold_max_ground_force_n=max((float(np.linalg.norm(s['ground_forces_n'][foot])) for s in hold), default=None),
+        recovery_mean_support_n=mean_support)
 
 
 def _lift_fraction(t):
@@ -112,6 +247,20 @@ def _load_lift_plan(path):
     standing_path = Path(plan['standing_report'])
     assert wiring.binding.sha256_file(standing_path) == plan['standing_report_sha256']
     assert plan['lift_settings'] == LIFT_SETTINGS
+    if plan.get('format') == CURRENT_LIFT_FORMAT:
+        import body_precheck
+        assert plan['completed'] and plan['duration_s'] == 16. and plan['control_dt_s'] == .02
+        assert plan['max_steps'] == 3200 and plan['max_physical_attempts'] == 1
+        prior, manifest, model = _load_current_standing(standing_path)
+        assert str(manifest) == plan['manifest'] and prior['manifest_sha256'] == plan['manifest_sha256']
+        for label in ('geometry_config', 'geometry_report'):
+            assert wiring.binding.sha256_file(path.parent/(label+'.json')) == plan[label+'_sha256']
+        geometry = json.loads((path.parent/'geometry_report.json').read_text(encoding='utf-8'))
+        assert geometry['status'] == 'pass'
+        body_precheck.revalidate_inputs(geometry)
+        assert plan['target_q_rad'] == {n: .768 if n == 'lf_elbow_joint' else 0. for n in prior['joint_names']}
+        assert plan['foot'] == prior['target']['end_links']['lf']
+        return plan, prior, manifest, model
     prior, manifest, model = _load_standing(standing_path)
     if 'keyframes' in plan:
         assert all(set(frame['q_rad']) == set(prior['joint_names']) for frame in plan['keyframes'])
@@ -188,6 +337,9 @@ def _lift_verdict(samples, plan, feet, weight):
 
 
 def _self_check(break_failure_handler=False):
+    rounded = np.asarray([.01, -.02, .03, 1.], dtype=np.float32)
+    rotation = _unit_rotation(rounded)
+    assert np.max(abs(rotation.T@rotation-np.eye(3))) < 1e-12 and abs(np.linalg.det(rotation)-1.) < 1e-12
     assert _posture_verdict([], {'standing': [4., 5.]}) == dict(max_chest_tilt_rad={'standing': None})
     assert [_lift_fraction(t) for t in (0, 5, 8, 10, 13, 16)] == [0, 0, 1, 1, 0, 0]
     feet, rows = ['lf', 'rf', 'rl', 'rr'], []
@@ -206,6 +358,20 @@ def _self_check(break_failure_handler=False):
     still_loaded[1]['ground_forces_n']['lf'] = [0., 0., 5.]
     assert not _lift_verdict(still_loaded, {'foot': 'lf'}, feet, 200.)['passed']
     assert not _lift_verdict(rows[:2], {'foot': 'lf'}, feet, 200.)['passed']
+    current_rows = []
+    for step in range(1, 3201):
+        t = step*.005
+        row = copy.deepcopy(rows[1] if 8. <= t <= 10. else rows[0])
+        row.update(t_s=t, root_drop_m=.03, q_rad=[.12], target_q_rad=[0.])
+        current_rows.append(row)
+    current_plan = dict(foot='lf')
+    assert _current_lift_verdict(current_rows, current_plan, feet, 200., None)['passed']
+    assert not _lift_verdict(current_rows, current_plan, feet, 200.)['passed'], 'legacy posture gate was relaxed'
+    for field, value in [('lifted_mesh_min_m', 0.), ('ground_forces_n', dict(lf=[0., 0., 2.], rf=[0., 0., 50.], rl=[0., 0., 50.], rr=[0., 0., 50.]))]:
+        bad = copy.deepcopy(current_rows); bad[1899][field] = value
+        assert not _current_lift_verdict(bad, current_plan, feet, 200., None)['passed'], field
+    assert not _current_lift_verdict(current_rows[:-1], current_plan, feet, 200., None)['passed']
+    assert not _current_lift_verdict(current_rows, current_plan, feet, 200., ['root_tilt'])['passed']
     timed = dict(keyframes=[dict(t_s=0., q_rad={'j': 0.}), dict(t_s=3., q_rad={'j': 1.}),
                            dict(t_s=6., q_rad={'j': 0.})], duration_s=6.)
     assert [_lift_target(t, timed)['j'] for t in (0., 1.5, 3., 4.5, 6.)] == [0., .5, 1., .5, 0.]
@@ -361,7 +527,13 @@ def _run(args):
                   input={str(input_path): wiring.binding.sha256_file(input_path)},
                   code_sha256=wiring.binding.sha256_file(Path(__file__)), samples=[])
     app, env = None, None
+    run_started = time.monotonic()
+    args.current_lift = bool(args.lift_plan and
+        json.loads(args.lift_plan.read_text(encoding='utf-8')).get('format') == CURRENT_LIFT_FORMAT)
     try:
+        if args.current_lift:
+            assert wiring.binding.sha256_file(args.lift_plan) == args.approved_lift_sha256, 'approved lift plan changed'
+            _load_lift_plan(args.lift_plan)  # Refuse invalid geometry/identity before starting the app.
         from isaaclab.app import AppLauncher
         app = AppLauncher(args).app
         import gymnasium as gym
@@ -402,6 +574,14 @@ def _run(args):
                 document['target_binding']['source'] = str(manifest)
                 wiring.write_json(manifest, document)
             result.update(lift_plan=plan, lift_settings=LIFT_SETTINGS)
+            if args.current_lift:
+                result.update(scope='one current left-front lift; unchanged PD, zero velocity targets, TGS/false',
+                              full_runs_started=1, retry_allowed=False,
+                              lift_plan_path=str(args.lift_plan.resolve()), approved_lift_sha256=args.approved_lift_sha256)
+                for dependency in ('palm_spatial_tracking.py', 'palm_spatial_runtime.py', 'palm_standing_force_audit.py'):
+                    source = Path(__file__).with_name(dependency)
+                    shutil.copyfile(source, out/dependency)
+                    result.setdefault('dependency_sha256', {})[dependency] = wiring.binding.sha256_file(source)
         elif args.standing_reference:
             prior, manifest, model = _load_standing(args.standing_reference)
             adapter = copy.deepcopy(prior['standing_adapter'])
@@ -438,6 +618,9 @@ def _run(args):
         cfg = copy.deepcopy(resolve_task_cfg(wiring.REGISTERED_TASK))
         target = wiring.obs_protocol.load_diagnostic_target(manifest, cfg, wiring.REGISTERED_TASK)
         cfg.sim.device, cfg.sim.dt, cfg.seed = args.device, SETTINGS['dt_s'], 0
+        if args.current_lift:
+            physics = cfg.sim.physics.default if hasattr(cfg.sim.physics, 'default') else cfg.sim.physics
+            assert cfg.decimation == 4 and physics.solver_type == 1 and physics.enable_external_forces_every_iteration is False
         if args.velocity_observation_probe:
             from isaaclab_physx.physics import PhysxCfg
             if cfg.sim.physics is None:
@@ -508,13 +691,18 @@ def _run(args):
                                      velocity_caps=backend(robot.root_view.get_dof_max_velocities()).tolist(),
                                      effort_caps=robot.data.joint_effort_limits.torch[0].cpu().tolist()))
         result['initial_entities'] = _entity_snapshot(robot, model)
-        if args.force_reference:
+        if args.force_reference or args.current_lift:
             caps = backend(robot.root_view.get_dof_max_forces())
             assert np.array_equal(caps, np.asarray(prior['readbacks']['effort_caps']))
             assert np.array_equal(backend(robot.root_view.get_dof_max_velocities()),
                                   np.asarray(prior['readbacks']['velocity_caps']))
             result['readbacks']['effort_caps'] = caps.tolist()
             result['joint_force_probe'] = _joint_force_probe_binding(live.sim.stage, robot, backend)
+            if args.current_lift:
+                physics_scene = live.sim.stage.GetPrimAtPath(cfg.sim.physics_prim_path)
+                result['readbacks'].update(force_timing=physics_scene.GetAttribute('physxScene:enableExternalForcesEveryIteration').Get(),
+                                          solver=physics_scene.GetAttribute('physxScene:solverType').Get())
+                assert result['readbacks']['force_timing'] is False and result['readbacks']['solver'] == 'TGS'
             if args.velocity_observation_probe:
                 physics_scene = live.sim.stage.GetPrimAtPath(cfg.sim.physics_prim_path)
                 result['readbacks']['force_timing'] = physics_scene.GetAttribute(
@@ -544,18 +732,22 @@ def _run(args):
         chest_id = body_names.index('chest_pitch')
         stop = None
         for step in range(1, int(duration/SETTINGS['dt_s'])+1):
+            if args.current_lift:
+                assert step <= plan['max_steps'] and time.monotonic()-run_started < plan['wall_budget_s'], 'lift budget exhausted'
             t = step*SETTINGS['dt_s']
-            desired = np.zeros(len(names))
-            action = zero.clone()
-            if args.lift_plan:
-                target_q = _lift_target(t, plan)
-                for k, name in enumerate(names):
-                    desired[k] = target_q[name]
-                    action[0, action_names.index(name)] = desired[k]
-            live.action_manager.process_action(action)
+            if not args.current_lift or (step-1) % 4 == 0:
+                desired = np.zeros(len(names))
+                action = zero.clone()
+                if args.lift_plan:
+                    command_t = ((step-1)//4)*.02 if args.current_lift else t
+                    target_q = _lift_target(command_t, plan)
+                    for k, name in enumerate(names):
+                        desired[k] = target_q[name]
+                        action[0, action_names.index(name)] = desired[k]
+                live.action_manager.process_action(action)
             live.action_manager.apply_action()
             live.scene.write_data_to_sim()
-            if args.force_reference:
+            if args.force_reference or args.current_lift:
                 drive = _drive_targets(robot, backend, desired)
             live.sim.step(render=False)
             live.scene.update(SETTINGS['dt_s'])
@@ -571,7 +763,7 @@ def _run(args):
                        root_pose_xyzw=root_pose.tolist(), root_velocity=root_vel.tolist(), tilt_rad=tilt,
                        root_drop_m=start_z-float(root_pose[2]), ground_forces_n=forces,
                        forbidden_ground_n=float(forbidden), reconstructed_pd_request_nm=(kp*(desired-q)-kd*v).tolist())
-            if args.force_reference:
+            if args.force_reference or args.current_lift:
                 row['backend_drive_targets'] = drive
                 row['joint_force_probe'] = _joint_force_probe_sample(robot.root_view, backend, result['joint_force_probe'])
                 if args.velocity_observation_probe:
@@ -586,6 +778,8 @@ def _run(args):
             if args.lift_plan:
                 actual = robot.data.body_link_pose_w.torch[0, lifted_id].cpu().numpy()
                 row['lifted_mesh_min_m'] = float((lifted_vertices @ _rotation(actual[3:]).T + actual[:3])[:,2].min())
+                if args.current_lift:
+                    row['lifted_actor_pose_xyzw'] = actual.tolist()
                 if 'keyframes' not in plan:
                     row['lift_fraction'] = _lift_fraction(t)
                 if 'sole_local_m' in plan:
@@ -600,7 +794,7 @@ def _run(args):
             checks = {'root_drop': row['root_drop_m'] > SETTINGS['stop_drop_m'], 'root_tilt': tilt > SETTINGS['stop_tilt_rad'],
                       'joint_motion': abs(q-desired).max() > SETTINGS['stop_joint_rad'],
                       'forbidden_ground': forbidden > SETTINGS['stop_forbidden_ground_n']}
-            if args.force_reference:
+            if args.force_reference or getattr(args, 'current_lift', False):
                 checks['joint_speed'] = bool(np.any(abs(v) >= np.asarray(result['readbacks']['velocity_caps'])*.5))
             if any(checks.values()):
                 stop = [k for k, value in checks.items() if value]
@@ -621,6 +815,11 @@ def _run(args):
             result['lift_verdict'] = _lift_verdict(result['samples'], plan, feet, weight)
             passed = stop is None and result['lift_verdict']['passed']
             result['status'] = 'single_leg_lift_verified' if passed else 'single_leg_lift_failed'
+            if getattr(args, 'current_lift', False):
+                result['legacy_lift_verdict'] = result.pop('lift_verdict')
+                result['lift_motion_verdict'] = _current_lift_verdict(result['samples'], plan, feet, weight, stop)
+                passed = result['lift_motion_verdict']['passed']
+                result['status'] = 'current_single_leg_lift_verified' if passed else 'current_single_leg_lift_failed'
         windows = {'standing': [SETTINGS['duration_s']-1, SETTINGS['duration_s']]}
         if args.lift_plan:
             windows = dict(baseline=[4., 5.], hold=[9., 10.], recovery=[15., 16.])
@@ -655,11 +854,86 @@ def _run(args):
     return passed
 
 
+def _audit_current_lift(path, digest):
+    """Replay current lift targets, actual foot geometry and measured loads [SI]."""
+    assert wiring.binding.sha256_file(path) == digest, 'lift report changed'
+    report = json.loads(path.read_text(encoding='utf-8'))
+    assert report['completed'] and report['stage'] == 'completed' and report['retry_allowed'] is False
+    assert wiring.binding.sha256_file(path.parent/'source.py') == report['code_sha256']
+    for name, hashed in report['dependency_sha256'].items():
+        assert wiring.binding.sha256_file(path.parent/name) == hashed
+    plan_path = Path(report['lift_plan_path'])
+    assert wiring.binding.sha256_file(plan_path) == report['approved_lift_sha256']
+    plan, prior, manifest, model = _load_lift_plan(plan_path)
+    assert report['lift_plan'] == plan and report['manifest'] == str(manifest)
+    assert wiring.binding.sha256_file(manifest) == report['manifest_sha256']
+    names, feet = report['joint_names'], list(report['target']['end_links'].values())
+    assert names == prior['joint_names'] and report['readbacks']['fixed_base'] is False
+    assert report['readbacks']['force_timing'] is False and report['readbacks']['solver'] == 'TGS'
+    for key in ('kp', 'kd', 'effort_caps', 'velocity_caps'):
+        assert report['readbacks'][key] == prior['readbacks'][key], key
+    rows = report['samples']; assert 0 < len(rows) <= 3200
+    t = np.asarray([r['t_s'] for r in rows])
+    assert np.array_equal(t, np.arange(1, len(rows)+1)*.005)
+    caps, speeds = np.asarray(report['readbacks']['effort_caps']), np.asarray(report['readbacks']['velocity_caps'])
+    binding = report['joint_force_probe']; assert binding['joint_names'] == names
+    vertices = csc.read_obj(model['links'][plan['foot']]['collision'])
+    projection_error = foot_fk_error = 0.
+    stop = None
+    for index, row in enumerate(rows):
+        expected = _lift_target((index//4)*.02, plan)
+        desired = np.asarray([expected[n] for n in names])
+        assert np.array_equal(row['target_q_rad'], desired), '50 Hz lift target changed'
+        assert np.array_equal(row['backend_drive_targets']['position_rad'], desired.astype(np.float32).astype(float))
+        assert not np.asarray(row['backend_drive_targets']['velocity_rad_s']).any(), 'lift velocity target is nonzero'
+        q, velocity = np.asarray(row['q_rad']), np.asarray(row['velocity_rad_s'])
+        force = row['joint_force_probe']
+        incoming = np.asarray(force['incoming_child_joint_wrench'])
+        projected = np.asarray(force['projected_joint_effort_nm'])
+        manual = np.asarray([incoming[binding['joints'][n]['child_index'], binding['joints'][n]['torque_component']] for n in names])
+        assert np.array_equal(manual, force['manual_axis_projection_nm'])
+        assert np.allclose(manual, projected, atol=1e-5, rtol=1e-5)
+        projection_error = max(projection_error, float(abs(manual-projected).max()))
+        assert not np.asarray(force['explicit_actuation_input_nm']).any()
+        actual = np.asarray(row['lifted_actor_pose_xyzw'])
+        minimum = float((vertices@_rotation(actual[3:]).T+actual[:3])[:, 2].min())
+        assert abs(minimum-row['lifted_mesh_min_m']) < 1e-12, 'actual foot clearance changed'
+        root = np.eye(4); root[:3, :3] = _rotation(row['root_pose_xyzw'][3:]); root[:3, 3] = row['root_pose_xyzw'][:3]
+        frame = root@csc.fk(model['joints'], plan['foot'], dict(zip(names, q)))
+        foot_fk_error = max(foot_fk_error, float(abs(frame[:3, 3]-actual[:3]).max()),
+                            float(abs(frame[:3, :3]-_rotation(actual[3:])).max()))
+        assert all(np.isfinite(x).all() for x in (q, velocity, incoming, projected, root, actual))
+        flags = dict(root_drop=row['root_drop_m'] > SETTINGS['stop_drop_m'], root_tilt=row['tilt_rad'] > SETTINGS['stop_tilt_rad'],
+                     joint_motion=abs(q-desired).max() > SETTINGS['stop_joint_rad'],
+                     forbidden_ground=row['forbidden_ground_n'] > SETTINGS['stop_forbidden_ground_n'],
+                     joint_speed=bool(np.any(abs(velocity) >= speeds*.5)))
+        if any(flags.values()):
+            assert index == len(rows)-1, 'continued after safety stop'
+            stop = [n for n, value in flags.items() if value]
+    assert foot_fk_error < 1e-5 and stop == report['stop_reason']
+    legacy = _lift_verdict(rows, plan, feet, report['weight_n'])
+    actual = _current_lift_verdict(rows, plan, feet, report['weight_n'], stop)
+    assert legacy == report['legacy_lift_verdict'] and actual == report['lift_motion_verdict']
+    assert report['status'] == ('current_single_leg_lift_verified' if actual['passed'] else 'current_single_leg_lift_failed')
+    loads = np.asarray([r['joint_force_probe']['projected_joint_effort_nm'] for r in rows])
+    joints = [dict(joint=n, peak_abs_step_average_nm=float(abs(loads[:, i]).max()),
+                   cap_fraction=float((abs(loads[:, i])/caps[i]).max()),
+                   samples_above_99pct=int((abs(loads[:, i])/caps[i] >= .99).sum())) for i, n in enumerate(names)]
+    return dict(report_sha256=digest, steps=len(rows), duration_s=float(t[-1]), stop_reason=stop,
+        lift_motion_verdict=actual, legacy_lift_verdict=legacy, foot_actor_fk_max_error=foot_fk_error,
+        projection_max_difference_nm=projection_error, joints=sorted(joints, key=lambda j: -j['cap_fraction']),
+        scope='one free-base left-front lift; actual foot clearance and three feet plus natural tail; not walking or peak motor capacity')
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--tracking_report', type=Path)
     parser.add_argument('--force_reference', type=Path, help='Verified symmetric-PD force report; one unchanged-gain standing observation')
     parser.add_argument('--approved_force_sha256')
+    parser.add_argument('--prepare_current_lift', action='store_true')
+    parser.add_argument('--approved_lift_sha256')
+    parser.add_argument('--replay_current_lift', type=Path)
+    parser.add_argument('--approved_report_sha256')
     parser.add_argument('--velocity_observation_probe', action='store_true',
                         help='Isolated per-iteration TGS force timing plus raw velocity and policy observation sampling')
     parser.add_argument('--lift_plan', type=Path)
@@ -677,10 +951,24 @@ if __name__ == '__main__':
     if '--self_check' in sys.argv:
         args = parser.parse_args()
         _self_check(args.break_failure_handler)
+    elif '--prepare_current_lift' in sys.argv:
+        args = parser.parse_args()
+        assert args.standing_reference and args.out and not args.lift_plan and not args.force_reference
+        _make_current_lift_plan(args.standing_reference, args.out)
+    elif '--replay_current_lift' in sys.argv:
+        args = parser.parse_args()
+        assert args.out and args.approved_report_sha256 and not args.out.exists()
+        wiring.write_json(args.out, _audit_current_lift(args.replay_current_lift, args.approved_report_sha256))
+        print('CURRENT_LIFT_REPLAY_OK')
     else:
         from isaaclab.app import AppLauncher
         AppLauncher.add_app_launcher_args(parser)
         args = parser.parse_args()
+        if args.lift_plan and json.loads(args.lift_plan.read_text(encoding='utf-8')).get('format') == CURRENT_LIFT_FORMAT:
+            if not args.approved_lift_sha256 or args.leg_frequency_hz is not None or args.neck_frequency_hz != 1 or args.wrist_frequency_hz != 1 or args.lf_wrist_frequency_hz != 1 or args.chest_frequency_hz is not None or args.load_reference or args.neck_load_reference or args.velocity_observation_probe:
+                parser.error('current lift requires approved_lift_sha256 and forbids all gain/force-timing overrides')
+        elif args.approved_lift_sha256:
+            parser.error('approved_lift_sha256 requires a current lift plan')
         if args.velocity_observation_probe and not args.force_reference:
             parser.error('velocity_observation_probe requires force_reference; no gain overrides')
         if not args.out or sum(bool(p) for p in (args.force_reference, args.tracking_report, args.lift_plan, args.standing_reference)) != 1 or args.break_failure_handler:
