@@ -4,9 +4,9 @@ title: lizard2 候选接线与真实消费者验证
 scope: rl_exp/blender, rl_exp/tasks, rl_exp/tools, ablation_harness
 status: in_progress
 landing: rl_exp/tasks/joint_names.py, rl_exp/tools/diagnose/palm_spatial_runtime.py, rl_exp/tools/verify/obs_protocol_live.py, ablation_harness/baseline_metrics.py
-next: B/C 以全部关节小幅实测接适度组合及已知载荷验证；E 补 obs 非零语义、gait/终止等剩余消费者，最终交 D，不手工调步态。
+next: E 接通道核对补非零 obs、gait/终止消费者，交 D；协调性能归 S6。
 close_when: E 自检就绪后随总项 D 由新上下文一次审核；必需链缺证不关闭。
-evidence: acceptance/records/2026-10-19-lizard2-a-delivery-plan.md, acceptance/records/2026-10-19-lizard2-chest-standing-pd.md, acceptance/records/2026-10-19-lizard2-loaded-standing.md, acceptance/records/2026-10-19-lizard2-spatial-small-tracking.md, acceptance/records/2026-10-19-lizard2-spatial-inertia-repair.md, acceptance/records/2026-10-16-lizard2-candidate-doc-organization.md, acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md, acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md, acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory.md
+evidence: acceptance/records/2026-10-22-lizard2-rl-coordination-handoff.md, acceptance/records/2026-10-19-lizard2-chest-standing-pd.md, acceptance/records/2026-10-19-lizard2-loaded-standing.md, acceptance/records/2026-10-19-lizard2-spatial-small-tracking.md, acceptance/records/2026-10-19-lizard2-spatial-inertia-repair.md, acceptance/records/2026-10-16-lizard2-candidate-doc-organization.md, acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md, acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md, acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory.md
 ---
 
 ## 当前范围

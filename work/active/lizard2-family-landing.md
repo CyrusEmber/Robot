@@ -2,12 +2,12 @@
 id: lizard2-family-landing
 title: lizard2 配方、动作接口与评测协议交付
 scope: rl_exp/versions/lizard2, rl_exp/tasks, rl_exp/tools/pipeline, rl_exp/tools/verify, ablation_harness
-status: open
+status: in_progress
 landing: rl_exp/versions/lizard2/main/main_params.yaml, rl_exp/tasks/lizard2_recipe.py, rl_exp/tools/pipeline/emit_diff_declaration.py, rl_exp/tools/verify/check_recipe_build.py
-next: 执行者接收 B 默认驱动条件、C 通道与协议样本，在 S5 定训练策略判据；D 输入/驱动/动作/安全 reset 集成审核及协议已审后接入，S6 采用与开训另获用户确认。
+next: S5 按 RL 分工接通道与协议样本定策略判据；正式接入、采用与开训按正文执行。
 close_when: 新上下文按正文“关闭条件”核验完整 S5/S6 或用户明确不采用的出口；仅 S5 构建通过不关闭。
 depends_on: lizard2-body-drive-candidate, lizard2-contact-protocol
-evidence: acceptance/records/2026-10-19-lizard2-chest-standing-pd.md, acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md, acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, acceptance/records/2026-09-23-lizard2-v1-gait-skate, acceptance/records/2026-10-09-lizard2-limit-requirement-and-status-sync, acceptance/records/2026-10-09-lizard2-v3-pretrain-sanity, acceptance/records/2026-10-10-lizard2-v3-joint-velocity-limits
+evidence: acceptance/records/2026-10-22-lizard2-rl-coordination-handoff.md, acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md, acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, acceptance/records/2026-09-23-lizard2-v1-gait-skate, acceptance/records/2026-10-09-lizard2-limit-requirement-and-status-sync, acceptance/records/2026-10-09-lizard2-v3-pretrain-sanity, acceptance/records/2026-10-10-lizard2-v3-joint-velocity-limits
 ---
 
 ## 当前范围与交接
@@ -67,4 +67,4 @@ S5 交付为未冻结候选版本实际路径、配置/协议/测试及 `accepta
 
 历史判决按原协议与机体解释，不自动外推当前候选。最小运行自检、静态几何、运动采样与执行器估算均有范围，不能替代碰撞、声明载荷下驱动稳定性或学习策略效果验证；几何样本只作诊断，不新增手工完整步态门槛。已训旧版本复现承诺按家族生命周期读取。
 
-审核记录按整体记录“审核输入绑定约定”落地，只留已有记录指针。本次文档同步不执行 S5/S6、不读配方锁、不改新配方，也不宣称可开训。
+审核记录按整体记录“审核输入绑定约定”落地，只留已有记录指针。本轮通道复读只整理接入机制，不构成正式 S5/S6 交付或可开训结论。
