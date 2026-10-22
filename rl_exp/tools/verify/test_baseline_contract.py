@@ -2543,6 +2543,59 @@ def test_entry_observer_bounds_real_step_calls():
         calls.clear()
         expect(ValueError, namespace["step"], torch.full((1, 30), value))
         assert not calls and not namespace["audit"]["env_steps"]
+    physics_fn = next(node for node in ast.walk(tree)
+                      if isinstance(node, ast.FunctionDef) and node.name == "physics_step")
+    calls = []
+    audit = {"budget": 2, "decimation": 4, "physics_steps": []}
+    namespace = {"torch": torch, "audit": audit, "_require": observer._require,
+                 "original_physics_step": lambda **kw: calls.append(kw) or token,
+                 "wp": NS(to_torch=lambda value: value), "live": NS(physics_dt=.005),
+                 "sensor": NS(contact_view=NS(get_net_contact_forces=lambda **kw: torch.zeros(31, 3))),
+                 "ground_views": []}
+    exec(compile(ast.Module(body=[physics_fn], type_ignores=[]), "<entry-physics-step>", "exec"), namespace)
+    for _ in range(8):
+        assert namespace["physics_step"](render=False) is token
+    expect(ValueError, namespace["physics_step"])
+    assert len(calls) == len(audit["physics_steps"]) == 8
+    view = NS(sensor_paths=["/foot"], filter_paths=[["/ground"]], sensor_count=1, filter_count=1)
+    observer._ground_binding(view, "/foot", ["/ground"])
+    for defect in ({"sensor_paths": ["/wrong"]}, {"filter_paths": [["/other"]]},
+                   {"filter_count": 2}, {"sensor_count": 0},
+                   {"filter_paths": [["/ground", "/ground"]]}):
+        expect(ValueError, observer._ground_binding, NS(**(vars(view) | defect)), "/foot", ["/ground"])
+
+    # Execute the producer's actual sampling configuration and peak loop against a
+    # transient at the first substep. End-of-control sampling would see only zero.
+    owner_tree = ast.parse((_REPO / "rl_exp/tools/verify/check_contact_ownership.py").read_text(encoding="utf-8"))
+    main = next(n for n in owner_tree.body if isinstance(n, ast.FunctionDef) and n.name == "main")
+    setup = [n for n in main.body if isinstance(n, ast.Assign)
+             and any(ast.unparse(t).startswith("cfg.scene.contact_forces")
+                     or ast.unparse(t) == "cfg.scene.lazy_sensor_update" for t in n.targets)]
+    start = next(i for i, n in enumerate(main.body) if isinstance(n, ast.Assign)
+                 and any(isinstance(t, ast.Name) and t.id == "peak" for t in n.targets))
+    stop = next(i for i, n in enumerate(main.body) if isinstance(n, ast.Assign)
+                and any(isinstance(t, ast.Name) and t.id == "peak_by_body" for t in n.targets))
+    for old_history, preset in ((1, False), (3, True), (8, True)):
+        contact_cfg = NS(history_length=old_history, update_period=.02)
+        cfg = NS(scene=NS(contact_forces=NS(default=contact_cfg) if preset else contact_cfg,
+                          lazy_sensor_update=True), sim=NS(dt=.005), decimation=4)
+        namespace = {"cfg": cfg, "resolve_presets": lambda value: getattr(value, "default", value)}
+        exec(compile(ast.Module(body=setup, type_ignores=[]), "<ownership-sampling-config>", "exec"), namespace)
+        history = torch.zeros(1, cfg.scene.contact_forces.history_length, 1, 3)
+        sampled = []
+
+        def step(action):
+            for index, force in enumerate((810., 0., 0., 0.)):
+                if not cfg.scene.lazy_sensor_update and cfg.scene.contact_forces.update_period <= .005 or index == 3:
+                    history[:] = history.roll(1, dims=1)
+                    history[:, 0, 0, 2] = force
+                    sampled.append(index)
+
+        namespace.update(torch=torch, sensor=NS(body_names=["lf_wrist"],
+                         data=NS(net_forces_w_history=NS(torch=history))), num_envs=1,
+                         env=NS(device="cpu", action_space=NS(shape=(30,)), step=step), args_cli=NS(steps=1))
+        exec(compile(ast.Module(body=main.body[start:stop], type_ignores=[]), "<ownership-peak-loop>", "exec"), namespace)
+        assert sampled == [0, 1, 2, 3] and float(namespace["peak"][0]) == 810., (sampled, namespace["peak"])
 
 
 def test_stance_target_uses_resolved_scale_and_offset():

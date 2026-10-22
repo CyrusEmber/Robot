@@ -158,14 +158,51 @@ class OutputTest(unittest.TestCase):
         tree = ast.parse(_TOOL.read_text(encoding="utf-8"), filename=str(_TOOL))
         nodes = [node for node in tree.body
                  if isinstance(node, (ast.FunctionDef, ast.ClassDef))
-                 and node.name in {"Case", "_cases", "_support_metadata", "_run_session", "main", "_run_cli"}]
-        self.assertEqual({node.name for node in nodes},
-                         {"Case", "_cases", "_support_metadata", "_run_session", "main", "_run_cli"})
+                 and node.name in {"Case", "_cases", "_support_metadata", "_run_session", "main", "_run_cli", "_wiring_request"}]
+        self.assertTrue({"Case", "_cases", "_support_metadata", "_run_session", "main", "_run_cli"}
+                        <= {node.name for node in nodes})
         exec(compile(ast.Module(body=nodes, type_ignores=[]), str(_TOOL), "exec"), self.namespace)
 
     def run_main(self):
         with redirect_stdout(io.StringIO()):
             self.namespace["main"]()
+
+    def test_wiring_collects_once_without_policy_or_warmup(self):
+        self.args.wiring_steps = 2
+        self.args.phases, self.args.heights = "0", ""
+        self.args.checkpoint = None
+        self.args.target_config = str(self.repo / "rl_exp/assets/fixture/params.yaml")
+        self.namespace["OnPolicyRunner"] = Mock(side_effect=AssertionError("policy must not load"))
+        self.run_main()
+        self.measure.assert_called_once()
+        self.assertEqual(self.measure.call_args.kwargs, {"seconds": 0.04, "zero_action": True})
+        report = json.loads((self.out / "p0_measure_check.json").read_text())
+        self.assertEqual(report["wiring"]["env_steps"], 2)
+        self.assertEqual(report["wiring"]["action"], "zero")
+        self.assertNotIn("zero_action", report, "do not relabel one window as two independent samples")
+        self.namespace["OnPolicyRunner"].assert_not_called()
+        self.gym_env.close.assert_called_once()
+        record = json.loads((self.out / "run.json").read_text())
+        self.assertEqual(record["state"], "completed")
+        self.assertEqual(record["config"]["wiring_steps"], 2)
+        self.assertFalse(any(row["identity"].endswith("checkpoint.pt") for row in record["inputs"]))
+
+    def test_wiring_rejects_unbounded_or_policy_requests(self):
+        validate = self.namespace["_wiring_request"]
+        self.assertIsNone(validate(self.args))
+        self.args.wiring_steps = 2
+        for changes in ({}, {"checkpoint": None}, {"checkpoint": None, "target_config": "manifest"},
+                        {"checkpoint": None, "target_config": "manifest", "phases": "0"}):
+            request = NS(**(vars(self.args) | changes))
+            with self.assertRaises(ValueError):
+                validate(request)
+        valid = vars(self.args) | {"checkpoint": None, "target_config": "manifest", "phases": "0", "heights": ""}
+        self.assertEqual(validate(NS(**valid)), 2)
+        for budget in (0, -1, 3):
+            with self.assertRaises(ValueError):
+                validate(NS(**(valid | {"wiring_steps": budget})))
+        with self.assertRaises(ValueError):
+            validate(NS(checkpoint=None, wiring_steps=None))
 
     def snapshot(self):
         files = {path.relative_to(self.out).as_posix(): path.read_bytes()

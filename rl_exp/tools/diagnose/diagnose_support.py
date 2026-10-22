@@ -64,6 +64,8 @@ Usage（repo 根目录）:
 Output: rl_exp/tools/diagnose/out/<label>/ 下 per-case json + summary.md + run.json。
 默认 label=runs/support/<运行编号>；显式 --label 保持旧路径用法。
 首份报告前自动登记到 artifact_index.json；失败留现场，复跑须换新 label。
+--wiring_steps 1/2 配合显式 target_config、phases=0、heights=，只采零动作短窗，
+不加载 checkpoint、不预热；报告明确限于入口接线，不能判支撑/策略性能。
 """
 
 from __future__ import annotations
@@ -98,6 +100,20 @@ def _load_binding_module(name: str):
 
 joint_names = _load_binding_module("joint_names")
 obs_protocol = _load_binding_module("obs_protocol")
+
+
+def _wiring_request(args) -> int | None:
+    """Validate the isolated zero-action entry check before launching Kit."""
+    steps = getattr(args, "wiring_steps", None)
+    if steps is None:
+        if not args.checkpoint:
+            raise ValueError("--checkpoint is required outside --wiring_steps")
+        return None
+    if steps not in (1, 2):
+        raise ValueError("--wiring_steps must be 1 or 2")
+    if (args.checkpoint or not args.target_config or args.phases != "0" or args.heights.strip()):
+        raise ValueError("--wiring_steps requires --target_config --phases 0 --heights= and no checkpoint")
+    return steps
 
 
 def _select_contacts(binding: dict, cfg, robot, sensor, manager) -> tuple:
@@ -211,10 +227,12 @@ parser.add_argument("--target_config", type=str, default=None, help="隔离目�
 parser.add_argument("--naming", choices=tuple(joint_names.NAMINGS), default=None,
                     help="兼容检查：显式值必须与目标声明一致，不覆盖命名。")
 parser.add_argument(
-    "--checkpoint", type=str, required=True,
+    "--checkpoint", type=str, default=None,
     help="训练 run 的 model_*.pt（没有默认值：旧线那一版默认路径已随其日志目录退役）",
 )
 parser.add_argument("--phases", type=str, default="1,2,3", help="逗号分隔的 phase 号，如 '1,3'。")
+parser.add_argument("--wiring_steps", type=int, default=None,
+                    help="仅隔离平地 Phase 0 零动作接线，1-2 步，无 checkpoint/预热；不判承重。")
 parser.add_argument("--heights", type=str, default="0.05,0.10,0.15,0.20",
                     help="台阶高度 [m]，空串仅平地；Phase 3 必须指定台阶高度。")
 parser.add_argument("--speeds", type=str, default="0.3,0.5,1.0", help="Phase 2 直行速度 [m/s]。")
@@ -228,6 +246,10 @@ parser.add_argument("--owner", default=getpass.getuser())
 parser.add_argument("--retention_reason", default="Support diagnostic cases, raw series and summary.")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
+try:
+    _wiring_request(args_cli)
+except ValueError as error:
+    parser.error(str(error))
 simulation_app = AppLauncher(args_cli).app
 
 import gymnasium as gym  # noqa: E402
@@ -940,8 +962,10 @@ def _support_metadata(paths, target_binding, env_cfg, agent_cfg):
     base = _REPO_ROOT / "rl_exp"
     target = pathlib.Path(target_binding["target"])
     body = obs_protocol.resolve_body(target.relative_to(base).as_posix(), family, base)
-    files = {pathlib.Path(args_cli.checkpoint).resolve(), pathlib.Path(target_binding["source"]),
+    files = {pathlib.Path(target_binding["source"]),
              pathlib.Path(target_binding["urdf"]), target, *body["refs"]}
+    if args_cli.checkpoint:
+        files.add(pathlib.Path(args_cli.checkpoint).resolve())
     if args_cli.target_config:
         files.add(pathlib.Path(args_cli.target_config).resolve())
     files.update(base / "versions" / name for name in
@@ -963,11 +987,13 @@ def _support_metadata(paths, target_binding, env_cfg, agent_cfg):
             "command": ["python", "rl_exp/tools/diagnose/diagnose_support.py", *sys.argv[1:]],
             "inputs": [paths.describe(path) for path in sorted(files)],
             "code": [paths.describe(path) for path in sorted(code)],
-            "config": {"env": cfg_snapshot.snapshot(env_cfg), "agent": cfg_snapshot.snapshot(agent_cfg)},
+            "config": {"env": cfg_snapshot.snapshot(env_cfg), "agent": cfg_snapshot.snapshot(agent_cfg),
+                       "wiring_steps": getattr(args_cli, "wiring_steps", None)},
             "target_binding": target_binding}
 
 
 def main():
+    _wiring_request(args_cli)
     heights = [float(h) for h in args_cli.heights.split(",") if h.strip()]
     phases = set(args_cli.phases.split(","))
     speeds = [float(s) for s in args_cli.speeds.split(",")]
@@ -1051,9 +1077,14 @@ def _run_session(env_cfg, agent_cfg, target_binding, naming, meshes, columns, he
         center_ray = n_rays // 2
 
     # 策略：checkpoint（家族 runner cfg，同 eval.py 的加载方式）
-    runner = OnPolicyRunner(wrapper, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
-    runner.load(args_cli.checkpoint)
-    policy = runner.get_inference_policy(device=device)
+    wiring_steps = getattr(args_cli, "wiring_steps", None)
+    if wiring_steps is not None:
+        print(f"[DIAG] WIRING_ONLY: {wiring_steps} zero-action steps, no warmup; no support verdict")
+    policy = None
+    if wiring_steps is None:
+        runner = OnPolicyRunner(wrapper, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
+        runner.load(args_cli.checkpoint)
+        policy = runner.get_inference_policy(device=device)
 
     ctx = {
         "wrapper": wrapper, "mbenv": mbenv, "robot": robot, "cmd_term":
@@ -1081,7 +1112,7 @@ def _run_session(env_cfg, agent_cfg, target_binding, naming, meshes, columns, he
     if isinstance(obs, tuple):
         obs = obs[0]
     zero = torch.zeros(mbenv.num_envs, mbenv.action_manager.total_action_dim, device=mbenv.device)
-    for _ in range(25):
+    for _ in range(25 if wiring_steps is None else 0):
         obs, _, _, _ = wrapper.step(zero)
     q0 = robot.data.body_quat_w.torch[:, spine_ids]
     stand_height = float(robot.data.root_pos_w.torch[:, 2].mean().item())
@@ -1102,15 +1133,20 @@ def _run_session(env_cfg, agent_cfg, target_binding, naming, meshes, columns, he
     print(f"[DIAG] ledger terms: {[term_names[i] for i in term_idx.values()]}")
 
     if "0" in phases:
-        mc = measure_check(ctx)
+        mc = (measure_check(ctx) if wiring_steps is None else
+              measure_check(ctx, seconds=wiring_steps * ctx["step_dt"], zero_action=True))
         # 零动作窗口：原版只有 ckpt 零命令 rollout（机身仍在漂移，不是静立）。
         # 真静立参照用来区分"缺额来自物理"还是"窗口没稳住"。
-        mc["zero_action"] = measure_check(ctx, zero_action=True)
+        if wiring_steps is None:
+            mc["zero_action"] = measure_check(ctx, zero_action=True)
+        else:
+            mc["wiring"] = {"env_steps": wiring_steps, "action": "zero", "warmup_steps": 0,
+                            "scope": "isolated entry wiring only; no policy/support/performance verdict"}
         mc["run_record"] = "run.json"
         with open(out_dir / "p0_measure_check.json", "w", encoding="utf-8") as f:
             json.dump(mc, f, indent=1, ensure_ascii=False)
         print(f"[DIAG] measure check -> {out_dir / 'p0_measure_check.json'}")
-        for tag in ("", "zero_action"):
+        for tag in (("", "zero_action") if wiring_steps is None else ("",)):
             sub = mc if not tag else mc["zero_action"]
             lc = sub["load_closure"]
             print(f"[DIAG] load closure{'_' + tag if tag else ''}: "

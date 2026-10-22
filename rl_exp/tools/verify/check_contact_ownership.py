@@ -156,6 +156,13 @@ def main() -> int:
     cfg.scene.num_envs = args_cli.num_envs
     target_binding = obs_protocol.load_diagnostic_target(
         args_cli.target_config, cfg, args_cli.task, naming_override=args_cli.naming)
+    # Peak means every physics sample, not only the last substep of each control step.
+    # Lazy updates otherwise discard an impact before this probe reads sensor history.
+    from isaaclab_tasks.utils.hydra import resolve_presets
+    cfg.scene.contact_forces = resolve_presets(cfg.scene.contact_forces)
+    cfg.scene.contact_forces.update_period = cfg.sim.dt
+    cfg.scene.contact_forces.history_length = max(cfg.scene.contact_forces.history_length, cfg.decimation)
+    cfg.scene.lazy_sensor_update = False
     naming = joint_names.naming_from_binding(target_binding)
     args_cli.naming = joint_names.naming_id(naming)
     env = gym.make(args_cli.task, cfg=cfg).unwrapped
@@ -248,6 +255,9 @@ def main() -> int:
               "target_binding": target_binding, "task": args_cli.task, "family": family, "usd": str(usd_path), "urdf": str(urdf),
               "robot_prim": str(robot_prim.GetPath()), "steps": args_cli.steps,
               "threshold": args_cli.threshold, "terms": terms, "no_collider": no_collider,
+              "sampling": {"period_s": cfg.scene.contact_forces.update_period,
+                           "history_length": cfg.scene.contact_forces.history_length,
+                           "decimation": cfg.decimation, "lazy_sensor_update": cfg.scene.lazy_sensor_update},
               "touching": touching, "blind": blind, "bodies": {}}
     for body in sorted(set(sensor.body_names)):
         prims = usd_bodies.get(body, [])

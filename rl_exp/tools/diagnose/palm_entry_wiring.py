@@ -5,7 +5,7 @@
 """Observe bounded real palm CLI entries [m, rad, N] without changing their data or verdicts.
 
 Only the current fixed candidate URDF, zero gains, disabled gravity and force timing False.
-Budgets count env.step calls after gym.make: layout 0, ownership/baseline 2, stance 12.
+Budgets count env.step calls after gym.make: layout 0, ownership/baseline/support 2, stance 12.
 The output must be a new directory under rl_exp/out. Forward the producer's arguments
 after --; include its --task and use only a tiny normalized action (<= 0.01).
 This is wiring evidence, not support, tracking, collision clearance or protocol approval.
@@ -28,15 +28,24 @@ ENTRIES = {
     "ownership": REPO / "rl_exp/tools/verify/check_contact_ownership.py",
     "baseline": REPO / "rl_exp/tools/verify/baseline_probe.py",
     "stance": REPO / "rl_exp/tools/diagnose/stance_step_probe.py",
+    "support": REPO / "rl_exp/tools/diagnose/diagnose_support.py",
 }
 BUDGETS = {"check_joint_layout.py": 0, "check_contact_ownership.py": 2,
-           "baseline_probe.py": 2, "stance_step_probe.py": 12}
+           "baseline_probe.py": 2, "stance_step_probe.py": 12, "diagnose_support.py": 2}
 URDF_SHA256 = "e8896feb8b0dbdbeaa35e74a01c2ffcb4ab38d89b52f221831b3f287943edd00"
 
 
 def _require(condition: bool, message: str) -> None:
     if not condition:
         raise ValueError(message)
+
+
+def _ground_binding(view, source: str, ground: list[str]) -> None:
+    """Check the native one-body, one-ground row and column before naming forces."""
+    _require(len(ground) == 1, 'one ground column required')
+    _require(view.sensor_paths in ([source], [[source]]), 'ground contact row mismatch')
+    _require(view.filter_paths in (ground, [ground]), 'ground contact column mismatch')
+    _require(view.sensor_count == view.filter_count == 1, 'ground contact shape mismatch')
 
 
 def collect(entry: Path, out: Path, arguments: list[str]) -> None:
@@ -58,7 +67,7 @@ def collect(entry: Path, out: Path, arguments: list[str]) -> None:
     def make(*args, **kwargs):
         import torch
         import warp as wp
-        from pxr import UsdPhysics
+        from pxr import UsdGeom, UsdPhysics
         from isaaclab.utils.math import quat_apply
         from rl_exp.tools.verify import check_self_collision as collision
 
@@ -92,6 +101,67 @@ def collect(entry: Path, out: Path, arguments: list[str]) -> None:
         _require(len(audit['body_disable_gravity']) == 31 * live.num_envs
                  and all(audit['body_disable_gravity'].values()), 'unexpected live gravity')
         _require(audit['max_joint_stiffness'] == audit['max_joint_damping'] == 0., 'nonzero live gains')
+        audit['native_contact_sensor_paths'] = list(sensor.contact_view.sensor_paths)
+        _require([path.rsplit('/', 1)[-1] for path in audit['native_contact_sensor_paths']]
+                 == list(sensor.body_names) * live.num_envs, 'native contact body order mismatch')
+        audit['decimation'] = cfg.decimation
+        audit['physics_steps'] = []
+        audit['collisions'] = []
+        transforms = UsdGeom.XformCache()
+        for prim in live.sim.stage.Traverse():
+            if not prim.HasAPI(UsdPhysics.CollisionAPI):
+                continue
+            points = prim.GetAttribute('points').Get() if prim.HasAttribute('points') else None
+            matrix = transforms.GetLocalToWorldTransform(prim)
+            audit['collisions'].append({
+                'path': str(prim.GetPath()), 'type': prim.GetTypeName(),
+                'enabled': UsdPhysics.CollisionAPI(prim).GetCollisionEnabledAttr().Get(),
+                'approximation': prim.GetAttribute('physics:approximation').Get(),
+                'rest_offset_m': prim.GetAttribute('physxCollision:restOffset').Get(),
+                'contact_offset_m': prim.GetAttribute('physxCollision:contactOffset').Get(),
+                'usd_authored_mesh_lowest_world_z_m':
+                    min(float(matrix.Transform(p)[2]) for p in points) if points else None})
+
+        ground = [row['path'] for row in audit['collisions'] if row['path'].startswith('/World/ground/')]
+        audit['ground_contact_mapping'] = []
+        ground_views = []
+        if entry.name == 'check_contact_ownership.py':
+            from isaaclab_physx.physics import PhysxManager
+            _require(len(ground) == 1, 'one exact ground collider required')
+            sim_view = PhysxManager.get_physics_sim_view()
+            for name in document['target_binding']['end_links'].values():
+                sources = [prim for prim in live.sim.stage.Traverse()
+                           if prim.HasAPI(UsdPhysics.RigidBodyAPI) and prim.GetName() == name]
+                _require(len(sources) == 1, 'one live foot owner required')
+                source = str(sources[0].GetPath())
+                view = sim_view.create_rigid_contact_view(
+                    source, filter_patterns=ground,
+                    max_contact_data_count=sensor.cfg.max_contact_data_count_per_prim)
+                mapping = {'body': name, 'source': source, 'ground': ground,
+                           'sensor_paths': view.sensor_paths, 'filter_paths': view.filter_paths}
+                audit['ground_contact_mapping'].append(mapping)
+                _ground_binding(view, source, ground)
+                ground_views.append((name, view))
+
+        original_physics_step = live.sim.step
+
+        def physics_step(*args, **kwargs):
+            _require(len(audit['physics_steps']) < audit['budget'] * audit['decimation'],
+                     'physics step budget exceeded')
+            result = original_physics_step(*args, **kwargs)
+            force = wp.to_torch(sensor.contact_view.get_net_contact_forces(dt=live.physics_dt)).clone()
+            _require(bool(torch.isfinite(force).all()), 'nonfinite native contact force')
+            pairs = {}
+            for name, view in ground_views:
+                matrix = wp.to_torch(view.get_contact_force_matrix(dt=live.physics_dt)).clone()
+                _require(tuple(matrix.shape) == (1, 1, 3) and bool(torch.isfinite(matrix).all()),
+                         'invalid ground contact matrix')
+                pairs[name] = matrix.cpu().tolist()
+            audit['physics_steps'].append({'net_forces_w_n': force.cpu().tolist(),
+                                           'foot_ground_forces_w_n': pairs})
+            return result
+
+        live.sim.step = physics_step
 
         def snapshot():
             raw = wp.to_torch(robot.root_physx_view.get_link_transforms()).clone()
