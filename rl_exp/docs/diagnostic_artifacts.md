@@ -1,6 +1,6 @@
 # 诊断运行的创建与收尾
 
-当前已接入口：`rl_exp/tools/diagnose/local_path_view.py`、`diagnose_support.py`。其它生产入口仍按
+当前已接入口：`rl_exp/tools/diagnose/local_path_view.py`、`diagnose_support.py`、`palm_spatial_probe.py`。其它生产入口仍按
 `work/active/diagnostic-artifact-lifecycle.md` 推广，不能由本入口推定全覆盖。
 
 从仓根用配置解释器运行；输入取已有报告，不重新采集物理：
@@ -110,3 +110,22 @@ off 模式关闭报告器并同样禁止旧转储和启动上传。实验的 `co
 不能直接从归档目录执行原脚本，因为它依赖相对仓根和 sibling imports。复跑优先用本工具创建新运行，
 单次重放须按记录恢复相同源码位置并换新 label。实验期间不要同时跑全仓源码扫描，以免碰到临时源清理。
 本工具不修改生产入口或原生回调，比较范围与结果归事项最新验收记录；不把小样本运行当作底层故障修复。
+
+## 空间几何探针
+
+`palm_spatial_probe.py` 的历史对照、`--static_slices`、`--refine_slices`、`--local_path`
+共用运行登记和收尾，原几何报告仍为 `report.json`。沿用几何复用指南的模式和判据，
+输出必须为两诊断输出根下的全新目录；`--self_check` 不建产物目录，优化模式明确拒绝。
+
+```text
+<python> -B rl_exp/tools/diagnose/palm_spatial_probe.py --static_slices --build_report <build.json> --output_dir rl_exp/out/runs/palm-spatial/<new_static> --work_id <active_work_id> --owner <executor> --retention_reason "<why retain this run>"
+<python> -B rl_exp/tools/diagnose/palm_spatial_probe.py --refine_slices --build_report <build.json> --source_report <static_report.json> --angle_resolution <rad> --output_dir rl_exp/out/runs/palm-spatial/<new_refinement>
+<python> -B rl_exp/tools/diagnose/artifact_run.py --inspect_run rl_exp/out/runs/palm-spatial/<new_static>
+<python> -B rl_exp/tools/verify/test_palm_spatial_output.py
+```
+
+写图/报告失败留已有文件和 `failed` 记录；同名不会重采或覆盖。`completed` 仅指采集和产物收尾完成，
+几何判词仍按报告读取。历史对照不合格的退出仍使运行记失败，局部探索的失败前缀继续按原结构保留。
+现代模式绑定候选自包含文件、build/源报告和实际源码；原始源输入只作溯源，历史对照仍真实核读旧机构输入。
+使用既有可信索引映射后，build 和源报告可从当前位置调用；身份比较按完整逻辑路径，摘要按实际读取文件。
+实际覆盖、旧根隔离和失败注入复读参数见事项最新验收记录，不外推其它消费者或整机异地恢复。
