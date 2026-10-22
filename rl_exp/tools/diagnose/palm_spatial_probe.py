@@ -20,13 +20,21 @@ bone segment per task step. Eight points per phase, 1e-5 m numerical task tolera
 Endpoints and joint-linear midpoints are checked; contact solves both within the same call budget.
 Failure stops that leg. Midpoint contact does not establish contact along a whole segment. No time mapping.
 --self_check --break_test <case> intentionally fails the corresponding regression assertion.
+All sampling modes register input/code ownership before collection and retain run.json on
+failure. --work_id, --owner and --retention_reason override ownership defaults. Existing
+reports keep their geometry schema. Python optimization is refused before input reads.
 """
 
 import argparse
+import getpass
 import json
 from pathlib import Path
 import sys
 import xml.etree.ElementTree as ET
+
+if sys.flags.optimize != 0:
+    raise RuntimeError('palm_spatial_probe does not support Python optimization (-O/-OO or PYTHONOPTIMIZE); '
+                       'identity validation requires assertions')
 
 import numpy as np
 from scipy.optimize import least_squares
@@ -38,6 +46,9 @@ import check_leg_reachability as reach  # noqa: E402
 import palm_motion_boundaries as motion  # noqa: E402
 sys.path.insert(0, str(REPO / "rl_exp/tools/runrecord"))
 from binding import sha256_file as digest  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from artifact_paths import ArtifactPaths, artifact_path  # noqa: E402
+from artifact_run import ArtifactRun  # noqa: E402
 
 csc = motion.gait.csc
 names = reach.joint_names
@@ -95,12 +106,13 @@ def check_blender(build, urdf, inject):
     """Compare saved Blender pivots/mesh samples against the independent URDF FK [m]."""
     if inject:
         urdf['joints']['lf_shoulder_twist_joint']['axis'] = np.array([0., 0., 1.])
-    root = ET.parse(build['candidate_urdf']).getroot()
+    candidate = artifact_path(Path(build['candidate_urdf']))
+    root = ET.parse(candidate).getroot()
     visual = {}
     for link in root.findall('link'):
         mesh = link.find('visual/geometry/mesh')
         if mesh is not None:
-            visual[link.get('name')] = cKDTree(csc.read_obj(Path(build['candidate_urdf']).parent / mesh.get('filename')))
+            visual[link.get('name')] = cKDTree(csc.read_obj(candidate.parent / mesh.get('filename')))
     pivot_error, mesh_error = 0., 0.
     for snapshot in build['snapshots']:
         q = snapshot['q_rad']
@@ -131,6 +143,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--build_report', type=Path)
     parser.add_argument('--output_dir', type=Path)
+    parser.add_argument('--work_id', default='diagnostic-artifact-lifecycle')
+    parser.add_argument('--owner', default=getpass.getuser())
+    parser.add_argument('--retention_reason', default='Bound spatial geometry diagnostic and failure evidence.')
     parser.add_argument('--local_path', action='store_true')
     parser.add_argument('--static_slices', action='store_true')
     parser.add_argument('--refine_slices', action='store_true')
@@ -166,28 +181,104 @@ def main():
         parser.error('--break_test requires --self_check')
     if args.build_report is None or args.output_dir is None:
         parser.error('--build_report and --output_dir are required unless --self_check')
-    if args.local_path:
-        _local_path(args.build_report, args.output_dir)
-        return
-    if args.refine_slices:
-        _refine_slices(args.build_report, args.source_report, args.output_dir, args.angle_resolution)
-        return
-    if args.static_slices:
-        if args.lock_twist or args.inject_error:
-            parser.error('--static_slices cannot use historical regression controls')
-        _static_slices(args.build_report, args.output_dir)
-        return
-    output = args.output_dir.resolve()
-    assert REPO / 'rl_exp/out' in output.parents and not output.exists(), 'Fresh isolated output required'
-    build = json.loads(args.build_report.read_text(encoding='utf-8'))
+    if args.static_slices and (args.lock_twist or args.inject_error):
+        parser.error('--static_slices cannot use historical regression controls')
+    _run_probe(args)
+
+
+def _probe_metadata(args, paths):
+    inputs = []
+
+    def bind(path, expected=None):
+        row = paths.describe(Path(path), expected)
+        if row not in inputs:
+            inputs.append(row)
+        return paths.resolve(Path(path), expected)
+
+    build = json.loads(bind(args.build_report).read_text(encoding='utf-8'))
     candidate = Path(build['candidate_urdf'])
+    actual = bind(candidate, build['candidate_sha256'])
+    bind(candidate.with_suffix('.blend'), build['candidate_blend_sha256'])
+    files = build.get('candidate_files_sha256', {})
+    modern = args.local_path or args.static_slices or args.refine_slices
+    if modern and not files:
+        raise ValueError('self-contained candidate hashes required')
+    for relative, sha in files.items():
+        child = candidate.parent / relative
+        if not child.resolve().is_relative_to(candidate.parent.resolve()):
+            raise ValueError('candidate binding escapes its directory')
+        bind(child, sha)
+    if modern and (files.get(candidate.name) != build['candidate_sha256']
+                   or files.get(candidate.with_suffix('.blend').name) != build['candidate_blend_sha256']):
+        raise ValueError('inconsistent candidate binding')
+    urdfs = [actual]
+    if not modern:
+        for name, sha in build['input_sha256'].items():
+            bind(name, sha)
+        urdfs.append(bind(build['source_urdf']))
+    for urdf in urdfs:
+        for mesh in ET.parse(urdf).getroot().iter('mesh'):
+            target = (urdf.parent / mesh.get('filename')).resolve()
+            if modern and not any(Path(row['location']) == target or
+                                  paths.root / row['location'] == target for row in inputs):
+                raise ValueError(f'unbound candidate mesh: {target}')
+            bind(target)
+    if args.refine_slices:
+        bind(args.source_report)
+    bind(REPO / 'rl_exp/versions/lizard2/assets.json')
+    runtime = Path(__file__).resolve().parents[3]
+    sources = {Path(module.__file__).resolve() for module in tuple(sys.modules.values())
+               if getattr(module, '__file__', None) and Path(module.__file__).is_absolute()
+               and str(module.__file__).endswith('.py') and Path(module.__file__).resolve().is_relative_to(runtime)}
+    sources.add(Path(__file__).resolve())
+    command = [sys.executable, '-B', str(Path(__file__).resolve()), '--build_report', str(args.build_report),
+               '--output_dir', str(args.output_dir)]
+    for key in ('local_path', 'static_slices', 'refine_slices', 'lock_twist'):
+        if getattr(args, key):
+            command.append('--' + key)
+    for key in ('source_report', 'angle_resolution', 'inject_error', 'work_id', 'owner', 'retention_reason'):
+        value = getattr(args, key)
+        if value is not None:
+            command.extend(['--' + key, str(value)])
+    return {'topic': 'palm-spatial-probe', 'work_id': args.work_id, 'owner': args.owner,
+            'retention_reason': args.retention_reason, 'command': command, 'inputs': inputs,
+            'code': [paths.describe(p) for p in sorted(sources)]}
+
+
+def _run_probe(args):
+    output = args.output_dir.resolve()
+    if output.exists():
+        raise FileExistsError(17, 'fresh isolated output required', str(output))
+    paths = ArtifactPaths(storage_root=REPO)
+    metadata = _probe_metadata(args, paths)
+    required = ['report.json']
+    if args.static_slices:
+        required.append('static_slices.png')
+    elif not (args.local_path or args.refine_slices or args.lock_twist):
+        required.append('comparison.png')
+    with ArtifactRun(output, paths, metadata, required):
+        if args.local_path:
+            _local_path(args.build_report, output)
+        elif args.refine_slices:
+            _refine_slices(args.build_report, args.source_report, output, args.angle_resolution)
+        elif args.static_slices:
+            _static_slices(args.build_report, output)
+        else:
+            _historical_probe(args)
+
+
+def _historical_probe(args):
+    output = args.output_dir.resolve()
+    build_path = artifact_path(args.build_report)
+    build = json.loads(build_path.read_text(encoding='utf-8'))
+    candidate = artifact_path(Path(build['candidate_urdf']))
     assert digest(candidate) == build['candidate_sha256']
     assert digest(candidate.with_suffix('.blend')) == build['candidate_blend_sha256']
     for relative, sha in build.get('candidate_files_sha256', {}).items():
         assert digest(candidate.parent / relative) == sha, relative
     for path, sha in build['input_sha256'].items():
-        assert digest(path) == sha, path
-    source = Path(build['source_urdf'])
+        assert digest(artifact_path(Path(path))) == sha, path
+    source = artifact_path(Path(build['source_urdf']))
     for path in (source, candidate):
         motion.validate_geometry(path)
     new = {leg: Leg(candidate, leg, names.PALM_SPATIAL_NAMING) for leg in names.LEGS}
@@ -275,10 +366,9 @@ def main():
     summary = {'maxima': maximum, 'regression_pass': regression, 'lock_twist': args.lock_twist,
                'capability': capability, 'blender': blender, 'mirror_residual_m_or_unitless': mirror_error,
                'old_new_mass_kg': masses, 'collision_samples': collisions,
-               'source_build_report': str(args.build_report.resolve()), 'build_report_sha256': digest(args.build_report),
+               'source_build_report': str(args.build_report.resolve()), 'build_report_sha256': digest(build_path),
                'probe_sha256': digest(__file__), 'rows': rows,
                'limits': 'Kinematics only. 51 samples per leg; collision only five full-body poses. Not a continuous safe domain, gait, dynamics or hardware ROM proof.'}
-    output.mkdir(parents=True, exist_ok=False)
     (output / 'report.json').write_text(json.dumps(summary, indent=1), encoding='utf-8')
     if not args.lock_twist:
         plot(output, old, new, rows)
@@ -322,9 +412,10 @@ def _static_pair_readings(rows):
 
 
 def _static_prepare(build_report):
-    build = json.loads(build_report.read_text(encoding='utf-8'))
+    build_path = artifact_path(build_report)
+    build = json.loads(build_path.read_text(encoding='utf-8'))
     assert build['naming'] == 'palm_spatial'
-    candidate = Path(build['candidate_urdf']).resolve()
+    candidate = artifact_path(Path(build['candidate_urdf'])).resolve()
     files = build['candidate_files_sha256']
     assert files, 'self-contained candidate hashes required'
     bound = {}
@@ -381,7 +472,7 @@ def _static_prepare(build_report):
     code_paths = [Path(__file__), Path(motion.__file__), Path(motion.gait.__file__),
                   Path(csc.__file__), Path(reach.__file__), Path(names.__file__),
                   REPO / 'rl_exp/tools/runrecord/binding.py']
-    identity = {'build_report': str(build_report.resolve()), 'build_report_sha256': digest(build_report),
+    identity = {'build_report': str(build_report.resolve()), 'build_report_sha256': digest(build_path),
                 'candidate_files_sha256': files, 'source_input_sha256_provenance_only': build['input_sha256'],
                 'code_sha256': {str(p.resolve()): digest(p) for p in code_paths}}
     assert all(identity['code_sha256'].values())
@@ -390,7 +481,6 @@ def _static_prepare(build_report):
 
 def _static_slices(build_report, output_dir):
     output = output_dir.resolve()
-    assert REPO / 'rl_exp/out' in output.parents and not output.exists(), 'Fresh isolated output required'
     build, models, urdf, zero, collision, excluded, root, neutral, blender, identity = _static_prepare(build_report)
     rows, axes = [], {}
     for leg in ('lf', 'rr'):
@@ -434,7 +524,6 @@ def _static_slices(build_report, output_dir):
                'candidate_limits': build['limits']}
     # Serialize before writing: invalid/nonfinite results must not leave a success report.
     payload = json.dumps(summary, indent=1, allow_nan=False)
-    output.mkdir(parents=True, exist_ok=False)
     _static_plot(output, rows, axes)
     (output / 'report.json').write_text(payload, encoding='utf-8')
     print(json.dumps({'mode': summary['mode'], 'sample_count': len(rows),
@@ -465,20 +554,29 @@ def _refine_bracket(low, high, resolution, check):
 def _refine_slices(build_report, source_report, output_dir, resolution):
     output = output_dir.resolve()
     assert np.isfinite(resolution) and resolution > 0, 'invalid angle resolution'
-    assert REPO / 'rl_exp/out' in output.parents and not output.exists(), 'Fresh isolated output required'
-    source = json.loads(source_report.read_text(encoding='utf-8'))
+    source_path = artifact_path(source_report)
+    source = json.loads(source_path.read_text(encoding='utf-8'))
     assert source['mode'] == 'sampled_static_slices' and source['sample_count'] == 270
     build, models, urdf, zero, collision, excluded, root, neutral, blender, identity = _static_prepare(build_report)
     old_identity = source['identity']
     assert set(old_identity) == set(identity), 'source identity schema mismatch'
+    paths = ArtifactPaths(storage_root=REPO)
     for key in identity.keys() - {'code_sha256'}:
-        assert old_identity[key] == identity[key], f'source identity mismatch: {key}'
+        if key == 'build_report':
+            assert paths.same_identity(Path(old_identity[key]), Path(identity[key])), 'source build identity mismatch'
+        else:
+            assert old_identity[key] == identity[key], f'source identity mismatch: {key}'
     old_code, current_code = old_identity['code_sha256'], identity['code_sha256']
-    assert set(old_code) == set(current_code), 'source dependency set mismatch'
+    assert len(old_code) == len(current_code), 'source dependency set mismatch'
+    matched = set()
     for path, sha in old_code.items():
         assert isinstance(sha, str) and len(sha) == 64 and all(c in '0123456789abcdef' for c in sha)
-        if path != str(Path(__file__).resolve()):
-            assert sha == current_code[path], f'source dependency changed: {path}'
+        matches = [current for current in current_code if paths.same_identity(Path(path), Path(current))]
+        assert len(matches) == 1 and matches[0] not in matched, 'source dependency identity mismatch'
+        current = matches[0]
+        matched.add(current)
+        if not paths.same_identity(Path(current), Path(__file__).resolve()):
+            assert sha == current_code[current], f'source dependency changed: {path}'
     assert source['root_transform'] == root.tolist(), 'source root mismatch'
     assert source['neutral_palm_minima_before_root'] == neutral, 'source neutral mismatch'
     assert source['excluded_pairs'] == excluded, 'source exclusions mismatch'
@@ -568,7 +666,7 @@ def _refine_slices(build_report, source_report, output_dir, resolution):
                          'source_angles_rad': [r['q_rad'][joint] for r in (low_row, high_row)],
                          'low': low, 'high': high, 'angle_width_rad': high['angle_rad'] - low['angle_rad']})
     summary = {'mode': 'refined_static_slices', 'identity': identity, 'source_identity': old_identity,
-               'source_report': str(source_report.resolve()), 'source_report_sha256': digest(source_report),
+               'source_report': str(source_report.resolve()), 'source_report_sha256': digest(source_path),
                'source_sample_count': len(indexed),
                'source_rr_solid_pose_count': sum(bool(r['solid_pairs']) for k, r in indexed.items() if k[0] == 'rr'),
                'source_rr_target_pose_count': sum(target_state(r) for k, r in indexed.items() if k[0] == 'rr'),
@@ -583,7 +681,6 @@ def _refine_slices(build_report, source_report, output_dir, resolution):
                          'than source edge leaves original rechecked bracket. No sampled absence implies safety; '
                          'no safety margin, asset/ROM/PD change or actual motion. Positive gap may be AABB lower bound.'}
     payload = json.dumps(summary, indent=1, allow_nan=False)
-    output.mkdir(parents=True, exist_ok=False)
     (output / 'report.json').write_text(payload, encoding='utf-8')
     print(json.dumps({'mode': summary['mode'], 'bracket_count': len(brackets), 'output_dir': str(output)}), flush=True)
 
@@ -701,7 +798,6 @@ def _local_closed(final, initial, config):
 
 def _local_path(build_report, output_dir):
     output = output_dir.resolve()
-    assert REPO / 'rl_exp/out' in output.parents and not output.exists(), 'Fresh isolated output required'
     build, models, urdf, zero, collision, excluded, root, neutral, blender, identity = _static_prepare(build_report)
     config = {'segment_step_fraction': .01, 'points_per_phase': 8,
               'position_tolerance_m': 1e-5, 'joint_step_rad': .05,
@@ -816,7 +912,6 @@ def _local_path(build_report, output_dir):
               'forward_axis': '+X of URDF root; body fixed, not world no-slip stance', 'legs': results,
               'limits': 'Local deterministic continuation only, not maximal capability, approved stride/height, safe domain, time, speed, PD or dynamics. Failure stops that leg, without widening tolerances. Midpoints are samples, not continuous proof. Lowest vertex identity is not contact material slip. Numerical ground tolerance is not mechanical permission.'}
     payload = json.dumps(report, indent=1, allow_nan=False)
-    output.mkdir(parents=True, exist_ok=False)
     (output / 'report.json').write_text(payload, encoding='utf-8')
     print(json.dumps({leg: {k: result[k] for k in ('completed_local_loop', 'accepted_points', 'failure_phase', 'evaluations')}
                       for leg, result in results.items()}, indent=1), flush=True)

@@ -4240,6 +4240,60 @@
       "owner": "diagnostic-artifact-lifecycle",
       "writer_status": "see_run_manifest",
       "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-spatial-producer/after-static",
+      "current_location": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-spatial-producer/after-static",
+      "run_record": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-spatial-producer/after-static/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-spatial-producer/after-refine",
+      "current_location": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-spatial-producer/after-refine",
+      "run_record": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-spatial-producer/after-refine/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-spatial-producer/after-local",
+      "current_location": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-spatial-producer/after-local",
+      "run_record": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-spatial-producer/after-local/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-spatial-producer/after-historical",
+      "current_location": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-spatial-producer/after-historical",
+      "run_record": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-spatial-producer/after-historical/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-spatial-producer/real-failures/static",
+      "current_location": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-spatial-producer/real-failures/static",
+      "run_record": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-spatial-producer/real-failures/static/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-spatial-producer/real-failures/historical",
+      "current_location": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-spatial-producer/real-failures/historical",
+      "run_record": "rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-spatial-producer/real-failures/historical/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
     }
   ]
 }
