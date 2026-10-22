@@ -29,7 +29,9 @@ import bpy
 from mathutils import Matrix
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-BLEND = os.path.join(_SCRIPT_DIR, "lizard_stance.blend")
+#: The ``.blend`` assets stay one level up: this folder holds scripts, not assets.
+_ASSET_DIR = os.path.dirname(_SCRIPT_DIR)
+BLEND = os.path.join(_ASSET_DIR, "lizard_stance.blend")
 R = Matrix.Rotation(math.radians(180.0), 4, "Z")
 TOL = 1e-6
 

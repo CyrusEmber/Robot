@@ -2,7 +2,9 @@ import bpy
 import mathutils
 import os
 
-_BLEND_IN = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lizard_stance.blend")
+#: The ``.blend`` assets stay one level up: this folder holds scripts, not assets.
+_ASSET_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_BLEND_IN = os.path.join(_ASSET_DIR, "lizard_stance.blend")
 BLEND_OUT = _BLEND_IN
 
 # bone name -> (head mesh, tail mesh or None for outward stub)

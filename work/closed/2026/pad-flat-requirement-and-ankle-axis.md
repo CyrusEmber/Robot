@@ -3,7 +3,7 @@ id: pad-flat-requirement-and-ankle-axis
 title: 脚板能否平放：需求判定，与踝轴/行程的取舍
 scope: rl_exp/versions/lizard2, rl_exp/blender, rl_exp/tasks, ablation_harness, acceptance/records
 status: superseded
-landing: rl_exp/blender/generate_urdf.py, rl_exp/versions/lizard2/main/main_params.yaml, ablation_harness/protocols/lizard2_flat_v4.json, rl_exp/tools/diagnose/pose_slider.py, rl_exp/tools/verify/check_leg_reachability.py
+landing: rl_exp/blender/scripts/generate_urdf.py, rl_exp/versions/lizard2/main/main_params.yaml, ablation_harness/protocols/lizard2_flat_v4.json, rl_exp/tools/diagnose/pose_slider.py, rl_exp/tools/verify/check_leg_reachability.py
 outcome: 2026-10-08 并入 joint-limit-shape-and-range-pass：接触需求与容差、静态/支撑轨迹/连续性三段检查、踝候选及几何出口移交；尚未验证通过。正文保留为合并前记录，当前目标与流程以接收项及 acceptance/records/2026-10-08-lizard2-work-consolidation.md 为准。
 superseded_by: joint-limit-shape-and-range-pass
 close_when: (a) 三段检查各有读数（A/B/C 的最小残余倾角—容差曲线、可行步幅上限、限位余量分布、自碰撞结论），且**口径自检**做了：离线 FK 与仿真 FK 在若干姿态上逐位比对，偏差有数字；(b) 目标步态与容差两层需求都有明确答复（谁答的、依据是什么），且在 (a) 之后；(c) 结论按 (a)(b) 落到一条可查产物 —— 奖励/需求变更落点、**或**新版本的轴/行程 + 重复读数、**或**写进口径文档的"允许立边承重"前提、**或**"需求不可满足"的书面结论；(d) 若动了资产，锁/快照侧同步完成或另立事项，历史 run 的可复现性作废已写明；(e) 本项的结论里**不得**出现承重/平衡/稳定行走的判断（那是动力学验证的事，另立）。

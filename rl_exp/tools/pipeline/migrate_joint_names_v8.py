@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """One-shot v8 joint-name migration across every lizard_params.yaml.
 
-v8 renamed the 26 joints to real anatomy (see blender/rename_flip_v8.py):
+v8 renamed the 26 joints to real anatomy (see blender/scripts/rename_flip_v8.py):
 the "neck1-3" chain was the tail (antenna tip), the "tail_yaw/tail_pitch"
 chain carried the sphere HEAD, and the leg names were front/rear + left/right
 swapped. This applies the same map to every yaml's joint_order and the two
