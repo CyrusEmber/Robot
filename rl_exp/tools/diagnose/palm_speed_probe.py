@@ -5,8 +5,9 @@
 """Bounded left-knee or left-elbow speed trials with unchanged PD and TGS/false.
 
 Prepare sampled full-body geometry before physics. Five nominal peak target
-speeds [rad/s], fixed base/self-weight, zero velocity targets and 50 Hz position
-updates. Actual speed is a measured result, never inferred from the command.
+speeds [rad/s], fixed base/self-weight and 50 Hz position updates. All new runs
+use zero velocity targets. The old nonzero-velocity comparison is replay-only.
+Actual speed is a measured result, never inferred from the command.
 No gain scan, force-timing switch, cap override, training or automatic retry.
 """
 from __future__ import annotations
@@ -28,6 +29,7 @@ REPO = wiring.REPO
 REFERENCE_SHA = "13929c53eccdb51d454ade60cf071c3eaa614bf5c90684dd2e06f4017d2485ef"
 JOINT = "rl_knee_joint"
 JOINTS = (JOINT, "lf_elbow_joint")
+ELBOW_REPORT_SHA = "9737ba5630e1e735b24ec839aaf30821453ab9ad95da192a0eec882434abe321"
 # Historical setting keys retain their spelling for old knee report replay;
 # the knee_* stop values apply to the selected active joint in either mode.
 SETTINGS = dict(dt_s=.005, control_dt_s=.02, amplitude_rad=.768, settle_s=5.,
@@ -70,6 +72,31 @@ def target(t, ramp):
     return sign*SETTINGS["amplitude_rad"]*(10*s**3-15*s**4+6*s**5)
 
 
+def target_velocity(t, ramp):
+    """Analytic smooth-reference derivative [rad/s], sampled/held at 50 Hz."""
+    t -= SETTINGS["settle_s"]
+    if t <= 0.:
+        return 0.
+    span = 2*ramp + SETTINGS["hold_s"] + SETTINGS["recover_s"]
+    sign = 1. if t <= span else -1.
+    t = t if sign > 0 else t-span
+    if t <= ramp:
+        s, direction = t/ramp, 1.
+    elif t <= ramp+SETTINGS["hold_s"]:
+        return 0.
+    elif t <= 2*ramp+SETTINGS["hold_s"]:
+        s, direction = (2*ramp+SETTINGS["hold_s"]-t)/ramp, -1.
+    else:
+        return 0.
+    return sign*direction*SETTINGS["amplitude_rad"]*30*s*s*(1-s)**2/ramp
+
+
+def commanded_velocity(t, case):
+    mode = case.get("velocity_target_mode", "zero")
+    require(mode in ("zero", "reference_derivative"), "unsupported velocity target mode")
+    return 0. if mode == "zero" else target_velocity(t, case["ramp_s"])
+
+
 def cases():
     """Return the complete step budget and nominal continuous target peaks."""
     result = []
@@ -84,6 +111,36 @@ def cases():
     require(len(result) == SETTINGS["max_cases"] and sum(c["steps"] for c in result) <= SETTINGS["max_steps"],
             "physics budget exceeded")
     return result
+
+
+def experiment_schedule(document):
+    """Keep historical staged trials separate from the two-case causal test."""
+    kind = document.get("experiment", "staged_speed")
+    require(kind in ("staged_speed", "velocity_reference_comparison"), "unsupported experiment")
+    settings = dict(SETTINGS)
+    if kind == "staged_speed":
+        return settings, cases()
+    require(selected_joint(document) == "lf_elbow_joint", "comparison only budgeted for left elbow")
+    schedule = [dict(cases()[-1], velocity_target_mode=mode)
+                for mode in ("zero", "reference_derivative")]
+    settings.update(max_cases=2, max_steps=sum(c["steps"] for c in schedule))
+    return settings, schedule
+
+
+def validate_plan(plan):
+    settings, schedule = experiment_schedule(plan)
+    require(plan["completed"] and plan["settings"] == settings and plan["cases"] == schedule,
+            "plan/config mismatch")
+    return settings, schedule
+
+
+def validate_physical_plan(plan):
+    """Enforce the current zero-velocity-target drive decision before startup."""
+    settings, schedule = validate_plan(plan)
+    require(plan.get("experiment", "staged_speed") == "staged_speed" and
+            all(c.get("velocity_target_mode", "zero") == "zero" for c in schedule),
+            "nonzero velocity targets are historical replay only; current target velocity is always zero")
+    return settings, schedule
 
 
 def load_reference(path):
@@ -201,6 +258,21 @@ def self_check():
         require(abs(issued).max() <= .768+1e-12, "target overshoot")
         require(abs(np.diff(issued)/.02).max() <= c["nominal_target_peak_rad_s"]+1e-10,
                 "discrete target exceeds nominal smooth-curve peak")
+        for t in np.arange(5.01, c["duration_s"]-.01, .013):
+            numeric = (target(t+1e-6, ramp)-target(t-1e-6, ramp))/2e-6
+            require(abs(numeric-target_velocity(t, ramp)) < 1e-6, "reference derivative differs")
+    comparison_settings, comparison = experiment_schedule(dict(joint="lf_elbow_joint", experiment="velocity_reference_comparison"))
+    require(comparison_settings["max_steps"] == 3888 and len(comparison) == 2, "comparison budget differs")
+    require(commanded_velocity(5.08, comparison[0]) == 0. and commanded_velocity(5.08, comparison[1]) > 7.,
+            "velocity comparison has no intervention")
+    validate_physical_plan(dict(completed=True, settings=SETTINGS, cases=cases()))
+    try:
+        validate_physical_plan(dict(completed=True, joint="lf_elbow_joint", experiment="velocity_reference_comparison",
+                                    settings=comparison_settings, cases=comparison))
+    except ValueError as error:
+        require("historical replay only" in str(error), "wrong physical refusal")
+    else:
+        raise ValueError("historical nonzero velocity experiment accepted for new physics")
     fake = {"q_rad": np.array([[0.], [.01], [.03]]), "t_s": np.array([5.005, 5.01, 5.015]),
             "target_rad": np.zeros((3, 1)), "position_delta_velocity_rad_s": np.array([[0.], [2.], [4.]]),
             "velocity_rad_s": np.full((3, 1), 99.), "projected_joint_effort_nm": np.ones((3, 1)),
@@ -229,7 +301,7 @@ def run(args):
     require(wiring.binding.sha256_file(args.plan) == args.approved_plan_sha256, "plan changed")
     plan = json.loads(args.plan.read_text(encoding="utf-8"))
     joint = selected_joint(plan)
-    require(plan["completed"] and plan["settings"] == SETTINGS and plan["cases"] == cases(), "plan/config mismatch")
+    settings, schedule = validate_physical_plan(plan)
     geometry_path = args.plan.parent/"geometry_report.json"
     require(wiring.binding.sha256_file(geometry_path) == plan["geometry_report_sha256"], "geometry changed")
     require(wiring.binding.sha256_file(args.plan.parent/"geometry_config.json") == plan["geometry_config_sha256"],
@@ -240,13 +312,15 @@ def run(args):
     body_precheck.revalidate_inputs(geometry)
     prior, manifest, _ = load_reference(Path(plan["reference"]))
     require(wiring.binding.sha256_file(manifest) == plan["manifest_sha256"], "plan manifest changed")
-    result = dict(completed=False, status="startup", joint=joint, settings=SETTINGS, plan=str(args.plan),
+    result = dict(completed=False, status="startup", joint=joint, settings=settings, plan=str(args.plan),
+                  experiment=plan.get("experiment", "staged_speed"),
                   plan_sha256=args.approved_plan_sha256, cases=[], physics_steps=0,
                   code_sha256=wiring.binding.sha256_file(Path(__file__)),
                   reference=plan["reference"], reference_sha256=REFERENCE_SHA,
                   manifest=str(manifest), manifest_sha256=plan["manifest_sha256"])
     elapsed_before = 0.
     if args.resume:
+        require(result["experiment"] == "staged_speed", "comparison retries are not budgeted")
         require(args.approved_resume_sha256, "resume approval required")
         checked = replay(args.resume, args.approved_resume_sha256)
         prefix = json.loads(args.resume.read_text(encoding="utf-8"))
@@ -335,8 +409,8 @@ def run(args):
             active["initial_q_rad"] = previous.tolist()
             desired = np.zeros(30)
             for step in range(case["steps"]):
-                require(elapsed_before+time.monotonic()-start < SETTINGS["wall_budget_s"], "wall-clock budget exhausted")
-                require(result["physics_steps"] < SETTINGS["max_steps"], "physical-step budget exhausted")
+                require(elapsed_before+time.monotonic()-start < settings["wall_budget_s"], "wall-clock budget exhausted")
+                require(result["physics_steps"] < settings["max_steps"], "physical-step budget exhausted")
                 if step % 4 == 0:
                     desired = np.zeros(30)
                     desired[knee] = target(step*.005, case["ramp_s"])
@@ -420,23 +494,100 @@ def audit_case(data, case, names, joint=JOINT):
     commanded[:, knee] = [target((step//4)*.02, case["ramp_s"]) for step in range(count)]
     require(np.array_equal(commanded, data["target_rad"]), "50 Hz target trajectory mismatch")
     require(np.allclose(commanded, data["backend_position_target_rad"], atol=1e-6, rtol=0), "backend target mismatch")
-    require(not data["backend_velocity_target_rad_s"].any(), "velocity target changed")
+    expected_velocity = np.zeros((count, 30))
+    expected_velocity[:, knee] = [commanded_velocity((step//4)*.02, case) for step in range(count)]
+    require(np.allclose(expected_velocity, data["backend_velocity_target_rad_s"], atol=1e-6, rtol=0),
+            "velocity target changed")
     actual = summarize(data, case, knee)
     require(actual == case["summary"], "saved summary differs from raw measurements")
     return actual
+
+
+def response_diagnostics(data, case, axis, kp, kd):
+    """Explain sampled response [SI]; PD terms are estimates, not telemetry."""
+    error = data["target_rad"][:, axis]-data["q_rad"][:, axis]
+    velocity = data["velocity_rad_s"][:, axis]
+    goal_velocity = data["backend_velocity_target_rad_s"][:, axis]
+    p_term, d_term = kp*error, kd*(goal_velocity-velocity)
+    k = int(np.argmax(abs(error)))
+    moving = data["t_s"] > SETTINGS["settle_s"]
+    return dict(post_settle_error_rms_rad=float(np.sqrt(np.mean(error[moving]**2))) if moving.any() else None,
+                max_backend_velocity_target_rad_s=float(abs(goal_velocity).max()),
+                at_max_error=dict(t_s=float(data["t_s"][k]), error_rad=float(error[k]),
+                    velocity_rad_s=float(velocity[k]), velocity_target_rad_s=float(goal_velocity[k]),
+                    p_term_estimate_nm=float(p_term[k]), d_term_estimate_nm=float(d_term[k]),
+                    pd_sum_estimate_nm=float(p_term[k]+d_term[k]),
+                    measured_step_average_projected_load_nm=float(data["projected_joint_effort_nm"][k, axis])),
+                scope="post-step algebraic PD estimates; not implicit solver motor effort")
+
+
+def chest_gravity_diagnostics(data, case, names, manifest):
+    """Compare held-window chest load with URDF self-weight [N m, kg, rad]."""
+    import xml.etree.ElementTree as ET
+    from palm_spatial_inertia import csc
+    model = csc.load_urdf(Path(manifest["target_binding"]["urdf"]))
+    tree = ET.parse(manifest["target_binding"]["urdf"]).getroot()
+    bodies = {link.get("name"): (float(link.find("inertial/mass").get("value")),
+              np.fromstring(link.find("inertial/origin").get("xyz"), sep=" "))
+              for link in tree.findall("link")}
+    chest = "chest_pitch_joint"
+    axis_index = names.index(chest)
+    descendants = [name for name in bodies if chest in csc.chain_up(model["joints"], name)]
+
+    def frames(q):
+        angles = dict(zip(names, q))
+        return {name: csc.fk(model["joints"], name, angles) for name in bodies}
+
+    def potential(q):
+        poses = frames(q)
+        return sum(9.81*mass*(poses[name][:3, :3]@com+poses[name][:3, 3])[2]
+                   for name, (mass, com) in bodies.items())
+
+    ramp = case["ramp_s"]
+    ends = dict(settle=5., positive_hold=5.+ramp+1., positive_returned=5.+2*ramp+2.,
+                negative_hold=5.+3*ramp+3., negative_returned=case["duration_s"])
+    windows = {}
+    for label, end in ends.items():
+        mask = (data["t_s"] >= end-.2-1e-8) & (data["t_s"] <= end+1e-8)
+        if not mask.any():
+            continue
+        q = data["q_rad"][mask].mean(axis=0)
+        poses = frames(q)
+        spec = model["joints"][chest]
+        pivot = poses[spec["child"]][:3, 3]
+        axis = poses[spec["child"]][:3, :3]@spec["axis"]
+        contributions = {}
+        for name in descendants:
+            mass, com = bodies[name]
+            center = poses[name][:3, :3]@com+poses[name][:3, 3]
+            contributions[name] = -float(axis@np.cross(center-pivot, [0., 0., -9.81*mass]))
+        compensation = sum(contributions.values())
+        step = np.zeros(len(names)); step[axis_index] = 1e-5
+        derivative = (potential(q+step)-potential(q-step))/(2e-5)
+        measured = float(data["projected_joint_effort_nm"][mask, axis_index].mean())
+        windows[label] = dict(samples=int(mask.sum()), gravity_compensation_nm=compensation,
+            potential_derivative_nm=float(derivative), gravity_method_difference_nm=float(compensation-derivative),
+            measured_mean_projected_load_nm=measured, load_minus_gravity_nm=measured-compensation,
+            max_chest_position_delta_speed_rad_s=float(abs(data["position_delta_velocity_rad_s"][mask, axis_index]).max()),
+            max_all_joint_position_range_rad=float(np.ptp(data["q_rad"][mask], axis=0).max()),
+            gravity_contributions_nm=contributions)
+    return dict(downstream_links=descendants, downstream_mass_kg=sum(bodies[n][0] for n in descendants),
+                windows=windows, scope="fixed-root identity orientation; self-weight at held-window mean actual q; no contact or dynamic-load prediction")
 
 
 def replay(path, digest):
     """Re-read saved speed trials and falsify corrupted numerical evidence."""
     require(wiring.binding.sha256_file(path) == digest, "report digest mismatch")
     report = json.loads(path.read_text(encoding="utf-8"))
-    require(report["settings"] == SETTINGS, "settings differ")
     require(wiring.binding.sha256_file(Path(report["plan"])) == report["plan_sha256"], "plan changed")
     plan = json.loads(Path(report["plan"]).read_text(encoding="utf-8"))
+    settings, schedule = validate_plan(plan)
+    require(report["settings"] == settings and report.get("experiment", "staged_speed") ==
+            plan.get("experiment", "staged_speed"), "report experiment/settings differ")
     joint = selected_joint(report)
-    require(joint == selected_joint(plan) and plan["settings"] == SETTINGS and plan["cases"] == cases(),
+    require(joint == selected_joint(plan),
             "report/plan joint or schedule differs")
-    reference, manifest_path, _ = load_reference(Path(report["reference"]))
+    reference, manifest_path, manifest = load_reference(Path(report["reference"]))
     require(report["joint_names"] == reference["joint_names"], "report joint axis changed")
     require(report["manifest"] == str(manifest_path) and report["manifest_sha256"] == reference["tracking_manifest_sha256"],
             "report manifest differs")
@@ -450,14 +601,21 @@ def replay(path, digest):
         require(wiring.binding.sha256_file(Path(prefix["report"])) == prefix["sha256"], "prefix report changed")
         require(wiring.binding.sha256_file(Path(prefix["report"]).parent/"source.py") == prefix["code_sha256"],
                 "prefix source changed")
-    totals, summaries, negatives, constraints = 0, [], [], []
+    totals, summaries, negatives, constraints, responses, pair_raw, chest_loads = 0, [], [], [], [], [], []
     for index, case in enumerate(report["cases"]):
-        require(case["index"] == index and all(case[k] == cases()[index][k] for k in cases()[index]),
+        require(index < len(schedule) and case["index"] == index and
+                all(case[k] == schedule[index][k] for k in schedule[index]),
                 "case schedule differs")
         require(wiring.binding.sha256_file(Path(case["raw"])) == case["raw_sha256"], "raw case changed")
         with np.load(case["raw"], allow_pickle=False) as raw:
             data = dict(raw)
         summaries.append(audit_case(data, case, report["joint_names"], joint))
+        axis = report["joint_names"].index(joint)
+        responses.append(response_diagnostics(data, case, axis, report["readbacks"]["kp"][axis],
+                                              report["readbacks"]["kd"][axis]))
+        chest_loads.append(chest_gravity_diagnostics(data, case, report["joint_names"], manifest))
+        if report.get("experiment") == "velocity_reference_comparison":
+            pair_raw.append(data)
         bounds = np.asarray(report["joint_force_probe"]["position_limits_rad"])
         margin = np.minimum(data["q_rad"]-bounds[:, 0], bounds[:, 1]-data["q_rad"])
         projected = data["projected_joint_effort_nm"]
@@ -478,25 +636,49 @@ def replay(path, digest):
             max_backend_speed_to_cap_ratio=float((abs(data["velocity_rad_s"])/np.asarray(report["readbacks"]["velocity_caps"])).max())))
         totals += len(data["t_s"])
         if not negatives:
-            for defect in ("fake_achieved_speed", "wrong_target_column", "wrong_time"):
+            for defect in ("fake_achieved_speed", "wrong_target_column", "wrong_time", "wrong_velocity_target"):
                 bad = {key: value.copy() for key, value in data.items()}
                 if defect == "fake_achieved_speed":
                     bad["position_delta_velocity_rad_s"][:] = case["nominal_target_peak_rad_s"]
                 elif defect == "wrong_target_column":
                     bad["target_rad"] = np.roll(bad["target_rad"], 1, axis=1)
-                else:
+                elif defect == "wrong_time":
                     bad["t_s"] += .005
+                else:
+                    bad["backend_velocity_target_rad_s"][:, report["joint_names"].index(joint)] += 1.
                 try:
                     audit_case(bad, case, report["joint_names"], joint)
                 except ValueError:
                     negatives.append(defect)
                 else:
                     raise ValueError("corrupted speed evidence accepted: "+defect)
-    require(totals == report["physics_steps"] and totals <= SETTINGS["max_steps"], "total physical budget mismatch")
+    require(totals == report["physics_steps"] and totals <= settings["max_steps"], "total physical budget mismatch")
     if report["completed"]:
-        require(len(report["cases"]) == 5 and all(c["completed"] for c in report["cases"]) and totals == 11352,
-                "completed verdict without all five cases")
+        require(len(report["cases"]) == len(schedule) and all(c["completed"] for c in report["cases"]) and
+                totals == sum(c["steps"] for c in schedule), "completed verdict without full schedule")
+    comparison = None
+    if pair_raw:
+        source = plan["baseline_source"]
+        require(source["sha256"] == ELBOW_REPORT_SHA and
+                replay(Path(source["report"]), source["sha256"])["completed"], "comparison baseline changed")
+        baseline = json.loads(Path(source["report"]).read_text(encoding="utf-8"))["cases"][-1]
+        with np.load(baseline["raw"], allow_pickle=False) as original:
+            n = len(pair_raw[0]["t_s"])
+            require(np.array_equal(pair_raw[0]["target_rad"], original["target_rad"][:n]),
+                    "comparison baseline position trajectory differs")
+            reproduction = float(abs(pair_raw[0]["q_rad"]-original["q_rad"][:n]).max())
+        comparison = dict(baseline_reproduction_max_q_difference_rad=reproduction)
+        if len(pair_raw) == 2:
+            n = min(len(d["t_s"]) for d in pair_raw)
+            require(np.array_equal(pair_raw[0]["target_rad"][:n], pair_raw[1]["target_rad"][:n]) and
+                    np.array_equal(report["cases"][0]["initial_q_rad"], report["cases"][1]["initial_q_rad"]),
+                    "paired initial state or position targets differ")
+        if report["completed"]:
+            comparison.update(max_error_reduction_fraction=1-summaries[1]["max_direct_error_rad"]/summaries[0]["max_direct_error_rad"],
+                post_settle_rms_error_reduction_fraction=1-responses[1]["post_settle_error_rms_rad"]/responses[0]["post_settle_error_rms_rad"])
     return dict(completed=report["completed"], joint=joint, physics_steps=totals, summaries=summaries,
+                chest_gravity_diagnostics=chest_loads,
+                response_diagnostics=responses, velocity_reference_comparison=comparison,
                 constraint_readbacks=constraints, negative_cases_rejected=negatives, stop_reason=report.get("error"))
 
 
