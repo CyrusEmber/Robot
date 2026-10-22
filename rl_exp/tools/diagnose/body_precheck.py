@@ -117,6 +117,8 @@ HERE = Path(__file__).resolve()
 REPO = HERE.parents[3]
 sys.path.insert(0, str(REPO / 'rl_exp/tools/runrecord'))
 import binding  # noqa: E402
+sys.path.insert(0, str(HERE.parent))
+from artifact_paths import artifact_path  # noqa: E402
 
 SUPPORT = __doc__
 CHECKS = {'joint_limits', 'end_position', 'self_collision', 'ground', 'source_consistency', 'role_consistency',
@@ -181,7 +183,7 @@ def role_map(value, names, label):
 
 def bound_input(spec, base):
     need(isinstance(spec, dict), 'input binding must be an object')
-    path = (base / text(spec.get('path'), 'input path')).resolve()
+    path = artifact_path((base / text(spec.get('path'), 'input path')).resolve())
     approved = text(spec.get('sha256'), 'approved sha256')
     need(len(approved) == 64 and all(c in '0123456789abcdef' for c in approved), 'bare lowercase sha256 required')
     actual = binding.sha256_file(path)
@@ -406,7 +408,7 @@ def pair_evaluate(a, b, world, meshes, clearance, np, triangles):
 def source_geometry_prepare(spec, base, path, report, root_link, np, csc):
     """Read saved/reopened pose samples once; bind consumed visuals and blend [m]."""
     from scipy.spatial import cKDTree
-    evidence_path = (base / text(spec.get('path'), 'source evidence path')).resolve()
+    evidence_path = artifact_path((base / text(spec.get('path'), 'source evidence path')).resolve())
     need(evidence_path.is_file(), 'independent source evidence file absent')
     # Unlike path-only geometry readers, source JSON is decoded from these exact bytes.
     raw = evidence_path.read_bytes()
@@ -423,7 +425,8 @@ def source_geometry_prepare(spec, base, path, report, root_link, np, csc):
     if not fields <= set(source):
         raise NotImplementedError('source evidence requires saved/reopened pose-sample payload')
     finite_data(source)
-    need((evidence_path.parent / text(source['candidate_urdf'], 'source candidate path')).resolve() == path,
+    need(artifact_path((evidence_path.parent / text(
+        source['candidate_urdf'], 'source candidate path')).resolve()) == path,
          'source candidate path differs from actual URDF')
     need(source['candidate_sha256'] == report['inputs']['urdf']['approved_sha256'],
          'source evidence belongs to a different URDF')

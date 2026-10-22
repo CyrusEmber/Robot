@@ -128,12 +128,16 @@ if ROBOT == "lizard2_palm_spatial":
     requested = Path(OUT_OVERRIDE).resolve()
     if scratch.resolve() not in requested.parents or os.path.lexists(requested):
         raise ValueError("palm spatial output must be fresh and isolated under rl_exp/out")
-    report_path = Path(BUILD_REPORT_PATH).resolve()
+    sys.path.insert(0, str(Path(_SCRIPT_DIR).parents[1] / "tools/diagnose"))
+    from artifact_paths import ArtifactPaths
+    artifact_paths = ArtifactPaths()
+    report_path = artifact_paths.resolve(Path(BUILD_REPORT_PATH).resolve())
     if file_binding.sha256_file(report_path) != BUILD_REPORT_SHA256:
         raise ValueError("palm spatial approved build_report SHA256 mismatch")
     SPATIAL_REPORT = json.loads(report_path.read_text(encoding="utf-8"))
-    reference_path = Path(SPATIAL_REPORT["candidate_urdf"]).resolve()
-    source_path = Path(BLEND_OVERRIDE).resolve()
+    reference_path = artifact_paths.resolve(Path(SPATIAL_REPORT["candidate_urdf"]).resolve())
+    source_path = artifact_paths.resolve(Path(BLEND_OVERRIDE).resolve())
+    BLEND_OVERRIDE = str(source_path)
     declared = SPATIAL_REPORT.get("candidate_files_sha256")
     if (not isinstance(declared, dict)
             or not valid_sha256(SPATIAL_REPORT.get("candidate_blend_sha256"))

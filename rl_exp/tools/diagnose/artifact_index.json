@@ -2665,13 +2665,13 @@
     },
     {
       "logical_root": "rl_exp/out/lizard2_palm_spatial_20261014",
-      "current_location": "rl_exp/out/lizard2_palm_spatial_20261014",
-      "classification": "current_dependency",
+      "current_location": "rl_exp/tools/diagnose/baselines/palm-spatial-20261014",
+      "classification": "retired_mixed_container",
       "owner": "lizard2-body-drive-candidate",
-      "action": "partitioned_current_input",
-      "writer_status": "no_selected_root_writer_observed_before_cleanup",
-      "storage": "git_tracked_current_input",
-      "basis": "acceptance/records/2026-10-22-diagnostic-spatial-consolidation.md",
+      "action": "merged_and_removed_old_root",
+      "writer_status": "old_root_removed_after_verified_restore",
+      "storage": "git_tracked_diagnostic_baseline_and_local_history_archive",
+      "basis": "acceptance/records/2026-10-22-diagnostic-checkpoint-relocation.md",
       "document_mentions": [
         "acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md",
         "acceptance/records/2026-10-14-lizard2-palm-spatial-trial-checkpoint.md",
@@ -2687,11 +2687,11 @@
         "acceptance/records/2026-10-20-diagnostic-artifact-plan-review.md"
       ],
       "report_metadata": null,
-      "consumer_verification": "Retained checkpoint_v3 consumed by runtime.check_build, check_export, preparation and body precheck; restored-code check_build passed with original repository unreadable.",
-      "retention_reason": "Current checkpoint_v3 input only; historical child trees removed after verified recovery.",
-      "next": "Migrate checkpoint_v3 only after check_export, preparation and body-precheck consumers resolve its new location and pass their real entry checks.",
+      "consumer_verification": "Current input readers migrated: full export/registered/body CLI, real Blender export self-check and pre-AppLauncher input copies in two new-root Git checkouts; original body fail verdict retained.",
+      "retention_reason": "Parent old directory removed; current checkpoint and fixed controls share diagnostic baseline; earlier history remains explicit local ZIP restore.",
+      "next": "Consume existing logical routes; remaining output roots and external backup follow the active lifecycle item.",
       "partition": {
-        "current_input": "checkpoint_v3",
+        "current_input": "checkpoint",
         "tracked_baselines": "rl_exp/tools/diagnose/baselines/palm-spatial-20261014",
         "historical_archive": "rl_exp/out/archive/palm-spatial/history-20261014.zip"
       }
@@ -4361,6 +4361,79 @@
       "consumer_verification": "Manifest bytes restored; real Git add/commit/clone under both autocrlf modes; restored-code CLI positive/locked negative and authorized check_build with old repository reads denied.",
       "retention_reason": "Historical build and regression evidence plus required source inputs; explicit restore required, no transparent ZIP route or physical approval.",
       "next": "Use manifest.json and blobs/<sha256> to restore historical paths into an isolated root; replay via test_artifact_relocation.py --archive; local archive is not external backup."
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_palm_spatial_20261014/checkpoint_v3",
+      "current_location": "rl_exp/tools/diagnose/baselines/palm-spatial-20261014/checkpoint",
+      "classification": "current_dependency",
+      "owner": "lizard2-body-drive-candidate",
+      "action": "relocated_current_input",
+      "writer_status": "fixed_input_old_copy_removed_after_recovery",
+      "storage": "git_tracked_diagnostic_input",
+      "basis": "acceptance/records/2026-10-22-diagnostic-checkpoint-relocation.md",
+      "retention_reason": "Fixed candidate input for current diagnostic readers; original byte identities and authorization retained, no adoption approval.",
+      "relocation": {
+        "original_absolute_root": "E:\\Robot\\rl_exp\\out\\lizard2_palm_spatial_20261014\\checkpoint_v3",
+        "files": {
+          "build.json": "59473f8c345dce48e8ee379c0972c928184f768be85afca948ac812a666fa6f8",
+          "meshes/085ffe1acad61d1360f838f310ee14a6e0a45a9e852db5d28785f916936eee6e.obj": "085ffe1acad61d1360f838f310ee14a6e0a45a9e852db5d28785f916936eee6e",
+          "meshes/14c1b5825581c0e6c57a10ee86744c59622627cac4214bddb3d12e0cc153cdd2.obj": "14c1b5825581c0e6c57a10ee86744c59622627cac4214bddb3d12e0cc153cdd2",
+          "meshes/274d18c6e52bf6b9f35e5e8f3f399007467584205ef44c3018780272ad01c393.obj": "274d18c6e52bf6b9f35e5e8f3f399007467584205ef44c3018780272ad01c393",
+          "meshes/2dd79f3f59636cafab95fdf1f5ec3f147f9a539594015d6226a43d7a48018f6b.obj": "2dd79f3f59636cafab95fdf1f5ec3f147f9a539594015d6226a43d7a48018f6b",
+          "meshes/31107e3ed866b696ece3f0d4d1f2fd656c91f23877b460aba8c9a749c29a3e61.obj": "31107e3ed866b696ece3f0d4d1f2fd656c91f23877b460aba8c9a749c29a3e61",
+          "meshes/3a7c4f471eec69d2c0a7438f3d246821b71ca092469417ee7b0536039980fddd.obj": "3a7c4f471eec69d2c0a7438f3d246821b71ca092469417ee7b0536039980fddd",
+          "meshes/47b0bce406c7f1d0c48a3ad3d402c95019402f4dd7f0cb41002a616f4ac1247d.obj": "47b0bce406c7f1d0c48a3ad3d402c95019402f4dd7f0cb41002a616f4ac1247d",
+          "meshes/4a595e5e5778ffe312b3b8ea8efb6bd34d7647e9e2c43195b6494e5ed969fa04.obj": "4a595e5e5778ffe312b3b8ea8efb6bd34d7647e9e2c43195b6494e5ed969fa04",
+          "meshes/5cc143594243181551ccdd291c00924a6b94b924803a5e036092a98e2ce299f7.obj": "5cc143594243181551ccdd291c00924a6b94b924803a5e036092a98e2ce299f7",
+          "meshes/63c83d113366ee7f211adea5ffb3e983ad2e24de25f4efc248927a8c84cd95f1.obj": "63c83d113366ee7f211adea5ffb3e983ad2e24de25f4efc248927a8c84cd95f1",
+          "meshes/6453e755ebc3f037bd14ab66cdd9f1e07a197eff9fc780efeafdbb0dd8d9c49f.obj": "6453e755ebc3f037bd14ab66cdd9f1e07a197eff9fc780efeafdbb0dd8d9c49f",
+          "meshes/65616b22124a7dfb5a48d2d32d5e58db2f4a59f76c88ca45bc9aa6e03cd8d82f.obj": "65616b22124a7dfb5a48d2d32d5e58db2f4a59f76c88ca45bc9aa6e03cd8d82f",
+          "meshes/6f7b085fe9ae45bb62befe05d129d48425a4dde6860002da61fde0aa4bf86aaf.obj": "6f7b085fe9ae45bb62befe05d129d48425a4dde6860002da61fde0aa4bf86aaf",
+          "meshes/6fc00a37f44c966c53cfa087e2d3939bc674cb2c3ff3b992ea9f6bc0e51f0b07.obj": "6fc00a37f44c966c53cfa087e2d3939bc674cb2c3ff3b992ea9f6bc0e51f0b07",
+          "meshes/70bc5a70c1f8a089600f2abd7d49c461a307d29aa45ad725906cbbc59b163cb0.obj": "70bc5a70c1f8a089600f2abd7d49c461a307d29aa45ad725906cbbc59b163cb0",
+          "meshes/7aab07149240a7be7d43293ff746c42d3f5ed749ae4595883cb92648d8c4f62a.obj": "7aab07149240a7be7d43293ff746c42d3f5ed749ae4595883cb92648d8c4f62a",
+          "meshes/7ae39439a7cb6e84de354f17c47169d24a423b213f518bf7a98a2944ef4f2e4e.obj": "7ae39439a7cb6e84de354f17c47169d24a423b213f518bf7a98a2944ef4f2e4e",
+          "meshes/7e2824a4dc7de7545f0c209af1ddbb0a899833ba588f155d390f155c4df9e786.obj": "7e2824a4dc7de7545f0c209af1ddbb0a899833ba588f155d390f155c4df9e786",
+          "meshes/87d3fa9522336bd811cfda6d7504761e63018a76a0036c2c3d1f5ced4585e98e.obj": "87d3fa9522336bd811cfda6d7504761e63018a76a0036c2c3d1f5ced4585e98e",
+          "meshes/96e53bd271241a91e39e593fa01529500d9b9f1aa6c758e3aa96736f990397d6.obj": "96e53bd271241a91e39e593fa01529500d9b9f1aa6c758e3aa96736f990397d6",
+          "meshes/9961a5bd2535b0f7f0986110036cb64b8323ec3ab0bc7895d08374221b8b1713.obj": "9961a5bd2535b0f7f0986110036cb64b8323ec3ab0bc7895d08374221b8b1713",
+          "meshes/9bb010aa54e42e9cbe62db9e126d71d2b9b90d4ca3ec7ba3356c560644444324.obj": "9bb010aa54e42e9cbe62db9e126d71d2b9b90d4ca3ec7ba3356c560644444324",
+          "meshes/9e790094b7766c4d83da72ec65f0931d89cf471c00d4abb87b4fdffeefbe9c6b.obj": "9e790094b7766c4d83da72ec65f0931d89cf471c00d4abb87b4fdffeefbe9c6b",
+          "meshes/a2d54f30bc209de2e171133e91856c13e79c262f5749bf97b5ecff2694f5c772.obj": "a2d54f30bc209de2e171133e91856c13e79c262f5749bf97b5ecff2694f5c772",
+          "meshes/a380b4cb51aa32c5e006e8156f27bfde3f1c344523965e99c186c17afd01e98a.obj": "a380b4cb51aa32c5e006e8156f27bfde3f1c344523965e99c186c17afd01e98a",
+          "meshes/a404fe6962e49f84d0c17c0bdf010ec1b31e7c7e24b070ed42a62f36484a11af.obj": "a404fe6962e49f84d0c17c0bdf010ec1b31e7c7e24b070ed42a62f36484a11af",
+          "meshes/a8b511e93149c124557fcfbd7ee648139dffde03e36d2a304d4618654a59b18e.obj": "a8b511e93149c124557fcfbd7ee648139dffde03e36d2a304d4618654a59b18e",
+          "meshes/b274ac68775afac0828054c5bd7eb01eda4ef067ce43af783d771cdfd461dc29.obj": "b274ac68775afac0828054c5bd7eb01eda4ef067ce43af783d771cdfd461dc29",
+          "meshes/b6a228d922b92d9dc5d50037e34e85d589a23845c1ae6f2eba7e3ca0b4bf693a.obj": "b6a228d922b92d9dc5d50037e34e85d589a23845c1ae6f2eba7e3ca0b4bf693a",
+          "meshes/ce545be42c025d221837b2b9565ce5ffb3d5c29029331aff1009d6ec1852f11e.obj": "ce545be42c025d221837b2b9565ce5ffb3d5c29029331aff1009d6ec1852f11e",
+          "meshes/d17266068080b79cedff1fd3700c8e20279e606c417a868d0c2e691f38dfa6c9.obj": "d17266068080b79cedff1fd3700c8e20279e606c417a868d0c2e691f38dfa6c9",
+          "meshes/d46d2edbd20627bdbb16d442fc64783cda014684899964978d16ca4d2a867a25.obj": "d46d2edbd20627bdbb16d442fc64783cda014684899964978d16ca4d2a867a25",
+          "meshes/dc3fcb0ce846b415db126df2decb1b5e550f67eae92f2a380ac5e9c4c37f16d5.obj": "dc3fcb0ce846b415db126df2decb1b5e550f67eae92f2a380ac5e9c4c37f16d5",
+          "meshes/e43174a7856857f7e6ef77b6a6ec9c1e13a6ea0a33f564636235ad8a66d9a9b9.obj": "e43174a7856857f7e6ef77b6a6ec9c1e13a6ea0a33f564636235ad8a66d9a9b9",
+          "meshes/e586888546c30b82874bdc170d021a210552cbc3d060a0216c4791b8d443f454.obj": "e586888546c30b82874bdc170d021a210552cbc3d060a0216c4791b8d443f454",
+          "meshes/fd4a5d6cd15bcd4bc00aed202173ce1fd49fb00bf14fae066e9db686ec38f10c.obj": "fd4a5d6cd15bcd4bc00aed202173ce1fd49fb00bf14fae066e9db686ec38f10c",
+          "palm_spatial.blend": "beeac4c09726260bf392a6ecc81a04ebcf9b54a210416493bbb2689c4909cdea",
+          "palm_spatial.urdf": "2c78117020458d5e7934219a2064bf7241430b81c2a736acd8cc0761c7a1461f"
+        }
+      }
+    },
+    {
+      "logical_root": "rl_exp/tools/diagnose/out/runs/support/lizard2-e-wiring-air01-20261022",
+      "current_location": "rl_exp/tools/diagnose/out/runs/support/lizard2-e-wiring-air01-20261022",
+      "run_record": "rl_exp/tools/diagnose/out/runs/support/lizard2-e-wiring-air01-20261022/run.json",
+      "classification": "producer_run",
+      "owner": "lizard2-candidate-wiring",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/tools/diagnose/out/runs/support/lizard2-e-wiring-final-20261022",
+      "current_location": "rl_exp/tools/diagnose/out/runs/support/lizard2-e-wiring-final-20261022",
+      "run_record": "rl_exp/tools/diagnose/out/runs/support/lizard2-e-wiring-final-20261022/run.json",
+      "classification": "producer_run",
+      "owner": "lizard2-candidate-wiring",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
     }
   ]
 }

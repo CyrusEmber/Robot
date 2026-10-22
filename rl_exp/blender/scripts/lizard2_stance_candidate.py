@@ -529,14 +529,17 @@ def spatial_export_self_check(blend, build_report, output_dir, *, build_report_s
     import json
     from pathlib import Path
     import xml.etree.ElementTree as ET
+    sys.path.insert(0, str(Path(_SCRIPT_DIR).parents[1] / "tools/diagnose"))
+    from artifact_paths import artifact_path
 
     exporter = Path(_SCRIPT_DIR) / "generate_urdf.py"
     output = Path(output_dir).resolve()
     root = Path(_SCRIPT_DIR).parents[1] / "out"
     assert root.resolve() in output.parents and not output.exists()
-    report_path = Path(build_report).resolve()
+    report_path = artifact_path(Path(build_report).resolve())
     report = json.loads(report_path.read_text(encoding="utf-8"))
-    reference = Path(report["candidate_urdf"])
+    reference = artifact_path(Path(report["candidate_urdf"]).resolve())
+    blend = artifact_path(Path(blend).resolve())
     protected = {p: file_binding.sha256_file(p)
                  for directory in (report_path.parent, Path(_ASSET_DIR),
                                    Path(_SCRIPT_DIR).parents[1] / "assets",

@@ -68,13 +68,14 @@ def check_export(path, approved_report, approved_urdf):
             "export identity mismatch")
     require(doc["mass_policy"] == "reference_full_link_inertial"
             and doc["links"] == 31 and doc["joints"] == 30, "export structure mismatch")
+    paths = ArtifactPaths()
     approved_sources = {"build_report": (BUILD, "59473f8c345dce48e8ee379c0972c928184f768be85afca948ac812a666fa6f8"),
                         "source_blend": (BUILD.parent / "palm_spatial.blend", BLEND_HASH),
                         "reference_urdf": (BUILD.parent / "palm_spatial.urdf", URDF_HASH)}
     for field, (source, digest) in approved_sources.items():
-        require(Path(doc[field]).resolve() == source.resolve(), "export source path mismatch: " + field)
+        require(paths.same_identity(Path(doc[field]), source), "export source path mismatch: " + field)
         require(doc["input_sha256"].get(doc[field]) == digest
-                and binding.sha256_file(source) == digest, "export source hash mismatch: " + field)
+                and binding.sha256_file(paths.resolve(source)) == digest, "export source hash mismatch: " + field)
     check_build(BUILD)
     files = doc["files_sha256"]
     urdf_name = "lizard2_palm_spatial.urdf"
@@ -91,7 +92,7 @@ def check_export(path, approved_report, approved_urdf):
         sources.add(source)
         require(binding.sha256_file(source) == digest, "export file hash mismatch: " + name)
     tree = ET.parse(path.parent / urdf_name).getroot()
-    reference = ET.parse(BUILD.parent / "palm_spatial.urdf").getroot()
+    reference = ET.parse(paths.resolve(BUILD.parent / "palm_spatial.urdf")).getroot()
     def attributes(element):
         require(element is not None, "missing export/reference XML element")
         # Attribute order and whitespace text/tails are serialization, not URDF values.
@@ -235,7 +236,8 @@ def pair_binding(sensor_paths, filter_paths, source, owners, shape):
 
 def self_check():
     doc = check_build(BUILD)
-    names = [j.get("name") for j in ET.parse(BUILD.parent / "palm_spatial.urdf").getroot().findall("joint")]
+    names = [j.get("name") for j in ET.parse(ArtifactPaths().resolve(
+        BUILD.parent / "palm_spatial.urdf")).getroot().findall("joint")]
     runtime = list(reversed(names))
     ids = [runtime.index(n) for n in names]
     exact_channels(names, names, ids, runtime)
@@ -452,13 +454,14 @@ def check_registered_manifest(path, *, measured_order=True):
 
 def prepare_registered(args):
     """Prepare an isolated replay manifest without starting AppLauncher or editing recipes."""
+    build = ArtifactPaths().resolve(BUILD)
     out = args.out.resolve()
     require(out.parent == REGISTERED_OUT.resolve(), "only registered output attempt allowed")
     require(not out.exists(), "registered output already exists")
     report_path = REGISTERED_INPUT / "runtime_report.json"
     report = json.loads(report_path.read_text(encoding="utf-8"))
     old = json.loads((REGISTERED_INPUT / "manifest.json").read_text(encoding="utf-8"))
-    require(report["completed"] and report["input"]["build_sha256"] == binding.sha256_file(BUILD),
+    require(report["completed"] and report["input"]["build_sha256"] == binding.sha256_file(build),
             "completed checkpoint measurement required")
     usd, urdf = REGISTERED_INPUT / "palm_spatial.usda", REGISTERED_INPUT / "palm_spatial.urdf"
     require(binding.sha256_file(usd) == FIXED_USD_HASH and binding.sha256_file(urdf) == URDF_HASH,
@@ -480,7 +483,7 @@ def prepare_registered(args):
                 "scope": "registered mother routing only; isolated deepcopy; no recipe/PD/support/performance verdict",
                 "input": {"runtime_report": str(report_path), "runtime_report_sha256": binding.sha256_file(report_path),
                           "old_manifest_sha256": binding.sha256_file(REGISTERED_INPUT / "manifest.json"),
-                          "build": str(BUILD), "build_sha256": binding.sha256_file(BUILD)}}
+                          "build": str(BUILD), "build_sha256": binding.sha256_file(build)}}
     out.mkdir(parents=True, exist_ok=False)
     write_json(manifest, document)
     verify_registered(manifest)
@@ -590,6 +593,7 @@ def verify_registered(manifest):
 
 def run(args, result):
     result["stage"] = "input"
+    build = ArtifactPaths().resolve(BUILD)
     exported = args.export_report is not None
     if exported:
         doc = check_export(args.export_report, args.approved_export_sha256, args.approved_urdf_sha256)
@@ -598,12 +602,12 @@ def run(args, result):
         out = fresh_export_out(args.out, source)
     else:
         doc = check_build(args.build)
-        source, files = BUILD.parent, doc["candidate_files_sha256"]
+        source, files = build.parent, doc["candidate_files_sha256"]
         out = args.out.resolve()
         require(out == OUT.resolve() or out.parent == OUT.resolve(), "only authorized output tree allowed")
     out.mkdir(exist_ok=False)
     result["output"] = str(out)
-    result["input"] = {"build": str(BUILD), "build_sha256": binding.sha256_file(BUILD),
+    result["input"] = {"build": str(BUILD), "build_sha256": binding.sha256_file(build),
                        "candidate_files_sha256": files}
     if exported:
         result["input"].update(export_report=str(args.export_report.resolve()),
@@ -618,7 +622,7 @@ def run(args, result):
     if exported:
         shutil.copyfile(out / "lizard2_palm_spatial.urdf", out / "palm_spatial.urdf")
         shutil.copyfile(args.export_report, out / "input_export.json")
-    shutil.copyfile(BUILD, out / "input_build.json")
+    shutil.copyfile(build, out / "input_build.json")
     shutil.copyfile(Path(__file__), out / "runtime_source.py")
     tree = ET.parse(out / "palm_spatial.urdf").getroot()
     joints = tree.findall("joint")
@@ -1001,7 +1005,8 @@ def connection_geometry(urdf=None):
 
     doc = check_build(BUILD)
     csc = motion.gait.csc
-    model = csc.load_urdf(urdf if urdf is not None else BUILD.parent / "palm_spatial.urdf")
+    model = csc.load_urdf(urdf if urdf is not None else ArtifactPaths().resolve(
+        BUILD.parent / "palm_spatial.urdf"))
     collision = motion.Collision(model, 1e-9)
     remap = {d["abduct"]: d["twist"] for d in doc["definitions"].values()}
     expected = {frozenset(remap.get(n, n) for n in pair) for pair in motion.gait.APPROVED}
