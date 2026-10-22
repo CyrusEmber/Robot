@@ -66,7 +66,7 @@
 | `rl_exp\tools\diagnose\palm_spatial_runtime.py` | 无承重接线与隔离配置绑定；`--reset_probe` 查 reset/首物理步及 collider 归属，`--contact_pairs` 采具名观测并严格拒错；不判 PD 或复现正式配方 |
 | `rl_exp\tools\diagnose\palm_joint_force_audit.py` | 左膝两例关节力矩离线复读：轴投影、重力平衡及上限占比；不起仿真，不测极限负载 |
 | `rl_exp\tools\diagnose\palm_velocity_limit_audit.py` | 当前候选速度上限的离线逐关节核对；读取 manifest/URDF/backend，不测触限行为 |
-| `rl_exp\tools\diagnose\palm_speed_probe.py` | 左后膝逐级升速诊断；先几何预查，再限预算采集；`--replay` 独立复算实际速度 |
+| `rl_exp\tools\diagnose\palm_speed_probe.py` | 左后膝/左前肘逐级升速诊断；`--prepare --joint` 先核几何，`--replay` 复算实际速度 |
 | `rl_exp\tools\diagnose\palm_spatial_probe.py` | 三轴试作的 Blender/FK 对照、历史固定落点诊断、`--static_slices` 切片及 `--local_path` 预算内局部路径；自检／失败对照验证口径，不验收步态或动力学 |
 | `rl_exp\tools\diagnose\local_path_check.py` | 已采路径几何复验：四分点、`--mirror`、`--combined`；`--support_schedule` 保几何调支持占比及节点参数接缝；限预算、失败即停，不判动力学 |
 | `rl_exp\tools\diagnose\local_path_view.py` | 局部路径报告的独立后处理：真实碰撞网格侧／俯视 GIF、轨迹与路径斜率接缝；不重求解、不新增接地采样、不判动力学 |
