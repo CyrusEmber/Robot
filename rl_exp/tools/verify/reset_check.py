@@ -46,6 +46,7 @@ Exit code is 0 only when every phase passed.
 from __future__ import annotations
 
 import argparse
+import pathlib
 
 from isaaclab.app import AppLauncher
 
@@ -55,6 +56,11 @@ parser.add_argument("--num_envs", type=int, default=8)
 parser.add_argument("--excite-steps", type=int, default=20, help="control steps of uniform actions in phase B")
 parser.add_argument("--subset", type=int, default=2, help="how many envs are reset alone in phase D")
 parser.add_argument("--seed", type=int, default=0, help="seeds the phase B actions only")
+parser.add_argument("--target_config", type=pathlib.Path, default=None,
+                    help="isolated diagnostic manifest bound through obs_protocol.load_diagnostic_target "
+                         "(--task must be the manifest's task); the registered cfg is otherwise untouched")
+parser.add_argument("--action_amplitude", type=float, default=1.0,
+                    help="excitation actions are uniform in [-a, a]; lower it where scale=1 rad is violent")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 simulation_app = AppLauncher(args_cli).app
@@ -115,7 +121,7 @@ def excite(env, mbenv, robot, steps: int, seed: int) -> tuple[torch.Tensor, int]
     try:
         for _ in range(steps):
             actions = torch.empty(mbenv.num_envs, mbenv.action_manager.total_action_dim,
-                                  device=mbenv.device).uniform_(-1.0, 1.0)
+                                  device=mbenv.device).uniform_(-args_cli.action_amplitude, args_cli.action_amplitude)
             # no torch.inference_mode() here, deliberately: it would make every tensor the
             # managers keep during a step an inference tensor, and a stateful term that writes to
             # its own buffer in reset() (teacher_mdp's dwell term) then dies on the next reset
@@ -133,6 +139,11 @@ def main() -> int:
     spec = gym.spec(args_cli.task)
     cfg = string_to_callable(spec.kwargs["env_cfg_entry_point"])()
     cfg.scene.num_envs = args_cli.num_envs
+    if args_cli.target_config:
+        from rl_exp.tasks import obs_protocol  # noqa: E402
+
+        obs_protocol.load_diagnostic_target(args_cli.target_config, cfg, args_cli.task)
+        cfg.scene.num_envs = args_cli.num_envs
     env = gym.make(args_cli.task, cfg=cfg)
     mbenv = env.unwrapped
     robot = mbenv.scene["robot"]
