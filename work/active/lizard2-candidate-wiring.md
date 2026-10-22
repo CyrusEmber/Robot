@@ -4,9 +4,9 @@ title: lizard2 候选接线与真实消费者验证
 scope: rl_exp/blender, rl_exp/tasks, rl_exp/tools, ablation_harness
 status: in_progress
 landing: rl_exp/tasks/joint_names.py, rl_exp/tools/diagnose/palm_spatial_runtime.py, rl_exp/tools/verify/obs_protocol_live.py, ablation_harness/baseline_metrics.py
-next: E 接通道核对补非零 obs、gait/终止消费者，交 D；协调性能归 S6。
+next: E 接非零观测记录补 gait/终止消费者及出口清点，交 D。
 close_when: E 自检就绪后随总项 D 由新上下文一次审核；必需链缺证不关闭。
-evidence: acceptance/records/2026-10-22-lizard2-rl-coordination-handoff.md, acceptance/records/2026-10-19-lizard2-chest-standing-pd.md, acceptance/records/2026-10-19-lizard2-loaded-standing.md, acceptance/records/2026-10-19-lizard2-spatial-small-tracking.md, acceptance/records/2026-10-19-lizard2-spatial-inertia-repair.md, acceptance/records/2026-10-16-lizard2-candidate-doc-organization.md, acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md, acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md, acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory.md
+evidence: acceptance/records/2026-10-22-lizard2-velocity-observation.md, acceptance/records/2026-10-19-lizard2-chest-standing-pd.md, acceptance/records/2026-10-19-lizard2-loaded-standing.md, acceptance/records/2026-10-19-lizard2-spatial-small-tracking.md, acceptance/records/2026-10-19-lizard2-spatial-inertia-repair.md, acceptance/records/2026-10-16-lizard2-candidate-doc-organization.md, acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md, acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md, acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory.md
 ---
 
 ## 当前范围
@@ -111,7 +111,7 @@ E 当前重点是补齐实际 `palm_spatial` 候选的完整消费链。已有�
 |---|---|---|
 | **新隔离输入的动力学接续** | 新导出身份、USD、主轴及 reset 切片取[新输入验收](../../acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md#追加新正式导出身份接入隔离-usd-与真实消费者2026-10-20)；新输入两姿态固定基惯量取[当前复验](../../acceptance/records/2026-10-19-lizard2-spatial-inertia-repair.md#新正式导出输入的运行时惯量复验2026-10-20)，全部关节 backend 目标/小幅实体响应取[当前跟踪切片](../../acceptance/records/2026-10-19-lizard2-spatial-small-tracking.md#新导出输入全部关节小幅驱动复验2026-10-20)，B/C 接组合与已知载荷，源／转换/约束设置有变再局部重验 | A 维护正式 URDF 源；原检查点保护不删除，不混用旧 USD 或旧动力学判词 |
 | **受控驱动工况接续** | 全部关节 backend 目标、实际小幅角度与有符号 actor 随动取当前跟踪切片；B/C 接适度组合、已知载荷保持/跟踪及有效边界。小幅无重力通过不升级受载、实际力矩或限速行为；不重建手工控制器 | 接新跟踪输入与工况；载荷/支撑及停止预算核验后执行，不拼接旧 USD 结论 |
-| **在线足端声明与旧对象回交** | 新输入实际 collider/owner、末端传感器及具名接触正反例取新输入验收；新输入独立在线布局与非空四足端分支取[前置验收](../../acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md#追加新输入运行时惯量与独立在线观测前置2026-10-20)，非零 obs 数值/语义仍未核；旧资产 cap/contact ownership 缺口由 `floor-contact-attribution` 按原对象回交 | 已验接触切片不升级全 ROM；阻塞需注明对象，不能混用旧资产与新候选判词 |
+| **在线足端声明与旧对象回交** | 新输入实际 collider/owner、末端传感器及具名接触正反例取新输入验收；新输入独立在线布局与非空四足端分支取[前置验收](../../acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md#追加新输入运行时惯量与独立在线观测前置2026-10-20)，非零 obs 切片取[本轮记录](../../acceptance/records/2026-10-22-lizard2-velocity-observation.md)的适用边界；旧资产 cap/contact ownership 缺口由 `floor-contact-attribution` 按原对象回交 | 已验接触切片不升级全 ROM；阻塞需注明对象，不能混用旧资产与新候选判词 |
 | **其余报告消费者与终止分支** | 新 baseline 实际 writer/reader 与绑定拒错取新输入验收；gait writer/绘图、其它 E3 必需链按变化复验或给明确复用依据；终止 hook 保留未测，不能以没有 done 的短窗解除。非零 twist 数值映射不能用全零采集证明 | 原始记录完整性与展示选列分开核对；字段/评测语义交接触协议项，不改写历史协议 |
 | **完整出口核对** | 对照 E3 清点每条必需链的真实输入、消费者、正反例、复读命令及未完项；补受影响的旧基线回归。按 E4 分段交接，完整出口需所有必需链有证据，最终随 D 独立审核 | 不等学习策略步态/协调性能才交接口；声明载荷下默认驱动安全验证仍由 B 交付，不以离线套件通过替代新候选运行证据 |
 
