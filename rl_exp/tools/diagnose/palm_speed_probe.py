@@ -2,7 +2,7 @@
 # All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
-"""Bounded left-knee speed trials with unchanged implicit PD and TGS/false.
+"""Bounded left-knee or left-elbow speed trials with unchanged PD and TGS/false.
 
 Prepare sampled full-body geometry before physics. Five nominal peak target
 speeds [rad/s], fixed base/self-weight, zero velocity targets and 50 Hz position
@@ -27,6 +27,9 @@ import palm_spatial_runtime as wiring
 REPO = wiring.REPO
 REFERENCE_SHA = "13929c53eccdb51d454ade60cf071c3eaa614bf5c90684dd2e06f4017d2485ef"
 JOINT = "rl_knee_joint"
+JOINTS = (JOINT, "lf_elbow_joint")
+# Historical setting keys retain their spelling for old knee report replay;
+# the knee_* stop values apply to the selected active joint in either mode.
 SETTINGS = dict(dt_s=.005, control_dt_s=.02, amplitude_rad=.768, settle_s=5.,
                 hold_s=1., recover_s=1., max_cases=5, max_steps=12000,
                 wall_budget_s=900., knee_stop_rad=1., other_stop_rad=.35,
@@ -39,6 +42,13 @@ RAMPS = (1.44, .72, .36, .24, .18)
 def require(condition, message):
     if not condition:
         raise ValueError(message)
+
+
+def selected_joint(document):
+    """Resolve the active joint, retaining historical knee-only report meaning."""
+    joint = document.get("joint", JOINT)
+    require(joint in JOINTS, "unsupported speed-probe joint")
+    return joint
 
 
 def target(t, ramp):
@@ -90,13 +100,14 @@ def load_reference(path):
 
 
 def prepare(args):
-    """Use the existing body-precheck engine on the sampled knee stop interval."""
+    """Use body-precheck on the selected joint's sampled stop interval [rad]."""
     import body_precheck as precheck
     from palm_spatial_inertia import csc
     report, manifest_path, manifest = load_reference(args.reference)
     urdf = Path(manifest["target_binding"]["urdf"])
     model = csc.load_urdf(urdf)
     names = report["joint_names"]
+    joint = args.joint or JOINT
     require(set(names) == {n for n, j in model["joints"].items() if j["limits"] is not None}, "joint set mismatch")
     meshes = {name: spec["collision"] for name, spec in model["links"].items() if spec["collision"]}
     direct = {tuple(sorted((j["parent"], j["child"]))) for j in model["joints"].values()}
@@ -113,10 +124,10 @@ def prepare(args):
                            joint_roles={n: n.removesuffix("_joint") for n in path}, contact_links=[end])
     angles = sorted(set(np.linspace(-1., 1., 41).tolist() + [-SETTINGS["amplitude_rad"], SETTINGS["amplitude_rad"]]))
     root = np.eye(4); root[2, 3] = 2.
-    samples = [dict(id=f"knee_{i:02d}", phase="knee speed preflight",
-                    q_rad={n: angle if n == JOINT else 0. for n in names}, root_transform=root.tolist())
+    samples = [dict(id=f"{joint}_{i:02d}", phase="single-joint speed preflight",
+                    q_rad={n: angle if n == joint else 0. for n in names}, root_transform=root.tolist())
                for i, angle in enumerate(angles)]
-    config = dict(inputs=dict(identity="left-knee staged speed preflight", units="SI",
+    config = dict(inputs=dict(identity=f"{joint} staged speed preflight", units="SI",
         urdf=dict(path=str(urdf), sha256=manifest["sha256"]["urdf"]),
         meshes=[dict(path=str(p), sha256=wiring.binding.sha256_file(p)) for p in meshes.values()],
         threshold_basis=dict(approved_by="user: staged speed trial to 8 rad/s",
@@ -130,13 +141,13 @@ def prepare(args):
     result = precheck.run(config, args.out, max_cases=len(samples))
     wiring.write_json(args.out/"geometry_config.json", config)
     wiring.write_json(args.out/"geometry_report.json", result)
-    plan = dict(completed=result["status"] == "pass", settings=SETTINGS, cases=cases(),
+    plan = dict(completed=result["status"] == "pass", joint=joint, settings=SETTINGS, cases=cases(),
                 reference=str(args.reference), reference_sha256=REFERENCE_SHA,
                 manifest=str(manifest_path), manifest_sha256=report["tracking_manifest_sha256"],
                 geometry_report_sha256=wiring.binding.sha256_file(args.out/"geometry_report.json"),
                 geometry_config_sha256=wiring.binding.sha256_file(args.out/"geometry_config.json"),
                 code_sha256=wiring.binding.sha256_file(Path(__file__)),
-                geometry_scope="43 sampled single-knee poses; other joints zero; no continuous safety claim")
+                geometry_scope="43 sampled selected-joint poses; other joints zero; no continuous safety claim")
     wiring.write_json(args.out/"plan.json", plan)
     require(plan["completed"], "sampled geometry failed; no physics authorized by this plan")
     print("SPEED_PLAN_PREPARED", sum(c["steps"] for c in plan["cases"]), flush=True)
@@ -172,6 +183,14 @@ def self_check():
     """Check the real target schedule, sampler budget and speed consumer."""
     plan = cases()
     require(sum(c["steps"] for c in plan) == 11352, "unexpected total budget")
+    require(selected_joint({}) == JOINT and selected_joint({"joint": JOINTS[1]}) == JOINTS[1],
+            "historical or elbow joint selection differs")
+    try:
+        selected_joint({"joint": "lf_wrist_joint"})
+    except ValueError:
+        pass
+    else:
+        raise ValueError("unbudgeted joint accepted")
     for c in plan:
         ramp = c["ramp_s"]
         require(target(0., ramp) == target(c["duration_s"], ramp) == 0., "trajectory not closed")
@@ -209,16 +228,19 @@ def run(args):
     require(args.plan and args.approved_plan_sha256, "approved geometry plan required")
     require(wiring.binding.sha256_file(args.plan) == args.approved_plan_sha256, "plan changed")
     plan = json.loads(args.plan.read_text(encoding="utf-8"))
+    joint = selected_joint(plan)
     require(plan["completed"] and plan["settings"] == SETTINGS and plan["cases"] == cases(), "plan/config mismatch")
     geometry_path = args.plan.parent/"geometry_report.json"
     require(wiring.binding.sha256_file(geometry_path) == plan["geometry_report_sha256"], "geometry changed")
+    require(wiring.binding.sha256_file(args.plan.parent/"geometry_config.json") == plan["geometry_config_sha256"],
+            "geometry config changed")
     import body_precheck
     geometry = json.loads(geometry_path.read_text(encoding="utf-8"))
     require(geometry["status"] == "pass", "geometry did not pass")
     body_precheck.revalidate_inputs(geometry)
     prior, manifest, _ = load_reference(Path(plan["reference"]))
     require(wiring.binding.sha256_file(manifest) == plan["manifest_sha256"], "plan manifest changed")
-    result = dict(completed=False, status="startup", settings=SETTINGS, plan=str(args.plan),
+    result = dict(completed=False, status="startup", joint=joint, settings=SETTINGS, plan=str(args.plan),
                   plan_sha256=args.approved_plan_sha256, cases=[], physics_steps=0,
                   code_sha256=wiring.binding.sha256_file(Path(__file__)),
                   reference=plan["reference"], reference_sha256=REFERENCE_SHA,
@@ -293,7 +315,7 @@ def run(args):
         wiring.exact_channels(names, action_names, ids, names)
         result["action_names"] = action_names
         model = csc.load_urdf(Path(bound["urdf"]))
-        knee = names.index(JOINT)
+        knee = names.index(joint)
         others = [i for i in range(30) if i != knee]
         caps = np.asarray(result["readbacks"]["velocity_caps"])
         result["dependencies"] = {}
@@ -341,10 +363,12 @@ def run(args):
                 require(all(np.isfinite(value).all() for value in row.values()), "non-finite sample")
                 require(np.array_equal(q, robot.data.joint_pos.torch[0].cpu().numpy()) and
                         np.array_equal(v, robot.data.joint_vel.torch[0].cpu().numpy()), "backend/cache mismatch")
-                require(abs(q[knee]) <= 1. and abs(q[others]).max() <= .35, "position stop")
-                require(max(abs(v[knee]), abs(fd[knee])) <= 9. and
+                require(abs(q[knee]) <= SETTINGS["knee_stop_rad"] and
+                        abs(q[others]).max() <= SETTINGS["other_stop_rad"], "position stop")
+                require(max(abs(v[knee]), abs(fd[knee])) <= SETTINGS["knee_speed_stop_rad_s"] and
                         np.all(abs(v[others]) < caps[others]*.5), "speed stop")
-                require(abs(force["projected_joint_effort_nm"][knee]) <= 144., "left-knee load stop")
+                require(abs(force["projected_joint_effort_nm"][knee]) <= SETTINGS["knee_effort_stop_nm"],
+                        "active-joint load stop")
                 require(contact <= 1., "contact stop")
             active["completed"] = True
             active["entities_final"] = _entity_snapshot(robot, model)
@@ -357,7 +381,7 @@ def run(args):
     except BaseException as error:
         result.update(status="stopped", error=repr(error), traceback=traceback.format_exc(), elapsed_wall_s=elapsed_before+time.monotonic()-start)
         if active is not None and active["rows"]:
-            save_case(args.out, active, names.index(JOINT))
+            save_case(args.out, active, names.index(joint))
         wiring.write_json(args.out/"failure.json", result)
         traceback.print_exc()
         sys.stdout.flush(); sys.stderr.flush()
@@ -381,9 +405,9 @@ def save_case(out, case, knee):
     case.update(raw=str(path), raw_sha256=wiring.binding.sha256_file(path), summary=summary)
 
 
-def audit_case(data, case, names):
+def audit_case(data, case, names, joint=JOINT):
     """Authenticate temporal/column meaning before deriving speed [SI]."""
-    knee = names.index(JOINT)
+    knee = names.index(joint)
     count = len(data["t_s"])
     require(count == case["summary"]["steps"] and count <= case["steps"], "sample count mismatch")
     require(all(np.isfinite(value).all() for value in data.values()), "non-finite raw data")
@@ -408,6 +432,10 @@ def replay(path, digest):
     report = json.loads(path.read_text(encoding="utf-8"))
     require(report["settings"] == SETTINGS, "settings differ")
     require(wiring.binding.sha256_file(Path(report["plan"])) == report["plan_sha256"], "plan changed")
+    plan = json.loads(Path(report["plan"]).read_text(encoding="utf-8"))
+    joint = selected_joint(report)
+    require(joint == selected_joint(plan) and plan["settings"] == SETTINGS and plan["cases"] == cases(),
+            "report/plan joint or schedule differs")
     reference, manifest_path, _ = load_reference(Path(report["reference"]))
     require(report["joint_names"] == reference["joint_names"], "report joint axis changed")
     require(report["manifest"] == str(manifest_path) and report["manifest_sha256"] == reference["tracking_manifest_sha256"],
@@ -429,7 +457,7 @@ def replay(path, digest):
         require(wiring.binding.sha256_file(Path(case["raw"])) == case["raw_sha256"], "raw case changed")
         with np.load(case["raw"], allow_pickle=False) as raw:
             data = dict(raw)
-        summaries.append(audit_case(data, case, report["joint_names"]))
+        summaries.append(audit_case(data, case, report["joint_names"], joint))
         bounds = np.asarray(report["joint_force_probe"]["position_limits_rad"])
         margin = np.minimum(data["q_rad"]-bounds[:, 0], bounds[:, 1]-data["q_rad"])
         projected = data["projected_joint_effort_nm"]
@@ -459,7 +487,7 @@ def replay(path, digest):
                 else:
                     bad["t_s"] += .005
                 try:
-                    audit_case(bad, case, report["joint_names"])
+                    audit_case(bad, case, report["joint_names"], joint)
                 except ValueError:
                     negatives.append(defect)
                 else:
@@ -468,13 +496,14 @@ def replay(path, digest):
     if report["completed"]:
         require(len(report["cases"]) == 5 and all(c["completed"] for c in report["cases"]) and totals == 11352,
                 "completed verdict without all five cases")
-    return dict(completed=report["completed"], physics_steps=totals, summaries=summaries,
+    return dict(completed=report["completed"], joint=joint, physics_steps=totals, summaries=summaries,
                 constraint_readbacks=constraints, negative_cases_rejected=negatives, stop_reason=report.get("error"))
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--prepare", action="store_true")
+    parser.add_argument("--joint", choices=JOINTS, help="prepare only; execution/replay use the bound plan joint")
     parser.add_argument("--reference", type=Path, default=REPO/"rl_exp/out/lizard2_b_joint_force_probe_20261021/report.json")
     parser.add_argument("--plan", type=Path)
     parser.add_argument("--approved_plan_sha256")
@@ -488,6 +517,7 @@ def main():
         from isaaclab.app import AppLauncher
         AppLauncher.add_app_launcher_args(parser)
     args = parser.parse_args()
+    require(args.joint is None or args.prepare, "--joint is only valid with --prepare")
     if args.self_check:
         self_check()
         return
