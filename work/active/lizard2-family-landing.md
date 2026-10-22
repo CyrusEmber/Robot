@@ -14,7 +14,7 @@ evidence: acceptance/records/2026-10-22-lizard2-rl-coordination-handoff.md, acce
 
 本项按下文 S5/S6 维护实际执行与交付，消费整体记录 `acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work.md` 的需求与边界。当前职责按[用户定案](../../acceptance/records/2026-10-19-lizard2-chest-standing-pd.md#用户定案默认关节驱动与强化学习职责)执行。候选 PLAN 正文为 `work/active/lizard2-body-drive-candidate.md`；`rl_exp/versions/lizard2/PLAN.md` 只作路由，本轮不改该入口或已冻结、已训的 v3 PLAN，不建立或采用新版本。
 
-骨骼/几何、默认 implicit PD 驱动与通道由候选项 A/B/C/E 交付；D 是训练前输入、驱动、真实动作映射和安全 reset 集成审核，不是手工步态或躯尾协调性能验收。协议与测量样本由 `work/active/lizard2-contact-protocol.md` 并行交付，各自一次审核。卸载、移重、躯尾协调、抬腿和步态由 RL 学习，运动性能（含转向/恢复动态）由本项 S6 评测，不在 S5/D/开训前另造手工控制器证明。
+骨骼/几何、默认 implicit PD 驱动与通道由候选项 A/B/C/E 交付；D 核训练前输入、驱动、真实动作映射和安全 reset。协议与测量样本由 `work/active/lizard2-contact-protocol.md` 交付，各自审核。卸载、移重、平衡、躯尾协调、抬腿和步态由 RL 学习，运动性能（含转向/恢复动态）归本项 S6；按[抬腿归属更正](../../acceptance/records/2026-10-22-lizard2-current-lift.md#用户更正抬腿检查归属)，该手工诊断不作策略验收或驱动缺陷判据，不要求 S5/D/开训前手工动作成功。
 
 拖尾与新增掌跖段承重须进入新协议的具名接触分组。静态趴姿归 `work/active/lizard2-prone-posture.md`（blocked），不在本项挂账、不计出口、不拆分 S5/S6；不新增趴姿任务。数值依据归 evidence，驱动方案尚未批准时不先写死奖励。版本及资产采用消费 `.codemaker/rules/versioning.mdc` §A/§B。
 
