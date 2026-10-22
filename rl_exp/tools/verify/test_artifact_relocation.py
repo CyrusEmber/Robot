@@ -11,6 +11,8 @@ is covered by test_local_path_optimization.py. No production evidence is changed
 """
 
 import builtins
+import argparse
+import importlib.util
 from contextlib import contextmanager, redirect_stdout
 import io
 import json
@@ -22,6 +24,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import zipfile
 from unittest.mock import patch
 
 REPO = Path(__file__).resolve().parents[3]
@@ -133,6 +136,23 @@ class RelocationTest(unittest.TestCase):
                 'relocation': {'original_absolute_root': str(original), 'files': files}})
         self.save()
         self.paths = routes.ArtifactPaths(self.index, self.root)
+        # This historical report predates the current FK implementation. Restore
+        # its exact committed source in the fixture; never rewrite its binding.
+        fk_name = 'rl_exp/tools/verify/check_self_collision.py'
+        report = json.loads(self.paths.resolve(CONTACT / 'report.json').read_text(encoding='utf-8'))
+        expected_fk = next(digest for name, digest in report['identity']['code_sha256'].items()
+                           if existing.same_identity(Path(name), REPO / fk_name))
+        fk_raw = git_boundary.git(REPO, 'show', 'd243b9e:' + fk_name).stdout
+        self.assertEqual(runtime.binding.sha256_bytes(fk_raw), expected_fk)
+        self.fk_path = self.root / fk_name
+        self.fk_path.parent.mkdir(parents=True)
+        self.fk_path.write_bytes(fk_raw)
+        spec = importlib.util.spec_from_file_location('relocation_fixture_fk', self.fk_path)
+        historical_fk = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(historical_fk)
+        historical_patch = patch.object(view, 'csc', historical_fk)
+        historical_patch.start()
+        self.addCleanup(historical_patch.stop)
         self.old_open = Path.open
         self.old_builtin_open = builtins.open
         self.old_io_open = io.open
@@ -253,6 +273,7 @@ class RelocationTest(unittest.TestCase):
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes((REPO / name).read_bytes())
                 names.append(name)
+            (source / self.fk_path.relative_to(self.root)).write_bytes(self.fk_path.read_bytes())
             default_index = source / 'rl_exp/tools/diagnose/artifact_index.json'
             default_index.write_bytes(self.index.read_bytes())
             names.append(default_index.relative_to(source).as_posix())
@@ -287,6 +308,7 @@ class RelocationTest(unittest.TestCase):
             paths = routes.ArtifactPaths(clone / 'artifact_index.json', clone)
             with patch.object(view, 'ArtifactPaths', lambda: paths), \
                     patch.object(runtime, 'ArtifactPaths', lambda: paths), \
+                    patch.object(view.csc, '__file__', str(clone / self.fk_path.relative_to(self.root))), \
                     self.isolated():
                 self.assertTrue(view._load(CONTACT / 'report.json')[-1])
                 self.assertEqual(runtime.check_build(runtime.BUILD)['candidate_sha256'], runtime.URDF_HASH)
@@ -370,5 +392,215 @@ class RelocationTest(unittest.TestCase):
                          analysis['drive_limit_prerequisites']['drive_report_sha256'])
 
 
+CONSOLIDATED_CHILD = r'''
+import builtins, io, json, os, sys
+from pathlib import Path
+root, original = map(Path, sys.argv[1:3])
+attempts = []
+def isolation(event, args):
+    if event == 'open' and isinstance(args[0], (str, bytes, os.PathLike)):
+        path = Path(os.fsdecode(args[0])).resolve()
+        if path.is_relative_to(original):
+            attempts.append(str(path))
+            raise AssertionError('OLD_ROOT_OPEN: ' + str(path))
+sys.addaudithook(isolation)
+sys.path[:] = [p for p in sys.path if p and not Path(p).resolve().is_relative_to(original)]
+sys.path.insert(0, str(root))
+sys.path.insert(0, str(root / 'rl_exp/tools/diagnose'))
+import artifact_paths as routes
+import palm_spatial_probe as probe
+import palm_spatial_runtime as runtime
+from artifact_run import inspect_run
+for module in (probe, runtime, probe.csc, routes):
+    assert Path(module.__file__).resolve().is_relative_to(root), module.__file__
+old_code = original / 'rl_exp/tools/verify/check_self_collision.py'
+for operation in (lambda: builtins.open(old_code, 'rb'), lambda: io.open(old_code, 'rb'),
+                  lambda: os.open(old_code, os.O_RDONLY), lambda: routes.sha256_file(old_code)):
+    try: operation()
+    except AssertionError as error: assert 'OLD_ROOT_OPEN' in str(error)
+    else: raise AssertionError('isolation control escaped')
+attempts.clear()
+manifest = json.loads((root / 'recovery.json').read_text(encoding='utf-8'))
+paths = routes.ArtifactPaths()
+baseline = original / manifest['source_root']
+positive = baseline / 'checkpoint_v3_probe/report.json'
+negative = baseline / 'checkpoint_v3_locked/report.json'
+def read(path):
+    return json.loads(paths.resolve(path).read_text(encoding='utf-8'))
+assert read(positive)['regression_pass'] is True
+assert read(negative)['regression_pass'] is False and read(negative)['lock_twist'] is True
+runtime.check_build(runtime.BUILD)
+for foreign in (root / 'forged/build.json', root / 'foreign/checkpoint_v3/build.json'):
+    try: runtime.check_build(foreign)
+    except ValueError as error: assert 'authorized' in str(error)
+    else: raise AssertionError('foreign build authorized')
+physical = paths.resolve(positive); raw = physical.read_bytes()
+physical.write_bytes(b'corrupt baseline')
+try:
+    try: paths.resolve(positive)
+    except ValueError as error: assert 'digest mismatch' in str(error)
+    else: raise AssertionError('corrupt relocated baseline accepted')
+finally: physical.write_bytes(raw)
+index = root / 'rl_exp/tools/diagnose/artifact_index.json'
+raw_index = index.read_bytes(); doc = json.loads(raw_index)
+doc['packages'] = [p for p in doc['packages'] if p['logical_root'] != positive.parent.relative_to(original).as_posix()]
+index.write_text(json.dumps(doc), encoding='utf-8')
+try:
+    try: routes.ArtifactPaths().resolve(positive).read_bytes()
+    except AssertionError as error: assert 'OLD_ROOT_OPEN' in str(error)
+    else: raise AssertionError('missing mapping silently accepted')
+finally: index.write_bytes(raw_index)
+attempts.clear()
+for label, locked in (('positive', False), ('negative', True)):
+    output = root / 'rl_exp/out/runs/restored-comparison' / label
+    sys.argv = [str(Path(probe.__file__)), '--build_report', str(original / manifest['replay']['build_report']),
+                '--output_dir', str(output)] + (['--lock_twist'] if locked else [])
+    try: probe.main()
+    except SystemExit as error:
+        assert locked and str(error).startswith('REGRESSION_REJECTED'), str(error)
+    else: assert not locked, 'locked-axis counterexample no longer rejected'
+    expected = read(original / manifest['replay'][label + '_report'])
+    actual = json.loads((output / 'report.json').read_text(encoding='utf-8'))
+    expected.pop('probe_sha256'); actual.pop('probe_sha256')
+    assert actual == expected, 'historical comparison changed: ' + label
+    record = json.loads((output / 'run.json').read_text(encoding='utf-8'))
+    assert record['state'] == ('failed' if locked else 'completed')
+    if not locked: inspect_run(output, routes.ArtifactPaths())
+assert not attempts, attempts
+print('CONSOLIDATED_RECOVERY_OK ' + json.dumps({'old_reads': 0, 'baseline_reads': 2,
+      'real_cli_replays': 2, 'authorization_negatives': True, 'missing_mapping_and_corruption_rejected': True}))
+'''
+
+
+def verify_consolidated_archive(archive: Path, proof: Path) -> None:
+    """Restore a blob-manifest archive, clone exact bytes, and replay real spatial consumers."""
+    require = runtime.require
+    require(not proof.exists(), 'proof directory must be fresh')
+    proof.mkdir(parents=True)
+    with zipfile.ZipFile(archive) as package:
+        manifest = json.loads(package.read('manifest.json'))
+        require(manifest['format'] == 1 and manifest['topic'] == 'palm-spatial-history', 'unexpected archive')
+        expected_members = {'manifest.json'} | {'blobs/' + row['sha256'] for row in manifest['files'].values()}
+        require(len(package.namelist()) == len(expected_members) and set(package.namelist()) == expected_members,
+                'unexpected or duplicate archive members')
+        blobs = {}
+        for name, row in manifest['files'].items():
+            routes._relative(name)
+            raw = package.read('blobs/' + row['sha256'])
+            require(runtime.binding.sha256_bytes(raw) == row['sha256'] and len(raw) == row['size'], name)
+            blobs[name] = raw
+    old_repo = Path(manifest['original_repository']).resolve()
+    source_root = Path(manifest['source_root'])
+    current = routes.ArtifactPaths()
+    index_doc = json.loads(current.index.read_text(encoding='utf-8'))
+    baseline_rows = [p for p in index_doc['packages'] if p['logical_root'] in {
+        (source_root / 'checkpoint_v3_probe').as_posix(), (source_root / 'checkpoint_v3_locked').as_posix()}]
+    require(len(baseline_rows) == 2, 'tracked baseline routes missing')
+    checkpoint = current.resolve(runtime.BUILD).parent
+    runtime.check_build(runtime.BUILD)
+    results = []
+    with tempfile.TemporaryDirectory(prefix='consolidated-diagnostic-') as temporary:
+        temporary_root = Path(temporary).resolve()
+        for autocrlf in ('true', 'false'):
+            case = temporary_root / autocrlf; case.mkdir()
+            source = git_boundary.DiagnosticGitBoundaryTest().new_repo(case, autocrlf)
+            names = []
+
+            def put(name, raw):
+                target = source / routes._relative(name)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(raw)
+                names.append(name)
+
+            tracked = git_boundary.git(REPO, 'ls-files', '-z', '--', 'rl_exp').stdout.decode().split('\0')
+            for name in tracked:
+                if name and (name.endswith('.py') or (name.startswith('rl_exp/versions/') and name.endswith('.json'))):
+                    put(name, (REPO / name).read_bytes())
+            attributes = (REPO / '.gitattributes').read_bytes()
+            attributes += b'\n# Exact executed code bytes in this recovery fixture.\n/rl_exp/**/*.py -text\n/rl_exp/versions/**/*.json -text\n'
+            put('.gitattributes', attributes)
+            put('recovery.json', json.dumps(manifest).encode())
+            packages = []
+            for logical in manifest['historical_roots'] + manifest['dependency_roots']:
+                relative = routes._relative(logical)
+                location = Path('rl_exp/out/runs/archive-recovery') / relative
+                files = {}
+                for name, raw in blobs.items():
+                    path = Path(name)
+                    if path.is_relative_to(relative):
+                        suffix = path.relative_to(relative).as_posix()
+                        files[suffix] = manifest['files'][name]['sha256']
+                        put((location / suffix).as_posix(), raw)
+                require(bool(files), 'empty restore route: ' + logical)
+                packages.append({'logical_root': logical, 'current_location': location.as_posix(),
+                                 'relocation': {'original_absolute_root': str(old_repo / relative), 'files': files}})
+            location = Path('rl_exp/out/runs/archive-recovery/checkpoint')
+            files = {}
+            for path in sorted(checkpoint.rglob('*')):
+                if path.is_file():
+                    suffix = path.relative_to(checkpoint).as_posix()
+                    files[suffix] = routes.sha256_file(path)
+                    put((location / suffix).as_posix(), path.read_bytes())
+            packages.append({'logical_root': runtime.BUILD.parent.relative_to(REPO).as_posix(),
+                             'current_location': location.as_posix(),
+                             'relocation': {'original_absolute_root': str(old_repo / runtime.BUILD.parent.relative_to(REPO)),
+                                            'files': files}})
+            for row in baseline_rows:
+                packages.append(row)
+                destination = Path(row['current_location'])
+                attributes = REPO / destination.parent / '.gitattributes'
+                put((destination.parent / '.gitattributes').as_posix(), attributes.read_bytes())
+                for name, digest in row['relocation']['files'].items():
+                    original = REPO / destination / name
+                    require(routes.sha256_file(original) == digest, 'baseline changed')
+                    put((destination / name).as_posix(), original.read_bytes())
+            put('rl_exp/tools/diagnose/artifact_index.json', json.dumps({'format': 1, 'packages': packages}).encode())
+            names = sorted(set(names))
+            originals = {name: (source / name).read_bytes() for name in names}
+            for start in range(0, len(names), 50):
+                git_boundary.git(source, 'add', '--', *names[start:start + 50])
+            git_boundary.git(source, 'commit', '-q', '-m', 'Restore consolidated diagnostic evidence')
+            clone = case / 'clone'
+            git_boundary.git(case, '-c', 'core.autocrlf=' + autocrlf, 'clone', '-q', str(source), str(clone))
+            query = ''.join('HEAD:' + name + '\n' for name in names).encode()
+            batch = subprocess.run(['git', '-C', str(source), 'cat-file', '--batch'], input=query,
+                                   capture_output=True, check=True, timeout=60)
+            objects = io.BytesIO(batch.stdout)
+            for name, raw in originals.items():
+                header = objects.readline().split()
+                require(len(header) == 3 and header[1] == b'blob', 'missing Git blob: ' + name)
+                require(objects.read(int(header[2])) == raw and objects.read(1) == b'\n', 'Git blob changed: ' + name)
+                require((clone / name).read_bytes() == raw, 'checkout changed: ' + name)
+            require(not objects.read(), 'unexpected Git batch output')
+            require(source.resolve().is_relative_to(temporary_root) and source.resolve() != temporary_root,
+                    'unsafe temporary source cleanup')
+            def remove_readonly(operation, path, error):
+                require(Path(path).resolve().is_relative_to(source.resolve()), 'cleanup escaped source')
+                if not isinstance(error, PermissionError):
+                    raise error
+                Path(path).chmod(stat.S_IWRITE)
+                operation(path)
+            shutil.rmtree(source, onexc=remove_readonly)
+            child = subprocess.run([sys.executable, '-I', '-B', '-c', CONSOLIDATED_CHILD,
+                                    str(clone), str(old_repo)], cwd=clone, capture_output=True, text=True, timeout=180)
+            (proof / ('child-' + autocrlf + '.log')).write_text(child.stdout + child.stderr, encoding='utf-8')
+            require(child.returncode == 0, child.stdout + child.stderr)
+            require('CONSOLIDATED_RECOVERY_OK ' in child.stdout, 'missing real consumer result')
+            results.append({'autocrlf': autocrlf, 'files_raw_blob_checkout_equal': len(names),
+                            'archive_members_restored': len(blobs), 'child_passed': True})
+    result = {'archive_sha256': routes.sha256_file(archive), 'results': results}
+    (proof / 'checks.json').write_text(json.dumps(result, indent=2), encoding='utf-8')
+    print('CONSOLIDATED_ARCHIVE_OK ' + json.dumps(result), flush=True)
+
+
 if __name__ == '__main__':
-    unittest.main()
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument('--archive', type=Path)
+    parser.add_argument('--proof_root', type=Path)
+    options, remaining = parser.parse_known_args()
+    if options.archive is not None:
+        if options.proof_root is None or remaining:
+            parser.error('--archive requires --proof_root and no unittest selectors')
+        verify_consolidated_archive(options.archive.resolve(), options.proof_root.resolve())
+    else:
+        unittest.main(argv=[sys.argv[0], *remaining])

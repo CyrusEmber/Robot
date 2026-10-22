@@ -2668,10 +2668,10 @@
       "current_location": "rl_exp/out/lizard2_palm_spatial_20261014",
       "classification": "current_dependency",
       "owner": "lizard2-body-drive-candidate",
-      "action": "hold",
-      "writer_status": "unknown",
-      "storage": "local_single_copy_no_backup",
-      "basis": "rl_exp/tools/diagnose/palm_spatial_runtime.py:27",
+      "action": "partitioned_current_input",
+      "writer_status": "no_selected_root_writer_observed_before_cleanup",
+      "storage": "git_tracked_current_input",
+      "basis": "acceptance/records/2026-10-22-diagnostic-spatial-consolidation.md",
       "document_mentions": [
         "acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md",
         "acceptance/records/2026-10-14-lizard2-palm-spatial-trial-checkpoint.md",
@@ -2687,9 +2687,14 @@
         "acceptance/records/2026-10-20-diagnostic-artifact-plan-review.md"
       ],
       "report_metadata": null,
-      "consumer_verification": "direct_code_reference",
-      "retention_reason": "preserve bound input",
-      "next": "verify actual consumers, identity, producer completion and retention reason before any move"
+      "consumer_verification": "Retained checkpoint_v3 consumed by runtime.check_build, check_export, preparation and body precheck; restored-code check_build passed with original repository unreadable.",
+      "retention_reason": "Current checkpoint_v3 input only; historical child trees removed after verified recovery.",
+      "next": "Migrate checkpoint_v3 only after check_export, preparation and body-precheck consumers resolve its new location and pass their real entry checks.",
+      "partition": {
+        "current_input": "checkpoint_v3",
+        "tracked_baselines": "rl_exp/tools/diagnose/baselines/palm-spatial-20261014",
+        "historical_archive": "rl_exp/out/archive/palm-spatial/history-20261014.zip"
+      }
     },
     {
       "logical_root": "rl_exp/out/lizard2_palm_spatial_refined_20261015",
@@ -4294,6 +4299,68 @@
       "owner": "diagnostic-artifact-lifecycle",
       "writer_status": "see_run_manifest",
       "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_palm_spatial_20261014/checkpoint_v3_probe",
+      "current_location": "rl_exp/tools/diagnose/baselines/palm-spatial-20261014/probe",
+      "classification": "historical_control",
+      "owner": "lizard2-palm-spatial-reconfiguration",
+      "action": "relocated_tracked_baseline",
+      "writer_status": "sealed_historical_comparison",
+      "storage": "git_tracked_original_bytes",
+      "basis": "acceptance/records/2026-10-22-diagnostic-spatial-consolidation.md",
+      "retention_reason": "Original fixed-reference geometric positive and locked-twist negative; not asset adoption.",
+      "relocation": {
+        "original_absolute_root": "E:\\Robot\\rl_exp\\out\\lizard2_palm_spatial_20261014\\checkpoint_v3_probe",
+        "files": {
+          "comparison.png": "c695eb9e6c47c9f830c6d391e682be64e821aba55942d39b87b845f195471730",
+          "report.json": "95c8071a0a5e80e4f18040351577574520e67445e31336298c51d797a9ebd262"
+        }
+      }
+    },
+    {
+      "logical_root": "rl_exp/out/lizard2_palm_spatial_20261014/checkpoint_v3_locked",
+      "current_location": "rl_exp/tools/diagnose/baselines/palm-spatial-20261014/locked",
+      "classification": "historical_control",
+      "owner": "lizard2-palm-spatial-reconfiguration",
+      "action": "relocated_tracked_baseline",
+      "writer_status": "sealed_historical_comparison",
+      "storage": "git_tracked_original_bytes",
+      "basis": "acceptance/records/2026-10-22-diagnostic-spatial-consolidation.md",
+      "retention_reason": "Original fixed-reference geometric positive and locked-twist negative; not asset adoption.",
+      "relocation": {
+        "original_absolute_root": "E:\\Robot\\rl_exp\\out\\lizard2_palm_spatial_20261014\\checkpoint_v3_locked",
+        "files": {
+          "report.json": "1af55c9db47e50d2462f85964877b9dcdbef3444abb62548bda537c28a3cca38"
+        }
+      }
+    },
+    {
+      "logical_root": "rl_exp/out/archive/palm-spatial/history-20261014.zip",
+      "current_location": "rl_exp/out/archive/palm-spatial/history-20261014.zip",
+      "classification": "historical_control",
+      "owner": "diagnostic-artifact-lifecycle",
+      "action": "consolidated_archive",
+      "writer_status": "sealed_after_verified_restore",
+      "storage": "local_verified_archive",
+      "basis": "acceptance/records/2026-10-22-diagnostic-spatial-consolidation.md",
+      "document_mentions": [],
+      "source_roots": [
+        "rl_exp/out/lizard2_palm_spatial_20261014/candidate_v1",
+        "rl_exp/out/lizard2_palm_spatial_20261014/checkpoint_candidate",
+        "rl_exp/out/lizard2_palm_spatial_20261014/checkpoint_locked",
+        "rl_exp/out/lizard2_palm_spatial_20261014/checkpoint_probe",
+        "rl_exp/out/lizard2_palm_spatial_20261014/checkpoint_v2",
+        "rl_exp/out/lizard2_palm_spatial_20261014/closeout_locked",
+        "rl_exp/out/lizard2_palm_spatial_20261014/closeout_probe_before",
+        "rl_exp/out/lizard2_palm_spatial_20261014/probe_v1",
+        "rl_exp/out/lizard2_palm_spatial_20261014/probe_v2"
+      ],
+      "sha256": "870a4949aad78dc152e0a93965e58fe8de966a78b48a326549a04dd53f7c10fe",
+      "size": 3400931,
+      "consumer_verification": "Manifest bytes restored; real Git add/commit/clone under both autocrlf modes; restored-code CLI positive/locked negative and authorized check_build with old repository reads denied.",
+      "retention_reason": "Historical build and regression evidence plus required source inputs; explicit restore required, no transparent ZIP route or physical approval.",
+      "next": "Use manifest.json and blobs/<sha256> to restore historical paths into an isolated root; replay via test_artifact_relocation.py --archive; local archive is not external backup."
     }
   ]
 }
