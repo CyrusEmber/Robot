@@ -38,6 +38,7 @@ import test_diagnostic_git_boundary as git_boundary
 
 CONTACT = REPO / 'rl_exp/out/lizard2_palm_local_path_contact_20261015'
 CHECKPOINT = runtime.BUILD.parent
+EXPORT = REPO / 'rl_exp/out/lizard2_spatial_export_cli_verified_20261019'
 
 # The audit hook is process-local and installed BEFORE importing the restored code.
 # It catches the CPython open event for builtins/io/FileIO/os.open, including hashes.
@@ -224,12 +225,26 @@ class RelocationTest(unittest.TestCase):
             self.assertEqual(runtime.check_build(new_build)['candidate_sha256'], runtime.URDF_HASH)
 
     def test_export_reader_without_checkpoint_originals(self):
-        export = REPO / 'rl_exp/out/lizard2_spatial_export_cli_verified_20261019/export.json'
-        with patch.object(runtime, 'ArtifactPaths', lambda: self.paths), self.isolated():
+        export = self.export_fixture()
+        with patch.object(runtime, 'ArtifactPaths', lambda: self.paths), \
+                patch.object(runtime, 'REPO', self.root), self.isolated():
             document = runtime.check_export(export,
                 '1f69bcd41330df40c9034c68973e687049f1294697924940cbef264bafe0e36a',
                 'e8896feb8b0dbdbeaa35e74a01c2ffcb4ab38d89b52f221831b3f287943edd00')
         self.assertEqual(len(document['files_sha256']), 73)
+
+    def export_fixture(self):
+        source = routes.ArtifactPaths().resolve(EXPORT / 'export.json').parent
+        target = self.root / 'rl_exp/out/runs/relocation/export'
+        shutil.copytree(source, target)
+        self.doc['packages'].append({'logical_root': EXPORT.relative_to(REPO).as_posix(),
+            'current_location': target.relative_to(self.root).as_posix(),
+            'relocation': {'original_absolute_root': str(EXPORT), 'files': {
+                p.relative_to(target).as_posix(): routes.sha256_file(p) for p in target.rglob('*') if p.is_file()}}})
+        self.save()
+        self.paths = routes.ArtifactPaths(self.index, self.root)
+        self.blocked_roots.append(EXPORT)
+        return EXPORT / 'export.json'
 
     def test_runtime_copies_real_inputs_before_app_launch(self):
         # All preparation is real; stop at the first physical-app boundary.
@@ -237,20 +252,62 @@ class RelocationTest(unittest.TestCase):
         def stop_at_launch(args):
             raise RuntimeError('PREPARATION_REACHED_APP_BOUNDARY')
         app.AppLauncher = stop_at_launch
-        output_root = self.root / 'runtime'; output_root.mkdir()
-        output = output_root / 'prepared'
-        args = SimpleNamespace(build=runtime.BUILD, out=output, export_report=None)
-        result = {}
-        with patch.object(runtime, 'ArtifactPaths', lambda: self.paths), \
-                patch.object(runtime, 'OUT', output_root), \
-                patch.dict(sys.modules, {'isaaclab.app': app}), self.isolated():
-            with self.assertRaisesRegex(RuntimeError, 'PREPARATION_REACHED_APP_BOUNDARY'):
-                runtime.run(args, result)
-        self.assertEqual(result['stage'], 'app_launch')
-        self.assertEqual(routes.sha256_file(output / 'input_build.json'),
-                         routes.sha256_file(self.paths.resolve(runtime.BUILD)))
-        for name, digest in result['input']['candidate_files_sha256'].items():
-            self.assertEqual(routes.sha256_file(output / name), digest)
+        export = self.export_fixture()
+        output_root = self.root / 'rl_exp/out/runtime'; output_root.mkdir(parents=True)
+        for label, report in (('checkpoint', None), ('export', export)):
+            output = output_root / label
+            args = SimpleNamespace(build=runtime.BUILD, out=output, export_report=report,
+                approved_export_sha256='1f69bcd41330df40c9034c68973e687049f1294697924940cbef264bafe0e36a',
+                approved_urdf_sha256='e8896feb8b0dbdbeaa35e74a01c2ffcb4ab38d89b52f221831b3f287943edd00')
+            result = {}
+            with patch.object(runtime, 'ArtifactPaths', lambda: self.paths), \
+                    patch.object(runtime, 'REPO', self.root), patch.object(runtime, 'OUT', output_root), \
+                    patch.dict(sys.modules, {'isaaclab.app': app}), self.isolated():
+                with self.assertRaisesRegex(RuntimeError, 'PREPARATION_REACHED_APP_BOUNDARY'):
+                    runtime.run(args, result)
+            self.assertEqual(result['stage'], 'app_launch')
+            self.assertEqual(routes.sha256_file(output / 'input_build.json'),
+                             routes.sha256_file(self.paths.resolve(runtime.BUILD)))
+            for name, digest in result['input']['candidate_files_sha256'].items():
+                self.assertEqual(routes.sha256_file(output / name), digest)
+
+    def test_fresh_reset_accepts_same_export_identity_at_new_location(self):
+        app = ModuleType('isaaclab.app')
+        def stop_at_launch(args):
+            raise RuntimeError('RESET_VALIDATION_REACHED_APP_BOUNDARY')
+        app.AppLauncher = stop_at_launch
+        with tempfile.TemporaryDirectory(prefix='export-reset-relocation-', dir=REPO / 'rl_exp/out') as temporary:
+            folder = Path(temporary)
+            source = routes.ArtifactPaths().resolve(EXPORT / 'export.json').parent
+            target = folder / 'export'
+            shutil.copytree(source, target)
+            doc = json.loads(routes.ArtifactPaths().index.read_text(encoding='utf-8'))
+            doc['packages'] = [p for p in doc['packages'] if p['logical_root'] != EXPORT.relative_to(REPO).as_posix()]
+            doc['packages'].append({'logical_root': EXPORT.relative_to(REPO).as_posix(),
+                'current_location': target.relative_to(REPO).as_posix(),
+                'relocation': {'original_absolute_root': str(EXPORT), 'files': {
+                    p.relative_to(target).as_posix(): routes.sha256_file(p) for p in target.rglob('*') if p.is_file()}}})
+            index = folder / 'index.json'; index.write_text(json.dumps(doc))
+            paths = routes.ArtifactPaths(index, REPO)
+            args = SimpleNamespace(reset_probe=REPO / 'rl_exp/out/lizard2_e_fresh_prepare_20261020/registered_manifest.json',
+                export_manifest_sha256='b48f99efcb298860db4f8dfaf12b134c994c54df08bbe192bfbb8465d6efa6e1',
+                export_report=target / 'export.json', out=folder / 'reset', repair_connections=False,
+                approved_export_sha256='1f69bcd41330df40c9034c68973e687049f1294697924940cbef264bafe0e36a',
+                approved_urdf_sha256='e8896feb8b0dbdbeaa35e74a01c2ffcb4ab38d89b52f221831b3f287943edd00')
+            result = {}
+            self.blocked_roots.append(EXPORT)
+            with patch.object(runtime, 'ArtifactPaths', lambda: paths), \
+                    patch.dict(sys.modules, {'isaaclab.app': app}), self.isolated():
+                with self.assertRaisesRegex(RuntimeError, 'RESET_VALIDATION_REACHED_APP_BOUNDARY'):
+                    runtime.reset_probe(args, result)
+                foreign = folder / 'foreign'
+                shutil.copytree(target, foreign)
+                args.export_report = foreign / 'export.json'
+                args.out = folder / 'foreign-reset'
+                with self.assertRaisesRegex(ValueError, 'fresh export lineage mismatch'):
+                    runtime.reset_probe(args, {})
+                self.assertFalse(args.out.exists())
+            self.assertEqual(result['stage'], 'app_launch')
 
     def test_whole_body_precheck_with_mapped_source_evidence(self):
         config_path = REPO / 'rl_exp/tools/diagnose/body_precheck_lizard2.json'
@@ -441,6 +498,50 @@ class RelocationTest(unittest.TestCase):
                          analysis['drive_limit_prerequisites']['drive_report_sha256'])
 
 
+class ArchiveDamageTest(unittest.TestCase):
+    def test_real_export_archive_rejects_lost_or_corrupt_controls(self):
+        archive = REPO / 'rl_exp/out/archive/palm-spatial/exports-20261019.zip'
+        manifest, _ = _archive_bytes(archive, 'palm-spatial-export-history')
+        tensor = next(row for row in manifest['export_controls'] if row['expected'] != 'accepted')
+        tensor_file = str(Path(tensor['report']).parent / 'lizard2_palm_spatial.urdf').replace('\\', '/')
+        tensor_blob = 'blobs/' + manifest['files'][tensor_file]['sha256']
+        log_blob = 'blobs/' + manifest['files'][manifest['standalone_files'][0]]['sha256']
+        with zipfile.ZipFile(archive) as source:
+            members = {name: source.read(name) for name in source.namelist()}
+        with tempfile.TemporaryDirectory(prefix='export-archive-damage-') as temporary:
+            for defect in ('drop_tensor', 'corrupt_log', 'duplicate_blob', 'escape_path', 'omit_control'):
+                with self.subTest(defect=defect):
+                    rows = dict(members)
+                    if defect == 'drop_tensor':
+                        del rows[tensor_blob]
+                    elif defect == 'corrupt_log':
+                        raw = rows[log_blob]
+                        rows[log_blob] = bytes([raw[0] ^ 1]) + raw[1:]
+                    elif defect in ('escape_path', 'omit_control'):
+                        doc = json.loads(rows['manifest.json'])
+                        if defect == 'escape_path':
+                            doc['files']['../escape'] = doc['files'].pop(tensor_file)
+                        else:
+                            doc['export_controls'].remove(tensor)
+                        rows['manifest.json'] = json.dumps(doc).encode()
+                    damaged = Path(temporary) / (defect + '.zip')
+                    with zipfile.ZipFile(damaged, 'w') as target:
+                        for name, raw in rows.items():
+                            target.writestr(name, raw)
+                        if defect == 'duplicate_blob':
+                            with self.assertWarns(UserWarning):
+                                target.writestr(tensor_blob, rows[tensor_blob])
+                    with self.assertRaises(ValueError):
+                        if defect == 'omit_control':
+                            verify_consolidated_archive(
+                                REPO / 'rl_exp/out/archive/palm-spatial/history-20261014.zip',
+                                Path(temporary) / 'proof',
+                                REPO / 'rl_exp/out/runs/diagnostic-artifact-lifecycle/20261022-checkpoint-relocation/body-before.json',
+                                export_archive=damaged)
+                        else:
+                            _archive_bytes(damaged, 'palm-spatial-export-history')
+
+
 CONSOLIDATED_CHILD = r'''
 import builtins, io, json, os, sys
 from pathlib import Path
@@ -591,6 +692,42 @@ if manifest.get('checkpoint_consumers'):
     print('CHECKPOINT_CONSUMERS_OK ' + json.dumps({'body_cases': actual_body['counters'],
           'body_status_preserved': actual_body['status'], 'export_and_registered_cli': True,
           'legacy_and_export_copy_before_physics': True, 'missing_mapping_and_corruption_rejected': True}))
+if manifest.get('export_controls'):
+    outcomes = []
+    for control in manifest['export_controls']:
+        report = paths.resolve(original / control['report'])
+        assert routes.sha256_file(report) == control['report_sha256']
+        try:
+            runtime.check_export(report, control['report_sha256'], control['urdf_sha256'])
+        except ValueError as error:
+            assert str(error) == control['expected'] and control['expected'] != 'accepted'
+        else: assert control['expected'] == 'accepted'
+        outcomes.append(control['expected'])
+    logical_export = root / 'rl_exp/out/lizard2_spatial_export_cli_verified_20261019/export.json'
+    canonical_export = paths.resolve(logical_export)
+    assert canonical_export != logical_export and not logical_export.exists()
+    logical_export.parent.mkdir(parents=True)
+    logical_export.write_bytes(b'conflicting old export bytes')
+    try: runtime.check_export(logical_export, approvals[3], approvals[5])
+    finally: logical_export.unlink(); logical_export.parent.rmdir()
+    raw = canonical_export.read_bytes(); canonical_export.write_bytes(b'corrupt canonical export')
+    try:
+        try: runtime.check_export(logical_export, approvals[3], approvals[5])
+        except ValueError as error: assert 'digest mismatch' in str(error)
+        else: raise AssertionError('corrupt canonical export accepted')
+    finally: canonical_export.write_bytes(raw)
+    raw_index = index.read_bytes(); doc = json.loads(raw_index)
+    logical = logical_export.parent.relative_to(root).as_posix()
+    doc['packages'] = [p for p in doc['packages'] if p['logical_root'] != logical]
+    index.write_text(json.dumps(doc))
+    try:
+        try: runtime.check_export(logical_export, approvals[3], approvals[5])
+        except ValueError as error: assert 'export report approval mismatch' in str(error)
+        else: raise AssertionError('export route removal escaped')
+    finally: index.write_bytes(raw_index)
+    assert not attempts, attempts
+    print('EXPORT_ARCHIVE_RECOVERY_OK ' + json.dumps({'controls':outcomes,
+        'conflicting_old_copy_ignored':True, 'corrupt_and_missing_route_rejected':True, 'old_reads':0}))
 print('CONSOLIDATED_RECOVERY_OK ' + json.dumps({'old_reads': 0, 'baseline_reads': 2,
       'real_cli_replays': 2, 'authorization_negatives': True, 'missing_mapping_and_corruption_rejected': True}))
 '''
@@ -641,7 +778,7 @@ current.spatial_export_self_check(logical / 'palm_spatial.blend', logical / 'bui
 report = json.loads((target / 'self_check.json').read_text())
 assert report['status'] == 'PASS' and report['negative_outputs_absent'] is True
 actual = json.loads((target / 'export.json').read_text())
-expected = json.loads((root / 'rl_exp/out/lizard2_spatial_export_cli_verified_20261019/export.json').read_text())
+expected = json.loads(paths.resolve(root / 'rl_exp/out/lizard2_spatial_export_cli_verified_20261019/export.json').read_text())
 assert actual['files_sha256'] == expected['files_sha256'], 'Blender export bytes changed'
 assert Path(bpy.data.filepath).resolve() == paths.resolve(logical / 'palm_spatial.blend')
 assert not attempts, attempts
@@ -650,15 +787,12 @@ print('BLENDER_RECOVERY_OK ' + json.dumps({'positive':report['positive'], 'negat
 '''
 
 
-def verify_consolidated_archive(archive: Path, proof: Path, body_reference: Path | None = None,
-                                blender: Path | None = None) -> None:
-    """Restore a blob-manifest archive, clone exact bytes, and replay real spatial consumers."""
+def _archive_bytes(archive: Path, topic: str) -> tuple[dict, dict[str, bytes]]:
+    """Validate every member before restoring an existing blob-manifest archive."""
     require = runtime.require
-    require(not proof.exists(), 'proof directory must be fresh')
-    proof.mkdir(parents=True)
     with zipfile.ZipFile(archive) as package:
         manifest = json.loads(package.read('manifest.json'))
-        require(manifest['format'] == 1 and manifest['topic'] == 'palm-spatial-history', 'unexpected archive')
+        require(manifest['format'] == 1 and manifest['topic'] == topic, 'unexpected archive')
         expected_members = {'manifest.json'} | {'blobs/' + row['sha256'] for row in manifest['files'].values()}
         require(len(package.namelist()) == len(expected_members) and set(package.namelist()) == expected_members,
                 'unexpected or duplicate archive members')
@@ -668,6 +802,16 @@ def verify_consolidated_archive(archive: Path, proof: Path, body_reference: Path
             raw = package.read('blobs/' + row['sha256'])
             require(runtime.binding.sha256_bytes(raw) == row['sha256'] and len(raw) == row['size'], name)
             blobs[name] = raw
+    return manifest, blobs
+
+
+def verify_consolidated_archive(archive: Path, proof: Path, body_reference: Path | None = None,
+                                blender: Path | None = None, export_archive: Path | None = None) -> None:
+    """Restore existing archives, clone exact bytes, and replay real spatial consumers."""
+    require = runtime.require
+    require(not proof.exists(), 'proof directory must be fresh')
+    proof.mkdir(parents=True)
+    manifest, blobs = _archive_bytes(archive, 'palm-spatial-history')
     old_repo = Path(manifest['original_repository']).resolve()
     source_root = Path(manifest['source_root'])
     current = routes.ArtifactPaths()
@@ -677,9 +821,39 @@ def verify_consolidated_archive(archive: Path, proof: Path, body_reference: Path
     require(len(baseline_rows) == 2, 'tracked baseline routes missing')
     checkpoint = current.resolve(runtime.BUILD).parent
     runtime.check_build(runtime.BUILD)
+    export_members = 0
+    if export_archive is not None:
+        exported_manifest, exported_bytes = _archive_bytes(export_archive, 'palm-spatial-export-history')
+        require(exported_manifest['original_repository'] == manifest['original_repository'], 'archive roots differ')
+        dependency = routes._relative(exported_manifest['checkpoint_root'])
+        actual_checkpoint = {p.relative_to(checkpoint).as_posix(): p.read_bytes()
+                             for p in checkpoint.rglob('*') if p.is_file()}
+        archived_checkpoint = {Path(name).relative_to(dependency).as_posix(): raw
+                               for name, raw in exported_bytes.items() if Path(name).is_relative_to(dependency)}
+        require(actual_checkpoint == archived_checkpoint, 'archived checkpoint closure differs')
+        for name, raw in exported_bytes.items():
+            if Path(name).is_relative_to(dependency):
+                continue
+            require(name not in blobs, 'archive paths overlap')
+            blobs[name] = raw
+            manifest['files'][name] = exported_manifest['files'][name]
+        manifest['historical_roots'] += exported_manifest['historical_roots']
+        manifest['standalone_files'] = exported_manifest['standalone_files']
+        manifest['export_controls'] = exported_manifest['export_controls']
+        controls = exported_manifest['export_controls']
+        expected_reports = {name + '/export.json' for name in exported_manifest['historical_roots']}
+        require(len(controls) == len(expected_reports) and {row['report'] for row in controls} == expected_reports,
+                'export control coverage incomplete')
+        require(all(row['report_sha256'] == exported_manifest['files'][row['report']]['sha256']
+                    for row in controls), 'export control identity differs')
+        export_members = len(exported_bytes)
     if body_reference is not None:
         manifest['checkpoint_consumers'] = True
         manifest['body_reference'] = json.loads(body_reference.read_text(encoding='utf-8'))
+    groups = [routes._relative(name) for name in manifest['historical_roots'] + manifest['dependency_roots']]
+    singles = set(manifest.get('standalone_files', []))
+    require(all(sum(Path(name).is_relative_to(group) for group in groups) + (name in singles) == 1
+                for name in blobs), 'archive member not restored exactly once')
     results = []
     with tempfile.TemporaryDirectory(prefix='consolidated-diagnostic-') as temporary:
         temporary_root = Path(temporary).resolve()
@@ -718,13 +892,16 @@ def verify_consolidated_archive(archive: Path, proof: Path, body_reference: Path
                 require(bool(files), 'empty restore route: ' + logical)
                 packages.append({'logical_root': logical, 'current_location': location.as_posix(),
                                  'relocation': {'original_absolute_root': str(old_repo / relative), 'files': files}})
+            for name in manifest.get('standalone_files', []):
+                put((Path('rl_exp/out/runs/archive-recovery') / name).as_posix(), blobs[name])
             location = checkpoint.relative_to(REPO) if body_reference is not None else Path('rl_exp/out/runs/archive-recovery/checkpoint')
             files = {}
             for path in sorted(checkpoint.rglob('*')):
                 if path.is_file():
                     suffix = path.relative_to(checkpoint).as_posix()
-                    files[suffix] = routes.sha256_file(path)
-                    put((location / suffix).as_posix(), path.read_bytes())
+                    raw = archived_checkpoint[suffix] if export_archive is not None else path.read_bytes()
+                    files[suffix] = runtime.binding.sha256_bytes(raw)
+                    put((location / suffix).as_posix(), raw)
             packages.append({'logical_root': runtime.BUILD.parent.relative_to(REPO).as_posix(),
                              'current_location': location.as_posix(),
                              'relocation': {'original_absolute_root': str(old_repo / runtime.BUILD.parent.relative_to(REPO)),
@@ -732,11 +909,17 @@ def verify_consolidated_archive(archive: Path, proof: Path, body_reference: Path
             if body_reference is not None:
                 config = 'rl_exp/tools/diagnose/body_precheck_lizard2.json'
                 put(config, (REPO / config).read_bytes())
-                export = REPO / 'rl_exp/out/lizard2_spatial_export_cli_verified_20261019/export.json'
+                export = current.resolve(EXPORT / 'export.json')
                 exported = json.loads(export.read_text())
+                export_location = export.parent.relative_to(REPO)
                 for name in ['export.json', *exported['files_sha256']]:
                     path = export.parent / name
                     put(path.relative_to(REPO).as_posix(), path.read_bytes())
+                packages.append({'logical_root': EXPORT.relative_to(REPO).as_posix(),
+                    'current_location': export_location.as_posix(), 'relocation': {
+                    'original_absolute_root': str(old_repo / EXPORT.relative_to(REPO)),
+                    'files': {name: routes.sha256_file(export.parent / name)
+                              for name in ['export.json', *exported['files_sha256']]}}})
                 for name in ('runtime_report.json', 'manifest.json', 'palm_spatial.urdf', 'palm_spatial.usda'):
                     path = runtime.REGISTERED_INPUT / name
                     put(path.relative_to(REPO).as_posix(), path.read_bytes())
@@ -800,6 +983,8 @@ def verify_consolidated_archive(archive: Path, proof: Path, body_reference: Path
             require('CONSOLIDATED_RECOVERY_OK ' in child.stdout, 'missing real consumer result')
             if body_reference is not None:
                 require('CHECKPOINT_CONSUMERS_OK ' in child.stdout, 'checkpoint consumers not exercised')
+            if export_archive is not None:
+                require('EXPORT_ARCHIVE_RECOVERY_OK ' in child.stdout, 'export history consumers not exercised')
             if blender is not None:
                 native = subprocess.run([str(blender), '--background', '--factory-startup', '--python-exit-code', '1',
                                          '--python-expr', BLENDER_RECOVERY_CHILD, '--', str(clone), str(old_repo)],
@@ -810,10 +995,12 @@ def verify_consolidated_archive(archive: Path, proof: Path, body_reference: Path
                         native.stdout + native.stderr)
             results.append({'autocrlf': autocrlf, 'files_raw_blob_checkout_equal': len(names),
                             'archive_members_restored': len(blobs), 'child_passed': True,
-                            'blender_passed': blender is not None})
+                            'blender_passed': blender is not None, 'export_archive_members_restored': export_members})
     result = {'archive_sha256': routes.sha256_file(archive), 'results': results}
     if body_reference is not None:
         result['body_reference_sha256'] = routes.sha256_file(body_reference)
+    if export_archive is not None:
+        result['export_archive_sha256'] = routes.sha256_file(export_archive)
     (proof / 'checks.json').write_text(json.dumps(result, indent=2), encoding='utf-8')
     print('CONSOLIDATED_ARCHIVE_OK ' + json.dumps(result), flush=True)
 
@@ -824,15 +1011,17 @@ if __name__ == '__main__':
     parser.add_argument('--proof_root', type=Path)
     parser.add_argument('--body_reference', type=Path)
     parser.add_argument('--blender', type=Path)
+    parser.add_argument('--export_archive', type=Path)
     options, remaining = parser.parse_known_args()
     if options.archive is not None:
         if options.proof_root is None or remaining:
             parser.error('--archive requires --proof_root and no unittest selectors')
-        if options.blender is not None and options.body_reference is None:
-            parser.error('--blender requires --body_reference')
+        if (options.blender is not None or options.export_archive is not None) and options.body_reference is None:
+            parser.error('--blender and --export_archive require --body_reference')
         verify_consolidated_archive(options.archive.resolve(), options.proof_root.resolve(),
-                                    options.body_reference, options.blender)
+                                    options.body_reference, options.blender, options.export_archive)
     else:
-        if any(option is not None for option in (options.body_reference, options.proof_root, options.blender)):
-            parser.error('--body_reference, --blender and --proof_root require --archive')
+        if any(option is not None for option in (options.body_reference, options.proof_root,
+                                               options.blender, options.export_archive)):
+            parser.error('recovery options require --archive')
         unittest.main(argv=[sys.argv[0], *remaining])

@@ -58,7 +58,8 @@ def check_build(path):
 
 def check_export(path, approved_report, approved_urdf):
     """Bind explicit approval to every export file before copying or starting Kit."""
-    path = path.resolve()
+    paths = ArtifactPaths()
+    path = paths.resolve(path).resolve()
     require(path.is_relative_to((REPO / "rl_exp/out").resolve()), "export report must be isolated")
     require(approved_report and approved_urdf, "independent export and URDF approvals required")
     require(binding.sha256_file(path) == approved_report, "export report approval mismatch")
@@ -68,7 +69,6 @@ def check_export(path, approved_report, approved_urdf):
             "export identity mismatch")
     require(doc["mass_policy"] == "reference_full_link_inertial"
             and doc["links"] == 31 and doc["joints"] == 30, "export structure mismatch")
-    paths = ArtifactPaths()
     approved_sources = {"build_report": (BUILD, "59473f8c345dce48e8ee379c0972c928184f768be85afca948ac812a666fa6f8"),
                         "source_blend": (BUILD.parent / "palm_spatial.blend", BLEND_HASH),
                         "reference_urdf": (BUILD.parent / "palm_spatial.urdf", URDF_HASH)}
@@ -130,7 +130,7 @@ def export_self_check(args):
     from tempfile import TemporaryDirectory
     from unittest.mock import patch
 
-    path = args.export_report.resolve()
+    path = ArtifactPaths().resolve(args.export_report).resolve()
     approved = args.approved_export_sha256
     urdf_hash = args.approved_urdf_sha256
     doc = check_export(path, approved, urdf_hash)
@@ -146,7 +146,12 @@ def export_self_check(args):
             raise ValueError("export destructive test escaped: " + label)
 
     # Approval must fail before report/URDF parsing, not merely later validation.
-    with patch.object(json, "loads", side_effect=AssertionError("parsed unapproved report")):
+    read_text = Path.read_text
+    def deny_unapproved_report(candidate, *arguments, **keywords):
+        if candidate.resolve() == path:
+            raise AssertionError("read unapproved report JSON")
+        return read_text(candidate, *arguments, **keywords)
+    with patch.object(Path, "read_text", deny_unapproved_report):
         rejected("wrong_report_approval", lambda: check_export(path, "0" * 64, urdf_hash),
                  "export report approval mismatch")
     with patch.object(ET, "parse", side_effect=AssertionError("parsed unapproved URDF")):
@@ -597,7 +602,8 @@ def run(args, result):
     exported = args.export_report is not None
     if exported:
         doc = check_export(args.export_report, args.approved_export_sha256, args.approved_urdf_sha256)
-        source = args.export_report.resolve().parent
+        export = ArtifactPaths().resolve(args.export_report)
+        source = export.parent
         files = doc["files_sha256"]
         out = fresh_export_out(args.out, source)
     else:
@@ -611,7 +617,8 @@ def run(args, result):
                        "candidate_files_sha256": files}
     if exported:
         result["input"].update(export_report=str(args.export_report.resolve()),
-            export_report_sha256=args.approved_export_sha256, urdf_sha256=args.approved_urdf_sha256)
+            export_report_location=str(export), export_report_sha256=args.approved_export_sha256,
+            urdf_sha256=args.approved_urdf_sha256)
     result["code"] = {"path": str(Path(__file__).resolve()), "sha256": binding.sha256_file(Path(__file__)),
                       "revision": binding.git_rev(REPO)}
     for name in files:
@@ -621,7 +628,7 @@ def run(args, result):
         require(binding.sha256_file(target) == files[name], "copy mismatch")
     if exported:
         shutil.copyfile(out / "lizard2_palm_spatial.urdf", out / "palm_spatial.urdf")
-        shutil.copyfile(args.export_report, out / "input_export.json")
+        shutil.copyfile(export, out / "input_export.json")
     shutil.copyfile(build, out / "input_build.json")
     shutil.copyfile(Path(__file__), out / "runtime_source.py")
     tree = ET.parse(out / "palm_spatial.urdf").getroot()
@@ -1087,7 +1094,7 @@ def reset_probe(args, result):
         prepared = json.loads((manifest.parent / "prepare_report.json").read_text(encoding="utf-8"))
         require(prepared["completed"] and prepared["status"] == "fresh_export_prepared_runtime_unverified"
                 and prepared["manifest_sha256"] == args.export_manifest_sha256, "fresh preparation binding mismatch")
-        require(document["input"]["export_report"] == str(args.export_report.resolve())
+        require(ArtifactPaths().same_identity(Path(document["input"]["export_report"]), args.export_report)
                 and document["input"]["export_report_sha256"] == args.approved_export_sha256
                 and document["sha256"]["urdf"] == args.approved_urdf_sha256, "fresh export lineage mismatch")
         usd = Path(document["target_binding"]["target"]).resolve()
