@@ -244,7 +244,8 @@ def main() -> int:
     # --- the table: USD vs URDF, with what each body does at runtime --------------------------
     print(f"{'body':<18} {'usd approx':<12} {'usd verts':>9} {'usd extent':<24} "
           f"{'urdf extent':<24} {'penal':<6} {'peak N':>8}")
-    report = {"target_binding": target_binding, "task": args_cli.task, "family": family, "usd": str(usd_path), "urdf": str(urdf),
+    report = {"status": "FAIL" if PROBLEMS else "PASS", "problems": list(PROBLEMS),
+              "target_binding": target_binding, "task": args_cli.task, "family": family, "usd": str(usd_path), "urdf": str(urdf),
               "robot_prim": str(robot_prim.GetPath()), "steps": args_cli.steps,
               "threshold": args_cli.threshold, "terms": terms, "no_collider": no_collider,
               "touching": touching, "blind": blind, "bodies": {}}
@@ -278,4 +279,18 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    outcome = 1
+    try:
+        outcome = main()
+    except BaseException as error:
+        import traceback
+
+        if isinstance(error, SystemExit):
+            outcome = error.code if isinstance(error.code, int) else (0 if error.code is None else 1)
+        elif isinstance(error, KeyboardInterrupt):
+            outcome = 130
+        traceback.print_exc()
+        raise
+    finally:
+        simulation_app.close(exit_code=outcome)
+    raise SystemExit(outcome)

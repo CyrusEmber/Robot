@@ -6,6 +6,11 @@
 # -*- coding: utf-8 -*-
 """Joint function check on the lizard asset: layout + actuation.
 
+``--kinematics_only --inject_rad 0.001 --require-all-actions`` stops after layout, channel
+coverage and the FK injections, before any env.step or load-bearing sweep. ``--json`` saves
+those readings and live configuration values. This mode does not test PD, support or collision
+clearance. The default full flow and its 0.3 rad injection remain available.
+
 No version in the name on purpose: layout is a property of the *asset*, not of a recipe
 version (an old task id loads today's asset -- FAMILY.md's retirement note), so the gate
 outlives any one recipe. The default task is a lizard PLAY variant; a newer family is checked
@@ -91,6 +96,8 @@ mixes the fall with the injected joint -- check the stance first
 """
 
 import argparse
+import json
+import math
 import pathlib
 import xml.etree.ElementTree as ET
 
@@ -148,537 +155,591 @@ parser.add_argument(
     help="fail unless every joint of the asset is carried by exactly one action term, in a vector of "
     "the expected width. Required when this run is the evidence that a new joint is commandable",
 )
+parser.add_argument("--kinematics_only", action="store_true",
+                    help="layout, action coverage and FK only; no env.step, load sweep or PD verdict")
+parser.add_argument("--inject_rad", type=float, default=0.3,
+                    help="single-joint FK/actuation injection [rad]; default preserves the full diagnostic")
+parser.add_argument("--json", type=pathlib.Path,
+                    help="write a kinematics_only report; requires --kinematics_only")
 parser.add_argument("--target_config", type=pathlib.Path, default=None, help="isolated diagnostic JSON manifest")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
+if not math.isfinite(args_cli.inject_rad) or args_cli.inject_rad <= 0:
+    parser.error("--inject_rad must be finite and positive")
+if args_cli.json is not None and not args_cli.kinematics_only:
+    parser.error("--json requires --kinematics_only")
 simulation_app = AppLauncher(args_cli).app
 
-import gymnasium as gym
-import torch
-
-import isaaclab_tasks  # noqa: F401
-from isaaclab.utils.math import quat_apply, quat_apply_inverse
-from isaaclab.utils.string import string_to_callable
-
-from rl_exp.tasks import obs_protocol  # noqa: E402  (task -> family; the body a task spawns)
-
-# The binding, resolved once here and read by every role below. It is DECLARED by the caller (a body's
-# words are a property of the asset), and it is verified against the spawned bodies before the layout
-# gates -- which index the chain by role -- so a wrong binding is refused instead of asserting about
-# links this asset does not have. The module is aliased above because this script legitimately keeps the
-# asset's own joint-name list in a local called ``joint_names``; a bare import made that list shadow the
-# table and this tool died on ``'list' object has no attribute 'CHAIN_ROOTS'`` (2026-10-12).
-# Naming is resolved from the final diagnostic target below.
-
-INJECT_RAD = 0.3
-SETTLE_STEPS = args_cli.settle
-
-cfg = string_to_callable(gym.spec(args_cli.task).kwargs["env_cfg_entry_point"])()
-cfg.scene.num_envs = 1
-target_binding = obs_protocol.load_diagnostic_target(
-    args_cli.target_config, cfg, args_cli.task, naming_override=args_cli.naming)
-NAMING = leg_names.naming_from_binding(target_binding)
-args_cli.naming = leg_names.naming_id(NAMING)
-env = gym.make(args_cli.task, cfg=cfg)
-env.reset()
-robot = env.unwrapped.scene["robot"]
-joint_names = list(robot.joint_names)
-body_names = list(robot.data.body_names)
-obs_protocol.validate_diagnostic_runtime(target_binding, cfg, robot,
-    env.unwrapped.scene["contact_forces"], env.unwrapped.action_manager)
-for _leg in leg_names.LEGS:
-    _end = leg_names.end_link(_leg, NAMING)
-    if _end not in body_names:
-        raise SystemExit(f"task {args_cli.task} spawns {cfg.scene.robot.spawn.usd_path}, which has no "
-                         f"{_end}: it does not carry the naming '{args_cli.naming}'. Declare the naming "
-                         "of the asset the task spawns")
-
-# The script is task-parameterized, so its asset knowledge has to be too: the leg chain of a family
-# that INSERTED a joint is a different chain, and a hand-written "hfe x kfe" sweep on it measures the
-# wrong joints while looking exactly like a passing run (review 2026-09-22). The family comes off the
-# task's declared route and the URDF off that body; every leg joint below is derived from the joint list.
-_USD = pathlib.Path(str(cfg.scene.robot.spawn.usd_path))
-_RL_EXP = pathlib.Path(__file__).resolve().parents[2]
-# Not ``_USD.parent.name``: a body in its own directory (``.../b1/b1.usda``, the layout a new body
-# lands in) would name the body as the family and then look for a URDF that does not exist. The
-# family comes off the task's declared route and the URDF off the one resolver every caller shares.
-_FAMILY = obs_protocol.family_of(args_cli.task)
-if not _FAMILY:
-    raise SystemExit(f"task {args_cli.task} declares no line, so no family to read assets from")
+outcome = 1
 try:
-    _BODY = obs_protocol.resolve_body(str(_USD.relative_to(_RL_EXP)).replace("\\", "/"), _FAMILY, _RL_EXP)
-except obs_protocol.ProtocolError as err:
-    raise SystemExit(f"cannot resolve the body of {args_cli.task}: {err}") from err
-_URDF = _BODY["urdf"]
-print("ASSET family=%s usd=%s urdf=%s" % (_FAMILY, _USD.name, _URDF.name))
+    import gymnasium as gym
+    import torch
+
+    import isaaclab_tasks  # noqa: F401
+    from isaaclab.utils.math import (
+        axis_angle_from_quat, quat_apply, quat_apply_inverse, quat_conjugate, quat_mul,
+    )
+    from isaaclab.utils.string import string_to_callable
+
+    from rl_exp.tasks import obs_protocol  # noqa: E402  (task -> family; the body a task spawns)
+
+    # The binding, resolved once here and read by every role below. It is DECLARED by the caller (a body's
+    # words are a property of the asset), and it is verified against the spawned bodies before the layout
+    # gates -- which index the chain by role -- so a wrong binding is refused instead of asserting about
+    # links this asset does not have. The module is aliased above because this script legitimately keeps the
+    # asset's own joint-name list in a local called ``joint_names``; a bare import made that list shadow the
+    # table and this tool died on ``'list' object has no attribute 'CHAIN_ROOTS'`` (2026-10-12).
+    # Naming is resolved from the final diagnostic target below.
+
+    INJECT_RAD = args_cli.inject_rad
+    SETTLE_STEPS = args_cli.settle
+
+    cfg = string_to_callable(gym.spec(args_cli.task).kwargs["env_cfg_entry_point"])()
+    cfg.scene.num_envs = 1
+    target_binding = obs_protocol.load_diagnostic_target(
+        args_cli.target_config, cfg, args_cli.task, naming_override=args_cli.naming)
+    NAMING = leg_names.naming_from_binding(target_binding)
+    args_cli.naming = leg_names.naming_id(NAMING)
+    env = gym.make(args_cli.task, cfg=cfg)
+    env.reset()
+    robot = env.unwrapped.scene["robot"]
+    joint_names = list(robot.joint_names)
+    body_names = list(robot.data.body_names)
+    obs_protocol.validate_diagnostic_runtime(target_binding, cfg, robot,
+        env.unwrapped.scene["contact_forces"], env.unwrapped.action_manager)
+    for _leg in leg_names.LEGS:
+        _end = leg_names.end_link(_leg, NAMING)
+        if _end not in body_names:
+            raise SystemExit(f"task {args_cli.task} spawns {cfg.scene.robot.spawn.usd_path}, which has no "
+                             f"{_end}: it does not carry the naming '{args_cli.naming}'. Declare the naming "
+                             "of the asset the task spawns")
+
+    # The script is task-parameterized, so its asset knowledge has to be too: the leg chain of a family
+    # that INSERTED a joint is a different chain, and a hand-written "hfe x kfe" sweep on it measures the
+    # wrong joints while looking exactly like a passing run (review 2026-09-22). The family comes off the
+    # task's declared route and the URDF off that body; every leg joint below is derived from the joint list.
+    _USD = pathlib.Path(str(cfg.scene.robot.spawn.usd_path))
+    _RL_EXP = pathlib.Path(__file__).resolve().parents[2]
+    # Not ``_USD.parent.name``: a body in its own directory (``.../b1/b1.usda``, the layout a new body
+    # lands in) would name the body as the family and then look for a URDF that does not exist. The
+    # family comes off the task's declared route and the URDF off the one resolver every caller shares.
+    _FAMILY = obs_protocol.family_of(args_cli.task)
+    if not _FAMILY:
+        raise SystemExit(f"task {args_cli.task} declares no line, so no family to read assets from")
+    try:
+        _BODY = obs_protocol.resolve_body(str(_USD.relative_to(_RL_EXP)).replace("\\", "/"), _FAMILY, _RL_EXP)
+    except obs_protocol.ProtocolError as err:
+        raise SystemExit(f"cannot resolve the body of {args_cli.task}: {err}") from err
+    _URDF = _BODY["urdf"]
+    print("ASSET family=%s usd=%s urdf=%s" % (_FAMILY, _USD.name, _URDF.name))
 
 
-def urdf_joints() -> dict:
-    """URDF joints by SIM joint name (they match on this asset), with axis and limits."""
-    out = {}
-    for j in ET.parse(_URDF).getroot().findall("joint"):
-        axis, limit = j.find("axis"), j.find("limit")
-        out[j.get("name")] = {
-            "axis": tuple(float(v) for v in axis.get("xyz").split()) if axis is not None else None,
-            "lower": float(limit.get("lower")),
-            "upper": float(limit.get("upper")),
-        }
-    return out
+    def urdf_joints() -> dict:
+        """URDF joints by SIM joint name (they match on this asset), with axis and limits."""
+        out = {}
+        for j in ET.parse(_URDF).getroot().findall("joint"):
+            axis, limit = j.find("axis"), j.find("limit")
+            out[j.get("name")] = {
+                "axis": tuple(float(v) for v in axis.get("xyz").split()) if axis is not None else None,
+                "lower": float(limit.get("lower")),
+                "upper": float(limit.get("upper")),
+            }
+        return out
 
 
-JOINTS = urdf_joints()
+    JOINTS = urdf_joints()
 
 
-def leg_of(link: str) -> str:
-    """The leg a link belongs to, ``lf`` from ``lf_shoulder_abduct``: the two-letter prefix.
+    def leg_of(link: str) -> str:
+        """The leg a link belongs to, ``lf`` from ``lf_shoulder_abduct``: the two-letter prefix.
 
-    Sliced, not split on the last ``_``: a root may carry an underscore of its own (``shoulder_swing``),
-    and ``rpartition`` would hand back half a word. Every leg id in this repo is two characters, which is
-    what makes the prefix a fixed-width field.
-    """
-    return link[:2]
-
-
-def token_of(link: str) -> str:
-    """The chain token a link carries, ``shoulder_abduct`` from ``lf_shoulder_abduct``."""
-    return link[len(leg_of(link)) + 1:]
+        Sliced, not split on the last ``_``: a root may carry an underscore of its own (``shoulder_swing``),
+        and ``rpartition`` would hand back half a word. Every leg id in this repo is two characters, which is
+        what makes the prefix a fixed-width field.
+        """
+        return link[:2]
 
 
-def leg_probes() -> list[tuple[str, str, str]]:
-    """``(sim joint, child link, chain endpoint)`` for every leg joint the ASSET has, all four legs.
-
-    Which joints are a leg's comes off the binding: a token the declared naming does not carry is not a
-    leg joint here, and the chain end is the naming's end link. A body read under the wrong naming then
-    finds NO leg joints rather than measuring a chain it is not -- and the caller's gate on the end links
-    has already refused that case before this runs.
-    """
-    out = []
-    for name in joint_names:
-        if not name.endswith(leg_names.JOINT_SUFFIX):
-            continue
-        link = name[: -len(leg_names.JOINT_SUFFIX)]
-        leg = leg_of(link)
-        if leg not in leg_names.LEGS or token_of(link) not in leg_names.roots_of(NAMING, leg):
-            continue
-        # The chain's end link, read from the name table: ``.*_foot`` matches this link AND the joint
-        # that moves it, so the body a probe lands on is the table's business, not a suffix guess.
-        end = leg_names.end_link(leg, NAMING)
-        if link not in body_names or end not in body_names:
-            continue
-        out.append((name, link, end))
-    return out
+    def token_of(link: str) -> str:
+        """The chain token a link carries, ``shoulder_abduct`` from ``lf_shoulder_abduct``."""
+        return link[len(leg_of(link)) + 1:]
 
 
-def pos_b():
-    """All body positions in the base frame, tensor (num_bodies, 3)."""
-    root_q = robot.data.root_quat_w.torch
-    rel = robot.data.body_pos_w.torch - robot.data.root_pos_w.torch
-    return quat_apply_inverse(root_q, rel)
+    def leg_probes() -> list[tuple[str, str, str]]:
+        """``(sim joint, child link, chain endpoint)`` for every leg joint the ASSET has, all four legs.
+
+        Which joints are a leg's comes off the binding: a token the declared naming does not carry is not a
+        leg joint here, and the chain end is the naming's end link. A body read under the wrong naming then
+        finds NO leg joints rather than measuring a chain it is not -- and the caller's gate on the end links
+        has already refused that case before this runs.
+        """
+        out = []
+        for name in joint_names:
+            if not name.endswith(leg_names.JOINT_SUFFIX):
+                continue
+            link = name[: -len(leg_names.JOINT_SUFFIX)]
+            leg = leg_of(link)
+            if leg not in leg_names.LEGS or token_of(link) not in leg_names.roots_of(NAMING, leg):
+                continue
+            # The chain's end link, read from the name table: ``.*_foot`` matches this link AND the joint
+            # that moves it, so the body a probe lands on is the table's business, not a suffix guess.
+            end = leg_names.end_link(leg, NAMING)
+            if link not in body_names or end not in body_names:
+                continue
+            out.append((name, link, end))
+        return out
 
 
-print("=== LAYOUT (base frame: sphere head=+x, antenna tail=-x, left=+y, up=+z) ===")
-p = pos_b()[0]
-base = p[body_names.index("base_link")]
-# The leg bodies are the asset's own (a family that inserted `hip` prints one more row per leg), drawn
-# in the chain's own order -- read off the binding, so "the chain's order" is the declared naming's, not
-# a list this file carries.
-for name in ("neck_pitch", "chest_pitch", "tail1_pitch", "tail3_pitch") + tuple(
-        child for _, child, _ in sorted(
-            leg_probes(),
-            key=lambda probe: (leg_of(probe[1]),
-                               leg_names.roots_of(NAMING, leg_of(probe[1])).index(token_of(probe[1]))))):
-    i = body_names.index(name)
-    print("BODY %-11s rel=(%7.3f, %7.3f, %7.3f)" % (name, p[i, 0] - base[0], p[i, 1] - base[1], p[i, 2] - base[2]))
-
-# hard gate: anatomy must match the names -- the v6 lesson (names trusted over
-# geometry for two versions) dies here
-assert p[body_names.index("neck_pitch"), 0] - base[0] > 1.0, "sphere head (neck_pitch) must sit at +x"
-assert p[body_names.index("tail3_pitch"), 0] - base[0] < -1.0, "antenna tail (tail3_pitch) must sit at -x"
-for n in (leg_names.link_name("lf", target_binding["roles"]["lf"]["haa"]),
-          leg_names.link_name("rf", target_binding["roles"]["rf"]["haa"])):
-    assert p[body_names.index(n), 0] - base[0] > 0, f"front leg {n} must be ahead of the root"
-for n in (leg_names.link_name("rl", target_binding["roles"]["rl"]["haa"]),
-          leg_names.link_name("rr", target_binding["roles"]["rr"]["haa"])):
-    assert p[body_names.index(n), 0] - base[0] < 0, f"rear leg {n} must be behind the root"
-for n in (leg_names.link_name("lf", target_binding["roles"]["lf"]["haa"]),
-          leg_names.link_name("rl", target_binding["roles"]["rl"]["haa"])):
-    assert p[body_names.index(n), 1] - base[1] > 0, f"left leg {n} must be on +y"
-for n in (leg_names.link_name("rf", target_binding["roles"]["rf"]["haa"]),
-          leg_names.link_name("rr", target_binding["roles"]["rr"]["haa"])):
-    assert p[body_names.index(n), 1] - base[1] < 0, f"right leg {n} must be on -y"
-print("LAYOUT_GATES PASSED (head +x / tail -x / legs anatomical)")
-
-print("=== FK (joint +%.2f rad, kinematics only: no physics step, so PD/gravity/ground cannot enter) ==="
-      % INJECT_RAD)
-# The polarity authority. Same injection as Part 2, but the endpoint is read after `sim.forward()`
-# instead of 40 physics steps, so the number is forward kinematics and nothing else. Sample: on the
-# standing baseline stance lf_hfe really turns 0.269 rad and its foot reads 13 mm (load path); here
-# the same joint reads the arc its axis prescribes.
-SPINE_PROBES = [
-    ("chest_pitch_joint", "chest_pitch", "neck_pitch"),
-    ("neck_yaw_joint", "neck_yaw", "neck_pitch"),
-    ("neck_pitch_joint", "neck_pitch", "neck_pitch"),
-    ("tail1_yaw_joint", "tail1_yaw", "tail3_pitch"),
-    ("tail3_pitch_joint", "tail3_pitch", "tail3_pitch"),
-]
-FK_PROBES = leg_probes() + SPINE_PROBES
+    def pos_b():
+        """All body positions in the base frame, tensor (num_bodies, 3)."""
+        root_q = robot.data.root_quat_w.torch
+        rel = robot.data.body_pos_w.torch - robot.data.root_pos_w.torch
+        return quat_apply_inverse(root_q, rel)
 
 
-def fk_pose(row):
-    """Write one joint configuration and propagate kinematics only (no physics step)."""
-    q = row.reshape(1, len(joint_names)).to(robot.device)
-    robot.write_joint_state_to_sim(q, torch.zeros_like(q))
-    env.unwrapped.sim.forward()
-    env.unwrapped.scene.update(env.unwrapped.physics_dt)
-
-
-def joint_turn(i, q0):
-    """The injected joint's axis*angle in the base frame, from the child link's own axes.
-
-    Deliberately avoids quaternion algebra: `quat_apply` is the library's own composition (the same
-    call the head-arrow marker uses, and `.torch` quats are consistent with it), whereas hand-rolled
-    delta quaternions depend on the (x,y,z,w)/(w,x,y,z) ordering of the buffer. The child frame axis
-    that moves most is the probe -- a vector parallel to the joint's axis has no cross product.
-
-    The norm of the result is the injected angle, so `|turn| != INJECT_RAD` means the reading is
-    wrong rather than the asset.
-    """
-    eye = torch.eye(3, device=robot.device)
-    v0 = torch.stack([quat_apply(q0, eye[k]) for k in range(3)])
-    v1 = torch.stack([quat_apply(robot.data.body_quat_w.torch[0, i], eye[k]) for k in range(3)])
-    cross = torch.linalg.cross(v0, v1)
-    k = int(torch.argmax(torch.linalg.norm(cross, dim=-1)))
-    angle = torch.atan2(torch.linalg.norm(cross[k]), torch.dot(v0[k], v1[k]))
-    axis = cross[k] / torch.linalg.norm(cross[k])
-    return quat_apply_inverse(robot.data.root_quat_w.torch[0], axis) * angle
-
-
-stance = torch.zeros(len(joint_names), device=robot.device)
-fk_pose(stance)
-fk_p0, fk_q0 = pos_b()[0], robot.data.body_quat_w.torch[0].clone()
-TURN = {}  # joint -> unit axis in the base frame (the load-height section below uses these)
-for joint, child, endpoint in FK_PROBES:
-    row = stance.clone()
-    row[joint_names.index(joint)] = INJECT_RAD
-    fk_pose(row)
+    print("=== LAYOUT (base frame: sphere head=+x, antenna tail=-x, left=+y, up=+z) ===")
     p = pos_b()[0]
-    c_idx, e_idx = body_names.index(child), body_names.index(endpoint)
-    dc, de = p[c_idx] - fk_p0[c_idx], p[e_idx] - fk_p0[e_idx]
-    turn = joint_turn(c_idx, fk_q0[c_idx])
-    TURN[joint] = turn / torch.linalg.norm(turn)
-    print("FK %-17s +%.2f -> %-11s turn=(%+.3f, %+.3f, %+.3f) |%.3f| | d=(%7.3f, %7.3f, %7.3f) "
-          "| %-11s d=(%7.3f, %7.3f, %7.3f)"
-          % (joint, INJECT_RAD, child, turn[0], turn[1], turn[2], float(torch.linalg.norm(turn)),
-             dc[0], dc[1], dc[2], endpoint, de[0], de[1], de[2]))
+    base = p[body_names.index("base_link")]
+    # The leg bodies are the asset's own (a family that inserted `hip` prints one more row per leg), drawn
+    # in the chain's own order -- read off the binding, so "the chain's order" is the declared naming's, not
+    # a list this file carries.
+    for name in ("neck_pitch", "chest_pitch", "tail1_pitch", "tail3_pitch") + tuple(
+            child for _, child, _ in sorted(
+                leg_probes(),
+                key=lambda probe: (leg_of(probe[1]),
+                                   leg_names.roots_of(NAMING, leg_of(probe[1])).index(token_of(probe[1]))))):
+        i = body_names.index(name)
+        print("BODY %-11s rel=(%7.3f, %7.3f, %7.3f)" % (name, p[i, 0] - base[0], p[i, 1] - base[1], p[i, 2] - base[2]))
 
-# --- composite scan at the load-bearing height --------------------------------------------------
-# The single-joint table above is a diagnostic, NOT a bound on the leg: `hfe` swings the whole
-# distal assembly, so whatever `kfe` does to the shank changes the radius `hfe` sweeps -- two
-# joints compose, their product is not the sum of their single-joint travels. This section settles
-# the robot first (the stroke that counts is the one available while the plate carries the body),
-# then sweeps the pair and reports the fore-aft (base +x) excursion of the plate's centre.
-# The base is not re-solved during the sweep (`sim.forward()` updates kinematics only), so the body
-# stays at the settled height and only the leg moves.
-_SWEEP_ROOTS = leg_names.roots_of(NAMING, args_cli.sweep_leg)
-_SWEEP_A = args_cli.sweep_a or target_binding["roles"][args_cli.sweep_leg]["hfe"]
-_SWEEP_B = args_cli.sweep_b or target_binding["roles"][args_cli.sweep_leg]["kfe"]
-_FOOT_LINK = leg_names.end_link(args_cli.sweep_leg, NAMING)
-for _flag, _token, _given in (("a", _SWEEP_A, args_cli.sweep_a), ("b", _SWEEP_B, args_cli.sweep_b)):
-    if _given is not None and _token not in _SWEEP_ROOTS:
-        raise SystemExit(f"--sweep-{_flag} {_token}: not one of this naming's roots for leg "
-                         f"{args_cli.sweep_leg} ({', '.join(_SWEEP_ROOTS)})")
-    if leg_names.joint_name(args_cli.sweep_leg, _token) not in JOINTS or _FOOT_LINK not in body_names:
-        raise SystemExit(f"--sweep-leg {args_cli.sweep_leg} + --sweep-a/-b {_SWEEP_A}/{_SWEEP_B}: no such"
-                         f" joint ({leg_names.joint_name(args_cli.sweep_leg, _token)}) or foot "
-                         f"({_FOOT_LINK}) on this asset. Joints here: {sorted(JOINTS)}")
+    # hard gate: anatomy must match the names -- the v6 lesson (names trusted over
+    # geometry for two versions) dies here
+    assert p[body_names.index("neck_pitch"), 0] - base[0] > 1.0, "sphere head (neck_pitch) must sit at +x"
+    assert p[body_names.index("tail3_pitch"), 0] - base[0] < -1.0, "antenna tail (tail3_pitch) must sit at -x"
+    for n in (leg_names.link_name("lf", target_binding["roles"]["lf"]["haa"]),
+              leg_names.link_name("rf", target_binding["roles"]["rf"]["haa"])):
+        assert p[body_names.index(n), 0] - base[0] > 0, f"front leg {n} must be ahead of the root"
+    for n in (leg_names.link_name("rl", target_binding["roles"]["rl"]["haa"]),
+              leg_names.link_name("rr", target_binding["roles"]["rr"]["haa"])):
+        assert p[body_names.index(n), 0] - base[0] < 0, f"rear leg {n} must be behind the root"
+    for n in (leg_names.link_name("lf", target_binding["roles"]["lf"]["haa"]),
+              leg_names.link_name("rl", target_binding["roles"]["rl"]["haa"])):
+        assert p[body_names.index(n), 1] - base[1] > 0, f"left leg {n} must be on +y"
+    for n in (leg_names.link_name("rf", target_binding["roles"]["rf"]["haa"]),
+              leg_names.link_name("rr", target_binding["roles"]["rr"]["haa"])):
+        assert p[body_names.index(n), 1] - base[1] < 0, f"right leg {n} must be on -y"
+    print("LAYOUT_GATES PASSED (head +x / tail -x / legs anatomical)")
 
-
-def plate_corners(foot_link: str):
-    """Bbox corners of ONE foot's collision mesh in the foot frame, at the mesh floor.
-
-    A proxy for the contact patch: that plate is a 26-vertex hull, so its bbox floor is what the
-    ground can touch. Read from the URDF's own collision mesh rather than hard-coded. Per foot,
-    because a sweep of the right-rear leg measured against the left-front plate reads 0.000 --
-    the plate simply does not move (measured 2026-09-22, first version of the per-leg table).
-    """
-    root = ET.parse(_URDF).getroot()
-    link = next(item for item in root.findall("link") if item.get("name") == foot_link)
-    mesh = _URDF.parent / link.find("collision/geometry/mesh").get("filename")
-    verts = [list(map(float, ln.split()[1:4])) for ln in mesh.read_text().splitlines() if ln.startswith("v ")]
-    lo = [min(v[i] for v in verts) for i in range(3)]
-    hi = [max(v[i] for v in verts) for i in range(3)]
-    return torch.tensor([[x, y, lo[2]] for x in (lo[0], hi[0]) for y in (lo[1], hi[1])], device=robot.device)
-
-
-_CORNERS = {}
-
-
-def corners_of(foot_link: str):
-    """``plate_corners(foot_link)``, read once per leg."""
-    if foot_link not in _CORNERS:
-        _CORNERS[foot_link] = plate_corners(foot_link)
-    return _CORNERS[foot_link]
-
-
-def contact_corner(foot_link: str = _FOOT_LINK):
-    """World point of that plate's lowest corner at the current configuration."""
-    i = body_names.index(foot_link)
-    pts = robot.data.body_pos_w.torch[0, i] + quat_apply(robot.data.body_quat_w.torch[0, i], corners_of(foot_link))
-    return pts[int(torch.argmin(pts[:, 2]))]
-
-
-corners_of(_FOOT_LINK)
-fk_pose(stance)
-settle_steps = max(SETTLE_STEPS, 100)  # ~2 s: the landing transient is ~0.3 s; the stance HEIGHT is what must settle
-zero_actions = torch.zeros(env.unwrapped.num_envs, env.unwrapped.action_manager.total_action_dim)
-for _ in range(settle_steps):
-    env.step(zero_actions)
-base_z = float(robot.data.root_pos_w.torch[0, 2])
-ground_z = float(contact_corner()[2])
-# The reference row is the SETTLED joint state, never zeros: under load the PD sags, so a sweep from
-# zeros is "an unloaded leg at a loaded body height" -- neither pose, and the neutral cell of the
-# first version of this scan was wrong for exactly that reason.
-q_ref = robot.data.joint_pos.torch[0].clone()
-print("=== COMPOSITE %s x %s from the load-bearing stance (base z = %.3f m after %d zero-action steps, "
-      "plate floor z = %.3f m, sag |q_ref - 0| = %.4f rad) ==="
-      % (_SWEEP_A, _SWEEP_B, base_z, settle_steps, ground_z, float(torch.linalg.norm(q_ref - stance))))
-if base_z > 1.0:
-    print("WARN base z is at spawn height: the settle did not land (reset or termination fired?) -- "
-          "this sweep is then measured airborne")
-_spawn_z = float(cfg.scene.robot.init_state.pos[2])
-if base_z < 0.7 * _spawn_z:
-    print("WARN base z %.3f m is far below the spawn height %.3f m: the settle ended with the robot low or"
-          " down (rough terrain? a termination?), so every number below is measured in THAT pose -- rerun on"
-          " a flat PLAY task of the same family for the load-bearing stance" % (base_z, _spawn_z))
-_bx = quat_apply(robot.data.root_quat_w.torch[0], torch.tensor([1.0, 0.0, 0.0], device=robot.device))
-print("base yaw check: body +x in world = (%+.2f, %+.2f, %+.2f); the table below is BASE-frame, so a "
-      "randomized spawn yaw cannot mix fore-aft into lateral" % (_bx[0], _bx[1], _bx[2]))
-# A fixed material point, not "the lowest corner": the plate pitches with kfe, so the lowest corner
-# changes identity between cells and a table of those x values measures the plate's own 0.458 m
-# extent rather than the leg's stroke (measured 2026-09-21: 143-644 mm, i.e. the plate's size).
-# The base x is invariant under a vertical shift, so the fore-aft numbers hold at ANY body height;
-# what the height decides is whether the cell is reachable at the settled height, reported as the
-# base z that cell would need to put the plate floor back on the ground.
-_STANCE_TOL = 0.05  # m: body height a cell may require and still count as "reachable at the stance"
-
-
-def plate_centre(foot_link: str = _FOOT_LINK):
-    """That plate's bbox centre in the BASE frame (spawn yaw stripped, as `pos_b` does) and its floor z."""
-    i = body_names.index(foot_link)
-    pts = robot.data.body_pos_w.torch[0, i] + quat_apply(robot.data.body_quat_w.torch[0, i], corners_of(foot_link))
-    centre_w = pts.mean(dim=0)
-    centre_b = quat_apply_inverse(robot.data.root_quat_w.torch[0], centre_w - robot.data.root_pos_w.torch[0])
-    return centre_b, float(pts[:, 2].min())
-
-
-# Self-check: the sweep's neutral cell (hfe = 0, kfe = 0) must land within a few mm of the plate centre
-# measured right here, on the settled robot. It is the one cell whose answer is already known, and the
-# first two versions of this section both failed it (unloaded reference row, and corner identity churn).
-print("self-check: settled plate centre x = %.0f mm -- the %s=0,%s=0 cell below must match it"
-      % (1000 * float(plate_centre()[0][0]), _SWEEP_A, _SWEEP_B))
-
-# --- every leg joint, swept at the load-bearing height -------------------------------------------
-# A joint that exists but is never swept is a joint nobody checked. This table is derived from the
-# asset's own joint list (`leg_probes`), so a family that inserted a joint grows through it instead of
-# slipping past it, and it covers all four legs rather than the one the grid below uses.
-# Per joint, the number that decides everything is the LEVER ARM `r`: the perpendicular distance from
-# that joint's axis line to the plate centre. Rotation by dtheta moves the point by ~r*dtheta, so r is
-# the whole story -- lizard's hfe turned out to sit at the femur's distal end (r = 49 mm, i.e. 15 mm of
-# foot travel per 0.3 rad) while its haa has r = 0.27 m at the same injection. Reading the axis VALUE
-# instead of the arm is pitfall P009; `chord` here is the free upper bound `2 r sin(dtheta/2)`, and the
-# assertion below is the machine version of that lesson.
-fk_pose(q_ref)
-settled = pos_b()[0]
-settled_quat = robot.data.body_quat_w.torch[0].clone()
-
-
-def axis_at(joint: str, child: str, base_q) -> torch.Tensor:
-    """The joint's unit axis in the BASE frame AT ``base_q``.
-
-    The FK section measures axes at the zero stance; under load the base body has tilted, so reusing
-    those directions here mixes two frames and the lever arm comes out wrong -- measured 2026-09-22:
-    lizard's rr_hfe read an arm 8% short, which the chord assertion below caught.
-    """
-    row = base_q.clone()
-    row[joint_names.index(joint)] += INJECT_RAD
-    fk_pose(row)
-    turn = joint_turn(body_names.index(child), settled_quat[body_names.index(child)])
-    fk_pose(base_q)
-    return turn / torch.linalg.norm(turn)
-
-
-print("=== LOAD-BEARING SWEEP: every leg joint over its URDF range (body held at %.3f m) ===" % base_z)
-stride_rows = []
-for joint, child, foot in leg_probes():
-    spec = JOINTS[joint]
-    fk_pose(q_ref)
-    centre_here = plate_centre(foot)[0]
-    arm_vec = centre_here - settled[body_names.index(child)]
-    axis = axis_at(joint, child, q_ref)
-    arm = float(torch.linalg.norm(arm_vec - torch.dot(arm_vec, axis) * axis))
-    dtheta = spec["upper"] - spec["lower"]
-    chord = 2.0 * arm * float(torch.sin(torch.tensor(dtheta / 2.0)))
-    xs, zs = [], []
-    for v in torch.linspace(spec["lower"], spec["upper"], 5).tolist():
-        row = q_ref.clone()
-        row[joint_names.index(joint)] = v
-        fk_pose(row)
-        centre, floor_z = plate_centre(foot)
-        xs.append(float(centre[0]))
-        zs.append(float(floor_z))
-    dx, dz = max(xs) - min(xs), max(zs) - min(zs)
-    stride_rows.append((joint, dx, dz, arm))
-    print("  SWEEP %-17s axis=(%s) range=(%+.2f,%+.2f) arm=%5.3f m chord=%5.3f m | "
-          "dx=%6.3f m dz=%6.3f m  (dx/chord=%.2f)"
-          % (joint, "".join("%+.2f" % v for v in spec["axis"]), spec["lower"], spec["upper"],
-             arm, chord, dx, dz, dx / chord if chord > 1e-9 else 0.0))
-    assert dx <= chord + 1e-3, (
-        "SWEEP %s: fore-aft travel %.3f m exceeds the %.3f m chord its %.3f m lever arm allows -- "
-        "the reading or the arm is wrong, not the asset" % (joint, dx, chord, arm))
-_fore = max(stride_rows, key=lambda r: r[1])
-_fore_token = _fore[0][len(args_cli.sweep_leg) + 1: -len("_joint")]
-print("LARGEST FORE-AFT AT LOAD: %s dx=%.3f m (arm %.3f m, urdf axis %s)"
-      % (_fore[0], _fore[1], _fore[3], "".join("%+.2f" % v for v in JOINTS[_fore[0]]["axis"])))
-for leg in ("lf", "rf", "rl", "rr"):
-    mine = [(j, dx) for j, dx, _, _ in stride_rows if j.startswith(leg + "_")]
-    if mine:
-        print("  LEG %s: " % leg + "  ".join("%s=%.3f" % (j[len(leg) + 1:-6], dx) for j, dx in mine))
-
-
-if _SWEEP_A != _fore_token and _SWEEP_B != _fore_token:
-    print("WARN the %s x %s grid below does NOT include %s, %s's largest fore-aft joint "
-          "(%.3f m). Name the pair with --sweep-a/--sweep-b if this grid is meant to be the evidence."
-          % (_SWEEP_A, _SWEEP_B, _fore[0], args_cli.sweep_leg, _fore[1]))
-_leg = args_cli.sweep_leg
-_joint_a = f"{_leg}_{_SWEEP_A}_joint"
-_joint_b = f"{_leg}_{_SWEEP_B}_joint"
-_a_grid = torch.linspace(JOINTS[_joint_a]["lower"], JOINTS[_joint_a]["upper"], 5).tolist()
-_b_grid = torch.linspace(JOINTS[_joint_b]["lower"], JOINTS[_joint_b]["upper"], 5).tolist()
-print("plate CENTRE x [mm]; '*' marks cells needing a body height more than %.0f mm off the settled one"
-      % (1000 * _STANCE_TOL))
-print("            %s=" % _SWEEP_B + "".join("%9.1f" % k for k in _b_grid))
-cells = []
-for h in _a_grid:
-    line = []
-    for k in _b_grid:
-        row = q_ref.clone()
-        row[joint_names.index(_joint_a)] = h
-        row[joint_names.index(_joint_b)] = k
-        fk_pose(row)
-        centre, floor_z = plate_centre()
-        need_z = base_z - (floor_z - ground_z)
-        line.append((float(centre[0]), need_z))
-        cells.append((float(centre[0]), need_z))
-    print("  %s=%+5.2f " % (_SWEEP_A, h)
-          + "".join("%8.0f%s" % (1000 * c[0], "" if abs(c[1] - base_z) <= _STANCE_TOL else "*")
-                    for c in line))
-usable = [c[0] for c in cells if abs(c[1] - base_z) <= _STANCE_TOL]
-all_x = [c[0] for c in cells]
-print("COMPOSITE stroke: plate centre x-range = %.3f m over %d of %d cells reachable at the settled "
-      "height; %.3f m over all cells (which would need a body height of %.3f-%.3f m instead of %.3f)"
-      % ((max(usable) - min(usable)) if usable else 0.0, len(usable), len(cells),
-         max(all_x) - min(all_x), min(c[1] for c in cells), max(c[1] for c in cells), base_z))
-fk_pose(q_ref)  # leave the settled stance: the ACTUATION section below assumes a standing robot
-
-print("=== ACTUATION (+%.2f rad single joint, endpoint delta in base frame) ===" % INJECT_RAD)
-# Both deltas are printed, and on a STANDING robot neither of them answers "which way does this
-# joint go": the endpoint sits under the load path (the foot is planted, the head chain is propped
-# by the legs), so a joint that really moved 0.27 rad can read as millimetres of endpoint motion --
-# measured 2026-09-18 on the baseline stance: lf_hfe achieved 0.269 rad, lf_foot moved 13 mm.
-# The sign of that millimetre motion is not the joint's direction -- read the FK section above for
-# polarity, and read this one for whether the channel is alive.
-# Read `achieved/commanded` for those chains (it says whether the channel is alive and how much of
-# the target the PD wins against the load); the deltas stay meaningful for the free chains (tail).
-# Every leg joint of THIS asset (so an inserted joint is probed without a table edit) plus the spine
-# chains, whose endpoints and names are the same on every family.
-PROBES = [(joint, endpoint) for joint, _child, endpoint in leg_probes()] + [
-    ("chest_pitch_joint", "neck_pitch"),  # chest pitch: ball head nods (dz)
-    ("neck_yaw_joint", "neck_pitch"),     # neck yaw: ball head sweeps in xy
-    ("neck_pitch_joint", "neck_pitch"),   # neck pitch: ball head nods (dz)
-    ("tail1_yaw_joint", "tail3_pitch"),   # tail yaw: antenna sweeps in xy
-    ("tail3_pitch_joint", "tail3_pitch"), # tail tip pitch
-]
-
-# action layout = concat of manager terms; map joint -> (action idx, scale)
-am = env.unwrapped.action_manager
-joint_to_action = {}
-action_order = []
-twice = []
-offset = 0
-for term_name in am.active_terms:
-    term = am.get_term(term_name)
-    t_scale = term._scale
-    t_scale = float(t_scale) if not hasattr(t_scale, "reshape") else float(t_scale.reshape(-1)[0])
-    print("ACTION_TERM %s %s scale=%s joints=%s" %
-          (term_name, type(term).__name__, t_scale, term._joint_names))
-    for i, jn in enumerate(term._joint_names):
-        if jn in joint_to_action:
-            twice.append(jn)
-        joint_to_action[jn] = (offset + i, t_scale)
-        action_order.append(jn)
-    offset += len(term._joint_names)
-print("TOTAL_ACTION_DIM %d" % am.total_action_dim)
-# The mapping check: a joint the action vector does not carry is a joint the policy can never move --
-# on a family that ADDED a joint that is the whole point of the family, and before this line the run
-# printed it as a SKIP line among ten others (review 2026-09-22).
-_unchannelled = [j for j in joint_names if j not in joint_to_action]
-print("ACTION COVERAGE %d of %d joints channelled (dim %d); index -> joint order:"
-      % (len(joint_to_action), len(joint_names), am.total_action_dim))
-for i, jn in enumerate(action_order):
-    print("  ACTION_IDX %3d %s" % (i, jn))
-if _unchannelled:
-    print("  NOT COMMANDABLE: " + ", ".join(_unchannelled))
-if twice:
-    print("  IN MORE THAN ONE GROUP: " + ", ".join(sorted(set(twice))))
-if args_cli.require_all_actions:
-    _bad = []
+    # action layout = concat of manager terms; map joint -> (action idx, scale)
+    am = env.unwrapped.action_manager
+    joint_to_action = {}
+    action_order = []
+    twice = []
+    offset = 0
+    for term_name in am.active_terms:
+        term = am.get_term(term_name)
+        t_scale = term._scale
+        t_scale = float(t_scale) if not hasattr(t_scale, "reshape") else float(t_scale.reshape(-1)[0])
+        print("ACTION_TERM %s %s scale=%s joints=%s" %
+              (term_name, type(term).__name__, t_scale, term._joint_names))
+        for i, jn in enumerate(term._joint_names):
+            if jn in joint_to_action:
+                twice.append(jn)
+            joint_to_action[jn] = (offset + i, t_scale)
+            action_order.append(jn)
+        offset += len(term._joint_names)
+    print("TOTAL_ACTION_DIM %d" % am.total_action_dim)
+    # The mapping check: a joint the action vector does not carry is a joint the policy can never move --
+    # on a family that ADDED a joint that is the whole point of the family, and before this line the run
+    # printed it as a SKIP line among ten others (review 2026-09-22).
+    _unchannelled = [j for j in joint_names if j not in joint_to_action]
+    print("ACTION COVERAGE %d of %d joints channelled (dim %d); index -> joint order:"
+          % (len(joint_to_action), len(joint_names), am.total_action_dim))
+    for i, jn in enumerate(action_order):
+        print("  ACTION_IDX %3d %s" % (i, jn))
     if _unchannelled:
-        _bad.append("no action term carries %s" % ", ".join(_unchannelled))
+        print("  NOT COMMANDABLE: " + ", ".join(_unchannelled))
     if twice:
-        _bad.append("more than one term carries %s" % ", ".join(sorted(set(twice))))
-    if am.total_action_dim != len(action_order):
-        _bad.append("action dim %d != %d channelled joints" % (am.total_action_dim, len(action_order)))
-    if _bad:
-        raise SystemExit("--require-all-actions FAILED: " + "; ".join(_bad))
-    print("ACTION_COVERAGE_GATE PASSED (every joint channelled exactly once)")
+        print("  IN MORE THAN ONE GROUP: " + ", ".join(sorted(set(twice))))
+    if args_cli.require_all_actions:
+        _bad = []
+        if _unchannelled:
+            _bad.append("no action term carries %s" % ", ".join(_unchannelled))
+        if twice:
+            _bad.append("more than one term carries %s" % ", ".join(sorted(set(twice))))
+        if am.total_action_dim != len(action_order):
+            _bad.append("action dim %d != %d channelled joints" % (am.total_action_dim, len(action_order)))
+        if _bad:
+            raise SystemExit("--require-all-actions FAILED: " + "; ".join(_bad))
+        print("ACTION_COVERAGE_GATE PASSED (every joint channelled exactly once)")
 
-act_dim = am.total_action_dim
-for joint, endpoint in PROBES:
-    zero = torch.zeros(1, act_dim)
-    idx = joint_names.index(joint)
-    e_idx = body_names.index(endpoint)
-    # settle back to stance
-    for _ in range(SETTLE_STEPS):
-        env.step(zero)
-    p0 = pos_b()[0, e_idx]
-    p0_w = robot.data.body_pos_w.torch[0, e_idx].clone()
-    cmd = zero.clone()
-    if joint not in joint_to_action:
-        print("JOINT %-17s SKIP -- no action group carries it on this task, so the policy cannot command "
-              "it (its axis is in the FK section above)" % joint)
-        continue
-    a_idx, a_scale = joint_to_action[joint]
-    # use_default_offset=True everywhere in this family, so the joint target the action asks for is
-    # default + scale * action -- which is INJECT_RAD by construction. The action VALUE is what
-    # differs between groups, and printing that as "commanded" would read as a 4x PD shortfall
-    target = INJECT_RAD
-    cmd[0, a_idx] = target / a_scale if a_scale > 0 else 1.0  # scale 0 = dead channel, poke anyway
-    for _ in range(SETTLE_STEPS):
-        env.step(cmd)
-    p1 = pos_b()[0, e_idx]
-    p1_w = robot.data.body_pos_w.torch[0, e_idx]
-    d = p1 - p0
-    d_w = p1_w - p0_w
-    achieved = float(robot.data.joint_pos[0][idx])
-    # a target the limits clamp would still read as "the joint answered" -- report the soft limits
-    # and flag a reading sitting on one of them, or a small delta has two very different causes
-    limits = robot.data.soft_joint_pos_limits.torch[0, idx]
-    lo, hi = float(limits[0]), float(limits[1])
-    clamped = min(abs(achieved - lo), abs(achieved - hi)) < 1e-3
-    print("JOINT %-17s scale=%.2f -> %-11s achieved=%+.3f of target %+.3f (%.0f%%) limits=(%+.2f,%+.2f)%s "
-          "d_base=(%7.3f, %7.3f, %7.3f) d_world=(%7.3f, %7.3f, %7.3f)"
-          % (joint, a_scale, endpoint, achieved, target, 100.0 * abs(achieved) / target,
-             lo, hi, " CLAMPED" if clamped else "", d[0], d[1], d[2], d_w[0], d_w[1], d_w[2]))
 
-env.close()
-print("=== DONE ===")
+    print("=== FK (joint +%.2f rad, kinematics only: no physics step, so PD/gravity/ground cannot enter) ==="
+          % INJECT_RAD)
+    # The polarity authority. Same injection as Part 2, but the endpoint is read after `sim.forward()`
+    # instead of 40 physics steps, so the number is forward kinematics and nothing else. Sample: on the
+    # standing baseline stance lf_hfe really turns 0.269 rad and its foot reads 13 mm (load path); here
+    # the same joint reads the arc its axis prescribes.
+    SPINE_PROBES = [
+        ("chest_pitch_joint", "chest_pitch", "neck_pitch"),
+        ("neck_yaw_joint", "neck_yaw", "neck_pitch"),
+        ("neck_pitch_joint", "neck_pitch", "neck_pitch"),
+        ("tail1_yaw_joint", "tail1_yaw", "tail3_pitch"),
+        ("tail3_pitch_joint", "tail3_pitch", "tail3_pitch"),
+    ]
+    FK_PROBES = leg_probes() + SPINE_PROBES
+
+
+    def fk_pose(row):
+        """Write one joint configuration and propagate kinematics only (no physics step)."""
+        q = row.reshape(1, len(joint_names)).to(robot.device)
+        robot.write_joint_state_to_sim(q, torch.zeros_like(q))
+        env.unwrapped.sim.forward()
+        env.unwrapped.scene.update(env.unwrapped.physics_dt)
+
+
+    def joint_turn(i, q0):
+        """Injected joint rotation vector in the base frame [rad].
+
+        A basis vector's arc is smaller than the full angle unless perpendicular to the axis.
+        Use the official xyzw quaternion functions for the complete child-frame rotation instead
+        of picking the basis vector that moved most or implementing a quaternion product here.
+        """
+        current = robot.data.body_quat_w.torch[0, i]
+        delta = quat_mul(current, quat_conjugate(q0))
+        turn_world = axis_angle_from_quat(delta)
+        return quat_apply_inverse(robot.data.root_quat_w.torch[0], turn_world)
+
+
+    stance = torch.zeros(len(joint_names), device=robot.device)
+    fk_pose(stance)
+    fk_p0, fk_q0 = pos_b()[0], robot.data.body_quat_w.torch[0].clone()
+    TURN = {}  # joint -> unit axis in the base frame (the load-height section below uses these)
+    fk_readings = []
+    for joint, child, endpoint in FK_PROBES:
+        row = stance.clone()
+        row[joint_names.index(joint)] = INJECT_RAD
+        fk_pose(row)
+        p = pos_b()[0]
+        c_idx, e_idx = body_names.index(child), body_names.index(endpoint)
+        dc, de = p[c_idx] - fk_p0[c_idx], p[e_idx] - fk_p0[e_idx]
+        turn = joint_turn(c_idx, fk_q0[c_idx])
+        TURN[joint] = turn / torch.linalg.norm(turn)
+        fk_readings.append({"joint": joint, "child": child, "endpoint": endpoint,
+                            "turn_rad": turn.tolist(), "child_delta_m": dc.tolist(),
+                            "endpoint_delta_m": de.tolist()})
+        print("FK %-17s +%.2f -> %-11s turn=(%+.3f, %+.3f, %+.3f) |%.3f| | d=(%7.3f, %7.3f, %7.3f) "
+              "| %-11s d=(%7.3f, %7.3f, %7.3f)"
+              % (joint, INJECT_RAD, child, turn[0], turn[1], turn[2], float(torch.linalg.norm(turn)),
+                 dc[0], dc[1], dc[2], endpoint, de[0], de[1], de[2]))
+
+    if args_cli.kinematics_only:
+        from pxr import UsdPhysics
+
+        fk_pose(stance)
+        live = env.unwrapped
+        report = {
+            "mode": "kinematics_only", "target_binding": target_binding,
+            "inject_rad": INJECT_RAD, "env_steps_after_reset": 0,
+            "joint_names": joint_names, "action_names": action_order,
+            "body_positions_base_m": dict(zip(body_names, fk_p0.tolist())),
+            "fk": fk_readings,
+            "runtime": {
+                "fixed_base": bool(robot.is_fixed_base),
+                "force_timing": live.sim.stage.GetPrimAtPath(cfg.sim.physics_prim_path).GetAttribute(
+                    "physxScene:enableExternalForcesEveryIteration").Get(),
+                "body_disable_gravity": {prim.GetName(): prim.GetAttribute("physxRigidBody:disableGravity").Get()
+                                         for prim in live.sim.stage.Traverse()
+                                         if prim.HasAPI(UsdPhysics.RigidBodyAPI)},
+                "max_joint_stiffness": float(robot.data.joint_stiffness.torch.abs().max()),
+                "max_joint_damping": float(robot.data.joint_damping.torch.abs().max()),
+            },
+            "scope": "layout/FK and channel coverage only; no physics step, tracking, support or collision verdict",
+        }
+        if args_cli.json is not None:
+            args_cli.json.write_text(json.dumps(report, indent=2), encoding="utf-8")
+        print("KINEMATICS_ONLY_COMPLETE (%d FK probes; no env.step after reset)" % len(fk_readings))
+        env.close()
+        raise SystemExit(0)
+
+    # --- composite scan at the load-bearing height --------------------------------------------------
+    # The single-joint table above is a diagnostic, NOT a bound on the leg: `hfe` swings the whole
+    # distal assembly, so whatever `kfe` does to the shank changes the radius `hfe` sweeps -- two
+    # joints compose, their product is not the sum of their single-joint travels. This section settles
+    # the robot first (the stroke that counts is the one available while the plate carries the body),
+    # then sweeps the pair and reports the fore-aft (base +x) excursion of the plate's centre.
+    # The base is not re-solved during the sweep (`sim.forward()` updates kinematics only), so the body
+    # stays at the settled height and only the leg moves.
+    _SWEEP_ROOTS = leg_names.roots_of(NAMING, args_cli.sweep_leg)
+    _SWEEP_A = args_cli.sweep_a or target_binding["roles"][args_cli.sweep_leg]["hfe"]
+    _SWEEP_B = args_cli.sweep_b or target_binding["roles"][args_cli.sweep_leg]["kfe"]
+    _FOOT_LINK = leg_names.end_link(args_cli.sweep_leg, NAMING)
+    for _flag, _token, _given in (("a", _SWEEP_A, args_cli.sweep_a), ("b", _SWEEP_B, args_cli.sweep_b)):
+        if _given is not None and _token not in _SWEEP_ROOTS:
+            raise SystemExit(f"--sweep-{_flag} {_token}: not one of this naming's roots for leg "
+                             f"{args_cli.sweep_leg} ({', '.join(_SWEEP_ROOTS)})")
+        if leg_names.joint_name(args_cli.sweep_leg, _token) not in JOINTS or _FOOT_LINK not in body_names:
+            raise SystemExit(f"--sweep-leg {args_cli.sweep_leg} + --sweep-a/-b {_SWEEP_A}/{_SWEEP_B}: no such"
+                             f" joint ({leg_names.joint_name(args_cli.sweep_leg, _token)}) or foot "
+                             f"({_FOOT_LINK}) on this asset. Joints here: {sorted(JOINTS)}")
+
+
+    def plate_corners(foot_link: str):
+        """Bbox corners of ONE foot's collision mesh in the foot frame, at the mesh floor.
+
+        A proxy for the contact patch: that plate is a 26-vertex hull, so its bbox floor is what the
+        ground can touch. Read from the URDF's own collision mesh rather than hard-coded. Per foot,
+        because a sweep of the right-rear leg measured against the left-front plate reads 0.000 --
+        the plate simply does not move (measured 2026-09-22, first version of the per-leg table).
+        """
+        root = ET.parse(_URDF).getroot()
+        link = next(item for item in root.findall("link") if item.get("name") == foot_link)
+        mesh = _URDF.parent / link.find("collision/geometry/mesh").get("filename")
+        verts = [list(map(float, ln.split()[1:4])) for ln in mesh.read_text().splitlines() if ln.startswith("v ")]
+        lo = [min(v[i] for v in verts) for i in range(3)]
+        hi = [max(v[i] for v in verts) for i in range(3)]
+        return torch.tensor([[x, y, lo[2]] for x in (lo[0], hi[0]) for y in (lo[1], hi[1])], device=robot.device)
+
+
+    _CORNERS = {}
+
+
+    def corners_of(foot_link: str):
+        """``plate_corners(foot_link)``, read once per leg."""
+        if foot_link not in _CORNERS:
+            _CORNERS[foot_link] = plate_corners(foot_link)
+        return _CORNERS[foot_link]
+
+
+    def contact_corner(foot_link: str = _FOOT_LINK):
+        """World point of that plate's lowest corner at the current configuration."""
+        i = body_names.index(foot_link)
+        pts = robot.data.body_pos_w.torch[0, i] + quat_apply(robot.data.body_quat_w.torch[0, i], corners_of(foot_link))
+        return pts[int(torch.argmin(pts[:, 2]))]
+
+
+    corners_of(_FOOT_LINK)
+    fk_pose(stance)
+    settle_steps = max(SETTLE_STEPS, 100)  # ~2 s: the landing transient is ~0.3 s; the stance HEIGHT is what must settle
+    zero_actions = torch.zeros(env.unwrapped.num_envs, env.unwrapped.action_manager.total_action_dim)
+    for _ in range(settle_steps):
+        env.step(zero_actions)
+    base_z = float(robot.data.root_pos_w.torch[0, 2])
+    ground_z = float(contact_corner()[2])
+    # The reference row is the SETTLED joint state, never zeros: under load the PD sags, so a sweep from
+    # zeros is "an unloaded leg at a loaded body height" -- neither pose, and the neutral cell of the
+    # first version of this scan was wrong for exactly that reason.
+    q_ref = robot.data.joint_pos.torch[0].clone()
+    print("=== COMPOSITE %s x %s from the load-bearing stance (base z = %.3f m after %d zero-action steps, "
+          "plate floor z = %.3f m, sag |q_ref - 0| = %.4f rad) ==="
+          % (_SWEEP_A, _SWEEP_B, base_z, settle_steps, ground_z, float(torch.linalg.norm(q_ref - stance))))
+    if base_z > 1.0:
+        print("WARN base z is at spawn height: the settle did not land (reset or termination fired?) -- "
+              "this sweep is then measured airborne")
+    _spawn_z = float(cfg.scene.robot.init_state.pos[2])
+    if base_z < 0.7 * _spawn_z:
+        print("WARN base z %.3f m is far below the spawn height %.3f m: the settle ended with the robot low or"
+              " down (rough terrain? a termination?), so every number below is measured in THAT pose -- rerun on"
+              " a flat PLAY task of the same family for the load-bearing stance" % (base_z, _spawn_z))
+    _bx = quat_apply(robot.data.root_quat_w.torch[0], torch.tensor([1.0, 0.0, 0.0], device=robot.device))
+    print("base yaw check: body +x in world = (%+.2f, %+.2f, %+.2f); the table below is BASE-frame, so a "
+          "randomized spawn yaw cannot mix fore-aft into lateral" % (_bx[0], _bx[1], _bx[2]))
+    # A fixed material point, not "the lowest corner": the plate pitches with kfe, so the lowest corner
+    # changes identity between cells and a table of those x values measures the plate's own 0.458 m
+    # extent rather than the leg's stroke (measured 2026-09-21: 143-644 mm, i.e. the plate's size).
+    # The base x is invariant under a vertical shift, so the fore-aft numbers hold at ANY body height;
+    # what the height decides is whether the cell is reachable at the settled height, reported as the
+    # base z that cell would need to put the plate floor back on the ground.
+    _STANCE_TOL = 0.05  # m: body height a cell may require and still count as "reachable at the stance"
+
+
+    def plate_centre(foot_link: str = _FOOT_LINK):
+        """That plate's bbox centre in the BASE frame (spawn yaw stripped, as `pos_b` does) and its floor z."""
+        i = body_names.index(foot_link)
+        pts = robot.data.body_pos_w.torch[0, i] + quat_apply(robot.data.body_quat_w.torch[0, i], corners_of(foot_link))
+        centre_w = pts.mean(dim=0)
+        centre_b = quat_apply_inverse(robot.data.root_quat_w.torch[0], centre_w - robot.data.root_pos_w.torch[0])
+        return centre_b, float(pts[:, 2].min())
+
+
+    # Self-check: the sweep's neutral cell (hfe = 0, kfe = 0) must land within a few mm of the plate centre
+    # measured right here, on the settled robot. It is the one cell whose answer is already known, and the
+    # first two versions of this section both failed it (unloaded reference row, and corner identity churn).
+    print("self-check: settled plate centre x = %.0f mm -- the %s=0,%s=0 cell below must match it"
+          % (1000 * float(plate_centre()[0][0]), _SWEEP_A, _SWEEP_B))
+
+    # --- every leg joint, swept at the load-bearing height -------------------------------------------
+    # A joint that exists but is never swept is a joint nobody checked. This table is derived from the
+    # asset's own joint list (`leg_probes`), so a family that inserted a joint grows through it instead of
+    # slipping past it, and it covers all four legs rather than the one the grid below uses.
+    # Per joint, the number that decides everything is the LEVER ARM `r`: the perpendicular distance from
+    # that joint's axis line to the plate centre. Rotation by dtheta moves the point by ~r*dtheta, so r is
+    # the whole story -- lizard's hfe turned out to sit at the femur's distal end (r = 49 mm, i.e. 15 mm of
+    # foot travel per 0.3 rad) while its haa has r = 0.27 m at the same injection. Reading the axis VALUE
+    # instead of the arm is pitfall P009; `chord` here is the free upper bound `2 r sin(dtheta/2)`, and the
+    # assertion below is the machine version of that lesson.
+    fk_pose(q_ref)
+    settled = pos_b()[0]
+    settled_quat = robot.data.body_quat_w.torch[0].clone()
+
+
+    def axis_at(joint: str, child: str, base_q) -> torch.Tensor:
+        """The joint's unit axis in the BASE frame AT ``base_q``.
+
+        The FK section measures axes at the zero stance; under load the base body has tilted, so reusing
+        those directions here mixes two frames and the lever arm comes out wrong -- measured 2026-09-22:
+        lizard's rr_hfe read an arm 8% short, which the chord assertion below caught.
+        """
+        row = base_q.clone()
+        row[joint_names.index(joint)] += INJECT_RAD
+        fk_pose(row)
+        turn = joint_turn(body_names.index(child), settled_quat[body_names.index(child)])
+        fk_pose(base_q)
+        return turn / torch.linalg.norm(turn)
+
+
+    print("=== LOAD-BEARING SWEEP: every leg joint over its URDF range (body held at %.3f m) ===" % base_z)
+    stride_rows = []
+    for joint, child, foot in leg_probes():
+        spec = JOINTS[joint]
+        fk_pose(q_ref)
+        centre_here = plate_centre(foot)[0]
+        arm_vec = centre_here - settled[body_names.index(child)]
+        axis = axis_at(joint, child, q_ref)
+        arm = float(torch.linalg.norm(arm_vec - torch.dot(arm_vec, axis) * axis))
+        dtheta = spec["upper"] - spec["lower"]
+        chord = 2.0 * arm * float(torch.sin(torch.tensor(dtheta / 2.0)))
+        xs, zs = [], []
+        for v in torch.linspace(spec["lower"], spec["upper"], 5).tolist():
+            row = q_ref.clone()
+            row[joint_names.index(joint)] = v
+            fk_pose(row)
+            centre, floor_z = plate_centre(foot)
+            xs.append(float(centre[0]))
+            zs.append(float(floor_z))
+        dx, dz = max(xs) - min(xs), max(zs) - min(zs)
+        stride_rows.append((joint, dx, dz, arm))
+        print("  SWEEP %-17s axis=(%s) range=(%+.2f,%+.2f) arm=%5.3f m chord=%5.3f m | "
+              "dx=%6.3f m dz=%6.3f m  (dx/chord=%.2f)"
+              % (joint, "".join("%+.2f" % v for v in spec["axis"]), spec["lower"], spec["upper"],
+                 arm, chord, dx, dz, dx / chord if chord > 1e-9 else 0.0))
+        assert dx <= chord + 1e-3, (
+            "SWEEP %s: fore-aft travel %.3f m exceeds the %.3f m chord its %.3f m lever arm allows -- "
+            "the reading or the arm is wrong, not the asset" % (joint, dx, chord, arm))
+    _fore = max(stride_rows, key=lambda r: r[1])
+    _fore_token = _fore[0][len(args_cli.sweep_leg) + 1: -len("_joint")]
+    print("LARGEST FORE-AFT AT LOAD: %s dx=%.3f m (arm %.3f m, urdf axis %s)"
+          % (_fore[0], _fore[1], _fore[3], "".join("%+.2f" % v for v in JOINTS[_fore[0]]["axis"])))
+    for leg in ("lf", "rf", "rl", "rr"):
+        mine = [(j, dx) for j, dx, _, _ in stride_rows if j.startswith(leg + "_")]
+        if mine:
+            print("  LEG %s: " % leg + "  ".join("%s=%.3f" % (j[len(leg) + 1:-6], dx) for j, dx in mine))
+
+
+    if _SWEEP_A != _fore_token and _SWEEP_B != _fore_token:
+        print("WARN the %s x %s grid below does NOT include %s, %s's largest fore-aft joint "
+              "(%.3f m). Name the pair with --sweep-a/--sweep-b if this grid is meant to be the evidence."
+              % (_SWEEP_A, _SWEEP_B, _fore[0], args_cli.sweep_leg, _fore[1]))
+    _leg = args_cli.sweep_leg
+    _joint_a = f"{_leg}_{_SWEEP_A}_joint"
+    _joint_b = f"{_leg}_{_SWEEP_B}_joint"
+    _a_grid = torch.linspace(JOINTS[_joint_a]["lower"], JOINTS[_joint_a]["upper"], 5).tolist()
+    _b_grid = torch.linspace(JOINTS[_joint_b]["lower"], JOINTS[_joint_b]["upper"], 5).tolist()
+    print("plate CENTRE x [mm]; '*' marks cells needing a body height more than %.0f mm off the settled one"
+          % (1000 * _STANCE_TOL))
+    print("            %s=" % _SWEEP_B + "".join("%9.1f" % k for k in _b_grid))
+    cells = []
+    for h in _a_grid:
+        line = []
+        for k in _b_grid:
+            row = q_ref.clone()
+            row[joint_names.index(_joint_a)] = h
+            row[joint_names.index(_joint_b)] = k
+            fk_pose(row)
+            centre, floor_z = plate_centre()
+            need_z = base_z - (floor_z - ground_z)
+            line.append((float(centre[0]), need_z))
+            cells.append((float(centre[0]), need_z))
+        print("  %s=%+5.2f " % (_SWEEP_A, h)
+              + "".join("%8.0f%s" % (1000 * c[0], "" if abs(c[1] - base_z) <= _STANCE_TOL else "*")
+                        for c in line))
+    usable = [c[0] for c in cells if abs(c[1] - base_z) <= _STANCE_TOL]
+    all_x = [c[0] for c in cells]
+    print("COMPOSITE stroke: plate centre x-range = %.3f m over %d of %d cells reachable at the settled "
+          "height; %.3f m over all cells (which would need a body height of %.3f-%.3f m instead of %.3f)"
+          % ((max(usable) - min(usable)) if usable else 0.0, len(usable), len(cells),
+             max(all_x) - min(all_x), min(c[1] for c in cells), max(c[1] for c in cells), base_z))
+    fk_pose(q_ref)  # leave the settled stance: the ACTUATION section below assumes a standing robot
+
+    print("=== ACTUATION (+%.2f rad single joint, endpoint delta in base frame) ===" % INJECT_RAD)
+    # Both deltas are printed, and on a STANDING robot neither of them answers "which way does this
+    # joint go": the endpoint sits under the load path (the foot is planted, the head chain is propped
+    # by the legs), so a joint that really moved 0.27 rad can read as millimetres of endpoint motion --
+    # measured 2026-09-18 on the baseline stance: lf_hfe achieved 0.269 rad, lf_foot moved 13 mm.
+    # The sign of that millimetre motion is not the joint's direction -- read the FK section above for
+    # polarity, and read this one for whether the channel is alive.
+    # Read `achieved/commanded` for those chains (it says whether the channel is alive and how much of
+    # the target the PD wins against the load); the deltas stay meaningful for the free chains (tail).
+    # Every leg joint of THIS asset (so an inserted joint is probed without a table edit) plus the spine
+    # chains, whose endpoints and names are the same on every family.
+    PROBES = [(joint, endpoint) for joint, _child, endpoint in leg_probes()] + [
+        ("chest_pitch_joint", "neck_pitch"),  # chest pitch: ball head nods (dz)
+        ("neck_yaw_joint", "neck_pitch"),     # neck yaw: ball head sweeps in xy
+        ("neck_pitch_joint", "neck_pitch"),   # neck pitch: ball head nods (dz)
+        ("tail1_yaw_joint", "tail3_pitch"),   # tail yaw: antenna sweeps in xy
+        ("tail3_pitch_joint", "tail3_pitch"), # tail tip pitch
+    ]
+
+
+    act_dim = am.total_action_dim
+    for joint, endpoint in PROBES:
+        zero = torch.zeros(1, act_dim)
+        idx = joint_names.index(joint)
+        e_idx = body_names.index(endpoint)
+        # settle back to stance
+        for _ in range(SETTLE_STEPS):
+            env.step(zero)
+        p0 = pos_b()[0, e_idx]
+        p0_w = robot.data.body_pos_w.torch[0, e_idx].clone()
+        cmd = zero.clone()
+        if joint not in joint_to_action:
+            print("JOINT %-17s SKIP -- no action group carries it on this task, so the policy cannot command "
+                  "it (its axis is in the FK section above)" % joint)
+            continue
+        a_idx, a_scale = joint_to_action[joint]
+        # use_default_offset=True everywhere in this family, so the joint target the action asks for is
+        # default + scale * action -- which is INJECT_RAD by construction. The action VALUE is what
+        # differs between groups, and printing that as "commanded" would read as a 4x PD shortfall
+        target = INJECT_RAD
+        cmd[0, a_idx] = target / a_scale if a_scale > 0 else 1.0  # scale 0 = dead channel, poke anyway
+        for _ in range(SETTLE_STEPS):
+            env.step(cmd)
+        p1 = pos_b()[0, e_idx]
+        p1_w = robot.data.body_pos_w.torch[0, e_idx]
+        d = p1 - p0
+        d_w = p1_w - p0_w
+        achieved = float(robot.data.joint_pos[0][idx])
+        # a target the limits clamp would still read as "the joint answered" -- report the soft limits
+        # and flag a reading sitting on one of them, or a small delta has two very different causes
+        limits = robot.data.soft_joint_pos_limits.torch[0, idx]
+        lo, hi = float(limits[0]), float(limits[1])
+        clamped = min(abs(achieved - lo), abs(achieved - hi)) < 1e-3
+        print("JOINT %-17s scale=%.2f -> %-11s achieved=%+.3f of target %+.3f (%.0f%%) limits=(%+.2f,%+.2f)%s "
+              "d_base=(%7.3f, %7.3f, %7.3f) d_world=(%7.3f, %7.3f, %7.3f)"
+              % (joint, a_scale, endpoint, achieved, target, 100.0 * abs(achieved) / target,
+                 lo, hi, " CLAMPED" if clamped else "", d[0], d[1], d[2], d_w[0], d_w[1], d_w[2]))
+
+    env.close()
+    print("=== DONE ===")
+    outcome = 0
+except BaseException as error:
+    import traceback
+
+    if isinstance(error, SystemExit):
+        outcome = error.code if isinstance(error.code, int) else (0 if error.code is None else 1)
+    elif isinstance(error, KeyboardInterrupt):
+        outcome = 130
+    if outcome:
+        traceback.print_exc()
+    raise
+finally:
+    simulation_app.close(exit_code=outcome)

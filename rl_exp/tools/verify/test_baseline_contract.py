@@ -2466,6 +2466,224 @@ def test_palm_solver_rejects_inserted_axis():
             assert twist in str(error), error
 
 
+def test_probe_cli_closes_app_before_exit():
+    """Kit must be shut down before returning a gate's status or propagating an exception."""
+    import contextlib
+    import io
+
+    problems = []
+    for filename in ("check_contact_ownership.py", "baseline_probe.py", "check_joint_layout.py", "stance_step_probe.py"):
+        category = "diagnose" if filename == "stance_step_probe.py" else "verify"
+        tree = ast.parse((_REPO / "rl_exp/tools" / category / filename).read_text(encoding="utf-8"))
+        footer = tree.body[-1]
+        is_layout = isinstance(footer, ast.Try)
+        if isinstance(footer, ast.If):
+            assert "__name__" in ast.unparse(footer.test)
+        else:
+            import copy
+
+            assert isinstance(footer, ast.Try)
+            footer = copy.deepcopy(footer)
+            # Exercise the script's real handlers/finally around a replaceable workload.
+            footer.body = ast.parse("outcome = main()\n").body
+        for value, expected in ((0, 0), (1, 1), ("error", 1), (SystemExit(2), 2),
+                                (SystemExit("bad binding"), 1), (SystemExit(None), 0),
+                                (KeyboardInterrupt(), 130)):
+            calls = []
+
+            def run():
+                calls.append("main")
+                if value == "error":
+                    raise ValueError("probe failed before return")
+                if isinstance(value, BaseException):
+                    raise value
+                return value
+
+            namespace = {"__name__": "__main__", "main": run, "outcome": 1,
+                         "simulation_app": NS(close=lambda exit_code=0: calls.append(("close", exit_code)))}
+            caught = None
+            stderr = io.StringIO()
+            try:
+                with contextlib.redirect_stderr(stderr):
+                    exec(compile(ast.Module(body=[footer], type_ignores=[]), filename, "exec"), namespace)
+            except BaseException as error:
+                caught = error
+            if value == "error":
+                assert isinstance(caught, ValueError) and "probe failed before return" in stderr.getvalue()
+            elif isinstance(value, BaseException):
+                assert caught is value
+            elif is_layout:
+                assert caught is None and namespace["outcome"] == value
+            else:
+                assert isinstance(caught, SystemExit) and caught.code == value
+            if calls != ["main", ("close", expected)]:
+                problems.append((filename, value, calls))
+    assert not problems, problems
+
+
+def test_entry_observer_bounds_real_step_calls():
+    from rl_exp.tools.diagnose import palm_entry_wiring as observer
+
+    tree = ast.parse(pathlib.Path(observer.__file__).read_text(encoding="utf-8"))
+    fn = next(node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and node.name == "step")
+    for budget in (0, 2):
+        calls = []
+        token = object()
+        audit = {"budget": budget, "env_steps": []}
+        namespace = {"torch": torch, "audit": audit, "_require": observer._require,
+                     "original_step": lambda action: calls.append(action.clone()) or token,
+                     "snapshot": lambda: {"completed": len(calls)}}
+        exec(compile(ast.Module(body=[fn], type_ignores=[]), "<entry-observer-step>", "exec"), namespace)
+        for _ in range(budget):
+            assert namespace["step"](torch.zeros(1, 30)) is token
+        expect(ValueError, namespace["step"], torch.zeros(1, 30))
+        assert len(calls) == len(audit["env_steps"]) == budget
+    for value in (float("nan"), float("inf"), .02):
+        namespace["audit"] = {"budget": 2, "env_steps": []}
+        calls.clear()
+        expect(ValueError, namespace["step"], torch.full((1, 30), value))
+        assert not calls and not namespace["audit"]["env_steps"]
+
+
+def test_stance_target_uses_resolved_scale_and_offset():
+    import contextlib
+    import io
+
+    tree = ast.parse((_REPO / "rl_exp/tools/diagnose/stance_step_probe.py").read_text(encoding="utf-8"))
+    body = tree.body[-1].body
+    start = next(i for i, node in enumerate(body) if isinstance(node, ast.Assign)
+                 and any(isinstance(t, ast.Name) and t.id == "offset" for t in node.targets))
+    stop = next(i for i, node in enumerate(body) if isinstance(node, ast.FunctionDef) and node.name == "set_target")
+    block = ast.Module(body=body[start:stop + 1], type_ignores=[])
+    for scale, offset, uses_default in ((torch.tensor([[.5, .25]]), torch.tensor([[.1, -.2]]), True),
+                                        (.5, .1, False)):
+        term = NS(_joint_names=["a_joint", "b_joint"], _scale=scale, _offset=offset,
+                  cfg=NS(use_default_offset=uses_default))
+        namespace = {"torch": torch, "manager": NS(active_terms=["legs"], get_term=lambda _: term),
+                     "target_joint": "b_joint", "target_index": 1, "_BOUND_SUFFIXES": ("_joint",),
+                     "joint_names": ["a_joint", "b_joint"], "actions": torch.zeros(1, 2),
+                     "robot": NS(data=NS(default_joint_pos=NS(torch=torch.tensor([[.1, -.2]]))))}
+        with contextlib.redirect_stdout(io.StringIO()):
+            exec(compile(block, "<stance-action-transform>", "exec"), namespace)
+        namespace["set_target"](.03)
+        column_scale = float(torch.as_tensor(scale).flatten()[-1])
+        column_offset = float(torch.as_tensor(offset).flatten()[-1])
+        processed = namespace["actions"][0, 1] * column_scale + column_offset
+        assert abs(float(processed) - .03) < 1e-7, (processed, namespace["actions"])
+        assert bool(namespace["_uses_default"]) == uses_default
+
+
+def test_stance_short_window_summary():
+    import contextlib
+    import io
+
+    tree = ast.parse((_REPO / "rl_exp/tools/diagnose/stance_step_probe.py").read_text(encoding="utf-8"))
+    body = tree.body[-1].body if isinstance(tree.body[-1], ast.Try) else tree.body
+    summary = next(node for node in body if "steady window only" in ast.unparse(node))
+    for steady in ([], [{"joint": (.001, 0., 0., .2)}, {"joint": (-.001, 0., 0., -.2)}]):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            exec(compile(ast.Module(body=[summary], type_ignores=[]), "<stance-steady-summary>", "exec"),
+                 {"steady": steady})
+        if steady:
+            assert "2 samples" in output.getvalue() and "tracking error max 0.0010 rad" in output.getvalue()
+        else:
+            assert "unavailable" in output.getvalue() and "0 samples" in output.getvalue()
+
+
+def test_joint_layout_oblique_axis_turn():
+    """A moved basis vector does not measure the full rotation about an oblique joint axis."""
+    from isaaclab.utils import math as rotations
+
+    tree = ast.parse((_REPO / "rl_exp/tools/verify/check_joint_layout.py").read_text(encoding="utf-8"))
+    fn = next(node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and node.name == "joint_turn")
+    root = rotations.quat_from_angle_axis(torch.tensor(.4), torch.tensor([-2., 3., 1.]))
+    rest = rotations.quat_from_angle_axis(torch.tensor(.37), torch.tensor([0., 1., 0.]))
+    before = rotations.quat_mul(root, rest)
+    for axis in ([1., 1., 1.], [1., 0., 0.], [1., 2., -3.]):
+        axis = torch.tensor(axis)
+        axis /= axis.norm()
+        for angle in (-.001, .001, .3):
+            delta = rotations.quat_from_angle_axis(torch.tensor(angle),
+                                                   rotations.quat_apply(root, axis))
+            after = rotations.quat_mul(delta, before)
+            robot = NS(device="cpu", data=NS(body_quat_w=NS(torch=after.reshape(1, 1, 4)),
+                                             root_quat_w=NS(torch=root.reshape(1, 4))))
+            namespace = {"torch": torch, "robot": robot}
+            namespace.update({name: getattr(rotations, name) for name in
+                              ("quat_apply", "quat_apply_inverse", "quat_mul", "quat_conjugate",
+                               "axis_angle_from_quat")})
+            exec(compile(ast.Module(body=[fn], type_ignores=[]), "<layout-joint-turn>", "exec"), namespace)
+            actual = namespace["joint_turn"](0, before)
+            assert torch.allclose(actual, axis * angle, atol=5e-7, rtol=0), (axis, angle, actual)
+
+
+def test_joint_layout_kinematic_parser_and_action_gate():
+    import argparse
+    import contextlib
+    import io
+    from unittest.mock import patch
+    from rl_exp.tasks import joint_names
+
+    tree = ast.parse((_REPO / "rl_exp/tools/verify/check_joint_layout.py").read_text(encoding="utf-8"))
+    parser_nodes = []
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(
+                isinstance(target, ast.Name) and target.id == "simulation_app" for target in node.targets):
+            break
+        if (isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id in
+                ("parser", "args_cli") for target in node.targets)
+                or isinstance(node, ast.Expr) and isinstance(node.value, ast.Call)
+                and isinstance(node.value.func, ast.Attribute) and isinstance(node.value.func.value, ast.Name)
+                and node.value.func.value.id == "parser"
+                or isinstance(node, ast.If) and "args_cli" in ast.unparse(node.test)):
+            parser_nodes.append(node)
+
+    def parse(arguments):
+        namespace = {"argparse": argparse, "pathlib": pathlib, "math": math, "leg_names": joint_names}
+        with patch.object(sys, "argv", ["layout", *arguments]), contextlib.redirect_stderr(io.StringIO()):
+            exec(compile(ast.Module(body=parser_nodes, type_ignores=[]), "<layout-parser>", "exec"), namespace)
+        return namespace["args_cli"]
+
+    defaults = parse([])
+    assert not defaults.kinematics_only and defaults.inject_rad == .3
+    args = parse(["--kinematics_only", "--inject_rad", ".001", "--json", "report.json"])
+    assert args.kinematics_only and args.inject_rad == .001
+    expect(SystemExit, parse, ["--json", "report.json"])
+    for angle in ("0", "-1", "nan", "inf"):
+        expect(SystemExit, parse, ["--inject_rad=" + angle])
+
+    protected = tree.body[-1].body
+    start = next(i for i, node in enumerate(protected) if isinstance(node, ast.Assign)
+                 and any(isinstance(t, ast.Name) and t.id == "am" for t in node.targets))
+    stop = next(i for i, node in enumerate(protected) if isinstance(node, ast.If)
+                and ast.unparse(node.test) == "args_cli.require_all_actions")
+    block = ast.Module(body=protected[start:stop + 1], type_ignores=[])
+    for groups, names, dimension, message in (
+            ([["a"], ["b"]], ["a", "b"], 2, None),
+            ([["a"]], ["a", "b"], 1, "no action term carries"),
+            ([["a"], ["a"]], ["a"], 2, "more than one term carries"),
+            ([["a"], ["b"]], ["a", "b"], 3, "action dim")):
+        terms = {str(i): NS(_joint_names=group, _scale=.5) for i, group in enumerate(groups)}
+        manager = NS(active_terms=list(terms), get_term=terms.__getitem__, total_action_dim=dimension)
+        namespace = {"env": NS(unwrapped=NS(action_manager=manager)), "joint_names": names,
+                     "args_cli": NS(require_all_actions=True)}
+        with contextlib.redirect_stdout(io.StringIO()):
+            if message:
+                error = expect(SystemExit, exec, compile(block, "<layout-action-gate>", "exec"), namespace)
+                assert message in str(error)
+            else:
+                exec(compile(block, "<layout-action-gate>", "exec"), namespace)
+                assert namespace["joint_to_action"] == {"a": (0, .5), "b": (1, .5)}
+    mode_index = next(i for i, node in enumerate(protected) if isinstance(node, ast.If)
+                      and ast.unparse(node.test) == "args_cli.kinematics_only")
+    # No rollout can precede the early mode branch; actual forward-only behavior is also run live.
+    assert not any(isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                   and isinstance(node.func.value, ast.Name) and node.func.value.id == "env"
+                   and node.func.attr == "step"
+                   for statement in protected[:mode_index] for node in ast.walk(statement))
+
+
 def test_reachability_parent_frame_cli():
     """A front-leg parent is translated and rotated; CLI must report base_link coordinates."""
     import contextlib
