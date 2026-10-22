@@ -75,7 +75,16 @@
 写 case/摘要失败会保留已写报告；Phase 0 的提前返回也经过收尾。环境通过退出栈关闭，
 CLI 将错误码传给 Kit 原生快速关闭，控制台采用 UTF-8，避免成功写报告却丢失失败状态。
 原生进程崩溃无法执行 Python 收尾，保留的 `running` 必须视为未完成。
-当前多环境复制的已知原生故障及复验范围见事项最新验收记录；不能用单环境完成外推多环境。
+支撑入口对整个诊断网格使用 `scene.replicate_physics=False`：逐环境复制 USD 并分别解析物理，
+避开当前框架在原生复制阶段的访问冲突。所有地形列继续运行，资产和物理参数沿用目标绑定；
+实际模式保存在配置快照中。代价是场景初始化较慢，底层原生复制故障仍需跟进。
+多环境与台阶路径可用新 label 复验：
+
+```text
+<python> -B rl_exp/tools/diagnose/diagnose_support.py --headless --task Lizard2-Flat-v3 --checkpoint <existing_checkpoint.pt> --phases 0,1,2,3 --speeds 0.3 --reps 1 --label runs/support/<new_run> --work_id <active_work_id> --owner <executor> --retention_reason "<why retain this run>"
+```
+
+实际覆盖、失败对照及原生故障边界见事项最新验收记录；完成生产不代表台阶通过率合格。
 
 绑定校验在创建和读取端共用：输入、源码、身份、位置、摘要及归属不可擦空；命令首项
 必须有效，后续参数允许合法空字符串。源码采集只把绝对仓内 Python 来源当文件绑定，
