@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
+import re
 import tempfile
 
 from artifact_paths import ArtifactPaths, _relative, _unlinked, sha256_file
@@ -77,6 +78,34 @@ def _check_bindings(rows, root):
             raise ValueError(f'run binding changed or unreadable: {location}')
 
 
+def _validate_metadata(metadata, required):
+    """Apply the same ownership and binding invariants at creation and inspection."""
+    for key in ('topic', 'work_id', 'owner', 'retention_reason'):
+        if not isinstance(metadata.get(key), str) or not metadata[key].strip():
+            raise ValueError(f'missing run metadata: {key}')
+    command = metadata.get('command')
+    if (not isinstance(command, list) or not command or any(not isinstance(a, str) for a in command)
+            or not command[0].strip()):
+        raise ValueError('invalid run metadata: command')
+    for key in ('inputs', 'code'):
+        rows = metadata.get(key)
+        if not isinstance(rows, list) or not rows:
+            raise ValueError(f'missing run metadata: {key}')
+        for row in rows:
+            if (not isinstance(row, dict)
+                    or any(not isinstance(row.get(field), str) or not row[field].strip()
+                           for field in ('identity', 'location', 'sha256'))
+                    or re.fullmatch('[0-9a-f]{64}', row['sha256']) is None):
+                raise ValueError(f'invalid run binding: {key}')
+    if (not isinstance(required, list) or not required or any(not isinstance(n, str) for n in required)
+            or len(set(required)) != len(required)):
+        raise ValueError('invalid run required_outputs')
+    for name in required:
+        _relative(name)
+        if name == 'run.json':
+            raise ValueError('run.json cannot bind itself as an output')
+
+
 def _inventory(output):
     inventory = {}
     for path in sorted(output.rglob('*')):
@@ -96,11 +125,10 @@ class ArtifactRun:
         self.output, self.paths = output, paths
         relative = output.relative_to(paths.root).as_posix()
         _unlinked(paths.root, _relative(relative))
-        if not output.is_relative_to(paths.root / 'rl_exp/out'):
-            raise ValueError('diagnostic run must be under rl_exp/out')
-        for key in ('topic', 'work_id', 'owner', 'command', 'inputs', 'code', 'retention_reason'):
-            if not metadata.get(key):
-                raise ValueError(f'missing run metadata: {key}')
+        roots = (paths.root / 'rl_exp/out', paths.root / 'rl_exp/tools/diagnose/out')
+        if not any(output != root and output.is_relative_to(root) for root in roots):
+            raise ValueError('diagnostic run must be under a diagnostic output root')
+        _validate_metadata(metadata, required)
         self.relative = relative
         self.record = {'format': 1, **metadata, 'state': 'registering', 'created_utc': _now(),
                        'required_outputs': required, 'outputs': {},
@@ -171,6 +199,7 @@ def inspect_run(output: Path, paths: ArtifactPaths) -> dict:
     record = json.loads((output / 'run.json').read_text(encoding='utf-8'))
     if record.get('format') != 1 or record.get('state') != 'completed':
         raise ValueError(f'incomplete run: {record.get("state", "missing state")}')
+    _validate_metadata(record, record.get('required_outputs'))
     relative = output.relative_to(paths.root).as_posix()
     doc = json.loads(paths.index.read_text(encoding='utf-8'))
     matches = [e for e in doc['packages'] if e.get('current_location') == relative

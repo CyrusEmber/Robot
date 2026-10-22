@@ -61,22 +61,32 @@ Usage（repo 根目录）:
     ... --phases 2            # 只跑 Phase 2
     ... --video               # 录视频（AppLauncher 视口，侧视需手录）
 
-Output: rl_exp/tools/diagnose/out/<label>/ 下 per-case json + summary.md。
+Output: rl_exp/tools/diagnose/out/<label>/ 下 per-case json + summary.md + run.json。
+默认 label=runs/support/<运行编号>；显式 --label 保持旧路径用法。
+首份报告前自动登记到 artifact_index.json；失败留现场，复跑须换新 label。
 """
 
 from __future__ import annotations
 
 import argparse
+from contextlib import ExitStack
 import datetime
+import getpass
 import importlib.metadata
 import importlib.util
 import json
 import math
 import pathlib
 import sys
+import traceback
 
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_REPO_ROOT / "ablation_harness"))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from artifact_paths import ArtifactPaths, _relative, _unlinked
+from artifact_run import ArtifactRun
+sys.path.insert(0, str(_REPO_ROOT / "rl_exp/tools/verify"))
+import cfg_snapshot
 
 def _load_binding_module(name: str):
     """Load a stdlib binding module without importing the task registry."""
@@ -205,12 +215,17 @@ parser.add_argument(
     help="训练 run 的 model_*.pt（没有默认值：旧线那一版默认路径已随其日志目录退役）",
 )
 parser.add_argument("--phases", type=str, default="1,2,3", help="逗号分隔的 phase 号，如 '1,3'。")
-parser.add_argument("--heights", type=str, default="0.05,0.10,0.15,0.20", help="台阶高度 [m]。")
+parser.add_argument("--heights", type=str, default="0.05,0.10,0.15,0.20",
+                    help="台阶高度 [m]，空串仅平地；Phase 3 必须指定台阶高度。")
 parser.add_argument("--speeds", type=str, default="0.3,0.5,1.0", help="Phase 2 直行速度 [m/s]。")
 parser.add_argument("--approach", type=float, default=0.3, help="Phase 3 接近速度 [m/s]。")
 parser.add_argument("--reps", type=int, default=3, help="每个 case 的 reset 重抽样次数。")
 parser.add_argument("--base_seed", type=int, default=1000)
-parser.add_argument("--label", type=str, default=None, help="输出目录名，默认 diag_<task>_<时间戳>。")
+parser.add_argument("--label", type=str, default=None, help="输出相对目录，默认 runs/support/diag_<task>_<时间戳>。")
+parser.add_argument("--topic", default="support")
+parser.add_argument("--work_id", default="diagnostic-artifact-lifecycle")
+parser.add_argument("--owner", default=getpass.getuser())
+parser.add_argument("--retention_reason", default="Support diagnostic cases, raw series and summary.")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 simulation_app = AppLauncher(args_cli).app
@@ -903,15 +918,68 @@ def measure_check(ctx: dict, seconds: float = 4.0, zero_action: bool = False) ->
     return {**out, "target_binding": ctx["target_binding"]}
 
 
+def _cases(phases, speeds):
+    cases = []
+    if "1" in phases:
+        cases.append(Case("p1a_zero_action_5s", 5.0, (0.0, 0.0, 0.0), args_cli.base_seed + 1, "zero"))
+        cases.append(Case("p1b_policy_still_10s", 10.0, (0.0, 0.0, 0.0), args_cli.base_seed + 2, "policy"))
+    if "2" in phases:
+        for rep in range(args_cli.reps):
+            for v in speeds:
+                cases.append(Case(f"p2_flat_v{v:g}_r{rep}", 10.0, (v, 0.0, 0.0),
+                                  args_cli.base_seed + 100 + rep * 10 + int(v * 10), "policy"))
+    if "3" in phases:
+        for rep in range(args_cli.reps):
+            cases.append(Case(f"p3_steps_r{rep}", 30.0, (args_cli.approach, 0.0, 0.0),
+                              args_cli.base_seed + 500 + rep, "policy"))
+    return cases
+
+
+def _support_metadata(paths, target_binding, env_cfg, agent_cfg):
+    family = obs_protocol.family_of(args_cli.task)
+    base = _REPO_ROOT / "rl_exp"
+    target = pathlib.Path(target_binding["target"])
+    body = obs_protocol.resolve_body(target.relative_to(base).as_posix(), family, base)
+    files = {pathlib.Path(args_cli.checkpoint).resolve(), pathlib.Path(target_binding["source"]),
+             pathlib.Path(target_binding["urdf"]), target, *body["refs"]}
+    if args_cli.target_config:
+        files.add(pathlib.Path(args_cli.target_config).resolve())
+    files.update(base / "versions" / name for name in
+                 ("recipes.json", "obs_protocols.json", "obs_protocol_anchors.json", "joint_order_runtime.json"))
+    files.add(base / "versions" / family / "assets.json")
+    runtime_root = pathlib.Path(__file__).resolve().parents[3]
+    code = {pathlib.Path(module.__file__).resolve() for module in tuple(sys.modules.values())
+            if getattr(module, "__file__", None) and str(module.__file__).endswith(".py")
+            and pathlib.Path(module.__file__).is_absolute()
+            and pathlib.Path(module.__file__).resolve().is_relative_to(runtime_root)}
+    # These tables are loaded by spec and need not be present in sys.modules.
+    code.update(pathlib.Path(module.__file__).resolve() for module in (joint_names, obs_protocol)
+                if getattr(module, "__file__", None))
+    code.add(pathlib.Path(__file__).resolve())
+    return {"topic": getattr(args_cli, "topic", "support"),
+            "work_id": getattr(args_cli, "work_id", "diagnostic-artifact-lifecycle"),
+            "owner": getattr(args_cli, "owner", getpass.getuser()),
+            "retention_reason": getattr(args_cli, "retention_reason", "Support diagnostic cases and raw series."),
+            "command": ["python", "rl_exp/tools/diagnose/diagnose_support.py", *sys.argv[1:]],
+            "inputs": [paths.describe(path) for path in sorted(files)],
+            "code": [paths.describe(path) for path in sorted(code)],
+            "config": {"env": cfg_snapshot.snapshot(env_cfg), "agent": cfg_snapshot.snapshot(agent_cfg)},
+            "target_binding": target_binding}
+
+
 def main():
-    heights = [float(h) for h in args_cli.heights.split(",")]
+    heights = [float(h) for h in args_cli.heights.split(",") if h.strip()]
     phases = set(args_cli.phases.split(","))
     speeds = [float(s) for s in args_cli.speeds.split(",")]
+    if not phases or not phases <= {"0", "1", "2", "3"} or args_cli.reps < 1:
+        raise ValueError("phases must select 0/1/2/3 and reps must be positive")
+    if "3" in phases and not heights:
+        raise ValueError("Phase 3 requires a step height")
 
-    out_dir = _REPO_ROOT / "rl_exp" / "tools" / "diagnose" / "out" / (
-        args_cli.label or f"diag_{args_cli.task}_{datetime.datetime.now():%m%d_%H%M%S}"
-    )
-    out_dir.mkdir(parents=True, exist_ok=False)
+    label = args_cli.label or f"runs/support/diag_{args_cli.task}_{datetime.datetime.now():%Y%m%d_%H%M%S}"
+    out_dir = _unlinked(_REPO_ROOT, pathlib.Path("rl_exp/tools/diagnose/out") / _relative(label))
+    if out_dir.exists():
+        raise FileExistsError(17, "fresh isolated output required", str(out_dir))
 
     terrain_cfg, columns = build_terrain(heights)
     spec = gym.spec(args_cli.task)
@@ -933,7 +1001,25 @@ def main():
     # 随机 yaw 是因其 completion 方向无关；台阶通过率必须正对才可判。
     env_cfg.events.reset_base.params["pose_range"]["yaw"] = (0.0, 0.0)
 
+    agent_cfg = string_to_callable(spec.kwargs["rsl_rl_cfg_entry_point"])()
+    agent_cfg = handle_deprecated_rsl_rl_cfg(agent_cfg, importlib.metadata.version("rsl-rl-lib"))
+    agent_cfg.seed = args_cli.base_seed
+    cases = _cases(phases, speeds)
+    required = [case.name + ".json" for case in cases]
+    if "0" in phases:
+        required.append("p0_measure_check.json")
+    if phases != {"0"}:
+        required.append("summary.md")
+    paths = ArtifactPaths(storage_root=_REPO_ROOT)
+    metadata = _support_metadata(paths, target_binding, env_cfg, agent_cfg)
+    with ArtifactRun(out_dir, paths, metadata, required), ExitStack() as resources:
+        _run_session(env_cfg, agent_cfg, target_binding, naming, meshes, columns, phases, cases, out_dir, resources)
+
+
+def _run_session(env_cfg, agent_cfg, target_binding, naming, meshes, columns, phases, cases, out_dir, resources):
+
     gym_env = gym.make(args_cli.task, cfg=env_cfg)
+    resources.callback(gym_env.close)
     mbenv = gym_env.unwrapped
     wrapper = RslRlVecEnvWrapper(gym_env)
     robot = mbenv.scene["robot"]
@@ -959,9 +1045,6 @@ def main():
         center_ray = n_rays // 2
 
     # 策略：checkpoint（家族 runner cfg，同 eval.py 的加载方式）
-    agent_cfg = string_to_callable(spec.kwargs["rsl_rl_cfg_entry_point"])()
-    agent_cfg = handle_deprecated_rsl_rl_cfg(agent_cfg, importlib.metadata.version("rsl-rl-lib"))
-    agent_cfg.seed = args_cli.base_seed
     runner = OnPolicyRunner(wrapper, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
     runner.load(args_cli.checkpoint)
     policy = runner.get_inference_policy(device=device)
@@ -1017,6 +1100,7 @@ def main():
         # 零动作窗口：原版只有 ckpt 零命令 rollout（机身仍在漂移，不是静立）。
         # 真静立参照用来区分"缺额来自物理"还是"窗口没稳住"。
         mc["zero_action"] = measure_check(ctx, zero_action=True)
+        mc["run_record"] = "run.json"
         with open(out_dir / "p0_measure_check.json", "w", encoding="utf-8") as f:
             json.dump(mc, f, indent=1, ensure_ascii=False)
         print(f"[DIAG] measure check -> {out_dir / 'p0_measure_check.json'}")
@@ -1032,22 +1116,7 @@ def main():
             print(f"[DIAG] mesh min z{'_' + tag if tag else ''}: {sub['mesh_min_z_m']} "
                   f"tail_pitch_rad={sub['tail_joint_pos_rad']}")
         if phases == {"0"}:
-            gym_env.close()
             return
-
-    cases: list[Case] = []
-    if "1" in phases:
-        cases.append(Case("p1a_zero_action_5s", 5.0, (0.0, 0.0, 0.0), args_cli.base_seed + 1, "zero"))
-        cases.append(Case("p1b_policy_still_10s", 10.0, (0.0, 0.0, 0.0), args_cli.base_seed + 2, "policy"))
-    if "2" in phases:
-        for rep in range(args_cli.reps):
-            for v in speeds:
-                cases.append(Case(f"p2_flat_v{v:g}_r{rep}", 10.0, (v, 0.0, 0.0),
-                                  args_cli.base_seed + 100 + rep * 10 + int(v * 10), "policy"))
-    if "3" in phases:
-        for rep in range(args_cli.reps):
-            cases.append(Case(f"p3_steps_r{rep}", 30.0, (args_cli.approach, 0.0, 0.0),
-                              args_cli.base_seed + 500 + rep, "policy"))
 
     col_env = {name: i for i, name in enumerate(columns)}
     results: list[dict] = []
@@ -1055,7 +1124,7 @@ def main():
         print(f"[DIAG] running {case.name} ...", flush=True)
         res = run_case(case, ctx)
         rec = {"case": case.name, "cmd": case.cmd, "seed": case.seed, "stats": {},
-               "target_binding": target_binding}
+               "target_binding": target_binding, "run_record": "run.json"}
         for name, c in col_env.items():
             if case.name.startswith("p1"):
                 rec["stats"][name] = analyze_stand(res, c, ctx["step_dt"], stand_height,
@@ -1074,8 +1143,6 @@ def main():
         results.append(rec)
         show = rec["stats"].get("flat") or rec["stats"].get("down_20") or rec["stats"].get("up_20")
         print(f"[DIAG] {case.name}: {json.dumps(show, ensure_ascii=False)}")
-
-    gym_env.close()
 
     lines = [f"# v10 支撑诊断 summary（{datetime.datetime.now():%F %T}）", ""]
     p1 = [r for r in results if r["case"].startswith("p1")]
@@ -1169,6 +1236,22 @@ def main():
     print(f"[DIAG] output -> {out_dir}")
 
 
+def _run_cli():
+    for stream in (sys.stdout, sys.stderr):
+        if callable(getattr(stream, "reconfigure", None)):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+    exit_code = 0
+    try:
+        main()
+    except BaseException:
+        exit_code = 1
+        traceback.print_exc()
+        sys.stderr.flush()
+        raise
+    finally:
+        # Kit fast shutdown exits the process natively; preserve the producer error.
+        simulation_app.close(exit_code=exit_code)
+
+
 if __name__ == "__main__":
-    main()
-    simulation_app.close()
+    _run_cli()

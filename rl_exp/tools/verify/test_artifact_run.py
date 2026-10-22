@@ -241,6 +241,38 @@ class ArtifactRunTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'registration'):
             inspect_run(self.output, self.fixture.paths)
 
+    def test_inspection_rejects_erased_binding_sections(self):
+        self.call_writer()
+        path = self.output / 'run.json'
+        original = json.loads(path.read_text())
+        for sections in (('inputs',), ('code',), ('inputs', 'code')):
+            record = dict(original)
+            for section in sections:
+                record[section] = []
+            path.write_text(json.dumps(record))
+            with self.subTest(sections=sections):
+                with self.assertRaisesRegex(ValueError, 'run metadata'):
+                    inspect_run(self.output, self.fixture.paths)
+
+    def test_inspection_rejects_erased_binding_identity_and_ownership(self):
+        self.call_writer()
+        path = self.output / 'run.json'
+        original = json.loads(path.read_text())
+        for section in ('inputs', 'code'):
+            for field in ('identity', 'location', 'sha256'):
+                record = json.loads(json.dumps(original))
+                record[section][0][field] = ''
+                path.write_text(json.dumps(record))
+                with self.subTest(section=section, field=field):
+                    with self.assertRaisesRegex(ValueError, 'run binding'):
+                        inspect_run(self.output, self.fixture.paths)
+        for field in ('topic', 'work_id', 'owner', 'command', 'retention_reason'):
+            record = dict(original, **{field: ''})
+            path.write_text(json.dumps(record))
+            with self.subTest(field=field):
+                with self.assertRaisesRegex(ValueError, 'run metadata'):
+                    inspect_run(self.output, self.fixture.paths)
+
     def test_missing_initial_record_is_incomplete_and_retained(self):
         self.output.mkdir()
         with self.assertRaises(FileNotFoundError):

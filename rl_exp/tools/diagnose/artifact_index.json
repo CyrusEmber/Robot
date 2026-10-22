@@ -4051,6 +4051,42 @@
       "owner": "diagnostic-artifact-lifecycle",
       "writer_status": "see_run_manifest",
       "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/tools/diagnose/out/runs/support/lifecycle-v3-20261022",
+      "current_location": "rl_exp/tools/diagnose/out/runs/support/lifecycle-v3-20261022",
+      "run_record": "rl_exp/tools/diagnose/out/runs/support/lifecycle-v3-20261022/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/tools/diagnose/out/runs/support/lifecycle-v3-flat-20261022",
+      "current_location": "rl_exp/tools/diagnose/out/runs/support/lifecycle-v3-flat-20261022",
+      "run_record": "rl_exp/tools/diagnose/out/runs/support/lifecycle-v3-flat-20261022/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/tools/diagnose/out/runs/support/lifecycle-v3-flat-utf8-20261022",
+      "current_location": "rl_exp/tools/diagnose/out/runs/support/lifecycle-v3-flat-utf8-20261022",
+      "run_record": "rl_exp/tools/diagnose/out/runs/support/lifecycle-v3-flat-utf8-20261022/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/out/runs/local-path-view/support-drive-root-20261022-final",
+      "current_location": "rl_exp/out/runs/local-path-view/support-drive-root-20261022-final",
+      "run_record": "rl_exp/out/runs/local-path-view/support-drive-root-20261022-final/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
     }
   ]
 }
