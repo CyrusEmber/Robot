@@ -3,10 +3,10 @@ id: lizard2-candidate-wiring
 title: lizard2 候选接线与真实消费者验证
 scope: rl_exp/blender, rl_exp/tasks, rl_exp/tools, ablation_harness
 status: in_progress
-landing: rl_exp/tasks/joint_names.py, rl_exp/tools/diagnose/palm_spatial_runtime.py, rl_exp/tools/verify/obs_protocol_live.py, ablation_harness/baseline_metrics.py
-next: E 接 A 核 FK 父系口径，补布局/站姿/接触独立入口证据与旧对象回交，交 D。
+landing: rl_exp/tasks/joint_names.py, rl_exp/tools/diagnose/palm_spatial_runtime.py, rl_exp/tools/verify/obs_protocol_live.py, rl_exp/tools/verify/check_leg_reachability.py, ablation_harness/baseline_metrics.py
+next: E 补布局/站姿/接触独立入口证据，核旧 shared 消费者扩展边界及旧对象回交，交 D。
 close_when: E 自检就绪后随总项 D 由新上下文一次审核；必需链缺证不关闭。
-evidence: acceptance/records/2026-10-22-lizard2-e-nonzero-gait-collision.md, acceptance/records/2026-10-22-lizard2-e-baseline-terminal.md, acceptance/records/2026-10-22-lizard2-e-live-values-gait.md, acceptance/records/2026-10-22-lizard2-velocity-observation.md, acceptance/records/2026-10-19-lizard2-chest-standing-pd.md, acceptance/records/2026-10-19-lizard2-loaded-standing.md, acceptance/records/2026-10-19-lizard2-spatial-small-tracking.md, acceptance/records/2026-10-19-lizard2-spatial-inertia-repair.md, acceptance/records/2026-10-16-lizard2-candidate-doc-organization.md, acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md, acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md, acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory.md
+evidence: acceptance/records/2026-10-22-lizard2-e-fk-parent-frame.md, acceptance/records/2026-10-22-lizard2-e-nonzero-gait-collision.md, acceptance/records/2026-10-22-lizard2-e-baseline-terminal.md, acceptance/records/2026-10-22-lizard2-e-live-values-gait.md, acceptance/records/2026-10-22-lizard2-velocity-observation.md, acceptance/records/2026-10-19-lizard2-chest-standing-pd.md, acceptance/records/2026-10-19-lizard2-loaded-standing.md, acceptance/records/2026-10-19-lizard2-spatial-small-tracking.md, acceptance/records/2026-10-19-lizard2-spatial-inertia-repair.md, acceptance/records/2026-10-16-lizard2-candidate-doc-organization.md, acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md, acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md, acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory.md
 ---
 
 ## 当前范围
@@ -112,14 +112,12 @@ E 当前重点是补齐实际 `palm_spatial` 候选的完整消费链。已有�
 | **新隔离输入的动力学接续** | 新导出身份、USD、主轴及 reset 切片取[新输入验收](../../acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md#追加新正式导出身份接入隔离-usd-与真实消费者2026-10-20)；新输入两姿态固定基惯量取[当前复验](../../acceptance/records/2026-10-19-lizard2-spatial-inertia-repair.md#新正式导出输入的运行时惯量复验2026-10-20)，全部关节 backend 目标/小幅实体响应取[当前跟踪切片](../../acceptance/records/2026-10-19-lizard2-spatial-small-tracking.md#新导出输入全部关节小幅驱动复验2026-10-20)，B/C 接组合与已知载荷，源／转换/约束设置有变再局部重验 | A 维护正式 URDF 源；原检查点保护不删除，不混用旧 USD 或旧动力学判词 |
 | **受控驱动工况接续** | 全部关节 backend 目标、实际小幅角度与有符号 actor 随动取当前跟踪切片；B/C 接适度组合、已知载荷保持/跟踪及有效边界。小幅无重力通过不升级受载、实际力矩或限速行为；不重建手工控制器 | 接新跟踪输入与工况；载荷/支撑及停止预算核验后执行，不拼接旧 USD 结论 |
 | **在线足端声明与旧对象回交** | 新输入实际 collider/owner、末端传感器及具名接触正反例取新输入验收；新输入独立在线布局与非空四足端分支取[前置验收](../../acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md#追加新输入运行时惯量与独立在线观测前置2026-10-20)，非零 obs 切片及训练一致 false 的复用限制取[本轮记录](../../acceptance/records/2026-10-22-lizard2-velocity-observation.md)；旧资产 cap/contact ownership 缺口由 `floor-contact-attribution` 按原对象回交 | 已验接触切片不升级全 ROM；阻塞需注明对象，不能混用旧资产与新候选判词 |
-| **其余报告消费者与终止分支** | baseline 人工 timeout 与非零记录取[终止切片](../../acceptance/records/2026-10-22-lizard2-e-baseline-terminal.md)，非零 gait 写读/绘图、碰撞构姿修补及 E3 清点取[当前记录](../../acceptance/records/2026-10-22-lizard2-e-nonzero-gait-collision.md)。布局/站姿/接触独立入口、FK 父系口径及旧对象回交仍需补证；不外推自然超时、跌倒或全部非零接触量 | 原始记录完整性与展示选列分开核对；字段/评测语义交接触协议项，不改写历史协议 |
+| **其余报告消费者与终止分支** | baseline 人工 timeout 与非零记录取[终止切片](../../acceptance/records/2026-10-22-lizard2-e-baseline-terminal.md)，非零 gait 写读/绘图、碰撞构姿修补及 E3 清点取[当前记录](../../acceptance/records/2026-10-22-lizard2-e-nonzero-gait-collision.md)，FK 父系组合与轴读数取[父系核对](../../acceptance/records/2026-10-22-lizard2-e-fk-parent-frame.md)。布局/站姿/接触独立入口、旧 shared 消费者扩展边界及旧对象回交仍需补证；不外推自然超时、跌倒或全部非零接触量 | 原始记录完整性与展示选列分开核对；字段/评测语义交接触协议项，不改写历史协议 |
 | **完整出口核对** | 对照 E3 清点每条必需链的真实输入、消费者、正反例、复读命令及未完项；补受影响的旧基线回归。按 E4 分段交接，完整出口需所有必需链有证据，最终随 D 独立审核 | 不等学习策略步态/协调性能才交接口；声明载荷下默认驱动安全验证仍由 B 交付，不以离线套件通过替代新候选运行证据 |
 
 **当前并行切片**：按本表引用的实测 manifest 与工况接续，已验切片只补变化/缺证，不混用旧 USD、不删 pin。A 维护源件；B/C 接组合/载荷，E 接剩余消费者，D 最终审核，S6 验学习策略协调。诊断必须独立显式配置，不当正式 v3；输出用新目录，中间结果不自动外推。
 
-**本轮共用文件归属**：`lizard2_palm_spatial_candidate.py`、`generate_urdf.py`、`lizard2_stance_candidate.py`、`joint_names.py`、`palm_spatial_probe.py` 与 FK/碰撞核心由 A/各原执行者维护，E 不同时修改。E 将读回异常交限位 PD 专项步骤 3/4 归因，不借接线改网格或正式驱动；本轮用户授权的具名过滤只写记录绑定的隔离副本，集合与适用边界取同一证据。真实末端归属和旧资产解除证据继续按本表各自回交。
-
-**文件与交接边界**：开始前明确骨架生成器、名表、FK/碰撞核心等共用文件的修改归属，避免 A/E 同时写同一实现。A 交接时说明树、轴、零位、网格/惯量或命名哪些改变；E 据此复验对应链。真实失败回责任节，保持获准阈值和正式资产不变。运行时接线归 E；几何、碰撞、导出与接触 cap 有效性未完动作仍按原项回交，默认承重 PD 归 B，通道与默认驱动归 C，D 审训练前集成。几何采样不升级为手工步态门槛，躯尾协调和完整步态性能交 `work/active/lizard2-family-landing.md` S6，不能在 E/D 提前判通过。
+**共用文件与交接**：`lizard2_palm_spatial_candidate.py`、`generate_urdf.py`、`lizard2_stance_candidate.py`、`joint_names.py`、`palm_spatial_probe.py` 由 A/各原执行者维护，E 不同时修改；无并行差异的 FK 父系/轴读数及碰撞构姿切片由 E 承接，落点取上述记录。后续共用文件仍先明确归属；A 说明树、轴、零位、网格/惯量或命名的变更，E 复验受影响链。读回异常交限位 PD 专项步骤 3/4，真实失败按本表原责任回交，保持获准阈值、正式资产与驱动不变。用户授权的具名过滤只写证据绑定的隔离副本。几何/导出、接触 cap 与旧资产解除仍按本表回交；B/C/D/S6 分工及非手工步态门槛按上文，不在 E/D 提前判学习策略性能通过。
 
 
 ## 关闭条件
