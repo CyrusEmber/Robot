@@ -28,6 +28,8 @@ The slider uses shared hip/haa/hfe/kfe/foot columns. palm/palm_spatial require a
 separate bound UI. Saved poses carry a URDF digest and joint names; loading checks
 them against the selected target. Historical files without binding retain their
 legacy unverified reading, with any declared URDF still checked for a mismatch.
+Body-frame drawing and derivatives compose each chain parent's rest transform;
+upstream joints are held at zero.
 
 The view is yours to keep. Left or middle drag rotates the whole scene -- the axes box and its ticks
 *are* the coordinate system here, so they turn with it -- and the right button zooms. There is no
@@ -67,6 +69,7 @@ from rl_exp.tools.verify.check_leg_reachability import (  # noqa: E402
     DEFAULT_URDF,
     LEGS,
     chain_joint_names,
+    chain_parent_transform,
     joint_effect,
     load_chain,
     pad_faces,
@@ -241,6 +244,7 @@ def build(args, show: bool = True):
     from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
     chains = {leg: load_chain(args.urdf, leg) for leg in LEGS}
+    parents = {leg: chain_parent_transform(args.urdf, leg) for leg in LEGS}
     normals = {leg: pad_normal_in_link(args.urdf, leg) for leg in LEGS}
     vertices = {leg: pad_vertices(args.urdf, leg) for leg in LEGS}
     faces = {leg: pad_faces(args.urdf, leg) for leg in LEGS}
@@ -252,7 +256,8 @@ def build(args, show: bool = True):
         angles, base_z, free = read_pose(args.load, args.base_z, urdf=args.urdf)
 
     state = {"active": None, "note": "", "silent": False, "drawn": False}
-    zero = {leg: pad_state(chains[leg], [0.0] * len(CHAIN), normals[leg], vertices[leg], base_z)["position"]
+    zero = {leg: pad_state(chains[leg], [0.0] * len(CHAIN), normals[leg], vertices[leg], base_z,
+                          parent_transform=parents[leg])["position"]
             for leg in LEGS}
 
     fig = plt.figure(figsize=(16.0, 10.0))
@@ -278,7 +283,8 @@ def build(args, show: bool = True):
 
     def leg_lines(leg: str) -> list[str]:
         """The readout for one leg: tilt, clearance, where the pad is, and how legal the pose is."""
-        posed = pad_state(chains[leg], angles[leg], normals[leg], vertices[leg], base_z)
+        posed = pad_state(chains[leg], angles[leg], normals[leg], vertices[leg], base_z,
+                          parent_transform=parents[leg])
         position = posed["position"]
         flag = "  PENETRATES" if posed["lowest_z"] < -1e-4 else ""
         return [
@@ -295,7 +301,8 @@ def build(args, show: bool = True):
         if state["active"] is None:
             return "touch a slider: its axis and what it does to the pad are read out here"
         leg, index = state["active"]
-        dp, dn, axis, dtilt = joint_effect(chains[leg], angles[leg], index, normals[leg], vertices[leg])
+        dp, dn, axis, dtilt = joint_effect(chains[leg], angles[leg], index, normals[leg], vertices[leg],
+                                          parent_transform=parents[leg])
         rate = _norm(dn)
         if rate < 1e-9:
             rotation = "pad does not rotate (it translates only)"
@@ -327,7 +334,8 @@ def build(args, show: bool = True):
             ax.plot([offset, offset], [-0.9, 0.9], [floor, floor], color="0.75", lw=0.5)
         hips = []
         for leg in LEGS:
-            posed = pad_state(chains[leg], angles[leg], normals[leg], vertices[leg], base_z)
+            posed = pad_state(chains[leg], angles[leg], normals[leg], vertices[leg], base_z,
+                              parent_transform=parents[leg])
             frames = posed["frames"]
             pivots = [[frames[k][i][3] for i in range(3)] for k in range(1, len(CHAIN) + 1)]
             hips.append(pivots[0])

@@ -758,10 +758,12 @@ def hinge_vs_body_z(chain: list[dict], angles: list[float], index: int, *,
 
 
 def joint_effect(chain: list[dict], angles: list[float], index: int, normal: list[float],
-                 vertices: list[list[float]], eps: float = 1e-5):
+                 vertices: list[list[float]], eps: float = 1e-5, *,
+                 parent_transform: list[list[float]] | None = None):
     """How joint ``index`` moves the pad, per radian, at these angles.
 
-    Returns ``(dp/dq, dn/dq, axis, d_tilt/dq)`` in the chain-parent frame, with the tilt
+    Returns ``(dp/dq, dn/dq, axis, d_tilt/dq)`` in the chain-parent frame (or the
+    supplied parent transform's reference frame), with the tilt
     derivative in deg/rad. ``dn/dq`` is the unit normal's derivative per radian, not the rotation
     axis: it vanishes when the normal is parallel to that axis. ``axis`` is the unit joint axis,
     including the joint's own origin/rpy rotation. These distinguish rotation from translation
@@ -773,8 +775,8 @@ def joint_effect(chain: list[dict], angles: list[float], index: int, normal: lis
     plus, minus = list(angles), list(angles)
     plus[index] += eps
     minus[index] -= eps
-    high = pad_state(chain, plus, normal, vertices, 0.0)
-    low = pad_state(chain, minus, normal, vertices, 0.0)
+    high = pad_state(chain, plus, normal, vertices, 0.0, parent_transform=parent_transform)
+    low = pad_state(chain, minus, normal, vertices, 0.0, parent_transform=parent_transform)
     dp = [(high["position"][i] - low["position"][i]) / (2 * eps) for i in range(3)]
     dn = [(high["normal"][i] - low["normal"][i]) / (2 * eps) for i in range(3)]
     d_tilt = (high["tilt_deg"] - low["tilt_deg"]) / (2 * eps)

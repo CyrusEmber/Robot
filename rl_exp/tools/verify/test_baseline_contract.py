@@ -2537,6 +2537,29 @@ def test_shared_fitter_reaches_its_fk_control():
     assert error <= .002, error  # Existing self-check tolerance [m], unchanged.
 
 
+def test_shared_slider_zero_is_in_base_frame():
+    import xml.etree.ElementTree as ET
+    from rl_exp.tools.diagnose import pose_slider as slider
+    from rl_exp.tools.verify import check_self_collision as collision
+
+    tree = ast.parse(pathlib.Path(slider.__file__).read_text(encoding="utf-8"))
+    build = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "build")
+    def assigns(node, name):
+        return isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == name for t in node.targets)
+    start = next(i for i, n in enumerate(build.body) if assigns(n, "chains"))
+    stop = next(i for i, n in enumerate(build.body) if assigns(n, "zero")) + 1
+    namespace = dict(vars(slider))
+    namespace['args'] = NS(urdf=slider.DEFAULT_URDF, base_z=.9253, free=False, load=None)
+    exec(compile(ast.Module(body=build.body[start:stop], type_ignores=[]), '<slider-setup>', 'exec'), namespace)
+    model = collision.load_urdf(slider.DEFAULT_URDF)
+    assert all(all(float(value) == 0. for value in joint.find('origin').get('rpy', '0 0 0').split())
+               for joint in ET.parse(slider.DEFAULT_URDF).getroot().findall('joint') if joint.find('origin') is not None)
+    for leg in slider.LEGS:
+        full = collision.fk(model['joints'], leg + '_foot', {})
+        expected = [full[i][3] for i in range(3)]
+        assert max(abs(a-b) for a,b in zip(namespace['zero'][leg], expected)) < 1e-10, leg
+
+
 def test_shared_fitter_rejects_before_derivation():
     import contextlib
     import io
@@ -2956,6 +2979,16 @@ def test_reachability_joint_effect_axis_own_rpy():
     assert max(abs(a - b) for a, b in zip(axis, [0., 0., 1.])) < 1e-12
     assert dp == [0., 0., 0.]
     assert max(abs(a - b) for a, b in zip(dn, [-1., 0., 0.])) < 1e-9
+    chain = [{'origin': [0., 0., 0.], 'axis': [0., 1., 0.]},
+             {'origin': [1., 0., 0.], 'axis': [0., 0., 1.]}]
+    parent = reach._matrix([1., 2., 3.], [0., 0., 1.], math.pi / 2)
+    angle = .3
+    dp, dn, axis, tilt = reach.joint_effect(chain, [angle, 0.], 0, [0., 0., 1.], [[0., 0., 0.]],
+                                           parent_transform=parent)
+    assert max(abs(a-b) for a,b in zip(dp, [0., -math.sin(angle), -math.cos(angle)])) < 1e-8
+    assert max(abs(a-b) for a,b in zip(dn, [0., math.cos(angle), -math.sin(angle)])) < 1e-8
+    assert max(abs(a-b) for a,b in zip(axis, [-1., 0., 0.])) < 1e-10
+    assert abs(tilt + math.degrees(1.)) < 1e-7  # Upward normal's angle to down decreases.
 
 
 def main():

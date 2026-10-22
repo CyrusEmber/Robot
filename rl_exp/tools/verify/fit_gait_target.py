@@ -47,6 +47,9 @@ evidence about the structure.
 This legacy solver uses the shared hip/haa/hfe/kfe/foot roles, including its explicit
 inserted-axis fixture. palm/palm_spatial inputs require their own bound solver;
 shared chain validation runs before any scaled copy is written.
+Coordinates are the selected leg chain's parent frame; the default hind-leg
+target's parent is base_link. A front-leg override does not silently compose
+the chest transform into this legacy target definition.
 
 Usage:
 
@@ -99,7 +102,7 @@ def joint_velocity_limits(urdf: pathlib.Path) -> dict[str, float]:
 
 
 def zero_pose(urdf: pathlib.Path, leg: str, base_z: float):
-    """The leg's standing pose: what target offsets are relative to, and what excursion is priced from."""
+    """Standing reference in the chain-parent frame [m], used for the target's relative offsets."""
     chain = K.load_chain(urdf, leg)
     normal = K.pad_normal_in_link(urdf, leg)
     vertices = K.pad_vertices(urdf, leg)
@@ -175,6 +178,11 @@ def _clipped(chain, angles):
     return [min(max(angles[i], chain[i]["limits"][0]), chain[i]["limits"][1]) for i in range(len(chain))]
 
 
+def _worst_terms(terms: list[float]) -> float:
+    """Worst normalised violation with the existing sum tie-break."""
+    return max(terms) + 1e-9 * sum(terms)
+
+
 def _minimax(chain, angles, normal, vertices, base_z, phase, target, point, facing_required) -> float:
     """The worst single normalised violation, with the sum as a tie-break: the anti-compensation score.
 
@@ -183,7 +191,7 @@ def _minimax(chain, angles, normal, vertices, base_z, phase, target, point, faci
     that comes out is the one with the least excuse rather than the best average.
     """
     read = residuals(chain, angles, normal, vertices, base_z, phase, target, point, facing_required)
-    return max(read["terms"]) + 1e-9 * sum(read["terms"])
+    return _worst_terms(read["terms"])
 
 
 def solve(chain, normal, vertices, base_z, phase, target, point, facing_required, seed, samples=9, sweeps=25):
@@ -195,10 +203,20 @@ def solve(chain, normal, vertices, base_z, phase, target, point, facing_required
 
     Two passes, and the second is the one that matters for a verdict: the first minimises the sum of
     normalised terms, the second minimises the largest one, starting from the first pass's answer.
+    Geometry, target and phase stay fixed during this call, so repeated angle tuples
+    reuse their two scalar scores. The cache is local to this solve.
     """
+    scores = {}
+
+    def evaluate(angles):
+        key = tuple(angles)
+        if key not in scores:
+            read = residuals(chain, angles, normal, vertices, base_z, phase, target, point, facing_required)
+            scores[key] = (read["cost"], _worst_terms(read["terms"]))
+        return scores[key]
+
     best = _clipped(chain, list(seed))
-    best_cost = residuals(chain, best, normal, vertices, base_z, phase, target, point,
-                          facing_required)["cost"]
+    best_cost = evaluate(best)[0]
 
     def descend(score_of, current, current_score):
         best_here, best_score = current, current_score
@@ -221,11 +239,10 @@ def solve(chain, normal, vertices, base_z, phase, target, point, facing_required
         return best_here, best_score
 
     def cost_of(angles):
-        return residuals(chain, angles, normal, vertices, base_z, phase, target, point,
-                         facing_required)["cost"]
+        return evaluate(angles)[0]
 
     def worst_of(angles):
-        return _minimax(chain, angles, normal, vertices, base_z, phase, target, point, facing_required)
+        return evaluate(angles)[1]
 
     best, best_cost = descend(cost_of, best, best_cost)
     # The minimax pass starts from the seed as well as from the sum's answer, and the better worst-term
@@ -638,9 +655,12 @@ def main() -> None:
         low, high = (float(value) for value in args.posture_azim.split(":"))
         target["posture"].update({"femur_azim_min_deg": low, "femur_azim_max_deg": high})
     leg = args.leg or target["meta"]["leg"]
-    K.chain_joint_names(args.urdf, leg)
+    chain_names = K.chain_joint_names(args.urdf, leg)
     if args.candidate_b is not None:
         K.chain_joint_names(args.candidate_b, leg)
+    parent = next(joint.find('parent').get('link') for joint in ET.parse(args.urdf).getroot().findall('joint')
+                  if joint.get('name') == chain_names[0])
+    print(f"coordinates: {parent} (leg chain parent); body height is this frame's height")
     if args.scale:
         scales = {token: float(factor) for token, factor in
                   (cell.split("=") for cell in args.scale.split(","))}
