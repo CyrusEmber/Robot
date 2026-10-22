@@ -33,6 +33,7 @@ sys.path.insert(0, str(_TOOL.parents[1] / "verify"))
 from artifact_paths import ArtifactPaths, _relative, _unlinked
 from artifact_run import ArtifactRun, inspect_run
 import cfg_snapshot
+import support_native_ab
 
 
 @dataclass(init=False)
@@ -429,6 +430,161 @@ class OutputTest(unittest.TestCase):
             "foot_load_frac": "[0.5, 0.6, 0.7, 0.8]", "ΣF_body/mg": "19.1", "非足top3": "",
             "neck_frac": "20.2", "belly_frac": "21.3", "ledger": '{"term": 22.4}'})
         self.assertEqual(inspect_run(self.out, ArtifactPaths(self.index, self.repo))["state"], "completed")
+
+
+class NativeAbTest(unittest.TestCase):
+    def test_archived_binding_survives_live_source_change_but_rejects_wrong_snapshot(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory)
+            executable, snapshot = repo / "driver.py", repo / "archived.py"
+            executable.write_bytes(b"exact executed bytes")
+            snapshot.write_bytes(executable.read_bytes())
+            rows = [{"identity": str(executable), "sha256": sha256_file(executable)}]
+            with patch.object(support_native_ab, "REPO", repo):
+                snapshot.write_bytes(b"wrong bytes")
+                with self.assertRaisesRegex(ValueError, "differs from archived source"):
+                    support_native_ab._archive_binding(rows, executable, snapshot)
+                snapshot.write_bytes(executable.read_bytes())
+                support_native_ab._archive_binding(rows, executable, snapshot)
+                executable.write_bytes(b"later implementation")
+                support_native_ab._check_bindings(rows, repo)
+                self.assertEqual(rows[0]["identity"], str(executable))
+
+    def test_inspect_reclassifies_verified_evidence_without_rewriting_it(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory)
+            index = repo / "rl_exp/tools/diagnose/artifact_index.json"
+            index.parent.mkdir(parents=True)
+            index.write_text(json.dumps({"format": 1, "packages": []}))
+            source = repo / "driver.py"
+            source.write_bytes(b"bound driver")
+            paths = ArtifactPaths(index, repo)
+            binding = paths.describe(source)
+            root = repo / "rl_exp/tools/diagnose/out/runs/ab"
+            metadata = {"topic": "support-native-ab", "work_id": "fixture", "owner": "fixture",
+                        "retention_reason": "actual native failure", "command": [sys.executable],
+                        "inputs": [binding], "code": [binding]}
+            with ArtifactRun(root, paths, metadata, ["report.json"]):
+                log = root / "pair3-before.log"
+                log.write_text('Windows fatal exception: code 0xc0000374\n'
+                               'physx_replicate.py", line 102 in attach_end_fn\n')
+                (root / "report.json").write_text(json.dumps({"versions": {"before": {}}, "results": [{
+                    "pair": 3, "variant": "before", "outcome": "incomplete", "returncode": 3221226356,
+                    "forced_stop": None, "log": log.name, "log_sha256": sha256_file(log),
+                    "measurement_sha256": None}]}))
+            before = {p: p.read_bytes() for p in root.rglob("*") if p.is_file()}
+            with patch.object(support_native_ab, "REPO", repo):
+                review = support_native_ab.inspect_results(root)
+                row = review["results"][0]
+                self.assertEqual((row["reported_outcome"], row["reviewed_outcome"], row["exit_hex"]),
+                                 ("incomplete", "native_failure", "0xc0000374"))
+                self.assertTrue(row["native_replication_frame"])
+                self.assertEqual({p: p.read_bytes() for p in before}, before)
+                log.write_text("changed log")
+                with self.assertRaises(ValueError):
+                    support_native_ab.inspect_results(root)
+
+    def test_observed_heap_corruption_after_replication_is_a_native_failure(self):
+        # Local reporter pair3-before: access violation followed by 0xc0000374.
+        native_log = ('Windows fatal exception: access violation\n'
+                      'physx_replicate.py", line 102 in attach_end_fn\n'
+                      'Windows fatal exception: code 0xc0000374\n')
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertEqual(support_native_ab._classify(
+                3221226356, native_log, Path(directory) / "missing.json", None), "native_failure")
+
+    def test_local_reporter_requires_all_four_effective_settings(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            values = {"/crashreporter/enabled": True, "/crashreporter/url": "",
+                      "/crashreporter/skipOldDumpUpload": True, "/app/uploadDumpsOnStartup": False}
+
+            def launch(*args, **kwargs):
+                (root / "reporter_check.json").write_text(json.dumps(values))
+                return NS(poll=lambda: 0, returncode=0, wait=lambda **kwargs: 0)
+
+            with patch.object(support_native_ab.subprocess, "Popen", side_effect=launch):
+                self.assertEqual(support_native_ab._reporter_check(root, {}, ""), values)
+                for setting, invalid in (("/crashreporter/enabled", False), ("/crashreporter/url", "upload"),
+                                         ("/crashreporter/skipOldDumpUpload", False),
+                                         ("/app/uploadDumpsOnStartup", True)):
+                    with self.subTest(setting=setting):
+                        original = values[setting]
+                        values[setting] = invalid
+                        with self.assertRaisesRegex(ValueError, "restrictions did not take effect"):
+                            support_native_ab._reporter_check(root, {}, "")
+                        values[setting] = original
+
+    def test_masked_failure_native_exit_and_missing_measurement_are_not_success(self):
+        with tempfile.TemporaryDirectory() as directory:
+            measurement = Path(directory) / "p0.json"
+            classify = support_native_ab._classify
+            self.assertEqual(classify(0, "", measurement, None), "incomplete")
+            measurement.write_text(json.dumps({"zero_action": {}, "target_binding": {}}))
+            self.assertEqual(classify(0, "", measurement, None), "completed")
+            self.assertEqual(classify(0, "Windows fatal exception: access violation", measurement, None),
+                             "completed_with_native_exception_log")
+            self.assertEqual(classify(0, "Traceback (most recent call last):", measurement, None), "python_failure")
+            self.assertEqual(classify(-1073741819, "", measurement, None), "native_access_violation")
+            self.assertEqual(classify(1, "Windows fatal exception: access violation", measurement,
+                                      "deadline"), "native_exception_timeout")
+            self.assertEqual(classify(1, "", measurement, "deadline"), "timeout")
+
+    def test_environment_comparison_detects_changes_despite_agent_construction_order(self):
+        before = b'''def main():
+    out_dir = "old"
+    terrain_cfg, columns = build_terrain(heights)
+    env_cfg.scene.num_envs = len(columns)
+    gym_env = gym.make(task, cfg=env_cfg)
+    agent_cfg = AgentCfg()
+'''
+        after = before.replace(b'"old"', b'"new"').replace(
+            b'    gym_env = gym.make(task, cfg=env_cfg)\n    agent_cfg = AgentCfg()',
+            b'    agent_cfg = AgentCfg()\n    gym_env = gym.make(task, cfg=env_cfg)')
+        compare = support_native_ab._environment_setup
+        self.assertEqual(compare(before), compare(after))
+        self.assertNotEqual(compare(before), compare(after.replace(b'len(columns)', b'1')))
+
+    def test_trial_applies_no_upload_controls_and_preserves_actual_source_binding(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory)
+            root = repo / "rl_exp/tools/diagnose/out/runs/ab"
+            root.mkdir(parents=True)
+            snapshot = root / "source.py"
+            snapshot.write_bytes(b"historical source")
+            executable = repo / "rl_exp/tools/diagnose/_tmp_fixture.py"
+            executable.write_bytes(snapshot.read_bytes())
+            captured = {}
+
+            def launch(command, **kwargs):
+                captured.update(command=command, environment=kwargs["env"])
+                case = root / "cases/pair0-after"
+                case.mkdir(parents=True)
+                (case / "p0_measure_check.json").write_text(
+                    json.dumps({"zero_action": {}, "target_binding": {}}))
+                (case / "run.json").write_text(json.dumps({
+                    "config": {"env": {"scene": {"replicate_physics": True}}},
+                    "code": [{"identity": str(executable), "sha256": sha256_file(snapshot)}],
+                    "command": ["python", "wrong-live-source"]}))
+                return NS(poll=lambda: 0, returncode=0)
+
+            with patch.object(support_native_ab, "REPO", repo), \
+                    patch.object(support_native_ab, "venv_python", return_value="configured-python"), \
+                    patch.object(support_native_ab.subprocess, "Popen", side_effect=launch), \
+                    redirect_stdout(io.StringIO()):
+                result = support_native_ab._trial(root, "after", 0, 7, snapshot, executable,
+                                                 {"rows": [], "checkpoint": "checkpoint.pt"}, 30)
+            self.assertEqual(result["outcome"], "completed")
+            self.assertEqual(captured["environment"]["OMNI_CRASHREPORTER_ENABLED"], "0")
+            self.assertEqual(captured["environment"]["OMNI_CRASHREPORTER_SKIPOLDDUMPUPLOAD"], "1")
+            self.assertEqual(captured["environment"]["PYTHONHASHSEED"], "7")
+            self.assertEqual(captured["command"][0], "configured-python")
+            kit_args = captured["command"][captured["command"].index("--kit_args") + 1]
+            self.assertIn("--/app/uploadDumpsOnStartup=false", kit_args)
+            record = json.loads((root / "cases/pair0-after/run.json").read_text())
+            self.assertEqual(record["command"], captured["command"])
+            self.assertEqual(record["code"][0]["location"], snapshot.relative_to(repo).as_posix())
+            self.assertEqual(record["comparison"]["restore_script_to"], str(executable))
 
 
 if __name__ == "__main__":

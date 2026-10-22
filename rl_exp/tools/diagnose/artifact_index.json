@@ -4150,6 +4150,96 @@
       "owner": "diagnostic-artifact-lifecycle",
       "writer_status": "see_run_manifest",
       "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/tools/diagnose/out/runs/support-native-ab/20261022-paired",
+      "current_location": "rl_exp/tools/diagnose/out/runs/support-native-ab/20261022-paired",
+      "run_record": "rl_exp/tools/diagnose/out/runs/support-native-ab/20261022-paired/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/tools/diagnose/out/runs/support-native-ab/20261022-paired/cases/pair0-after",
+      "current_location": "rl_exp/tools/diagnose/out/runs/support-native-ab/20261022-paired/cases/pair0-after",
+      "run_record": "rl_exp/tools/diagnose/out/runs/support-native-ab/20261022-paired/cases/pair0-after/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/tools/diagnose/out/runs/support-native-ab/20261022-paired/cases/pair1-after",
+      "current_location": "rl_exp/tools/diagnose/out/runs/support-native-ab/20261022-paired/cases/pair1-after",
+      "run_record": "rl_exp/tools/diagnose/out/runs/support-native-ab/20261022-paired/cases/pair1-after/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/tools/diagnose/out/runs/support-native-ab/20261022-paired/cases/pair2-after",
+      "current_location": "rl_exp/tools/diagnose/out/runs/support-native-ab/20261022-paired/cases/pair2-after",
+      "run_record": "rl_exp/tools/diagnose/out/runs/support-native-ab/20261022-paired/cases/pair2-after/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/tools/diagnose/out/runs/support-native-ab/20261022-paired/cases/pair3-after",
+      "current_location": "rl_exp/tools/diagnose/out/runs/support-native-ab/20261022-paired/cases/pair3-after",
+      "run_record": "rl_exp/tools/diagnose/out/runs/support-native-ab/20261022-paired/cases/pair3-after/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/tools/diagnose/out/runs/support-native-ab/20261022-local-reporter",
+      "current_location": "rl_exp/tools/diagnose/out/runs/support-native-ab/20261022-local-reporter",
+      "run_record": "rl_exp/tools/diagnose/out/runs/support-native-ab/20261022-local-reporter/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/tools/diagnose/out/runs/support-native-ab/20261022-local-reporter/cases/pair0-after",
+      "current_location": "rl_exp/tools/diagnose/out/runs/support-native-ab/20261022-local-reporter/cases/pair0-after",
+      "run_record": "rl_exp/tools/diagnose/out/runs/support-native-ab/20261022-local-reporter/cases/pair0-after/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/tools/diagnose/out/runs/support-native-ab/20261022-local-reporter/cases/pair1-after",
+      "current_location": "rl_exp/tools/diagnose/out/runs/support-native-ab/20261022-local-reporter/cases/pair1-after",
+      "run_record": "rl_exp/tools/diagnose/out/runs/support-native-ab/20261022-local-reporter/cases/pair1-after/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/tools/diagnose/out/runs/support-native-ab/20261022-local-reporter/cases/pair2-after",
+      "current_location": "rl_exp/tools/diagnose/out/runs/support-native-ab/20261022-local-reporter/cases/pair2-after",
+      "run_record": "rl_exp/tools/diagnose/out/runs/support-native-ab/20261022-local-reporter/cases/pair2-after/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
+    },
+    {
+      "logical_root": "rl_exp/tools/diagnose/out/runs/support-native-ab/20261022-local-reporter/cases/pair3-after",
+      "current_location": "rl_exp/tools/diagnose/out/runs/support-native-ab/20261022-local-reporter/cases/pair3-after",
+      "run_record": "rl_exp/tools/diagnose/out/runs/support-native-ab/20261022-local-reporter/cases/pair3-after/run.json",
+      "classification": "producer_run",
+      "owner": "diagnostic-artifact-lifecycle",
+      "writer_status": "see_run_manifest",
+      "storage": "local_single_copy_no_backup"
     }
   ]
 }
