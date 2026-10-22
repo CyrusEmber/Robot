@@ -1,12 +1,12 @@
 ---
 id: floor-contact-attribution
 title: 地面接触归属：谁在滑、谁在牵引、穿透容忍度
-scope: rl_exp/tools/diagnose, rl_exp/assets
+scope: rl_exp/tools/diagnose, rl_exp/tools/verify, rl_exp/assets, rl_exp/versions/lizard2/main
 status: in_progress
-landing: rl_exp/tools/diagnose/diagnose_support.py, rl_exp/tools/diagnose/diag_metrics.py, ablation_harness/protocols/baseline_flat_v2.json
+landing: rl_exp/versions/lizard2/main/main_params.yaml, rl_exp/tools/verify/check_recipe_build.py, rl_exp/tools/diagnose/diagnose_support.py, rl_exp/tools/diagnose/diag_metrics.py, ablation_harness/protocols/baseline_flat_v2.json
 next: E 核旧对象回交边界；接触执行者接续地面力、速度与穿透对照。
 close_when: 新上下文按正文关闭条件审核接触测量、穿透容忍度与旧对象回交；缺口保留在办。
-evidence: acceptance/records/2026-10-22-lizard2-e-legacy-contact.md, acceptance/records/2026-10-22-lizard2-e-legacy-exit.md, acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md, acceptance/records/2026-09-21-baseline-eval-measurement-contract.md, acceptance/records/2026-09-23-lizard2-v1-gait-skate.md
+evidence: acceptance/records/2026-10-22-lizard2-dev-contact-selection.md, acceptance/records/2026-10-22-lizard2-e-legacy-contact.md, acceptance/records/2026-10-22-lizard2-e-legacy-exit.md, acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md, acceptance/records/2026-09-21-baseline-eval-measurement-contract.md, acceptance/records/2026-09-23-lizard2-v1-gait-skate.md
 ---
 
 ## 当前范围
@@ -18,7 +18,7 @@ evidence: acceptance/records/2026-10-22-lizard2-e-legacy-contact.md, acceptance/
 ## 下一步
 
 1. E 对照原对象回交与出口表核定 cap 校准身份、原失败、实际入口、collider/处罚集合及具名地面过滤证据；确认所需消费者使用记录绑定的隔离配置，仍按 E/D 流程独立审核。
-2. 正式旧配方的空处罚项保持具名问题，后续正式采用须按版本规则迁移；如需证明非足端处罚实际触发，再安排同资产、同配方边界下的受控接触，不把足端载荷外推该能力。
+2. 后续正式版本采用时承接[开发选择修正](../../acceptance/records/2026-10-22-lizard2-dev-contact-selection.md)，按版本规则接入，不把开发构建当作正式任务已迁移；如需证明非足端处罚实际触发，再安排同资产、同配方边界下的受控接触，不把足端载荷外推该能力。
 3. 诊断器与验收器复用 `diag_metrics.contact_point_velocity` / `mesh_lowest_point`，不各写一份。接触点切向速度以 COM 为参考，区分 body 原点与 COM；最低顶点近似及点切换限制继续声明。
 4. 在诊断自建 cfg 中采过滤力，区分地面接触与自碰撞；不能只用 `net_forces_w` 推断接触对象，不改冻结配方摘要来补传感器过滤。
 5. 用切向力方向区分牵引与被拖动，按逐 body 接触速度、位移和逐脚 duty 交叉核验；法向力或摩擦预算占比不能单独证明牵引/滑动。
