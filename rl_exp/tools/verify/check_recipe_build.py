@@ -477,9 +477,48 @@ def hard_b(line_key: str, version: str, declared: dict, paths: list[str]) -> int
     return len(flat) + len(agent_paths)
 
 
+def _dev_contact_selection_errors(cfg) -> list[str]:
+    """Check the constructed shared dev recipe against its actual collision owners."""
+    import xml.etree.ElementTree as ET
+    from isaaclab.utils.string import resolve_matching_names
+    from rl_exp.tasks import obs_protocol
+
+    root = _REPO / "rl_exp"
+    usd = pathlib.Path(cfg.scene.robot.spawn.usd_path).resolve()
+    body = obs_protocol.resolve_body(usd.relative_to(root).as_posix(), "lizard2", root)
+    links = ET.parse(body["urdf"]).getroot().findall("link")
+    colliders = {link.get("name") for link in links if link.find("collision") is not None}
+    patterns = cfg.rewards.undesired_contacts.params["sensor_cfg"].body_names
+    _, selected = resolve_matching_names(patterns, [link.get("name") for link in links])
+    expected = {f"{leg}_hfe" for leg in ("lf", "rf", "rl", "rr")}
+    errors = []
+    if dead := set(selected) - colliders:
+        errors.append(f"dev undesired_contacts selects bodies without collision: {sorted(dead)}")
+    if set(selected) != expected:
+        errors.append(f"dev undesired_contacts must retain four hfe owners: {sorted(selected)}")
+    return errors
+
+
+def _check_dev_contact_selection() -> list[str]:
+    """Keep the real empty-channel regression and reject lost or broadened selection."""
+    problems = []
+    for play in (False, True):
+        cls = recipe.recipe_class("v3", play=play, line="lizard2/main", name="DevContactCheckCfg")
+        cfg = cls(params_version=None)
+        problems.extend(_dev_contact_selection_errors(cfg))
+        selection = cfg.rewards.undesired_contacts.params["sensor_cfg"]
+        saved = selection.body_names
+        for broken in ([".*_hfe", ".*_kfe"], [], [".*"]):
+            selection.body_names = broken
+            if not _dev_contact_selection_errors(cfg):
+                problems.append(f"dev contact falsifier was accepted: {broken}")
+        selection.body_names = saved
+    return problems
+
+
 def main(argv: list[str] | None = None) -> int:
     """Gate entry point: build each declared recipe and compare it against the frozen golden."""
-    problems: list[str] = []
+    problems: list[str] = _check_dev_contact_selection()
     attribution_problems: list[str] = []
     mapping = lock.recipe_map()
     try:

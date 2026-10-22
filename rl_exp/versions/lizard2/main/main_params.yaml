@@ -99,7 +99,6 @@ names:
     - ".*_foot"
   undesired_contact_body_names:
     - ".*_hfe"
-    - ".*_kfe"
   head_contact_body_names:
     - "chest_pitch"
     - "neck_pitch"
