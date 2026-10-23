@@ -4,10 +4,10 @@ title: lizard2 配方、动作接口与评测协议交付
 scope: rl_exp/versions/lizard2, rl_exp/tasks, rl_exp/tools/pipeline, rl_exp/tools/verify, ablation_harness
 status: in_progress
 landing: rl_exp/versions/lizard2/main/main_params.yaml, rl_exp/tasks/lizard2_recipe.py, rl_exp/tools/pipeline/emit_diff_declaration.py, rl_exp/tools/verify/check_recipe_build.py
-next: S5 据接口方案定案后续接入，核 D/协议前提；采用、冻结和开训按正文执行。
+next: S5 按全计划盘点推进训练接口接入与必要核验；限速边界试验取消。
 close_when: 新上下文按正文“关闭条件”核验完整 S5/S6 或用户明确不采用的出口；仅 S5 构建通过不关闭。
 depends_on: lizard2-body-drive-candidate, lizard2-contact-protocol
-evidence: acceptance/records/2026-10-23-lizard2-training-interface-plan.md, acceptance/records/2026-10-22-lizard2-rl-coordination-handoff.md, acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md, acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, acceptance/records/2026-09-23-lizard2-v1-gait-skate, acceptance/records/2026-10-09-lizard2-limit-requirement-and-status-sync, acceptance/records/2026-10-09-lizard2-v3-pretrain-sanity, acceptance/records/2026-10-10-lizard2-v3-joint-velocity-limits
+evidence: acceptance/records/2026-10-23-lizard2-plan-inventory.md, acceptance/records/2026-10-23-lizard2-training-interface-plan.md, acceptance/records/2026-10-22-lizard2-rl-coordination-handoff.md, acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md, acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, acceptance/records/2026-09-23-lizard2-v1-gait-skate, acceptance/records/2026-10-09-lizard2-limit-requirement-and-status-sync, acceptance/records/2026-10-09-lizard2-v3-pretrain-sanity, acceptance/records/2026-10-10-lizard2-v3-joint-velocity-limits
 ---
 
 ## 当前范围与交接
@@ -61,7 +61,7 @@ S5 交付为未冻结候选版本实际路径、配置/协议/测试及 `accepta
 - 初始动作分布与硬限位、初始化高度与自然站高的配方合理性复核沿用 `rl_exp/tools/verify/action_range_check.py`；历史读数及判定仅见 `acceptance/records/2026-10-09-lizard2-v3-pretrain-sanity.md`，不外推当前候选可开训。改配方走版本规则。
 - `feet_slide` / `foot_clearance` 保留奖励候选，先统一承重口径再定实现与权重。脚掌接触面积/形状项排除依据、lf 异常撤回与历史因果边界见步态记录。
 - 姿态目标未验收时不直接新增角度监督；设计要求、量测与可训练目标交接见整体记录及用户定案指针。
-- 速度上限消费 B 声明载荷下默认 implicit PD 的跟踪/稳定包线与真实 effort/speed 约束；明确有依据启用或明确不启用及风险/工况边界，未决须回 B，不把自动启用当默认要求。不以旧 URDF 自报值、旧策略分位数或 `check_actuator_budget.py --drive-audit` 单独批准上限；启用须同条件对照并核引擎采用，字段机制按 evidence 与 `check_dr_parity.py` 取用。不启用诊断不冒称有限速能力。
+- 速度设置保留当前候选取值，接入时核实际写入及源身份；按[用户取消决定](../../acceptance/records/2026-10-23-lizard2-plan-inventory.md)不再做触边、跨关节、有/无限速及速度—载荷包线试验，不作开训前置。已测范围与未验风险保留，不以取消试验证明边界通过，也不擅自去掉限速设置。
 
 ## 证据边界
 
@@ -70,3 +70,5 @@ S5 交付为未冻结候选版本实际路径、配置/协议/测试及 `accepta
 审核记录按整体记录“审核输入绑定约定”落地，只留已有记录指针。本轮通道复读只整理接入机制，不构成正式 S5/S6 交付或可开训结论。
 
 接口建议、逐列映射、采样/reset 接入缺口与验证顺序见[训练接口方案](../../acceptance/records/2026-10-23-lizard2-training-interface-plan.md)；后续实现按正文前提推进，方案存在不代表正式参数已采用。
+
+用户取消的试验、全计划剩余项及训练优先顺序统一取[计划盘点](../../acceptance/records/2026-10-23-lizard2-plan-inventory.md)；本项承接后续训练，不将本轮盘点记作开训。

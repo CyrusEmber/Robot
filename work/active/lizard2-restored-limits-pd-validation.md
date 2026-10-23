@@ -4,7 +4,7 @@ title: lizard2 恢复模型：限位与 PD 验证前提及标定
 scope: rl_exp/blender, rl_exp/tools/diagnose, acceptance/records
 status: in_progress
 landing: rl_exp/blender/scripts/generate_urdf.py, rl_exp/blender/scripts/lizard2_stance_candidate.py, rl_exp/tools/diagnose/palm_motion_boundaries.py, rl_exp/tools/diagnose/palm_5b_targets.json, rl_exp/tools/diagnose/palm_motion_view.py, rl_exp/tools/diagnose/palm_spatial_inertia.py, rl_exp/tools/diagnose/palm_spatial_tracking.py, rl_exp/tools/diagnose/palm_spatial_standing.py
-next: B 离线核低限矩越界，保留原上限边界未判；C 续交付，协调交 S6。
+next: B/C 汇总现有驱动证据交 D/S5；限速边界试验已取消，未完动作按全计划盘点处理。
 close_when: 新上下文按正文关闭条件审核实际落点与证据，合格后交机体总项 B/C/D；缺证不关闭。
 evidence: acceptance/records/2026-10-22-lizard2-low-cap-comparison.md, acceptance/records/2026-10-22-lizard2-drive-gaps-and-cap-plan.md, acceptance/records/2026-10-22-lizard2-current-lift.md, acceptance/records/2026-10-22-lizard2-velocity-limits.md, acceptance/records/2026-10-22-lizard2-velocity-observation.md, acceptance/records/2026-10-19-lizard2-load-transfer-lift.md, acceptance/records/2026-10-19-lizard2-single-leg-lift.md, acceptance/records/2026-10-19-lizard2-a-geometry-replay.md, acceptance/records/2026-10-16-lizard2-support-schedule.md, acceptance/records/2026-10-16-lizard2-local-path-combined.md, acceptance/records/2026-10-16-lizard2-local-path-mirror.md, acceptance/records/2026-10-16-lizard2-local-path-quarters.md, acceptance/records/2026-10-16-lizard2-local-path-postprocess.md, acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md, acceptance/records/2026-10-15-lizard2-palm-local-contact-repair.md, acceptance/records/2026-10-15-lizard2-palm-local-path-probe.md, acceptance/records/2026-10-15-lizard2-palm-phase-target-preparation.md, acceptance/records/2026-10-15-lizard2-palm-spatial-refined-boundaries.md, acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-14-lizard2-palm-phase-constraint-correction.md, acceptance/records/2026-10-14-lizard2-5b-motion-boundaries.md, acceptance/records/2026-10-14-lizard2-a-priority-review.md, acceptance/records/2026-10-14-lizard2-restored-validation-handoff.md, acceptance/records/2026-10-13-lizard2-restored-limits-pd-open-issues.md, acceptance/records/2026-10-13-lizard2-hindlimb-restored.md
 ---
@@ -51,7 +51,7 @@ evidence: acceptance/records/2026-10-22-lizard2-low-cap-comparison.md, acceptanc
 
    **最小受控检查**：同一套候选初值覆盖限位内逐关节小幅平滑跟踪、明确基座/重力/自重或已知载荷下的保持与跟踪、适度组合耦合检查；可用支持机身夹具隔离驱动，不能以无重力空载通过替代受载证据。允许预先声明的有限静差，检查无失控或持续振荡。固定物理步长、目标更新率、目标速度约定和重置状态，按已批准预算执行；安全 reset/站姿样本作集成检查，不要求胸部水平、手工单腿抬落或低速步行成功。读回 PD/限位/力矩/速度设置，分清请求估计与实际驱动力；缺可靠实测通道不称实际饱和已验证，保留未知与设置/预算依据，不追加穷尽传感项。失败先分辨限位、碰撞、载荷、边界与跟踪问题；只改对应关节组的一类参数并复验受影响检查，到预算上限带失败证据停，不作全关节网格扫描。
 
-   **交付与后续**：逐关节覆盖、最小受载行为、组合响应、实际设置及适用边界交总项 B/C 与 D/S5，不先宣告默认 PD 最终合格。有效限速启用仍须原批准的触边激励和同条件有/无限速对照，否则明确不启用及其边界；实际 USD/执行器 cap 未知项不得消失。S5 核逐角色真实 action manager 目标、缩放/偏置与实体随动，声明固定或阶段门控，需协调关节必须可访问；不自动改冻结配置。原移重/抬落、物理时间映射、低速直行、转向/恢复及躯尾性能对照交 S6 的学习策略验收，不作为本项关闭或训练接入前置、不记为完成。机械限位、几何禁区和正式导出缺口仍由本项/A/E 完成；训练仅 S6 经用户授权的新配方执行，本项不授权训练或正式采用。
+   **交付与后续**：逐关节覆盖、最小受载行为、组合响应、实际设置及适用边界交总项 B/C 与 D/S5，不先宣告默认 PD 最终合格。限速边界试验按[用户取消决定](../../acceptance/records/2026-10-23-lizard2-plan-inventory.md)移出前置；保留设置/读回及未验证范围，不视作取消限速功能或行为通过。限矩验证沿用用户不再要求的决定，原失败保留。S5 核真实动作目标、缩放/偏置、实体随动及所用 cap 写入；需协调关节可访问，不自动改冻结配置。移重/抬落、直行、转向/恢复及躯尾性能归 S6，不作手工动作前置。机械限位、几何禁区和正式导出缺口仍由本项/A/E 承接。
 
 ## 关闭条件
 
