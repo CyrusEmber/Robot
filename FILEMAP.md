@@ -66,6 +66,7 @@
 | `rl_exp\tools\diagnose\palm_spatial_runtime.py` | 无承重接线与隔离配置绑定；`--reset_probe` 查 reset/首物理步及 collider 归属，`--contact_pairs` 采具名观测并严格拒错；不判 PD 或复现正式配方 |
 | `rl_exp\tools\diagnose\palm_joint_force_audit.py` | 左膝两例关节力矩离线复读：轴投影、重力平衡及上限占比；不起仿真，不测极限负载 |
 | `rl_exp\tools\diagnose\palm_velocity_limit_audit.py` | 当前候选速度上限的离线逐关节核对；读取 manifest/URDF/backend，不测触限行为 |
+| `rl_exp\tools\diagnose\palm_training_interface.py` | 隔离训练草案的真实动作、子步接触与完整/子集/自动 reset 诊断；`--audit` 离线复算 |
 | `rl_exp\tools\diagnose\palm_speed_probe.py` | 零速度目标的肘膝升速及 `--cap_comparison` 左膝低上限对照；`--replay` 复读历史样本 |
 | `rl_exp\tools\diagnose\palm_cap_comparison.py` | 左后膝低上限对照的设置核对、恢复及判词消费者；不代表原上限能力 |
 | `rl_exp\tools\diagnose\palm_spatial_standing.py` | 自由根静站诊断与历史抬腿复读；抬腿性能归 RL/S6，不作默认驱动验收 |
