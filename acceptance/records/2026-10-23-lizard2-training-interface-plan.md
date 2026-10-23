@@ -1,5 +1,7 @@
 # lizard2 审核清单更新与训练接口方案
 
+> 后续计划修订：按[训练优先修订](2026-10-23-lizard2-training-priority-plan.md)及[当前正文](../../work/active/lizard2-family-landing.md)接续。本记录保留制定时状态；原独立 S5/S6 路由、完整新协议/动态标定对配置接入与首轮训练的前置已被替换。必要接口安全、版本/采用要求和已批预算保持，新增指标在使用前验证。
+
 ## 适用范围
 
 用户要求“更新审核清单、准备训练接口方案”。对象为当前 `palm_spatial` 隔离候选，URDF SHA256 `e8896feb8b0dbdbeaa35e74a01c2ffcb4ab38d89b52f221831b3f287943edd00`；配置依据为承地 `standing_manifest.json`（SHA256 `2f39ca4e6268d90cee08600510f05a3eae78c1272fdbeebb811ba911405569f2`）。本轮更新 [D 自检清单](2026-10-22-lizard2-body-drive-candidate.md)，提出可审阅的 S5 接口方案；只读复核制品、构建配置及计算初始动作分布，不运行物理或训练。

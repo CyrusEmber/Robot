@@ -4,14 +4,14 @@ title: lizard2 候选接线与真实消费者验证
 scope: rl_exp/blender, rl_exp/tasks, rl_exp/tools, ablation_harness
 status: in_progress
 landing: rl_exp/tasks/joint_names.py, rl_exp/tools/diagnose/palm_spatial_runtime.py, rl_exp/tools/verify/obs_protocol_live.py, rl_exp/tools/verify/check_leg_reachability.py, rl_exp/tools/verify/check_joint_layout.py, rl_exp/tools/diagnose/stance_step_probe.py, rl_exp/tools/diagnose/pose_slider.py, rl_exp/tools/verify/fit_gait_target.py, ablation_harness/baseline_metrics.py
-next: E 按最新回交证据汇总出口，随 D 交新上下文核原制品；训练采样迁移交 S5。
+next: E 按最新回交证据汇总出口，随 D 交新上下文核原制品；训练采样迁移交训练接入。
 close_when: E 自检就绪后随总项 D 由新上下文一次审核；必需链缺证不关闭。
 evidence: acceptance/records/2026-10-22-lizard2-dev-contact-selection.md, acceptance/records/2026-10-22-lizard2-e-legacy-contact.md, acceptance/records/2026-10-22-lizard2-e-legacy-exit.md, acceptance/records/2026-10-22-lizard2-e-support-contact.md, acceptance/records/2026-10-22-lizard2-e-independent-entries.md, acceptance/records/2026-10-22-lizard2-e-fk-parent-frame.md, acceptance/records/2026-10-22-lizard2-e-nonzero-gait-collision.md, acceptance/records/2026-10-22-lizard2-e-baseline-terminal.md, acceptance/records/2026-10-22-lizard2-e-live-values-gait.md, acceptance/records/2026-10-22-lizard2-velocity-observation.md, acceptance/records/2026-10-19-lizard2-chest-standing-pd.md, acceptance/records/2026-10-19-lizard2-loaded-standing.md, acceptance/records/2026-10-19-lizard2-spatial-small-tracking.md, acceptance/records/2026-10-19-lizard2-spatial-inertia-repair.md, acceptance/records/2026-10-16-lizard2-candidate-doc-organization.md, acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md, acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md, acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory.md
 ---
 
 ## 当前范围
 
-承接 [机体与驱动总项及当前候选 PLAN 正文](lizard2-body-drive-candidate.md) 的 E；A/P1–P4、B/C/D 均指总项职责，按[用户定案](../../acceptance/records/2026-10-19-lizard2-chest-standing-pd.md#用户定案默认关节驱动与强化学习职责)执行。构型与候选归 [重构专项](lizard2-palm-spatial-reconfiguration.md)，运行异常归 [限位 PD 专项](lizard2-restored-limits-pd-validation.md)，报告语义归 [接触协议](lizard2-contact-protocol.md)。本项交目标绑定和真实消费者证据，随 D 的训练前输入/驱动/动作/安全 reset 集成审核一次审；C 交通道与默认驱动，不交手工躯尾协调性能。卸载、移重、抬腿、躯尾协调、步态及转向/恢复动态归 `work/active/lizard2-family-landing.md` S6 学习策略评测，不在 E/D/配方或训练前先证明手工动作成功。
+承接 [机体与驱动总项及当前候选 PLAN 正文](lizard2-body-drive-candidate.md) 的 E；A/P1–P4、B/C/D 均指总项职责，按[用户定案](../../acceptance/records/2026-10-19-lizard2-chest-standing-pd.md#用户定案默认关节驱动与强化学习职责)执行。构型与候选归 [重构专项](lizard2-palm-spatial-reconfiguration.md)，运行异常归 [限位 PD 专项](lizard2-restored-limits-pd-validation.md)，报告语义归 [接触协议](lizard2-contact-protocol.md)。本项交目标绑定和真实消费者证据，随 D 的训练前输入/驱动/动作/安全 reset 集成审核一次审；C 交通道与默认驱动，不交手工躯尾协调性能。卸载、移重、抬腿、躯尾协调、步态及转向/恢复动态归 `work/active/lizard2-family-landing.md`训练后策略评测，不在 E/D/配方或训练前先证明手工动作成功。
 
 ## 下一步
 
@@ -35,11 +35,11 @@ E 执行者按 E5 当前切片推进；E2 是绑定要求，E3 是消费者范�
 腿前缀（lf/rf/rl/rr）、`_joint` 后缀与躯干/颈/尾名不变。掌/跖段作为腕/踝关节的子 link，随腕/踝词根命名并承担末端接触；不另设活动接触片。
 
 - 改名走与 v8 同类的一次性迁移，不留旧名别名；候选（新名）与现行（旧名）并存期间，工具必须两边都可用，所以先做 E 的最小绑定。本次还改变链结构，不能把旧 `foot` 到 `finger/toe` 的改名样本直接当成目标候选。
-- 候选在隔离路径生成；`joint_order`、正则组、工具、obs/action 文档在采用时同变更迁移。这是机体换代：采用时 lizard2 仍加载旧机体的冻结版本须同一次变更退休（`versioning.mdc` §A），归 `lizard2-family-landing` S6。
+- 候选在隔离路径生成；`joint_order`、正则组、工具、obs/action 文档在采用时同变更迁移。这是机体换代：采用时 lizard2 仍加载旧机体的冻结版本须同一次变更退休（`versioning.mdc` §A），归 `lizard2-family-landing`正式采用。
 
 ## E. 名表与五自由度腿链接线（最小绑定先行，随 A 逐层验证）
 
-勘察与逐切片读数见 `acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory.md` 的追加段落索引；当前缺口、复读及修订依据见 `acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md` 的 F1/F3 与“追加：E 执行情况核查”。下文只维护未完动作和判据；历史记录里的“运行时对照归 S6”不再作为施工路由。
+勘察与逐切片读数见 `acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory.md` 的追加段落索引；当前缺口、复读及修订依据见 `acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md` 的 F1/F3 与“追加：E 执行情况核查”。下文只维护未完动作和判据；历史将运行时对照延后的安排不再作为施工路由。
 
 **A 节结构修订的接线影响**：`split` / `PLANNED_ROOTS` 保留旧指/趾根改名样本含义，`palm` 保留四轴对照含义；当前肩髋三轴目标绑定 `palm_spatial`，角色顺序为 swing → abduct → twist → elbow/knee → wrist/ankle，轴系与执行路线归 `work/active/lizard2-palm-spatial-reconfiguration.md`。不得用旧链位次或四轴数组消费新增近端轴，末端保持 wrist/ankle。已有双命名测试与 palm-chain-p1 记录不证明新构型，当前候选仍须通过 E/D 的真实消费者验证。
 
@@ -50,7 +50,7 @@ E 执行者按 E5 当前切片推进；E2 是绑定要求，E3 是消费者范�
 - **就地代码问题**：复制词根、模块名被运行时列表遮蔽、按最后一个 `_` 拆词根、空匹配被当正常输出，分别在原消费者修复，不借机重构工具体系。
 - **契约表达问题**：无机体上下文的全局旧名表不能表达双机体并存；只补入口绑定和内部传递，不扩张为资产注册系统。
 - **落点与依赖**：名表仍在 `rl_exp/tasks/joint_names.py`，纯标准库；Blender 与离线工具绕过 `rl_exp/tasks/__init__.py` 导入，沿用名表模块说明中的直接文件导入先例。
-- **范围**：既有 `rl_exp/versions/**` 的冻结 yaml/json、配方锁及历史协议/读数不改写。候选在隔离路径生成；正式声明、传感器/奖励配置、obs/action 协议与机体退休归 S6 采用，不用 E 提前采用机体。
+- **范围**：既有 `rl_exp/versions/**` 的冻结 yaml/json、配方锁及历史协议/读数不改写。候选在隔离路径生成；正式声明、传感器/奖励配置、obs/action 协议与机体退休归正式采用，不用 E 提前采用机体。
 
 | 路线 | 约束与收益 | 代价与取舍 |
 |---|---|---|
@@ -64,12 +64,12 @@ E 执行者按 E5 当前切片推进；E2 是绑定要求，E3 是消费者范�
 1. **在入口确定目标，命名约定与它同行**。最小普通数据形状为目标路径、声明来源、按 leg 的“角色 → 词根”映射和每 leg 的末端角色；不需要命名对象或注册表。稳定角色取本项已有链映射的角色键，前后肢实际词根来自同一名表；该映射不承诺两机体几何等价。方案可附稳定标识，但取名使用绑定的映射，不看全局开关或候选生命周期。旧入口显式提供共享词根映射，新候选入口显式提供前后肢映射；下游只拿已绑定数据。未声明约定的任意外部机体不得从关节名猜方案。
    **实现落点**：`rl_exp/tasks/joint_names.py` 的 `NAMINGS`（保留 `shared`/`split`/`palm`，补 `palm_spatial`）、`naming_for`/`naming_id`/`roots_of` 与 `end_link`/`contact_body_patterns`/`is_contact_body`；路径与声明来源由各消费者的既有入口解析（任务级用 `obs_protocol.resolve_body`）。名表存在不等于完整绑定，剩余接线与拒错归 E3。
 2. **复用路径解析，不另造寻址**。任务工具读取最终 cfg 的实际 `usd_path`，复用 `rl_exp/tasks/obs_protocol.py:363` 的 `resolve_body()`；无覆盖时可用 `body_for_task()`。`--usd`/`--urdf` 覆盖、`--compare` 第二机体须连同各自命名约定重新绑定，不继承当前家族或第一机体的约定。未能取得约定或 USD/URDF 对应依据则拒绝比较。不能仅按 family 选新旧，同一家族会有两种机体。
-3. **声明只有入口一份**。Blender 在 `generate_urdf.py` 已有 `ROBOT_SPECS` 中随构建目标声明约定，候选骨架脚本消费同一目标；诊断入口从所选隔离配置取得目标路径及命名，报告 writer 写出该绑定及来源，reader 直接消费。现有 `--naming` 不能继续作为新目标之外的第二份默认选择；保留旧 CLI 兼容时，显式值须与目标声明一致，不得覆盖它。新报告缺绑定来源即拒，历史报告只走原协议分支。正式配方声明归 S6；E 不改已冻结配方、不另建全仓注册表。
+3. **声明只有入口一份**。Blender 在 `generate_urdf.py` 已有 `ROBOT_SPECS` 中随构建目标声明约定，候选骨架脚本消费同一目标；诊断入口从所选隔离配置取得目标路径及命名，报告 writer 写出该绑定及来源，reader 直接消费。现有 `--naming` 不能继续作为新目标之外的第二份默认选择；保留旧 CLI 兼容时，显式值须与目标声明一致，不得覆盖它。新报告缺绑定来源即拒，历史报告只走原协议分支。正式配方声明归正式采用；E 不改已冻结配方、不另建全仓注册表。
 4. **一套函数，逐目标绑定数据**。纯名表函数接收绑定中的命名数据和 leg，派生链词根、具名 joint/link、链端接触体与匹配式；后缀/正则仍由已有 builder 生成。内部按已定义角色选关节，再取该 leg 的名字；需要索引时由实际树及运行时名称解析，不在每层选择新旧。关节名可含多个 `_`，用完整生成名映射到角色，或只剥已知 leg 前缀与 `_joint` 后缀，不用 `rpartition('_')` 识别词根。
 5. **链结构不由名字杜撰**。链路径仍走实际 URDF 的父子关系，名表负责角色与接触端命名，不以固定关节数或元组位次替代真实树。旧 lizard 链缺少 lizard2 的根摆轴须继续可读；消费者用到某角色而机体未提供时，明确报告不适用或拒绝该检查，不造空数据。
 6. **接触体与关节分开**。绑定提供每条腿的精确末端 link 名与其父 joint 名；新绑定路径的模式与成员判断由精确名生成，不以末端后缀通配任意 body。旧公开接口的兼容处理遵守第 8 条；所有 E 消费者走精确绑定路径。是否为末端按目标真实链声明：旧改名测试链中的掌/跖为中间段，当前 A 候选中的掌/跖为末端承重体，不按词根或旧链位置推断。运行时只选择正确集合，保留框架返回顺序，并与具名 leg 映射对照；不把名表顺序当 obs/action 索引。
 7. **绑定先验真，再测量**。URDF 核对所需角色名、末端 link、对应父关节与链连通；运行时核对 robot、传感器及 action manager 的实际名称与映射；报告按其声明的角色/列集合核对完整性，不能因一列匹配便放过其它混合命名列。缺项、重名、跨前后肢错误、外来末端、混合命名及空匹配都须带目标路径与差异拒绝。短链、部分报告或诊断配置有意取消的动作通道按显式声明处理，不补不存在的角色、不把“有一列匹配”当完整校验。
-8. **不改变既有公开符号语义**。旧常量/函数不全局翻转为新名，不删除或改签名；各目标消费者显式走绑定数据。`PLANNED_ACTIVE` 不进入绑定或选名路径，E 与 S6 均不靠翻转它切换机体；模块内“采用即翻转 active”的既有说明随实现纠正，稳定映射不随采用改义。要移除旧公开接口先按 API 纪律另行弃用，不把旧名字解释成新名字，也不建立新候选的旧名别名。
+8. **不改变既有公开符号语义**。旧常量/函数不全局翻转为新名，不删除或改签名；各目标消费者显式走绑定数据。`PLANNED_ACTIVE` 不进入绑定或选名路径，E 与正式采用均不靠翻转它切换机体；模块内“采用即翻转 active”的既有说明随实现纠正，稳定映射不随采用改义。要移除旧公开接口先按 API 纪律另行弃用，不把旧名字解释成新名字，也不建立新候选的旧名别名。
 
 ### E3. 消费者迁移与交接范围
 
@@ -79,7 +79,7 @@ E 执行者按 E5 当前切片推进；E2 是绑定要求，E3 是消费者范�
 |---|---|---|
 | Blender 候选 → URDF | `lizard2_stance_candidate.py` / `generate_urdf.py` 入口绑定构建目标；按 A/P3 和重构事项接真实 palm_spatial 导出目标、三轴共中心、网格归属和惯量，不以只读 contract 代替导出 | 旧链及改名样本先验证双命名消费；P2 前置成立后真实导出 palm_spatial，错源/错目标写前拒绝，输出隔离 |
 | URDF → FK / 碰撞 | `check_leg_reachability.py`、`check_self_collision.py` 对每个输入独立绑定；替换链端、角色选取、限位查找旁路，保留树遍历与原有数值口径 | 保留同几何改名回归；实际 palm_spatial 除 `chain_joint_names` / `load_chain` / FK 外，逐一验证 `straight_hfe` / `thigh_shank_angle` / `load_case_angles` 与碰撞构姿，核骨段而非零长度承载枢轴。新求解器消费完整真实链，非零 twist 对照独立 FK；旧四轴求解器必须拒绝新链，遗漏 twist、沿用旧肘膝位次不得被接受 |
-| 运行时 → 布局 / 站姿 / 步态诊断 | 执行者提供旧/新命名 USD 与各自隔离 cfg；`check_joint_layout.py`、`stance_step_probe.py`、`gait_probe.py` 贯通最终目标、接触体、动作列与角色映射；先修 `gait_probe` 模块遮蔽与旧链位次假设 | 两套目标各跑真实诊断并读回动作/传感器，另跑错配负例；不等 S6、不改冻结配置；palm_spatial 几何就绪后逐角色注入并读回实际候选，确认 twist、肘膝和腕踝没有错列或漏驱动 |
+| 运行时 → 布局 / 站姿 / 步态诊断 | 执行者提供旧/新命名 USD 与各自隔离 cfg；`check_joint_layout.py`、`stance_step_probe.py`、`gait_probe.py` 贯通最终目标、接触体、动作列与角色映射；先修 `gait_probe` 模块遮蔽与旧链位次假设 | 两套目标各跑真实诊断并读回动作/传感器，另跑错配负例；不等正式采用、不改冻结配置；palm_spatial 几何就绪后逐角色注入并读回实际候选，确认 twist、肘膝和腕踝没有错列或漏驱动 |
 | 接触诊断与在线协议核对 | `diag_metrics.py`、`baseline_probe.py`、`check_contact_ownership.py`、`obs_protocol_live.py` 消费精确绑定；`diagnose_support.py` 的旧筛选交 `floor-contact-attribution` 执行者修改并回交 E | 新旧末端集合及外来/跨肢负例；隔离带足端声明的配置须实际执行 `obs_protocol_live` 被改分支；新近端承载 link 不得误计作足端，空循环不算覆盖 |
 | 报告 → 图 / 评测 | writer 的字段/列契约由 `lizard2-contact-protocol` 承接；执行者在 `gait_probe.py` / `baseline_eval.py` 写目标绑定与来源，`plot_joints.py` / `baseline_metrics.py` 消费并逐项验真 | 两套真实诊断输出经同一 reader 读取，配合同数据改名对照与缺列/混合命名/缺来源负例；历史报告按原协议处理；新候选报告含 twist 列和资产身份，同为五轴也不得把旧 foot 列解释为 twist |
 
@@ -93,13 +93,13 @@ E 执行者按 E5 当前切片推进；E2 是绑定要求，E3 是消费者范�
 
 1. **先绑定，再派生**：给名表最小入口数据与纯函数，保留原接口；接到一个 URDF 真实消费者后，才扩到 Blender、运行时和报告链。不增机器闸门，检查留在现有 self-check／测试入口。
 2. **同几何双样本 + 负例**：同一份 URDF／报告／记录改名为另一套词（数值不动），经同一真实消费者读出同一组数。按 E2 补整套错配、跨肢/外来末端、混合命名、缺角色/缺列、重名和空匹配负例；分别经过真实消费入口，修复前必须失败、修复后通过，不只测名表。已有读数见 2026-10-12 记录追加六/七/九。
-3. **真实解释器与接线**：标准 Python 验纯模块；Blender 验真实构建消费者；执行者为旧资产与同几何新名样本成对准备隔离 USD/cfg，连同默认位姿、驱动选择、动作列表、`joint_order` 与传感器一起绑定。IsaacLab 逐目标验证实际名称、集合、动作列及至少一步诊断读回，不训练、不替换冻结配方。两套真实报告均走 writer → reader，不能只手改旧报告模拟 writer；新候选就绪后 E 联同 A 核验实际 palm_spatial，包含五角色的限位、默认目标、驱动组、动作/观测索引和精确接触体；逐轴注入确认动的是对应实体。注入须核真实 action manager 的缩放、偏置、裁剪、顺序、目标及对应实体，并核安全 reset 与运行时 effort/speed 限制。诊断覆盖五个角色不等于正式策略自动开放全部动作；S5 对腿部五角色及躯干/颈/尾逐角色决定策略可访问、锁定或阶段门控并实际改配方，RL 所需协调关节不能静默锁零，锁定/门控需声明可学性限制与开放阶段。改名样本不证明新链结构成立。
+3. **真实解释器与接线**：标准 Python 验纯模块；Blender 验真实构建消费者；执行者为旧资产与同几何新名样本成对准备隔离 USD/cfg，连同默认位姿、驱动选择、动作列表、`joint_order` 与传感器一起绑定。IsaacLab 逐目标验证实际名称、集合、动作列及至少一步诊断读回，不训练、不替换冻结配方。两套真实报告均走 writer → reader，不能只手改旧报告模拟 writer；新候选就绪后 E 联同 A 核验实际 palm_spatial，包含五角色的限位、默认目标、驱动组、动作/观测索引和精确接触体；逐轴注入确认动的是对应实体。注入须核真实 action manager 的缩放、偏置、裁剪、顺序、目标及对应实体，并核安全 reset 与运行时 effort/speed 限制。诊断覆盖五个角色不等于正式策略自动开放全部动作；训练接入对腿部五角色及躯干/颈/尾逐角色决定策略可访问、锁定或阶段门控并实际改配方，RL 所需协调关节不能静默锁零，锁定/门控需声明可学性限制与开放阶段。改名样本不证明新链结构成立。
 4. **旧基线不退化**：先记录既有自检与相关离线套件的状态，再同条件复跑。既有红项按原记录及负责事项保留，不删断言、不借 E 改网格；受阻链留为未验，不算绿。仍受资产前提阻碍的必需运行时/报告验收不得以“旧红”豁免完成条件。
 5. **证据与审核**：实施读数、复读命令、输入路径/绑定来源、实际消费者、负例结果与未验项追加到本项 evidence 的 2026-10-12 记录或后续具名记录；记录存在后才补指针。E 各步只自检，最终仍随 D 一次性由新上下文审核。
 
 **分段出口**：最小绑定及 URDF 消费核实后可交 A 推进离线几何；旧机体与同几何改名样本的回归继续完成。E 完整交付还要求实际 palm_spatial 的 Blender → URDF → USD → 运行时 → 报告链成立，五角色逐轴读回、接触集合及拒错有证据。名表自检、源码支持、编译或旧双命名通过均不能代替新候选接线；任何必需链受阻均留为未交付。B 默认驱动条件与设置读回独立核对；限速边界试验按总项 B3 的用户决定取消，不再作为 E 出口前置。
 
-**正式采用边界**：E 证明目标绑定与实际链消费，不批准新候选承重或步态性能，不完成 B 的承重对照，也不完成 S6。A/B/C 依本节接口推进；D 核对实际候选；S6 才迁正式配置/协议并退休旧机体版本。
+**正式采用边界**：E 证明目标绑定与实际链消费，不批准新候选承重或步态性能，不完成 B 的承重对照，也不完成正式采用或训练。A/B/C 依本节接口推进；D 核对实际候选；正式采用时迁移配置并退休旧机体版本；完整评测协议在相应新指标使用前交付。
 
 **接触体名（当前要求：2026-10-12）**：当前无指/趾候选的末端承重 link 随腕/踝词根，前肢 `*_wrist`、后肢 `*_ankle`；对应掌/跖实体，不另建活动接触片。旧候选约定 `*_finger` / `*_toe` 只用于已有改名测试样本；现行旧机体与历史报告仍按各自绑定解释，不改写。运行时须核对目标的精确末端集合，不能把其它机器人的 `.*_foot` 当本仓默认，也不能按旧候选末端筛选当前候选。
 
@@ -115,14 +115,14 @@ E 当前重点是补齐实际 `palm_spatial` 候选的完整消费链。已有�
 | **其余消费者与终止分支** | 独立入口及接触采样取[入口复核](../../acceptance/records/2026-10-22-lizard2-e-support-contact.md)；旧 shared 工具及对象回交取[出口表](../../acceptance/records/2026-10-22-lizard2-e-legacy-exit.md)，不外推自然超时、跌倒或全接触域 | 原始记录完整性与展示选列分开核对；字段/评测语义交接触协议项，不改写历史协议 |
 | **完整出口核对** | 按出口表复验发生变更的链，补受影响的旧基线回归并接旧对象回交；完整出口需 E3/E4 必需链均有证据，最终随 D 独立审核 | 不等学习策略步态/协调性能才交接口；声明载荷下默认驱动安全验证仍由 B 交付，不以离线套件通过替代新候选运行证据 |
 
-**当前并行切片**：按本表引用的实测 manifest 与工况接续，已验切片只补变化/缺证，不混用旧 USD、不删 pin。A 维护源件；B/C 接组合/载荷，E 接剩余消费者，D 最终审核，S6 验学习策略协调。诊断必须独立显式配置，不当正式 v3；输出用新目录，中间结果不自动外推。
+**当前并行切片**：按本表引用的实测 manifest 与工况接续，已验切片只补变化/缺证，不混用旧 USD、不删 pin。A 维护源件；B/C 接组合/载荷，E 接剩余消费者，D 最终审核，训练后评测验学习策略协调。诊断必须独立显式配置，不当正式 v3；输出用新目录，中间结果不自动外推。
 
-**共用文件与交接**：`lizard2_palm_spatial_candidate.py`、`generate_urdf.py`、`lizard2_stance_candidate.py`、`joint_names.py`、`palm_spatial_probe.py` 由 A/各原执行者维护，E 不同时修改；无并行差异的 FK 父系/轴读数及碰撞构姿切片由 E 承接，落点取上述记录。后续共用文件仍先明确归属；A 说明树、轴、零位、网格/惯量或命名的变更，E 复验受影响链。读回异常交限位 PD 专项步骤 3/4，真实失败按本表原责任回交，保持获准阈值、正式资产与驱动不变。用户授权的具名过滤只写证据绑定的隔离副本。几何/导出、接触 cap 与旧资产解除仍按本表回交；B/C/D/S6 分工及非手工步态门槛按上文，不在 E/D 提前判学习策略性能通过。
+**共用文件与交接**：`lizard2_palm_spatial_candidate.py`、`generate_urdf.py`、`lizard2_stance_candidate.py`、`joint_names.py`、`palm_spatial_probe.py` 由 A/各原执行者维护，E 不同时修改；无并行差异的 FK 父系/轴读数及碰撞构姿切片由 E 承接，落点取上述记录。后续共用文件仍先明确归属；A 说明树、轴、零位、网格/惯量或命名的变更，E 复验受影响链。读回异常交限位 PD 专项步骤 3/4，真实失败按本表原责任回交，保持获准阈值、正式资产与驱动不变。用户授权的具名过滤只写证据绑定的隔离副本。几何/导出、接触 cap 与旧资产解除仍按本表回交；B/C/D/正式采用分工及非手工步态门槛按上文，不在 E/D 提前判学习策略性能通过。
 
 
 ## 关闭条件
 
 - **审核者与输入**：E 自检就绪后置 pending_review，next 点名总项 D 的新上下文审核者；对照 E2–E5、真实消费者与绑定证据一次审核，不新增先于 D 的串行审批。
 - **可观察验收**：E3 必需链均满足 E4 的实际新候选出口、旧基线回归和真实拒错要求；E5 未完动作已完成，受资产前提阻碍的必需链不得豁免。
-- **交付与边界**：证据交总项 D；最小绑定可提前交 A，完整接线不代替 B 默认驱动条件、C 通道交付、D 输入/驱动/动作/安全 reset 集成审核或 S6 采用与学习策略性能验收。
+- **交付与边界**：证据交总项 D；最小绑定可提前交 A，完整接线不代替 B 默认驱动条件、C 通道交付、D 输入/驱动/动作/安全 reset 集成审核或正式采用与学习策略性能验收。
 - **结果处理**：审核通过后关闭；可修缺口退 in_progress，仅用户能解除的前提置 blocked。未完动作继续在办，证据改变后重审。
