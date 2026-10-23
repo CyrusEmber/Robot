@@ -234,17 +234,18 @@ python ablation_harness\eval.py --task Lizard2-Flat-v1 --mode nominal --seed 123
 ## 训练
 
 ```bat
-python scripts\reinforcement_learning\rsl_rl\train.py --task Lizard2-Flat-v3 --max_iterations 6000 --seed 42
+python rl_exp\tools\launch_recipe.py --task Lizard2-Flat-v4 --max_iterations 6000 --seed 42
 ```
 
-预算/种子与配方声明一致（`main_params.yaml` 的 `max_iterations` 6000、seed 42，v3.3 用户拍板）；
-加 `--max_iterations` 只是把该声明写进命令，数值改口径仍只走版本纪律。
+当前正式配置与启动方案见 `rl_exp/versions/lizard2/main/v4/PLAN.md`。上式只核启动计划；
+完成必要预检后加 `--launch` 才训练。首轮从头初始化，不用旧 v3 checkpoint；
+预算/种子继承已批声明，数值改口径仍只走版本纪律。
 headless 是本仓的常规形态，命令里不必带旗标：配方不声明 visualizer，框架据此强制 headless。
 `--headless` 已弃用；要**显式强制**（不依赖配方声明）用 `--viz none`，扫参调度
 （`ablation_harness\run_ablation.py`）按后者写。launcher（`rl_exp\tools\launch_recipe.py --launch`）
 不转发 viz 类旗标，从它交棒同样是默认 headless。
 
-**版本复现**：任务 id 由注册表常驻（`Lizard2-Flat-v3` = v3 配方），机制见
+**版本复现**：任务 id 由注册表常驻（`Lizard2-Flat-v4` = v4 配方；旧 v3 已退休），机制见
 `rl_exp/versions/lizard2/FAMILY.md`「任务注册表」；真源是 `versions/recipes.json`（身份映射）
 与各线自己的配方声明模块（`rl_exp/tasks/lizard2_recipe.py`；`rl_exp/tasks/recipe.py` 只留
 `LINES` 路由与构建机制）。旧 lizard 三条线的任务 id 已随退休清理退出注册，只留历史配方与记录。

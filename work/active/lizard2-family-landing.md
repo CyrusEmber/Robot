@@ -4,10 +4,10 @@ title: lizard2 配方、动作接口与评测协议交付
 scope: rl_exp/versions/lizard2, rl_exp/tasks, rl_exp/tools/pipeline, rl_exp/tools/verify, ablation_harness
 status: in_progress
 landing: rl_exp/versions/lizard2/main/main_params.yaml, rl_exp/tasks/lizard2_recipe.py, rl_exp/tools/pipeline/emit_diff_declaration.py, rl_exp/tools/verify/check_recipe_build.py
-next: 执行者复用已审草案，落地正式候选配置并核训练接口。
+next: 执行者按正式版本完成必要预检，接续已批训练及策略评测。
 close_when: 新上下文核验配置、采用、实际训练与策略评测交付；仅构建通过不关闭。
 depends_on: lizard2-body-drive-candidate
-evidence: acceptance/records/2026-10-23-lizard2-plan-inventory.md, acceptance/records/2026-10-23-lizard2-training-interface-plan.md, acceptance/records/2026-10-22-lizard2-rl-coordination-handoff.md, acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md, acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, acceptance/records/2026-09-23-lizard2-v1-gait-skate, acceptance/records/2026-10-09-lizard2-limit-requirement-and-status-sync, acceptance/records/2026-10-09-lizard2-v3-pretrain-sanity, acceptance/records/2026-10-10-lizard2-v3-joint-velocity-limits
+evidence: acceptance/records/2026-10-23-lizard2-v4-configuration.md, acceptance/records/2026-10-23-lizard2-v4-configuration-review.md, acceptance/records/2026-10-23-lizard2-plan-inventory.md, acceptance/records/2026-10-23-lizard2-training-interface-plan.md, acceptance/records/2026-10-22-lizard2-rl-coordination-handoff.md, acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md, acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, acceptance/records/2026-09-23-lizard2-v1-gait-skate, acceptance/records/2026-10-09-lizard2-limit-requirement-and-status-sync, acceptance/records/2026-10-09-lizard2-v3-pretrain-sanity, acceptance/records/2026-10-10-lizard2-v3-joint-velocity-limits
 ---
 
 ## 当前范围与交接
@@ -18,20 +18,16 @@ A/E 交骨架、几何及真实消费者，B/C 交具名工况下的默认驱动
 
 `depends_on` 约束训练输入与安全集成，消费具名已审交付，不要求候选总项先关闭。`lizard2-contact-protocol` 维护新测量和完整评测协议；其三类动态标定、异常主承重分类及完整发布不阻塞本轮位置策略训练。若新增指标进入奖励、终止或合格判定，必须先交付对应测量验证，不得用未校准信号训练或判通过。静态趴姿仍归 `lizard2-prone-posture`（blocked），不作为本轮出口。
 
-## 正式候选配置与训练接入
+## 当前正式配置
 
-1. 消费候选 D 的输入/驱动/动作/安全 reset 审核与 B/C/E 的具名记录，核资产、代码、工况和实际驱动设置。配置接入可以直接准备，完整新接触协议未发布不阻止该动作；实际错轴、残留目标、漏采或驱动安全缺口按来源修复。部署端参考越限行为、硬限位与动作裁剪分别核对，不新增胸部世界水平门槛。
-2. 按版本机制准备未冻结的下一版本 PLAN、参数与差异声明，绑定肩髋三轴、肘膝、腕踝及胸颈尾。逐角色落实策略可访问/锁定/门控及依据，RL 所需协调关节须有真实可达动作；不恢复指/趾根空通道，不暗中锁零。关节顺序、目标映射、scale/offset/clip、默认姿态、驱动及传感器逐项对照实际集合，复用已审草案，不改已发布 term 或已训 v3。
-3. 在最终同一配置核实际 action manager 的逐列目标、缩放/偏置/裁剪、backend 零速度目标及实体响应，核非零观测、接触首子步/历史、完整及子集 reset 和已声明的终止边界。范围未变的证据复用；构建和名称一致不替代运行。实际采用的 effort/speed 设置须读回，不恢复已取消的边界试验。
-4. 首轮沿用已核训练目标和必要的接触消费者，不因延后评测标定而静默删改奖励/终止。新滑移、滚动或异常主承重指标未经验证不启用；需要新增奖励时按版本纪律另交实现、测量依据和检查。奖励不保证几何禁区或全域精度。
-5. 完成相关离线检查，由新上下文结合 D 一次核同一候选的真实配置和接口记录，避免把配置、协议和训练拆成反复互等的审核关卡。记录实际路径及可复读证据；红项修复后接续，不把手工步态表现列为输入检查。
+正式版本入口取 [main/v4/PLAN](../../rl_exp/versions/lizard2/main/v4/PLAN.md)，配置、资产采用、旧版退休及有限接口审核取 evidence 中对应记录。当前只交付配置，必要预检、实际训练和策略评测继续在本项，不恢复独立阶段。
 
-## 正式采用与训练
+## 正式版本预检与训练
 
-1. 依据已核候选和用户采用决定，按版本规则完成正式资产声明、骨骼改名迁移、仍消费旧机体的冻结版本退休及新版本身份。`joint_order`、正则组、工具与 obs/action 文档随实际采用同步；不覆盖或解冻已训 v3，不刷新旧资产锁。资产管线消费 `asset-tree-per-family` 对此次采用的检查，不等待该项所有历史尾项关闭。
-2. 复用同身份的默认驱动、静态承重安全、动作/观测、采样/reset 证据；只补正式落点变化影响的核验，以及地形预检、GUI 目视和相关仓库检查。取消的限速/限矩及对称复测不恢复，不要求先手工走路或抬腿。
-3. 首轮训练预算与从头初始化决定复用[接口方案](../../acceptance/records/2026-10-23-lizard2-training-interface-plan.md#用户确定首轮训练预算)，不重复询问同一预算。展示实际工况、启动命令、学习目标及已有评测依据；尚未确定的关键采用/运行条件具名处理，不用预算确认代替输入核验，也不把只改计划写成已经开训。
-4. 按版本机制冻结，通过启动前检查后执行已批准训练，绑定实际 run、manifest/checkpoint 与偏离。新策略从新接口初始化，不以旧 v3 checkpoint 续训代替新候选训练；工作树和版本锚点可复现。
+1. 使用同一正式版本和原生训练入口完成地形预检、GUI 目视及启动前仓库/身份核验。复用同身份默认驱动、静态承重安全、动作/非零观测、子步接触和完整/子集/接触自动 reset 的具名证据，只补落点变化影响或真实缺证；构建不能替代实际运行。错轴、残留目标影响首步、漏采或驱动安全缺陷按来源修复。取消的边界/限矩和对称复测不恢复，不先要求手工步态或抬腿。
+2. 首轮训练预算与从头初始化决定复用[接口方案](../../acceptance/records/2026-10-23-lizard2-training-interface-plan.md#用户确定首轮训练预算)，不重复询问。展示实际工况、启动命令、学习目标和已有评测依据；尚未确定的关键运行条件具名处理，不用预算确认代替输入核验，也不把配置交付写成已经开训。
+3. 通过必要预检后执行已批准训练，绑定实际 run、manifest/checkpoint 与偏离。新策略从正式接口初始化，不续训旧 checkpoint；保持工作树与版本锚点可复现。实际采用的 effort/speed 读回按同身份复用，不恢复已取消的边界试验。
+4. 保留首轮既有训练目标和必要接触消费者；新滑移、滚动、异常主承重或净空判分用于奖励/终止前，先交对应测量与版本实现。未经验证不启用，不因延后完整协议而静默删改奖励或终止。新增终止/地形/reset 组合按实际范围核，不把有限证据冒称全覆盖。
 
 ## 训练后策略评测
 
@@ -53,4 +49,4 @@ A/E 交骨架、几何及真实消费者，B/C 交具名工况下的默认驱动
 - `feet_slide` / `foot_clearance` 保留奖励候选；先验证其实际测量，再按版本机制决定实现与权重，未加入首轮不构成该轮开训缺口。姿态监督仍须实际验收依据。
 - 速度设置取当前候选配置并核实际写入；[取消决定](../../acceptance/records/2026-10-23-lizard2-plan-inventory.md)中的触边、跨关节、有/无限速及速度—载荷包线不恢复，未验范围不称通过。
 - B/C 输入取[清单](../../acceptance/records/2026-10-23-lizard2-bc-handoff.md)和[审核](../../acceptance/records/2026-10-23-lizard2-bc-independent-review.md)；草案取[运行记录](../../acceptance/records/2026-10-23-lizard2-interface-runtime.md)及[复核](../../acceptance/records/2026-10-23-lizard2-interface-runtime-review.md)。接触测量取[原生样本](../../acceptance/records/2026-10-23-lizard2-contact-native.md)及其独立审核，原有限范围不变。
-- 历史判决按原协议/机体解释；计划修订不修改原失败、不证明未测能力、不采用资产或启动训练。后续以同一候选实际配置与产物交付。
+- 历史判决按原协议/机体解释；计划修订不修改原失败或证明未测能力。正式配置的采用取具名记录，不据此称已启动训练。
