@@ -101,6 +101,9 @@ LEGACY_JUDGE_ID = "legacy-baseline-threshold-keys-1"
 #: they read columns an earlier format does not carry, and a published id's case table is frozen.
 FOOTED_JUDGE_ID = "baseline-criteria-footed-1"
 
+#: Correct COM-to-candidate lever arm; older readers retain their published readings.
+CONTACT_COM_JUDGE_ID = "baseline-criteria-contact-com-1"
+
 #: Protocols allowed to arrive without a ``criteria`` block, by declared identity (not by filename).
 LEGACY_PROTOCOLS = (("Baseline-Flat-v1", 1), ("Baseline-Flat-v2", 2), ("Baseline-Flat-v3", 3))
 
@@ -227,6 +230,9 @@ CRITERION_KINDS = {
     "foot_slip_v1": {"params": ("max_slip_mps", "min_load", "max_slip_fraction"),
                      "columns": ("foot_lowest_point", "foot_com_pos", "foot_lin_vel", "foot_ang_vel",
                                  "foot_fraction")},
+    "foot_slip_com_v1": {"params": ("max_slip_mps", "min_load", "max_slip_fraction"),
+                         "columns": ("foot_lowest_point", "foot_com_pos", "foot_lin_vel", "foot_ang_vel",
+                                     "foot_contact", "foot_fraction")},
 }
 
 #: Which reader may read which kinds. The protocol's ``judge`` is a binding, not a label: a criterion
@@ -250,10 +256,14 @@ JUDGE_KINDS = {
                       "non_foot_load_sum_v1", "gait_swing_v1", "foot_lift_v1", "foot_slip_v1"),
 }
 
+JUDGE_KINDS[CONTACT_COM_JUDGE_ID] = tuple(
+    kind for kind in JUDGE_KINDS[FOOTED_JUDGE_ID] if kind != "foot_slip_v1") + ("foot_slip_com_v1",)
+
 #: Which reader produces which report items. Only the newest reader declares its list: the older ones
 #: were published without one, and tightening them now would invalidate verdicts already on record.
 JUDGE_REPORTS = {
     FOOTED_JUDGE_ID: tuple(REPORT_ITEMS),
+    CONTACT_COM_JUDGE_ID: tuple(REPORT_ITEMS),
 }
 
 
@@ -597,6 +607,31 @@ def foot_slip_speed(frames: dict, meta: dict) -> torch.Tensor:
     return (velocity - along * normal).norm(dim=-1)
 
 
+def foot_point_velocity_com_v1(frames: dict) -> torch.Tensor:
+    """World velocity at the geometric candidate using the COM lever arm [m/s].
+
+    This new entry belongs to CONTACT_COM_JUDGE_ID. The old entry is frozen,
+    including its reversed positional COM/point arguments. A lowest mesh vertex
+    remains a contact candidate, not a measured ground contact pair.
+    """
+    from rl_exp.tools.diagnose.diag_metrics import contact_point_velocity
+
+    return contact_point_velocity(
+        com_lin_vel_w=frames["foot_lin_vel"], ang_vel_w=frames["foot_ang_vel"],
+        com_pos_w=frames["foot_com_pos"], point_pos_w=frames["foot_lowest_point"])
+
+
+def foot_slip_speed_com_v1(frames: dict, meta: dict) -> torch.Tensor:
+    """Tangential COM-based candidate speed against the declared static plane [m/s]."""
+    velocity = foot_point_velocity_com_v1(frames)
+    source = meta.get("ground_source") or {}
+    normal = torch.as_tensor(source.get("normal") or (0.0, 0.0, 1.0),
+                             dtype=velocity.dtype, device=velocity.device)
+    normal = normal / normal.norm().clamp_min(1e-9)
+    along = (velocity * normal).sum(dim=-1, keepdim=True)
+    return (velocity - along * normal).norm(dim=-1)
+
+
 def _foot_readings(frames: dict, alive: torch.Tensor, meta: dict) -> dict:
     """The matrices both the report and the foot gates need, computed once.
 
@@ -659,6 +694,20 @@ def _gate_foot_slip_v1(frames: dict, alive: torch.Tensor, dt: float, measured: d
     return bool((share[carried] <= params["max_slip_fraction"]).all())
 
 
+def _gate_foot_slip_com_v1(frames: dict, alive: torch.Tensor, dt: float, measured: dict, meta: dict,
+                           params: dict) -> bool:
+    """The frozen loaded-share rule with the corrected COM-based speed [m/s]."""
+    slip = foot_slip_speed_com_v1(frames, meta)
+    loaded = (frames["foot_contact"] > 0) & alive.unsqueeze(-1) \
+        & (frames["foot_fraction"] >= params["min_load"])
+    breach = (slip > params["max_slip_mps"]) & loaded
+    share = breach.sum(dim=0) / loaded.sum(dim=0).clamp_min(1)
+    carried = loaded.any(dim=0)
+    measured["foot_slip_fraction_worst"] = float(share[carried].max()) if bool(carried.any()) else 0.0
+    measured["foot_slip_frames_loaded"] = int(loaded.sum())
+    return bool((share[carried] <= params["max_slip_fraction"]).all()) if bool(carried.any()) else False
+
+
 #: kind -> the function that decides it. One dispatch table, so a protocol names a criterion and the
 #: judge has exactly one place to look it up.
 CRITERIA = {
@@ -680,6 +729,7 @@ CRITERIA = {
     "gait_swing_v1": _gate_gait_swing_v1,
     "foot_lift_v1": _gate_foot_lift_v1,
     "foot_slip_v1": _gate_foot_slip_v1,
+    "foot_slip_com_v1": _gate_foot_slip_com_v1,
 }
 
 
@@ -1372,6 +1422,8 @@ def _score(artifact: dict, alive: torch.Tensor,
     # -- the foot readings: what the gait kind cannot see, reported whenever the format carries them --
     if "foot_lowest_point" in frames and "foot_com_pos" in frames:
         readings = _foot_readings(frames, alive, artifact["meta"])
+        if reader_id(protocol) == CONTACT_COM_JUDGE_ID:
+            readings["slip_mps"] = foot_slip_speed_com_v1(frames, artifact["meta"])
         clearance, slip = readings["clearance_m"], readings["slip_mps"]
         unloaded, loaded = readings["unloaded"], readings["loaded"]
         peak = torch.where(unloaded, clearance, torch.full_like(clearance, float("-inf"))).amax(dim=0)

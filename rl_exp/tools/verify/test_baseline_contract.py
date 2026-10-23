@@ -1467,6 +1467,144 @@ SCENE_PROTOCOL = {
 }
 
 
+def _fixture_contact_com(kw):
+    """Known rigid point motions through the actual frame writer; no physical rollout."""
+    protocol = {
+        **V4_PROTOCOL, "judge": baseline_metrics.CONTACT_COM_JUDGE_ID, "episode_length_s": .4,
+        "criteria": {"foot_slip": {"kind": "foot_slip_com_v1", "params": {
+            "max_slip_mps": .05, "min_load": .05, "max_slip_fraction": .02}}},
+        "report_only": ["foot_slip_mps", "foot_loaded_frames"],
+    }
+    f = {name: torch.zeros(20, 1, len(FEET), 3) for name in
+         ('foot_lowest_point', 'foot_com_pos', 'foot_lin_vel', 'foot_ang_vel')}
+    f['foot_contact'] = torch.ones(20, 1, len(FEET))
+    f['foot_fraction'] = torch.zeros(20, 1, len(FEET))
+    t = torch.arange(1, 21, dtype=torch.float32).reshape(-1, 1, 1) * .02
+    radius, speed = .1, .1
+    mode = kw.get('mode', 'rolling')
+    for name in ('foot_lowest_point', 'foot_com_pos', 'foot_lin_vel', 'foot_ang_vel'):
+        f[name].zero_()
+    f['foot_com_pos'][..., 2] = radius
+    f['foot_fraction'].fill_(kw.get('load', .25))
+    f['foot_contact'].fill_(1.)
+    if mode == 'deflection':
+        # A fixed material point on the floor, with the COM pivoting around it.
+        f['foot_com_pos'][..., 0] = radius * t.sin()
+        f['foot_com_pos'][..., 2] = radius * t.cos()
+        f['foot_ang_vel'][..., 1] = 1.
+        f['foot_lin_vel'][..., 0] = radius * t.cos()
+        f['foot_lin_vel'][..., 2] = -radius * t.sin()
+    else:
+        drift = -speed if mode == 'cancelled_sliding' else speed
+        f['foot_com_pos'][..., 0] = drift * t
+        f['foot_lowest_point'][..., 0] = drift * t
+        f['foot_lin_vel'][..., 0] = drift
+        if mode in ('rolling', 'cancelled_sliding'):
+            f['foot_ang_vel'][..., 1] = 1.
+        elif mode == 'descending':
+            height = .5 * (.4 - t)
+            f['foot_com_pos'][..., 0] = 0.
+            f['foot_lowest_point'][..., 0] = 0.
+            f['foot_com_pos'][..., 2] = radius + height
+            f['foot_lowest_point'][..., 2] = height
+            f['foot_lin_vel'].zero_()
+            f['foot_lin_vel'][..., 2] = -.5
+            f['foot_contact'].zero_()
+            f['foot_fraction'].zero_()
+            f['foot_contact'][-1] = 1.
+            f['foot_fraction'][-1] = .25
+    if 'speed_limit' in kw:
+        protocol['criteria']['foot_slip']['params']['max_slip_mps'] = kw['speed_limit']
+    artifact = build(protocol, 20, series={name: (lambda step, values=value: values[step])
+                                         for name, value in f.items()})
+    if kw.get('drop_contact'):
+        del artifact['frames']['foot_contact']
+    return protocol, artifact
+
+
+def test_contact_com_reader_distinguishes_deflection_rolling_and_sliding():
+    for mode, expected in (('deflection', 0.), ('rolling', 0.), ('sliding', .1),
+                           ('cancelled_sliding', .2), ('descending', 0.)):
+        _, artifact = _fixture_contact_com({'mode': mode})
+        result = baseline_metrics.judge(artifact)
+        assert result['verdict'] == ('pass' if expected == 0 else 'fail'), (mode, result)
+        got = result['diagnostics']['foot_slip_mps']
+        assert max(abs(v - expected) for v in got) < 1.e-6, (mode, got)
+
+
+def test_contact_com_preserves_old_readings_and_cannot_be_reached_by_old_reader():
+    _, artifact = _fixture_contact_com({'mode': 'rolling'})
+    frames = artifact['frames']
+    old_speed = baseline_metrics.foot_slip_speed(frames, artifact['meta'])
+    assert torch.allclose(old_speed, torch.full_like(old_speed, .2))
+    old = json.loads(json.dumps(artifact['protocol']))
+    old['judge'] = baseline_metrics.FOOTED_JUDGE_ID
+    artifact['protocol'] = old
+    assert baseline_metrics.judge(artifact)['verdict'] == 'invalid'
+    old['criteria']['foot_slip']['kind'] = 'foot_slip_v1'
+    result = baseline_metrics.judge(artifact)
+    assert result['verdict'] == 'fail' and all(abs(v-.2) < 1.e-6 for v in result['diagnostics']['foot_slip_mps'])
+
+
+def test_contact_com_requires_contact_column_and_loaded_samples():
+    _, artifact = _fixture_contact_com({'mode': 'rolling', 'load': 0.})
+    result = baseline_metrics.judge(artifact)
+    assert result['verdict'] == 'fail' and not result['gates']['foot_slip']
+    del artifact['frames']['foot_contact']
+    result = baseline_metrics.judge(artifact)
+    assert result['verdict'] == 'invalid' and any('foot_contact' in s for s in result['invalid_reasons'])
+
+
+def test_contact_com_threshold_boundary_and_common_translation():
+    for limit, verdict in ((.1, 'pass'), (.099, 'fail')):
+        _, artifact = _fixture_contact_com({'mode': 'sliding', 'speed_limit': limit})
+        assert baseline_metrics.judge(artifact)['verdict'] == verdict
+    _, artifact = _fixture_contact_com({'mode': 'cancelled_sliding'})
+    before = baseline_metrics.foot_point_velocity_com_v1(artifact['frames'])
+    shift = torch.tensor([2., -3., 4.])
+    artifact['frames']['foot_com_pos'] += shift
+    artifact['frames']['foot_lowest_point'] += shift
+    after = baseline_metrics.foot_point_velocity_com_v1(artifact['frames'])
+    assert torch.allclose(after, before, atol=1.e-6, rtol=0)
+
+
+def test_contact_com_calibration_motion_reaches_the_frame_writer():
+    from unittest.mock import patch
+
+    seen = []
+    original = baseline_frames.BaselineFrames.add
+    columns = ('foot_lowest_point', 'foot_com_pos', 'foot_lin_vel', 'foot_ang_vel',
+               'foot_contact', 'foot_fraction')
+
+    def observe(recorder, **frame):
+        seen.append({name: frame[name].clone() for name in columns})
+        return original(recorder, **frame)
+
+    with patch.object(baseline_frames.BaselineFrames, 'add', observe):
+        _, artifact = _fixture_contact_com({'mode': 'rolling'})
+    assert len(seen) == 20
+    for name in columns:
+        written = torch.stack([row[name] for row in seen])
+        assert torch.equal(written, artifact['frames'][name]), name
+    assert float(torch.stack([row['foot_ang_vel'] for row in seen]).abs().max()) > 0
+
+
+def contact_com_calibration():
+    """Return known fixture inputs and actual new/old consumer outputs, not physical evidence."""
+    cases = []
+    for mode in ('deflection', 'rolling', 'sliding', 'cancelled_sliding', 'descending'):
+        _, artifact = _fixture_contact_com({'mode': mode})
+        frames = artifact['frames']
+        result = baseline_metrics.judge(artifact)
+        candidate = frames['foot_lowest_point']
+        cases.append(dict(mode=mode, point_world_travel_m=float((candidate[-1]-candidate[0]).norm(dim=-1).max()),
+            frames={name: frames[name].tolist() for name in ('foot_lowest_point','foot_com_pos','foot_lin_vel',
+                                                          'foot_ang_vel','foot_contact','foot_fraction')},
+            new=result, old_candidate_slip_mps=baseline_metrics.foot_slip_speed(frames, artifact['meta']).tolist()))
+    return dict(scope='synthetic rigid-motion consumer calibration; no physics, sensor or mesh-contact proof',
+                cases=cases)
+
+
 def _fixture_plain(kw):
     """A clean run on the command: every declared gate passes."""
     return V4_PROTOCOL, build(V4_PROTOCOL, 1000, num_envs=2)
@@ -1747,6 +1885,7 @@ def _fixture_banded(kw):
 # time, before this function exists. One home per fixture still holds -- there is exactly one line
 # that binds the name "banded" to a fixture.
 _FIXTURES["banded"] = _fixture_banded
+_FIXTURES["contact_com"] = _fixture_contact_com
 
 
 def test_banded_tracking_judges_each_band_and_the_zero_band_in_absolute_units():
@@ -3028,6 +3167,14 @@ def test_reachability_joint_effect_axis_own_rpy():
 
 
 def main():
+    if "--contact-calibration" in sys.argv:
+        out = pathlib.Path(sys.argv[sys.argv.index("--contact-calibration") + 1]).resolve()
+        assert _REPO / "rl_exp/out" in out.parents and not out.exists()
+        out.parent.mkdir(parents=True, exist_ok=True)
+        report = contact_com_calibration()
+        out.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+        print("CONTACT_COM_SYNTHETIC_CALIBRATION_WRITTEN", out)
+        return
     if "--render_matrix" in sys.argv:
         test_target_binding_report_roundtrip(render_matrix=True)
         print("TARGET_BINDING_RENDER_MATRIX_OK (4 namings, 8 PNGs)")

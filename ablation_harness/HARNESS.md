@@ -31,11 +31,14 @@
   就地加字段等于改掉那份字节（`protocol_anchors.json` 的摘要会当场红）。所以新指标 = 新协议版本号 + 新锚点，
   哪怕判据一个数都没动。报告项**自带依赖列**：读不到那一列时该记录判 `invalid`，不是少一个数 ——
   "缺失"与"这一项当时平平无奇"在报告里长得一样，这就是依赖列的理由。
-- **代码基线**：v1.10.0 —— 几何测量的唯一家 `rl_exp/tasks/terrain_geometry.py`；记录格式见下一节。
+- **代码基线**：v1.11.0 —— 接触候选点速度新增 COM 杠杆臂判分器；记录格式见下一节。
   **版本纪律**：往 `ablation_harness/` 加模块、或改测量语义 ⇒ minor bump，并打 `harness-vN.M.K` 锚点
   （复现 = `git checkout harness-vN.M.K -- ablation_harness/`；已推的 tag 不改指不改名，内容错了开新
   版本号，不去改旧的）。**只写版本号不打 tag = 视同未声明**：号成为锚点，是在远端能 checkout 的那一刻，
   本机 tag 不算 —— 声明与 tag 是同一笔动作，分开做就有一半会漏。v1.9.0 = v1.8.0（判据身份化 + 套件锁 + 同表条件面）加 `video_matrix.py`（见下）。
+  v1.11.0 新增 `baseline-criteria-contact-com-1` / `foot_slip_com_v1`，材料点速度明确用 COM→候选点的杠杆臂。
+  旧判分器保留历史位置参数传反的读数，新旧 judge 不混表；最低碰撞顶点仍是几何接触候选，不能冒称地面接触对真值。
+  原因、对照及适用边界见 `acceptance/records/2026-10-23-lizard2-contact-com-calibration.md`。
   v1.10.0 = v1.9.0 加帧格式 2 与足端判据、定点场景驱动（协议 `scenes` + `components/command_player.py`）、
   汇总侧身份拒表（记录格式节 ④）、帧格式 3 与四条步态形态报告项、**判分器的分段与 settled 种类**
   （身份 `baseline-criteria-banded-1` → `-settled-1`：按带逐段判且未归带的帧即失败、非足载荷先求和、

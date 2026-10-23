@@ -415,6 +415,142 @@
           "expect": {"completion": 1.0}
         }
       }
+    },
+    "baseline-criteria-contact-com-1": {
+      "module": "ablation_harness.baseline_metrics",
+      "constant": "CONTACT_COM_JUDGE_ID",
+      "driver": "baseline",
+      "protocol_file": "baseline_flat_v4.json",
+      "kinds": [
+        "displacement_banded_settled_v1",
+        "displacement_v1",
+        "foot_lift_v1",
+        "foot_slip_com_v1",
+        "gait_swing_v1",
+        "mesh_clearance_v1",
+        "non_foot_carrier_v1",
+        "non_foot_contact_v1",
+        "non_foot_load_sum_v1",
+        "survival_v1",
+        "sustained_tilt_v1",
+        "tracking_banded_settled_v1",
+        "tracking_v1"
+      ],
+      "note": "Correct COM-to-geometric-candidate lever arm. Older readers retain reversed-argument readings. Cases use synthetic known rigid motions through BaselineFrames and judge; these thresholds are test fixtures, not approved robot performance criteria. No new family protocol is published by this block.",
+      "cases": {
+        "deflection": {
+          "fixture": "contact_com",
+          "kw": {
+            "mode": "deflection"
+          },
+          "expect": {
+            "verdict": "pass",
+            "gates": {
+              "foot_slip": true
+            }
+          }
+        },
+        "rolling": {
+          "fixture": "contact_com",
+          "kw": {
+            "mode": "rolling"
+          },
+          "expect": {
+            "verdict": "pass",
+            "gates": {
+              "foot_slip": true
+            }
+          }
+        },
+        "sliding": {
+          "fixture": "contact_com",
+          "kw": {
+            "mode": "sliding"
+          },
+          "expect": {
+            "verdict": "fail",
+            "gates": {
+              "foot_slip": false
+            }
+          }
+        },
+        "cancelled_sliding": {
+          "fixture": "contact_com",
+          "kw": {
+            "mode": "cancelled_sliding"
+          },
+          "expect": {
+            "verdict": "fail",
+            "gates": {
+              "foot_slip": false
+            }
+          }
+        },
+        "descending": {
+          "fixture": "contact_com",
+          "kw": {
+            "mode": "descending"
+          },
+          "expect": {
+            "verdict": "pass",
+            "gates": {
+              "foot_slip": true
+            }
+          }
+        },
+        "no_loaded_samples": {
+          "fixture": "contact_com",
+          "kw": {
+            "load": 0.0
+          },
+          "expect": {
+            "verdict": "fail",
+            "gates": {
+              "foot_slip": false
+            }
+          }
+        },
+        "at_speed_threshold": {
+          "fixture": "contact_com",
+          "kw": {
+            "mode": "sliding",
+            "speed_limit": 0.1
+          },
+          "expect": {
+            "verdict": "pass",
+            "gates": {
+              "foot_slip": true
+            }
+          }
+        },
+        "above_speed_threshold": {
+          "fixture": "contact_com",
+          "kw": {
+            "mode": "sliding",
+            "speed_limit": 0.099
+          },
+          "expect": {
+            "verdict": "fail",
+            "gates": {
+              "foot_slip": false
+            }
+          }
+        },
+        "missing_contact_column": {
+          "fixture": "contact_com",
+          "kw": {
+            "drop_contact": true
+          },
+          "expect": {
+            "verdict": "invalid",
+            "gates": {
+              "foot_slip": null
+            }
+          }
+        }
+      },
+      "kinds_sha256": "sha256:6321453df8f1abb19b44209e8a0bbeb6bfd269e57dfdc6ecedc3b6b054079b88",
+      "frozen_sha256": "sha256:8fcbe813ba5fae38ea92a49819e1baef72935ded5f4acca389569e71e855cb51"
     }
   }
 }
