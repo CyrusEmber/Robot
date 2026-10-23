@@ -66,7 +66,7 @@ DIFF_NAME = "diff.json"
 """The difference declaration's filename inside a recipe's version directory (``ARCH_PLAN`` 2.4 B4)."""
 
 EXPECTED_COMPARED: dict[str, int] = {
-    "lizard2/main": 6,
+    "lizard2/main": 8,
 }
 """How many recipe/task pairs this gate compares, per line, pinned.
 
@@ -107,6 +107,7 @@ EXPECTED_DIFFS: dict[tuple[str, str], int] = {
     # inheriting v2's 14000, which is a second agent leaf: 2 env + 2 agent = 4. Pinned at the same
     # freeze as v1/v2; a regeneration that loses a group shows up here as a count, not as silence.
     ("lizard2/main", "v3"): 4,
+    ("lizard2/main", "v4"): 66,
 }
 """Recipe -> how many paths its difference declaration lists (``diff.json`` next to the recipe)."""
 
@@ -258,7 +259,7 @@ def covers(key: str, path: str) -> bool:
     robot block writes), so every comparison asks whether the *entry* covers the *path*, never
     the other way round.
     """
-    return path == key or path.startswith(f"{key}.")
+    return path == key or path.startswith(f"{key}.") or path.startswith(f"{key}[")
 
 
 def agent_entry(line_key: str, version: str) -> str:
@@ -486,16 +487,26 @@ def _dev_contact_selection_errors(cfg) -> list[str]:
     root = _REPO / "rl_exp"
     usd = pathlib.Path(cfg.scene.robot.spawn.usd_path).resolve()
     body = obs_protocol.resolve_body(usd.relative_to(root).as_posix(), "lizard2", root)
-    links = ET.parse(body["urdf"]).getroot().findall("link")
+    urdf = ET.parse(body["urdf"]).getroot()
+    links = urdf.findall("link")
     colliders = {link.get("name") for link in links if link.find("collision") is not None}
     patterns = cfg.rewards.undesired_contacts.params["sensor_cfg"].body_names
-    _, selected = resolve_matching_names(patterns, [link.get("name") for link in links])
-    expected = {f"{leg}_hfe" for leg in ("lf", "rf", "rl", "rr")}
+    try:
+        _, selected = resolve_matching_names(patterns, [link.get("name") for link in links])
+    except ValueError as error:
+        return [f"dev undesired_contacts has unmatched body selectors: {error}"]
+    # Proximal leg collision owners, excluding the terminal pads. This reads the
+    # body's actual collision/chain structure, independently of the YAML selection.
+    parents = {joint.find("parent").get("link") for joint in urdf.findall("joint")
+               if joint.get("type") != "fixed"}
+    expected = {name for name in colliders & parents
+                if name.startswith(("lf_", "rf_", "rl_", "rr_"))}
     errors = []
     if dead := set(selected) - colliders:
         errors.append(f"dev undesired_contacts selects bodies without collision: {sorted(dead)}")
     if set(selected) != expected:
-        errors.append(f"dev undesired_contacts must retain four hfe owners: {sorted(selected)}")
+        errors.append(f"dev undesired_contacts must retain proximal collision owners "
+                      f"{sorted(expected)}: {sorted(selected)}")
     return errors
 
 
@@ -503,7 +514,7 @@ def _check_dev_contact_selection() -> list[str]:
     """Keep the real empty-channel regression and reject lost or broadened selection."""
     problems = []
     for play in (False, True):
-        cls = recipe.recipe_class("v3", play=play, line="lizard2/main", name="DevContactCheckCfg")
+        cls = recipe.recipe_class("v4", play=play, line="lizard2/main", name="DevContactCheckCfg")
         cfg = cls(params_version=None)
         problems.extend(_dev_contact_selection_errors(cfg))
         selection = cfg.rewards.undesired_contacts.params["sensor_cfg"]

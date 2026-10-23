@@ -98,6 +98,24 @@ def main(probed_rows: dict[str, dict] | None = None) -> int:
         _fires(lambda r: r.update(synthetic=_synthetic(legs=(10.0, None), stub=("legs",))),
                g._check_inert_velocity_limits, "actuator honours "),
     ])
+    # Check the clean baseline before mutations, then falsify the v4 cap branch too.
+    baseline: list[str] = []
+    g._check_inert_velocity_limits(rows, baseline)
+    ok = ok and not baseline
+    import copy
+    for fault in ("missing", "changed", "extra"):
+        probe = copy.deepcopy(rows)
+        actuator = probe["Lizard2FlatV4EnvCfg"]["instance"].scene.robot.actuators["legs"]
+        if fault == "missing":
+            actuator.velocity_limit_sim = None
+        elif fault == "changed":
+            actuator.velocity_limit_sim["lf_elbow_joint"] = 11.0
+        else:
+            actuator.velocity_limit_sim["foreign_joint"] = 10.0
+        problems: list[str] = []
+        g._check_inert_velocity_limits(probe, problems)
+        print(f"  v4 cap {fault}: {'FIRES' if problems else 'SILENT'}")
+        ok = bool(problems) and ok
     print("CONFIGCLASS_FIELDS_GATE_FALSIFIABLE" if ok else "CONFIGCLASS_FIELDS_GATE_SILENT")
     return 0 if ok else 1
 

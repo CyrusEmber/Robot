@@ -37,6 +37,11 @@
           "status": "retired",
           "retired_at": "2026-10-08",
           "reason": "Owner adopted the candidate stance body in main/v3; this old-body version exits maintenance and reproduction. See acceptance/records/2026-10-08-lizard2-v3-landing.md."
+        },
+        "v3": {
+          "status": "retired",
+          "retired_at": "2026-10-23",
+          "reason": "Formal palm-spatial configuration main/v4 replaces the old body; keep historical run identity, no new train/resume or relock. See acceptance/records/2026-10-23-lizard2-v4-configuration.md."
         }
       }
     }

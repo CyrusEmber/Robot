@@ -110,6 +110,44 @@
         "lf_foot"
       ],
       "reason": "v3 owner-approved candidate body adoption; measure actual articulation order"
+    },
+    "lizard2_palm_spatial/lizard2_palm_spatial.usda": {
+      "measured_at": "2026-10-23",
+      "measured_on": "Lizard2-Flat-Play-v4",
+      "body_count": 31,
+      "joint_order": [
+        "chest_yaw",
+        "tail1_yaw",
+        "rl_hip_swing",
+        "rr_hip_swing",
+        "chest_pitch",
+        "tail1_pitch",
+        "rl_hip_abduct",
+        "rr_hip_abduct",
+        "neck_yaw",
+        "lf_shoulder_swing",
+        "rf_shoulder_swing",
+        "tail2_yaw",
+        "rl_hip_twist",
+        "rr_hip_twist",
+        "neck_pitch",
+        "lf_shoulder_abduct",
+        "rf_shoulder_abduct",
+        "tail2_pitch",
+        "rl_knee",
+        "rr_knee",
+        "lf_shoulder_twist",
+        "rf_shoulder_twist",
+        "tail3_yaw",
+        "rl_ankle",
+        "rr_ankle",
+        "lf_elbow",
+        "rf_elbow",
+        "tail3_pitch",
+        "lf_wrist",
+        "rf_wrist"
+      ],
+      "reason": "Formal v4 exact-byte audited palm asset relocation; actual registered 30-action/102-observation construction, no diagnostic override"
     }
   }
 }

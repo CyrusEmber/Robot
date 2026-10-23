@@ -9,13 +9,13 @@
 
 ## 家族身份
 
-lizard2 = lizard 的四足构型修正版，保留每腿 `hip → haa → hfe → kfe → foot` 与机身关节，共 30 个可动关节。当前 main/v3 采用用户于 2026-10-08 批准的候选站姿骨架；旧机体 main/v1、main/v2 同次退休，保留历史配方与任务身份，不再承诺新训/续训与当前树复现。
+lizard2 = lizard 的四足构型修正版。当前 main/v4 采用掌部候选，前肢 `shoulder_swing → shoulder_abduct → shoulder_twist → elbow → wrist`、后肢 `hip_swing → hip_abduct → hip_twist → knee → ankle`，加胸颈尾共 30 个可动关节。旧机体 main/v1、main/v2、main/v3 已退休，保留历史配方与任务身份，不再承诺新训/续训与当前树复现。
 
-家族起源与旧机体的轴向/网格事实归历史记录 `acceptance/records/2026-09-22-lizard2-family-landing.md`、`acceptance/records/2026-09-22-lizard2-stride-at-load.md`。当前机体来源与采用记录归 `acceptance/records/2026-10-08-lizard2-v3-landing.md`。
+家族起源与旧机体的轴向/网格事实归历史记录 `acceptance/records/2026-09-22-lizard2-family-landing.md`、`acceptance/records/2026-09-22-lizard2-stride-at-load.md`。旧站姿机体采用归 `acceptance/records/2026-10-08-lizard2-v3-landing.md`；当前掌部资产采用与配置证据归 `acceptance/records/2026-10-23-lizard2-v4-configuration.md`。
 
 ## 设计入口
 
-当前版本为 main/v3：2026-10-10 冻结（tag `lizard2-main-v3`）并启动训练（预算 6000 迭代，同日跑满），方案入口见 [PLAN.md](PLAN.md)，正文唯一归 [main/v3/PLAN.md](main/v3/PLAN.md)。
+当前正式配置为 main/v4，方案入口见 [PLAN.md](PLAN.md)，正文唯一归 [main/v4/PLAN.md](main/v4/PLAN.md)，发布身份取 tag `lizard2-main-v4`。main/v3 的已训历史保留在其原 PLAN/NOTES。
 
 ## 线
 
@@ -24,10 +24,10 @@ lizard2 = lizard 的四足构型修正版，保留每腿 `hip → haa → hfe �
 - 家族级文档（`FAMILY.md` / `PLAN.md`）落在 `versions/lizard2/`，**不在 `main/` 里**。
 - 线之间的隔离是硬约束：本线不 import 其它线的 cfg/mdp，要哪个核就复制一份进本线自己的模块。
 
-## 资产树（2026-10-08）
+## 资产树（2026-10-23）
 
-声明 `versions/lizard2/assets.json` 指向 `lizard2_candidate/meshes`。当前正式机体为 `lizard2_candidate/lizard2_candidate.usda`，同目录 `<stem>.urdf` 与相对网格引用构成实际资产集合。USD 采用原候选转换产物，未重算骨架；来源 DCC 为 `blender/lizard2_stance_candidate.blend`。
-旧 `versions/lizard2/meshes` 与 `assets/lizard2/lizard2.usda` 留作历史，不由当前活跃配方消费。资产换代退休规则从版本纪律继承。
+声明 `versions/lizard2/assets.json` 指向 `lizard2_palm_spatial/meshes`。当前正式机体为 `lizard2_palm_spatial/lizard2_palm_spatial.usda`，同目录 URDF 与相对网格引用构成实际资产集合。采用已审站姿制品的原字节；来源身份与验证边界见配置验收记录。
+旧 `lizard2_candidate/`、`versions/lizard2/meshes` 与 `assets/lizard2/lizard2.usda` 留作历史，不由当前活跃配方消费。资产换代退休规则从版本纪律继承。
 
 ## 任务注册表
 
@@ -39,8 +39,10 @@ lizard2 = lizard 的四足构型修正版，保留每腿 `hip → haa → hfe �
 | `Lizard2-Flat-Play-v1` | `lizard2-flat-play-v1@1`（冻结参数 `versions/lizard2/main/v1/main_params.yaml`） |
 | `Lizard2-Flat-v2` | `lizard2-flat-v2@1`（冻结参数 `versions/lizard2/main/v2/main_params.yaml`） |
 | `Lizard2-Flat-Play-v2` | `lizard2-flat-play-v2@1`（历史参数 `versions/lizard2/main/v2/main_params.yaml`；退休） |
-| `Lizard2-Flat-v3` | `lizard2-flat-v3@1`（参数 `versions/lizard2/main/v3/main_params.yaml`） |
-| `Lizard2-Flat-Play-v3` | `lizard2-flat-play-v3@1`（参数 `versions/lizard2/main/v3/main_params.yaml`） |
+| `Lizard2-Flat-v3` | `lizard2-flat-v3@1`（历史参数 `versions/lizard2/main/v3/main_params.yaml`；退休） |
+| `Lizard2-Flat-Play-v3` | `lizard2-flat-play-v3@1`（历史参数 `versions/lizard2/main/v3/main_params.yaml`；退休） |
+| `Lizard2-Flat-v4` | `lizard2-flat-v4@1`（参数 `versions/lizard2/main/v4/main_params.yaml`） |
+| `Lizard2-Flat-Play-v4` | `lizard2-flat-play-v4@1`（参数 `versions/lizard2/main/v4/main_params.yaml`） |
 
 ## 版本历史
 
@@ -52,3 +54,4 @@ lizard2 = lizard 的四足构型修正版，保留每腿 `hip → haa → hfe �
 | main/v1 | 2026-09-22 | 新骨骼上的第一条线：髋轴补齐 + 无 DR、无课程的平地速度追踪配方（`lin_vel_x ∈ [0, 2]`，奖励/终止沿用 v1 基线）；血统根 ⇒ `base.json` 为 `null`，比较对象是框架 stock | （训练后补） |
 | main/v2 | 2026-09-28 | v1 对照版：脚板四关节退出动作接口，其余沿用 v1；母本 main/v1。2026-10-08 因机体采用退休 | 历史结果见 main/v2/NOTES.md |
 | main/v3 | 2026-10-08 | 用户批准的候选机体采用；基于 v2 摘除 kfe 策略动作，保留全部可动关节、PD 与默认零目标；唯一母本 main/v2，旧机体版本同次退休 | 自检/限制见 `acceptance/records/2026-10-08-lizard2-v3-landing.md` |
+| main/v4 | 2026-10-23 | 按用户“落实正式训练配置”采用已审掌部资产和全部位置动作；母本 main/v3，旧机体 v3 同次退休；独立 runner 与日志身份 | 配置交付及未覆盖边界见 `acceptance/records/2026-10-23-lizard2-v4-configuration.md` |

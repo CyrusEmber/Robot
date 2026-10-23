@@ -141,7 +141,7 @@ CHECKS: list[Check] = [
           [f"{_V}/check_split_probe_wait.py"], contract=("rl_exp/tools/verify/terrain_split_probe.py",)),
     Check    ("record binding primitives have one home (no second file digest / revision spelling / rsl_rl identity; detector self-tested)",
           [f"{_V}/check_record_bindings.py"], contract=("rl_exp/tools/runrecord/binding.py",)),
-    Check("leg chain caliber (adopted body's foot mesh + hinge plane + knee straight pose; the range must not reach straight)",
+    Check("leg chain caliber (fixed v3 geometry controls + naming/FK negatives; not current palm acceptance)",
           [f"{_V}/check_leg_reachability.py", "--self-check"],
           contract=("rl_exp/lizard2_candidate/lizard2_candidate.urdf",)),
 ]

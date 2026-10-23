@@ -36,6 +36,18 @@
       "env_cfg_entry": "rl_exp.tasks.recipe_tasks:Lizard2FlatV3EnvCfg_PLAY",
       "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:Lizard2V3PPORunnerCfg",
       "legacy_task_version": "v3"
+    },
+    "lizard2-flat-v4@1": {
+      "line": "lizard2/main",
+      "env_cfg_entry": "rl_exp.tasks.recipe_tasks:Lizard2FlatV4EnvCfg",
+      "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:Lizard2V4PPORunnerCfg",
+      "legacy_task_version": "v4"
+    },
+    "lizard2-flat-play-v4@1": {
+      "line": "lizard2/main",
+      "env_cfg_entry": "rl_exp.tasks.recipe_tasks:Lizard2FlatV4EnvCfg_PLAY",
+      "agent_entry": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:Lizard2V4PPORunnerCfg",
+      "legacy_task_version": "v4"
     }
   },
   "tasks": {
@@ -44,6 +56,8 @@
     "Lizard2-Flat-v2": "lizard2-flat-v2@1",
     "Lizard2-Flat-Play-v2": "lizard2-flat-play-v2@1",
     "Lizard2-Flat-v3": "lizard2-flat-v3@1",
-    "Lizard2-Flat-Play-v3": "lizard2-flat-play-v3@1"
+    "Lizard2-Flat-Play-v3": "lizard2-flat-play-v3@1",
+    "Lizard2-Flat-v4": "lizard2-flat-v4@1",
+    "Lizard2-Flat-Play-v4": "lizard2-flat-play-v4@1"
   }
 }

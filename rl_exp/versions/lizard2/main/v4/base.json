@@ -1,0 +1,4 @@
+{
+  "base": "v3",
+  "note": "2026-10-23 formalize audited palm draft; body, drives, 30 position actions and contact/reset sampling; PPO and reward kernels retained."
+}

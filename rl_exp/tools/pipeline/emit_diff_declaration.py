@@ -162,8 +162,8 @@ def build(line_key: str, version: str) -> dict:
     # under it actually moved: the replay says ``actions.joint_pos_legs``, the comparison against a
     # mother says ``actions.joint_pos_legs.joint_names[]``. The gate asks whether the entry COVERS a
     # path the element moved (``check_recipe_build.hard_b``), so the entry has to sit at or above the
-    # replay's path; last writer wins, because a path several elements touch still has one element
-    # that set its final value and the gate accepts any element that really moved it.
+    # replay's path. Last writer selects the entry's granularity; its attribution must
+    # then include EVERY element that moved that entry or its children, as hard_b requires.
     author_of: dict[str, tuple[str, str]] = {}
     for name in reversed([name for name, _ in trace]):
         for moved in sorted(produced.get(name, ())):
@@ -180,6 +180,8 @@ def build(line_key: str, version: str) -> dict:
             unowned.append(leaf)
             continue
         author, entry = found
+        author = "+".join(sorted(name for name, moves in produced.items()
+                                 if any(crb.covers(entry, moved) for moved in moves)))
         group = env_allowed.setdefault(author, {"paths": [], "why": why_todo_env(mother)})
         if entry not in declared:
             declared.add(entry)

@@ -395,7 +395,7 @@ def self_check_sole_area() -> None:
     assert torch.allclose(tilted, torch.tensor([[[0.0, -math.sin(theta), -math.cos(theta)]]]),
                           atol=1e-6), tilted
 
-    # The CURRENT asset's four feet, identity orientation, floor at each mesh's lowest vertex.
+    # Fixed v3 calibration geometry, never a mutable family's current mesh tree.
     # The front pad retains this 2026-09-28 calibration: 1 mm band 0.003422 m^2, 2 mm 0.013352,
     # 5 mm 0.051689, 10 mm 0.116479 of a 0.164180 m^2 denominator. The pad is curved and its faces are
     # ~2 cm across, so the reading steps rather than slides: its lowest vertices sit at 0, 1.668,
@@ -403,10 +403,11 @@ def self_check_sole_area() -> None:
     # is also why no pose can approach a ratio of 1 and why the threshold needs the same measurement
     # behind it. 2 mm and 5 mm are asserted away from those rings so a hair of float noise cannot move
     # them across a step.
+    root = pathlib.Path(__file__).resolve().parents[2]
     areas, flat = {}, {}
     for name in ("lf", "rf", "rl", "rr"):
-        mesh = diag_metrics.mesh_triangles(diag_metrics.collision_mesh_dir(
-            obs_protocol.family_of("Lizard2-Flat-v1")) / f"{name}_foot_collision.obj")
+        mesh = diag_metrics.mesh_triangles(
+            root / "lizard2_candidate/meshes/collision" / f"{name}_foot_collision.obj")
         assert mesh.shape == (48, 3, 3), mesh.shape
         areas[name] = diag_metrics.sole_area_m2(mesh)
         grounded = mesh - torch.tensor([0.0, 0.0, float(mesh[..., 2].min())])
@@ -436,7 +437,7 @@ def self_check_sole_area() -> None:
     assert all(tree.is_dir() for tree in trees.values()), trees
     assert trees["lizard"] != trees["lizard2"], ("family trees alias", trees)
     print("[SELF-CHECK] historical flat/dome caps retain 0.119282/0.013352 m^2; "
-          f"current families resolve separate trees {trees}; current lizard2 2 mm caps "
+          f"current families resolve separate trees {trees}; historical v3 2 mm caps "
           f"{ {name: bands[0.002] for name, bands in flat.items()} }")
 
 

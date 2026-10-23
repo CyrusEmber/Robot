@@ -91,6 +91,7 @@
 | `check_version_docs.py` | 版本文档完备 + 血统闸：每版本目录齐件（PLAN/NOTES/`<line>_params.yaml` + asset_lock；**退休版免锁**，状态经 `check_recipe_registry.effective_status` 读）+ `base.json` 边合法 + FAMILY 版本史行 + 本文件版本行；另扫覆盖文档的闸门判词 + `ARCH_PLAN.md` 的状态词（加粗形式与 H1 标题行）+ **harness 代码基线（`ablation_harness/HARNESS.md`）的号是否有本地 tag**（家族版本 tag 缺失只 WARN，这一条红） |
 | `check_cfg_lock.py` | 配方 golden 闸门（format 3 分两层：框架组合块 + 线自己的条目）；`--update` 必须带 `--line` + `--reason`；反证 `test_cfg_lock_gate.py` |
 | `check_recipe_build.py` | 构建硬闸：冻结 golden 逐字段比 + 覆盖钉数 + 逐步归属 |
+| `test_lizard2_v4.py` | 正式掌部配置的命名、动作、驱动与采样离线回归 |
 | `check_recipe_map.py` | 配方身份闸门：`ast` 读注册表（不 import），声明的 `env_cfg_entry`/`agent_entry` 与注册逐字一致；`--bind-config` 构造实例读 `params_version`；反证 `test_recipe_map_gate.py` |
 | `check_recipe_registry.py` | 实验线生命周期闸门（`lines.json` 二值 `status` + 版本例外只许退休，闸门无时钟）；`effective_status` 是"线状态 + 版本例外"的唯一读者（离线闸门与启动共用）；反证 `test_recipe_registry_gate.py` |
 | `check_obs_protocol.py` / `obs_protocol_live.py` | 协议闸门（自洽 + 已审锚点 + golden 逐任务 + `--live` 实构比对 + 覆盖）；live 侧起 env 读真实 manager 的组序/项序/宽度/shape。反证 `test_obs_protocol_gate.py` |

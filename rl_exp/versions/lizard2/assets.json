@@ -1,5 +1,5 @@
 {
   "format": 1,
-  "meshes_dir": "lizard2_candidate/meshes",
-  "why": "Owner adopted the approved 2026-10-08 candidate body in main/v3. Its USD and URDF live together in lizard2_candidate/ and URDF mesh references resolve to this family-owned tree. Old-body versions are retired, not relocked; see acceptance/records/2026-10-08-lizard2-v3-landing.md."
+  "meshes_dir": "lizard2_palm_spatial/meshes",
+  "why": "Formalize audited palm body for main/v4; exact source bytes and mesh references retained. Old-body versions retire without relocking. See acceptance/records/2026-10-23-lizard2-v4-configuration.md."
 }

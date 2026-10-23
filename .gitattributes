@@ -24,3 +24,9 @@
 # Diagnostic evidence hashes bind original bytes, including historical CRLF reports.
 /rl_exp/out/** -text
 /rl_exp/tools/diagnose/out/** -text
+
+# Adopted palm body keeps the exact source bytes bound by its runtime evidence.
+/rl_exp/lizard2_palm_spatial/** -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+# Original exporter formatting is part of these two audited source hashes.
+/rl_exp/lizard2_palm_spatial/lizard2_palm_spatial.urdf whitespace=-blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+/rl_exp/lizard2_palm_spatial/lizard2_palm_spatial.usda whitespace=blank-at-eol,-blank-at-eof,space-before-tab,cr-at-eol

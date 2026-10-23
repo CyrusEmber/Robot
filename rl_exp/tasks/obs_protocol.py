@@ -484,10 +484,10 @@ def load_diagnostic_target(path, cfg, task, *, naming_override=None, usd_overrid
         if actual != original["usd"]:
             raise ProtocolError(f"{task}: cfg USD {actual} differs from declared {original['usd']}")
         body = original
-        naming = names.naming_for("shared")
         params = _params_document(task)
         if params is None:
             raise ProtocolError(f"{task}: no parameters document for target binding source")
+        naming = names.naming_for(params[0].get("robot", {}).get("naming", "shared"))
         binding = names.binding_for_target(str(body["usd"]), str(params[1]), naming)
         binding.update(task=task, urdf=str(body["urdf"]))
     if naming_override is not None and names.naming_id(naming) != naming_override:

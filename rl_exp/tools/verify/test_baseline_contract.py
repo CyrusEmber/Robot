@@ -2480,7 +2480,7 @@ def test_gait_sole_calibration_keeps_asset_identity():
     exec(compile(ast.Module(body=[function], type_ignores=[]), str(current), "exec"), scope)
     run = scope["self_check_sole_area"]
     with contextlib.redirect_stdout(io.StringIO()):
-        run()  # The actual adopted candidate must pass without altering either historical cap.
+        run()  # Fixed v3 geometry must pass without altering either historical cap.
         retired_tree = diag_metrics.collision_mesh_dir("lizard")
         with patch.object(diag_metrics, "collision_mesh_dir", return_value=retired_tree):
             expect(AssertionError, run)  # A declaration alias still fails when rear caps coincide.
@@ -2701,7 +2701,7 @@ def test_shared_fitter_reaches_its_fk_control():
 
     target = fit.load_target(fit.DEFAULT_TARGET)
     leg, base_z = target["meta"]["leg"], target["body"]["base_z_m"]
-    chain, normal, vertices, zero, _ = fit.zero_pose(fit.K.DEFAULT_URDF, leg, base_z)
+    chain, normal, vertices, zero, _ = fit.zero_pose(fit.K.CALIBRATION_URDF, leg, base_z)
     pose = [.3, -.2, .4, -.5, .1][:len(chain)]
     assert all(joint["limits"][0] <= value <= joint["limits"][1] for joint, value in zip(chain, pose))
     point = fit.K.pad_state(chain, pose, normal, vertices, base_z)["position"]
@@ -2724,11 +2724,12 @@ def test_shared_slider_zero_is_in_base_frame():
     start = next(i for i, n in enumerate(build.body) if assigns(n, "chains"))
     stop = next(i for i, n in enumerate(build.body) if assigns(n, "zero")) + 1
     namespace = dict(vars(slider))
-    namespace['args'] = NS(urdf=slider.DEFAULT_URDF, base_z=.9253, free=False, load=None)
+    urdf = _REPO / 'rl_exp/lizard2_candidate/lizard2_candidate.urdf'
+    namespace['args'] = NS(urdf=urdf, base_z=.9253, free=False, load=None)
     exec(compile(ast.Module(body=build.body[start:stop], type_ignores=[]), '<slider-setup>', 'exec'), namespace)
-    model = collision.load_urdf(slider.DEFAULT_URDF)
+    model = collision.load_urdf(urdf)
     assert all(all(float(value) == 0. for value in joint.find('origin').get('rpy', '0 0 0').split())
-               for joint in ET.parse(slider.DEFAULT_URDF).getroot().findall('joint') if joint.find('origin') is not None)
+               for joint in ET.parse(urdf).getroot().findall('joint') if joint.find('origin') is not None)
     for leg in slider.LEGS:
         full = collision.fk(model['joints'], leg + '_foot', {})
         expected = [full[i][3] for i in range(3)]

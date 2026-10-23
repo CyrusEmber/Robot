@@ -1,0 +1,110 @@
+{
+  "format": 4,
+  "recipe": "lizard2-flat-v4@1",
+  "line": "lizard2/main",
+  "note": "Hard B, lineage reading: base.json names v3 as this recipe's mother, so the declared difference is against that recipe -- not against the framework stock cfg, which would bury this version's own delta inside everything its ancestors already wrote. Env paths are grouped by the element that last moved them in the replay, so the paths here cannot disagree with the build; params_version is filtered as identity, because it says which recipe this is and it is what makes the two recipes different at all. Each parent path names the complete replay writer set; reasons bind the changed owners to the audited palm adoption.",
+  "env": {
+    "allowed": {
+      "lizard2_palm_interface": {
+        "paths": [
+          "actions.joint_pos_legs.clip",
+          "actions.joint_pos_legs.preserve_order",
+          "actions.joint_pos_spine.clip",
+          "actions.joint_pos_spine.preserve_order",
+          "events.reset_base.params.pose_range.pitch",
+          "events.reset_base.params.pose_range.roll",
+          "events.reset_base.params.pose_range.z",
+          "scene.contact_forces.default.history_length",
+          "scene.contact_forces.default.update_period",
+          "scene.contact_forces.physx.history_length",
+          "scene.contact_forces.physx.update_period",
+          "scene.lazy_sensor_update",
+          "scene.robot.actuators.feet.dynamic_friction",
+          "scene.robot.actuators.feet.effort_limit_sim",
+          "scene.robot.actuators.feet.friction",
+          "scene.robot.actuators.feet.velocity_limit_sim",
+          "scene.robot.actuators.feet.viscous_friction",
+          "scene.robot.actuators.legs.dynamic_friction",
+          "scene.robot.actuators.legs.effort_limit_sim",
+          "scene.robot.actuators.legs.friction",
+          "scene.robot.actuators.legs.velocity_limit_sim",
+          "scene.robot.actuators.legs.viscous_friction",
+          "scene.robot.actuators.spine.dynamic_friction",
+          "scene.robot.actuators.spine.effort_limit_sim",
+          "scene.robot.actuators.spine.friction",
+          "scene.robot.actuators.spine.velocity_limit_sim",
+          "scene.robot.actuators.spine.viscous_friction",
+          "scene.robot.init_state.joint_vel..*",
+          "scene.robot.init_state.joint_vel.chest_pitch_joint",
+          "scene.robot.init_state.joint_vel.chest_yaw_joint",
+          "scene.robot.init_state.joint_vel.lf_elbow_joint",
+          "scene.robot.init_state.joint_vel.lf_shoulder_abduct_joint",
+          "scene.robot.init_state.joint_vel.lf_shoulder_swing_joint",
+          "scene.robot.init_state.joint_vel.lf_shoulder_twist_joint",
+          "scene.robot.init_state.joint_vel.lf_wrist_joint",
+          "scene.robot.init_state.joint_vel.neck_pitch_joint",
+          "scene.robot.init_state.joint_vel.neck_yaw_joint",
+          "scene.robot.init_state.joint_vel.rf_elbow_joint",
+          "scene.robot.init_state.joint_vel.rf_shoulder_abduct_joint",
+          "scene.robot.init_state.joint_vel.rf_shoulder_swing_joint",
+          "scene.robot.init_state.joint_vel.rf_shoulder_twist_joint",
+          "scene.robot.init_state.joint_vel.rf_wrist_joint",
+          "scene.robot.init_state.joint_vel.rl_ankle_joint",
+          "scene.robot.init_state.joint_vel.rl_hip_abduct_joint",
+          "scene.robot.init_state.joint_vel.rl_hip_swing_joint",
+          "scene.robot.init_state.joint_vel.rl_hip_twist_joint",
+          "scene.robot.init_state.joint_vel.rl_knee_joint",
+          "scene.robot.init_state.joint_vel.rr_ankle_joint",
+          "scene.robot.init_state.joint_vel.rr_hip_abduct_joint",
+          "scene.robot.init_state.joint_vel.rr_hip_swing_joint",
+          "scene.robot.init_state.joint_vel.rr_hip_twist_joint",
+          "scene.robot.init_state.joint_vel.rr_knee_joint",
+          "scene.robot.init_state.joint_vel.tail1_pitch_joint",
+          "scene.robot.init_state.joint_vel.tail1_yaw_joint",
+          "scene.robot.init_state.joint_vel.tail2_pitch_joint",
+          "scene.robot.init_state.joint_vel.tail2_yaw_joint",
+          "scene.robot.init_state.joint_vel.tail3_pitch_joint",
+          "scene.robot.init_state.joint_vel.tail3_yaw_joint",
+          "scene.robot.spawn.articulation_props.enabled_self_collisions"
+        ],
+        "why": "Keep audited action order/clip, explicit backend caps, xyzw free-root spawn, self collision, per-substep contact/history and deterministic six-axis reset; preserve TGS/false."
+      },
+      "lizard2_palm_interface+lizard2_robot": {
+        "paths": [
+          "scene.robot.actuators",
+          "scene.robot.init_state",
+          "scene.robot.spawn"
+        ],
+        "why": "The robot element adopts the exact-byte palm body and per-joint PD/defaults; the interface element completes explicit backend caps, free-root spawn, zero joint velocity and self collision. Both write this parent block."
+      },
+      "lizard2_actions+lizard2_palm_interface": {
+        "paths": [
+          "actions.joint_pos_legs",
+          "actions.joint_pos_spine"
+        ],
+        "why": "The action element exposes 20 leg and 10 spine position targets with audited scales; the interface element adds explicit preserve_order/offset/clip. Both write this parent block."
+      },
+      "lizard2_rewards": {
+        "paths": [
+          "rewards.undesired_contacts.params.sensor_cfg.body_names"
+        ],
+        "why": "Bind the unchanged undesired-contact penalty to the eight real proximal collision owners; reward kernel/weight retained."
+      }
+    }
+  },
+  "agent": {
+    "why": "The agent is a class, not a declaration: these entries carry a reason and no element name.",
+    "allowed": {
+      "experiment_name": "Separate v4 experiment directory for a fresh 30-action policy; approved 6000-iteration budget and PPO hyperparameters retained."
+    }
+  },
+  "authored_against": {
+    "env": {
+      "lizard2_actions+lizard2_palm_interface": "c2d337a24d88",
+      "lizard2_palm_interface": "5ce55a89177e",
+      "lizard2_palm_interface+lizard2_robot": "8abe762ff1ca",
+      "lizard2_rewards": "109992297c56"
+    },
+    "agent": "7a03ab33ba5d"
+  }
+}

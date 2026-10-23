@@ -118,7 +118,9 @@ FROZEN = {
     # `--update` printed "no content change (provenance or format only)" and `check_recipe_build`
     # stayed green, i.e. the 6 entries are the same snapshots under a new key (6 added, none edited).
     # Reason, readouts and the independent review: acceptance/records/2026-10-10-record-format-live-checks.md.
-    "rl_exp/versions/lizard2/main/cfg_lock.json": "8b7e7a139500407b866945446e4feeea787d51904a1c96ce53705d030af47cf7",
+    # 2026-10-23: add two v4 tasks on the adopted palm body, no old snapshot changed.
+    # Exact update/review: acceptance/records/2026-10-23-lizard2-v4-configuration.md.
+    "rl_exp/versions/lizard2/main/cfg_lock.json": "ea7bf0f4b45c23d99217c310ae84171f2ad0511f0ff90a3081b13ce6d650eba4",
 }
 
 FROZEN_REVS: dict[str, str] = {
@@ -141,7 +143,7 @@ FROZEN_REVS: dict[str, str] = {
     # ("declare the v3 budget at 6000"), and this line names that revision.
     # The 2026-10-10 re-baseline (the rsl_rl identity moved the combination key) took the same two
     # steps: the new bytes landed in cb6eb27.
-    "rl_exp/versions/lizard2/main/cfg_lock.json": "cb6eb27",
+    "rl_exp/versions/lizard2/main/cfg_lock.json": "lizard2-main-v4",
 }
 """Which revision each frozen file's bytes are from, for the banner only.
 

@@ -88,3 +88,10 @@ class Lizard2V3PPORunnerCfg(Lizard2V2PPORunnerCfg):
 
     max_iterations = 6000
     experiment_name = "lizard2_v3"
+
+
+@configclass
+class Lizard2V4PPORunnerCfg(Lizard2V3PPORunnerCfg):
+    """Fresh 30-position-action palm policy; retain the approved PPO budget."""
+
+    experiment_name = "lizard2_v4"

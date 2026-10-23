@@ -333,6 +333,40 @@ def lizard2_no_dr(cfg) -> None:
             reset_params[range_key][axis] = (0.0, 0.0)
 
 
+def lizard2_palm_interface(cfg) -> None:
+    """Apply the v4 position interface, runtime drive caps and sampling [SI units]."""
+    params = _doc(cfg)
+    robot = params["robot"]
+    cfg.scene.robot.init_state.rot = tuple(robot["base_init_rotation_xyzw"])
+    cfg.scene.robot.init_state.lin_vel = (0.0, 0.0, 0.0)
+    cfg.scene.robot.init_state.ang_vel = (0.0, 0.0, 0.0)
+    cfg.scene.robot.init_state.joint_vel = dict.fromkeys(params["default_joint_pos"], 0.0)
+    cfg.scene.robot.spawn.articulation_props.enabled_self_collisions = robot["self_collisions"]
+    cfg.scene.robot.spawn.articulation_props.fix_root_link = None
+    for name, actuator in cfg.scene.robot.actuators.items():
+        group = params["actuators"][name]
+        actuator.effort_limit_sim = group["effort_limit"]
+        actuator.velocity_limit_sim = group["velocity_limit"]
+        actuator.friction = 0.0
+        actuator.dynamic_friction = 0.0
+        actuator.viscous_friction = 0.0
+    for name, group in (("joint_pos_legs", "legs"), ("joint_pos_spine", "spine")):
+        term = getattr(cfg.actions, name)
+        term.offset = 0.0
+        term.preserve_order = True
+        term.clip = {joint: tuple(bounds) for joint, bounds in params["action"]["clip"][group].items()}
+    cfg.scene.lazy_sensor_update = False
+    for name in ("default", "physx"):
+        sensor = getattr(cfg.scene.contact_forces, name)
+        sensor.update_period = params["sim"]["dt"]
+        sensor.history_length = params["sim"]["decimation"]
+    cfg.sim.physics.physx.solver_type = 1
+    cfg.sim.physics.physx.enable_external_forces_every_iteration = False
+    for field in ("pose_range", "velocity_range"):
+        cfg.events.reset_base.params[field] = dict.fromkeys(
+            ("x", "y", "z", "roll", "pitch", "yaw"), (0.0, 0.0))
+
+
 LIZARD2_RECIPES: dict[str, dict] = {
     "v1": {
         "elements": (
@@ -408,6 +442,13 @@ LIZARD2_RECIPES: dict[str, dict] = {
         "train": "Lizard2-Flat-v3",
         "play": "Lizard2-Flat-Play-v3",
     },
+}
+
+LIZARD2_RECIPES["v4"] = {
+    **LIZARD2_RECIPES["v3"],
+    "elements": (*LIZARD2_RECIPES["v3"]["elements"], "lizard2_palm_interface"),
+    "train": "Lizard2-Flat-v4",
+    "play": "Lizard2-Flat-Play-v4",
 }
 
 ELEMENTS = {

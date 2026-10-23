@@ -148,10 +148,12 @@ def family_urdf(rl_exp: pathlib.Path, family: str) -> tuple[pathlib.Path, str]:
 
 
 #: The body the family consumes today, resolved from its own declaration (``versions/lizard2/assets.json``
-#: names the candidate's mesh tree, and ``main_params.yaml`` spawns its USD): the default reading has to
-#: be the adopted body, otherwise the pinned knee facts below would describe a body nothing runs. The
-#: first body stays reachable through ``--urdf``.
+#: names the candidate's mesh tree, and ``main_params.yaml`` spawns its USD). Normal
+#: diagnostics use this body; historical arithmetic controls have explicit fixtures below.
 DEFAULT_URDF = family_urdf(_REPO / "rl_exp", "lizard2")[0]
+# Historical arithmetic controls stay on the geometry/recipe that established them.
+CALIBRATION_URDF = _REPO / "rl_exp/lizard2_candidate/lizard2_candidate.urdf"
+CALIBRATION_PARAMS = _REPO / "rl_exp/versions/lizard2/main/v3/main_params.yaml"
 #: The five joints of a leg, root to pad. The blade is the last one: the pad is rigid to it. The chain
 #: itself lives in the name table, so a body that inserts a joint (or renames one) is this file's
 #: business only through that table.
@@ -167,7 +169,7 @@ LEGS = ("lf", "rf", "rl", "rr")
 #: short of straight], and the thigh-shank angle at the FOLDED end of the range [deg]. Four entries
 #: rather than one because the four chains are not exact mirrors of one another.
 #:
-#: These are the ADOPTED body's numbers (``rl_exp/lizard2_candidate/lizard2_candidate.urdf``), where
+#: These are the historical v3 body's controls (``lizard2_candidate/lizard2_candidate.urdf``), where
 #: the range stops 6.245 deg short of straight, so reverse bending is not reachable and the knee
 #: cannot fully straighten either. The first body was the other way round -- collinear at +-55.1465
 #: deg inside a +-1.2 rad range, i.e. 13.608 deg of hyperextension it inherited when ``hfe``'s axis
@@ -444,17 +446,22 @@ def downstream_links(urdf: pathlib.Path, leg: str,
             for name in chain_joint_names(urdf, leg, naming)}
 
 
-def gain_table(rl_exp: pathlib.Path, family: str, joint_names: tuple[str, ...]) -> dict[str, dict]:
+def gain_table(rl_exp: pathlib.Path, family: str, joint_names: tuple[str, ...], *,
+               params_path: pathlib.Path | None = None) -> dict[str, dict]:
     """``{joint: {"group", "kp", "kd"}}`` from the recipe that CONSUMES this body, not from the body.
 
     The gains are not in the URDF, so they have to come from their one home: the line's ``actuators:``
     block, matched to joints by its own ``joint_patterns``. The group->joint mapping is imported from the
     parity gate instead of being re-implemented (one answer to "which group owns this joint"), and a
     joint no group claims -- or two claiming it -- is refused: a gain table invented here would be a
-    second home for a number the recipe owns.
+    second home for a number the recipe owns. ``params_path`` binds historical controls to their
+    frozen recipe; omission reads the current development recipe. Scalar/per-joint gains both work.
     """
-    yaml_path = rl_exp / "versions" / family / "main" / "main_params.yaml"
-    groups = _actuator_groups(yaml_path.read_text(encoding="utf-8"))
+    yaml_path = params_path or rl_exp / "versions" / family / "main" / "main_params.yaml"
+    text = yaml_path.read_text(encoding="utf-8")
+    groups = _actuator_groups(text)
+    import yaml
+    values = yaml.safe_load(text)["actuators"]
     if not groups:
         raise SystemExit(f"{yaml_path}: declares no actuators block, so there are no gains to read")
     owners = _joint_owners(groups, {name: {} for name in joint_names})
@@ -463,8 +470,11 @@ def gain_table(rl_exp: pathlib.Path, family: str, joint_names: tuple[str, ...]) 
         if len(claims) != 1:
             raise SystemExit(f"{yaml_path}: {name} is claimed by {claims or 'no group'} -- "
                              "expected exactly one actuator group")
-        spec = groups[claims[0]]
-        table[name] = {"group": claims[0], "kp": float(spec["stiffness"]), "kd": float(spec["damping"])}
+        spec = values[claims[0]]
+        def value(field):
+            declared = spec[field]
+            return float(declared[name] if isinstance(declared, dict) else declared)
+        table[name] = {"group": claims[0], "kp": value("stiffness"), "kd": value("damping")}
     return table
 
 
@@ -1015,6 +1025,10 @@ def diagnostic_urdf(path: pathlib.Path | None, urdf: pathlib.Path | None,
                     naming_id: str | None) -> tuple[pathlib.Path, dict, str]:
     """Resolve an offline manifest binding, refusing conflicting raw overrides."""
     if path is None:
+        if urdf is None and naming_id is None:
+            import yaml
+            params = _REPO / "rl_exp/versions/lizard2/main/main_params.yaml"
+            naming_id = yaml.safe_load(params.read_text(encoding="utf-8"))["robot"].get("naming", "shared")
         return (urdf or DEFAULT_URDF).resolve(), joint_names.naming_for(naming_id or "shared"), "CLI/default"
     source = path.resolve()
     document = json.loads(source.read_text(encoding="utf-8"))
@@ -1319,7 +1333,7 @@ def _knee_geometry_check() -> None:
 
 
 def self_check(urdf: pathlib.Path) -> None:
-    """Poses whose answers are hand arithmetic, not a second pass of the same matrix product."""
+    """Fixed v3 geometry/recipe arithmetic controls; not current palm body acceptance."""
     _knee_geometry_check()
     for leg in LEGS:
         chain = load_chain(urdf, leg)
@@ -1480,7 +1494,8 @@ def self_check(urdf: pathlib.Path) -> None:
         # Nested subtrees do NOT make it monotone -- the mass term carries each joint's OWN lever arm, so
         # at the zero pose the yaw hip sees almost nothing of a leg that hangs along its axis while the
         # abduction axis swings the whole leg. The reading is per joint, not a nesting of the one above.
-        gains = gain_table(_REPO / "rl_exp", _GAIN_FAMILY, tuple(joint["name"] for joint in chain))
+        gains = gain_table(_REPO / "rl_exp", _GAIN_FAMILY, tuple(joint["name"] for joint in chain),
+                           params_path=CALIBRATION_PARAMS)
         moments = reflected_inertia(chain, zero_angles, link_inertials(urdf), downstream_links(urdf, leg),
                                    gains)
         assert all(moment["inertia"] > 0.0 for moment in moments), (leg, moments)
@@ -1894,7 +1909,7 @@ def main() -> None:
                              "(every asset today), 'split' = the front/rear rename. Declared, never read "
                              "off the joint names: a body's chain is not evidence of its naming")
     parser.add_argument("--self-check", action="store_true",
-                        help="hand-computed poses; no simulator, no sweep")
+                        help="fixed v3 hand-computed controls; no simulator or current-body acceptance")
     parser.add_argument("--break-test", action="store_true",
                         help="perturb the readings --self-check's verdicts rest on: each one must "
                              "make it fail, or this reports the hole and exits non-zero")
@@ -1918,6 +1933,9 @@ def main() -> None:
     parser.add_argument("--contact_n", type=float, default=1.0,
                         help="per-foot normal force above which the pad is called loaded [N]")
     args = parser.parse_args()
+    if args.target_config is None and (args.self_check or args.break_test) and args.urdf is None:
+        args.urdf = CALIBRATION_URDF
+        print(f"[calibration fixture] {args.urdf}; not the current body's geometry acceptance")
     args.urdf, naming, source = diagnostic_urdf(args.target_config, args.urdf, args.naming)
     args.naming = _naming_id(naming)
     if args.prepare_diagnostic_twins is not None:

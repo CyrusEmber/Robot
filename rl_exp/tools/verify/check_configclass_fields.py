@@ -69,6 +69,8 @@ RECIPES_JSON = _REPO / "rl_exp" / "versions" / "recipes.json"
 #: inert state itself: which groups declare one, at which values, with ``velocity_limit_sim`` absent
 #: and the actuator still implicit. Any of the four moving is a decision, not an edit -- and the day
 #: one moves silently, this is what says so instead of a reader.
+# v4 carries these reviewed group speeds as explicit per-joint sim caps; earlier
+# recipes retain the inert contract. Adoption evidence: lizard2-v4-configuration.md.
 INERT_VELOCITY_LIMITS: dict[str, float] = {"legs": 10.0, "feet": 6.0, "spine": 4.0}
 
 
@@ -293,10 +295,20 @@ def _check_inert_velocity_limits(rows: dict[str, dict], problems: list[str]) -> 
         actuators = getattr(getattr(getattr(p["instance"], "scene", None), "robot", None), "actuators", None)
         if not actuators:
             continue
+        # Only v4 adopts reviewed real caps; all earlier recipes keep the inert pin.
+        explicit = (getattr(p["instance"], "params_line", None) == "lizard2/main"
+                    and p.get("value") == "v4")
         for group in sorted(actuators):
             cfg = actuators[group]
             declared = getattr(cfg, "velocity_limit", None)
             simulated = getattr(cfg, "velocity_limit_sim", None)
+            if explicit:
+                expected = dict.fromkeys(cfg.joint_names_expr, INERT_VELOCITY_LIMITS.get(group))
+                if (group not in INERT_VELOCITY_LIMITS or not isinstance(cfg, ImplicitActuatorCfg)
+                        or declared != expected or simulated != expected):
+                    problems.append(f"{name}.{group}: v4 requires reviewed per-joint implicit caps "
+                                    f"{expected}; declared={declared}, simulated={simulated}")
+                continue
             if declared is None and simulated is None:
                 continue
             if not isinstance(cfg, ImplicitActuatorCfg):
