@@ -128,6 +128,36 @@ reset 建议完整复用承地初始条件：自由根、重力开启、根高 0
 
 本轮交付到方案与清单。没有把实现表中的后续动作标为已完成，没有把独立审核或新协议创建为文件即视作通过。
 
+### 后续继续：隔离配置草案已实际构建
+
+用户要求继续 B/C 交付后，以同一承地 manifest 派生 `rl_exp/out/lizard2_bc_handoff_20261023/training_interface_draft.json`，使用现有注册构造器和 `obs_protocol.load_diagnostic_target` 完成真实配置对象构建。这是隔离配置草案，仍未写入正式/开发配方、版本目录或任务注册，没有建立环境、执行物理或训练。
+
+相对源 manifest，仅将动作 scale/clip 按上文精确公式写入，将已有实测后端 joint order 显式绑定，并将 default/physx contact preset 的 update_period/history_length 和 scene.lazy_sensor_update 写成上文建议。没有改资产、全部 PD/caps、初始位姿、重力、自由根、自碰撞和连接过滤。构建后逐名确认 30 动作唯一覆盖、scale 非零、clip 等于实际 URDF 限位，全部 Kp/Kd/effort_limit_sim/velocity_limit_sim 与承地后端读回按 float32 精确匹配；实际 PhysX preset 与 contact preset 的字段也核对一致。
+
+构建输出 `training_interface_build.json` 状态为 `constructed_isolated_draft_not_adopted_or_runtime_verified`。其中 30 动作/102 policy 是接口预期，不能称本轮重新测得 observation manager 输出宽度；先前真实消费者证据仍按其原条件引用。第一次构建因未先导入任务注册而在配置解析阶段拒绝，补 `import rl_exp.tasks` 后同一草案构建通过；没有借失败增开物理进程。
+
+草案 SHA256 `a120b8907601852e5ca7bf1190f675d75ea7a8ae0fa79e970d887628ed7e8b19`；构建输出 SHA256 `e07829666b578dccd052b4a9b4fb8b95328dea093239496ac1d3c71ee4d4f301`。本机制品不承诺入仓。离线重建配置对象可在仓根的项目 Python 中运行下列代码；读取草案不执行其中的代码，也不启动 Kit：
+
+```python
+from pathlib import Path
+import rl_exp.tasks
+from rl_exp.tasks import obs_protocol
+from rl_exp.tools.verify.baseline_runtime import resolve_task_cfg
+task = 'Lizard2-Flat-Play-v3'
+cfg = resolve_task_cfg(task)
+bound = obs_protocol.load_diagnostic_target(
+    Path('rl_exp/out/lizard2_bc_handoff_20261023/training_interface_draft.json'), cfg, task)
+assert len(cfg.actions.joint_pos_legs.joint_names) == 20
+assert len(cfg.actions.joint_pos_spine.joint_names) == 10
+assert cfg.scene.contact_forces.physx.history_length == 4
+assert cfg.scene.lazy_sensor_update is False
+print('ISOLATED_TRAINING_INTERFACE_CONFIG_BUILT', bound['source'])
+```
+
+胸部上限须保留显式覆盖：`chest_pitch_joint` 的 manifest/backend effort cap 为 280 N·m，URDF 为 80 N·m；本草案取 manifest 驱动上限，URDF 只用于关节位置裁剪。该差异已列入 [B/C 独立审核](2026-10-23-lizard2-bc-independent-review.md)，不可在正式接入时静默改回。
+
+后续仍须实例化最终候选环境，核实际动作 manager 的 affine/clip 与 backend 零速度目标、102 维非零值、接触首子步和完整 reset。构建成功不替代这些检查，不升级为 S5 完整实装或开训放行。
+
 ## 证据引用
 
 - 本地输出 `rl_exp/out/lizard2_interface_plan_20261023/`：`channel.json` SHA256 `34b8b031cb1ec05bfc42381024952f4c8467804494ed63bbb0d0191d6fbef7d9`，`design_table.json` SHA256 `5fd4347b9b20b308bfccb3213af67498c2ee381169a736dbac68389c2ea7a808`，`mechanisms.json` SHA256 `e3b49e27ce58943bf99ab4e5da313969b4c834be734b2bb1796d71af493e81db`。本机制品不承诺入仓；持久动作复读入口与批准输入见[通道记录](2026-10-22-lizard2-rl-coordination-handoff.md)。
@@ -170,4 +200,4 @@ assert a == 30
 
 ## 未覆盖边界
 
-方案尚未实装，开放/scale/clip/采样建议未被正式采用；没有新接口的在线动作、首次/自然终止 reset、训练采样或策略性能通过结论。限速边界试验已取消，未测范围仅保留为证据边界；速度观测偏差、新接触协议及独立审核继续具名保留。硬限位裁剪不保证联合构姿无碰撞、无瞬时大力矩或全域 0.002 rad 精度；RL 学习承担协调，不承担掩盖接线或 reset 缺陷。原不追加对称复测、不再要求限矩验证以及抬腿/行走归 RL 的用户决定保持执行。
+正式训练配置尚未实装，隔离草案仅完成构建，开放/scale/clip/采样建议未被正式采用；没有新接口的在线动作、首次/自然终止 reset、训练采样或策略性能通过结论。限速边界试验已取消，未测范围仅保留为证据边界；速度观测偏差、新接触协议及整体独立审核继续具名保留。硬限位裁剪不保证联合构姿无碰撞、无瞬时大力矩或全域 0.002 rad 精度；RL 学习承担协调，不承担掩盖接线或 reset 缺陷。原不追加对称复测、不再要求限矩验证以及抬腿/行走归 RL 的用户决定保持执行。

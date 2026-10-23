@@ -4,7 +4,7 @@ title: lizard2 机体与默认关节驱动候选：肩髋三轴、足掌连接�
 scope: rl_exp/blender, rl_exp/tools/pipeline, rl_exp/tools/verify, rl_exp/tools/diagnose, rl_exp/tasks, acceptance/records
 status: in_progress
 landing: rl_exp/blender/scripts/lizard2_specimen_proportions.py, rl_exp/blender/scripts/lizard2_stance_candidate.py, rl_exp/blender/scripts/generate_urdf.py, rl_exp/tools/diagnose/gait_probe.py, rl_exp/tools/diagnose/stance_step_probe.py, rl_exp/tools/diagnose/plot_joints.py, rl_exp/tools/verify/check_leg_reachability.py, rl_exp/tools/verify/check_self_collision.py, rl_exp/tools/verify/check_joint_layout.py, rl_exp/tools/verify/baseline_probe.py, rl_exp/tasks/joint_names.py, ablation_harness/baseline_metrics.py
-next: D/E 核现有交付并交 S5 接入；限速边界试验按用户决定取消，训练前剩余项见盘点。
+next: S5 接隔离接口草案并核实际运行；D/E 续审整体集成，B/C 有限输入按独立记录复用。
 close_when: 新上下文按正文修订范围核验 R1–R5 与 D 记录，保留几何/预算约束，用户确认外观/几何样本；策略动作性能交 S6，缺证不关闭。
 evidence: acceptance/records/2026-10-22-lizard2-body-drive-candidate.md, acceptance/records/2026-10-22-lizard2-low-cap-comparison.md, acceptance/records/2026-10-22-lizard2-drive-gaps-and-cap-plan.md, acceptance/records/2026-10-22-lizard2-current-lift.md, acceptance/records/2026-10-22-lizard2-velocity-limits.md, acceptance/records/2026-10-19-lizard2-pd-scope-correction.md, acceptance/records/2026-10-19-lizard2-load-transfer-lift.md, acceptance/records/2026-10-19-lizard2-single-leg-lift.md, acceptance/records/2026-10-22-lizard2-velocity-observation.md, acceptance/records/2026-10-19-lizard2-spatial-inertia-repair.md, acceptance/records/2026-10-19-lizard2-contact-path-correction.md, acceptance/records/2026-10-19-lizard2-a-geometry-replay.md, acceptance/records/2026-10-16-lizard2-support-schedule.md, acceptance/records/2026-10-16-lizard2-candidate-doc-organization.md, acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-14-lizard2-palm-spatial-design-decision.md, acceptance/records/2026-10-14-lizard2-a-priority-review.md, acceptance/records/2026-10-13-lizard2-restored-limits-pd-open-issues.md, acceptance/records/2026-10-13-lizard2-a-implementation-plan-review.md, acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md, acceptance/records/2026-10-13-lizard2-natural-ground-tail.md, acceptance/records/2026-10-13-lizard2-lowered-body-vertical-shanks.md, acceptance/records/2026-10-12-lizard2-four-palms-lowered.md, acceptance/records/2026-10-12-lizard2-claw-palm-shape.md, acceptance/records/2026-10-12-lizard2-palm-p2-sample.md, acceptance/records/2026-10-12-lizard2-palm-chain-p1.md, acceptance/records/2026-10-08-lizard2-r1-numeric-reference-and-decision-drafts
 ---
@@ -89,6 +89,8 @@ C4 的 `local_path_check.py`、`local_path_view.py` 及既有路径/回放保留
 
 ## B. 驱动（能力表先出，可与 A 同时）
 
+本轮 B/C 交付范围与证据取[交付清单](../../acceptance/records/2026-10-23-lizard2-bc-handoff.md)，独立判定取[有限输入审核](../../acceptance/records/2026-10-23-lizard2-bc-independent-review.md)；后续 D/S5 按其范围复用，不重开已取消/不追加试验，不以局部交付关闭总项。
+
 **标定前置（B/C 共用）**：候选的 A/P3 几何与实际隔离运行接线成立后，执行者提出目标、载荷、驱动能力、幅度、窗口、步数/资源预算及停止条件，用户确认工程取值；先按 R5 静力筛查，再做受控动力学标定。设计不变量及已批准几何容差仍约束标定，缺测量通道先交接触协议项处理。标定只交付测量及工况边界，不先判最终性能通过；它不依赖 S5 完整交付或本项关闭。C 可先用现有机体核通道，受机体变化影响的标定须用实际候选重做后交 S5。
 
 1. 能力表已归 `acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory.md` A 节（判词、源码坐标与未知项），本项只留它给的**约束**：位置→力矩通路按构造就是线性 PD，**渐硬/渐变的趾端恢复力今天不可表达**（要么新增 Python 执行器子类、但丢掉本线特意选的物理步长 implicit PD；要么走每子步外力、可达性未验证）⇒ A 选 pivot/轴时**按线性对照**进行，或先回来重划弹性这一节的范围。不新建驱动机制、不改配方。
@@ -100,7 +102,7 @@ C4 的 `local_path_check.py`、`local_path_view.py` 及既有路径/回放保留
 ## C. 胸颈尾默认驱动与测量通道
 
 1. 区分根机身 heading、胸部侧弯、颈方向、尾 yaw/pitch 与肩髋 twist；躯干转向不能被记成腿的长轴旋转。以实际 URDF 树与运行时关节集合为准，在交付记录逐项对表胸颈尾关节的默认目标、坐标、真实驱动及动作/观测列，不默认新增脊柱轴；旧机体只作具名通道对照。
-2. 在同一候选上按 B/专项步骤 6 的受控载荷与保持/跟踪口径补胸颈尾缺证，记录耦合、静差和有效力矩/速度边界。胸部世界姿态只作观测，不要求固定水平；不手工增加移重、尾部随动或姿态补偿来证明驱动合格。测量通道和稳定默认驱动交 D/S5，已训策略才用于协同性能判断。
+2. 按 B/C 交付清单复用胸颈尾受控单轴、颈/尾组合和载荷证据，保留自身增益相同与全机背景改变的差别；不称胸颈尾整体组合已测。胸部世界姿态只作观测，不要求水平，不加手工协调/补偿；真实通道与驱动条件交 D/S5，协同性能留已训策略，试验取消范围按 B3。
 3. 行走允许自然拖尾，异常主承重、头腹推进和真实滑移仍由接触协议与 S6 的策略验收检查。原躯干侧弯、尾部运动及组合协同的性能对照转交 [S6](lizard2-family-landing.md#s6-直接执行正式采用预检与训练验收)，不取消、不记为完成，不作为本项关闭前置。
 
 ## D. 训练前集成与审核（A/E 输入、B/C 默认驱动证据齐备后）

@@ -4,12 +4,14 @@ title: lizard2 恢复模型：限位与 PD 验证前提及标定
 scope: rl_exp/blender, rl_exp/tools/diagnose, acceptance/records
 status: in_progress
 landing: rl_exp/blender/scripts/generate_urdf.py, rl_exp/blender/scripts/lizard2_stance_candidate.py, rl_exp/tools/diagnose/palm_motion_boundaries.py, rl_exp/tools/diagnose/palm_5b_targets.json, rl_exp/tools/diagnose/palm_motion_view.py, rl_exp/tools/diagnose/palm_spatial_inertia.py, rl_exp/tools/diagnose/palm_spatial_tracking.py, rl_exp/tools/diagnose/palm_spatial_standing.py
-next: B/C 汇总现有驱动证据交 D/S5；限速边界试验已取消，未完动作按全计划盘点处理。
+next: D/S5 复用 B/C 已审有限输入并接实际配置；本项其余机械/几何交付继续在办。
 close_when: 新上下文按正文关闭条件审核实际落点与证据，合格后交机体总项 B/C/D；缺证不关闭。
 evidence: acceptance/records/2026-10-22-lizard2-low-cap-comparison.md, acceptance/records/2026-10-22-lizard2-drive-gaps-and-cap-plan.md, acceptance/records/2026-10-22-lizard2-current-lift.md, acceptance/records/2026-10-22-lizard2-velocity-limits.md, acceptance/records/2026-10-22-lizard2-velocity-observation.md, acceptance/records/2026-10-19-lizard2-load-transfer-lift.md, acceptance/records/2026-10-19-lizard2-single-leg-lift.md, acceptance/records/2026-10-19-lizard2-a-geometry-replay.md, acceptance/records/2026-10-16-lizard2-support-schedule.md, acceptance/records/2026-10-16-lizard2-local-path-combined.md, acceptance/records/2026-10-16-lizard2-local-path-mirror.md, acceptance/records/2026-10-16-lizard2-local-path-quarters.md, acceptance/records/2026-10-16-lizard2-local-path-postprocess.md, acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md, acceptance/records/2026-10-15-lizard2-palm-local-contact-repair.md, acceptance/records/2026-10-15-lizard2-palm-local-path-probe.md, acceptance/records/2026-10-15-lizard2-palm-phase-target-preparation.md, acceptance/records/2026-10-15-lizard2-palm-spatial-refined-boundaries.md, acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-14-lizard2-palm-phase-constraint-correction.md, acceptance/records/2026-10-14-lizard2-5b-motion-boundaries.md, acceptance/records/2026-10-14-lizard2-a-priority-review.md, acceptance/records/2026-10-14-lizard2-restored-validation-handoff.md, acceptance/records/2026-10-13-lizard2-restored-limits-pd-open-issues.md, acceptance/records/2026-10-13-lizard2-hindlimb-restored.md
 ---
 
 ## 范围与交接
+
+B/C 当前输入交付取[清单](../../acceptance/records/2026-10-23-lizard2-bc-handoff.md)及[独立审核](../../acceptance/records/2026-10-23-lizard2-bc-independent-review.md)；本项整体不因此关闭，未验工况与用户取消范围按该清单处理。
 
 本项承接[总项](lizard2-body-drive-candidate.md)的恢复模型机械限位与全部关节默认 PD；整体结构、A/P2/P3 与 B/C/D 集成判据归总项。范围修订依据见[默认驱动与 RL 职责记录](../../acceptance/records/2026-10-19-lizard2-chest-standing-pd.md#用户定案默认关节驱动与强化学习职责)：保证关节正常驱动，移重、抬落、步态、转向/恢复和躯尾协调由 RL 学习，性能验收转交 [S6](lizard2-family-landing.md#s6-直接执行正式采用预检与训练验收)，不取消、不记为完成。本项完成不等于正式采用或完整步态验收。身份、读数和边界取 evidence；不把诊断导出或历史过滤对照当合格资产。
 
