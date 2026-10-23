@@ -4,7 +4,7 @@ title: lizard2 配方、动作接口与评测协议交付
 scope: rl_exp/versions/lizard2, rl_exp/tasks, rl_exp/tools/pipeline, rl_exp/tools/verify, ablation_harness
 status: in_progress
 landing: rl_exp/versions/lizard2/main/main_params.yaml, rl_exp/tasks/lizard2_recipe.py, rl_exp/tools/pipeline/emit_diff_declaration.py, rl_exp/tools/verify/check_recipe_build.py
-next: S5 复用 B/C 已审输入与隔离草案，接实际环境核动作/接触/reset；整体采用与训练继续按正文。
+next: S5 复用已审草案运行证据，准备正式接入；整体采用与训练继续按正文。
 close_when: 新上下文按正文“关闭条件”核验完整 S5/S6 或用户明确不采用的出口；仅 S5 构建通过不关闭。
 depends_on: lizard2-body-drive-candidate, lizard2-contact-protocol
 evidence: acceptance/records/2026-10-23-lizard2-plan-inventory.md, acceptance/records/2026-10-23-lizard2-training-interface-plan.md, acceptance/records/2026-10-22-lizard2-rl-coordination-handoff.md, acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md, acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, acceptance/records/2026-09-23-lizard2-v1-gait-skate, acceptance/records/2026-10-09-lizard2-limit-requirement-and-status-sync, acceptance/records/2026-10-09-lizard2-v3-pretrain-sanity, acceptance/records/2026-10-10-lizard2-v3-joint-velocity-limits
@@ -71,6 +71,6 @@ S5 交付为未冻结候选版本实际路径、配置/协议/测试及 `accepta
 
 接口建议、逐列映射、采样/reset 接入缺口与验证顺序见[训练接口方案](../../acceptance/records/2026-10-23-lizard2-training-interface-plan.md)；后续实现按正文前提推进，方案存在不代表正式参数已采用。
 
-B/C 有限输入取[交付清单](../../acceptance/records/2026-10-23-lizard2-bc-handoff.md)和[独立审核](../../acceptance/records/2026-10-23-lizard2-bc-independent-review.md)；隔离配置草案已有构建落点，在线运行及正式版本接入仍未交付。
+B/C 输入取[清单](../../acceptance/records/2026-10-23-lizard2-bc-handoff.md)和[审核](../../acceptance/records/2026-10-23-lizard2-bc-independent-review.md)；草案取[运行记录](../../acceptance/records/2026-10-23-lizard2-interface-runtime.md)及[独立复核](../../acceptance/records/2026-10-23-lizard2-interface-runtime-review.md)，正式接入在办。
 
 用户取消的试验、全计划剩余项及训练优先顺序统一取[计划盘点](../../acceptance/records/2026-10-23-lizard2-plan-inventory.md)；本项承接后续训练，不将本轮盘点记作开训。
