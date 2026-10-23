@@ -4,7 +4,7 @@ title: lizard2 新接触评测协议：滑移/滚动/偏转样本对拍与承重
 scope: ablation_harness, rl_exp/tools/verify, rl_exp/tools/diagnose, acceptance/records
 status: in_progress
 landing: ablation_harness/protocols, ablation_harness/baseline_metrics.py, ablation_harness/baseline_eval.py, rl_exp/tools/diagnose/gait_probe.py
-next: 执行者复用具名测量修正，补原生接触对、承重分组与正式协议。
+next: 执行者复用原生接触采样，补分类标定、承重分组与正式协议。
 close_when: 新上下文按正文“关闭条件”审核协议与标定样本，通过交 lizard2-family-landing；缺口按责任退回。
 evidence: acceptance/records/2026-10-19-lizard2-chest-standing-pd.md, acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md, acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory, acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, acceptance/records/2026-10-10-lizard2-v3-first-eval, acceptance/records/2026-10-10-lizard2-v3-band-buckets, acceptance/records/2026-10-10-lizard2-carrier-dwell-calibration, acceptance/records/2026-10-09-lizard2-v3-eval-entry-and-inert-velocity-field
 ---
@@ -13,7 +13,7 @@ evidence: acceptance/records/2026-10-19-lizard2-chest-standing-pd.md, acceptance
 
 ## 动作
 
-测量修正取[校准与审核](../../acceptance/records/2026-10-23-lizard2-contact-com-calibration.md)；其余按下文交付。
+采样与测量见[记录](../../acceptance/records/2026-10-23-lizard2-contact-native.md)；其余按下文交付。
 
 1. 通道存在性已核（可用的通道、具名缺口、滚动/有效阶段为何分不开、报告项被静默不检查的那两项，全归 `acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory.md` C 节，本项不复述）：动作从那份缺口表开始定口径；缺口仍在时写具名缺口，不用最低顶点跳变冒称材料点速度。
 2. 新协议覆盖足底净空、足端相对机身摆幅、承重接触材料点相对地面的切向运动，并逐项绑定实现。柔顺偏转/滚动/真实滑动按整体记录“联动设计修订”第 2 条区分：关节偏转与原点移动不自动扣分，真实承重接触点滑动仍计滑移，回位不抹去已发生的滑动；近似点切换、滚动与有效阶段须声明。
