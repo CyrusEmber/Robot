@@ -1,13 +1,13 @@
 ---
 id: lizard2-family-landing
 title: lizard2 配方、动作接口与评测协议交付
-scope: rl_exp/versions/lizard2, rl_exp/tasks, rl_exp/tools/pipeline, rl_exp/tools/verify, ablation_harness
+scope: rl_exp/versions/lizard2, rl_exp/tasks, rl_exp/tools/diagnose, rl_exp/tools/pipeline, rl_exp/tools/verify, ablation_harness
 status: in_progress
 landing: rl_exp/versions/lizard2/main/main_params.yaml, rl_exp/tasks/lizard2_recipe.py, rl_exp/tools/pipeline/emit_diff_declaration.py, rl_exp/tools/verify/check_recipe_build.py
-next: 执行者按正式版本完成必要预检，接续已批训练及策略评测。
+next: 执行者按已批预算启动正式版本训练，再交策略评测。
 close_when: 新上下文核验配置、采用、实际训练与策略评测交付；仅构建通过不关闭。
 depends_on: lizard2-body-drive-candidate
-evidence: acceptance/records/2026-10-23-lizard2-v4-configuration.md, acceptance/records/2026-10-23-lizard2-v4-configuration-review.md, acceptance/records/2026-10-23-lizard2-plan-inventory.md, acceptance/records/2026-10-23-lizard2-training-interface-plan.md, acceptance/records/2026-10-22-lizard2-rl-coordination-handoff.md, acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md, acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, acceptance/records/2026-09-23-lizard2-v1-gait-skate, acceptance/records/2026-10-09-lizard2-limit-requirement-and-status-sync, acceptance/records/2026-10-09-lizard2-v3-pretrain-sanity, acceptance/records/2026-10-10-lizard2-v3-joint-velocity-limits
+evidence: acceptance/records/2026-10-23-lizard2-v4-preflight.md, acceptance/records/2026-10-23-lizard2-v4-configuration.md, acceptance/records/2026-10-23-lizard2-v4-configuration-review.md, acceptance/records/2026-10-23-lizard2-plan-inventory.md, acceptance/records/2026-10-23-lizard2-training-interface-plan.md, acceptance/records/2026-10-22-lizard2-rl-coordination-handoff.md, acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md, acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, acceptance/records/2026-09-23-lizard2-v1-gait-skate, acceptance/records/2026-10-09-lizard2-limit-requirement-and-status-sync, acceptance/records/2026-10-09-lizard2-v3-pretrain-sanity, acceptance/records/2026-10-10-lizard2-v3-joint-velocity-limits
 ---
 
 ## 当前范围与交接
@@ -20,13 +20,13 @@ A/E 交骨架、几何及真实消费者，B/C 交具名工况下的默认驱动
 
 ## 当前正式配置
 
-正式版本入口取 [main/v4/PLAN](../../rl_exp/versions/lizard2/main/v4/PLAN.md)，配置、资产采用、旧版退休及有限接口审核取 evidence 中对应记录。当前只交付配置，必要预检、实际训练和策略评测继续在本项，不恢复独立阶段。
+正式版本入口取 [main/v4/PLAN](../../rl_exp/versions/lizard2/main/v4/PLAN.md)，配置、资产采用、旧版退休及有限接口审核取 evidence 中对应记录。正式版本的有限预检取 [预检记录](../../acceptance/records/2026-10-23-lizard2-v4-preflight.md)。实际训练和策略评测继续在本项，不恢复独立阶段。
 
 ## 正式版本预检与训练
 
-1. 使用同一正式版本和原生训练入口完成地形预检、GUI 目视及启动前仓库/身份核验。复用同身份默认驱动、静态承重安全、动作/非零观测、子步接触和完整/子集/接触自动 reset 的具名证据，只补落点变化影响或真实缺证；构建不能替代实际运行。错轴、残留目标影响首步、漏采或驱动安全缺陷按来源修复。取消的边界/限矩和对称复测不恢复，不先要求手工步态或抬腿。
+1. 启动前保持正式版本、工作树与真实输入身份一致；配置变动或新出现的错轴、旧目标影响首步、漏采及驱动安全缺陷按来源修复。已审默认驱动、动作/非零观测、子步接触和有限 reset 证据按同身份复用，预检不外推训练资源或长时能力。不恢复取消的边界/限矩、对称复测或手工步态/抬腿前置。
 2. 首轮训练预算与从头初始化决定复用[接口方案](../../acceptance/records/2026-10-23-lizard2-training-interface-plan.md#用户确定首轮训练预算)，不重复询问。展示实际工况、启动命令、学习目标和已有评测依据；尚未确定的关键运行条件具名处理，不用预算确认代替输入核验，也不把配置交付写成已经开训。
-3. 通过必要预检后执行已批准训练，绑定实际 run、manifest/checkpoint 与偏离。新策略从正式接口初始化，不续训旧 checkpoint；保持工作树与版本锚点可复现。实际采用的 effort/speed 读回按同身份复用，不恢复已取消的边界试验。
+3. 执行已批准训练，绑定实际 run、manifest/checkpoint 与偏离。新策略从正式接口初始化，不续训旧 checkpoint；保持工作树与版本锚点可复现。实际采用的 effort/speed 读回按同身份复用，不恢复已取消的边界试验。
 4. 保留首轮既有训练目标和必要接触消费者；新滑移、滚动、异常主承重或净空判分用于奖励/终止前，先交对应测量与版本实现。未经验证不启用，不因延后完整协议而静默删改奖励或终止。新增终止/地形/reset 组合按实际范围核，不把有限证据冒称全覆盖。
 
 ## 训练后策略评测
