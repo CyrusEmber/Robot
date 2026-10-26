@@ -15,7 +15,7 @@ lizard2 = lizard 的四足构型修正版。当前 main/v4 采用掌部候选，
 
 ## 设计入口
 
-当前 main/v5 已按用户要求解冻为提案态，原冻结标签已撤销，方案入口见 [PLAN.md](PLAN.md)，正文唯一归 [main/v5/PLAN.md](main/v5/PLAN.md)。已训 main/v4 保留原配方与 tag；main/v3 的已训历史保留在其原 PLAN/NOTES。
+当前 main/v5 修订已按用户要求重新冻结到本地标签 `lizard2-main-v5`，方案入口见 [PLAN.md](PLAN.md)，正文唯一归 [main/v5/PLAN.md](main/v5/PLAN.md)。已训 main/v4 保留原配方与 tag；main/v3 的已训历史保留在其原 PLAN/NOTES。
 
 ## 线
 

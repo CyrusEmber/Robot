@@ -20,7 +20,7 @@ A/E 交骨架、几何及真实消费者，B/C 交具名工况下的默认驱动
 
 ## 当前正式配置
 
-当前解冻提案入口及奖励修订取 [main/v5/PLAN](../../rl_exp/versions/lizard2/main/v5/PLAN.md)，当前碰撞修订取 [本轮记录](../../acceptance/records/2026-10-26-lizard2-v5-self-collision-off.md)，奖励修订取 [奖励记录](../../acceptance/records/2026-10-26-lizard2-v5-leg-contact-penalty.md)，既有终止测量取 [新规则记录](../../acceptance/records/2026-10-26-lizard2-v5-head-ground-dwell.md)。已训 v4 保留原配方与结果身份，配置、资产采用、旧版退休及有限接口审核取 evidence 中对应记录；其预检仍取 [原预检记录](../../acceptance/records/2026-10-23-lizard2-v4-preflight.md)。训练和策略评测继续在本项，不恢复独立阶段。
+当前冻结配置入口取 [main/v5/PLAN](../../rl_exp/versions/lizard2/main/v5/PLAN.md)，当前碰撞修订取 [本轮记录](../../acceptance/records/2026-10-26-lizard2-v5-self-collision-off.md)，奖励修订取 [奖励记录](../../acceptance/records/2026-10-26-lizard2-v5-leg-contact-penalty.md)，既有终止测量取 [新规则记录](../../acceptance/records/2026-10-26-lizard2-v5-head-ground-dwell.md)。已训 v4 保留原配方与结果身份，配置、资产采用、旧版退休及有限接口审核取 evidence 中对应记录；其预检仍取 [原预检记录](../../acceptance/records/2026-10-23-lizard2-v4-preflight.md)。训练和策略评测继续在本项，不恢复独立阶段。
 
 ## 正式版本预检与训练
 

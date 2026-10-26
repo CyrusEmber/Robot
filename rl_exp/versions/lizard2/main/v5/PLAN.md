@@ -1,6 +1,6 @@
 # lizard2 main/v5：头部持续触地终止
 
-> 修订：v5.2。母本为已训 main/v4；用户要求解冻未训练的 v5，已撤销本地与远端 `lizard2-main-v5` 标签，当前为提案态。本轮关闭物理自碰撞，不启动训练。
+> 修订：v5.2。母本为已训 main/v4；用户在解冻修订完成后明确要求重新冻结，当前冻结锚点为本地标签 `lizard2-main-v5`。物理自碰撞及指定腿部接触惩罚关闭，本轮不启动训练。
 
 ## 目的与假设
 
@@ -28,7 +28,7 @@
 
 任务为 `Lizard2-Flat-v5` / `Lizard2-Flat-Play-v5`，runner 为 `Lizard2V5PPORunnerCfg`，日志身份 `lizard2_v5`。本轮不启动新训练、不热改原 v4 进程。既有 v4 checkpoint 始终按原终止规则归因；若后续加载其权重用于 v5，须作为新配方迁移记录源 checkpoint，不冒称同配方续训。
 
-当前保持解冻；下一次开训前须对实际配置重新检查并冻结，不自动重建已撤销标签。
+当前修订按用户明确要求重新冻结；启动训练使用 `lizard2-main-v5` 对应的实际配置，后续配置变更继续按版本规则处理。
 
 核启动身份但不启动：`python -B rl_exp/tools/launch_recipe.py --task Lizard2-Flat-v5 --seed 42 --record rl_exp/out/lizard2_v5_launch_plan.json`。独立原生核验：`python -B rl_exp/tools/diagnose/palm_preflight.py --task Lizard2-Flat-v5 --out rl_exp/out/<新目录> --num_envs 4 --steps 100 --head_ground_check --viz none`。此开关末尾含隔离强制触地测量夹具，不是步态或性能测试。
 
