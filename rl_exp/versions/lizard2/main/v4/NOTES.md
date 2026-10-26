@@ -6,8 +6,12 @@
 
 ## 实际执行与偏离
 
-尚未启动训练，无 run/checkpoint。配置构建、正式入口运行、复读命令及检查证据归 [配置验收记录](../../../../../acceptance/records/2026-10-23-lizard2-v4-configuration.md)。
+本次查看的 run 为 `logs/rsl_rl/lizard2_v4/2026-10-26_11-16-58/`，checkpoint 为 `model_5999.pt`；命令与实际工况以该 run 的 `run_manifest.json` / `checkpoints.json` 为准。原文“尚未启动训练”已不符合本机已有 run，现修正为实际指针。配置交付仍取 [配置验收记录](../../../../../acceptance/records/2026-10-23-lizard2-v4-configuration.md)。
 
 ## 结果回填
 
-配置交付按上述记录判定；不代表策略训练或性能验收。后续写实际 `logs/rsl_rl/lizard2_v4/<时间戳>` 的 run/报告指针与一句判定；数值结论继续归 acceptance/records。
+本次录像、训练读数与自碰撞归因假设取 [训练现象记录](../../../../../acceptance/records/2026-10-26-lizard2-v4-self-collision-hypothesis.md)；统计复读使用 `rl_exp/tools/trainlog/probe_run.py --run <上述 run 目录> --window 200`。
+
+## 结论
+
+低头及姿态不稳现象已记录，自碰撞影响属于待验证假设，未认定根因或策略验收通过。
