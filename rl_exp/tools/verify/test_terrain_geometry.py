@@ -187,6 +187,37 @@ def test_video_matrix_gears_resolve_against_the_suite() -> None:
     module through ``suites`` is what that rule is about).
     """
     from ablation_harness import video_matrix
+    from unittest.mock import patch
+    import tempfile
+
+    # Exercise the recording scheduler, including the camera passed to each rollout.
+    # A nine-cell declaration alone would miss recording the same view nine times.
+    args = video_matrix.build_parser().parse_args(["--checkpoint", "policy.pt"])
+    assert args.speeds == "0.5,1.5,3" and args.seconds == 10.0
+    args.dry_run = False
+    recorded = []
+
+    def shoot(cell, shot_args):
+        recorded.append((cell["speed"], tuple(shot_args.eye), str(shot_args.out_dir)))
+        return {"speed_mps": cell["speed"], "terrain": cell["terrain"],
+                "clip": str(shot_args.out_dir / f"{cell['speed']:g}mps_plane.mp4")}
+
+    with tempfile.TemporaryDirectory() as directory, \
+            patch.object(video_matrix, "record_cell", side_effect=shoot), \
+            patch.object(video_matrix, "compose_grids", return_value=["overview.mp4"]) as compose:
+        args.out_dir = pathlib.Path(directory)
+        output = video_matrix.run(args)
+        assert json.loads((args.out_dir / "matrix.json").read_text())["cells"] == output["cells"]
+    assert len(recorded) == len(output["cells"]) == 9
+    assert {eye for _, eye, _ in recorded} == {(0.0, -5.0, 1.4), (5.0, 0.0, 1.6), (-4.0, -3.0, 2.2)}
+    assert len({path for _, _, path in recorded}) == 3
+    assert output["grids"] == ["overview.mp4"] and compose.call_count == 1
+    assert [shot["view"] for shot in output["cells"]] == ["side", "front", "rear_oblique"] * 3
+
+    # Explicit legacy camera coordinates remain a single custom view, at the old clip paths.
+    custom = video_matrix.build_parser().parse_args(["--eye", "1", "2", "3", "--speeds", "2"])
+    custom.dry_run = True
+    assert video_matrix.run(custom)["cells"] == [{"speed": 2.0, "terrain": "plane", "view": "custom"}]
 
     # a heavy module bound at module level is the regression; the import itself is the symptom
     for name, value in vars(video_matrix).items():

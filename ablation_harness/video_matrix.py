@@ -2,7 +2,12 @@
 # All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
-"""Record one short clip per (speed gear x terrain gear) cell chosen on the command line.
+"""Record speed x terrain x view clips and assemble labelled comparison grids.
+
+The default is a nine-panel video: rows are target speeds 0.5, 1.5, 3 m/s, columns are
+side, front, rear-oblique views, with ten seconds per clip. Individual clips are retained.
+``--speeds`` and ``--terrains`` still select arbitrary gears; each terrain gets its own grid,
+with at most three speeds per page. Explicit ``--eye`` retains the single custom-camera path.
 
 This is a camera, not a judge. It writes mp4 plus the conditions each clip was shot under, and
 **no verdict**: the frozen protocols under ``protocols/`` keep their meaning because nothing here
@@ -27,7 +32,7 @@ is what makes longer clips worth shooting at all.
 Clip length is the caller's call, and on suite gears it is the thing to think about: a suite board
 is 16 m across with flat borders, so at 3 m/s the graded patch is crossed in a couple of seconds and
 the rest of the clip is the robot on flat ground (or off the board entirely). ``--seconds`` defaults
-to 6 for the recipe's own plane, which is infinite.
+to 10 for the recipe's own plane, which is infinite.
 """
 
 from __future__ import annotations
@@ -36,7 +41,9 @@ import argparse
 import importlib.metadata
 import json
 import math
+import os
 import pathlib
+import subprocess
 import sys
 import traceback
 
@@ -55,6 +62,73 @@ DEFAULT_LOOKAT = (1.5, 0.0, 0.3)
 #: ``omni.replicator.core``"); read off the live capture when it exposes one, so a recorder that
 #: ever captures elsewhere is followed correctly rather than silently not followed.
 DEFAULT_CAMERA_PRIM = "/OmniverseKit_Persp"
+DEFAULT_VIEWS = {
+    "side": (0.0, -5.0, 1.4),
+    "front": (5.0, 0.0, 1.6),
+    "rear_oblique": DEFAULT_EYE,
+}
+
+
+def selected_views(args) -> dict:
+    """Return camera offsets, retaining explicit legacy single-camera coordinates [m]."""
+    if args.eye is not None:
+        return {"custom": tuple(args.eye)}
+    names = [name.strip() for name in args.views.split(",") if name.strip()]
+    if not names or len(set(names)) != len(names) or any(name not in DEFAULT_VIEWS for name in names):
+        raise SystemExit(f"--views takes unique names from {','.join(DEFAULT_VIEWS)}")
+    return {name: DEFAULT_VIEWS[name] for name in names}
+
+
+def compose_grids(shots: list[dict], args) -> list[str]:
+    """Assemble clips by terrain, target speed (rows), and view (columns)."""
+    import imageio_ffmpeg
+
+    # Use the existing imageio encoder; no system ffmpeg installation is required.
+    encoder = imageio_ffmpeg.get_ffmpeg_exe()
+    # Windows FFmpeg has no system fontconfig database; point at the installed font.
+    font = pathlib.Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts" / "arial.ttf"
+    font_option = ""
+    if sys.platform == "win32" and font.is_file():
+        font_name = font.as_posix().replace(":", r"\:")
+        font_option = f"fontfile='{font_name}':"
+    views = list(selected_views(args))
+    speeds = list(dict.fromkeys(shot["speed_mps"] for shot in shots))
+    outputs = []
+    for terrain in dict.fromkeys(shot["terrain"] for shot in shots):
+        for page, start in enumerate(range(0, len(speeds), 3), 1):
+            page_speeds = speeds[start:start + 3]
+            ordered = [next(shot for shot in shots if shot["terrain"] == terrain
+                            and shot["speed_mps"] == speed and shot["view"] == view)
+                       for speed in page_speeds for view in views]
+            inputs, filters = [], []
+            for index, shot in enumerate(ordered):
+                inputs.extend(["-threads", "1", "-i", shot["clip"]])
+                label = f"target {shot['speed_mps']:g} m/s | {shot['view']} | {terrain}"
+                # Values here come from validated gears, never arbitrary CLI text.
+                filters.append(
+                    f"[{index}:v]fps=25,scale=640:360,setsar=1,"
+                    f"drawtext={font_option}text='{label}':fontcolor=white:fontsize=20:"
+                    f"box=1:boxcolor=black@0.65:x=10:y=10[v{index}]"
+                )
+            if len(ordered) == 1:
+                filters.append("[v0]null[out]")
+            else:
+                layout = "|".join(f"{col * 640}_{row * 360}"
+                                  for row in range(len(page_speeds)) for col in range(len(views)))
+                filters.append("".join(f"[v{i}]" for i in range(len(ordered)))
+                               + f"xstack=inputs={len(ordered)}:layout={layout}:shortest=1[out]")
+            suffix = f"_{page}" if len(speeds) > 3 else ""
+            output = pathlib.Path(args.out_dir) / f"{terrain}_overview{suffix}.mp4"
+            subprocess.run(
+                [encoder, "-y", "-hide_banner", "-loglevel", "error", "-filter_complex_threads", "2",
+                 *inputs, "-filter_complex", ";".join(filters), "-map", "[out]", "-an",
+                 "-c:v", "libx264", "-crf", "20", "-preset", "fast", "-threads", "4",
+                 "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(output)], check=True,
+            )
+            if not output.is_file() or output.stat().st_size == 0:
+                raise RuntimeError(f"no comparison grid was written to {output}")
+            outputs.append(str(output))
+    return outputs
 
 
 def parse_speeds(text: str) -> list[float]:
@@ -260,38 +334,57 @@ def run(args) -> dict:
     """Shoot every cell and return the manifest."""
     speeds = parse_speeds(args.speeds)
     terrains = parse_terrains(args.terrains)
-    matrix = cells(speeds, terrains)
+    views = selected_views(args)
+    matrix = [{**cell, "view": view} for cell in cells(speeds, terrains) for view in views]
     if args.dry_run:
         return {"dry_run": True, "cells": matrix}
     shots = []
     for cell in matrix:
-        print(f"[VIDEO-MATRIX] shooting {cell['speed']:g} m/s on {cell['terrain']}", flush=True)
-        shots.append(record_cell(cell, args))
-    return {"cells": shots}
+        view = cell["view"]
+        shot_args = argparse.Namespace(**vars(args))
+        shot_args.eye = views[view]
+        shot_args.lookat = args.lookat if args.lookat is not None else (
+            DEFAULT_LOOKAT if view == "custom" else (0.0, 0.0, 0.2))
+        shot_args.out_dir = pathlib.Path(args.out_dir) if view == "custom" else pathlib.Path(args.out_dir) / view
+        print(f"[VIDEO-MATRIX] shooting {cell['speed']:g} m/s on {cell['terrain']} ({view})", flush=True)
+        shots.append({**record_cell(cell, shot_args), "view": view})
+    # Save all completed clips before encoding: a failed encoder must not erase their index.
+    args.out_dir.mkdir(parents=True, exist_ok=True)
+    manifest = {"task": args.task, "seed": args.seed, "cells": shots}
+    (args.out_dir / "matrix.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    return {"cells": shots, "grids": compose_grids(shots, args)}
 
 
-def main() -> None:
+def build_parser() -> argparse.ArgumentParser:
+    """Build recording arguments without importing or starting the simulator."""
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--task", default="Lizard2-Flat-Play-v3")
     parser.add_argument("--checkpoint", help="policy checkpoint; required unless --dry-run")
-    parser.add_argument("--speeds", default="3.0", help="comma-separated speed gears [m/s]")
+    parser.add_argument("--speeds", default="0.5,1.5,3", help="comma-separated target speeds [m/s] (grid rows)")
     parser.add_argument("--terrains", default=PLANE,
                         help="comma-separated terrain gears: plane, or any suite column name")
-    parser.add_argument("--seconds", type=float, default=6.0, help="clip length [s]")
+    parser.add_argument("--seconds", type=float, default=10.0, help="clip length [s]")
     parser.add_argument("--num_envs", type=int, default=1)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--follow", action=argparse.BooleanOptionalAction, default=True,
                         help="chase camera: eye/lookat are offsets from the robot root (default). "
                              "--no-follow makes them absolute world points, and the robot leaves "
                              "the frame within seconds at speed")
-    parser.add_argument("--eye", type=float, nargs=3, default=list(DEFAULT_EYE),
+    parser.add_argument("--views", default=",".join(DEFAULT_VIEWS),
+                        help="comma-separated grid columns: side,front,rear_oblique")
+    parser.add_argument("--eye", type=float, nargs=3, default=None,
                         help="camera position [m]: offset from the robot when --follow, world point otherwise")
-    parser.add_argument("--lookat", type=float, nargs=3, default=list(DEFAULT_LOOKAT),
+    parser.add_argument("--lookat", type=float, nargs=3, default=None,
                         help="camera target [m]: offset from the robot when --follow, world point otherwise")
     parser.add_argument("--out_dir", type=pathlib.Path, default=DEFAULT_OUT_DIR)
     parser.add_argument("--dry_run", action="store_true",
                         help="print the matrix and exit; launches no simulator")
+    return parser
+
+
+def main() -> None:
+    parser = build_parser()
     from isaaclab.app import AppLauncher
 
     AppLauncher.add_app_launcher_args(parser)
