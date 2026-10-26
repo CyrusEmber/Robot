@@ -1051,6 +1051,16 @@
    "protocol": "a25a8c39001b",
    "version": "v4",
    "line": "lizard2/main"
+  },
+  "Lizard2-Flat-v5": {
+   "protocol": "a25a8c39001b",
+   "version": "v5",
+   "line": "lizard2/main"
+  },
+  "Lizard2-Flat-Play-v5": {
+   "protocol": "a25a8c39001b",
+   "version": "v5",
+   "line": "lizard2/main"
   }
  }
 }

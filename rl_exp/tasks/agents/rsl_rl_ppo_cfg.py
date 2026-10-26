@@ -95,3 +95,10 @@ class Lizard2V4PPORunnerCfg(Lizard2V3PPORunnerCfg):
     """Fresh 30-position-action palm policy; retain the approved PPO budget."""
 
     experiment_name = "lizard2_v4"
+
+
+@configclass
+class Lizard2V5PPORunnerCfg(Lizard2V4PPORunnerCfg):
+    """Head-to-ground dwell termination; preserve the position policy interface."""
+
+    experiment_name = "lizard2_v5"

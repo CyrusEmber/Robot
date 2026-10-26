@@ -1,0 +1,4 @@
+{
+  "base": "v4",
+  "note": "User decision 2026-10-26: replace instantaneous chest/neck net contact with head mesh-to-floor continuous 0.5 s dwell; retain base_contact and all policy/physics settings."
+}

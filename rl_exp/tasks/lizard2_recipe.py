@@ -367,6 +367,21 @@ def lizard2_palm_interface(cfg) -> None:
             ("x", "y", "z", "roll", "pitch", "yaw"), (0.0, 0.0))
 
 
+def lizard2_head_ground_dwell(cfg) -> None:
+    """V5: only the head mesh against the floor, continuously for the declared time [s]."""
+    from rl_exp.tasks.lizard2_mdp import HeadGroundContactDwell
+
+    params = _doc(cfg)["terminations"]["head_ground_contact"]
+    cfg.scene.head_ground_contact = cfg.scene.contact_forces.copy()
+    for backend in ("default", "physx"):
+        sensor = getattr(cfg.scene.head_ground_contact, backend)
+        sensor.prim_path = "{ENV_REGEX_NS}/Robot/Geometry/" + params["head_body_name"]
+        sensor.filter_prim_paths_expr = [params["floor_prim_path"]]
+        sensor.track_air_time = False
+    cfg.terminations.head_contact = None
+    cfg.terminations.head_ground_contact = DoneTerm(func=HeadGroundContactDwell, params=dict(params))
+
+
 LIZARD2_RECIPES: dict[str, dict] = {
     "v1": {
         "elements": (
@@ -449,6 +464,13 @@ LIZARD2_RECIPES["v4"] = {
     "elements": (*LIZARD2_RECIPES["v3"]["elements"], "lizard2_palm_interface"),
     "train": "Lizard2-Flat-v4",
     "play": "Lizard2-Flat-Play-v4",
+}
+
+LIZARD2_RECIPES["v5"] = {
+    **LIZARD2_RECIPES["v4"],
+    "elements": (*LIZARD2_RECIPES["v4"]["elements"], "lizard2_head_ground_dwell"),
+    "train": "Lizard2-Flat-v5",
+    "play": "Lizard2-Flat-Play-v5",
 }
 
 ELEMENTS = {

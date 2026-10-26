@@ -1,0 +1,465 @@
+# V5: head mesh to floor continuously for 0.5 s; v4 drives and policy unchanged.
+robot:
+  name: lizard2
+  usd_path: lizard2_palm_spatial/lizard2_palm_spatial.usda
+  base_body_name: base_link
+  base_init_height: 0.6038
+  base_init_rotation_xyzw:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+  self_collisions: true
+  naming: palm_spatial
+joint_order:
+- chest_yaw
+- chest_pitch
+- neck_yaw
+- neck_pitch
+- lf_shoulder_swing
+- lf_shoulder_abduct
+- lf_shoulder_twist
+- lf_elbow
+- lf_wrist
+- rf_shoulder_swing
+- rf_shoulder_abduct
+- rf_shoulder_twist
+- rf_elbow
+- rf_wrist
+- tail1_yaw
+- tail1_pitch
+- tail2_yaw
+- tail2_pitch
+- tail3_yaw
+- tail3_pitch
+- rl_hip_swing
+- rl_hip_abduct
+- rl_hip_twist
+- rl_knee
+- rl_ankle
+- rr_hip_swing
+- rr_hip_abduct
+- rr_hip_twist
+- rr_knee
+- rr_ankle
+default_joint_pos:
+  chest_yaw_joint: 0.0
+  chest_pitch_joint: 0.0
+  neck_yaw_joint: 0.0
+  neck_pitch_joint: 0.0
+  lf_shoulder_swing_joint: 0.0
+  lf_shoulder_abduct_joint: 0.0
+  lf_shoulder_twist_joint: 0.0
+  lf_elbow_joint: 0.0
+  lf_wrist_joint: 0.0
+  rf_shoulder_swing_joint: 0.0
+  rf_shoulder_abduct_joint: 0.0
+  rf_shoulder_twist_joint: 0.0
+  rf_elbow_joint: 0.0
+  rf_wrist_joint: 0.0
+  tail1_yaw_joint: 0.0
+  tail1_pitch_joint: 0.0
+  tail2_yaw_joint: 0.0
+  tail2_pitch_joint: 0.0
+  tail3_yaw_joint: 0.0
+  tail3_pitch_joint: 0.0
+  rl_hip_swing_joint: 0.0
+  rl_hip_abduct_joint: 0.0
+  rl_hip_twist_joint: 0.0
+  rl_knee_joint: 0.0
+  rl_ankle_joint: 0.0
+  rr_hip_swing_joint: 0.0
+  rr_hip_abduct_joint: 0.0
+  rr_hip_twist_joint: 0.0
+  rr_knee_joint: 0.0
+  rr_ankle_joint: 0.0
+actuators:
+  legs:
+    joint_patterns:
+    - lf_shoulder_swing_joint
+    - lf_shoulder_abduct_joint
+    - lf_shoulder_twist_joint
+    - lf_elbow_joint
+    - rf_shoulder_swing_joint
+    - rf_shoulder_abduct_joint
+    - rf_shoulder_twist_joint
+    - rf_elbow_joint
+    - rl_hip_swing_joint
+    - rl_hip_abduct_joint
+    - rl_hip_twist_joint
+    - rl_knee_joint
+    - rr_hip_swing_joint
+    - rr_hip_abduct_joint
+    - rr_hip_twist_joint
+    - rr_knee_joint
+    stiffness:
+      lf_shoulder_swing_joint: 39.51528592905594
+      lf_shoulder_abduct_joint: 683.3387264744138
+      lf_shoulder_twist_joint: 63.0
+      lf_elbow_joint: 220.0
+      rf_shoulder_swing_joint: 39.51530946002652
+      rf_shoulder_abduct_joint: 683.3389536890733
+      rf_shoulder_twist_joint: 63.0
+      rf_elbow_joint: 220.0
+      rl_hip_swing_joint: 42.430006073784355
+      rl_hip_abduct_joint: 707.7715645844042
+      rl_hip_twist_joint: 62.0
+      rl_knee_joint: 220.0
+      rr_hip_swing_joint: 42.42998254281378
+      rr_hip_abduct_joint: 707.7713694627079
+      rr_hip_twist_joint: 62.0
+      rr_knee_joint: 220.0
+    damping:
+      lf_shoulder_swing_joint: 12.578106166597744
+      lf_shoulder_abduct_joint: 60.46906596698318
+      lf_shoulder_twist_joint: 9.259147567093025
+      lf_elbow_joint: 14.95006801883189
+      rf_shoulder_swing_joint: 12.57811365673831
+      rf_shoulder_abduct_joint: 60.46907063160223
+      rf_shoulder_twist_joint: 9.2591467559832
+      rf_elbow_joint: 14.950070650195313
+      rl_hip_swing_joint: 13.505890404123846
+      rl_hip_abduct_joint: 63.21388695024736
+      rl_hip_twist_joint: 9.054972304307615
+      rl_knee_joint: 14.950076790041491
+      rr_hip_swing_joint: 13.50588291398328
+      rr_hip_abduct_joint: 63.213923617214846
+      rr_hip_twist_joint: 9.054978426060286
+      rr_knee_joint: 14.950093455325538
+    effort_limit:
+      lf_shoulder_swing_joint: 180.0
+      lf_shoulder_abduct_joint: 180.0
+      lf_shoulder_twist_joint: 180.0
+      lf_elbow_joint: 180.0
+      rf_shoulder_swing_joint: 180.0
+      rf_shoulder_abduct_joint: 180.0
+      rf_shoulder_twist_joint: 180.0
+      rf_elbow_joint: 180.0
+      rl_hip_swing_joint: 180.0
+      rl_hip_abduct_joint: 180.0
+      rl_hip_twist_joint: 180.0
+      rl_knee_joint: 180.0
+      rr_hip_swing_joint: 180.0
+      rr_hip_abduct_joint: 180.0
+      rr_hip_twist_joint: 180.0
+      rr_knee_joint: 180.0
+    velocity_limit:
+      lf_shoulder_swing_joint: 10.0
+      lf_shoulder_abduct_joint: 10.0
+      lf_shoulder_twist_joint: 10.0
+      lf_elbow_joint: 10.0
+      rf_shoulder_swing_joint: 10.0
+      rf_shoulder_abduct_joint: 10.0
+      rf_shoulder_twist_joint: 10.0
+      rf_elbow_joint: 10.0
+      rl_hip_swing_joint: 10.0
+      rl_hip_abduct_joint: 10.0
+      rl_hip_twist_joint: 10.0
+      rl_knee_joint: 10.0
+      rr_hip_swing_joint: 10.0
+      rr_hip_abduct_joint: 10.0
+      rr_hip_twist_joint: 10.0
+      rr_knee_joint: 10.0
+    armature: 0.0
+  feet:
+    joint_patterns:
+    - lf_wrist_joint
+    - rf_wrist_joint
+    - rl_ankle_joint
+    - rr_ankle_joint
+    stiffness:
+      lf_wrist_joint: 12.194502945185873
+      rf_wrist_joint: 12.194624415267306
+      rl_ankle_joint: 12.194500111664386
+      rr_ankle_joint: 12.194621581717595
+    damping:
+      lf_wrist_joint: 0.6593089440051423
+      rf_wrist_joint: 0.6593130889879237
+      rl_ankle_joint: 0.6593458670300771
+      rr_ankle_joint: 0.6593500121483227
+    effort_limit:
+      lf_wrist_joint: 70.0
+      rf_wrist_joint: 70.0
+      rl_ankle_joint: 70.0
+      rr_ankle_joint: 70.0
+    velocity_limit:
+      lf_wrist_joint: 6.0
+      rf_wrist_joint: 6.0
+      rl_ankle_joint: 6.0
+      rr_ankle_joint: 6.0
+    armature: 0.0
+  spine:
+    joint_patterns:
+    - chest_yaw_joint
+    - chest_pitch_joint
+    - neck_yaw_joint
+    - neck_pitch_joint
+    - tail1_yaw_joint
+    - tail1_pitch_joint
+    - tail2_yaw_joint
+    - tail2_pitch_joint
+    - tail3_yaw_joint
+    - tail3_pitch_joint
+    stiffness:
+      chest_yaw_joint: 1183.4806397841637
+      chest_pitch_joint: 7835.783011254786
+      neck_yaw_joint: 52.913237006972885
+      neck_pitch_joint: 304.46663057539075
+      tail1_yaw_joint: 94.9596647293975
+      tail1_pitch_joint: 1052.7517254177665
+      tail2_yaw_joint: 37.673672166476464
+      tail2_pitch_joint: 479.2714787818486
+      tail3_yaw_joint: 6.440327228306681
+      tail3_pitch_joint: 128.6921180297125
+    damping:
+      chest_yaw_joint: 376.71358775041693
+      chest_pitch_joint: 895.5293576650034
+      neck_yaw_joint: 16.842806449305478
+      neck_pitch_joint: 40.917534161789845
+      tail1_yaw_joint: 30.22660007206544
+      tail1_pitch_joint: 122.08309725184303
+      tail2_yaw_joint: 11.991902299436566
+      tail2_pitch_joint: 42.577695464661495
+      tail3_yaw_joint: 2.0500198270286676
+      tail3_pitch_joint: 9.159101712150125
+    effort_limit:
+      chest_yaw_joint: 80.0
+      chest_pitch_joint: 280.0
+      neck_yaw_joint: 80.0
+      neck_pitch_joint: 80.0
+      tail1_yaw_joint: 80.0
+      tail1_pitch_joint: 80.0
+      tail2_yaw_joint: 80.0
+      tail2_pitch_joint: 80.0
+      tail3_yaw_joint: 80.0
+      tail3_pitch_joint: 80.0
+    velocity_limit:
+      chest_yaw_joint: 4.0
+      chest_pitch_joint: 4.0
+      neck_yaw_joint: 4.0
+      neck_pitch_joint: 4.0
+      tail1_yaw_joint: 4.0
+      tail1_pitch_joint: 4.0
+      tail2_yaw_joint: 4.0
+      tail2_pitch_joint: 4.0
+      tail3_yaw_joint: 4.0
+      tail3_pitch_joint: 4.0
+    armature: 0.0
+action:
+  legs_scale:
+    lf_shoulder_swing_joint: 0.19999999999999998
+    lf_shoulder_abduct_joint: 0.19999999999999998
+    lf_shoulder_twist_joint: 0.17453292519943295
+    lf_elbow_joint: 0.39999999999999997
+    lf_wrist_joint: 0.17453292533333334
+    rf_shoulder_swing_joint: 0.19999999999999998
+    rf_shoulder_abduct_joint: 0.19999999999999998
+    rf_shoulder_twist_joint: 0.17453292519943295
+    rf_elbow_joint: 0.39999999999999997
+    rf_wrist_joint: 0.17453292533333334
+    rl_hip_swing_joint: 0.19999999999999998
+    rl_hip_abduct_joint: 0.19999999999999998
+    rl_hip_twist_joint: 0.17453292519943295
+    rl_knee_joint: 0.39999999999999997
+    rl_ankle_joint: 0.17453292533333334
+    rr_hip_swing_joint: 0.19999999999999998
+    rr_hip_abduct_joint: 0.19999999999999998
+    rr_hip_twist_joint: 0.17453292519943295
+    rr_knee_joint: 0.39999999999999997
+    rr_ankle_joint: 0.17453292533333334
+  spine_scale:
+    chest_yaw_joint: 0.19999999999999998
+    chest_pitch_joint: 0.16666666666666666
+    neck_yaw_joint: 0.19999999999999998
+    neck_pitch_joint: 0.16666666666666666
+    tail1_yaw_joint: 0.19999999999999998
+    tail1_pitch_joint: 0.16666666666666666
+    tail2_yaw_joint: 0.19999999999999998
+    tail2_pitch_joint: 0.16666666666666666
+    tail3_yaw_joint: 0.19999999999999998
+    tail3_pitch_joint: 0.16666666666666666
+  use_default_offset: true
+  joints:
+    legs:
+    - lf_shoulder_swing_joint
+    - lf_shoulder_abduct_joint
+    - lf_shoulder_twist_joint
+    - lf_elbow_joint
+    - lf_wrist_joint
+    - rf_shoulder_swing_joint
+    - rf_shoulder_abduct_joint
+    - rf_shoulder_twist_joint
+    - rf_elbow_joint
+    - rf_wrist_joint
+    - rl_hip_swing_joint
+    - rl_hip_abduct_joint
+    - rl_hip_twist_joint
+    - rl_knee_joint
+    - rl_ankle_joint
+    - rr_hip_swing_joint
+    - rr_hip_abduct_joint
+    - rr_hip_twist_joint
+    - rr_knee_joint
+    - rr_ankle_joint
+    spine:
+    - chest_yaw_joint
+    - chest_pitch_joint
+    - neck_yaw_joint
+    - neck_pitch_joint
+    - tail1_yaw_joint
+    - tail1_pitch_joint
+    - tail2_yaw_joint
+    - tail2_pitch_joint
+    - tail3_yaw_joint
+    - tail3_pitch_joint
+  clip:
+    legs:
+      lf_shoulder_swing_joint:
+      - -0.6
+      - 0.6
+      lf_shoulder_abduct_joint:
+      - -0.6
+      - 0.6
+      lf_shoulder_twist_joint:
+      - -0.5235987755982988
+      - 0.5235987755982988
+      lf_elbow_joint:
+      - -1.2
+      - 1.2
+      lf_wrist_joint:
+      - -0.523598776
+      - 0.523598776
+      rf_shoulder_swing_joint:
+      - -0.6
+      - 0.6
+      rf_shoulder_abduct_joint:
+      - -0.6
+      - 0.6
+      rf_shoulder_twist_joint:
+      - -0.5235987755982988
+      - 0.5235987755982988
+      rf_elbow_joint:
+      - -1.2
+      - 1.2
+      rf_wrist_joint:
+      - -0.523598776
+      - 0.523598776
+      rl_hip_swing_joint:
+      - -0.6
+      - 0.6
+      rl_hip_abduct_joint:
+      - -0.6
+      - 0.6
+      rl_hip_twist_joint:
+      - -0.5235987755982988
+      - 0.5235987755982988
+      rl_knee_joint:
+      - -1.2
+      - 1.2
+      rl_ankle_joint:
+      - -0.523598776
+      - 0.523598776
+      rr_hip_swing_joint:
+      - -0.6
+      - 0.6
+      rr_hip_abduct_joint:
+      - -0.6
+      - 0.6
+      rr_hip_twist_joint:
+      - -0.5235987755982988
+      - 0.5235987755982988
+      rr_knee_joint:
+      - -1.2
+      - 1.2
+      rr_ankle_joint:
+      - -0.523598776
+      - 0.523598776
+    spine:
+      chest_yaw_joint:
+      - -0.6
+      - 0.6
+      chest_pitch_joint:
+      - -0.5
+      - 0.5
+      neck_yaw_joint:
+      - -0.6
+      - 0.6
+      neck_pitch_joint:
+      - -0.5
+      - 0.5
+      tail1_yaw_joint:
+      - -0.6
+      - 0.6
+      tail1_pitch_joint:
+      - -0.5
+      - 0.5
+      tail2_yaw_joint:
+      - -0.6
+      - 0.6
+      tail2_pitch_joint:
+      - -0.5
+      - 0.5
+      tail3_yaw_joint:
+      - -0.6
+      - 0.6
+      tail3_pitch_joint:
+      - -0.5
+      - 0.5
+sim:
+  dt: 0.005
+  decimation: 4
+  episode_length_s: 20.0
+names:
+  foot_body_names:
+  - lf_wrist
+  - rf_wrist
+  - rl_ankle
+  - rr_ankle
+  undesired_contact_body_names:
+  - lf_shoulder_twist
+  - lf_elbow
+  - rf_shoulder_twist
+  - rf_elbow
+  - rl_hip_twist
+  - rl_knee
+  - rr_hip_twist
+  - rr_knee
+  head_contact_body_names:
+  - chest_pitch
+  - neck_pitch
+commands:
+  lin_vel_x:
+  - 0.0
+  - 3.0
+  lin_vel_y:
+  - 0.0
+  - 0.0
+  ang_vel_z:
+  - 0.0
+  - 0.0
+  heading_command: false
+  rel_standing_envs: 0.0
+rewards:
+  track_lin_vel_xy_miki: 1.5
+  track_ang_vel_z_exp: 0.5
+  lin_vel_z_l2: -2.0
+  action_rate_l2: -0.01
+  dof_torques_l2: -1.0e-05
+  undesired_contacts: -1.0
+  belly_contact_force: -0.5
+terminations:
+  terms:
+  - base_contact
+  - head_ground_contact
+  base_contact_threshold: 1.0
+  head_contact_threshold: 1.0
+  head_ground_contact:
+    sensor_name: head_ground_contact
+    head_body_name: neck_pitch
+    floor_prim_path: /World/ground/terrain/GroundPlane/CollisionPlane
+    threshold: 1.0
+    dwell_s: 0.5
+params:
+  belly_force_scale: 706.0
+  miki_sigma_sq: 0.25
+  track_std: 0.5

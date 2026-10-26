@@ -295,9 +295,9 @@ def _check_inert_velocity_limits(rows: dict[str, dict], problems: list[str]) -> 
         actuators = getattr(getattr(getattr(p["instance"], "scene", None), "robot", None), "actuators", None)
         if not actuators:
             continue
-        # Only v4 adopts reviewed real caps; all earlier recipes keep the inert pin.
+        # V4 and its termination-only v5 successor use the same reviewed real caps.
         explicit = (getattr(p["instance"], "params_line", None) == "lizard2/main"
-                    and p.get("value") == "v4")
+                    and p.get("value") in ("v4", "v5"))
         for group in sorted(actuators):
             cfg = actuators[group]
             declared = getattr(cfg, "velocity_limit", None)

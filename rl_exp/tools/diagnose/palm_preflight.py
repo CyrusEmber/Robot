@@ -34,7 +34,9 @@ def main() -> int:
     from rl_exp.tools.verify import cfg_snapshot
 
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--task', default='Lizard2-Flat-v4', choices=['Lizard2-Flat-v4'])
+    parser.add_argument('--task', default='Lizard2-Flat-v4', choices=['Lizard2-Flat-v4', 'Lizard2-Flat-v5'])
+    parser.add_argument('--head_ground_check', action='store_true',
+                        help='V5 only: opt-in real buffer tests and forced head-floor measurement fixture')
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--num_envs', type=int)
     parser.add_argument('--steps', type=int, default=100)
@@ -42,6 +44,8 @@ def main() -> int:
     parser.add_argument('--hold_seconds', type=float, default=0.)
     add_launcher_args(parser)
     args, remaining = setup_preset_cli(parser)
+    if args.head_ground_check and args.task != 'Lizard2-Flat-v5':
+        parser.error('--head_ground_check requires the registered v5 task')
     if remaining or args.steps < 1 or args.hold_seconds < 0 or (args.num_envs is not None and args.num_envs < 1):
         parser.error('positive env/step counts, nonnegative hold, and no preset overrides required')
     out = args.out.resolve()
@@ -52,8 +56,15 @@ def main() -> int:
     report = dict(completed=False, closed=False, task=args.task, argv=sys.argv,
                   source_sha256=binding.sha256_file(out/'source.py'),
                   git_rev=binding.git_run(REPO, 'rev-parse', 'HEAD'),
-                  tag_rev=binding.git_run(REPO, 'rev-parse', 'lizard2-main-v4'),
+                  tag_rev=binding.git_run(REPO, 'rev-parse', 'lizard2-main-'+args.task.rsplit('-', 1)[1]),
                   requested_control_steps=args.steps, control_steps=0, samples=[])
+    if args.head_ground_check:
+        report['head_ground_sources'] = {}
+        for source in ('rl_exp/tasks/lizard2_mdp.py', 'rl_exp/tasks/lizard2_recipe.py',
+                       'rl_exp/tools/diagnose/head_ground_dwell_probe.py'):
+            saved = out/Path(source).name
+            saved.write_bytes((REPO/source).read_bytes())
+            report['head_ground_sources'][source] = binding.sha256_file(saved)
     started = time.monotonic()
     env = None
     try:
@@ -157,6 +168,10 @@ def main() -> int:
                           simulated_seconds=args.steps*live.step_dt,
                           torch_peak_allocated_bytes=torch.cuda.max_memory_allocated()
                           if str(live.device).startswith('cuda') else None)
+            if args.head_ground_check:
+                from head_ground_dwell_probe import check
+                report['head_ground_check'] = {}
+                check(live, report['head_ground_check'])
             print('PREFLIGHT_HOLD_READY', out, flush=True)
             if args.hold_seconds:
                 live.sim.pause()

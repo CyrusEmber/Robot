@@ -120,7 +120,9 @@ FROZEN = {
     # Reason, readouts and the independent review: acceptance/records/2026-10-10-record-format-live-checks.md.
     # 2026-10-23: add two v4 tasks on the adopted palm body, no old snapshot changed.
     # Exact update/review: acceptance/records/2026-10-23-lizard2-v4-configuration.md.
-    "rl_exp/versions/lizard2/main/cfg_lock.json": "ea7bf0f4b45c23d99217c310ae84171f2ad0511f0ff90a3081b13ce6d650eba4",
+    # 2026-10-26: only two v5 entries added; old entries unchanged by tool readback.
+    # Evidence: acceptance/records/2026-10-26-lizard2-v5-head-ground-dwell.md.
+    "rl_exp/versions/lizard2/main/cfg_lock.json": "b03879832e6fe950f6c44d4f52c627099e0c46221944727c8a0c8c67c5a54c5e",
 }
 
 FROZEN_REVS: dict[str, str] = {
@@ -143,7 +145,7 @@ FROZEN_REVS: dict[str, str] = {
     # ("declare the v3 budget at 6000"), and this line names that revision.
     # The 2026-10-10 re-baseline (the rsl_rl identity moved the combination key) took the same two
     # steps: the new bytes landed in cb6eb27.
-    "rl_exp/versions/lizard2/main/cfg_lock.json": "lizard2-main-v4",
+    "rl_exp/versions/lizard2/main/cfg_lock.json": "lizard2-main-v5",
 }
 """Which revision each frozen file's bytes are from, for the banner only.
 
