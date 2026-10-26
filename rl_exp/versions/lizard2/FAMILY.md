@@ -15,7 +15,7 @@ lizard2 = lizard 的四足构型修正版。当前 main/v4 采用掌部候选，
 
 ## 设计入口
 
-当前正式配置为 main/v4，方案入口见 [PLAN.md](PLAN.md)，正文唯一归 [main/v4/PLAN.md](main/v4/PLAN.md)，发布身份取 tag `lizard2-main-v4`。main/v3 的已训历史保留在其原 PLAN/NOTES。
+当前终止规则交付为 main/v5，方案入口见 [PLAN.md](PLAN.md)，正文唯一归 [main/v5/PLAN.md](main/v5/PLAN.md)，发布身份取 tag `lizard2-main-v5`。已训 main/v4 保留原配方与 tag；main/v3 的已训历史保留在其原 PLAN/NOTES。
 
 ## 线
 
@@ -43,6 +43,8 @@ lizard2 = lizard 的四足构型修正版。当前 main/v4 采用掌部候选，
 | `Lizard2-Flat-Play-v3` | `lizard2-flat-play-v3@1`（历史参数 `versions/lizard2/main/v3/main_params.yaml`；退休） |
 | `Lizard2-Flat-v4` | `lizard2-flat-v4@1`（参数 `versions/lizard2/main/v4/main_params.yaml`） |
 | `Lizard2-Flat-Play-v4` | `lizard2-flat-play-v4@1`（参数 `versions/lizard2/main/v4/main_params.yaml`） |
+| `Lizard2-Flat-v5` | `lizard2-flat-v5@1`（参数 `versions/lizard2/main/v5/main_params.yaml`） |
+| `Lizard2-Flat-Play-v5` | `lizard2-flat-play-v5@1`（参数 `versions/lizard2/main/v5/main_params.yaml`） |
 
 ## 版本历史
 
@@ -55,3 +57,4 @@ lizard2 = lizard 的四足构型修正版。当前 main/v4 采用掌部候选，
 | main/v2 | 2026-09-28 | v1 对照版：脚板四关节退出动作接口，其余沿用 v1；母本 main/v1。2026-10-08 因机体采用退休 | 历史结果见 main/v2/NOTES.md |
 | main/v3 | 2026-10-08 | 用户批准的候选机体采用；基于 v2 摘除 kfe 策略动作，保留全部可动关节、PD 与默认零目标；唯一母本 main/v2，旧机体版本同次退休 | 自检/限制见 `acceptance/records/2026-10-08-lizard2-v3-landing.md` |
 | main/v4 | 2026-10-23 | 按用户“落实正式训练配置”采用已审掌部资产和全部位置动作；母本 main/v3，旧机体 v3 同次退休；独立 runner 与日志身份 | 配置交付及未覆盖边界见 `acceptance/records/2026-10-23-lizard2-v4-configuration.md` |
+| main/v5 | 2026-10-26 | 用户要求头部持续触地终止，母本为已训 main/v4；保留原版本与共享默认参数，独立任务与日志身份 | 实现及验证边界见 `acceptance/records/2026-10-26-lizard2-v5-head-ground-dwell.md` |

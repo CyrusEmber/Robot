@@ -64,6 +64,7 @@
 | `rl_exp\tools\diagnose\palm_asset_probe.py` | **Blender 内取 palm 候选的实际枢轴与绑定网格**（`blender --python`，只读源 `.blend`，不改源）；输出须在 `rl_exp\out` 下，供 `palm_pd_probe.py` 的 `--blender_snapshot` 对照 |
 | `rl_exp\blender\scripts\lizard2_palm_spatial_candidate.py` | 肩髋共中心三轴隔离试作生成器（Blender）：输出 blend、相对网格引用 URDF 与身份报告，不写正式资产 |
 | `rl_exp\tools\diagnose\palm_spatial_runtime.py` | 无承重接线与隔离配置绑定；`--reset_probe` 查 reset/首物理步及 collider 归属，`--contact_pairs` 采具名观测并严格拒错；不判 PD 或复现正式配方 |
+| `rl_exp\tools\diagnose\head_ground_dwell_probe.py` | `palm_preflight --head_ground_check` 的头部→地面通道与连续接触/reset 原生核验 |
 | `rl_exp\tools\diagnose\palm_joint_force_audit.py` | 左膝两例关节力矩离线复读：轴投影、重力平衡及上限占比；不起仿真，不测极限负载 |
 | `rl_exp\tools\diagnose\palm_velocity_limit_audit.py` | 当前候选速度上限的离线逐关节核对；读取 manifest/URDF/backend，不测触限行为 |
 | `rl_exp\tools\diagnose\palm_training_interface.py` | 隔离训练草案的真实动作、子步接触与完整/子集/自动 reset 诊断；`--audit` 离线复算 |
@@ -93,6 +94,7 @@
 | `check_cfg_lock.py` | 配方 golden 闸门（format 3 分两层：框架组合块 + 线自己的条目）；`--update` 必须带 `--line` + `--reason`；反证 `test_cfg_lock_gate.py` |
 | `check_recipe_build.py` | 构建硬闸：冻结 golden 逐字段比 + 覆盖钉数 + 逐步归属 |
 | `test_lizard2_v4.py` | 正式掌部配置的命名、动作、驱动与采样离线回归 |
+| `test_lizard2_v5.py` | 头部地面持续接触终止的边界、间断、过滤、reset 和版本隔离；`--legacy` 复读旧规则失败对照 |
 | `check_recipe_map.py` | 配方身份闸门：`ast` 读注册表（不 import），声明的 `env_cfg_entry`/`agent_entry` 与注册逐字一致；`--bind-config` 构造实例读 `params_version`；反证 `test_recipe_map_gate.py` |
 | `check_recipe_registry.py` | 实验线生命周期闸门（`lines.json` 二值 `status` + 版本例外只许退休，闸门无时钟）；`effective_status` 是"线状态 + 版本例外"的唯一读者（离线闸门与启动共用）；反证 `test_recipe_registry_gate.py` |
 | `check_obs_protocol.py` / `obs_protocol_live.py` | 协议闸门（自洽 + 已审锚点 + golden 逐任务 + `--live` 实构比对 + 覆盖）；live 侧起 env 读真实 manager 的组序/项序/宽度/shape。反证 `test_obs_protocol_gate.py` |

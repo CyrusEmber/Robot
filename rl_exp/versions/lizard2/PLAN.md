@@ -1,6 +1,6 @@
 # lizard2 路线入口
 
-> 更新：2026-10-23。当前正式配置为 main/v4；本轮仅交付配置，不启动训练。配置与采用证据归 [配置记录](../../../acceptance/records/2026-10-23-lizard2-v4-configuration.md)，正文唯一归 [main/v4/PLAN.md](main/v4/PLAN.md)。
+> 更新：2026-10-26。当前终止规则交付为 main/v5；本轮不启动新训练。正文唯一归 [main/v5/PLAN.md](main/v5/PLAN.md)，实现与验证归 [终止规则记录](../../../acceptance/records/2026-10-26-lizard2-v5-head-ground-dwell.md)。已训 v4 保留原配方，资产采用证据仍取 [配置记录](../../../acceptance/records/2026-10-23-lizard2-v4-configuration.md)。
 
 家族事实与版本史见 [FAMILY.md](FAMILY.md)。当前训练交付由 [lizard2-family-landing](../../../work/active/lizard2-family-landing.md)承接，资产及默认驱动来源见 [候选事项](../../../work/active/lizard2-body-drive-candidate.md)，统筹路由取 [joint-limit-shape-and-range-pass](../../../work/active/joint-limit-shape-and-range-pass.md)。
 
