@@ -7,7 +7,7 @@ landing: rl_exp/versions/lizard2/main/main_params.yaml, rl_exp/tasks/lizard2_rec
 next: 执行者按新版本入口接续训练与策略评测，保留旧版结果身份。
 close_when: 新上下文核验配置、采用、实际训练与策略评测交付；仅构建通过不关闭。
 depends_on: lizard2-body-drive-candidate
-evidence: acceptance/records/2026-10-26-lizard2-v4-self-collision-hypothesis.md, acceptance/records/2026-10-26-lizard2-v5-leg-contact-penalty.md, acceptance/records/2026-10-26-lizard2-v5-head-ground-dwell.md, acceptance/records/2026-10-23-lizard2-v4-preflight.md, acceptance/records/2026-10-23-lizard2-v4-configuration.md, acceptance/records/2026-10-23-lizard2-v4-configuration-review.md, acceptance/records/2026-10-23-lizard2-plan-inventory.md, acceptance/records/2026-10-23-lizard2-training-interface-plan.md, acceptance/records/2026-10-22-lizard2-rl-coordination-handoff.md, acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md, acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, acceptance/records/2026-09-23-lizard2-v1-gait-skate, acceptance/records/2026-10-09-lizard2-limit-requirement-and-status-sync, acceptance/records/2026-10-09-lizard2-v3-pretrain-sanity, acceptance/records/2026-10-10-lizard2-v3-joint-velocity-limits
+evidence: acceptance/records/2026-10-26-lizard2-v5-self-collision-off.md, acceptance/records/2026-10-26-lizard2-v4-self-collision-hypothesis.md, acceptance/records/2026-10-26-lizard2-v5-leg-contact-penalty.md, acceptance/records/2026-10-26-lizard2-v5-head-ground-dwell.md, acceptance/records/2026-10-23-lizard2-v4-preflight.md, acceptance/records/2026-10-23-lizard2-v4-configuration.md, acceptance/records/2026-10-23-lizard2-v4-configuration-review.md, acceptance/records/2026-10-23-lizard2-plan-inventory.md, acceptance/records/2026-10-23-lizard2-training-interface-plan.md, acceptance/records/2026-10-22-lizard2-rl-coordination-handoff.md, acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md, acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, acceptance/records/2026-09-23-lizard2-v1-gait-skate, acceptance/records/2026-10-09-lizard2-limit-requirement-and-status-sync, acceptance/records/2026-10-09-lizard2-v3-pretrain-sanity, acceptance/records/2026-10-10-lizard2-v3-joint-velocity-limits
 ---
 
 ## 当前范围与交接
@@ -20,7 +20,7 @@ A/E 交骨架、几何及真实消费者，B/C 交具名工况下的默认驱动
 
 ## 当前正式配置
 
-当前解冻提案入口及奖励修订取 [main/v5/PLAN](../../rl_exp/versions/lizard2/main/v5/PLAN.md)，当前修订取 [奖励记录](../../acceptance/records/2026-10-26-lizard2-v5-leg-contact-penalty.md)，既有终止测量取 [新规则记录](../../acceptance/records/2026-10-26-lizard2-v5-head-ground-dwell.md)。已训 v4 保留原配方与结果身份，配置、资产采用、旧版退休及有限接口审核取 evidence 中对应记录；其预检仍取 [原预检记录](../../acceptance/records/2026-10-23-lizard2-v4-preflight.md)。训练和策略评测继续在本项，不恢复独立阶段。
+当前解冻提案入口及奖励修订取 [main/v5/PLAN](../../rl_exp/versions/lizard2/main/v5/PLAN.md)，当前碰撞修订取 [本轮记录](../../acceptance/records/2026-10-26-lizard2-v5-self-collision-off.md)，奖励修订取 [奖励记录](../../acceptance/records/2026-10-26-lizard2-v5-leg-contact-penalty.md)，既有终止测量取 [新规则记录](../../acceptance/records/2026-10-26-lizard2-v5-head-ground-dwell.md)。已训 v4 保留原配方与结果身份，配置、资产采用、旧版退休及有限接口审核取 evidence 中对应记录；其预检仍取 [原预检记录](../../acceptance/records/2026-10-23-lizard2-v4-preflight.md)。训练和策略评测继续在本项，不恢复独立阶段。
 
 ## 正式版本预检与训练
 
@@ -31,7 +31,7 @@ A/E 交骨架、几何及真实消费者，B/C 交具名工况下的默认驱动
 
 ## 训练后策略评测
 
-- 先按[训练现象记录](../../acceptance/records/2026-10-26-lizard2-v4-self-collision-hypothesis.md)补齐异常归因所需的事件对齐证据；未经验证不据此更改物理自碰撞默认，也不将后续多变量版本差异解释为单因素结论。
+- 按[训练现象记录](../../acceptance/records/2026-10-26-lizard2-v4-self-collision-hypothesis.md)补齐归因证据；用户最新碰撞设置取[本轮记录](../../acceptance/records/2026-10-26-lizard2-v5-self-collision-off.md)，不将多变量版本差异解释为单因素结论。
 
 1. 固定命令、窗口及已有可信报告项，评价实际 checkpoint 的速度/存活、卸载/移重、抬腿/步态、躯尾协调/拖尾、转向及恢复，交用户预览。学习性能不回交 D 要求手工动作先成功；趴姿训练和起卧过渡仍不新增。
 2. 净空、摆幅、承重滑移、柔顺及异常主承重等目标继续保留。使用新增滑移/滚动分类或新承重判分前，交 `lizard2-contact-protocol` 完成相应样本、writer/reader、具名协议及审核；性能阈值在使用前经用户确认固定。未校准项写未判，不把静置样本外推动态能力，不从最终表现倒推阈值；更换尺须保留身份并同尺重评。

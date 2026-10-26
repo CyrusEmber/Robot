@@ -4,6 +4,8 @@
 
 目的、假设与验收取 [PLAN.md](PLAN.md)。本版以头部持续触地替换旧胸颈瞬时净接触终止；解冻修订关闭指定腿部接触惩罚。完整差异与逐项理由取 [diff.json](diff.json)。
 
+当前修订另关闭全部物理自碰撞；设置与验证取 [本轮记录](../../../../../acceptance/records/2026-10-26-lizard2-v5-self-collision-off.md)。
+
 ## 实际执行与偏离
 
 未启动 v5 策略训练，无 v5 run/checkpoint。配置、回归、隔离原生测量与复读命令取 [验收记录](../../../../../acceptance/records/2026-10-26-lizard2-v5-head-ground-dwell.md)。
