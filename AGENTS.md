@@ -5,6 +5,7 @@
 - 直接说明限制；错了承认，不确定就查证。
 - 按任务检索 `FILEMAP.md`、家族 `FAMILY.md` 和子系统文档，不整份通读。
 - 临时脚本不留仓根；可复读诊断进 `rl_exp/tools/diagnose/`，历史工具进 `rl_exp/tools/archive/`。
+- 录制策略视频默认用 `ablation_harness/video_matrix.py` 输出带速度/视角标签的九宫格，保留单段原片；默认三档目标速度 × 三个视角，参数与输出见 `ablation_harness/HARNESS.md`。
 
 ## Work 与证据
 

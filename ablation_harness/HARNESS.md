@@ -56,7 +56,10 @@
   （`_HARNESS_DIR/eval.py`），train 入口相对**已解析**的 IsaacLab cwd（`scripts/...`）；cwd 与那条
   `--viz none` 一样是启动参数，不是定位手段。
 - **同目录但不是测量仪器**：`video_matrix.py`（录像矩阵）与 `results/` 里的记录无关 —— 它按
-  `--speeds` × `--terrains` 任意组合录 mp4 + `matrix.json`，用来**看**策略在不同速度/地面上怎么走，
+  `--speeds` × `--terrains` × `--views` 组合录单段 mp4、`matrix.json` 和带标签的对照视频，
+  默认九宫格：目标速度 0.5 / 1.5 / 3 m/s 三行，侧面 / 正前方 / 后侧斜视三列，每段 10 秒。
+  每个地形单独合成；超过三档速度按三行分页。`--eye` 保留单个自定义机位和原来的单段路径，
+  单段原片保留在视角子目录，合成片为 `<terrain>_overview[_<page>].mp4`。用来**看**策略怎么走，
   **不产 verdict、不写 `results/<协议>/`**。它的命令由评测侧注入，可以落在配方命令区间之外（那种格子
   记 `in_recipe_box: false`），其位移/均速只作"这段片子是否靠谱"的自查，**不得引用进任何验收表**；
   地形挡位取本仓套件的单列板（`plane` 走配方自己的地）。断言折在 `test_terrain_geometry.py` 里，
