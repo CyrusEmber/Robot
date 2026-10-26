@@ -5,6 +5,12 @@
   "note": "Hard B, lineage reading: base.json names v4 as this recipe's mother, so the declared difference is against that recipe -- not against the framework stock cfg, which would bury this version's own delta inside everything its ancestors already wrote. Env paths are grouped by the element that last moved them in the replay, so the paths here cannot disagree with the build; params_version is filtered as identity, because it says which recipe this is and it is what makes the two recipes different at all. The why strings are TODO until an author writes them: hard B compares paths, not prose, so an unwritten reason is a review item rather than a wrong claim.",
   "env": {
     "allowed": {
+      "lizard2_robot": {
+        "paths": [
+          "scene.robot.spawn"
+        ],
+        "why": "User decision 2026-10-26: disable all physical self-collisions in unfrozen v5.2. The declaration groups the containing spawn configuration; actual snapshot comparison changes only enabled_self_collisions from true to false. Keep ground collisions and every other robot setting unchanged."
+      },
       "lizard2_head_ground_dwell": {
         "paths": [
           "scene.head_ground_contact",
@@ -36,7 +42,8 @@
     "env": {
       "lizard2_contact_gate+lizard2_head_ground_dwell": "ac4ac2aa5c4c",
       "lizard2_head_ground_dwell": "f694f9100a3e",
-      "lizard2_rewards": "8b931efa1b29"
+      "lizard2_rewards": "8b931efa1b29",
+      "lizard2_robot": "7e2869406606"
     },
     "agent": "2fe849b56cc2"
   }

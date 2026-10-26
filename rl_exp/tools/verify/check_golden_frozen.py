@@ -124,7 +124,9 @@ FROZEN = {
     # Evidence: acceptance/records/2026-10-26-lizard2-v5-head-ground-dwell.md.
     # V5.1 is an explicitly unfrozen, untrained proposal; only its leg reward is removed.
     # Evidence: acceptance/records/2026-10-26-lizard2-v5-leg-contact-penalty.md.
-    "rl_exp/versions/lizard2/main/cfg_lock.json": "b2ee663a5c53d099fc976f18c1586749026439c216a203ed776754cc233f8b8a",
+    # V5.2 keeps that proposal unfrozen and disables physical self-collisions by user decision.
+    # Evidence: acceptance/records/2026-10-26-lizard2-v5-self-collision-off.md.
+    "rl_exp/versions/lizard2/main/cfg_lock.json": "d53f83788660022b242e69279de4908cd3b03f19f4b98fd14b9c04d8081f1dff",
 }
 
 FROZEN_REVS: dict[str, str] = {
@@ -147,7 +149,7 @@ FROZEN_REVS: dict[str, str] = {
     # ("declare the v3 budget at 6000"), and this line names that revision.
     # The 2026-10-10 re-baseline (the rsl_rl identity moved the combination key) took the same two
     # steps: the new bytes landed in cb6eb27.
-    "rl_exp/versions/lizard2/main/cfg_lock.json": "b14692a",
+    "rl_exp/versions/lizard2/main/cfg_lock.json": "HEAD",
 }
 """Which revision each frozen file's bytes are from, for the banner only.
 

@@ -127,6 +127,19 @@ def main() -> int:
                 fixed_base=robot.is_fixed_base)
             assert report['backend'] == dict(solver='TGS', force_timing=False, fixed_base=False)
             params, _ = obs_protocol._params_document(args.task)
+            from pxr import UsdPhysics
+
+            roots = [prim for prim in live.sim.stage.Traverse()
+                     if str(prim.GetPath()).startswith('/World/envs/')
+                     and prim.HasAPI(UsdPhysics.ArticulationRootAPI)]
+            actual_self_collisions = {
+                str(prim.GetPath()): prim.GetAttribute('physxArticulation:enabledSelfCollisions').Get()
+                for prim in roots
+            }
+            report['backend']['self_collisions'] = actual_self_collisions
+            assert len(roots) == live.num_envs, 'missing or extra runtime articulation roots'
+            assert all(value is params['robot']['self_collisions']
+                       for value in actual_self_collisions.values()), 'runtime self-collision flag mismatch'
             for key, method, field in (('kp', 'get_dof_stiffnesses', 'stiffness'),
                                        ('kd', 'get_dof_dampings', 'damping'),
                                        ('effort', 'get_dof_max_forces', 'effort_limit'),

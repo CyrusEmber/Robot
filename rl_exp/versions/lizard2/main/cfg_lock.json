@@ -1,9 +1,9 @@
 {
  "lock_format": 3,
  "note": "recipe golden of line 'lizard2/main': entry keys are '<combination>|<task id>' and a training run never adds one",
- "reason": "User-approved v5 unfreeze: remove only the undesired leg contact reward; preserve every other snapshot",
- "reason_at": "2026-10-26T15:53:13+08:00",
- "reason_rev": "8f9ce3a4a3d3",
+ "reason": "User-approved unfrozen v5.2: disable all physical self-collisions only",
+ "reason_at": "2026-10-26T16:19:26+08:00",
+ "reason_rev": "01d2f5839264",
  "entries": {
   "isaaclab=28a37cecdd43|rsl_rl=installed:5.4.2|python=3.12.13|Lizard2-Flat-Play-v1": {
    "version": "v1",
@@ -6928,7 +6928,7 @@
    "version": "v5",
    "env_cfg_class": "rl_exp.tasks.recipe_tasks:Lizard2FlatV5EnvCfg_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:Lizard2V5PPORunnerCfg",
-   "digest": "458563eddf03c1e97aea0656e01c4ba6a81b92dc76e88d4be5f81eaffaaef174",
+   "digest": "3b3b78e16f346a702ce5d1530fb8b4807a6a410785a9a03f2984039c973e4546",
    "snapshot": {
     "env": {
      "viewer": {
@@ -7156,7 +7156,7 @@
         "articulation_props": {
          "articulation_enabled": null,
          "fix_root_link": null,
-         "enabled_self_collisions": true,
+         "enabled_self_collisions": false,
          "solver_position_iteration_count": 8,
          "solver_velocity_iteration_count": 0,
          "sleep_threshold": null,
@@ -16252,7 +16252,7 @@
    "version": "v5",
    "env_cfg_class": "rl_exp.tasks.recipe_tasks:Lizard2FlatV5EnvCfg",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:Lizard2V5PPORunnerCfg",
-   "digest": "53e10276e32b79cd84b0b1a72df8f8c497358e914f49a177829f0bef2dd1c2aa",
+   "digest": "aada5b91808a0e358db66aa7a4971d8e45d8fb0bad8fc220239c1092440bc9e5",
    "snapshot": {
     "env": {
      "viewer": {
@@ -16480,7 +16480,7 @@
         "articulation_props": {
          "articulation_enabled": null,
          "fix_root_link": null,
-         "enabled_self_collisions": true,
+         "enabled_self_collisions": false,
          "solver_position_iteration_count": 8,
          "solver_velocity_iteration_count": 0,
          "sleep_threshold": null,

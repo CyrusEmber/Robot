@@ -173,6 +173,20 @@ def test_v5_leg_contacts_no_longer_deduct_reward():
         assert manager.compute(.02).tolist() == [0., 0.]
 
 
+def test_v5_disables_self_collisions_without_changing_v4():
+    import rl_exp.tasks  # register tasks for standalone execution
+    from rl_exp.tools.verify.baseline_runtime import resolve_task_cfg
+
+    old = resolve_task_cfg('Lizard2-Flat-v4')
+    assert old.scene.robot.spawn.articulation_props.enabled_self_collisions is True
+    expected = old.scene.robot.to_dict()
+    expected['spawn']['articulation_props']['enabled_self_collisions'] = False
+    for task in ('Lizard2-Flat-v5', 'Lizard2-Flat-Play-v5'):
+        cfg = resolve_task_cfg(task)
+        assert cfg.scene.robot.spawn.articulation_props.enabled_self_collisions is False, task
+        assert cfg.scene.robot.to_dict() == expected, 'unrelated robot configuration changed'
+
+
 if __name__ == '__main__':
     if '--legacy' in sys.argv:
         failed = 0

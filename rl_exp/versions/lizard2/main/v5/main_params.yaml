@@ -9,7 +9,7 @@ robot:
   - 0.0
   - 0.0
   - 1.0
-  self_collisions: true
+  self_collisions: false
   naming: palm_spatial
 joint_order:
 - chest_yaw
