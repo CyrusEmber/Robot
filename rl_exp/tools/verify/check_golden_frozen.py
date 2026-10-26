@@ -122,7 +122,9 @@ FROZEN = {
     # Exact update/review: acceptance/records/2026-10-23-lizard2-v4-configuration.md.
     # 2026-10-26: only two v5 entries added; old entries unchanged by tool readback.
     # Evidence: acceptance/records/2026-10-26-lizard2-v5-head-ground-dwell.md.
-    "rl_exp/versions/lizard2/main/cfg_lock.json": "b03879832e6fe950f6c44d4f52c627099e0c46221944727c8a0c8c67c5a54c5e",
+    # V5.1 is an explicitly unfrozen, untrained proposal; only its leg reward is removed.
+    # Evidence: acceptance/records/2026-10-26-lizard2-v5-leg-contact-penalty.md.
+    "rl_exp/versions/lizard2/main/cfg_lock.json": "b2ee663a5c53d099fc976f18c1586749026439c216a203ed776754cc233f8b8a",
 }
 
 FROZEN_REVS: dict[str, str] = {
@@ -145,7 +147,7 @@ FROZEN_REVS: dict[str, str] = {
     # ("declare the v3 budget at 6000"), and this line names that revision.
     # The 2026-10-10 re-baseline (the rsl_rl identity moved the combination key) took the same two
     # steps: the new bytes landed in cb6eb27.
-    "rl_exp/versions/lizard2/main/cfg_lock.json": "lizard2-main-v5",
+    "rl_exp/versions/lizard2/main/cfg_lock.json": "HEAD",
 }
 """Which revision each frozen file's bytes are from, for the banner only.
 

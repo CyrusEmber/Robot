@@ -445,7 +445,7 @@ rewards:
   lin_vel_z_l2: -2.0
   action_rate_l2: -0.01
   dof_torques_l2: -1.0e-05
-  undesired_contacts: -1.0
+  undesired_contacts: 0.0
   belly_contact_force: -0.5
 terminations:
   terms:

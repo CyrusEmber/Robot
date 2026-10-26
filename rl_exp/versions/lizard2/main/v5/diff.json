@@ -12,6 +12,12 @@
         ],
         "why": "User decision 2026-10-26: add one head-owner to floor-collider filtered sensor and require continuous 0.5 s contact; unrelated net force is excluded."
       },
+      "lizard2_rewards": {
+        "paths": [
+          "rewards.undesired_contacts"
+        ],
+        "why": "User decision 2026-10-26: unfreeze the untrained v5 and remove the designated leg-body contact penalty. A zero YAML weight removes this reward term; preserve every other reward and the trained v4 recipe."
+      },
       "lizard2_contact_gate+lizard2_head_ground_dwell": {
         "paths": [
           "terminations.head_contact"
@@ -29,7 +35,8 @@
   "authored_against": {
     "env": {
       "lizard2_contact_gate+lizard2_head_ground_dwell": "ac4ac2aa5c4c",
-      "lizard2_head_ground_dwell": "f694f9100a3e"
+      "lizard2_head_ground_dwell": "f694f9100a3e",
+      "lizard2_rewards": "8b931efa1b29"
     },
     "agent": "2fe849b56cc2"
   }

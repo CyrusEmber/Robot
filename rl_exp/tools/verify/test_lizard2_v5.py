@@ -137,8 +137,40 @@ def test_v5_routing_preserves_v4():
     assert old.terminations.head_contact.func is illegal_contact
     assert old.terminations.head_contact.params['sensor_cfg'].body_names == ['chest_pitch', 'neck_pitch']
     assert cfg.terminations.base_contact.to_dict() == old.terminations.base_contact.to_dict()
-    for name in ('actions', 'observations', 'rewards', 'events', 'commands'):
+    expected_rewards = old.rewards.to_dict()
+    expected_rewards['undesired_contacts'] = None
+    assert cfg.rewards.to_dict() == expected_rewards, 'unrelated reward changed'
+    for name in ('actions', 'observations', 'events', 'commands'):
         assert getattr(cfg, name).to_dict() == getattr(old, name).to_dict(), name+' drifted'
+
+
+def test_v5_leg_contacts_no_longer_deduct_reward():
+    import rl_exp.tasks  # registers the task ids when this test is run by itself
+    from isaaclab.managers import RewardManager
+    from rl_exp.tools.verify.baseline_runtime import resolve_task_cfg
+
+    old = resolve_task_cfg('Lizard2-Flat-v4').rewards.undesired_contacts
+    assert old.weight == -1.0
+    # Inject one contacted leg body. Exercise the real manager and reward function,
+    # not just a zero in YAML; a later re-enabled term must make this test fail.
+    sensor_cfg = old.params['sensor_cfg']
+    body_names = sensor_cfg.body_names
+    sensor_cfg.body_names = None
+    sensor_cfg.body_ids = list(range(len(body_names)))
+    forces = torch.zeros(2, 4, len(body_names), 3)
+    forces[0, :, 0, 2] = 50.
+    env = NS(num_envs=2, device='cpu', sim=NS(is_playing=lambda: True),
+             scene=Scene(contact_forces=NS(body_names=body_names, num_bodies=len(body_names),
+                         find_bodies=lambda *args, **kwargs: (list(range(len(body_names))), body_names),
+                         data=NS(net_forces_w_history=NS(torch=forces)))))
+    baseline = RewardManager({'undesired_contacts': old}, env)
+    assert torch.allclose(baseline.compute(.02), torch.tensor([-.02, 0.]))
+    for task in ('Lizard2-Flat-v5', 'Lizard2-Flat-Play-v5'):
+        cfg = resolve_task_cfg(task)
+        assert cfg.rewards.undesired_contacts is None, task+' still enables the leg-contact penalty'
+        manager = RewardManager({'undesired_contacts': cfg.rewards.undesired_contacts}, env)
+        assert manager.active_terms == []
+        assert manager.compute(.02).tolist() == [0., 0.]
 
 
 if __name__ == '__main__':

@@ -108,7 +108,7 @@ EXPECTED_DIFFS: dict[tuple[str, str], int] = {
     # freeze as v1/v2; a regeneration that loses a group shows up here as a count, not as silence.
     ("lizard2/main", "v3"): 4,
     ("lizard2/main", "v4"): 66,
-    ("lizard2/main", "v5"): 4,
+    ("lizard2/main", "v5"): 5,
 }
 """Recipe -> how many paths its difference declaration lists (``diff.json`` next to the recipe)."""
 

@@ -224,7 +224,7 @@ def lizard2_velocity_command(cfg) -> None:
 
 
 def lizard2_rewards(cfg) -> None:
-    """Seven terms; the rest removed by name, not by omission -- the framework base registers ten
+    """Up to seven terms; the rest removed by name, not by omission -- the framework base registers ten
     and this recipe keeps four of them (the other three are the ones it replaces or adds)."""
     params = _doc(cfg)
     reward_params = params["rewards"]
@@ -242,10 +242,13 @@ def lizard2_rewards(cfg) -> None:
     cfg.rewards.lin_vel_z_l2.weight = reward_params["lin_vel_z_l2"]
     cfg.rewards.action_rate_l2.weight = reward_params["action_rate_l2"]
     cfg.rewards.dof_torques_l2.weight = reward_params["dof_torques_l2"]
-    cfg.rewards.undesired_contacts.weight = reward_params["undesired_contacts"]
-    cfg.rewards.undesired_contacts.params["sensor_cfg"] = SceneEntityCfg(
-        "contact_forces", body_names=params["names"]["undesired_contact_body_names"]
-    )
+    if reward_params["undesired_contacts"] == 0.0:
+        cfg.rewards.undesired_contacts = None
+    else:
+        cfg.rewards.undesired_contacts.weight = reward_params["undesired_contacts"]
+        cfg.rewards.undesired_contacts.params["sensor_cfg"] = SceneEntityCfg(
+            "contact_forces", body_names=params["names"]["undesired_contact_body_names"]
+        )
     cfg.rewards.belly_contact_force = RewTerm(
         func=belly_contact_force,
         weight=reward_params["belly_contact_force"],
