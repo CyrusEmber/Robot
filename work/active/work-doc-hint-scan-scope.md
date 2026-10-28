@@ -2,17 +2,28 @@
 id: work-doc-hint-scan-scope
 title: 指针扫描把冻结证据读成活指针（HINT 信道被恒噪占满）
 scope: rl_exp/tools/verify
-status: pending_review
+status: in_progress
 landing: rl_exp/tools/verify/check_work_docs.py
-next: 审——**新上下文**（不带执行会话历史）对着 `close_when` 与 `acceptance/records/2026-10-10-work-doc-hint-scope.md` 判三件：① 豁免是否只扩到**冻结证据类**（`_FROZEN_REFS` = 版本记录 + `acceptance/records`），有没有连带放过活文档 —— 判据是自测里活文档那条过时引用**仍须**出 HINT；② 破坏测试是否真咬住（撤掉 `acceptance/records` 后自测必须红在那条断言上）；③ 准入的缺陷是**真实一次**而非"以防万一"（`34c4917` 关闭 `runtime-acceptance-v3` 时暴露）。审核读数入 `acceptance/records/`，本项只留指针；审过即移进 `work/closed/2026/`、去掉本 `next`、补 `outcome`
-close_when: 扫描不再读冻结证据类，且自测同时钉住两侧（冻结记录里出现过时指针必须**不报**、活文档里出现过时指针必须**仍报**）。按 `AGENTS.md` §Gates 准入：回应一次真实缺陷（写明是哪一次）、在该缺陷上有破坏测试、标明查的是行为成立而非声明一致 —— 本项钉的正是闸门自身行为，故破坏测试即证据
-evidence: acceptance/records/2026-10-10-work-doc-hint-scope.md
+next: 执行者修复审核发现的扫描范围缺口，补回归测试与验收证据，再交新上下文复审；详见下一步。
+close_when: 新上下文按关闭条件审核冻结证据和活文档边界、回归与破坏测试及真实缺陷来源。
+evidence: acceptance/records/2026-10-28-work-doc-hint-scope-review.md, acceptance/records/2026-10-10-work-doc-hint-scope.md
 ---
 
 ## 当前状态
 
-- **已做**：`_FROZEN_REFS` 按类扩到 `acceptance/records`；自测补冻结记录一侧的 fixture 与反向断言（活文档一侧早已有）。读数、破坏测试与复读命令全在 `evidence`（本项不复述数字）。
-- **待审**：见 `next`。执行者认为本项已做完，故置 `pending_review`。
+独立审核未通过，审核证据见 `evidence`；待修复并复审。
+
+## 下一步
+
+- 执行者按版本文档实际语义区分冻结记录与活文档，修复版本树内活文档漏扫及目录前缀误匹配。
+- 补充版本树活文档、相似目录名与冻结记录的自测；验证修复前失败、修复后通过，保留原有记录豁免破坏测试。
+- 记录验证结果，置 `pending_review`，请不带执笔历史的新上下文复审。
+
+## 关闭条件
+
+- 冻结证据中的过时指针不报 HINT；版本树活文档、相似目录名及普通活文档中的过时指针仍报 HINT。
+- 审核者对照真实缺陷来源和行为测试，复核回归测试修复前红、修复后绿，以及撤掉记录豁免时的破坏测试为红。
+- 审核通过后归档；有可修缺口则退回，只有用户能解除的缺口才置 `blocked`。
 
 ## 为什么按类豁免，而不是逐条修
 
