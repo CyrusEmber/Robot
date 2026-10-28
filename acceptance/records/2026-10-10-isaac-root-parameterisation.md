@@ -225,6 +225,28 @@ train 相对已解析 cwd；末句“不是定位手段”只可理解为 cwd �
 
 训练与评测记录本仓 rev `e567ba1d4167`。两仓均有脏树，manifest 离线验证为 `RUN_MANIFEST_PARTIAL`（3 项必需声明未知）；未归档源码与已安装 rsl_rl 来源限制整树重建，不能将本次结果当性能结论。仅证明本机当前训练器的 v4 nominal 新训链路，不证明 v5/v6 套件兼容、任意 tag 身份或未来保存命名不漂移。
 
+### 头地过滤器套件适配执行证据（2026-10-28）
+
+- eval 和视频切换地形后以 `terrain.prim_path` 绑定头部传感器与终止项：生成地形用 `/terrain/mesh`，平地用原 `CollisionPlane`，未知类型拒绝。未改训练配方或冻结协议。`test_terrain_geometry.py` 新断言在修复前失败，修复后通过，并覆盖视频平地、生成地形、自定义 prim 路径及未知类型拒绝；`test_lizard2_v5.py` 通过。
+- 原生套件夹具用两个环境、平地列分别实测 v5/v6：真实生成网格带碰撞 API，PhysX 接触视图仅绑定该网格；连续头地接触达到原 dwell 时终止，真实碰撞箱头部接触由独立过滤通道确认，地面过滤通道未触发。报告 `rl_exp/out/terrain_head_v5_probe03/report.json`、`rl_exp/out/terrain_head_v6_probe02/report.json`，日志同目录名加 `.log`；原平地对照 `rl_exp/out/terrain_head_flat_v5_probe01/report.json`。夹具人为固定穿透姿态，力值不是策略载荷；物理检查仅覆盖套件平地列。
+- 复读夹具：`E:\IsaacLab\env_isaaclab\Scripts\python.exe -B rl_exp\tools\diagnose\palm_preflight.py --task Lizard2-Flat-v5 --num_envs 2 --steps 1 --head_ground_check --terrain_suite lizard_suite_v2 --viz none --out rl_exp\out\<新的目录>`；v6 替换 task，平地对照省略 `--terrain_suite`。报告存档了执行时的源码快照与摘要；本次为脏工作树运行，git rev 不能单独重建改动。
+- v5/v6 实际 eval 均落盘 `ablation_harness/results/locomotion_eval_v3/smoke/Lizard2-Flat-v5_terrain_filter_v5_20261028_nominal_seed123/` 和 `ablation_harness/results/locomotion_eval_v3/smoke/Lizard2-Flat-v6_terrain_filter_v6_20261028_nominal_seed123/`；启动日志分别为 `rl_exp/out/terrain_filter_eval_v5_20261028.log` 和 `rl_exp/out/terrain_filter_eval_v6_20261028.log`。使用协议 v3 nominal、seed 123、每地形 1 环境和相应 checkpoint；命令入口 `ablation_harness/eval.py --task <task> --checkpoint <checkpoint> --protocol locomotion_eval_v3 --mode nominal --seed 123 --envs_per_terrain 1 --tag <新标签> --group smoke --viz none`。这些是脏树下的功能探针，记录中的 git rev 不包含未提交修复，不作为性能结论或可由该 rev 重建的证据。
+
+### 头地过滤器独立审核（2026-10-28）
+
+**暂不通过关闭**：独立新上下文核验实现、真实物理报告及 eval 产物后确认功能证据成立，但其他地形列与真实视频运行等未覆盖边界尚未明确留在活跃事项，须先保留并重审。
+
+- v5/v6 套件平地列各两环境的实际过滤通道，连续 100 个物理步头地接触到原 dwell 时触发；另一碰撞箱的独立通道持续检测到真实接触，地面通道为零且不触发。夹具是人为固定穿透姿态，不是自然跌倒或策略载荷。
+- 两组原 `smoke` 目录的 eval、record 和 terrain 几何均存在，record 读态 complete；日志有九个终局帧，checkpoint 的实算摘要与记录的加载前后摘要相符。eval 与 record 的对应性由身份、时间和日志交叉核验，非 eval 文件加密绑定。
+- 独立执行 `test_terrain_geometry.py` 得 8 passed、`test_lizard2_v5.py` 通过；内存将绑定函数替换为空操作，eval 和视频目标测试均失败，恢复后通过。视频只核验到 `gym.make` 前的配置，未有真实视频运行证据。
+- 套件其他列的真实头地接触、真实自接触、自然跌倒、robust 及视频运行未验证；两次 eval 的 rev 不含当时未提交修复，不能据 rev 重建。代码和证据变化后须由不带执笔历史的新上下文重新审核。
+
+### 头地过滤器独立重审（2026-10-28）
+
+**关闭判据通过，限当前工作区证据快照。** 新上下文复核绑定点、v5/v6 原生物理报告和原组 eval/record；独立运行关键离线检查共 20 条通过，内存将绑定函数置空时 eval 与视频配置测试均失败，恢复后通过。两版物理夹具均在原 dwell 时间触发头地接触；箱体过滤通道证明真实非地接触、地面通道未触发。eval 与 record 经身份、时间和日志交叉核验；checkpoint 实算摘要与记录一致。原报告源码快照与当前功能实现一致，诊断源码仅文档字符串有差异。
+
+其余套件列真实头地接触、真实自接触、自然跌倒、robust 及真实视频验证转 `work/active/terrain-contact-suite-coverage.md`，不由本项关闭。真实探针在脏树运行，记录的 rev 不含修复，运行环境不保证完整重建；警告和原始报告保留，结果不作策略性能结论。
+
 ## 证据引用
 
 - 事项：`work/closed/2026/isaac-root-parameterisation.md`。

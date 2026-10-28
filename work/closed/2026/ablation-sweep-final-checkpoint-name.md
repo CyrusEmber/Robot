@@ -11,7 +11,7 @@ evidence: acceptance/records/2026-10-10-isaac-root-parameterisation.md
 
 ## 当前状态
 
-已修复并用新 tag 补跑 v4 新训到评测；原 spec、日志与产物见 evidence 的「v4 新训到 eval 补证」节，待独立审核。v5/v6 套件过滤器缺陷另由 `work/active/eval-terrain-contact-filter.md` 跟踪。
+已修复并用新 tag 补跑 v4 新训到评测；原 spec、日志与独立审核见 evidence。v5/v6 套件过滤器事项见 `work/closed/2026/eval-terrain-contact-filter.md`。
 
 ## 未覆盖边界
 

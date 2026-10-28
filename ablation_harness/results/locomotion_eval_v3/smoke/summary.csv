@@ -1,3 +1,5 @@
-run_id,protocol,task,tag,mode,seed,git_rev_lizard,git_rev_isaaclab,timestamp,success_rate,fall_rate,lin_mae_mps,ang_mae_radps,energy_per_m_j,stop_overshoot_mps,recovery_mean_s,never_recovered
-Lizard-Rough-v14_zeroaction_nominal_seed123,Locomotion-Eval-v3,Lizard-Rough-v14,zeroaction,nominal,123,4051ed5906e7,28a37cecdd43,2026-09-20T15:06:14,0.285,0.0,0.8329,0.1714,3980.2253,0.0016,,
-Lizard-Rough-v14_zeroaction-evidence_nominal_seed123,Locomotion-Eval-v3,Lizard-Rough-v14,zeroaction-evidence,nominal,123,a7e021176a3c,28a37cecdd43,2026-09-20T15:25:35,0.285,0.0,0.8329,0.1714,3980.2253,0.0016,,
+run_id,protocol,task,tag,mode,seed,variant,git_rev_lizard,git_rev_isaaclab,timestamp,success_rate,fall_rate,lin_mae_mps,ang_mae_radps,energy_per_m_j,stop_overshoot_mps,recovery_mean_s,never_recovered
+Lizard-Rough-v14_zeroaction_nominal_seed123,Locomotion-Eval-v3,Lizard-Rough-v14,zeroaction,nominal,123,,4051ed5906e7,28a37cecdd43,2026-09-20T15:06:14,0.285,0.0,0.8329,0.1714,3980.2253,0.0016,,
+Lizard-Rough-v14_zeroaction-evidence_nominal_seed123,Locomotion-Eval-v3,Lizard-Rough-v14,zeroaction-evidence,nominal,123,,a7e021176a3c,28a37cecdd43,2026-09-20T15:25:35,0.285,0.0,0.8329,0.1714,3980.2253,0.0016,,
+Lizard2-Flat-v6_terrain_filter_v6_20261028_nominal_seed123,Locomotion-Eval-v3,Lizard2-Flat-v6,terrain_filter_v6_20261028,nominal,123,,40a9a8f595a5,28a37cecdd43,2026-10-28T16:17:48,0.1793,0.0,0.8351,0.1677,3875.5542,0.0015,,
+Lizard2-Flat-v5_terrain_filter_v5_20261028_nominal_seed123,Locomotion-Eval-v3,Lizard2-Flat-v5,terrain_filter_v5_20261028,nominal,123,,40a9a8f595a5,28a37cecdd43,2026-10-28T16:18:02,0.201,0.0,0.8348,0.1752,3338.1167,0.0084,,

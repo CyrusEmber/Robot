@@ -2,16 +2,16 @@
 id: eval-terrain-contact-filter
 title: 评测套件适配头部地面接触过滤器
 scope: ablation_harness/eval.py, rl_exp/tasks/lizard2_recipe.py
-status: open
+status: done
 landing: ablation_harness/eval.py
 evidence: acceptance/records/2026-10-10-isaac-root-parameterisation.md
-next: 执行者核定套件碰撞路径及传感器语义，修复评测配置并以真实仿真和破坏回归验证。
+outcome: 固定套件过滤绑定修复，v5/v6 原生接触与 eval 通过独立重审；未覆盖验证已交接活跃事项。
 close_when: 新上下文按正文“关闭条件”核验落点与证据；有缺口不关闭。
 ---
 
 ## 当前范围
 
-v5/v6 的头部地面接触传感器过滤训练平地路径；eval 换成固定地形套件后该路径不存在，初始化失败。失败证据见 `acceptance/records/2026-10-10-isaac-root-parameterisation.md` 的「修复后 v6 探针」节。
+eval 与视频的地形替换已适配头部过滤器；回归、原生接触夹具和 v5/v6 eval 落盘待重审，证据见 evidence。其他地形列、自接触、自然跌倒、robust 与真实视频验证转 `work/active/terrain-contact-suite-coverage.md`。
 
 ## 下一步
 
