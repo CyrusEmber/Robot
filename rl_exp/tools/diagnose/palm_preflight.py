@@ -5,7 +5,8 @@
 
 """Short native-task zero-action preflight [s, rad, rad/s, N, N*m].
 
-No policy, reset/terrain/drive overrides, extra sensors or performance verdict.
+By default no policy, reset/terrain/drive overrides, extra sensors or performance verdict.
+The opt-in terrain suite adds a fixed-terrain and non-ground contact fixture.
 Use --viz kit --num_envs 4 --hold_seconds 60 for visual inspection; --viz none
 without --num_envs checks the registered training environment count. Outputs
 must be new directories under rl_exp/out. The report preserves failures too.
@@ -34,9 +35,12 @@ def main() -> int:
     from rl_exp.tools.verify import cfg_snapshot
 
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--task', default='Lizard2-Flat-v4', choices=['Lizard2-Flat-v4', 'Lizard2-Flat-v5'])
+    parser.add_argument('--task', default='Lizard2-Flat-v4',
+                        choices=['Lizard2-Flat-v4', 'Lizard2-Flat-v5', 'Lizard2-Flat-v6'])
     parser.add_argument('--head_ground_check', action='store_true',
-                        help='V5 only: opt-in real buffer tests and forced head-floor measurement fixture')
+                        help='V5/V6: opt-in head-ground dwell measurement fixture')
+    parser.add_argument('--terrain_suite', choices=['lizard_suite_v2'],
+                        help='Opt-in fixed generated terrain and real non-ground contact fixture')
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--num_envs', type=int)
     parser.add_argument('--steps', type=int, default=100)
@@ -44,8 +48,12 @@ def main() -> int:
     parser.add_argument('--hold_seconds', type=float, default=0.)
     add_launcher_args(parser)
     args, remaining = setup_preset_cli(parser)
-    if args.head_ground_check and args.task != 'Lizard2-Flat-v5':
-        parser.error('--head_ground_check requires the registered v5 task')
+    if args.head_ground_check and args.task not in ('Lizard2-Flat-v5', 'Lizard2-Flat-v6'):
+        parser.error('--head_ground_check requires the registered v5 or v6 task')
+    if args.terrain_suite and not args.head_ground_check:
+        parser.error('--terrain_suite requires --head_ground_check')
+    if args.terrain_suite and args.num_envs != 2:
+        parser.error('--terrain_suite fixture requires exactly 2 environments')
     if remaining or args.steps < 1 or args.hold_seconds < 0 or (args.num_envs is not None and args.num_envs < 1):
         parser.error('positive env/step counts, nonnegative hold, and no preset overrides required')
     out = args.out.resolve()
@@ -60,8 +68,11 @@ def main() -> int:
                   requested_control_steps=args.steps, control_steps=0, samples=[])
     if args.head_ground_check:
         report['head_ground_sources'] = {}
-        for source in ('rl_exp/tasks/lizard2_mdp.py', 'rl_exp/tasks/lizard2_recipe.py',
-                       'rl_exp/tools/diagnose/head_ground_dwell_probe.py'):
+        sources = ['rl_exp/tasks/lizard2_mdp.py', 'rl_exp/tasks/lizard2_recipe.py',
+                   'rl_exp/tools/diagnose/head_ground_dwell_probe.py']
+        if args.terrain_suite:
+            sources.extend(('ablation_harness/suites.py', 'rl_exp/tasks/terrain_geometry.py'))
+        for source in sources:
             saved = out/Path(source).name
             saved.write_bytes((REPO/source).read_bytes())
             report['head_ground_sources'][source] = binding.sha256_file(saved)
@@ -75,6 +86,26 @@ def main() -> int:
         if args.num_envs is not None:
             cfg.scene.num_envs = args.num_envs
         cfg.seed = args.seed
+        if args.terrain_suite:
+            from ablation_harness import suites
+            from isaaclab.assets import AssetBaseCfg
+            import isaaclab.sim as sim_utils
+
+            cfg.scene.terrain = suites.lizard_suite_v2()
+            suites.bind_head_ground_to_terrain(cfg)
+            cfg.curriculum.terrain_levels = None
+            gen = cfg.scene.terrain.terrain_generator
+            box_y = -gen.size[1] * (gen.num_cols - 1) / 2
+            cfg.scene.head_probe_box = AssetBaseCfg(
+                prim_path='/World/HeadProbeBox',
+                spawn=sim_utils.CuboidCfg(size=(8., 8., .2),
+                                          collision_props=sim_utils.CollisionPropertiesCfg()),
+                init_state=AssetBaseCfg.InitialStateCfg(pos=(0., box_y, 1.9)))
+            cfg.scene.head_probe_contact = cfg.scene.head_ground_contact.copy()
+            cfg.scene.head_probe_contact.filter_prim_paths_expr = ['/World/HeadProbeBox/geometry/mesh']
+            report['terrain_suite'] = dict(name=args.terrain_suite, seed=suites.SUITE_SEED,
+                                           fixture_box_center=[0., box_y, 1.9],
+                                           fixture_box_size=[8., 8., .2])
         if args.device is not None:
             cfg.sim.device = args.device
         if args.hold_seconds:
@@ -109,6 +140,9 @@ def main() -> int:
 
         with runtime_with_report():
             import warp as wp
+            if args.terrain_suite:
+                from rl_exp.tasks.terrain_geometry import seed_rngs
+                seed_rngs(suites.SUITE_SEED)
             env = gym.make(args.task, cfg=cfg)
             live = env.unwrapped
             robot, sensor, manager = live.scene['robot'], live.scene['contact_forces'], live.action_manager
@@ -184,7 +218,7 @@ def main() -> int:
             if args.head_ground_check:
                 from head_ground_dwell_probe import check
                 report['head_ground_check'] = {}
-                check(live, report['head_ground_check'])
+                check(live, report['head_ground_check'], terrain_suite=bool(args.terrain_suite))
             print('PREFLIGHT_HOLD_READY', out, flush=True)
             if args.hold_seconds:
                 live.sim.pause()

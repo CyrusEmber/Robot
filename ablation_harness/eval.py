@@ -392,6 +392,7 @@ def _prepare_env(protocol: dict) -> tuple[object, object, str]:
         args_cli.envs_per_terrain = int(protocol["suite_layout"]["envs_per_terrain"])
 
     env_cfg.scene.terrain = suite_factory()
+    suites.bind_head_ground_to_terrain(env_cfg)
     env_cfg.scene.num_envs = args_cli.envs_per_terrain * num_cols
     env_cfg.episode_length_s = float(protocol["episode_length_s"])
     env_cfg.seed = args_cli.seed

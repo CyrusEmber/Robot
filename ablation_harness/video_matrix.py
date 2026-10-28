@@ -217,7 +217,7 @@ def record_cell(cell: dict, args) -> dict:
     from isaaclab_tasks.utils.hydra import resolve_presets
     from rsl_rl.runners import OnPolicyRunner
 
-    from ablation_harness import record as record_mod
+    from ablation_harness import record as record_mod, suites
     from ablation_harness.components.command_player import CommandPlayer
     from ablation_harness.components.dr_controller import apply_eval_mode
 
@@ -231,6 +231,7 @@ def record_cell(cell: dict, args) -> dict:
     command_box = [float(v) for v in cfg.commands.base_velocity.ranges.lin_vel_x]
 
     cfg.scene.terrain = gear_terrain(cell["terrain"], cfg.scene.terrain)
+    suites.bind_head_ground_to_terrain(cfg)
     cfg.curriculum.terrain_levels = None
     cfg.scene.num_envs = args.num_envs
     cfg.seed = args.seed

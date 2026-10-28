@@ -139,6 +139,20 @@ _LIZARD_SUITE_V2_GENERATOR.sub_terrains = {
 }
 
 
+def bind_head_ground_to_terrain(cfg) -> None:
+    """Bind the head-ground termination to the collider of the selected terrain."""
+    term = getattr(cfg.terminations, "head_ground_contact", None)
+    if term is None:
+        return
+    terrain = cfg.scene.terrain
+    paths = {"plane": "/terrain/GroundPlane/CollisionPlane", "generator": "/terrain/mesh"}
+    if terrain.terrain_type not in paths:
+        raise ValueError(f"Unsupported head-ground terrain type: {terrain.terrain_type}")
+    floor = terrain.prim_path + paths[terrain.terrain_type]
+    cfg.scene.head_ground_contact.filter_prim_paths_expr = [floor]
+    term.params["floor_prim_path"] = floor
+
+
 def lizard_suite_v2() -> TerrainImporterCfg:
     """Fixed terrain suite for the lizard, v2: v1's layout with genuinely rough columns.
 

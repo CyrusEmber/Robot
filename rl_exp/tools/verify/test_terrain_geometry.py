@@ -285,22 +285,25 @@ def test_video_matrix_resolves_dynamic_sensor_presets() -> None:
     class CheckedBeforeSimulation(Exception):
         pass
 
-    def check_config(task, *, cfg, **kwargs):
-        assert task == "Lizard2-Flat-Play-v5"
-        sensor = cfg.scene.head_ground_contact
-        assert sensor.prim_path == "{ENV_REGEX_NS}/Robot/Geometry/neck_pitch"
-        assert sensor.filter_prim_paths_expr == ["/World/ground/terrain/GroundPlane/CollisionPlane"]
-        assert cfg.terminations.head_ground_contact.params["dwell_s"] == 0.5
-        raise CheckedBeforeSimulation
+    for gear, suffix in (("plane", "/terrain/GroundPlane/CollisionPlane"), ("rough_b", "/terrain/mesh")):
+        def check_config(task, *, cfg, **kwargs):
+            assert task == "Lizard2-Flat-Play-v5"
+            sensor = cfg.scene.head_ground_contact
+            floor = cfg.scene.terrain.prim_path + suffix
+            assert sensor.prim_path == "{ENV_REGEX_NS}/Robot/Geometry/neck_pitch"
+            assert sensor.filter_prim_paths_expr == [floor]
+            assert cfg.terminations.head_ground_contact.params["floor_prim_path"] == floor
+            assert cfg.terminations.head_ground_contact.params["dwell_s"] == 0.5
+            raise CheckedBeforeSimulation
 
-    args = video_matrix.build_parser().parse_args(["--task", "Lizard2-Flat-Play-v5"])
-    with patch.object(gym, "make", side_effect=check_config):
-        try:
-            video_matrix.record_cell({"speed": 1.5, "terrain": "plane"}, args)
-        except CheckedBeforeSimulation:
-            pass
-        else:
-            raise AssertionError("record_cell did not construct the requested task")
+        args = video_matrix.build_parser().parse_args(["--task", "Lizard2-Flat-Play-v5"])
+        with patch.object(gym, "make", side_effect=check_config):
+            try:
+                video_matrix.record_cell({"speed": 1.5, "terrain": gear}, args)
+            except CheckedBeforeSimulation:
+                pass
+            else:
+                raise AssertionError("record_cell did not construct the requested task")
 
 
 def test_eval_resolves_dynamic_sensor_presets() -> None:
@@ -328,7 +331,8 @@ def test_eval_resolves_dynamic_sensor_presets() -> None:
                                                   seed=123, device=None, mode="nominal"),
         "string_to_callable": string_to_callable, "resolve_presets": resolve_presets,
         "handle_deprecated_rsl_rl_cfg": handle_deprecated_rsl_rl_cfg,
-        "importlib": importlib, "_SUITE_REGISTRY": {"lizard_suite_v2": (None, suites.lizard_suite_v2)},
+        "importlib": importlib, "suites": suites,
+        "_SUITE_REGISTRY": {"lizard_suite_v2": (None, suites.lizard_suite_v2)},
         "apply_eval_mode": apply_eval_mode,
     }
     exec(compile(ast.Module(body=[fn], type_ignores=[]), "eval.py", "exec"), namespace)
@@ -336,6 +340,20 @@ def test_eval_resolves_dynamic_sensor_presets() -> None:
     with patch.object(importlib.metadata, "version", return_value="5.0.1"):
         env_cfg, _, _ = namespace["_prepare_env"](protocol)
     assert isinstance(env_cfg.scene.head_ground_contact, SensorBaseCfg)
+    floor = env_cfg.scene.terrain.prim_path + "/terrain/mesh"
+    assert env_cfg.scene.head_ground_contact.filter_prim_paths_expr == [floor]
+    assert env_cfg.terminations.head_ground_contact.params["floor_prim_path"] == floor
+    env_cfg.scene.terrain.prim_path = "/World/custom"
+    suites.bind_head_ground_to_terrain(env_cfg)
+    assert env_cfg.scene.head_ground_contact.filter_prim_paths_expr == ["/World/custom/terrain/mesh"]
+    assert env_cfg.terminations.head_ground_contact.params["floor_prim_path"] == "/World/custom/terrain/mesh"
+    env_cfg.scene.terrain.terrain_type = "usd"
+    try:
+        suites.bind_head_ground_to_terrain(env_cfg)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("unknown terrain cannot be silently bound to a guessed collider")
 
 
 def _main() -> None:
