@@ -235,13 +235,22 @@ def assets_on_protocol(key: str, document: dict) -> tuple[set[str], list[str]]:
     reader = _runtime_reader()
     assets: set[str] = set()
     unresolved: list[str] = []
+    resolved = {}  # Per call only: later checks must observe edits to the params file.
     for task_id, route in sorted((document.get("tasks") or {}).items()):
         if not isinstance(route, dict) or route.get("protocol") != key:
             continue
         if reader is None:
             unresolved.append(f"{task_id} (the runtime reader could not be loaded)")
             continue
-        asset = reader.usd_path_for_route(route.get("line"), route.get("version"))
+        line, version = route.get("line"), route.get("version")
+        cacheable = isinstance(line, str) and (version is None or isinstance(version, str))
+        route_key = (line, version) if cacheable else None
+        if cacheable and route_key in resolved:
+            asset = resolved[route_key]
+        else:
+            asset = reader.usd_path_for_route(line, version)
+            if cacheable:
+                resolved[route_key] = asset
         if asset is None:
             unresolved.append(task_id)
         else:

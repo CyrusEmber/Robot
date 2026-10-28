@@ -107,6 +107,35 @@ def live_value_regression() -> None:
 
 def main() -> int:
     PROBLEMS.clear()
+    # TRAIN/PLAY share a route, but a later check must still observe changed input.
+    routes = {name: {'protocol': 'fixture', 'line': 'fixture/main', 'version': 'v1'}
+              for name in ('train', 'play')}
+    calls, current = [], {'asset': 'asset.usda'}
+
+    def resolve_asset(line, version):
+        calls.append((line, version))
+        return current['asset']
+
+    with patch.object(g, '_runtime_reader', return_value=NS(usd_path_for_route=resolve_asset)):
+        assets, missing = g.assets_on_protocol('fixture', {'tasks': routes})
+        check('asset-reader/resolves-train-play-once', len(calls) == 1
+              and assets == {'asset.usda'} and not missing, f'calls={calls}, assets={assets}, missing={missing}')
+        calls.clear()
+        routes['other_version'] = {**routes['train'], 'version': 'v2'}
+        g.assets_on_protocol('fixture', {'tasks': routes})
+        check('asset-reader/versions-stay-independent', len(calls) == 2
+              and set(calls) == {('fixture/main', 'v1'), ('fixture/main', 'v2')}, f'calls={calls}')
+        del routes['other_version']
+        current['asset'] = None
+        assets, missing = g.assets_on_protocol('fixture', {'tasks': routes})
+        check('asset-reader/next-check-reads-new-input', not assets and missing == ['play', 'train'],
+              f'assets={assets}, missing={missing}')
+        calls.clear()
+        routes['malformed'] = {**routes['train'], 'version': []}
+        assets, missing = g.assets_on_protocol('fixture', {'tasks': routes})
+        check('asset-reader/non-string-route-keeps-reader-behavior', not assets
+              and missing == ['malformed', 'play', 'train'] and ('fixture/main', []) in calls,
+              f'calls={calls}, assets={assets}, missing={missing}')
     live_value_regression()
     # --- the real declaration is clean on both halves it can run offline ---------------
     check("real/self-consistent", g.check_self(DECLARED) == [], f"{g.check_self(DECLARED)}")
