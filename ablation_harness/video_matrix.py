@@ -214,6 +214,7 @@ def record_cell(cell: dict, args) -> dict:
     import torch
     from isaaclab.utils.string import string_to_callable
     from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper, handle_deprecated_rsl_rl_cfg
+    from isaaclab_tasks.utils.hydra import resolve_presets
     from rsl_rl.runners import OnPolicyRunner
 
     from ablation_harness import record as record_mod
@@ -223,7 +224,7 @@ def record_cell(cell: dict, args) -> dict:
     import rl_exp.tasks  # noqa: F401  (registers the tasks)
 
     spec = gym.spec(args.task)
-    cfg = string_to_callable(spec.kwargs["env_cfg_entry_point"])()
+    cfg = resolve_presets(string_to_callable(spec.kwargs["env_cfg_entry_point"])())
     agent_cfg = string_to_callable(spec.kwargs["rsl_rl_cfg_entry_point"])()
     agent_cfg = handle_deprecated_rsl_rl_cfg(agent_cfg, importlib.metadata.version("rsl-rl-lib"))
     speed = cell["speed"]

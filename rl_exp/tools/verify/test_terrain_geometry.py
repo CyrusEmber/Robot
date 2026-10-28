@@ -274,6 +274,35 @@ def test_video_matrix_gears_resolve_against_the_suite() -> None:
     print("  ok video matrix: gears resolve off the suite, one column per gear, camera rides the root")
 
 
+def test_video_matrix_resolves_dynamic_sensor_presets() -> None:
+    """V5's dynamically attached head sensor must reach gym as a concrete config."""
+    import gymnasium as gym
+    from unittest.mock import patch
+
+    import rl_exp.tasks  # noqa: F401
+    from ablation_harness import video_matrix
+
+    class CheckedBeforeSimulation(Exception):
+        pass
+
+    def check_config(task, *, cfg, **kwargs):
+        assert task == "Lizard2-Flat-Play-v5"
+        sensor = cfg.scene.head_ground_contact
+        assert sensor.prim_path == "{ENV_REGEX_NS}/Robot/Geometry/neck_pitch"
+        assert sensor.filter_prim_paths_expr == ["/World/ground/terrain/GroundPlane/CollisionPlane"]
+        assert cfg.terminations.head_ground_contact.params["dwell_s"] == 0.5
+        raise CheckedBeforeSimulation
+
+    args = video_matrix.build_parser().parse_args(["--task", "Lizard2-Flat-Play-v5"])
+    with patch.object(gym, "make", side_effect=check_config):
+        try:
+            video_matrix.record_cell({"speed": 1.5, "terrain": "plane"}, args)
+        except CheckedBeforeSimulation:
+            pass
+        else:
+            raise AssertionError("record_cell did not construct the requested task")
+
+
 def _main() -> None:
     tests = [fn for name, fn in sorted(globals().items()) if name.startswith("test_") and callable(fn)]
     for fn in tests:
