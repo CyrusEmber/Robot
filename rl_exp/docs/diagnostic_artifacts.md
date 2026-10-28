@@ -58,6 +58,9 @@
 输出默认本机保留且被 Git 忽略；索引、源码与验收记录入仓不等于运行字节有外部备份。
 恢复证明的范围、结果及已知边界见事项的验收记录指针。
 
+`rl_exp/out/lizard2_v4_staged_whitespace.log` 已合入本机 ZIP，旧路径不会透明解析；
+按 `acceptance/records/2026-10-28-lizard2-v4-whitespace-archive.md` 的命令显式恢复原日志。
+
 ## 支撑诊断入口
 
 `diagnose_support.py` 使用同一索引和收尾机制，输出根保留为

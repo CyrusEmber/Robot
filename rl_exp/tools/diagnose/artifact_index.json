@@ -3781,6 +3781,22 @@
       "next": "resolve direct consumer and writer status before deletion; restore from manifest using the acceptance record"
     },
     {
+      "logical_root": "rl_exp/out/lizard2_v4_staged_whitespace.log",
+      "current_location": "rl_exp/out/archive/diagnostic-development/lizard2-v4-staged-whitespace-20261023.zip",
+      "classification": "historical_control",
+      "owner": "diagnostic-artifact-lifecycle",
+      "action": "consolidated_archive",
+      "writer_status": "snapshot_only_exclusive_open_succeeded",
+      "storage": "local_single_copy_no_backup",
+      "basis": "acceptance/records/2026-10-28-lizard2-v4-whitespace-archive.md",
+      "document_mentions": [
+        "acceptance/records/2026-10-23-lizard2-v4-configuration.md"
+      ],
+      "consumer_verification": "isolated manifest restore, byte comparison with original and actual URDF, USDA and OBJ whitespace failure parsing; explicit restoration required",
+      "retention_reason": "preserve full historical failure log, not a passing check or reproducible current output",
+      "next": "restore manifest blob into isolated root using acceptance record; archive is local only"
+    },
+    {
       "logical_root": "rl_exp/out/archive/diagnostic-development/commit-scratch-20261028.zip",
       "current_location": "rl_exp/out/archive/diagnostic-development/commit-scratch-20261028.zip",
       "classification": "historical_control",
