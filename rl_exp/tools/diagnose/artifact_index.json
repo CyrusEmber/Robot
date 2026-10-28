@@ -3748,6 +3748,20 @@
       "next": "original executor confirms run state, source identity, input dependencies and retention scope"
     },
     {
+      "logical_root": "rl_exp/out/archive/diagnostic-development/loaded-axes-samples-20261028.zip",
+      "current_location": "rl_exp/out/archive/diagnostic-development/loaded-axes-samples-20261028.zip",
+      "classification": "historical_control",
+      "owner": "diagnostic-artifact-lifecycle",
+      "action": "retain_rollback",
+      "writer_status": "sealed_after_verified_restore",
+      "storage": "local_single_copy_no_backup",
+      "basis": "acceptance/records/2026-10-28-loaded-axes-compression.md",
+      "document_mentions": [],
+      "consumer_verification": "isolated restore and per-file hashes match the downstream gain20 bindings; samples remain directly readable at original paths",
+      "retention_reason": "same-volume rollback copy for NTFS compression, not external backup",
+      "next": "retain until an independently verified backup replaces it; restore explicitly in an isolated directory"
+    },
+    {
       "logical_root": "rl_exp/out/archive/diagnostic-development/inventory-snapshots-20261028.zip",
       "current_location": "rl_exp/out/archive/diagnostic-development/inventory-snapshots-20261028.zip",
       "classification": "historical_control",
@@ -4112,11 +4126,11 @@
       "action": "investigate",
       "writer_status": "unknown",
       "storage": "local_single_copy_no_backup",
-      "basis": null,
+      "basis": "acceptance/records/2026-10-28-loaded-axes-compression.md",
       "document_mentions": [],
-      "consumer_verification": "top-level refresh only; not an independent physical acceptance",
-      "retention_reason": "unreviewed runtime material; triage into canonical evidence, mergeable history or disposable output",
-      "next": "inspect producer and live consumers; eliminate duplicate copies, migrate dependencies after read verification, delete superseded material"
+      "consumer_verification": "17 sample files NTFS-compressed in place; audit compared to stored result and gain20 self-check passed; rest of directory not assessed",
+      "retention_reason": "historical loaded samples remain inputs to actual consumers; preserve original paths and bytes",
+      "next": "continue triage of other files and dependencies; sample-only same-volume rollback archive is not an external backup"
     },
     {
       "logical_root": "rl_exp/out/lizard2_b_loaded_axes_20261021.log",
