@@ -12,7 +12,7 @@ evidence: acceptance/records/2026-10-10-isaac-root-parameterisation.md
 ## 当前状态
 
 独立审核裁定见 evidence 的「补证独立审核」节。
-关联缺陷事项仍见 `work/active/ablation-sweep-final-checkpoint-name.md`，不由本项代关。
+关联缺陷事项见 `work/closed/2026/ablation-sweep-final-checkpoint-name.md`，不由本项代关。
 
 ## 未覆盖边界
 

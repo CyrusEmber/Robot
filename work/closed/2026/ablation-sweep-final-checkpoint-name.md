@@ -2,16 +2,16 @@
 id: ablation-sweep-final-checkpoint-name
 title: 调度器的"训练已完成"凭据（model_{max_iterations}.pt）与训练器收尾保存命名差一
 scope: ablation_harness/run_ablation.py, ablation_harness/specs
-status: in_progress
+status: done
 landing: ablation_harness/run_ablation.py
-next: 执行者用全新 tag 与独立组补跑新训到评测，保留原始 spec、完整命令和终局日志，再交无执行历史的新上下文审核。
+outcome: 调度器按实际末档判完成并默认评估末档；独立审核确认 v4 新训到 eval 的关闭判据成立。
 close_when: 一条**不复用旧 checkpoint** 的 spec 能走完 train → eval：判据 = `[ABLATION] sweep done, failures=0` 且对应 `results/<协议>/<组>/<run_id>/eval.json` 落盘；或用户明示"spec 只走复用路径"，则判据改为 docstring 写明该前提、检查与之一致。两条路都得落一份 `acceptance/records/` 记录。缺 checkpoint 时报失败是当前行为，不算通过
 evidence: acceptance/records/2026-10-10-isaac-root-parameterisation.md
 ---
 
 ## 当前状态
 
-代码已修复，独立审核发现原探针缺少可复核的终局日志；真实新训、零失败终局与原组 eval 须在同一次执行中补证。审核结果见 evidence 的「checkpoint 完成凭据独立审核」节。
+已修复并用新 tag 补跑 v4 新训到评测；原 spec、日志与产物见 evidence 的「v4 新训到 eval 补证」节，待独立审核。v5/v6 套件过滤器缺陷另由 `work/active/eval-terrain-contact-filter.md` 跟踪。
 
 ## 未覆盖边界
 

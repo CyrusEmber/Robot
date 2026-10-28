@@ -1,0 +1,2 @@
+run_id,protocol,task,tag,mode,seed,variant,git_rev_lizard,git_rev_isaaclab,timestamp,success_rate,fall_rate,lin_mae_mps,ang_mae_radps,energy_per_m_j,stop_overshoot_mps,recovery_mean_s,never_recovered
+Lizard2-Flat-v4_checkpoint_sweep_v4_20261028_it1_nominal_seed123,Locomotion-Eval-v3,Lizard2-Flat-v4,checkpoint_sweep_v4_20261028_it1,nominal,123,,e567ba1d4167,28a37cecdd43,2026-10-28T15:43:46,0.1793,0.0,0.8351,0.1677,3914.783,0.0015,,

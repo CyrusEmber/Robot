@@ -206,6 +206,25 @@ train 相对已解析 cwd；末句“不是定位手段”只可理解为 cwd �
 - eval 创建环境时抛出 `Unknown asset config type for head_ground_contact`，但进程返回零，调度器错误打印 `failures=0`。目标组未产出 eval 或 record；此轮不满足关闭条件，不能把零失败打印当成通过。
 - 根因：eval 未像训练和视频入口一样解析动态传感器 preset；调度器只看子进程返回码，未检查新产物。已分别增加解析和新产物检查；对应回归先在旧实现上失败，再在修复后通过。已有 eval 的复用途径仍按原契约处理，不能证明其来源或内容。
 
+### 修复后 v6 探针：地形过滤器不兼容（2026-10-28）
+
+新 tag 的 spec `rl_exp/out/sweep_checkpoint_fixed_20261028.yaml` 与日志 `rl_exp/out/sweep_checkpoint_fixed_20261028.log` 保留在本机。新训后 eval 已通过 preset 解析，但 v6 的头部传感器仍过滤训练平地的 `/World/ground/terrain/GroundPlane/CollisionPlane`；评测套件替换了该地形，PhysX 找不到过滤目标而在初始化失败。新产物检查正确报 `failures=1`，未写 eval。不能通过关闭头部终止项冒充同一评测；v5/v6 的套件过滤器兼容性不在 checkpoint 命名修复范围内，须另行解决。
+
+### v4 新训到 eval 补证（2026-10-28；提交 `e567ba1`）
+
+- 本机 spec：`rl_exp/out/sweep_checkpoint_v4_20261028.yaml`（SHA-256 `0149551a9dfda021cc50e97b795b9f09ce454db1f05fb7f0813cee89a1bd9203`）；完整 stdout/stderr：`rl_exp/out/sweep_checkpoint_v4_20261028.log`。执行前确认 tag 的训练目录与评测组均不存在。
+- 完整命令（cmd）：`set "RL_ALLOW_DIRTY_TREE=Diagnostic sweep: unrelated concurrent artifact-index and ledger-check edits; no performance claim" && "E:\IsaacLab\env_isaaclab\Scripts\python.exe" -u "E:\Robot\ablation_harness\run_ablation.py" --spec "E:\Robot\rl_exp\out\sweep_checkpoint_v4_20261028.yaml" --group checkpoint-sweep-v4-20261028 > "E:\Robot\rl_exp\out\sweep_checkpoint_v4_20261028.log" 2>&1`。并行会话的非本项脏文件导致显式记录 override；这不是性能评测。
+- 新训目录 `E:\IsaacLab\logs\rsl_rl\lizard2_v4\2026-10-28_15-40-04_checkpoint_sweep_v4_20261028`；预算 2，默认评估末档 `model_1.pt`。日志打印 `sweep done, failures=0`，原组产出 `ablation_harness/results/locomotion_eval_v3/checkpoint-sweep-v4-20261028/Lizard2-Flat-v4_checkpoint_sweep_v4_20261028_it1_nominal_seed123/eval.json` 与同目录 `record.json`。细节、未复用与摘要由独立审核复核。
+- v4 不含 v5/v6 特有的训练平地接触过滤器；本次通过不能证明 v5/v6 套件兼容，另见 `work/active/eval-terrain-contact-filter.md`。
+
+### v4 补证独立审核（2026-10-28）
+
+**通过关闭判据，限于当前证据快照。** 独立新上下文从事项、实现和保留产物核验：日志有一次新训、迭代 0 和 1、一次 eval，无 `eval exists, skip`；manifest 标明 `resume=false`、`resumed=false`、source 为 null。原 spec 未指定 `eval_checkpoints`，默认 it1；日志有 `failures=0`，eval 和 record 在启动时的原组内，record 读态 complete。启动前目录不存在是执行者声明，不能事后独立回看；新训日志、manifest 和产物交叉支持未复用。
+
+独立重算 `model_1.pt` SHA-256 为 `36003d8b8912b7f35aeacb07afa3efe1ed2e18c5352194e719f35c9f12dbc13a`，与 checkpoint 索引、record 加载前后摘要和日志一致，eval 指向同一文件。日志 SHA-256 `40c6a4bdafea7a09b2fb0ccbb5a3e1a791aa1eede3a6b0ac21d609c8989b84ad`；eval SHA-256 `4c94d45df46d8ee1d7c2af4446448db350b0f15ac2b0245b7d20ab4691d8bbee`；record SHA-256 `7b6a6a259f5ff5d819f97b720e51a707b90579c6fc2f255dae271bb47b2bf1e6`。原 spec、日志和训练 checkpoint 为机器本地证据，须保留；产物入仓不等于本地证据有备份。
+
+训练与评测记录本仓 rev `e567ba1d4167`。两仓均有脏树，manifest 离线验证为 `RUN_MANIFEST_PARTIAL`（3 项必需声明未知）；未归档源码与已安装 rsl_rl 来源限制整树重建，不能将本次结果当性能结论。仅证明本机当前训练器的 v4 nominal 新训链路，不证明 v5/v6 套件兼容、任意 tag 身份或未来保存命名不漂移。
+
 ## 证据引用
 
 - 事项：`work/closed/2026/isaac-root-parameterisation.md`。
