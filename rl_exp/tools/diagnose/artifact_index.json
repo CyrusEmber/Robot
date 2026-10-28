@@ -3797,6 +3797,20 @@
       "next": "restore manifest blob into isolated root using acceptance record; archive is local only"
     },
     {
+      "logical_root": "rl_exp/out/archive/diagnostic-development/commit-index-20261028.zip",
+      "current_location": "rl_exp/out/archive/diagnostic-development/commit-index-20261028.zip",
+      "classification": "historical_control",
+      "owner": "diagnostic-artifact-lifecycle",
+      "action": "consolidated_archive",
+      "writer_status": "sealed_after_verified_restore",
+      "storage": "local_single_copy_no_backup",
+      "basis": "acceptance/records/2026-10-28-diagnostic-commit-scratch-archive.md",
+      "document_mentions": [],
+      "consumer_verification": "restored original Git index bytes and corresponding historical scripts in an isolated directory; each restored index matches its recorded commit tree",
+      "retention_reason": "preserve historical temporary Git index bytes and their separate identities",
+      "next": "restore using the acceptance record in an isolated directory; do not run historical commit scripts"
+    },
+    {
       "logical_root": "rl_exp/out/archive/diagnostic-development/commit-scratch-20261028.zip",
       "current_location": "rl_exp/out/archive/diagnostic-development/commit-scratch-20261028.zip",
       "classification": "historical_control",
