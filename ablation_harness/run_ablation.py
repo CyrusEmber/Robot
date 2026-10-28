@@ -171,6 +171,9 @@ def _run_eval(run: dict, checkpoint: pathlib.Path, iteration: int, mode: str, ar
         ["--device", args_cli.device] if args_cli.device else [])
     print(f"[ABLATION] eval: {run_id}", flush=True)
     result = subprocess.run(cmd, cwd=str(_ISAAC_ROOT), check=False)
+    if result.returncode == 0 and not out_json.is_file():
+        print(f"[ABLATION] ERROR: eval exited successfully but did not write {out_json}", flush=True)
+        return False
     return result.returncode == 0
 
 

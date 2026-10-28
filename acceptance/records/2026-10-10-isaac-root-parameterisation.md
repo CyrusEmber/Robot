@@ -199,6 +199,13 @@ train 相对已解析 cwd；末句“不是定位手段”只可理解为 cwd �
 - 审核时首次构造破坏测试因 globals 隔离错误触发训练入口，在缺少 `gymnasium` 的导入阶段失败，未启动仿真；该次不计证据。随后绑定原模块 globals 才得到有效隔离红测。
 - 补证须用无旧 checkpoint 和 eval 的新 tag、独立组，保留原始 spec、完整命令及 stdout/stderr，核实同一次执行的新训、零失败终局与原组内 eval；补证后由无执行历史的新上下文重审。tag 后缀和 checkpoint 文件名不能证明 task、seed 或运行身份，未来训练器保存契约漂移也不由替身自动发现。
 
+### checkpoint 新训补跑：未通过（2026-10-28）
+
+- 原始 spec：`rl_exp/out/sweep_checkpoint_20261028.yaml`；完整日志：`rl_exp/out/sweep_checkpoint_20261028.log`（均为机器本地保留）。外层命令：`E:\IsaacLab\env_isaaclab\Scripts\python.exe -u E:\Robot\ablation_harness\run_ablation.py --spec E:\Robot\rl_exp\out\sweep_checkpoint_20261028.yaml --group checkpoint-sweep-proof-20261028`。
+- 启动前确认 tag 和组不存在；日志及 manifest 显示新训两个迭代、未 resume，默认选中 `model_1.pt`，其文件 SHA-256 与 checkpoint 索引一致。训练目录：`E:\IsaacLab\logs\rsl_rl\lizard2_v6\2026-10-28_15-30-05_checkpoint_sweep_proof_20261028`。
+- eval 创建环境时抛出 `Unknown asset config type for head_ground_contact`，但进程返回零，调度器错误打印 `failures=0`。目标组未产出 eval 或 record；此轮不满足关闭条件，不能把零失败打印当成通过。
+- 根因：eval 未像训练和视频入口一样解析动态传感器 preset；调度器只看子进程返回码，未检查新产物。已分别增加解析和新产物检查；对应回归先在旧实现上失败，再在修复后通过。已有 eval 的复用途径仍按原契约处理，不能证明其来源或内容。
+
 ## 证据引用
 
 - 事项：`work/closed/2026/isaac-root-parameterisation.md`。

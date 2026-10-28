@@ -303,6 +303,41 @@ def test_video_matrix_resolves_dynamic_sensor_presets() -> None:
             raise AssertionError("record_cell did not construct the requested task")
 
 
+def test_eval_resolves_dynamic_sensor_presets() -> None:
+    import argparse
+    import ast
+    import importlib.metadata
+    from unittest.mock import patch
+
+    import gymnasium as gym
+    from isaaclab.sensors import SensorBaseCfg
+    from isaaclab.utils.string import string_to_callable
+    from isaaclab_rl.rsl_rl import handle_deprecated_rsl_rl_cfg
+    from isaaclab_tasks.utils.hydra import resolve_presets
+    import yaml
+
+    import rl_exp.tasks  # noqa: F401
+    from ablation_harness import suites
+    from ablation_harness.components.dr_controller import apply_eval_mode
+
+    source = (_REPO / "ablation_harness" / "eval.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    fn = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "_prepare_env")
+    namespace = {
+        "gym": gym, "args_cli": argparse.Namespace(task="Lizard2-Flat-v6", envs_per_terrain=None,
+                                                  seed=123, device=None, mode="nominal"),
+        "string_to_callable": string_to_callable, "resolve_presets": resolve_presets,
+        "handle_deprecated_rsl_rl_cfg": handle_deprecated_rsl_rl_cfg,
+        "importlib": importlib, "_SUITE_REGISTRY": {"lizard_suite_v2": (None, suites.lizard_suite_v2)},
+        "apply_eval_mode": apply_eval_mode,
+    }
+    exec(compile(ast.Module(body=[fn], type_ignores=[]), "eval.py", "exec"), namespace)
+    protocol = yaml.safe_load((_REPO / "ablation_harness" / "protocols" / "locomotion_eval_v3.yaml").read_text())
+    with patch.object(importlib.metadata, "version", return_value="5.0.1"):
+        env_cfg, _, _ = namespace["_prepare_env"](protocol)
+    assert isinstance(env_cfg.scene.head_ground_contact, SensorBaseCfg)
+
+
 def _main() -> None:
     tests = [fn for name, fn in sorted(globals().items()) if name.startswith("test_") and callable(fn)]
     for fn in tests:

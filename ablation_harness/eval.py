@@ -77,6 +77,7 @@ from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper, handle_deprecated_rsl_rl_cfg 
 from isaaclab.utils.string import string_to_callable  # noqa: E402
 
 import isaaclab_tasks  # noqa: F401, E402  (registers the gym tasks)
+from isaaclab_tasks.utils.hydra import resolve_presets  # noqa: E402
 
 import host_paths  # noqa: E402  (machine-local IsaacLab root, see paths.example.yaml)
 import loco_judge  # noqa: E402  (sibling module: the criterion's identity and derivation half)
@@ -379,7 +380,7 @@ def _round(value, digits=4):
 def _prepare_env(protocol: dict) -> tuple[object, object, str]:
     """Env cfg from the gym registry (no hydra), suite swap, protocol timing, eval mode."""
     spec = gym.spec(args_cli.task)
-    env_cfg = string_to_callable(spec.kwargs["env_cfg_entry_point"])()
+    env_cfg = resolve_presets(string_to_callable(spec.kwargs["env_cfg_entry_point"])())
     agent_cfg = string_to_callable(spec.kwargs["rsl_rl_cfg_entry_point"])()
     # same legacy-cfg migration train.py does: rsl-rl >= 5 rejects the old
     # `stochastic`/`init_noise_std` policy fields that the repo cfgs still carry

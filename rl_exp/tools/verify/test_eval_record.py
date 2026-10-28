@@ -593,7 +593,7 @@ def _probe_run(**overrides) -> dict:
 
 
 def _sweep_harness(scratch: str, run: dict, seed: list[str] = (), train_ok: bool = True,
-                   train_writes_last: bool = True) -> dict:
+                   train_writes_last: bool = True, eval_writes_result: bool = True) -> dict:
     """Run the real ``_sweep`` over a fake two-tree layout; only sim and sharing are faked.
 
     ``work/active/ablation-sweep-final-checkpoint-name.md``: the scheduler asked for
@@ -624,6 +624,12 @@ def _sweep_harness(scratch: str, run: dict, seed: list[str] = (), train_ok: bool
                 raise subprocess.CalledProcessError(1, argv)
             if train_writes_last:
                 (run_dir / f"model_{int(run['max_iterations']) - 1}.pt").write_bytes(b"")
+        elif eval_writes_result:
+            iteration = _checkpoint_of(argv).stem.split("_")[-1]
+            run_id = f"{run['task']}_{run['tag']}_it{iteration}_nominal_seed123"
+            out_json = harness / "results" / "locomotion_eval_v3" / "probe" / run_id / "eval.json"
+            out_json.parent.mkdir(parents=True, exist_ok=True)
+            out_json.write_text("{}", encoding="utf-8")
         return types.SimpleNamespace(returncode=0)
 
     args = types.SimpleNamespace(spec=str(spec), python="python", device=None,
@@ -657,6 +663,11 @@ def test_a_fresh_run_is_scored_at_its_last_checkpoint():
     assert len(result["eval"]) == 1, "one default checkpoint means one eval"
     assert _checkpoint_of(result["eval"][0][0]) == result["run_dir"] / "model_1.pt", \
         "with no eval_checkpoints the run's own last checkpoint (N-1) is the one to score"
+
+
+def test_eval_without_result_is_a_failure_even_on_zero_exit():
+    result = _sweep_harness(tempfile.mkdtemp(prefix="sweep-"), _probe_run(), eval_writes_result=False)
+    assert len(result["eval"]) == 1 and result["failures"] == 1
 
 
 def test_a_finished_run_is_not_retrained():
