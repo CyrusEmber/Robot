@@ -67,7 +67,7 @@
 目录。挂账已迁进 `work/`；**迁移审计记录**（`2026-09-20-doc-read-cost-baseline`、`2026-09-20-ledger-pilot`、
 `2026-09-20-harness-migration`、`2026-09-21-plan-migration`、`2026-09-21-acceptance-ledger-split`、
 `2026-09-20-baseline-flat-eval-protocol`）不在此表，入口是引用它们的事项 —— 前五份经
-`work/closed/2026/ledger-migration-expansion.md`，最后一份经 `work/active/baseline-v2-recipe.md` 等
+`work/closed/2026/ledger-migration-expansion.md`，最后一份经 `work/closed/2026/baseline-v2-recipe.md` 等
 （另见 `FAMILY.md` 与 `baseline/v2/PLAN.md`）。要找"某份记录为什么存在"，走 `work/` 的 `evidence` 字段。
 
 ## 旧路径说明（找旧节 → 去记录）

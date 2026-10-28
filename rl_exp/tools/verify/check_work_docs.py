@@ -27,9 +27,13 @@ Prose pointers are reported, not gated. The default check also scans documents f
 file, so every document that named the old path has to be found and the live one updated. The
 scan prints the path that resolves instead, as a ``HINT``, and never changes the exit code:
 whether a given line is a live pointer to update or a dated trace to leave alone is not
-decidable from the text. Dated traces are not read at all (``_FROZEN_REFS``) -- they
-keep the tree they were written with on purpose (see ``_a0_paths.py``); an evidence record keeps
-the item it was taken against, and that back-reference is history, not a route.
+decidable from the text. Acceptance records are not read (``_FROZEN_REFS``): an evidence
+record keeps the item it was taken against, and that back-reference is history, not a route.
+Version documents are scanned, including frozen plans and results: their lifecycle and individual
+references cannot be reliably classified from paths or freeze markers alone. A HINT there may be a
+historical trace, not permission to rewrite frozen evidence (see ``_a0_paths.py``). Individually
+reviewed historical references are exempted only at their exact path, line number, text and target
+(``_HISTORICAL_REFS``); all other version references remain in scope.
 
 What each measurement is for -- three different things, not one budget:
 
@@ -238,13 +242,26 @@ _SHA = re.compile(r"\bsha256:[0-9a-fA-F]{8,}")
 #: (``work/closed/<year>/<id>.md``) do not match, which is what keeps this file's own format
 #: description out of its own scan.
 _REF = re.compile(r"work/(?:active|closed/\d{4})/([a-z0-9-]+)\.md")
-#: Reference scopes that are dated traces rather than live pointers, so the scan skips them:
-#: A0's frozen records keep the paths they were written with, and rewriting them to match
-#: today's layout stops them being evidence of anything. An evidence record is the same case --
-#: the live handle runs item -> record, so a record's back-reference to the item it served is
-#: not a route anyone follows; the whole repo's hints came from there on 2026-10-10, which is
-#: how a real break drowns.
-_FROZEN_REFS = ("rl_exp/versions", "acceptance/records")
+#: Evidence records are dated traces: their back-reference to the item served is not a live route.
+#: Version trees cannot be exempted as a class: plans can be proposals and NOTES can be updated.
+#: Scanning them can report historical references; humans must not rewrite frozen evidence blindly.
+_FROZEN_REFS = ("acceptance/records",)
+#: Reviewed pre-training plan references, not a file- or target-wide exemption. The version has
+#: trained and the protocol item closed; skipped probe and incomplete manifest remain disclosed.
+#: Rationale and individual decisions: acceptance/records/2026-10-28-work-doc-hint-exact-exemptions.md
+#: Keys include line number so movement or edits restore the HINT rather than expanding silence.
+_HISTORICAL_REFS = {
+    (
+        "rl_exp/versions/lizard/baseline/v2/PLAN.md", 51,
+        "   姿态/承重/网格四条与 v1 同尺子（`work/active/baseline-eval-protocol-gap.md`）。",
+        "work/active/baseline-eval-protocol-gap.md",
+    ),
+    (
+        "rl_exp/versions/lizard/baseline/v2/PLAN.md", 67,
+        "一并冻结（在办事项 `work/active/baseline-eval-protocol-gap.md`）。冻结前**不得开训**。",
+        "work/active/baseline-eval-protocol-gap.md",
+    ),
+}
 #: What the pointer scan reads, and the size past which a file is a dump rather than prose.
 #: Documents only: code spells ledger paths as data (a migration tool's replacement rules) or as
 #: fixtures (a gate's own self-test literals), where "does this pointer resolve" has no meaning.
@@ -549,7 +566,11 @@ def _inbound_hints(items: list[Item]) -> list[str]:
         if path.suffix not in _REF_SUFFIXES or not path.is_file():
             continue
         rel = _rel(path)
-        if rel.startswith(_FROZEN_REFS) or "__pycache__" in path.parts or ".git" in path.parts:
+        if (
+            any(path.is_relative_to(_REPO / scope) for scope in _FROZEN_REFS)
+            or "__pycache__" in path.parts
+            or ".git" in path.parts
+        ):
             continue
         try:
             if path.stat().st_size > _REF_MAX_BYTES:
@@ -558,10 +579,14 @@ def _inbound_hints(items: list[Item]) -> list[str]:
         except (OSError, UnicodeDecodeError):
             continue
         for number, line in enumerate(text.splitlines(), 1):
+            seen: set[str] = set()
             for match in _REF.finditer(line):
                 ref, name = match.group(0), match.group(1)
-                if (_REPO / ref).exists():
+                if ref in seen or (_REPO / ref).exists():
                     continue
+                if (rel, number, line, ref) in _HISTORICAL_REFS:
+                    continue
+                seen.add(ref)
                 verdict = f"now lives at {where[name]}" if name in where else "is on disk under no path"
                 hints.append(f"{rel}:{number}: {ref} -- that id {verdict}")
     return hints
@@ -664,18 +689,56 @@ def self_test() -> int:
         (root / "acceptance" / "records" / "2026-09-20-dated.md").write_text(
             good_record + "\nsee work/active/gone.md\n", encoding="utf-8"
         )
+        (root / "acceptance" / "records" / "nested").mkdir()
+        (root / "acceptance" / "records" / "nested" / "dated.md").write_text(
+            "see work/active/gone.md\n", encoding="utf-8"
+        )
         (root / "notes" / "pointers.md").write_text(
             "see work/active/good.md\n"
             "see work/active/gone.md\n"
             "see work/active/nowhere.md\n"
-            "placeholder work/closed/<year>/<id>.md\n",
+            "placeholder work/closed/<year>/<id>.md\n"
+            "[work/active/gone.md](work/active/gone.md) work/active/nowhere.md\n"
+            "see work/active/gone.md\n",
             encoding="utf-8",
         )
+        (root / "notes" / "other.md").write_text("see work/active/gone.md\n", encoding="utf-8")
         (root / "notes" / "tool.py").write_text("# see work/active/nowhere.md\n", encoding="utf-8")
-        (root / "rl_exp" / "versions" / "lizard" / "v1").mkdir(parents=True)
-        (root / "rl_exp" / "versions" / "lizard" / "v1" / "NOTES.md").write_text(
-            "see work/active/nowhere.md\n", encoding="utf-8"
+        version_docs = (
+            "rl_exp/versions/lizard/PLAN.md",  # family plan
+            "rl_exp/versions/lizard/main/PLAN.md",  # line plan
+            "rl_exp/versions/lizard/main/v2/PLAN.md",  # proposal: no freeze marker
+            "rl_exp/versions/lizard/main/v1/PLAN.md",  # frozen plan: history is ambiguous
+            "rl_exp/versions/lizard/main/v1/NOTES.md",  # results may still be filled in
+            "acceptance/records-live/plan.md",  # adjacent, not a record
+            "rl_exp/versions-live/plan.md",  # adjacent, not the version tree
         )
+        for name in version_docs:
+            path = root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("see work/active/nowhere.md\n", encoding="utf-8")
+        (root / "rl_exp/versions/lizard/main/v1/asset_lock.json").write_text("{}", encoding="utf-8")
+        # Reproduce the reviewed lines at their exact locations, plus nearby counterexamples.
+        historical = root / "rl_exp/versions/lizard/baseline/v2/PLAN.md"
+        historical.parent.mkdir(parents=True, exist_ok=True)
+        line51 = "   姿态/承重/网格四条与 v1 同尺子（`work/active/baseline-eval-protocol-gap.md`）。"
+        line67 = "一并冻结（在办事项 `work/active/baseline-eval-protocol-gap.md`）。冻结前**不得开训**。"
+        lines = ["" for _ in range(68)]
+        lines[50], lines[66] = line51, line67
+        lines[51] = line51  # identical text at a different line must still report
+        lines[52] = line51 + " changed"  # changed content must still report
+        historical.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        other = root / "rl_exp/versions/lizard/baseline/v2/other.md"
+        other.write_text("\n" * 50 + line51 + "\n", encoding="utf-8")
+        # Run separate scans after mutation so changed text occupies the exempted line number.
+        _REPO, _ACTIVE, _CLOSED = root, root / "work" / "active", root / "work" / "closed"
+        _RECORDS = root / "acceptance" / "records"
+        changed_lines = lines.copy()
+        changed_lines[50] += " changed"
+        historical.write_text("\n".join(changed_lines) + "\n", encoding="utf-8")
+        if not any(h.startswith("rl_exp/versions/lizard/baseline/v2/PLAN.md:51:") for h in _inbound_hints([])):
+            problems.append("changed text at the reviewed location was missed")
+        historical.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
         def item(name: str, text: str, closed: bool = False) -> None:
             folder = root / "work" / ("closed/2026" if closed else "active")
@@ -826,19 +889,38 @@ def self_test() -> int:
             problems.append("the --list budget message does not refuse to justify a cancellation")
 
         pointers = _inbound_hints(items)
+        historical_hints = [h for h in pointers if h.startswith("rl_exp/versions/lizard/baseline/v2/")]
+        for number in (51, 67):
+            if any(h.startswith(f"rl_exp/versions/lizard/baseline/v2/PLAN.md:{number}:") for h in historical_hints):
+                problems.append(f"reviewed historical line {number} was not exempted")
+        for location in ("PLAN.md:52:", "PLAN.md:53:", "other.md:51:"):
+            if not any(location in h for h in historical_hints):
+                problems.append(f"unreviewed historical-reference variant was missed: {location}")
         for expected in (
             "notes/pointers.md:2: work/active/gone.md -- that id now lives at work/closed/2026/gone.md",
             "notes/pointers.md:3: work/active/nowhere.md -- that id is on disk under no path",
         ):
             if not any(expected in hint for hint in pointers):
                 problems.append(f"falsifier did not fire: {expected!r}")
+        expected_pointers = [
+            "notes/pointers.md:2: work/active/gone.md -- that id now lives at work/closed/2026/gone.md",
+            "notes/pointers.md:3: work/active/nowhere.md -- that id is on disk under no path",
+            "notes/pointers.md:5: work/active/gone.md -- that id now lives at work/closed/2026/gone.md",
+            "notes/pointers.md:5: work/active/nowhere.md -- that id is on disk under no path",
+            "notes/pointers.md:6: work/active/gone.md -- that id now lives at work/closed/2026/gone.md",
+            "notes/other.md:1: work/active/gone.md -- that id now lives at work/closed/2026/gone.md",
+        ]
+        actual_pointers = [hint for hint in pointers if hint.startswith(("notes/pointers.md:", "notes/other.md:"))]
+        if sorted(actual_pointers) != sorted(expected_pointers):
+            problems.append(f"pointer locations or targets were duplicated or lost: {actual_pointers}")
         if any("notes/tool.py" in hint for hint in pointers):
             problems.append("the pointer scan read code, where a path is data or a fixture")
         if any("work/active/good.md" in hint for hint in pointers):
             problems.append("the pointer scan blamed a reference that resolves")
-        if any("rl_exp/versions" in hint for hint in pointers):
-            problems.append("the pointer scan read a frozen record")
-        if any("acceptance/records" in hint for hint in pointers):
+        for name in version_docs:
+            if not any(hint.startswith(f"{name}:1:") for hint in pointers):
+                problems.append(f"the pointer scan missed {name}")
+        if any(hint.startswith("acceptance/records/") for hint in pointers):
             problems.append("the pointer scan read a dated evidence record")
         if any("placeholder" in hint for hint in pointers):
             problems.append("the pointer scan matched a placeholder path")
@@ -884,7 +966,7 @@ def self_test() -> int:
     for problem in problems:
         print(f"  FALSIFIER: {problem}")
     print(
-        "WORK_DOCS_SELF_TEST_OK (17 item + 3 record + 4 pointer fixtures; scaffold checks)"
+        "WORK_DOCS_SELF_TEST_OK (item, record, pointer and scaffold fixtures)"
         if not problems
         else f"WORK_DOCS_SELF_TEST_DRIFT ({len(problems)})"
     )
