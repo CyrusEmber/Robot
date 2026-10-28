@@ -188,6 +188,17 @@ train 相对已解析 cwd；末句“不是定位手段”只可理解为 cwd �
 也不会自动察觉安装训练器的保存契约漂移。本次独立 tag、manifest 与 checkpoint 摘要绑定消除了本次证据
 混用，不证明所有未来排程都无此风险；本项不借机重构。整树可重建与探针汇总不在关闭承诺内。
 
+### checkpoint 完成凭据独立审核（2026-10-28）
+
+**关闭审核不通过，退回补证。** 审核从该事项的 `close_when`、调度器与保留产物出发，未参与原修复或探针执行。
+
+- 当前调度器按目录中最大 checkpoint 下标判预算，默认评估末档；本机安装的训练器从 0 开始计数，收尾保存最后一次迭代下标。该契约只针对当前安装和新训成立，恢复训练起点不同。
+- 独立运行 `rl_exp/tools/verify/test_eval_record.py` 得 33 passed；在内存分别还原旧完成凭据、旧默认选择与相对 eval 入口，相关断言失败。测试替身不能代替真实仿真，也不能自动发现训练器以后改名。
+- 留存的训练 manifest 显示两次迭代、`resume=false`，checkpoint 索引保留 `model_0.pt` 和 `model_1.pt`；eval 指向末档，其文件摘要与 checkpoint 索引及 record 中加载前后摘要一致，record 读态为 complete。这证明新训产物和 eval 绑定，不单独证明发起 eval 的 sweep 没有复用已有训练目录。
+- 未找到当次 sweep 的保留终局日志，无法独立核实同一次未复用 checkpoint 的执行同时打印 `sweep done, failures=0` 并产出 eval。保留 record 的启动组为 `smoke`，产物后移至 `isaac-root-reprobe`，当前 spec 也已改组；不能把当前复用执行或物理迁移当作原次新训的终局证据。
+- 审核时首次构造破坏测试因 globals 隔离错误触发训练入口，在缺少 `gymnasium` 的导入阶段失败，未启动仿真；该次不计证据。随后绑定原模块 globals 才得到有效隔离红测。
+- 补证须用无旧 checkpoint 和 eval 的新 tag、独立组，保留原始 spec、完整命令及 stdout/stderr，核实同一次执行的新训、零失败终局与原组内 eval；补证后由无执行历史的新上下文重审。tag 后缀和 checkpoint 文件名不能证明 task、seed 或运行身份，未来训练器保存契约漂移也不由替身自动发现。
+
 ## 证据引用
 
 - 事项：`work/closed/2026/isaac-root-parameterisation.md`。

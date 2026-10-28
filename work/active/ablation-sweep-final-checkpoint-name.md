@@ -2,17 +2,16 @@
 id: ablation-sweep-final-checkpoint-name
 title: 调度器的"训练已完成"凭据（model_{max_iterations}.pt）与训练器收尾保存命名差一
 scope: ablation_harness/run_ablation.py, ablation_harness/specs
-status: pending_review
+status: in_progress
 landing: ablation_harness/run_ablation.py
-next: 由不带执行历史的新上下文审：对照 close_when 读 evidence 的「补证」节——修复提交 3420339、两路破坏测试、真跑探针（failures=0、eval.json 落盘且保留）；同时核对默认 checkpoint 选择与训练器契约漂移的论证。成立 ⇒ 关闭（移 work/closed/2026/、去 next、补 outcome）；证据缺口 ⇒ 退回 in_progress。
+next: 执行者用全新 tag 与独立组补跑新训到评测，保留原始 spec、完整命令和终局日志，再交无执行历史的新上下文审核。
 close_when: 一条**不复用旧 checkpoint** 的 spec 能走完 train → eval：判据 = `[ABLATION] sweep done, failures=0` 且对应 `results/<协议>/<组>/<run_id>/eval.json` 落盘；或用户明示"spec 只走复用路径"，则判据改为 docstring 写明该前提、检查与之一致。两条路都得落一份 `acceptance/records/` 记录。缺 checkpoint 时报失败是当前行为，不算通过
 evidence: acceptance/records/2026-10-10-isaac-root-parameterisation.md
 ---
 
 ## 当前状态
 
-已修复并补证：完成凭据改为读目录，默认按末档进 eval；四条回归断言折进既有检查；
-不能复用的探针 spec 真跑走通（failures=0、eval.json 落盘保留）。细节见 evidence 的「补证」节。
+代码已修复，独立审核发现原探针缺少可复核的终局日志；真实新训、零失败终局与原组 eval 须在同一次执行中补证。审核结果见 evidence 的「checkpoint 完成凭据独立审核」节。
 
 ## 未覆盖边界
 
