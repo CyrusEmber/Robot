@@ -109,7 +109,7 @@ EXPECTED_DIFFS: dict[tuple[str, str], int] = {
     ("lizard2/main", "v3"): 4,
     ("lizard2/main", "v4"): 66,
     ("lizard2/main", "v5"): 6,
-    ("lizard2/main", "v6"): 2,
+    ("lizard2/main", "v6"): 4,
 }
 """Recipe -> how many paths its difference declaration lists (``diff.json`` next to the recipe)."""
 

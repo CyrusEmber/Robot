@@ -66,6 +66,7 @@
 | `rl_exp\tools\diagnose\palm_spatial_runtime.py` | 无承重接线与隔离配置绑定；`--reset_probe` 查 reset/首物理步及 collider 归属，`--contact_pairs` 采具名观测并严格拒错；不判 PD 或复现正式配方 |
 | `rl_exp\tools\diagnose\head_ground_dwell_probe.py` | `palm_preflight --head_ground_check` 的头部→地面通道与连续接触/reset 原生核验 |
 | `rl_exp\tools\diagnose\belly_reset_probe.py` | 最终策略与零动作对照，捕获腹部接触终止帧并核对自动重开；v5 为失败对照 |
+| `rl_exp\tools\diagnose\yaw_command_probe.py` | 原生转向指令采样、观测传递与定时换档核验；不测策略转弯能力 |
 | `rl_exp\tools\diagnose\palm_joint_force_audit.py` | 左膝两例关节力矩离线复读：轴投影、重力平衡及上限占比；不起仿真，不测极限负载 |
 | `rl_exp\tools\diagnose\palm_velocity_limit_audit.py` | 当前候选速度上限的离线逐关节核对；读取 manifest/URDF/backend，不测触限行为 |
 | `rl_exp\tools\diagnose\palm_training_interface.py` | 隔离训练草案的真实动作、子步接触与完整/子集/自动 reset 诊断；`--audit` 离线复算 |

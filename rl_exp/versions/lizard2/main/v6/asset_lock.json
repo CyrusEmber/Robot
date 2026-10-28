@@ -38,7 +38,7 @@
     "lizard2_palm_spatial/meshes/visual/tail1_pitch_visual.obj": "11f51f536ab4d6cead3e64a18d9d3c7e229505566e18ba175c6ba07bdd538596",
     "lizard2_palm_spatial/meshes/visual/tail2_pitch_visual.obj": "d07810d610a40056c2de72e79bd228e596d6264dc71de236440ea71d2b964914",
     "lizard2_palm_spatial/meshes/visual/tail3_pitch_visual.obj": "7a259db887f71b8e1ebcb475558078a042ee01bce5ee50b84e7d09a04149b5f1",
-    "versions/lizard2/main/v6/main_params.yaml": "d09524c63fc114f32c9e97c76edb40200e24d5ce688a784481dae2475e022e8e"
+    "versions/lizard2/main/v6/main_params.yaml": "ef37979dc7c487459707bf55b1fa3acb99d8a080de22377e9eb168ad1c205482"
   },
   "note": "asset sha256 pinned at freeze; this lock is written once and never refreshed -- a version that loads different assets is a new version (see check_dr_parity.py)"
 }

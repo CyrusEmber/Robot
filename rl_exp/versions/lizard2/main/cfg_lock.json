@@ -1,9 +1,9 @@
 {
  "lock_format": 3,
  "note": "recipe golden of line 'lizard2/main': entry keys are '<combination>|<task id>' and a training run never adds one",
- "reason": "User 2026-10-28: add v6 immediate chest/belly contact reset while preserving trained v5 and every other recipe",
- "reason_at": "2026-10-28T11:33:51+08:00",
- "reason_rev": "df6ce050337f",
+ "reason": "User explicitly unfroze untrained v6 on 2026-10-28: v6.1 samples yaw commands within +/-0.5 rad/s; preserve published v6 tag.",
+ "reason_at": "2026-10-28T14:31:00+08:00",
+ "reason_rev": "35d9ca11173f",
  "entries": {
   "isaaclab=28a37cecdd43|rsl_rl=installed:5.4.2|python=3.12.13|Lizard2-Flat-Play-v1": {
    "version": "v1",
@@ -9333,7 +9333,7 @@
    "version": "v6",
    "env_cfg_class": "rl_exp.tasks.recipe_tasks:Lizard2FlatV6EnvCfg_PLAY",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:Lizard2V6PPORunnerCfg",
-   "digest": "7f55e2c7b3bb5b532ee6617f4b31a10aed227eae9623f9c39029a7ec6e961636",
+   "digest": "55c4a865bec1fa22ce267f8a71dd80c8a335305e4af8b3182f3a92f38b18b283",
    "snapshot": {
     "env": {
      "viewer": {
@@ -11521,8 +11521,8 @@
         },
         "ang_vel_z": {
          "__tuple__": [
-          0.0,
-          0.0
+          -0.5,
+          0.5
          ]
         },
         "heading": {
@@ -21063,7 +21063,7 @@
    "version": "v6",
    "env_cfg_class": "rl_exp.tasks.recipe_tasks:Lizard2FlatV6EnvCfg",
    "agent_cfg_class": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:Lizard2V6PPORunnerCfg",
-   "digest": "b928f31f18fce92234f0f33acdfacb0f6d5e7c8004eb413880f5ab45efab9cfb",
+   "digest": "6f7d09beb76a89dcfffce55abc7a761792fbb3ee1baf594ba3f6fb4c7547bc12",
    "snapshot": {
     "env": {
      "viewer": {
@@ -23251,8 +23251,8 @@
         },
         "ang_vel_z": {
          "__tuple__": [
-          0.0,
-          0.0
+          -0.5,
+          0.5
          ]
         },
         "heading": {

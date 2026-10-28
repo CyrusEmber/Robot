@@ -1,4 +1,4 @@
 {
   "base": "v5",
-  "note": "User decision 2026-10-28: reset immediately when the belly touches the ground; include the chest_pitch belly shell alongside base_link. Preserve the trained v5 recipe."
+  "note": "User decision 2026-10-28: reset immediately when the belly touches the ground; include the chest_pitch belly shell alongside base_link. V6.1 explicitly revises untrained v6 to sample yaw commands within +/-0.5 rad/s; retain the published v6 tag and trained v5 recipe."
 }

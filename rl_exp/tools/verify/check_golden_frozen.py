@@ -128,7 +128,9 @@ FROZEN = {
     # Evidence: acceptance/records/2026-10-26-lizard2-v5-self-collision-off.md.
     # V6 adds only its TRAIN/PLAY pair; existing entries remain unchanged.
     # Re-anchor evidence: acceptance/records/2026-10-28-lizard2-v6-belly-reset.md.
-    "rl_exp/versions/lizard2/main/cfg_lock.json": "ccdeea8043f1b8e3d7a50bf9c613c1476cf1cf136d37b19d5f812e748ff71037",
+    # V6.1: user explicitly unfroze untrained v6; only its TRAIN/PLAY yaw bounds move.
+    # Re-anchor evidence: acceptance/records/2026-10-28-lizard2-v6-yaw-command.md.
+    "rl_exp/versions/lizard2/main/cfg_lock.json": "b1396611378c26e9f723fde301e38404db801692c74093fe6cac1fca2cc9172d",
 }
 
 FROZEN_REVS: dict[str, str] = {
@@ -151,7 +153,7 @@ FROZEN_REVS: dict[str, str] = {
     # ("declare the v3 budget at 6000"), and this line names that revision.
     # The 2026-10-10 re-baseline (the rsl_rl identity moved the combination key) took the same two
     # steps: the new bytes landed in cb6eb27.
-    "rl_exp/versions/lizard2/main/cfg_lock.json": "lizard2-main-v6",
+    "rl_exp/versions/lizard2/main/cfg_lock.json": "lizard2-main-v6.1",
 }
 """Which revision each frozen file's bytes are from, for the banner only.
 

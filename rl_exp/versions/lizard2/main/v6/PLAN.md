@@ -1,14 +1,16 @@
-# lizard2 main/v6：腹部触地立即重开
+# lizard2 main/v6：腹部触地重开与转向指令
 
-> 修订：v6。母本为已训 main/v5；当前为训练候选，本轮只交付配置与验证。
+> 修订：v6.1。母本为已训 main/v5；用户明确解冻未训练 v6 后修订，本轮只交付配置与验证。
 
 ## 目的与假设
 
 用户拍板：2026-10-28，“加回来腹部接触地面就重开”。腹部外壳实际归属 `chest_pitch`，仅检查 `base_link` 会漏掉胸腹承地。沿用既有接触阈值，不增加持续时间；旧策略的趴地轨迹应触发自动 reset，零动作四足站立不应误触发。
 
+用户拍板：2026-10-28，明确解冻未训练 v6，在本版开放目标转速 `[-0.5, 0.5] rad/s`。正值左转、负值右转；既有转速跟踪奖励应随目标变化。已发布 `lizard2-main-v6` 保留原快照、不撤销或改指，本次以 `lizard2-main-v6.1` 另立修订锚，属于用户明确选择的同版修订例外。
+
 ## 差异清单
 
-完整路径及逐项理由唯一归 [diff.json](diff.json)，母本取 [base.json](base.json)。本版扩大 `base_contact` 的刚体选择；头部持续触地、奖励、动作、驱动、观测、自碰撞和 PPO 沿用母本。新任务和日志保留独立身份。
+完整路径及逐项理由唯一归 [diff.json](diff.json)，母本取 [base.json](base.json)。本版扩大 `base_contact` 的刚体选择并开放目标转速；头部持续触地、奖励、动作、驱动、观测、自碰撞和 PPO 沿用母本。沿用 v6 任务和日志身份。
 
 ## 验收
 
@@ -16,13 +18,15 @@
 - 旧 v5 对胸腹单独承地输入不终止，新版 TRAIN/PLAY 均终止；足、腿和尾接触不加入该项，阈值边界及环境间隔离有失败对照。
 - 原生仿真中，最终 v5 策略在新配方下由腹部接触触发自动 reset；同场零动作四足站立保持运行。原生测量证明接触/重开接线，不证明新策略学会步态。
 - v5 冻结配置及行为保持；其余配置逐字段比较，资产采用原字节。完整结论归 [验收记录](../../../../../acceptance/records/2026-10-28-lizard2-v6-belly-reset.md)。
+- TRAIN/PLAY 均采样左右转向，目标进入策略观测且不被 heading/standing 覆盖；实际指令项按原周期换档，转速匹配比静止、反向获得更高奖励。旧零范围必须使回归失败。修订验证及边界归 [转向验收记录](../../../../../acceptance/records/2026-10-28-lizard2-v6-yaw-command.md)。
 
 ## 启动方案
 
-任务 `Lizard2-Flat-v6` / `Lizard2-Flat-Play-v6`，runner `Lizard2V6PPORunnerCfg`，日志 `lizard2_v6`。配置冻结采用标签 `lizard2-main-v6`，训练是独立动作。只核计划：`python -B rl_exp/tools/launch_recipe.py --task Lizard2-Flat-v6 --seed 42`；本轮不加 `--launch`。若加载 v5 权重，作为配方迁移记录源 checkpoint，不称同配方续训。
+任务 `Lizard2-Flat-v6` / `Lizard2-Flat-Play-v6`，runner `Lizard2V6PPORunnerCfg`，日志 `lizard2_v6`。当前配置冻结采用标签 `lizard2-main-v6.1`，训练是独立动作。只核计划：`python -B rl_exp/tools/launch_recipe.py --task Lizard2-Flat-v6 --seed 42`；本轮不加 `--launch`。若加载 v5 权重，作为配方迁移记录源 checkpoint，不称同配方续训。
 
 ## 修订记录
 
 | 日期 | 版本 | 变更与依据 |
 |---|---|---|
 | 2026-10-28 | v6 | 用户拍板恢复腹部触地立即重开，覆盖实际胸腹外壳；已训 v5 保持原配方。 |
+| 2026-10-28 | v6.1 | 用户拍板明确解冻未训练 v6，目标转速改为双向范围；保留已推 v6 标签，新增 v6.1 修订锚。依据及验证见转向验收记录。 |

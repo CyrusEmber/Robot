@@ -238,7 +238,7 @@ python rl_exp\tools\launch_recipe.py --task Lizard2-Flat-v6 --seed 42
 ```
 
 当前终止规则与启动方案见 `rl_exp/versions/lizard2/main/v6/PLAN.md`。上式只核启动计划；
-加 `--launch` 才训练。v6 恢复实际胸腹外壳触地立即重开，头部持续触地规则保留；指定腿部接触惩罚和物理自碰撞仍关闭。已训 v5/v4 的 checkpoint 保留原配方身份；
+加 `--launch` 才训练。v6.1 采用双向转向指令，恢复实际胸腹外壳触地立即重开，头部持续触地规则保留；指定腿部接触惩罚和物理自碰撞仍关闭。已训 v5/v4 的 checkpoint 保留原配方身份；
 从旧版加载权重属于配方迁移，须记录源 checkpoint，不作为旧版的同配方续训。
 headless 是本仓的常规形态，命令里不必带旗标：配方不声明 visualizer，框架据此强制 headless。
 `--headless` 已弃用；要**显式强制**（不依赖配方声明）用 `--viz none`，扫参调度

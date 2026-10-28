@@ -204,8 +204,7 @@ def lizard2_timing(cfg) -> None:
 
 
 def lizard2_velocity_command(cfg) -> None:
-    """A command *range*, landed exactly as the yaml wrote it: ``lin_vel_x`` ``[0.0, 2.0]`` m/s,
-    with ``lin_vel_y`` and ``ang_vel_z`` fixed at 0.0. Nothing here rewrites or narrows it -- the
+    """Copy the YAML command ranges [m/s, rad/s] without rewriting or narrowing them. The
     framework's own command term already carries a 10 s resampling window, so a 20 s episode holds
     two commands and the transition between them is graded too. This element's whole job is to copy
     the yaml's ranges onto the command manager.

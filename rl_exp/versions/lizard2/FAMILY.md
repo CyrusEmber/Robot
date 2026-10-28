@@ -15,7 +15,7 @@ lizard2 = lizard 的四足构型修正版。当前 main/v4 采用掌部候选，
 
 ## 设计入口
 
-当前 main/v6 冻结标签为 `lizard2-main-v6`，承接腹部触地立即重开，方案入口见 [PLAN.md](PLAN.md)，正文唯一归 [main/v6/PLAN.md](main/v6/PLAN.md)。已训 main/v5 和 main/v4 保留原配方与 tag；main/v3 的已训历史保留在其原 PLAN/NOTES。
+当前 main/v6 修订锚为 `lizard2-main-v6.1`，承接腹部触地立即重开与转向指令；原 `lizard2-main-v6` 保留原快照。方案入口见 [PLAN.md](PLAN.md)，正文唯一归 [main/v6/PLAN.md](main/v6/PLAN.md)。已训 main/v5 和 main/v4 保留原配方与 tag；main/v3 的已训历史保留在其原 PLAN/NOTES。
 
 ## 线
 
@@ -61,3 +61,4 @@ lizard2 = lizard 的四足构型修正版。当前 main/v4 采用掌部候选，
 | main/v4 | 2026-10-23 | 按用户“落实正式训练配置”采用已审掌部资产和全部位置动作；母本 main/v3，旧机体 v3 同次退休；独立 runner 与日志身份 | 配置交付及未覆盖边界见 `acceptance/records/2026-10-23-lizard2-v4-configuration.md` |
 | main/v5 | 2026-10-26 | 头部持续触地终止；用户解冻修订关闭指定腿部接触惩罚，母本为已训 main/v4，独立任务与日志身份 | 当前修订见 `acceptance/records/2026-10-26-lizard2-v5-leg-contact-penalty.md`，原终止测量见原记录 |
 | main/v6 | 2026-10-28 | 腹部触地立即重开，补入实际胸腹外壳；母本为已训 main/v5，独立任务与日志身份 | 验证与边界见 `acceptance/records/2026-10-28-lizard2-v6-belly-reset.md` |
+| main/v6 修订 v6.1 | 2026-10-28 | 用户明确解冻未训练 v6 后开放转向指令；任务身份沿用，已推原标签保留 | `acceptance/records/2026-10-28-lizard2-v6-yaw-command.md` |

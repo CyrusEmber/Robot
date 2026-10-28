@@ -435,8 +435,8 @@ commands:
   - 0.0
   - 0.0
   ang_vel_z:
-  - 0.0
-  - 0.0
+  - -0.5
+  - 0.5
   heading_command: false
   rel_standing_envs: 0.0
 rewards:

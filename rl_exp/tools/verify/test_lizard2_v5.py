@@ -202,7 +202,7 @@ def test_v6_belly_contact_reset(task='Lizard2-Flat-v6'):
     assert manager.compute().tolist() == [True, False], 'root-body contact protection was lost'
 
 
-def test_v6_changes_only_belly_selection():
+def test_v6_changes_only_belly_selection_and_yaw_range():
     import gymnasium as gym
     import rl_exp.tasks
     from isaaclab.utils.string import string_to_callable
@@ -218,12 +218,57 @@ def test_v6_changes_only_belly_selection():
         expected['base_contact']['params']['sensor_cfg']['body_names'] = ['base_link', 'chest_pitch']
         assert cfg.terminations.to_dict() == expected, 'unrelated termination changed'
         for name in ('scene', 'rewards', 'actions', 'observations', 'events', 'commands', 'sim', 'curriculum'):
-            assert getattr(cfg, name).to_dict() == getattr(old, name).to_dict(), name+' drifted'
+            expected_group = getattr(old, name).to_dict()
+            if name == 'commands':
+                expected_group['base_velocity']['ranges']['ang_vel_z'] = (-.5, .5)
+            assert getattr(cfg, name).to_dict() == expected_group, name+' drifted'
         old_agent = string_to_callable(gym.spec(old_task).kwargs['rsl_rl_cfg_entry_point'])().to_dict()
         new_agent = string_to_callable(gym.spec(new_task).kwargs['rsl_rl_cfg_entry_point'])().to_dict()
         old_agent['experiment_name'] = 'lizard2_v6'
         assert old_agent == new_agent, 'PPO changed beyond its log identity'
         test_v6_belly_contact_reset(new_task)
+
+
+def test_v6_yaw_command_sampling_and_reward():
+    """Both turning directions reach command observations and the actual yaw reward."""
+    import rl_exp.tasks  # register tasks for standalone regression execution
+    from isaaclab.envs.mdp.commands.velocity_command import UniformVelocityCommand
+    from isaaclab.envs.mdp.observations import generated_commands
+    from isaaclab.envs.mdp.rewards import track_ang_vel_z_exp
+    from rl_exp.tools.verify.baseline_runtime import resolve_task_cfg
+
+    for task in ('Lizard2-Flat-v6', 'Lizard2-Flat-Play-v6'):
+        cfg = resolve_task_cfg(task)
+        assert cfg.commands.base_velocity.ranges.ang_vel_z == (-.5, .5), 'v6 yaw range is still zero-only'
+        assert not cfg.commands.base_velocity.heading_command
+        assert cfg.commands.base_velocity.rel_standing_envs == 0.
+        command = object.__new__(UniformVelocityCommand)
+        command._env = NS(num_envs=64, device='cpu')
+        command.cfg = cfg.commands.base_velocity
+        command.vel_command_b = torch.zeros(64, 3)
+        command.is_standing_env = torch.zeros(64, dtype=torch.bool)
+        with torch.random.fork_rng(devices=[]):
+            torch.manual_seed(42)
+            command._resample_command(torch.arange(64))
+        sampled = command.command.clone()
+        command._update_command()
+        assert torch.equal(sampled, command.command), 'postprocessing overwrote sampled turning commands'
+        assert (sampled[:, 2] > .05).any() and (sampled[:, 2] < -.05).any()
+        assert sampled[:, 2].abs().max() <= .5
+        assert sampled[:, 0].min() >= 0. and sampled[:, 0].max() <= 3.
+        assert sampled[:, 1].eq(0.).all()
+        env = NS(command_manager=NS(get_command=lambda name: command.command),
+                 scene={'robot': NS(data=NS(root_ang_vel_b=NS(torch=torch.zeros(64, 3))))})
+        assert torch.equal(generated_commands(env, 'base_velocity'), sampled)
+        command.vel_command_b[:, 2] = .5
+        term = cfg.rewards.track_ang_vel_z_exp
+        stopped = track_ang_vel_z_exp(env, **term.params)*term.weight
+        env.scene['robot'].data.root_ang_vel_b.torch[:, 2] = .5
+        following = track_ang_vel_z_exp(env, **term.params)*term.weight
+        env.scene['robot'].data.root_ang_vel_b.torch[:, 2] = -.5
+        opposite = track_ang_vel_z_exp(env, **term.params)*term.weight
+        assert torch.allclose(following, torch.full((64,), .5))
+        assert (following > stopped).all() and (stopped > opposite).all()
 
 
 def test_v5_disables_self_collisions_without_changing_v4():

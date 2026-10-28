@@ -10,6 +10,13 @@
           "terminations.base_contact.params.sensor_cfg.body_names[]"
         ],
         "why": "User decision 2026-10-28: immediately reset belly-to-ground contact. Add the actual chest_pitch belly shell to base_contact alongside base_link; retain the original 1 N strict threshold and substep history, without adding dwell or changing any other termination. In the inherited flat-ground, self-collision-disabled scene, these net contact forces measure ground support."
+      },
+      "lizard2_velocity_command": {
+        "paths": [
+          "commands.base_velocity.ranges.ang_vel_z.__tuple__[0]",
+          "commands.base_velocity.ranges.ang_vel_z.__tuple__[1]"
+        ],
+        "why": "User decision 2026-10-28: explicitly unfreeze untrained v6 and sample yaw angular velocity uniformly within [-0.5, 0.5] rad/s, replacing v5's zero-only target. Existing heading override and standing fractions stay disabled; reward, observations and 10 s resampling remain unchanged. Retain published lizard2-main-v6 and freeze this revision under lizard2-main-v6.1."
       }
     }
   },
@@ -21,7 +28,8 @@
   },
   "authored_against": {
     "env": {
-      "lizard2_belly_contact_gate": "e4f70a0cd025"
+      "lizard2_belly_contact_gate": "e4f70a0cd025",
+      "lizard2_velocity_command": "b7543c74c7b5"
     },
     "agent": "ff6909d0dd40"
   }
