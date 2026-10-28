@@ -15,7 +15,7 @@ lizard2 = lizard 的四足构型修正版。当前 main/v4 采用掌部候选，
 
 ## 设计入口
 
-当前 main/v5 修订已按用户要求重新冻结到本地标签 `lizard2-main-v5`，方案入口见 [PLAN.md](PLAN.md)，正文唯一归 [main/v5/PLAN.md](main/v5/PLAN.md)。已训 main/v4 保留原配方与 tag；main/v3 的已训历史保留在其原 PLAN/NOTES。
+当前 main/v6 冻结标签为 `lizard2-main-v6`，承接腹部触地立即重开，方案入口见 [PLAN.md](PLAN.md)，正文唯一归 [main/v6/PLAN.md](main/v6/PLAN.md)。已训 main/v5 和 main/v4 保留原配方与 tag；main/v3 的已训历史保留在其原 PLAN/NOTES。
 
 ## 线
 
@@ -45,6 +45,8 @@ lizard2 = lizard 的四足构型修正版。当前 main/v4 采用掌部候选，
 | `Lizard2-Flat-Play-v4` | `lizard2-flat-play-v4@1`（参数 `versions/lizard2/main/v4/main_params.yaml`） |
 | `Lizard2-Flat-v5` | `lizard2-flat-v5@1`（参数 `versions/lizard2/main/v5/main_params.yaml`） |
 | `Lizard2-Flat-Play-v5` | `lizard2-flat-play-v5@1`（参数 `versions/lizard2/main/v5/main_params.yaml`） |
+| `Lizard2-Flat-v6` | `lizard2-flat-v6@1`（参数 `versions/lizard2/main/v6/main_params.yaml`） |
+| `Lizard2-Flat-Play-v6` | `lizard2-flat-play-v6@1`（参数 `versions/lizard2/main/v6/main_params.yaml`） |
 
 ## 版本历史
 
@@ -58,3 +60,4 @@ lizard2 = lizard 的四足构型修正版。当前 main/v4 采用掌部候选，
 | main/v3 | 2026-10-08 | 用户批准的候选机体采用；基于 v2 摘除 kfe 策略动作，保留全部可动关节、PD 与默认零目标；唯一母本 main/v2，旧机体版本同次退休 | 自检/限制见 `acceptance/records/2026-10-08-lizard2-v3-landing.md` |
 | main/v4 | 2026-10-23 | 按用户“落实正式训练配置”采用已审掌部资产和全部位置动作；母本 main/v3，旧机体 v3 同次退休；独立 runner 与日志身份 | 配置交付及未覆盖边界见 `acceptance/records/2026-10-23-lizard2-v4-configuration.md` |
 | main/v5 | 2026-10-26 | 头部持续触地终止；用户解冻修订关闭指定腿部接触惩罚，母本为已训 main/v4，独立任务与日志身份 | 当前修订见 `acceptance/records/2026-10-26-lizard2-v5-leg-contact-penalty.md`，原终止测量见原记录 |
+| main/v6 | 2026-10-28 | 腹部触地立即重开，补入实际胸腹外壳；母本为已训 main/v5，独立任务与日志身份 | 验证与边界见 `acceptance/records/2026-10-28-lizard2-v6-belly-reset.md` |

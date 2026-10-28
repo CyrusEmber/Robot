@@ -1,0 +1,28 @@
+{
+  "format": 4,
+  "recipe": "lizard2-flat-v6@1",
+  "line": "lizard2/main",
+  "note": "Hard B, lineage reading: base.json names v5 as this recipe's mother, so the declared difference is against that recipe -- not against the framework stock cfg, which would bury this version's own delta inside everything its ancestors already wrote. Env paths are grouped by the element that last moved them in the replay, so the paths here cannot disagree with the build; params_version is filtered as identity, because it says which recipe this is and it is what makes the two recipes different at all. The why strings are TODO until an author writes them: hard B compares paths, not prose, so an unwritten reason is a review item rather than a wrong claim.",
+  "env": {
+    "allowed": {
+      "lizard2_belly_contact_gate": {
+        "paths": [
+          "terminations.base_contact.params.sensor_cfg.body_names[]"
+        ],
+        "why": "User decision 2026-10-28: immediately reset belly-to-ground contact. Add the actual chest_pitch belly shell to base_contact alongside base_link; retain the original 1 N strict threshold and substep history, without adding dwell or changing any other termination. In the inherited flat-ground, self-collision-disabled scene, these net contact forces measure ground support."
+      }
+    }
+  },
+  "agent": {
+    "why": "The agent is a class, not a declaration: these entries carry a reason and no element name.",
+    "allowed": {
+      "experiment_name": "Keep v6 logs/checkpoints separate from the trained v5 recipe whose belly selector was base_link only."
+    }
+  },
+  "authored_against": {
+    "env": {
+      "lizard2_belly_contact_gate": "e4f70a0cd025"
+    },
+    "agent": "ff6909d0dd40"
+  }
+}

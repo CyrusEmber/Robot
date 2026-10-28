@@ -234,18 +234,18 @@ python ablation_harness\eval.py --task Lizard2-Flat-v1 --mode nominal --seed 123
 ## 训练
 
 ```bat
-python rl_exp\tools\launch_recipe.py --task Lizard2-Flat-v5 --seed 42
+python rl_exp\tools\launch_recipe.py --task Lizard2-Flat-v6 --seed 42
 ```
 
-当前终止规则与启动方案见 `rl_exp/versions/lizard2/main/v5/PLAN.md`。上式只核启动计划；
-加 `--launch` 才训练。当前 v5 修订已重新冻结到本地 `lizard2-main-v5`；头部持续触地终止保留，指定腿部接触惩罚和物理自碰撞关闭。原 v4 的训练和 checkpoint 保留原配方身份；
-从 v4 加载权重属于配方迁移，须记录源 checkpoint，不作为原 v4 的同配方续训。
+当前终止规则与启动方案见 `rl_exp/versions/lizard2/main/v6/PLAN.md`。上式只核启动计划；
+加 `--launch` 才训练。v6 恢复实际胸腹外壳触地立即重开，头部持续触地规则保留；指定腿部接触惩罚和物理自碰撞仍关闭。已训 v5/v4 的 checkpoint 保留原配方身份；
+从旧版加载权重属于配方迁移，须记录源 checkpoint，不作为旧版的同配方续训。
 headless 是本仓的常规形态，命令里不必带旗标：配方不声明 visualizer，框架据此强制 headless。
 `--headless` 已弃用；要**显式强制**（不依赖配方声明）用 `--viz none`，扫参调度
 （`ablation_harness\run_ablation.py`）按后者写。launcher（`rl_exp\tools\launch_recipe.py --launch`）
 不转发 viz 类旗标，从它交棒同样是默认 headless。
 
-**版本复现**：任务 id 由注册表常驻（`Lizard2-Flat-v5` = v5 配方；v4 保留，旧 v3 已退休），机制见
+**版本复现**：任务 id 由注册表常驻（`Lizard2-Flat-v6` = v6 配方；已训 v5/v4 保留，旧 v3 已退休），机制见
 `rl_exp/versions/lizard2/FAMILY.md`「任务注册表」；真源是 `versions/recipes.json`（身份映射）
 与各线自己的配方声明模块（`rl_exp/tasks/lizard2_recipe.py`；`rl_exp/tasks/recipe.py` 只留
 `LINES` 路由与构建机制）。旧 lizard 三条线的任务 id 已随退休清理退出注册，只留历史配方与记录。

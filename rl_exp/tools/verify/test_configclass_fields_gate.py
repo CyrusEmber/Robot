@@ -103,19 +103,20 @@ def main(probed_rows: dict[str, dict] | None = None) -> int:
     g._check_inert_velocity_limits(rows, baseline)
     ok = ok and not baseline
     import copy
-    for fault in ("missing", "changed", "extra"):
-        probe = copy.deepcopy(rows)
-        actuator = probe["Lizard2FlatV4EnvCfg"]["instance"].scene.robot.actuators["legs"]
-        if fault == "missing":
-            actuator.velocity_limit_sim = None
-        elif fault == "changed":
-            actuator.velocity_limit_sim["lf_elbow_joint"] = 11.0
-        else:
-            actuator.velocity_limit_sim["foreign_joint"] = 10.0
-        problems: list[str] = []
-        g._check_inert_velocity_limits(probe, problems)
-        print(f"  v4 cap {fault}: {'FIRES' if problems else 'SILENT'}")
-        ok = bool(problems) and ok
+    for version in ('V4', 'V6'):
+        for fault in ("missing", "changed", "extra"):
+            probe = copy.deepcopy(rows)
+            actuator = probe[f"Lizard2Flat{version}EnvCfg"]["instance"].scene.robot.actuators["legs"]
+            if fault == "missing":
+                actuator.velocity_limit_sim = None
+            elif fault == "changed":
+                actuator.velocity_limit_sim["lf_elbow_joint"] = 11.0
+            else:
+                actuator.velocity_limit_sim["foreign_joint"] = 10.0
+            problems: list[str] = []
+            g._check_inert_velocity_limits(probe, problems)
+            print(f"  {version.lower()} cap {fault}: {'FIRES' if problems else 'SILENT'}")
+            ok = bool(problems) and ok
     print("CONFIGCLASS_FIELDS_GATE_FALSIFIABLE" if ok else "CONFIGCLASS_FIELDS_GATE_SILENT")
     return 0 if ok else 1
 

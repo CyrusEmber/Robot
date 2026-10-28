@@ -102,3 +102,10 @@ class Lizard2V5PPORunnerCfg(Lizard2V4PPORunnerCfg):
     """Head-to-ground dwell termination; preserve the position policy interface."""
 
     experiment_name = "lizard2_v5"
+
+
+@configclass
+class Lizard2V6PPORunnerCfg(Lizard2V5PPORunnerCfg):
+    """Immediate belly-contact reset; retain v5 policy and PPO settings."""
+
+    experiment_name = "lizard2_v6"

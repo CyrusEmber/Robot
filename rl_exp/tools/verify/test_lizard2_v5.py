@@ -173,6 +173,59 @@ def test_v5_leg_contacts_no_longer_deduct_reward():
         assert manager.compute(.02).tolist() == [0., 0.]
 
 
+def test_v6_belly_contact_reset(task='Lizard2-Flat-v6'):
+    """The old base-only selector misses chest contact; feet and tail remain allowed."""
+    import rl_exp.tasks
+    from isaaclab.managers import TerminationManager
+    from isaaclab.utils.string import resolve_matching_names
+    from rl_exp.tools.verify.baseline_runtime import resolve_task_cfg
+
+    names = ['base_link', 'chest_pitch', 'lf_wrist', 'tail1_pitch']
+    forces = torch.zeros(2, 4, len(names), 3)
+    cfg = resolve_task_cfg(task).terminations.base_contact.copy()
+    env = NS(num_envs=2, device='cpu', sim=NS(is_playing=lambda: True),
+             scene=Scene(contact_forces=NS(body_names=names, num_bodies=len(names),
+                 find_bodies=lambda patterns, **kwargs: resolve_matching_names(patterns, names, **kwargs),
+                 data=NS(net_forces_w_history=NS(torch=forces)))))
+    manager = TerminationManager({'base_contact': cfg}, env)
+    forces[:, :, 2:, 2] = 1000.
+    assert not manager.compute().any(), 'foot or tail contact caused a belly reset'
+    forces[0, 0, 1, 2] = 1.
+    assert not manager.compute().any(), 'the inherited strict threshold changed'
+    forces[0, 0, 1, 2] = 1.01
+    assert manager.compute().tolist() == [True, False], 'chest belly contact did not reset immediately'
+    forces.zero_()
+    forces[1, -1, 1, 2] = 50.
+    assert manager.compute().tolist() == [False, True], 'oldest physics substep was missed or envs leaked'
+    forces.zero_()
+    forces[0, 0, 0, 2] = 2.
+    assert manager.compute().tolist() == [True, False], 'root-body contact protection was lost'
+
+
+def test_v6_changes_only_belly_selection():
+    import gymnasium as gym
+    import rl_exp.tasks
+    from isaaclab.utils.string import string_to_callable
+    from rl_exp.tools.verify.baseline_runtime import resolve_task_cfg
+
+    for suffix in ('', '-Play'):
+        old_task = 'Lizard2-Flat'+suffix+'-v5'
+        new_task = old_task.replace('v5', 'v6')
+        old, cfg = resolve_task_cfg(old_task), resolve_task_cfg(new_task)
+        assert old.terminations.base_contact.params['sensor_cfg'].body_names == ['base_link']
+        assert cfg.terminations.base_contact.params['sensor_cfg'].body_names == ['base_link', 'chest_pitch']
+        expected = old.terminations.to_dict()
+        expected['base_contact']['params']['sensor_cfg']['body_names'] = ['base_link', 'chest_pitch']
+        assert cfg.terminations.to_dict() == expected, 'unrelated termination changed'
+        for name in ('scene', 'rewards', 'actions', 'observations', 'events', 'commands', 'sim', 'curriculum'):
+            assert getattr(cfg, name).to_dict() == getattr(old, name).to_dict(), name+' drifted'
+        old_agent = string_to_callable(gym.spec(old_task).kwargs['rsl_rl_cfg_entry_point'])().to_dict()
+        new_agent = string_to_callable(gym.spec(new_task).kwargs['rsl_rl_cfg_entry_point'])().to_dict()
+        old_agent['experiment_name'] = 'lizard2_v6'
+        assert old_agent == new_agent, 'PPO changed beyond its log identity'
+        test_v6_belly_contact_reset(new_task)
+
+
 def test_v5_disables_self_collisions_without_changing_v4():
     import rl_exp.tasks  # register tasks for standalone execution
     from rl_exp.tools.verify.baseline_runtime import resolve_task_cfg
@@ -188,6 +241,13 @@ def test_v5_disables_self_collisions_without_changing_v4():
 
 
 if __name__ == '__main__':
+    if '--legacy-belly' in sys.argv:
+        try:
+            test_v6_belly_contact_reset('Lizard2-Flat-v5')
+        except AssertionError as error:
+            print('LEGACY_BELLY_FAILURE:', error)
+            raise SystemExit(1)
+        raise SystemExit(0)
     if '--legacy' in sys.argv:
         failed = 0
         for check in (test_brief_head_ground_contact_is_allowed, test_self_contact_is_not_ground):

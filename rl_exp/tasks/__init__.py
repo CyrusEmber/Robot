@@ -125,3 +125,23 @@ gym.register(
         "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:Lizard2V5PPORunnerCfg",
     },
 )
+
+gym.register(
+    id="Lizard2-Flat-v6",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": "rl_exp.tasks.recipe_tasks:Lizard2FlatV6EnvCfg",
+        "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:Lizard2V6PPORunnerCfg",
+    },
+)
+
+gym.register(
+    id="Lizard2-Flat-Play-v6",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": "rl_exp.tasks.recipe_tasks:Lizard2FlatV6EnvCfg_PLAY",
+        "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:Lizard2V6PPORunnerCfg",
+    },
+)

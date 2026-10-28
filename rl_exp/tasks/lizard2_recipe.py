@@ -370,6 +370,13 @@ def lizard2_palm_interface(cfg) -> None:
             ("x", "y", "z", "roll", "pitch", "yaw"), (0.0, 0.0))
 
 
+def lizard2_belly_contact_gate(cfg) -> None:
+    """V6: include the chest-owned belly shell in immediate contact termination."""
+    cfg.terminations.base_contact.params["sensor_cfg"] = SceneEntityCfg(
+        "contact_forces", body_names=_doc(cfg)["terminations"]["belly_contact_body_names"]
+    )
+
+
 def lizard2_head_ground_dwell(cfg) -> None:
     """V5: only the head mesh against the floor, continuously for the declared time [s]."""
     from rl_exp.tasks.lizard2_mdp import HeadGroundContactDwell
@@ -474,6 +481,13 @@ LIZARD2_RECIPES["v5"] = {
     "elements": (*LIZARD2_RECIPES["v4"]["elements"], "lizard2_head_ground_dwell"),
     "train": "Lizard2-Flat-v5",
     "play": "Lizard2-Flat-Play-v5",
+}
+
+LIZARD2_RECIPES["v6"] = {
+    **LIZARD2_RECIPES["v5"],
+    "elements": (*LIZARD2_RECIPES["v5"]["elements"], "lizard2_belly_contact_gate"),
+    "train": "Lizard2-Flat-v6",
+    "play": "Lizard2-Flat-Play-v6",
 }
 
 ELEMENTS = {

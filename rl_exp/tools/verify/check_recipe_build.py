@@ -66,7 +66,7 @@ DIFF_NAME = "diff.json"
 """The difference declaration's filename inside a recipe's version directory (``ARCH_PLAN`` 2.4 B4)."""
 
 EXPECTED_COMPARED: dict[str, int] = {
-    "lizard2/main": 10,
+    "lizard2/main": 12,
 }
 """How many recipe/task pairs this gate compares, per line, pinned.
 
@@ -109,6 +109,7 @@ EXPECTED_DIFFS: dict[tuple[str, str], int] = {
     ("lizard2/main", "v3"): 4,
     ("lizard2/main", "v4"): 66,
     ("lizard2/main", "v5"): 6,
+    ("lizard2/main", "v6"): 2,
 }
 """Recipe -> how many paths its difference declaration lists (``diff.json`` next to the recipe)."""
 
