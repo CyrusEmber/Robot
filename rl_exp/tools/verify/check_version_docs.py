@@ -73,11 +73,14 @@ means a pass *rate* quoted without a verdict token ("27/27 绿") still slips
 through; catching that needs review, not a regex.
 """
 
+import contextlib
+import io
 import json
 import pathlib
 import re
 import subprocess
 import sys
+from unittest.mock import patch
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import check_recipe_registry  # noqa: E402 - owns the lifecycle index's shape and its one status reader
@@ -92,7 +95,19 @@ _HARNESS_DOC = _REPO / "ablation_harness" / "HARNESS.md"
 #: The harness's code baseline, and the tag form the discipline beside it demands. The number is
 #: written when the version lands (no proposal state, one naming form), so the tag is due in the
 #: same breath -- which is why this pair is red while the family versions below stay a warning.
-_BASELINE_LINE = re.compile(r"\*\*代码基线\*\*：v(\d+\.\d+\.\d+)")
+#: Declaration grammar: a visible line starts with the bold label (optionally a Markdown list
+#: marker), followed by a full-width colon and ASCII vN.M.K. Body requires an em dash preceded
+#: by whitespace, or sentence punctuation (ASCII period must end the sentence). Brackets and
+#: parentheses immediately after the version are not separators. Examples belong in code spans,
+#: fenced blocks or HTML comments; they are not declarations. Any extra label on a declaration
+#: line counts separately, even if its colon or version is malformed. HTML comments are blanked
+#: before validation, including after a version; they cannot replace required separators.
+#: Code spans may cross lines and use equal-length backtick runs. Unclosed spans/comments/fences,
+#: escaped backticks outside spans and nested/container fences are rejected as ambiguous; this is
+#: deliberately not a general Markdown parser.
+_BASELINE_LINE = re.compile(r"^[ \t]*(?:(?:[-+*]|[0-9]+[.)])[ \t]+)?\*\*代码基线\*\*")
+_BASELINE_LABEL = "**代码基线**"
+_BASELINE_VERSION = re.compile(r"：v([0-9]+\.[0-9]+\.[0-9]+)(?:[ \t]*|[ \t]+——.*|[，。；、：！？,;:!?].*|\.(?:[ \t]+.*)?)\Z")
 
 
 def required_pieces(retired: bool) -> tuple[str, ...]:
@@ -158,25 +173,84 @@ def title_claims(text: str) -> list[tuple[int, str]]:
     return found
 
 
-def baseline_tag_problem(text: str, tags: set[str]) -> str | None:
+def baseline_tag_problem(text: str, tags: set[str] | None) -> str | None:
     """What is wrong with the harness baseline line in ``text``, or ``None`` when nothing is.
 
     Returns a message rather than a flag so the self-test asserts the whole chain -- parse,
     cardinality, tag lookup -- instead of only the regex. Two things are failures here and only
     one of them is a missing tag: a line that matched zero or two times also fails, because this
     reads prose and a reworded line would otherwise turn the assertion into a no-op that reads
-    exactly like a correct repo.
+    exactly like a correct repo. With unknown tags, still validate the declaration but do not
+    assert tag presence; the caller reports the Git failure separately.
     """
-    declared = _BASELINE_LINE.findall(text)
+    # Lex comments and code in source order; keep separate masks for declaration validation
+    # (comments blanked) and label counting (comments and code blanked).
+    declared = []
+    fence = None
+    comment = False
+    code = None
+    for line in text.splitlines():
+        if fence is not None:
+            marker = re.match(r"^ {0,3}(`{3,}|~{3,})[ \t]*$", line)
+            if marker and marker[1][0] == fence[0] and len(marker[1]) >= len(fence):
+                fence = None
+            continue
+        if not comment and code is None:
+            marker = re.match(r"^ {0,3}(`{3,}|~{3,})(.*)$", line)
+            if marker:
+                if marker[1][0] == '`' and '`' in marker[2]:
+                    return "ambiguous backtick fence opener"
+                fence = marker[1]
+                continue
+            if re.match(r"^(?:[ \t]{4,}|[ \t]*(?:(?:[-+*]|[0-9]+[.)])[ \t]+|>[ \t]*)+)(`{3,}|~{3,})", line.expandtabs(4)):
+                return "ambiguous nested or indented fence"
+        chars = list(line)
+        visible = list(line)
+        pos = 0
+        while pos < len(line):
+            if comment:
+                end = line.find("-->", pos)
+                end = len(line) if end < 0 else end + 3
+                chars[pos:end] = visible[pos:end] = " " * (end - pos)
+                comment = not line[pos:end].endswith("-->")
+                pos = end
+            elif code is None and line.startswith("<!--", pos):
+                comment = True
+            elif line[pos] == '`':
+                end = pos + 1
+                while end < len(line) and line[end] == '`':
+                    end += 1
+                if code is None:
+                    code = end - pos
+                elif code == end - pos:
+                    code = None
+                visible[pos:end] = " " * (end - pos)
+                pos = end
+            elif code is not None:
+                visible[pos] = " "
+                pos += 1
+            elif line.startswith("\\`", pos):
+                return "ambiguous escaped backtick"
+            else:
+                pos += 1
+        match = _BASELINE_LINE.match("".join(visible))
+        if match:
+            declared.extend(["".join(chars[match.end():])] * "".join(visible[match.start():]).count(_BASELINE_LABEL))
+    if comment or code is not None or fence is not None:
+        return "ambiguous unclosed HTML comment, code span or fence"
     if len(declared) != 1:
         return (
             f"'**代码基线**：vN.M.K' matched {len(declared)} time(s), expected exactly 1"
             " -- reworded, duplicated or missing, so no version can be read off it"
         )
-    tag = f"harness-v{declared[0]}"
-    if tag not in tags:
+    match = _BASELINE_VERSION.fullmatch(declared[0])
+    if match is None:
+        return f"invalid harness baseline version or separator {declared[0]!r} (expected ：vN.M.K)"
+    version = match.group(1)
+    tag = f"harness-v{version}"
+    if tags is not None and tag not in tags:
         return (
-            f"declares v{declared[0]} but has no tag {tag} -- a number in this line is not a"
+            f"declares v{version} but has no tag {tag} -- a number in this line is not a"
             f" declaration until the tree it names can be checked out: git tag {tag} <declaring"
             f" commit> && git push origin {tag}"
         )
@@ -245,8 +319,76 @@ def self_test() -> int:
         ("the discipline sentence naming the tag form", "并打 `harness-vN.M.K` 锚点", set(), False),
         ("a reworded baseline line", "**基线**：v1.10.0", {"harness-v1.10.0"}, False),
         ("two baseline lines", "**代码基线**：v1.10.0\n**代码基线**：v1.9.0", {"harness-v1.10.0"}, False),
+        ("dotted suffix", "**代码基线**：v1.10.0.1 —— prose", {"harness-v1.10.0"}, False),
+        ("hyphen suffix", "**代码基线**：v1.10.0-invalid —— prose", {"harness-v1.10.0"}, False),
+        ("sentence punctuation", "**代码基线**：v1.10.0。", {"harness-v1.10.0"}, True),
+        ("ASCII comma punctuation", "**代码基线**：v1.10.0, prose", {"harness-v1.10.0"}, True),
+        ("period punctuation", "**代码基线**：v1.10.0. Next", {"harness-v1.10.0"}, True),
+        ("letter suffix", "**代码基线**：v1.10.0abc", {"harness-v1.10.0"}, False),
+        ("duplicate invalid declaration", "**代码基线**：v1.10.0\n**代码基线**：v1.10.0-invalid", {"harness-v1.10.0"}, False),
+        ("duplicate missing v", "**代码基线**：v1.10.0\n**代码基线**：1.10.0", {"harness-v1.10.0"}, False),
+        ("duplicate empty declaration", "**代码基线**：v1.10.0\n**代码基线**：", {"harness-v1.10.0"}, False),
+        ("unknown tags", "**代码基线**：v1.10.0", None, True),
+        ("unknown tags invalid version", "**代码基线**：v1.10.0-invalid", None, False),
+        ("ASCII colon", "**代码基线**:v1.10.0", {"harness-v1.10.0"}, False),
+        ("duplicate ASCII colon", "**代码基线**：v1.10.0\n- **代码基线**:v9.9.9", {"harness-v1.10.0"}, False),
+        ("duplicate on one line", "**代码基线**：v1.10.0 —— prose **代码基线**：v9.9.9", {"harness-v1.10.0"}, False),
+        ("bracket suffix", "**代码基线**：v1.10.0[invalid]", {"harness-v1.10.0"}, False),
+        ("spaced bracket suffix", "**代码基线**：v1.10.0 [invalid]", {"harness-v1.10.0"}, False),
+        ("parenthesized prose", "- **代码基线**：v1.10.0 —— （说明 [注]）", {"harness-v1.10.0"}, True),
+        ("inline explanation", "**代码基线**：v1.10.0\n解释 `**代码基线**：v9.9.9` 格式", {"harness-v1.10.0"}, True),
+        ("code example", "**代码基线**：v1.10.0\n```python\n**代码基线**：v9.9.9\n```", {"harness-v1.10.0"}, True),
+        ("comment masks malformed declaration", "<!-- **代码基线**：v1.10.0 -->\n- **代码基线**v9.9.9", {"harness-v1.10.0"}, False),
+        ("comment is not a duplicate", "**代码基线**：v1.10.0\n<!-- **代码基线**：v9.9.9 -->", {"harness-v1.10.0"}, True),
+        ("comment beside declaration", "<!-- note --> **代码基线**：v1.10.0", {"harness-v1.10.0"}, True),
+        ("comment opener inside fenced code", "```python\n<!--\n```\n**代码基线**：v1.10.0", {"harness-v1.10.0"}, True),
+        ("multiline comment masks malformed declaration", "<!--\n**代码基线**：v1.10.0\n-->\n**代码基线**v9.9.9", {"harness-v1.10.0"}, False),
+        ("duplicate on one line in code span", "**代码基线**：v1.10.0 —— example `**代码基线**：v9.9.9`", {"harness-v1.10.0"}, True),
+        ("inline opener before baseline", "示例 `<!--`\n**代码基线**：v1.10.0", {"harness-v1.10.0"}, True),
+        ("inline opener after baseline hides duplicate", "**代码基线**：v1.10.0 —— 示例 `<!--`\n**代码基线**:v9.9.9", {"harness-v1.10.0"}, False),
+        ("multiple backticks before baseline", "示例 `` `<!--` ``\n**代码基线**：v1.10.0", {"harness-v1.10.0"}, True),
+        ("multiple backticks hide duplicate", "**代码基线**：v1.10.0 —— `` `<!--` ``\n**代码基线**:v9.9.9", {"harness-v1.10.0"}, False),
+        ("trailing comment", "**代码基线**：v1.10.0 <!-- note -->", {"harness-v1.10.0"}, True),
+        ("trailing comment with duplicate", "**代码基线**：v1.10.0 <!-- note -->\n**代码基线**:v9.9.9", {"harness-v1.10.0"}, False),
+        ("trailing multiline comment", "**代码基线**：v1.10.0 <!-- note\n**代码基线**:v9.9.9\n-->\n**代码基线**:v9.9.9", {"harness-v1.10.0"}, False),
+        ("fenced opener and duplicate", "```\n<!-- `\n```\n**代码基线**：v1.10.0\n**代码基线**:v9.9.9", {"harness-v1.10.0"}, False),
+        ("unclosed inline code", "示例 `<!--\n**代码基线**：v1.10.0", {"harness-v1.10.0"}, False),
+        ("multiline code span", "示例 ``\n<!-- `\n``\n**代码基线**：v1.10.0\n**代码基线**:v9.9.9", {"harness-v1.10.0"}, False),
+        ("multiline code span before baseline", "示例 ``\n<!-- `\n``\n**代码基线**：v1.10.0", {"harness-v1.10.0"}, True),
+        ("escaped backtick", "示例 \\`<!--\n**代码基线**：v1.10.0", {"harness-v1.10.0"}, False),
+        ("unclosed comment", "**代码基线**：v1.10.0\n<!--", {"harness-v1.10.0"}, False),
+        ("unclosed fence", "**代码基线**：v1.10.0\n```", {"harness-v1.10.0"}, False),
+        ("nested fence", "**代码基线**：v1.10.0\n> ```\n> <!--\n> ```", {"harness-v1.10.0"}, False),
+        ("unspaced nested fence", "**代码基线**：v1.10.0\n>```\n> <!--\n>```", {"harness-v1.10.0"}, False),
+        ("indented fence", "**代码基线**：v1.10.0\n    ~~~\n    <!--\n    ~~~", {"harness-v1.10.0"}, False),
+        ("tab fence in comment", "**代码基线**：v1.10.0\n<!--\n\t```\n--> ", {"harness-v1.10.0"}, True),
+        ("tab fence in fenced code", "**代码基线**：v1.10.0\n```python\n\t```\n```", {"harness-v1.10.0"}, True),
+        ("tab fence in code span", "**代码基线**：v1.10.0\n示例 ``\n\t```\n``", {"harness-v1.10.0"}, True),
+        ("unindented fence example", "**代码基线**：v1.10.0\n~~~\n**代码基线**:v9.9.9\n~~~", {"harness-v1.10.0"}, True),
+        ("three-space fence example", "**代码基线**：v1.10.0\n   ```\n**代码基线**:v9.9.9\n   ```", {"harness-v1.10.0"}, True),
+        ("comment cannot split version", "**代码基线**：v1.10<!--x-->.0", {"harness-v1.10.0"}, False),
+        ("comment before bad suffix", "**代码基线**：v1.10.0<!--x-->.1", {"harness-v1.10.0"}, False),
     ]
-    problems = [
+    # A Markdown tab advances to the next four-column stop, not one indentation character.
+    indented_fences = ["\t", " \t", "  \t", "   \t", "\t ", "    ", "     "]
+    # Exercise the real main path without recursively running this self-test.
+    with patch.object(sys, "argv", ["check_version_docs.py"]), patch(
+        __name__ + "._git_tags", return_value=None
+    ), contextlib.redirect_stdout(io.StringIO()) as git_output:
+        git_status = main(show_tree=False)
+    git_text = git_output.getvalue()
+    problems = []
+    with patch(__name__ + ".subprocess.run", side_effect=UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid")):
+        try:
+            decode_result = _git_tags()
+        except UnicodeDecodeError:
+            decode_result = "raised"
+    if decode_result is not None:
+        problems.append("self-test 'git decode failure': must return unknown")
+    if (git_status != 1 or "git tag --list could not be read" not in git_text
+            or "has no tag" in git_text or "no git tag" in git_text):
+        problems.append("self-test 'git unavailable': must fail as unknown without claiming missing tags")
+    problems += [
         f"self-test '{name}': expected {expected} leak(s), found {len(verdict_leaks(text))}"
         for name, text, expected in cases
         if len(verdict_leaks(text)) != expected
@@ -268,13 +410,19 @@ def self_test() -> int:
         for name, text, tags, clean in baseline_cases
         if (baseline_tag_problem(text, tags) is None) != clean
     ]
+    for indent in indented_fences:
+        for marker in ("```", "~~~"):
+            text = f"**代码基线**：v1.10.0\n{indent}{marker}\n**代码基线**:v9.9.9\n{marker}"
+            problem = baseline_tag_problem(text, {"harness-v1.10.0"})
+            if problem is None or "ambiguous" not in problem:
+                problems.append(f"self-test indented fence {indent!r}{marker}: expected ambiguous, got {problem!r}")
     if problems:
         for problem in problems:
             print(f"check_version_docs: FAIL -- {problem}")
         return 1
     print(
         f"check_version_docs: self-test OK "
-        f"({len(cases) + len(status_cases) + len(title_cases) + len(piece_cases)} fixtures)"
+        f"({len(cases) + len(status_cases) + len(title_cases) + len(piece_cases) + len(baseline_cases) + len(indented_fences) * 2 + 2} fixtures)"
     )
     return 0
 
@@ -291,13 +439,18 @@ def _git_tags() -> set[str] | None:
             ["git", "tag", "--list"], capture_output=True, text=True, check=True, cwd=_REPO
         ).stdout
         return {line.strip() for line in out.splitlines() if line.strip()}
-    except (OSError, subprocess.CalledProcessError):
+    except (OSError, subprocess.CalledProcessError, UnicodeDecodeError):
         return None
 
 
 def main(show_tree: bool = "--tree" in sys.argv) -> int:
-    if "--self-test" in sys.argv and self_test():
-        return 1
+    self_test_output = io.StringIO()
+    if "--self-test" in sys.argv:
+        with contextlib.redirect_stdout(self_test_output):
+            self_test_failed = self_test()
+        if self_test_failed:
+            print(self_test_output.getvalue(), end="")
+            return 1
     problems: list[str] = []
     warnings: list[str] = []
     retired_versions: list[str] = []
@@ -532,7 +685,7 @@ def main(show_tree: bool = "--tree" in sys.argv) -> int:
     if not _HARNESS_DOC.is_file():
         problems.append("ablation_harness/HARNESS.md: missing (it writes the harness baseline)")
     else:
-        harness_problem = baseline_tag_problem(_HARNESS_DOC.read_text(encoding="utf-8"), tags)
+        harness_problem = baseline_tag_problem(_HARNESS_DOC.read_text(encoding="utf-8"), probed)
         if harness_problem is not None:
             problems.append(f"ablation_harness/HARNESS.md: {harness_problem}")
 
@@ -550,6 +703,8 @@ def main(show_tree: bool = "--tree" in sys.argv) -> int:
         print(f"VERSION_DOCS_DRIFT ({len(problems)})")
         return 1
     print(f"VERSION_DOCS_OK (coverage docs scanned: {scanned})")
+    if "--self-test" in sys.argv:
+        print(self_test_output.getvalue(), end="")
     return 0
 
 
