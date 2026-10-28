@@ -17,4 +17,4 @@ evidence: acceptance/records/2026-10-10-harness-baseline-coverage-fill.md, accep
 
 - 只处理编号、锚点与覆盖声明，不重新评价 `video_matrix.py` 的实现（归 `work/closed/2026/video-matrix-gears.md`）。
 - 已推的 tag 不改指不改名；本次不作新编号裁决。
-- 代码基线与本地 tag 的配对闸归 `work/active/harness-baseline-tag-gate.md`；本项的锚点判据在远端，两者不等价。
+- 代码基线与本地 tag 的配对闸归 `work/closed/2026/harness-baseline-tag-gate.md`；本项的锚点判据在远端，两者不等价。
