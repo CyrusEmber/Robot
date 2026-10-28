@@ -247,6 +247,10 @@ train 相对已解析 cwd；末句“不是定位手段”只可理解为 cwd �
 
 其余套件列真实头地接触、真实自接触、自然跌倒、robust 及真实视频验证转 `work/active/terrain-contact-suite-coverage.md`，不由本项关闭。真实探针在脏树运行，记录的 rev 不含修复，运行环境不保证完整重建；警告和原始报告保留，结果不作策略性能结论。
 
+### 后续扩展补测取消（2026-10-28）
+
+用户决定取消 `work/closed/2026/terrain-contact-suite-coverage.md`：前述其他地形列、自接触、自然跌倒、robust 和真实视频均仍属未覆盖边界，不因取消被视为通过。原审核的交接记录保留为当时事实，不表示当前仍有活跃补测。
+
 ## 证据引用
 
 - 事项：`work/closed/2026/isaac-root-parameterisation.md`。

@@ -2,10 +2,10 @@
 id: terrain-contact-suite-coverage
 title: 补测多地形接触与视频运行
 scope: ablation_harness/video_matrix.py, rl_exp/tools/diagnose/head_ground_dwell_probe.py
-status: open
+status: cancelled
 landing: rl_exp/tools/diagnose/head_ground_dwell_probe.py
 evidence: acceptance/records/2026-10-10-isaac-root-parameterisation.md
-next: 执行者设计并执行多地形原生接触、非地接触与视频、robust 覆盖验证，留可复读证据。
+outcome: 用户决定取消过度扩展的补测；未验证边界保留在验收记录，不作为已验证能力。
 close_when: 新上下文按正文“关闭条件”核验落点与证据；有缺口不关闭。
 ---
 

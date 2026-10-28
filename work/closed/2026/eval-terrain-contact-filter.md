@@ -5,13 +5,13 @@ scope: ablation_harness/eval.py, rl_exp/tasks/lizard2_recipe.py
 status: done
 landing: ablation_harness/eval.py
 evidence: acceptance/records/2026-10-10-isaac-root-parameterisation.md
-outcome: 固定套件过滤绑定修复，v5/v6 原生接触与 eval 通过独立重审；未覆盖验证已交接活跃事项。
+outcome: 固定套件过滤绑定修复，v5/v6 原生接触与 eval 通过独立重审；用户取消后续扩展补测。
 close_when: 新上下文按正文“关闭条件”核验落点与证据；有缺口不关闭。
 ---
 
 ## 当前范围
 
-eval 与视频的地形替换已适配头部过滤器；回归、原生接触夹具和 v5/v6 eval 落盘待重审，证据见 evidence。其他地形列、自接触、自然跌倒、robust 与真实视频验证转 `work/active/terrain-contact-suite-coverage.md`。
+eval 与视频的地形替换已适配头部过滤器；回归、原生接触夹具和 v5/v6 eval 落盘通过独立重审，证据及未覆盖边界见 evidence。后续扩展补测经用户决定取消，见 `work/closed/2026/terrain-contact-suite-coverage.md`。
 
 ## 下一步
 
