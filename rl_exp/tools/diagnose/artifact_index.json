@@ -3748,6 +3748,23 @@
       "next": "original executor confirms run state, source identity, input dependencies and retention scope"
     },
     {
+      "logical_root": "rl_exp/out/archive/diagnostic-development/inventory-snapshots-20261028.zip",
+      "current_location": "rl_exp/out/archive/diagnostic-development/inventory-snapshots-20261028.zip",
+      "classification": "historical_control",
+      "owner": "diagnostic-artifact-lifecycle",
+      "action": "consolidated_archive",
+      "writer_status": "sealed_after_verified_restore",
+      "storage": "local_verified_archive",
+      "basis": "acceptance/records/2026-10-28-diagnostic-inventory-consolidation.md",
+      "document_mentions": [
+        "acceptance/records/2026-10-20-diagnostic-artifact-preflight.md",
+        "acceptance/records/2026-10-21-diagnostic-artifact-decoupling-cleanup.md"
+      ],
+      "consumer_verification": "original inventory JSON restored in an isolated root, hashed and parsed against the recorded summaries; explicit recovery required",
+      "retention_reason": "four historical inventory snapshots preserve observations and limitations, not deletion authorization",
+      "next": "restore the named manifest member in an isolated directory and verify its SHA256 before reading; archive is local only"
+    },
+    {
       "logical_root": "rl_exp/out/archive/diagnostic-development/commit-scratch-20261028.zip",
       "current_location": "rl_exp/out/archive/diagnostic-development/commit-scratch-20261028.zip",
       "classification": "historical_control",

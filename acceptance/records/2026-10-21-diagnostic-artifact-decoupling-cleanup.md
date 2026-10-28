@@ -45,7 +45,7 @@
 
 ## 证据引用
 
-本轮本机运行目录：`rl_exp/out/runs/diagnostic-artifact-lifecycle/20261021-retention-continuation/`。包含只读 `inventory.json`、`relocation-red-behavior.log`、`relocation-green.log`、`relocation-after-move.log`、`relocation-commit.log`、`optimization-final.log`、`active-contact-migration.json`、`scratch-consolidation.json`、`scratch-finalization.json`、四份 `audit-*.json/log`、`audit-final-verification.json` 及 `offline-final.log`。归档现状以 finalization 为准，consolidation 中的初批包摘要不再代表终版。
+本轮本机运行目录：`rl_exp/out/runs/diagnostic-artifact-lifecycle/20261021-retention-continuation/`。只读 `inventory.json` 已归档，恢复方法见 `acceptance/records/2026-10-28-diagnostic-inventory-consolidation.md`；其余保留 `relocation-red-behavior.log`、`relocation-green.log`、`relocation-after-move.log`、`relocation-commit.log`、`optimization-final.log`、`active-contact-migration.json`、`scratch-consolidation.json`、`scratch-finalization.json`、四份 `audit-*.json/log`、`audit-final-verification.json` 及 `offline-final.log`。归档现状以 finalization 为准，consolidation 中的初批包摘要不再代表终版。
 
 初始盘点看到两根 3231 文件、2,567,185,843 bytes、43 tracked、227 顶级包；`rl_exp/out` 扫描期间 10 处发生变化，其边界为 unknown，不能用作迁移原子快照。实际迁移/删除另按本批精确文件集与重新实算摘要决定，未按旧盘点猜测。该次扫描的 unresolved 审计有截断，词法无引用不能单独支持删除。
 

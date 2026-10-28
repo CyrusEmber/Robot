@@ -28,7 +28,7 @@
 - 加入新证据和修复后的 `inventory-final.json` 观察 3,038 文件、1,452,362,218 bytes、43 tracked、2,995 ignored、164 包、26,409 引用边；该次与本轮回归写日志/临时坏身份样本并行，`rl_exp/out` 边界变化已降级 unknown，不能用于迁移。SHA256 `53f8cc3e9e2a4f3cf21f0f0a30dc985fde1335573f199ea7c067573b642b2548`。
 - 后续刷新 `inventory-handoff.json` 观察 3,041 文件、1,494,227,427 bytes、43 tracked、2,998 ignored、164 包、26,516 引用边；两根枚举边界未观察变化，unknown_entries=0，但 writer/runtime 仍 unknown。SHA256 `8fe8a7f2551e04b299af5f90510f567c837436d52659645702d36e41424942fa`。引用审计 28 跳过、3 解码失败、1,000 unresolved 保留、2,810 unresolved 截断；不会据快照称依赖齐全。该快照不含自身。
 - 新增文件和体积包含其它在办实验与本轮盘点/验证材料，不是待删除体积；旧快照亦纳盘点，不以空间目标授权清理。仍是非原子观察，不据 unchanged stat 推定没有 writer。词法能力有大小/文件数/未解析路径预算；未解析路径可能包含协议标签而非文件，必须人工判别。
-- 快照与日志本机单副本，默认忽略；未建立外部备份，不能删除。此前快照及失败日志亦保留，全部新产物归本事项，复核者沿下述路径读取。
+- 历史快照与日志本机单副本，默认忽略；未建立外部备份。四份旧盘点现按 `acceptance/records/2026-10-28-diagnostic-inventory-consolidation.md` 从本机归档恢复；失败日志仍留原位。
 
 ### 审核与闸门
 
@@ -42,7 +42,7 @@
 
 本机产物父目录均为 `rl_exp/out/runs/diagnostic-artifact-lifecycle/`：
 
-- `20261020-inventory/inventory.json`、`inventory-final.json`、`inventory-handoff.json`：盘点清单、逐文件摘要、Git 状态、引用边、待判定责任与扫描限制。
+- `20261020-inventory/inventory.json`、`inventory-final.json`、`inventory-handoff.json`：历史逻辑路径；原字节现存于 `rl_exp/out/archive/diagnostic-development/inventory-snapshots-20261028.zip`，显式恢复方法和摘要见 `acceptance/records/2026-10-28-diagnostic-inventory-consolidation.md`。
 - `20261020-preflight/diagnose-support-red.log` / `diagnose-support-green.log` / `diagnose-support-bindings.log`。
 - `20261020-preflight/optimization-red.log` / `optimization-green.log` / `optimization-selfcheck.log`。
 - `20261020-preflight/git-boundary-red.log` / `git-boundary-green.log`。
