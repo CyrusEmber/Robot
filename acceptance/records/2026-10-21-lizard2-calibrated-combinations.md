@@ -45,6 +45,7 @@
 
 ## 证据引用
 
+- 七份日志与两个临时 Git index 已另存本机归档，原路径当前保留；归档身份、恢复及消费者缺口见 `acceptance/records/2026-10-28-diagnostic-combinations-archive.md`。
 - 直接前序 report SHA256 `c5500ee862043111f68b65d5e0c2a03a8a9d4154f143a8b38775fd3281def9dc`；新入口在启动前重新复读全部 30 轴及前序完整链，不覆盖旧数据。
 - 本轮实际源码 SHA256 `76140c6b4d5fde72e207f69df7b0208a071e9d6f16b10050117dff9c8991b7be`；`rl_exp/out/palm_spatial_tracking_combinations_HEAD.py.txt` 与物理产物 source.py 字节一致，源码提交 `745976777fde50bf9e1911da944317d4ea18e357`；不含共享文件 RF/视频等 WIP。
 - `rl_exp/out/lizard2_b_combinations_20261021/report.json` SHA256 `903ec4dcf17ba4c6bd7c7f2e4e4e1a68ed0794cf0c17f18356554574b386de82`。

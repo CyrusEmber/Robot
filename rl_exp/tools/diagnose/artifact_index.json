@@ -3765,6 +3765,22 @@
       "next": "restore the named manifest member in an isolated directory and verify its SHA256 before reading; archive is local only"
     },
     {
+      "logical_root": "rl_exp/out/archive/diagnostic-development/calibrated-combinations-logs-index-20261021.zip",
+      "current_location": "rl_exp/out/archive/diagnostic-development/calibrated-combinations-logs-index-20261021.zip",
+      "classification": "historical_control",
+      "owner": "diagnostic-artifact-lifecycle",
+      "action": "consolidated_archive_originals_retained",
+      "writer_status": "snapshot_only",
+      "storage": "local_single_copy_no_backup",
+      "basis": "acceptance/records/2026-10-28-diagnostic-combinations-archive.md",
+      "document_mentions": [
+        "acceptance/records/2026-10-21-lizard2-calibrated-combinations.md"
+      ],
+      "consumer_verification": "nine files restored to isolated temporary root and checked against originals; historic record script reads two original log paths and is not migrated",
+      "retention_reason": "preserve combination logs including failed gate and exact historical Git index bytes",
+      "next": "resolve direct consumer and writer status before deletion; restore from manifest using the acceptance record"
+    },
+    {
       "logical_root": "rl_exp/out/archive/diagnostic-development/commit-scratch-20261028.zip",
       "current_location": "rl_exp/out/archive/diagnostic-development/commit-scratch-20261028.zip",
       "classification": "historical_control",
