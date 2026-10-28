@@ -3748,6 +3748,20 @@
       "next": "original executor confirms run state, source identity, input dependencies and retention scope"
     },
     {
+      "logical_root": "rl_exp/out/archive/diagnostic-development/commit-scratch-20261028.zip",
+      "current_location": "rl_exp/out/archive/diagnostic-development/commit-scratch-20261028.zip",
+      "classification": "historical_control",
+      "owner": "diagnostic-artifact-lifecycle",
+      "action": "consolidated_archive",
+      "writer_status": "sealed_after_verified_restore",
+      "storage": "local_verified_archive",
+      "basis": "acceptance/records/2026-10-28-diagnostic-commit-scratch-archive.md",
+      "document_mentions": [],
+      "consumer_verification": "every manifest member restored to an isolated temporary root and checked against original bytes before removal",
+      "retention_reason": "historical one-off Git and documentation editing scripts; not diagnostic consumers",
+      "next": "restore using the manifest in an isolated directory for inspection; do not execute against the working tree"
+    },
+    {
       "logical_root": "rl_exp/out/archive/diagnostic-development/tracking-scratch-20261021.zip",
       "current_location": "rl_exp/out/archive/diagnostic-development/tracking-scratch-20261021.zip",
       "classification": "historical_control",
