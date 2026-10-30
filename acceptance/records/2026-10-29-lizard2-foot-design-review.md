@@ -1,0 +1,64 @@
+# lizard2 足端设计事项审核意见
+
+## 适用范围
+
+用户对 `lizard2-foot-design-tradeoffs` 提供的审核结论及本次文档修订；不构成资产、驱动或训练验收。
+
+## 验收条件
+
+记录审核结论、具体缺口及其文档处理，区分候选定义、比较准入、动态证据与接触指标标定。
+
+## 结果
+
+用户审核结论为退回修订：原事项尚不是可比较、可判决的方案，不能据此关闭、选型或开训。审核指出候选身份不完整、双轴碰撞和受载身份未通过、对照混杂、缺判决规则、动态接口及 checkpoint 缺前置、接触指标未标定。修订将这些缺口及后续动作列入事项；阈值、预算及未存在的候选资产仍待确定，修订本身不视为解决。
+
+## 证据引用
+
+- 用户本轮提供的 Review 结论与阻塞问题。
+- `acceptance/records/2026-10-29-lizard2-foot-collision-candidate.md`、`acceptance/records/2026-10-29-lizard2-two-axis-candidate.md`。
+- `work/active/lizard2-contact-protocol.md`、`work/active/lizard2-foot-design-tradeoffs.md`。
+
+## 追加：保留当前双轴脚板的控制方案修订
+
+### 用户决策与输入身份
+
+用户在本轮确认“以当前双轴候选为保留目标”，本轮只修文档，不改资产或启动仿真、训练。保留外形、两轴、轴向、枢轴和连接关系；PD 与目标余量允许隔离诊断调整，碰撞形状、质量和惯量修正先单列并经用户确认。保留设计不等于接受已知相交、诊断惯量或批准采用。
+
+本轮只读 SHA256 核对的原始输入：
+
+| 文件 | SHA256 |
+|---|---|
+| `rl_exp/out/lizard2_two_axis_20261029/candidate01/lizard2_two_axis.urdf` | `0a506f94e48087aae9d4af64716b170ba744981ae8392bdd3d91917911a552dd` |
+| `rl_exp/out/lizard2_two_axis_20261029/candidate01/lizard2_two_axis/lizard2_two_axis.usda` | `a90de34b39f59dd65399d38d18f0b2f8b10cd434f2de063305cb41715e5ede05` |
+
+只绑定这两个入口字节，不证明依赖网格、材料、配置、Blender 或实际加载身份完整；执行前仍须补完整绑定。本机候选不承诺入仓。可用 Python 标准库 `hashlib.sha256(Path(<上述路径>).read_bytes()).hexdigest()` 复读；不得用不同字节沿用本摘要。
+
+### 本轮修订落点
+
+- `work/active/lizard2-foot-design-tradeoffs.md`：锁定保留边界；将局部几何、过滤、限位接线、观测能力及停止线前置到 PD 扫描；分开整机与匹配负载对照；缺可靠力矩时允许有限诊断但不核定正式驱动；奖励改为按需，纯关节项与接触项分别核前置。
+- `work/active/lizard2-two-axis-feet.md`：同步保留输入、修正授权边界和处理顺序；不将模型或增益试值直接采用，不将新增奖励设为必交付。
+- 固定足、锁定脚板和关节必要性研究的未完动作保留在原事项的暂不执行节，不作为当前保留双轴方案前置，不自动取消或启动。
+- 当前出口聚焦保留配置身份、声明姿态/路径、受载保持及响应、限位余量和测量缺口；正式采用、接触新测量、策略训练仍按对应事项交付，不能以本次修文档代替。
+
+这是对本对话前述助手审核意见的文档修订，不是一次新的独立复审。原记录将审核来源写为“用户审核结论”，应理解为用户转交的助手 Review；本轮不将执笔自检冒充独立审核。两个事项继续 in_progress，不关闭。
+
+### 文档检查与复核
+
+本轮 `python -B rl_exp/tools/verify/check_work_docs.py`、`python -B rl_exp/tools/verify/check_suite_banners.py` 和 `git diff --check` 通过；事项检查另有历史路径 HINT，不是失败。一个无本轮执笔历史的新上下文仅对三份文档核对上述四项修订，未发现阻塞性文档矛盾；该复核不检查原始仿真、能力或关闭条件，不批准采用和关闭。未运行仿真或训练。
+
+用户随后确认连同脚板前序依赖整理入库；提交范围包含脚板/抬身证据、必要性事项及其复读工具和测试，不含列耦合事项、仓库事项检查器等无关在办改动。本机资产、原始输出、视频和训练产物不入库。
+
+### 入库检查发现与修复
+
+首轮完整离线检查为 36/37 通过，`check_record_bindings.py` 报 `RECORD_BINDING_SINGLE_SOURCE_VIOLATED`，命中 15 个文件的重复哈希实现。脚板范围 13 个文件统一改用 `rl_exp.tools.runrecord.binding.sha256_file`；其余 `column_coupling_probe.py` 与 `lift_trial_isaac_replay.py` 经用户额外确认后单独处理：前者的参数字节摘要改用 `sha256_bytes`，后者文件摘要改用 `sha256_file`，不改参数序列化及物理逻辑。两份原未跟踪脚本会完整入库，不视为仅提交局部补丁。
+
+同一脚板范围绑定闸门修前失败、修后通过。离线单测 `test_pose_target_solver`、`test_lift_foot_plate_sweep`、`test_lizard2_lift_precheck`、`test_lift_preload_offset` 合计 9 项通过；前序脚本的完整仿真与 Blender 重跑未做。新脚本的测试为显式复读，不新增闸门或声称全域能力。
+
+源码复核另发现两份历史状态重放脚本的固定“80×”标签不随样本时间步长计算；本轮不据此标签引用速度倍率，不以这些重放视频作为原生相机或动力学验收。该限制不影响本次文件摘要去重和控制方案文档修订。
+
+
+最终复跑 `rl_exp/tools/verify/run_offline_checks.bat` 为 37/37 通过；`column_coupling_probe.py selftest` 通过，未运行真实列耦合仿真。25 份待入库 Python 源码/测试经 AST 语法检查通过。修复前完整闸门明确失败，修复后用同一闸门通过，不通过添加白名单或削弱检测解决。
+
+## 未覆盖边界
+
+本记录保存此前审核及本轮用户决策、修订落点；上述复核仅覆盖文档一致性，不声称已执行方案对照、完成标定或验证候选准入。阈值、增益范围、预算、停止线和实际行为仍须按事项落实；本轮未修改资产、驱动配置、配方或评测协议，源码只做上述哈希复用修复。
