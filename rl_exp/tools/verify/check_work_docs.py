@@ -235,7 +235,10 @@ LIST_BYTES = 6144
 #: this changes the aggregate alarm threshold, not the unfinished-work or review requirements.
 #: Raised 150000 -> 180000 on 2026-10-16 at the user's explicit request to allow the
 #: precheck plan update without removing unfinished work. LIST_BYTES and review rules stay unchanged.
-BUDGET_BYTES = 180000
+#: Raised 180000 -> 200000 on 2026-10-29 at the user's explicit request, to open the foot-plate
+#: necessity item without trimming unfinished work (active total was 179914 before it). No merge or
+#: shave accompanied this raise, against the note above; the alarm is weaker for it.
+BUDGET_BYTES = 200000
 
 _SHA = re.compile(r"\bsha256:[0-9a-fA-F]{8,}")
 #: A prose reference to a ledger file, spelled the way a document writes it. Placeholders
