@@ -22,4 +22,4 @@ evidence: acceptance/records/2026-10-09-repo-architecture-review, acceptance/rec
 ## 未覆盖边界
 
 - 原条件的首条新增套件项尚未观察到；用户同意不再把该观察作为本事项关闭条件，未来新增项仍按现行准入规则审查。
-- 不回溯存量条目的来源，不改 `.codemaker/rules/versioning.mdc`；准入无机器看守。命中史统计由 `work/active/gate-hit-history.md` 跟进。
+- 不回溯存量条目的来源，不改 `.codemaker/rules/versioning.mdc`；准入无机器看守。命中史统计见 `work/closed/2026/gate-hit-history.md`。

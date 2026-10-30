@@ -2,22 +2,17 @@
 id: gate-hit-history
 title: 离线闸门命中史统计
 scope: rl_exp/tools/verify
-status: open
+status: done
 landing: rl_exp/tools/verify/OFFLINE_CHECKS.md
-next: 执行者界定可核查的历史范围与命中口径，统计并记录证据。
 close_when: 独立审核者复核统计口径、样本和证据，确认结论及边界。
+outcome: 固定基线命中调查经独立重审通过，未知不作零命中或退役依据。
 depends_on: rl_exp/tools/verify/offline_suite.py
+evidence: acceptance/records/2026-10-30-gate-hit-history, acceptance/records/2026-10-30-gate-hit-history-review, acceptance/records/2026-10-30-gate-hit-history-second-review, acceptance/records/2026-10-30-gate-hit-history-final-review
 ---
 
 ## 当前范围
 
-统计离线闸门的历史命中，判断哪些检查捕获了真实问题，以及可见记录能支持什么结论；不把反例自测、测试夹具和真实开发中的命中混为一谈。
-
-## 下一步
-
-1. 执行者检查现有套件及历史记录，明确统计范围、命中定义、数据来源、不可追溯的条目和复读方法。
-2. 汇总有据可查的真实命中与证据缺口，结果归 `acceptance/records/`；评估统计能否支持维护决策，不因缺记录推断从未命中。
-3. 完成后置 `pending_review`，指派新上下文审核者复核口径、样本和证据。
+历史调查经独立重审通过；调查、历次审核及局限见 `evidence`。
 
 ## 关闭条件
 
