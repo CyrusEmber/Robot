@@ -21,6 +21,9 @@
 *.blend -text
 *.pt -text
 
+# Preserve the protocol bytes already bound to its anchor and eval records.
+/ablation_harness/protocols/lizard2_flat_v4.json -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+
 # Diagnostic evidence hashes bind original bytes, including historical CRLF reports.
 /rl_exp/out/** -text
 /rl_exp/tools/diagnose/out/** -text
