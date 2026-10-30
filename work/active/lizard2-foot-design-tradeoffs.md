@@ -4,9 +4,9 @@ title: lizard2 保留脚板及踝部控制方案
 scope: rl_exp/versions/lizard2, rl_exp/tools/diagnose, acceptance/records
 status: in_progress
 landing: rl_exp/tools/diagnose, acceptance/records
-next: 执行者核对双轴方向与踮脚可达路径，提出保持、小幅响应及主动踮脚的有限 PD 协议。
+next: 执行者依据首轮记录定位踮脚时原腕轴偏差与路径失配，提出分轴控制及接触观测的最小后续对照。
 close_when: 新上下文按正文“关闭条件”核验落点与证据；有缺口不关闭。
-evidence: acceptance/records/2026-10-29-lizard2-foot-design-review.md, acceptance/records/2026-10-29-lizard2-foot-plate-role-evidence.md, acceptance/records/2026-10-29-lizard2-two-axis-candidate.md, acceptance/records/2026-10-29-lizard2-two-axis-support-sweep.md, acceptance/records/2026-10-29-lizard2-foot-collision-candidate.md, acceptance/records/2026-10-30-lizard2-foot-control-tiprise-review.md
+evidence: acceptance/records/2026-10-29-lizard2-foot-design-review.md, acceptance/records/2026-10-29-lizard2-foot-plate-role-evidence.md, acceptance/records/2026-10-29-lizard2-two-axis-candidate.md, acceptance/records/2026-10-29-lizard2-two-axis-support-sweep.md, acceptance/records/2026-10-29-lizard2-foot-collision-candidate.md, acceptance/records/2026-10-30-lizard2-foot-control-tiprise-review.md, acceptance/records/2026-10-30-lizard2-foot-control-first-trials.md
 ---
 
 ## 当前范围
@@ -15,7 +15,7 @@ evidence: acceptance/records/2026-10-29-lizard2-foot-design-review.md, acceptanc
 
 保留设计选择不等于接受已知相交或认可现有惯量。PD 和目标余量可在隔离诊断中调整；碰撞形状、质量或惯量确需修正时，先单列差异、原因及验证范围，经用户确认再制作独立候选；不得扩大碰撞排除掩盖相交，也不得顺带改轴、移枢轴或换连接结构。机械限位、限矩、限速和材料不是本轮默认调参项。不能满足保留边界时报告冲突，不擅自换结构。
 
-双轴候选仍有碰撞、惯量和受载缺口，不因保留脚板而认定可采用。正式资产、已冻结配方和旧策略不因本事项变更；本次文档修订不授权资产修改、仿真或训练。数值、修订依据和验证边界唯一归 evidence。
+双轴候选仍有碰撞、惯量和受载缺口，不因保留脚板而认定可采用。正式资产、已冻结配方和旧策略不因本事项变更；已授权的首轮有限诊断按最新证据记录，不扩展为资产采用或训练授权。数值、修订依据和验证边界唯一归 evidence。
 
 本事项负责保留边界、控制验证顺序与交接；双轴几何、碰撞、惯量、驱动和版本接线由 `lizard2-two-axis-feet` 实施；整腿可达性引用 `lizard2-foot-plate-necessity` 的对应结果，不等待其必要性训练对照；新增接触测量由 `lizard2-contact-protocol` 承接。不得重复执行或新增通用开训前置。
 

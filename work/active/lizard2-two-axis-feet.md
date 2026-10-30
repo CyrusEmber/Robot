@@ -4,14 +4,14 @@ title: lizard2 脚掌双自由度机体
 scope: rl_exp/lizard2_palm_spatial, rl_exp/tools/diagnose, rl_exp/versions/lizard2
 status: in_progress
 landing: rl_exp/tools/diagnose/lizard2_two_axis_candidate.py, rl_exp/versions/lizard2
-next: 执行者核双轴方向与踮脚可达路径，按控制方案提出保持、响应及主动踮脚的有限 PD 对照。
+next: 执行者按首轮记录定位原腕轴反向偏差及踮脚路径失配，提出分轴控制与接触观测的最小后续对照。
 close_when: 新上下文按正文“关闭条件”核验落点与证据；有缺口不关闭。
-evidence: acceptance/records/2026-10-29-lizard2-two-axis-candidate.md, acceptance/records/2026-10-29-lizard2-two-axis-support-sweep.md, acceptance/records/2026-10-29-lizard2-foot-design-review.md, acceptance/records/2026-10-30-lizard2-foot-control-tiprise-review.md
+evidence: acceptance/records/2026-10-29-lizard2-two-axis-candidate.md, acceptance/records/2026-10-29-lizard2-two-axis-support-sweep.md, acceptance/records/2026-10-29-lizard2-foot-design-review.md, acceptance/records/2026-10-30-lizard2-foot-control-tiprise-review.md, acceptance/records/2026-10-30-lizard2-foot-control-first-trials.md
 ---
 
 ## 当前范围
 
-用户确认以当前双轴隔离候选为保留目标：保留脚板外形、每足两轴、轴向、枢轴及连接关系；身份输入与摘要见足端设计审核记录，执行前补完整依赖和实际加载绑定。PD 与目标余量只在隔离诊断中调整；碰撞形状、质量或惯量确需修正时先单列差异，经用户确认后制作独立候选，不擅自改轴、移枢轴、换连接或扩大碰撞排除。保留选择不代表接受相交缺陷或批准正式采用。隔离候选的受载跟踪与正式驱动仍有缺口，尚未采用为正式机体或训练配方；证据见 evidence。正式 v6 原资产及已有策略身份保留，本次文档修订不启动仿真或训练。
+用户确认以当前双轴隔离候选为保留目标：保留脚板外形、每足两轴、轴向、枢轴及连接关系；身份输入与摘要见足端设计审核记录，执行前补完整依赖和实际加载绑定。PD 与目标余量只在隔离诊断中调整；碰撞形状、质量或惯量确需修正时先单列差异，经用户确认后制作独立候选，不擅自改轴、移枢轴、换连接或扩大碰撞排除。保留选择不代表接受相交缺陷或批准正式采用。隔离候选的受载跟踪与正式驱动仍有缺口，尚未采用为正式机体或训练配方；证据见 evidence。正式 v6 原资产及已有策略身份保留；首轮有限诊断的授权、执行与边界归最新证据，不扩展为训练授权。
 
 ## 下一步
 
