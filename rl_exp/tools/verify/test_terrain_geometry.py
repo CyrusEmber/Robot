@@ -274,6 +274,61 @@ def test_video_matrix_gears_resolve_against_the_suite() -> None:
     print("  ok video matrix: gears resolve off the suite, one column per gear, camera rides the root")
 
 
+def test_video_matrix_failure_exit_status() -> None:
+    import os
+    import subprocess
+    import tempfile
+
+    script = """
+import io, os, pathlib, sys, types
+from ablation_harness import video_matrix
+app_module = types.ModuleType('isaaclab.app')
+class AppLauncher:
+    @staticmethod
+    def add_app_launcher_args(parser):
+        pass
+    def __init__(self, args):
+        self.app = self
+    def close(self):
+        pathlib.Path(output, 'close_called').touch()
+        os._exit(0)
+app_module.AppLauncher = AppLauncher
+sys.modules['isaaclab.app'] = app_module
+mode, output = sys.argv[1:]
+sys.argv = ['video_matrix.py', '--checkpoint', 'unused.pt', '--out_dir', output]
+def run(args):
+    if mode == 'error':
+        raise RuntimeError('injected video failure')
+    if mode == 'system_exit':
+        raise SystemExit('injected video refusal')
+    if mode == 'broken_stdout':
+        class BrokenStdout(io.StringIO):
+            def flush(self):
+                raise OSError('stdout flush failed')
+        sys.stdout = BrokenStdout()
+        raise RuntimeError('injected broken stdout')
+    return {'cells': []}
+video_matrix.run = run
+video_matrix.main()
+"""
+    with tempfile.TemporaryDirectory() as output:
+        for mode, message in (("error", "injected video failure"),
+                              ("system_exit", "injected video refusal"),
+                              ("broken_stdout", "injected broken stdout"),
+                              ("success", "")):
+            result = subprocess.run([sys.executable, "-c", script, mode, output],
+                                    capture_output=True, text=True, encoding="utf-8", errors="replace",
+                                    cwd=_REPO, env=os.environ.copy())
+            if mode == "success":
+                assert result.returncode == 0, (result.returncode, result.stderr)
+                assert (pathlib.Path(output) / "matrix.json").is_file()
+                assert (pathlib.Path(output) / "close_called").is_file()
+            else:
+                assert result.returncode != 0, (mode, result.returncode, result.stderr)
+                assert "Traceback" in result.stderr and message in result.stderr, result.stderr
+                assert not (pathlib.Path(output) / "close_called").exists(), mode
+
+
 def test_video_matrix_resolves_dynamic_sensor_presets() -> None:
     """V5's dynamically attached head sensor must reach gym as a concrete config."""
     import gymnasium as gym

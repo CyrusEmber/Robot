@@ -414,10 +414,12 @@ def main() -> None:
         print(json.dumps(payload, indent=2, ensure_ascii=False))
     except BaseException:
         # app.close() ends the process, so a traceback raised past it never reaches the terminal.
-        traceback.print_exc()
-        sys.stdout.flush()
-        sys.stderr.flush()
-        raise
+        try:
+            traceback.print_exc()
+            sys.stderr.flush()
+            sys.stdout.flush()
+        finally:
+            os._exit(1)
     finally:
         app.close()
 
