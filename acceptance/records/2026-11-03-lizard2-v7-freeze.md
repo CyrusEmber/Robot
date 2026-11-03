@@ -43,7 +43,11 @@
 
 随后将 `FROZEN_REVS` 原未提交候选标注换为这笔真实完整提交，摘要不变；家族入口与在办路由同步。最终暂存候选树 `96c4649f8280265f8cbf47de218a63dc44e688d9` 的完整套件退出0，37/37通过，56.7s，日志为同一系统temp下 `offline-final.log`。另一不带执笔历史的新上下文核对最后五文件索引、来源/标签语义及在办交接，无硬阻塞；确认未夹带其他会话改动，首笔材料与收尾候选字节不变。
 
-第二收尾提交后标签 `lizard2-main-v7` 指向其真实提交，不改旧tag。远端执行结果另按真实结果回填。
+第二收尾真实提交 `9b531cb8509203da06154aba6c4d80efd25496fc`（`lizard2-v7.1: bind frozen recipe to source commit`），只5个文件，hooks再次全部通过。新annotated标签 `lizard2-main-v7` 指向此提交，未改旧tag。
+
+实际 `git push --atomic origin main refs/tags/lizard2-main-v7` 退出0，远端main从 `24e8eb1` 前进至 `9b531cb`，仅新v7标签发布。推后再次核tag提交、golden来源和tag内USD/URDF/冻结yaml/probe字节，均与已审制品一致，索引为空。此后本记录的远端结果回填作为正常新增提交，不移动冻结标签。
+
+其它会话eval、lift/UI及未跟踪支撑工作仍原样保留；本轮没有为了工作树干净而提交、清理或隐藏它们，因此默认脏树训练限制仍成立。
 
 ## 证据引用
 
