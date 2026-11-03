@@ -20,7 +20,10 @@ Exit code is 1 when any task's live contract disagrees.
 """
 
 import argparse
+import os
 import pathlib
+import sys
+import traceback
 
 from isaaclab.app import AppLauncher
 
@@ -52,13 +55,21 @@ if args_cli.value_report:
         parser.error("--value_report requires one isolated target/environment/task, without --pin/--all-tasks")
     if args_cli.value_report.exists() or args_cli.value_report.with_suffix(args_cli.value_report.suffix + ".source.py").exists():
         parser.error("--value_report output already exists")
-simulation_app = AppLauncher(args_cli).app
+try:
+    simulation_app = AppLauncher(args_cli).app
 
-import gymnasium as gym  # noqa: E402
-import isaaclab_tasks  # noqa: F401,E402
-import yaml  # noqa: E402
+    import gymnasium as gym  # noqa: E402
+    import isaaclab_tasks  # noqa: F401,E402
+    import yaml  # noqa: E402
 
-from rl_exp.tasks import obs_protocol  # noqa: E402
+    from rl_exp.tasks import obs_protocol  # noqa: E402
+except BaseException:
+    try:
+        traceback.print_exc()
+        sys.stderr.flush()
+        sys.stdout.flush()
+    finally:
+        os._exit(1)
 
 _REPO = pathlib.Path(__file__).resolve().parents[3]
 
@@ -422,13 +433,21 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    code = main()
+    try:
+        code = main()
+    except BaseException:
+        try:
+            traceback.print_exc()
+            sys.stderr.flush()
+            sys.stdout.flush()
+        finally:
+            os._exit(1)
     if code:
         # Kit close may terminate with status 0; preserve real CLI rejection first.
-        import os
-        import sys
-        sys.stdout.flush()
-        sys.stderr.flush()
-        os._exit(code)
+        try:
+            sys.stderr.flush()
+            sys.stdout.flush()
+        finally:
+            os._exit(code)
     simulation_app.close()
     raise SystemExit(code)

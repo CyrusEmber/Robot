@@ -19,6 +19,7 @@ import copy
 import hashlib
 import json
 import pathlib
+import subprocess
 import sys
 import tempfile
 from types import SimpleNamespace as NS
@@ -105,8 +106,113 @@ def live_value_regression() -> None:
             check(f"live/nonzero-rejects-{label}", False)
 
 
+def entry_exit_regression(sources=None) -> None:
+    """Run complete entry scripts with a simulated Kit zero-exit shutdown, not a simulator."""
+    paths = {
+        "live": pathlib.Path("rl_exp/tools/verify/obs_protocol_live.py").resolve(),
+        "diagnose": pathlib.Path("rl_exp/tools/diagnose/diagnose_nan.py").resolve(),
+    }
+    sources = sources or paths
+    child = r'''
+import atexit, builtins, os, pathlib, sys, types
+kind, mode, source, filename, marker = sys.argv[1:]
+original_import = builtins.__import__
+def fail_import(name, *args, **kwargs):
+    if name == 'gymnasium': raise ImportError('injected post-launch import failure')
+    return original_import(name, *args, **kwargs)
+def module(name):
+    result = types.ModuleType(name)
+    sys.modules[name] = result
+    return result
+class AppLauncher:
+    @staticmethod
+    def add_app_launcher_args(parser): pass
+    def __init__(self, args):
+        self.app = self
+        self.shutdown = lambda: os._exit(0)
+        atexit.register(self.shutdown)
+    def close(self):
+        pathlib.Path(marker).touch()
+        print('APP_CLOSED')
+        sys.stdout.flush()
+        sys.stderr.flush()
+        atexit.unregister(self.shutdown)
+module('isaaclab')
+module('isaaclab.app').AppLauncher = AppLauncher
+module('isaaclab_tasks')
+gym = module('gymnasium')
+if kind == 'live':
+    module('yaml')
+    module('rl_exp')
+    tasks = module('rl_exp.tasks')
+    tasks.joint_names = types.SimpleNamespace(NAMINGS={}, LEGACY_NAMING={})
+    tasks.obs_protocol = types.SimpleNamespace(
+        declaration=lambda: {'tasks': {'fixture': {}} if mode == 'refusal' else {}},
+        usd_path=lambda task: None)
+    sys.argv = [filename, '--target_config', 'fixture', '--tasks', 'a', 'b'] if mode == 'error' else [filename, '--all-tasks']
+else:
+    def parse_env_cfg(*args, **kwargs):
+        if mode == 'error': raise RuntimeError('injected main failure')
+        if mode == 'system_exit': raise SystemExit('injected main refusal')
+        return object()
+    module('isaaclab_tasks.utils').parse_env_cfg = parse_env_cfg
+    class Value:
+        def __getitem__(self, key): return self
+        def any(self): return self
+        def sum(self): return self
+        def min(self): return self
+        def max(self): return self
+        def abs(self): return self
+        def item(self): return 0
+    value = Value()
+    torch = module('torch')
+    torch.isnan = lambda x: value
+    torch.zeros = lambda *a, **k: value
+    class Env:
+        action_space = types.SimpleNamespace(shape=(1,))
+        unwrapped = types.SimpleNamespace(device='cpu', scene={'robot': types.SimpleNamespace(
+            data=types.SimpleNamespace(root_pos_w=value, joint_vel=value))})
+        def reset(self): return {'policy': value}, None
+        def step(self, action): return {'policy': value}, value, value, value, {}
+        def close(self): print('ENV_CLOSED')
+    gym.make = lambda *a, **k: Env()
+    sys.argv = [filename]
+code = pathlib.Path(source).read_bytes()
+if mode == 'import_error': builtins.__import__ = fail_import
+exec(compile(code, filename, 'exec'), {'__name__': '__main__', '__file__': filename})
+'''
+    cases = (
+        ("live", "error", "--target_config requires exactly one", True),
+        ("live", "import_error", "injected post-launch import failure", True),
+        ("live", "refusal", "OBS_PROTOCOL_LIVE_FAILED", False),
+        ("live", "success", "OBS_PROTOCOL_LIVE_OK", False),
+        ("diagnose", "error", "injected main failure", True),
+        ("diagnose", "import_error", "injected post-launch import failure", True),
+        ("diagnose", "system_exit", "injected main refusal", True),
+        ("diagnose", "success", "RESULT: total terminations", False),
+    )
+    with tempfile.TemporaryDirectory() as scratch:
+        marker = pathlib.Path(scratch) / "closed"
+        for kind, mode, message, traceback_expected in cases:
+            marker.unlink(missing_ok=True)
+            result = subprocess.run(
+                [sys.executable, "-B", "-c", child, kind, mode, str(sources[kind]), str(paths[kind]), str(marker)],
+                cwd=scratch, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
+            success = mode == "success"
+            output = result.stderr if traceback_expected else result.stdout
+            ok = ((result.returncode == 0 if success else result.returncode != 0)
+                  and marker.is_file() == success and message in output
+                  and (not traceback_expected or "Traceback" in result.stderr)
+                  and (kind != "diagnose" or mode == "import_error" or "TASK: Lizard2-Flat-v3" in result.stdout)
+                  and (not success or "APP_CLOSED" in result.stdout)
+                  and (kind != "diagnose" or not success or "ENV_CLOSED" in result.stdout))
+            check(f"entry/{kind}/{mode}", ok,
+                  f"exit={result.returncode}, closed={marker.is_file()}, stdout={result.stdout!r}, stderr={result.stderr!r}")
+
+
 def main() -> int:
     PROBLEMS.clear()
+    entry_exit_regression()
     # TRAIN/PLAY share a route, but a later check must still observe changed input.
     routes = {name: {'protocol': 'fixture', 'line': 'fixture/main', 'version': 'v1'}
               for name in ('train', 'play')}

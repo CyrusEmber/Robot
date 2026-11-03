@@ -8,7 +8,9 @@ Usage:
 """
 
 import argparse
+import os
 import sys
+import traceback
 
 TASK = "Lizard2-Flat-v3"
 if len(sys.argv) > 1 and not sys.argv[-1].startswith("-"):
@@ -20,14 +22,22 @@ parser = argparse.ArgumentParser(description="Diagnose NaN observations.")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 
-app_launcher = AppLauncher(args_cli)
-simulation_app = app_launcher.app
+try:
+    app_launcher = AppLauncher(args_cli)
+    simulation_app = app_launcher.app
 
-import gymnasium as gym
-import torch
+    import gymnasium as gym
+    import torch
 
-import isaaclab_tasks  # noqa: F401
-from isaaclab_tasks.utils import parse_env_cfg
+    import isaaclab_tasks  # noqa: F401
+    from isaaclab_tasks.utils import parse_env_cfg
+except BaseException:
+    try:
+        traceback.print_exc()
+        sys.stderr.flush()
+        sys.stdout.flush()
+    finally:
+        os._exit(1)
 
 OBS_LAYOUT = [
     ("base_lin_vel", 3),
@@ -73,5 +83,13 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except BaseException:
+        try:
+            traceback.print_exc()
+            sys.stderr.flush()
+            sys.stdout.flush()
+        finally:
+            os._exit(1)
     simulation_app.close()
