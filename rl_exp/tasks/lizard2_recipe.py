@@ -489,6 +489,12 @@ LIZARD2_RECIPES["v6"] = {
     "play": "Lizard2-Flat-Play-v6",
 }
 
+LIZARD2_RECIPES["v7"] = {
+    **LIZARD2_RECIPES["v6"],
+    "train": "Lizard2-Flat-v7",
+    "play": "Lizard2-Flat-Play-v7",
+}
+
 ELEMENTS = {
     name: globals()[name]
     for entry in LIZARD2_RECIPES.values()

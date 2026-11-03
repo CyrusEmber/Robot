@@ -1022,6 +1022,31 @@
    "version": "v2",
    "line": "lizard2/main"
   },
+  "Lizard2-Flat-Play-v3": {
+   "protocol": "a25a8c39001b",
+   "version": "v3",
+   "line": "lizard2/main"
+  },
+  "Lizard2-Flat-Play-v4": {
+   "protocol": "a25a8c39001b",
+   "version": "v4",
+   "line": "lizard2/main"
+  },
+  "Lizard2-Flat-Play-v5": {
+   "protocol": "a25a8c39001b",
+   "version": "v5",
+   "line": "lizard2/main"
+  },
+  "Lizard2-Flat-Play-v6": {
+   "protocol": "a25a8c39001b",
+   "version": "v6",
+   "line": "lizard2/main"
+  },
+  "Lizard2-Flat-Play-v7": {
+   "protocol": "a25a8c39001b",
+   "version": "v7",
+   "line": "lizard2/main"
+  },
   "Lizard2-Flat-v1": {
    "protocol": "a25a8c39001b",
    "version": "v1",
@@ -1037,17 +1062,7 @@
    "version": "v3",
    "line": "lizard2/main"
   },
-  "Lizard2-Flat-Play-v3": {
-   "protocol": "a25a8c39001b",
-   "version": "v3",
-   "line": "lizard2/main"
-  },
   "Lizard2-Flat-v4": {
-   "protocol": "a25a8c39001b",
-   "version": "v4",
-   "line": "lizard2/main"
-  },
-  "Lizard2-Flat-Play-v4": {
    "protocol": "a25a8c39001b",
    "version": "v4",
    "line": "lizard2/main"
@@ -1057,19 +1072,14 @@
    "version": "v5",
    "line": "lizard2/main"
   },
-  "Lizard2-Flat-Play-v5": {
-   "protocol": "a25a8c39001b",
-   "version": "v5",
-   "line": "lizard2/main"
-  },
   "Lizard2-Flat-v6": {
    "protocol": "a25a8c39001b",
    "version": "v6",
    "line": "lizard2/main"
   },
-  "Lizard2-Flat-Play-v6": {
+  "Lizard2-Flat-v7": {
    "protocol": "a25a8c39001b",
-   "version": "v6",
+   "version": "v7",
    "line": "lizard2/main"
   }
  }

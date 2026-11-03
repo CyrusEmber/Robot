@@ -33,3 +33,8 @@
 # Original exporter formatting is part of these two audited source hashes.
 /rl_exp/lizard2_palm_spatial/lizard2_palm_spatial.urdf whitespace=-blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
 /rl_exp/lizard2_palm_spatial/lizard2_palm_spatial.usda whitespace=blank-at-eol,-blank-at-eof,space-before-tab,cr-at-eol
+
+/rl_exp/lizard2_round_feet/** -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+/rl_exp/lizard2_round_feet/lizard2_round_feet.urdf whitespace=-blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+/rl_exp/lizard2_round_feet/lizard2_round_feet.usda whitespace=blank-at-eol,-blank-at-eof,space-before-tab,cr-at-eol
+/rl_exp/versions/lizard2/main/v7/main_params.yaml -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol

@@ -98,12 +98,12 @@ def main(probed_rows: dict[str, dict] | None = None) -> int:
         _fires(lambda r: r.update(synthetic=_synthetic(legs=(10.0, None), stub=("legs",))),
                g._check_inert_velocity_limits, "actuator honours "),
     ])
-    # Check the clean baseline before mutations, then falsify the v4 cap branch too.
+    # Check the clean baseline before mutations, then falsify the reviewed cap versions too.
     baseline: list[str] = []
     g._check_inert_velocity_limits(rows, baseline)
     ok = ok and not baseline
     import copy
-    for version in ('V4', 'V6'):
+    for version in ('V4', 'V6', 'V7'):
         for fault in ("missing", "changed", "extra"):
             probe = copy.deepcopy(rows)
             actuator = probe[f"Lizard2Flat{version}EnvCfg"]["instance"].scene.robot.actuators["legs"]

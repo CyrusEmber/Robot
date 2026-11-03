@@ -1,5 +1,5 @@
 {
   "format": 1,
-  "meshes_dir": "lizard2_palm_spatial/meshes",
-  "why": "Formalize audited palm body for main/v4; exact source bytes and mesh references retained. Old-body versions retire without relocking. See acceptance/records/2026-10-23-lizard2-v4-configuration.md."
+  "meshes_dir": "lizard2_round_feet/meshes",
+  "why": "Adopt export04 fixed round feet for main/v7; retain repaired USD, URDF and referenced meshes byte-for-byte. Retire v4-v6 without relocking. See acceptance/records/2026-11-03-lizard2-v7-round-feet.md."
 }

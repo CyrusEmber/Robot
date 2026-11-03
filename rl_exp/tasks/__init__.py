@@ -137,6 +137,26 @@ gym.register(
 )
 
 gym.register(
+    id="Lizard2-Flat-v7",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": "rl_exp.tasks.recipe_tasks:Lizard2FlatV7EnvCfg",
+        "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:Lizard2V7PPORunnerCfg",
+    },
+)
+
+gym.register(
+    id="Lizard2-Flat-Play-v7",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": "rl_exp.tasks.recipe_tasks:Lizard2FlatV7EnvCfg_PLAY",
+        "rsl_rl_cfg_entry_point": "rl_exp.tasks.agents.rsl_rl_ppo_cfg:Lizard2V7PPORunnerCfg",
+    },
+)
+
+gym.register(
     id="Lizard2-Flat-Play-v6",
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     disable_env_checker=True,

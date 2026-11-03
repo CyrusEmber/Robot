@@ -9,13 +9,13 @@
 
 ## 家族身份
 
-lizard2 = lizard 的四足构型修正版。当前 main/v4 采用掌部候选，前肢 `shoulder_swing → shoulder_abduct → shoulder_twist → elbow → wrist`、后肢 `hip_swing → hip_abduct → hip_twist → knee → ankle`，加胸颈尾共 30 个可动关节。旧机体 main/v1、main/v2、main/v3 已退休，保留历史配方与任务身份，不再承诺新训/续训与当前树复现。
+lizard2 = lizard 的四足构型修正版。当前 main/v7 接入固定圆足机体，前肢 `shoulder_swing → shoulder_abduct → shoulder_twist → elbow`、后肢 `hip_swing → hip_abduct → hip_twist → knee`，加胸颈尾共 26 个可动关节；腕踝足端刚体通过固定连接保留。旧机体 main/v1–v6 已退休，保留历史配方与任务身份，不再承诺新训/续训与当前树复现。采用范围及证据见 `acceptance/records/2026-11-03-lizard2-v7-round-feet.md`。
 
 家族起源与旧机体的轴向/网格事实归历史记录 `acceptance/records/2026-09-22-lizard2-family-landing.md`、`acceptance/records/2026-09-22-lizard2-stride-at-load.md`。旧站姿机体采用归 `acceptance/records/2026-10-08-lizard2-v3-landing.md`；当前掌部资产采用与配置证据归 `acceptance/records/2026-10-23-lizard2-v4-configuration.md`。
 
 ## 设计入口
 
-当前 main/v6 修订锚为 `lizard2-main-v6.1`，承接腹部触地立即重开与转向指令；原 `lizard2-main-v6` 保留原快照。方案入口见 [PLAN.md](PLAN.md)，正文唯一归 [main/v6/PLAN.md](main/v6/PLAN.md)。已训 main/v5 和 main/v4 保留原配方与 tag；main/v3 的已训历史保留在其原 PLAN/NOTES。
+当前 main/v7 配置与独立任务已建立，方案入口见 [PLAN.md](PLAN.md)，正文唯一归 [main/v7/PLAN.md](main/v7/PLAN.md)。采用与检查边界取 `acceptance/records/2026-11-03-lizard2-v7-round-feet.md`。旧 main/v6 修订锚 `lizard2-main-v6.1` 与原 `lizard2-main-v6` 保留原快照；旧版训练历史与标签保持原身份。
 
 ## 线
 
@@ -24,10 +24,10 @@ lizard2 = lizard 的四足构型修正版。当前 main/v4 采用掌部候选，
 - 家族级文档（`FAMILY.md` / `PLAN.md`）落在 `versions/lizard2/`，**不在 `main/` 里**。
 - 线之间的隔离是硬约束：本线不 import 其它线的 cfg/mdp，要哪个核就复制一份进本线自己的模块。
 
-## 资产树（2026-10-23）
+## 资产树
 
-声明 `versions/lizard2/assets.json` 指向 `lizard2_palm_spatial/meshes`。当前正式机体为 `lizard2_palm_spatial/lizard2_palm_spatial.usda`，同目录 URDF 与相对网格引用构成实际资产集合。采用已审站姿制品的原字节；来源身份与验证边界见配置验收记录。
-旧 `lizard2_candidate/`、`versions/lizard2/meshes` 与 `assets/lizard2/lizard2.usda` 留作历史，不由当前活跃配方消费。资产换代退休规则从版本纪律继承。
+声明 `versions/lizard2/assets.json` 指向 `lizard2_round_feet/meshes`。当前正式机体为 `lizard2_round_feet/lizard2_round_feet.usda`，同目录 URDF 与相对网格引用构成实际资产集合；采用 export04 主轴修正 USD 与对应 URDF/网格的原字节。来源身份、诊断质量假设与验证边界见圆足接入记录。
+旧 `lizard2_palm_spatial/`、`lizard2_candidate/`、`versions/lizard2/meshes` 与 `assets/lizard2/lizard2.usda` 保留历史，不由当前活跃配方消费。资产换代退休规则从版本纪律继承。
 
 ## 任务注册表
 
@@ -41,12 +41,14 @@ lizard2 = lizard 的四足构型修正版。当前 main/v4 采用掌部候选，
 | `Lizard2-Flat-Play-v2` | `lizard2-flat-play-v2@1`（历史参数 `versions/lizard2/main/v2/main_params.yaml`；退休） |
 | `Lizard2-Flat-v3` | `lizard2-flat-v3@1`（历史参数 `versions/lizard2/main/v3/main_params.yaml`；退休） |
 | `Lizard2-Flat-Play-v3` | `lizard2-flat-play-v3@1`（历史参数 `versions/lizard2/main/v3/main_params.yaml`；退休） |
-| `Lizard2-Flat-v4` | `lizard2-flat-v4@1`（参数 `versions/lizard2/main/v4/main_params.yaml`） |
-| `Lizard2-Flat-Play-v4` | `lizard2-flat-play-v4@1`（参数 `versions/lizard2/main/v4/main_params.yaml`） |
-| `Lizard2-Flat-v5` | `lizard2-flat-v5@1`（参数 `versions/lizard2/main/v5/main_params.yaml`） |
-| `Lizard2-Flat-Play-v5` | `lizard2-flat-play-v5@1`（参数 `versions/lizard2/main/v5/main_params.yaml`） |
-| `Lizard2-Flat-v6` | `lizard2-flat-v6@1`（参数 `versions/lizard2/main/v6/main_params.yaml`） |
-| `Lizard2-Flat-Play-v6` | `lizard2-flat-play-v6@1`（参数 `versions/lizard2/main/v6/main_params.yaml`） |
+| `Lizard2-Flat-v4` | `lizard2-flat-v4@1`（参数 `versions/lizard2/main/v4/main_params.yaml`；退休） |
+| `Lizard2-Flat-Play-v4` | `lizard2-flat-play-v4@1`（参数 `versions/lizard2/main/v4/main_params.yaml`；退休） |
+| `Lizard2-Flat-v5` | `lizard2-flat-v5@1`（参数 `versions/lizard2/main/v5/main_params.yaml`；退休） |
+| `Lizard2-Flat-Play-v5` | `lizard2-flat-play-v5@1`（参数 `versions/lizard2/main/v5/main_params.yaml`；退休） |
+| `Lizard2-Flat-v6` | `lizard2-flat-v6@1`（参数 `versions/lizard2/main/v6/main_params.yaml`；退休） |
+| `Lizard2-Flat-Play-v6` | `lizard2-flat-play-v6@1`（参数 `versions/lizard2/main/v6/main_params.yaml`；退休） |
+| `Lizard2-Flat-v7` | `lizard2-flat-v7@1`（参数 `versions/lizard2/main/v7/main_params.yaml`） |
+| `Lizard2-Flat-Play-v7` | `lizard2-flat-play-v7@1`（参数 `versions/lizard2/main/v7/main_params.yaml`） |
 
 ## 版本历史
 
@@ -62,3 +64,4 @@ lizard2 = lizard 的四足构型修正版。当前 main/v4 采用掌部候选，
 | main/v5 | 2026-10-26 | 头部持续触地终止；用户解冻修订关闭指定腿部接触惩罚，母本为已训 main/v4，独立任务与日志身份 | 当前修订见 `acceptance/records/2026-10-26-lizard2-v5-leg-contact-penalty.md`，原终止测量见原记录 |
 | main/v6 | 2026-10-28 | 腹部触地立即重开，补入实际胸腹外壳；母本为已训 main/v5，独立任务与日志身份 | 验证与边界见 `acceptance/records/2026-10-28-lizard2-v6-belly-reset.md` |
 | main/v6 修订 v6.1 | 2026-10-28 | 用户明确解冻未训练 v6 后开放转向指令；任务身份沿用，已推原标签保留 | `acceptance/records/2026-10-28-lizard2-v6-yaw-command.md` |
+| main/v7 | 2026-11-03 | 用户批准固定圆足正式接入；母本 main/v6.1，取消末端活动轴并采用收窄肘限位；旧机体 v4–v6 同轮退休，独立任务与日志身份 | 来源、配置检查与边界见 `acceptance/records/2026-11-03-lizard2-v7-round-feet.md` |

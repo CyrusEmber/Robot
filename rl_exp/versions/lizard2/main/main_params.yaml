@@ -1,7 +1,7 @@
-# V4: adopted audited palm body; all 30 position actions, zero velocity references.
+# V7: fixed round feet, 26 position actions; otherwise inherit v6.1.
 robot:
   name: lizard2
-  usd_path: lizard2_palm_spatial/lizard2_palm_spatial.usda
+  usd_path: lizard2_round_feet/lizard2_round_feet.usda
   base_body_name: base_link
   base_init_height: 0.6038
   base_init_rotation_xyzw:
@@ -9,7 +9,7 @@ robot:
   - 0.0
   - 0.0
   - 1.0
-  self_collisions: true
+  self_collisions: false
   naming: palm_spatial
 joint_order:
 - chest_yaw
@@ -20,12 +20,10 @@ joint_order:
 - lf_shoulder_abduct
 - lf_shoulder_twist
 - lf_elbow
-- lf_wrist
 - rf_shoulder_swing
 - rf_shoulder_abduct
 - rf_shoulder_twist
 - rf_elbow
-- rf_wrist
 - tail1_yaw
 - tail1_pitch
 - tail2_yaw
@@ -36,12 +34,10 @@ joint_order:
 - rl_hip_abduct
 - rl_hip_twist
 - rl_knee
-- rl_ankle
 - rr_hip_swing
 - rr_hip_abduct
 - rr_hip_twist
 - rr_knee
-- rr_ankle
 default_joint_pos:
   chest_yaw_joint: 0.0
   chest_pitch_joint: 0.0
@@ -51,12 +47,10 @@ default_joint_pos:
   lf_shoulder_abduct_joint: 0.0
   lf_shoulder_twist_joint: 0.0
   lf_elbow_joint: 0.0
-  lf_wrist_joint: 0.0
   rf_shoulder_swing_joint: 0.0
   rf_shoulder_abduct_joint: 0.0
   rf_shoulder_twist_joint: 0.0
   rf_elbow_joint: 0.0
-  rf_wrist_joint: 0.0
   tail1_yaw_joint: 0.0
   tail1_pitch_joint: 0.0
   tail2_yaw_joint: 0.0
@@ -67,12 +61,10 @@ default_joint_pos:
   rl_hip_abduct_joint: 0.0
   rl_hip_twist_joint: 0.0
   rl_knee_joint: 0.0
-  rl_ankle_joint: 0.0
   rr_hip_swing_joint: 0.0
   rr_hip_abduct_joint: 0.0
   rr_hip_twist_joint: 0.0
   rr_knee_joint: 0.0
-  rr_ankle_joint: 0.0
 actuators:
   legs:
     joint_patterns:
@@ -161,33 +153,6 @@ actuators:
       rr_hip_twist_joint: 10.0
       rr_knee_joint: 10.0
     armature: 0.0
-  feet:
-    joint_patterns:
-    - lf_wrist_joint
-    - rf_wrist_joint
-    - rl_ankle_joint
-    - rr_ankle_joint
-    stiffness:
-      lf_wrist_joint: 12.194502945185873
-      rf_wrist_joint: 12.194624415267306
-      rl_ankle_joint: 12.194500111664386
-      rr_ankle_joint: 12.194621581717595
-    damping:
-      lf_wrist_joint: 0.6593089440051423
-      rf_wrist_joint: 0.6593130889879237
-      rl_ankle_joint: 0.6593458670300771
-      rr_ankle_joint: 0.6593500121483227
-    effort_limit:
-      lf_wrist_joint: 70.0
-      rf_wrist_joint: 70.0
-      rl_ankle_joint: 70.0
-      rr_ankle_joint: 70.0
-    velocity_limit:
-      lf_wrist_joint: 6.0
-      rf_wrist_joint: 6.0
-      rl_ankle_joint: 6.0
-      rr_ankle_joint: 6.0
-    armature: 0.0
   spine:
     joint_patterns:
     - chest_yaw_joint
@@ -251,22 +216,18 @@ action:
     lf_shoulder_abduct_joint: 0.19999999999999998
     lf_shoulder_twist_joint: 0.17453292519943295
     lf_elbow_joint: 0.39999999999999997
-    lf_wrist_joint: 0.17453292533333334
     rf_shoulder_swing_joint: 0.19999999999999998
     rf_shoulder_abduct_joint: 0.19999999999999998
     rf_shoulder_twist_joint: 0.17453292519943295
     rf_elbow_joint: 0.39999999999999997
-    rf_wrist_joint: 0.17453292533333334
     rl_hip_swing_joint: 0.19999999999999998
     rl_hip_abduct_joint: 0.19999999999999998
     rl_hip_twist_joint: 0.17453292519943295
     rl_knee_joint: 0.39999999999999997
-    rl_ankle_joint: 0.17453292533333334
     rr_hip_swing_joint: 0.19999999999999998
     rr_hip_abduct_joint: 0.19999999999999998
     rr_hip_twist_joint: 0.17453292519943295
     rr_knee_joint: 0.39999999999999997
-    rr_ankle_joint: 0.17453292533333334
   spine_scale:
     chest_yaw_joint: 0.19999999999999998
     chest_pitch_joint: 0.16666666666666666
@@ -285,22 +246,18 @@ action:
     - lf_shoulder_abduct_joint
     - lf_shoulder_twist_joint
     - lf_elbow_joint
-    - lf_wrist_joint
     - rf_shoulder_swing_joint
     - rf_shoulder_abduct_joint
     - rf_shoulder_twist_joint
     - rf_elbow_joint
-    - rf_wrist_joint
     - rl_hip_swing_joint
     - rl_hip_abduct_joint
     - rl_hip_twist_joint
     - rl_knee_joint
-    - rl_ankle_joint
     - rr_hip_swing_joint
     - rr_hip_abduct_joint
     - rr_hip_twist_joint
     - rr_knee_joint
-    - rr_ankle_joint
     spine:
     - chest_yaw_joint
     - chest_pitch_joint
@@ -324,11 +281,8 @@ action:
       - -0.5235987755982988
       - 0.5235987755982988
       lf_elbow_joint:
-      - -1.2
-      - 1.2
-      lf_wrist_joint:
-      - -0.523598776
-      - 0.523598776
+      - -1.0
+      - 1.0
       rf_shoulder_swing_joint:
       - -0.6
       - 0.6
@@ -339,11 +293,8 @@ action:
       - -0.5235987755982988
       - 0.5235987755982988
       rf_elbow_joint:
-      - -1.2
-      - 1.2
-      rf_wrist_joint:
-      - -0.523598776
-      - 0.523598776
+      - -1.0
+      - 1.0
       rl_hip_swing_joint:
       - -0.6
       - 0.6
@@ -356,9 +307,6 @@ action:
       rl_knee_joint:
       - -1.2
       - 1.2
-      rl_ankle_joint:
-      - -0.523598776
-      - 0.523598776
       rr_hip_swing_joint:
       - -0.6
       - 0.6
@@ -371,9 +319,6 @@ action:
       rr_knee_joint:
       - -1.2
       - 1.2
-      rr_ankle_joint:
-      - -0.523598776
-      - 0.523598776
     spine:
       chest_yaw_joint:
       - -0.6
@@ -435,8 +380,8 @@ commands:
   - 0.0
   - 0.0
   ang_vel_z:
-  - 0.0
-  - 0.0
+  - -0.5
+  - 0.5
   heading_command: false
   rel_standing_envs: 0.0
 rewards:
@@ -445,14 +390,23 @@ rewards:
   lin_vel_z_l2: -2.0
   action_rate_l2: -0.01
   dof_torques_l2: -1.0e-05
-  undesired_contacts: -1.0
+  undesired_contacts: 0.0
   belly_contact_force: -0.5
 terminations:
   terms:
   - base_contact
-  - head_contact
+  - head_ground_contact
   base_contact_threshold: 1.0
+  belly_contact_body_names:
+  - base_link
+  - chest_pitch
   head_contact_threshold: 1.0
+  head_ground_contact:
+    sensor_name: head_ground_contact
+    head_body_name: neck_pitch
+    floor_prim_path: /World/ground/terrain/GroundPlane/CollisionPlane
+    threshold: 1.0
+    dwell_s: 0.5
 params:
   belly_force_scale: 706.0
   miki_sigma_sq: 0.25

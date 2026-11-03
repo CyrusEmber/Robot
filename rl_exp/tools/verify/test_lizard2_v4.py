@@ -105,9 +105,15 @@ def test_default_geometry_reader_binds_current_body_and_per_joint_gains():
     from rl_exp.tools.verify import check_leg_reachability as geometry
 
     urdf, naming, _ = geometry.diagnostic_urdf(None, None, None)
-    assert urdf == (REPO/'rl_exp/lizard2_palm_spatial/lizard2_palm_spatial.urdf').resolve()
+    from rl_exp.tasks import obs_protocol
+
+    current = obs_protocol.usd_path_for_route('lizard2/main', None)
+    assert urdf == obs_protocol.resolve_body(current, 'lizard2')['urdf']
     assert geometry._naming_id(naming) == 'palm_spatial'
-    joints = geometry.chain_joint_names(urdf, 'lf', naming)
+    chain = geometry.chain_joint_names(urdf, 'lf', naming)
+    import xml.etree.ElementTree as ET
+    active = {j.get('name') for j in ET.parse(urdf).findall('joint') if j.get('type') != 'fixed'}
+    joints = tuple(j for j in chain if j in active)
     gains = geometry.gain_table(REPO/'rl_exp', 'lizard2', joints)
     assert gains['lf_elbow_joint']['kp'] == 220.
     assert set(gains) == set(joints)

@@ -514,8 +514,12 @@ def load_diagnostic_target(path, cfg, task, *, naming_override=None, usd_overrid
     for leg in names.LEGS:
         end = names.end_link(leg, naming)
         parent_joint = names.joint_name(leg, names.roots_of(naming, leg)[-1])
-        if end not in links or end not in by_child or by_child[end].get("name") != parent_joint:
-            raise ProtocolError(f"{body['urdf']}: {end} must be child of {parent_joint}")
+        mount = by_child.get(end)
+        fixed_end = (names.naming_id(naming) == "palm_spatial" and mount is not None
+                     and mount.get("type") == "fixed"
+                     and mount.get("name") == f"{end}_fixed")
+        if end not in links or mount is None or (mount.get("name") != parent_joint and not fixed_end):
+            raise ProtocolError(f"{body['urdf']}: {end} must be child of {parent_joint} or its fixed mount")
         cursor, chain = end, []
         while cursor in by_child:
             if cursor in chain:
@@ -526,6 +530,10 @@ def load_diagnostic_target(path, cfg, task, *, naming_override=None, usd_overrid
             joint = names.joint_name(leg, root)
             if joint not in joints and names.naming_id(naming) == "shared" and root == "hip":
                 continue  # legacy lizard has no root swing joint
+            if fixed_end and root == names.roots_of(naming, leg)[-1]:
+                if names.link_name(leg, root) not in chain or joint in joints:
+                    raise ProtocolError(f"{body['urdf']}: invalid fixed terminal role {leg}/{root}")
+                continue
             if joint not in joints or names.link_name(leg, root) not in chain:
                 raise ProtocolError(f"{body['urdf']}: missing/disconnected role {leg}/{root}")
     if document is None:
@@ -657,9 +665,21 @@ def load_diagnostic_target(path, cfg, task, *, naming_override=None, usd_overrid
             if not set(term.joint_names) <= set(joints):
                 raise ProtocolError(f"{path}: {dotted} names absent joints")
         draft.scene.robot.spawn.usd_path = str(body["usd"])
-        cfg.__dict__.update(draft.__dict__)
         binding["joint_order"] = list(order)
         binding["runtime_joint_order"] = document.get("runtime_joint_order")
+    else:
+        draft = cfg
+    if names.naming_id(naming) == "palm_spatial":
+        positions = draft.scene.robot.init_state.joint_pos
+        for leg in names.LEGS:
+            end = names.end_link(leg, naming)
+            parent_joint = names.joint_name(leg, names.roots_of(naming, leg)[-1])
+            fixed_end = by_child[end].get("type") == "fixed"
+            configured = any(re.fullmatch(pattern, parent_joint) for pattern in positions)
+            if configured == fixed_end:
+                raise ProtocolError(f"{body['urdf']}: {end} fixed mount disagrees with configured joint state")
+    if document is not None:
+        cfg.__dict__.update(draft.__dict__)
     print(f"DIAGNOSTIC_TARGET task={task} target={binding['target']} urdf={binding['urdf']} source={binding['source']} naming={names.naming_id(naming)}")
     return binding
 
@@ -833,6 +853,62 @@ def diagnostic_target_self_check() -> None:
                     count += 1
                 else:
                     raise AssertionError("incomplete sensor accepted")
+            spatial_usd, spatial_urdf, spatial_joints = body("palm_spatial")
+            manifest = base / "spatial.json"
+            binding = names.binding_for_target(str(spatial_usd), str(manifest),
+                                               names.naming_for("palm_spatial"), joint_names=spatial_joints)
+            binding.update(task="fixture", urdf=str(spatial_urdf))
+            document = {"target_binding": binding, "joint_order": spatial_joints,
+                        "config": {"actions.legs.joint_names": spatial_joints,
+                                   "scene.robot.init_state.joint_pos": {".*_joint": 0.0}}}
+            manifest.write_text(json.dumps(document), encoding="utf-8")
+            target_cfg = copy.deepcopy(cfg)
+            load_diagnostic_target(manifest, target_cfg, "fixture")
+            assert target_cfg.scene.robot.init_state.joint_pos == {".*_joint": 0.0}
+            remapped_cfg = copy.deepcopy(cfg)
+            fixed_cfg = copy.deepcopy(cfg)
+            for leg in names.LEGS:
+                fixed_cfg.scene.robot.init_state.joint_pos[names.joint_name(
+                    leg, names.roots_of(names.naming_for("palm_spatial"), leg)[-1])] = 0.0
+            remapped_cfg.scene.robot.init_state.joint_pos = {".*_foot_joint": 0.0}
+            remapped = copy.deepcopy(document)
+            del remapped["config"]["scene.robot.init_state.joint_pos"]
+            manifest.write_text(json.dumps(remapped), encoding="utf-8")
+            load_diagnostic_target(manifest, remapped_cfg, "fixture")
+            assert all(names.joint_name(leg, names.roots_of(names.naming_for("palm_spatial"), leg)[-1])
+                       in remapped_cfg.scene.robot.init_state.joint_pos for leg in names.LEGS)
+            bad = copy.deepcopy(document)
+            bad["config"]["scene.robot.init_state.joint_pos"] = {".*_elbow_joint": 0.0}
+            manifest.write_text(json.dumps(bad), encoding="utf-8")
+            try:
+                load_diagnostic_target(manifest, fixed_cfg, "fixture")
+            except ProtocolError as exc:
+                assert "fixed mount disagrees" in str(exc)
+            else:
+                raise AssertionError("movable mount missing from final joint state accepted")
+            assert fixed_cfg.scene.robot.spawn.usd_path == str(original_usd)
+            tree = ET.parse(spatial_urdf)
+            for joint in tree.getroot().findall("joint"):
+                child = joint.find("child").get("link")
+                if child in names.contact_body_names(names.naming_for("palm_spatial")):
+                    joint.set("name", child + "_fixed")
+                    joint.set("type", "fixed")
+            tree.write(spatial_urdf, encoding="unicode")
+            fixed_joints = [j.get("name") for j in tree.getroot().findall("joint") if j.get("type") != "fixed"]
+            document["target_binding"]["joint_names"] = fixed_joints
+            document["joint_order"] = fixed_joints
+            document["config"]["actions.legs.joint_names"] = fixed_joints
+            document["config"]["scene.robot.init_state.joint_pos"] = {".*_elbow_joint": 0.0}
+            manifest.write_text(json.dumps(document), encoding="utf-8")
+            load_diagnostic_target(manifest, copy.deepcopy(cfg), "fixture")
+            document["config"]["scene.robot.init_state.joint_pos"] = {".*_joint": 0.0}
+            manifest.write_text(json.dumps(document), encoding="utf-8")
+            try:
+                load_diagnostic_target(manifest, copy.deepcopy(cfg), "fixture")
+            except ProtocolError as exc:
+                assert "fixed mount disagrees" in str(exc)
+            else:
+                raise AssertionError("fixed mount selected by final joint state accepted")
             for options in ({"usd_override": str(base / "wrong.usda")}, {"naming_override": "split"}):
                 try:
                     load_diagnostic_target(None, copy.deepcopy(cfg), "fixture", **options)

@@ -148,6 +148,40 @@
         "rf_wrist"
       ],
       "reason": "Formal v4 exact-byte audited palm asset relocation; actual registered 30-action/102-observation construction, no diagnostic override"
+    },
+    "lizard2_round_feet/lizard2_round_feet.usda": {
+      "measured_at": "2026-11-03",
+      "measured_on": "Lizard2-Flat-Play-v7",
+      "body_count": 31,
+      "joint_order": [
+        "chest_yaw",
+        "tail1_yaw",
+        "rl_hip_swing",
+        "rr_hip_swing",
+        "chest_pitch",
+        "tail1_pitch",
+        "rl_hip_abduct",
+        "rr_hip_abduct",
+        "neck_yaw",
+        "lf_shoulder_swing",
+        "rf_shoulder_swing",
+        "tail2_yaw",
+        "rl_hip_twist",
+        "rr_hip_twist",
+        "neck_pitch",
+        "lf_shoulder_abduct",
+        "rf_shoulder_abduct",
+        "tail2_pitch",
+        "rl_knee",
+        "rr_knee",
+        "lf_shoulder_twist",
+        "rf_shoulder_twist",
+        "tail3_yaw",
+        "lf_elbow",
+        "rf_elbow",
+        "tail3_pitch"
+      ],
+      "reason": "Measure exact v7 fixed round-foot order after run05 nonzero interface and reset checks"
     }
   }
 }

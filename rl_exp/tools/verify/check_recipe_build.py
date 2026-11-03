@@ -66,7 +66,7 @@ DIFF_NAME = "diff.json"
 """The difference declaration's filename inside a recipe's version directory (``ARCH_PLAN`` 2.4 B4)."""
 
 EXPECTED_COMPARED: dict[str, int] = {
-    "lizard2/main": 12,
+    "lizard2/main": 14,
 }
 """How many recipe/task pairs this gate compares, per line, pinned.
 
@@ -110,6 +110,7 @@ EXPECTED_DIFFS: dict[tuple[str, str], int] = {
     ("lizard2/main", "v4"): 66,
     ("lizard2/main", "v5"): 6,
     ("lizard2/main", "v6"): 4,
+    ("lizard2/main", "v7"): 6,
 }
 """Recipe -> how many paths its difference declaration lists (``diff.json`` next to the recipe)."""
 
@@ -513,11 +514,15 @@ def _dev_contact_selection_errors(cfg) -> list[str]:
 
 
 def _check_dev_contact_selection() -> list[str]:
-    """Keep the real empty-channel regression and reject lost or broadened selection."""
+    """Keep the v4 empty-channel regression against its frozen contact-enabled recipe.
+
+    Dev YAML follows the adopted version; v5+ deliberately disable this reward.
+    The selectors and falsifiers here belong to v4, not every later dev recipe.
+    """
     problems = []
     for play in (False, True):
         cls = recipe.recipe_class("v4", play=play, line="lizard2/main", name="DevContactCheckCfg")
-        cfg = cls(params_version=None)
+        cfg = cls()
         problems.extend(_dev_contact_selection_errors(cfg))
         selection = cfg.rewards.undesired_contacts.params["sensor_cfg"]
         saved = selection.body_names

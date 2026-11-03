@@ -19,6 +19,8 @@ import subprocess
 import sys
 import tempfile
 import types
+from contextlib import ExitStack, contextmanager
+from unittest.mock import patch
 
 sys.path.insert(0, ".")
 sys.path.insert(0, "rl_exp/tools/verify")
@@ -34,6 +36,39 @@ from test_lifecycle_gate import active_index  # noqa: E402
 
 PROBLEMS: list[str] = []
 TASK = "Lizard2-Flat-v4"
+
+
+@contextmanager
+def isolated_assets(root: pathlib.Path):
+    """Supply synthetic v4 assets, not a restored production lock or v7 runtime claim.
+
+    Keep the historical 30-joint cfg / 102-wide stub paired. Read real fixture bytes
+    through asset_digest; only its repository and line discovery are redirected.
+    Rebuild tests reuse this tree for real lock existence and origin checks.
+    """
+    from rl_exp.tools.verify import recipe_lines
+
+    repo = root / "asset_fixture"
+    line_root = repo / "rl_exp" / "versions" / "lizard2" / "main"
+    lock_path = line_root / "v4" / "asset_lock.json"
+    lock_path.parent.mkdir(parents=True)
+    asset = repo / "rl_exp" / "synthetic_asset.txt"
+    asset.write_text("offline recorder fixture, not a robot asset\n", encoding="utf-8")
+    lock_path.write_text(
+        json.dumps({"files": {"synthetic_asset.txt": prov.sha256_file(asset)}}), encoding="utf-8"
+    )
+    read = M.asset_digest
+
+    def snapshot(params_version, line_key=None):
+        if (params_version, line_key) != ("v4", "lizard2/main"):
+            raise AssertionError(f"unexpected fixture asset identity: {params_version!r}, {line_key!r}")
+        with patch.object(M, "_REPO", repo), patch.object(
+            recipe_lines, "discover", return_value={line_key: types.SimpleNamespace(root=line_root)}
+        ):
+            return read(params_version, line_key)
+
+    with patch.object(M, "asset_digest", side_effect=snapshot):
+        yield repo
 
 
 def _begin(**kwargs):
@@ -209,7 +244,9 @@ def main() -> int:
     root = pathlib.Path(tempfile.mkdtemp(prefix="runrecord_"))
     real_sources = prov.code_sources
     prov.code_sources = _clean_sources
+    assets = ExitStack()
     try:
+        assets.enter_context(isolated_assets(root))
         run_dir = root / "2026-09-15_14-00-00_v4"
         ctx, env, runner = _record(run_dir)
 
@@ -411,8 +448,19 @@ def main() -> int:
             f"{[r for r in stale_rows if r['level'] == '可重建']}",
         )
         shutil.rmtree(stale)
-        bad = _tamper(run_dir, lambda d: d["declaration"]["assets"].__setitem__("manifest_sha256", "0" * 64))
-        check("negative/assets-changed", M.main(["--verify", str(bad)]) == 1, "asset drift not reported")
+        bad = _tamper(
+            run_dir,
+            lambda d: d["declaration"]["assets"].__setitem__("manifest_sha256", "0" * 64),
+            refresh_t1=True,
+        )
+        asset_rows, asset_problems = M.verify(bad)
+        check(
+            "negative/assets-changed",
+            M.main(["--verify", str(bad)]) == 1
+            and _detail_result(asset_rows, "assets:") == "失败"
+            and "assets: content differs from the recorded lock" in asset_problems,
+            f"{asset_problems}",
+        )
         shutil.rmtree(bad)
 
         bad = _tamper(
@@ -628,6 +676,7 @@ def main() -> int:
         )
 
     finally:
+        assets.close()
         prov.code_sources = real_sources
         shutil.rmtree(root, ignore_errors=True)
 

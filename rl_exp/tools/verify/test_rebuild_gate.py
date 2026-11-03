@@ -16,6 +16,8 @@ import pathlib
 import shutil
 import sys
 import tempfile
+from contextlib import ExitStack
+from unittest.mock import patch
 
 sys.path.insert(0, ".")
 sys.path.insert(0, "rl_exp/tools/verify")
@@ -25,7 +27,7 @@ import torch  # noqa: E402
 from rl_exp.tools.runrecord import manifest as M  # noqa: E402
 from rl_exp.tools.runrecord import provenance as prov  # noqa: E402
 from rl_exp.tools.runrecord import rebuild as R  # noqa: E402
-from test_run_manifest import _record  # noqa: E402
+from test_run_manifest import _record, isolated_assets  # noqa: E402
 
 # This gate exists to record dirty/untracked runs, so its synthetic runs have to be allowed
 # to start from one -- the launch guard in run_manifest.begin is opted out here deliberately,
@@ -95,7 +97,10 @@ def main() -> int:
     real_sources, real_git, real_tree_root = prov.code_sources, prov.git, R._tree_root
     trees = _fake_trees(root)
     R._tree_root = lambda name: trees[name]
+    assets = ExitStack()
     try:
+        asset_repo = assets.enter_context(isolated_assets(root))
+        assets.enter_context(patch.object(R, "_REPO", asset_repo))
         # 1. a dirty diff that has drifted: the recorded content is gone for good
         prov.code_sources = lambda: _sources("OLD DIFF")
         prov.git = _fake_git("DIFFERENT DIFF")
@@ -172,7 +177,7 @@ def main() -> int:
         dest = root / "dest_untracked"
         ckpt = _real_ckpt(run)
         record, _ = R.capture(run, dest, archive)
-        deps = [pathlib.Path(R.__file__).resolve().parents[3], prov.isaac_root()]
+        deps = [pathlib.Path(R.__file__).resolve().parents[3], prov.isaac_root(), asset_repo]
         gone = root / "not_a_source_path"
         rows, problems = R.check(dest, root / "rebuild_root", deps, [gone])
         check("check/exit-code", R._exit_code(rows, problems) == 0, f"{[(r['result'], r['detail'][:60]) for r in rows if r['required']]}")
@@ -234,7 +239,7 @@ def main() -> int:
             any("isaaclab" in r["detail"] and r["result"] == "失败" for r in rows),
             "declaring the framework rebuilt as well must assert where it came from",
         )
-        rows, _ = R.check(dest, root / "rebuild_root", deps, originals=[deps[0]])
+        rows, _ = R.check(dest, root / "rebuild_root", deps, originals=[asset_repo])
         check(
             "check/asset-lock-fallback-fails",
             any(r["result"] == "失败" and "the lock resolves back into the original tree" in r["detail"] for r in rows),
@@ -311,6 +316,7 @@ def main() -> int:
             f"{[(r['result'], r['detail'][:50]) for r in rows]}",
         )
     finally:
+        assets.close()
         prov.code_sources, prov.git, R._tree_root = real_sources, real_git, real_tree_root
         shutil.rmtree(root, ignore_errors=True)
 

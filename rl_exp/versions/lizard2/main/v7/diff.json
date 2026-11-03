@@ -1,0 +1,50 @@
+{
+  "format": 4,
+  "recipe": "lizard2-flat-v7@1",
+  "line": "lizard2/main",
+  "note": "Hard B, lineage reading: base.json names v6 as this recipe's mother, so the declared difference is against that recipe -- not against the framework stock cfg, which would bury this version's own delta inside everything its ancestors already wrote. Env paths are grouped by the element that last moved them in the replay, so the paths here cannot disagree with the build; params_version is filtered as identity, because it says which recipe this is and it is what makes the two recipes different at all.",
+  "env": {
+    "allowed": {
+      "lizard2_robot": {
+        "paths": [
+          "scene.robot.spawn"
+        ],
+        "why": "Adopt byte-identical export04 principal-axes-repaired USD and its fixed round-foot geometry instead of palm geometry."
+      },
+      "lizard2_palm_interface+lizard2_robot": {
+        "paths": [
+          "scene.robot.actuators",
+          "scene.robot.init_state"
+        ],
+        "why": "Remove four fixed terminal joints from initial state and remove feet PD actuator; retain legs/spine gains and all other v6.1 initialization."
+      },
+      "lizard2_palm_interface": {
+        "paths": [
+          "actions.joint_pos_legs.clip"
+        ],
+        "why": "Tighten both front elbow clips from +/-1.2 to +/-1.0 rad to respect new URDF limits; retain v6.1 scale."
+      },
+      "lizard2_actions+lizard2_palm_interface": {
+        "paths": [
+          "actions.joint_pos_legs"
+        ],
+        "why": "Remove four fixed terminal joints from leg action order, scales and clips; retain 16 leg plus 10 spine position actions."
+      }
+    }
+  },
+  "agent": {
+    "why": "The agent is a class, not a declaration: these entries carry a reason and no element name.",
+    "allowed": {
+      "experiment_name": "Separate v7 training log identity; all other v6 runner settings retained."
+    }
+  },
+  "authored_against": {
+    "env": {
+      "lizard2_actions+lizard2_palm_interface": "eca5bbb3799b",
+      "lizard2_palm_interface": "a4280f5c2877",
+      "lizard2_palm_interface+lizard2_robot": "f8f8ceb2455b",
+      "lizard2_robot": "7e2869406606"
+    },
+    "agent": "e18cc6cf936c"
+  }
+}

@@ -258,7 +258,8 @@ def check_task(task_id: str, problems: list[str], warnings: list[str],
     spec = gym.spec(task_id)
     cfg = spec.kwargs["env_cfg_entry_point"]
     module_name, _, cls_name = cfg.partition(":")
-    env_cfg = getattr(__import__(module_name, fromlist=[cls_name]), cls_name)()
+    from isaaclab_tasks.utils.hydra import resolve_presets
+    env_cfg = resolve_presets(getattr(__import__(module_name, fromlist=[cls_name]), cls_name)())
     env_cfg.scene.num_envs = args_cli.envs
     binding = obs_protocol.load_diagnostic_target(
         args_cli.target_config, env_cfg, task_id, naming_override=args_cli.naming)

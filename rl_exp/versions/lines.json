@@ -42,6 +42,21 @@
           "status": "retired",
           "retired_at": "2026-10-23",
           "reason": "Formal palm-spatial configuration main/v4 replaces the old body; keep historical run identity, no new train/resume or relock. See acceptance/records/2026-10-23-lizard2-v4-configuration.md."
+        },
+        "v4": {
+          "status": "retired",
+          "retired_at": "2026-11-03",
+          "reason": "Owner adopted fixed round feet in main/v7; old palm body exits maintenance and reproduction, no new train/resume or relock. See acceptance/records/2026-11-03-lizard2-v7-round-feet.md."
+        },
+        "v5": {
+          "status": "retired",
+          "retired_at": "2026-11-03",
+          "reason": "Owner adopted fixed round feet in main/v7; old palm body exits maintenance and reproduction, no new train/resume or relock. See acceptance/records/2026-11-03-lizard2-v7-round-feet.md."
+        },
+        "v6": {
+          "status": "retired",
+          "retired_at": "2026-11-03",
+          "reason": "Owner adopted fixed round feet in main/v7; old palm body exits maintenance and reproduction, no new train/resume or relock. See acceptance/records/2026-11-03-lizard2-v7-round-feet.md."
         }
       }
     }

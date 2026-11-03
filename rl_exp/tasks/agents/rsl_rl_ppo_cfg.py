@@ -109,3 +109,10 @@ class Lizard2V6PPORunnerCfg(Lizard2V5PPORunnerCfg):
     """Immediate belly-contact reset; retain v5 policy and PPO settings."""
 
     experiment_name = "lizard2_v6"
+
+
+@configclass
+class Lizard2V7PPORunnerCfg(Lizard2V6PPORunnerCfg):
+    """Fixed spherical feet with 26 actions; retain v6 PPO settings."""
+
+    experiment_name = "lizard2_v7"
