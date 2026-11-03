@@ -15,7 +15,7 @@ lizard2 = lizard 的四足构型修正版。当前 main/v7 接入固定圆足机
 
 ## 设计入口
 
-当前 main/v7 配置与独立任务已建立，方案入口见 [PLAN.md](PLAN.md)，正文唯一归 [main/v7/PLAN.md](main/v7/PLAN.md)。采用与检查边界取 `acceptance/records/2026-11-03-lizard2-v7-round-feet.md`。旧 main/v6 修订锚 `lizard2-main-v6.1` 与原 `lizard2-main-v6` 保留原快照；旧版训练历史与标签保持原身份。
+当前 main/v7 冻结候选采用标签 `lizard2-main-v7`，方案入口见 [PLAN.md](PLAN.md)，正文唯一归 [main/v7/PLAN.md](main/v7/PLAN.md)。资产、接口和golden证据取对应记录；实际提交与冻结身份取 `acceptance/records/2026-11-03-lizard2-v7-freeze.md`。旧 main/v6 修订锚 `lizard2-main-v6.1` 与原 `lizard2-main-v6` 保留原快照；旧版训练历史与标签保持原身份。
 
 ## 线
 

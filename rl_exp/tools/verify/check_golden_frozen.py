@@ -155,7 +155,7 @@ FROZEN_REVS: dict[str, str] = {
     # ("declare the v3 budget at 6000"), and this line names that revision.
     # The 2026-10-10 re-baseline (the rsl_rl identity moved the combination key) took the same two
     # steps: the new bytes landed in cb6eb27.
-    "rl_exp/versions/lizard2/main/cfg_lock.json": "uncommitted-v7:f82affdc627aa82b",
+    "rl_exp/versions/lizard2/main/cfg_lock.json": "900fd8c054f6aaad7bdbb3a8f0902072043a3165",
 }
 """Which revision each frozen file's bytes are from, for the banner only.
 
