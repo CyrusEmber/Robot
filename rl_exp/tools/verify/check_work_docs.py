@@ -238,7 +238,10 @@ LIST_BYTES = 6144
 #: Raised 180000 -> 200000 on 2026-10-29 at the user's explicit request, to open the foot-plate
 #: necessity item without trimming unfinished work (active total was 179914 before it). No merge or
 #: shave accompanied this raise, against the note above; the alarm is weaker for it.
-BUDGET_BYTES = 200000
+#: Raised 200000 -> 250000 on 2026-11-03 at the user's explicit request, to carry the revised
+#: training-provenance-dependency-scope item (active total was 193754 before it settled) without
+#: trimming unfinished work. No merge or shave accompanied this raise either.
+BUDGET_BYTES = 250000
 
 _SHA = re.compile(r"\bsha256:[0-9a-fA-F]{8,}")
 #: A prose reference to a ledger file, spelled the way a document writes it. Placeholders
