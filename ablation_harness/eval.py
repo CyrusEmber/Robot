@@ -12,7 +12,7 @@ plus one row into the protocol's summary.csv.
 
 Usage (from E:\\IsaacLab):
     python ablation_harness\\eval.py --task Lizard2-Flat-v3 --checkpoint <model.pt> ^
-        --protocol locomotion_eval_v3 --mode nominal --seed 123
+        --protocol locomotion_eval_v3 --mode robust --seed 123
 """
 
 from __future__ import annotations
