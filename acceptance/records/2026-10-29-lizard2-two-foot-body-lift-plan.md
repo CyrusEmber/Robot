@@ -70,10 +70,97 @@
 
 ## 结果
 
-本轮仅完成方案记录和脚手架 work 的建立，尚未实现夹具或扩展采集，尚未执行上述测试。所有动作、脚板稳定、双足独立承重与余量结论均待测；本记录不表示独立审核完成。
+原建项时仅完成方案记录和脚手架；下述旧机体后续结果及圆足修订按各自身份解释，不能继续把建项时的“尚未实现”当作当前全局状态。
+
+### 2026-10-30 修订：圆足两组对角受控静态承重
+
+用户要求做“两只腿能不能支撑身体”的实验，先检索复用已有事项，并明确“先更新再来”；经范围确认，选择先做受控承重，不直接做自由机身双足平衡。本次仅更新事项与方案，不改实现、不运行仿真、不训练，延续当前不提交的边界。
+
+**当前输入与范围**：采用圆足事项 `work/active/lizard2-round-feet.md` 最新记录绑定的 `rl_exp/out/lizard2_round_feet/export03/lizard2_round_feet/lizard2_round_feet_repaired02.usda` 与对应 URDF、candidate、修正审计；26 个机器人活动轴、四个固定圆足体。球半径 0.08 m、每足 1.0861 kg 及实心球惯量仍为已授权诊断假设。其来源和实际接口检查见 `acceptance/records/2026-10-30-lizard2-round-feet-plan-review.md`，不将旧 v6/双轴或原失败 USD 混作当前输入。若夹具另增一个竖直被动关节，机器人仍为 26 轴，夹具轴不加入策略动作。
+
+本轮仅准备左前＋右后、右前＋左后两个独立静态承重工况，不包含抬高、回落、踮脚、增益扫描、训练或旧双机体对照矩阵。需要四足基线时仅为初始化/测量诊断，单列目的和预算。导向约束仅释放机身竖直平移，不设高度驱动；它提供横向与转动帮助，可能减轻关节负担，因此即使通过，也只能写“该导向工况下指定双足承担机体重量”，不能写自由平衡、自然步态或实物能力通过。
+
+**旧证据复用边界**：`2026-10-29-lizard2-preload-offset-control.md` 已记录旧正式 v6 掌部机体、左前＋右后、竖直导向及手工预偏置下的 2 s 保持和 0.02/0.05 m 完整升降；这纠正了事项仍只描述早期早停的滞后状态，但不是圆足或另一组对角通过。旧导向、子步采集、配对绑定和复读可按受影响切片复用；旧目标偏置、平掌法线、根高、非支撑足净空及成功读数不直接移植。旧缺证矩阵、恢复和自由基座交接保留在活跃事项，不因缩小本轮范围而取消。
+
+**实施前必须完成的最小准备**：
+
+1. 用共享 FK/IK 为球面最低点贴地重新求两组静态姿态，报告关节余量、球心位置和其余足/尾/胸腹/头实际几何净空。候选自碰撞保持关闭，内部相交记模型限制，不重启旧脚板碰撞修形；地面碰撞、限位及外部净空必须核。静态节点检查不冒称连续切换路径验证，本轮可分别初始化两组工况，不要求手工从四足移重成功。
+2. 从已修正圆足 USD 新建隔离导向装配，保留全部机器人质量惯量，复核夹具无竖直驱动/托举及其反力读回。单刚体旧导向自由落体正反例不单独证明新机器人装配无帮助；结合新装配约束、反力和载荷核对验证，不搭建与本次无关的新夹具项目。
+3. 复用逐物理子步具名地面接触配对，覆盖指定足及所有潜在其它承重点，保存同帧地面力而非历史峰值；同时记录根/胸腹/全身质心位置与速度、足心及姿态、关节目标/实际/速度、导向完整反力和力矩。读取当前足—地材料与接触偏移，不能以视觉颜色代替物理材料。实际驱动力矩若无可信通道，只将饱和、余量和电机不足标未知，不把完整力矩遥测建设作为静态承重判定的无关前置。
+4. 将沉降与保持窗、静态速度/高度稳定和载荷判据、非指定部位承重/净空、导向竖直帮助容差、限位/速度/下沉/非有限停止线、每例次数及总墙钟预算落入隔离配置后集中确认。本记录上文旧 13 s 升降时序、12 例矩阵及旧数值均不是圆足已批准协议；原脚本默认停止线也不自动套用。缺输入不运行，不从结果倒推阈值。
+5. reset 后核真实初始化并处理/下发当前工况目标，再推进物理；接口检查已证明本 fork reset 后旧 backend target 可以残留，不能只看 action 缓冲清零。采样阶段禁止写根/关节状态、自动 reset 或任何竖直高度驱动；失败帧先保存再停止。两组独立判定，一组物理失败不自动取消另一组；共用前提失败时说明依赖未执行。初轮保持既有驱动，不自动加增益、限矩或套用旧预偏置；必要目标偏置另列为诊断对照，经依据与预算确认再做。
+
+**判词与后续**：只有稳定窗口内指定两足持续承担近体重载荷、其它部位无承重且有净空、导向没有可见竖直托举，才能按明确容差判本工况承重；载荷差同时结合质心加速度解释，不能以两足力和单独证明夹具无帮助。失败分别检查下沉、目标/姿态、额外接触、限位和测量，不直接归因电机不足；缺测则未判。自由双足平衡交 `lizard2-learned-gait`，抬身/恢复等历史未完动作仍由本项维护，恢复须另定范围；此修订不是关闭审核。
+
+本次只读核对已有 `lift_guide_calibration.py` 和 `lift_guided_trial.py`：前者是单刚体校验，不是机器人装配证明；后者仍绑定旧升降 IK/预查和 v6 配置，不能直接换 USD 后宣称适配圆足。具体代码改动、当前物理结果和资源消耗本次均不存在。工作账本格式检查另行执行，不把格式通过当能力验收。
+
+### 2026-10-30 执行切片：两组圆足静态几何与导向装配准备
+
+用户在解释“两组圆足姿态与导向适配”后确认继续，本阶段执行离线准备，不启动物理采样或受载试验，不训练、不提交。新增 `lizard2_round_support_geometry.py` 复用共享点目标 IK/FK，不给球足添加法线约束；只开放 16 个腿部关节，完整保存 26 轴目标，尾首 pitch 显式固定 0.3 rad。临时非支撑足间隙 0.10 m、关节预留 0.02 rad 与非足几何间隙 0.002 m 为离线准备输入/容差，不是已批准物理停止线。根高由零位球面最低点求得 0.603763 m，根姿态 identity xyzw；两组分别从初值求解，不要求连续移重路径。
+
+实际输出 `rl_exp/out/lizard2_round_support/prepare01/geometry.json`：两组指定球底均贴地，最大误差约 `5.33e-12 m`，非支撑球底间隙均为 0.100000 m；全部 visual/collision 网格与球体逐项变换核地面间隙、限位及质量加权质心。
+
+| 支撑工况 | 最小关节限位余量 rad | 最小非足几何地面间隙 m |
+|---|---:|---:|
+| 左前＋右后 | 0.0303452472 | 0.0799976790 |
+| 右前＋左后 | 0.116177493 | 0.0518490175 |
+
+左前＋右后最小余量仅约 0.0303 rad，距准备要求 0.02 rad 尚有余量，但不是宽裕工作区，加载后仍须按实际限位检查；不能只因 IK 通过就认受载安全或稳定。两组非对称来自独立求解，不将其当镜像等效或优劣结论。测试逐项复算原始报告，并破坏球心 XY/高度、visual/collision 非足净空、非支撑间隙及限位，均拒绝；首组注入求解异常时保留失败完整姿态并继续另一组。自碰撞关闭，内部相交、连续路径与实际接触均未验证。
+
+`lift_guide_asset.py` 新增可选 `--floating_source --carrier` 路径，旧固定根来源默认接口保留；不重转换或重算圆足惯量。新来源没有旧工具所需的 world-fixed joint，因此不能直接运行旧默认模式；采用既有正确载体结构：world fixed → 无碰撞固定载体 → 无驱动 Z prismatic → 原 base_link。输出 `prepare01/guide/round_guided.usda`，离线复核原始所有 prim 属性、metadata、关系与几何路径保持；机器人原 31 刚体、26 revolute、4 fixed 不变，另增载体 0.001 kg、world fixed 与一个被动导向轴。总计 32 刚体、26 revolute、1 prismatic、5 fixed；载体不计机器人质量或动作。导向轴无 linear/angular drive、无 authored friction，限位无界，局部约束框架为 identity；机器人质量读回约 72.000398714 kg。
+
+源自碰撞属性 true 原样保留；物理环境必须显式覆盖为本工况的 false 并读回，离线声明不冒充运行态过滤。装配仅证明新增约束声明和源属性保持，尚未验证加载后机身高度、导向反力或无竖直帮助。首次尝试 flatten 新增 material prototype 路径，被完整路径检查拒绝；失败副本 `round_guided_failed_flatten.usda`、`guide_failed_flatten.json` 保留不可用。有效输出改直接导出已自包含来源，外部依赖来源暂拒绝，不静默重写。
+
+| 产物（相对 `rl_exp/out/lizard2_round_support/prepare01/`） | SHA256 |
+|---|---|
+| `geometry.json` | `bd3b39a129a44728e900d04187537b061bf47edaef3879a51ad23c2972168b7a` |
+| `guide/round_guided.usda` | `a25427f0c0ab8389a4ef66bd30fed187bd8b30e90ce0425d488aac8a641ef012` |
+| `guide/guide.json` | `e2a1133638694187720f12c09a41348786ba6026065cb70703c82dc68af6d9d4` |
+
+持久复读入口（生成时须换全新输出路径；测试只读原报告并在内存/系统临时目录注入反例）：
+
+```bat
+E:\IsaacLab\env_isaaclab\Scripts\python.exe -B rl_exp\tools\diagnose\lizard2_round_support_geometry.py --out rl_exp\out\lizard2_round_support\prepare02\geometry.json
+E:\IsaacLab\env_isaaclab\Scripts\python.exe -B rl_exp\tools\diagnose\lift_guide_asset.py --usd rl_exp\out\lizard2_round_feet\export03\lizard2_round_feet\lizard2_round_feet_repaired02.usda --out rl_exp\out\lizard2_round_support\prepare02\guide\round_guided.usda --carrier --floating_source
+E:\IsaacLab\env_isaaclab\Scripts\python.exe -B rl_exp\tools\verify\test_lizard2_round_support_geometry.py
+E:\IsaacLab\env_isaaclab\Scripts\python.exe -B rl_exp\tools\diagnose\test_lift_guide_asset.py
+```
+
+导向测试五项覆盖旧路径兼容、新浮动来源、缺载体、已有世界关节/滑动轴拒绝，以及 drive/惯量/连接/限位破坏；旧代码不能接受新浮动来源，适配后实际产物及反例通过。本阶段只准备几何和资产，尚须补运行态导向标定、子步接触绑定、初始后端目标与测量读回；沉降/保持窗、载荷稳定阈值、停止线及资源预算仍待集中确认，未擅自启动承重实验或放宽限位。
+
+本阶段专项几何复读与破坏测试、导向五项测试通过；全仓离线套件未全绿：`test_baseline_contract.py:1259` 的四元数扫描因 Git 源码枚举为空而失败，1 项失败、15 项跳过。该处调用现有 `binding.git_run`，尚未定位为空的根因，不能宣称本轮全仓通过，也不为通过而放宽扫描；未修改该检查。此阻塞不抹去本轮专项证据。
+
+### 2026-10-30 姿态修正：静态准备固定零扭转
+
+用户发现外观接近零位却接近限位，审核确认旧 prepare01 的 16 维点目标 IK 存在每腿一维冗余，没有优先抑制 twist，因而选择了不必要的扭转分支。机械限位没有左右不一致：肩/髋 twist 均为 ±0.5235987756 rad。用户选择“优先零扭转重算”，本次将四个肩/髋 twist 排除出自由变量，静态目标固定为零；仍为 26 个机器人活动轴，只是姿态求解用其余 12 个腿轴，不移除真实 twist 关节或扩大限位。
+
+`lizard2_round_support_geometry.py` 默认输出改为 `prepare02/geometry.json`，保持原球心 XY、根高 0.603763 m、支撑贴地及非支撑足间隙 0.10 m、尾 pitch 0.3 rad，不调整 URDF、PD 或共享求解器。12 维求解首次完成两组，无重试、无目标放宽；四个 twist 两组均为 0，所有原几何检查通过。
+
+- 两组全机最小关节余量均 0.2 rad，来自显式尾 pitch=0.3 rad 的上限0.5，不再是腿部 twist 靠限位。
+- 两组自由腿轴最小余量约 0.3999426423 rad，分别为非支撑前腿肩外展，角度约 −0.2000573577 rad；其余关节逐项见完整报告。
+- 非足几何最小地面间隙：lf+rr 为 0.07999930694 m，rf+rl 为 0.07999927806 m。
+- 关节轴反射关系核对后，12 个自由轴左右对应使用同号角度；两组交换左右后最大角差约 `2.47683e-6 rad`，球心最大反射差 `1e-6 m`，与来源后腿约微米级 origin 不对称一致。全身 link/inertial origin 的最大反射差约8.432 mm，主要在原尾部；未修原资产，也未宣称完整网格镜像一致。
+
+新增回归先在旧实现实际失败：twist仍参与自由求解、左后twist约0.4932535284 rad，8个非零twist注入没有被 held_joint 检查拒绝；排除 twist 后新求解与8个反例均通过，旧FK/地面/限位/质心复读、几何反例及失败隔离继续通过。修前/修后日志保留于 `prepare02/regression_before.log`、`regression_after.log`，镜像只读诊断见 `prepare02/mirror.json`；旧 prepare01、video01 不覆盖，不能继续将其作为当前推荐姿态。
+
+视频脚本新增 `--report`，复用共享 SHA256 入口，依据新姿态生成 `rl_exp/out/lizard2_round_support/video02/two_groups_geometry.mp4`。两组各正面/侧面/斜视静态硬切，12 s、960×640、15 fps、H.264，180帧全解码通过；标签 `GEOMETRY ONLY / NO PHYSICS | TWIST=0`，主上下文目视斜视截图确认。它不是动作、接触力或承重录像。
+
+| 当前产物 | SHA256 |
+|---|---|
+| `rl_exp/out/lizard2_round_support/prepare02/geometry.json` | `03ac5662571709d0351a4099013dfc23ce1c54ae82a808ed79c3875ac0a6c5f1` |
+| `rl_exp/out/lizard2_round_support/video02/two_groups_geometry.mp4` | `64c4ce9e32beba9f330f8e4f1474817779a5b56b52713e0e810e0f30019b2fa3` |
+
+复读几何执行 `E:/IsaacLab/env_isaaclab/Scripts/python.exe -B rl_exp/tools/verify/test_lizard2_round_support_geometry.py`；新生成使用 geometry 脚本 `--out <新路径>`。渲染原入口另传 `--report <新geometry.json> --out <新视频目录>`，随后 host Python 同脚本 `--encode --out <该视频目录>`。运行态导向标定、承重采样及阈值/预算仍未执行或核定；本次仅姿态修正与几何展示，未训练、未提交。
+
+本次零扭转专项回归通过；全仓离线检查仍未全绿，本次实际阻塞为 `check_suite_shape.py` 检出集外 `test_eval_record.py` 未声明的解释器子进程，1项失败、10项跳过；前述源码枚举异常本次没有复现。未修改集外检查或豁免规则，未提交。
 
 ## 证据引用
 
+- 当前准备代码：`rl_exp/tools/diagnose/lizard2_round_support_geometry.py`、`rl_exp/tools/diagnose/lift_guide_asset.py`；回归入口：`rl_exp/tools/verify/test_lizard2_round_support_geometry.py`、`rl_exp/tools/diagnose/test_lift_guide_asset.py`。
+- 当前准备现场：`rl_exp/out/lizard2_round_support/prepare01/geometry.json`、`guide/guide.json` 与 `guide/round_guided.usda`；本机工件不承诺入仓，失败 flatten 副本继续保留。
+
+- 圆足当前输入、转换惯量修正与原生接口/reset 边界：`acceptance/records/2026-10-30-lizard2-round-feet-plan-review.md`；实际承接 `work/active/lizard2-round-feet.md`。
+- 旧机体导向预偏置、静态保持及完整升降结果：`acceptance/records/2026-10-29-lizard2-preload-offset-control.md`，不外推到圆足或另一组对角。
 - 工作入口：`work/active/lizard2-two-foot-body-lift.md`。
 - 正式配置：`rl_exp/versions/lizard2/main/v6/main_params.yaml`；机体采用背景：`acceptance/records/2026-10-23-lizard2-v4-configuration.md`。
 - 已有可信静站观测及限制：`acceptance/records/2026-10-22-lizard2-standing-joint-force.md`；驱动与策略职责：`acceptance/records/2026-10-22-lizard2-current-lift.md` 的用户更正。

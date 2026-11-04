@@ -2,7 +2,7 @@
 # All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
-"""Interactive kinematic viewer for the v6 palm-spatial URDF; no physics."""
+"""Interactive kinematic viewer for Lizard2 URDF joint limits; no physics."""
 
 from __future__ import annotations
 
@@ -29,6 +29,22 @@ GROUPS = {
 }
 
 
+def joint_groups(model):
+    """Group active axes only; fixed mounts remain in the FK tree."""
+    active = {name for name, spec in model['joints'].items() if spec['axis'] is not None}
+    groups = {key: [name for name in group if name + '_joint' in active]
+              for key, group in GROUPS.items()}
+    for group, leg, tip in [('LF front', 'lf', 'wrist'), ('RF front', 'rf', 'wrist'),
+                             ('RL rear', 'rl', 'ankle'), ('RR rear', 'rr', 'ankle')]:
+        name = f'{leg}_{tip}_lateral'
+        if name + '_joint' in active:
+            groups[group].insert(-1, name)
+    names = [name + '_joint' for group in groups.values() for name in group]
+    if len(names) != len(set(names)) or set(names) != active:
+        raise ValueError('slider groups do not cover the URDF active joint set exactly')
+    return groups
+
+
 def load_model(path: pathlib.Path):
     """Load the asset and reject unsupported nonzero frame rotations or mesh transforms."""
     root = ET.parse(path).getroot()
@@ -36,13 +52,7 @@ def load_model(path: pathlib.Path):
         if any(abs(float(x)) > 1e-12 for x in node.get('rpy', '0 0 0').split()):
             raise ValueError('nonzero URDF frame rotation requires another FK reader')
     model = csc.load_urdf(path)
-    names = [name + '_joint' for group in GROUPS.values() for name in group]
-    for leg, tip in [('lf', 'wrist'), ('rf', 'wrist'), ('rl', 'ankle'), ('rr', 'ankle')]:
-        name = f'{leg}_{tip}_lateral_joint'
-        if name in model['joints']:
-            names.append(name)
-    if len(names) != len(set(names)) or set(names) != set(model['joints']):
-        raise ValueError('slider groups do not cover the URDF joint set exactly')
+    joint_groups(model)
     meshes = {}
     for link in root.findall('link'):
         visual = link.find('visual')
@@ -51,9 +61,20 @@ def load_model(path: pathlib.Path):
         origin = visual.find('origin')
         xyz = [float(v) for v in (origin.get('xyz', '0 0 0') if origin is not None else '0 0 0').split()]
         mesh = visual.find('geometry/mesh')
-        if mesh is None or mesh.get('scale', '1 1 1') != '1 1 1':
-            raise ValueError('unsupported visual geometry or scale')
-        vertices, _ = csc.read_obj_faces((path.parent / mesh.get('filename')).resolve())
+        sphere = visual.find('geometry/sphere')
+        if sphere is not None:
+            radius = float(sphere.get('radius'))
+            if not np.isfinite(radius) or radius <= 0:
+                raise ValueError('sphere radius must be positive and finite')
+            theta, phi = np.meshgrid(np.linspace(0, np.pi, 13),
+                                     np.linspace(0, 2 * np.pi, 24, endpoint=False))
+            vertices = radius * np.column_stack((
+                (np.sin(theta) * np.cos(phi)).ravel(),
+                (np.sin(theta) * np.sin(phi)).ravel(), np.cos(theta).ravel()))
+        else:
+            if mesh is None or mesh.get('scale', '1 1 1') != '1 1 1':
+                raise ValueError('unsupported visual geometry or scale')
+            vertices, _ = csc.read_obj_faces((path.parent / mesh.get('filename')).resolve())
         # Draw a closed approximate shell, not disconnected sampled triangles. These hulls
         # are for display only and must never be used for contact or collision measurements.
         sample = vertices[np.linspace(0, len(vertices) - 1, min(len(vertices), 400), dtype=int)]
@@ -68,24 +89,24 @@ def build(path: pathlib.Path = URDF, backend: str = 'TkAgg', show: bool = True):
     from matplotlib.widgets import Button, RadioButtons, Slider
     from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
+    path = path.resolve()
     model, meshes = load_model(path)
-    groups = {key: list(value) for key, value in GROUPS.items()}
-    for group, leg, tip in [('LF front', 'lf', 'wrist'), ('RF front', 'rf', 'wrist'),
-                             ('RL rear', 'rl', 'ankle'), ('RR rear', 'rr', 'ankle')]:
-        name = f'{leg}_{tip}_lateral'
-        if name + '_joint' in model['joints']:
-            groups[group].insert(-1, name)
-    values = {name: 0.0 for name in model['joints']}
+    groups = joint_groups(model)
+    values = {name: 0.0 for name, spec in model['joints'].items() if spec['axis'] is not None}
     fig = plt.figure(figsize=(14, 9))
     is_candidate = any(name.endswith('_lateral_joint') for name in model['joints'])
-    fig.canvas.manager.set_window_title('Lizard2 two-axis candidate' if is_candidate else 'Lizard2 v6 joint pose')
+    has_spheres = ET.parse(path).find('./link/visual/geometry/sphere') is not None
+    label = ('Lizard2 fixed round feet' if has_spheres else
+             'Lizard2 two-axis candidate' if is_candidate else 'Lizard2 palm spatial')
+    title = f'{label} | {len(values)} active joints'
+    fig.canvas.manager.set_window_title(title)
+    fig.text(0.03, 0.96, f'Source: {path}', fontsize=8)
     ax = fig.add_axes([0.03, 0.10, 0.65, 0.82], projection='3d')
     ax.set_xlim(-1.9, 1.9); ax.set_ylim(-1.3, 1.3); ax.set_zlim(-0.8, 1.0)
     ax.set_box_aspect((3.8, 2.6, 1.8))
     ax.view_init(elev=18, azim=-62)
     ax.set_xlabel('X forward [m]'); ax.set_ylabel('Y left [m]'); ax.set_zlabel('Z [m]')
-    ax.set_title(('Two-axis candidate' if is_candidate else 'v6 palm spatial')
-                 + ': approximate display shells; no gravity/contact')
+    ax.set_title(title + '\nApproximate display shells; no gravity/contact')
     ax.mouse_init(rotate_btn=[1, 2], pan_btn=[], zoom_btn=3)
     collections = {}
     for name, (vertices, faces) in meshes.items():
@@ -142,6 +163,8 @@ def build(path: pathlib.Path = URDF, backend: str = 'TkAgg', show: bool = True):
     # Keep widgets alive for Matplotlib callbacks, and expose state for focused verification.
     fig._pose_controls = (radio, reset_button, state, values, draw)
     if show:
+        fig.canvas.draw()
+        print(f'VIEWER_READY | {title} | source={path} | backend={backend}', flush=True)
         plt.show()
     return fig
 
