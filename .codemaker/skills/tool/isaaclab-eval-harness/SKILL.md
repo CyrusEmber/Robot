@@ -1,7 +1,7 @@
 ---
 name: isaaclab-eval-harness
 description: >
-  在机器人仓（<REPO>，本机 E:\Robot）的 ablation_harness 中做 locomotion 消融实验与统一评测。
+  在机器人仓的 ablation_harness 中做 locomotion 消融实验、统一评测与训后评估收尾。
   当用户提到"ablation/消融"、"对比实验"、"统一 eval"、"评测/评估/跑分 policy"、
   "eval protocol/评测协议"、"Locomotion-Eval"、"固定 seed 评估"、"checkpoint 评估"、
   "success rate / fall rate / velocity tracking / energy / terrain completion"、
@@ -20,14 +20,16 @@ description: >
 **协议唯一真源是 `ablation_harness\protocols\locomotion_eval_vN.yaml`**，
 本 skill 只述要点、不复制协议数值 —— 复制处即漂移处。改协议/指标口径前先读"版本纪律"。
 
+训后必做流程、必报/可选指标和交付要求，执行前必读 `ablation_harness/HARNESS.md`「训后评估固定流程」。
+
 ## 核心理念
 
 1. **协议是数据、具名、冻结**：`Locomotion-Eval-vN` = 一个 yaml。语义改动 → 新建 vN+1；
    旧结果永远带旧协议标签，**跨版本不比**
 2. **训练诊断 ≠ 模型性能**：terrain curriculum level 只是训练诊断；固定地形套件的
    completion 才是模型性能指标
-3. **双模式**：Nominal（全 DR 关 → 理论上限）/ Robust（固定 seed DR + recovery push
-   → 真实水平 + 恢复力）
+3. **默认 robust，nominal 由用户选择**：命令显式传模式，spec 显式写 `eval_modes`。
+   Robust 测协议规定的 DR 与扰动条件；Nominal 测关闭 DR 的条件，均不自动代表实机水平或理论上限。
 4. **组件复用 + 数据驱动**：命令时间线在协议 yaml 只写一处；command_player 按它发命令、
    metrics 按它自动切窗 —— 命令脚本与指标窗口永不分家
 
@@ -74,13 +76,13 @@ harness 与机器人无关；**机器人相关只有 suites.py 一个文件 + �
 
 ## 使用方案
 
-**task 必须传 TRAIN id（非 `-Play`）**：harness 自己控 DR（nominal 关 / robust 固定 seed），
+**`eval.py` 的 task 必须传 TRAIN id（非 `-Play`）**：harness 自己控 DR（nominal 关 / robust 固定 seed），
 `-Play` 的 DR 预先全关，robust 会静默退化成 nominal（eval.py 已硬拦）。
 
 ```bat
 :: 单点评估；--group 让一次 campaign 单独成目录 + 专属 summary.csv
 python ablation_harness\eval.py --task <Robot>-<Task>-vN --checkpoint <model.pt> ^
-  --protocol locomotion_eval_vN --mode nominal --seed 123 --group <标签>
+  --protocol locomotion_eval_vN --mode robust --seed 123 --group <标签>
 
 :: 消融调度（spec yaml 内 N 个 run 顺序 train+eval，断点续跑）+ 汇总表
 python ablation_harness\run_ablation.py --spec ablation_harness\specs\<name>.yaml

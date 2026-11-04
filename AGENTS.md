@@ -5,7 +5,8 @@
 - 直接说明限制；错了承认，不确定就查证。
 - 按任务检索 `FILEMAP.md`、家族 `FAMILY.md` 和子系统文档，不整份通读。
 - 临时脚本不留仓根或输出根；一次性操作优先系统临时目录并在使用后清理，可复读诊断进 `rl_exp/tools/diagnose/`，历史工具进 `rl_exp/tools/archive/`。诊断输出和日志按事项与运行分目录；保留失败现场和未核定证据，不按日期自动删除。
-- 录制策略视频默认用 `ablation_harness/video_matrix.py` 输出带速度/视角标签的九宫格，保留单段原片；默认三档目标速度 × 三个视角，参数与输出见 `ablation_harness/HARNESS.md`。
+- 每次训练结束必须执行 `ablation_harness/HARNESS.md`「训后评估固定流程」：默认 robust，nominal 由用户选择；固定必报项不能临时省略，报告项与通过门槛分开。
+- 训后九宫格视频必录并实际验看：用 `ablation_harness/video_matrix.py` 输出带速度/视角标签的三档目标速度 × 三个视角，保留单段原片和 `matrix.json`；参数、缺项处理与产物要求见 `ablation_harness/HARNESS.md`。
 
 ## Work 与证据
 
