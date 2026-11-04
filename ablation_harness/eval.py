@@ -26,8 +26,29 @@ import math
 import os
 import pathlib
 import re
+import runpy
 import subprocess
 import sys
+import traceback
+import uuid
+
+# Run the entire module under the guard: imports after AppLauncher can fail before main(),
+# and Kit may exit 0 during Python shutdown even without an explicit app.close().
+if __name__ == "__main__":
+    try:
+        runner = runpy.run_path(__file__, run_name="__eval_runner__")
+        runner["main"]()
+        runner["simulation_app"].close()
+    except BaseException as exc:
+        if isinstance(exc, SystemExit) and (exc.code is None or exc.code == 0):
+            raise
+        try:
+            traceback.print_exc()
+            sys.stderr.flush()
+            sys.stdout.flush()
+        finally:
+            os._exit(1)
+    sys.exit(0)
 
 from isaaclab.app import AppLauncher
 
@@ -138,7 +159,7 @@ _SUITE_REGISTRY = {
 # is where that has to be visible (record.CONDITIONS_WITH_DECLARATION).
 _SUMMARY_COLUMNS = [
     "run_id", "protocol", "task", "tag", "mode", "seed", "variant",
-    "git_rev_lizard", "git_rev_isaaclab", "timestamp",
+    "git_rev_lizard", "git_rev_isaaclab", "timestamp", "persist_id",
     "success_rate", "fall_rate", "lin_mae_mps", "ang_mae_radps",
     "energy_per_m_j", "stop_overshoot_mps", "recovery_mean_s", "never_recovered",
 ]
@@ -747,46 +768,90 @@ def _persist(result: dict, segments: list, recovery: dict | None, run_id: str, t
     result["git_rev_lizard"] = rec["runtime"]["git_rev_lizard"]
     result["git_rev_isaaclab"] = rec["runtime"]["git_rev_isaaclab"]
     rec["run"]["timestamp"] = result["timestamp"]
-    _guard_writes(out_dir, rec, run_id)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    _atomic_write_json(out_dir / "record.json", rec)
-    _atomic_write_json(out_dir / "eval.json", result)
-    if terrain_evidence is not None:
-        # the archived ground (work/active/verified-rebuild-rating.md ⑤b): per-cell digests and relief, plus what produced
-        # them -- a suite name and a seed are enough to regenerate it, which is how the offline
-        # check verifies this file instead of trusting it
-        _atomic_write_json(out_dir / "terrain" / "geometry.json", terrain_evidence)
+    rec["run"]["persist_id"] = uuid.uuid4().hex
+    out_dir.parent.mkdir(parents=True, exist_ok=True)
+    lock = (_RESULTS_ROOT / args_cli.protocol) / ".summary-write.lock"
+    try:
+        lock_fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    except FileExistsError as exc:
+        raise SystemExit(f"[EVAL] refusing concurrent write: {lock}; verify owner before removing a stale lock") from exc
+    committed = False
+    writing = False
+    try:
+        try:
+            handle = os.fdopen(lock_fd, "w", encoding="utf-8")
+        except BaseException:
+            try:
+                os.close(lock_fd)
+            except OSError:
+                pass
+            raise
+        with handle:
+            handle.write(f"pid={os.getpid()} persist_id={rec['run']['persist_id']}\n")
+        legacy_locks = sorted(lock.parent.glob("*/.summary-write.lock"))
+        if legacy_locks:
+            raise SystemExit(f"[EVAL] refusing write while group lock exists: {legacy_locks[0]}")
+        _guard_writes(out_dir, rec, run_id)
+        summary_path = out_dir.parent / "summary.csv"
+        kept_rows = []
+        if summary_path.exists():
+            try:
+                with open(summary_path, encoding="utf-8", newline="") as f:
+                    reader = csv.DictReader(f, strict=True)
+                    fields = reader.fieldnames
+                    if (not fields or "run_id" not in fields or len(fields) != len(set(fields))
+                            or any(not field or field not in _SUMMARY_COLUMNS for field in fields)):
+                        raise ValueError("invalid or unsupported column headers")
+                    rows = list(reader)
+                    if any(None in row or any(value is None for value in row.values()) or not row["run_id"]
+                           for row in rows):
+                        raise ValueError("invalid row width or empty run_id")
+                    if (len({row["run_id"] for row in rows}) != len(rows) or
+                            any(row["run_id"] in (".", "..") or "/" in row["run_id"] or "\\" in row["run_id"]
+                                or ":" in row["run_id"] for row in rows)):
+                        raise ValueError("duplicate or invalid run_id")
+                    kept_rows = [row for row in rows if row["run_id"] != run_id]
+            except (OSError, UnicodeError, csv.Error, ValueError) as exc:
+                raise SystemExit(f"[EVAL] refusing to replace invalid summary {summary_path}: {exc}") from exc
+        writing = True
+        out_dir.mkdir(parents=True, exist_ok=True)
+        _atomic_write_json(out_dir / "record.json", rec)
+        _atomic_write_json(out_dir / "eval.json", result)
+        if terrain_evidence is not None:
+            # the archived ground (work/active/verified-rebuild-rating.md ⑤b): per-cell digests and relief, plus what produced
+            # them -- a suite name and a seed are enough to regenerate it, which is how the offline
+            # check verifies this file instead of trusting it
+            _atomic_write_json(out_dir / "terrain" / "geometry.json", terrain_evidence)
 
-    row = {c: "" for c in _SUMMARY_COLUMNS}
-    row.update({
-        "run_id": run_id, "protocol": result["protocol"], "task": args_cli.task, "tag": tag,
-        "mode": args_cli.mode, "seed": args_cli.seed, "timestamp": result["timestamp"],
-        "variant": args_cli.variant or "",
-        "git_rev_lizard": result["git_rev_lizard"], "git_rev_isaaclab": result["git_rev_isaaclab"],
-        "success_rate": _round(result["global"]["success_rate"]),
-        "fall_rate": _round(result["global"]["fall_rate"]),
-        "lin_mae_mps": _round(result["global"]["lin_mae_mps"]),
-        "ang_mae_radps": _round(result["global"]["ang_mae_radps"]),
-        "energy_per_m_j": _round(result["global"]["energy_per_m_j"]),
-    })
-    if segments and "stop_overshoot_mps" in segments[-1]:
-        row["stop_overshoot_mps"] = _round(segments[-1]["stop_overshoot_mps"])
-    if recovery is not None:
-        row["recovery_mean_s"] = _round(recovery["recovery_time_mean_s"])
-        row["never_recovered"] = _round(recovery["never_recovered_frac"])
+        row = {c: "" for c in _SUMMARY_COLUMNS}
+        row.update({
+            "run_id": run_id, "protocol": result["protocol"], "task": args_cli.task, "tag": tag,
+            "mode": args_cli.mode, "seed": args_cli.seed, "timestamp": result["timestamp"],
+            "persist_id": rec["run"]["persist_id"], "variant": args_cli.variant or "",
+            "git_rev_lizard": result["git_rev_lizard"], "git_rev_isaaclab": result["git_rev_isaaclab"],
+            "success_rate": _round(result["global"]["success_rate"]),
+            "fall_rate": _round(result["global"]["fall_rate"]),
+            "lin_mae_mps": _round(result["global"]["lin_mae_mps"]),
+            "ang_mae_radps": _round(result["global"]["ang_mae_radps"]),
+            "energy_per_m_j": _round(result["global"]["energy_per_m_j"]),
+        })
+        if segments and "stop_overshoot_mps" in segments[-1]:
+            row["stop_overshoot_mps"] = _round(segments[-1]["stop_overshoot_mps"])
+        if recovery is not None:
+            row["recovery_mean_s"] = _round(recovery["recovery_time_mean_s"])
+            row["never_recovered"] = _round(recovery["never_recovered_frac"])
 
-    summary_path = out_dir.parent / "summary.csv"
-    kept_rows = []
-    if summary_path.exists():
-        with open(summary_path, encoding="utf-8") as f:
-            kept_rows = [r for r in csv.DictReader(f) if r.get("run_id") != run_id]
-    summary_tmp = summary_path.with_name(summary_path.name + ".tmp")
-    with open(summary_tmp, "w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=_SUMMARY_COLUMNS)
-        writer.writeheader()
-        writer.writerows(kept_rows)
-        writer.writerow(row)
-    os.replace(summary_tmp, summary_path)
+        summary_tmp = summary_path.with_name(summary_path.name + ".tmp")
+        with open(summary_tmp, "w", encoding="utf-8", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=_SUMMARY_COLUMNS)
+            writer.writeheader()
+            writer.writerows(kept_rows)
+            writer.writerow(row)
+        os.replace(summary_tmp, summary_path)
+        committed = True
+    finally:
+        if committed or not writing:
+            lock.unlink()
 
 
 def main():
@@ -859,9 +924,7 @@ def main():
         return
     refusal = suite_lock.start_refusal(protocol, suite_lock_state, stage="geometry")
     if refusal is not None:
-        print(f"[EVAL] refused: {refusal}", file=sys.stderr, flush=True)
-        simulation_app.close()
-        raise SystemExit(1)
+        raise SystemExit(f"[EVAL] refused: {refusal}")
     rec["suite"]["lock"] = {"verdict": suite_lock_state["verdict"], "cfg": suite_lock_state["cfg"],
                             "geometry": suite_lock_state["geometry"]}
     rec["suite"]["geometry_env"] = suite_lock_state["geometry_env"]
@@ -996,8 +1059,3 @@ def main():
           f"suite={rec['suite']['digest'][:19]} assets={rec['assets']['actual']['verdict']}")
     print(f"[EVAL] wrote results/{args_cli.protocol}/{args_cli.group + '/' if args_cli.group else ''}{run_id}/eval.json")
     print(f"[EVAL] wrote results/{args_cli.protocol}/{args_cli.group + '/' if args_cli.group else ''}{run_id}/record.json")
-
-
-if __name__ == "__main__":
-    main()
-    simulation_app.close()

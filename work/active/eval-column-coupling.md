@@ -2,17 +2,29 @@
 id: eval-column-coupling
 title: 套件列间耦合：几何没变的列也会随别的列改变读数
 scope: ablation_harness
-status: pending_review
-landing: ablation_harness/eval.py, ablation_harness/suites.py, acceptance/records
-next: 审——**新上下文**（不带执行会话历史）对着 `close_when` 与 `acceptance/records/2026-10-10-eval-column-coupling-initial-state.md` 判三件：① 诊断是否真的把通道收到引擎层（判据两条：未改列写入态逐位相同、零动作几步内即分叉；注意 `RslRlVecEnvWrapper.__init__` 会 reset，起跑态是它之后的写入态，不是构造态）；② 边界有没有写够 —— "引擎内部路径未取证""未做定量放大"是读数还是被读成了结论；③ 据此要不要落**规则与工具** —— "改套件 ⇒ 未变列不可比"（进 HARNESS/协议，或明确记录为不落）与该诊断是否常驻，两件都还没决定。审核读数入 `acceptance/records/`，本项只留指针；审过即移进 `work/closed/2026/`、去掉本 `next`、补 `outcome`
-close_when: 至少一条单变量探针跑完，且能指出"改了这个、只有这些列变了"来排除或坐实机制 —— 结论进 `acceptance/records/`、本项只留指针；若两条探针都不动 stairs，则撤销"耦合"这个说法并把复现命令与读数留档（"测不到"也是结论，不许只写判决不写条件）
-evidence: acceptance/records/2026-10-10-eval-column-coupling-probes.md, acceptance/records/2026-10-10-eval-column-coupling-review.md, acceptance/records/2026-10-10-eval-column-coupling-initial-state.md
+status: in_progress
+landing: ablation_harness/eval.py, ablation_harness/suites.py, rl_exp/tools/diagnose/column_coupling_probe.py, acceptance/records
+next: 执行者处理汇总一致性与机制归因缺口，完成验证后申请独立重审。
+close_when: 独立审核确认单变量探针及机制归因、复读链和规则工具去向。
+depends_on: eval-column-runtime-recovery
+evidence: acceptance/records/2026-10-30-eval-column-coupling-summary-repair-review.md, acceptance/records/2026-10-30-eval-column-coupling-second-closing-review.md, acceptance/records/2026-10-30-eval-column-coupling-closing-review.md, acceptance/records/2026-10-28-eval-column-coupling-repair.md, acceptance/records/2026-10-28-eval-column-coupling-dynamics.md, acceptance/records/2026-10-28-eval-column-coupling-independent-review.md, acceptance/records/2026-10-10-eval-column-coupling-probes.md, acceptance/records/2026-10-10-eval-column-coupling-review.md, acceptance/records/2026-10-10-eval-column-coupling-initial-state.md
 ---
 
 ## 当前状态
 
-- 执行证据、审核与机制诊断：见 `evidence`；当前动作见 `next`。
-- 机制已收到引擎层（改一格的几何会让别的、逐位相同格子上的 env 走出不同轨迹），引擎内部路径仍未取证 —— 读数不复述。
+- 整体独立复审未通过；历史批次显式复读补修及限定复核见 `evidence`，环境恢复依赖仍未完成。
+
+## 下一步
+
+- 汇总文字勘误及辅助冲突报告重名修复见 `evidence`；复核完整差异，避免把单文件原子写入当跨文件事务。
+- 复核历史批次显式复读与整体规则落点；恢复依赖及未观测引擎边界见 `evidence`。
+- 修复后交由不带执笔历史的新上下文复审原始数据、比较器、规则工具落点及恢复事项；不得覆盖或删除现存数据。
+- 保留引擎内未测状态与定量放大边界，不将未变列当作跨套件可比白名单。
+
+## 关闭条件
+
+- 至少完成一组单变量探针，指出改变及受影响列，据此排除或坐实候选机制；如两条探针都不影响 stairs，撤销耦合说法并保留条件与读数。
+- 审核者复核实际落点、原始证据、复读路径、未覆盖边界以及规则和诊断工具的去向；不通过则退回。
 
 ## 为什么要单独立项
 

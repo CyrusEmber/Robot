@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import os
 from pathlib import Path
 import sys
 import time
@@ -184,6 +185,85 @@ def audit(path):
             continue
         raise AssertionError('reader accepted corrupted sample')
     return dict(result, rejected_corruptions=len(corruptions))
+
+
+def cleanup_self_check(namespace):
+    """Exercise the collector's actual finally with injected failures, without Kit."""
+    import ast
+    from tempfile import TemporaryDirectory
+    from unittest.mock import patch
+
+    tree = ast.parse(Path(namespace['__file__']).read_text(encoding='utf-8'))
+    collector = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'collect')
+    final = next(n for n in collector.body if isinstance(n, ast.Try)).finalbody
+    wrapper = ast.parse('def cleanup(out, r, env, app, original):\n'
+                        ' try:\n  if original: raise original\n finally:\n  pass').body[0]
+    wrapper.body[0].finalbody = final
+    scope = dict(namespace)
+    exec(compile(ast.fix_missing_locations(ast.Module(body=[wrapper], type_ignores=[])),
+                 '<actual collector finally>', 'exec'), scope)
+
+    class Env:
+        def __init__(self, fail):
+            self.fail = fail
+        def close(self):
+            if self.fail:
+                raise OSError('close fixture')
+
+    class App:
+        def __init__(self, fail):
+            self.fail = fail
+        def close(self):
+            raise SystemExit(7 if self.fail else 0)
+
+    with TemporaryDirectory(prefix='palm_cleanup_') as directory:
+        out = Path(directory)
+        contact = namespace['__file__'].endswith('palm_contact_sample.py')
+        for case in ('original', 'original_write', 'original_close', 'original_both', 'close', 'close_write', 'write',
+                     'nan', 'audit', 'audit_write', 'app_failure', 'normal'):
+            original = ValueError('original fixture') if case.startswith('original') else None
+            r = dict(completed=original is None, closed=False)
+            if case == 'nan':
+                r['invalid'] = float('nan')
+            called = []
+            def fake_audit(path):
+                called.append('audit')
+                if case == 'audit':
+                    raise AssertionError('audit fixture')
+                return {}
+            scope['audit'] = fake_audit
+            write_text = Path.write_text
+            def fake_write(path, *args, **kwargs):
+                if (path.name == 'report.json' and case in ('write', 'original_write', 'original_both', 'close_write') or
+                    path.name == 'audit.json' and case == 'audit_write'):
+                    raise OSError('write fixture')
+                return write_text(path, *args, **kwargs)
+            caught = None
+            try:
+                with patch.object(Path, 'write_text', fake_write):
+                    scope['cleanup'](out, r, Env(case in ('close', 'close_write', 'original_close', 'original_both')),
+                                     App(case == 'app_failure'), original)
+            except BaseException as exc:
+                caught = exc
+            if original:
+                assert caught is original, (case, caught)
+                notes = '\n'.join(getattr(caught, '__notes__', []))
+                if case in ('original_write', 'original_both'):
+                    assert 'write fixture' in notes
+                if case in ('original_close', 'original_both'):
+                    assert 'close fixture' in notes
+            elif case == 'app_failure':
+                assert isinstance(caught, SystemExit) and caught.code == 7, (case, caught)
+            elif case == 'normal' or not contact and case in ('audit', 'audit_write'):
+                assert caught is None, (case, caught)
+            else:
+                assert caught is not None and not isinstance(caught, SystemExit), (case, caught)
+            if case == 'close_write':
+                assert str(caught) == 'close fixture' and 'write fixture' in '\n'.join(caught.__notes__)
+            assert bool(called) == (contact and case in ('audit', 'audit_write', 'app_failure', 'normal')), case
+            if case in ('close', 'original_close'):
+                report = json.loads((out/'report.json').read_text(encoding='utf-8'))
+                assert report['closed'] is False and 'close_failure' in report
 
 
 def collect(args):
@@ -412,19 +492,39 @@ def collect(args):
         step(zero)
         r['completed'] = True
         live._reset_idx, live.sim.step, live.scene.update = original_reset, original_physics, original_update
-    except Exception as exc:
+    except BaseException as exc:
         r.update(error=repr(exc), traceback=traceback.format_exc())
         raise
     finally:
+        original = sys.exc_info()[1]
+        failure = original
         if env is not None:
-            env.close()
-            r['closed'] = True
-        (out/'report.json').write_text(json.dumps(r, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
-        if app is not None:
+            try:
+                env.close()
+                r['closed'] = True
+            except BaseException as exc:
+                r['close_failure'] = traceback.format_exc()
+                if failure is None:
+                    failure = exc
+                else:
+                    failure.add_note('env.close failed:\n' + r['close_failure'])
+        try:
+            (out/'report.json').write_text(json.dumps(r, ensure_ascii=False, indent=2, allow_nan=False)+'\n',
+                                           encoding='utf-8')
+        except BaseException as exc:
+            if failure is None:
+                failure = exc
+            else:
+                failure.add_note('report write failed:\n' + traceback.format_exc())
+        if original is None and failure is not None:
+            raise failure
+        # Kit can terminate with status 0 while an exception is unwinding.
+        if failure is None and app is not None:
             try:
                 app.close()
-            except SystemExit:
-                pass
+            except SystemExit as exc:
+                if exc.code not in (None, 0):
+                    raise
 
 
 def main():
@@ -433,7 +533,7 @@ def main():
     parser.add_argument('--out', type=Path)
     parser.add_argument('--self_check', action='store_true')
     parser.add_argument('--termination_fixture', action='store_true')
-    if '--audit' not in sys.argv and '--self_check' not in sys.argv:
+    if not any(flag in sys.argv for flag in ('--audit', '--self_check')):
         from isaaclab.app import AppLauncher
         AppLauncher.add_app_launcher_args(parser)
     args = parser.parse_args()
@@ -444,6 +544,7 @@ def main():
             except ValueError:
                 continue
             raise AssertionError('invalid array accepted')
+        cleanup_self_check(globals())
         print('INTERFACE_READER_SELF_CHECK_OK')
     elif args.audit:
         print(json.dumps(audit(args.audit), indent=2))
@@ -454,4 +555,14 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except BaseException as exc:
+        if isinstance(exc, SystemExit) and exc.code in (None, 0):
+            raise
+        try:
+            traceback.print_exc()
+            sys.stderr.flush()
+            sys.stdout.flush()
+        finally:
+            os._exit(1)

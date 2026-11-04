@@ -1,5 +1,7 @@
 # 套件列间耦合探针：动一格的碰撞几何，让另四列（网格逐字节相同）读数改变（2026-10-10）
 
+> **2026-10-30 勘误：** 撤回下文“差异全部由地面产生”的排他归因；该批没有完整固定运行身份和 reset、spawn 等通道，生成器摘要不证明 PhysX 碰撞及初始化条件完全相同。原读数与原文保留，限定及可复读对账见 `acceptance/records/2026-10-10-eval-column-coupling-review.md` 和 `acceptance/records/2026-10-28-eval-column-coupling-independent-review.md`。后续单标量探针只支持其自身批次的较窄结论，见 `acceptance/records/2026-10-28-eval-column-coupling-repair.md`。
+
 ## 适用范围
 
 - **被验的问题**：`work/active/eval-column-coupling.md` —— 套件里改一列，别的列会不会跟着动？

@@ -57,6 +57,7 @@ SPAWN_ALLOWED: dict[str, tuple[int, str]] = {
     "test_cfg_snapshot.py": (1, "the digest must be identical from two PYTHONHASHSEED runs"),
     "test_dump_tb_sampling.py": (2, "the CLI resample path only exists in dump_tb.py's __main__"),
     "test_terrain_geometry.py": (1, "video_matrix exit status and os._exit require separate processes"),
+    "test_eval_record.py": (1, "eval exit status and Kit's os._exit shutdown require a separate process"),
     "check_record_bindings.py": (
         1,
         "losing the child's output to the host locale only reproduces off UTF-8 mode (PEP 597), so the "

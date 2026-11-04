@@ -1,5 +1,7 @@
 # 套件入口的跨协议读数：v3 与 v2 各自逐字段可复现，但改套件会污染几何未变的列（2026-10-10）
 
+> **2026-10-30 勘误：** 文末 2026-10-10 勘误第 3 条误将 `success_rate` 说成逐环境二值、粒度 0.125。实际是有效帧成功掩码的加权比例，无固定的 1/8 粒度；该粒度仅适用于本次八个环境的 `fall_rate`。原勘误保留，依据见 `acceptance/records/2026-10-10-eval-column-coupling-review.md` 的 P2 和 `ablation_harness/metrics.py`。
+
 ## 适用范围
 
 - **被验的动作**：`work/active/runtime-acceptance-v3.md` 的 ①（同一 ckpt 跨协议对照）与 ②（rough 两列 completion 分布），

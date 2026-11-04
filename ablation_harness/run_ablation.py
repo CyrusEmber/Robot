@@ -30,6 +30,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import pathlib
 import re
 import subprocess
@@ -210,7 +211,9 @@ def _summary_paths(protocol_dir: pathlib.Path, group: str | None) -> list[pathli
     """Group filter narrows to one campaign; otherwise the protocol rollup = root + groups."""
     if group:
         return [protocol_dir / group / "summary.csv"]
-    return [protocol_dir / "summary.csv", *sorted(protocol_dir.glob("*/summary.csv"))]
+    paths = [protocol_dir / "summary.csv", *sorted(protocol_dir.glob("*/summary.csv")),
+             *[p.parent / "summary.csv" for p in sorted(protocol_dir.glob("*/.summary-write.lock"))]]
+    return list(dict.fromkeys(paths))
 
 
 def _condition_report(summary_path: pathlib.Path, rows: list[dict]) -> dict:
@@ -275,61 +278,168 @@ def _identity_report(summary_path: pathlib.Path, rows: list[dict]) -> tuple[list
 
 
 def _summarize(args_cli) -> int:
-    """Print the table, and refuse one whose rows were not measured under the same conditions."""
+    """Print a snapshot while excluding cooperating writers in this protocol."""
     protocol_dir = _HARNESS_DIR / "results" / args_cli.protocol
-    rows_by_path: dict[pathlib.Path, list[dict]] = {}
-    for path in _summary_paths(protocol_dir, args_cli.group):
-        if not path.exists():
-            continue
-        with open(path, encoding="utf-8") as f:
-            rows_by_path[path] = list(csv.DictReader(f))
-    rows = [row for group_rows in rows_by_path.values() for row in group_rows]
-    if not rows:
+    if not protocol_dir.is_dir():
         print(f"[ABLATION] no results under {protocol_dir}")
         return 0
-    columns = [c for c in rows[0].keys() if c != "timestamp"]
-    widths = {c: max(len(c), *(len(r.get(c, "")) for r in rows)) for c in columns}
+    lock = protocol_dir / ".summary-write.lock"
+    try:
+        fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    except FileExistsError:
+        print(f"[ABLATION] {lock}: write in progress or stale lock -- cannot certify")
+        return 1
+    try:
+        try:
+            handle = os.fdopen(fd, "w", encoding="utf-8")
+        except BaseException:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+            raise
+        with handle:
+            handle.write(f"reader pid={os.getpid()}\n")
+        return _summarize_locked(args_cli)
+    finally:
+        lock.unlink()
+
+
+def _summarize_locked(args_cli) -> int:
+    protocol_dir = _HARNESS_DIR / "results" / args_cli.protocol
+    rows_by_path: dict[pathlib.Path, list[dict]] = {}
+    problems = 0
+    lock_paths = set()
+    for path in _summary_paths(protocol_dir, args_cli.group):
+        lock = path.parent / ".summary-write.lock"
+        lock_paths.add(lock)
+        if lock != protocol_dir / ".summary-write.lock" and lock.exists():
+            problems += 1
+            print(f"[ABLATION] {lock}: write in progress or stale lock -- cannot certify")
+        if not path.exists():
+            continue
+        try:
+            with open(path, encoding="utf-8", newline="") as f:
+                reader = csv.DictReader(f, strict=True)
+                fields = reader.fieldnames
+                if not fields or "run_id" not in fields or len(fields) != len(set(fields)) or any(not f for f in fields):
+                    raise ValueError("missing or duplicate column headers")
+                rows = list(reader)
+                if any(None in row or any(value is None for value in row.values()) or not row["run_id"]
+                       for row in rows):
+                    raise ValueError("invalid row width or empty run_id")
+                if (len({row["run_id"] for row in rows}) != len(rows) or
+                        any(row["run_id"] in (".", "..") or "/" in row["run_id"] or "\\" in row["run_id"]
+                            or ":" in row["run_id"] for row in rows)):
+                    raise ValueError("duplicate or invalid run_id")
+                rows_by_path[path] = rows
+        except (OSError, UnicodeError, csv.Error, ValueError) as exc:
+            problems += 1
+            print(f"[ABLATION] {path}: invalid summary.csv: {exc}")
+    entries = [(path, row) for path, group_rows in rows_by_path.items() for row in group_rows]
+    if not entries:
+        print(f"[ABLATION] no results under {protocol_dir}")
+        return problems
+    columns = list(dict.fromkeys(c for _, row in entries for c in row if c != "timestamp"))
+    widths = {c: max(len(c), *(len(row.get(c, "")) for _, row in entries)) for c in columns}
+    show_source = len(rows_by_path) > 1
+    source_width = max(len("source"), *(len(str(path.parent.relative_to(protocol_dir))) for path, _ in entries))
     header = " | ".join(c.ljust(widths[c]) for c in columns)
     divider = "-|-".join("-" * widths[c] for c in columns)
-    print(header)
-    print(divider)
-    for r in sorted(rows, key=lambda r: (r.get("mode", ""), r.get("run_id", ""))):
-        print(" | ".join(str(r.get(c, "")).ljust(widths[c]) for c in columns))
-    problems = 0
-    for path, group_rows in rows_by_path.items():
-        refused, uncertified = _identity_report(path, group_rows)
-        if refused:
+    print(("source".ljust(source_width) + " | " if show_source else "") + header)
+    print(("-" * source_width + "-|-" if show_source else "") + divider)
+    for path, row in sorted(entries, key=lambda item: (item[1].get("mode", ""), item[1].get("run_id", ""))):
+        source = str(path.parent.relative_to(protocol_dir))
+        print((source.ljust(source_width) + " | " if show_source else "") +
+              " | ".join(str(row.get(c, "")).ljust(widths[c]) for c in columns))
+    records = []
+    snapshots = {}
+    for path, row in entries:
+        run_id = row.get("run_id") or "?"
+        record_path = path.parent / run_id / "record.json"
+        if record_path not in snapshots:
+            try:
+                snapshots[record_path] = record.load(record_path)
+            except (OSError, UnicodeError, json.JSONDecodeError):
+                snapshots[record_path] = None
+        rec = snapshots[record_path]
+        if rec is None:
             problems += 1
-            for run_id, kind in sorted(refused):
-                print(f"[ABLATION] {path}: {run_id} was measured by policy.kind={kind!r}, not a "
-                      f"checkpoint: a diagnostic row in a scores table. Give it its own "
-                      f"--group {_SMOKE_GROUP}, or score a policy here.")
-        for run_id in uncertified:
-            print(f"[ABLATION] {path}: {run_id} carries no policy.kind -- identity uncertified "
-                  "(written before the field existed), not refused")
-        report = _condition_report(path, group_rows)
-        if not report["conflicts"] and not report["no_record"]:
+            print(f"[ABLATION] {record_path}: no readable record.json -- it cannot be certified")
             continue
-        problems += 1
-        for run_id, entry in sorted(report["conflicts"].items()):
-            for other, moved in sorted(entry["against"].items()):
-                undeclared = any("declared_as" not in values for values in moved.values())
-                print(f"[ABLATION] {path}: {run_id} vs {other}: "
-                      f"conditions {'differ' if undeclared else 'differ, declared'}:")
-                for name, values in sorted(moved.items()):
-                    tail = f" (declared as {values['declared_as']})" if "declared_as" in values else ""
-                    print(f"    {name}: {values['a']} -> {values['b']}{tail}")
-                if undeclared:
-                    print("    these rows answer different questions; give them their own table, or "
-                          "name the substitution with --variant")
-        for run_id in report["no_record"]:
-            print(f"[ABLATION] {path}: {run_id} has no readable record.json -- it cannot be certified "
-                  "as measured under these conditions")
+        state = record.read_state(rec)
+        if state["state"] != "complete":
+            problems += 1
+            print(f"[ABLATION] {record_path}: {state['state']}: {state['note'] or state['missing']} "
+                  "-- it cannot be certified")
+            continue
+        for field in ("eval_protocol.digest", "suite.name", "suite.digest", "suite.geometry_digest",
+                      "obs_protocol.identity", "obs_protocol.digest", "judge.id", "assets.declared_digest"):
+            value = record.get(rec, field)
+            if value is not record._MISSING and (not isinstance(value, str) or not value):
+                problems += 1
+                print(f"[ABLATION] {record_path}: invalid {field} -- cannot certify")
+        for field in ("suite.num_rows", "suite.num_cols", "suite.envs_per_terrain"):
+            value = record.get(rec, field)
+            if value is not record._MISSING and value != record.UNKNOWN and (type(value) is not int or value <= 0):
+                problems += 1
+                print(f"[ABLATION] {record_path}: invalid {field} -- cannot certify")
+        terrains = record.get(rec, "suite.terrains")
+        if (terrains is not record._MISSING and terrains != record.UNKNOWN
+                and (not isinstance(terrains, list) or any(not isinstance(name, str) or not name for name in terrains))):
+            problems += 1
+            print(f"[ABLATION] {record_path}: invalid suite.terrains -- cannot certify")
+        if rec["run"].get("run_id") != run_id:
+            problems += 1
+            print(f"[ABLATION] {record_path}: record run_id differs from row -- cannot certify")
+        if "variant" in row and row["variant"] != (rec["run"].get("variant") or ""):
+            problems += 1
+            print(f"[ABLATION] {path}: {run_id}: variant differs from {record_path} -- cannot certify")
+        row_id = row.get("persist_id") or ""
+        record_id = (rec.get("run") or {}).get("persist_id") or ""
+        if row_id != record_id:
+            problems += 1
+            print(f"[ABLATION] {path}: {run_id}: persist_id differs from {record_path} -- cannot certify")
+            continue
+        if not row_id:
+            problems += 1
+            print(f"[ABLATION] {path}: {run_id}: generation unverified (legacy row and record)")
+        if path.parent.name != _SMOKE_GROUP:
+            kind = (rec.get("policy") or {}).get("kind")
+            if kind is None:
+                print(f"[ABLATION] {record_path}: no policy.kind -- identity uncertified "
+                      "(written before the field existed), not refused")
+            elif kind != "checkpoint":
+                problems += 1
+                print(f"[ABLATION] {record_path}: policy.kind={kind!r}, not a checkpoint: "
+                      f"a diagnostic row in a scores table; use --group {_SMOKE_GROUP}")
+        records.append((record_path, rec))
+    for index, (left_path, left) in enumerate(records):
+        for right_path, right in records[index + 1:]:
+            result = record.conditions_conflict(left, right, a_path=left_path, b_path=right_path)
+            moved = result["conflicts"]
+            if not moved and not result["unproven"]:
+                continue
+            if (any("declared_as" not in values for values in moved.values()) or
+                    any(name in record.CONDITION_IDENTITIES and
+                        (record.get(left, name) is record._MISSING or record.get(right, name) is record._MISSING)
+                        for name in result["unproven"])):
+                problems += 1
+            print(f"[ABLATION] {left_path} vs {right_path}:")
+            for name, values in sorted(moved.items()):
+                tail = f" (declared as {values['declared_as']})" if "declared_as" in values else ""
+                print(f"    {name}: {values['a']} -> {values['b']}{tail}")
+            if result["unproven"]:
+                print(f"    unproven: {', '.join(result['unproven'])}")
+    for lock in lock_paths:
+        if lock != protocol_dir / ".summary-write.lock" and lock.exists():
+            problems += 1
+            print(f"[ABLATION] {lock}: write in progress or stale lock -- cannot certify")
     return problems
 
 
 _TERRAIN_COLUMNS = ["run_id", "protocol", "task", "mode", "seed", "iteration",
-                    "terrain", "completion", "fall_rate", "success_rate"]
+                    "terrain", "completion", "fall_rate", "success_rate", "source"]
 
 
 def _collect_terrain_rows(protocol_dir: pathlib.Path, group: str | None) -> list[dict]:
@@ -345,7 +455,9 @@ def _collect_terrain_rows(protocol_dir: pathlib.Path, group: str | None) -> list
             match = re.search(r"model_(\d+)\.pt", str(j.get("checkpoint", "")))
             for name, terrain in j.get("terrains", {}).items():
                 rows.append({
-                    "run_id": json_path.parent.name, "protocol": j["protocol"], "task": j["task"],
+                    "run_id": json_path.parent.name, "_source": str(json_path),
+                    "source": json_path.relative_to(protocol_dir).as_posix(),
+                    "protocol": j["protocol"], "task": j["task"],
                     "mode": j["mode"], "seed": j["seed"],
                     "iteration": int(match.group(1)) if match else -1, "terrain": name,
                     "completion": terrain["completion"], "fall_rate": terrain["fall_rate"],
@@ -355,8 +467,18 @@ def _collect_terrain_rows(protocol_dir: pathlib.Path, group: str | None) -> list
 
 
 def _terrain_pivot(rows: list[dict], metric: str) -> None:
-    """terrain x run table; run columns ordered by checkpoint iteration then mode."""
-    runs = sorted({(r["iteration"], r["mode"]) for r in rows})
+    """terrain x run table; refuse columns that combine distinct sources."""
+    sources = {}
+    seen = set()
+    for row in rows:
+        key = (row["iteration"], row["mode"])
+        source = row.get("_source", row["run_id"])
+        cell = (key, row["terrain"])
+        if (key in sources and sources[key] != source) or cell in seen:
+            raise ValueError(f"terrain pivot collision {key}: {sources.get(key)} vs {source}")
+        sources[key] = source
+        seen.add(cell)
+    runs = sorted(sources)
     cells = {(r["iteration"], r["mode"], r["terrain"]): r[metric] for r in rows}
     labels = [("smoke" if it < 0 else str(it)) + "/" + mode for it, mode in runs]
     width = max(11, *(len(x) for x in labels)) + 1
@@ -369,21 +491,26 @@ def _terrain_pivot(rows: list[dict], metric: str) -> None:
             for it, mode in runs))
 
 
-def _by_terrain(args_cli) -> None:
+def _by_terrain(args_cli) -> int:
     protocol_dir = _HARNESS_DIR / "results" / args_cli.protocol
     scope = protocol_dir / args_cli.group if args_cli.group else protocol_dir
     rows = _collect_terrain_rows(protocol_dir, args_cli.group)
     if not rows:
         print(f"[ABLATION] no eval.json under {scope}")
-        return
+        return 0
     out_csv = scope / "terrains.csv"
     with open(out_csv, "w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=_TERRAIN_COLUMNS)
+        writer = csv.DictWriter(f, fieldnames=_TERRAIN_COLUMNS, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)
     print(f"[ABLATION] wrote {out_csv} ({len(rows)} rows)")
-    for metric in ("completion", "fall_rate", "success_rate"):
-        _terrain_pivot(rows, metric)
+    try:
+        for metric in ("completion", "fall_rate", "success_rate"):
+            _terrain_pivot(rows, metric)
+    except ValueError as exc:
+        print(f"[ABLATION] {exc}; pivot not printed")
+        return 1
+    return 0
 
 
 def main():
@@ -406,8 +533,7 @@ def main():
     if args_cli.summarize:
         sys.exit(_summarize(args_cli))
     if args_cli.by_terrain:
-        _by_terrain(args_cli)
-        return
+        sys.exit(_by_terrain(args_cli))
     if args_cli.spec is None:
         parser.error("--spec, --summarize or --by-terrain is required")
     failures = _sweep(args_cli) + _summarize(args_cli)

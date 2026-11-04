@@ -91,18 +91,39 @@
 新字段被静默纳入比较）：`eval_protocol.digest`、`suite.name/digest/geometry_digest/num_rows/
 num_cols/envs_per_terrain/terrains`、`obs_protocol.identity` **与** `digest`（同名协议可被重批，
 身份相等不蕴含布局相等）、`judge.id`。唯一例外 `CONDITIONS_WITH_DECLARATION`：`assets.declared_digest`
-不同时该行必须在 `run.variant` 里点明这次替换（表里 `variant` 列即该声明），否则按冲突拒。两侧同为
-unknown 不算冲突但记 `unproven` —— 建立在缺失值上的表就是建立在空处。
+不同时该行必须在 `run.variant` 里点明这次替换。仅识别 `assets`、仓内确证的历史标签
+`assets-unknown`，或用 `+` 连接 `checkpoint`、`suite`、`assets`、`protocol`、`obs_protocol`、
+`assets-unknown` 的多标签；每个部分都须合法。自由文本无法穷尽否定语义，`no-assets`、
+`without-assets`、`non-assets`、`assets-note` 等模糊标签不作声明，其他历史 variant 仍可读取，
+但不能借模糊标签放行资产差异。真实汇总仅在写时快照的基线绝对路径与当前基线记录路径一致、两行
+实际属于同一协议内来源组、run_id 和双方资产摘要均匹配时确定候选行，且仅认候选行声明；路径迁移、
+跨组或其他无法确定方向的情况报告 `assets.declaration_direction` 未验证，沿用任一侧有效声明的历史
+行为，不猜候选身份。直接调用 `conditions_conflict` 而不传路径也按方向未验证处理；原调用方式保留。
+表有 `variant` 列时须与对应记录一致；历史表缺该列仍可读，但声明不在表中可见。上述声明由人填写，
+不证明资产确曾按意图替换。两侧同为
+unknown 不算冲突但记 `unproven`；历史记录双缺 `suite.geometry_digest` 或 `judge.id` 也记 `unproven`，不能从配置摘要推定几何或判分器身份。布局及地形清单等历史可选字段双缺仍沿用兼容行为，不表示已证。条件面比较整套件，
+不提供未改列跨套件可比白名单；列耦合诊断及边界见 `acceptance/records/2026-10-28-eval-column-coupling-dynamics.md`。
+辅助 API `table_conflicts` 的报告按 run_id 索引；重复 ID 或缺失 ID 的 `rowN` 备用键发生碰撞时，
+后续同键的报告键附输入行号以保留所有行；唯一键的输出结构不变。主 `--summarize` 不调用此 API，
+仍按完整路径逐对比较。
 
 **写侧硬门**：绑定齐备处（`_make_policy` 之后）与 `_persist` 各判一次 —— ①记录不完整 ⇒ **拒绝落盘**；
 ②同一 `run_id` 已有**可比**记录 ⇒ 重跑自重写，其余一律拒（记录有真差异 / legacy / 不完整 /
 目录有结果无记录 / 记录文件不可读）。放行只有 `--variant`（另起身份）或 `--overwrite`（显式替换）。
 拒写发生在 rollout **之前**。③**汇总侧按条件面拒表**：`--summarize` 读每行 run 目录的 `record.json`，
-条件冲突或记录读不到 ⇒ 列出冲突字段与方向并以非零码退出。④**汇总侧按身份拒表**（2026-09-23）：
+条件冲突或记录读不到、不完整 ⇒ 列出冲突字段与方向或记录状态并以非零码退出。未指定 `--group`
+时同表跨组检查，表中标注来源目录，报告使用完整记录路径区分重名 run；指定 `--group` 只检查所选组。
+条件双方均为 unknown 时报告 unproven，不将其当成一致已证（沿用零退出）；两行任一缺几何或判分器身份时非零退出，即便另一侧也是 unknown。单行没有两两条件比较。已声明的资产替换仍可同行。汇总拒绝非字符串或空地形名称；
+历史记录缺少 `suite.terrains` 时沿用原有兼容行为，不等于该条件已验证。新写入的记录与
+表行使用 `persist_id` 识别中断重写造成的代际错配；旧行缺身份报告 `generation unverified` 并非零退出，
+不补造历史身份。同一协议下的写入及汇总持有协议根目录独占锁；协作进程互斥，旧组锁也会拒写。
+写入开始后的失败会保留锁；写前失败和汇总读取正常展开的异常会释放锁，进程强制中断可能留下锁。
+遇到残锁须先核实进程和输出，再由维护者处理，不能仅按锁龄删除。该检查不使多文件变成事务、不证明
+内容真实性，也不约束未使用同一锁的旧版进程或人工修改；`--by-terrain` 与 HTML 不受保护。④**汇总侧按身份拒表**（2026-09-23）：
 `--group` 只决定一行落在哪张表，不决定它是什么 ⇒ 非 `smoke` 组的表里出现 `policy.kind != checkpoint`
 的行（零动作 / 冒烟）即点名该行与它的 kind 并非零退出 —— 那类行是**诊断**，与真分数同行会被读成性能读数
-（`locomotion_eval_v4` 根表里唯一那行就是 `zero_action`，其读数与 v3 smoke 同值、没有信息量）。写在
-`policy.kind` 字段出现之前的记录记 `identity uncertified` 但**不拒**：把历史表全变成不可读不叫更安全。
+（`locomotion_eval_v4` 根表里唯一那行就是 `zero_action`，其读数与 v3 smoke 同值、没有信息量）。缺少
+`policy.kind` 的历史记录在前面的完整性检查中被拒，不会进入身份兼容提示分支。
 `record.json` / `eval.json` /
 `summary.csv` 一律 tmp + `os.replace` 原子落盘：截断的记录会让下一次 run 崩在解析上，而不是崩在一个决定上。
 
@@ -163,7 +184,10 @@ harness 代码高频变更 / 多机器人共用 / 再开新协议时 → 目录�
 `--report` / `--summarize` 按协议目录天然隔离。v1.8.0 起这条**部分由机器执行**：`--summarize` 按
 条件面（见记录格式节）逐对比较，冲突即非零退出。**闸门只覆盖它看见的字段** —— `policy.kind`
 （零动作冒烟行混进真分数表）自 2026-09-23 起由 `--summarize` 单独拒绝（记录格式节 ④），
-图表/HTML 不经过 `--summarize`，那部分仍是纪律。
+`--by-terrain` 的逐地形表及图表/HTML 不经过 `--summarize` 的条件检查，那部分仍是纪律。
+`--by-terrain` 先按来源逐行写 `terrains.csv`，保留原列并在末尾追加 `source`：相对协议目录的
+`[组/]run_id/eval.json`，使用 `/` 分隔；指定组时也以协议目录为基准。按列名读取的消费者可忽略新列，
+按固定列数或整行比较的外部消费者需适配。打印透视表时若不同来源共用 `(iteration, mode)`，即使地形不重叠也拒绝透视并非零退出，避免合列或覆盖；CSV 保留全部行。此路径不受汇总锁保护。
 
 ## 与 rl_exp 的契约（单向消费，改动必跑闸门）
 

@@ -149,6 +149,9 @@ CONDITIONS = (
 #: table refuses it. Silence is what would let a cross-asset row read as a like-for-like one.
 CONDITIONS_WITH_DECLARATION = {"assets.declared_digest": "assets"}
 
+#: These identities cannot be inferred from other condition fields or absent historical metadata.
+CONDITION_IDENTITIES = {"suite.geometry_digest", "judge.id"}
+
 #: Value written for a fact that could not be established. Deliberately a string, not
 #: ``null``: an empty slot reads like "not recorded", which is the thing Step 0c refuses.
 UNKNOWN = "unknown"
@@ -323,29 +326,64 @@ def _value(record: dict | None, path: str):
     return None if value is _MISSING else value
 
 
-def _declares(a: dict, b: dict, variant: str) -> bool:
-    """Whether either side names this substitution, i.e. the difference is on the record."""
-    for side in (a, b):
-        if variant in str(get(side, "run.variant") or ""):
-            return True
-    return False
+def _declares(a: dict, b: dict, variant: str, a_path=None, b_path=None) -> tuple[bool, bool]:
+    """Return declaration and whether its candidate direction is backed by source paths."""
+    def names(side):
+        label = _value(side, "run.variant")
+        if not isinstance(label, str):
+            return False
+        parts = label.split("+")
+        allowed = set(SUBSTITUTION_CATEGORY.values()) | {"assets-unknown"}
+        return all(part in allowed for part in parts) and (variant in parts or
+                                                            (variant == "assets" and "assets-unknown" in parts))
+
+    def references(candidate, baseline, candidate_path, baseline_path):
+        evidence = candidate.get("substitutions")
+        if not isinstance(evidence, dict) or evidence.get("comparison") != "compared":
+            return False
+        ref = evidence.get("baseline")
+        bindings = evidence.get("bindings")
+        values = bindings.get("assets.declared_digest") if isinstance(bindings, dict) else None
+        if not (isinstance(ref, dict) and isinstance(ref.get("path"), str)
+                and candidate_path is not None and baseline_path is not None):
+            return False
+        try:
+            ref_path = pathlib.Path(ref["path"])
+            candidate_path, baseline_path = pathlib.Path(candidate_path).resolve(), pathlib.Path(baseline_path).resolve()
+            if not ref_path.is_absolute() or ref_path.resolve() != baseline_path:
+                return False
+        except (OSError, RuntimeError, ValueError):
+            return False
+        return (candidate_path.parent.parent == baseline_path.parent.parent
+                and ref.get("run_id") == _value(baseline, "run.run_id")
+                and isinstance(values, dict) and values.get("candidate") == _value(candidate, "assets.declared_digest")
+                and values.get("baseline") == _value(baseline, "assets.declared_digest"))
+
+    a_candidate = references(a, b, a_path, b_path)
+    b_candidate = references(b, a, b_path, a_path)
+    if a_candidate != b_candidate:
+        return names(a if a_candidate else b), True
+    return names(a) or names(b), False
 
 
-def conditions_conflict(a: dict, b: dict) -> dict:
+def conditions_conflict(a: dict, b: dict, *, a_path=None, b_path=None) -> dict:
     """Why two records may not share one table: the conditions that moved, and the ones unproven.
 
-    Unknown on both sides is *not* a conflict -- equal absence is what two rows of one batch look
-    like when a fact was never recorded -- but it is reported as unproven, because a table built on
-    a missing value is a table built on nothing.
+    Unknown on both sides is not a conflict, but is reported as unproven. Missing geometry and
+    judge identities are likewise unproven; optional historical layout fields may both be absent.
 
     The one exception is :data:`CONDITIONS_WITH_DECLARATION`: a difference a row declares (an assets
     swap, named by ``run.variant``) is carried through as ``declared_as`` instead of refused. The row
     is then not a like-for-like row, and saying so is the whole condition for keeping it.
+    Optional record paths establish candidate direction; without them it is explicitly unproven
+    and the historical symmetric declaration rule remains in effect.
     """
     conflicts: dict[str, dict] = {}
     unproven: list[str] = []
     for path in CONDITIONS:
         left, right = _value(a, path), _value(b, path)
+        if path in CONDITION_IDENTITIES and (left is None or right is None):
+            unproven.append(path)
         if left is None and right is None:
             continue
         if left == right:
@@ -353,15 +391,22 @@ def conditions_conflict(a: dict, b: dict) -> dict:
                 unproven.append(path)
             continue
         conflicts[path] = {"a": left, "b": right}
-        if left == UNKNOWN or right == UNKNOWN:
+        if (left == UNKNOWN or right == UNKNOWN) and path not in unproven:
             unproven.append(path)
     for path, variant in CONDITIONS_WITH_DECLARATION.items():
         left, right = _value(a, path), _value(b, path)
-        if left is None and right is None or left == right:
+        if left is None and right is None:
+            continue
+        if left == right:
+            if left == UNKNOWN:
+                unproven.append(path)
             continue
         entry = {"a": left, "b": right}
-        if _declares(a, b, variant):  # the difference is on the record, so the row may stay
+        declared, directed = _declares(a, b, variant, a_path, b_path)
+        if left != UNKNOWN and right != UNKNOWN and declared:
             entry["declared_as"] = variant
+        if not directed:
+            unproven.append("assets.declaration_direction")
         conflicts[path] = entry
         if left == UNKNOWN or right == UNKNOWN:
             unproven.append(path)
@@ -374,23 +419,40 @@ def table_conflicts(records: list[dict]) -> dict:
     Pairwise rather than against the first row: a table whose first row is the odd one out must not
     be the only one reported. A record that is not ``complete`` is reported as ``unreadable`` rather
     than skipped -- a table that dropped a row in silence is a table whose population nobody can
-    reconstruct later.
+    reconstruct later. When run IDs collide, report keys include their input row positions.
     """
+    ids = []
+    reserved = set()
+    for index, item in enumerate(records):
+        value = get(item, "run.run_id")
+        run_id = str(value if value is not _MISSING and value else f"row{index}")
+        ids.append(run_id)
+        reserved.add(run_id)
+    seen = set()
+    for index, run_id in enumerate(ids):
+        if run_id in seen:
+            key = f"{run_id} [row {index}]"
+            while key in reserved:
+                key += "#"
+            ids[index] = key
+            reserved.add(key)
+        seen.add(run_id)
     conflicts: dict[str, dict] = {}
     unreadable: dict[str, str] = {}
     for index, left in enumerate(records):
-        run_id = str(get(left, "run.run_id") or f"row{index}")
+        run_id = ids[index]
         state = read_state(left)
         if state["state"] != "complete":
             unreadable[run_id] = f"{state['state']}: {state['note'] or state['missing']}"
             continue
-        for right in records[index + 1:]:
+        for right_index in range(index + 1, len(records)):
+            right = records[right_index]
             if read_state(right)["state"] != "complete":
                 continue
             found = conditions_conflict(left, right)
             if not found["conflicts"] and not found["unproven"]:
                 continue
-            other = str(get(right, "run.run_id") or f"row{index + 1}")
+            other = ids[right_index]
             entry = conflicts.setdefault(run_id, {"against": {}, "unproven": []})
             entry["against"][other] = found["conflicts"]
             entry["unproven"].extend(name for name in found["unproven"] if name not in entry["unproven"])
@@ -522,7 +584,7 @@ def baseline_evidence(
     else:
         try:
             return substitution_evidence(candidate, load(path), baseline_ref=ref)
-        except (OSError, json.JSONDecodeError) as err:
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as err:
             reason = f"{path} is unreadable ({err})"
     return substitution_evidence(candidate, None, baseline_ref=ref, reason=reason)
 
@@ -543,9 +605,9 @@ def overwrite_refusal(previous: dict | None, current: dict) -> str | None:
 
     ``None`` previous means nothing sits at that run_id. A previous record that is not complete
     -- legacy, another format, missing fields -- is refused: its identity cannot be established.
-    A complete previous record is refused when a binding **differs**; when the bindings are equal
-    the pair is the same measurement re-run and overwrites itself, and bindings that read
-    ``unknown`` on both sides count as equal there (equal evidence, absent though it is).
+    A complete previous record is refused when a binding **differs**. Bindings that read
+    ``unknown`` on both sides count as equal for overwrite policy, but do not establish that
+    the two records describe the same measurement.
     """
     if previous is None:
         return None

@@ -16,6 +16,7 @@ import argparse
 import copy
 import inspect
 import json
+import os
 from pathlib import Path
 import sys
 import time
@@ -26,7 +27,7 @@ import numpy as np
 REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO))
 from rl_exp.tools.runrecord.binding import sha256_file  # noqa: E402
-from palm_training_interface import DRAFT, DRAFT_SHA, TASK, equal  # noqa: E402
+from palm_training_interface import DRAFT, DRAFT_SHA, TASK, cleanup_self_check, equal  # noqa: E402
 from palm_spatial_inertia import _rotation, csc  # noqa: E402
 from palm_spatial_runtime import pair_binding  # noqa: E402
 
@@ -208,48 +209,6 @@ def audit(path):
     return dict(checked, rejected_corruptions=5)
 
 
-def cleanup_self_check():
-    """Exercise the actual collector finally with stub close and write failures."""
-    import ast
-    from contextlib import nullcontext
-    from tempfile import TemporaryDirectory
-    from unittest.mock import patch
-
-    tree = ast.parse(Path(__file__).read_text(encoding='utf-8'))
-    collector = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'collect')
-    final = next(n for n in collector.body if isinstance(n, ast.Try)).finalbody
-    wrapper = ast.parse('def cleanup(out, r, env, app, failed):\n pass').body[0]
-    wrapper.body = final
-    called = []
-
-    class App:
-        def close(self):
-            called.append('close')
-            raise SystemExit(0)
-
-    namespace = dict(json=json, traceback=traceback, audit=lambda p: called.append('audit') or {})
-    exec(compile(ast.fix_missing_locations(ast.Module(body=[wrapper], type_ignores=[])),
-                 '<actual collector finally>', 'exec'), namespace)
-    with TemporaryDirectory(prefix='contact_cleanup_', dir=REPO/'rl_exp/out') as directory:
-        out = Path(directory)
-        for case in ('normal', 'collection_failure', 'nan', 'write_failure'):
-            called.clear()
-            r = dict(completed=case == 'normal', closed=True, failure='fixture failure')
-            if case == 'nan':
-                r['value'] = float('nan')
-            disk = patch.object(Path, 'write_text', side_effect=OSError('fixture disk failure')) \
-                if case == 'write_failure' else nullcontext()
-            try:
-                with disk:
-                    namespace['cleanup'](out, r, None, App(), case == 'collection_failure')
-            except (ValueError, OSError, RuntimeError):
-                assert case != 'normal'
-            else:
-                assert case == 'normal', 'failure escaped cleanup'
-            assert called[-1:] == ['close'], 'app cleanup skipped on '+case
-            assert ('audit' in called) == (case == 'normal')
-
-
 def collect(args):
     """Observe native ground patches without changing the isolated draft physics."""
     assert sha256_file(DRAFT) == DRAFT_SHA
@@ -262,7 +221,6 @@ def collect(args):
         samples=[], steps=[], stop_reason=None)
     app = env = None
     started = time.monotonic()
-    failed = False
     try:
         from isaaclab.app import AppLauncher
         app = AppLauncher(args).app
@@ -369,30 +327,41 @@ def collect(args):
                 break
         r['completed'] = True
     except BaseException:
-        failed = True
         r['failure'] = traceback.format_exc()
         raise
     finally:
+        original = sys.exc_info()[1]
+        failure = original
+        if env is not None:
+            try:
+                env.close()
+                r['closed'] = True
+            except BaseException as exc:
+                r['close_failure'] = traceback.format_exc()
+                if failure is None:
+                    failure = exc
+                else:
+                    failure.add_note('env.close failed:\n' + r['close_failure'])
         try:
-            if env is not None:
-                try:
-                    env.close()
-                    r['closed'] = True
-                except BaseException:
-                    failed = True
-                    r['close_failure'] = traceback.format_exc()
             (out/'report.json').write_text(json.dumps(r, indent=2, allow_nan=False), encoding='utf-8')
-            if failed:
-                raise RuntimeError(r.get('failure', r.get('close_failure')))
+        except BaseException as exc:
+            if failure is None:
+                failure = exc
+            else:
+                failure.add_note('report write failed:\n' + traceback.format_exc())
+        if original is None and failure is not None:
+            raise failure
+        if failure is None:
             checked = audit(out/'report.json')
-            (out/'audit.json').write_text(json.dumps(checked, indent=2), encoding='utf-8')
+            (out/'audit.json').write_text(json.dumps(checked, indent=2, allow_nan=False), encoding='utf-8')
             print(json.dumps(checked, indent=2), flush=True)
-        finally:
+            # Kit can terminate with status 0 while an exception is unwinding.
             if app is not None:
                 try:
                     app.close()
-                except SystemExit:
-                    pass
+                except SystemExit as exc:
+                    if exc.code not in (None, 0):
+                        raise
 
 
 def main():
@@ -400,7 +369,7 @@ def main():
     parser.add_argument('--audit', type=Path)
     parser.add_argument('--out', type=Path)
     parser.add_argument('--self_check', action='store_true')
-    if '--audit' not in sys.argv and '--self_check' not in sys.argv:
+    if not any(flag in sys.argv for flag in ('--audit', '--self_check')):
         from isaaclab.app import AppLauncher
         AppLauncher.add_app_launcher_args(parser)
     args = parser.parse_args()
@@ -431,7 +400,7 @@ def main():
             raise AssertionError('invalid contact buffer range accepted')
         empty = contact_patch(arrays[:4] + [np.array([[0]]), np.array([[-1]])])
         assert empty['forces'] == empty['points'] == []
-        cleanup_self_check()
+        cleanup_self_check(globals())
         print('CONTACT_SAMPLE_SELF_CHECK_OK')
     elif args.audit:
         print(json.dumps(audit(args.audit), indent=2))
@@ -442,4 +411,14 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except BaseException as exc:
+        if isinstance(exc, SystemExit) and exc.code in (None, 0):
+            raise
+        try:
+            traceback.print_exc()
+            sys.stderr.flush()
+            sys.stdout.flush()
+        finally:
+            os._exit(1)

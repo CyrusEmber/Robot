@@ -1,5 +1,9 @@
 # 套件列间耦合：改一格的几何，让站在**别的、逐字节相同**格子上的 env 走出不同轨迹（2026-10-10）
 
+> **2026-10-30 勘误：以下为原始叙述，不作为已核实的机制结论。** 原批次没有逐环境 done、reset 与首次分叉记录；单边先终止并重置可能制造状态差异，撤回“重落只会掩盖、不会制造分叉”和“已坐实引擎层”等无条件归因。原结果使用截断摘要，原始日志及临时脚本当前缺失，表格亦有列数不一致；不能独立核验原批次的逐位相同或分叉，也不能原样执行下方复读命令。原文及脚本正文保留作历史，缺失输入未补造。详见 `acceptance/records/2026-10-28-eval-column-coupling-independent-review.md`。
+>
+> 后续单标量四臂探针记录了初态、done 和 reset，在该批次支持更窄的结论，不能补证原批次；未记录的引擎状态、全局随机流及其他环境影响仍未排除。数据和可复读入口见 `acceptance/records/2026-10-28-eval-column-coupling-repair.md`。完整历史仿真环境仍待 `work/active/eval-column-runtime-recovery.md` 恢复验证。
+
 ## 适用范围
 
 - **被验的问题**：`work/active/eval-column-coupling.md`（`close_when` 的机制部分）。上一轮证据与审核：
