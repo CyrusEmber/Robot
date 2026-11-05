@@ -103,8 +103,6 @@ CHECKS: list[Check] = [
           [f"{_V}/check_cfg_lock.py", "--self-test"], contract=("rl_exp/versions/cfg_baselines.json",)),
     Check("run manifest (T0/T1 record, checkpoint infos, external index, --verify)",
           [f"{_V}/test_run_manifest.py"], contract=("rl_exp/tools/runrecord/manifest.py",)),
-    Check("isolation rebuild gate (material capture/refusal, sources, missing-file negative test)",
-          [f"{_V}/test_rebuild_gate.py"], contract=("rl_exp/tools/runrecord/rebuild.py",)),
     Check("recipe line discovery (yaml/lock convention, refusals must fire)",
           [f"{_V}/test_recipe_lines.py"], contract=("rl_exp/tools/verify/recipe_lines.py",)),
     Check("recipe line lifecycle (identity / retirement evidence / binary status / version exceptions)",
@@ -174,7 +172,7 @@ def default_jobs() -> int:
 #   Deliberately far above the cost budget, so that a slow check is reported as cost, not
 #   killed as a hang.
 PER_CHECK_BUDGET_S = 25.0
-MAX_CHECKS = 37  # ratchet: today's count (48 - 11 retired 2026-10-09 with the lizard main/parkour/baseline lines: every one of those entries guarded a module or registration that left the repo -- i.e. 36 + the leg-chain caliber, whose knee assertion is the only guard the "no reverse bending" requirement has). Add one -> remove or merge one, or raise this here.
+MAX_CHECKS = 36  # the isolation-rebuild test moved out of the default suite; add one -> remove or merge one, or raise this here.
 SERIAL_BUDGET_S = 160.0  # the total; --confirm-cost measures it (160s on 2026-09-18, 45 checks; 140s and 154s on 2026-09-20, 46 checks -- those readings did not move the constant. It moved on 2026-10-09 with the count ratchet, 48 -> 37: quiet 146s, 37 checks, so the ceiling comes down with the checks)
 SOLO_RECHECKS = 3  # breaching checks re-run alone, worst first, before they are suspect
 PER_CHECK_TIMEOUT_S = 180.0

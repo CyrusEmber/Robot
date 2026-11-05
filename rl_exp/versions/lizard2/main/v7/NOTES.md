@@ -6,12 +6,13 @@
 
 ## 实际执行与偏离
 
-本版接入阶段做资产晋升、配置及离线检查；后续接口实测取 [接口记录](../../../../../acceptance/records/2026-11-03-lizard2-v7-interface.md)。未启动策略训练、未生成训练run/checkpoint。用户已批准提交与冻结，实际提交/标签/远端身份唯一取 [冻结记录](../../../../../acceptance/records/2026-11-03-lizard2-v7-freeze.md)。接入执行与原缺证归 [接入记录](../../../../../acceptance/records/2026-11-03-lizard2-v7-round-feet.md)，不将其历史状态当当前接口状态。
+本版接入阶段做资产晋升、配置及离线检查；后续接口实测取 [接口记录](../../../../../acceptance/records/2026-11-03-lizard2-v7-interface.md)。接入和冻结阶段没有启动策略训练；实际提交/标签/远端身份取 [冻结记录](../../../../../acceptance/records/2026-11-03-lizard2-v7-freeze.md)。接入执行与原缺证归 [接入记录](../../../../../acceptance/records/2026-11-03-lizard2-v7-round-feet.md)，不将其历史状态当当前接口状态。
 
 ## 结果回填
 
-后续在此引用实际 run 目录、manifest 复读命令与验收记录；本轮无训练结果。
+- 已训 run `E:/IsaacLab/logs/rsl_rl/lizard2_v7/2026-11-03_17-07-29/`；策略现场诊断取 [小腿倾角记录](../../../../../acceptance/records/2026-11-04-lizard2-shank-tilt-reach.md)。
+- 来源短训 run `E:/IsaacLab/logs/rsl_rl/lizard2_v7/2026-11-04_16-12-57/`；复读 `python -m rl_exp.tools.runrecord.manifest --verify E:/IsaacLab/logs/rsl_rl/lizard2_v7/2026-11-04_16-12-57`，来源与训后状态取 [验收记录](../../../../../acceptance/records/2026-11-04-training-provenance-dependency-scope.md)。
 
 ## 结论
 
-配置及有限接口已交付，具体批准范围取 [接口实测记录](../../../../../acceptance/records/2026-11-03-lizard2-v7-interface.md)；不宣称策略性能改善或已经启动训练。其余限制以接入记录和接口记录为准。
+已产生策略训练及来源短训记录；来源短训不代表策略性能通过，固定评估状态和边界取上述记录。

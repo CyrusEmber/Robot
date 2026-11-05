@@ -22,11 +22,14 @@ register.
 
 from __future__ import annotations
 
+import inspect
 import json
 import os
 import pathlib
+import subprocess
 import sys
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 
 _REPO = pathlib.Path(__file__).resolve().parents[3]
 if str(_REPO) not in sys.path:
@@ -48,6 +51,7 @@ RETIRED_LINE = "lizard2/main"
 def main() -> int:
     """Run every case; each one asserts something a reader cannot see from the happy path."""
     problems: list[str] = []
+    problems.extend(_dependency_cases())
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp = pathlib.Path(tmp_dir)
         problems.extend(_refusals())
@@ -195,6 +199,142 @@ def _agent_cfg():
             return {"experiment_name": self.experiment_name, "seed": self.seed}
 
     return _Agent()
+
+
+# Installed by sitecustomize in both fresh interpreters, before either entry imports repository code.
+_SITE = r'''
+import ast, importlib.util, os, pathlib, sys
+
+repo = pathlib.Path(os.environ["PROBE_REPO"])
+source = repo / "rl_exp/tools/runrecord/provenance.py"
+tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
+declarations = [node.value for node in tree.body if isinstance(node, ast.Assign)
+                and any(isinstance(target, ast.Name) and target.id == "EVAL_EXCLUSIVE_PATHS"
+                        for target in node.targets)]
+if len(declarations) != 1:
+    raise RuntimeError("expected one literal eval-exclusive declaration")
+forbidden = {(repo / path).resolve() for path in ast.literal_eval(declarations[0])}
+if not forbidden or (repo / "ablation_harness/record.py").resolve() not in forbidden:
+    raise RuntimeError("record.py must be in the nonempty eval-exclusive declaration")
+
+is_trainer = pathlib.Path(sys.argv[0]).name == "train.py"
+role = "trainer" if is_trainer else "launcher"
+filenames = {}
+
+def guard(frame, event, arg):
+    if event == "call":
+        filename = frame.f_code.co_filename
+        if filename not in filenames:
+            filenames[filename] = not filename.startswith("<") and pathlib.Path(filename).resolve() in forbidden
+        if filenames[filename]:
+            print(f"DEPENDENCY_GUARD_HIT {role} {filename}", file=sys.stderr, flush=True)
+            raise SystemExit(86)
+    return None
+# The guard needs call events only; avoid the trace hook's per-frame tracing overhead.
+sys.setprofile(guard)
+print(f"DEPENDENCY_GUARD_READY {role} {os.getpid()} {os.getppid()}", flush=True)
+
+from rl_exp.tools.runrecord import lifecycle, provenance
+read = lifecycle.read_index
+lifecycle.read_index = lambda root=None: read(root or pathlib.Path(os.environ["PROBE_INDEX"]))
+if os.environ.get("PROBE_INJECT") == role:
+    if is_trainer:
+        from rl_exp.tools.runrecord import manifest
+        original = manifest.prov.code_sources
+        def injected(*args, **kwargs):
+            spec = importlib.util.spec_from_file_location("dependency_probe", repo / os.environ["PROBE_PATH"])
+            spec.loader.exec_module(importlib.util.module_from_spec(spec))
+            return original(*args, **kwargs)
+        manifest.prov.code_sources = injected
+    else:
+        original = lifecycle.check_recipe_map.bind
+        def injected(*args, **kwargs):
+            spec = importlib.util.spec_from_file_location("dependency_probe", repo / os.environ["PROBE_PATH"])
+            spec.loader.exec_module(importlib.util.module_from_spec(spec))
+            return original(*args, **kwargs)
+        lifecycle.check_recipe_map.bind = injected
+'''
+
+
+def _dependency_cases() -> list[str]:
+    """Run the real launcher CLI and its child stub, not a simulation or the fork trainer."""
+    problems = []
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp = pathlib.Path(tmp_dir)
+        with active_index(tmp):
+            pass  # materialize the same active fixture independently read in both processes
+        (tmp / "sitecustomize.py").write_text(_SITE, encoding="utf-8")
+        trainer = tmp / "scripts/reinforcement_learning/rsl_rl/train.py"
+        trainer.parent.mkdir(parents=True)
+        trainer.write_text(
+            "import json, os, pathlib, sys\n"
+            "from rl_exp.tools.runrecord import manifest as M\n"
+            + inspect.getsource(_env_cfg) + "\n" + inspect.getsource(_agent_cfg) + "\n"
+            "task = sys.argv[sys.argv.index('--task') + 1]\n"
+            "print('TRAINER_STUB_ENTER ' + json.dumps({'pid': os.getpid(), 'ppid': os.getppid(), "
+            "'argv': sys.argv, 'cwd': os.getcwd(), 'executable': sys.executable}), flush=True)\n"
+            "ctx = M.begin(log_dir=pathlib.Path(os.environ['PROBE_LOG']), task=task, "
+            "argv=sys.argv, env_cfg=_env_cfg(), agent_cfg=_agent_cfg())\n"
+            "record = json.loads(ctx.manifest_path.read_text(encoding='utf-8'))\n"
+            "assert record['declaration']['lifecycle']['allowed']\n"
+            "print('TRAINER_MANIFEST_OK', flush=True)\n",
+            encoding="utf-8",
+        )
+        launcher = _REPO / "rl_exp/tools/launch_recipe.py"
+
+        def run(case):
+            label, launch, injection, path = case
+            env = {**os.environ, "PROBE_REPO": str(_REPO), "PROBE_INDEX": str(tmp / "active_index"),
+                   "PROBE_INJECT": injection, "PROBE_PATH": path, "PROBE_LOG": str(tmp / label), "RL_ISAAC_ROOT": str(tmp),
+                   "RL_ALLOW_DIRTY_TREE": "offline dependency check, not training",
+                   "PYTHONPATH": os.pathsep.join((str(tmp), str(_REPO), os.environ.get("PYTHONPATH", "")))}
+            return subprocess.run(
+                [sys.executable, str(launcher), "--task", TASK, "--num_envs", "64", "--seed", "7",
+                 *(["--launch", "--python", sys.executable] if launch else [])],
+                cwd=_REPO, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=180,
+            )
+
+        paths = ("ablation_harness/eval.py", "ablation_harness/record.py", "ablation_harness/run_ablation.py")
+        cases = [("default", False, "trainer", paths[0]), ("handoff", True, "", paths[0])]
+        cases.extend((f"{role}-injected-{i}", True, role, path)
+                     for role in ("launcher", "trainer") for i, path in enumerate(paths))
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            results = list(pool.map(run, cases))
+        for (label, _, _, path), result in zip(cases, results):
+            out, err = result.stdout, result.stderr
+            ready = [line.split() for line in out.splitlines() if line.startswith("DEPENDENCY_GUARD_READY ")]
+            launcher_pids = [int(line[2]) for line in ready if line[1] == "launcher"]
+            trainer_pids = [int(line[2]) for line in ready if line[1] == "trainer"]
+            stub_lines = [line.removeprefix("TRAINER_STUB_ENTER ") for line in out.splitlines()
+                          if line.startswith("TRAINER_STUB_ENTER ")]
+            stub = json.loads(stub_lines[0]) if len(stub_lines) == 1 else None
+            launcher_ready = len(launcher_pids) == 1
+            trainer_ready = len(trainer_pids) == 1
+            entered = stub is not None
+            handoff = (launcher_ready and trainer_ready and entered
+                       and stub["pid"] == trainer_pids[0] != launcher_pids[0]
+                       and stub["ppid"] == int(next(line[3] for line in ready if line[1] == "trainer"))
+                       # Windows venv launchers can insert a native process between interpreters.
+                       and pathlib.Path(stub["cwd"]).resolve() == tmp.resolve()
+                       and pathlib.Path(stub["executable"]).resolve() == pathlib.Path(sys.executable).resolve()
+                       and (tmp / stub["argv"][0]).resolve() == trainer.resolve()
+                       and stub["argv"][1:] == ["--task", TASK, "--num_envs", "64", "--seed", "7"])
+            manifest_ok = "TRAINER_MANIFEST_OK" in out
+            if label == "default":
+                ok = result.returncode == 0 and launcher_ready and not trainer_ready and not entered
+            elif label == "handoff":
+                ok = result.returncode == 0 and handoff and manifest_ok
+            elif label.startswith("launcher-injected"):
+                ok = (result.returncode == 86 and launcher_ready and not trainer_ready and not entered
+                      and "DEPENDENCY_GUARD_HIT launcher " in err and pathlib.Path(path).name in err)
+            else:
+                ok = (result.returncode == 86 and handoff and not manifest_ok
+                      and "DEPENDENCY_GUARD_HIT trainer " in err and pathlib.Path(path).name in err)
+            if not ok:
+                problems.append(f"dependency {label}: exit={result.returncode}\nstdout={out}\nstderr={err}")
+            else:
+                print(f"  dependency {label}: {'guard hit' if 'injected' in label else 'completed'}")
+    return problems
 
 
 if __name__ == "__main__":

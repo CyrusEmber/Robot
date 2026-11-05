@@ -34,9 +34,8 @@ is reported as unknown with a reason.
 One thing this module **refuses** instead of recording: a training launch from a dirty
 project tree (``dirty_tree_refusal``). The T0 record is still written first, so a refused
 launch leaves evidence rather than nothing; the refusal is then a ``failure`` entry plus a
-non-zero exit. A dirty tree is not a run whose provenance is merely awkward -- no revision
-restores it, so its rebuildable claim could never be proven, and finding that out months
-later is strictly worse than finding it out at launch.
+non-zero exit. A revision alone cannot restore protected uncommitted changes; an archive is
+needed to trace them for a later rebuild.
 
 Verify offline: ``python -m rl_exp.tools.runrecord.manifest --verify <log_dir>``.
 The report is two-dimensional, as the plan requires: evidence level (record complete /
@@ -453,12 +452,10 @@ def dirty_tree_refusal(ctx: RunContext) -> str | None:
     is *expected* to carry the fork patches uncommitted, so refusing on it would refuse
     every launch and train people to set the override as a habit. Both stay recorded.
 
-    Scoped again, inside the repository, to the changes a run actually read: prose does not count.
-    The ledger, the records and the plans are ``.md`` and no declaration digests one, so a document
-    edited while a run is in flight cannot change what the run did -- and the rebuild gate already
-    reads a record this way (it archives code-root dirt and ignores the rest). ``dirty`` stays the
-    recorded fact; the refusal is about ``changed_non_prose``. A provenance that predates that split
-    carries no field and stays strict.
+    Inside the repository, prose and the T0-declared eval-only files are excluded from the
+    protected paths. ``dirty`` remains the whole-tree fact. Records without the new scope
+    fields retain their original classification. Unavailable provenance is refused unless
+    the override carries a reason.
 
     Args:
         ctx: the run context whose T0 has just been written.
@@ -468,18 +465,23 @@ def dirty_tree_refusal(ctx: RunContext) -> str | None:
         reason.
     """
     source = (ctx.manifest.get("code") or {}).get("repository") or {}
-    if not source.get("dirty"):
-        return None
     if os.environ.get(DIRTY_OVERRIDE_ENV, "").strip():
         return None
-    blocking = source.get("changed_non_prose")
+    if not source.get("available"):
+        return f"project provenance unavailable ({source.get('detail', 'no detail')}); state a reason via {DIRTY_OVERRIDE_ENV}"
+    if not source.get("dirty"):
+        return None
+    if isinstance(source.get("eval_exclusive_paths"), list) and isinstance(source.get("changed_blocking"), list):
+        blocking = source["changed_blocking"]
+    else:
+        blocking = source.get("changed_non_prose")
     if blocking is not None and not blocking:
         return None
     named = f" ({', '.join(blocking[:3])})" if blocking else ""
     return (
         f"the project tree is dirty (rev {source.get('rev', '?')}, "
         f"{source.get('diff_lines', '?')} diff line(s), {source.get('untracked_count', '?')} untracked)"
-        f"{named}: no revision restores it, so this run's rebuildable claim could never be proven. "
+        f"{named}: a revision alone cannot restore these changes; their content needs an archive. "
         f"Commit first, or state the reason explicitly: {DIRTY_OVERRIDE_ENV}="
         f'"<why this dirty tree must run>"'
     )
@@ -526,11 +528,31 @@ def after_env(ctx: RunContext, env) -> None:
             },
             "checked": {name: list(pair) for name, pair in checks.items()},
         }
+        repository = (ctx.manifest.get("code") or {}).get("repository") or {}
+        declaration = repository.get("eval_exclusive_paths")
+        violations = []
+        if isinstance(declaration, list):
+            observed = []
+            root = prov._REPO.resolve()
+            for name, module in list(sys.modules.items()):
+                filename = getattr(module, "__file__", None)
+                if not isinstance(filename, (str, os.PathLike)):
+                    continue
+                try:
+                    relative = pathlib.Path(filename).resolve().relative_to(root).as_posix()
+                except (OSError, ValueError):
+                    continue
+                observed.append({"module": name, "path": relative})
+            stage["observed_dependencies"] = sorted(observed, key=lambda item: (item["path"], item["module"]))
+            violations = [item for item in stage["observed_dependencies"] if item["path"] in declaration]
+            stage["scope_violations"] = violations
         ctx.manifest.setdefault("stages", {})["env_constructed"] = stage
         ctx.flush()
         for mismatch in mismatches:
             ctx.fail(f"env construction disagreed with the declaration -- {mismatch}")
-        if not mismatches:
+        if violations:
+            ctx.fail(f"eval-exclusive scope violation: loaded {violations}")
+        if not mismatches and not violations:
             print(f"[run-manifest] {ctx.run_id}: env built as declared (obs groups {list(stage['obs_group_dims'])})")
     except Exception as err:  # noqa: BLE001
         ctx.fail(f"env_constructed recording failed: {type(err).__name__}: {err}")
@@ -940,7 +962,36 @@ def _verify_self_consistency(manifest: dict, problems: list[str]) -> list[dict]:
     else:
         rows.append(_row("记录完整", "通过", f"T1 digest re-derived from the record ({str(recorded)[:16]})"))
 
-    checked = manifest.get("stages", {}).get("env_constructed", {}).get("checked", {})
+    env_stage = manifest.get("stages", {}).get("env_constructed", {})
+    declaration = (manifest.get("code", {}).get("repository") or {}).get("eval_exclusive_paths")
+    observed = env_stage.get("observed_dependencies") or []
+    violations = env_stage.get("scope_violations") or []
+    if isinstance(declaration, list):
+        if not isinstance(env_stage.get("observed_dependencies"), list) or not isinstance(env_stage.get("scope_violations"), list):
+            problems.append("record: scope observation missing")
+            rows.append(_row("记录完整", "失败", "scope observation missing from env construction"))
+        violations = [*violations, *(item for item in observed
+                                    if isinstance(item, dict) and item.get("path") in declaration and item not in violations)]
+    if violations:
+        problems.append(f"record: eval-exclusive scope violation -- {violations}")
+        rows.append(_row("记录完整", "失败", f"eval-exclusive scope violation: {violations}"))
+
+    t0 = (manifest.get("code") or {}).get("repository") or {}
+    t1 = ((manifest.get("stages") or {}).get("ready_to_learn", {}).get("code") or {}).get("repository")
+    if isinstance(declaration, list) and isinstance(t0.get("changed_blocking"), list):
+        t1 = t1 if isinstance(t1, dict) else {}
+        paths = t1.get("changed_paths_full")
+        if not t1.get("available") or not isinstance(paths, list):
+            problems.append("record: T1 code scope unavailable")
+            rows.append(_row("记录完整", "失败", "T1 code scope unavailable"))
+        else:
+            t1_blocking = [path for path in paths if not path.lower().endswith(".md") and path not in declaration]
+            if (t1.get("rev") != t0.get("rev") or t1_blocking != t0.get("changed_blocking")
+                    or (t1_blocking and t1.get("diff_sha256") != t0.get("diff_sha256"))):
+                problems.append("record: protected code scope changed between T0 and T1")
+                rows.append(_row("记录完整", "失败", "protected code scope changed between T0 and T1"))
+
+    checked = env_stage.get("checked", {})
     disagreements = [
         f"{name}: declared {pair[0]!r} != actual {pair[1]!r}"
         for name, pair in checked.items()
@@ -1033,10 +1084,18 @@ def _verify_code(manifest: dict, problems: list[str]) -> list[dict]:
                 _row("可重建", "未知", f"{name}: installed distribution {before.get('distribution_version')}, source not pinned")
             )
             continue
+        if not after.get("available"):
+            rows.append(_row("可重建", "未知", f"{name}: current source unavailable ({after.get('detail', 'no detail')})"))
+            continue
         moved = before.get("rev") != after.get("rev")
+        if (name == "repository" and isinstance(before.get("eval_exclusive_paths"), list)
+                and isinstance(before.get("changed_blocking"), list) and not before["changed_blocking"]):
+            rows.append(_row("可重建", "通过", f"{name}: no protected paths changed at T0; "
+                             f"recorded revision {before.get('rev')}"))
+            continue
         diff_moved = before.get("diff_sha256") != after.get("diff_sha256")
         dirty_then = before.get("dirty")
-        code_in_untracked = before.get("untracked_in_code_root") or []
+        code_in_untracked = prov.protected_untracked(name, before)
         outside = len(before.get("untracked_outside_code_root") or [])
         ignored = f" ({outside} untracked file(s) outside the code root ignored)" if outside else ""
         if dirty_then and code_in_untracked:
@@ -1045,7 +1104,7 @@ def _verify_code(manifest: dict, problems: list[str]) -> list[dict]:
                     "可重建",
                     "未知",
                     f"{name}: the run had {len(code_in_untracked)} untracked code file(s) "
-                    f"(e.g. {code_in_untracked[:2]}); this record hashes them and stops there -- whether the "
+                    f"(e.g. {code_in_untracked[:2]}); this record lists them but does not store their content -- whether the "
                     f"content was kept is asserted by the 1.5 drill material (rebuild --capture --archive), "
                     f"not by the run record (work/active/verified-rebuild-rating.md).{ignored}",
                 )

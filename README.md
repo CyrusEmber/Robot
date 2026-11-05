@@ -185,11 +185,15 @@ copy <REPO>\paths.example.yaml <REPO>\paths.yaml
 挂着 junction，`rmdir <ROOT>\ablation_harness` 摘链接即可（**只准 rmdir**，递归
 del 会穿透删真身）。
 
-**开训前置：本仓工作树必须干净。** 脏树开训会被 `run_manifest.begin` **硬拒**并在 run
-目录留下一条拒训记录（T0 先落盘）：没有 rev 能还原脏树，该 run 的"可重建"永远无法
-证明。确需在脏树上开训必须显式声明理由：`set RL_ALLOW_DIRTY_TREE="<为什么>"`，理由写进
-manifest（记为偏差，不是免检）。IsaacLab 树带未提交的 fork 补丁属**预期状态**，只记录
-不阻拦。
+**开训前置：本仓训练依赖须干净。** `run_manifest.begin` 对受保护文件的脏改动硬拒，
+T0 先落盘；仅有 `.md` 或 T0 记录的文件级 eval 专属路径改动时不拒。声明本身、共享
+`host_paths.py`、未声明代码、配置和资产仍受保护。修订号不能还原未提交的受保护内容，
+追溯需要归档。确需开训须显式声明理由：`set RL_ALLOW_DIRTY_TREE="<为什么>"`；理由记入
+manifest，不改变分类，也不免除归档或范围违例。环境构造后已加载专属文件会记为违例；
+未观察到引用不证明依赖完整：构造后的延迟导入、不进入 `sys.modules` 的动态加载、
+被 `.gitignore` 忽略却实际读取的配置均未覆盖。未跟踪文件目前没有 T0 内容摘要，事后采集
+材料不证明它与训练时内容同源；摘要与评级由 `work/active/verified-rebuild-rating.md` 跟进。
+旧记录缺范围字段时按旧口径读取。IsaacLab 树带未提交的 fork 补丁属预期状态，只记录不阻拦。
 
 **fork 补丁的退出码契约**（谁启动训练，谁就得能看出它到底跑没跑）：fork 树里的门禁拒绝
 一律**先打印再 `os._exit`**——`raise` / `sys.exit` 没用，sim app 收尾会在返回路径上把

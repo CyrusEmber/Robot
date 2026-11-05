@@ -54,6 +54,7 @@ RUNNER = "offline_suite.py"
 # tested. The count is the contract: it is compared with the code below, so a new
 # interpreter child cannot land without declaring itself here.
 SPAWN_ALLOWED: dict[str, tuple[int, str]] = {
+    "test_launcher.py": (1, "real launcher CLI and handoff need fresh interpreters so cached imports cannot hide file loads"),
     "test_cfg_snapshot.py": (1, "the digest must be identical from two PYTHONHASHSEED runs"),
     "test_dump_tb_sampling.py": (2, "the CLI resample path only exists in dump_tb.py's __main__"),
     "test_terrain_geometry.py": (1, "video_matrix exit status and os._exit require separate processes"),

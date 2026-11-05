@@ -47,7 +47,7 @@ alwaysApply: false
 
 **分线（新计数器）**：配方无上游的全新算法不开 vN+1，开 `versions/<family>/<line>/v1/` 独立计数。支线/主线 = 算法区别：机器人/assets/eval 全家族共用，除独立版本链外一切照本节规则。判据：依赖在 = 线内 vN+1（哪怕 diff 巨大）；无上游 = 新支线（v1 PLAN 全量式）。**新线（新支线或新家族）必须同时在该家族的 `versions/lines.json` 落一条生命周期记录**（`status` 及退休字段）——发现到一条线却没有它的记录是**拒绝项**，不是默认 `active`（闸门 `check_recipe_registry.py` 看守；线与记录的句柄同源，见 `recipe_lines.py`）。
 
-**流程（家族无关，通用五步）**：
+**流程（家族无关，通用五步）**：训练配方打 tag 前单独运行 `python rl_exp/tools/verify/test_rebuild_gate.py`；该检查不在默认离线套件中，tag 不会自动触发它。
 
 1. `copy versions/<family>/<line>/vN versions/<family>/<line>/vN+1`（含 yaml），改新目录参数；
    **copy 后重置正文**：`NOTES.md` 只留骨架、`PLAN.md` 按本版重写——继承上版的差异段 / 结果表 /

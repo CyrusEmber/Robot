@@ -64,7 +64,7 @@ def sha256_file(path: pathlib.Path | None, chunk: int = 1 << 20) -> str | None:
         return None
 
 
-def git_run(root: pathlib.Path | None, *args: str) -> str:
+def git_run(root: pathlib.Path | None, *args: str, strip_output: bool = True, check: bool = False) -> str:
     """Run git in ``root``; return stdout, or "" when git cannot answer.
 
     The decode is pinned rather than left to the host locale. Left to it, a non-ASCII byte in git's
@@ -72,15 +72,20 @@ def git_run(root: pathlib.Path | None, *args: str) -> str:
     the failure surfaces as an ``AttributeError`` about ``strip`` -- naming neither git nor the
     encoding. Pinning UTF-8 with replacement is how every other tool-output reader in this tree
     decodes, and it keeps this function's contract ("a string, or empty") true on any host.
+    ``strip_output=False`` preserves path whitespace and NUL-delimited output; ``check=True``
+    propagates errors rather than interpreting them as empty output.
     """
     if root is None:
         return ""
     try:
-        return subprocess.run(
+        output = subprocess.run(
             ["git", *args], capture_output=True, text=True, check=True, cwd=root,
             encoding="utf-8", errors="replace",
-        ).stdout.strip()
+        ).stdout
+        return output.strip() if strip_output else output
     except (OSError, subprocess.CalledProcessError):
+        if check:
+            raise
         return ""
 
 

@@ -24,6 +24,7 @@ import importlib.util
 import json
 import os
 import pathlib
+import subprocess
 import sys
 from datetime import datetime
 from urllib.parse import urlsplit
@@ -37,8 +38,7 @@ if str(_REPO) not in sys.path:
 # function hashes a file, one abbreviates a revision, and both records call them. They are
 # re-exported under the names this package's callers (``manifest``, ``rebuild``, the golden
 # lock) and ``test_run_manifest.py`` already import, rather than re-implemented -- a second
-# implementation is what ``check_record_bindings.py`` fails on. ``hashlib`` and ``subprocess``
-# are no longer imported here for that reason.
+# implementation is what ``check_record_bindings.py`` fails on.
 from rl_exp.tools.runrecord.binding import (  # noqa: E402
     git_rev as rev,
     git_run as git,
@@ -48,6 +48,11 @@ from rl_exp.tools.runrecord.binding import (  # noqa: E402
 from rl_exp.tools.verify.cfg_snapshot import relativize  # noqa: E402
 
 UNTRACKED_CAP = 40
+EVAL_EXCLUSIVE_PATHS = (
+    "ablation_harness/eval.py",
+    "ablation_harness/record.py",
+    "ablation_harness/run_ablation.py",
+)
 
 
 def now() -> str:
@@ -75,7 +80,7 @@ def split_untracked(untracked: list[str], root: pathlib.Path | None, code_root: 
     inside: list[str] = []
     outside: list[str] = []
     for relative in untracked:
-        cleaned = relative.strip('"')
+        cleaned = relative
         if any(token in cleaned for token in _NON_CODE_TOKENS):
             outside.append(cleaned)
             continue
@@ -83,7 +88,7 @@ def split_untracked(untracked: list[str], root: pathlib.Path | None, code_root: 
             outside.append(cleaned)
             continue
         target = (root / cleaned).resolve()
-        if str(target).startswith(str(code_root)):
+        if target.is_relative_to(code_root.resolve()):
             inside.append(cleaned)
         else:
             outside.append(cleaned)
@@ -93,12 +98,8 @@ def split_untracked(untracked: list[str], root: pathlib.Path | None, code_root: 
 def split_prose(changed: list[str]) -> tuple[list[str], list[str]]:
     """Split changed paths into the prose and the rest.
 
-    Prose is the ledger, the records and the plans -- all ``.md``, and nothing a run reads. A run's
-    rebuildable claim is about the code, the configs and the assets its declaration digests, so a
-    document edited while a run is in flight changes none of them; refusing over it would turn
-    "commit your notes before you train" into a habit and teach people to set the override, which is
-    the same failure mode the IsaacLab tree is exempted for. The cut is by extension on purpose:
-    it cannot be widened by adding a directory, and no config, lock or asset is a ``.md``.
+    Prose is the ledger, the records and the plans. The existing policy excludes ``.md`` by
+    extension, not by directory. This is a convention, not proof that no run reads a document.
 
     Args:
         changed: paths git reports as changed, tracked or untracked.
@@ -111,7 +112,17 @@ def split_prose(changed: list[str]) -> tuple[list[str], list[str]]:
     return prose, blocking
 
 
-def _changed_paths(root: pathlib.Path) -> list[str]:
+def protected_untracked(name: str, source: dict) -> list[str]:
+    """Use the recorded T0 scope for repository untracked paths; keep legacy records strict."""
+    paths = source.get("untracked_in_code_root") or []
+    if (name == "repository" and isinstance(source.get("eval_exclusive_paths"), list)
+            and isinstance(source.get("changed_blocking"), list)):
+        blocking = set(source["changed_blocking"])
+        return [path for path in paths if path in blocking]
+    return paths
+
+
+def _changed_paths(root: pathlib.Path, untracked: list[str] | None = None) -> list[str]:
     """Every path git reports as changed, tracked or untracked, as one flat sorted list.
 
     Two raw name lists rather than one parsed status listing: these come back NUL-separated and
@@ -119,11 +130,12 @@ def _changed_paths(root: pathlib.Path) -> list[str]:
     care at all. (A first version sliced the status listing at a fixed offset and lost the first
     character of every modified path, because the helper hands back stripped lines.)
     """
-    names: list[str] = []
-    for args in (("diff", "--name-only", "-z", "HEAD"),
-                 ("ls-files", "--others", "--exclude-standard", "-z")):
-        names.extend(field for field in git(root, *args).split("\0") if field.strip())
-    return sorted(set(name.strip() for name in names))
+    names = git(root, "diff", "--name-only", "--no-renames", "-z", "HEAD",
+                strip_output=False, check=True).split("\0")
+    if untracked is None:
+        untracked = git(root, "ls-files", "--others", "--exclude-standard", "-z",
+                        strip_output=False, check=True).split("\0")
+    return sorted(set(names + untracked) - {""})
 
 
 
@@ -144,14 +156,31 @@ def git_state(root: pathlib.Path | None, label: str, code_root: pathlib.Path | N
     head = rev(root)
     if not head:
         return {"available": False, "detail": f"{root} is not a git work tree"}
-    porcelain = git(root, "status", "--porcelain=v2")
-    status_lines = porcelain.splitlines()
-    untracked = sorted(line.split(" ", 1)[1] for line in status_lines if line.startswith("? "))
+    try:
+        porcelain = git(root, "status", "--porcelain=v2", check=True)
+        status_lines = porcelain.splitlines()
+        untracked = sorted(field for field in git(root, "ls-files", "--others", "--exclude-standard", "-z",
+                                                  strip_output=False, check=True).split("\0") if field)
+        changed = _changed_paths(root, untracked)
+        diff = git(root, "diff", "HEAD", check=True)
+    except (OSError, subprocess.CalledProcessError) as err:
+        return {"available": False, "root": relativize(str(root)), "rev": head,
+                "detail": f"{label}: git state unavailable: {err}"}
     in_code, outside = split_untracked(untracked, root, code_root)
-    changed = _changed_paths(root)
     prose, blocking = split_prose(changed)
-    diff = git(root, "diff", "HEAD")
+    scope = {}
+    if label == "repository":
+        declaration = list(EVAL_EXCLUSIVE_PATHS)
+        protected = set(blocking) - set(declaration)
+        in_code = sorted(set(in_code) | (set(untracked) & protected))
+        outside = [path for path in outside if path not in in_code]
+        scope = {
+            "eval_exclusive_paths": declaration,
+            "changed_paths_full": changed,
+            "changed_blocking": [path for path in blocking if path in protected],
+        }
     return {
+        **scope,
         "available": True,
         "root": relativize(str(root)),
         "rev": head,
@@ -160,9 +189,7 @@ def git_state(root: pathlib.Path | None, label: str, code_root: pathlib.Path | N
         "diff_sha256": sha256_bytes(diff.encode("utf-8")),
         "diff_lines": len(diff.splitlines()),
         "changed_paths": changed[:UNTRACKED_CAP],
-        # What the launch gate refuses on: the changed paths that are not prose. ``dirty`` stays the
-        # whole truth about the tree, so a record whose only dirt was a document says so and is not
-        # refused for it (2026-09-22; the rebuild gate already read it this way).
+        # Preserve the historical display field; scoped decisions use the full path list below.
         "changed_non_prose": blocking[:UNTRACKED_CAP],
         "changed_prose_count": len(prose),
         "untracked_count": len(untracked),

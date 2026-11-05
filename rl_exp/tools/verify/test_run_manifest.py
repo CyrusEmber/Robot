@@ -11,6 +11,7 @@ a missing T1, a moved code revision, changed assets, a vanished checkpoint, and 
 checkpoint written before T1 all have to be reported as blocking.
 """
 
+import importlib.util
 import json
 import os
 import pathlib
@@ -71,13 +72,15 @@ def isolated_assets(root: pathlib.Path):
         yield repo
 
 
-def _begin(**kwargs):
+def _begin(*, index_ready=False, **kwargs):
     """Record against an isolated active-line index, independent of real retirement.
 
     Keep the real identity resolver and startup judge. Only the fixture's directory
     grants permission; its recorded digests belong to the fixture files, not the
     retired production index. Retirement refusals are covered by test_lifecycle_gate.
     """
+    if index_ready:
+        return M.begin(**kwargs)
     with tempfile.TemporaryDirectory(prefix="manifest_index_") as tmp:
         with active_index(pathlib.Path(tmp)):
             return M.begin(**kwargs)
@@ -137,6 +140,9 @@ def _record(
     runner_lr: float | None = None,
     resume_path: pathlib.Path | None = None,
     curriculum_resume: dict | None = None,
+    index_ready: bool = False,
+    cfg=None,
+    agent=None,
 ):
     """Run the four recording call sites against stubs, saving one checkpoint.
 
@@ -144,11 +150,11 @@ def _record(
     case is the honest default and a mismatch has to be asked for explicitly.
     ``curriculum_resume`` stands in for the outcome ``apply_resume_state`` returns.
     """
-    cfg = Lizard2FlatV4EnvCfg()
-    agent = Lizard2V4PPORunnerCfg()
+    cfg = cfg if cfg is not None else Lizard2FlatV4EnvCfg()
+    agent = agent if agent is not None else Lizard2V4PPORunnerCfg()
     env = _StubEnv(cfg, num_envs)
     runner = _StubRunner(lr=agent.algorithm.learning_rate if runner_lr is None else runner_lr)
-    ctx = _begin(log_dir=tmp, task=TASK, argv=["train.py", "--task", TASK], env_cfg=cfg, agent_cfg=agent)
+    ctx = _begin(index_ready=index_ready, log_dir=tmp, task=TASK, argv=["train.py", "--task", TASK], env_cfg=cfg, agent_cfg=agent)
     M.hook_runner_save(runner, ctx)
     if save_early:
         runner.save(tmp / "model_0.pt")
@@ -209,6 +215,328 @@ def _clean_sources() -> dict:
     }
 
 
+def _real_git_scope(root: pathlib.Path, real_sources) -> None:
+    """Exercise the provenance boundary against actual git state, not fabricated sources."""
+    repo = root / "scope_repo"
+    repo.mkdir()
+    exclusive = {
+        "ablation_harness/eval.py",
+        "ablation_harness/record.py",
+        "ablation_harness/run_ablation.py",
+    }
+    protected = {
+        "ablation_harness/host_paths.py",
+        "rl_exp/tools/runrecord/provenance.py",
+        "rl_exp/tools/runrecord/manifest.py",
+        "rl_exp/tasks/train.py",
+        "rl_exp/versions/config.json",
+        "rl_exp/assets/robot.usd",
+    }
+    tracked = exclusive | protected | {"README.md", ".gitignore"}
+
+    def git(*args):
+        return subprocess.run(
+            ["git", *args], cwd=repo, check=True, capture_output=True, text=True, encoding="utf-8"
+        ).stdout
+
+    def write(path, content="VALUE = 1\n"):
+        target = repo / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+
+    git("init", "-q")
+    git("config", "user.name", "Offline Test")
+    git("config", "user.email", "offline-test@example.invalid")
+    for path in tracked:
+        write(path, "__pycache__/\n" if path == ".gitignore" else "VALUE = 1\n")
+    git("add", "--", *sorted(tracked))
+    git("commit", "-q", "-m", "fixture")
+
+    cfg = Lizard2FlatV4EnvCfg()
+    agent = Lizard2V4PPORunnerCfg()
+    serial = 0
+    staged_rename = False
+
+    def reset():
+        nonlocal staged_rename
+        if staged_rename:
+            git("reset", "--hard", "-q", "HEAD")
+            staged_rename = False
+        # Restore the known fixture directly; only git mv changes the index.
+        for child in repo.iterdir():
+            if child.name != ".git":
+                if child.is_dir():
+                    shutil.rmtree(child)
+                else:
+                    child.unlink()
+        for path in tracked:
+            write(path, "__pycache__/\n" if path == ".gitignore" else "VALUE = 1\n")
+
+    def start(reason=None):
+        nonlocal serial
+        serial += 1
+        run = root / f"scope_run_{serial}"
+        run.mkdir()
+        env = {} if reason is None else {M.DIRTY_OVERRIDE_ENV: reason}
+        with patch.dict(os.environ, env, clear=False):
+            if reason is None:
+                os.environ.pop(M.DIRTY_OVERRIDE_ENV, None)
+            try:
+                ctx = _begin(index_ready=True, log_dir=run, task=TASK, argv=["train.py"], env_cfg=cfg, agent_cfg=agent)
+                error = None
+            except RuntimeError as err:
+                ctx, error = None, str(err)
+            data = json.loads((run / M.MANIFEST_NAME).read_text(encoding="utf-8"))
+        return ctx, error, data
+
+    from rl_exp.tools.runrecord import lifecycle
+    from rl_exp.tools.verify import check_cfg_lock
+
+    def run_cases():
+        nonlocal staged_rename
+        for path in sorted(exclusive):
+            reset()
+            write(path, "VALUE = 2\n")
+            ctx, error, data = start()
+            source = data["code"]["repository"]
+            check(f"scope/exclusive/{path}", ctx is not None and error is None,
+                  f"individual eval-only change refused: {error}")
+            check(f"scope/snapshot/{path}", set(source.get("eval_exclusive_paths", [])) == exclusive
+                  and source.get("changed_blocking") == [] and path in source.get("changed_non_prose", []),
+                  f"T0 classification: {source}")
+            rows = M._verify_code(data, [])
+            repo_row = next((row for row in rows if row["detail"].startswith("repository:")), {})
+            check(f"scope/verify/{path}", repo_row.get("result") == "通过",
+                  f"individual eval-only change must verify: {repo_row}")
+
+        reset()
+        for path in protected:
+            write(path, "VALUE = 2\n")
+        ctx, error, data = start()
+        source = data["code"]["repository"]
+        for path in sorted(protected):
+            check(f"scope/protected/{path}", ctx is None and error is not None
+                  and path in source.get("changed_blocking", [])
+                  and any("refused" in item for item in data.get("failures", [])),
+                  f"protected change must block with recorded classification: {error}, {source}")
+
+        reset()
+        real_git_subprocess = prov.subprocess.run
+
+        def failing_git(*args, **kwargs):
+            if args[0][1:2] == ["status"]:
+                raise subprocess.CalledProcessError(128, args[0])
+            return real_git_subprocess(*args, **kwargs)
+        with patch.object(prov.subprocess, "run", side_effect=failing_git):
+            ctx, error, data = start()
+            source = data["code"]["repository"]
+            rows = M._verify_code({"code": {"repository": {"available": True, "rev": "old"}}}, [])
+            check("scope/git-failure-refused", ctx is None and not source.get("available")
+                  and "git state unavailable" in source.get("detail", "") and "provenance unavailable" in error,
+                  f"failed git status must not read clean: {source}, {error}")
+            check("scope/git-failure-verify-unknown", rows[0]["result"] == "未知",
+                  f"unavailable current source must not pass: {rows}")
+
+        reset()
+        write("README.md", "changed prose\n")
+        ctx, error, data = start()
+        source = data["code"]["repository"]
+        check("scope/tracked-readme-start", ctx is not None and source.get("dirty")
+              and source.get("changed_blocking") == [], f"{error}, {source}")
+        write("README.md", "changed again\n")
+        rows = M._verify_code(data, [])
+        repo_row = next((row for row in rows if row["detail"].startswith("repository:")), {})
+        check("scope/tracked-readme-verify", repo_row.get("result") == "通过",
+              f"prose-only diff changed after T0: {repo_row}")
+
+        reset()
+        write("notes/new.md")
+        ctx, error, data = start()
+        source = data["code"]["repository"]
+        check("scope/untracked/notes/new.md", ctx is not None
+              and "notes/new.md" not in source.get("changed_blocking", [])
+              and "notes/new.md" in source.get("changed_paths_full", []), f"{error}, {source}")
+        reset()
+        untracked = ("ablation_harness/new_eval.py", " first.py", "notes/中文 配置.yaml")
+        for path in untracked:
+            write(path)
+        ctx, error, data = start()
+        source = data["code"]["repository"]
+        for path in untracked:
+            check(f"scope/untracked/{path}", ctx is None
+                  and path in source.get("changed_blocking", [])
+                  and path in source.get("changed_paths_full", []), f"{error}, {source}")
+
+        reset()
+        (repo / "rl_exp/tasks/train.py").unlink()
+        ctx, error, data = start()
+        check("scope/deleted-training", ctx is None
+              and "rl_exp/tasks/train.py" in data["code"]["repository"].get("changed_blocking", []),
+              f"deleted dependency not blocked: {error}, {data['code']['repository']}")
+
+        for old, new in (("ablation_harness/eval.py", "rl_exp/tasks/moved_eval.py"),
+                         ("rl_exp/tasks/train.py", "ablation_harness/eval.py")):
+            reset()
+            if (repo / new).exists():
+                (repo / new).unlink()
+            if old == "rl_exp/tasks/train.py":
+                write(old, "DISTINCT_TRAINING_SOURCE = 1\n")
+            git("mv", "-f", "--", old, new)
+            staged_rename = True
+            ctx, error, data = start()
+            source = data["code"]["repository"]
+            paths = prov._changed_paths(repo)
+            training_path = old if old.startswith("rl_exp/") else new
+            check(f"scope/rename/{old}", ctx is None and {old, new} <= set(paths)
+                  and training_path in source.get("changed_blocking", []),
+                  f"both rename ends must count: paths={paths}, error={error}, source={source}")
+
+        reset()
+        for i in range(45):
+            write(f"aaa/doc_{i:02}.md")
+        write("zzz/block.py")
+        ctx, error, data = start()
+        source = data["code"]["repository"]
+        check("scope/truncated-display-blocks", ctx is None and "zzz/block.py" not in source.get("changed_paths", [])
+              and len(source.get("changed_paths_full", [])) == 46
+              and "zzz/block.py" in source.get("changed_paths_full", [])
+              and "zzz/block.py" in source.get("changed_blocking", []), f"{error}, {source}")
+        reset()
+        for i in range(45):
+            write(f"many/source_{i:02}.py")
+        ctx, error, data = start()
+        source = data["code"]["repository"]
+        check("scope/full-blocking-list", ctx is None and len(source.get("changed_blocking", [])) == 45
+              and "many/source_44.py" in source.get("changed_blocking", []), f"{error}, {source}")
+
+        reset()
+        write("ablation_harness/eval.py", "VALUE = 2\n")
+        _, _, data = start(reason="fixture override")
+        source = data["code"]["repository"]
+        snapshot = list(source.get("eval_exclusive_paths", []))
+        declarations = [(module, name, value) for module in (prov, M) for name, value in vars(module).items()
+                        if name.isupper() and isinstance(value, (set, frozenset, list, tuple))
+                        and set(value) == exclusive]
+        old_refusal = fresh_refusal = None
+        if declarations:
+            module, name, value = declarations[0]
+            with patch.object(module, name, type(value)()), patch.dict(os.environ, {}, clear=False):
+                os.environ.pop(M.DIRTY_OVERRIDE_ENV, None)
+                old_refusal = M.dirty_tree_refusal(types.SimpleNamespace(manifest=data))
+                fresh = real_sources()["repository"]
+                fresh_refusal = M.dirty_tree_refusal(types.SimpleNamespace(manifest={"code": {"repository": fresh}}))
+        check("scope/t0-snapshot-not-reclassified", set(snapshot) == exclusive and bool(declarations)
+              and source.get("eval_exclusive_paths") == snapshot and old_refusal is None
+              and fresh_refusal is not None, f"old={old_refusal}, fresh={fresh_refusal}, snapshot={snapshot}")
+        legacy = json.loads(json.dumps(data))
+        legacy_source = legacy["code"]["repository"]
+        legacy_source.pop("eval_exclusive_paths", None)
+        legacy_source.pop("changed_blocking", None)
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop(M.DIRTY_OVERRIDE_ENV, None)
+            legacy_refusal = M.dirty_tree_refusal(types.SimpleNamespace(manifest=legacy))
+        check("scope/legacy-fallback", legacy_refusal is not None and "eval.py" in legacy_refusal,
+              f"old changed_non_prose must remain strict: {legacy_refusal}")
+
+        reset()
+        write("rl_exp/tasks/train.py", "VALUE = 2\n")
+        ctx, error, data = start()
+        source = data["code"]["repository"]
+        for reason in (None, "", "   ", "needed for offline test"):
+            with patch.dict(os.environ, {}, clear=False):
+                if reason is None:
+                    os.environ.pop(M.DIRTY_OVERRIDE_ENV, None)
+                else:
+                    os.environ[M.DIRTY_OVERRIDE_ENV] = reason
+                refusal = M.dirty_tree_refusal(types.SimpleNamespace(manifest=data))
+            allowed = bool(reason and reason.strip())
+            check(f"scope/override/{reason!r}", (refusal is None) == allowed
+                  and ctx is None and error is not None
+                  and "rl_exp/tasks/train.py" in source.get("changed_blocking", [])
+                  and any("refused" in item for item in data.get("failures", [])),
+                  f"override must preserve classification and refusal evidence: {error}, {source}")
+
+        ctx, error, data = start(reason="needed for offline test")
+        check("scope/override-recorded", ctx is not None
+              and data.get("declaration", {}).get("dirty_tree_override_reason") == "needed for offline test"
+              and "rl_exp/tasks/train.py" in data["code"]["repository"].get("changed_blocking", []),
+              f"override must be recorded without hiding protected changes: {error}")
+        if ctx is not None:
+            module_path = repo / "ablation_harness/eval.py"
+            spec = importlib.util.spec_from_file_location("scope_fixture_eval", module_path)
+            module = importlib.util.module_from_spec(spec)
+            with patch.dict(sys.modules, {"scope_fixture_eval": module}):
+                spec.loader.exec_module(module)
+                M.after_env(ctx, _StubEnv(cfg))
+            saved = json.loads(ctx.manifest_path.read_text(encoding="utf-8"))
+            stage = saved.get("stages", {}).get("env_constructed", {})
+            observed = stage.get("observed_dependencies", [])
+            violations = stage.get("scope_violations", [])
+            found = any(isinstance(item, dict) and item.get("module", item.get("name")) == "scope_fixture_eval"
+                        and item.get("path", item.get("relative_path")) == "ablation_harness/eval.py"
+                        for item in observed)
+            check("scope/after-env-observed", found, f"module and actual relative path missing: {observed}")
+            check("scope/after-env-violation", "ablation_harness/eval.py" in json.dumps(violations)
+                  and bool(ctx.failures) and bool(saved.get("failures")),
+                  f"override must not hide scope violation: violations={violations}, failures={saved.get('failures')}")
+            manifest = saved
+            manifest["failures"] = []
+            manifest["t1_sha256"] = M.t1_digest(manifest)
+            problems = []
+            rows = M._verify_self_consistency(manifest, problems)
+            check("scope/after-env-verify", any("scope violation" in problem for problem in problems)
+                  and any("scope violation" in row["detail"] and row["result"] == "失败" for row in rows),
+                  f"scope failure ignored by verify: {problems}, {rows}")
+            manifest["stages"]["env_constructed"]["scope_violations"] = [
+                {"module": "other", "path": "ablation_harness/record.py"}
+            ]
+            manifest["t1_sha256"] = M.t1_digest(manifest)
+            problems = []
+            M._verify_self_consistency(manifest, problems)
+            check("scope/after-env-incomplete-violations", any("scope violation" in p and "eval.py" in p for p in problems),
+                  f"an incomplete nonempty violation list must not hide observed paths: {problems}")
+            manifest["stages"]["ready_to_learn"] = {"code": manifest["code"]}
+            manifest["t1_sha256"] = M.t1_digest(manifest)
+            ctx.manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            from rl_exp.tools.runrecord import rebuild
+            with patch.object(rebuild, "_REPO", root / "asset_fixture"):
+                result, capture_problems = rebuild.capture(ctx.log_dir, root / "scope_violation_capture")
+            check("scope/after-env-capture", result["verdict"] == "failed"
+                  and any("scope violation" in problem for problem in capture_problems),
+                  f"capture ignored recorded violation: {result['verdict']}, {capture_problems}")
+            manifest["stages"]["env_constructed"].pop("observed_dependencies")
+            manifest["stages"]["env_constructed"].pop("scope_violations")
+            manifest["t1_sha256"] = M.t1_digest(manifest)
+            problems = []
+            M._verify_self_consistency(manifest, problems)
+            check("scope/after-env-missing-observation", any("scope observation missing" in p for p in problems),
+                  f"removed observation must not verify: {problems}")
+        else:
+            check("scope/after-env-setup", False, f"override failed unexpectedly: {error}")
+
+    with (active_index(root), patch.object(prov, "_REPO", repo),
+          patch.object(prov, "code_sources", real_sources),
+          patch.object(prov, "isaac_root", return_value=None),
+          patch.object(prov, "rsl_rl_state", return_value={"available": False, "detail": "fixture"}),
+          patch.object(check_cfg_lock, "combination", return_value={
+              "isaaclab_rev": "unresolved", "rsl_rl": "unknown", "python": sys.version.split()[0]
+          })):
+        index = lifecycle.read_index()
+        recipe = M.recipe_ref(cfg)
+        assets = M.asset_digest(cfg.params_version, type(cfg).params_line)
+        agent_snapshot = M.cs.snapshot(agent)
+        snapshot = M.cs.snapshot
+
+        def cached_snapshot(obj, **kwargs):
+            return agent_snapshot if obj is agent and not kwargs else snapshot(obj, **kwargs)
+
+        with (patch.object(lifecycle, "read_index", return_value=index),
+              patch.object(M, "recipe_ref", return_value=recipe),
+              patch.object(M, "asset_digest", return_value=assets),
+              patch.object(M.cs, "snapshot", new=cached_snapshot)):
+            run_cases()
+
+
 class _FakeDistribution:
     """The metadata reads the install-origin lookup makes, and nothing else."""
 
@@ -247,6 +575,9 @@ def main() -> int:
     assets = ExitStack()
     try:
         assets.enter_context(isolated_assets(root))
+        _real_git_scope(root, real_sources)
+        from rl_exp.tools.verify import check_cfg_lock
+        check_cfg_lock.combination.cache_clear()
         run_dir = root / "2026-09-15_14-00-00_v4"
         ctx, env, runner = _record(run_dir)
 
@@ -501,10 +832,8 @@ def main() -> int:
             "state digest unstable",
         )
         # --- a dirty project tree is refused at launch, not merely recorded -------
-        # No revision restores a dirty tree, so the run's rebuildable claim could never be
-        # proved -- learning that at launch beats learning it months later. The provenance
-        # is injected so the case does not depend on whether the developer happens to have
-        # uncommitted work.
+        # A revision alone cannot restore a dirty tree; the content needs an archive.
+        # Inject provenance so the case does not depend on the developer's tree.
         dirty_sources = json.loads(json.dumps(_clean_sources()))
         dirty_sources["repository"].update(dirty=True, diff_lines=17, untracked_count=2)
         prov.code_sources = lambda: dirty_sources

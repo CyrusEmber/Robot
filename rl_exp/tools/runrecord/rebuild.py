@@ -83,6 +83,12 @@ def _stored_text(path: pathlib.Path, digest: str | None) -> str | None:
     return text if prov.sha256_bytes(text.encode("utf-8")) == digest else None
 
 
+def _binary_stub(diff: str) -> bool:
+    """Git's binary summary has no payload; hunk content always has a prefix."""
+    return any(line.startswith("Binary files ") and " and " in line and line.endswith(" differ")
+               for line in diff.splitlines())
+
+
 def _stage_file(src: pathlib.Path, rel: str, stage: pathlib.Path, digests: dict) -> str:
     target = stage / rel
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -146,8 +152,9 @@ def _code_item(name: str, recorded: dict, archive: pathlib.Path | None, run_id: 
     can read later -- that is what ``--archive`` names. Without it the capture refuses,
     because hashing a diff does not make it retrievable (work/active/verified-rebuild-rating.md).
     """
-    keep = ("rev", "dirty", "diff_sha256", "diff_lines", "untracked_in_code_root", "mode")
-    item = {"retrieval": "none", "recorded": {key: recorded.get(key) for key in keep}}
+    keep = ("rev", "dirty", "diff_sha256", "diff_lines", "untracked_in_code_root", "mode",
+            "eval_exclusive_paths", "changed_paths_full", "changed_blocking")
+    item = {"retrieval": "none", "recorded": {key: recorded[key] for key in keep if key in recorded}}
     root = _tree_root(name)
     item["tree"] = cs.relativize(str(root)) if root else None
     if not recorded.get("available"):
@@ -163,7 +170,9 @@ def _code_item(name: str, recorded: dict, archive: pathlib.Path | None, run_id: 
     if not _object_exists(root, f"{rev}^{{commit}}"):
         refusals.append(f"{name}: revision {rev} is not in {root}; the run's code cannot be brought back")
         return item
-    if not recorded.get("dirty"):
+    scoped_clean = (name == "repository" and isinstance(recorded.get("eval_exclusive_paths"), list)
+                    and isinstance(recorded.get("changed_blocking"), list) and not recorded["changed_blocking"])
+    if not recorded.get("dirty") or scoped_clean:
         item["retrieval"] = "git-rev"
         item["payload"] = f"{rev} (git checkout)"
         return item
@@ -189,12 +198,16 @@ def _code_item(name: str, recorded: dict, archive: pathlib.Path | None, run_id: 
                 f"for its content (work/active/verified-rebuild-rating.md); pass --archive"
             )
             return item
-        _write_text(diff_path, live)
         diff = live
+    if _binary_stub(diff):
+        refusals.append(f"{name}: binary diff contains a Binary files differ stub, not recoverable content")
+        return item
+    if not diff_path.is_file() or _stored_text(diff_path, recorded.get("diff_sha256")) is None:
+        _write_text(diff_path, diff)
     item["stored_diff"] = cs.relativize(str(diff_path)) if diff_path else None
     item["payload"] = _stage_file(diff_path, f"code/{name}.diff", stage, digests)
 
-    for relative in recorded.get("untracked_in_code_root") or []:
+    for relative in prov.protected_untracked(name, recorded):
         if stored is None:
             refusals.append(f"{name}: untracked code {relative} has no archive location (work/active/verified-rebuild-rating.md)")
             return item
@@ -332,6 +345,7 @@ def capture(run_dir: pathlib.Path, dest: pathlib.Path, archive: pathlib.Path | N
         refusals.append(f"record: no final T1 (missing {missing_stages}); the run was never ready to learn")
     if manifest.get("failures"):
         refusals.append(f"record: the run recorded failures ({manifest['failures'][-1]})")
+    M._verify_self_consistency(manifest, problems)
 
     stage = dest / ".staging"
     if stage.exists():
@@ -382,8 +396,9 @@ def capture(run_dir: pathlib.Path, dest: pathlib.Path, archive: pathlib.Path | N
 
 
 def _under(path: pathlib.Path, roots: list[pathlib.Path]) -> bool:
-    resolved = str(path.resolve())
-    return any(resolved.startswith(str(root.resolve())) for root in roots if root is not None)
+    resolved = pathlib.Path(os.path.normcase(str(path.resolve())))
+    return any(resolved.is_relative_to(pathlib.Path(os.path.normcase(str(root.resolve()))))
+               for root in roots if root is not None)
 
 
 def _module_origin(module: str) -> pathlib.Path | None:
@@ -416,6 +431,8 @@ def check_drill_scope(
     """
     if not originals:
         return []
+    if not root.is_dir():
+        return [_ROW("已验证重建", "失败", f"scope: rebuild root is not a directory ({root})")]
     if _under(root, originals):
         return [
             _ROW(
@@ -437,12 +454,14 @@ def check_drill_scope(
 
 def check_material(record: dict, dest: pathlib.Path) -> list[dict]:
     """The payload copies still hash as captured -- no silent local patch."""
-    bad = [
-        rel
-        for rel, digest in (record.get("payload_digests") or {}).items()
-        if prov.sha256_file(dest / "material" / rel) != digest
-    ]
-    return [
+    digests = record.get("payload_digests") or {}
+    bad = [rel for rel, digest in digests.items() if prov.sha256_file(dest / "material" / rel) != digest]
+    for name in CODE_SOURCES:
+        item = (record.get("items") or {}).get(name) or {}
+        rel = f"code/{name}.diff"
+        if item.get("retrieval") == "stored-diff" and rel not in digests:
+            bad.append(rel)
+    rows = [
         _ROW(
             "已验证重建",
             "失败" if bad else "通过",
@@ -450,6 +469,18 @@ def check_material(record: dict, dest: pathlib.Path) -> list[dict]:
             + (f", changed or missing: {bad[:3]}" if bad else " hash as captured"),
         )
     ]
+    for name in CODE_SOURCES:
+        item = (record.get("items") or {}).get(name) or {}
+        if item.get("retrieval") != "stored-diff":
+            continue
+        path = dest / "material" / "code" / f"{name}.diff"
+        try:
+            stub = _binary_stub(_read_text(path))
+        except (OSError, UnicodeError):
+            continue  # The material integrity row already reports missing/changed payloads.
+        if stub:
+            rows.append(_ROW("已验证重建", "失败", f"material: {name} binary diff is an unrecoverable stub"))
+    return rows
 
 
 def check_sources(
@@ -466,9 +497,12 @@ def check_sources(
     asserting where it resolves would be proving the declaration to itself. What the path
     configuration *cannot* tell you is whether the project's own materials came from the
     rebuild: ``paths.yaml`` has no key for the project root, and the import path arrives
-    through a ``.pth`` inside the venv. That gap is what this row closes.
+    through a ``.pth`` inside the venv. This checks the declared package's import origin,
+    not every submodule or later dynamic load.
     """
     rows: list[dict] = []
+    if not rebuilt:
+        return [_ROW("已验证重建", "未知", "sources: no rebuilt package declared, nothing was asserted")]
     if not originals:
         rows.append(
             _ROW(
@@ -478,7 +512,6 @@ def check_sources(
             )
         )
         return rows
-    allowed = [root, *deps]
     fell_back, undeclared = [], []
     for module in rebuilt:
         origin = _module_origin(module)
@@ -486,7 +519,7 @@ def check_sources(
             undeclared.append(f"{module}: not importable here")
         elif _under(origin, originals):
             fell_back.append(f"{module} -> {origin}")
-        elif not _under(origin, allowed):
+        elif not _under(origin, [root]):
             undeclared.append(f"{module} -> {origin}")
     rows.append(
         _ROW(
@@ -496,7 +529,7 @@ def check_sources(
             + (
                 f"resolved back into the original tree ({fell_back[:2]})"
                 if fell_back
-                else f"came from outside the rebuild and its declared dependencies ({undeclared[:2]})"
+                else f"did not resolve under the rebuild root ({undeclared[:2]})"
                 if undeclared
                 else f"resolves under {root}"
                 + (f" (dependencies, recorded not asserted: {[str(dep) for dep in deps]})" if deps else "")
@@ -527,7 +560,7 @@ def check_asset_origins(root: pathlib.Path, deps: list[pathlib.Path], originals:
         return [_ROW("已验证重建", "未知", "assets: the run recorded no lock to locate")]
     resolved = _unrelativize(str(lock), "<REPO_ROOT>", _REPO)
     falls_back = _under(resolved, originals)
-    inside = _under(resolved, [root, *deps])
+    inside = _under(resolved, [root])
     return [
         _ROW(
             "已验证重建",
@@ -538,6 +571,8 @@ def check_asset_origins(root: pathlib.Path, deps: list[pathlib.Path], originals:
                 if falls_back
                 else f"the lock does not resolve inside the rebuild ({resolved})"
                 if not inside
+                else f"the lock is missing ({resolved})"
+                if not resolved.is_file()
                 else f"the lock resolves under the rebuild root ({cs.relativize(str(resolved))})"
             ),
         )
@@ -686,7 +721,7 @@ def maintest(dest: pathlib.Path, root: pathlib.Path, deps=None, originals=None, 
         )
     finally:
         victim.write_bytes(backup)
-    restored_rows, restored_problems = check(dest, root, deps, originals)
+    restored_rows, restored_problems = check(dest, root, deps, originals, rebuilt)
     restored = _exit_code(restored_rows, restored_problems) == 0
     rows.append(
         _ROW(
