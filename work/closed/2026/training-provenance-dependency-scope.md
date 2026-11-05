@@ -2,23 +2,22 @@
 id: training-provenance-dependency-scope
 title: 训练来源闸门按实际依赖划定阻塞范围
 scope: rl_exp/tools/runrecord, rl_exp/tools/verify, README.md
-status: in_progress
+status: done
 landing: rl_exp/tools/runrecord/provenance.py, rl_exp/tools/runrecord/manifest.py, rl_exp/tools/runrecord/rebuild.py
-next: 执行者处理独立审核缺陷、保留训后缺口并重跑闸门。
 close_when: 不带执笔历史的新上下文按正文判据审核实现与验收证据后决定关闭。
 evidence: acceptance/records/2026-11-04-training-provenance-dependency-scope.md
+outcome: 独立复审通过训练来源范围；评测、短训缺口及重建评级由现有事项承接。
 ---
 
 ## 当前范围
 
 文件级分类与回归已落地，结果和历史散文口径纠正在 [验收记录](../../acceptance/records/2026-11-04-training-provenance-dependency-scope.md)。本项先审核文件级豁免及 T0 记录；`work/active/verified-rebuild-rating.md` 再据此验收归档内容与评级，本项不接管历史材料补全。
 
-## 下一步
+## 承接
 
-1. 独立审核未通过；二进制 diff 存根拒绝和真实 fork trainer 进程反证已补，需复核修改后的诊断及旧记录规则。
-2. eval 命令与策略观测的时序缺陷转 `work/active/eval-command-observation-timing.md`；保留现有 robust 结果限制，不将补片当协议窗口。
-3. 短训画面同步、停车恢复零样本和支撑/摆动缺口交 `work/active/v7-short-run-post-train-evidence.md`；材料归档拒绝和未跟踪同源风险交 `work/active/verified-rebuild-rating.md`，不补造 T0。
-4. 重建回归按用户决定退出默认套件，训练配方打 tag 前单独执行；保留来源与归档反例。相关单项和默认套件通过后重交不带执笔历史的新上下文；证据变化后重审。
+- eval 命令与策略观测的时序缺陷由 `work/active/eval-command-observation-timing.md` 承接。
+- 短训画面同步、停车恢复零样本和支撑/摆动缺口由 `work/active/v7-short-run-post-train-evidence.md` 承接；材料归档拒绝和未跟踪同源风险由 `work/active/verified-rebuild-rating.md` 承接，不补造 T0。
+- 重建回归按用户决定退出默认套件，训练配方打 tag 前单独执行。
 
 ## 关闭条件
 

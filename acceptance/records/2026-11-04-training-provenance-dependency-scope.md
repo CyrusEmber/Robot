@@ -2,7 +2,7 @@
 
 ## 适用范围
 
-`work/active/training-provenance-dependency-scope.md`；覆盖训练来源的路径分类、记录及重建材料读取，并保留短训及训后证据。独立审核已执行但未通过，修改后尚待重审；不是训练成功、依赖闭包或重建评级结论。
+`work/closed/2026/training-provenance-dependency-scope.md`；覆盖训练来源的路径分类、记录及重建材料读取，并保留短训及训后证据。修改后独立复审通过训练来源范围；不是训练成功、依赖闭包或重建评级结论。
 
 ## 验收条件
 
@@ -127,6 +127,12 @@ CodeMaker 于 2026-11-04 17:22:15 +08:00 前抽帧验看，原片和命名 PNG �
 ### 重建回归运行时机调整（2026-11-05）
 
 按用户决定，`test_rebuild_gate.py` 移出默认离线套件，保留单独运行入口；训练配方打 tag 前执行，默认套件和 Git tag 不自动运行它。默认套件不再以该单项的 25 s 耗时判失败；单项回归本身仍须通过，不以移出套件替代实际恢复证据或独立审核。调整后的首次默认套件行为 36/36 通过，但 `check_obs_protocol.py` 安静复跑 26.9 s，成本闸门以 `OFFLINE_SUITE_COST_REGRESSION` 退出 1。提交前重跑默认套件 `ALL_OFFLINE_CHECKS_PASSED`（36/36）；两项波内超预算后安静复跑，manifest 23.2 s、观测检查 20.9 s。上述重建单项不在该次默认套件中。
+
+### 独立复审（2026-11-05）
+
+审核者：不带本事项执笔历史的新上下文，审查提交 `bd6fb1d`、事项关闭条件、实现、回归及本机原始证据；结论 **通过训练来源范围验收**。审核者亲自复跑 `test_run_manifest.py`、`test_rebuild_gate.py`、`test_launcher.py` 均通过；默认套件 `ALL_OFFLINE_CHECKS_PASSED`（36/36，47.2 s），manifest 单项安静复测 18.6 s。另以临时 Git 夹具补核已跟踪 `record.py` 启动、T0 分类与材料往返，输出 `AUDIT_TRACKED_RECORD PASS`。
+
+审核者核对三个豁免文件、受保护路径、完整列表与旧口径、二进制存根真实反例，逐例读取 `20261105-161938-c40984cb` 探针命令及 stdout，确认真实 fork 的 control 和六个注入结果；核对真实短训 manifest 与 checkpoint、归档拒绝现场。真实 run 复核仍为 `RUN_MANIFEST_PARTIAL`，repository、IsaacLab 和安装态 `rsl_rl` 三项必需来源为未知；输出的退出码不代表可重建。审核没有启动仿真或训练，也未重跑真实 fork、短训、训后评估或逐片复看视频。探针和 `sys.modules` 不证明完整依赖闭包、训练期无后续变化或原生加载；本次通过不代表短训模型合格、历史材料同源或已验证重建评级完成。评测时序、短训证据与重建评级分别由现存活跃事项承接。
 
 ## 证据引用
 
