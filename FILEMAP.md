@@ -68,6 +68,8 @@
 | `rl_exp\tools\diagnose\belly_reset_probe.py` | 最终策略与零动作对照，捕获腹部接触终止帧并核对自动重开；v5 为失败对照 |
 | `rl_exp\tools\diagnose\yaw_command_probe.py` | 原生转向指令采样、观测传递与定时换档核验；不测策略转弯能力 |
 | `rl_exp\tools\diagnose\palm_joint_force_audit.py` | 左膝两例关节力矩离线复读：轴投影、重力平衡及上限占比；不起仿真，不测极限负载 |
+| `rl_exp\tools\diagnose\lizard2_leg_drive_baseline.py` | v7 圆足逐轴离线基线；`--two_foot` 计算假设足力灵敏度，`--propulsion_report` 分析推进采样的近似接触矩 |
+| `rl_exp\tools\diagnose\lizard2_leg_drive_protocol.py` | v7 悬空驱动对照的离线轨迹、判据与停止线；未接仿真，不验受载或实际力矩 |
 | `rl_exp\tools\diagnose\palm_velocity_limit_audit.py` | 当前候选速度上限的离线逐关节核对；读取 manifest/URDF/backend，不测触限行为 |
 | `rl_exp\tools\diagnose\palm_training_interface.py` | 隔离训练草案的真实动作、子步接触与完整/子集/自动 reset 诊断；`--audit` 离线复算 |
 | `rl_exp\tools\diagnose\palm_preflight.py` | 正式掌部任务的原生零动作短程预检与 GUI 观察；保留失败报告，不判策略性能 |
