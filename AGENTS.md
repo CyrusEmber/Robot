@@ -4,7 +4,7 @@
 - 修改前说明计划；单文件、无 API 变化且一句话可解释的小改动可直接做并自检。
 - 直接说明限制；错了承认，不确定就查证。
 - 按任务检索 `FILEMAP.md`、家族 `FAMILY.md` 和子系统文档，不整份通读。
-- 临时脚本不留仓根或输出根；一次性操作优先系统临时目录并在使用后清理，可复读诊断进 `rl_exp/tools/diagnose/`，历史工具进 `rl_exp/tools/archive/`。诊断输出和日志按事项与运行分目录；保留失败现场和未核定证据，不按日期自动删除。
+- 临时脚本不留仓根或输出根；一次性操作优先系统临时目录并在使用后清理，可复读诊断进 `rl_exp/tools/diagnose/`，历史工具进 `rl_exp/tools/archive/`。诊断输出和日志按事项组织；同一事项的运行或重试可共用目录，以不同文件名或标识区分，禁止覆盖已有产物。保留失败现场和未核定证据，不按日期自动删除。
 - 每次训练结束必须执行 `ablation_harness/HARNESS.md`「训后评估固定流程」：默认 robust，nominal 由用户选择；固定必报项不能临时省略，报告项与通过门槛分开。
 - 训后九宫格视频必录并逐片验看：用 `ablation_harness/video_matrix.py` 输出带速度/视角标签的三档目标速度 × 三个视角，保留单段原片和 `matrix.json`；按 `ablation_harness/POST_TRAIN_EVAL_TEMPLATE.md` 记录执行者、播放/抽帧方式、时间位置与局限，完成状态按 `HARNESS.md` 判。
 
