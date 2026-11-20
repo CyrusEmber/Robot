@@ -21,12 +21,29 @@ def check(path, count, round_feet=False):
     model, meshes = viewer.load_model(path)
     fig = viewer.build(path, backend='Agg', show=False)
     radio, reset_button, state, values, draw = fig._pose_controls
+    pd_texts = [text.get_text() for text in fig.texts if 'Kp=' in text.get_text()]
+    if round_feet:
+        assert any('Kp=39.52' in text and 'Kd=12.58' in text for text in pd_texts)
+        assert any('Kp=220.00' in text and 'Kd=14.95' in text for text in pd_texts)
+    else:
+        assert not pd_texts
+        assert any('PD unavailable' in text.get_text() for text in fig.texts)
     assert len(values) == count
     assert all(model['joints'][name]['axis'] is not None for name in values)
+    if round_feet:
+        import yaml
+        with viewer.V7_PARAMS.open(encoding='utf-8') as stream:
+            actuators = yaml.safe_load(stream)['actuators']
+        pd = {name: (kp, actuator['damping'][name])
+              for actuator in actuators.values() for name, kp in actuator['stiffness'].items()}
     seen = set()
     for index in range(len(viewer.GROUPS)):
         radio.set_active(index)
-        seen.update(slider.label.get_text() + '_joint' for slider in state['sliders'])
+        names = [slider.label.get_text() + '_joint' for slider in state['sliders']]
+        seen.update(names)
+        if round_feet:
+            displayed = [text.get_text() for text in fig.texts if 'Kp=' in text.get_text()]
+            assert displayed == [f'Kp={pd[name][0]:.2f}   Kd={pd[name][1]:.2f}' for name in names]
     assert seen == set(values)
     if round_feet:
         assert not any('wrist' in name or 'ankle' in name for name in values)
@@ -35,6 +52,9 @@ def check(path, count, round_feet=False):
                 if link.find('visual/geometry/sphere') is not None]
         assert len(feet) == 4 and all(name in meshes for name in feet)
         radio.set_active(2)
+        pd_texts = [text.get_text() for text in fig.texts if 'Kp=' in text.get_text()]
+        assert any('Kp=42.43' in text and 'Kd=13.51' in text for text in pd_texts)
+        assert any('Kp=220.00' in text and 'Kd=14.95' in text for text in pd_texts)
         twist = next(slider for slider in state['sliders'] if slider.label.get_text() == 'rl_hip_twist')
         np.testing.assert_allclose([twist.valmin, twist.valmax], [-0.5236, 0.5236], atol=1e-4)
         foot = next(name for name in feet if name.startswith('rl_'))
@@ -56,7 +76,7 @@ def check(path, count, round_feet=False):
 
 
 if __name__ == '__main__':
-    check(REPO / 'rl_exp/out/lizard2_round_feet/export03/lizard2_round_feet.urdf', 26, True)
+    check(REPO / 'rl_exp/lizard2_round_feet/lizard2_round_feet.urdf', 26, True)
     check(viewer.URDF, 30)
     candidate = REPO / 'rl_exp/out/lizard2_two_axis_20261029/candidate01/lizard2_two_axis.urdf'
     if candidate.exists():

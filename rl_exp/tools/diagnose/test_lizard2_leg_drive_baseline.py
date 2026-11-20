@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Offline numerical and negative checks for the v7 fixed-root baseline."""
 import copy
+import json
 import math
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -246,6 +247,25 @@ def run():
         pass
     else:
         raise AssertionError('misaligned propulsion step count accepted')
+    terms = baseline.swing_terms(100., 20., .25, .2, 180., 10., [10., 20.])
+    assert np.isclose(terms['wn_hz'], 20 / (2*math.pi)) and np.isclose(terms['zeta'], 2.)
+    assert np.isclose(terms['kp_scale_percent_effort'], 100*100*.2/180)
+    assert np.isclose(terms['kd_velocity_limit_percent_effort'], 100*20*10/180)
+    assert np.allclose(terms['load_static_error_rad'], [.1, .2])
+    assert baseline.swing_terms(100., 20., .25, .2, 180., 10.)['load_static_error_rad'] is None
+    for bad in ((0., 20., .25, .2, 180., 10.), (100., 20., .25, .2, 180., 0.),
+                (100., 20., .25, .2, 180., 10., [10., -1.]), (100., 20., .25, .2, 180., 10., [float('nan'), 1.])):
+        try:
+            baseline.swing_terms(*bad)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError('invalid swing term input accepted')
+    with TemporaryDirectory() as temp:
+        plan = Path(temp) / 'plan.json'
+        plan.write_text(json.dumps({'preflight': {'joint_names': [f'wrong{i}_joint' for i in range(26)]},
+                                    'mapping': []}), encoding='utf-8')
+        rejects(lambda: baseline.swing_review(plan), 'recorded plan joint identity')
     print('OFFLINE_BASELINE_TEST_OK: inertia, gravity, collision and contact virtual-work checks')
 
 

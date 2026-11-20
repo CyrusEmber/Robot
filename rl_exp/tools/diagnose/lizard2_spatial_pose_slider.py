@@ -19,6 +19,8 @@ sys.path.insert(0, str(REPO / 'rl_exp' / 'tools' / 'verify'))
 import check_self_collision as csc  # noqa: E402
 
 URDF = REPO / 'rl_exp' / 'lizard2_palm_spatial' / 'lizard2_palm_spatial.urdf'
+V7_URDF = REPO / 'rl_exp' / 'lizard2_round_feet' / 'lizard2_round_feet.urdf'
+V7_PARAMS = REPO / 'rl_exp' / 'versions' / 'lizard2' / 'main' / 'v7' / 'main_params.yaml'
 GROUPS = {
     'LF front': ['lf_shoulder_swing', 'lf_shoulder_abduct', 'lf_shoulder_twist', 'lf_elbow', 'lf_wrist'],
     'RF front': ['rf_shoulder_swing', 'rf_shoulder_abduct', 'rf_shoulder_twist', 'rf_elbow', 'rf_wrist'],
@@ -100,7 +102,20 @@ def build(path: pathlib.Path = URDF, backend: str = 'TkAgg', show: bool = True):
              'Lizard2 two-axis candidate' if is_candidate else 'Lizard2 palm spatial')
     title = f'{label} | {len(values)} active joints'
     fig.canvas.manager.set_window_title(title)
-    fig.text(0.03, 0.96, f'Source: {path}', fontsize=8)
+    fig.text(0.03, 0.075, f'Source: {path}', fontsize=8)
+    pd = {}
+    if path == V7_URDF.resolve():
+        import yaml
+        with V7_PARAMS.open(encoding='utf-8') as stream:
+            actuators = yaml.safe_load(stream)['actuators']
+        for actuator in actuators.values():
+            for name in actuator['stiffness']:
+                pd[name] = (actuator['stiffness'][name], actuator['damping'][name])
+        if set(pd) != set(values):
+            raise ValueError('v7 PD parameters do not match the URDF active joints')
+        fig.text(0.03, 0.055, f'PD source: {V7_PARAMS} | Kp [N m/rad], Kd [N m s/rad] | no physics', fontsize=7)
+    else:
+        fig.text(0.03, 0.055, 'PD unavailable: no recipe bound to this URDF', fontsize=7)
     ax = fig.add_axes([0.03, 0.10, 0.65, 0.82], projection='3d')
     ax.set_xlim(-1.9, 1.9); ax.set_ylim(-1.3, 1.3); ax.set_zlim(-0.8, 1.0)
     ax.set_box_aspect((3.8, 2.6, 1.8))
@@ -120,6 +135,7 @@ def build(path: pathlib.Path = URDF, backend: str = 'TkAgg', show: bool = True):
     slider_axes = [fig.add_axes([0.75, 0.49 - i * 0.061, 0.20, 0.025]) for i in range(6)]
     reset_button = Button(fig.add_axes([0.74, 0.06, 0.20, 0.05]), 'Reset all')
     state = {'sliders': [], 'group': 'LF front', 'changing': False}
+    pd_text = [fig.text(0.72, 0.515 - i * 0.061, '', fontsize=8) for i in range(6)]
 
     def draw():
         for name, (vertices, faces) in meshes.items():
@@ -137,9 +153,13 @@ def build(path: pathlib.Path = URDF, backend: str = 'TkAgg', show: bool = True):
         for index, area in enumerate(slider_axes):
             area.clear()
             area.set_visible(index < len(groups[group]))
+            pd_text[index].set_text('')
             if index >= len(groups[group]):
                 continue
             name = groups[group][index] + '_joint'
+            if name in pd:
+                kp, kd = pd[name]
+                pd_text[index].set_text(f'Kp={kp:.2f}   Kd={kd:.2f}')
             low, high = model['joints'][name]['limits']
             slider = Slider(area, name.removesuffix('_joint'), low, high, valinit=values[name], valfmt='%+.2f')
             def changed(value, key=name):

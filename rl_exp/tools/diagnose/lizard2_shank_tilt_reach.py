@@ -141,10 +141,85 @@ def analyse_poses(joints, report):
             'scope': 'sampled env 0, fixed remaining joints/root during swing sweeps; no support/collision verdict'}
 
 
+def analyse_landings(joints, report, arrays):
+    """Solve sampled landing orientations with/without fixed foot location [m, rad]; no dynamics verdict."""
+    from scipy.optimize import least_squares, minimize
+    from scipy.spatial.transform import Rotation
+
+    rows = []
+    settings = {'max_events_per_leg': 3, 'after_s': 1., 'position_scale_m': 0.001,
+                'fixed_position_reference': 'FK of sampled pose, compared to observed sphere center',
+                'direction_scale': float(np.sin(np.radians(1.))), 'starts': ['actual_pose', 'zero_leg'],
+                'max_nfev': 200, 'scope': 'diagnostic tolerances only; not user-approved gait acceptance or global reachability'}
+    joint_names = report.get('landing_diagnostic', {}).get('joint_names') or report['runtime_joint_names']
+    for leg in LEGS:
+        events = [e for e in report['landing_diagnostic']['events'] if e['leg'] == leg and e['time_s'] >= settings['after_s']]
+        for event in events[:settings['max_events_per_leg']]:
+            index, env = event['sample'], event['env']
+            q = dict(zip(joint_names, arrays['joint_pos_rad'][index, env]))
+            root_pose = arrays['root_pose_xyzw'][index, env]
+            rotation = Rotation.from_quat(root_pose[3:]).as_matrix()
+            names, shank, foot = leg_spec(leg)
+            expected_foot = arrays['foot_pos_w_m'][index, env, event['leg_index']]
+            bounds = np.array([joints[n]['limits'] for n in names]).T
+            initial = np.clip([q[n] for n in names], *bounds)
+
+            def pose(values):
+                altered = {**q, **dict(zip(names, values))}
+                top = geometry.fk(joints, shank, altered)[:3, 3]
+                tip = geometry.fk(joints, foot, altered)[:3, 3]
+                vector = rotation @ (tip-top)
+                return rotation @ tip + root_pose[:3], vector / np.linalg.norm(vector)
+
+            actual_foot, actual_direction = pose(initial)
+            assert np.linalg.norm(actual_foot-expected_foot) < 1e-4, 'landing FK position mismatch'
+            observed_direction = arrays['shank_direction_w'][index, env, event['leg_index']]
+            assert np.linalg.norm(actual_direction-observed_direction) < 1e-4, 'landing FK direction mismatch'
+            solutions = {}
+            constraint = {'type': 'eq', 'fun': lambda values: pose(values)[0]-actual_foot}
+            constrained = [minimize(lambda values: float(np.sum((pose(values)[1]+np.array([0., 0., 1.]))**2)),
+                                    start, method='SLSQP', bounds=list(zip(*bounds)), constraints=constraint,
+                                    options={'maxiter': 200, 'ftol': 1e-12})
+                           for start in (initial, np.zeros(4))]
+            feasible = [result for result in constrained if np.linalg.norm(pose(result.x)[0]-actual_foot) < 1e-6]
+            if feasible:
+                best_fixed = min(feasible, key=lambda result: float(np.sum((pose(result.x)[1]+np.array([0., 0., 1.]))**2)))
+                tip, direction = pose(best_fixed.x)
+                solutions['exact_same_foot_position'] = {
+                    'joint_pos_rad': dict(zip(names, best_fixed.x.tolist())),
+                    'tilt_deg': float(np.degrees(np.arccos(np.clip(-direction[2], -1, 1)))),
+                    'foot_position_error_m': float(np.linalg.norm(tip-actual_foot)),
+                    'solver_success': bool(best_fixed.success),
+                    'scope': 'local constrained solution, not global unreachability proof'}
+            for label, fixed_foot in (('orientation_only', False), ('position_orientation_tradeoff', True)):
+                def residual(values):
+                    tip, direction = pose(values)
+                    orientation = (direction + np.array([0., 0., 1.])) / settings['direction_scale']
+                    return np.r_[(tip-expected_foot)/settings['position_scale_m'], orientation] if fixed_foot else orientation
+
+                trials = [least_squares(residual, start, bounds=bounds, max_nfev=settings['max_nfev'])
+                          for start in (initial, np.zeros(4))]
+                best = min(trials, key=lambda trial: float(np.linalg.norm(residual(trial.x))))
+                tip, direction = pose(best.x)
+                solutions[label] = {'joint_pos_rad': dict(zip(names, best.x.tolist())),
+                                    'tilt_deg': float(np.degrees(np.arccos(np.clip(-direction[2], -1, 1)))),
+                                    'foot_position_error_m': float(np.linalg.norm(tip-expected_foot)),
+                                    'max_joint_change_rad': float(np.abs(best.x-initial).max()),
+                                    'solver_success': bool(best.success), 'nfev': int(best.nfev)}
+            rows.append({'leg': leg, 'time_s': event['time_s'], 'env': env,
+                         'original_tilt_deg': float(np.degrees(np.arccos(np.clip(-actual_direction[2], -1, 1)))),
+                         'fk_foot_error_m': float(np.linalg.norm(actual_foot-expected_foot)),
+                         'fk_direction_error': float(np.linalg.norm(actual_direction-arrays['shank_direction_w'][index, env, event['leg_index']])),
+                         'solutions': solutions})
+    assert rows, 'no eligible filtered landing events'
+    return {'settings': settings, 'events': rows}
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--urdf", type=Path, default=DEFAULT_URDF)
     p.add_argument("--out", type=Path, default=DEFAULT_OUT)
+    p.add_argument('--landing_report', type=Path, help='filtered substep event report; paired landing_samples.npz')
     p.add_argument('--pose_report', type=Path, help='live pose samples from lizard2_shank_use_probe')
     p.add_argument("--steps", type=int, default=11)
     args = p.parse_args()
@@ -153,6 +228,15 @@ def main():
     assert all(np.allclose(np.fromstring(n.get('rpy', '0 0 0'), sep=' '), 0) for n in tree.findall('joint/origin'))
     joints = geometry.load_urdf(args.urdf.resolve())["joints"]
     selfcheck(joints)
+    if args.landing_report:
+        report = json.loads(args.landing_report.read_text(encoding='utf-8'))
+        arrays = np.load(args.landing_report.parent / 'landing_samples.npz')
+        result = analyse_landings(joints, report, arrays)
+        result['source_landing_report'] = str(args.landing_report)
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(json.dumps(result, indent=2), encoding='utf-8')
+        print('LANDING_GEOMETRY', len(result['events']))
+        return
     if args.pose_report:
         report = json.loads(args.pose_report.read_text(encoding='utf-8'))
         result = analyse_poses(joints, report)

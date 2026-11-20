@@ -34,7 +34,8 @@ parser.add_argument('--propulsion_samples', action='store_true',
 parser.add_argument('--policy_drive_case', choices=('swing_kp2', 'twist_kp2', 'swing_kd_half'),
                     help='probe-only gains before policy rollout; no frozen recipe changes')
 parser.add_argument('--contact_samples', action='store_true', help='save first-episode control-frame force and shank samples')
-parser.add_argument('--drive_probe', choices=('suspended', 'ground'), help='replace policy with bounded actuator calibration')
+parser.add_argument('--drive_probe', choices=('suspended', 'ground', 'two_foot'),
+                    help='replace policy with bounded actuator calibration')
 parser.add_argument('--leg_drive_preflight', action='store_true',
                     help='prepare swing-only baseline/candidate readbacks without stepping physics')
 parser.add_argument('--leg_drive_calibration', action='store_true',
@@ -726,6 +727,252 @@ def drive_probe(live, out, mode, checkpoint):
     print('DRIVE_PROBE_OK', out, flush=True)
 
 
+def two_foot_probe(live, out, checkpoint):
+    """Measure diagonal two-foot support with the opposite pair folded: estimated torque and attitude.
+
+    Four envs run in lockstep: both diagonal support pairs, each at v7 gains and at the doubled swing
+    candidate. Support legs start from the offline trim that puts the centre of mass on the support
+    line, and the trim scale is refit against the measured centre of mass because PD sag moves it.
+    Effort is the PD estimate ``Kp*(target-q) - Kd*dq``, since ``applied_torque`` is structurally zero
+    for implicit drives. Stops are safety only; tilt, drift and belly contact are recorded, not judged.
+    """
+    import numpy as np
+    import torch
+    import warp as wp
+    from diag_metrics import tilt_cos
+    from lizard2_leg_drive_baseline import two_foot_trim
+    from rl_exp.tools.runrecord.binding import sha256_file
+
+    settings = {'settle_s': .6, 'hold_s': .3, 'trim_scales': (1., 1.4), 'trim_bounds': (.4, 2.5),
+                'belly_stop_n': 5., 'contact_loss_n': 1., 'wall_limit_s': 1800.,
+                'groups': ('lf+rr', 'rf+rl'), 'gains': ('v7', 'swing_kp2_kd_sqrt2'),
+                'scope': 'two-point stance with the opposite pair folded, centre of mass trimmed onto the '
+                         'support line; that trim is neutral, not stable, so drift is the measured result. '
+                         'Torque is a PD estimate, not a measured actuator output.'}
+    robot = live.scene['robot']
+    term = live.action_manager.get_term('joint_pos_legs')
+    names, ids = list(term._joint_names), list(term._joint_ids)
+    env_groups = settings['groups'] * len(settings['gains'])
+    legs = ('lf', 'rf', 'rl', 'rr')
+    assert len(names) == 16 and not robot.is_fixed_base and live.scene.num_envs == 4 == len(env_groups)
+    trims = {group: two_foot_trim(group) for group in settings['groups']}
+    assert all(set(info['trims_rad']) <= set(names) for info in trims.values())
+    kp, kd = robot.data.joint_stiffness.torch.clone(), robot.data.joint_damping.torch.clone()
+    columns = [ids[i] for i, name in enumerate(names) if name.endswith('_swing_joint')]
+    assert len(columns) == 4
+    kp[2:, columns] *= 2.
+    kd[2:, columns] *= math.sqrt(2.)
+    robot.write_joint_stiffness_to_sim_index(stiffness=kp)
+    robot.write_joint_damping_to_sim_index(damping=kd)
+    assert torch.allclose(wp.to_torch(robot.root_view.get_dof_stiffnesses()).to(kp.device), kp)
+    assert torch.allclose(wp.to_torch(robot.root_view.get_dof_dampings()).to(kd.device), kd)
+    limits, vel_limits = robot.data.joint_pos_limits.torch, robot.data.joint_vel_limits.torch
+    effort_limits, body_mass = robot.data.joint_effort_limits.torch, robot.data.body_mass.torch
+    feet_sensors = [live.scene[f'landing_{leg}'] for leg in legs]
+    feet_bodies = {leg: robot.body_names.index(f'{leg}_{FOOT[leg]}') for leg in legs}
+    support_pair = [[feet_bodies[leg] for leg in group.split('+')] for group in env_groups]
+    belly = live.scene['contact_forces']
+    belly_ids = [belly.body_names.index(n) for n in ('base_link', 'chest_pitch')
+                 if n in belly.body_names]
+    assert belly_ids, 'belly bodies missing from contact sensor'
+    baseline_root = robot.data.default_root_state.torch.clone()
+    baseline_root[:, :3] += live.scene.env_origins
+    spin = robot.body_names.index('base_link')
+    rows = []
+    started = time.monotonic()
+
+    def stance_target(scales):
+        target = torch.zeros((4, 16), device=live.device)
+        for env, group in enumerate(env_groups):
+            for index, name in enumerate(names):
+                value = float(trims[group]['base_q_rad'].get(name, 0.))
+                if name in trims[group]['trims_rad']:
+                    value += float(scales[env]) * float(trims[group]['trims_rad'][name])
+                target[env, index] = value
+        return target
+
+    def raw_of(target):
+        raw = torch.zeros((4, live.action_manager.total_action_dim), device=live.device)
+        raw[:, :16] = (target - term._offset[:, :16]) / term._scale[:, :16]
+        applied = raw[:, :16] * term._scale + term._offset
+        assert torch.allclose(torch.maximum(torch.minimum(applied, term._clip[:, :, 1]), term._clip[:, :, 0]),
+                              target, atol=1e-6), 'trim target exceeds the action clip'
+        return raw
+
+    def centre_offset():
+        com = (body_mass[:, :, None] * robot.data.body_com_pos_w.torch).sum(dim=1) \
+            / body_mass.sum(dim=1, keepdim=True)
+        first = torch.stack([robot.data.body_com_pos_w.torch[e, support_pair[e][0], :2] for e in range(4)])
+        second = torch.stack([robot.data.body_com_pos_w.torch[e, support_pair[e][1], :2] for e in range(4)])
+        line = second - first
+        normal = torch.stack((line[:, 1], -line[:, 0]), dim=-1)
+        normal = normal / normal.norm(dim=-1, keepdim=True)
+        return ((com[:, :2] - first) * normal).sum(dim=-1)
+
+    def reset_fixture(target):
+        live.action_manager.reset()
+        live.scene.reset()
+        joint = torch.zeros_like(robot.data.default_joint_pos.torch)
+        joint[:, ids] = target
+        robot.write_root_pose_to_sim_index(root_pose=baseline_root[:, :7])
+        robot.write_root_velocity_to_sim_index(root_velocity=baseline_root[:, 7:])
+        robot.write_joint_state_to_sim_index(position=joint,
+                                            velocity=torch.zeros_like(robot.data.default_joint_vel.torch))
+        live.sim.forward()
+        assert torch.allclose(robot.data.joint_pos.torch, joint, atol=1e-6)
+        assert torch.allclose(wp.to_torch(robot.root_view.get_dof_stiffnesses()).to(kp.device), kp)
+        assert torch.allclose(wp.to_torch(robot.root_view.get_dof_dampings()).to(kd.device), kd)
+
+    def readback():
+        q, dq = robot.data.joint_pos.torch[:, ids], robot.data.joint_vel.torch[:, ids]
+        assert torch.isfinite(q).all() and torch.isfinite(dq).all()
+        if time.monotonic() - started > settings['wall_limit_s']:
+            raise RuntimeError('wall clock limit reached')
+        body = belly.data.net_forces_w.torch[:, belly_ids].norm(dim=-1).max(dim=1).values
+        stop = None
+        full_q, full_dq = robot.data.joint_pos.torch, robot.data.joint_vel.torch
+        outside = (full_q < limits[..., 0] - 1e-3) | (full_q > limits[..., 1] + 1e-3)
+        if outside.any():
+            env, joint = (int(i) for i in outside.nonzero()[0][:2])
+            stop = f'joint_position_limit env {env} {robot.joint_names[joint]} {float(full_q[env, joint]):.4f}'
+        elif (full_dq.abs() > vel_limits).any():
+            stop = 'joint_velocity_limit'
+        return q, dq, body, stop
+
+    def advance(raw, target, samples, fallen):
+        live.action_manager.process_action(raw)
+        processed = torch.maximum(torch.minimum(raw[:, :16] * term._scale + term._offset, term._clip[:, :, 1]),
+                                 term._clip[:, :, 0])
+        assert torch.allclose(term.processed_actions, processed, atol=1e-6)
+        stop = None
+        for _ in range(live.cfg.decimation):
+            live.action_manager.apply_action()
+            live.scene.write_data_to_sim()
+            live.sim.step(render=False)
+            live.scene.update(live.physics_dt)
+            q, dq, body, step_stop = readback()
+            stop = stop or step_stop
+            fallen |= body > settings['belly_stop_n']
+            if samples is None:
+                continue
+            effort = kp[:, ids] * (target - robot.data.joint_pos.torch[:, ids]) - kd[:, ids] * dq
+            samples['q'].append(q.cpu().numpy().copy())
+            samples['dq'].append(dq.cpu().numpy().copy())
+            samples['target'].append(target.cpu().numpy().copy())
+            samples['estimated_effort'].append(effort.cpu().numpy().copy())
+            samples['root_pos'].append(robot.data.body_link_pos_w.torch[:, spin].cpu().numpy().copy())
+            samples['root_quat'].append(robot.data.body_link_quat_w.torch[:, spin].cpu().numpy().copy())
+            samples['tilt_cos'].append(tilt_cos(robot.data.projected_gravity_b.torch).cpu().numpy().copy())
+            samples['feet_normal'].append(np.stack(
+                [sensor.data.net_forces_w.torch.norm(dim=-1).max(dim=1).values.cpu().numpy()
+                 for sensor in feet_sensors], axis=1))
+            samples['belly'].append(body.cpu().numpy().copy())
+        return stop
+
+    bias = torch.zeros((4, 16), device=live.device)
+
+    def run_stance(scales, seconds, samples=None, compensate=False):
+        """Hold the trimmed stance, optionally folding the measured steady error back into the target.
+
+        Returns every centre offset [m] and the first stop. Compensation is a constant target bias,
+        not a controller: it removes the PD droop that otherwise drags the folded legs onto the floor.
+        """
+        nonlocal bias
+        target = stance_target(scales) + bias
+        raw = raw_of(target)
+        fallen = torch.zeros(live.scene.num_envs, dtype=torch.bool, device=live.device)
+        reset_fixture(target)
+        stop, offsets = None, []
+        for _ in range(round(seconds / live.step_dt)):
+            stop = advance(raw, target, samples, fallen) or stop
+            offsets.append(centre_offset().cpu().numpy().copy())
+            if stop or bool(fallen.all()):
+                break
+        if compensate:
+            bias += target - robot.data.joint_pos.torch[:, ids]
+        return np.stack(offsets), stop
+
+    seat = round(.2 / live.physics_dt)
+    fits = []
+    for _ in range(2):
+        run_stance([settings['trim_scales'][0]] * 4, settings['settle_s'], compensate=True)
+    for scale in settings['trim_scales']:
+        offsets, stop = run_stance([scale] * 4, settings['settle_s'])
+        fits.append((scale, offsets[-seat:].mean(axis=0), stop))
+    first, refit = settings['trim_scales']
+    sensitivity = (fits[1][1] - fits[0][1]) / (refit - first)
+    scales = np.where(np.abs(sensitivity) < 1e-4, refit, fits[1][1] / sensitivity * -1 + refit)
+    scales = np.clip(scales, *settings['trim_bounds'])
+    samples = {key: [] for key in ('q', 'dq', 'target', 'estimated_effort', 'root_pos', 'root_quat',
+                                   'tilt_cos', 'feet_normal', 'belly')}
+    offsets, stop_reason = run_stance(scales, settings['settle_s'] + settings['hold_s'], samples)
+    arrays = {key: np.stack(value) for key, value in samples.items()}
+    steps = len(arrays['q'])
+    assert steps > seat
+    tilt = np.degrees(np.arccos(np.clip(arrays['tilt_cos'], -1., 1.)))
+    for env, group in enumerate(settings['groups'] * len(settings['gains'])):
+        support_legs = set(group.split('+'))
+        support_feet = [legs.index(leg) for leg in support_legs]
+        fallen_steps = np.nonzero(arrays['belly'][:, env] > settings['belly_stop_n'])[0]
+        # Every env stops contributing at its own belly contact: a fallen body's effort is ground load.
+        end = len(arrays['belly']) if not len(fallen_steps) else int(fallen_steps[0]) + 1
+        tau = np.abs(arrays['estimated_effort'][:end, env, :])
+        contacts = arrays['feet_normal'][:end, env, :]
+        # The first control step still shows the reset state, so contact loss is only judged after it.
+        lost = np.nonzero(contacts[live.cfg.decimation:, support_feet].min(axis=1)
+                          < settings['contact_loss_n'])[0]
+        root = arrays['root_pos'][:end, env, :]
+        joints = []
+        for index, name in enumerate(names):
+            limit = float(effort_limits[env, ids[index]])
+            joints.append({'joint': name, 'side': 'support' if name[:2] in support_legs else 'lifted',
+                           'effort_limit_nm': limit, 'peak_estimate_nm': float(tau[:, index].max()),
+                           'p95_estimate_nm': float(np.percentile(tau[:, index], 95)),
+                           'percent_effort_peak': 100 * float(tau[:, index].max()) / limit,
+                           'saturation_fraction': float(np.mean(tau[:, index] >= limit))})
+        rows.append({'env': env, 'support_group': group, 'gains': settings['gains'][env // 2],
+                     'peak_estimate_nm': {side: max(row['peak_estimate_nm'] for row in joints if row['side'] == side)
+                                          for side in ('support', 'lifted')},
+                     'fall_time_s': None if not len(fallen_steps) else float(fallen_steps[0] * live.physics_dt),
+                     'window_end_s': float(end * live.physics_dt),
+                     'tilt_peak_deg': float(tilt[:end, env].max()), 'tilt_end_deg': float(tilt[end - 1, env]),
+                     'root_drop_m': float(root[0, 2] - root[:, 2].min()),
+                     'lateral_drift_m': float(np.hypot(*(root[-1, :2] - root[0, :2]))),
+                     'support_contact_loss_s': None if not len(lost) else float(
+                         (lost[0] + live.cfg.decimation) * live.physics_dt),
+                     'belly_peak_n': float(arrays['belly'][:end, env].max()),
+                     'feet_normal_mean_n': [float(arrays['feet_normal'][:end, env, i].mean()) for i in range(4)],
+                     'feet_normal_max_n': [float(arrays['feet_normal'][:end, env, i].max()) for i in range(4)],
+                     'joints': joints})
+    report = {'metadata': {'settings': settings, 'mode': 'two_foot', 'joint_names': names,
+                           'stiffness': kp.cpu().tolist(), 'damping': kd.cpu().tolist(),
+                           'trim_solutions': trims, 'trim_scale_fits': [
+                               {'scale': float(scale), 'centre_offset_m': offset.tolist(), 'stop': stop}
+                               for scale, offset, stop in fits],
+                           'final_trim_scale': scales.tolist(),
+                           'final_centre_offset_m': offsets[-seat:].mean(axis=0).tolist(),
+                           'source_checkpoint_identity_only': checkpoint,
+                           'code_sha256': sha256_file(Path(__file__)),
+                           'source_usd_sha256': sha256_file(Path(live.cfg.scene.robot.spawn.usd_path)),
+                           'physics_dt_s': live.physics_dt, 'control_dt_s': live.step_dt,
+                           'substeps': steps, 'stop_reason': stop_reason,
+                           'stop_time_s': None if stop_reason is None else steps * live.physics_dt},
+              'rows': rows,
+              'limitations': ['Estimated effort is Kp*(target-q) - Kd*dq; applied_torque is structurally zero '
+                              'for implicit drives, so this is not a measured actuator output.',
+                              'The trimmed two-point stance is neutral, not stable: attitude decay and contact '
+                              'loss still have to be read as the measured result, not as a failure.',
+                              'Support feet are single points, so stability here is a nominal open-loop record, '
+                              'not a support margin or a calibrated-load verdict.',
+                              'The opposite pair is already folded at reset: the lift transient itself is not in '
+                              'this window, and no controller or policy is used.'],
+              'completed': True}
+    out.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(out.with_suffix('.npz'), **arrays, centre_offset_m=offsets)
+    out.write_text(json.dumps(report, indent=2, allow_nan=False), encoding='utf-8')
+    print('TWO_FOOT_PROBE_OK', out, flush=True)
+
+
 calibration_started = False
 propulsion_started = False
 try:
@@ -759,8 +1006,9 @@ try:
     cfg.scene.num_envs, cfg.seed = 4, args.seed
     cfg.episode_length_s = 20.0
     apply_eval_mode(cfg, 'nominal')
-    if args.landing_samples:
-        assert not args.drive_probe and not args.policy_drive_case and args.swing_clip is None
+    if args.landing_samples or args.drive_probe == 'two_foot':
+        assert (args.drive_probe == 'two_foot') != args.landing_samples
+        assert not args.policy_drive_case and args.swing_clip is None
         cfg.scene.lazy_sensor_update = False
         floor = cfg.terminations.head_ground_contact.params['floor_prim_path']
         for leg, tip in FOOT.items():
@@ -787,7 +1035,8 @@ try:
                 else:
                     group.damping[name] *= 0.5
     if args.drive_probe or args.leg_drive_preflight or args.leg_drive_calibration:
-        cfg.scene.num_envs = 2 if args.leg_drive_preflight or args.leg_drive_calibration else 5
+        cfg.scene.num_envs = 2 if args.leg_drive_preflight or args.leg_drive_calibration else (
+            4 if args.drive_probe == 'two_foot' else 5)
         cfg.scene.robot.spawn.articulation_props.fix_root_link = bool(
             args.leg_drive_preflight or args.leg_drive_calibration or args.drive_probe == 'suspended')
         if args.leg_drive_preflight or args.leg_drive_calibration or args.drive_probe == 'suspended':
@@ -826,6 +1075,11 @@ try:
         sys.exit(0)
     if args.leg_drive_calibration:
         leg_drive_calibration(live, args.out, checkpoint_digest(args.checkpoint))
+        env.close()
+        app.close(exit_code=0)
+        sys.exit(0)
+    if args.drive_probe == 'two_foot':
+        two_foot_probe(live, args.out, checkpoint_digest(args.checkpoint))
         env.close()
         app.close(exit_code=0)
         sys.exit(0)

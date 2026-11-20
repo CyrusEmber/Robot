@@ -25,6 +25,7 @@ ORDER = RL / 'versions/joint_order_runtime.json'
 USD_KEY = 'lizard2_round_feet/lizard2_round_feet.usda'
 URDF_KEY = 'lizard2_round_feet/lizard2_round_feet.urdf'
 FEET = ('lf_wrist', 'rf_wrist', 'rl_ankle', 'rr_ankle')
+SWING = ('lf_shoulder_swing_joint', 'rf_shoulder_swing_joint', 'rl_hip_swing_joint', 'rr_hip_swing_joint')
 
 
 def load_model(path, names):
@@ -316,6 +317,237 @@ def propulsion_report(arrays, joint_names):
                              'single trajectory, seed and checkpoint; contact spikes are not motor saturation'])
 
 
+def two_foot_trim(label: str) -> dict:
+    """Solve swing offsets that put the projected centre of mass under a diagonal support line.
+
+    Args:
+        label: Support pair from the offline geometry (``'lf+rr'``, ``'rf+rl'``), or ``'both'`` to
+            solve all four swing axes together so the two diagonals cross under the centre of mass.
+
+    Returns:
+        Joint-space offsets [rad] on swing axes only, chosen so the contact points keep their heights
+        and the stance keeps its height, plus the residuals. Kinematic only: no contact compliance,
+        and a centre of mass on the line leaves no restoring margin.
+    """
+    import lizard2_round_support_geometry as support
+
+    cfg, names, _, model, bodies = inputs()
+    geometry = support.run(RL / URDF_KEY)
+    if not geometry['passed'] or (label != 'both' and label not in geometry['groups']):
+        raise ValueError('unknown support group or failed geometry')
+    group = geometry['groups']['lf+rr' if label == 'both' else label]
+    # "both" answers a default-pose question, so it starts from the zero pose rather than a stance
+    # with the opposite pair folded and the tail pitched.
+    base = {name: 0. for name in names} if label == 'both' else dict(group['solver']['q_rad'])
+    feet = list(group['support']) if label != 'both' else list(FEET)
+    pairs = [(feet[0], feet[3]), (feet[1], feet[2])] if label == 'both' else [(feet[0], feet[1])]
+    shapes = [g for item in geometry['groups'].values() for g in item['validation']['geometry']]
+    radius = {foot: next(g['radius_m'] for g in shapes
+                         if g['link'] == foot and g['kind'] == 'collision') for foot in feet}
+    root = np.asarray(geometry['root_position_world_m'])
+    mass = sum(body['mass'] for body in bodies.values())
+    front = {leg: leg in ('lf', 'rf') for leg in ('lf', 'rf', 'rl', 'rr')}
+    trims = []
+    for foot in feet:
+        leg = foot[:2]
+        trims.append(f'{leg}_{"shoulder" if front[leg] else "hip"}_swing_joint')
+    # Swing axes are vertical, so the contact points move in the horizontal plane only: the stance
+    # keeps its height and its foot heights, and only the support line moves under the mass.
+    mirror = {name: float(np.sign(model['joints'][name]['axis'][2])) for name in trims}
+
+    def state(values):
+        q = dict(base)
+        for name, value in zip(trims, values):
+            q[name] += value * mirror[name]
+        poses = {n: csc.fk(model['joints'], n, q) for n in bodies}
+        com = sum(body['mass'] * (poses[n][:3, :3] @ body['com'] + poses[n][:3, 3])
+                  for n, body in bodies.items()) / mass + root
+        points = {foot: np.asarray(poses[foot][:3, 3]) + root - [0., 0., radius[foot]] for foot in feet}
+        return com, points
+
+    def crossing(points):
+        (a, b), (c, d) = ((points[p[0]], points[p[1]]) for p in pairs)
+        first = np.array([b[0] - a[0], b[1] - a[1]])
+        second = np.array([d[0] - c[0], d[1] - c[1]])
+        t = np.linalg.solve(np.column_stack((first, -second)), np.array([c[0] - a[0], c[1] - a[1]]))
+        return a[:2] + t[0] * first
+
+    def residual(values):
+        com, points = state(values)
+        if label == 'both':
+            return crossing(points) - com[:2], com, points
+        a, b = points[feet[0]], points[feet[1]]
+        line = np.array([b[0] - a[0], b[1] - a[1], 0.])
+        line /= np.linalg.norm(line)
+        normal = np.array([-line[1], line[0], 0.])
+        return np.array([(com - a) @ normal, a[2] - b[2]]), com, points
+
+    values, damping = np.zeros(len(trims)), 1e-4
+    for _ in range(300):
+        f = residual(values)[0]
+        if float(np.linalg.norm(f)) < 1e-9:
+            break
+        jac = np.zeros((len(f), len(trims)))
+        for k in range(len(trims)):
+            step = np.zeros(len(trims))
+            step[k] = 1e-6
+            jac[:, k] = (residual(values + step)[0] - f) / 1e-6
+        step = jac.T @ np.linalg.solve(jac @ jac.T + damping * np.eye(len(f)), f)
+        scale = min(1., .05 / max(float(np.abs(step).max()), 1e-12))
+        candidate = values - step * scale
+        if float(np.linalg.norm(residual(candidate)[0])) < float(np.linalg.norm(f)):
+            values, damping = candidate, max(damping / 2, 1e-9)
+        else:
+            damping *= 4
+    f, com, points = residual(values)
+    if float(np.linalg.norm(f)) > 1e-6 or np.abs(values).max() > .4:
+        raise ValueError(f'no bounded trim found for {label}: residual {np.abs(f).max():.2e}, '
+                         f'max trim {np.abs(values).max():.3f} rad')
+    offsets = {}
+    for pair in pairs:
+        a, b = points[pair[0]], points[pair[1]]
+        line = np.array([b[0] - a[0], b[1] - a[1], 0.])
+        line /= np.linalg.norm(line)
+        offsets['+'.join(sorted((pair[0][:2], pair[1][:2])))] = \
+            float((com - a) @ np.array([-line[1], line[0], 0.]))
+    return dict(support_group=label, support_feet=feet,
+                foot_radius_m={foot: float(radius[foot]) for foot in feet},
+                trims_rad={name: float(value * mirror[name]) for name, value in zip(trims, values)},
+                com_offset_m=float(f[0]), foot_height_gap_m=float(f[1]) if len(f) > 1 else 0.,
+                diagonal_offsets_m=offsets, com_height_m=float(com[2]), base_q_rad=base,
+                limitations=['Kinematic solve: no contact compliance, friction or PD sag is modelled.',
+                             'A centre of mass on the support line is neutral, not stable: no restoring margin.'])
+
+
+def swing_terms(kp, kd, inertia, scale, effort, velocity, load=None) -> dict:
+    """Return local swing criteria terms from one axis and one gain set [N m/rad, N m s/rad].
+
+    Args:
+        kp: Stiffness [N·m/rad].
+        kd: Damping [N·m·s/rad].
+        inertia: Fixed-root zero-pose downstream inertia [kg·m²].
+        scale: Action scale [rad per action].
+        effort: Configured effort limit [N·m].
+        velocity: Configured velocity limit [rad/s].
+        load: Optional external joint moment magnitudes [N·m].
+
+    Returns:
+        Local natural frequency [Hz], damping ratio, Kp·scale and Kd·velocity
+        percentages of the configured effort limit, and load/static-error terms [rad].
+    """
+    values = (kp, kd, inertia, scale, effort, velocity)
+    if not all(math.isfinite(float(v)) and v > 0 for v in values):
+        raise ValueError('invalid gain, inertia or limit')
+    if load is not None and (not np.isfinite(load).all() or (np.asarray(load) < 0).any()):
+        raise ValueError('invalid load moment')
+    return dict(wn_hz=math.sqrt(kp / inertia) / (2 * math.pi), zeta=kd / (2 * math.sqrt(kp * inertia)),
+                kp_scale_percent_effort=100 * kp * scale / effort,
+                kd_velocity_limit_percent_effort=100 * kd * velocity / effort,
+                load_static_error_rad=None if load is None else (np.asarray(load) / kp).tolist())
+
+
+def swing_review(plan_path: Path, propulsion_path: Path | None = None) -> dict:
+    """Cross-check recorded swing A/B gains against recorded loads and response.
+
+    Args:
+        plan_path: Recorded run plan JSON holding preflight gains, limits, mapping and case files.
+        propulsion_path: Recorded propulsion report JSON; its NPZ supplies contact moments [N·m].
+
+    Returns:
+        Per swing axis: recorded gains, limits and inertia, local terms for both gain sets,
+        and measured suspended RMS, amplitude ratio and phase for both gains.
+    """
+    import lizard2_leg_drive_protocol as protocol
+
+    plan = json.loads(plan_path.read_text(encoding='utf-8'))
+    pre, mapping = plan['preflight'], plan['mapping']
+    names = pre['joint_names']
+    cfg, cfg_names, _, model, bodies = inputs()
+    assert sorted(names) == sorted(cfg_names), 'plan joint names differ from v7'
+    default = pre['config_default_joint_pos']
+    default = np.asarray([default[n] for n in names] if isinstance(default, dict) else default, dtype=float)
+    assert default.shape == (26,) and not default.any(), 'unsupported default targets'
+    stiffness = {**cfg['actuators']['legs']['stiffness'], **cfg['actuators']['spine']['stiffness']}
+    damping = {**cfg['actuators']['legs']['damping'], **cfg['actuators']['spine']['damping']}
+    gains = {}
+    for key, field, row, source in (('v7_kp', 'initial_stiffness', 0, stiffness),
+                                    ('candidate_kp', 'proposed_stiffness', 1, stiffness),
+                                    ('v7_kd', 'initial_damping', 0, damping),
+                                    ('candidate_kd', 'proposed_damping', 1, damping)):
+        values = np.asarray(pre[field], dtype=float)
+        if values.shape != (2, 26):
+            raise ValueError('recorded gain row shape mismatch: ' + field)
+        gains[key] = values[row]
+        if row == 0 and not np.allclose(values[0], [source[n] for n in names]):
+            raise ValueError('recorded v7 gain row differs from config: ' + field)
+    if (gains['candidate_kp'] <= 0).any() or (gains['candidate_kd'] <= 0).any():
+        raise ValueError('invalid recorded candidate gains')
+    inertia = np.diag(project(model, bodies, names, cfg['default_joint_pos']))
+    if not np.allclose(np.asarray(pre['nominal_inertia_kg_m2'], dtype=float), inertia, atol=1e-12):
+        raise ValueError('recorded nominal inertia differs from current asset')
+    effort = np.asarray(pre['effort_limit_nm'], dtype=float)[0]
+    velocity = np.asarray(pre['velocity_limit_rad_s'], dtype=float)[0]
+    scale = {}
+    for entry in mapping:
+        if entry['joint'] in SWING:
+            scale[entry['joint']] = float(entry['scale'])
+    assert set(scale) == set(SWING), 'recorded mapping lacks swing axes'
+    moments = None
+    if propulsion_path is not None:
+        recorded = json.loads(propulsion_path.read_text(encoding='utf-8'))
+        with np.load(propulsion_path.parent / recorded['propulsion_diagnostic']['samples'],
+                     allow_pickle=False) as samples:
+            moments = propulsion_report(samples, recorded['runtime_joint_names'])
+    cases = {case.id: case for case in protocol.cases(cfg['action']['joints']['legs'], gravity='on')}
+    rows, measured = [], {}
+    for entry in plan['cases']:
+        if not Path(plan_path.parent / entry['file']).is_file():
+            raise ValueError('missing case sample: ' + entry['file'])
+        with np.load(plan_path.parent / entry['file'], allow_pickle=False) as sample:
+            arrays = {key: sample[key] for key in sample}
+        for slot, key in ((0, entry['A']), (1, entry['B'])):
+            if key not in cases:
+                raise ValueError('unknown recorded case: ' + key)
+            measured[key] = protocol.measure(cases[key], names, default, sample_names=names, time=arrays['time_s'],
+                                             target_readback=arrays['readback'][:, slot], q=arrays['q'][:, slot])
+    for name in SWING:
+        index = names.index(name)
+        load = None if moments is None else np.array([moments['legs'][name[:2]]['p95_abs_nm'][2],
+                                                      moments['legs'][name[:2]]['max_abs_nm'][2]])
+        row = dict(joint=name, runtime_joint_index=index, scale_rad_per_action=scale[name],
+                   effort_limit_nm=float(effort[index]), velocity_limit_rad_s=float(velocity[index]),
+                   inertia_kg_m2=float(inertia[index]), p95_max_contact_moment_nm=None if load is None else load.tolist())
+        for label in ('v7', 'candidate'):
+            kp, kd = gains[label + '_kp'][index], gains[label + '_kd'][index]
+            row[label] = swing_terms(kp, kd, inertia[index], scale[name], effort[index], velocity[index], load)
+            row[label].update(kp=float(kp), kd=float(kd))
+        row['measured'] = {}
+        for frequency in (.5, 1.):
+            for gain in ('A', 'B'):
+                key = f'{gain}|on|sin|{name}|{frequency:g}'
+                if key not in measured:
+                    raise ValueError('recorded case missing: ' + key)
+                row['measured'][f'{gain}|{frequency:g}'] = {
+                    key2: measured[key][key2] for key2 in ('rms', 'amplitude_ratio', 'phase_rad', 'max_error',
+                                                          'fit_residual', 'precision_pass')}
+            a, b = (row['measured'][f'{g}|{frequency:g}']['rms'] for g in 'AB')
+            row['measured'][f'rms_reduction_percent|{frequency:g}'] = 100 * (a - b) / a
+        rows.append(row)
+    paths = [plan_path, Path(__file__), Path(protocol.__file__), RL / URDF_KEY, PARAMS, LOCK]
+    if propulsion_path is not None:
+        paths.append(propulsion_path)
+    return dict(plan=str(plan_path), mapping_scope='recorded run plan, not a live backend readback this run',
+                input_sha256={str(p.resolve()): sha(p) for p in paths}, rows=rows,
+                propulsion_legs=None if moments is None else moments['legs'],
+                verdicts=['Static-error and authority terms use recorded contact moments and configured limits; '
+                          'no approved tolerance, so loaded adequacy stays unjudged.',
+                          'Measured suspended response is a fixed-root self-weight comparison; actual actuator '
+                          'torque, saturation, two-foot support and retrained behaviour are not covered.'],
+                limitations=['Contact moments are single-point friction-approximated ground-on-foot proxies.',
+                             'Authority and damping percentages are separate hypothetical terms at configured limits.',
+                             'Recorded gains are plan preflight rows, not per-case runtime readback in this review.'])
+
+
 def support_report(foot_forces: dict[str, list[float]] | None = None) -> dict:
     """Estimate two-foot load sensitivity for a prescribed root-upright pose.
 
@@ -404,13 +636,23 @@ if __name__ == '__main__':
     parser.add_argument('--two_foot', action='store_true', help='Report hypothetical guided two-foot load sensitivity')
     parser.add_argument('--foot_forces', type=Path, help='JSON map of four foot names to world-frame force vectors [N]')
     parser.add_argument('--propulsion_report', type=Path, help='Analyze recorded propulsion report and matching NPZ')
+    parser.add_argument('--swing_review', type=Path, help='Review a recorded swing A/B plan against recorded loads')
+    parser.add_argument('--two_foot_trim', choices=('lf+rr', 'rf+rl', 'both'),
+                        help='Solve swing offsets putting the centre of mass under a diagonal support line, '
+                             'or under the crossing of both diagonals with "both"')
     args = parser.parse_args()
     if args.foot_forces and not args.two_foot:
         parser.error('--foot_forces requires --two_foot')
-    if args.propulsion_report and (args.two_foot or args.foot_forces):
-        parser.error('--propulsion_report cannot be combined with --two_foot')
+    if (args.propulsion_report or args.swing_review or args.two_foot_trim) and (args.two_foot or args.foot_forces):
+        parser.error('--propulsion_report, --swing_review and --two_foot_trim cannot be combined with --two_foot')
     forces = json.loads(args.foot_forces.read_text(encoding='utf-8')) if args.foot_forces else None
-    if args.propulsion_report:
+    if args.two_foot_trim:
+        result = two_foot_trim(args.two_foot_trim)
+        result['input_sha256'] = {str(p): sha(p) for p in (RL / URDF_KEY, Path(__file__),
+                                                          Path(__import__('lizard2_round_support_geometry').__file__))}
+    elif args.swing_review:
+        result = swing_review(args.swing_review, args.propulsion_report)
+    elif args.propulsion_report:
         recorded = json.loads(args.propulsion_report.read_text(encoding='utf-8'))
         sample_path = args.propulsion_report.parent / recorded['propulsion_diagnostic']['samples']
         with np.load(sample_path, allow_pickle=False) as samples:
