@@ -32,10 +32,10 @@ rl_exp/versions/**/plots/
 #   dump_tb.py --csv_in <vN/tb_scalars.full.csv> --out <vN/tb_scalars.csv> --max_points 150
 rl_exp/versions/**/tb_scalars.full.csv
 
-# Diagnostic outputs stay machine-local by default, including unique/expensive evidence.
-# Ignoring is not backup or permission to delete; retain inputs and failure comparisons
-# until their recorded storage/recovery route has been verified. Existing tracked
-# baselines remain tracked until individually reviewed and recoverably relocated.
+# Diagnostic outputs stay machine-local by default. Keep active inputs, unresolved
+# failures, and unreviewed material until disposition. Use the version-document and
+# artifact policy in rl_exp/docs/diagnostic_artifacts.md. Review tracked baselines
+# individually under their version and asset contracts.
 rl_exp/out/
 rl_exp/tools/diagnose/out/
 

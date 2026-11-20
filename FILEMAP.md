@@ -23,6 +23,7 @@
 | `paths.example.yaml` | 主机路径模板（`isaac_root` + `python`）；每台机器 copy 成 `paths.yaml`（不入库） |
 | `README.md` / `AGENTS.md` | 仓定位与摆位步骤 / 工作与 IsaacLab 守则 |
 | `ARCH_PLAN.md` | 架构改造的判据与实现形态（**只写当时证据，不写当前状态**：加粗状态词、H1 标题行状态词与"覆盖文档里的闸门判词"由 `check_version_docs.py` 扫） |
+| `rl_exp/docs/project_simplification_plan.md` | 项目分批精简总纲，含实施顺序、逐步改动和验收条件 |
 | `work\` | 在办事项（`active\`，一项一文件）与关闭归档（`closed\<year>\`）；`check_work_docs.py` 查形状、发现事项及预览/生成事项骨架（`--scaffold`）；用法见 `--help` |
 | `FILEMAP.md` | 本文件 = 目录导航（见文首边界） |
 | `rl_exp\` | 任务包（自包含核心）；`import rl_exp` 经 venv `.pth` 可达 |
