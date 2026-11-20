@@ -4,7 +4,7 @@ title: lizard2 四腿关节驱动重新标定
 scope: rl_exp/tools/diagnose, rl_exp/versions/lizard2
 status: in_progress
 landing: rl_exp/tools/diagnose/lizard2_leg_drive_baseline.py, rl_exp/tools/diagnose/lizard2_leg_drive_protocol.py, acceptance/records
-next: 对照推进样本与悬空响应核定 swing 候选的误差、权限及受载验证。
+next: 对角两足工况已成立；待用户定窗口长度、重复次数与判据，再逐条件对比 v7 与候选。
 close_when: 新上下文按正文“关闭条件”核验落点与证据；有缺口不关闭。
 evidence: acceptance/records/2026-11-04-lizard2-leg-drive-baseline.md, acceptance/records/2026-11-03-lizard2-v7-round-feet.md, acceptance/records/2026-11-03-lizard2-v7-interface.md, acceptance/records/2026-10-30-lizard2-round-feet-plan-review.md, acceptance/records/2026-11-04-lizard2-shank-tilt-reach, acceptance/records/2026-10-21-lizard2-left-knee-absolute-pd, acceptance/records/2026-10-21-lizard2-symmetric-knee-elbow-pd, acceptance/records/2026-10-22-lizard2-standing-joint-force
 ---
@@ -16,7 +16,7 @@ evidence: acceptance/records/2026-11-04-lizard2-leg-drive-baseline.md, acceptanc
 - **物理锚点**：用户已确认没有实物电机参数或扭矩/速度及持续能力预算；本项只做仿真内相对标定，不声称物理能力或硬件可行性，后续有物理参数须重核方案。
 - **旧证据边界**：旧掌足左膝标定只覆盖固定根、重力下悬空且无额外载荷工况；对称膝肘候选未物理复测新增三轴；旧自由根承地静站观察只属于其原姿态与结果。旧机体与圆足的质量、惯量和足端几何不同：只按原条件复用方法与测量口径，不把旧数值、精度或承重结论迁移为当前圆足实测，也不从冻结策略即时响应推断新配方重训效果。
 - **参数分工**：本项负责逐轴 Kp/Kd 及其配比；动作 scale、力矩/速度上限与 clip 单独核其影响和来源，调整须有证据并经用户确认，不将各项混称“驱动力”。用户方向“小腿驱动力不应高于大腿”来源见 `work/active/lizard2-thigh-drive-shank-landing.md`，不是已验证的量化判据。
-- **当前进度**：最小 swing 对照、推进采样、接触力矩近似与候选及其限制见 `acceptance/records/2026-11-04-lizard2-leg-drive-baseline.md`。摩擦锚点和实际驱动力矩未核；不能以该候选称受载标定通过。未改正式配方、未确定最终参数、未启动训练。
+- **当前进度**：最小 swing 对照、推进采样、接触力矩近似与候选及其限制见 `acceptance/records/2026-11-04-lizard2-leg-drive-baseline.md`。2026-11-17 新增离线复核入口（`--swing_review`），结论是候选 B 在悬空口径被子 2 Hz 候选支配、权限与阻尼准则互斥待决；同日按用户方向把主测工况改为对角双足支撑 + 抬腿，swing trim 加稳态下沉补偿后首次成立（折叠腿足力 0 N、零下沉、支撑峰值 158–165 N·m、倾角 2.3–3.3°），但每条件仅 1 次、窗口 0.9 s，不构成对比结论。摩擦锚点和实际驱动力矩未核；不能以该候选称受载标定通过。未改正式配方、未确定最终参数、未启动训练。
 
 ## 责任边界
 
