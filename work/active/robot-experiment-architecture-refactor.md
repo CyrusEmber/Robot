@@ -1,72 +1,50 @@
 ---
 id: robot-experiment-architecture-refactor
-title: 面向机器人实验的架构精简与单向解耦重构
-scope: rl_exp, ablation_harness, work, setup.bat, README.md, .codemaker/rules
+title: Lizard2 v7 最小实验闭环与文档流程
+scope: rl_exp, ablation_harness, work, acceptance, README.md, AGENTS.md, .codemaker/rules, hooks
 status: open
-landing: rl_exp, ablation_harness, setup.bat, README.md, .codemaker/rules
-next: Codex 修正现役入口，以冻结锚和现有 checkpoint 建立 v7 对照，再接显式实验配置。
-close_when: 新上下文核验最终安装形态、v7 对照与续训、v8 单文件改参及旧接线退网。
+landing: rl_exp, ablation_harness, README.md, work, acceptance
+next: 实现者保留旧入口作对照，接通圆足 v7 的训练、PLAY、评测与录像。
+close_when: 核对删旧后的 v7 训评、普通试错零手写收尾与已采纳基线的回放。
 ---
 
-## 当前范围
+## 目标
 
-推倒“配置动态拼接 + 多重静态身份表 + 工具逆向依赖验证脚本”的旧链路，围绕“选机体 → 选配置 → 训 run → 协议评 checkpoint”重构项目结构与单向依赖边界。
+研究者复制一个实验文件、改一个奖励权重就能开训。训练自动留痕，评测给出指标与视频，人决定下一步。普通失败可以随本地 Run 清理；采纳的基线应能从一份仓内记录找到当时的代码、资产和权重并重新加载。
 
-### 目标结构与四个权威边界
+## 实验的四步
 
-核心从试点起使用长期包前缀 `rl_exp`。机体、训练和实验模块直接写入各自的最终包路径，评测与工具待消费者切换后再整理。
+| 步骤 | 入口与行为 |
+|---|---|
+| 定义机体 | `rl_exp/robots/lizard2_round_feet.py` 指向圆足 USD/URDF 及相对网格，声明动作关节顺序、执行器分组和默认 PD。现有同名资产目录继续存资产。 |
+| 定义实验 | `rl_exp/lizard2_v7.py` 显式选机体，写清观测、动作、奖励、终止、随机化、命令范围及 PPO 参数。复用现有函数，把 v7 实际需要且依赖旧 recipe 的代码移入 `rl_exp/locomotion/`。保留 TRAIN 的随机化和命令范围，PLAY 只覆盖推理所需配置。 |
+| 训练 | 目标命令 `train --exp rl_exp/lizard2_v7.py`。独立入口 `rl_exp/locomotion/train.py` 接通 AppLauncher、环境和 PPO runner，失败返回非零状态。允许新文件和未提交改动直接开训，省去 Gym 自动发现、版本登记、训前冻结和逐函数源码校验。 |
+| 评测与决策 | 目标命令 `eval --ckpt <checkpoint> --protocol <protocol>`。扩展现有 `ablation_harness/eval.py`，从 Run 取实验配置；旧权重可显式传 `--exp rl_exp/lizard2_v7.py`。真实训练结束后默认跑 robust，nominal 由用户选择。调用现有 `video_matrix.py` 录三档速度 × 三个视角，保留标签、九段原片和合成视频，逐片验看后决定采纳、放弃或继续实验。 |
 
-```text
-rl_exp/
-  robots/        # 机体配置与实际加载的相对资产引用
-  locomotion/    # 环境装配、MDP、训练接线与运行记录
-  experiments/   # 独立可读的 Python 实验配置
-  evaluation/    # 评测、协议、指标和录像
-  tools/         # 诊断、资产转换、导出和离线分析
-tests/         # 行为测试、集成测试与最小反例
-work/          # 在办动作
-acceptance/records/  # 已审核结论
-```
+## Run 自动留下什么
 
-| 边界 | 权威来源 | 约束 |
-|---|---|---|
-| 机体 | `robots/.../robot.py` 与其加载的资产 | 声明关节语义、资产路径和默认 PD。实验可按关节覆盖 PD，迁移时保留执行器分组及运行时行为 |
-| 实验 | `experiments/.../<exp>.py` | 一处可读选定机体、动作/观测、奖励、终止、随机化与 runner 参数；允许显式重复少量参数，不跨历史版本继承元素表；Gym 注册仅留接口边缘薄适配 |
-| 运行 | `run` 目录 | 保留 T0/T1、实际解析配置、CLI 覆盖、代码/框架身份、资产摘要、seed、父 checkpoint 与恢复验证 |
-| 评测 | 协议文件 + 被测 checkpoint | 协议定义测量口径与判据，结果绑定 checkpoint、协议与实际工况 |
+每次运行使用独立目录。训练保留 checkpoint、TensorBoard 日志，并自动写三类材料：
 
-### 实验发现与启动
+- `resolved_cfg.yaml` 保存 CLI 覆盖后的生效配置和实际 seed。想知道两次实验改了什么，直接 diff。
+- `provenance.json` 和 `git.diff` 保存实验入口、HEAD、框架与资产来源，以及暂存和未暂存的代码差异（排除 `*.pt`/`*.usda`/`*.blend`/`*.obj`/`*.stl` 大二进制）。另存实验文件、本次 `sys.modules` 命中的仓内未跟踪 Python 源码，以及实际加载的 `.usda` / `.urdf` 文件 `sha256`（防止路径相同但资产被覆盖）。
+- 从运行中的环境读取观测组、有序项名及宽度、动作关节顺序及维度，随 Run 和新 checkpoint 保存。加载时在首个不匹配处报错；历史 v7 权重缺签名时，从旧环境取对照。
 
-- 首批支持 `rl_exp/experiments/lizard2/flat_vN.py`。从文件名生成 `Lizard2-Flat-vN` 和 `Lizard2-Flat-Play-vN`，按统一导出名注册 `TrainEnvCfg`、`PlayEnvCfg` 和 `RunnerCfg` 的字符串入口，保留 v7 底层类名及 checkpoint 所需身份。发现阶段只查约定目录和名称，配置模块按入口延迟解析。重复 ID、未知实验和导出缺失明确拒绝。
-- launcher、Gym 注册和 fork trainer 的 T0 共用同一身份解析。生命周期沿用 `lines.json` 的线状态与显式退休记录，加入普通实验版本时由实验文件提供身份。对历史任务保留迁移期兼容读侧，显式退休仍拒绝新训及续训。
-- 试点 1 内接通发现、注册、生命周期和冻结，再切 v7 正常入口。项目新增一个符合约定的实验文件即可预检。正式开训前，按新流程冻结获批实验的提交与 tag，自动产出冻结材料。进入试点 2 前同步更新适用的版本规则与闸门，明确版本目的、基准、run 引用及结论分别放在哪里。
+评测直接把固定数值项、有效样本数及缺测原因写入 `eval.json`，区分报告项和协议通过门槛。`matrix.json` 索引实际录像工况与片段；eval 和录像各自的 `execution.json` 由启动端写命令、工作目录、起止时间与退出状态。程序只报告实际测到的内容；步态等定性判断来自看片。终端直接展示已有结果，省去 `eval_summary.json`、全局 `LOG.md` 和专用汇总脚本。
 
-### 冻结、运行与依赖
+## 实验何时需要人写字
 
-- **配置基准**取自对应冻结 tag 的训练、PLAY 和 runner 解析快照。新实验以声明的基准展示实际差异。冻结版本校验参数与顺序，允许的运行覆盖单独记录。保留原 v7 tag，迁移产生的类路径、评测指纹或格式差异逐项确认，迁移后基准绑定通过验收的提交。
-- **实现来源**按获批提交绑定实验实际依赖的本仓 MDP 及共享模块，并绑定框架和资产身份。冻结启动校验这些来源。用同名奖励函数改函数体的反例验证实现校验，用权重改值验证配置校验。测量口径仍用独立的行为对照。
-- **运行记录**沿用 T0/T1 和 checkpoint 索引。旧记录缺失的来源保留未知。材料齐备的新 run 的隔离重建由[重建事项](verified-rebuild-rating.md)承接。
-- **依赖方向**由评测、工具和测试调用核心。训练与记录直接调用核心的绑定、生命周期和快照能力。保留独立的诊断入口，一次性探针按[诊断产物规则](../../rl_exp/docs/diagnostic_artifacts.md)处理。
+| 情况 | 唯一的人工记录 |
+|---|---|
+| 当天试完，普通失败或放弃 | 零手写文档、零强制提交。看完九宫格即可结束，无需逐片填表。 |
+| 有个值得搜索的小教训 | 把实际实验改动提交到 Git，在提交消息写工况和观察，例如“v7 肘部 kp 40→20，本次落地塌陷，弃用”。需要恢复参数时可 revert，原提交仍可用 `git log --grep` 找回。 |
+| 采纳基线，或否决一条技术路线 | 在 `acceptance/records/` 写一份短记录，分四段写改动目的、Run 与 checkpoint 位置、关键指标与九宫格逐片看片观察、决定与适用范围。只在采纳基线时，将当时实际运行的源码落实到提交并打一个 tag，确认对应资产可取、权重有保留位置且能加载。 |
+| 中途需要续做或交接 | 在 `work/active/<id>.md`（退网后收口为 `work/<id>.md`）写下一步、Run 路径，有阻塞才写阻塞。做完删除；有重大结论时转为上面的一份记录。 |
 
-## 下一步
+README 给出四步用法。切换文档流程时，同次更新 `AGENTS.md`、`FILEMAP.md`、`HARNESS.md` 与训后模板，撤下逐 Run 手抄表和普通实验的逐片填表义务（仅采纳基线时写进验收记录）；同步调整 work-ledger、versioning、`check_work_docs.py`、`check_version_docs.py` 及其 `hooks/pre-commit`/离线调用。普通改参免建 PLAN/NOTES 等版本材料，简短待办免脚手架、预算、强制复审与关闭搬运。沿用已有历史记录，无需回填或重分类。精简 B 中的 pytest 耗时、台账成本与批量补历史 tag 试点退出本次实施路径。
 
-1. **修正当前入口。** README 给出可预检的 v7 命令。录像按受支持的任务选择 PLAY，平地评测按协议和任务匹配规则明确选择或拒绝。分别验证显式任务、省略任务参数、版本不匹配及退休任务的实际行为和退出码。测量时序、退出码和旧帧复读沿[时序事项](eval-command-observation-timing.md)、[退出码事项](exit-status-swallowed-by-app-close.md)及[旧帧事项](legacy-frames-rejudged-invalid.md)验对应步骤。显式配置构建和身份解析可先行。
-2. **试点 1 验证显式 v7。**
-   - 实现圆足机体和 `flat_v7.py`，复用环境、MDP 与运行记录。验证两条现有 Gym ID、独立 fork 入口、旧 checkpoint 读取，以及配置解析和运行链对 `verify/`、`diagnose/` 的导入边界。
-   - 使用同一序列化规则对照旧与新路径的训练、PLAY 及 runner 配置。逐项列出获批的路径或身份表示差异。检查实际构造后的观测组、项序、宽度和解析出的动作关节序。
-   - 从 [v7 运行记录](../../rl_exp/versions/lizard2/main/v7/NOTES.md)选取可读的父 checkpoint。在同一框架、资产、种子及父 checkpoint 下先重复旧实现，再对比新实现。要求父 checkpoint 摘要、恢复结果、迭代位置和动作顺序精确一致。核对首次更新前的模型和优化器状态，至少完成一个 PPO iteration，并验证新 checkpoint 的迭代计数、T1 绑定及再次加载。先从旧实现重复结果确定连续读数的比较容差。证据不足的比较记未知。
-   - 用 `eval.py --protocol locomotion_eval_v3 --mode robust` 对两条路径的同一既有 v7 checkpoint 做对照，固定 seed、工况和采样窗口。零有效样本按缺证记录，评测对齐与模型合格分别判。每次短训结束执行 [HARNESS 固定流程](../../ablation_harness/HARNESS.md#训后评估固定流程)，含必报项、九宫格和逐片验看。v7 专属平地协议沿评测专项推进。
-3. **试点 2 验证改参成本与拒绝行为。** 用 `flat_v8.py` 单改肘部 PD 或复演 `b14692a` 的奖励改动。从真实运行读回生效值。核实新增配置能由两个入口解析并按新规则冻结，旧表无需人工登记。分别列人工编辑、自动生成和必跑检查，比较同机同环境的检查耗时。人工维护目标为一份实验配置及一份验收记录。用同名函数体变更、冻结配置值变更、等宽观测或动作错序及错维度，分别验证实际启动路径在首次学习之前拒绝。错序预期取独立的顺序锚或标记输入。
-4. **按消费者切换和退网。** 保留切换前可恢复提交与旧读入口，验明启动、评测、历史读取及公开兼容后，再移除失去消费者的动态构建器、映射和重复闸门。旧线按已有历史承诺保留对应入口和材料。最终若调整模块路径、setup 或 fork shim，必须在隔离检出按最终安装形态重跑 v7 解析、旧 checkpoint 加载、PLAY、同协议评测和退休拒绝，并核验所加载模块的实际位置。失败时回到上一个可用入口，保留现场。
+## 实施与验收
 
-本机大产物和重复资产归[诊断产物事项](diagnostic-artifact-lifecycle.md)。测试框架、历史标签和台账维护的独立评估归[精简后续评估](project-simplification-b.md)。
-
-## 关闭条件
-
-- **审核者与输入**：不带执笔历史的新上下文读取上述代码落点、迁移前/后快照对照及各批 `acceptance/records/`。
-- **可观察验收**：
-  - 试点 1 通过配置、注册、续训、PLAY、同协议评测与独立训后验收，核心导入边界通过。
-  - 试点 2 达到人工维护成本目标，实际入口拒绝冻结漂移、观测及动作错序或错维度。
-  - 退网后按最终安装形态验证现役入口、历史兼容和退休拒绝，离线检查通过并保留回退点。
-- **交付与边界**：`README.md` 与现行导航反映单句话工作流；历史退役线以 git 归档或 `lines.json` 边界留痕，未完专项在独立活跃事项承接。
-- **结果处理**：全部通过审核后移入 `work/closed/<year>/`；可修缺口退 `in_progress`，需用户拍板的环境/历史策略置 `blocked`。
+1. **保留旧入口做一次 v7 对照。** 使用现有 Run `2026-11-03_17-07-29/model_5999.pt`。有同条件旧结果就复用，缺失才用旧 `Lizard2-Flat-v7` 补跑。新入口加载同一权重跑 PLAY，核对同输入的首帧观测、首步动作；交换同宽观测项或动作关节时应拒载。固定资产、框架、协议、seed、环境数、命令段与采样窗口，跑一轮 robust eval，比较有效样本、平地指标与协议判定，其他地形分列。逐片看九宫格，解释影响判定或步态的差异；缺有效样本时对齐仍待验证。[v7 Run 位置](../../rl_exp/versions/lizard2/main/v7/NOTES.md)
+2. **证明训练入口能写出可用权重。** 从新入口完成一次 PPO 更新，核对实际生效值、Run 留痕、指标有限值，以及新 checkpoint 保存和重载推理。这个测试只验证训练接线，v7 行为对照始终使用第一步的同一权重。
+3. **对齐后一次退网。** 在最后可运行的旧提交打 `archive/pre-refactor`。按真实调用迁出评测和录像仍依赖的共享函数，删除旧 `lizard2_recipe.py`、`recipe_tasks.py`、`cfg_lock.json`、`recipes.json`、`obs_protocol_anchors.json`、退役线目录、专属元检查，以及绑定旧锁与旧构建的 `work/active/` 历史挂账（无需逐个走 `pending_review`），并同步更新 `hooks/pre-commit` 与仓级导航/规则。用删旧后的正常入口复验训练、PLAY、eval 和录像。行为检查统一由 pytest 覆盖现役机体加载、环境构造、签名错序或错维度拒载、一次训推与评测口径。本机大产物清理另行处理，归档 tag 只兜底 Git 已跟踪的内容。
+4. **用实际操作验收文档流程。** 普通改参从开训到看完放弃，可以零份 Markdown 收尾；一张交接待办可以正常添加和删除；从一份已采纳基线记录能读懂采纳理由，并用其中的源码 tag、资产和 checkpoint 实际加载策略。复用这些操作验证，无需另建台账。
