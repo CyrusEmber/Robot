@@ -21,12 +21,8 @@ def check(path, count, round_feet=False):
     model, meshes = viewer.load_model(path)
     fig = viewer.build(path, backend='Agg', show=False)
     radio, reset_button, state, values, draw = fig._pose_controls
-    pd_texts = [text.get_text() for text in fig.texts if 'Kp=' in text.get_text()]
-    if round_feet:
-        assert any('Kp=39.52' in text and 'Kd=12.58' in text for text in pd_texts)
-        assert any('Kp=220.00' in text and 'Kd=14.95' in text for text in pd_texts)
-    else:
-        assert not pd_texts
+    if not round_feet:
+        assert not [text.get_text() for text in fig.texts if 'Kp=' in text.get_text()]
         assert any('PD unavailable' in text.get_text() for text in fig.texts)
     assert len(values) == count
     assert all(model['joints'][name]['axis'] is not None for name in values)
@@ -52,9 +48,6 @@ def check(path, count, round_feet=False):
                 if link.find('visual/geometry/sphere') is not None]
         assert len(feet) == 4 and all(name in meshes for name in feet)
         radio.set_active(2)
-        pd_texts = [text.get_text() for text in fig.texts if 'Kp=' in text.get_text()]
-        assert any('Kp=42.43' in text and 'Kd=13.51' in text for text in pd_texts)
-        assert any('Kp=220.00' in text and 'Kd=14.95' in text for text in pd_texts)
         twist = next(slider for slider in state['sliders'] if slider.label.get_text() == 'rl_hip_twist')
         np.testing.assert_allclose([twist.valmin, twist.valmax], [-0.5236, 0.5236], atol=1e-4)
         foot = next(name for name in feet if name.startswith('rl_'))

@@ -24,6 +24,7 @@ import json
 import pathlib
 import sys
 
+import numpy as np
 import torch
 from isaaclab.utils.math import quat_apply, quat_apply_inverse, yaw_quat
 
@@ -192,6 +193,31 @@ def load_fraction(load_n: torch.Tensor, weight_n: float) -> torch.Tensor:
         weight_n: body weight ``mass * g`` [N].
     """
     return load_n / weight_n
+
+
+def support_contact_window(forces_n, threshold: float, skip: int) -> tuple[int | None, int | None]:
+    """First substep that establishes support load, and the first loss after it, as indices.
+
+    A two-point stance starts with the feet still in the air: the reset pose carries the trimmed
+    legs above the floor, so the leading substeps always read zero force. Calling that a loss
+    reports the reset transient as lost contact, so the window only opens once the weakest support
+    foot is loaded.
+
+    Args:
+        forces_n: ``[substeps, support feet]`` normal forces [N].
+        threshold: load that counts as contact [N].
+        skip: leading substeps that still show the reset state.
+
+    Returns:
+        ``(established, lost)``: the first loaded substep and the first unloaded substep after it.
+        Both are ``None`` when support never establishes -- an unloaded run has no loss to report.
+    """
+    loaded = np.asarray(forces_n, dtype=float)[skip:].min(axis=1) >= threshold
+    if not loaded.any():
+        return None, None
+    first = int(np.argmax(loaded))
+    lost = np.nonzero(~loaded[first:])[0]
+    return first + skip, None if not len(lost) else int(first + lost[0] + skip)
 
 
 def mesh_vertices(obj_path) -> torch.Tensor:
@@ -509,4 +535,18 @@ def yaw_frame_offset(root_pos_w: torch.Tensor, root_quat_w: torch.Tensor,
     delta = body_pos_w - root_pos_w[:, None, :]
     yaw = yaw_quat(root_quat_w).unsqueeze(1).expand(-1, delta.shape[1], -1)
     return quat_apply_inverse(yaw, delta)
+
+
+def _self_check() -> None:
+    """Negatives for :func:`support_contact_window`: the reset transient is not a loss."""
+    reset = np.zeros((50, 2))
+    reset[12:40] = 300.
+    assert support_contact_window(reset, 1., 4) == (12, 40), support_contact_window(reset, 1., 4)
+    assert support_contact_window(np.zeros((50, 2)), 1., 4) == (None, None)
+    assert support_contact_window(np.full((50, 2), 300.), 1., 4) == (4, None)
+    print("DIAG_METRICS_SELF_CHECK_OK support_contact_window")
+
+
+if __name__ == "__main__":
+    _self_check()
 

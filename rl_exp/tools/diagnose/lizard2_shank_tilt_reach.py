@@ -151,7 +151,10 @@ def analyse_landings(joints, report, arrays):
                 'fixed_position_reference': 'FK of sampled pose, compared to observed sphere center',
                 'direction_scale': float(np.sin(np.radians(1.))), 'starts': ['actual_pose', 'zero_leg'],
                 'max_nfev': 200, 'scope': 'diagnostic tolerances only; not user-approved gait acceptance or global reachability'}
-    joint_names = report.get('landing_diagnostic', {}).get('joint_names') or report['runtime_joint_names']
+    joint_names = report.get('landing_diagnostic', {}).get('joint_names') or report.get('runtime_joint_names')
+    if not joint_names or len(joint_names) != 26:
+        raise ValueError('landing report carries no 26-entry runtime joint order; record it again with '
+                         'the current lizard2_shank_use_probe')
     for leg in LEGS:
         events = [e for e in report['landing_diagnostic']['events'] if e['leg'] == leg and e['time_s'] >= settings['after_s']]
         for event in events[:settings['max_events_per_leg']]:
@@ -172,9 +175,10 @@ def analyse_landings(joints, report, arrays):
                 return rotation @ tip + root_pose[:3], vector / np.linalg.norm(vector)
 
             actual_foot, actual_direction = pose(initial)
-            assert np.linalg.norm(actual_foot-expected_foot) < 1e-4, 'landing FK position mismatch'
             observed_direction = arrays['shank_direction_w'][index, env, event['leg_index']]
-            assert np.linalg.norm(actual_direction-observed_direction) < 1e-4, 'landing FK direction mismatch'
+            assert np.linalg.norm(actual_foot-expected_foot) < 1e-4, 'landing FK position mismatch'
+            direction_error = float(np.linalg.norm(actual_direction-observed_direction))
+            assert direction_error < 1e-4, 'landing FK direction mismatch'
             solutions = {}
             constraint = {'type': 'eq', 'fun': lambda values: pose(values)[0]-actual_foot}
             constrained = [minimize(lambda values: float(np.sum((pose(values)[1]+np.array([0., 0., 1.]))**2)),
@@ -209,7 +213,7 @@ def analyse_landings(joints, report, arrays):
             rows.append({'leg': leg, 'time_s': event['time_s'], 'env': env,
                          'original_tilt_deg': float(np.degrees(np.arccos(np.clip(-actual_direction[2], -1, 1)))),
                          'fk_foot_error_m': float(np.linalg.norm(actual_foot-expected_foot)),
-                         'fk_direction_error': float(np.linalg.norm(actual_direction-arrays['shank_direction_w'][index, env, event['leg_index']])),
+                         'fk_direction_error': direction_error,
                          'solutions': solutions})
     assert rows, 'no eligible filtered landing events'
     return {'settings': settings, 'events': rows}
@@ -219,7 +223,9 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--urdf", type=Path, default=DEFAULT_URDF)
     p.add_argument("--out", type=Path, default=DEFAULT_OUT)
-    p.add_argument('--landing_report', type=Path, help='filtered substep event report; paired landing_samples.npz')
+    p.add_argument('--landing_report', type=Path,
+                   help='filtered substep event report; its samples file sits beside it '
+                        '(the name the report records, else landing_samples.npz)')
     p.add_argument('--pose_report', type=Path, help='live pose samples from lizard2_shank_use_probe')
     p.add_argument("--steps", type=int, default=11)
     args = p.parse_args()
@@ -230,7 +236,12 @@ def main():
     selfcheck(joints)
     if args.landing_report:
         report = json.loads(args.landing_report.read_text(encoding='utf-8'))
-        arrays = np.load(args.landing_report.parent / 'landing_samples.npz')
+        samples = (report.get('propulsion_diagnostic') or {}).get('samples', 'landing_samples.npz')
+        arrays_path = args.landing_report.parent / samples
+        if not arrays_path.is_file():
+            raise SystemExit(f'missing landing samples: {arrays_path}')
+        with np.load(arrays_path, allow_pickle=False) as data:
+            arrays = {key: data[key] for key in data}
         result = analyse_landings(joints, report, arrays)
         result['source_landing_report'] = str(args.landing_report)
         args.out.parent.mkdir(parents=True, exist_ok=True)

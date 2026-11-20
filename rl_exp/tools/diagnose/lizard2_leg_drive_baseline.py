@@ -331,10 +331,12 @@ def two_foot_trim(label: str) -> dict:
     """
     import lizard2_round_support_geometry as support
 
-    cfg, names, _, model, bodies = inputs()
+    _, names, _, model, bodies = inputs()
     geometry = support.run(RL / URDF_KEY)
-    if not geometry['passed'] or (label != 'both' and label not in geometry['groups']):
-        raise ValueError('unknown support group or failed geometry')
+    if label != 'both' and label not in geometry['groups']:
+        raise ValueError('unknown support group: ' + label)
+    if not (geometry['passed'] if label == 'both' else geometry['groups'][label]['passed']):
+        raise ValueError('support geometry solve failed for ' + label)
     group = geometry['groups']['lf+rr' if label == 'both' else label]
     # "both" answers a default-pose question, so it starts from the zero pose rather than a stance
     # with the opposite pair folded and the tail pitched.
@@ -346,11 +348,7 @@ def two_foot_trim(label: str) -> dict:
                          if g['link'] == foot and g['kind'] == 'collision') for foot in feet}
     root = np.asarray(geometry['root_position_world_m'])
     mass = sum(body['mass'] for body in bodies.values())
-    front = {leg: leg in ('lf', 'rf') for leg in ('lf', 'rf', 'rl', 'rr')}
-    trims = []
-    for foot in feet:
-        leg = foot[:2]
-        trims.append(f'{leg}_{"shoulder" if front[leg] else "hip"}_swing_joint')
+    trims = [next(name for name in SWING if name.startswith(foot[:2] + '_')) for foot in feet]
     # Swing axes are vertical, so the contact points move in the horizontal plane only: the stance
     # keeps its height and its foot heights, and only the support line moves under the mass.
     mirror = {name: float(np.sign(model['joints'][name]['axis'][2])) for name in trims}
@@ -512,11 +510,15 @@ def swing_review(plan_path: Path, propulsion_path: Path | None = None) -> dict:
                                              target_readback=arrays['readback'][:, slot], q=arrays['q'][:, slot])
     for name in SWING:
         index = names.index(name)
-        load = None if moments is None else np.array([moments['legs'][name[:2]]['p95_abs_nm'][2],
-                                                      moments['legs'][name[:2]]['max_abs_nm'][2]])
+        p95 = maximum = None
+        if moments is not None:
+            leg = moments['legs'][name[:2]]
+            p95, maximum = float(leg['p95_abs_nm'][2]), float(leg['max_abs_nm'][2])
+        load = None if p95 is None else np.array([p95, maximum])
         row = dict(joint=name, runtime_joint_index=index, scale_rad_per_action=scale[name],
                    effort_limit_nm=float(effort[index]), velocity_limit_rad_s=float(velocity[index]),
-                   inertia_kg_m2=float(inertia[index]), p95_max_contact_moment_nm=None if load is None else load.tolist())
+                   inertia_kg_m2=float(inertia[index]),
+                   p95_contact_moment_nm=p95, max_contact_moment_nm=maximum)
         for label in ('v7', 'candidate'):
             kp, kd = gains[label + '_kp'][index], gains[label + '_kd'][index]
             row[label] = swing_terms(kp, kd, inertia[index], scale[name], effort[index], velocity[index], load)

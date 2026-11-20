@@ -739,7 +739,7 @@ def two_foot_probe(live, out, checkpoint):
     import numpy as np
     import torch
     import warp as wp
-    from diag_metrics import tilt_cos
+    from diag_metrics import support_contact_window, tilt_cos
     from lizard2_leg_drive_baseline import two_foot_trim
     from rl_exp.tools.runrecord.binding import sha256_file
 
@@ -905,7 +905,16 @@ def two_foot_probe(live, out, checkpoint):
     scales = np.clip(scales, *settings['trim_bounds'])
     samples = {key: [] for key in ('q', 'dq', 'target', 'estimated_effort', 'root_pos', 'root_quat',
                                    'tilt_cos', 'feet_normal', 'belly')}
-    offsets, stop_reason = run_stance(scales, settings['settle_s'] + settings['hold_s'], samples)
+    try:
+        offsets, stop_reason = run_stance(scales, settings['settle_s'] + settings['hold_s'], samples)
+    except BaseException:
+        # A wall-clock abort two thirds in is still a stance record; keep what was sampled.
+        partial = {key: np.stack(value) for key, value in samples.items() if value}
+        target = out.with_name(out.stem + '_partial.npz')
+        if partial and not target.exists():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            np.savez_compressed(target, **partial)
+        raise
     arrays = {key: np.stack(value) for key, value in samples.items()}
     steps = len(arrays['q'])
     assert steps > seat
@@ -918,9 +927,12 @@ def two_foot_probe(live, out, checkpoint):
         end = len(arrays['belly']) if not len(fallen_steps) else int(fallen_steps[0]) + 1
         tau = np.abs(arrays['estimated_effort'][:end, env, :])
         contacts = arrays['feet_normal'][:end, env, :]
-        # The first control step still shows the reset state, so contact loss is only judged after it.
-        lost = np.nonzero(contacts[live.cfg.decimation:, support_feet].min(axis=1)
-                          < settings['contact_loss_n'])[0]
+        # Both support feet have to carry load, and the reset pose leaves them airborne: the window
+        # opens at touchdown, so the leading zeros are not a loss.
+        established, lost = support_contact_window(contacts[:, support_feet], settings['contact_loss_n'],
+                                                   live.cfg.decimation)
+        pair_loaded = contacts[established:, support_feet].min(axis=1) >= settings['contact_loss_n'] \
+            if established is not None else None
         root = arrays['root_pos'][:end, env, :]
         joints = []
         for index, name in enumerate(names):
@@ -938,8 +950,10 @@ def two_foot_probe(live, out, checkpoint):
                      'tilt_peak_deg': float(tilt[:end, env].max()), 'tilt_end_deg': float(tilt[end - 1, env]),
                      'root_drop_m': float(root[0, 2] - root[:, 2].min()),
                      'lateral_drift_m': float(np.hypot(*(root[-1, :2] - root[0, :2]))),
-                     'support_contact_loss_s': None if not len(lost) else float(
-                         (lost[0] + live.cfg.decimation) * live.physics_dt),
+                     'support_contact_first_s': None if established is None else float(
+                         established * live.physics_dt),
+                     'support_contact_loss_s': None if lost is None else float(lost * live.physics_dt),
+                     'support_pair_loaded_fraction': None if pair_loaded is None else float(pair_loaded.mean()),
                      'belly_peak_n': float(arrays['belly'][:end, env].max()),
                      'feet_normal_mean_n': [float(arrays['feet_normal'][:end, env, i].mean()) for i in range(4)],
                      'feet_normal_max_n': [float(arrays['feet_normal'][:end, env, i].max()) for i in range(4)],
@@ -968,8 +982,10 @@ def two_foot_probe(live, out, checkpoint):
                               'this window, and no controller or policy is used.'],
               'completed': True}
     out.parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(out.with_suffix('.npz'), **arrays, centre_offset_m=offsets)
-    out.write_text(json.dumps(report, indent=2, allow_nan=False), encoding='utf-8')
+    with out.with_suffix('.npz').open('xb') as stream:
+        np.savez_compressed(stream, **arrays, centre_offset_m=offsets)
+    with out.open('x', encoding='utf-8') as stream:
+        json.dump(report, stream, indent=2, allow_nan=False)
     print('TWO_FOOT_PROBE_OK', out, flush=True)
 
 
@@ -1079,7 +1095,16 @@ try:
         app.close(exit_code=0)
         sys.exit(0)
     if args.drive_probe == 'two_foot':
-        two_foot_probe(live, args.out, checkpoint_digest(args.checkpoint))
+        try:
+            two_foot_probe(live, args.out, checkpoint_digest(args.checkpoint))
+        except BaseException as exc:
+            failure = args.out.with_name(args.out.stem + '_failure.json')
+            if not failure.exists():
+                failure.parent.mkdir(parents=True, exist_ok=True)
+                failure.write_text(json.dumps({'status': 'failed', 'error': repr(exc),
+                                               'traceback': traceback.format_exc()},
+                                              indent=2, allow_nan=False), encoding='utf-8')
+            raise
         env.close()
         app.close(exit_code=0)
         sys.exit(0)
