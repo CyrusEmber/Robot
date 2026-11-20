@@ -1,0 +1,26 @@
+{
+  "command": [
+    "E:\\IsaacLab\\env_isaaclab\\Scripts\\python.exe",
+    "-B",
+    "E:\\Robot\\ablation_harness\\eval.py",
+    "--task",
+    "Lizard2-Flat-v7",
+    "--checkpoint",
+    "E:\\IsaacLab\\logs\\rsl_rl\\lizard2_v7\\2026-11-04_16-12-57\\model_0.pt",
+    "--protocol",
+    "locomotion_eval_v3",
+    "--mode",
+    "robust",
+    "--seed",
+    "123",
+    "--group",
+    "provenance-v7-20261104-161257",
+    "--tag",
+    "short",
+    "--headless"
+  ],
+  "cwd": "E:\\Robot",
+  "started_at": "2026-11-04T16:14:28+08:00",
+  "ended_at": "2026-11-04T16:16:32+08:00",
+  "exit_code": 0
+}

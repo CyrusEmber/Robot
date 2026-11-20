@@ -1,0 +1,1838 @@
+diff --git a/README.md b/README.md
+index 90ba048..e2a9e03 100644
+--- a/README.md
++++ b/README.md
+@@ -185,11 +185,15 @@ copy <REPO>\paths.example.yaml <REPO>\paths.yaml
+ 挂着 junction，`rmdir <ROOT>\ablation_harness` 摘链接即可（**只准 rmdir**，递归
+ del 会穿透删真身）。
+ 
+-**开训前置：本仓工作树必须干净。** 脏树开训会被 `run_manifest.begin` **硬拒**并在 run
+-目录留下一条拒训记录（T0 先落盘）：没有 rev 能还原脏树，该 run 的"可重建"永远无法
+-证明。确需在脏树上开训必须显式声明理由：`set RL_ALLOW_DIRTY_TREE="<为什么>"`，理由写进
+-manifest（记为偏差，不是免检）。IsaacLab 树带未提交的 fork 补丁属**预期状态**，只记录
+-不阻拦。
++**开训前置：本仓训练依赖须干净。** `run_manifest.begin` 对受保护文件的脏改动硬拒，
++T0 先落盘；仅有 `.md` 或 T0 记录的文件级 eval 专属路径改动时不拒。声明本身、共享
++`host_paths.py`、未声明代码、配置和资产仍受保护。修订号不能还原未提交的受保护内容，
++追溯需要归档。确需开训须显式声明理由：`set RL_ALLOW_DIRTY_TREE="<为什么>"`；理由记入
++manifest，不改变分类，也不免除归档或范围违例。环境构造后已加载专属文件会记为违例；
++未观察到引用不证明依赖完整：构造后的延迟导入、不进入 `sys.modules` 的动态加载、
++被 `.gitignore` 忽略却实际读取的配置均未覆盖。未跟踪文件目前没有 T0 内容摘要，事后采集
++材料不证明它与训练时内容同源；摘要与评级由 `work/active/verified-rebuild-rating.md` 跟进。
++旧记录缺范围字段时按旧口径读取。IsaacLab 树带未提交的 fork 补丁属预期状态，只记录不阻拦。
+ 
+ **fork 补丁的退出码契约**（谁启动训练，谁就得能看出它到底跑没跑）：fork 树里的门禁拒绝
+ 一律**先打印再 `os._exit`**——`raise` / `sys.exit` 没用，sim app 收尾会在返回路径上把
+diff --git a/acceptance/records/2026-11-04-lizard2-shank-tilt-reach.md b/acceptance/records/2026-11-04-lizard2-shank-tilt-reach.md
+index 828abd0..74249a6 100644
+--- a/acceptance/records/2026-11-04-lizard2-shank-tilt-reach.md
++++ b/acceptance/records/2026-11-04-lizard2-shank-tilt-reach.md
+@@ -2,7 +2,7 @@
+ 
+ ## 适用范围
+ 
+-`work/active/lizard2-thigh-drive-shank-landing.md` 的轴映射、几何可达性核查与 v7 策略诊断。对象为 v7 锁定的 `rl_exp/lizard2_round_feet/` 资产，策略复读对象及条件见下文。已核正式 USD/URDF 和已采实时姿态，并逐片抽帧查看既有九宫格；用户现场身份仍未由用户明确核定，未做执行器分项探测或独立审核，不是完整步态验收或根因结论。
++`work/active/lizard2-thigh-drive-shank-landing.md` 的轴映射、几何可达性核查与 v7 策略诊断。对象为 v7 锁定的 `rl_exp/lizard2_round_feet/` 资产，策略复读对象及条件见下文。已核正式 USD/URDF、实时姿态、五组隔离执行器响应及真实策略控制帧接触指示，并逐片抽帧查看既有九宫格；用户现场身份仍未由用户明确核定，未做已学习轨迹增益因果对照或独立审核，不是完整步态验收或根因结论。
+ 
+ ## 验收条件
+ 
+@@ -99,6 +99,44 @@
+ 
+ 九段原片、索引、带速度/视角标签九宫格已存在且九图逐一查看。本次只完成专项的逐片抽帧观察；视频缺完整录制条件/执行记录，核心评估与足端承载口径也未在本项补齐，整体训后评估按 `HARNESS.md` 仍不能判完成。下一未完步骤为原限位执行器动态探测，并补正式落地事件与有效推进口径。
+ 
++### 第 2 步读数与第 3 步接触诊断：原限位执行器动态探测
++
++本轮只做隔离标定，不加载策略、不更新正式配方/资产、不训练。原始 action 正弦幅度 0.5，经过原动作项 scale/offset/clip，控制 50 Hz、物理 200 Hz；频率 0.5 / 1 Hz、每关节 4 周期，拟合舍弃首周期。目标幅度随原 scale 为 swing/abduct 0.10 rad、twist 0.0873 rad、elbow/knee 0.20 rad，不把不同轴的原始 action 响应误作等目标幅度对照。
++
++同一仿真内五环境各一组：原配置；swing/twist Kp×2、Kd×sqrt(2)；swing/twist Kd×0.5；elbow/knee Kp×0.5、Kd×sqrt(0.5)；swing/twist scale×2。其余轴、限位和力矩上限保持原值。本次未做限矩变体；原始小信号是否触及估计饱和先读结果，不能据同限矩组判权限变体已验证。悬空固定根 z=2 m，着地为自由根原高度，两者均保留重力，关闭随机事件；固定根不会消除腿部自重力矩。幅相比用于各工况内部比较，跨悬空/着地差异只解释负载/耦合变化，不直接归因控制器。
++
++**失败现场**：首次悬空 `drive_suspended01.log` 在物理初始化拒绝，原 fork 的 `fix_root_link=True` 产生 Geometry 与 base_link 两个 ArticulationRootAPI：`Expected exactly one ArticulationRootAPI prim ... found 2`。沿既有 `palm_spatial_runtime.py` 固定根诊断适配，只在生成的仿真 prim 去掉 base_link 残余 articulation schema，保留刚体 schema并断言单根，不保存/转换正式 USD。此为标定夹具修正，不是策略根因修复。
++
++`drive_suspended02` / `drive_ground01` 为初版测量；`drive_suspended03` / `drive_ground02` 增加每次复位的初始 q 与求解器增益核对、逐工况根位姿/腹部净接触力、拟合残差及目标发出与采样之间一控制步的相位时间对齐。补证版两次正常退出，各 160 行，保存逐轴波形和元数据；读数及局限见下，不因运行完成宣布驱动根因或修复成立。
++
++**首批悬空完成读数（drive_suspended02，待补证版复核）**：完成 16 轴 × 2 频率 × 5 组，共 160 行；零动作根高度均保持 2 m、腹部净接触力均为 0。1 Hz 前/后 swing 原配置幅比为 0.482 / 0.490，肘膝约 0.929；提高 swing/twist 刚度组 swing 幅比为 0.656 / 0.658，降低阻尼组为 0.938 / 0.968。1 Hz scale×2 只把 swing 目标幅度由 0.10 rad 变为 0.20 rad、实际幅度约翻倍，归一化幅比仍为 0.482 / 0.490，未改善动态跟踪效率。降低肘膝刚度组未改变该悬空 swing 幅比，肘膝自身幅比降至约 0.872。
++
++0.5 Hz 前/后 swing 基线幅比 0.799 / 0.792，降阻尼后 1.113 / 1.090，提示已有幅值放大；1 Hz 降阻尼虽提高幅度，时标对齐后的 swing 滞后仍约四分之一周期，不能据幅比接近 1 判跟踪优秀。前 swing 基线 1 Hz 正弦拟合残差 RMS 约 `1.03e-4 rad`，首批记录没有该字段，本次由保留 NPZ 复拟合。全部首批估计饱和比例为 0，仅支持此悬空小信号窗口未见估计限矩，不能外推接地负载或实际 motor 饱和。
++
++这批读数支持“swing 的频率响应弱于肘膝、刚度/阻尼会改变响应”的候选，不证明其导致策略固定偏置或后腿折叠；不能直接选降阻尼改参。首批 phase 字段按目标发出索引拟合，补证版增加一控制步时间对齐，正式相位引用以补证版为准；着地与复位/增益验证结果仍待完成核查。
++
++**首批着地完成读数（drive_ground01，待补证版姿态/接触复核）**：完成 160 行，但零动作夹具已出现明显支撑差异，不能将五组直接当成同姿态线性传递函数。原初始根高约 0.604 m，基线 2 s 零动作期间最低约 0.453 m、胸腹净接触峰值约 583 N；降阻尼组 0.454 m/610 N，降低肘膝刚度组 0.449 m/536 N，scale×2 组 0.453 m/604 N。swing/twist 提高刚度组最低约 0.504 m、该窗口胸腹峰值 0 N。峰值不是持续承载比例；夹具是零目标、无策略/自动终止，不据此认定训练策略本身必然触腹。
++
++基线 1 Hz 前 swing 幅比接近 0，前 twist 实际角停在约 ±0.524 rad；保存波形显示前 swing 首周期后的全跨度仅约 `5.45e-5 rad`、前 twist 约 `1.91e-6 rad`。这类几乎零幅度的 phase 字段无实际意义，禁止当正常相位读数引用。基线后 swing 幅比约 0.248，降阻尼约 0.386，提高刚度约 0.300；提高刚度还显著改变整体支撑/姿态，不能把全部改善归为单轴响应。降低肘膝刚度组后膝幅比约 0.283–0.288，低于基线 0.630–0.634；其零动作支撑也未满足不触腹要求，当前不支持直接降低小腿刚度。
++
++结论范围：首批着地揭示零目标下的负载/姿态耦合问题，比“限位太小”更值得核查。仍需补证版逐工况根姿态、接触和拟合残差，区分腹部/关节限位约束与单轴驱动能力；没有证明提高大腿刚度能修复已训练策略或满足落地分工，也不能把降阻尼的悬空幅比直接推广到承重工况。
++
++**补证版核查（drive_suspended03 / drive_ground02）**：悬空幅比复现首批，全部 160 行估计饱和为 0；前/后 swing 基线 1 Hz 时标对齐滞后 94.1° / 92.1°，提高刚度 74.7° / 73.2°，降低阻尼 95.4° / 91.4°。说明降阻尼的幅值恢复并未解决该频率的 swing 相位；twist 的相位改善较大，不能把二者统称为同一响应问题。
++
++着地补证推翻“提高大腿刚度即可保持不触腹”的推广：提高刚度组前 swing 激励期间根平均高度约 0.471 m、胸腹峰值 347 N、1–4 s 净接触指示占比 100%，该片段根漂移约 0.118 m；零动作头 2 s 未测到触腹不代表后续安全。其他四组同片段接触指示占比也为 100%。提高刚度组后膝激励峰值可达约 1098 N、拟合残差 RMS 0.020 rad；接触/机体运动明显，单轴幅比不是固定姿态线性响应。基线后 swing 幅比 0.248、降阻尼 0.386、提高刚度 0.300 的比较只能作隔离零目标夹具结果。当前五组均未满足整个动态测量窗口的不触腹要求，不批准任何一组用于正式改参。
++
++**第 3 步推进**：沿真实 model_5999 策略补控制帧足端净垂直力与小腿有向轴（相对世界 -Z）的总倾角、X/Y 分量、机身速度/位移及腹部净力。足端读点是四个圆足 body，净垂直力 >1 N 仅作接触指示；相邻有效控制帧由未接触到接触为候选边沿，不叫真实 touchdown。保留每环境第一局，排除首帧、done 覆盖帧及后续 reset 局。复用通道，不将球足转换成假掌面网格或给 sole 面積判分；完整接触协议与材料点滑移仍由接触专项承担。新接触边沿 helper 的合成正例与 reset 污染负例已运行，未变更冻结协议或奖励。
++
++**真实策略接触帧补证（contact07）**：同一 model_5999，0.5 m/s、seed 123、4 环境、500 步，reset_count=0；与 use05 的逐关节汇总完全一致，采集没有改变策略轨迹。排除首帧后有效控制帧 1996，足端净力指示占比 lf/rf/rl/rr 为 61.8% / 61.6% / 56.7% / 62.5%，接触指示帧总倾角均值 8.04° / 11.63° / 43.29° / 49.39°，后腿世界横向分量均值 -42.35° / 49.23°。力边沿候选数分别 71 / 74 / 72 / 82（跨 4 环境汇总），对应倾角中位数 9.23° / 20.95° / 46.47° / 49.21°。候选数可能含接触抖动，绝不能作为真正落地次数或步频。
++
++该实际策略片段腹部净力 >1 N 指示占比 0，前向速度 MAE 0.0514 m/s，每环境前向位移约 4.90–4.93 m。读数只用于该固定速度短时诊断，不是核心协议速度/跌倒/完成度 verdict。策略能在无腹部接触指示下推进，后腿却在接触指示帧明显侧倾；因此零目标夹具塌低不能直接代表策略行为，且仅靠速度收益并未消除后腿姿态问题。仍不能从这些结果认定某个奖励项或 PD 是唯一根因。
++
++第 2 步已获得五组、两种工况的读数与负例；尚无限矩变体、已学习轨迹上的增益因果对照、正式支撑分类。第 3 步现仅完成控制帧接触候选与速度/位移诊断；真实首次落地、稳定接触与滑移仍未标定，不添加落地奖励或关闭本项。
++
++测量边界：不走 `env.step`，使用正式动作项 process/apply 与 decimation 物理子步，故无自动终止/reset/奖励或策略作用；每工况显式从零姿态复位并稳定 2 s。求解器 Kp/Kd 写入后核对后台读回，改参不依赖隐式执行器旧估计缓存。力矩使用 K*(target-q)-D*dq 的控制帧后估计，50 Hz，不是逐物理帧实测，饱和比例仅标“估计”。腹部为 base_link/chest_pitch 净接触力，不是已核定的逐接触支撑口径；着地若姿态/接触变化，低幅相比不能单独判驱动弱。拟合比例/相位正例与反号、零响应负例已执行，人工波形 0.6 幅比、30° 滞后复现。
++
++**奖励通路只读核对**：`lizard2_recipe.py:lizard2_rewards` 显式移除 `feet_air_time`、`dof_pos_limits`、`flat_orientation_l2`、`dof_acc_l2`、`ang_vel_xy_l2`；manifest 的实际 reward 类别为速度跟随、偏航跟随、垂直速度、动作变化、力矩、腹部接触六项，没有小腿落地姿态或 swing 周期运动目标。`action_rate_l2` 用 raw action 与 prev_action 的差，不用处理后 target；固定大 raw 偏置本身没有动作幅值惩罚，但改变它仍有 rate 成本。`last_action` 返回 raw action，饱和输出不是所有通路都等价。此只表明目标未约束用户期望的分工，不证明哪项导致 swing 正向漂移；须结合动态读数和后续对照。
++
+ ## 证据引用
+ 
+ - 脚本：`rl_exp/tools/diagnose/lizard2_shank_tilt_reach.py`（内置破坏检查）。
+@@ -111,6 +149,10 @@
+ - 训练阶段复读输出：`rl_exp/out/lizard2_shank_tilt/drift_500/result.json`、`rl_exp/out/lizard2_shank_tilt/drift_1500/result.json`、`rl_exp/out/lizard2_shank_tilt/drift_3000/result.json`；复读使用同一 rollout 命令，分别替换为该 run 的对应 checkpoint 及新输出路径。
+ - 可视化实现：`rl_exp/tools/diagnose/lizard2_spatial_pose_slider.py`；打开本次机体需传 `--urdf rl_exp/lizard2_round_feet/lizard2_round_feet.urdf`，默认路径仍为历史 palm_spatial，不能把默认机体误作 v7。
+ 
++- 第 2 步验证：`rl_exp/out/lizard2_shank_tilt/step2_offline_checks.log` 中 37 项功能检查通过但隔离 rebuild 单测成本超预算；仿真结束再跑 `step2_offline_checks02.log`，37 项功能仍通过，`test_rebuild_gate.py` 单独 25.3 s 超 25 s、整体 exit 1。并行仿真不是全部原因，不将此改称已通过、不改预算。该单测在其他会话的工作树也有改动，本轮不擅自修其归属；成本门未绿，暂不提交/推送本轮动态与接触诊断。
++- 真实策略接触诊断：`rl_exp/out/lizard2_shank_tilt/contact07/result.json`、`contact07/contact_samples.npz`、`contact07.log`；复读同 rollout 命令添加 `--contact_samples`，全新输出路径。实际采集保留第一局并排除 done/首帧；helper 合成正例仅留合法边沿，故意忽略有效窗会多出起始/reset 边沿。该 NPZ 不含 floor 过滤或逐子步落地权威，不消费为冻结协议判分。
++- 动态入口：`rl_exp/tools/diagnose/lizard2_shank_use_probe.py --checkpoint <本 run/model_5999.pt> --out <新目录/result.json> --drive_probe suspended --viz none`（着地改 `--drive_probe ground`）；各目录 `plan.json` 先于物理标定写入，`progress.json` 和逐关节 NPZ 保存过程。失败 `drive_suspended01.log`，初版 `drive_suspended02`/`drive_ground01` 与补证版 `drive_suspended03`/`drive_ground02` 均保留，日志为同级同名 `.log`，运行完成须以结果与日志实际核查。
++- 奖励口径：`rl_exp/tasks/lizard2_recipe.py:225`，框架 `envs/mdp/rewards.py:257`（raw action rate）、`envs/mdp/observations.py:740`（raw last_action），以及本 run `run_manifest.json` 的 `ready_to_learn.term_classes.rewards`。
+ - 验证：`rl_exp/out/lizard2_shank_tilt/step1_offline_checks.log`，`ALL_OFFLINE_CHECKS_PASSED (37/37 in 51.5s)`；实时复读正常退出，FK 改轴负例通过。回填后 `check_work_docs.py` 再跑 `WORK_DOCS_OK (105 item file(s))`；格式/仓库闸门不证明步态修复或独立审核。
+ - 原离线扫描复读需指定全新 `--out`（默认 `reach01/result.json` 已存在，现脚本拒绝覆盖）；实时补证复读：`<配置解释器> -B rl_exp/tools/diagnose/lizard2_shank_use_probe.py --checkpoint <本 run/model_5999.pt> --out <新目录/result.json> --pose_samples --viz none`，再用 `<配置解释器> -B rl_exp/tools/diagnose/lizard2_shank_tilt_reach.py --pose_report <上述 result.json> --out <新目录/result.json>`；此入口保存逐轴归零切片并执行改轴负例。
+ - 本轮输出：`rl_exp/out/lizard2_shank_tilt/usd_axes01/result.json`（正式 USD/URDF audit 与全部锁哈希）、`rl_exp/out/lizard2_shank_tilt/pose06/result.json`（实时姿态）、`rl_exp/out/lizard2_shank_tilt/pose06.log`（仿真日志）、`rl_exp/out/lizard2_shank_tilt/pose_fk02/result.json`（FK/单轴扫描/逐轴归零/改轴负例）；`pose_fk01` 为追加归零字段前的保留中间证据，不覆盖。
+@@ -121,6 +163,6 @@
+ 
+ - USD/URDF 与实际姿态仅覆盖上述资产与 0.5 m/s、seed 123 的 20 个 env 0 读点，未作连续域、复杂地形或极端姿态核查。
+ - 几何切片包含足端位置，但无支撑稳定、关节自碰撞与无滑移约束；单轴归零改变落点。可视化范围扩大尚未验证，也未修改正式资产。
+-- 足端高度仅作支撑代理，未正式测首次落地、限位接触、跌倒率或有效推进；不能将后腿横向倾斜或归零几何收益直接归因到驱动/奖励。
++- 足端高度与净垂直力仅作两种接触代理；已采控制帧力边沿候选，但未正式测首次落地、限位接触、跌倒率或材料点有效推进；不能将后腿横向倾斜或归零几何收益直接归因到驱动/奖励。
+ - 已绑定复读 run/checkpoint/资产与既有录像，用户所看现场身份未获显式确认；视频只抽帧，缺完整当时条件与执行记录，不能判整体训后流程完成。
+-- 执行器分项探测、奖励因果对照、正式落地事件口径及独立审核未完成。
++- 五组隔离执行器探测已采且核查；限矩变体、已学习轨迹的增益/策略目标因果对照、正式落地事件口径及独立审核未完成。仓库成本门未绿，本轮未提交。
+diff --git a/rl_exp/tools/diagnose/lizard2_shank_use_probe.py b/rl_exp/tools/diagnose/lizard2_shank_use_probe.py
+index 502905b..32832c0 100644
+--- a/rl_exp/tools/diagnose/lizard2_shank_use_probe.py
++++ b/rl_exp/tools/diagnose/lizard2_shank_use_probe.py
+@@ -12,6 +12,7 @@ full joint/link state and both sides of loaded USD joint frames, using xyzw link
+ import argparse
+ import importlib.metadata
+ import json
++import math
+ from pathlib import Path
+ import sys
+ import traceback
+@@ -26,12 +27,14 @@ parser.add_argument('--out', type=Path, required=True)
+ parser.add_argument('--speed', type=float, default=0.5)
+ parser.add_argument('--seed', type=int, default=123)
+ parser.add_argument('--steps', type=int, default=500)
++parser.add_argument('--contact_samples', action='store_true', help='save first-episode control-frame force and shank samples')
++parser.add_argument('--drive_probe', choices=('suspended', 'ground'), help='replace policy with bounded actuator calibration')
+ parser.add_argument('--pose_samples', action='store_true', help='save env 0 poses and USD world axes every 0.5 s')
+ parser.add_argument('--swing-clip', type=float, default=None,
+                     help='probe-only: replace every *_swing_joint action clip with (-v, v); URDF limit still applies')
+ AppLauncher.add_app_launcher_args(parser)
+ args = parser.parse_args()
+-if args.out.exists():
++if args.out.exists() or (args.drive_probe and args.out.parent.exists()):
+     parser.error('output already exists')
+ app = AppLauncher(args).app
+ 
+@@ -39,6 +42,161 @@ STANCE_Z = 0.10
+ LEGS = {'lf': 'elbow', 'rf': 'elbow', 'rl': 'knee', 'rr': 'knee'}
+ FOOT = {'lf': 'wrist', 'rf': 'wrist', 'rl': 'ankle', 'rr': 'ankle'}
+ 
++def contact_edges(loaded, valid):
++    """Control-frame force edges in contiguous valid first-episode samples; not touchdown authority."""
++    import numpy as np
++
++    edges = np.zeros_like(loaded, dtype=bool)
++    edges[1:] = loaded[1:] & ~loaded[:-1] & valid[1:, :, None] & valid[:-1, :, None]
++    return edges
++
++
++def sine_response(time, position, target, frequency):
++    """Fit sine amplitude ratio and signed lag [deg], discarding the first cycle."""
++    import numpy as np
++
++    valid = time >= 1. / frequency
++    basis = np.column_stack((np.ones(valid.sum()), np.sin(2*math.pi*frequency*time[valid]),
++                             np.cos(2*math.pi*frequency*time[valid])))
++    a = np.linalg.lstsq(basis, position[valid], rcond=None)[0]
++    b = np.linalg.lstsq(basis, target[valid], rcond=None)[0]
++    target_amp = float(np.hypot(b[1], b[2]))
++    assert target_amp > 1e-6, 'no sine excitation'
++    error = position[valid] - target[valid]
++    return {'actual_amplitude_rad': float(np.hypot(a[1], a[2])), 'target_amplitude_rad': target_amp,
++            'amplitude_ratio': float(np.hypot(a[1], a[2]) / target_amp),
++            'phase_lag_deg': float(np.degrees(np.angle(np.exp(1j*(np.arctan2(b[2], b[1])-np.arctan2(a[2], a[1])))))),
++            'mean_abs_track_error_rad': float(np.abs(error).mean()),
++            'fit_rms_residual_rad': float(np.sqrt(np.mean((position[valid] - basis @ a)**2))),
++            'mean_position_rad': float(position[valid].mean())}
++
++
++def drive_probe(live, out, mode, checkpoint):
++    """Observe bounded sine response through action manager; time [s], angle [rad], estimated torque [N*m]."""
++    import numpy as np
++    import torch
++    import warp as wp
++    from rl_exp.tools.runrecord.binding import sha256_file
++
++    check_time = np.arange(0., 8., 0.02)
++    check_target = 0.1 * np.sin(2*math.pi*check_time)
++    check_actual = 0.06 * np.sin(2*math.pi*check_time - math.pi/6)
++    check_result = sine_response(check_time, check_actual, check_target, 1.)
++    assert abs(check_result['amplitude_ratio'] - 0.6) < 1e-6
++    assert abs(check_result['phase_lag_deg'] - 30.) < 1e-6
++    negative = sine_response(check_time, 0.06 * np.sin(2*math.pi*check_time + math.pi/6), check_target, 1.)
++    assert abs(negative['phase_lag_deg'] - 30.) > 1.
++    assert sine_response(check_time, np.zeros_like(check_time), check_target, 1.)['amplitude_ratio'] < 1e-6
++    robot = live.scene['robot']
++    term = live.action_manager.get_term('joint_pos_legs')
++    names, ids = list(term._joint_names), list(term._joint_ids)
++    assert len(names) == 16 and robot.is_fixed_base == (mode == 'suspended')
++    settings = {'amplitude_rad': 0.10, 'frequency_hz': [0.5, 1.0], 'settle_s': 2., 'cycles': 4,
++                'cases': ['baseline', 'proximal_kp2_kd_sqrt2', 'proximal_kd_half', 'bend_kp_half_kd_sqrt_half',
++                          'proximal_scale2'], 'torque_channel': 'K*(target-q)-D*dq from live gains, estimate only',
++                'velocity_target': 'zero', 'control_dt_s': live.step_dt, 'physics_dt_s': live.physics_dt,
++                'raw_amplitude': 0.5, 'phase_time_alignment': 'position sampled one control_dt after held target issuance',
++                'scope': 'isolated calibration, no policy/reward/termination/DR events; gravity retained'}
++    kp, kd = robot.data.joint_stiffness.torch.clone(), robot.data.joint_damping.torch.clone()
++    proximal = [ids[i] for i, n in enumerate(names) if n.endswith(('_swing_joint', '_twist_joint'))]
++    bend = [ids[i] for i, n in enumerate(names) if n.endswith(('_elbow_joint', '_knee_joint'))]
++    kp[1, proximal] *= 2.
++    kd[1, proximal] *= math.sqrt(2.)
++    kd[2, proximal] *= 0.5
++    kp[3, bend] *= 0.5
++    kd[3, bend] *= math.sqrt(0.5)
++    robot.write_joint_stiffness_to_sim_index(stiffness=kp)
++    robot.write_joint_damping_to_sim_index(damping=kd)
++    term._scale[4, [i for i, n in enumerate(names) if n.endswith(('_swing_joint', '_twist_joint'))]] *= 2.
++    assert torch.allclose(wp.to_torch(robot.root_view.get_dof_stiffnesses()).to(kp.device), kp)
++    assert torch.allclose(wp.to_torch(robot.root_view.get_dof_dampings()).to(kd.device), kd)
++    baseline_root = robot.data.default_root_state.torch.clone()
++    baseline_root[:, :3] += live.scene.env_origins
++    zeros = torch.zeros((5, live.action_manager.total_action_dim), device=live.device)
++    sensor = live.scene['contact_forces']
++    belly_ids = [sensor.body_names.index(n) for n in ('base_link', 'chest_pitch')]
++    force_peak, z_min = np.zeros(5), np.full(5, np.inf)
++    results = []
++    out.parent.mkdir(parents=True, exist_ok=True)
++    metadata = {'settings': settings, 'mode': mode, 'source_checkpoint_identity_only': checkpoint,
++                'joint_names': names, 'stiffness': kp.cpu().tolist(), 'damping': kd.cpu().tolist(),
++                'action_scale': term._scale.cpu().tolist(), 'action_clip': term._clip.cpu().tolist(),
++                'code_sha256': sha256_file(Path(__file__)), 'source_usd_sha256': sha256_file(Path(live.cfg.scene.robot.spawn.usd_path))}
++    (out.parent / 'plan.json').write_text(json.dumps(metadata, indent=2), encoding='utf-8')
++
++    def reset_fixture():
++        live.action_manager.reset()
++        live.scene.reset()
++        robot.write_root_pose_to_sim_index(root_pose=baseline_root[:, :7])
++        robot.write_root_velocity_to_sim_index(root_velocity=baseline_root[:, 7:])
++        robot.write_joint_state_to_sim_index(position=robot.data.default_joint_pos.torch.clone(),
++                                            velocity=torch.zeros_like(robot.data.default_joint_vel.torch))
++        live.sim.forward()
++        assert torch.allclose(robot.data.joint_pos.torch, robot.data.default_joint_pos.torch, atol=1e-6)
++        assert torch.allclose(wp.to_torch(robot.root_view.get_dof_stiffnesses()).to(kp.device), kp)
++        assert torch.allclose(wp.to_torch(robot.root_view.get_dof_dampings()).to(kd.device), kd)
++
++    def step(raw):
++        live.action_manager.process_action(raw)
++        target = raw[:, :16] * term._scale + term._offset
++        target = torch.maximum(torch.minimum(target, term._clip[:, :, 1]), term._clip[:, :, 0])
++        assert torch.allclose(term.processed_actions, target, atol=1e-6)
++        for _ in range(live.cfg.decimation):
++            live.action_manager.apply_action()
++            live.scene.write_data_to_sim()
++            live.sim.step(render=False)
++            live.scene.update(live.physics_dt)
++        q, dq = robot.data.joint_pos.torch[:, ids], robot.data.joint_vel.torch[:, ids]
++        assert torch.isfinite(q).all() and torch.isfinite(dq).all()
++        return q.cpu().numpy().copy(), target.cpu().numpy().copy()
++
++    reset_fixture()
++    for _ in range(round(settings['settle_s'] / live.step_dt)):
++        step(zeros)
++        force = sensor.data.net_forces_w.torch[:, belly_ids].norm(dim=-1).max(dim=1).values.cpu().numpy()
++        force_peak = np.maximum(force_peak, force)
++        z_min = np.minimum(z_min, robot.data.body_link_pos_w.torch[:, robot.body_names.index('base_link'), 2].cpu().numpy())
++    for frequency in settings['frequency_hz']:
++        for local, name in enumerate(names):
++            reset_fixture()
++            for _ in range(round(settings['settle_s'] / live.step_dt)):
++                step(zeros)
++            positions, targets, estimates, base_poses, belly_forces = [], [], [], [], []
++            steps = round(settings['cycles'] / frequency / live.step_dt)
++            for index in range(steps):
++                raw = zeros.clone()
++                raw[:, local] = settings['raw_amplitude'] * math.sin(2 * math.pi * frequency * index * live.step_dt)
++                q, target = step(raw)
++                positions.append(q)
++                targets.append(target)
++                effort = kp[:, ids] * (torch.tensor(target, device=live.device) - robot.data.joint_pos.torch[:, ids])
++                effort -= kd[:, ids] * robot.data.joint_vel.torch[:, ids]
++                estimates.append(effort.cpu().numpy().copy())
++                base_poses.append(robot.data.body_link_pose_w.torch[:, robot.body_names.index('base_link')].cpu().numpy().copy())
++                belly_forces.append(sensor.data.net_forces_w.torch[:, belly_ids].norm(dim=-1).max(dim=1).values.cpu().numpy())
++            positions, targets, estimates = np.stack(positions), np.stack(targets), np.stack(estimates)
++            base_poses, belly_forces = np.stack(base_poses), np.stack(belly_forces)
++            time = np.arange(steps) * live.step_dt
++            for case in range(5):
++                response = sine_response(time, positions[:, case, local], targets[:, case, local], frequency)
++                response['phase_lag_deg'] = float(np.degrees(np.angle(np.exp(1j*np.radians(
++                    response['phase_lag_deg'] + 360*frequency*live.step_dt)))))
++                results.append({'case': settings['cases'][case], 'joint': name, 'frequency_hz': frequency, **response,
++                                'mean_base_z_m': float(base_poses[:, case, 2].mean()),
++                                'belly_force_peak_n': float(belly_forces[:, case].max()),
++                                'estimated_effort_peak_nm': float(np.abs(estimates[:, case, local]).max()),
++                                'estimated_saturation_fraction': float(np.mean(np.abs(estimates[:, case, local]) >=
++                                    float(robot.data.joint_effort_limits.torch[case, ids[local]])))})
++            np.savez_compressed(out.parent / f'{frequency:g}hz_{name}.npz', positions=positions, targets=targets,
++                                estimated_effort=estimates, time_s=time, base_pose_xyzw=base_poses, belly_force_n=belly_forces)
++            (out.parent / 'progress.json').write_text(json.dumps({'completed_rows': results}, indent=2), encoding='utf-8')
++            print('DRIVE_CASE', mode, frequency, name, flush=True)
++    report = {'metadata': metadata, 'results': results, 'zero_action_belly_peak_n': force_peak.tolist(),
++              'zero_action_base_min_z_m': z_min.tolist(), 'completed': True}
++    out.write_text(json.dumps(report, indent=2), encoding='utf-8')
++    print('DRIVE_PROBE_OK', out, flush=True)
++
++
+ try:
+     import gymnasium as gym
+     import numpy as np
+@@ -57,11 +215,41 @@ try:
+     cfg.scene.num_envs, cfg.seed = 4, args.seed
+     cfg.episode_length_s = 20.0
+     apply_eval_mode(cfg, 'nominal')
++    if args.drive_probe:
++        cfg.scene.num_envs = 5
++        cfg.scene.robot.spawn.articulation_props.fix_root_link = args.drive_probe == 'suspended'
++        if args.drive_probe == 'suspended':
++            cfg.scene.robot.init_state.pos = (0., 0., 2.)
++            original_spawn = cfg.scene.robot.spawn.func
++
++            def suspended_spawn(prim_path, spawn_cfg, *positional, **keywords):
++                from pxr import Sdf, Usd, UsdPhysics
++
++                prim = original_spawn(prim_path, spawn_cfg, *positional, **keywords)
++                roots = [p for p in Usd.PrimRange(prim) if p.HasAPI(UsdPhysics.ArticulationRootAPI)]
++                assert len(roots) == 2 and sum(p.GetName() == 'base_link' for p in roots) == 1
++                base = next(p for p in roots if p.GetName() == 'base_link')
++                excluded = {'PhysicsArticulationRootAPI', 'NewtonArticulationRootAPI', 'PhysxArticulationAPI'}
++                base.SetMetadata('apiSchemas', Sdf.TokenListOp.CreateExplicit(
++                    [name for name in base.GetAppliedSchemas() if name not in excluded]))
++                assert not base.HasAPI(UsdPhysics.ArticulationRootAPI) and base.HasAPI(UsdPhysics.RigidBodyAPI)
++                assert len([p for p in Usd.PrimRange(prim) if p.HasAPI(UsdPhysics.ArticulationRootAPI)]) == 1
++                return prim
++
++            cfg.scene.robot.spawn.func = suspended_spawn
++        for name, event in vars(cfg.events).items():
++            if event is not None:
++                setattr(cfg.events, name, None)
+     agent = handle_deprecated_rsl_rl_cfg(string_to_callable(spec.kwargs['rsl_rl_cfg_entry_point'])(),
+                                          importlib.metadata.version('rsl-rl-lib'))
+     env = gym.make(task, cfg=cfg)
+     wrapper = RslRlVecEnvWrapper(env, clip_actions=agent.clip_actions)
+     live = env.unwrapped
++    if args.drive_probe:
++        drive_probe(live, args.out, args.drive_probe, checkpoint_digest(args.checkpoint))
++        wrapper.close()
++        app.close(exit_code=0)
++        sys.exit(0)
+     runner = OnPolicyRunner(wrapper, agent.to_dict(), log_dir=None, device=live.device)
+     runner.load(args.checkpoint)
+     policy = runner.get_inference_policy(device=live.device)
+@@ -95,6 +283,17 @@ try:
+                     (joint.GetBody0Rel(), joint.GetLocalPos0Attr(), joint.GetLocalRot0Attr()),
+                     (joint.GetBody1Rel(), joint.GetLocalPos1Attr(), joint.GetLocalRot1Attr()))]
+         assert set(sample_frames) == set(leg_names), 'loaded USD leg-joint set mismatch'
++    contact_trace = []
++    contact_active = np.ones(live.num_envs, dtype=bool)
++    if args.contact_samples:
++        test_loaded = np.array([0, 1, 0, 1, 0, 1], dtype=bool).reshape(-1, 1, 1)
++        test_valid = np.array([0, 1, 1, 1, 0, 0], dtype=bool).reshape(-1, 1)
++        assert np.flatnonzero(contact_edges(test_loaded, test_valid)).tolist() == [3]
++        assert np.count_nonzero(test_loaded[1:] & ~test_loaded[:-1]) == 3
++        contact_sensor = live.scene['contact_forces']
++        contact_ids = [contact_sensor.body_names.index(f'{leg}_{FOOT[leg]}') for leg in LEGS]
++        contact_belly_ids = [contact_sensor.body_names.index(name) for name in ('base_link', 'chest_pitch')]
++        contact_start = robot.data.body_link_pos_w.torch[:, robot.body_names.index('base_link')].cpu().numpy().copy()
+     resets = 0
+     pos, tgt, tilt, raw = [], [], {leg: [] for leg in LEGS}, []
+     obs = wrapper.get_observations()
+@@ -105,11 +304,27 @@ try:
+             raw.append(act[:, :len(leg_names)].cpu().numpy())
+             obs, _, done, _ = wrapper.step(act)
+         resets += int(done.sum())
+-        assert torch.equal(leg_term.raw_actions, act[:, :len(leg_names)]), 'leg slice != action term raw input'
++        if not bool(done.any()):
++            assert torch.equal(leg_term.raw_actions, act[:, :len(leg_names)]), 'leg slice != action term raw input'
+         d = robot.data
+         pos.append(d.joint_pos.torch[:, jidx].cpu().numpy())
+         tgt.append(d.joint_pos_target.torch[:, jidx].cpu().numpy())
+         bp = d.body_link_pos_w.torch
++        if args.contact_samples:
++            from isaaclab.utils.math import quat_apply_inverse, yaw_quat
++
++            contact_active &= ~done.cpu().numpy().astype(bool)
++            directions = torch.stack([bp[:, foot] - bp[:, top] for top, foot in bidx.values()], dim=1)
++            directions /= directions.norm(dim=-1, keepdim=True)
++            yaw_velocity = quat_apply_inverse(yaw_quat(d.root_link_quat_w.torch), d.root_link_lin_vel_w.torch)
++            contact_trace.append({'valid': contact_active.copy() & (step > 0),
++                                  'foot_force_z_n': contact_sensor.data.net_forces_w.torch[:, contact_ids, 2].cpu().numpy().copy(),
++                                  'shank_tilt_deg': torch.rad2deg(torch.acos((-directions[..., 2]).clamp(-1, 1))).cpu().numpy(),
++                                  'shank_xy_deg': torch.rad2deg(torch.asin(directions[..., :2].clamp(-1, 1))).cpu().numpy(),
++                                  'foot_pos_w_m': bp[:, [foot for _, foot in bidx.values()]].cpu().numpy().copy(),
++                                  'base_pos_w_m': bp[:, robot.body_names.index('base_link')].cpu().numpy().copy(),
++                                  'yaw_velocity_mps': yaw_velocity.cpu().numpy(),
++                                  'belly_force_n': contact_sensor.data.net_forces_w.torch[:, contact_belly_ids].norm(dim=-1).max(dim=1).values.cpu().numpy()})
+         if args.pose_samples and step % max(1, round(0.5 / live.step_dt)) == 0 and not bool(done[0]):
+             positions = bp[0].cpu().numpy()
+             rotations = matrix_from_quat(d.body_link_quat_w.torch[0]).cpu().numpy()
+@@ -154,10 +369,41 @@ try:
+                   joints=joints, stance_shank_tilt=stance, leg_action_names=leg_names,
+                   reset_count=resets, pose_samples_env0=samples)
+     args.out.parent.mkdir(parents=True, exist_ok=True)
++    if args.contact_samples:
++        arrays = {name: np.stack([row[name] for row in contact_trace]) for name in contact_trace[0]}
++        np.savez_compressed(args.out.parent / 'contact_samples.npz', **arrays)
++        valid = arrays['valid']
++        force = arrays['foot_force_z_n']
++        loaded = force > 1.
++        rising = contact_edges(loaded, valid)
++        feet = {}
++        for i, leg in enumerate(LEGS):
++            stance_mask = loaded[..., i] & valid
++            event_mask = rising[..., i]
++            event_tilt = arrays['shank_tilt_deg'][..., i][event_mask]
++            stance_tilt = arrays['shank_tilt_deg'][..., i][stance_mask]
++            feet[leg] = {'contact_indicator_fraction': float(stance_mask.sum() / valid.sum()) if valid.any() else None,
++                         'candidate_contact_edges': int(event_mask.sum()),
++                         'candidate_edge_tilt_deg': event_tilt.tolist(),
++                         'force_contact_tilt_mean_deg': float(stance_tilt.mean()) if stance_tilt.size else None,
++                         'force_contact_xy_mean_deg': arrays['shank_xy_deg'][..., i, :][stance_mask].mean(axis=0).tolist()
++                                                      if stance_tilt.size else None}
++        report['contact_diagnostic'] = {'feet': feet, 'valid_control_frames': int(valid.sum()),
++                                        'threshold_n': 1., 'validity': 'first episode only; done and frame zero excluded',
++                                        'sampling': 'last physics substep of control frame, unfiltered net vertical force',
++                                        'scope': 'diagnostic force-edge candidates, not calibrated touchdown or slip verdict',
++                                        'mean_velocity_error_mps': float(np.abs(arrays['yaw_velocity_mps'][..., 0][valid]-args.speed).mean())
++                                                                   if valid.any() else None,
++                                        'belly_contact_indicator_fraction': float(np.mean(arrays['belly_force_n'][valid] > 1.))
++                                                                            if valid.any() else None,
++                                        'per_env_forward_displacement_m': [float(arrays['base_pos_w_m'][valid[:, i], i, 0][-1]-contact_start[i, 0])
++                                                                           if valid[:, i].any() else None for i in range(live.num_envs)]}
+     args.out.write_text(json.dumps(report, indent=2, allow_nan=False), encoding='utf-8')
+     print('SHANK_USE_PROBE_OK', args.out, flush=True)
+     wrapper.close()
+     app.close(exit_code=0)
++except SystemExit:
++    raise
+ except BaseException:
+     traceback.print_exc()
+     app.close(exit_code=1)
+diff --git a/rl_exp/tools/runrecord/binding.py b/rl_exp/tools/runrecord/binding.py
+index bc7111a..0b92778 100644
+--- a/rl_exp/tools/runrecord/binding.py
++++ b/rl_exp/tools/runrecord/binding.py
+@@ -64,7 +64,7 @@ def sha256_file(path: pathlib.Path | None, chunk: int = 1 << 20) -> str | None:
+         return None
+ 
+ 
+-def git_run(root: pathlib.Path | None, *args: str) -> str:
++def git_run(root: pathlib.Path | None, *args: str, strip_output: bool = True, check: bool = False) -> str:
+     """Run git in ``root``; return stdout, or "" when git cannot answer.
+ 
+     The decode is pinned rather than left to the host locale. Left to it, a non-ASCII byte in git's
+@@ -72,15 +72,20 @@ def git_run(root: pathlib.Path | None, *args: str) -> str:
+     the failure surfaces as an ``AttributeError`` about ``strip`` -- naming neither git nor the
+     encoding. Pinning UTF-8 with replacement is how every other tool-output reader in this tree
+     decodes, and it keeps this function's contract ("a string, or empty") true on any host.
++    ``strip_output=False`` preserves path whitespace and NUL-delimited output; ``check=True``
++    propagates errors rather than interpreting them as empty output.
+     """
+     if root is None:
+         return ""
+     try:
+-        return subprocess.run(
++        output = subprocess.run(
+             ["git", *args], capture_output=True, text=True, check=True, cwd=root,
+             encoding="utf-8", errors="replace",
+-        ).stdout.strip()
++        ).stdout
++        return output.strip() if strip_output else output
+     except (OSError, subprocess.CalledProcessError):
++        if check:
++            raise
+         return ""
+ 
+ 
+diff --git a/rl_exp/tools/runrecord/manifest.py b/rl_exp/tools/runrecord/manifest.py
+index 8c9babf..f2541d0 100644
+--- a/rl_exp/tools/runrecord/manifest.py
++++ b/rl_exp/tools/runrecord/manifest.py
+@@ -34,9 +34,8 @@ is reported as unknown with a reason.
+ One thing this module **refuses** instead of recording: a training launch from a dirty
+ project tree (``dirty_tree_refusal``). The T0 record is still written first, so a refused
+ launch leaves evidence rather than nothing; the refusal is then a ``failure`` entry plus a
+-non-zero exit. A dirty tree is not a run whose provenance is merely awkward -- no revision
+-restores it, so its rebuildable claim could never be proven, and finding that out months
+-later is strictly worse than finding it out at launch.
++non-zero exit. A revision alone cannot restore protected uncommitted changes; an archive is
++needed to trace them for a later rebuild.
+ 
+ Verify offline: ``python -m rl_exp.tools.runrecord.manifest --verify <log_dir>``.
+ The report is two-dimensional, as the plan requires: evidence level (record complete /
+@@ -453,12 +452,10 @@ def dirty_tree_refusal(ctx: RunContext) -> str | None:
+     is *expected* to carry the fork patches uncommitted, so refusing on it would refuse
+     every launch and train people to set the override as a habit. Both stay recorded.
+ 
+-    Scoped again, inside the repository, to the changes a run actually read: prose does not count.
+-    The ledger, the records and the plans are ``.md`` and no declaration digests one, so a document
+-    edited while a run is in flight cannot change what the run did -- and the rebuild gate already
+-    reads a record this way (it archives code-root dirt and ignores the rest). ``dirty`` stays the
+-    recorded fact; the refusal is about ``changed_non_prose``. A provenance that predates that split
+-    carries no field and stays strict.
++    Inside the repository, prose and the T0-declared eval-only files are excluded from the
++    protected paths. ``dirty`` remains the whole-tree fact. Records without the new scope
++    fields retain their original classification. Unavailable provenance is refused unless
++    the override carries a reason.
+ 
+     Args:
+         ctx: the run context whose T0 has just been written.
+@@ -468,18 +465,23 @@ def dirty_tree_refusal(ctx: RunContext) -> str | None:
+         reason.
+     """
+     source = (ctx.manifest.get("code") or {}).get("repository") or {}
+-    if not source.get("dirty"):
+-        return None
+     if os.environ.get(DIRTY_OVERRIDE_ENV, "").strip():
+         return None
+-    blocking = source.get("changed_non_prose")
++    if not source.get("available"):
++        return f"project provenance unavailable ({source.get('detail', 'no detail')}); state a reason via {DIRTY_OVERRIDE_ENV}"
++    if not source.get("dirty"):
++        return None
++    if isinstance(source.get("eval_exclusive_paths"), list) and isinstance(source.get("changed_blocking"), list):
++        blocking = source["changed_blocking"]
++    else:
++        blocking = source.get("changed_non_prose")
+     if blocking is not None and not blocking:
+         return None
+     named = f" ({', '.join(blocking[:3])})" if blocking else ""
+     return (
+         f"the project tree is dirty (rev {source.get('rev', '?')}, "
+         f"{source.get('diff_lines', '?')} diff line(s), {source.get('untracked_count', '?')} untracked)"
+-        f"{named}: no revision restores it, so this run's rebuildable claim could never be proven. "
++        f"{named}: a revision alone cannot restore these changes; their content needs an archive. "
+         f"Commit first, or state the reason explicitly: {DIRTY_OVERRIDE_ENV}="
+         f'"<why this dirty tree must run>"'
+     )
+@@ -526,11 +528,31 @@ def after_env(ctx: RunContext, env) -> None:
+             },
+             "checked": {name: list(pair) for name, pair in checks.items()},
+         }
++        repository = (ctx.manifest.get("code") or {}).get("repository") or {}
++        declaration = repository.get("eval_exclusive_paths")
++        violations = []
++        if isinstance(declaration, list):
++            observed = []
++            root = prov._REPO.resolve()
++            for name, module in list(sys.modules.items()):
++                filename = getattr(module, "__file__", None)
++                if not isinstance(filename, (str, os.PathLike)):
++                    continue
++                try:
++                    relative = pathlib.Path(filename).resolve().relative_to(root).as_posix()
++                except (OSError, ValueError):
++                    continue
++                observed.append({"module": name, "path": relative})
++            stage["observed_dependencies"] = sorted(observed, key=lambda item: (item["path"], item["module"]))
++            violations = [item for item in stage["observed_dependencies"] if item["path"] in declaration]
++            stage["scope_violations"] = violations
+         ctx.manifest.setdefault("stages", {})["env_constructed"] = stage
+         ctx.flush()
+         for mismatch in mismatches:
+             ctx.fail(f"env construction disagreed with the declaration -- {mismatch}")
+-        if not mismatches:
++        if violations:
++            ctx.fail(f"eval-exclusive scope violation: loaded {violations}")
++        if not mismatches and not violations:
+             print(f"[run-manifest] {ctx.run_id}: env built as declared (obs groups {list(stage['obs_group_dims'])})")
+     except Exception as err:  # noqa: BLE001
+         ctx.fail(f"env_constructed recording failed: {type(err).__name__}: {err}")
+@@ -940,7 +962,36 @@ def _verify_self_consistency(manifest: dict, problems: list[str]) -> list[dict]:
+     else:
+         rows.append(_row("记录完整", "通过", f"T1 digest re-derived from the record ({str(recorded)[:16]})"))
+ 
+-    checked = manifest.get("stages", {}).get("env_constructed", {}).get("checked", {})
++    env_stage = manifest.get("stages", {}).get("env_constructed", {})
++    declaration = (manifest.get("code", {}).get("repository") or {}).get("eval_exclusive_paths")
++    observed = env_stage.get("observed_dependencies") or []
++    violations = env_stage.get("scope_violations") or []
++    if isinstance(declaration, list):
++        if not isinstance(env_stage.get("observed_dependencies"), list) or not isinstance(env_stage.get("scope_violations"), list):
++            problems.append("record: scope observation missing")
++            rows.append(_row("记录完整", "失败", "scope observation missing from env construction"))
++        violations = [*violations, *(item for item in observed
++                                    if isinstance(item, dict) and item.get("path") in declaration and item not in violations)]
++    if violations:
++        problems.append(f"record: eval-exclusive scope violation -- {violations}")
++        rows.append(_row("记录完整", "失败", f"eval-exclusive scope violation: {violations}"))
++
++    t0 = (manifest.get("code") or {}).get("repository") or {}
++    t1 = ((manifest.get("stages") or {}).get("ready_to_learn", {}).get("code") or {}).get("repository")
++    if isinstance(declaration, list) and isinstance(t0.get("changed_blocking"), list):
++        t1 = t1 if isinstance(t1, dict) else {}
++        paths = t1.get("changed_paths_full")
++        if not t1.get("available") or not isinstance(paths, list):
++            problems.append("record: T1 code scope unavailable")
++            rows.append(_row("记录完整", "失败", "T1 code scope unavailable"))
++        else:
++            t1_blocking = [path for path in paths if not path.lower().endswith(".md") and path not in declaration]
++            if (t1.get("rev") != t0.get("rev") or t1_blocking != t0.get("changed_blocking")
++                    or (t1_blocking and t1.get("diff_sha256") != t0.get("diff_sha256"))):
++                problems.append("record: protected code scope changed between T0 and T1")
++                rows.append(_row("记录完整", "失败", "protected code scope changed between T0 and T1"))
++
++    checked = env_stage.get("checked", {})
+     disagreements = [
+         f"{name}: declared {pair[0]!r} != actual {pair[1]!r}"
+         for name, pair in checked.items()
+@@ -1033,7 +1084,15 @@ def _verify_code(manifest: dict, problems: list[str]) -> list[dict]:
+                 _row("可重建", "未知", f"{name}: installed distribution {before.get('distribution_version')}, source not pinned")
+             )
+             continue
++        if not after.get("available"):
++            rows.append(_row("可重建", "未知", f"{name}: current source unavailable ({after.get('detail', 'no detail')})"))
++            continue
+         moved = before.get("rev") != after.get("rev")
++        if (name == "repository" and isinstance(before.get("eval_exclusive_paths"), list)
++                and isinstance(before.get("changed_blocking"), list) and not before["changed_blocking"]):
++            rows.append(_row("可重建", "通过", f"{name}: no protected paths changed at T0; "
++                             f"recorded revision {before.get('rev')}"))
++            continue
+         diff_moved = before.get("diff_sha256") != after.get("diff_sha256")
+         dirty_then = before.get("dirty")
+         code_in_untracked = before.get("untracked_in_code_root") or []
+@@ -1045,7 +1104,7 @@ def _verify_code(manifest: dict, problems: list[str]) -> list[dict]:
+                     "可重建",
+                     "未知",
+                     f"{name}: the run had {len(code_in_untracked)} untracked code file(s) "
+-                    f"(e.g. {code_in_untracked[:2]}); this record hashes them and stops there -- whether the "
++                    f"(e.g. {code_in_untracked[:2]}); this record lists them but does not store their content -- whether the "
+                     f"content was kept is asserted by the 1.5 drill material (rebuild --capture --archive), "
+                     f"not by the run record (work/active/verified-rebuild-rating.md).{ignored}",
+                 )
+diff --git a/rl_exp/tools/runrecord/provenance.py b/rl_exp/tools/runrecord/provenance.py
+index 776032e..a6dbe79 100644
+--- a/rl_exp/tools/runrecord/provenance.py
++++ b/rl_exp/tools/runrecord/provenance.py
+@@ -24,6 +24,7 @@ import importlib.util
+ import json
+ import os
+ import pathlib
++import subprocess
+ import sys
+ from datetime import datetime
+ from urllib.parse import urlsplit
+@@ -37,8 +38,7 @@ if str(_REPO) not in sys.path:
+ # function hashes a file, one abbreviates a revision, and both records call them. They are
+ # re-exported under the names this package's callers (``manifest``, ``rebuild``, the golden
+ # lock) and ``test_run_manifest.py`` already import, rather than re-implemented -- a second
+-# implementation is what ``check_record_bindings.py`` fails on. ``hashlib`` and ``subprocess``
+-# are no longer imported here for that reason.
++# implementation is what ``check_record_bindings.py`` fails on.
+ from rl_exp.tools.runrecord.binding import (  # noqa: E402
+     git_rev as rev,
+     git_run as git,
+@@ -48,6 +48,11 @@ from rl_exp.tools.runrecord.binding import (  # noqa: E402
+ from rl_exp.tools.verify.cfg_snapshot import relativize  # noqa: E402
+ 
+ UNTRACKED_CAP = 40
++EVAL_EXCLUSIVE_PATHS = (
++    "ablation_harness/eval.py",
++    "ablation_harness/record.py",
++    "ablation_harness/run_ablation.py",
++)
+ 
+ 
+ def now() -> str:
+@@ -75,7 +80,7 @@ def split_untracked(untracked: list[str], root: pathlib.Path | None, code_root:
+     inside: list[str] = []
+     outside: list[str] = []
+     for relative in untracked:
+-        cleaned = relative.strip('"')
++        cleaned = relative
+         if any(token in cleaned for token in _NON_CODE_TOKENS):
+             outside.append(cleaned)
+             continue
+@@ -83,7 +88,7 @@ def split_untracked(untracked: list[str], root: pathlib.Path | None, code_root:
+             outside.append(cleaned)
+             continue
+         target = (root / cleaned).resolve()
+-        if str(target).startswith(str(code_root)):
++        if target.is_relative_to(code_root.resolve()):
+             inside.append(cleaned)
+         else:
+             outside.append(cleaned)
+@@ -93,12 +98,8 @@ def split_untracked(untracked: list[str], root: pathlib.Path | None, code_root:
+ def split_prose(changed: list[str]) -> tuple[list[str], list[str]]:
+     """Split changed paths into the prose and the rest.
+ 
+-    Prose is the ledger, the records and the plans -- all ``.md``, and nothing a run reads. A run's
+-    rebuildable claim is about the code, the configs and the assets its declaration digests, so a
+-    document edited while a run is in flight changes none of them; refusing over it would turn
+-    "commit your notes before you train" into a habit and teach people to set the override, which is
+-    the same failure mode the IsaacLab tree is exempted for. The cut is by extension on purpose:
+-    it cannot be widened by adding a directory, and no config, lock or asset is a ``.md``.
++    Prose is the ledger, the records and the plans. The existing policy excludes ``.md`` by
++    extension, not by directory. This is a convention, not proof that no run reads a document.
+ 
+     Args:
+         changed: paths git reports as changed, tracked or untracked.
+@@ -111,7 +112,7 @@ def split_prose(changed: list[str]) -> tuple[list[str], list[str]]:
+     return prose, blocking
+ 
+ 
+-def _changed_paths(root: pathlib.Path) -> list[str]:
++def _changed_paths(root: pathlib.Path, untracked: list[str] | None = None) -> list[str]:
+     """Every path git reports as changed, tracked or untracked, as one flat sorted list.
+ 
+     Two raw name lists rather than one parsed status listing: these come back NUL-separated and
+@@ -119,11 +120,12 @@ def _changed_paths(root: pathlib.Path) -> list[str]:
+     care at all. (A first version sliced the status listing at a fixed offset and lost the first
+     character of every modified path, because the helper hands back stripped lines.)
+     """
+-    names: list[str] = []
+-    for args in (("diff", "--name-only", "-z", "HEAD"),
+-                 ("ls-files", "--others", "--exclude-standard", "-z")):
+-        names.extend(field for field in git(root, *args).split("\0") if field.strip())
+-    return sorted(set(name.strip() for name in names))
++    names = git(root, "diff", "--name-only", "--no-renames", "-z", "HEAD",
++                strip_output=False, check=True).split("\0")
++    if untracked is None:
++        untracked = git(root, "ls-files", "--others", "--exclude-standard", "-z",
++                        strip_output=False, check=True).split("\0")
++    return sorted(set(names + untracked) - {""})
+ 
+ 
+ 
+@@ -144,14 +146,31 @@ def git_state(root: pathlib.Path | None, label: str, code_root: pathlib.Path | N
+     head = rev(root)
+     if not head:
+         return {"available": False, "detail": f"{root} is not a git work tree"}
+-    porcelain = git(root, "status", "--porcelain=v2")
+-    status_lines = porcelain.splitlines()
+-    untracked = sorted(line.split(" ", 1)[1] for line in status_lines if line.startswith("? "))
++    try:
++        porcelain = git(root, "status", "--porcelain=v2", check=True)
++        status_lines = porcelain.splitlines()
++        untracked = sorted(field for field in git(root, "ls-files", "--others", "--exclude-standard", "-z",
++                                                  strip_output=False, check=True).split("\0") if field)
++        changed = _changed_paths(root, untracked)
++        diff = git(root, "diff", "HEAD", check=True)
++    except (OSError, subprocess.CalledProcessError) as err:
++        return {"available": False, "root": relativize(str(root)), "rev": head,
++                "detail": f"{label}: git state unavailable: {err}"}
+     in_code, outside = split_untracked(untracked, root, code_root)
+-    changed = _changed_paths(root)
+     prose, blocking = split_prose(changed)
+-    diff = git(root, "diff", "HEAD")
++    scope = {}
++    if label == "repository":
++        declaration = list(EVAL_EXCLUSIVE_PATHS)
++        protected = set(blocking) - set(declaration)
++        in_code = sorted(set(in_code) | (set(untracked) & protected))
++        outside = [path for path in outside if path not in in_code]
++        scope = {
++            "eval_exclusive_paths": declaration,
++            "changed_paths_full": changed,
++            "changed_blocking": [path for path in blocking if path in protected],
++        }
+     return {
++        **scope,
+         "available": True,
+         "root": relativize(str(root)),
+         "rev": head,
+@@ -160,9 +179,7 @@ def git_state(root: pathlib.Path | None, label: str, code_root: pathlib.Path | N
+         "diff_sha256": sha256_bytes(diff.encode("utf-8")),
+         "diff_lines": len(diff.splitlines()),
+         "changed_paths": changed[:UNTRACKED_CAP],
+-        # What the launch gate refuses on: the changed paths that are not prose. ``dirty`` stays the
+-        # whole truth about the tree, so a record whose only dirt was a document says so and is not
+-        # refused for it (2026-09-22; the rebuild gate already read it this way).
++        # Preserve the historical display field; scoped decisions use the full path list below.
+         "changed_non_prose": blocking[:UNTRACKED_CAP],
+         "changed_prose_count": len(prose),
+         "untracked_count": len(untracked),
+diff --git a/rl_exp/tools/runrecord/rebuild.py b/rl_exp/tools/runrecord/rebuild.py
+index 01ab8ad..0e23343 100644
+--- a/rl_exp/tools/runrecord/rebuild.py
++++ b/rl_exp/tools/runrecord/rebuild.py
+@@ -146,8 +146,9 @@ def _code_item(name: str, recorded: dict, archive: pathlib.Path | None, run_id:
+     can read later -- that is what ``--archive`` names. Without it the capture refuses,
+     because hashing a diff does not make it retrievable (work/active/verified-rebuild-rating.md).
+     """
+-    keep = ("rev", "dirty", "diff_sha256", "diff_lines", "untracked_in_code_root", "mode")
+-    item = {"retrieval": "none", "recorded": {key: recorded.get(key) for key in keep}}
++    keep = ("rev", "dirty", "diff_sha256", "diff_lines", "untracked_in_code_root", "mode",
++            "eval_exclusive_paths", "changed_paths_full", "changed_blocking")
++    item = {"retrieval": "none", "recorded": {key: recorded[key] for key in keep if key in recorded}}
+     root = _tree_root(name)
+     item["tree"] = cs.relativize(str(root)) if root else None
+     if not recorded.get("available"):
+@@ -163,7 +164,9 @@ def _code_item(name: str, recorded: dict, archive: pathlib.Path | None, run_id:
+     if not _object_exists(root, f"{rev}^{{commit}}"):
+         refusals.append(f"{name}: revision {rev} is not in {root}; the run's code cannot be brought back")
+         return item
+-    if not recorded.get("dirty"):
++    scoped_clean = (name == "repository" and isinstance(recorded.get("eval_exclusive_paths"), list)
++                    and isinstance(recorded.get("changed_blocking"), list) and not recorded["changed_blocking"])
++    if not recorded.get("dirty") or scoped_clean:
+         item["retrieval"] = "git-rev"
+         item["payload"] = f"{rev} (git checkout)"
+         return item
+@@ -332,6 +335,7 @@ def capture(run_dir: pathlib.Path, dest: pathlib.Path, archive: pathlib.Path | N
+         refusals.append(f"record: no final T1 (missing {missing_stages}); the run was never ready to learn")
+     if manifest.get("failures"):
+         refusals.append(f"record: the run recorded failures ({manifest['failures'][-1]})")
++    M._verify_self_consistency(manifest, problems)
+ 
+     stage = dest / ".staging"
+     if stage.exists():
+diff --git a/rl_exp/tools/verify/check_suite_shape.py b/rl_exp/tools/verify/check_suite_shape.py
+index 9993324..6373010 100644
+--- a/rl_exp/tools/verify/check_suite_shape.py
++++ b/rl_exp/tools/verify/check_suite_shape.py
+@@ -54,6 +54,7 @@ RUNNER = "offline_suite.py"
+ # tested. The count is the contract: it is compared with the code below, so a new
+ # interpreter child cannot land without declaring itself here.
+ SPAWN_ALLOWED: dict[str, tuple[int, str]] = {
++    "test_launcher.py": (1, "real launcher CLI and handoff need fresh interpreters so cached imports cannot hide file loads"),
+     "test_cfg_snapshot.py": (1, "the digest must be identical from two PYTHONHASHSEED runs"),
+     "test_dump_tb_sampling.py": (2, "the CLI resample path only exists in dump_tb.py's __main__"),
+     "test_terrain_geometry.py": (1, "video_matrix exit status and os._exit require separate processes"),
+diff --git a/rl_exp/tools/verify/test_launcher.py b/rl_exp/tools/verify/test_launcher.py
+index b4205b9..9ef1558 100644
+--- a/rl_exp/tools/verify/test_launcher.py
++++ b/rl_exp/tools/verify/test_launcher.py
+@@ -22,11 +22,14 @@ register.
+ 
+ from __future__ import annotations
+ 
++import inspect
+ import json
+ import os
+ import pathlib
++import subprocess
+ import sys
+ import tempfile
++from concurrent.futures import ThreadPoolExecutor
+ 
+ _REPO = pathlib.Path(__file__).resolve().parents[3]
+ if str(_REPO) not in sys.path:
+@@ -48,6 +51,7 @@ RETIRED_LINE = "lizard2/main"
+ def main() -> int:
+     """Run every case; each one asserts something a reader cannot see from the happy path."""
+     problems: list[str] = []
++    problems.extend(_dependency_cases())
+     with tempfile.TemporaryDirectory() as tmp_dir:
+         tmp = pathlib.Path(tmp_dir)
+         problems.extend(_refusals())
+@@ -197,5 +201,141 @@ def _agent_cfg():
+     return _Agent()
+ 
+ 
++# Installed by sitecustomize in both fresh interpreters, before either entry imports repository code.
++_SITE = r'''
++import ast, importlib.util, os, pathlib, sys
++
++repo = pathlib.Path(os.environ["PROBE_REPO"])
++source = repo / "rl_exp/tools/runrecord/provenance.py"
++tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
++declarations = [node.value for node in tree.body if isinstance(node, ast.Assign)
++                and any(isinstance(target, ast.Name) and target.id == "EVAL_EXCLUSIVE_PATHS"
++                        for target in node.targets)]
++if len(declarations) != 1:
++    raise RuntimeError("expected one literal eval-exclusive declaration")
++forbidden = {(repo / path).resolve() for path in ast.literal_eval(declarations[0])}
++if not forbidden or (repo / "ablation_harness/record.py").resolve() not in forbidden:
++    raise RuntimeError("record.py must be in the nonempty eval-exclusive declaration")
++
++is_trainer = pathlib.Path(sys.argv[0]).name == "train.py"
++role = "trainer" if is_trainer else "launcher"
++filenames = {}
++
++def guard(frame, event, arg):
++    if event == "call":
++        filename = frame.f_code.co_filename
++        if filename not in filenames:
++            filenames[filename] = not filename.startswith("<") and pathlib.Path(filename).resolve() in forbidden
++        if filenames[filename]:
++            print(f"DEPENDENCY_GUARD_HIT {role} {filename}", file=sys.stderr, flush=True)
++            raise SystemExit(86)
++    return None
++# The guard needs call events only; avoid the trace hook's per-frame tracing overhead.
++sys.setprofile(guard)
++print(f"DEPENDENCY_GUARD_READY {role} {os.getpid()} {os.getppid()}", flush=True)
++
++from rl_exp.tools.runrecord import lifecycle, provenance
++read = lifecycle.read_index
++lifecycle.read_index = lambda root=None: read(root or pathlib.Path(os.environ["PROBE_INDEX"]))
++if os.environ.get("PROBE_INJECT") == role:
++    if is_trainer:
++        from rl_exp.tools.runrecord import manifest
++        original = manifest.prov.code_sources
++        def injected(*args, **kwargs):
++            spec = importlib.util.spec_from_file_location("dependency_probe", repo / os.environ["PROBE_PATH"])
++            spec.loader.exec_module(importlib.util.module_from_spec(spec))
++            return original(*args, **kwargs)
++        manifest.prov.code_sources = injected
++    else:
++        original = lifecycle.check_recipe_map.bind
++        def injected(*args, **kwargs):
++            spec = importlib.util.spec_from_file_location("dependency_probe", repo / os.environ["PROBE_PATH"])
++            spec.loader.exec_module(importlib.util.module_from_spec(spec))
++            return original(*args, **kwargs)
++        lifecycle.check_recipe_map.bind = injected
++'''
++
++
++def _dependency_cases() -> list[str]:
++    """Run the real launcher CLI and its child stub, not a simulation or the fork trainer."""
++    problems = []
++    with tempfile.TemporaryDirectory() as tmp_dir:
++        tmp = pathlib.Path(tmp_dir)
++        with active_index(tmp):
++            pass  # materialize the same active fixture independently read in both processes
++        (tmp / "sitecustomize.py").write_text(_SITE, encoding="utf-8")
++        trainer = tmp / "scripts/reinforcement_learning/rsl_rl/train.py"
++        trainer.parent.mkdir(parents=True)
++        trainer.write_text(
++            "import json, os, pathlib, sys\n"
++            "from rl_exp.tools.runrecord import manifest as M\n"
++            + inspect.getsource(_env_cfg) + "\n" + inspect.getsource(_agent_cfg) + "\n"
++            "task = sys.argv[sys.argv.index('--task') + 1]\n"
++            "print('TRAINER_STUB_ENTER ' + json.dumps({'pid': os.getpid(), 'ppid': os.getppid(), "
++            "'argv': sys.argv, 'cwd': os.getcwd(), 'executable': sys.executable}), flush=True)\n"
++            "ctx = M.begin(log_dir=pathlib.Path(os.environ['PROBE_LOG']), task=task, "
++            "argv=sys.argv, env_cfg=_env_cfg(), agent_cfg=_agent_cfg())\n"
++            "record = json.loads(ctx.manifest_path.read_text(encoding='utf-8'))\n"
++            "assert record['declaration']['lifecycle']['allowed']\n"
++            "print('TRAINER_MANIFEST_OK', flush=True)\n",
++            encoding="utf-8",
++        )
++        launcher = _REPO / "rl_exp/tools/launch_recipe.py"
++
++        def run(case):
++            label, launch, injection, path = case
++            env = {**os.environ, "PROBE_REPO": str(_REPO), "PROBE_INDEX": str(tmp / "active_index"),
++                   "PROBE_INJECT": injection, "PROBE_PATH": path, "PROBE_LOG": str(tmp / label), "RL_ISAAC_ROOT": str(tmp),
++                   "RL_ALLOW_DIRTY_TREE": "offline dependency check, not training",
++                   "PYTHONPATH": os.pathsep.join((str(tmp), str(_REPO), os.environ.get("PYTHONPATH", "")))}
++            return subprocess.run(
++                [sys.executable, str(launcher), "--task", TASK, "--num_envs", "64", "--seed", "7",
++                 *(["--launch", "--python", sys.executable] if launch else [])],
++                cwd=_REPO, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=180,
++            )
++
++        paths = ("ablation_harness/eval.py", "ablation_harness/record.py", "ablation_harness/run_ablation.py")
++        cases = [("default", False, "trainer", paths[0]), ("handoff", True, "", paths[0])]
++        cases.extend((f"{role}-injected-{i}", True, role, path)
++                     for role in ("launcher", "trainer") for i, path in enumerate(paths))
++        with ThreadPoolExecutor(max_workers=4) as pool:
++            results = list(pool.map(run, cases))
++        for (label, _, _, path), result in zip(cases, results):
++            out, err = result.stdout, result.stderr
++            ready = [line.split() for line in out.splitlines() if line.startswith("DEPENDENCY_GUARD_READY ")]
++            launcher_pids = [int(line[2]) for line in ready if line[1] == "launcher"]
++            trainer_pids = [int(line[2]) for line in ready if line[1] == "trainer"]
++            stub_lines = [line.removeprefix("TRAINER_STUB_ENTER ") for line in out.splitlines()
++                          if line.startswith("TRAINER_STUB_ENTER ")]
++            stub = json.loads(stub_lines[0]) if len(stub_lines) == 1 else None
++            launcher_ready = len(launcher_pids) == 1
++            trainer_ready = len(trainer_pids) == 1
++            entered = stub is not None
++            handoff = (launcher_ready and trainer_ready and entered
++                       and stub["pid"] == trainer_pids[0] != launcher_pids[0]
++                       and stub["ppid"] == int(next(line[3] for line in ready if line[1] == "trainer"))
++                       # Windows venv launchers can insert a native process between interpreters.
++                       and pathlib.Path(stub["cwd"]).resolve() == tmp.resolve()
++                       and pathlib.Path(stub["executable"]).resolve() == pathlib.Path(sys.executable).resolve()
++                       and (tmp / stub["argv"][0]).resolve() == trainer.resolve()
++                       and stub["argv"][1:] == ["--task", TASK, "--num_envs", "64", "--seed", "7"])
++            manifest_ok = "TRAINER_MANIFEST_OK" in out
++            if label == "default":
++                ok = result.returncode == 0 and launcher_ready and not trainer_ready and not entered
++            elif label == "handoff":
++                ok = result.returncode == 0 and handoff and manifest_ok
++            elif label.startswith("launcher-injected"):
++                ok = (result.returncode == 86 and launcher_ready and not trainer_ready and not entered
++                      and "DEPENDENCY_GUARD_HIT launcher " in err and pathlib.Path(path).name in err)
++            else:
++                ok = (result.returncode == 86 and handoff and not manifest_ok
++                      and "DEPENDENCY_GUARD_HIT trainer " in err and pathlib.Path(path).name in err)
++            if not ok:
++                problems.append(f"dependency {label}: exit={result.returncode}\nstdout={out}\nstderr={err}")
++            else:
++                print(f"  dependency {label}: {'guard hit' if 'injected' in label else 'completed'}")
++    return problems
++
++
+ if __name__ == "__main__":
+     sys.exit(main())
+diff --git a/rl_exp/tools/verify/test_rebuild_gate.py b/rl_exp/tools/verify/test_rebuild_gate.py
+index d0c8c2b..1409b4d 100644
+--- a/rl_exp/tools/verify/test_rebuild_gate.py
++++ b/rl_exp/tools/verify/test_rebuild_gate.py
+@@ -14,8 +14,10 @@ import json
+ import os
+ import pathlib
+ import shutil
++import subprocess
+ import sys
+ import tempfile
++import types
+ from contextlib import ExitStack
+ from unittest.mock import patch
+ 
+@@ -27,7 +29,8 @@ import torch  # noqa: E402
+ from rl_exp.tools.runrecord import manifest as M  # noqa: E402
+ from rl_exp.tools.runrecord import provenance as prov  # noqa: E402
+ from rl_exp.tools.runrecord import rebuild as R  # noqa: E402
+-from test_run_manifest import _record, isolated_assets  # noqa: E402
++from test_run_manifest import _record, isolated_assets, Lizard2FlatV4EnvCfg, Lizard2V4PPORunnerCfg  # noqa: E402
++from test_lifecycle_gate import active_index  # noqa: E402
+ 
+ # This gate exists to record dirty/untracked runs, so its synthetic runs have to be allowed
+ # to start from one -- the launch guard in run_manifest.begin is opted out here deliberately,
+@@ -69,12 +72,12 @@ def _fake_git(live_diff: str):
+     """
+     real = prov.git
+ 
+-    def git(tree, *args):
++    def git(tree, *args, **kwargs):
+         if args[:1] == ("cat-file",) or args[:2] == ("rev-parse", "--verify"):
+             return "present"
+         if args[:2] == ("diff", "HEAD"):
+             return live_diff
+-        return real(tree, *args)
++        return real(tree, *args, **kwargs)
+ 
+     return git
+ 
+@@ -92,6 +95,319 @@ def _real_ckpt(run_dir: pathlib.Path) -> str:
+     return name
+ 
+ 
++def _real_git_scope(root: pathlib.Path) -> None:
++    """Exercise T0 and rebuild against a real, isolated dirty work tree."""
++    with isolated_assets(root) as repo, active_index(root), patch.object(prov, "_REPO", repo), patch.object(
++        R, "_REPO", repo
++    ), patch.object(R, "CODE_SOURCES", ("repository",)):
++        def git(*args: str) -> None:
++            subprocess.run(
++                ["git", *args], cwd=repo, check=True, capture_output=True,
++                env={**os.environ, "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull},
++            )
++
++        def put(path: str, content: str) -> None:
++            target = repo / path
++            target.parent.mkdir(parents=True, exist_ok=True)
++            target.write_text(content, encoding="utf-8")
++
++        def clean() -> None:
++            for path in tracked:
++                put(path, "original\n")
++            for path in ("new_notes.md", "ablation_harness/record.py", "notes/中文 配置.yaml", "configs/run.log.yaml"):
++                (repo / path).unlink(missing_ok=True)
++
++        def item(source: dict) -> tuple[dict, list[str]]:
++            refusals: list[str] = []
++            result = R._code_item("repository", source, None, "scope", root / "stage", {}, refusals)
++            return result, refusals
++
++        def record(name: str, reason: str = "", *, freeze_it: bool = True) -> tuple[pathlib.Path, dict, bool]:
++            run = root / name
++            with (patch.dict(os.environ, {M.DIRTY_OVERRIDE_ENV: reason}),
++                  patch.object(prov, "code_sources", code_sources),
++                  patch.object(lifecycle, "read_index", return_value=index),
++                  patch.object(M, "recipe_ref", return_value=recipe),
++                  patch.object(M, "asset_digest", return_value=assets),
++                  patch.object(M.cs, "snapshot", new=cached_snapshot),
++                  patch.object(M, "after_env", new=cached_after_env)):
++                try:
++                    _record(run, freeze_it=freeze_it, index_ready=True, cfg=cfg, agent=agent)
++                    started = True
++                except RuntimeError as err:
++                    if "refused to start" not in str(err):
++                        raise
++                    started = False
++            data = json.loads((run / M.MANIFEST_NAME).read_text(encoding="utf-8"))
++            return run, data, started
++
++        git("init", "-q")
++        tracked = ("notes.md", "ablation_harness/eval.py", "ablation_harness/run_ablation.py",
++                   "ablation_harness/host_paths.py")
++        for path in tracked:
++            put(path, "original\n")
++        git("add", "--", ".")
++        git("-c", "user.name=Offline Test", "-c", "user.email=offline@example.invalid", "commit", "-q", "-m", "fixture")
++
++        # Host dependencies are outside this isolated repository; every repository
++        # T0 and T1 still runs the real git_state against the fixture.
++        cfg, agent = Lizard2FlatV4EnvCfg(), Lizard2V4PPORunnerCfg()
++        dependencies = {
++            "isaaclab": {"available": False, "detail": "outside fixture"},
++            "rsl_rl": {"available": False, "detail": "outside fixture"},
++        }
++
++        def code_sources():
++            return {**dependencies, "repository": prov.git_state(repo, "repository", code_root=repo)}
++
++        from rl_exp.tools.runrecord import lifecycle
++        index = lifecycle.read_index()
++        recipe = M.recipe_ref(cfg)
++        assets = M.asset_digest(cfg.params_version, type(cfg).params_line)
++        snapshots = {id(cfg): M.cs.snapshot(cfg), id(agent): M.cs.snapshot(agent)}
++        real_snapshot = M.cs.snapshot
++
++        def cached_snapshot(obj, **kwargs):
++            return snapshots[id(obj)] if id(obj) in snapshots and not kwargs else real_snapshot(obj, **kwargs)
++
++        # after_env still scans the live module table each time. Only host module paths
++        # outside the mutable fixture are stable; fixture paths must resolve live.
++        real_after_env = M.after_env
++        real_resolve = pathlib.Path.resolve
++        host_paths = {}
++        fixture_root = real_resolve(root)
++
++        def cached_after_env(ctx, env):
++            module_paths = {pathlib.Path(path) for module in list(sys.modules.values())
++                            if isinstance(path := getattr(module, "__file__", None), (str, os.PathLike))}
++
++            def resolve(path, *args, **kwargs):
++                if path in host_paths and not args and not kwargs:
++                    return host_paths[path]
++                result = real_resolve(path, *args, **kwargs)
++                if path in module_paths and not result.is_relative_to(fixture_root) and not args and not kwargs:
++                    host_paths[path] = result
++                return result
++
++            with patch.object(pathlib.Path, "resolve", resolve):
++                return real_after_env(ctx, env)
++
++        # Each path is changed alone; no override on the first real launch.
++        cases = (
++            ("tracked-prose", "notes.md", False),
++            ("untracked-prose", "new_notes.md", True),
++            ("tracked-eval", "ablation_harness/eval.py", False),
++            ("untracked-eval", "ablation_harness/record.py", True),
++            ("tracked-dispatch", "ablation_harness/run_ablation.py", False),
++        )
++        for name, path, untracked in cases:
++            clean()
++            if untracked and (repo / path).exists():
++                raise AssertionError(f"fixture path must be untracked: {path}")
++            put(path, "changed\n")
++            run, data, started = record(f"scope_{name}")
++            source = data["code"]["repository"]
++            check(f"scope/{name}/launch", started, str(data.get("failures")))
++            check(
++                f"scope/{name}/t0-classification",
++                source.get("dirty") is True and source.get("changed_blocking") == []
++                and isinstance(source.get("eval_exclusive_paths"), list)
++                and (path.endswith(".md") or path in source.get("eval_exclusive_paths", [])),
++                str({key: source.get(key) for key in ("dirty", "changed_blocking", "eval_exclusive_paths")}),
++            )
++            # Even an old startup refusal must not hide the actual rebuild defect.
++            if not started:
++                run, data, _ = record(f"scope_{name}_override", "offline scope regression")
++                source = data["code"]["repository"]
++            captured, _ = R.capture(run, root / f"capture_{name}")
++            check(f"scope/{name}/item-no-archive", captured["items"]["repository"]["retrieval"] == "git-rev",
++                  str(captured["refusals"]))
++            check(f"scope/{name}/capture-no-archive", captured["verdict"] == "captured", str(captured["refusals"]))
++            saved = captured["items"]["repository"]["recorded"]
++            check(
++                f"scope/{name}/snapshot-roundtrip",
++                "eval_exclusive_paths" in source and "changed_blocking" in source
++                and saved.get("eval_exclusive_paths") == source["eval_exclusive_paths"]
++                and saved.get("changed_blocking") == source["changed_blocking"]
++                and saved.get("changed_paths_full") == source.get("changed_paths_full")
++                and "eval_exclusive_paths" in saved and "changed_blocking" in saved and "changed_paths_full" in saved,
++                f"T0={source.get('eval_exclusive_paths')}, {source.get('changed_blocking')}; material={saved}",
++            )
++
++            if name == "tracked-eval":
++                # Alter the live declaration, not the frozen T0. Find its actual owner so
++                # the test does not prescribe the implementation's constant name or module.
++                snapshot = source.get("eval_exclusive_paths")
++                owner = None
++                if isinstance(snapshot, list) and path in snapshot:
++                    for module_name, module in list(sys.modules.items()):
++                        if not module_name.startswith("rl_exp.tools.runrecord") or module is None:
++                            continue
++                        for attr, value in vars(module).items():
++                            if "EXCLUSIVE" in attr.upper() and isinstance(value, (list, tuple, set, frozenset)):
++                                if set(value) == set(snapshot):
++                                    owner = (module, attr, value)
++                                    break
++                        if owner:
++                            break
++                if owner:
++                    module, attr, value = owner
++                    replacement = type(value)(entry for entry in value if entry != path)
++                    with patch.object(module, attr, replacement):
++                        current = code_sources()["repository"]
++                        changed_capture, _ = R.capture(run, root / "capture_declaration_changed")
++                        check(
++                            "scope/declaration-changed/t0-wins",
++                            path not in current.get("eval_exclusive_paths", [path])
++                            and path in current.get("changed_blocking", [])
++                            and changed_capture["items"]["repository"]["retrieval"] == "git-rev"
++                            and changed_capture["verdict"] == "captured"
++                            and changed_capture["items"]["repository"]["recorded"].get("eval_exclusive_paths") == snapshot,
++                            f"current={current.get('eval_exclusive_paths')}, {current.get('changed_blocking')}; "
++                            f"capture={changed_capture['refusals']}",
++                        )
++                else:
++                    check("scope/declaration-changed/t0-wins", False, "T0 declaration or its live owner missing")
++
++            if name == "tracked-prose":
++                # Model historical on-disk records from this real run, preserving a valid T1.
++                for missing in (("eval_exclusive_paths",), ("changed_blocking",),
++                                ("eval_exclusive_paths", "changed_blocking")):
++                    legacy = json.loads(json.dumps(data))
++                    for key in missing:
++                        legacy["code"]["repository"].pop(key, None)
++                    legacy["t1_sha256"] = M.t1_digest(legacy)
++                    (run / M.MANIFEST_NAME).write_text(json.dumps(legacy), encoding="utf-8")
++                    old_capture, _ = R.capture(run, root / ("legacy_" + "_".join(missing)))
++                    check(
++                        f"scope/legacy-missing-{'-'.join(missing)}",
++                        old_capture["items"]["repository"]["retrieval"] == "none"
++                        and old_capture["verdict"] == "refused"
++                        and any("repository:" in x and "archive" in x for x in old_capture["refusals"]),
++                        f"capture={old_capture['verdict']} {old_capture['refusals']}",
++                    )
++
++        clean()
++        protected = "ablation_harness/host_paths.py"
++        put(protected, "changed\n")
++        run, data, started = record("scope_protected_override", "offline protected change")
++        source = data["code"]["repository"]
++        with patch.dict(os.environ, {M.DIRTY_OVERRIDE_ENV: ""}):
++            refusal = M.dirty_tree_refusal(types.SimpleNamespace(manifest=data))
++        check("scope/protected/dirty-refused", refusal is not None and "dirty" in refusal, str(refusal))
++        check(
++            "scope/protected/override-preserves-classification",
++            started and data.get("declaration", {}).get("dirty_tree_override_reason") == "offline protected change"
++            and protected in source.get("changed_blocking", []), str(source.get("changed_blocking")),
++        )
++        captured, _ = R.capture(run, root / "capture_protected")
++        check(
++            "scope/protected/override-no-archive-refused",
++            captured["items"]["repository"]["retrieval"] == "none"
++            and captured["verdict"] == "refused"
++            and any("repository:" in x and "archive" in x for x in captured["refusals"]),
++            f"capture={captured['verdict']} {captured['refusals']}",
++        )
++
++        clean()
++        unicode_path = "notes/中文 配置.yaml"
++        filtered_path = "configs/run.log.yaml"
++        put(unicode_path, "untracked\n")
++        put(filtered_path, "untracked protected configuration\n")
++        run, data, started = record("scope_untracked", "offline untracked regression")
++        source = data["code"]["repository"]
++        check("scope/untracked-unicode/full-path", started and unicode_path in source.get("changed_blocking", [])
++              and unicode_path in source.get("untracked_in_code_root", []), str(source))
++        captured, _ = R.capture(run, root / "capture_untracked", root / "untracked_archive")
++        check("scope/untracked-unicode/archived", captured["verdict"] == "captured"
++              and f"code/repository/{unicode_path}" in captured["payload_digests"], str(captured["refusals"]))
++        check("scope/untracked-filtered/not-lost", started and filtered_path in source.get("changed_blocking", [])
++              and filtered_path in source.get("untracked_in_code_root", [])
++              and captured["verdict"] == "captured" and f"code/repository/{filtered_path}" in captured["payload_digests"],
++              str(captured["refusals"]))
++
++        clean()
++        protected_path = "ablation_harness/host_paths.py"
++        run = root / "scope_t0_t1_change"
++        from test_run_manifest import _StubEnv, _StubRunner, _begin
++        with patch.dict(os.environ, {M.DIRTY_OVERRIDE_ENV: ""}), patch.object(prov, "code_sources", code_sources), patch.object(M, "after_env", cached_after_env):
++            ctx = _begin(index_ready=True, log_dir=run, task="Lizard2-Flat-v4", argv=["train.py"],
++                         env_cfg=cfg, agent_cfg=agent)
++            env = _StubEnv(cfg)
++            M.after_env(ctx, env)
++            put(protected_path, "changed after T0\n")
++            runner = _StubRunner(lr=agent.algorithm.learning_rate)
++            M.hook_runner_save(runner, ctx)
++            M.freeze(ctx, runner=runner, env=env, agent_cfg=agent, resume_path=None, drop_curriculum_state=False)
++            runner.save(run / "model_42.pt")
++        captured, _ = R.capture(run, root / "capture_t0_t1_change")
++        check("scope/t0-t1-protected-change", captured["verdict"] != "captured"
++              and any("code" in problem.lower() or "scope" in problem.lower()
++                      for problem in [*captured["refusals"], *captured["problems"]]),
++              f"T1 protected change must prevent a T0-only capture: {captured['verdict']}, "
++              f"{captured['refusals']}, {captured['problems']}")
++
++        clean()
++        put(protected_path, "tracked dirty at T0\n")
++        run = root / "scope_tracked_same_path"
++        with patch.dict(os.environ, {M.DIRTY_OVERRIDE_ENV: "test tracked drift"}), patch.object(prov, "code_sources", code_sources), patch.object(M, "after_env", cached_after_env):
++            ctx = _begin(index_ready=True, log_dir=run, task="Lizard2-Flat-v4", argv=["train.py"],
++                         env_cfg=cfg, agent_cfg=agent)
++            env = _StubEnv(cfg)
++            M.after_env(ctx, env)
++            put(protected_path, "tracked dirty at T1\n")
++            runner = _StubRunner(lr=agent.algorithm.learning_rate)
++            M.hook_runner_save(runner, ctx)
++            M.freeze(ctx, runner=runner, env=env, agent_cfg=agent, resume_path=None, drop_curriculum_state=False)
++            runner.save(run / "model_42.pt")
++        captured, _ = R.capture(run, root / "capture_tracked_same_path", root / "tracked_archive")
++        check("scope/t0-t1-same-tracked", any("protected code scope changed" in p for p in captured["problems"]),
++              f"tracked content drift must be recorded: {captured['verdict']}, {captured['problems']}")
++        clean()
++        put(protected_path, "tracked changed at T0\n")
++        run, _, _ = record("scope_after_t1_tracked", "test post-T1 tracked drift")
++        put(protected_path, "tracked changed after T1\n")
++        captured, _ = R.capture(run, root / "capture_after_t1_tracked", root / "post_t1_tracked_archive")
++        check("scope/after-t1-tracked", captured["verdict"] == "refused"
++              and any("no longer matches" in text for text in captured["refusals"]), str(captured["refusals"]))
++
++        # Untracked content identity belongs to verified-rebuild-rating; a pathname alone
++        # cannot decide T0/T1 or post-T1 content equality.
++        clean()
++        put("ablation_harness/eval.py", "only eval changed before T0\n")
++        run = root / "scope_declaration_changed_during_run"
++        with patch.dict(os.environ, {M.DIRTY_OVERRIDE_ENV: ""}), patch.object(prov, "code_sources", code_sources), patch.object(M, "after_env", cached_after_env):
++            ctx = _begin(index_ready=True, log_dir=run, task="Lizard2-Flat-v4", argv=["train.py"],
++                         env_cfg=cfg, agent_cfg=agent)
++            env = _StubEnv(cfg)
++            M.after_env(ctx, env)
++            runner = _StubRunner(lr=agent.algorithm.learning_rate)
++            M.hook_runner_save(runner, ctx)
++            with patch.object(prov, "EVAL_EXCLUSIVE_PATHS", tuple(path for path in prov.EVAL_EXCLUSIVE_PATHS
++                                                                  if path != "ablation_harness/eval.py")):
++                M.freeze(ctx, runner=runner, env=env, agent_cfg=agent, resume_path=None, drop_curriculum_state=False)
++            runner.save(run / "model_42.pt")
++        captured, _ = R.capture(run, root / "capture_declaration_during_run")
++        check("scope/t0-declaration-during-run", captured["verdict"] == "captured",
++              f"T1 must classify with the T0 declaration: {captured['verdict']}, {captured['problems']}")
++
++        clean()
++        for i in range(45):
++            put(f"bulk/{i:02}.py", "changed\n")
++        put("z_protected.py", "untracked\n")
++        _, data, started = record("scope_over_cap", "offline over-cap regression", freeze_it=False)
++        source = data["code"]["repository"]
++        blocking = source.get("changed_blocking") or []
++        check(
++            "scope/over-40/full-blocking",
++            started and len(blocking) == 46 and "z_protected.py" in blocking
++            and all(f"bulk/{i:02}.py" in blocking for i in range(45)),
++            f"blocking count={len(blocking)}, last={blocking[-3:]}",
++        )
++        result, refusals = item(source)
++        check("scope/over-40/no-archive-refused", result["retrieval"] == "none" and bool(refusals), str(refusals))
++
++
+ def main() -> int:
+     root = pathlib.Path(tempfile.mkdtemp(prefix="rebuild_gate_"))
+     real_sources, real_git, real_tree_root = prov.code_sources, prov.git, R._tree_root
+@@ -320,6 +636,11 @@ def main() -> int:
+         prov.code_sources, prov.git, R._tree_root = real_sources, real_git, real_tree_root
+         shutil.rmtree(root, ignore_errors=True)
+ 
++    try:
++        _real_git_scope(root / "real_git_scope")
++    finally:
++        shutil.rmtree(root, ignore_errors=True)
++
+     for problem in PROBLEMS:
+         print(f"  {problem}")
+     print("REBUILD_GATE_TEST_OK" if not PROBLEMS else "REBUILD_GATE_TEST_DRIFT")
+diff --git a/rl_exp/tools/verify/test_run_manifest.py b/rl_exp/tools/verify/test_run_manifest.py
+index f0835c5..fb3d733 100644
+--- a/rl_exp/tools/verify/test_run_manifest.py
++++ b/rl_exp/tools/verify/test_run_manifest.py
+@@ -11,6 +11,7 @@ a missing T1, a moved code revision, changed assets, a vanished checkpoint, and
+ checkpoint written before T1 all have to be reported as blocking.
+ """
+ 
++import importlib.util
+ import json
+ import os
+ import pathlib
+@@ -71,13 +72,15 @@ def isolated_assets(root: pathlib.Path):
+         yield repo
+ 
+ 
+-def _begin(**kwargs):
++def _begin(*, index_ready=False, **kwargs):
+     """Record against an isolated active-line index, independent of real retirement.
+ 
+     Keep the real identity resolver and startup judge. Only the fixture's directory
+     grants permission; its recorded digests belong to the fixture files, not the
+     retired production index. Retirement refusals are covered by test_lifecycle_gate.
+     """
++    if index_ready:
++        return M.begin(**kwargs)
+     with tempfile.TemporaryDirectory(prefix="manifest_index_") as tmp:
+         with active_index(pathlib.Path(tmp)):
+             return M.begin(**kwargs)
+@@ -137,6 +140,9 @@ def _record(
+     runner_lr: float | None = None,
+     resume_path: pathlib.Path | None = None,
+     curriculum_resume: dict | None = None,
++    index_ready: bool = False,
++    cfg=None,
++    agent=None,
+ ):
+     """Run the four recording call sites against stubs, saving one checkpoint.
+ 
+@@ -144,11 +150,11 @@ def _record(
+     case is the honest default and a mismatch has to be asked for explicitly.
+     ``curriculum_resume`` stands in for the outcome ``apply_resume_state`` returns.
+     """
+-    cfg = Lizard2FlatV4EnvCfg()
+-    agent = Lizard2V4PPORunnerCfg()
++    cfg = cfg if cfg is not None else Lizard2FlatV4EnvCfg()
++    agent = agent if agent is not None else Lizard2V4PPORunnerCfg()
+     env = _StubEnv(cfg, num_envs)
+     runner = _StubRunner(lr=agent.algorithm.learning_rate if runner_lr is None else runner_lr)
+-    ctx = _begin(log_dir=tmp, task=TASK, argv=["train.py", "--task", TASK], env_cfg=cfg, agent_cfg=agent)
++    ctx = _begin(index_ready=index_ready, log_dir=tmp, task=TASK, argv=["train.py", "--task", TASK], env_cfg=cfg, agent_cfg=agent)
+     M.hook_runner_save(runner, ctx)
+     if save_early:
+         runner.save(tmp / "model_0.pt")
+@@ -209,6 +215,328 @@ def _clean_sources() -> dict:
+     }
+ 
+ 
++def _real_git_scope(root: pathlib.Path, real_sources) -> None:
++    """Exercise the provenance boundary against actual git state, not fabricated sources."""
++    repo = root / "scope_repo"
++    repo.mkdir()
++    exclusive = {
++        "ablation_harness/eval.py",
++        "ablation_harness/record.py",
++        "ablation_harness/run_ablation.py",
++    }
++    protected = {
++        "ablation_harness/host_paths.py",
++        "rl_exp/tools/runrecord/provenance.py",
++        "rl_exp/tools/runrecord/manifest.py",
++        "rl_exp/tasks/train.py",
++        "rl_exp/versions/config.json",
++        "rl_exp/assets/robot.usd",
++    }
++    tracked = exclusive | protected | {"README.md", ".gitignore"}
++
++    def git(*args):
++        return subprocess.run(
++            ["git", *args], cwd=repo, check=True, capture_output=True, text=True, encoding="utf-8"
++        ).stdout
++
++    def write(path, content="VALUE = 1\n"):
++        target = repo / path
++        target.parent.mkdir(parents=True, exist_ok=True)
++        target.write_text(content, encoding="utf-8")
++
++    git("init", "-q")
++    git("config", "user.name", "Offline Test")
++    git("config", "user.email", "offline-test@example.invalid")
++    for path in tracked:
++        write(path, "__pycache__/\n" if path == ".gitignore" else "VALUE = 1\n")
++    git("add", "--", *sorted(tracked))
++    git("commit", "-q", "-m", "fixture")
++
++    cfg = Lizard2FlatV4EnvCfg()
++    agent = Lizard2V4PPORunnerCfg()
++    serial = 0
++    staged_rename = False
++
++    def reset():
++        nonlocal staged_rename
++        if staged_rename:
++            git("reset", "--hard", "-q", "HEAD")
++            staged_rename = False
++        # Restore the known fixture directly; only git mv changes the index.
++        for child in repo.iterdir():
++            if child.name != ".git":
++                if child.is_dir():
++                    shutil.rmtree(child)
++                else:
++                    child.unlink()
++        for path in tracked:
++            write(path, "__pycache__/\n" if path == ".gitignore" else "VALUE = 1\n")
++
++    def start(reason=None):
++        nonlocal serial
++        serial += 1
++        run = root / f"scope_run_{serial}"
++        run.mkdir()
++        env = {} if reason is None else {M.DIRTY_OVERRIDE_ENV: reason}
++        with patch.dict(os.environ, env, clear=False):
++            if reason is None:
++                os.environ.pop(M.DIRTY_OVERRIDE_ENV, None)
++            try:
++                ctx = _begin(index_ready=True, log_dir=run, task=TASK, argv=["train.py"], env_cfg=cfg, agent_cfg=agent)
++                error = None
++            except RuntimeError as err:
++                ctx, error = None, str(err)
++            data = json.loads((run / M.MANIFEST_NAME).read_text(encoding="utf-8"))
++        return ctx, error, data
++
++    from rl_exp.tools.runrecord import lifecycle
++    from rl_exp.tools.verify import check_cfg_lock
++
++    def run_cases():
++        nonlocal staged_rename
++        for path in sorted(exclusive):
++            reset()
++            write(path, "VALUE = 2\n")
++            ctx, error, data = start()
++            source = data["code"]["repository"]
++            check(f"scope/exclusive/{path}", ctx is not None and error is None,
++                  f"individual eval-only change refused: {error}")
++            check(f"scope/snapshot/{path}", set(source.get("eval_exclusive_paths", [])) == exclusive
++                  and source.get("changed_blocking") == [] and path in source.get("changed_non_prose", []),
++                  f"T0 classification: {source}")
++            rows = M._verify_code(data, [])
++            repo_row = next((row for row in rows if row["detail"].startswith("repository:")), {})
++            check(f"scope/verify/{path}", repo_row.get("result") == "通过",
++                  f"individual eval-only change must verify: {repo_row}")
++
++        reset()
++        for path in protected:
++            write(path, "VALUE = 2\n")
++        ctx, error, data = start()
++        source = data["code"]["repository"]
++        for path in sorted(protected):
++            check(f"scope/protected/{path}", ctx is None and error is not None
++                  and path in source.get("changed_blocking", [])
++                  and any("refused" in item for item in data.get("failures", [])),
++                  f"protected change must block with recorded classification: {error}, {source}")
++
++        reset()
++        real_git_subprocess = prov.subprocess.run
++
++        def failing_git(*args, **kwargs):
++            if args[0][1:2] == ["status"]:
++                raise subprocess.CalledProcessError(128, args[0])
++            return real_git_subprocess(*args, **kwargs)
++        with patch.object(prov.subprocess, "run", side_effect=failing_git):
++            ctx, error, data = start()
++            source = data["code"]["repository"]
++            rows = M._verify_code({"code": {"repository": {"available": True, "rev": "old"}}}, [])
++            check("scope/git-failure-refused", ctx is None and not source.get("available")
++                  and "git state unavailable" in source.get("detail", "") and "provenance unavailable" in error,
++                  f"failed git status must not read clean: {source}, {error}")
++            check("scope/git-failure-verify-unknown", rows[0]["result"] == "未知",
++                  f"unavailable current source must not pass: {rows}")
++
++        reset()
++        write("README.md", "changed prose\n")
++        ctx, error, data = start()
++        source = data["code"]["repository"]
++        check("scope/tracked-readme-start", ctx is not None and source.get("dirty")
++              and source.get("changed_blocking") == [], f"{error}, {source}")
++        write("README.md", "changed again\n")
++        rows = M._verify_code(data, [])
++        repo_row = next((row for row in rows if row["detail"].startswith("repository:")), {})
++        check("scope/tracked-readme-verify", repo_row.get("result") == "通过",
++              f"prose-only diff changed after T0: {repo_row}")
++
++        reset()
++        write("notes/new.md")
++        ctx, error, data = start()
++        source = data["code"]["repository"]
++        check("scope/untracked/notes/new.md", ctx is not None
++              and "notes/new.md" not in source.get("changed_blocking", [])
++              and "notes/new.md" in source.get("changed_paths_full", []), f"{error}, {source}")
++        reset()
++        untracked = ("ablation_harness/new_eval.py", " first.py", "notes/中文 配置.yaml")
++        for path in untracked:
++            write(path)
++        ctx, error, data = start()
++        source = data["code"]["repository"]
++        for path in untracked:
++            check(f"scope/untracked/{path}", ctx is None
++                  and path in source.get("changed_blocking", [])
++                  and path in source.get("changed_paths_full", []), f"{error}, {source}")
++
++        reset()
++        (repo / "rl_exp/tasks/train.py").unlink()
++        ctx, error, data = start()
++        check("scope/deleted-training", ctx is None
++              and "rl_exp/tasks/train.py" in data["code"]["repository"].get("changed_blocking", []),
++              f"deleted dependency not blocked: {error}, {data['code']['repository']}")
++
++        for old, new in (("ablation_harness/eval.py", "rl_exp/tasks/moved_eval.py"),
++                         ("rl_exp/tasks/train.py", "ablation_harness/eval.py")):
++            reset()
++            if (repo / new).exists():
++                (repo / new).unlink()
++            if old == "rl_exp/tasks/train.py":
++                write(old, "DISTINCT_TRAINING_SOURCE = 1\n")
++            git("mv", "-f", "--", old, new)
++            staged_rename = True
++            ctx, error, data = start()
++            source = data["code"]["repository"]
++            paths = prov._changed_paths(repo)
++            training_path = old if old.startswith("rl_exp/") else new
++            check(f"scope/rename/{old}", ctx is None and {old, new} <= set(paths)
++                  and training_path in source.get("changed_blocking", []),
++                  f"both rename ends must count: paths={paths}, error={error}, source={source}")
++
++        reset()
++        for i in range(45):
++            write(f"aaa/doc_{i:02}.md")
++        write("zzz/block.py")
++        ctx, error, data = start()
++        source = data["code"]["repository"]
++        check("scope/truncated-display-blocks", ctx is None and "zzz/block.py" not in source.get("changed_paths", [])
++              and len(source.get("changed_paths_full", [])) == 46
++              and "zzz/block.py" in source.get("changed_paths_full", [])
++              and "zzz/block.py" in source.get("changed_blocking", []), f"{error}, {source}")
++        reset()
++        for i in range(45):
++            write(f"many/source_{i:02}.py")
++        ctx, error, data = start()
++        source = data["code"]["repository"]
++        check("scope/full-blocking-list", ctx is None and len(source.get("changed_blocking", [])) == 45
++              and "many/source_44.py" in source.get("changed_blocking", []), f"{error}, {source}")
++
++        reset()
++        write("ablation_harness/eval.py", "VALUE = 2\n")
++        _, _, data = start(reason="fixture override")
++        source = data["code"]["repository"]
++        snapshot = list(source.get("eval_exclusive_paths", []))
++        declarations = [(module, name, value) for module in (prov, M) for name, value in vars(module).items()
++                        if name.isupper() and isinstance(value, (set, frozenset, list, tuple))
++                        and set(value) == exclusive]
++        old_refusal = fresh_refusal = None
++        if declarations:
++            module, name, value = declarations[0]
++            with patch.object(module, name, type(value)()), patch.dict(os.environ, {}, clear=False):
++                os.environ.pop(M.DIRTY_OVERRIDE_ENV, None)
++                old_refusal = M.dirty_tree_refusal(types.SimpleNamespace(manifest=data))
++                fresh = real_sources()["repository"]
++                fresh_refusal = M.dirty_tree_refusal(types.SimpleNamespace(manifest={"code": {"repository": fresh}}))
++        check("scope/t0-snapshot-not-reclassified", set(snapshot) == exclusive and bool(declarations)
++              and source.get("eval_exclusive_paths") == snapshot and old_refusal is None
++              and fresh_refusal is not None, f"old={old_refusal}, fresh={fresh_refusal}, snapshot={snapshot}")
++        legacy = json.loads(json.dumps(data))
++        legacy_source = legacy["code"]["repository"]
++        legacy_source.pop("eval_exclusive_paths", None)
++        legacy_source.pop("changed_blocking", None)
++        with patch.dict(os.environ, {}, clear=False):
++            os.environ.pop(M.DIRTY_OVERRIDE_ENV, None)
++            legacy_refusal = M.dirty_tree_refusal(types.SimpleNamespace(manifest=legacy))
++        check("scope/legacy-fallback", legacy_refusal is not None and "eval.py" in legacy_refusal,
++              f"old changed_non_prose must remain strict: {legacy_refusal}")
++
++        reset()
++        write("rl_exp/tasks/train.py", "VALUE = 2\n")
++        ctx, error, data = start()
++        source = data["code"]["repository"]
++        for reason in (None, "", "   ", "needed for offline test"):
++            with patch.dict(os.environ, {}, clear=False):
++                if reason is None:
++                    os.environ.pop(M.DIRTY_OVERRIDE_ENV, None)
++                else:
++                    os.environ[M.DIRTY_OVERRIDE_ENV] = reason
++                refusal = M.dirty_tree_refusal(types.SimpleNamespace(manifest=data))
++            allowed = bool(reason and reason.strip())
++            check(f"scope/override/{reason!r}", (refusal is None) == allowed
++                  and ctx is None and error is not None
++                  and "rl_exp/tasks/train.py" in source.get("changed_blocking", [])
++                  and any("refused" in item for item in data.get("failures", [])),
++                  f"override must preserve classification and refusal evidence: {error}, {source}")
++
++        ctx, error, data = start(reason="needed for offline test")
++        check("scope/override-recorded", ctx is not None
++              and data.get("declaration", {}).get("dirty_tree_override_reason") == "needed for offline test"
++              and "rl_exp/tasks/train.py" in data["code"]["repository"].get("changed_blocking", []),
++              f"override must be recorded without hiding protected changes: {error}")
++        if ctx is not None:
++            module_path = repo / "ablation_harness/eval.py"
++            spec = importlib.util.spec_from_file_location("scope_fixture_eval", module_path)
++            module = importlib.util.module_from_spec(spec)
++            with patch.dict(sys.modules, {"scope_fixture_eval": module}):
++                spec.loader.exec_module(module)
++                M.after_env(ctx, _StubEnv(cfg))
++            saved = json.loads(ctx.manifest_path.read_text(encoding="utf-8"))
++            stage = saved.get("stages", {}).get("env_constructed", {})
++            observed = stage.get("observed_dependencies", [])
++            violations = stage.get("scope_violations", [])
++            found = any(isinstance(item, dict) and item.get("module", item.get("name")) == "scope_fixture_eval"
++                        and item.get("path", item.get("relative_path")) == "ablation_harness/eval.py"
++                        for item in observed)
++            check("scope/after-env-observed", found, f"module and actual relative path missing: {observed}")
++            check("scope/after-env-violation", "ablation_harness/eval.py" in json.dumps(violations)
++                  and bool(ctx.failures) and bool(saved.get("failures")),
++                  f"override must not hide scope violation: violations={violations}, failures={saved.get('failures')}")
++            manifest = saved
++            manifest["failures"] = []
++            manifest["t1_sha256"] = M.t1_digest(manifest)
++            problems = []
++            rows = M._verify_self_consistency(manifest, problems)
++            check("scope/after-env-verify", any("scope violation" in problem for problem in problems)
++                  and any("scope violation" in row["detail"] and row["result"] == "失败" for row in rows),
++                  f"scope failure ignored by verify: {problems}, {rows}")
++            manifest["stages"]["env_constructed"]["scope_violations"] = [
++                {"module": "other", "path": "ablation_harness/record.py"}
++            ]
++            manifest["t1_sha256"] = M.t1_digest(manifest)
++            problems = []
++            M._verify_self_consistency(manifest, problems)
++            check("scope/after-env-incomplete-violations", any("scope violation" in p and "eval.py" in p for p in problems),
++                  f"an incomplete nonempty violation list must not hide observed paths: {problems}")
++            manifest["stages"]["ready_to_learn"] = {"code": manifest["code"]}
++            manifest["t1_sha256"] = M.t1_digest(manifest)
++            ctx.manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
++            from rl_exp.tools.runrecord import rebuild
++            with patch.object(rebuild, "_REPO", root / "asset_fixture"):
++                result, capture_problems = rebuild.capture(ctx.log_dir, root / "scope_violation_capture")
++            check("scope/after-env-capture", result["verdict"] == "failed"
++                  and any("scope violation" in problem for problem in capture_problems),
++                  f"capture ignored recorded violation: {result['verdict']}, {capture_problems}")
++            manifest["stages"]["env_constructed"].pop("observed_dependencies")
++            manifest["stages"]["env_constructed"].pop("scope_violations")
++            manifest["t1_sha256"] = M.t1_digest(manifest)
++            problems = []
++            M._verify_self_consistency(manifest, problems)
++            check("scope/after-env-missing-observation", any("scope observation missing" in p for p in problems),
++                  f"removed observation must not verify: {problems}")
++        else:
++            check("scope/after-env-setup", False, f"override failed unexpectedly: {error}")
++
++    with (active_index(root), patch.object(prov, "_REPO", repo),
++          patch.object(prov, "code_sources", real_sources),
++          patch.object(prov, "isaac_root", return_value=None),
++          patch.object(prov, "rsl_rl_state", return_value={"available": False, "detail": "fixture"}),
++          patch.object(check_cfg_lock, "combination", return_value={
++              "isaaclab_rev": "unresolved", "rsl_rl": "unknown", "python": sys.version.split()[0]
++          })):
++        index = lifecycle.read_index()
++        recipe = M.recipe_ref(cfg)
++        assets = M.asset_digest(cfg.params_version, type(cfg).params_line)
++        agent_snapshot = M.cs.snapshot(agent)
++        snapshot = M.cs.snapshot
++
++        def cached_snapshot(obj, **kwargs):
++            return agent_snapshot if obj is agent and not kwargs else snapshot(obj, **kwargs)
++
++        with (patch.object(lifecycle, "read_index", return_value=index),
++              patch.object(M, "recipe_ref", return_value=recipe),
++              patch.object(M, "asset_digest", return_value=assets),
++              patch.object(M.cs, "snapshot", new=cached_snapshot)):
++            run_cases()
++
++
+ class _FakeDistribution:
+     """The metadata reads the install-origin lookup makes, and nothing else."""
+ 
+@@ -247,6 +575,9 @@ def main() -> int:
+     assets = ExitStack()
+     try:
+         assets.enter_context(isolated_assets(root))
++        _real_git_scope(root, real_sources)
++        from rl_exp.tools.verify import check_cfg_lock
++        check_cfg_lock.combination.cache_clear()
+         run_dir = root / "2026-09-15_14-00-00_v4"
+         ctx, env, runner = _record(run_dir)
+ 
+@@ -501,10 +832,8 @@ def main() -> int:
+             "state digest unstable",
+         )
+         # --- a dirty project tree is refused at launch, not merely recorded -------
+-        # No revision restores a dirty tree, so the run's rebuildable claim could never be
+-        # proved -- learning that at launch beats learning it months later. The provenance
+-        # is injected so the case does not depend on whether the developer happens to have
+-        # uncommitted work.
++        # A revision alone cannot restore a dirty tree; the content needs an archive.
++        # Inject provenance so the case does not depend on the developer's tree.
+         dirty_sources = json.loads(json.dumps(_clean_sources()))
+         dirty_sources["repository"].update(dirty=True, diff_lines=17, untracked_count=2)
+         prov.code_sources = lambda: dirty_sources
+diff --git a/work/active/lizard2-learned-gait.md b/work/active/lizard2-learned-gait.md
+index a3548c0..cf91d5f 100644
+--- a/work/active/lizard2-learned-gait.md
++++ b/work/active/lizard2-learned-gait.md
+@@ -16,12 +16,16 @@ evidence: acceptance/records/2026-10-28-lizard2-v6-belly-reset.md, acceptance/re
+ 
+ 本项负责步态目标、训练方案与训练后行为证据；正式配方接入、训练和整体评测交接 `lizard2-family-landing`。接触归属和测量复用 `floor-contact-attribution` 与 `lizard2-contact-protocol`，不将手工步态设为机体交付或开训前置。已训配方与已有标签保持原身份；未来训练修改按版本规则建立新版本。
+ 
++用户反馈整体姿态不像蜥蜴，且躯干与尾部不做 yaw 侧向摆动。待证伪的配置侧候选（仅由参数文件推算，未经仿真）：① `chest_yaw` 的阻尼与力矩上限组合可能使其在步频下无法摆动；② 转向跟随读取 base 瞬时 yaw 角速度、`action_rate_l2` 覆盖脊柱，二者可能惩罚周期性躯干摆动；③ 现有奖励无姿态、步态或躯尾协调项。风格手段（相位时钟加躯尾参考、接触相位关联、参考动作等）尚未选定，摆幅、相位关系与蜥蜴参考须先查证，不预设。
++
+ ## 下一步
+ 
++大腿参与、后腿折叠与小腿落地朝向专项由 `work/active/lizard2-thigh-drive-shank-landing.md` 承接；该专项的目标、测量和对照动作唯一归其正文，本项消费其结果并负责整体步态交接。
++
+ 1. 执行者收齐 v6 实际训练状态与 checkpoint 身份，结合录像和已有日志区分胸腹触地、头部触地、姿态偏低、四肢支撑及动作协调；录像为观察样本，不把相关现象当成单因素因果。
+ 2. 明确可观察的目标：四肢支撑与摆动、身体姿态和高度、躯干与尾部协调、前进及转向；结合既有参考资料确定哪些是必要特征、哪些仍需用户决定，不预设必须复现手工轨迹。
+-3. 对照现有奖励、终止、命令分布、观测、动作权限和机体能力，提出可证伪的候选原因；按实际缺口考虑训练目标、课程或参考动作等选择，说明取舍及可能的作弊方式，不把任何一种手段预定为结论。
+-4. 设计可复读的对照与评测：固定 checkpoint、命令及观测窗口，分别检查站立支撑、直行和转向，结合多视角视频与可靠的接触、姿态和步态读数；计数口径与接触对象要明确。涉及新的测量、奖励或判据时先核其有效性，不以总奖励替代实际动作。
++3. 对照现有奖励、终止、命令分布、观测、动作权限和机体能力，提出可证伪的候选原因；按实际缺口考虑训练目标、课程或参考动作等选择，说明取舍及可能的作弊方式，不把任何一种手段预定为结论。躯尾 yaw 先在 `rl_exp/tools/diagnose/` 用正弦目标探测胸、尾 yaw 在步频下的幅值比、相位与力矩饱和，物理可达后再处理奖励冲突与风格项；作弊检查含原地扭身不前进、仅尾部摆动、高频抖动与足端打滑。
++4. 设计可复读的对照与评测：固定 checkpoint、命令及观测窗口，分别检查站立支撑、直行和转向，结合多视角视频与可靠的接触、姿态和步态读数；计数口径与接触对象要明确。躯尾协调须有脊柱/尾部 yaw 摆幅、频率及其与对角腿相位关系的读数。涉及新的测量、奖励或判据时先核其有效性，不以总奖励替代实际动作。
+ 5. 将选定方案交版本与训练流程，记录实际结果、未覆盖边界和失败去向；执行完成后置 pending_review，交不带执笔历史的新上下文核验。
+ 
+ ## 关闭条件
+diff --git a/work/active/lizard2-thigh-drive-shank-landing.md b/work/active/lizard2-thigh-drive-shank-landing.md
+index 8ce8b2d..ed6ce88 100644
+--- a/work/active/lizard2-thigh-drive-shank-landing.md
++++ b/work/active/lizard2-thigh-drive-shank-landing.md
+@@ -5,7 +5,7 @@ scope: rl_exp/tasks, ablation_harness
+ status: in_progress
+ landing: rl_exp/tasks/lizard2_recipe.py, rl_exp/tasks/lizard2_mdp.py, rl_exp/versions/lizard2, ablation_harness
+ evidence: acceptance/records/2026-11-04-lizard2-shank-tilt-reach
+-next: 执行者沿第 1 步补证进入原限位执行器动态探测，核 swing/twist 与 abduct/knee 配合；保留现场确认及落地测量缺口。
++next: 执行者补真实落地阶段与支撑口径，按已采证据选择策略目标/增益因果对照；成本闸门缺口保留，不直接改正式配方。
+ close_when: 新上下文按正文“关闭条件”核验落点与证据；有缺口不关闭。
+ depends_on: lizard2-learned-gait
+ ---
+diff --git a/work/active/training-provenance-dependency-scope.md b/work/active/training-provenance-dependency-scope.md
+index 5042751..09d191c 100644
+--- a/work/active/training-provenance-dependency-scope.md
++++ b/work/active/training-provenance-dependency-scope.md
+@@ -1,33 +1,28 @@
+ ---
+ id: training-provenance-dependency-scope
+ title: 训练来源闸门按实际依赖划定阻塞范围
+-scope: rl_exp/tools/runrecord, rl_exp/tools/verify/test_run_manifest.py, rl_exp/tools/verify/test_rebuild_gate.py, README.md
+-status: open
++scope: rl_exp/tools/runrecord, rl_exp/tools/verify, README.md
++status: in_progress
+ landing: rl_exp/tools/runrecord/provenance.py, rl_exp/tools/runrecord/manifest.py, rl_exp/tools/runrecord/rebuild.py
+-next: 执行者先用临时 git 仓复现散文分歧与 eval 阻塞，再实现文件级专属路径声明。
++next: 执行者按开训权限补真实训练来源读数，再交独立审核。
+ close_when: 不带执笔历史的新上下文按正文判据审核实现与验收证据后决定关闭。
++evidence: acceptance/records/2026-11-04-training-provenance-dependency-scope.md
+ ---
+ 
+ ## 当前范围
+ 
+-修复未落地，eval 误拦截尚待端到端复现。本项**扩展** [原散文豁免](../../acceptance/records/2026-09-22-dirty-tree-refusal-scoped-to-code.md)，保留启动时 `.md` 已豁免的行为；原记录关于“rebuild 本来就是代码根口径”的表述不能作为已跟踪 `.md` 的依据，后续验收记录须明确纠正，不改写历史证据。
+-
+-先复现现有分歧：启动看 `changed_non_prose`；`manifest._verify_code` 看整仓 `diff_sha256` 与 `untracked_in_code_root`；`rebuild._code_item` 遇 `dirty` 要求归档 diff。因此仅修改已跟踪 `.md` 时启动放行，capture 仍要求 `--archive`，文档 diff 再变化还会影响离线复核。未跟踪分类不能解释已跟踪文件。
+-
+-本项先实现并审核文件级豁免及其 T0 记录，`work/active/verified-rebuild-rating.md` 再据此验收归档内容与评级；旧记录沿旧口径严格读取。两项不同时改共享判据；本项不接管历史材料补全或评级。文档落点为仓根 `README.md`。
++文件级分类与回归已落地，结果和历史散文口径纠正在 [验收记录](../../acceptance/records/2026-11-04-training-provenance-dependency-scope.md)。本项先审核文件级豁免及 T0 记录；`work/active/verified-rebuild-rating.md` 再据此验收归档内容与评级，本项不接管历史材料补全。
+ 
+ ## 下一步
+ 
+-1. 用临时 git 仓走真实采集器及三处判定，先复现已跟踪 `.md` 分歧。复现在临时仓内造同名 `ablation_harness/eval.py`、`record.py`、`run_ablation.py` 并各自单独改动（真实脏树提交后样本即失效，不作证据），沿 `code_sources → git_state/_changed_paths → manifest.begin/dirty_tree_refusal` 验证阻塞；排除无关生命周期拒绝，不以混合脏树证明独立。
+-2. 在 runrecord 中维护一个 eval 专属路径常量，粒度固定为文件，禁止目录或通配符豁免；只有正向声明可新增放行。初始清单及每次增删，均在 `acceptance/records/` 逐条写明导入方检查：训练侧（`rl_exp/tasks`、`rl_exp/tools/runrecord`、`launch_recipe.py`、`cfg_snapshot.py`）无人导入才可列入；检查范围含 `importlib` 与字符串引用，且声明其覆盖不到的路径。2026-11-03 搜索时 `eval.py`、`record.py`、`run_ablation.py` 无训练侧静态导入，仅作起点，动手时重查。声明文件自身是训练依赖，其改动不得享受豁免。`provenance.isaac_root` 与 `cfg_snapshot` 均导入 `ablation_harness.host_paths`，该共享文件继续受保护；其他未声明代码、配置、资产和未知用途不新增豁免。
+-3. T0、拒绝判定前保存当次采用的专属路径清单，避免当前声明改变历史分类；不新增范围版本、完整依赖集合、集合摘要或逐路径依据。启动、离线复核、重建材料共用该记录，`rebuild._code_item.keep` 保留新字段；旧记录缺字段严格回退既有口径，不用当前声明或 import 图补历史。保留整仓事实，分类与存储使用全量路径，展示截断不得参与判定。
+-4. 在现有测试中加入独立子进程测试，入口为 `rl_exp/tools/launch_recipe.py` 的真实启动路径与 fork 训练器调用的 `manifest.begin`（二者均走 runrecord，未列入口不宣称覆盖）；导入专属文件即失败，并注入此引用证明测试有效。运行期在已有 `after_env`（`manifest.py:499`，已 `ctx.flush`/`ctx.fail`）检查 `sys.modules` 中模块的实际文件路径，命中专属清单就将 run 记为范围违例，复核不得忽略该违例；验收记录补一次真 run 读数，不只靠单元测试。模块记录仅称“已观察依赖”，只作反证、不作放行依据；未命中不代表完整独立，不承诺学习前识别后续延迟导入。
+-5. 真实路径采集使用 `git diff --name-only --no-renames -z HEAD`，让重命名两端以删除/新增纳入判定；删除训练依赖仍阻塞。临时 git 仓覆盖跟踪、未跟踪、删除、重命名、超过展示上限、声明文件自改、共享 `host_paths.py`、配置/资产、旧字段缺失、材料往返及事后修改声明。覆盖 `RL_ALLOW_DIRTY_TREE` 有无理由：仅显式理由放行并记偏差，不改变分类、不免除归档责任或范围违例。回归必须修复前失败、修复后通过，不能只构造 provenance 字典。
+-6. 限定拒绝措辞为当前依赖追溯缺口（`manifest.py:482`、`README.md` “开训前置”段的“永远无法证明”），同步仓根 `README.md` 该段；运行相关仓库闸门。复读命令、结果及边界唯一归 `acceptance/records/`，同次更新 evidence 指针。明确 after_env 之后的延迟导入、未进入 `sys.modules` 的动态加载及被 `.gitignore` 忽略却实际读取的配置仍未覆盖。完成后置 pending_review，交不带执笔历史的新上下文审核。
++1. 执行者按版本方案的开训权限与前置条件，补一次真实训练 run 的 `after_env` 读数；不得用零训练仿真构造或 trainer 桩替代。若启动训练，按 `ablation_harness/HARNESS.md` 完成训后固定流程及逐片验看。
++2. 未跟踪内容同源与评级风险交现有评级事项，保持历史缺摘要未知；后续改动须重新通过相关闸门。实施与反证入口见验收记录。
++3. 完成后置 `pending_review`，由不带执笔历史的新上下文核查实现、文件声明与实际证据；未完动作不得因状态调整消失。
+ 
+ ## 关闭条件
+ 
+ - **审核者与输入**：新上下文核对实现、临时仓测试、子进程及运行期反证；审核专属声明，不以未观察到引用或格式通过证明独立。
+-- **可观察验收**：上述用例可复读；散文和获准 eval 的三处判定一致，声明及共享文件不被豁免，范围违例被记录并影响复核，截断不丢判据，历史分类不被当前文件改写，override 不冒充可重建。
+-- **交付与边界**：向评级事项交付已审专属声明、T0 清单读法及旧格式规则；保留观察盲区与未完动作，不宣称依赖完整、训练成功或评级完成。剩余动作迁移须同次建立承接项。
++- **可观察验收**：真实 Git 临时仓单独修改每个声明文件及已跟踪散文，依次走真实采集、启动、复核和材料采集；声明与共享 `host_paths.py`、未知代码、配置和资产仍受保护。覆盖未跟踪、删除、双向重命名、超展示上限、声明自改、声明事后变更、旧字段缺失及材料往返；全量路径而非截断展示决定判定。无理由 override 拒绝，有理由记录偏差但不免除受保护内容归档或范围违例。
++- **声明与运行期反证**：仅正向声明具体文件，不得用目录或通配符；声明本身受保护。初始清单及每次增删在验收记录逐条检查训练侧（`rl_exp/tasks`、`rl_exp/tools/runrecord`、`launch_recipe.py`、`cfg_snapshot.py`）静态导入、`importlib` 和字符串引用，声明搜索盲区。独立进程运行 launcher 真正交接及 fork 训练器调用的 `manifest.begin`；导入任一声明文件须失败，注入引用证明守卫有效。`after_env` 按 T0 声明与 `sys.modules` 文件路径记录已观察依赖、违例影响复核；补一次真实 run 读数。未观察不作为依赖独立性证明。
++- **交付与边界**：向评级事项交付已审专属声明、T0 清单读法及旧格式规则；不新增范围版本、完整依赖集合或摘要，保留整仓事实。保留 `after_env` 后延迟导入、不进 `sys.modules` 的动态加载、被 `.gitignore` 忽略但实际读取配置等观察盲区；不宣称依赖完整、训练成功或评级完成。剩余动作迁移须同次建立承接项。
+ - **结果处理**：通过审核后关闭；可修缺口退 in_progress，仅用户能解决的缺口置 blocked。
