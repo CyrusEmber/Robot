@@ -21,6 +21,8 @@ import argparse
 import csv
 import datetime
 import importlib.metadata
+from importlib.util import find_spec
+from io import BytesIO
 import json
 import math
 import os
@@ -31,6 +33,8 @@ import subprocess
 import sys
 import traceback
 import uuid
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 # Run the entire module under the guard: imports after AppLauncher can fail before main(),
 # and Kit may exit 0 during Python shutdown even without an explicit app.close().
@@ -53,10 +57,13 @@ if __name__ == "__main__":
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser(description="Locomotion eval harness runner.")
-parser.add_argument("--task", type=str, required=True, help="Registered TRAIN task id (not -Play).")
-parser.add_argument("--checkpoint", type=str, default=None, help="Policy checkpoint; omit for a zero-action smoke run.")
+parser.add_argument("--task", help="Legacy registered TRAIN task id.")
+parser.add_argument("--checkpoint", "--ckpt", help="Policy checkpoint; omit only for a legacy zero-action run.")
+parser.add_argument("--checkpoint-sha256", help=argparse.SUPPRESS)
+parser.add_argument("--exp", type=pathlib.Path, help="Experiment file for a checkpoint outside a training Run.")
+parser.add_argument("--output-dir", type=pathlib.Path, help="Output directory for standalone experiment evaluation.")
 parser.add_argument("--protocol", type=str, default="locomotion_eval_v3", help="Protocol name under protocols/.")
-parser.add_argument("--mode", type=str, default="nominal", choices=["nominal", "robust"])
+parser.add_argument("--mode", choices=["nominal", "robust"])
 parser.add_argument("--seed", type=int, default=123, help="Eval seed (pins DR realizations and resets).")
 parser.add_argument("--envs_per_terrain", type=int, default=None,
                     help="Env columns per suite terrain; default from protocol suite_layout.")
@@ -78,6 +85,23 @@ parser.add_argument("--print-suite-fingerprint", action="store_true",
                          "the machine produced.")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
+args_cli.experiment_files = None
+if args_cli.task is None:
+    if not args_cli.checkpoint:
+        parser.error("provide --ckpt for standalone evaluation or --task for legacy evaluation")
+    from ablation_harness.experiment_eval import experiment_files
+
+    checkpoint = pathlib.Path(args_cli.checkpoint).resolve()
+    try:
+        args_cli.experiment_files = experiment_files(checkpoint, args_cli.exp)
+    except (OSError, ValueError, KeyError) as exc:
+        parser.error(str(exc))
+    args_cli.checkpoint = str(checkpoint)
+    args_cli.task = args_cli.experiment_files[0].stem
+    args_cli.output_dir = args_cli.output_dir or checkpoint.parent / "evaluation" / uuid.uuid4().hex[:8] / "metrics"
+elif args_cli.exp is not None or args_cli.output_dir is not None or args_cli.checkpoint_sha256 is not None:
+    parser.error("--task cannot be combined with standalone evaluation options")
+args_cli.mode = args_cli.mode or ("robust" if args_cli.experiment_files else "nominal")
 # a -Play cfg arrives with every DR event already nulled, which silently turns
 # robust mode into nominal (dr_controller can only keep or remove events that
 # still exist) -- refuse loudly instead of publishing wrong numbers
@@ -87,13 +111,19 @@ if args_cli.task.endswith("-Play"):
         "the harness controls domain randomization itself (nominal disables it, "
         "robust keeps it at a pinned seed), so it needs a cfg with DR intact."
     )
-simulation_app = AppLauncher(args_cli).app
+if args_cli.experiment_files and find_spec("isaacsim") is None:
+    raise SystemExit("Isaac Sim/Kit is unavailable. PhysX evaluation requires it.")
+launcher = AppLauncher(args_cli)
+simulation_app = launcher.app
+if args_cli.experiment_files:
+    args_cli.device = launcher.device
 
 import gymnasium as gym  # noqa: E402
 import torch  # noqa: E402
 import yaml  # noqa: E402
 from rsl_rl.runners import OnPolicyRunner  # noqa: E402
 
+from isaaclab.envs import ManagerBasedRLEnv  # noqa: E402
 from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper, handle_deprecated_rsl_rl_cfg  # noqa: E402
 from isaaclab.utils.string import string_to_callable  # noqa: E402
 
@@ -398,14 +428,21 @@ def _round(value, digits=4):
     return value
 
 
-def _prepare_env(protocol: dict) -> tuple[object, object, str]:
+def _prepare_env(protocol: dict) -> tuple[object, object, str, tuple[BytesIO, dict, dict] | None]:
     """Env cfg from the gym registry (no hydra), suite swap, protocol timing, eval mode."""
-    spec = gym.spec(args_cli.task)
-    env_cfg = resolve_presets(string_to_callable(spec.kwargs["env_cfg_entry_point"])())
-    agent_cfg = string_to_callable(spec.kwargs["rsl_rl_cfg_entry_point"])()
-    # same legacy-cfg migration train.py does: rsl-rl >= 5 rejects the old
-    # `stochastic`/`init_noise_std` policy fields that the repo cfgs still carry
-    agent_cfg = handle_deprecated_rsl_rl_cfg(agent_cfg, importlib.metadata.version("rsl-rl-lib"))
+    pinned_checkpoint = None
+    if getattr(args_cli, "experiment_files", None):
+        from ablation_harness.experiment_eval import checkpoint_signature, checkpoint_snapshot, configurations
+
+        env_cfg, agent_cfg, legacy_task = configurations(args_cli.experiment_files)
+        stream, binding = checkpoint_snapshot(pathlib.Path(args_cli.checkpoint), args_cli.checkpoint_sha256)
+        signature = checkpoint_signature(stream, legacy_task, args_cli.device)
+        pinned_checkpoint = stream, binding, signature
+    else:
+        spec = gym.spec(args_cli.task)
+        env_cfg = resolve_presets(string_to_callable(spec.kwargs["env_cfg_entry_point"])())
+        agent_cfg = string_to_callable(spec.kwargs["rsl_rl_cfg_entry_point"])()
+        agent_cfg = handle_deprecated_rsl_rl_cfg(agent_cfg, importlib.metadata.version("rsl-rl-lib"))
 
     suite_factory = _SUITE_REGISTRY[protocol["suite"]][1]
     num_cols = int(protocol["suite_layout"]["num_cols"])
@@ -417,33 +454,46 @@ def _prepare_env(protocol: dict) -> tuple[object, object, str]:
     env_cfg.scene.num_envs = args_cli.envs_per_terrain * num_cols
     env_cfg.episode_length_s = float(protocol["episode_length_s"])
     env_cfg.seed = args_cli.seed
-    env_cfg.curriculum.terrain_levels = None  # fixed suite: no terrain roaming
+    if env_cfg.curriculum is not None:
+        env_cfg.curriculum.terrain_levels = None  # fixed suite: no terrain roaming
     if args_cli.device is not None:
         env_cfg.sim.device = args_cli.device
-    apply_eval_mode(env_cfg, args_cli.mode)
+    apply_eval_mode(env_cfg, args_cli.mode, keep_training_noise=bool(args_cli.experiment_files))
     # The suite as the harness built it, digestible before the simulator starts: the check that can
     # refuse a wrong ground without paying for an app launch.
     from rl_exp.tools.verify import cfg_snapshot
 
     suite_cfg_digest = cfg_snapshot.digest(cfg_snapshot.snapshot(env_cfg.scene.terrain))
-    return env_cfg, agent_cfg, suite_cfg_digest
+    return env_cfg, agent_cfg, suite_cfg_digest, pinned_checkpoint
 
 
-def _make_policy(wrapper, mbenv, agent_cfg, device, rec: dict) -> tuple[object, str]:
+def _make_policy(wrapper, mbenv, agent_cfg, device, rec: dict, pinned_checkpoint=None) -> tuple[object, str]:
     """Trained checkpoint policy or zero-action smoke policy.
 
-    The checkpoint is hashed **here, at load**, into the record: this is the file the run
-    actually loaded, and the digest is re-read immediately after ``load`` so a checkpoint
-    overwritten while the run is in flight reads as a mismatch instead of being certified by
-    whatever sits at that path at the end (``record.read_state`` voids such a record).
+    Standalone evaluation loads the bytes checked by the interface signature.
+    Legacy evaluation retains its pre/post-load file digest record.
     """
     if args_cli.checkpoint is not None:
         agent_cfg.seed = args_cli.seed
-        runner = OnPolicyRunner(wrapper, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
-        before = record.checkpoint_digest(args_cli.checkpoint)
-        runner.load(args_cli.checkpoint)
+        if pinned_checkpoint is not None:
+            from ablation_harness.experiment_eval import check_signature, interface_signature
+
+            stream, before, expected = pinned_checkpoint
+            actual = interface_signature(mbenv)
+            check_signature(expected, actual)
+            rec["interface_signature"] = actual
+        runner = OnPolicyRunner(wrapper, agent_cfg.to_dict(), log_dir=None,
+                                device=device if pinned_checkpoint is not None else agent_cfg.device)
+        if pinned_checkpoint is not None:
+            stream.seek(0)
+            runner.load(stream, map_location=device)
+            loaded_digest = before["sha256"]
+        else:
+            before = record.checkpoint_digest(args_cli.checkpoint)
+            runner.load(args_cli.checkpoint)
+            loaded_digest = record.file_sha256(before["resolved"])
         rec["policy"] = {"kind": "checkpoint"}
-        rec["checkpoint"] = {**before, "sha256_after_load": record.file_sha256(before["resolved"])}
+        rec["checkpoint"] = {**before, "sha256_after_load": loaded_digest}
         return runner.get_inference_policy(device=device), args_cli.checkpoint
     action_dim = mbenv.action_manager.total_action_dim
     rec["policy"] = {"kind": "zero_action", "action_dim": int(action_dim)}
@@ -614,10 +664,11 @@ def _analyze(rollout: dict, protocol: dict, tilt_cos_min: float, clearance_min: 
     energy_per_m = (energy_total / travelled.clamp(min=0.1)).mean().item()
 
     step_axis = torch.arange(num_steps, device=device).unsqueeze(1) * step_dt
+    windows = player.segments(num_steps * step_dt, step_dt)
     segments = [
         s for s in (
             _segment_stats(seg, lin_err, ang_err, succ, lin_vel_b, valid, step_axis)
-            for seg in player.segments(num_steps * step_dt, step_dt)
+            for seg in windows
         ) if s
     ]
 
@@ -657,6 +708,46 @@ def _analyze(rollout: dict, protocol: dict, tilt_cos_min: float, clearance_min: 
         "segments": segments,
         "terrains": terrains,
     }
+    if getattr(args_cli, "experiment_files", None):
+        samples = {}
+        for col, name in enumerate(terrain_names):
+            subset = rollout["terrain_types"] == col
+            terrain_valid = valid[:, subset]
+            rows = []
+            for segment in windows:
+                window = ((step_axis >= segment["start_s"]) & (step_axis < segment["end_s"])).squeeze(1)
+                mask = terrain_valid[window]
+                row = {"name": segment["name"], "window_s": [segment["start_s"], segment["end_s"]],
+                       "valid_steps": int(mask.sum()), "valid_envs": int(mask.any(dim=0).sum())}
+                if row["valid_steps"]:
+                    row["lin_mae_mps"] = float(lin_err[window][:, subset][mask].mean())
+                    row["ang_mae_radps"] = float(ang_err[window][:, subset][mask].mean())
+                    if all(v == 0.0 for v in segment["cmd"]):
+                        speed = torch.linalg.vector_norm(lin_vel_b[window][:, subset, :2], dim=-1)
+                        row["stop_mean_residual_mps"] = float(speed[mask].mean())
+                else:
+                    row.update(lin_mae_mps=None, ang_mae_radps=None, missing_reason="no valid samples")
+                rows.append(row)
+            samples[name] = {"envs": int(subset.sum()), "segments": rows}
+        result["report_only"] = {
+            "samples_by_terrain": samples,
+            "early_terminations": int((first_done < num_steps - 1).sum()),
+            "foot_support_and_swing": {"value": None, "missing_reason": "no validated numeric collector in this rollout"},
+            "non_foot_support": {"value": None, "missing_reason": "no validated numeric collector in this rollout"},
+            "body_tail_coordination": {"value": None, "missing_reason": "requires video review"},
+        }
+        if clearance is None:
+            result["report_only"]["fall_clearance"] = {
+                "value": None, "missing_reason": "no height scanner; measured fall rate uses tilt only"
+            }
+        if not any(all(v == 0.0 for v in segment["cmd"]) for segment in windows):
+            result["report_only"]["stop_residual"] = {"value": None, "missing_reason": "no stop segment in protocol"}
+        result["protocol_judgment"] = {
+            "tracking_success_rate": result["global"]["success_rate"],
+            "tracking_step_thresholds": [m_cfg["tracking_lin_threshold_mps"], m_cfg["tracking_ang_threshold_radps"]],
+            "overall_pass": None,
+            "reason": "the protocol defines per-step criteria, not an overall pass threshold",
+        }
 
     recovery = None
     if push is not None:
@@ -675,14 +766,18 @@ def _analyze(rollout: dict, protocol: dict, tilt_cos_min: float, clearance_min: 
             falls & (first_done > push_step)
         ).float().sum().item() / max(int(surviving.numel()), 1)
         recovery["measured_envs"] = int(surviving.numel())
+        if getattr(args_cli, "experiment_files", None) and not math.isfinite(recovery["recovery_time_mean_s"]):
+            recovery["missing_reason"] = "no recovery samples" if surviving.numel() == 0 else "no environment recovered"
         result["recovery"] = recovery
+    elif getattr(args_cli, "experiment_files", None) and args_cli.mode == "robust":
+        result["recovery"] = {"measured_envs": 0, "missing_reason": "protocol does not declare a recovery push"}
 
     return result, segments, recovery
 
 
 def _run_dir(run_id: str) -> pathlib.Path:
     """Where this run's artifacts live: protocol dir, optional campaign group, run_id."""
-    return record.run_dir(_RESULTS_ROOT, args_cli.protocol, args_cli.group, run_id)
+    return getattr(args_cli, "output_dir", None) or record.run_dir(_RESULTS_ROOT, args_cli.protocol, args_cli.group, run_id)
 
 
 def _occupied_refusal(out_dir: pathlib.Path, rec: dict) -> str | None:
@@ -746,6 +841,16 @@ def _atomic_write_json(path: pathlib.Path, payload) -> None:
     with open(tmp, "w", encoding="utf-8") as handle:
         json.dump(payload, handle, indent=2, ensure_ascii=False)
     os.replace(tmp, path)
+
+
+def _null_nonfinite(value):
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    if isinstance(value, dict):
+        return {key: _null_nonfinite(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_null_nonfinite(item) for item in value]
+    return value
 
 
 def _persist(result: dict, segments: list, recovery: dict | None, run_id: str, tag: str, rec: dict,
@@ -861,7 +966,7 @@ def main():
     protocol = _load_protocol(args_cli.protocol)
     terrain_names = _SUITE_REGISTRY[protocol["suite"]][0]
 
-    env_cfg, agent_cfg, suite_cfg_digest = _prepare_env(protocol)
+    env_cfg, agent_cfg, suite_cfg_digest, pinned_checkpoint = _prepare_env(protocol)
     # Step one of the suite lock: the cfg is the harness' own declaration, so a mismatch is
     # definitive and is answered before the simulator starts.
     cfg_lock = suite_lock.compare(protocol, suite_cfg_digest, record.UNKNOWN, _geometry_env())
@@ -874,7 +979,7 @@ def main():
     # a different terrain in every eval (work/active/verified-rebuild-rating.md ①).
     seed_rngs(suites.SUITE_SEED)
     terrain_split_probe.install()
-    gym_env = gym.make(args_cli.task, cfg=env_cfg)
+    gym_env = ManagerBasedRLEnv(cfg=env_cfg) if args_cli.experiment_files else gym.make(args_cli.task, cfg=env_cfg)
     mbenv = gym_env.unwrapped
     wrapper = RslRlVecEnvWrapper(gym_env, clip_actions=agent_cfg.clip_actions)
     robot = mbenv.scene["robot"]
@@ -950,7 +1055,7 @@ def main():
         "group": args_cli.group,
     }
 
-    policy, policy_label = _make_policy(wrapper, mbenv, agent_cfg, device, rec)
+    policy, policy_label = _make_policy(wrapper, mbenv, agent_cfg, device, rec, pinned_checkpoint)
 
     player = CommandPlayer(protocol["command_timeline"], mbenv.num_envs, device)
     cmd_term = mbenv.command_manager.get_term("base_velocity")
@@ -1019,7 +1124,11 @@ def main():
 
     # every binding now exists, so an occupied run_id or an incomplete record is refused here
     # rather than after the rollout (a mistyped --variant must not cost two minutes)
-    _guard_writes(_run_dir(run_id), rec, run_id)
+    if args_cli.experiment_files:
+        if (_run_dir(run_id) / "eval.json").exists():
+            raise FileExistsError(f"Evaluation output already exists: {_run_dir(run_id)}")
+    else:
+        _guard_writes(_run_dir(run_id), rec, run_id)
 
     rollout = _rollout(wrapper, mbenv, robot, policy, player, cmd_term, scanner,
                        center_ray, push, num_steps, step_dt, device)
@@ -1030,11 +1139,16 @@ def main():
         policy_label, num_steps, step_dt, device, push,
     )
 
-    _persist(result, segments, recovery, run_id, tag, rec,
-             terrain_evidence=evidence(terrain_record, identity={
-                 "suite": protocol["suite"], "seed": suites.SUITE_SEED,
-                 "task": args_cli.task, "protocol": args_cli.protocol, "mode": args_cli.mode,
-             }))
+    ground = evidence(terrain_record, identity={
+        "suite": protocol["suite"], "seed": suites.SUITE_SEED,
+        "task": args_cli.task, "protocol": args_cli.protocol, "mode": args_cli.mode,
+    })
+    if args_cli.experiment_files:
+        result["conditions"] = rec
+        result["terrain_evidence"] = ground
+        _atomic_write_json(_run_dir(run_id) / "eval.json", _null_nonfinite(result))
+    else:
+        _persist(result, segments, recovery, run_id, tag, rec, terrain_evidence=ground)
 
     print(f"[EVAL] protocol={result['protocol']} mode={result['mode']} run_id={run_id}")
     # v2 hook liveness: it captures one frame per reset the rollout caused, so 0 means the
@@ -1054,8 +1168,9 @@ def main():
               f"never_recovered={recovery['never_recovered_frac']:.2f}")
     # the record's own verdict, so a reader does not have to open the file to know whether
     # the conditions were all recorded (an 'unknown' value is complete, an absent one is not)
-    print(f"[EVAL] record={record.RECORD_FORMAT} state={record.read_state(rec)['state']} "
-          f"checkpoint={(rec.get('checkpoint') or {}).get('sha256') or 'none'} "
-          f"suite={rec['suite']['digest'][:19]} assets={rec['assets']['actual']['verdict']}")
-    print(f"[EVAL] wrote results/{args_cli.protocol}/{args_cli.group + '/' if args_cli.group else ''}{run_id}/eval.json")
-    print(f"[EVAL] wrote results/{args_cli.protocol}/{args_cli.group + '/' if args_cli.group else ''}{run_id}/record.json")
+    print(f"[EVAL] wrote {_run_dir(run_id) / 'eval.json'}")
+    if not args_cli.experiment_files:
+        print(f"[EVAL] record={record.RECORD_FORMAT} state={record.read_state(rec)['state']} "
+              f"checkpoint={(rec.get('checkpoint') or {}).get('sha256') or 'none'} "
+              f"suite={rec['suite']['digest'][:19]} assets={rec['assets']['actual']['verdict']}")
+        print(f"[EVAL] wrote {_run_dir(run_id) / 'record.json'}")

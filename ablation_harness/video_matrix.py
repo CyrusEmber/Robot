@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.metadata
+from importlib.util import find_spec
 import json
 import math
 import os
@@ -212,6 +213,7 @@ def record_cell(cell: dict, args) -> dict:
     import gymnasium as gym
     import imageio
     import torch
+    from isaaclab.envs import ManagerBasedRLEnv
     from isaaclab.utils.string import string_to_callable
     from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper, handle_deprecated_rsl_rl_cfg
     from isaaclab_tasks.utils.hydra import resolve_presets
@@ -221,18 +223,26 @@ def record_cell(cell: dict, args) -> dict:
     from ablation_harness.components.command_player import CommandPlayer
     from ablation_harness.components.dr_controller import apply_eval_mode
 
-    import rl_exp.tasks  # noqa: F401  (registers the tasks)
+    files = getattr(args, "experiment_files", None)
+    if files:
+        from ablation_harness.experiment_eval import check_signature, interface_signature
 
-    spec = gym.spec(args.task)
-    cfg = resolve_presets(string_to_callable(spec.kwargs["env_cfg_entry_point"])())
-    agent_cfg = string_to_callable(spec.kwargs["rsl_rl_cfg_entry_point"])()
-    agent_cfg = handle_deprecated_rsl_rl_cfg(agent_cfg, importlib.metadata.version("rsl-rl-lib"))
+        cfg = args.base_env_cfg.copy()
+        agent_cfg = args.base_runner_cfg.copy()
+    else:
+        import rl_exp.tasks  # noqa: F401  (registers the tasks)
+
+        spec = gym.spec(args.task)
+        cfg = resolve_presets(string_to_callable(spec.kwargs["env_cfg_entry_point"])())
+        agent_cfg = string_to_callable(spec.kwargs["rsl_rl_cfg_entry_point"])()
+        agent_cfg = handle_deprecated_rsl_rl_cfg(agent_cfg, importlib.metadata.version("rsl-rl-lib"))
     speed = cell["speed"]
     command_box = [float(v) for v in cfg.commands.base_velocity.ranges.lin_vel_x]
 
     cfg.scene.terrain = gear_terrain(cell["terrain"], cfg.scene.terrain)
     suites.bind_head_ground_to_terrain(cfg)
-    cfg.curriculum.terrain_levels = None
+    if cfg.curriculum is not None:
+        cfg.curriculum.terrain_levels = None
     cfg.scene.num_envs = args.num_envs
     cfg.seed = args.seed
     cfg.episode_length_s = args.seconds
@@ -243,12 +253,15 @@ def record_cell(cell: dict, args) -> dict:
         cfg.viewer.eye = tuple(args.eye)
         cfg.viewer.lookat = tuple(args.lookat)
 
-    env = gym.make(args.task, cfg=cfg, render_mode="rgb_array")
+    env = (ManagerBasedRLEnv(cfg=cfg, render_mode="rgb_array") if files
+           else gym.make(args.task, cfg=cfg, render_mode="rgb_array"))
     wrapper = None
     clip = pathlib.Path(args.out_dir) / f"{speed:g}mps_{cell['terrain']}.mp4"
     try:
         wrapper = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
         live = env.unwrapped
+        if files:
+            check_signature(args.expected_signature, interface_signature(live))
         steps = round(args.seconds / live.step_dt)
         cmd_term = live.command_manager.get_term("base_velocity")
         player = CommandPlayer([{"t": 0.0, "vx": speed}], live.num_envs, live.device)
@@ -256,7 +269,13 @@ def record_cell(cell: dict, args) -> dict:
         start = robot.data.root_pos_w.torch.clone()
 
         runner = OnPolicyRunner(wrapper, agent_cfg.to_dict(), log_dir=None, device=live.device)
-        runner.load(args.checkpoint)
+        if files:
+            args.checkpoint_stream.seek(0)
+            runner.load(args.checkpoint_stream, map_location=live.device)
+            checkpoint = args.checkpoint_binding
+        else:
+            runner.load(args.checkpoint)
+            checkpoint = record_mod.checkpoint_digest(args.checkpoint)
         policy = runner.get_inference_policy(device=live.device)
 
         obs = wrapper.get_observations()
@@ -319,7 +338,7 @@ def record_cell(cell: dict, args) -> dict:
             "forward_speed_mps": round(peak_forward / args.seconds, 4),
             "net_forward_m": round(net_forward, 4),
             "resets": resets, "first_reset_s": first_reset_s,
-            "checkpoint": record_mod.checkpoint_digest(args.checkpoint),
+            "checkpoint": checkpoint,
             "clip": str(clip), "clip_bytes": clip.stat().st_size if clip.exists() else 0,
             "camera": {"follow": args.follow, "camera_prim": camera_prim,
                        "eye": [float(v) for v in args.eye], "lookat": [float(v) for v in args.lookat],
@@ -341,6 +360,8 @@ def run(args) -> dict:
     if args.dry_run:
         return {"dry_run": True, "cells": matrix}
     shots = []
+    args.out_dir.mkdir(parents=True, exist_ok=True)
+    manifest = {"task": args.task, "seed": args.seed, "cells": shots}
     for cell in matrix:
         view = cell["view"]
         shot_args = argparse.Namespace(**vars(args))
@@ -350,10 +371,8 @@ def run(args) -> dict:
         shot_args.out_dir = pathlib.Path(args.out_dir) if view == "custom" else pathlib.Path(args.out_dir) / view
         print(f"[VIDEO-MATRIX] shooting {cell['speed']:g} m/s on {cell['terrain']} ({view})", flush=True)
         shots.append({**record_cell(cell, shot_args), "view": view})
-    # Save all completed clips before encoding: a failed encoder must not erase their index.
-    args.out_dir.mkdir(parents=True, exist_ok=True)
-    manifest = {"task": args.task, "seed": args.seed, "cells": shots}
-    (args.out_dir / "matrix.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        # Keep completed clips indexed if a later cell or the encoder fails.
+        (args.out_dir / "matrix.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     return {"cells": shots, "grids": compose_grids(shots, args)}
 
 
@@ -362,7 +381,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--task", default="Lizard2-Flat-Play-v3")
-    parser.add_argument("--checkpoint", help="policy checkpoint; required unless --dry-run")
+    parser.add_argument("--checkpoint", "--ckpt", help="policy checkpoint; required unless --dry-run")
+    parser.add_argument("--checkpoint-sha256", help=argparse.SUPPRESS)
+    parser.add_argument("--from-run", action="store_true", help="Read the experiment from the checkpoint's Run.")
+    parser.add_argument("--exp", type=pathlib.Path, help="Standalone experiment for a historical checkpoint.")
     parser.add_argument("--speeds", default="0.5,1.5,3", help="comma-separated target speeds [m/s] (grid rows)")
     parser.add_argument("--terrains", default=PLANE,
                         help="comma-separated terrain gears: plane, or any suite column name")
@@ -397,13 +419,37 @@ def main() -> None:
         parser.error("--seconds must be positive")
     if not args.dry_run and not args.checkpoint:
         parser.error("--checkpoint is required to shoot a clip")
+    if args.checkpoint_sha256 is not None and not (args.from_run or args.exp is not None):
+        parser.error("--checkpoint-sha256 requires --from-run or --exp")
     if args.dry_run:
         print(json.dumps(run(args), indent=2))
         return
+    if args.from_run or args.exp is not None:
+        from ablation_harness.experiment_eval import experiment_files
+
+        checkpoint = pathlib.Path(args.checkpoint).resolve()
+        try:
+            args.experiment_files = experiment_files(checkpoint, args.exp)
+        except (OSError, ValueError, KeyError) as exc:
+            parser.error(str(exc))
+        args.checkpoint = str(checkpoint)
+        args.task = args.experiment_files[0].stem
     # rgb_array frames come from the recorder, which needs cameras regardless of --headless.
     args.enable_cameras = True
-    app = AppLauncher(args).app
+    if find_spec("isaacsim") is None:
+        raise SystemExit("Isaac Sim/Kit is unavailable. Video recording requires it.")
+    launcher = AppLauncher(args)
+    app = launcher.app
     try:
+        if args.from_run or args.exp is not None:
+            from ablation_harness.experiment_eval import checkpoint_signature, checkpoint_snapshot, configurations
+
+            args.base_env_cfg, args.base_runner_cfg, legacy_task = configurations(args.experiment_files)
+            args.base_env_cfg.sim.device = launcher.device
+            args.checkpoint_stream, args.checkpoint_binding = checkpoint_snapshot(
+                pathlib.Path(args.checkpoint), args.checkpoint_sha256
+            )
+            args.expected_signature = checkpoint_signature(args.checkpoint_stream, legacy_task, launcher.device)
         # Gears are validated only now: naming a suite column imports the suite, and that import
         # chain must not run before the app, or Kit's own USD stack comes up poisoned (pitfalls P003).
         manifest = run(args)

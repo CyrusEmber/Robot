@@ -48,8 +48,8 @@ _SPECIAL = "<>|&"
 #: pattern scan only catches the name someone already thought of (see the module docstring).
 DECLARED_ROOT = (
     ".codemaker", ".git", ".gitattributes", ".gitignore", "AGENTS.md", "ARCH_PLAN.md",
-    "FILEMAP.md", "README.md", "ablation_harness", "acceptance", "hooks", "papers",
-    "paths.example.yaml", "rl_exp", "setup.bat", "work",
+    "FILEMAP.md", "README.md", "ablation_harness", "acceptance", "eval.cmd", "hooks", "papers",
+    "paths.example.yaml", "rl_exp", "setup.bat", "train.cmd", "work",
 )
 #: Entries that come and go without anyone deciding anything: the machine-local path config
 #: (``paths.yaml``, git-ignored) and the pytest cache. Absent on a fresh clone, and neither is a
