@@ -4,7 +4,7 @@ title: Lizard2 v7 最小实验闭环与文档流程
 scope: rl_exp, ablation_harness, work, acceptance, README.md, AGENTS.md, .codemaker/rules, hooks
 status: open
 landing: rl_exp, ablation_harness, README.md, work, acceptance
-next: 实现者保留旧入口作对照，接通圆足 v7 的训练、PLAY、评测与录像。
+next: 定义圆足 v7 机体，引用现有圆足 USD/URDF 和网格，声明动作关节顺序、执行器分组和默认 PD。
 close_when: 核对删旧后的 v7 训评、普通试错零手写收尾与已采纳基线的回放。
 ---
 
@@ -43,6 +43,12 @@ close_when: 核对删旧后的 v7 训评、普通试错零手写收尾与已采�
 README 给出四步用法。切换文档流程时，同次更新 `AGENTS.md`、`FILEMAP.md`、`HARNESS.md` 与训后模板，撤下逐 Run 手抄表和普通实验的逐片填表义务（仅采纳基线时写进验收记录）；同步调整 work-ledger、versioning、`check_work_docs.py`、`check_version_docs.py` 及其 `hooks/pre-commit`/离线调用。普通改参免建 PLAN/NOTES 等版本材料，简短待办免脚手架、预算、强制复审与关闭搬运。沿用已有历史记录，无需回填或重分类。精简 B 中的 pytest 耗时、台账成本与批量补历史 tag 试点退出本次实施路径。
 
 ## 实施与验收
+
+### 第一步：定义圆足 v7 机体
+
+在 `rl_exp/robots/lizard2_round_feet.py` 引用现有圆足 USD/URDF 和网格，声明动作关节顺序、执行器分组和默认 PD。
+
+### 后续验收
 
 1. **保留旧入口做一次 v7 对照。** 使用现有 Run `2026-11-03_17-07-29/model_5999.pt`。有同条件旧结果就复用，缺失才用旧 `Lizard2-Flat-v7` 补跑。新入口加载同一权重跑 PLAY，核对同输入的首帧观测、首步动作；交换同宽观测项或动作关节时应拒载。固定资产、框架、协议、seed、环境数、命令段与采样窗口，跑一轮 robust eval，比较有效样本、平地指标与协议判定，其他地形分列。逐片看九宫格，解释影响判定或步态的差异；缺有效样本时对齐仍待验证。[v7 Run 位置](../../rl_exp/versions/lizard2/main/v7/NOTES.md)
 2. **证明训练入口能写出可用权重。** 从新入口完成一次 PPO 更新，核对实际生效值、Run 留痕、指标有限值，以及新 checkpoint 保存和重载推理。这个测试只验证训练接线，v7 行为对照始终使用第一步的同一权重。
