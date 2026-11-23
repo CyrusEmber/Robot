@@ -14,12 +14,8 @@ run sees the identical draws.
 from __future__ import annotations
 
 
-# event names that constitute domain randomization / disturbance (mode="startup"
-# physics randomization + interval disturbances). Tasks without a name are
-# skipped, so this works for any env cfg built on the velocity task family.
-# KEEP IN SYNC with rl_exp/tasks/play_utils.py -- every PLAY cfg disables
-# the same list; adding a DR event without updating both silently breaks
-# deterministic evaluation.
+# Event names that constitute domain randomization or interval disturbances.
+# Absent terms are skipped so this works across tasks with or without DR.
 _DR_EVENT_NAMES = [
     "physics_material",
     "add_base_mass",
@@ -30,9 +26,6 @@ _DR_EVENT_NAMES = [
     "randomize_joint_params",
     "base_external_force_torque",
     "push_robot",
-    # v12 (versions/lizard/v12/PLAN.md): nominal eval must also come without
-    # friction dips and with clean height rings (NoisyFootRing returns
-    # uncorrupted scans once the state event is gone)
     "foot_friction_dip",
     "sample_ring_noise",
 ]
@@ -56,9 +49,7 @@ def apply_eval_mode(env_cfg, mode: str) -> None:
     else:
         raise ValueError(f"Unknown eval mode: {mode!r} (expected 'nominal' or 'robust')")
 
-    # corruption on every present obs group (v1/v2: single "policy" group;
-    # v3: proprio/extero/priv -- the retired policy group is None), same
-    # iteration discipline as play_utils.apply_play_wiring
+    # Enable observation corruption on every active observation group in robust mode.
     for group in vars(env_cfg.observations).values():
         if group is not None:
             group.enable_corruption = mode == "robust"

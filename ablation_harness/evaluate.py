@@ -34,7 +34,7 @@ def _run(command: list[str], output: Path, log_name: str) -> int:
 
 
 def evaluate(checkpoint: Path, protocol: str, mode: str = "robust", *, exp: Path | None = None,
-             seed: int = 123, device: str | None = None) -> int:
+             seed: int = 123, device: str | None = None, allow_drift: bool = False) -> int:
     """Collect metrics and video, returning nonzero if either child fails."""
     checkpoint = checkpoint.resolve()
     source = experiment_source(checkpoint, experiment_files(checkpoint, exp))
@@ -55,6 +55,8 @@ def evaluate(checkpoint: Path, protocol: str, mode: str = "robust", *, exp: Path
               "--seed", str(seed), "--viz", "none"]
     if device is not None:
         common += ["--device", device]
+    if allow_drift:
+        common += ["--allow-drift"]
     experiment = ["--exp", str(exp.resolve())] if exp is not None else []
 
     metrics_code = _run([sys.executable, str(_REPO / "ablation_harness/eval.py"), *common, *experiment,
@@ -96,9 +98,12 @@ def main() -> int:
     parser.add_argument("--exp", type=Path)
     parser.add_argument("--seed", type=int, default=123)
     parser.add_argument("--device")
+    parser.add_argument("--allow-drift", action="store_true",
+                        help="Allow evaluation when training-time inference config differs from the Run.")
     args = parser.parse_args()
     try:
-        return evaluate(args.ckpt, args.protocol, args.mode, exp=args.exp, seed=args.seed, device=args.device)
+        return evaluate(args.ckpt, args.protocol, args.mode, exp=args.exp, seed=args.seed,
+                        device=args.device, allow_drift=args.allow_drift)
     except (OSError, ValueError, KeyError) as exc:
         parser.error(str(exc))
 

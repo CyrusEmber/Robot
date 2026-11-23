@@ -53,6 +53,8 @@ parser.add_argument("--protocol", default="locomotion_eval_v3")
 parser.add_argument("--mode", choices=("nominal", "robust"), default="robust")
 parser.add_argument("--seed", type=int, default=123)
 parser.add_argument("--envs_per_terrain", type=int, help="Environments per terrain. Defaults to the protocol value.")
+parser.add_argument("--allow-drift", action="store_true",
+                    help="Allow evaluation when training-time inference config differs from the Run.")
 parser.add_argument("--print-suite-fingerprint", action="store_true")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
@@ -287,11 +289,20 @@ def _perturbation_reference(protocol: dict, push) -> dict | None:
     }
 
 
-def _prepare_env(protocol: dict) -> tuple[object, object, str, tuple[BytesIO, dict, dict], dict]:
+def _prepare_env(protocol: dict) -> tuple[object, object, str, tuple[BytesIO, dict, dict], dict, dict]:
     """Load the experiment and apply the evaluation protocol."""
-    from ablation_harness.experiment_eval import checkpoint_signature, checkpoint_snapshot, configurations
+    from ablation_harness.experiment_eval import (
+        checkpoint_signature,
+        checkpoint_snapshot,
+        configurations,
+        height_scanner_prim_path,
+    )
 
-    env_cfg, agent_cfg, assets = configurations(args_cli.experiment_files)
+    env_cfg, agent_cfg, assets, config_check, experiment = configurations(
+        args_cli.experiment_files,
+        checkpoint=args_cli.checkpoint,
+        allow_drift=args_cli.allow_drift,
+    )
     stream, binding = checkpoint_snapshot(args_cli.checkpoint, args_cli.checkpoint_sha256)
     pinned_checkpoint = stream, binding, checkpoint_signature(stream, binding)
 
@@ -314,7 +325,7 @@ def _prepare_env(protocol: dict) -> tuple[object, object, str, tuple[BytesIO, di
 
     # Evaluation-only ground clearance at the root XY. It stays outside the policy inputs.
     env_cfg.scene.height_scanner = RayCasterCfg(
-        prim_path=f"{env_cfg.scene.robot.prim_path}/Geometry/base_link",
+        prim_path=height_scanner_prim_path(env_cfg, experiment),
         offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 20.0)),
         ray_alignment="world", mesh_prim_paths=["/World/ground"],
         pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=(0.0, 0.0)),
@@ -324,7 +335,7 @@ def _prepare_env(protocol: dict) -> tuple[object, object, str, tuple[BytesIO, di
     from ablation_harness import cfg_snapshot
 
     suite_cfg_digest = cfg_snapshot.digest(cfg_snapshot.snapshot(env_cfg.scene.terrain))
-    return env_cfg, agent_cfg, suite_cfg_digest, pinned_checkpoint, assets
+    return env_cfg, agent_cfg, suite_cfg_digest, pinned_checkpoint, assets, config_check
 
 
 def _make_policy(wrapper, env, agent_cfg, rec: dict, pinned_checkpoint):
@@ -570,9 +581,6 @@ def _analyze(rollout: dict, protocol: dict, tilt_cos_min: float, clearance_min: 
     result["report_only"] = {
         "samples_by_terrain": samples,
         "early_terminations": int((first_done < num_steps - 1).sum()),
-        "foot_support_and_swing": {"value": None, "missing_reason": "no validated numeric collector in this rollout"},
-        "non_foot_support": {"value": None, "missing_reason": "no validated numeric collector in this rollout"},
-        "body_tail_coordination": {"value": None, "missing_reason": "requires video review"},
     }
     hits = torch.isfinite(clearance) & valid if clearance is not None else torch.zeros_like(valid)
     result["report_only"]["fall_clearance"] = {
@@ -650,7 +658,8 @@ def main():
     terrain_names = _SUITE_REGISTRY[protocol["suite"]][0]
 
     source = experiment_source(args_cli.checkpoint, args_cli.experiment_files)
-    env_cfg, agent_cfg, suite_cfg_digest, pinned_checkpoint, assets = _prepare_env(protocol)
+    env_cfg, agent_cfg, suite_cfg_digest, pinned_checkpoint, assets, config_check = _prepare_env(protocol)
+    source["config_check"] = config_check
     # Step one of the suite lock: the cfg is the harness' own declaration, so a mismatch is
     # definitive and is answered before the simulator starts.
     cfg_lock = suite_lock.compare(protocol, suite_cfg_digest, record.UNKNOWN, _geometry_env())

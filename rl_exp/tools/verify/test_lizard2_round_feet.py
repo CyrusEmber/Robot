@@ -19,37 +19,19 @@ from rl_exp.tools.diagnose.lizard2_round_feet_probe import check_interface, chec
 
 class RoundFeetTest(unittest.TestCase):
     def test_live_task_resolves_native_presets(self):
-        import gymnasium as gym
-        import rl_exp.tasks
         from isaaclab_tasks.utils.hydra import PresetCfg
         from isaaclab_physx.sensors.contact_sensor.contact_sensor_cfg import ContactSensorCfg
+        from rl_exp import lizard2_v7
 
-        tree = ast.parse(Path(__file__).with_name('obs_protocol_live.py').read_text(encoding='utf-8'))
-        check = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'check_task')
-        end = next(i for i, n in enumerate(check.body) if isinstance(n, ast.Assign)
-                   and isinstance(n.targets[0], ast.Name) and n.targets[0].id == 'env_cfg')
-        construction = check.body[:end + 1]
-        legacy = copy.deepcopy(construction)
-        legacy[-1].value = ast.parse(
-            'getattr(__import__(module_name, fromlist=[cls_name]), cls_name)()').body[0].value
-        for task in ('Lizard2-Flat-v7', 'Lizard2-Flat-Play-v7'):
-            for unresolved, statements in ((False, construction), (True, legacy)):
-                with self.subTest(task=task, unresolved=unresolved):
-                    scope = dict(gym=gym, task_id=task)
-                    exec(compile(ast.fix_missing_locations(ast.Module(body=statements, type_ignores=[])),
-                                 '<check_task config construction>', 'exec'), scope)
-                    sensor = scope['env_cfg'].scene.head_ground_contact
-                    if unresolved:
-                        self.assertIsInstance(sensor, PresetCfg)
-                        with self.assertRaises(AssertionError):
-                            self.assertIsInstance(sensor, ContactSensorCfg)
-                    else:
-                        self.assertIsInstance(sensor, ContactSensorCfg)
-                        self.assertNotIsInstance(sensor, PresetCfg)
-                        self.assertEqual(sensor.prim_path, '{ENV_REGEX_NS}/Robot/Geometry/neck_pitch')
-                        self.assertEqual(sensor.history_length, 4)
-                        self.assertEqual(sensor.filter_prim_paths_expr,
-                                         ['/World/ground/terrain/GroundPlane/CollisionPlane'])
+        for play in (False, True):
+            with self.subTest(play=play):
+                sensor = lizard2_v7.make_env_cfg(play=play).scene.head_ground_contact
+                self.assertIsInstance(sensor, ContactSensorCfg)
+                self.assertNotIsInstance(sensor, PresetCfg)
+                self.assertEqual(sensor.prim_path, '{ENV_REGEX_NS}/Robot/Geometry/neck_pitch')
+                self.assertEqual(sensor.history_length, 4)
+                self.assertEqual(sensor.filter_prim_paths_expr,
+                                 ['/World/ground/terrain/GroundPlane/CollisionPlane'])
 
     def _formal_stimulus(self):
         import types

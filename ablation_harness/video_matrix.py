@@ -382,6 +382,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--lookat", type=float, nargs=3, default=None,
                         help="camera target [m]: offset from the robot when --follow, world point otherwise")
     parser.add_argument("--out_dir", type=pathlib.Path, default=DEFAULT_OUT_DIR)
+    parser.add_argument("--allow-drift", action="store_true",
+                        help="Allow recording when training-time inference config differs from the Run.")
     parser.add_argument("--dry_run", action="store_true",
                         help="print the matrix and exit; launches no simulator")
     return parser
@@ -420,7 +422,10 @@ def main() -> None:
     try:
         from ablation_harness.experiment_eval import checkpoint_signature, checkpoint_snapshot, configurations
 
-        args.base_env_cfg, args.base_runner_cfg, _ = configurations(files, play=True)
+        args.base_env_cfg, args.base_runner_cfg, _, config_check, _ = configurations(
+            files, play=True, checkpoint=checkpoint, allow_drift=args.allow_drift
+        )
+        args.experiment_source["config_check"] = config_check
         args.base_env_cfg.sim.device = launcher.device
         args.checkpoint_stream, args.checkpoint_binding = checkpoint_snapshot(checkpoint, args.checkpoint_sha256)
         args.expected_signature = checkpoint_signature(args.checkpoint_stream, args.checkpoint_binding)

@@ -15,6 +15,13 @@ _ASSET_DIR = Path(__file__).resolve().parents[1] / "lizard2_round_feet"
 USD_PATH = _ASSET_DIR / "lizard2_round_feet.usda"
 URDF_PATH = _ASSET_DIR / "lizard2_round_feet.urdf"
 
+ROOT_BODY_PRIM = "Geometry/base_link"
+BELLY_BODY = "base_link"
+CHEST_BODY = "chest_pitch"
+HEAD_BODY = "neck_pitch"
+HEAD_BODY_PRIM = f"{{ENV_REGEX_NS}}/Robot/Geometry/{HEAD_BODY}"
+NOMINAL_WEIGHT_N = 706.0
+
 # Each row specifies the joint name, default stiffness and default damping.
 # The order within each group is the default action column order.
 _LEG_DRIVES = (
@@ -52,6 +59,64 @@ LEG_ACTION_JOINTS = tuple(joint for joint, _, _ in _LEG_DRIVES)
 SPINE_ACTION_JOINTS = tuple(joint for joint, _, _ in _SPINE_DRIVES)
 ACTION_JOINTS = LEG_ACTION_JOINTS + SPINE_ACTION_JOINTS
 
+# Default action scale and symmetric clip bound per joint [rad].
+ACTION_SCALE = {
+    "lf_shoulder_swing_joint": 0.19999999999999998,
+    "lf_shoulder_abduct_joint": 0.19999999999999998,
+    "lf_shoulder_twist_joint": 0.17453292519943295,
+    "lf_elbow_joint": 0.39999999999999997,
+    "rf_shoulder_swing_joint": 0.19999999999999998,
+    "rf_shoulder_abduct_joint": 0.19999999999999998,
+    "rf_shoulder_twist_joint": 0.17453292519943295,
+    "rf_elbow_joint": 0.39999999999999997,
+    "rl_hip_swing_joint": 0.19999999999999998,
+    "rl_hip_abduct_joint": 0.19999999999999998,
+    "rl_hip_twist_joint": 0.17453292519943295,
+    "rl_knee_joint": 0.39999999999999997,
+    "rr_hip_swing_joint": 0.19999999999999998,
+    "rr_hip_abduct_joint": 0.19999999999999998,
+    "rr_hip_twist_joint": 0.17453292519943295,
+    "rr_knee_joint": 0.39999999999999997,
+    "chest_yaw_joint": 0.19999999999999998,
+    "chest_pitch_joint": 0.16666666666666666,
+    "neck_yaw_joint": 0.19999999999999998,
+    "neck_pitch_joint": 0.16666666666666666,
+    "tail1_yaw_joint": 0.19999999999999998,
+    "tail1_pitch_joint": 0.16666666666666666,
+    "tail2_yaw_joint": 0.19999999999999998,
+    "tail2_pitch_joint": 0.16666666666666666,
+    "tail3_yaw_joint": 0.19999999999999998,
+    "tail3_pitch_joint": 0.16666666666666666,
+}
+ACTION_CLIP = {
+    "lf_shoulder_swing_joint": 0.6,
+    "lf_shoulder_abduct_joint": 0.6,
+    "lf_shoulder_twist_joint": 0.5235987755982988,
+    "lf_elbow_joint": 1.0,
+    "rf_shoulder_swing_joint": 0.6,
+    "rf_shoulder_abduct_joint": 0.6,
+    "rf_shoulder_twist_joint": 0.5235987755982988,
+    "rf_elbow_joint": 1.0,
+    "rl_hip_swing_joint": 0.6,
+    "rl_hip_abduct_joint": 0.6,
+    "rl_hip_twist_joint": 0.5235987755982988,
+    "rl_knee_joint": 1.2,
+    "rr_hip_swing_joint": 0.6,
+    "rr_hip_abduct_joint": 0.6,
+    "rr_hip_twist_joint": 0.5235987755982988,
+    "rr_knee_joint": 1.2,
+    "chest_yaw_joint": 0.6,
+    "chest_pitch_joint": 0.5,
+    "neck_yaw_joint": 0.6,
+    "neck_pitch_joint": 0.5,
+    "tail1_yaw_joint": 0.6,
+    "tail1_pitch_joint": 0.5,
+    "tail2_yaw_joint": 0.6,
+    "tail2_pitch_joint": 0.5,
+    "tail3_yaw_joint": 0.6,
+    "tail3_pitch_joint": 0.5,
+}
+
 
 def make_robot_cfg(prim_path: str = "{ENV_REGEX_NS}/Robot") -> ArticulationCfg:
     """Create a fresh round-foot articulation configuration.
@@ -68,6 +133,12 @@ def make_robot_cfg(prim_path: str = "{ENV_REGEX_NS}/Robot") -> ArticulationCfg:
             usd_path=str(USD_PATH),
             activate_contact_sensors=True,
             rigid_props=sim_utils.RigidBodyPropertiesCfg(
+                disable_gravity=False,
+                retain_accelerations=False,
+                linear_damping=0.0,
+                angular_damping=0.0,
+                max_linear_velocity=1000.0,
+                max_angular_velocity=1000.0,
                 max_depenetration_velocity=1.0,
             ),
             articulation_props=sim_utils.ArticulationRootPropertiesCfg(
@@ -90,6 +161,9 @@ def make_robot_cfg(prim_path: str = "{ENV_REGEX_NS}/Robot") -> ArticulationCfg:
                 effort_limit_sim=180.0,
                 velocity_limit_sim=10.0,
                 armature=0.0,
+                friction=0.0,
+                dynamic_friction=0.0,
+                viscous_friction=0.0,
             ),
             "spine": ImplicitActuatorCfg(
                 joint_names_expr=list(SPINE_ACTION_JOINTS),
@@ -98,6 +172,9 @@ def make_robot_cfg(prim_path: str = "{ENV_REGEX_NS}/Robot") -> ArticulationCfg:
                 effort_limit_sim=dict.fromkeys(SPINE_ACTION_JOINTS, 80.0) | {"chest_pitch_joint": 280.0},
                 velocity_limit_sim=4.0,
                 armature=0.0,
+                friction=0.0,
+                dynamic_friction=0.0,
+                viscous_friction=0.0,
             ),
         },
     )

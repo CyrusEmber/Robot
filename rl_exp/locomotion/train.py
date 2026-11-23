@@ -12,6 +12,7 @@ from importlib.metadata import version
 from importlib.util import find_spec, module_from_spec, spec_from_file_location
 from pathlib import Path
 from random import SystemRandom
+import re
 import subprocess
 import sys
 import traceback
@@ -22,6 +23,7 @@ from isaaclab.app import AppLauncher
 from rl_exp.locomotion.train_record import interface_signature, write_json, write_provenance
 
 _DEFAULT_OUTPUT = Path(__file__).resolve().parents[1] / "out" / "train"
+_CHECKPOINT_RE = re.compile(r"^model_(\d+)\.pt$")
 
 
 def _positive_int(value: str) -> int:
@@ -29,6 +31,25 @@ def _positive_int(value: str) -> int:
     if number < 1:
         raise argparse.ArgumentTypeError("must be a positive integer")
     return number
+
+
+def _strip_eval_flag(argv: list[str]) -> list[str]:
+    """Remove ``--eval`` before spawning the child training process."""
+    return [arg for arg in argv if arg != "--eval"]
+
+
+def _latest_checkpoint(run: Path) -> Path:
+    """Return the highest-iteration ``model_<int>.pt`` written in ``run``."""
+    candidates: list[tuple[int, Path]] = []
+    for path in run.iterdir():
+        if not path.is_file():
+            continue
+        match = _CHECKPOINT_RE.match(path.name)
+        if match is not None:
+            candidates.append((int(match.group(1)), path))
+    if not candidates:
+        raise FileNotFoundError(f"Training did not write any model_<int>.pt checkpoint in {run}")
+    return max(candidates, key=lambda item: item[0])[1]
 
 
 def main() -> None:
@@ -39,7 +60,8 @@ def main() -> None:
     parser.add_argument("--max-iterations", type=_positive_int, help="Override the PPO iteration count.")
     parser.add_argument("--seed", type=int, help="Override the random seed (-1 chooses a seed).")
     parser.add_argument("--output-root", type=Path, default=_DEFAULT_OUTPUT, help="Parent directory for runs.")
-    parser.add_argument("--train-only", action="store_true", help="Skip post-training metrics and recording.")
+    parser.add_argument("--eval", action="store_true", help="Run post-training metrics and video recording.")
+    parser.add_argument("--train-only", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--eval-mode", choices=("robust", "nominal"), default="robust")
     parser.add_argument("--eval-protocol", default="locomotion_eval_v3")
     parser.add_argument("--run-dir", type=Path, help=argparse.SUPPRESS)
@@ -48,13 +70,18 @@ def main() -> None:
 
     if args.exp is None:
         parser.error("--exp is required")
+    if args.eval and args.train_only:
+        parser.error("--eval and --train-only cannot be combined")
+    if args.train_only:
+        print("Warning: --train-only is deprecated (training only is now the default); pass --eval to evaluate.",
+              file=sys.stderr, flush=True)
     experiment_path = args.exp.resolve()
     if experiment_path.suffix != ".py" or not experiment_path.is_file():
         parser.error(f"--exp must point to an existing Python file: {experiment_path}")
 
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     run = args.run_dir or args.output_root.resolve() / f"{timestamp}_{uuid4().hex[:8]}"
-    if not args.train_only:
+    if args.eval:
         from ablation_harness.evaluate import PROTOCOLS, evaluate
         from ablation_harness.experiment_eval import resolved_config
 
@@ -62,8 +89,9 @@ def main() -> None:
             parser.error(f"Unknown evaluation protocol: {args.eval_protocol}")
         # Kit can terminate its Python process on shutdown. Launch evaluation
         # from the parent after the training process has released the simulator.
-        command = [sys.executable, "-m", "rl_exp.locomotion.train", *sys.argv[1:],
-                   "--train-only", "--run-dir", str(run)]
+        command = [sys.executable, "-m", "rl_exp.locomotion.train", *_strip_eval_flag(sys.argv[1:])]
+        if args.run_dir is None:
+            command += ["--run-dir", str(run)]
         code = subprocess.run(command).returncode
         if code:
             raise SystemExit(code)
@@ -71,9 +99,10 @@ def main() -> None:
         if not config_path.is_file():
             raise SystemExit(f"Training did not write its resolved configuration: {run}")
         runner = resolved_config(config_path)["runner"]
-        checkpoint = run / f"model_{runner['max_iterations'] - 1}.pt"
-        if not checkpoint.is_file():
-            raise SystemExit(f"Training did not write the final checkpoint: {checkpoint}")
+        try:
+            checkpoint = _latest_checkpoint(run)
+        except FileNotFoundError as exc:
+            raise SystemExit(str(exc)) from None
         raise SystemExit(evaluate(checkpoint, args.eval_protocol, args.eval_mode, device=runner["device"]))
 
     spec = spec_from_file_location("_robot_training_experiment", experiment_path)
@@ -100,9 +129,9 @@ def main() -> None:
     env_cfg.log_dir = str(run)
     if find_spec("isaacsim") is None:
         raise SystemExit("Isaac Sim/Kit is unavailable in this Python environment. PhysX training requires it.")
+    run.mkdir(parents=True)
     launcher = AppLauncher(args)
     try:
-        run.mkdir(parents=True)
         print(f"Run directory: {run}", flush=True)
         with ExitStack() as cleanup:
             from isaaclab.envs import ManagerBasedRLEnv
@@ -114,9 +143,9 @@ def main() -> None:
             dump_yaml(str(run / "resolved_cfg.yaml"), {"env": env_cfg.to_dict(), "runner": runner_cfg.to_dict()})
             env = ManagerBasedRLEnv(cfg=env_cfg)
             cleanup.callback(env.close)
-            write_provenance(
-                run, experiment_path, env_cfg.scene.robot.spawn.usd_path, getattr(experiment, "URDF_PATH", None)
-            )
+            robot_mod = getattr(experiment, "ROBOT", None)
+            urdf_path = getattr(robot_mod, "URDF_PATH", None) or getattr(experiment, "URDF_PATH", None)
+            write_provenance(run, experiment_path, env_cfg.scene.robot.spawn.usd_path, urdf_path)
 
             signature = interface_signature(env)
             write_json(run / "interface_signature.json", signature)

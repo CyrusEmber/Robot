@@ -297,6 +297,7 @@ class RelocationTest(unittest.TestCase):
             result = {}
             self.blocked_roots.append(EXPORT)
             with patch.object(runtime, 'ArtifactPaths', lambda: paths), \
+                    patch.object(runtime, 'check_registered_manifest', lambda *a, **k: {}), \
                     patch.dict(sys.modules, {'isaaclab.app': app}), self.isolated():
                 with self.assertRaisesRegex(RuntimeError, 'RESET_VALIDATION_REACHED_APP_BOUNDARY'):
                     runtime.reset_probe(args, result)

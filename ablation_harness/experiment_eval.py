@@ -48,8 +48,7 @@ def experiment_source(checkpoint: Path, files: tuple[Path, dict]) -> dict:
             "matches_run_copy": digest == saved_digest if saved_digest is not None else None}
 
 
-def resolved_config(path: Path) -> dict:
-    """Read a saved Isaac Lab config including its unresolved scene indices."""
+def _yaml_loader():
     import yaml
 
     class ConfigLoader(yaml.FullLoader):
@@ -59,10 +58,81 @@ def resolved_config(path: Path) -> dict:
         "tag:yaml.org,2002:python/object/apply:builtins.slice",
         lambda loader, node: slice(*loader.construct_sequence(node)),
     )
-    return yaml.load(path.read_text(encoding="utf-8"), Loader=ConfigLoader)
+    return ConfigLoader
 
 
-def configurations(files: tuple[Path, dict], *, play: bool = False):
+def resolved_config(path: Path) -> dict:
+    """Read a saved Isaac Lab config including its unresolved scene indices."""
+    import yaml
+
+    return yaml.load(path.read_text(encoding="utf-8"), Loader=_yaml_loader())
+
+
+def _normalize_yaml(data: dict) -> dict:
+    """Normalize an in-memory config dict through the same YAML round trip as ``dump_yaml``."""
+    import yaml
+
+    dumped = yaml.dump(data, default_flow_style=False, sort_keys=False)
+    return yaml.load(dumped, Loader=_yaml_loader())
+
+
+def _inference_subset(env: dict, runner: dict) -> dict:
+    """Extract training-time inference parameters that change rollout dynamics."""
+    return {
+        "robot": env["scene"]["robot"],
+        "actions": env["actions"],
+        "observations": env["observations"],
+        "sim_dt": env["sim"]["dt"],
+        "decimation": env["decimation"],
+        "clip_actions": runner.get("clip_actions"),
+        "obs_groups": runner.get("obs_groups"),
+        "actor": runner.get("actor"),
+    }
+
+
+def check_inference_config(checkpoint: Path, env_cfg, runner_cfg, *,
+                           provenance: dict | None = None, allow_drift: bool = False) -> dict:
+    """Compare training-mode inference parameters against the Run's ``resolved_cfg.yaml``."""
+    config_path = checkpoint.parent / "resolved_cfg.yaml"
+    if provenance is None:
+        prov_path = checkpoint.parent / "provenance.json"
+        provenance = json.loads(prov_path.read_text(encoding="utf-8")) if prov_path.is_file() else {}
+    if not config_path.is_file():
+        if provenance.get("experiment"):
+            message = f"Training Run is missing resolved_cfg.yaml: {config_path}"
+            if not allow_drift:
+                raise ValueError(f"{message}. Restore it or pass --allow-drift.")
+            print(f"Allowing evaluation without resolved_cfg.yaml: {message}", file=sys.stderr, flush=True)
+            return {"status": "missing", "allow_drift": True, "reason": message}
+        return {"status": "unavailable", "reason": "resolved_cfg.yaml not found"}
+    saved = resolved_config(config_path)
+    expected = _inference_subset(saved["env"], saved["runner"])
+    actual = _normalize_yaml(_inference_subset(env_cfg.to_dict(), runner_cfg.to_dict()))
+    try:
+        _require_match(expected, actual, "Training inference config")
+    except ValueError as exc:
+        if not allow_drift:
+            raise ValueError(f"{exc}. Restore the training config or pass --allow-drift.") from None
+        print(f"Allowing inference config drift: {exc}", file=sys.stderr, flush=True)
+        return {"status": "drifted", "allow_drift": True, "diff": str(exc)}
+    return {"status": "matched", "allow_drift": bool(allow_drift)}
+
+
+def experiment_urdf(experiment) -> Path | None:
+    """Resolve the robot URDF from ``experiment.ROBOT`` or a legacy module-level ``URDF_PATH``."""
+    robot = getattr(experiment, "ROBOT", None)
+    return getattr(robot, "URDF_PATH", None) or getattr(experiment, "URDF_PATH", None)
+
+
+def height_scanner_prim_path(env_cfg, experiment) -> str:
+    """Resolve the evaluation height-scanner mount prim from ``experiment.ROBOT``."""
+    robot = getattr(experiment, "ROBOT", None)
+    root_prim = getattr(robot, "ROOT_BODY_PRIM", "Geometry/base_link")
+    return f"{env_cfg.scene.robot.prim_path}/{root_prim}"
+
+
+def configurations(files: tuple[Path, dict], *, play: bool = False,
+                   checkpoint: Path | None = None, allow_drift: bool = False):
     """Construct fresh environment and runner configs for a checkpoint."""
     from isaaclab_rl.rsl_rl import handle_deprecated_rsl_rl_cfg
 
@@ -71,16 +141,23 @@ def configurations(files: tuple[Path, dict], *, play: bool = False):
     experiment = module_from_spec(spec)
     sys.modules[spec.name] = experiment
     spec.loader.exec_module(experiment)
-    env_cfg = experiment.make_env_cfg(play=True) if play else experiment.make_env_cfg()
+    train_env_cfg = experiment.make_env_cfg()
     runner_cfg = handle_deprecated_rsl_rl_cfg(experiment.make_runner_cfg(), version("rsl-rl-lib"))
-    urdf = getattr(experiment, "URDF_PATH", None)
+    config_check = (
+        check_inference_config(checkpoint, train_env_cfg, runner_cfg,
+                               provenance=provenance, allow_drift=allow_drift)
+        if checkpoint is not None
+        else {"status": "unavailable", "reason": "checkpoint not provided"}
+    )
+    env_cfg = experiment.make_env_cfg(play=True) if play else train_env_cfg
+    urdf = experiment_urdf(experiment)
     assets = asset_fingerprints(env_cfg.scene.robot.spawn.usd_path, urdf)
     for kind, asset in provenance.get("assets", {}).items():
         current = assets.get(kind, {})
         for key in ("sha256", "dependencies"):
             if key in asset and (asset[key] is None or asset[key] != current.get(key)):
                 raise ValueError(f"{kind.upper()} {key} differs from the training Run: {current.get('path')}")
-    return env_cfg, runner_cfg, assets
+    return env_cfg, runner_cfg, assets, config_check, experiment
 
 
 def checkpoint_snapshot(checkpoint: Path, expected_sha256: str | None = None) -> tuple[BytesIO, dict]:

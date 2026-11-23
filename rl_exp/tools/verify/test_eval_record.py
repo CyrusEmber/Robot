@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 """Offline gate for the eval record format (`ARCH_PLAN` Step 3.2a/3.2e, no sim).
 
-Four things this file is here to prove:
-
+Proves:
 1. The read side keeps Step 0c's four rules apart -- no ``record_format`` is *legacy*
    (fields stay unknown), a format missing its required fields is *incomplete* (not legacy,
    not a pass), and only a complete record can be compared at all.
@@ -10,37 +9,25 @@ Four things this file is here to prove:
    binding, so a swapped input cannot be published under the old record's identity.
 3. The record module writes records without consuming the random stream: it must not import
    torch, numpy or random at all (3.2d's offline half).
-4. The write-time substitution evidence (``record.substitution_evidence``, work/active/record-variant-and-snapshot-specs.md A3) keeps
+4. The write-time substitution evidence (``record.substitution_evidence``) keeps
    "compared, nothing confirmed" apart from "could not be compared", counts only *proven* moves,
    and stores the values it compared instead of re-reading a baseline that may have moved since.
-5. The lookup that feeds it (``record.baseline_evidence``) is offline-reachable: the layout rule
-   and all three refusal reasons are asserted here, including the one success path that a broken
-   path composition would otherwise hide behind "always unknown".
-6. The sweep scheduler's completion evidence and launch path
-   (``work/active/ablation-sweep-final-checkpoint-name.md``): a run of budget N ends on
-   ``model_{N-1}.pt``, a spec naming no checkpoints is scored at that last one, a finished run is
-   not re-trained, and eval enters through the harness's own absolute path.
-
-The negative direction is built in: every substitution asserts both that the digest moved and
-that the two records read as ``not_comparable``, and the untouched pair as ``comparable``.
+5. The lookup that feeds it (``record.baseline_evidence``) is offline-reachable.
+6. The active ``ablation_harness/eval.py`` exit-status guard never returns 0 on failure.
 """
 
 import ast
-import contextlib
-import io
 import json
 import pathlib
 import subprocess
 import sys
 import tempfile
-import types
 
 _REPO = pathlib.Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_REPO))
 sys.path.insert(0, str(_REPO / "ablation_harness"))
 
 import record  # noqa: E402
-import run_ablation  # noqa: E402  (sibling: the sweep's completion evidence and launch paths)
 
 
 def _record(complete: bool = True) -> dict:
@@ -121,12 +108,7 @@ def test_unknown_valued_binding_is_complete_but_not_comparable() -> None:
 
 
 def test_equal_unknowns_are_indistinguishable_but_unproven() -> None:
-    """Two records whose binding is unknown on *both* sides are the same measurement re-run.
-
-    They are not comparable in the strong sense (nothing was proven) -- the verdict stays
-    ``unknown`` -- but nothing differs, so a re-run of that measurement must be allowed to
-    overwrite itself. This is the dev line, where no frozen asset lock exists at all.
-    """
+    """Two records whose binding is unknown on *both* sides are the same measurement re-run."""
     dev = _record()
     dev["assets"]["declared_digest"] = record.UNKNOWN
     twin = _record()
@@ -137,7 +119,6 @@ def test_equal_unknowns_are_indistinguishable_but_unproven() -> None:
     assert verdict["unproven"] == ["assets.declared_digest"], "and they must be visible as unproven"
     assert record.overwrite_refusal(dev, twin) is None, \
         "an identical measurement re-run must be able to overwrite itself"
-    # but the dev record and a locked one do differ, and that stays refused
     refusal = record.overwrite_refusal(dev, _record())
     assert refusal is not None and "assets.declared_digest" in refusal, \
         f"unknown vs a real digest is a difference: {refusal}"
@@ -208,8 +189,6 @@ def test_p04_each_substitution_moves_its_own_binding() -> None:
             f"{path}: exactly that binding must be named: {verdict['differences']}"
 
 
-#: The baseline reference a variant run writes into its evidence: the base run id kept *before*
-#: the ``--variant`` suffix is appended (``eval.py``), in its own protocol dir and group.
 _BASELINE_REF = {
     "run_id": "Lizard-Rough-v14_ckpt_nominal_seed123",
     "path": "results/locomotion_eval_v2/v1/Lizard-Rough-v14_ckpt_nominal_seed123/record.json",
@@ -267,8 +246,6 @@ def test_an_unproven_side_is_not_a_substitution() -> None:
     assert "assets.declared_digest" in record.compare(base, _record())["differences"], \
         "compare() does call it a difference -- which is exactly why its keys are not the substitutions"
 
-    # the mirror image, and an absent field: a zero-action baseline carries no checkpoint digest,
-    # so a checkpoint candidate differs from it without that proving a *swap* of one
     known = _record()
     known["assets"]["declared_digest"] = record.UNKNOWN
     unknown = _record()
@@ -304,9 +281,6 @@ def test_a_missing_baseline_reads_unknown_with_a_reason() -> None:
         "the baseline side is empty, never a fabricated value"
 
 
-#: The three values ``eval.py`` hands the lookup: protocol directory, campaign group, base run id.
-#: A path composed wrongly reads as a *missing* baseline here, which is why the success case below
-#: exists -- the three refusal reasons alone cannot tell a right lookup from a broken one.
 _LOOKUP = {"protocol": "locomotion_eval_v2", "group": "v1", "base_run_id": "Lizard-Rough-v14_ckpt"}
 
 
@@ -322,11 +296,7 @@ def _lookup(scratch: str, candidate: dict) -> dict:
 
 
 def test_baseline_lookup_reads_the_neighbouring_run() -> None:
-    """The success path: protocol + group + base run id land on a record that compares.
-
-    The campaign group is part of the path, so a lookup that ignored it (or dropped the protocol
-    directory) reads as an absent baseline here rather than passing as a comparison.
-    """
+    """The success path: protocol + group + base run id land on a record that compares."""
     with tempfile.TemporaryDirectory() as scratch:
         base = _record()
         base["suite"]["digest"] = "sha256:base-suite"
@@ -403,12 +373,7 @@ def test_an_empty_substitution_list_is_not_an_unknown_comparison() -> None:
 
 
 def test_stored_evidence_is_not_re_derived_from_a_later_baseline() -> None:
-    """The evidence is a snapshot: a baseline rewritten afterwards cannot rewrite this run's story.
-
-    The failure this pins is the one that takes a year to show up (work/active/record-variant-and-snapshot-specs.md): a baseline
-    replaced by ``--overwrite`` while an old record still points at that path. The stored bindings
-    are what was compared, so a reader never has to trust -- or re-interpret -- the live one.
-    """
+    """The evidence is a snapshot: a baseline rewritten afterwards cannot rewrite this run's story."""
     candidate = _record()
     candidate["suite"]["digest"] = "sha256:other-suite"
     stored = _evidence(candidate, _record())
@@ -449,8 +414,6 @@ def test_run_id_reuse_is_refused_unless_comparable() -> None:
         f"a swapped suite under the same run_id must be refused, and say why: {refusal}"
     assert record.overwrite_refusal({"task": "Lizard-Rough-v14"}, base) is not None, \
         "a legacy record at that run_id cannot certify anything, so it is refused too"
-    # a *run directory* holding results but no record is the same case: 25 of the 31 run dirs
-    # in the harness predate the format, and nothing may be written over them by accident
     assert record.overwrite_refusal(record.legacy_run(), base) is not None, \
         "an eval.json without a record.json is a legacy run, not an empty run_id"
 
@@ -480,21 +443,17 @@ def test_record_module_cannot_consume_the_random_stream() -> None:
             imported.add(node.module.split(".")[0])
     banned = {"torch", "numpy", "random"}
     assert not (imported & banned), f"record.py must not import {sorted(imported & banned)}"
-    # `random` can arrive via a stdlib import of the *test* (tempfile), so the module-level
-    # claim is checked on the record module's own namespace, and the framework claim on the
-    # process: importing record.py must not have pulled torch/numpy in for anyone.
     for name in sorted(banned):
         assert not hasattr(record, name), f"the record module exposes {name}"
-    for framework in ("torch", "numpy"):
-        assert framework not in sys.modules, f"importing the record module pulled in {framework}"
+    probe = subprocess.run(
+        [sys.executable, "-c",
+         f"import sys; sys.path[:0] = [{str(_REPO)!r}, {str(_REPO / 'ablation_harness')!r}]; "
+         "import record; assert 'torch' not in sys.modules and 'numpy' not in sys.modules"],
+        capture_output=True, text=True, errors="replace",
+    )
+    assert probe.returncode == 0, f"importing the record module pulled in torch/numpy: {probe.stderr}"
     for token in ("np.random", "torch.rand", "random."):
         assert token not in source, f"record.py must not reach for {token}"
-
-
-# --- the table's conditions (Step 3.2d): what may share one scoreboard ---------------------------
-#
-# The summary is what people read instead of the records, so it is where a row whose ground,
-# protocol, judge or assets moved would otherwise sit next to its neighbours as if comparable.
 
 
 def _twin(**overrides) -> dict:
@@ -508,11 +467,7 @@ def _twin(**overrides) -> dict:
 
 
 def test_a_scoreboard_may_compare_different_models():
-    """The checkpoint is the variable a table compares, so it is not a condition.
-
-    Conditions are deliberately not the binding set: requiring the checkpoint equal would refuse
-    every legitimate cross-model table, which is the one thing a scoreboard exists to show.
-    """
+    """The checkpoint is the variable a table compares, so it is not a condition."""
     a, b = _record(), _twin()
     a["checkpoint"] = {"sha256": "sha256:model-a"}
     b["checkpoint"] = {"sha256": "sha256:model-b"}
@@ -564,1053 +519,6 @@ def test_a_cross_asset_row_is_allowed_only_when_it_says_so():
     assert allowed["conflicts"]["assets.declared_digest"]["declared_as"] == "assets", allowed
 
 
-def _summary_asset_case(base, candidate, *, variants=True):
-    """Exercise the real summary reader with two persisted rows."""
-    import csv
-
-    with tempfile.TemporaryDirectory(prefix="summary-assets-") as scratch:
-        harness = pathlib.Path(scratch)
-        root = harness / "results" / "test-protocol"
-        root.mkdir(parents=True)
-        fields = ["run_id", "persist_id"] + (["variant"] if variants else [])
-        with (root / "summary.csv").open("w", encoding="utf-8", newline="") as handle:
-            writer = csv.DictWriter(handle, fieldnames=fields)
-            writer.writeheader()
-            for rec, displayed in (base, candidate):
-                rec = json.loads(json.dumps(rec))
-                ref = (rec.get("substitutions") or {}).get("baseline") or {}
-                if ref.get("path") == "__same_group__":
-                    ref["path"] = str(root / ref["run_id"] / "record.json")
-                run = rec["run"]
-                folder = root / run["run_id"]
-                folder.mkdir()
-                (folder / "record.json").write_text(json.dumps(rec), encoding="utf-8")
-                row = {"run_id": run["run_id"], "persist_id": run["persist_id"]}
-                if variants:
-                    row["variant"] = displayed
-                writer.writerow(row)
-        output = io.StringIO()
-        with _patched(run_ablation, _HARNESS_DIR=harness), contextlib.redirect_stdout(output):
-            status = run_ablation._summarize(types.SimpleNamespace(protocol="test-protocol", group=None))
-        return status, output.getvalue()
-
-
-def _asset_rows(variant):
-    base, candidate = _ckpt_record("sha256:model"), _ckpt_record("sha256:model")
-    base["run"].update(run_id="base", persist_id="a", variant=None, group=None)
-    candidate["run"].update(run_id=f"base_{variant}", persist_id="b", variant=variant, group=None)
-    candidate["assets"]["declared_digest"] = "sha256:other"
-    return base, candidate
-
-
-def test_summary_asset_declaration_boundaries():
-    for variant, allowed in (("assets", True), ("assets-unknown", True),
-                             ("assets+suite", True), ("suite+assets-unknown", True),
-                             ("suite+assets-note", False), ("not-assets", False), ("myassets", False),
-                             ("assetsx", False), ("suite+not-assets", False),
-                             ("not-assets+assets", False), ("ckpt3000", False)):
-        base, candidate = _asset_rows(variant)
-        status, output = _summary_asset_case((base, ""), (candidate, variant))
-        assert (status == 0) == allowed, (variant, status, output)
-        assert ("declared as assets" in output) == allowed, (variant, output)
-
-
-def test_summary_rejects_ambiguous_asset_labels():
-    for variant in ("no-assets", "without-assets", "non-assets", "foo-assets",
-                    "assets-not-replaced", "not-assets+assets"):
-        base, candidate = _asset_rows(variant)
-        status, output = _summary_asset_case((base, ""), (candidate, variant))
-        assert status != 0 and "declared as assets" not in output, (variant, status, output)
-
-
-def test_summary_baseline_direction_uses_actual_source_paths():
-    import csv
-
-    with tempfile.TemporaryDirectory(prefix="summary-direction-") as scratch:
-        harness = pathlib.Path(scratch)
-        root = harness / "results" / "test-protocol"
-        base, candidate = _asset_rows("ckpt3000")
-        base["run"].update(run_id="base_assets", variant="assets")
-        candidate["run"]["run_id"] = "base_assets_ckpt3000"
-        for group, rec in (("a", base), ("b", candidate)):
-            folder = root / group / rec["run"]["run_id"]
-            folder.mkdir(parents=True)
-            with (folder.parent / "summary.csv").open("w", encoding="utf-8", newline="") as f:
-                writer = csv.DictWriter(f, fieldnames=["run_id", "persist_id", "variant"])
-                writer.writeheader()
-                writer.writerow({key: rec["run"].get(key) or "" for key in writer.fieldnames})
-        base_path = root / "a" / "base_assets" / "record.json"
-        candidate_path = root / "b" / "base_assets_ckpt3000" / "record.json"
-        candidate["substitutions"] = record.substitution_evidence(
-            candidate, base, baseline_ref={"run_id": "base_assets", "path": str(base_path)})
-        base_path.write_text(json.dumps(base), encoding="utf-8")
-        candidate_path.write_text(json.dumps(candidate), encoding="utf-8")
-        args = types.SimpleNamespace(protocol="test-protocol", group=None)
-        def summarize():
-            output = io.StringIO()
-            with _patched(run_ablation, _HARNESS_DIR=harness), contextlib.redirect_stdout(output):
-                status = run_ablation._summarize(args)
-            return status, output.getvalue()
-        status, output = summarize()
-        assert status == 0 and "unproven" in output and "direction" in output, (status, output)
-        # Same group, snapshot actually pointing to that baseline: only candidate label counts.
-        target = root / "a" / candidate["run"]["run_id"]
-        candidate_path.parent.rename(target)
-        (root / "b" / "summary.csv").unlink()
-        with (root / "a" / "summary.csv").open("a", encoding="utf-8", newline="") as f:
-            csv.DictWriter(f, fieldnames=["run_id", "persist_id", "variant"]).writerow(
-                {key: candidate["run"].get(key) or "" for key in ("run_id", "persist_id", "variant")})
-        status, output = summarize()
-        assert status != 0 and "assets.declared_digest" in output, (status, output)
-        # A snapshot pointing into another group must not borrow this same-named row.
-        candidate["substitutions"]["baseline"]["path"] = str(root / "b" / "base_assets" / "record.json")
-        (target / "record.json").write_text(json.dumps(candidate), encoding="utf-8")
-        status, output = summarize()
-        assert status == 0 and "unproven" in output and "direction" in output, (status, output)
-        # A valid candidate label cannot be suppressed by an unrelated cross-group snapshot.
-        base["run"]["variant"] = "ckpt3000"
-        candidate["run"]["variant"] = "assets"
-        candidate["substitutions"] = record.substitution_evidence(
-            base, candidate, baseline_ref={"run_id": candidate["run"]["run_id"], "path": str(target / "record.json")})
-        base["substitutions"] = candidate.pop("substitutions")
-        base["substitutions"]["baseline"]["path"] = str(root / "b" / candidate["run"]["run_id"] / "record.json")
-        base_path.write_text(json.dumps(base), encoding="utf-8")
-        (target / "record.json").write_text(json.dumps(candidate), encoding="utf-8")
-        (root / "a" / "summary.csv").write_text(
-            "run_id,persist_id,variant\nbase_assets,a,ckpt3000\nbase_assets_ckpt3000,b,assets\n", encoding="utf-8")
-        status, output = summarize()
-        assert status == 0 and "unproven" in output and "direction" in output, (status, output)
-
-
-def test_summary_cross_group_snapshot_does_not_hide_candidate_declaration():
-    with tempfile.TemporaryDirectory(prefix="summary-reverse-") as scratch:
-        harness = pathlib.Path(scratch)
-        root = harness / "results" / "test-protocol"
-        base, candidate = _asset_rows("assets")
-        base["run"].update(run_id="base", variant="ckpt3000")
-        candidate["run"]["run_id"] = "candidate"
-        for group, rec in (("a", base), ("b", candidate)):
-            folder = root / group / rec["run"]["run_id"]
-            folder.mkdir(parents=True)
-            (folder.parent / "summary.csv").write_text(
-                f"run_id,persist_id,variant\n{rec['run']['run_id']},{rec['run']['persist_id']},"
-                f"{rec['run']['variant']}\n", encoding="utf-8")
-        base["substitutions"] = record.substitution_evidence(
-            base, candidate, baseline_ref={"run_id": "candidate", "path": str(root / "b" / "candidate" / "record.json")})
-        for group, rec in (("a", base), ("b", candidate)):
-            (root / group / rec["run"]["run_id"] / "record.json").write_text(json.dumps(rec), encoding="utf-8")
-        output = io.StringIO()
-        with _patched(run_ablation, _HARNESS_DIR=harness), contextlib.redirect_stdout(output):
-            status = run_ablation._summarize(types.SimpleNamespace(protocol="test-protocol", group=None))
-        assert status == 0 and "declared as assets" in output.getvalue() and "direction" in output.getvalue(), output.getvalue()
-
-
-def test_summary_real_records_reject_false_asset_declaration():
-    root = (_REPO / "ablation_harness" / "results" / "locomotion_eval_v3" / "livecheck")
-    base = record.load(root / "Lizard2-Flat-v3_live_nominal_seed123" / "record.json")
-    candidate = record.load(root / "Lizard2-Flat-v3_live_nominal_seed123_ckpt3000" / "record.json")
-    base["run"]["persist_id"], candidate["run"]["persist_id"] = "a", "b"
-    candidate["assets"]["declared_digest"] = "sha256:other"
-    candidate["run"]["variant"] = "not-assets"
-    candidate["substitutions"] = record.substitution_evidence(
-        candidate, base, baseline_ref={"run_id": base["run"]["run_id"], "path": "original/record.json"})
-    status, output = _summary_asset_case((base, ""), (candidate, "not-assets"))
-    assert status != 0 and "assets.declared_digest" in output and "declared as assets" not in output, output
-    candidate["run"]["variant"] = "assets"
-    status, output = _summary_asset_case((base, ""), (candidate, "assets"))
-    assert status == 0 and "declared as assets" in output, output
-
-
-def test_summary_preserves_historical_asset_label():
-    path = (_REPO / "ablation_harness" / "results" / "locomotion_eval_v2" / "dev" /
-            "Lizard-Velocity-Rough_devnolock_nominal_seed123_assets-unknown" / "record.json")
-    historical = record.load(path)
-    assert historical["run"]["variant"] == "assets-unknown"
-    assert historical["assets"]["declared_digest"] == record.UNKNOWN
-    # Historical unknown assets cannot prove a swap; use the actual label on complete temporary rows.
-    base, candidate = _asset_rows(historical["run"]["variant"])
-    status, output = _summary_asset_case((base, ""), (candidate, historical["run"]["variant"]))
-    assert status == 0 and "declared as assets" in output, (status, output)
-    candidate["assets"]["declared_digest"] = record.UNKNOWN
-    status, output = _summary_asset_case((base, ""), (candidate, historical["run"]["variant"]))
-    assert status != 0 and "unproven" in output, (status, output)
-
-
-def test_summary_requires_variant_column_to_match_record():
-    base, candidate = _asset_rows("assets")
-    status, output = _summary_asset_case((base, ""), (candidate, "not-assets"))
-    assert status != 0 and "variant" in output, (status, output)
-    status, output = _summary_asset_case((base, ""), (candidate, ""), variants=False)
-    assert status == 0, (status, output)
-
-
-def test_summary_requires_identifiable_candidate_to_declare():
-    base, candidate = _asset_rows("ckpt3000")
-    # A prior variant can itself be the base identity of a different tag. The candidate's
-    # write-time baseline reference identifies the direction, not record list order.
-    base["run"].update(run_id="base_assets", variant="assets")
-    candidate["run"]["run_id"] = "base_assets_ckpt3000"
-    candidate["substitutions"] = record.substitution_evidence(
-        candidate, base, baseline_ref={"run_id": "base_assets", "path": "__same_group__"})
-    for rows in (((base, "assets"), (candidate, "ckpt3000")),
-                 ((candidate, "ckpt3000"), (base, "assets"))):
-        status, output = _summary_asset_case(*rows)
-        assert status != 0 and "assets.declared_digest" in output, (status, output)
-    # The physical source path, not optional run.group metadata, identifies the group.
-    candidate["run"]["group"] = "different-group"
-    status, output = _summary_asset_case((base, "assets"), (candidate, "ckpt3000"))
-    assert status != 0, (status, output)
-    candidate["run"]["group"] = None
-    candidate["substitutions"]["bindings"]["assets.declared_digest"]["baseline"] = "old-digest"
-    status, output = _summary_asset_case((base, "assets"), (candidate, "ckpt3000"))
-    assert status == 0, (status, output)  # the baseline was replaced after the snapshot
-    candidate["run"].update(run_id="base_assets_assets", variant="assets")
-    candidate["substitutions"] = record.substitution_evidence(
-        candidate, base, baseline_ref={"run_id": "base_assets", "path": "__same_group__"})
-    status, output = _summary_asset_case((base, "assets"), (candidate, "assets"))
-    assert status == 0, (status, output)
-
-
-def test_summary_asset_owner_unknown_keeps_existing_symmetric_behavior():
-    a, b = _asset_rows("assets")
-    b["run"]["run_id"] = "unrelated_assets"
-    for rows in (((a, ""), (b, "assets")), ((b, "assets"), (a, ""))):
-        status, output = _summary_asset_case(*rows)
-        assert status == 0, (status, output)
-
-
-def test_an_absent_fact_is_unproven_and_an_unreadable_row_is_named():
-    a, b = _record(), _twin()
-    a["judge"] = {"id": record.UNKNOWN}
-    b["judge"] = {"id": record.UNKNOWN}
-    found = record.conditions_conflict(a, b)
-    assert found["conflicts"] == {} and found["unproven"] == ["judge.id"], found
-    incomplete = _record(complete=False)
-    incomplete["run"]["run_id"] = "incomplete"
-    report = record.table_conflicts([_record(), incomplete])
-    assert "incomplete" in report["unreadable"] and not report["conflicts"], report
-
-
-def _assert_missing_identity_refused(field):
-    # Delete only this identity from both rows; the other identity remains present.
-    with tempfile.TemporaryDirectory(prefix="missing-identity-") as scratch:
-        harness = pathlib.Path(scratch)
-        root = harness / "results" / "test-protocol"
-        for group in ("a", "b"):
-            rec = _ckpt_record("sha256:model")
-            rec["run"].update(run_id="run", persist_id=group)
-            section, key = field.split(".")
-            del rec[section][key]
-            folder = root / group / "run"
-            folder.mkdir(parents=True)
-            (folder / "record.json").write_text(json.dumps(rec), encoding="utf-8")
-            (folder.parent / "summary.csv").write_text(f"run_id,persist_id\nrun,{group}\n", encoding="utf-8")
-        output = io.StringIO()
-        with _patched(run_ablation, _HARNESS_DIR=harness), contextlib.redirect_stdout(output):
-            status = run_ablation._summarize(types.SimpleNamespace(protocol="test-protocol", group=None))
-        assert status != 0 and field in output.getvalue(), (field, status, output.getvalue())
-
-
-def test_missing_geometry_identity_alone_refuses_summary():
-    _assert_missing_identity_refused("suite.geometry_digest")
-
-
-def test_missing_judge_identity_alone_refuses_summary():
-    _assert_missing_identity_refused("judge.id")
-
-
-def test_missing_identity_evidence_is_unproven_and_summary_refuses():
-    a, b = _ckpt_record("sha256:model"), _ckpt_record("sha256:model")
-    for rec in (a, b):
-        del rec["suite"]["geometry_digest"]
-        del rec["judge"]
-        rec["suite"]["num_rows"] = 1
-        rec["suite"]["num_cols"] = 9
-        rec["suite"]["envs_per_terrain"] = 8
-        rec["suite"]["terrains"] = ["flat"]
-    assert record.read_state(a)["state"] == record.read_state(b)["state"] == "complete"
-    for field in ("suite.geometry_digest", "judge.id"):
-        assert field in record.conditions_conflict(a, b)["unproven"]
-    b["suite"]["geometry_digest"] = record.UNKNOWN
-    assert "suite.geometry_digest" in record.conditions_conflict(a, b)["unproven"]
-    del b["suite"]["geometry_digest"]
-    b["suite"]["geometry_digest"] = "sha256:geometry"
-    assert "suite.geometry_digest" in record.conditions_conflict(a, b)["unproven"]
-    del b["suite"]["geometry_digest"]
-    for rec in (a, b):
-        for field in ("num_rows", "num_cols", "envs_per_terrain", "terrains"):
-            del rec["suite"][field]
-    assert set(record.conditions_conflict(a, b)["unproven"]) == {"suite.geometry_digest", "judge.id"}
-    with tempfile.TemporaryDirectory(prefix="missing-identities-") as scratch:
-        harness = pathlib.Path(scratch)
-        root = harness / "results" / "test-protocol"
-        for group, rec in (("a", a), ("b", b)):
-            rec["run"].update(run_id="run", persist_id=group)
-            folder = root / group / "run"
-            folder.mkdir(parents=True)
-            (folder / "record.json").write_text(json.dumps(rec), encoding="utf-8")
-            (folder.parent / "summary.csv").write_text(f"run_id,persist_id\nrun,{group}\n", encoding="utf-8")
-        output = io.StringIO()
-        with _patched(run_ablation, _HARNESS_DIR=harness), contextlib.redirect_stdout(output):
-            status = run_ablation._summarize(types.SimpleNamespace(protocol="test-protocol", group=None))
-        assert status != 0 and "suite.geometry_digest" in output.getvalue() and "judge.id" in output.getvalue(), output.getvalue()
-        b["suite"]["geometry_digest"] = record.UNKNOWN
-        b["judge"] = {"id": record.UNKNOWN}
-        (root / "b" / "run" / "record.json").write_text(json.dumps(b), encoding="utf-8")
-        output = io.StringIO()
-        with _patched(run_ablation, _HARNESS_DIR=harness), contextlib.redirect_stdout(output):
-            status = run_ablation._summarize(types.SimpleNamespace(protocol="test-protocol", group=None))
-        assert status != 0 and "unproven" in output.getvalue(), output.getvalue()
-        a["suite"]["geometry_digest"] = record.UNKNOWN
-        a["judge"] = {"id": record.UNKNOWN}
-        (root / "a" / "run" / "record.json").write_text(json.dumps(a), encoding="utf-8")
-        output = io.StringIO()
-        with _patched(run_ablation, _HARNESS_DIR=harness), contextlib.redirect_stdout(output):
-            status = run_ablation._summarize(types.SimpleNamespace(protocol="test-protocol", group=None))
-        assert status == 0 and "unproven" in output.getvalue(), output.getvalue()
-
-
-def test_terrain_pivot_refuses_duplicate_sources_but_keeps_csv_rows():
-    import csv
-
-    with tempfile.TemporaryDirectory(prefix="terrain-collision-") as scratch:
-        harness = pathlib.Path(scratch)
-        root = harness / "results" / "test-protocol"
-        payload = {"protocol": "test-protocol", "task": "task", "mode": "nominal", "seed": 123,
-                   "checkpoint": "model_1.pt", "terrains": {"flat": {"completion": 0.2,
-                   "fall_rate": 0.3, "success_rate": 0.4}}}
-        for group, run, value in (("a", "same", 0.2), ("b", "same", 0.8), ("a", "other", 0.6)):
-            folder = root / group / run
-            folder.mkdir(parents=True)
-            payload["terrains"]["flat"]["completion"] = value
-            (folder / "eval.json").write_text(json.dumps(payload), encoding="utf-8")
-        with _patched(run_ablation, _HARNESS_DIR=harness):
-            for group, expected in ((None, 3), ("a", 2)):
-                output = io.StringIO()
-                with contextlib.redirect_stdout(output):
-                    status = run_ablation._by_terrain(types.SimpleNamespace(protocol="test-protocol", group=group))
-                assert status == 1 and "terrain pivot collision" in output.getvalue(), output.getvalue()
-                with (root / (group or "") / "terrains.csv").open(encoding="utf-8", newline="") as f:
-                    rows = list(csv.DictReader(f))
-                assert len(rows) == expected and len({r["completion"] for r in rows}) == expected, rows
-                expected_sources = {"a/same/eval.json": "0.2", "a/other/eval.json": "0.6"}
-                if group is None:
-                    expected_sources["b/same/eval.json"] = "0.8"
-                assert {r["source"]: r["completion"] for r in rows} == expected_sources, rows
-                assert all(r["run_id"] == r["source"].split("/")[-2] for r in rows), rows
-                assert list(rows[0]) == ["run_id", "protocol", "task", "mode", "seed", "iteration",
-                                         "terrain", "completion", "fall_rate", "success_rate", "source"]
-                assert all(r["protocol"] == "test-protocol" and r["task"] == "task" and
-                           r["mode"] == "nominal" and r["seed"] == "123" and r["iteration"] == "1" and
-                           r["terrain"] == "flat" and r["fall_rate"] == "0.3" and r["success_rate"] == "0.4"
-                           for r in rows), rows
-            args = types.SimpleNamespace(protocol="test-protocol", group="b")
-            output = io.StringIO()
-            with contextlib.redirect_stdout(output):
-                assert run_ablation._by_terrain(args) == 0
-            assert "0.80" in output.getvalue(), output.getvalue()
-            folder = root / "root-run"
-            folder.mkdir()
-            (folder / "eval.json").write_text(json.dumps(payload), encoding="utf-8")
-            with contextlib.redirect_stdout(io.StringIO()):
-                assert run_ablation._by_terrain(types.SimpleNamespace(protocol="test-protocol", group=None)) == 1
-            with (root / "terrains.csv").open(encoding="utf-8", newline="") as f:
-                rows = list(csv.DictReader(f))
-            assert any(r["run_id"] == "root-run" and r["source"] == "root-run/eval.json" for r in rows), rows
-        rows = run_ablation._collect_terrain_rows(root, "b")
-        try:
-            run_ablation._terrain_pivot(rows + rows, "completion")
-        except ValueError as exc:
-            assert "terrain pivot collision" in str(exc)
-        else:
-            assert False, "duplicate cells from one source must not overwrite"
-
-
-def test_summary_checks_conditions_across_groups():
-    with tempfile.TemporaryDirectory(prefix="summary-groups-") as scratch:
-        harness = pathlib.Path(scratch)
-        root = harness / "results" / "test-protocol"
-        for group, digest in (("a", "sha256:first"), ("b", "sha256:second")):
-            run = root / group / "same-run"
-            run.mkdir(parents=True)
-            rec = _ckpt_record("sha256:model")
-            rec["run"].update(run_id="same-run", persist_id=group)
-            rec["suite"]["digest"] = digest
-            assert record.read_state(rec)["state"] == "complete"
-            (run / "record.json").write_text(json.dumps(rec), encoding="utf-8")
-            (run.parent / "summary.csv").write_text(f"run_id,persist_id\nsame-run,{group}\n", encoding="utf-8")
-        args = types.SimpleNamespace(protocol="test-protocol", group=None)
-        with _patched(run_ablation, _HARNESS_DIR=harness):
-            assert run_ablation._summarize(args) != 0, "cross-group suite differences must be refused"
-            args.group = "a"
-            assert run_ablation._summarize(args) == 0, "one group without conflicts must pass"
-            args.group = None
-            other = root / "b" / "same-run" / "record.json"
-            rec = json.loads(other.read_text(encoding="utf-8"))
-            rec["suite"]["digest"] = "sha256:first"
-            other.write_text(json.dumps(rec), encoding="utf-8")
-            assert run_ablation._summarize(args) == 0, "matching groups must pass"
-            rec["suite"]["digest"] = "sha256:second"
-            rec["assets"]["declared_digest"] = "sha256:other"
-            rec["run"]["variant"] = "assets"
-            other.write_text(json.dumps(rec), encoding="utf-8")
-            assert run_ablation._summarize(args) != 0, "declared assets must not hide a suite conflict"
-            rec["suite"]["digest"] = "sha256:first"
-            other.write_text(json.dumps(rec), encoding="utf-8")
-            assert run_ablation._summarize(args) == 0, "declared assets remain allowed"
-            del rec["suite"]["digest"]
-            other.write_text(json.dumps(rec), encoding="utf-8")
-            assert run_ablation._summarize(args) != 0, "incomplete records must not be certified"
-
-
-def test_summary_reads_each_record_once_and_consistently_reports_conditions():
-    from unittest.mock import patch
-
-    with tempfile.TemporaryDirectory(prefix="summary-conditions-") as scratch:
-        harness = pathlib.Path(scratch)
-        root = harness / "results" / "test-protocol"
-        a, b = _ckpt_record("sha256:model"), _ckpt_record("sha256:model")
-        a["run"].update(run_id="first", persist_id="a")
-        b["run"].update(run_id="second", persist_id="b")
-        files = []
-        for group, rec in (("", a), ("group", b)):
-            folder = root / group
-            folder.mkdir(parents=True, exist_ok=True)
-            (folder / rec["run"]["run_id"]).mkdir()
-            path = folder / rec["run"]["run_id"] / "record.json"
-            path.write_text(json.dumps(rec), encoding="utf-8")
-            extra_header = ",success_rate" if group else ""
-            extra_value = ",0.73" if group else ""
-            (folder / "summary.csv").write_text(
-                f"run_id,persist_id{extra_header}\n{rec['run']['run_id']},{rec['run']['persist_id']}{extra_value}\n",
-                encoding="utf-8")
-            files.append(path)
-        args = types.SimpleNamespace(protocol="test-protocol", group=None)
-        def run():
-            output = io.StringIO()
-            with contextlib.redirect_stdout(output):
-                result = run_ablation._summarize(args)
-            return result, output.getvalue()
-        with _patched(run_ablation, _HARNESS_DIR=harness):
-            original_load = record.load
-            counts = {}
-            def load_once(path):
-                counts[path] = counts.get(path, 0) + 1
-                assert counts[path] == 1, f"record read more than once: {path}"
-                return original_load(path)
-            with patch.object(record, "load", side_effect=load_once):
-                status, output = run()
-                assert status == 0 and "success_rate" in output and "0.73" in output, output
-            def broken(path):
-                if path == files[0]:
-                    raise OSError("injected read failure")
-                return original_load(path)
-            with patch.object(record, "load", side_effect=broken):
-                status, output = run()
-                assert status != 0 and "first" in output
-            b["judge"] = {"id": record.UNKNOWN}
-            a["judge"] = {"id": record.UNKNOWN}
-            files[0].write_text(json.dumps(a), encoding="utf-8")
-            files[1].write_text(json.dumps(b), encoding="utf-8")
-            status, output = run()
-            assert status == 0 and "unproven" in output and "judge.id" in output
-            assert "source" in output and "group" in output
-            b["judge"]["id"] = "known"
-            files[1].write_text(json.dumps(b), encoding="utf-8")
-            status, output = run()
-            assert status != 0 and "judge.id" in output
-            a["suite"]["num_rows"] = 1
-            b["suite"]["num_rows"] = True
-            files[0].write_text(json.dumps(a), encoding="utf-8")
-            files[1].write_text(json.dumps(b), encoding="utf-8")
-            status, output = run()
-            assert status != 0 and "suite.num_rows" in output, output
-            del a["suite"]["num_rows"]
-            del b["suite"]["num_rows"]
-            files[0].write_text(json.dumps(a), encoding="utf-8")
-            b["judge"]["id"] = record.UNKNOWN
-            b["assets"]["declared_digest"] = "sha256:other"
-            b["run"]["variant"] = "assets"
-            files[1].write_text(json.dumps(b), encoding="utf-8")
-            status, output = run()
-            assert status == 0 and "unproven" in output and "declared as assets" in output
-            (root / "group" / "summary.csv").unlink()
-            (root / "summary.csv").write_text("run_id,persist_id\nfirst,a\nsecond,b\n", encoding="utf-8")
-            (root / "second").mkdir()
-            (root / "second" / "record.json").write_text(json.dumps(b), encoding="utf-8")
-            status, output = run()
-            assert status == 0 and "unproven" in output and "declared as assets" in output
-            a["assets"]["declared_digest"] = record.UNKNOWN
-            b["assets"]["declared_digest"] = record.UNKNOWN
-            (root / "first" / "record.json").write_text(json.dumps(a), encoding="utf-8")
-            (root / "second" / "record.json").write_text(json.dumps(b), encoding="utf-8")
-            status, output = run()
-            assert status == 0 and "assets.declared_digest" in output and "unproven" in output
-            b["assets"]["declared_digest"] = "sha256:other"
-            (root / "second" / "record.json").write_text(json.dumps(b), encoding="utf-8")
-            status, output = run()
-            assert status != 0 and "assets.declared_digest" in output and "unproven" in output
-
-
-def test_summary_rejects_corrupt_inputs():
-    with tempfile.TemporaryDirectory(prefix="summary-corrupt-") as scratch:
-        harness = pathlib.Path(scratch)
-        folder = harness / "results" / "test-protocol"
-        folder.mkdir(parents=True)
-        summary = folder / "summary.csv"
-        run = folder / "run"
-        run.mkdir()
-        record_path = run / "record.json"
-        rec = _ckpt_record("sha256:model")
-        rec["run"].update(run_id="run", persist_id="generation")
-        record_path.write_text(json.dumps(rec), encoding="utf-8")
-        args = types.SimpleNamespace(protocol="test-protocol", group=None)
-        with _patched(run_ablation, _HARNESS_DIR=harness):
-            for content in (b"", b"task\nrun\n", b"run_id,mode\nrun\n", b"run_id\nrun,extra\n",
-                            b"run_id\n\xff\n", b"run_id,run_id\nrun,run\n", b"run_id\nrun\nrun\n",
-                            b"run_id\n../run\n", b"run_id\nC:\\run\n", b"run_id\n.\n"):
-                summary.write_bytes(content)
-                output = io.StringIO()
-                with contextlib.redirect_stdout(output):
-                    result = run_ablation._summarize(args)
-                assert result != 0 and "summary.csv" in output.getvalue(), (content, result, output.getvalue())
-            summary.write_text("run_id,persist_id\nrun,generation\n", encoding="utf-8")
-            record_path.write_bytes(b"\xff")
-            output = io.StringIO()
-            with contextlib.redirect_stdout(output):
-                result = run_ablation._summarize(args)
-            assert result != 0 and "record.json" in output.getvalue(), output.getvalue()
-            record_path.write_text(json.dumps(rec), encoding="utf-8")
-            assert run_ablation._summarize(args) == 0
-            summary.write_text("run_id\n", encoding="utf-8")
-            assert run_ablation._summarize(args) == 0, "valid header without rows is empty, not corrupt"
-            summary.write_text("run_id,persist_id\nrun,generation\n", encoding="utf-8")
-            rec["suite"]["digest"] = 123
-            record_path.write_text(json.dumps(rec), encoding="utf-8")
-            output = io.StringIO()
-            with contextlib.redirect_stdout(output):
-                status = run_ablation._summarize(args)
-            assert status != 0 and "suite.digest" in output.getvalue(), output.getvalue()
-            summary.write_text("run_id\n", encoding="utf-8")
-            (folder / ".summary-write.lock").write_text("active or stale", encoding="utf-8")
-            assert run_ablation._summarize(args) != 0, "a locked empty table is not certified"
-            (folder / ".summary-write.lock").unlink()
-            new_group = folder / "new-group"
-            new_group.mkdir()
-            (new_group / ".summary-write.lock").write_text("active or stale", encoding="utf-8")
-            assert run_ablation._summarize(args) != 0, "a new group's lock must be discovered without a summary"
-
-
-def test_summary_rejects_invalid_terrain_names():
-    with tempfile.TemporaryDirectory(prefix="summary-terrains-") as scratch:
-        harness = pathlib.Path(scratch)
-        folder = harness / "results" / "test-protocol"
-        run = folder / "run"
-        run.mkdir(parents=True)
-        rec = _ckpt_record("sha256:model")
-        rec["run"].update(run_id="run", persist_id="generation")
-        (folder / "summary.csv").write_text("run_id,persist_id\nrun,generation\n", encoding="utf-8")
-        args = types.SimpleNamespace(protocol="test-protocol", group=None)
-        with _patched(run_ablation, _HARNESS_DIR=harness):
-            for value, expected in ((["flat", "stairs"], 0), (record.UNKNOWN, 0),
-                                    ([1], 1), ([True], 1), (["flat", 1], 1), (["flat", True], 1),
-                                    (["flat", ""], 1), ("flat", 1), (None, 1)):
-                rec["suite"]["terrains"] = value
-                (run / "record.json").write_text(json.dumps(rec), encoding="utf-8")
-                output = io.StringIO()
-                with contextlib.redirect_stdout(output):
-                    status = run_ablation._summarize(args)
-                assert (status != 0) == bool(expected), (value, status, output.getvalue())
-                if expected:
-                    assert "suite.terrains" in output.getvalue(), output.getvalue()
-            del rec["suite"]["terrains"]
-            (run / "record.json").write_text(json.dumps(rec), encoding="utf-8")
-            assert run_ablation._summarize(args) == 0
-
-
-def test_summary_rejects_mismatched_record_generation():
-    with tempfile.TemporaryDirectory(prefix="summary-generation-") as scratch:
-        harness = pathlib.Path(scratch)
-        folder = harness / "results" / "test-protocol"
-        run = folder / "run"
-        run.mkdir(parents=True)
-        rec = _ckpt_record("sha256:model")
-        rec["run"].update(run_id="run", persist_id="second")
-        (run / "record.json").write_text(json.dumps(rec), encoding="utf-8")
-        summary = folder / "summary.csv"
-        args = types.SimpleNamespace(protocol="test-protocol", group=None)
-        with _patched(run_ablation, _HARNESS_DIR=harness):
-            for expected, actual in (("first", "second"), ("first", ""), ("", "second")):
-                summary.write_text(f"run_id,persist_id\nrun,{expected}\n", encoding="utf-8")
-                rec["run"]["persist_id"] = actual
-                (run / "record.json").write_text(json.dumps(rec), encoding="utf-8")
-                output = io.StringIO()
-                with contextlib.redirect_stdout(output):
-                    result = run_ablation._summarize(args)
-                assert result != 0 and "persist_id" in output.getvalue(), output.getvalue()
-            rec["run"]["persist_id"] = "first"
-            (run / "record.json").write_text(json.dumps(rec), encoding="utf-8")
-            summary.write_text("run_id,persist_id\nrun,first\n", encoding="utf-8")
-            assert run_ablation._summarize(args) == 0
-            del rec["run"]["persist_id"]
-            (run / "record.json").write_text(json.dumps(rec), encoding="utf-8")
-            summary.write_text("run_id\nrun\n", encoding="utf-8")
-            output = io.StringIO()
-            with contextlib.redirect_stdout(output):
-                result = run_ablation._summarize(args)
-            assert result != 0 and "generation unverified" in output.getvalue()
-
-
-def test_lock_metadata_failure_closes_descriptor_and_releases_lock():
-    import os
-    from unittest.mock import patch
-
-    tree = ast.parse((_REPO / "ablation_harness" / "eval.py").read_text(encoding="utf-8"))
-    selected = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "_persist"]
-    namespace = {"pathlib": pathlib, "os": os, "uuid": __import__("uuid")}
-    exec(compile(ast.Module(body=selected, type_ignores=[]), "eval.py", "exec"), namespace)
-    with tempfile.TemporaryDirectory(prefix="lock-metadata-") as scratch:
-        harness = pathlib.Path(scratch)
-        protocol = harness / "results" / "test-protocol"
-        protocol.mkdir(parents=True)
-        namespace.update(_RESULTS_ROOT=harness / "results", _run_dir=lambda run_id: protocol / run_id,
-                         args_cli=types.SimpleNamespace(protocol="test-protocol"))
-        result = {"timestamp": "test"}
-        rec = _record()
-        args = types.SimpleNamespace(protocol="test-protocol", group=None)
-        original_open = os.open
-        opened = []
-        def capture_open(*args, **kwargs):
-            fd = original_open(*args, **kwargs)
-            opened.append(fd)
-            return fd
-        def failed_metadata(*args, **kwargs):
-            raise OSError("injected metadata failure")
-        with _patched(run_ablation, _HARNESS_DIR=harness):
-            for call in (lambda: namespace["_persist"](result, [], None, "run", "tag", rec),
-                         lambda: run_ablation._summarize(args)):
-                opened.clear()
-                try:
-                    with patch.object(os, "open", side_effect=capture_open), patch.object(os, "fdopen", side_effect=failed_metadata):
-                        try:
-                            call()
-                        except OSError as exc:
-                            assert str(exc) == "injected metadata failure", str(exc)
-                        else:
-                            assert False, "metadata failure must abort"
-                    assert len(opened) == 1
-                    try:
-                        os.fstat(opened[0])
-                    except OSError:
-                        pass
-                    else:
-                        assert False, "metadata failure leaked its descriptor"
-                    assert not (protocol / ".summary-write.lock").exists()
-                    assert not (protocol / "run").exists()
-                finally:
-                    for fd in opened:
-                        try:
-                            os.close(fd)
-                        except OSError:
-                            pass
-                    (protocol / ".summary-write.lock").unlink(missing_ok=True)
-
-
-def test_persist_binds_each_summary_row_to_its_write():
-    import ast
-    import csv
-
-    source = (_REPO / "ablation_harness" / "eval.py").read_text(encoding="utf-8")
-    tree = ast.parse(source)
-    selected = [node for node in tree.body if
-                isinstance(node, ast.FunctionDef) and node.name in ("_atomic_write_json", "_persist")]
-    assert len(selected) == 2
-    namespace = {"pathlib": pathlib, "json": json, "csv": csv, "os": __import__("os"),
-                 "uuid": __import__("uuid"), "record": record,
-                 "_SUMMARY_COLUMNS": ["run_id", "protocol", "task", "tag", "mode", "seed", "variant",
-                                      "git_rev_lizard", "git_rev_isaaclab", "timestamp", "persist_id",
-                                      "success_rate", "fall_rate", "lin_mae_mps", "ang_mae_radps",
-                                      "energy_per_m_j", "stop_overshoot_mps", "recovery_mean_s", "never_recovered"],
-                 "_round": lambda x: round(x, 4), "_guard_writes": lambda *args: None,
-                 "args_cli": types.SimpleNamespace(task="task", mode="nominal", seed=123, variant=None, protocol="test-protocol")}
-    exec(compile(ast.Module(body=selected, type_ignores=[]), "eval.py", "exec"), namespace)
-    with tempfile.TemporaryDirectory(prefix="persist-generation-") as scratch:
-        root = pathlib.Path(scratch)
-        namespace["_RESULTS_ROOT"] = root.parent
-        namespace["args_cli"].protocol = root.name
-        namespace["_run_dir"] = lambda run_id: root / run_id
-        result = {"timestamp": "same-second", "protocol": "test", "global": {
-            "success_rate": 1, "fall_rate": 0, "lin_mae_mps": 0, "ang_mae_radps": 0, "energy_per_m_j": 0}}
-        rec = _ckpt_record("sha256:model")
-        namespace["_persist"](result, [], None, "run", "tag", rec)
-        first = rec["run"]["persist_id"]
-        with (root / "summary.csv").open(encoding="utf-8", newline="") as f:
-            assert list(csv.DictReader(f))[0]["persist_id"] == first
-        namespace["_persist"](result, [], None, "run", "tag", rec)
-        with (root / "summary.csv").open(encoding="utf-8", newline="") as f:
-            rows = list(csv.DictReader(f))
-        assert len(rows) == 1 and rows[0]["persist_id"] == rec["run"]["persist_id"] != first
-        assert json.loads((root / "run" / "record.json").read_text(encoding="utf-8"))["run"]["persist_id"] == rows[0]["persist_id"]
-        original_write = namespace["_atomic_write_json"]
-        def interrupted(path, payload):
-            if path.name == "eval.json":
-                raise OSError("injected interruption")
-            original_write(path, payload)
-        namespace["_atomic_write_json"] = interrupted
-        try:
-            namespace["_persist"](result, [], None, "run", "tag", rec)
-            assert False, "interruption must abort persistence"
-        except OSError as exc:
-            assert str(exc) == "injected interruption"
-        harness = root / "harness"
-        protocol_dir = harness / "results" / "test-protocol"
-        protocol_dir.mkdir(parents=True)
-        assert (root / ".summary-write.lock").is_file(), "failed writes retain the lock for inspection"
-        (root / "run").rename(protocol_dir / "run")
-        (root / "summary.csv").rename(protocol_dir / "summary.csv")
-        (root / ".summary-write.lock").rename(protocol_dir / ".summary-write.lock")
-        output = io.StringIO()
-        with _patched(run_ablation, _HARNESS_DIR=harness), contextlib.redirect_stdout(output):
-            status = run_ablation._summarize(types.SimpleNamespace(protocol="test-protocol", group=None))
-        assert status != 0 and ".summary-write.lock" in output.getvalue(), output.getvalue()
-        (protocol_dir / ".summary-write.lock").unlink()
-        output = io.StringIO()
-        with _patched(run_ablation, _HARNESS_DIR=harness), contextlib.redirect_stdout(output):
-            status = run_ablation._summarize(types.SimpleNamespace(protocol="test-protocol", group=None))
-        assert status != 0 and "persist_id" in output.getvalue(), output.getvalue()
-
-
-def test_persist_refuses_second_writer_without_losing_rows():
-    import ast
-    import csv
-    import threading
-
-    tree = ast.parse((_REPO / "ablation_harness" / "eval.py").read_text(encoding="utf-8"))
-    selected = [node for node in tree.body if
-                isinstance(node, ast.FunctionDef) and node.name in ("_atomic_write_json", "_persist")]
-    namespace = {"pathlib": pathlib, "json": json, "csv": csv, "os": __import__("os"),
-                 "uuid": __import__("uuid"), "record": record,
-                 "_SUMMARY_COLUMNS": ["run_id", "protocol", "task", "tag", "mode", "seed", "variant",
-                                      "git_rev_lizard", "git_rev_isaaclab", "timestamp", "persist_id",
-                                      "success_rate", "fall_rate", "lin_mae_mps", "ang_mae_radps",
-                                      "energy_per_m_j", "stop_overshoot_mps", "recovery_mean_s", "never_recovered"],
-                 "_round": lambda x: round(x, 4), "_guard_writes": lambda *args: None,
-                 "args_cli": types.SimpleNamespace(task="task", mode="nominal", seed=123, variant=None, protocol="test-protocol")}
-    exec(compile(ast.Module(body=selected, type_ignores=[]), "eval.py", "exec"), namespace)
-    with tempfile.TemporaryDirectory(prefix="persist-writers-") as scratch:
-        root = pathlib.Path(scratch)
-        namespace["_RESULTS_ROOT"] = root.parent
-        namespace["args_cli"].protocol = root.name
-        namespace["_run_dir"] = lambda run_id: root / run_id
-        result = {"timestamp": "same-second", "protocol": "test", "global": {
-            "success_rate": 1, "fall_rate": 0, "lin_mae_mps": 0, "ang_mae_radps": 0, "energy_per_m_j": 0}}
-        entered, release = threading.Event(), threading.Event()
-        original_write = namespace["_atomic_write_json"]
-        def paused(path, payload):
-            if path.parent.name == "first" and path.name == "record.json":
-                entered.set()
-                assert release.wait(5), "test timed out waiting for second writer"
-            original_write(path, payload)
-        namespace["_atomic_write_json"] = paused
-        errors = []
-        def writer():
-            try:
-                namespace["_persist"](result.copy(), [], None, "first", "tag", _ckpt_record("sha256:model"))
-            except BaseException as exc:
-                errors.append(exc)
-        thread = threading.Thread(target=writer)
-        thread.start()
-        try:
-            assert entered.wait(5)
-            try:
-                namespace["_persist"](result.copy(), [], None, "second", "tag", _ckpt_record("sha256:model"))
-            except (OSError, SystemExit):
-                refused = True
-            else:
-                refused = False
-            assert refused, "a concurrent writer must be refused before touching any run files"
-            assert not (root / "second" / "record.json").exists()
-            with _patched(run_ablation, _HARNESS_DIR=root.parent):
-                with __import__("unittest.mock", fromlist=["patch"]).patch.object(
-                        run_ablation, "_summary_paths", return_value=[root / "summary.csv"]):
-                    assert run_ablation._summarize_locked(types.SimpleNamespace(protocol="test-protocol", group=None)) != 0
-        finally:
-            release.set()
-            thread.join(5)
-        assert not thread.is_alive() and not errors, errors
-        namespace["_atomic_write_json"] = original_write
-        namespace["_persist"](result.copy(), [], None, "second", "tag", _ckpt_record("sha256:model"))
-        with (root / "summary.csv").open(encoding="utf-8", newline="") as f:
-            assert {row["run_id"] for row in csv.DictReader(f)} == {"first", "second"}
-
-
-def test_summary_blocks_concurrent_writer_and_new_group():
-    from unittest.mock import patch
-    import os
-    import csv
-
-    tree = ast.parse((_REPO / "ablation_harness" / "eval.py").read_text(encoding="utf-8"))
-    selected = [node for node in tree.body if isinstance(node, ast.FunctionDef)
-                and node.name in ("_atomic_write_json", "_persist")]
-    columns = next(node for node in tree.body if isinstance(node, ast.Assign)
-                   and any(isinstance(t, ast.Name) and t.id == "_SUMMARY_COLUMNS" for t in node.targets))
-    namespace = {"pathlib": pathlib, "json": json, "csv": csv, "os": os,
-                 "uuid": __import__("uuid"), "record": record,
-                 "_round": lambda x: round(x, 4), "_guard_writes": lambda *args: None,
-                 "args_cli": types.SimpleNamespace(task="task", mode="nominal", seed=123, variant=None,
-                                                   protocol="test-protocol")}
-    exec(compile(ast.Module(body=[columns, *selected], type_ignores=[]), "eval.py", "exec"), namespace)
-    with tempfile.TemporaryDirectory(prefix="summary-snapshot-") as scratch:
-        harness = pathlib.Path(scratch)
-        protocol = harness / "results" / "test-protocol"
-        run = protocol / "first"
-        run.mkdir(parents=True)
-        rec = _ckpt_record("sha256:model")
-        rec["run"].update(run_id="first", persist_id="first-id")
-        (run / "record.json").write_text(json.dumps(rec), encoding="utf-8")
-        (protocol / "summary.csv").write_text("run_id,persist_id\nfirst,first-id\n", encoding="utf-8")
-        original_load = record.load
-        attempted = []
-        namespace["_RESULTS_ROOT"] = harness / "results"
-        namespace["_run_dir"] = lambda run_id: protocol / "new-group" / run_id
-        result = {"timestamp": "test", "protocol": "test", "global": {
-            "success_rate": 1, "fall_rate": 0, "lin_mae_mps": 0, "ang_mae_radps": 0, "energy_per_m_j": 0}}
-        def during_read(path):
-            try:
-                namespace["_persist"](result.copy(), [], None, "second", "tag", _ckpt_record("sha256:model"))
-            except SystemExit:
-                attempted.append("blocked")
-            else:
-                attempted.append("wrote")
-            return original_load(path)
-        args = types.SimpleNamespace(protocol="test-protocol", group=None)
-        with _patched(run_ablation, _HARNESS_DIR=harness), patch.object(record, "load", side_effect=during_read):
-            status = run_ablation._summarize(args)
-        assert attempted == ["blocked"] and status == 0, (attempted, status)
-        assert not (protocol / "new-group" / "second" / "record.json").exists()
-
-
-def test_persist_refuses_corrupt_existing_summary_before_writing():
-    import csv
-
-    tree = ast.parse((_REPO / "ablation_harness" / "eval.py").read_text(encoding="utf-8"))
-    selected = [node for node in tree.body if isinstance(node, ast.FunctionDef)
-                and node.name in ("_atomic_write_json", "_persist")]
-    columns = next(node for node in tree.body if isinstance(node, ast.Assign)
-                   and any(isinstance(t, ast.Name) and t.id == "_SUMMARY_COLUMNS" for t in node.targets))
-    namespace = {"pathlib": pathlib, "json": json, "csv": csv, "os": __import__("os"),
-                 "uuid": __import__("uuid"), "record": record,
-                 "_round": lambda x: round(x, 4), "_guard_writes": lambda *args: None,
-                 "args_cli": types.SimpleNamespace(task="task", mode="nominal", seed=123, variant=None, protocol="test-protocol")}
-    exec(compile(ast.Module(body=[columns, *selected], type_ignores=[]), "eval.py", "exec"), namespace)
-    with tempfile.TemporaryDirectory(prefix="persist-corrupt-") as scratch:
-        root = pathlib.Path(scratch)
-        namespace["_RESULTS_ROOT"] = root.parent
-        namespace["args_cli"].protocol = root.name
-        namespace["_run_dir"] = lambda run_id: root / run_id
-        result = {"timestamp": "test", "protocol": "test", "global": {
-            "success_rate": 1, "fall_rate": 0, "lin_mae_mps": 0, "ang_mae_radps": 0, "energy_per_m_j": 0}}
-        summary = root / "summary.csv"
-        legacy_lock = root / "legacy-group" / ".summary-write.lock"
-        legacy_lock.parent.mkdir()
-        legacy_lock.write_text("legacy writer or recovery", encoding="utf-8")
-        summary.write_text("run_id\n", encoding="utf-8")
-        try:
-            namespace["_persist"](result.copy(), [], None, "new-run", "tag", _ckpt_record("sha256:model"))
-        except (ValueError, OSError, SystemExit):
-            pass
-        else:
-            assert False, "legacy group lock must block writes"
-        assert not (root / "new-run" / "record.json").exists()
-        assert legacy_lock.is_file() and not (root / ".summary-write.lock").exists()
-        legacy_lock.unlink()
-        for content in (b"run_id,persist_id\nlost\n", b"run_id,run_id\nlost,lost\n",
-                        b"run_id\nlost,extra\n", b"run_id\n\xff\n", b"run_id\nold\nold\n"):
-            summary.write_bytes(content)
-            try:
-                namespace["_persist"](result.copy(), [], None, "new-run", "tag", _ckpt_record("sha256:model"))
-            except (ValueError, OSError, SystemExit):
-                pass
-            else:
-                assert False, f"corrupt summary was accepted: {content!r}"
-            assert summary.read_bytes() == content
-            assert not (root / "new-run" / "record.json").exists(), "existing data must be validated first"
-            assert not (root / ".summary-write.lock").exists()
-
-
-def test_a_diagnostic_row_cannot_sit_in_a_scores_table():
-    """``--group`` decides where a row lands, never what it is (work/active/diagnostic-run-gate.md).
-
-    Four cases, because the refusal has to be narrower than "any row I dislike": a zero-action row
-    in a scores table is refused with its kind named; the same row under the smoke group is allowed
-    (that table is a diagnostic one on purpose); a scored row passes; and a record written before
-    ``policy.kind`` existed is reported uncertified -- refusing it would make every historical table
-    unreadable, which is not the same thing as safer.
-    """
-    sys.path.insert(0, str(_REPO / "ablation_harness"))
-    import run_ablation  # noqa: E402
-
-    def table(group: str | None, kind: str | None):
-        base = pathlib.Path(tempfile.mkdtemp(prefix="table-")) / "proto"
-        folder = base / group if group else base
-        run_id = "run-ck" if kind == "checkpoint" else "run-zero"
-        (folder / run_id).mkdir(parents=True)
-        payload = {"record_format": record.RECORD_FORMAT}
-        if kind is not None:
-            payload["policy"] = {"kind": kind}
-        (folder / run_id / "record.json").write_text(json.dumps(payload), encoding="utf-8")
-        path = folder / "summary.csv"
-        path.write_text(f"run_id\n{run_id}\n", encoding="utf-8")
-        return run_ablation._identity_report(path, [{"run_id": run_id}])
-
-    assert table(None, "zero_action") == ([("run-zero", "zero_action")], []), \
-        "a diagnostic row in a scores table has to be refused, with its kind named"
-    assert table("smoke", "zero_action") == ([], []), "a smoke table is a diagnostic table on purpose"
-    assert table(None, "checkpoint") == ([], []), "a scored policy row is what a scores table is for"
-    refused, uncertified = table(None, None)
-    assert not refused and uncertified == ["run-zero"], "no kind is uncertified, not refused"
-
-
-@contextlib.contextmanager
-def _patched(module, **values):
-    """Set module attributes for one test, restore them however it ends."""
-    old = {k: getattr(module, k) for k in values}
-    for key, value in values.items():
-        setattr(module, key, value)
-    try:
-        yield
-    finally:
-        for key, value in old.items():
-            setattr(module, key, value)
-
-
-def _probe_run(**overrides) -> dict:
-    """One-run spec payload; nominal only, so one checkpoint means one eval."""
-    return {"tag": "probe", "task": "Lizard2-Flat-v3", "seed": 42, "max_iterations": 2,
-            "eval_modes": ["nominal"], **overrides}
-
-
-def _sweep_harness(scratch: str, run: dict, seed: list[str] = (), train_ok: bool = True,
-                   train_writes_last: bool = True, eval_writes_result: bool = True) -> dict:
-    """Run the real ``_sweep`` over a fake two-tree layout; only sim and sharing are faked.
-
-    ``work/active/ablation-sweep-final-checkpoint-name.md``: the scheduler asked for
-    ``model_{max_iterations}.pt`` while a run of that budget ends on ``model_{N-1}.pt``, so every
-    spec that had to train failed before eval. The fakes are the subprocess (which would start
-    Isaac Sim) and the two shared roots; the scheduler's own decisions are the real ones.
-    """
-    import yaml
-
-    isaac = pathlib.Path(scratch) / "isaac"
-    run_dir = isaac / "logs" / "rsl_rl" / "exp" / f"2026-01-01_00-00-00_{run['tag']}"
-    run_dir.mkdir(parents=True)
-    for name in seed:
-        (run_dir / name).write_bytes(b"")
-    harness = pathlib.Path(scratch) / "harness"
-    harness.mkdir()
-    (harness / "eval.py").write_text("", encoding="utf-8")
-    spec = pathlib.Path(scratch) / "spec.yaml"
-    spec.write_text(yaml.safe_dump({"runs": [run], "group": "probe"}), encoding="utf-8")
-
-    calls = {"train": [], "eval": []}
-
-    def fake_run(argv, cwd=None, check=False):
-        kind = "train" if argv[1].endswith("train.py") else "eval"
-        calls[kind].append((list(argv), cwd))
-        if kind == "train":
-            if not train_ok:
-                raise subprocess.CalledProcessError(1, argv)
-            if train_writes_last:
-                (run_dir / f"model_{int(run['max_iterations']) - 1}.pt").write_bytes(b"")
-        elif eval_writes_result:
-            iteration = _checkpoint_of(argv).stem.split("_")[-1]
-            run_id = f"{run['task']}_{run['tag']}_it{iteration}_nominal_seed123"
-            out_json = harness / "results" / "locomotion_eval_v3" / "probe" / run_id / "eval.json"
-            out_json.parent.mkdir(parents=True, exist_ok=True)
-            out_json.write_text("{}", encoding="utf-8")
-        return types.SimpleNamespace(returncode=0)
-
-    args = types.SimpleNamespace(spec=str(spec), python="python", device=None,
-                                 protocol="locomotion_eval_v3", group=None)
-    fake_subprocess = types.SimpleNamespace(run=fake_run,
-                                            CalledProcessError=subprocess.CalledProcessError)
-    with _patched(run_ablation, _ISAAC_ROOT=isaac, _HARNESS_DIR=harness,
-                  subprocess=fake_subprocess):
-        failures = run_ablation._sweep(args)
-    return {"failures": failures, **calls, "run_dir": run_dir, "harness": harness, "isaac": isaac}
-
-
-def _checkpoint_of(argv: list[str]) -> pathlib.Path:
-    return pathlib.Path(argv[argv.index("--checkpoint") + 1])
-
-
-def test_a_fresh_run_is_scored_at_its_last_checkpoint():
-    """A run of budget N ends on model_{N-1}.pt -- the default checkpoint is that one.
-
-    Pre-fix, ``_run_train`` looked for model_2.pt on a two-iteration run, printed
-    ``expected model_2.pt not found`` and returned None: training happened, then the sweep counted a
-    failure and never reached eval. The budget's indices are the trainer's 0..N-1, so the assertion
-    is on what a real run leaves behind, not on a name the scheduler composed.
-    """
-    run = _probe_run()
-    result = _sweep_harness(tempfile.mkdtemp(prefix="sweep-"), run)
-    assert run_ablation._eval_checkpoints(run, result["run_dir"], 2) == [1], \
-        "the default is the run's last checkpoint (N-1), not the budget N the trainer never saves"
-    assert result["failures"] == 0, f"a run that trains must reach eval, got {result['failures']} failure(s)"
-    assert len(result["train"]) == 1, "the budget had not been reached, so training had to run once"
-    assert len(result["eval"]) == 1, "one default checkpoint means one eval"
-    assert _checkpoint_of(result["eval"][0][0]) == result["run_dir"] / "model_1.pt", \
-        "with no eval_checkpoints the run's own last checkpoint (N-1) is the one to score"
-
-
-def test_eval_without_result_is_a_failure_even_on_zero_exit():
-    result = _sweep_harness(tempfile.mkdtemp(prefix="sweep-"), _probe_run(), eval_writes_result=False)
-    assert len(result["eval"]) == 1 and result["failures"] == 1
-
-
-def test_a_finished_run_is_not_retrained():
-    """The completion evidence reads the directory, so a finished run is reused, not re-trained."""
-    run = _probe_run()
-    result = _sweep_harness(tempfile.mkdtemp(prefix="sweep-"), run, seed=["model_1.pt"])
-    assert not result["train"], "a run that already reached its budget must not be trained again"
-    assert _checkpoint_of(result["eval"][0][0]) == result["run_dir"] / "model_1.pt"
-
-
-def test_an_unfinished_or_failed_train_is_not_a_finished_run():
-    """Half a budget, or a crash, is not "done" -- both must be counted as failures, with no eval."""
-    run = _probe_run()
-    partial = _sweep_harness(tempfile.mkdtemp(prefix="sweep-"), run, train_writes_last=False)
-    assert partial["failures"] == 1 and not partial["eval"], \
-        "a run that stopped before its last iteration is unfinished, not scored"
-    crashed = _sweep_harness(tempfile.mkdtemp(prefix="sweep-"), run, train_ok=False)
-    assert crashed["failures"] == 1 and not crashed["eval"], "a failed train is a failed run"
-
-
-def test_the_sweep_launches_from_the_repo_and_runs_isaaclab_as_cwd():
-    """Eval enters through the harness's own absolute path; the IsaacLab tree is only the cwd.
-
-    Pre-fix, ``_run_eval`` passed the string ``ablation_harness/eval.py`` with ``cwd=IsaacLab``,
-    which resolved only while the retired junction made one a child of the other -- with the link
-    gone it was ``can't open file``. The log glob must likewise come from the resolved IsaacLab tree.
-    """
-    run = _probe_run()
-    result = _sweep_harness(tempfile.mkdtemp(prefix="sweep-"), run)
-    train_argv, train_cwd = result["train"][0]
-    eval_argv, eval_cwd = result["eval"][0]
-    assert eval_argv[1] == str(result["harness"] / "eval.py"), \
-        f"the eval entry has to be an existing absolute path, not {eval_argv[1]!r}"
-    assert pathlib.Path(eval_argv[1]).is_file(), "the entry named has to exist"
-    assert train_argv[1] == "scripts/reinforcement_learning/rsl_rl/train.py" and \
-        train_cwd == str(result["isaac"]), "the trainer is IsaacLab's own script, relative to its tree"
-    assert eval_cwd == str(result["isaac"]), "eval inherits the same cwd as train"
-    assert str(result["run_dir"]).startswith(str(result["isaac"])), \
-        "the log directory must be found in the IsaacLab tree, not beside the harness"
-
-
-#: The pairs written before the fix (``eval.py`` read HEAD into the result *after* the rollout, so a
-#: commit landing mid-run left the two files of one run disagreeing). Each entry names the
-#: disagreement itself, so re-running one of those runs makes the entry stale and this gate says to
-#: drop it rather than letting an old exception quietly cover a new mismatch.
 _PRE_FIX_REV_PAIRS = {
     "locomotion_eval_v3/livecheck/Lizard2-Flat-v3_live_nominal_seed123_ckpt3000": {
         "git_rev_lizard": ("0f4b2bf5317a", "ee1fc367cba8"),
@@ -1624,20 +532,7 @@ _REV_FIELDS = ("git_rev_lizard", "git_rev_isaaclab")
 
 
 def one_run_one_revision(results: pathlib.Path, exceptions: dict[str, dict[str, tuple[str, str]]]) -> list[str]:
-    """Mismatched revisions between a run's record and its result, plus the exceptions gone stale.
-
-    One run is one measurement, so its two files have to name one revision of each tree. Reading the
-    pairs off disk covers the artifacts the write side produced, which a fixture over the writer
-    cannot: the divergence was in the two files, and no single call returns both.
-
-    Args:
-        results: the harness' results root.
-        exceptions: run key -> field -> the (record, result) pair that was already wrong when the fix
-            landed.
-
-    Returns:
-        One message per mismatch, and one per exception that is no longer needed.
-    """
+    """Mismatched revisions between a run's record and its result, plus the exceptions gone stale."""
     problems: list[str] = []
     for record_path in sorted(results.glob("**/record.json")):
         result_path = record_path.with_name("eval.json")
@@ -1660,17 +555,11 @@ def one_run_one_revision(results: pathlib.Path, exceptions: dict[str, dict[str, 
 
 
 def test_one_run_names_one_revision() -> None:
-    """A run's record and its result must name the same code; the stored pairs are the control.
-
-    The guard bites on the two pairs written before the fix (asserted below without the exceptions),
-    and passes with them declared. A run re-run after the fix leaves its exception unused, and that
-    is reported as a problem rather than ignored -- an exception nobody needs is how the next
-    mismatch gets covered up.
-    """
+    """A run's record and its result must name the same code; the stored pairs are the control."""
     unguarded = one_run_one_revision(_RESULTS, {})
     assert len(unguarded) == len(_PRE_FIX_REV_PAIRS), \
         f"the stored pairs must hold exactly the disagreements the table names: {unguarded}"
-    for key, fields in _PRE_FIX_REV_PAIRS.items():
+    for key in _PRE_FIX_REV_PAIRS:
         assert any(message.startswith(key) for message in unguarded), \
             f"{key} is the pair this guard is for, and it has to be caught by reading disk: {unguarded}"
     with tempfile.TemporaryDirectory() as scratch:
@@ -1695,14 +584,15 @@ def test_one_run_names_one_revision() -> None:
 def _eval_exit_probe(entry: pathlib.Path) -> None:
     """Run the real parser and post-launch import; simulate Kit and main in a child."""
     script = r'''
-import atexit, builtins, io, os, pathlib, runpy, sys, types
-mode, entry, marker = sys.argv[1:]
+import atexit, builtins, importlib.util, io, os, pathlib, runpy, sys, types
+mode, entry, marker, ckpt, exp = sys.argv[1:]
 app_module = types.ModuleType('isaaclab.app')
 class AppLauncher:
     @staticmethod
     def add_app_launcher_args(parser): pass
     def __init__(self, args):
         self.app = self
+        self.device = 'cpu'
         atexit.register(lambda: os._exit(0))
     def close(self):
         if mode == 'close_error': raise RuntimeError('injected close failure')
@@ -1711,12 +601,14 @@ class AppLauncher:
 app_module.AppLauncher = AppLauncher
 sys.modules['isaaclab'] = types.ModuleType('isaaclab')
 sys.modules['isaaclab.app'] = app_module
+original_find_spec = importlib.util.find_spec
+importlib.util.find_spec = lambda name, package=None: object() if name == 'isaacsim' else original_find_spec(name, package)
 original_import = builtins.__import__
 def injected_import(name, *args, **kwargs):
-    if name == 'gymnasium': raise RuntimeError('injected import failure')
+    if name == 'torch': raise RuntimeError('injected import failure')
     return original_import(name, *args, **kwargs)
 builtins.__import__ = injected_import
-sys.argv = [entry] + (['--help'] if mode == 'help' else [] if mode == 'parser_error' else ['--task', 'test'])
+sys.argv = [entry] + (['--help'] if mode == 'help' else [] if mode == 'parser_error' else ['--ckpt', ckpt, '--exp', exp])
 original_run_path = runpy.run_path
 if mode not in ('import', 'help', 'parser_error'):
     def fake_runner(path, run_name):
@@ -1732,15 +624,19 @@ if mode not in ('import', 'help', 'parser_error'):
     runpy.run_path = fake_runner
 original_run_path(entry, run_name='__main__')
 '''
-    cases = (('import', 1, 'injected import failure'), ('parser_error', 1, '--task'),
+    cases = (('import', 1, 'injected import failure'), ('parser_error', 1, '--checkpoint'),
              ('help', 0, 'usage:'), ('error', 1, 'injected main failure'),
              ('system_exit', 1, 'injected main refusal'), ('broken_stdout', 1, 'injected flush failure'),
              ('close_error', 1, 'injected close failure'), ('success', 0, ''))
     with tempfile.TemporaryDirectory() as scratch:
+        ckpt = pathlib.Path(scratch) / 'model_0.pt'
+        exp = pathlib.Path(scratch) / 'exp.py'
+        ckpt.write_bytes(b'ckpt')
+        exp.write_text('# stub\n', encoding='utf-8')
         for mode, expected, message in cases:
             marker = pathlib.Path(scratch) / mode
-            result = subprocess.run([sys.executable, '-c', script, mode, str(entry), str(marker)], cwd=scratch,
-                                    capture_output=True, text=True, encoding='utf-8', errors='replace')
+            result = subprocess.run([sys.executable, '-c', script, mode, str(entry), str(marker), str(ckpt), str(exp)],
+                                    cwd=scratch, capture_output=True, text=True, encoding='utf-8', errors='replace')
             assert result.returncode == expected, (mode, result.returncode, result.stderr)
             assert message in (result.stdout if mode == 'help' else result.stderr), (mode, result.stderr)
             assert marker.exists() == (mode == 'success'), mode

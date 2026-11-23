@@ -151,8 +151,14 @@ class ArchivedSupportReadTest(unittest.TestCase):
             self.data = missing
         for logical in reader.LOGICAL_ROOTS:
             self.assertEqual(self.read(logical), self.originals[logical]["summary.md"].decode("utf-8"))
-        self.assertNotIn("isaaclab.app", sys.modules)
-        self.assertNotIn("torch", sys.modules)
+        probe = subprocess.run(
+            [sys.executable, "-c",
+             f"import sys; sys.path.insert(0, {str(REPO / 'rl_exp' / 'tools' / 'diagnose')!r}); "
+             "import archived_support_read; "
+             "assert 'isaaclab.app' not in sys.modules and 'torch' not in sys.modules"],
+            capture_output=True, text=True, errors="replace",
+        )
+        self.assertEqual(probe.returncode, 0, probe.stderr)
 
     def test_unknown_duplicate_schema_and_mapping_refused(self):
         with self.assertRaisesRegex(ValueError, "unknown logical root"):

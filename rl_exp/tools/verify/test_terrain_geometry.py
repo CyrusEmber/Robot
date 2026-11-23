@@ -196,6 +196,8 @@ def test_video_matrix_gears_resolve_against_the_suite() -> None:
     args = video_matrix.build_parser().parse_args(["--checkpoint", "policy.pt"])
     assert args.speeds == "0.5,1.5,3" and args.seconds == 10.0
     args.dry_run = False
+    args.task = "lizard2_v7"
+    args.experiment_source = {}
     recorded = []
 
     def shoot(cell, shot_args):
@@ -218,6 +220,8 @@ def test_video_matrix_gears_resolve_against_the_suite() -> None:
     # Explicit legacy camera coordinates remain a single custom view, at the old clip paths.
     custom = video_matrix.build_parser().parse_args(["--eye", "1", "2", "3", "--speeds", "2"])
     custom.dry_run = True
+    custom.task = "lizard2_v7"
+    custom.experiment_source = {}
     assert video_matrix.run(custom)["cells"] == [{"speed": 2.0, "terrain": "plane", "view": "custom"}]
 
     # a heavy module bound at module level is the regression; the import itself is the symptom
@@ -281,8 +285,8 @@ def test_video_matrix_failure_exit_status() -> None:
     import tempfile
 
     script = """
-import io, os, pathlib, sys, types
-from ablation_harness import video_matrix
+import importlib.util, io, os, pathlib, sys, types
+from ablation_harness import experiment_eval, video_matrix
 app_module = types.ModuleType('isaaclab.app')
 class AppLauncher:
     @staticmethod
@@ -290,13 +294,26 @@ class AppLauncher:
         pass
     def __init__(self, args):
         self.app = self
+        self.device = 'cpu'
     def close(self):
         pathlib.Path(output, 'close_called').touch()
         os._exit(0)
 app_module.AppLauncher = AppLauncher
+sys.modules['isaaclab'] = types.ModuleType('isaaclab')
 sys.modules['isaaclab.app'] = app_module
-mode, output = sys.argv[1:]
-sys.argv = ['video_matrix.py', '--checkpoint', 'unused.pt', '--out_dir', output]
+orig_find_spec = importlib.util.find_spec
+importlib.util.find_spec = lambda name, pkg=None: object() if name == 'isaacsim' else orig_find_spec(name, pkg)
+experiment_eval.configurations = lambda *a, **k: (
+    types.SimpleNamespace(sim=types.SimpleNamespace(device='cpu')),
+    types.SimpleNamespace(),
+    {},
+    {'status': 'unavailable'},
+    types.SimpleNamespace(),
+)
+experiment_eval.checkpoint_snapshot = lambda *a, **k: (io.BytesIO(b'ckpt'), {'path': ckpt, 'sha256': '0'})
+experiment_eval.checkpoint_signature = lambda *a, **k: {}
+mode, output, ckpt, exp = sys.argv[1:]
+sys.argv = ['video_matrix.py', '--checkpoint', ckpt, '--exp', exp, '--out_dir', output]
 def run(args):
     if mode == 'error':
         raise RuntimeError('injected video failure')
@@ -313,37 +330,42 @@ video_matrix.run = run
 video_matrix.main()
 """
     with tempfile.TemporaryDirectory() as output:
+        ckpt = pathlib.Path(output) / "unused.pt"
+        exp = pathlib.Path(output) / "exp.py"
+        ckpt.write_bytes(b"ckpt")
+        exp.write_text("# stub\n", encoding="utf-8")
         for mode, message in (("error", "injected video failure"),
                               ("system_exit", "injected video refusal"),
                               ("broken_stdout", "injected broken stdout"),
                               ("success", "")):
-            result = subprocess.run([sys.executable, "-c", script, mode, output],
+            run_dir = pathlib.Path(output) / mode
+            run_dir.mkdir()
+            result = subprocess.run([sys.executable, "-c", script, mode, str(run_dir), str(ckpt), str(exp)],
                                     capture_output=True, text=True, encoding="utf-8", errors="replace",
                                     cwd=_REPO, env=os.environ.copy())
             if mode == "success":
                 assert result.returncode == 0, (result.returncode, result.stderr)
-                assert (pathlib.Path(output) / "matrix.json").is_file()
-                assert (pathlib.Path(output) / "close_called").is_file()
+                assert (run_dir / "matrix.json").is_file()
+                assert (run_dir / "close_called").is_file()
             else:
                 assert result.returncode != 0, (mode, result.returncode, result.stderr)
                 assert "Traceback" in result.stderr and message in result.stderr, result.stderr
-                assert not (pathlib.Path(output) / "close_called").exists(), mode
+                assert not (run_dir / "close_called").exists(), mode
 
 
 def test_video_matrix_resolves_dynamic_sensor_presets() -> None:
-    """V5's dynamically attached head sensor must reach gym as a concrete config."""
-    import gymnasium as gym
+    """The standalone v7 head sensor must bind its floor collider for every terrain gear."""
     from unittest.mock import patch
 
-    import rl_exp.tasks  # noqa: F401
+    import isaaclab.envs as isaac_envs
     from ablation_harness import video_matrix
+    from rl_exp import lizard2_v7
 
     class CheckedBeforeSimulation(Exception):
         pass
 
     for gear, suffix in (("plane", "/terrain/GroundPlane/CollisionPlane"), ("rough_b", "/terrain/mesh")):
-        def check_config(task, *, cfg, **kwargs):
-            assert task == "Lizard2-Flat-Play-v5"
+        def check_config(*, cfg, **kwargs):
             sensor = cfg.scene.head_ground_contact
             floor = cfg.scene.terrain.prim_path + suffix
             assert sensor.prim_path == "{ENV_REGEX_NS}/Robot/Geometry/neck_pitch"
@@ -352,49 +374,57 @@ def test_video_matrix_resolves_dynamic_sensor_presets() -> None:
             assert cfg.terminations.head_ground_contact.params["dwell_s"] == 0.5
             raise CheckedBeforeSimulation
 
-        args = video_matrix.build_parser().parse_args(["--task", "Lizard2-Flat-Play-v5"])
-        with patch.object(gym, "make", side_effect=check_config):
+        args = video_matrix.build_parser().parse_args([])
+        args.base_env_cfg = lizard2_v7.make_env_cfg(play=True)
+        args.base_runner_cfg = lizard2_v7.make_runner_cfg()
+        with patch.object(isaac_envs, "ManagerBasedRLEnv", side_effect=check_config):
             try:
                 video_matrix.record_cell({"speed": 1.5, "terrain": gear}, args)
             except CheckedBeforeSimulation:
                 pass
             else:
-                raise AssertionError("record_cell did not construct the requested task")
+                raise AssertionError("record_cell did not construct the requested environment")
 
 
 def test_eval_resolves_dynamic_sensor_presets() -> None:
     import argparse
     import ast
-    import importlib.metadata
+    from io import BytesIO
     from unittest.mock import patch
 
-    import gymnasium as gym
     from isaaclab.sensors import SensorBaseCfg
-    from isaaclab.utils.string import string_to_callable
-    from isaaclab_rl.rsl_rl import handle_deprecated_rsl_rl_cfg
-    from isaaclab_tasks.utils.hydra import resolve_presets
     import yaml
 
-    import rl_exp.tasks  # noqa: F401
-    from ablation_harness import suites
+    from ablation_harness import experiment_eval, suites
     from ablation_harness.components.dr_controller import apply_eval_mode
+    from rl_exp import lizard2_v7
 
     source = (_REPO / "ablation_harness" / "eval.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
     fn = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "_prepare_env")
+    exp_path = _REPO / "rl_exp" / "lizard2_v7.py"
     namespace = {
-        "gym": gym, "args_cli": argparse.Namespace(task="Lizard2-Flat-v6", envs_per_terrain=None,
-                                                  seed=123, device=None, mode="nominal"),
-        "string_to_callable": string_to_callable, "resolve_presets": resolve_presets,
-        "handle_deprecated_rsl_rl_cfg": handle_deprecated_rsl_rl_cfg,
-        "importlib": importlib, "suites": suites,
+        "BytesIO": BytesIO,
+        "args_cli": argparse.Namespace(
+            checkpoint=_REPO / "unused.pt", checkpoint_sha256=None,
+            experiment_files=(exp_path, {}), exp=exp_path, allow_drift=False,
+            envs_per_terrain=None, seed=123, device=None, mode="nominal",
+        ),
+        "suites": suites,
         "_SUITE_REGISTRY": {"lizard_suite_v2": (None, suites.lizard_suite_v2)},
         "apply_eval_mode": apply_eval_mode,
     }
     exec(compile(ast.Module(body=[fn], type_ignores=[]), "eval.py", "exec"), namespace)
     protocol = yaml.safe_load((_REPO / "ablation_harness" / "protocols" / "locomotion_eval_v3.yaml").read_text())
-    with patch.object(importlib.metadata, "version", return_value="5.0.1"):
-        env_cfg, _, _ = namespace["_prepare_env"](protocol)
+    with patch.object(
+        experiment_eval, "configurations",
+        return_value=(lizard2_v7.make_env_cfg(), lizard2_v7.make_runner_cfg(), {}, {"status": "unavailable"}, lizard2_v7),
+    ), patch.object(
+        experiment_eval, "checkpoint_snapshot", return_value=(BytesIO(b"ckpt"), {"path": "unused.pt", "sha256": "0"}),
+    ), patch.object(
+        experiment_eval, "checkpoint_signature", return_value={},
+    ):
+        env_cfg, _, _, _, _, _ = namespace["_prepare_env"](protocol)
     assert isinstance(env_cfg.scene.head_ground_contact, SensorBaseCfg)
     floor = env_cfg.scene.terrain.prim_path + "/terrain/mesh"
     assert env_cfg.scene.head_ground_contact.filter_prim_paths_expr == [floor]

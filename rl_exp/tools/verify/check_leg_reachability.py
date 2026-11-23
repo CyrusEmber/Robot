@@ -98,14 +98,10 @@ import tempfile
 import xml.etree.ElementTree as ET
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-# ONE answer to "which actuator group owns this joint" (the parity gate's), shared rather than
-# re-implemented: the gain table below reads the same yaml block that gate asserts coverage over.
-from check_dr_parity import _actuator_groups, _joint_owners  # noqa: E402
 
 _REPO = pathlib.Path(__file__).resolve().parents[3]
 # ``rl_exp`` is not an installed package, so the repo root joins sys.path beside the leg table it holds
-# (the same insert ``check_dr_parity`` does for the same reason) -- ``--self-check`` is stdlib-only and
-# runs on plain python.
+# -- ``--self-check`` is stdlib-only and runs on plain python.
 if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 from rl_exp.tasks import joint_names  # noqa: E402
@@ -448,25 +444,24 @@ def downstream_links(urdf: pathlib.Path, leg: str,
 
 def gain_table(rl_exp: pathlib.Path, family: str, joint_names: tuple[str, ...], *,
                params_path: pathlib.Path | None = None) -> dict[str, dict]:
-    """``{joint: {"group", "kp", "kd"}}`` from the recipe that CONSUMES this body, not from the body.
+    """``{joint: {"group", "kp", "kd"}}`` from a historical recipe yaml (offline diagnostics only).
 
-    The gains are not in the URDF, so they have to come from their one home: the line's ``actuators:``
-    block, matched to joints by its own ``joint_patterns``. The group->joint mapping is imported from the
-    parity gate instead of being re-implemented (one answer to "which group owns this joint"), and a
-    joint no group claims -- or two claiming it -- is refused: a gain table invented here would be a
-    second home for a number the recipe owns. ``params_path`` binds historical controls to their
-    frozen recipe; omission reads the current development recipe. Scalar/per-joint gains both work.
+    Historical diagnostic reference: reads retired ``versions/<family>/main/main_params.yaml`` (or an
+    explicit historical ``params_path``) for existing diagnostic reports, not active standalone v7
+    robot definitions under ``rl_exp/robots/``.
     """
     yaml_path = params_path or rl_exp / "versions" / family / "main" / "main_params.yaml"
-    text = yaml_path.read_text(encoding="utf-8")
-    groups = _actuator_groups(text)
     import yaml
-    values = yaml.safe_load(text)["actuators"]
-    if not groups:
+    parsed = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+    values = parsed.get("actuators")
+    if not values:
         raise SystemExit(f"{yaml_path}: declares no actuators block, so there are no gains to read")
-    owners = _joint_owners(groups, {name: {} for name in joint_names})
     table = {}
-    for name, claims in owners.items():
+    for name in joint_names:
+        claims = sorted(
+            group for group, spec in values.items()
+            if any(re.search(pattern, name) for pattern in (spec.get("joint_patterns") or ()))
+        )
         if len(claims) != 1:
             raise SystemExit(f"{yaml_path}: {name} is claimed by {claims or 'no group'} -- "
                              "expected exactly one actuator group")

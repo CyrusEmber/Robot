@@ -539,6 +539,7 @@ def _run_metadata(paths, source, drive_report, output, apply_root_translation, o
     inputs.append(paths.describe(declaration))
     files = {Path(module.__file__).resolve() for module in tuple(sys.modules.values())
              if getattr(module, '__file__', None) and str(module.__file__).endswith('.py')
+             and Path(module.__file__).is_absolute() and Path(module.__file__).is_file()
              and Path(module.__file__).resolve().is_relative_to(runtime_root)}
     files.add(Path(__file__).resolve())  # Also when invoked as __main__.
     code = [paths.describe(p) for p in sorted(files)]

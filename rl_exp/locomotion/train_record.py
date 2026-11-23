@@ -123,6 +123,32 @@ def write_provenance(run: Path, experiment: Path, usd: str, urdf: Path | None) -
     })
 
 
+_JOINT_OBS_PREFIXES = ("joint_pos", "joint_vel", "joint_effort", "joint_acc")
+
+
+def _observation_joint_names(env, term_cfg) -> list[str] | None:
+    """Return resolved joint names for joint-indexed observations, or None."""
+    params = getattr(term_cfg, "params", None) or {}
+    entity = params.get("asset_cfg")
+    explicit_joints = entity is not None and (
+        getattr(entity, "joint_names", None) is not None
+        or isinstance(getattr(entity, "joint_ids", None), (list, tuple))
+    )
+    func_name = getattr(getattr(term_cfg, "func", None), "__name__", "")
+    is_joint_func = func_name.startswith(_JOINT_OBS_PREFIXES)
+    if not explicit_joints and not is_joint_func:
+        return None
+    robot = env.scene[entity.name if entity is not None else "robot"]
+    indices = getattr(entity, "joint_ids", None) if entity is not None else slice(None)
+    if indices is None:
+        names = getattr(entity, "joint_names", None)
+        if names is not None:
+            return [names] if isinstance(names, str) else list(names)
+        indices = slice(None)
+    return (list(robot.joint_names[indices]) if isinstance(indices, slice)
+            else [robot.joint_names[i] for i in indices])
+
+
 def interface_signature(env) -> dict:
     """Read ordered observation and action dimensions from the initialized managers."""
     observations = env.observation_manager
@@ -142,12 +168,9 @@ def interface_signature(env) -> dict:
         terms = []
         for name, shape in zip(names, observations.group_obs_term_dim[group], strict=True):
             term = {"name": name, "width": prod(shape)}
-            if name in {"joint_pos", "joint_vel"}:
-                entity = getattr(group_cfg, name).params.get("asset_cfg")
-                robot = env.scene[entity.name if entity is not None else "robot"]
-                indices = entity.joint_ids if entity is not None else slice(None)
-                term["joints"] = (list(robot.joint_names[indices]) if isinstance(indices, slice)
-                                  else [robot.joint_names[i] for i in indices])
+            joints = _observation_joint_names(env, getattr(group_cfg, name))
+            if joints is not None:
+                term["joints"] = joints
             terms.append(term)
         observation_groups.append({"name": group, "terms": terms})
     return {

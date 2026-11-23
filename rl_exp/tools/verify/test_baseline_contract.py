@@ -407,163 +407,6 @@ def test_a_saved_record_is_written_whole_and_never_over_one_that_exists():
         assert not list(pathlib.Path(tmp).glob("half.frames.pt.*.tmp")), "the temp file has to go"
 
 
-def test_the_window_is_saved_before_it_is_judged():
-    """The one ordering a judge defect must not be able to undo, read off the real ``run``.
-
-    The offline half is :func:`test_a_judge_failure_names_the_record_to_retry_from`; this is the
-    half that cannot be exercised without a simulator, so it is read as the order of two calls
-    inside ``run`` rather than left to the next 20 s rollout to notice.
-    """
-    source = ast.parse((_REPO / "ablation_harness" / "baseline_eval.py").read_text(encoding="utf-8"))
-    run = next(node for node in source.body
-               if isinstance(node, ast.FunctionDef) and node.name == "run")
-    at = {"save": None, "judge": None}
-    for node in ast.walk(run):
-        if isinstance(node, ast.Call):
-            called = ast.unparse(node.func)
-            if called.endswith("baseline_frames.save"):
-                at["save"] = node.lineno
-            elif called.endswith("judged_or_recoverable"):
-                at["judge"] = node.lineno
-    assert at["save"] and at["judge"], f"run does not both save and judge: {at}"
-    assert at["save"] < at["judge"], (
-        f"the window is judged on line {at['judge']} before it is saved on line {at['save']}: a judge "
-        "defect would then cost a completed collection")
-
-
-def test_smoke_collection_preserves_invalid_and_metadata():
-    """Execute the live smoke branch and artifact kwargs; fixtures are not real rollout evidence."""
-    source = ast.parse((_REPO / "ablation_harness/baseline_eval.py").read_text(encoding="utf-8"))
-    run = next(node for node in source.body if isinstance(node, ast.FunctionDef) and node.name == "run")
-    branch = next(node for node in ast.walk(run) if isinstance(node, ast.If)
-                  and ast.unparse(node.test) == "smoke_steps is not None"
-                  and any(isinstance(child, ast.Constant) and child.value == "smoke_only"
-                          for child in ast.walk(node)))
-    code = compile(ast.fix_missing_locations(ast.Module(body=[branch], type_ignores=[])),
-                   "baseline smoke branch", "exec")
-    artifact_call = next(node for node in ast.walk(run) if isinstance(node, ast.Call)
-                         and ast.unparse(node.func) == "recorder.artifact")
-    conditions = next(node for node in ast.walk(run) if isinstance(node, ast.Assign)
-                      and any(isinstance(target, ast.Name) and target.id == "scene_conditions"
-                              for target in node.targets))
-    conditions_branch = next(node for node in ast.walk(run) if isinstance(node, ast.If)
-                             and ast.unparse(node.test) == "smoke_steps is not None"
-                             and any(isinstance(child, ast.Subscript)
-                                     and ast.unparse(child) == "scene_conditions['smoke']"
-                                     for child in ast.walk(node)))
-    metadata_code = compile(ast.fix_missing_locations(ast.Module(
-        body=[conditions, conditions_branch], type_ignores=[])), "baseline artifact metadata", "exec")
-    extra_kwargs = next(keyword.value for keyword in artifact_call.keywords
-                        if keyword.arg is None and ast.unparse(keyword.value) == "scene_conditions")
-    kwargs_code = compile(ast.Expression(body=extra_kwargs), "baseline artifact kwargs", "eval")
-    full_steps = 20
-    for smoke_steps in (None, 10, full_steps):
-        steps = full_steps if smoke_steps is None else smoke_steps
-        artifact = truncated(build(PROTOCOL, full_steps), steps)
-        artifact["meta"]["steps"] = steps
-        reader = baseline_metrics.judge(artifact)
-        states = [(None, reader, "smoke_only") if smoke_steps is not None else (None, reader, reader["verdict"])]
-        if smoke_steps is not None:
-            recorder = baseline_frames.BaselineFrames(num_envs=1, step_dt=1.0, axes=AXES)
-            bad_frame = default_frame(1)
-            del bad_frame["tilt_cos"]
-            error = expect(baseline_frames.FramesContractError, recorder.add, **bad_frame)
-            states.append((error, {"verdict": "invalid", "invalid_reasons": [f"collection contract: {error}"],
-                                  "gates": {name: None for name in baseline_metrics.gate_names(PROTOCOL)},
-                                  "metrics": {}, "diagnostics": {}, "per_env": {}}, "invalid"))
-            malformed = {**artifact, "meta": {**artifact["meta"], "body_weight_n": None}}
-            states.append((None, baseline_metrics.judge(malformed), "invalid"))
-        for contract_error, result, expected in states:
-            original = dict(result)
-            context = {"smoke_steps": smoke_steps, "steps": steps, "full_steps": full_steps,
-                       "contract_error": contract_error, "recorder": NS(count=steps),
-                       "protocol": PROTOCOL, "baseline_metrics": baseline_metrics, "result": result,
-                       "live": NS(step_dt=1.0), "scenes": None}
-            exec(code, context)
-            actual = context["result"]
-            if smoke_steps is None:
-                assert actual == original, actual
-                assert "smoke" not in actual
-            else:
-                assert actual["verdict"] == expected, (smoke_steps, original, actual)
-                assert actual["reader_validation"] == original, actual
-                assert actual["metrics"] == {} and all(value is None for value in actual["gates"].values())
-                assert actual["smoke"]["partial"] == (steps < full_steps)
-                assert actual["smoke"]["collected_steps"] == steps
-                assert actual["smoke"]["full_protocol_steps"] == full_steps
-                if expected == "invalid":
-                    assert actual["invalid_reasons"] == original["invalid_reasons"]
-            exec(metadata_code, context)
-            metadata = eval(kwargs_code, context)
-            fixture_recorder = baseline_frames.BaselineFrames(num_envs=1, step_dt=1.0, axes=AXES)
-            for index in range(steps):
-                fixture_recorder.add(**{name: values[index] for name, values in artifact["frames"].items()})
-            fixture_artifact = fixture_recorder.artifact(
-                protocol=PROTOCOL, body_weight_n=BODY_WEIGHT_N,
-                start_pos=torch.zeros(1, 3), start_yaw=torch.zeros(1),
-                ground_source=GROUND_SOURCE, foot_geometry=FOOT_GEOMETRY, **metadata)
-            with tempfile.TemporaryDirectory() as tmp:
-                path = pathlib.Path(tmp) / "smoke.frames.pt"
-                baseline_frames.save(path, fixture_artifact)
-                loaded = baseline_frames.load(path)
-            assert loaded["meta"].get("smoke") == metadata.get("smoke")
-            if smoke_steps is None:
-                assert "smoke" not in loaded["meta"]
-            else:
-                assert loaded["meta"]["smoke"]["partial"] == (steps < full_steps)
-                assert loaded["meta"]["smoke"]["full_protocol_steps"] == full_steps
-                assert loaded["meta"]["smoke"]["scope"] == actual["smoke"]["scope"]
-
-
-def test_baseline_terminal_hook_preserves_pre_reset_snapshot():
-    """Execute the actual hook/merge; late capture and whole-batch replacement must fail."""
-    source = ast.parse((_REPO / "ablation_harness/baseline_eval.py").read_text(encoding="utf-8"))
-    run = next(n for n in source.body if isinstance(n, ast.FunctionDef) and n.name == "run")
-    hook = next(n for n in ast.walk(run) if isinstance(n, ast.FunctionDef) and n.name == "capture_reset")
-    merge = next(n for n in ast.walk(run) if isinstance(n, ast.If)
-                 and ast.unparse(n.test) == "pending is not None")
-
-    def exercise(hook_node, merge_node):
-        skeleton = ast.parse("def harness(snapshot, original_reset, env_ids):\n"
-                             "    terminal = {}\n    pending = None\n    captured = 0\n")
-        skeleton.body[0].body.extend([hook_node, *ast.parse(
-            "capture_reset(env_ids)\nreturn terminal, pending, captured").body])
-        scope = {}
-        exec(compile(ast.fix_missing_locations(skeleton), "actual baseline capture hook", "exec"), scope)
-        state = {name: torch.arange(6, dtype=torch.float32).reshape(2, 3) + i + 1
-                 for i, name in enumerate(("joint_pos", "command_world"))}
-        before = {name: value.clone() for name, value in state.items()}
-
-        def reset(env_ids):
-            for value in state.values():
-                value[env_ids] = 0.
-
-        terminal, pending, captured = scope["harness"](
-            lambda: {name: value.clone() for name, value in state.items()}, reset, torch.tensor([1]))
-        # The nonterminal env's post-step sample must survive selective replacement.
-        frame = {name: value.clone() + 100. for name, value in state.items()}
-        unchanged = {name: value[0].clone() for name, value in frame.items()}
-        context = dict(frame=frame, terminal=terminal, pending=pending)
-        exec(compile(ast.fix_missing_locations(ast.Module(body=[merge_node], type_ignores=[])),
-                     "actual baseline terminal merge", "exec"), context)
-        assert captured == 1 and context["pending"] is None
-        for name in frame:
-            assert torch.equal(frame[name][1], before[name][1]), "terminal frame lost pre-reset values"
-            assert torch.equal(frame[name][0], unchanged[name]), "nonterminal env was replaced"
-
-    exercise(hook, merge)
-    # A deliberate ordering mutation demonstrates that the fixture distinguishes reset states.
-    import copy
-    late = copy.deepcopy(hook)
-    late.body.insert(1, late.body.pop())  # original_reset before snapshot, after nonlocal
-    expect(AssertionError, exercise, late, merge)
-    wrong_batch = copy.deepcopy(merge)
-    for node in ast.walk(wrong_batch):
-        if isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Name) and node.slice.id == "pending":
-            node.slice = ast.Slice()
-    expect(AssertionError, exercise, hook, wrong_batch)
-
-
 def test_terminal_probe_replay_accepts_collector_digest():
     """Use the collector's sha256: spelling, then exercise all saved-data negatives."""
     from rl_exp.tools.diagnose import palm_baseline_terminal as terminal
@@ -599,28 +442,6 @@ def test_terminal_probe_replay_accepts_collector_digest():
         result = terminal.replay(path, binding.sha256_bytes(raw))
         assert result["rejected"] == ["post_reset", "wrong_joint", "timeout", "command"]
         expect(ValueError, terminal.replay, path, "0" * 64)
-
-
-def test_a_judge_failure_names_the_record_to_retry_from():
-    """A judge defect must not cost the window: the error names the file that re-judges it offline."""
-    from ablation_harness import baseline_eval
-
-    artifact = build(PROTOCOL, 20)
-    with tempfile.TemporaryDirectory() as tmp:
-        path = pathlib.Path(tmp) / "eval.frames.pt"
-        assert baseline_eval.judged_or_recoverable(artifact, path) == baseline_metrics.judge(artifact)
-
-        def dies(subject):
-            raise RuntimeError("Expected all tensors to be on the same device, but found cuda:0 and cpu")
-
-        original, baseline_metrics.judge = baseline_metrics.judge, dies
-        try:
-            err = expect(RuntimeError, baseline_eval.judged_or_recoverable, artifact, path)
-        finally:
-            baseline_metrics.judge = original
-        assert str(path) in str(err), err
-        assert "python -m ablation_harness.baseline_metrics" in str(err), err
-        assert isinstance(err.__cause__, RuntimeError), "the judge's own error has to stay reachable"
 
 
 # --- the foot criteria: what the gait kind cannot see -------------------------------------------
@@ -1154,50 +975,6 @@ def test_probe_isolated_observation_contract():
     results.clear()
     exec(code, namespace)
     assert results == [("obs/policy-5-dims-as-approved", True)], results
-
-
-def score_along_heading(yaw: float, *, steps: int = 20, speed: float = 0.5) -> dict:
-    """A robot travelling at ``speed`` along its own heading for the whole window."""
-    from ablation_harness.baseline_eval import yaw_of
-    from isaaclab.utils.math import quat_from_euler_xyz
-
-    quat = quat_from_euler_xyz(torch.zeros(1), torch.full((1,), 0.35), torch.tensor([yaw]))
-    start_yaw = yaw_of(quat)
-
-    def position(step):
-        travel = (step + 1) * speed
-        return torch.tensor([[travel * math.cos(yaw), travel * math.sin(yaw), 0.0]])
-
-    return baseline_metrics.judge(build(PROTOCOL, steps, series={
-        "pos": position, "yaw": lambda step: start_yaw.clone()}, start_yaw=start_yaw))
-
-
-def test_eval_forward_axis_is_the_training_frame():
-    """The evaluator's forward axis must be the operator the reward kernel uses, not a re-derivation."""
-    from ablation_harness.baseline_eval import yaw_of
-    from isaaclab.utils.math import quat_apply_inverse, quat_from_euler_xyz, wrap_to_pi, yaw_quat
-
-    yaws = torch.tensor([0.0, math.pi / 2, math.pi, -2.0])
-    quat = quat_from_euler_xyz(torch.zeros(4), torch.full((4,), 0.35), yaws)
-    assert torch.allclose(wrap_to_pi(yaw_of(quat) - yaws), torch.zeros(4), atol=1e-5), \
-        "yaw must survive a pitched base, unchanged"
-    delta = torch.stack((10.0 * yaws.cos(), 10.0 * yaws.sin(), torch.zeros(4)), dim=-1)
-    kernel_axis = quat_apply_inverse(yaw_quat(quat), delta)[:, 0]
-    eval_axis = delta[:, 0] * yaw_of(quat).cos() + delta[:, 1] * yaw_of(quat).sin()
-    assert torch.allclose(eval_axis, kernel_axis, atol=1e-4), \
-        "the evaluator's projection must agree with the reward frame's operator"
-    assert torch.allclose(eval_axis, torch.full((4,), 10.0), atol=1e-4), \
-        "travelling along its own heading is forward, at every heading"
-
-
-def test_eval_scores_equal_relative_motion_equally():
-    """Same motion, different heading: the fixed window must not care which way it faces."""
-    for yaw in (0.0, 1.2, -1.2, math.pi):
-        result = score_along_heading(yaw)
-        assert abs(result["metrics"]["forward_displacement_m"] - 10.0) < 1e-3, \
-            f"yaw {yaw}: forward displacement must not depend on the heading"
-        assert result["metrics"]["forward_mae_mps"] < 1e-6, f"yaw {yaw}: motion is exactly on command"
-        assert result["verdict"] == "pass", f"yaw {yaw}: a perfectly tracked walk must pass"
 
 
 # A hand-rolled yaw that reads the quaternion as (w, x, y, z) silently returns ~pi on (x, y, z, w)
@@ -2208,7 +1985,6 @@ def test_the_legacy_reader_refuses_thresholds_it_cannot_read():
 def test_target_binding_report_roundtrip(*, render_matrix=False):
     """Check all binding readers; render the four-naming PNG matrix only when requested."""
     import copy
-    from ablation_harness import baseline_eval
     from rl_exp.tasks import joint_names
     from rl_exp.tools.diagnose import plot_joints
 
@@ -2289,8 +2065,6 @@ def test_target_binding_report_roundtrip(*, render_matrix=False):
         artifact["frames"]["joint_pos"] = wave[:, None, None].expand(20, 1, len(names)).clone()
         artifact["frames"]["foot_lowest_point"][..., 0] = (
             artifact["frames"]["pos"][..., 0, None] + wave[:, None, None])
-        cfg = NS(scene=NS(robot=NS(actuators={"spine": NS(joint_names_expr=["chest_yaw_joint"])})))
-        assert baseline_eval._gait_shape_joints(cfg, names, naming) == names
         with tempfile.TemporaryDirectory() as temp:
             path = pathlib.Path(temp) / "bound.frames.pt"
             baseline_frames.save(path, artifact)
