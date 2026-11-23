@@ -30,7 +30,7 @@ description: >
 | `tasks\` | **完整任务包**（自有代码 100% 自包含）：`__init__.py` 注册表、env cfg 家族、`agents\`（runner cfg）、按需的课程组件 |
 | `tools\`（pipeline/verify/diagnose/trainlog/archive）、`blender\` | 工具与验证脚本（见 asset-pipeline skill） |
 
-目录职责、闸门与入口清单在仓根 `FILEMAP.md`；obs 布局在 `OBS.md`。
+现役实验从仓根 `README.md` 进入，观测布局见显式实验文件。
 **动手前先读目标机器人 `FAMILY.md` 的「线」「任务注册表」「开新版本流程」三节**（不必整份读）。
 
 **任务注册机制（自包含包模式）**：任务包住 `<robot>_exp\tasks\`，`gym.register` 的

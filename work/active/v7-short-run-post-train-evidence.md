@@ -3,7 +3,7 @@ id: v7-short-run-post-train-evidence
 title: v7短训训后证据与未完成项
 scope: ablation_harness, rl_exp/versions/lizard2/main/v7
 status: open
-landing: ablation_harness/HARNESS.md, rl_exp/versions/lizard2/main/v7
+landing: README.md, rl_exp/versions/lizard2/main/v7
 next: 执行者核查短训训后缺口和画面同步，保留零有效样本事实并明确后续处置。
 close_when: 新上下文核验短训训后证据、未完成项及其承接后决定关闭。
 evidence: acceptance/records/2026-11-04-training-provenance-dependency-scope.md
@@ -23,6 +23,6 @@ evidence: acceptance/records/2026-11-04-training-provenance-dependency-scope.md
 ## 关闭条件
 
 - **审核者与输入**：新上下文读取原始评测、录像、证据记录和相关承接事项。
-- **可观察验收**：按 `ablation_harness/HARNESS.md` 如实报告有效样本与视频核验；零样本不写成成功，逐足或非足支撑须有经核定的测量口径。
+- **可观察验收**：按 [README 的评测产物](../../README.md#评测产物) 核对有效样本与视频；零样本不写成成功，逐足或非足支撑须有经核定的测量口径。
 - **交付与边界**：不能补出的历史数据保持未知；需要新的模型或其他未完成动作须有明确承接，不自动新增训练。
 - **结果处理**：通过审核后关闭；可修缺口退 in_progress，仅用户能解决的缺口置 blocked。

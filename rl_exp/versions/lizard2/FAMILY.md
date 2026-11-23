@@ -5,7 +5,7 @@
 > **本文只收已成立的事实（现在时/过去时）**：任何"待/未/若"字头的内容住 [PLAN.md](PLAN.md)。
 > **继承机制按引用不复制**：升版五步、状态机、记录规范、PLAN/NOTES 必含骨架从
 > `.codemaker/rules/versioning.mdc` §A 继承，本文不复制规则正文；目录职责、闸门清单、
-> 版本目录登记行见仓根 `FILEMAP.md`（本文不重复）。
+> 旧版本目录和登记表见 `archive/pre-refactor`。现役实验入口见 [README](../../../README.md)。
 
 ## 家族身份
 

@@ -13,4 +13,4 @@ close_when: 执行者在一次真 run 上走完 ①→②→③ 并观察：run 
 
 文件级豁免已由 `work/closed/2026/training-provenance-dependency-scope.md` 实现并独立审核，本项验收归档内容与评级。新格式按 T0 专属路径清单判定豁免，不宣称记录了完整依赖；已观察依赖只作范围违例反证。旧格式缺清单仍严格沿旧口径，不用当前声明缩小历史归档责任；材料完整性与旧记录 unknown 的要求保留。
 
-本项不改"历史 run 未采到的证据保持 unknown"这条读侧口径（standing 规则，见 `HARNESS.md` 记录格式节），也不重开归档位置的裁决；`--capture`/`--check` 的通过判词不复述。
+本项沿用 `archive/pre-refactor` 中评测文档的历史读数口径：未采到的证据保持 unknown。归档位置和 `--capture`/`--check` 的判据沿用已有记录。

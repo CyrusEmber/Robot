@@ -1,11 +1,11 @@
 ---
 id: legacy-frames-rejudged-invalid
 title: 旧帧记录的冻结判决不可再复读（新 reader 的报告项声明把老记录判成 invalid）
-scope: ablation_harness/baseline_metrics.py, ablation_harness/HARNESS.md, rl_exp/tools/verify/test_baseline_contract.py
+scope: ablation_harness/baseline_metrics.py, rl_exp/tools/verify/test_baseline_contract.py
 status: open
-landing: ablation_harness/baseline_metrics.py, rl_exp/tools/verify/test_baseline_contract.py, ablation_harness/HARNESS.md
+landing: ablation_harness/baseline_metrics.py, rl_exp/tools/verify/test_baseline_contract.py, acceptance/records
 next: 先定处置口径（修行为 vs 改声明，见下节，待用户拍板），再落对应改动 + 一条用**旧格式真实记录**（不是最新格式合成 fixture）钉住的行为断言。取证与读数见 `acceptance/records/2026-10-10-baseline-eval-pipeline-restructure-post-close-review.md`。
-close_when: 下列两条之一成立，且 `rl_exp/tools/verify/test_baseline_contract.py` 有一条用已入仓 `baseline-frames-1` 真实记录做输入的行为断言（现缺口：钉这件事的测试只喂 `build(frozen, 20)` 的默认最新格式）——(a) 修行为：`python -m ablation_harness.baseline_metrics <已入仓 frames.pt>` 对这些记录回到原判决（`fail`/`pass`），"只对新 reader 强制"对报告项依赖列检查也成立；(b) 改声明：把"旧格式记录遇声明了足端项的协议即判 `invalid`"写进 `HARNESS.md` 的机制契约与 `baseline-eval-pipeline-restructure` 的 P2 出口，并给出旧记录判决的替代可复读路径（原 `eval.json` 与帧并存即为该路径）。两条都不允许只改文档不改测试。
+close_when: 下列两条之一成立，且 `rl_exp/tools/verify/test_baseline_contract.py` 有一条用已入仓 `baseline-frames-1` 真实记录做输入的行为断言（现缺口：测试只喂 `build(frozen, 20)` 的默认最新格式）——(a) 修行为：`python -m ablation_harness.baseline_metrics <已入仓 frames.pt>` 对这些记录回到原判决（`fail`/`pass`），"只对新 reader 强制"对报告项依赖列检查也成立；(b) 改声明：写一份验收记录明确"旧格式记录遇声明了足端项的协议即判 `invalid`"及替代复读路径（原 `eval.json` 与帧并存），P2 出口只留记录指针。
 ---
 
 ## 情况
@@ -29,8 +29,7 @@ close_when: 下列两条之一成立，且 `rl_exp/tools/verify/test_baseline_co
 - **(a) 修行为**：让报告项依赖列检查沿记录所选 reader 走（旧 reader 只按旧路径）。代价 = 旧记录的判决能
   复读，但"协议声明了一个记录没测的项"这条保护对旧 reader 失效，历史上那三份 `report_only` 里的足端项
   将永远只报"缺号"而不报不可判。
-- **(b) 改声明**：承认旧记录在新声明下不可判，把这条写进 `HARNESS.md` 与 P2 出口。代价 = 一个已发布的
-  验收工具改变了已冻结产物的可复读性，须在契约里显式登记，而不是让它静默发生。
+- **(b) 改声明**：在验收记录说明旧记录在新声明下不可判及其复读路径。代价是一个已发布的验收工具改变了已冻结产物的可复读性。
 
 **不做**：不动已入仓帧与协议（它们是复现锚），不重判那三份记录的历史结论，不给 `REPORT_ITEMS` 加开关。
 

@@ -14,7 +14,7 @@ description: >
 
 资产链路：Blender 站姿 SSOT → URDF（几何 SSOT）→ USD（训练用）。方法论通用；
 每机器人一个 `<robot>_exp\` 目录（转换脚本、`blender\`、`meshes\`、验证脚本都在其中；
-目录与脚本清单见该机器人仓根 `FILEMAP.md`）。
+现役机体定义入口见该机器人仓根 `README.md`）。
 
 ## 核心规则
 
@@ -59,7 +59,7 @@ USD**。PD 初值随质量量级重估，抄旧机器人数值必炸。
 | 肉眼终验 | GUI 观察脚本（开 Isaac Sim 窗口看站立 / 穿模 / 地形） |
 
 标准顺序：convert → 关节数 → baseline_probe（数据）→ 肉眼终验。具体脚本名见仓根
-`FILEMAP.md`。
+`README.md`。
 
 ## 核心坑（症状 → 根因）
 
