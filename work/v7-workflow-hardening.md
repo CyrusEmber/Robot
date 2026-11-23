@@ -1,10 +1,10 @@
 ---
 id: v7-workflow-hardening
 title: v7 实验闭环止血、机体解耦与仓内清旧
-scope: rl_exp, ablation_harness, work, acceptance, .codemaker, AGENTS.md, README.md
-status: open
-next: 执行 Batch 1（修复 verify 断链与训练/评测安全阀）。
-close_when: 三批全部提交且验收全绿；改奖励只动 exp.py，改机体只动 robots/<body.py>；三目录 pytest 零收集错误；最终提交上的实跑评测写入验收记录。
+scope: rl_exp, ablation_harness, work, acceptance, .codemaker, AGENTS.md, README.md, pytest.ini
+status: in_progress
+next: 提交 Batch 1–3 代码与文档改动锁定源码版本，再用 model_5999.pt 跑一次完整 eval.cmd（Batch 3.3）更新 acceptance/records/2026-11-23-v7-standalone-cutover.md，并确认 work/active/ 旧工单去留。
+close_when: 三批全部提交且验收全绿；改奖励只动 exp.py，改机体只动 robots/<body.py>；pytest.ini 三目录零收集错误且全通过；最终提交上的实跑评测写入验收记录。
 ---
 
 ## 目标与非目标
@@ -17,39 +17,42 @@ close_when: 三批全部提交且验收全绿；改奖励只动 exp.py，改机�
 非目标（防过度设计）：
 - 不建 `RobotSpec` / `BaseExperiment` / `RobotRegistry` / YAML 继承 / 插件体系。
 - 不加 `apply_nominal` 新钩子（当前 v7 无 DR 事件，等首个带 DR 的现役实验出现再按真实事件定义）。
-- 不拆 `eval_cfg.yaml`、不重塑 `eval.json` 结构、不为字面搜索归零而改写现役局部变量名（如 `eval.py:656` 的 `cfg_lock`）。
-- 不为测试单独维护第二份真实 USD 资产，也不重构历史诊断工具（只修复被退网误伤的导入）。
+- 保留 `eval.json` 现有生效配置快照，不拆 `eval_cfg.yaml`；仅删 3 个恒为 `None` 且无消费者的死字段。
+- 不新建 `check.cmd`、不把全量 pytest 塞进 `pre-commit` hook（用 `pytest.ini` 的 `testpaths` 守住三目录即可）。
+- 不为字面搜索归零而改写现役局部变量名（如 `eval.py:656` 的 `cfg_lock`）；不为测试维护第二份真实 USD 资产；不把历史离线诊断工具强行改接到新机体模块。
 
 ## Batch 1：止血与安全阀（先修真缺陷，不改核心结构）
 
-### 1.1 分流 `verify/` 16 个收集错误
-- **修仍在用的诊断链**：把 `rl_exp/tools/verify/check_leg_reachability.py:103` 依赖的 `_actuator_groups` / `_joint_owners` 就地内联，断开已删的 `check_dr_parity`，恢复 `check_self_collision.py`、`local_path_view.py`、`pose_target_solver.py` 及相关 10 个测试。
-- **迁移现役测试再删死代码**：先把 `test_eval_record.py:1751` 的 `test_eval_failure_exit_status` 等现役行为测试迁入 `rl_exp/locomotion/tests/test_v7_experiment.py`；再删除绑死已退网 `recipe_tasks` / `check_cfg_lock` / `check_recipe_map` 的废弃文件（`rl_exp/tasks/` 旧配方模块、`rl_exp/tools/runrecord/{lifecycle,manifest,provenance,rebuild}.py`、`test_cfg_snapshot.py`、`test_resume_state.py`、`test_run_manifest.py`、`test_rebuild_gate.py`、`test_pxr_leak_gate.py`、`check_pxr_leak.py`、`test_eval_record.py` 等）。历史统一由 `archive/pre-refactor` tag 兜底。
-- **断反向依赖**：把新主线唯一复用的 `sha256_file` / `sha256_bytes` / `git_run`（~30 行）迁入 `rl_exp/locomotion/train_record.py`，移除对 `rl_exp.tools.runrecord.binding` 的依赖。
+### 1.1 清零 `verify/` + `diagnose/` 18 个收集错误并统一测试入口
+- **修仍在用的诊断链**：把 `rl_exp/tools/verify/check_leg_reachability.py:103` 依赖的 `_actuator_groups` / `_joint_owners` 就地内联，断开已删的 `check_dr_parity`，一并恢复 `verify/`（10 个）与 `diagnose/`（2 个，含 `test_lizard2_leg_drive_protocol.py`）的收集。明确 `check_leg_reachability.gain_table` 读取退役 `main_params.yaml` 仅属历史诊断口径，不作现役 v7 PD 判据。
+- **裁剪 `test_eval_record.py`**：删除已删 `run_ablation` 的导入及 30 条 sweep 段测试，保留其余 29 条（含 `test_eval_failure_exit_status`）并确保全绿。
+- **删除已退网死代码**：删除已无现役消费者的退网配方与旧门控脚本（`rl_exp/tasks/` 废弃配方、`check_pxr_leak.py`、`check_suite_shape.py`、`check_configclass_fields.py`、`test_configclass_fields_gate.py`、`check_record_bindings.py`、`lifecycle_entry_run.py`、`launcher_source_probe.py`、`debug_pose.py`、`emit_diff_declaration.py`、`declare_family.py`、`test_pxr_leak_gate.py`、`test_rebuild_gate.py`、`test_run_manifest.py` 等）。其中 `test_resume_state.py` 因 v7 `curriculum=None` 且顶部依赖已删 `recipe_tasks` 随旧课程工具退役；`test_cfg_snapshot.py` 为 0 pytest 用例的旧 check 脚本（现役 `cfg_snapshot.py` 仅由 `eval.py` 消费）。历史统一由 `archive/pre-refactor` tag 兜底。
+- **精简 `rl_exp/tools/runrecord/`（不留两份家）**：全仓 50+ 诊断、blender 与 verify 脚本复用 `rl_exp/tools/runrecord/binding.py`（108 行纯 stdlib 原语），保留 `binding.py` 原地作为唯一家，删除同目录已退网的 `lifecycle.py`、`manifest.py`、`provenance.py`、`rebuild.py`。
+- **守住测试范围**：`pytest.ini` 的 `testpaths` 覆盖 `rl_exp/locomotion/tests`、`rl_exp/tools/verify`、`rl_exp/tools/diagnose` 三个目录，并消除跨文件进程污染（`local_path_view.py` 跳过虚拟相对路径模块 `__file__`、`test_eval_record.py`/`test_archived_support_read.py` 改用干净子进程测无框架导入）。
 
 ### 1.2 修训练与评测安全阀
-- **训练默认只训练，保留兼容别名**：`rl_exp/locomotion/train.py` 默认只训练，加 `--eval` 才串接 `eval.cmd`；保留 `--train-only` 作为已弃用 no-op 兼容别名并提示弃用。
+- **训练默认只训练，保留兼容别名**：`rl_exp/locomotion/train.py` 默认只训练，加 `--eval` 才串接 `eval.cmd`；保留 `--train-only` 作为已弃用空操作兼容别名并提示弃用。**同步修改 `train.py:65` 子进程重入命令**：由硬追加 `--train-only` 改为剥离 `--eval`，避免 `--eval` 无限递归。
 - **修训练启动与 ckpt 定位**：
   - `run.mkdir(parents=True)` 移到 `AppLauncher(args)` 之前，避免目录冲突时白等 Kit 启动。
-  - 保留子进程现有的最终 checkpoint 存在性检查（避免中间权重冒充最终结果）；父进程仅在 `--eval` 且训练子进程成功退出后，从本次独占的新 Run 目录按数字迭代号选最大的 `model_<整数>.pt`，无候选即失败（删 `model_{max_iterations - 1}.pt` 猜测）。
+  - 保留子进程现有的最终 checkpoint 存在性检查（避免中间权重冒充最终结果）；父进程仅在 `--eval` 且训练子进程成功退出后，从本次独占的新 Run 目录按数字迭代号选最大的 `model_<整数>.pt`，无候选即失败（删 `train.py:74` 的 `model_{max_iterations - 1}.pt` 猜测）。
 - **单轨推理配置漂移校验（选 A）**：
-  - 新 Run 复用已有 `resolved_cfg.yaml`，在 `PLAY`、地形和 `nominal/robust` 覆写之前，对比训练口径下的 `scene.robot`、`actions`、`observations`、`sim.dt`、`decimation`，以及实际传给评测 wrapper 的 `runner.clip_actions`。
+  - 新 Run 复用已有 `resolved_cfg.yaml`，在 `PLAY`、地形和 `nominal/robust` 覆写之前，对比训练口径下的 `scene.robot`、`actions`、`observations`、`sim.dt`、`decimation`，以及 `runner.clip_actions`、`runner.obs_groups`、`runner.actor`（含 `activation`）。
   - 保留已有资产校验和权重接口签名；源码哈希沿用现有来源记录，不参与拒绝判定。
-  - 任一受检推理项不一致时默认拒绝（造环境前失败，不强行前移到 `AppLauncher` 之前，避免预启动阶段引入 `pxr` 泄漏）；仅在显式传 `--allow-drift` 或显式 `--exp` 时放行，并在指标和录像中记录实际来源。
-  - 历史 `model_5999.pt` 无 `resolved_cfg.yaml`，沿用显式 `--exp` 和已有 sidecar，并记录配置比对不可用。
-- **修观测签名（兼容现役权重）**：
-  - `rl_exp/locomotion/train_record.py:145` 去掉字面名白名单 `{"joint_pos", "joint_vel"}`，改为覆盖两类项：显式带 `asset_cfg.joint_ids`/`joint_names` 的项，以及省略 `asset_cfg` 的关节类观测函数（保留默认全关节 `slice(None)` 语义，兼容 `model_5999.pt.interface.json`）。
+  - 任一受检推理项不一致、或新 Run（含 `provenance.json` 中 `experiment` 字段）缺失 `resolved_cfg.yaml` 时默认拒绝（造环境前失败，不强行前移到 `AppLauncher` 之前，避免预启动阶段引入 `pxr` 泄漏）；**仅在显式传 `--allow-drift` 时放行**并在指标和录像中记录实际来源（`--exp` 仅指定实验文件，不豁免漂移）。
+  - 历史 `model_5999.pt`（位于 Isaac Lab 根下 `logs/rsl_rl/lizard2_v7/2026-11-03_17-07-29/`）无 `resolved_cfg.yaml`，沿用显式 `--exp` 和同目录 `model_5999.pt.interface.json`，并记录配置比对不可用。
+- **修观测签名（保持双向严格匹配兼容）**：
+  - `rl_exp/locomotion/train_record.py:145` 去掉字面名白名单 `{"joint_pos", "joint_vel"}`，改为覆盖显式带 `asset_cfg.joint_ids`/`joint_names` 的项，以及省略 `asset_cfg` 的关节类观测函数（保留默认全关节 `slice(None)` 语义）。确认 `lizard2_v7` 仍只有 `joint_pos` / `joint_vel` 带 `joints` 键，其余 5 项不意外多键（满足 `experiment_eval._require_match:123` 双向严格比较）。
 - **修 `find_python.cmd`**：优先级改为 `RL_PYTHON` > `paths.yaml` > `VIRTUAL_ENV`；稳健解析 `paths.yaml`（容忍冒号前空格、单双引号、行尾 `#` 注释）。
 
 ### 1.3 补测试与前测
 - `rl_exp/locomotion/tests/test_v7_experiment.py` 补：
-  1. `train.py` 异常退出真实子进程测试，以及 `--train-only` / 默认纯训练 / `--eval`（含最大 `model_<整数>.pt` 选择与无候选失败）路径测试；
-  2. 原始 `model_5999.pt.interface.json` sidecar 兼容加载测试 + 非标准项名（如 `joint_pos_legs`）同宽重排拒载测试；
+  1. `train.py` 异常退出真实子进程测试，以及 `--train-only` / 默认纯训练 / `--eval`（含子进程剥离 `--eval`、最大 `model_<整数>.pt` 选择与无候选失败）路径测试；
+  2. 以 `model_5999.pt.interface.json` 真实键集为夹具的兼容加载测试（不硬依赖宿主机绝对路径）+ 非标准项名（如 `joint_pos_legs`）同宽重排拒载测试；
   3. 漂移校验三例：只改一项 PD 默认拒绝、只改 `runner.clip_actions` 默认拒绝、只改奖励权重或注释正常通过；传 `--allow-drift` 放行并在指标和录像记录来源。
 - Batch 1 完成后可跑一次 `eval.cmd` 作前测，不提前改写最终验收记录。
 
 ### Batch 1 验收
-- 显式收集并执行三个目录：`pytest --collect-only` 与 `pytest` 覆盖 `rl_exp/locomotion/tests`、`rl_exp/tools/verify`、`rl_exp/tools/diagnose`，均 **0 error** 且全部通过。
+- `pytest --collect-only` 覆盖三目录 **18 error → 0 error**，且默认 `pytest` 全通过（含 `test_eval_record.py` 29 passed）。
 - 漂移校验三例与 `--allow-drift` 全部命中预期。
 
 ## Batch 2：机体模块解耦（实现“改机体 = 只改机体”）
@@ -75,19 +78,19 @@ close_when: 三批全部提交且验收全绿；改奖励只动 exp.py，改机�
 ### 3.1 对齐 `.codemaker/` 技能与规则
 - 重写或删改冲突技能：
   - `isaaclab-task-creator/SKILL.md` → 改为显式 `robots/<body.py>` + `rl_exp/<exp>.py` 指南（删 `gym.register`、`versions/<family>/vN/`、`<robot>_params.yaml`、`FAMILY.md`）。
-  - `isaaclab-pretrain-check/SKILL.md`、`isaaclab-train-probe/SKILL.md` → 更新指向 `rl_exp/out/train/` 与现役入口，不再用则直接删除。
+  - `isaaclab-pretrain-check/SKILL.md`、`isaaclab-train-probe/SKILL.md` → 更新指向 `rl_exp/out/train/`（注明为首次训练自动创建的默认输出根）与现役入口，不再用则直接删除。
 - 精简 `AGENTS.md` 与 `.codemaker/rules/isaaclab-development.mdc`：删不适用个人实验仓的上游公共库条款（如“破坏公开 API 须先弃用”、“`./isaaclab.sh -d`”）。
 
 ### 3.2 清理残余历史文档与死字段
-- `rl_exp/versions/` 废元数据与旧 `FAMILY.md` 清理或标只读归档；`work/active/` 29 份旧工单按 `README.md` 收口（已结删、未完扁平化到 `work/<id>.md`）。
-- 保留 `eval.json` 现有生效配置快照，仅删除 `ablation_harness/eval.py:573-575` 三个恒为 `None` 的死字段。
+- `rl_exp/versions/` 废元数据与旧 `FAMILY.md` 清理或标只读归档（若保留 `check_leg_reachability` 历史诊断，同步确认其依赖的 `main_params.yaml` 去留）；`work/active/` 29 份旧工单按 `README.md` 收口（已结删、未完扁平化到 `work/<id>.md`）。
+- 保留 `eval.json` 现有生效配置快照，仅删除 `ablation_harness/eval.py:573-575` 三个恒为 `None` 且无消费者的死字段。
 
 ### 3.3 最终实跑与验收收尾（三批全部提交后执行）
-- 锁定三批全部改动的最终源码提交，用同一 `model_5999.pt`、`locomotion_eval_v3` 和 `seed 123` 跑一次完整 `robust` 评测（该命令同时生成九段 nominal 平地录像）：
+- 锁定三批全部改动的最终源码提交，用位于 Isaac Lab 根下 `logs/rsl_rl/lizard2_v7/2026-11-03_17-07-29/model_5999.pt`（配同目录 `model_5999.pt.interface.json`）、`locomotion_eval_v3` 和 `seed 123` 跑一次完整 `robust` 评测（该命令同时生成九段 nominal 平地录像）：
   1. 对照已有 robust 基线的指标、射线有效帧与九段录像，确认无行为回归；
   2. 更新 `acceptance/records/2026-11-23-v7-standalone-cutover.md` 指向最终验证的提交与输出目录。
 
 ### Batch 3 验收
-- 现役入口不再导入已删除的配方模块；三目录 pytest 全绿（`rl_exp/locomotion/tests`、`rl_exp/tools/verify`、`rl_exp/tools/diagnose`）。
+- 现役入口不再导入已删除的配方模块；默认 `pytest`（覆盖三目录）全绿。
 - `.codemaker/`、`README.md`、`AGENTS.md` 不再指引已退网配方流程（`recipes.json` / `lizard2_recipe` / `recipe_tasks` / `versions/<family>/vN`）。
 - 验收记录中 `eval.json` 的 `git_rev_lizard` 与最终提交一致。

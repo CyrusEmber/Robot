@@ -18,10 +18,10 @@ description: >
 
 ## 核心规则
 
-- **改了 URDF 或 PD 参数后必须重跑 convert**，env 引用的 USD 才更新
+- **改了 URDF 后必须重跑 convert**，env 引用的 USD 才更新
   （`force_usd_conversion` 只管重转、不管触发）
 - **转换前删旧 assets 目录 + `.asset_hash` + `config.yaml`**
-- **资产换代时同步冻结配方环境** —— 快照里抄了资产配置
+- **换代或更新资产后同步更新机体模块 `rl_exp/robots/<body.py>`**（资产路径、默认 PD、动作关节与身体部位）
 - `UrdfConverterCfg` 要点新机器人照抄，每条都有踩坑理由，别乱改
 
 ## convert_urdf 运行
@@ -32,7 +32,7 @@ description: >
 
 `UrdfConverterCfg` 要点：
 
-- PD 增益从 `<robot>_params.yaml` actuator 组读取 → USD 内嵌 drive 与训练配置一致
+- PD 增益与动作映射在现役机体模块 `rl_exp/robots/<body.py>` 统一定义
 - `merge_fixed_joints=False`：保留脚部独立 body，接触奖励依赖它们
 - `fix_base=False`；`self_collision=True`
 - `run_asset_transformer=False` / `run_multi_physics_conversion=False`：分层资产把物理放
@@ -40,11 +40,11 @@ description: >
 - 转完自动 `flatten_usd()`：3.0 importer 把 link 嵌套进 base body，破坏接触传感器
   body 匹配，必须拍平回 2.x 布局
 - 显式 `usd_file_name="<robot>/<robot>.usda"`：缺省时旧目录占坑会被静默改名
-  `<robot>_1/`，yaml 指向空
+  `<robot>_1/`，导致引用路径错位
 
 ## 资产层 vs 环境层
 
-PD 增益虽内嵌 USD，env cfg actuator 配置会覆盖它 ⇒ **调 PD 改 yaml 即生效，不用重转
+PD 增益虽内嵌 USD，机体模块的 `make_robot_cfg()` actuator 配置会覆盖它 ⇒ **调 PD 直接改 `rl_exp/robots/<body.py>` 即生效，不用重转
 USD**。PD 初值随质量量级重估，抄旧机器人数值必炸。
 
 ## 转换后验证链（从 IsaacLab 根目录，venv python）
