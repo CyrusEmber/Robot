@@ -1,9 +1,9 @@
 ---
 id: live-doc-ledger-numbers
 title: 活文档里的旧台账编号
-scope: ablation_harness, work/active, ARCH_PLAN.md
+scope: ablation_harness, work/active, work/archive/2026/ARCH_PLAN.md
 status: done
-landing: ablation_harness/HARNESS.md, ARCH_PLAN.md, ablation_harness/protocols
+landing: ablation_harness/HARNESS.md, work/archive/2026/ARCH_PLAN.md, ablation_harness/protocols
 outcome: 独立审核通过，详情见 evidence；冻结协议未修改。
 close_when: 独立审核活跃标题无失效编号、指定冻结协议注释已有处置且两处指针真实可解析；失败退回修复。
 evidence: acceptance/records/2026-10-30-live-doc-ledger-numbers.md, acceptance/records/2026-10-30-live-doc-ledger-numbers-review.md
