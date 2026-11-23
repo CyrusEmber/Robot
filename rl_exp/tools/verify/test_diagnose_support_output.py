@@ -32,7 +32,7 @@ sys.path.insert(0, str(_TOOL.parent))
 sys.path.insert(0, str(_TOOL.parents[1] / "verify"))
 from artifact_paths import ArtifactPaths, _relative, _unlinked
 from artifact_run import ArtifactRun, inspect_run
-import cfg_snapshot
+from ablation_harness import cfg_snapshot
 import support_native_ab
 
 

@@ -95,7 +95,7 @@ from rl_exp.tasks.teacher_mdp import (
     SpawnWeightSIRTerrainCurriculum,
     ck_value,
 )
-from rl_exp.tools.verify import cfg_snapshot as cs
+from ablation_harness import cfg_snapshot as cs
 
 STATE_KEY = "lizard_curriculum_state"
 """Key under ``checkpoint["infos"]`` carrying the curriculum state."""

@@ -45,7 +45,7 @@ from rl_exp.tools.runrecord.binding import (  # noqa: E402
     sha256_bytes,
     sha256_file,
 )
-from rl_exp.tools.verify.cfg_snapshot import relativize  # noqa: E402
+from ablation_harness.cfg_snapshot import relativize  # noqa: E402
 
 UNTRACKED_CAP = 40
 EVAL_EXCLUSIVE_PATHS = (

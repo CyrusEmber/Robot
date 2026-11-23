@@ -46,7 +46,7 @@ if str(_REPO) not in sys.path:
 
 from rl_exp.tools.runrecord import manifest as M  # noqa: E402
 from rl_exp.tools.runrecord import provenance as prov  # noqa: E402
-from rl_exp.tools.verify import cfg_snapshot as cs  # noqa: E402
+from ablation_harness import cfg_snapshot as cs  # noqa: E402
 
 MATERIAL_NAME = "rebuild_material.json"
 MATERIAL_FORMAT = 1

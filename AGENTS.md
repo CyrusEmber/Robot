@@ -5,18 +5,13 @@
 - 直接说明限制；错了承认，不确定就查证。
 - 按任务检索 `FILEMAP.md`、家族 `FAMILY.md` 和子系统文档，不整份通读。
 - 临时脚本不留仓根或输出根；一次性操作优先系统临时目录并在使用后清理，可复读诊断进 `rl_exp/tools/diagnose/`，历史工具进 `rl_exp/tools/archive/`。诊断输出和日志按事项组织；同一事项的运行或重试可共用目录，以不同文件名或标识区分，禁止覆盖已有产物。保留失败现场和未核定证据，不按日期自动删除。
-- 每次训练结束必须执行 `ablation_harness/HARNESS.md`「训后评估固定流程」：默认 robust，nominal 由用户选择；固定必报项不能临时省略，报告项与通过门槛分开。
-- 训后九宫格视频必录并逐片验看：用 `ablation_harness/video_matrix.py` 输出带速度/视角标签的三档目标速度 × 三个视角，保留单段原片和 `matrix.json`；按 `ablation_harness/POST_TRAIN_EVAL_TEMPLATE.md` 记录执行者、播放/抽帧方式、时间位置与局限，完成状态按 `HARNESS.md` 判。
+- 正常训练结束自动跑 robust 评测及三档速度 × 三个视角录像。用户可选择 nominal。指标、样本数、缺测和命令状态由程序写进 Run，看片后决定下一步。报告项与协议阈值分开。见 `ablation_harness/HARNESS.md`。
 
 ## Work 与证据
 
-- 在办事项 `work/active/`，关闭归档 `work/closed/<year>/`，结果唯一归 `acceptance/records/`。
-- **新建 work 必须用 `check_work_docs.py --scaffold ... --apply`；禁止手工创建。**
-- 活跃事项只写当前状态与未完动作；数值、摘要和完整结论只进验收记录，其它文档留指针。
-- 关闭前先置 `pending_review`，由不带执笔历史的新上下文对照实际落点与证据审核；证据变化须重审。
-- 审核记录与事项的证据指针同次提交；格式检查通过、记录存在都不代表审核已经完成。
-- 未完动作不得随事项关闭而消失；迁移同次建新删旧，不能为预算达标自动取消、关闭或归档。
-- 操作 work 或验收记录前，必读 [work-ledger](.codemaker/rules/work-ledger.mdc)；文件格式以 `rl_exp/tools/verify/check_work_docs.py` 模块文档为准。
+- 普通试错只留 Run。值得搜索的小教训可留在 Git 提交消息里。
+- 需要交接时写 `work/<id>.md`，只记下一步、Run 路径与实际阻塞。做完删除。
+- 采纳基线或否决重要路线时，在 `acceptance/records/` 写一份短记录，记目的、Run 与权重、关键指标与看片发现、决定与适用范围。采纳后给实际运行的代码提交打 tag，确认资产和权重可取并能加载。
 
 ## 实现与验证红线
 
@@ -33,8 +28,6 @@
 | 任务 | 入口 |
 |---|---|
 | 代码、API、依赖、测试、文件头、CI | [isaaclab-development](.codemaker/rules/isaaclab-development.mdc) |
-| 版本、配方、PLAN/NOTES/FAMILY | [versioning](.codemaker/rules/versioning.mdc) |
 | FILEMAP | [docs](.codemaker/rules/docs.mdc) |
 | 编写或修改 skill | [skill-authoring](.codemaker/rules/skill-authoring.mdc) |
-| 新增闸门 | `rl_exp/tools/verify/OFFLINE_CHECKS.md` §4：真实缺陷与破坏测试，区分声明一致和行为验证 |
 | 迭代收尾、提交、推送 | [git-auto-sync](.codemaker/skills/tool/git-auto-sync/SKILL.md) |

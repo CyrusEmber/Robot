@@ -54,7 +54,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 from isaaclab.managers import ManagerTermBase  # noqa: E402
 
-import cfg_snapshot as cs  # noqa: E402
+from ablation_harness import cfg_snapshot as cs  # noqa: E402
 
 from rl_exp.tasks.curriculum_state import (  # noqa: E402
     REQUIRES_CURRICULUM_STATE,
@@ -78,7 +78,7 @@ from rl_exp.tasks.recipe_tasks import (  # noqa: E402
     Lizard2FlatV3EnvCfg_PLAY,
 )
 from rl_exp.tasks.teacher_mdp import JOINT_SIR_TERM, ck_value, init_ck  # noqa: E402
-from rl_exp.tools.verify import terrain_split_probe as probe  # noqa: E402
+from ablation_harness import terrain_split_probe as probe  # noqa: E402
 from test_joint_sir import (  # noqa: E402
     GRID,
     NUM_ENVS,

@@ -31,7 +31,7 @@ import builtins
 import sys
 import types
 
-from rl_exp.tools.verify import terrain_split_probe as probe
+from ablation_harness import terrain_split_probe as probe
 
 #: The module under watch, and the real importer we expect to be handed back afterwards.
 GENERATOR = probe._GENERATOR_MODULE

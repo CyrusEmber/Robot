@@ -1202,8 +1202,8 @@ def capture(args):
         from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper
         from ablation_harness import suites
         from ablation_harness.components.dr_controller import apply_eval_mode
-        from rl_exp.tasks.terrain_geometry import seed_rngs
-        from rl_exp.tools.verify import terrain_split_probe, cfg_snapshot
+        from ablation_harness.terrain_geometry import seed_rngs
+        from ablation_harness import terrain_split_probe, cfg_snapshot
 
         spec = gym.spec('Lizard2-Flat-v3')
         cfg = string_to_callable(spec.kwargs['env_cfg_entry_point'])()

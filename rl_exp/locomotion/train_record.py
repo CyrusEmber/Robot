@@ -8,10 +8,12 @@
 from importlib.metadata import version
 import json
 from math import prod
+import os
 from pathlib import Path
 from shutil import copyfile
 from subprocess import CalledProcessError
 import sys
+from xml.etree import ElementTree
 
 from rl_exp.tools.runrecord.binding import git_run, sha256_file
 
@@ -23,11 +25,54 @@ def write_json(path: Path, data: dict) -> None:
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
+def asset_fingerprints(usd: str, urdf: Path | None) -> dict:
+    """Record the USD dependency graph and any URDF meshes beside it."""
+    from pxr import UsdUtils
+
+    usd_path = Path(usd).resolve()
+    layers, assets, missing = UsdUtils.ComputeAllDependencies(str(usd_path))
+    if missing:
+        raise FileNotFoundError(f"Unresolved dependencies of {usd_path}: {missing}")
+
+    def fingerprint(path: Path, dependencies) -> dict:
+        def digest(file: Path) -> str:
+            value = sha256_file(file)
+            if value is None:
+                raise FileNotFoundError(f"Asset is unreadable: {file}")
+            return value
+
+        files = {file.resolve() for file in dependencies}
+        files.discard(path)
+        return {
+            "path": str(path),
+            "sha256": digest(path),
+            "dependencies": {
+                Path(os.path.relpath(file, path.parent)).as_posix() if file.anchor == path.anchor else file.as_posix():
+                digest(file) for file in sorted(files)
+            },
+        }
+
+    result = {"usd": fingerprint(usd_path, [*(Path(layer.realPath) for layer in layers), *(Path(str(p)) for p in assets)])}
+    if urdf is not None:
+        urdf = urdf.resolve()
+        meshes = (urdf.parent / mesh.attrib["filename"] for mesh in ElementTree.parse(urdf).iter("mesh"))
+        result["urdf"] = fingerprint(urdf, meshes)
+    return result
+
+
 def write_provenance(run: Path, experiment: Path, usd: str, urdf: Path | None) -> None:
     """Save tracked changes, the experiment file, and imported untracked Python sources."""
     import isaaclab
 
     framework_source = Path(isaaclab.__file__).resolve().parent
+    framework_root = git_run(framework_source, "rev-parse", "--show-toplevel")
+    framework = {"source": str(framework_source), "head": git_run(framework_source, "rev-parse", "HEAD") or None,
+                 "version": version("isaaclab")}
+    if framework_root:
+        framework_diff = git_run(Path(framework_root), "diff", "HEAD", "--no-ext-diff", strip_output=False, check=True)
+        if framework_diff:
+            (run / "isaaclab.diff").write_text(framework_diff, encoding="utf-8", newline="\n")
+            framework["git_diff"] = "isaaclab.diff"
     git_head = git_run(_REPO, "rev-parse", "HEAD") or None
     git_error = None
     untracked = None
@@ -63,19 +108,18 @@ def write_provenance(run: Path, experiment: Path, usd: str, urdf: Path | None) -
         copyfile(source, target)
         copied_sources.append(relative.as_posix())
 
-    assets = {"usd": {"path": str(usd), "sha256": sha256_file(Path(usd))}}
-    if urdf is not None:
-        assets["urdf"] = {"path": str(urdf), "sha256": sha256_file(urdf)}
+    entry = {"path": str(experiment), "copy": copied_experiment.as_posix()}
+    if experiment.is_relative_to(_REPO):
+        entry["repo_path"] = experiment.relative_to(_REPO).as_posix()
     write_json(run / "provenance.json", {
-        "experiment": {"path": str(experiment), "copy": copied_experiment.as_posix()},
+        "experiment": entry,
         "repository_head": git_head,
         "git_diff": "git.diff" if git_error is None else None,
         "git_error": git_error,
         "copied_sources": sorted(set(copied_sources)),
-        "isaaclab": {"source": str(framework_source), "head": git_run(framework_source, "rev-parse", "HEAD") or None,
-                     "version": version("isaaclab")},
+        "isaaclab": framework,
         "rsl_rl_version": version("rsl-rl-lib"),
-        "assets": assets,
+        "assets": asset_fingerprints(usd, urdf),
     })
 
 
@@ -86,15 +130,28 @@ def interface_signature(env) -> dict:
     action_terms = []
     for name in actions.active_terms:
         term = actions.get_term(name)
-        action_terms.append({"name": name, "width": term.action_dim, "joints": list(term.IO_descriptor.joint_names)})
+        descriptor = getattr(term, "IO_descriptor", None)
+        joints = getattr(descriptor, "joint_names", None)
+        action = {"name": name, "width": term.action_dim}
+        if joints is not None:
+            action["joints"] = list(joints)
+        action_terms.append(action)
+    observation_groups = []
+    for group, names in observations.active_terms.items():
+        group_cfg = getattr(observations.cfg, group)
+        terms = []
+        for name, shape in zip(names, observations.group_obs_term_dim[group], strict=True):
+            term = {"name": name, "width": prod(shape)}
+            if name in {"joint_pos", "joint_vel"}:
+                entity = getattr(group_cfg, name).params.get("asset_cfg")
+                robot = env.scene[entity.name if entity is not None else "robot"]
+                indices = entity.joint_ids if entity is not None else slice(None)
+                term["joints"] = (list(robot.joint_names[indices]) if isinstance(indices, slice)
+                                  else [robot.joint_names[i] for i in indices])
+            terms.append(term)
+        observation_groups.append({"name": group, "terms": terms})
     return {
-        "observations": [
-            {"name": group, "terms": [
-                {"name": term, "width": prod(shape)}
-                for term, shape in zip(terms, observations.group_obs_term_dim[group], strict=True)
-            ]}
-            for group, terms in observations.active_terms.items()
-        ],
+        "observations": observation_groups,
         "action_dim": actions.total_action_dim,
         "actions": action_terms,
     }

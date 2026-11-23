@@ -14,6 +14,7 @@ from pathlib import Path
 from random import SystemRandom
 import subprocess
 import sys
+import traceback
 from uuid import uuid4
 
 from isaaclab.app import AppLauncher
@@ -96,17 +97,14 @@ def main() -> None:
     env_cfg.seed = runner_cfg.seed
     env_cfg.validate()
 
-    run.mkdir(parents=True)
     env_cfg.log_dir = str(run)
-    print(f"Run directory: {run}", flush=True)
-
-    with ExitStack() as cleanup:
-        try:
-            if find_spec("isaacsim") is None:
-                raise SystemExit("Isaac Sim/Kit is unavailable in this Python environment. PhysX training requires it.")
-            launcher = AppLauncher(args)
-            cleanup.callback(launcher.app.close)
-
+    if find_spec("isaacsim") is None:
+        raise SystemExit("Isaac Sim/Kit is unavailable in this Python environment. PhysX training requires it.")
+    launcher = AppLauncher(args)
+    try:
+        run.mkdir(parents=True)
+        print(f"Run directory: {run}", flush=True)
+        with ExitStack() as cleanup:
             from isaaclab.envs import ManagerBasedRLEnv
             from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper
             from rsl_rl.runners import OnPolicyRunner
@@ -116,26 +114,32 @@ def main() -> None:
             dump_yaml(str(run / "resolved_cfg.yaml"), {"env": env_cfg.to_dict(), "runner": runner_cfg.to_dict()})
             env = ManagerBasedRLEnv(cfg=env_cfg)
             cleanup.callback(env.close)
-        finally:
-            # Include modules imported during initialization, even if startup fails.
             write_provenance(
                 run, experiment_path, env_cfg.scene.robot.spawn.usd_path, getattr(experiment, "URDF_PATH", None)
             )
 
-        signature = interface_signature(env)
-        write_json(run / "interface_signature.json", signature)
+            signature = interface_signature(env)
+            write_json(run / "interface_signature.json", signature)
 
-        class TrainingRunner(OnPolicyRunner):
-            def save(self, path: str, infos: dict | None = None) -> None:
-                super().save(path, {**(infos or {}), "interface_signature": signature})
+            class TrainingRunner(OnPolicyRunner):
+                def save(self, path: str, infos: dict | None = None) -> None:
+                    super().save(path, {**(infos or {}), "interface_signature": signature})
 
-        wrapped_env = RslRlVecEnvWrapper(env, clip_actions=runner_cfg.clip_actions)
-        runner = TrainingRunner(wrapped_env, runner_cfg.to_dict(), log_dir=str(run), device=runner_cfg.device)
-        # This entry point records source state itself without requiring a clean Git worktree.
-        runner.logger.git_status_repos.clear()
-        runner.learn(num_learning_iterations=runner_cfg.max_iterations, init_at_random_ep_len=True)
-        if not (run / f"model_{runner.current_learning_iteration}.pt").is_file():
-            raise RuntimeError("Training finished without writing its final checkpoint")
+            wrapped_env = RslRlVecEnvWrapper(env, clip_actions=runner_cfg.clip_actions)
+            runner = TrainingRunner(wrapped_env, runner_cfg.to_dict(), log_dir=str(run), device=runner_cfg.device)
+            # This entry point records source state itself without requiring a clean Git worktree.
+            runner.logger.git_status_repos.clear()
+            runner.learn(num_learning_iterations=runner_cfg.max_iterations, init_at_random_ep_len=True)
+            if not (run / f"model_{runner.current_learning_iteration}.pt").is_file():
+                raise RuntimeError("Training finished without writing its final checkpoint")
+    except BaseException:
+        # Kit's default fast shutdown terminates Python and would discard this error.
+        traceback.print_exc()
+        sys.stdout.flush()
+        sys.stderr.flush()
+        launcher.app.close(exit_code=1)
+        raise SystemExit(1)
+    launcher.app.close()
 
 
 if __name__ == "__main__":

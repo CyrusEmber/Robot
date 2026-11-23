@@ -38,13 +38,12 @@ _DR_EVENT_NAMES = [
 ]
 
 
-def apply_eval_mode(env_cfg, mode: str, *, keep_training_noise: bool = False) -> None:
+def apply_eval_mode(env_cfg, mode: str) -> None:
     """Mutate ``env_cfg`` in place for the requested eval mode.
 
     Args:
         env_cfg: A ManagerBasedRLEnvCfg instance (already suite-swapped).
         mode: "nominal" (all DR off, no sensor noise) or "robust" (DR on).
-        keep_training_noise: Preserve the experiment's observation noise switches in robust mode.
     """
     if mode == "nominal":
         for name in _DR_EVENT_NAMES:
@@ -60,11 +59,9 @@ def apply_eval_mode(env_cfg, mode: str, *, keep_training_noise: bool = False) ->
     # corruption on every present obs group (v1/v2: single "policy" group;
     # v3: proprio/extero/priv -- the retired policy group is None), same
     # iteration discipline as play_utils.apply_play_wiring
-    corruption = mode == "robust"
-    if not (corruption and keep_training_noise):
-        for group in vars(env_cfg.observations).values():
-            if group is not None:
-                group.enable_corruption = corruption
+    for group in vars(env_cfg.observations).values():
+        if group is not None:
+            group.enable_corruption = mode == "robust"
 
     # deterministic command injection: the player overwrites the command every
     # step, so disable every autonomous mutation of the velocity command term

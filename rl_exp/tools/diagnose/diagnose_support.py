@@ -88,7 +88,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from artifact_paths import ArtifactPaths, _relative, _unlinked
 from artifact_run import ArtifactRun
 sys.path.insert(0, str(_REPO_ROOT / "rl_exp/tools/verify"))
-import cfg_snapshot
+from ablation_harness import cfg_snapshot
 
 def _load_binding_module(name: str):
     """Load a stdlib binding module without importing the task registry."""

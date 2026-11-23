@@ -28,8 +28,9 @@ import isaaclab.terrains as terrain_gen  # noqa: E402
 from isaaclab.terrains import TerrainGeneratorCfg  # noqa: E402
 
 from ablation_harness import suites  # noqa: E402
-from rl_exp.tasks.terrain_geometry import foot_relief, seed_rngs  # noqa: E402
-from rl_exp.tools.verify import terrain_preflight, terrain_split_probe  # noqa: E402
+from ablation_harness.terrain_geometry import foot_relief, seed_rngs  # noqa: E402
+from ablation_harness import terrain_split_probe
+from rl_exp.tools.verify import terrain_preflight  # noqa: E402
 
 _SEED = 7
 

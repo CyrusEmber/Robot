@@ -38,7 +38,6 @@ to 10 for the recipe's own plane, which is infinite.
 from __future__ import annotations
 
 import argparse
-import importlib.metadata
 from importlib.util import find_spec
 import json
 import math
@@ -210,32 +209,21 @@ def follow_view(root, yaw: float, eye_off, lookat_off) -> tuple[tuple, tuple]:
 
 def record_cell(cell: dict, args) -> dict:
     """Shoot one clip and return its conditions. Kit must already be up."""
-    import gymnasium as gym
     import imageio
     import torch
     from isaaclab.envs import ManagerBasedRLEnv
-    from isaaclab.utils.string import string_to_callable
-    from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper, handle_deprecated_rsl_rl_cfg
-    from isaaclab_tasks.utils.hydra import resolve_presets
+    from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper
     from rsl_rl.runners import OnPolicyRunner
 
-    from ablation_harness import record as record_mod, suites
+    from ablation_harness import suites
     from ablation_harness.components.command_player import CommandPlayer
     from ablation_harness.components.dr_controller import apply_eval_mode
 
-    files = getattr(args, "experiment_files", None)
-    if files:
-        from ablation_harness.experiment_eval import check_signature, interface_signature
+    from ablation_harness.experiment_eval import check_signature
+    from rl_exp.locomotion.train_record import interface_signature
 
-        cfg = args.base_env_cfg.copy()
-        agent_cfg = args.base_runner_cfg.copy()
-    else:
-        import rl_exp.tasks  # noqa: F401  (registers the tasks)
-
-        spec = gym.spec(args.task)
-        cfg = resolve_presets(string_to_callable(spec.kwargs["env_cfg_entry_point"])())
-        agent_cfg = string_to_callable(spec.kwargs["rsl_rl_cfg_entry_point"])()
-        agent_cfg = handle_deprecated_rsl_rl_cfg(agent_cfg, importlib.metadata.version("rsl-rl-lib"))
+    cfg = args.base_env_cfg.copy()
+    agent_cfg = args.base_runner_cfg.copy()
     speed = cell["speed"]
     command_box = [float(v) for v in cfg.commands.base_velocity.ranges.lin_vel_x]
 
@@ -253,15 +241,13 @@ def record_cell(cell: dict, args) -> dict:
         cfg.viewer.eye = tuple(args.eye)
         cfg.viewer.lookat = tuple(args.lookat)
 
-    env = (ManagerBasedRLEnv(cfg=cfg, render_mode="rgb_array") if files
-           else gym.make(args.task, cfg=cfg, render_mode="rgb_array"))
+    env = ManagerBasedRLEnv(cfg=cfg, render_mode="rgb_array")
     wrapper = None
     clip = pathlib.Path(args.out_dir) / f"{speed:g}mps_{cell['terrain']}.mp4"
     try:
         wrapper = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
         live = env.unwrapped
-        if files:
-            check_signature(args.expected_signature, interface_signature(live))
+        check_signature(args.expected_signature, interface_signature(live))
         steps = round(args.seconds / live.step_dt)
         cmd_term = live.command_manager.get_term("base_velocity")
         player = CommandPlayer([{"t": 0.0, "vx": speed}], live.num_envs, live.device)
@@ -269,13 +255,9 @@ def record_cell(cell: dict, args) -> dict:
         start = robot.data.root_pos_w.torch.clone()
 
         runner = OnPolicyRunner(wrapper, agent_cfg.to_dict(), log_dir=None, device=live.device)
-        if files:
-            args.checkpoint_stream.seek(0)
-            runner.load(args.checkpoint_stream, map_location=live.device)
-            checkpoint = args.checkpoint_binding
-        else:
-            runner.load(args.checkpoint)
-            checkpoint = record_mod.checkpoint_digest(args.checkpoint)
+        args.checkpoint_stream.seek(0)
+        runner.load(args.checkpoint_stream, map_location=live.device)
+        checkpoint = args.checkpoint_binding
         policy = runner.get_inference_policy(device=live.device)
 
         obs = wrapper.get_observations()
@@ -380,10 +362,8 @@ def build_parser() -> argparse.ArgumentParser:
     """Build recording arguments without importing or starting the simulator."""
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--task", default="Lizard2-Flat-Play-v3")
     parser.add_argument("--checkpoint", "--ckpt", help="policy checkpoint; required unless --dry-run")
     parser.add_argument("--checkpoint-sha256", help=argparse.SUPPRESS)
-    parser.add_argument("--from-run", action="store_true", help="Read the experiment from the checkpoint's Run.")
     parser.add_argument("--exp", type=pathlib.Path, help="Standalone experiment for a historical checkpoint.")
     parser.add_argument("--speeds", default="0.5,1.5,3", help="comma-separated target speeds [m/s] (grid rows)")
     parser.add_argument("--terrains", default=PLANE,
@@ -419,21 +399,17 @@ def main() -> None:
         parser.error("--seconds must be positive")
     if not args.dry_run and not args.checkpoint:
         parser.error("--checkpoint is required to shoot a clip")
-    if args.checkpoint_sha256 is not None and not (args.from_run or args.exp is not None):
-        parser.error("--checkpoint-sha256 requires --from-run or --exp")
     if args.dry_run:
         print(json.dumps(run(args), indent=2))
         return
-    if args.from_run or args.exp is not None:
-        from ablation_harness.experiment_eval import experiment_files
+    from ablation_harness.experiment_eval import experiment_files
 
-        checkpoint = pathlib.Path(args.checkpoint).resolve()
-        try:
-            args.experiment_files = experiment_files(checkpoint, args.exp)
-        except (OSError, ValueError, KeyError) as exc:
-            parser.error(str(exc))
-        args.checkpoint = str(checkpoint)
-        args.task = args.experiment_files[0].stem
+    checkpoint = pathlib.Path(args.checkpoint).resolve()
+    try:
+        files = experiment_files(checkpoint, args.exp)
+    except (OSError, ValueError, KeyError) as exc:
+        parser.error(str(exc))
+    args.task = files[0].stem
     # rgb_array frames come from the recorder, which needs cameras regardless of --headless.
     args.enable_cameras = True
     if find_spec("isaacsim") is None:
@@ -441,15 +417,12 @@ def main() -> None:
     launcher = AppLauncher(args)
     app = launcher.app
     try:
-        if args.from_run or args.exp is not None:
-            from ablation_harness.experiment_eval import checkpoint_signature, checkpoint_snapshot, configurations
+        from ablation_harness.experiment_eval import checkpoint_signature, checkpoint_snapshot, configurations
 
-            args.base_env_cfg, args.base_runner_cfg, legacy_task = configurations(args.experiment_files)
-            args.base_env_cfg.sim.device = launcher.device
-            args.checkpoint_stream, args.checkpoint_binding = checkpoint_snapshot(
-                pathlib.Path(args.checkpoint), args.checkpoint_sha256
-            )
-            args.expected_signature = checkpoint_signature(args.checkpoint_stream, legacy_task, launcher.device)
+        args.base_env_cfg, args.base_runner_cfg, _ = configurations(files, play=True)
+        args.base_env_cfg.sim.device = launcher.device
+        args.checkpoint_stream, args.checkpoint_binding = checkpoint_snapshot(checkpoint, args.checkpoint_sha256)
+        args.expected_signature = checkpoint_signature(args.checkpoint_stream, args.checkpoint_binding)
         # Gears are validated only now: naming a suite column imports the suite, and that import
         # chain must not run before the app, or Kit's own USD stack comes up poisoned (pitfalls P003).
         manifest = run(args)
@@ -457,7 +430,7 @@ def main() -> None:
         payload = json.dumps({"task": args.task, "seed": args.seed, **manifest},
                              indent=2, ensure_ascii=False, allow_nan=False)
         (args.out_dir / "matrix.json").write_text(payload, encoding="utf-8")
-        print(json.dumps(payload, indent=2, ensure_ascii=False))
+        print(payload)
     except BaseException:
         # app.close() ends the process, so a traceback raised past it never reaches the terminal.
         try:

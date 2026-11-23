@@ -61,14 +61,14 @@ def evaluate(checkpoint: Path, protocol: str, mode: str = "robust", *, exp: Path
         report = json.loads((metrics_dir / "eval.json").read_text(encoding="utf-8"))
         print(json.dumps(report["global"], ensure_ascii=False, indent=2), flush=True)
         clearance = report.get("report_only", {}).get("fall_clearance")
-        if clearance:
+        if clearance and clearance.get("missing_reason"):
             print(f"Fall rate: {clearance['missing_reason']}", flush=True)
     else:
         metrics_code = metrics_code or 1
         print(f"Evaluation failed or produced no report. See {metrics_dir / 'eval.log'}", file=sys.stderr)
 
     video_code = _run([sys.executable, str(_REPO / "ablation_harness/video_matrix.py"), *common,
-                       *(experiment or ["--from-run"]), "--out_dir", str(video_dir)], video_dir, "video.log")
+                       *experiment, "--out_dir", str(video_dir)], video_dir, "video.log")
     matrix_path = video_dir / "matrix.json"
     if video_code == 0 and matrix_path.is_file():
         matrix = json.loads(matrix_path.read_text(encoding="utf-8"))

@@ -39,9 +39,9 @@ import gymnasium as gym  # noqa: E402
 import isaaclab_tasks  # noqa: F401, E402  (registers the gym tasks)
 
 from isaaclab.utils.string import string_to_callable  # noqa: E402
-from rl_exp.tasks import terrain_map  # noqa: E402
+from ablation_harness import terrain_map  # noqa: E402
 from rl_exp.tasks.teacher_mdp import JOINT_SIR_TERM  # noqa: E402
-from rl_exp.tools.verify import terrain_split_probe as probe  # noqa: E402
+from ablation_harness import terrain_split_probe as probe  # noqa: E402
 
 
 def main() -> int:

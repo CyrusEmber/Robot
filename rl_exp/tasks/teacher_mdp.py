@@ -43,7 +43,7 @@ from isaaclab.utils.math import euler_xyz_from_quat, quat_apply_inverse, yaw_qua
 from isaaclab.utils.warp.kernels import raycast_mesh_masked_kernel
 
 from rl_exp.tasks import joint_names
-from rl_exp.tools.verify import terrain_split_probe
+from ablation_harness import terrain_split_probe
 
 # ponytail: RayCaster is deliberately NOT imported at module top. This module is
 # imported by env cfgs during hydra compose (pre-AppLauncher); a top-level

@@ -57,7 +57,7 @@ if str(_REPO) not in sys.path:
 
 from rl_exp.tools.runrecord import lifecycle as lifecycle_gate  # noqa: E402
 from rl_exp.tools.runrecord import provenance as prov  # noqa: E402
-from rl_exp.tools.verify import cfg_snapshot as cs  # noqa: E402
+from ablation_harness import cfg_snapshot as cs  # noqa: E402
 from rl_exp.tools.verify import recipe_lifecycle  # noqa: E402
 
 FORMAT_VERSION = 1

@@ -32,7 +32,7 @@ def main() -> int:
     import rl_exp.tasks  # noqa: F401
     from isaaclab_tasks.utils import add_launcher_args, launch_simulation, resolve_task_config, setup_preset_cli
     from rl_exp.tasks import obs_protocol
-    from rl_exp.tools.verify import cfg_snapshot
+    from ablation_harness import cfg_snapshot
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--task', default='Lizard2-Flat-v4',
@@ -141,7 +141,7 @@ def main() -> int:
         with runtime_with_report():
             import warp as wp
             if args.terrain_suite:
-                from rl_exp.tasks.terrain_geometry import seed_rngs
+                from ablation_harness.terrain_geometry import seed_rngs
                 seed_rngs(suites.SUITE_SEED)
             env = gym.make(args.task, cfg=cfg)
             live = env.unwrapped

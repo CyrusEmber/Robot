@@ -28,9 +28,9 @@ sys.path.insert(0, str(_REPO))
 
 import yaml  # noqa: E402
 
-from rl_exp.tasks import terrain_map  # noqa: E402
+from ablation_harness import terrain_map  # noqa: E402
 from rl_exp.tasks.param_grid_terrain import build_param_grid_terrain_cfg  # noqa: E402
-from rl_exp.tools.verify import terrain_split_probe as probe  # noqa: E402
+from ablation_harness import terrain_split_probe as probe  # noqa: E402
 
 _GRID_SECTION = "v11"
 _DEFAULT_PARAMS = _REPO / "rl_exp" / "versions" / "lizard" / "main" / "v11" / "main_params.yaml"

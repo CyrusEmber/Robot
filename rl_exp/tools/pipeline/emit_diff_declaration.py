@@ -34,7 +34,7 @@ _EXP = _REPO / "rl_exp"
 sys.path.insert(0, str(_REPO))
 sys.path.insert(0, str(_EXP / "tools" / "verify"))
 
-import cfg_snapshot as cs  # noqa: E402
+from ablation_harness import cfg_snapshot as cs  # noqa: E402
 import check_cfg_lock as lock  # noqa: E402 - the sibling that owns snapshot/diff/lock reading
 import check_recipe_build as crb  # noqa: E402 - the gate that owns the hard-B mechanism
 from rl_exp.tasks import recipe  # noqa: E402

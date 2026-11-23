@@ -35,7 +35,7 @@ from rl_exp.tasks.teacher_mdp import (  # noqa: E402
     JointSIRTerrainCurriculumCfg,
     ParticleVelocityCommand,
 )
-from rl_exp.tools.verify import terrain_split_probe as probe  # noqa: E402
+from ablation_harness import terrain_split_probe as probe  # noqa: E402
 
 NUM_ENVS = 6
 GRID = {

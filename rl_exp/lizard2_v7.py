@@ -18,6 +18,7 @@ from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.terrains import TerrainImporterCfg
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR, ISAACLAB_NUCLEUS_DIR
 from isaaclab.utils.configclass import configclass
+from isaaclab.utils.noise import UniformNoiseCfg
 from isaaclab_physx.physics import PhysxCfg
 from isaaclab_physx.sensors import ContactSensorCfg
 from isaaclab_rl.rsl_rl import RslRlMLPModelCfg, RslRlOnPolicyRunnerCfg, RslRlPpoAlgorithmCfg
@@ -27,7 +28,6 @@ from rl_exp.locomotion.terminations import HeadGroundContactDwell
 from rl_exp.robots import lizard2_round_feet
 
 URDF_PATH = lizard2_round_feet.URDF_PATH
-LEGACY_TASK = "Lizard2-Flat-v7"
 
 _DT = 0.005
 _DECIMATION = 4
@@ -66,12 +66,12 @@ def _joint_position_action(
 class _Observations:
     @configclass
     class Policy(ObsGroup):
-        base_lin_vel = ObsTerm(func=mdp.base_lin_vel)
-        base_ang_vel = ObsTerm(func=mdp.base_ang_vel)
-        projected_gravity = ObsTerm(func=mdp.projected_gravity)
+        base_lin_vel = ObsTerm(func=mdp.base_lin_vel, noise=UniformNoiseCfg(n_min=-0.1, n_max=0.1))
+        base_ang_vel = ObsTerm(func=mdp.base_ang_vel, noise=UniformNoiseCfg(n_min=-0.2, n_max=0.2))
+        projected_gravity = ObsTerm(func=mdp.projected_gravity, noise=UniformNoiseCfg(n_min=-0.05, n_max=0.05))
         velocity_commands = ObsTerm(func=mdp.generated_commands, params={"command_name": "base_velocity"})
-        joint_pos = ObsTerm(func=mdp.joint_pos_rel)
-        joint_vel = ObsTerm(func=mdp.joint_vel_rel)
+        joint_pos = ObsTerm(func=mdp.joint_pos_rel, noise=UniformNoiseCfg(n_min=-0.01, n_max=0.01))
+        joint_vel = ObsTerm(func=mdp.joint_vel_rel, noise=UniformNoiseCfg(n_min=-1.5, n_max=1.5))
         actions = ObsTerm(func=mdp.last_action)
 
     policy: Policy = Policy(enable_corruption=False, concatenate_terms=True)

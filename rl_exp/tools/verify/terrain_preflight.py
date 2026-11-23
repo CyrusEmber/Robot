@@ -50,7 +50,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 
 from rl_exp.tasks import recipe_params  # noqa: E402
 from rl_exp.tasks.param_grid_terrain import build_param_grid_terrain_cfg  # noqa: E402
-from rl_exp.tasks.terrain_geometry import foot_relief, geometry_digest, seed_rngs, stats  # noqa: E402,F401
+from ablation_harness.terrain_geometry import foot_relief, geometry_digest, seed_rngs, stats  # noqa: E402,F401
 from isaaclab.terrains.height_field import HfTerrainBaseCfg  # noqa: E402
 
 #: The frozen geometry source: ``versions/lizard/main/v11/main_params.yaml``, read through the
