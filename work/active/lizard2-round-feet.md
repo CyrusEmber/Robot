@@ -25,7 +25,7 @@ evidence: acceptance/records/2026-11-03-lizard2-v7-interface.md, acceptance/reco
 | `rl_exp/out/lizard2_round_feet/export03/` | 隔离 URDF、USD 与审计/修正记录 | 当前有效文件由 evidence 指定；后续接线不误用未修正或失败副本 |
 | `rl_exp/out/lizard2_round_feet/skeleton02/` | 当前隔离骨架、构建报告与预览 | 按 evidence 核输入输出身份；不与旧 URDF/USD 候选混认 |
 | `rl_exp/tools/diagnose/lizard2_round_feet.py` | 旧正式单轴 URDF 母本的候选生成、结构核对及几何预览入口 | 不是本次双轴骨架导出入口；复核尺寸、质量惯量与母本，另补转换绑定，需要新候选时写新目录 |
-| `rl_exp/tools/diagnose/lizard2_round_feet_probe.py` | 独立接口模式核加载关节、动作后端目标及显式 reset；保留旧受载入口 | 维护 reset 后须处理新动作的边界；旧模式阶段耦合、接触参数及受载另定范围，不把接口通过当能力通过 |
+| `rl_exp/tools/diagnose/lizard2_round_feet_probe.py` | 核对现役 v7 的关节、动作后端目标及显式 reset；旧受载探针从 `archive/pre-refactor` 运行 | 维护 reset 后须处理新动作的边界；旧模式阶段耦合、接触参数及受载另定范围，不把接口通过当能力通过 |
 | `rl_exp/tools/verify/test_lizard2_round_feet.py` | 固定足替换及其余腿链保持的结构检查 | 随实际变更维护，只证明结构契约 |
 | `rl_exp/out/lizard2_round_feet/candidate01/` | 现有 URDF/USD、网格、身份清单、转换配置、预览、运行报告与日志 | 保留失败现场；复用前核绑定，不覆盖、不混入正式资产 |
 

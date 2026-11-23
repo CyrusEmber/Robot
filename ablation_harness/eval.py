@@ -56,7 +56,7 @@ parser.add_argument("--envs_per_terrain", type=int, help="Environments per terra
 parser.add_argument("--print-suite-fingerprint", action="store_true")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
-from ablation_harness.experiment_eval import experiment_files
+from ablation_harness.experiment_eval import experiment_files, experiment_source
 
 args_cli.checkpoint = args_cli.checkpoint.resolve()
 try:
@@ -649,6 +649,7 @@ def main():
     protocol = _load_protocol(args_cli.protocol)
     terrain_names = _SUITE_REGISTRY[protocol["suite"]][0]
 
+    source = experiment_source(args_cli.checkpoint, args_cli.experiment_files)
     env_cfg, agent_cfg, suite_cfg_digest, pinned_checkpoint, assets = _prepare_env(protocol)
     # Step one of the suite lock: the cfg is the harness' own declaration, so a mismatch is
     # definitive and is answered before the simulator starts.
@@ -687,6 +688,7 @@ def main():
         "runtime": _runtime_reference(mbenv),
     }
     rec["assets"] = assets
+    rec["experiment"] = source
 
     # what this run actually stood on: the per-cell geometry digests, captured where the
     # generator handed the mesh over (work/active/verified-rebuild-rating.md ⑤b). A rebuild is a different claim -- this is

@@ -343,7 +343,7 @@ def run(args) -> dict:
         return {"dry_run": True, "cells": matrix}
     shots = []
     args.out_dir.mkdir(parents=True, exist_ok=True)
-    manifest = {"task": args.task, "seed": args.seed, "cells": shots}
+    manifest = {"task": args.task, "seed": args.seed, "experiment": args.experiment_source, "cells": shots}
     for cell in matrix:
         view = cell["view"]
         shot_args = argparse.Namespace(**vars(args))
@@ -355,7 +355,7 @@ def run(args) -> dict:
         shots.append({**record_cell(cell, shot_args), "view": view})
         # Keep completed clips indexed if a later cell or the encoder fails.
         (args.out_dir / "matrix.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-    return {"cells": shots, "grids": compose_grids(shots, args)}
+    return {**manifest, "grids": compose_grids(shots, args)}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -402,11 +402,12 @@ def main() -> None:
     if args.dry_run:
         print(json.dumps(run(args), indent=2))
         return
-    from ablation_harness.experiment_eval import experiment_files
+    from ablation_harness.experiment_eval import experiment_files, experiment_source
 
     checkpoint = pathlib.Path(args.checkpoint).resolve()
     try:
         files = experiment_files(checkpoint, args.exp)
+        args.experiment_source = experiment_source(checkpoint, files)
     except (OSError, ValueError, KeyError) as exc:
         parser.error(str(exc))
     args.task = files[0].stem
@@ -427,8 +428,7 @@ def main() -> None:
         # chain must not run before the app, or Kit's own USD stack comes up poisoned (pitfalls P003).
         manifest = run(args)
         args.out_dir.mkdir(parents=True, exist_ok=True)
-        payload = json.dumps({"task": args.task, "seed": args.seed, **manifest},
-                             indent=2, ensure_ascii=False, allow_nan=False)
+        payload = json.dumps(manifest, indent=2, ensure_ascii=False, allow_nan=False)
         (args.out_dir / "matrix.json").write_text(payload, encoding="utf-8")
         print(payload)
     except BaseException:

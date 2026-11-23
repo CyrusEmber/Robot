@@ -1,6 +1,6 @@
 # 诊断运行的创建与收尾
 
-当前已接入口：`rl_exp/tools/diagnose/local_path_view.py`、`diagnose_support.py`、`palm_spatial_probe.py`、`local_path_check.py`。其它生产入口仍按
+当前读已有报告的入口包括 `rl_exp/tools/diagnose/local_path_view.py` 和 `local_path_check.py`。旧版支撑及掌部采集按对应归档入口复跑。其它生产入口仍按
 `work/active/diagnostic-artifact-lifecycle.md` 推广，不能由本入口推定全覆盖。
 
 从仓根用配置解释器运行；输入取已有报告，不重新采集物理：
@@ -78,7 +78,7 @@
 
 ## 支撑诊断入口
 
-`diagnose_support.py` 使用同一索引和收尾机制，输出根保留为
+以下 `diagnose_support.py` 运行命令从 `archive/pre-refactor` 检出后执行。索引和收尾机制使用的输出根为
 `rl_exp/tools/diagnose/out/`。默认 label 放进 `runs/support/`；显式 `--label`
 仍相对该根定位，必须是安全的新目录。原 case JSON、原始下采样时序和摘要继续输出，
 各报告通过相邻 `run.json` 找到绑定；完成生产不代表资产或物理表现通过验收。

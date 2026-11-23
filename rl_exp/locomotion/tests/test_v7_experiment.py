@@ -18,11 +18,34 @@ from xml.etree import ElementTree
 import pytest
 
 from ablation_harness.components.dr_controller import apply_eval_mode
+from ablation_harness import experiment_eval
 from ablation_harness.experiment_eval import check_signature, resolved_config
 from rl_exp import lizard2_v7
 from rl_exp.locomotion.train_record import asset_fingerprints, interface_signature
 
 ROOT = Path(__file__).resolve().parents[3]
+
+
+def test_eval_uses_workspace_experiment_and_checks_run_assets(tmp_path, monkeypatch):
+    checkpoint = tmp_path / "model_0.pt"
+    checkpoint.touch()
+    experiment = ROOT / "rl_exp/lizard2_v7.py"
+    copy = tmp_path / "v7_at_training.py"
+    copy.write_text("# experiment at training time\n", encoding="utf-8")
+    provenance = {"experiment": {"repo_path": "rl_exp/lizard2_v7.py", "copy": copy.name},
+                  "assets": {"usd": {"sha256": "recorded"}}}
+    (tmp_path / "provenance.json").write_text(json.dumps(provenance), encoding="utf-8")
+
+    files = experiment_eval.experiment_files(checkpoint, None)
+    assert files[0] == experiment.resolve()
+    source = experiment_eval.experiment_source(checkpoint, files)
+    assert source["path"] == str(experiment.resolve())
+    assert source["matches_run_copy"] is False
+
+    monkeypatch.setattr(experiment_eval, "asset_fingerprints", lambda *_: {"usd": {"sha256": "changed"}})
+    for explicit in (None, experiment):
+        with pytest.raises(ValueError, match="USD sha256 differs from the training Run"):
+            experiment_eval.configurations(experiment_eval.experiment_files(checkpoint, explicit))
 
 
 def test_v7_modes():
@@ -119,5 +142,6 @@ def test_one_ppo_update_and_reload(tmp_path):
     assert report["num_envs"] == 9
     assert report["report_only"]["fall_clearance"]["valid_steps"] > 0
     assert all(math.isfinite(value) for value in report["global"].values())
+    assert report["conditions"]["experiment"]["matches_run_copy"] is True
     expected = json.loads((run / "interface_signature.json").read_text(encoding="utf-8"))
     assert report["conditions"]["interface_signature"] == expected

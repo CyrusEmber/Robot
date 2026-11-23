@@ -13,7 +13,7 @@ import subprocess
 import sys
 from uuid import uuid4
 
-from ablation_harness.experiment_eval import experiment_files
+from ablation_harness.experiment_eval import experiment_files, experiment_source
 from rl_exp.tools.runrecord.binding import sha256_file
 
 _REPO = Path(__file__).resolve().parents[1]
@@ -37,7 +37,10 @@ def evaluate(checkpoint: Path, protocol: str, mode: str = "robust", *, exp: Path
              seed: int = 123, device: str | None = None) -> int:
     """Collect metrics and video, returning nonzero if either child fails."""
     checkpoint = checkpoint.resolve()
-    experiment_files(checkpoint, exp)
+    source = experiment_source(checkpoint, experiment_files(checkpoint, exp))
+    if source["matches_run_copy"] is False:
+        print(f"Experiment differs from the training Run copy. Using workspace file: {source['path']}",
+              file=sys.stderr, flush=True)
     checkpoint_sha = sha256_file(checkpoint)
     if checkpoint_sha is None:
         raise FileNotFoundError(f"Checkpoint not found: {checkpoint}")

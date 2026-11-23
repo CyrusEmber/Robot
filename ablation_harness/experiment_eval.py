@@ -14,29 +14,38 @@ from pathlib import Path
 import sys
 
 from rl_exp.locomotion.train_record import asset_fingerprints
-from rl_exp.tools.runrecord.binding import sha256_bytes
+from rl_exp.tools.runrecord.binding import sha256_bytes, sha256_file
 
 _REPO = Path(__file__).resolve().parents[1]
 
 
-def experiment_files(checkpoint: Path, explicit: Path | None) -> tuple[Path, Path | None]:
+def experiment_files(checkpoint: Path, explicit: Path | None) -> tuple[Path, dict]:
     """Find the experiment in the current checkout and its Run, if available."""
     if not checkpoint.is_file():
         raise FileNotFoundError(f"Checkpoint not found: {checkpoint}")
+    path = checkpoint.parent / "provenance.json"
+    provenance = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
     if explicit is not None:
         if not explicit.is_file() or explicit.suffix != ".py":
             raise ValueError(f"--exp must identify an existing Python file: {explicit}")
-        return explicit.resolve(), None
-    run = checkpoint.parent
-    provenance = run / "provenance.json"
-    resolved = run / "resolved_cfg.yaml"
-    if not provenance.is_file() or not resolved.is_file():
-        raise ValueError("Checkpoint has no training Run configuration. Supply its experiment with --exp.")
-    entry = json.loads(provenance.read_text(encoding="utf-8"))["experiment"]
+        return explicit.resolve(), provenance
+    entry = provenance.get("experiment")
+    if not entry:
+        raise ValueError("Checkpoint has no Run experiment. Supply its experiment with --exp.")
     experiment = (_REPO / entry["repo_path"] if "repo_path" in entry else Path(entry["path"])).resolve()
     if not experiment.is_file():
         raise ValueError(f"Restore the Run's experiment to {experiment}, or supply it with --exp.")
-    return experiment, resolved
+    return experiment, provenance
+
+
+def experiment_source(checkpoint: Path, files: tuple[Path, dict]) -> dict:
+    """Identify the workspace experiment and compare its bytes with the Run copy."""
+    path, provenance = files
+    digest = sha256_bytes(path.read_bytes())
+    copy = provenance.get("experiment", {}).get("copy")
+    saved_digest = sha256_file(checkpoint.parent / copy) if copy else None
+    return {"path": str(path), "sha256": digest,
+            "matches_run_copy": digest == saved_digest if saved_digest is not None else None}
 
 
 def resolved_config(path: Path) -> dict:
@@ -53,11 +62,11 @@ def resolved_config(path: Path) -> dict:
     return yaml.load(path.read_text(encoding="utf-8"), Loader=ConfigLoader)
 
 
-def configurations(files: tuple[Path, Path | None], *, play: bool = False):
+def configurations(files: tuple[Path, dict], *, play: bool = False):
     """Construct fresh environment and runner configs for a checkpoint."""
     from isaaclab_rl.rsl_rl import handle_deprecated_rsl_rl_cfg
 
-    path, resolved = files
+    path, provenance = files
     spec = spec_from_file_location("_robot_training_experiment", path)
     experiment = module_from_spec(spec)
     sys.modules[spec.name] = experiment
@@ -66,13 +75,11 @@ def configurations(files: tuple[Path, Path | None], *, play: bool = False):
     runner_cfg = handle_deprecated_rsl_rl_cfg(experiment.make_runner_cfg(), version("rsl-rl-lib"))
     urdf = getattr(experiment, "URDF_PATH", None)
     assets = asset_fingerprints(env_cfg.scene.robot.spawn.usd_path, urdf)
-    if resolved is not None:
-        provenance = json.loads(resolved.with_name("provenance.json").read_text(encoding="utf-8"))
-        for kind, asset in provenance["assets"].items():
-            current = assets.get(kind, {})
-            for key in ("sha256", "dependencies"):
-                if key in asset and (asset[key] is None or asset[key] != current.get(key)):
-                    raise ValueError(f"{kind.upper()} {key} differs from the training Run: {current.get('path')}")
+    for kind, asset in provenance.get("assets", {}).items():
+        current = assets.get(kind, {})
+        for key in ("sha256", "dependencies"):
+            if key in asset and (asset[key] is None or asset[key] != current.get(key)):
+                raise ValueError(f"{kind.upper()} {key} differs from the training Run: {current.get('path')}")
     return env_cfg, runner_cfg, assets
 
 

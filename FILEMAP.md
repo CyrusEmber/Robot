@@ -8,9 +8,10 @@
 | `rl_exp/lizard2_v7.py` | 现役 v7 的环境与 PPO 配置 |
 | `rl_exp/locomotion/` | 训练入口、v7 的 MDP、Run 留痕及 pytest |
 | `ablation_harness/` | 协议、评测、地形和九宫格录像 |
-| `rl_exp/tools/diagnose/` | 机体和行为的专项诊断 |
+| `rl_exp/tools/diagnose/lizard2_round_feet_probe.py` | 当前 v7 的关节、动作目标和 reset 探针 |
+| `rl_exp/tools/diagnose/lizard2_shank_use_probe.py` | 当前 v7 的 checkpoint 回放及腿部诊断 |
 | `rl_exp/out/` | 本地 Run、评测与诊断产物 |
 | `work/` | 简短交接和已有归档 |
 | `acceptance/records/` | 重大实验决定与证据指针 |
 
-旧 Gym 配方、退役版本、旧闸门和历史架构说明见 Git 标签 `archive/pre-refactor`。
+旧 Gym 配方、退役版本、配方诊断入口（如 `diagnose_support.py` 和 `gait_probe.py`）、旧闸门和历史架构说明见 Git 标签 `archive/pre-refactor`。

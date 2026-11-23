@@ -61,7 +61,8 @@ if ((args.leg_drive_preflight and args.leg_drive_calibration)
         and (args.drive_probe or args.policy_drive_case or args.landing_samples
              or args.contact_samples or args.pose_samples or args.swing_clip is not None)):
     parser.error('leg drive diagnostics cannot be combined with probe interventions')
-app = AppLauncher(args).app
+launcher = AppLauncher(args)
+app = launcher.app
 
 STANCE_Z = 0.10
 LEGS = {'lf': 'elbow', 'rf': 'elbow', 'rl': 'knee', 'rr': 'knee'}
@@ -992,14 +993,12 @@ def two_foot_probe(live, out, checkpoint):
 calibration_started = False
 propulsion_started = False
 try:
-    import gymnasium as gym
     import numpy as np
     import torch
-    from isaaclab.utils.string import string_to_callable
-    from isaaclab_tasks.utils.hydra import resolve_presets
+    from isaaclab.envs import ManagerBasedRLEnv
     from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper, handle_deprecated_rsl_rl_cfg
     from rsl_rl.runners import OnPolicyRunner
-    import rl_exp.tasks  # noqa: F401
+    from rl_exp import lizard2_v7
     from ablation_harness.components.dr_controller import apply_eval_mode
     from ablation_harness.record import checkpoint_digest
 
@@ -1017,8 +1016,8 @@ try:
                        'code_sha256': sha256_file(Path(__file__)), 'speed_mps': args.speed,
                        'seed': args.seed, 'steps': args.steps}, stream, indent=2, allow_nan=False)
         propulsion_started = True
-    spec = gym.spec(task)
-    cfg = resolve_presets(string_to_callable(spec.kwargs['env_cfg_entry_point'])())
+    cfg = lizard2_v7.make_env_cfg(play=True)
+    cfg.sim.device = launcher.device
     cfg.scene.num_envs, cfg.seed = 4, args.seed
     cfg.episode_length_s = 20.0
     apply_eval_mode(cfg, 'nominal')
@@ -1077,12 +1076,12 @@ try:
         for name, event in vars(cfg.events).items():
             if event is not None:
                 setattr(cfg.events, name, None)
-    agent = handle_deprecated_rsl_rl_cfg(string_to_callable(spec.kwargs['rsl_rl_cfg_entry_point'])(),
+    agent = handle_deprecated_rsl_rl_cfg(lizard2_v7.make_runner_cfg(),
                                          importlib.metadata.version('rsl-rl-lib'))
     if args.leg_drive_calibration:
         paths = leg_drive_reserve_outputs(args.out)
         calibration_started = True
-    env = gym.make(task, cfg=cfg)
+    env = ManagerBasedRLEnv(cfg=cfg)
     live = env.unwrapped
     if args.leg_drive_preflight:
         leg_drive_preflight(live, args.out, checkpoint_digest(args.checkpoint))
