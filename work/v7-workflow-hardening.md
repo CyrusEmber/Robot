@@ -3,7 +3,7 @@ id: v7-workflow-hardening
 title: v7 实验闭环止血、机体解耦与仓内清旧
 scope: rl_exp, ablation_harness, work, acceptance, .codemaker, AGENTS.md, README.md, pytest.ini
 status: in_progress
-next: 确认 work/active/ 旧工单去留；决定 ablation_harness/record.py 记录状态机（已无生产者）是恢复写入还是退网。
+next: 确认 work/active/ 旧工单去留，随后收口提交。
 close_when: 三批全部提交且验收全绿；改奖励只动 exp.py，改机体只动 robots/<body.py>；三目录零收集错误，默认 pytest 快速离线全绿，按需专项与 sim 冒烟全绿；最终提交上的实跑评测写入验收记录。
 ---
 
@@ -25,7 +25,7 @@ close_when: 三批全部提交且验收全绿；改奖励只动 exp.py，改机�
 
 ### 1.1 清零 `verify/` + `diagnose/` 18 个收集错误并统一测试入口
 - **修仍在用的诊断链**：把 `rl_exp/tools/verify/check_leg_reachability.py:103` 依赖的 `_actuator_groups` / `_joint_owners` 就地内联，断开已删的 `check_dr_parity`，一并恢复 `verify/`（10 个）与 `diagnose/`（2 个，含 `test_lizard2_leg_drive_protocol.py`）的收集。明确 `check_leg_reachability.gain_table` 读取退役 `main_params.yaml` 仅属历史诊断口径，不作现役 v7 PD 判据。
-- **裁剪 `test_eval_record.py`**：删除已删 `run_ablation` 的导入及 30 条 sweep 段测试，保留其余 29 条（含 `test_eval_failure_exit_status`）并确保全绿。
+- **裁剪 `ablation_harness/record.py` 与 `test_eval_record.py`**：删除已无生产者的 `record.json` 状态机（保留现役 5 个纯 stdlib 原语：`UNKNOWN`、`canonical`、`digest`、`file_sha256`、`checkpoint_digest`）；`test_eval_record.py` 删除旧 sweep 与 `record.json` 状态机测试，保留 4 条现役测试（`digest` 确定性、`checkpoint_digest`、无框架/RNG 导入、`eval.py` 退出码守卫）。
 - **删除已退网死代码**：删除已无现役消费者的退网配方与旧门控脚本（`rl_exp/tasks/` 废弃配方、`check_pxr_leak.py`、`check_suite_shape.py`、`check_configclass_fields.py`、`test_configclass_fields_gate.py`、`check_record_bindings.py`、`lifecycle_entry_run.py`、`launcher_source_probe.py`、`debug_pose.py`、`emit_diff_declaration.py`、`declare_family.py`、`test_pxr_leak_gate.py`、`test_rebuild_gate.py`、`test_run_manifest.py` 等）。其中 `test_resume_state.py` 因 v7 `curriculum=None` 且顶部依赖已删 `recipe_tasks` 随旧课程工具退役；`test_cfg_snapshot.py` 为 0 pytest 用例的旧 check 脚本（现役 `cfg_snapshot.py` 仅由 `eval.py` 消费）。历史统一由 `archive/pre-refactor` tag 兜底。
 - **精简 `rl_exp/tools/runrecord/`（不留两份家）**：全仓 50+ 诊断、blender 与 verify 脚本复用 `rl_exp/tools/runrecord/binding.py`（108 行纯 stdlib 原语），保留 `binding.py` 原地作为唯一家，删除同目录已退网的 `lifecycle.py`、`manifest.py`、`provenance.py`、`rebuild.py`。
 - **测试分层与去污染**：`pytest.ini` 设 `testpaths = rl_exp/locomotion/tests` 与 `addopts = -m "not sim"`（默认 `pytest` ~9s 离线快检；`test_one_ppo_update_and_reload` 打 `@pytest.mark.sim` 按需跑 `pytest -m sim`；`rl_exp/tools/verify`、`rl_exp/tools/diagnose` 按改动显式点名运行，独立 `main()` 脚本直接 `python` 执行）。同时修复 `test_terrain_map.py` / `check_terrain_split_source.py` 指向 `ablation_harness/terrain_map.py`，并消除跨文件进程污染（`local_path_view.py` 跳过虚拟相对路径模块 `__file__`、`test_eval_record.py`/`test_archived_support_read.py` 改用干净子进程测无框架导入）。
@@ -52,7 +52,7 @@ close_when: 三批全部提交且验收全绿；改奖励只动 exp.py，改机�
 - Batch 1 完成后可跑一次 `eval.cmd` 作前测，不提前改写最终验收记录。
 
 ### Batch 1 验收
-- `pytest --collect-only rl_exp/locomotion/tests rl_exp/tools/verify rl_exp/tools/diagnose` 覆盖三目录 **18 error → 0 error**；默认 `pytest` ~9s 离线全通过，显式专项检查（含 `test_eval_record.py` 29 passed、`test_terrain_map.py` 8 passed、`check_terrain_split_source.py`）全通过。
+- `pytest --collect-only rl_exp/locomotion/tests rl_exp/tools/verify rl_exp/tools/diagnose` 覆盖三目录 **18 error → 0 error**；默认 `pytest` ~9s 离线全通过，显式专项检查（含 `test_eval_record.py` 4 passed、`test_terrain_map.py` 8 passed、`check_terrain_split_source.py`）全通过。
 - 漂移校验三例与 `--allow-drift` 全部命中预期。
 
 ## Batch 2：机体模块解耦（实现“改机体 = 只改机体”）
@@ -90,7 +90,7 @@ close_when: 三批全部提交且验收全绿；改奖励只动 exp.py，改机�
   1. 对照已有 robust 基线的指标、射线有效帧与九段录像，确认无行为回归；
   2. 更新 `acceptance/records/2026-11-23-v7-standalone-cutover.md` 指向最终验证的提交与输出目录。
 - **执行结果**：源码 `5b9bf541d27f`，产物 `evaluation/2026-11-23_18-57-14_edd6c7dc/`，退出码 0。六项全局指标与 `segments`/`terrains`/`recovery`/`terrain_evidence` 与 `89178065fdec` 那次逐位相等；`conditions.interface_signature` 与 sidecar 完全相等（含关节序）。`config_check` 记 `unavailable`（该 Run 无 `resolved_cfg.yaml`）。录像仅核文件齐全，未逐帧复核。
-- **顺带发现**：`ablation_harness/record.py` 的状态机无生产者（评测不再写 `record.json`），其 `runtime.device_declared` / `num_envs_declared` 等必填字段只剩 `test_eval_record.py` 在守；`checkpoint_digest` 仍被三个诊断探针使用。未在本轮处理。
+- **顺带清理**：`ablation_harness/record.py` 已裁剪掉无生产者的 `record.json` 状态机，保留 `UNKNOWN`/`canonical`/`digest`/`file_sha256`/`checkpoint_digest` 给现役 `eval.py`、`baseline_metrics.py` 和诊断探针；`test_eval_record.py` 同步精简为 4 条现役测试。
 
 ### Batch 3 验收
 - 现役入口不再导入已删除的配方模块；默认 `pytest` 快速离线全绿，三目录 `--collect-only` 零错误。

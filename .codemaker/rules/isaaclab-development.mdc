@@ -22,5 +22,8 @@ alwaysApply: false
   ```
 
 ## 测试
-- 仓库根目录运行 `pytest` 默认覆盖 `pytest.ini` 声明的三个测试目录（`rl_exp/locomotion/tests`、`rl_exp/tools/verify`、`rl_exp/tools/diagnose`），使用 `paths.yaml` 中的 IsaacLab Python 解释器。
+- 使用 `paths.yaml` 中的 IsaacLab Python 解释器在仓库根目录运行测试：
+  - 默认 `pytest` 只跑 `rl_exp/locomotion/tests` 下的快速离线用例（`pytest.ini` 已配 `addopts = -m "not sim"`）。
+  - 真实 Isaac Sim 训评接线测试按需显式运行 `pytest -m sim`。
+  - 涉及评测、地形、机体或历史诊断的现役专项检查按改动显式点名运行（如 `pytest rl_exp/tools/verify/<file>.py`）；独立 `main()` 脚本直接用 Python 运行（如 `python rl_exp/tools/verify/check_terrain_split_source.py`）。
 - 回归测试须验证修复前失败、修复后通过；不在正式代码中遗留 `wp.printf` 等调试打印。
