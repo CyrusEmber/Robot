@@ -26,6 +26,8 @@ sys.path.insert(0, str(ROOT))
 from rl_exp.tools.runrecord.binding import sha256_file  # noqa: E402
 
 SOURCE = ROOT / 'rl_exp/lizard2_palm_spatial/lizard2_palm_spatial.urdf'
+#: Local archive that keeps the retired source tree at its old repo-relative path.
+ARCHIVE = ROOT / 'rl_exp/out/archive/pre-refactor'
 FEET = ('lf_wrist', 'rf_wrist', 'rl_ankle', 'rr_ankle')
 REMOVED = tuple(f'{foot}_joint' for foot in FEET)
 
@@ -181,28 +183,40 @@ def preview(urdf: Path, target: Path, radius: float) -> dict:
             for name, center in centers.items()}
 
 
-def generate(out: Path, radius: float) -> dict:
+def locate(path):
+    """Where a recorded upstream path lives now: in place, or under the local archive."""
+    path = Path(path).resolve()
+    if path.exists():
+        return path
+    try:
+        return ARCHIVE / path.relative_to(ROOT)
+    except ValueError:
+        return path
+
+
+def generate(out: Path, radius: float, source: Path | None = None) -> dict:
     """Write an isolated candidate and source bindings with sphere radius [m]."""
     out = out.resolve()
     if not out.is_relative_to((ROOT / 'rl_exp/out').resolve()) or out.exists():
         raise ValueError('output must be a fresh directory below rl_exp/out')
-    tree = build_tree(SOURCE, radius)
+    source = locate(source or SOURCE)
+    tree = build_tree(source, radius)
     out.mkdir(parents=True)
-    bindings = {str(SOURCE): sha256_file(SOURCE), str(Path(__file__).resolve()): sha256_file(__file__)}
+    bindings = {str(source): sha256_file(source), str(Path(__file__).resolve()): sha256_file(__file__)}
     for mesh in tree.getroot().iter('mesh'):
         relative = Path(mesh.get('filename'))
-        source = (SOURCE.parent / relative).resolve()
-        if relative.is_absolute() or not source.is_relative_to(SOURCE.parent.resolve()):
+        source_mesh = (source.parent / relative).resolve()
+        if relative.is_absolute() or not source_mesh.is_relative_to(source.parent.resolve()):
             raise ValueError('expected local relative mesh')
         target = out / relative
         target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, target)
-        bindings[str(source)] = sha256_file(source)
+        shutil.copy2(source_mesh, target)
+        bindings[str(source_mesh)] = sha256_file(source_mesh)
     target = out / 'lizard2_round_feet.urdf'
     tree.write(target, encoding='utf-8', xml_declaration=True)
     locations = preview(target, out / 'preview.png', radius)
     report = {
-        'source': str(SOURCE), 'source_bindings_sha256': bindings,
+        'source': str(source), 'source_bindings_sha256': bindings,
         'urdf': str(target), 'urdf_sha256': sha256_file(target),
         'radius_m': radius, 'foot_body_names': list(FEET), 'removed_joints': list(REMOVED),
         'fixed_mounts': [f'{n}_fixed' for n in FEET], 'active_joint_count': 26,
@@ -222,5 +236,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--radius', type=float, default=.08, help='sphere radius [m]')
+    parser.add_argument('--source_urdf', type=Path,
+                        help='formal palm-spatial URDF; defaults to the archived copy')
     args = parser.parse_args()
-    generate(args.out, args.radius)
+    generate(args.out, args.radius, args.source_urdf)

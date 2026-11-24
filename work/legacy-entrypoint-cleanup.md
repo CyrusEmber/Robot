@@ -90,7 +90,7 @@ close_when: 仓内仅保留 v7 现役最小代码集、正式圆足资产、4 �
 5. **协议锚表同步与全目录扫描保留（对应二审 #2）**：
    - 从 `ablation_harness/protocol_anchors.json` 移出拟删的 6 条 `.json` 历史协议锚点，保留 `locomotion_eval_v1..v4.yaml` 4 条。
    - `test_eval_frame_v2.py` 移除 `baseline_metrics` 豁免后，完整保留 `test_protocol_anchors_match_the_files_they_pin` 与 `protocols/` 全目录扫描（任何未锚定的 `.json`/`.yaml` 落入 `protocols/` 立即判败），并新增临时未锚定协议触发失败的破坏断言。
-   - `test_terrain_geometry.py` 内联 `build_sub_terrain`（约 15 行），`_V3_EVIDENCE` 改指保留的 v7 `Lizard2-Flat-v7_short_robust_seed123/terrain/geometry.json`；该文件与其余 11 份归档的 `definition.module` 都写着已删的 `rl_exp.tasks.terrain_geometry`，`:82` 的 `import_module(...)` 须经一张两名映射表解析到 `ablation_harness.terrain_geometry`（不保留 `rl_exp/tasks` 垫片）。
+   - `test_terrain_geometry.py` 内联 `build_sub_terrain`，`_V3_EVIDENCE` 改指保留的 v7 `Lizard2-Flat-v7_short_robust_seed123/terrain/geometry.json`。归档 `geometry.json` 里的 `definition.module` 只是历史字符串，没有任何代码按它 import（`:82` 校验的是内存中新生记录的模块名），删除 `rl_exp/tasks` 后无需映射表或垫片。
 6. **列耦合探针保留与新采样解耦（对应二审 #4）**：
    - 保留 `rl_exp/tools/diagnose/column_coupling_probe.py`，其 `compare` 与 `selftest` 逻辑原封不动以保障历史批次与归档 ZIP 复读（`compare` 只认目录内 `capture_script.py` 快照，ZIP 的 `data/` 下已有该文件）；仅将 `capture()` 新运行采样从 `gym.make('Lizard2-Flat-v3')` 与 `rl_exp/tasks` 源码哈希切到 `rl_exp.lizard2_v7.make_env_cfg()` + `ManagerBasedRLEnv` 及现役源码目录哈希，并让 `source_hashes()` 的每个根目录先断言存在——目录不存在时 `rglob` 静默返回空集，会把覆盖缩水当通过。
 7. **消除 `pytest` 0 收集假绿**：为 `test_recovery_parity.py`、`test_lizard2_leg_drive_baseline.py`、`test_lizard2_leg_drive_protocol.py` 补齐包路径导入与标准 `test_*` 函数入口。

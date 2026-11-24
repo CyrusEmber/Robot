@@ -101,5 +101,9 @@ def main():
     print("ALL_RECOVERY_PARITY_TESTS_PASSED")
 
 
+def test_recovery_parity():
+    main()
+
+
 if __name__ == "__main__":
     main()

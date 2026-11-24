@@ -14,8 +14,10 @@ from isaaclab.app import AppLauncher
 AppLauncher.add_app_launcher_args(parser)
 args = parser.parse_args()
 source = args.candidate.resolve()
-if not source.is_relative_to((ROOT / 'rl_exp/out').resolve()) or not source.is_file():
-    parser.error('candidate must be an existing URDF below rl_exp/out')
+if not source.is_file():
+    parser.error('candidate must be an existing URDF')
+if source.is_relative_to(ROOT) and not source.is_relative_to((ROOT / 'rl_exp/out').resolve()):
+    parser.error('an in-repo candidate URDF must sit under rl_exp/out/<item>; use %TEMP% for one-off work')
 target = source.with_suffix('.usda')
 if target.exists() or (source.parent / source.stem).exists():
     parser.error('refusing to overwrite existing USD')

@@ -59,6 +59,47 @@ LEG_ACTION_JOINTS = tuple(joint for joint, _, _ in _LEG_DRIVES)
 SPINE_ACTION_JOINTS = tuple(joint for joint, _, _ in _SPINE_DRIVES)
 ACTION_JOINTS = LEG_ACTION_JOINTS + SPINE_ACTION_JOINTS
 
+#: Measured 2026-11-03 on Lizard2-Flat-Play-v7: the articulation order the observation and the
+#: action actually read, keyed by the asset it was measured on. This is NOT the action order above
+#: -- a permutation here silently misaligns every trained checkpoint, so it is written down as a
+#: fact and bound to the asset's bytes instead of being derived from the URDF tree.
+MEASURED_JOINT_ORDER = (
+    "chest_yaw_joint",
+    "tail1_yaw_joint",
+    "rl_hip_swing_joint",
+    "rr_hip_swing_joint",
+    "chest_pitch_joint",
+    "tail1_pitch_joint",
+    "rl_hip_abduct_joint",
+    "rr_hip_abduct_joint",
+    "neck_yaw_joint",
+    "lf_shoulder_swing_joint",
+    "rf_shoulder_swing_joint",
+    "tail2_yaw_joint",
+    "rl_hip_twist_joint",
+    "rr_hip_twist_joint",
+    "neck_pitch_joint",
+    "lf_shoulder_abduct_joint",
+    "rf_shoulder_abduct_joint",
+    "tail2_pitch_joint",
+    "rl_knee_joint",
+    "rr_knee_joint",
+    "lf_shoulder_twist_joint",
+    "rf_shoulder_twist_joint",
+    "tail3_yaw_joint",
+    "lf_elbow_joint",
+    "rf_elbow_joint",
+    "tail3_pitch_joint",
+)
+
+#: The formal asset the order above was measured on; a re-export must update these deliberately.
+MEASURED_USD_SHA256 = "134bf043d42c3600dcb4369ef2c5642c49f1f68b650991702f833c6bca8eb6e4"
+MEASURED_URDF_SHA256 = "dbc00660b5c8feac84099fee65b44fe7a867f12a67f7ab437347ca7d82460a13"
+
+#: sha256 of ``"|".join(MEASURED_JOINT_ORDER)``: a permutation keeps the joint set, so binding the
+#: bytes of the asset does not notice it -- this does, until it is re-pasted deliberately.
+MEASURED_ORDER_SHA256 = "3841d3bc2c0e21de977c4a5702622ca43f6b64b80effc311152cb7b26478241c"
+
 # Default action scale and symmetric clip bound per joint [rad].
 ACTION_SCALE = {
     "lf_shoulder_swing_joint": 0.19999999999999998,

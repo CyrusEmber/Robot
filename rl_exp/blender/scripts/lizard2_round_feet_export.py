@@ -9,7 +9,6 @@ Blender --background --factory-startup --python-exit-code 1 --python <script> --
 Axes are inherited from the verified formal URDF, not inferred from bone Y axes.
 """
 import argparse
-import ast
 import json
 from pathlib import Path
 import shutil
@@ -24,22 +23,8 @@ from mathutils import Matrix, Quaternion, Vector
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from rl_exp.tools.diagnose.lizard2_round_feet import SOURCE, FEET, build_tree, validate_tree
+from rl_exp.tools.diagnose.lizard2_round_feet import SOURCE, FEET, build_tree, locate, validate_tree
 from rl_exp.tools.runrecord.binding import sha256_file
-from types import SimpleNamespace
-
-# Reuse pure FK/OBJ functions without importing simulation task registrations.
-GEOMETRY_PATH = ROOT / 'rl_exp/tools/verify/check_self_collision.py'
-_geometry_ast = ast.parse(GEOMETRY_PATH.read_text(encoding='utf-8'))
-_geometry_functions = [n for n in _geometry_ast.body if isinstance(n, ast.FunctionDef)
-                       and n.name in {'load_urdf', 'read_obj', 'chain_up', 'fk'}]
-require_names = {n.name for n in _geometry_functions}
-if require_names != {'load_urdf', 'read_obj', 'chain_up', 'fk'}:
-    raise ValueError('shared FK helper contract changed')
-_geometry_namespace = {'np': np, 'ET': ET, 'pathlib': __import__('pathlib')}
-exec(compile(ast.Module(body=_geometry_functions, type_ignores=[]),
-             str(GEOMETRY_PATH), 'exec'), _geometry_namespace)
-geometry = SimpleNamespace(**{n: _geometry_namespace[n] for n in require_names})
 from lizard2_round_feet_candidate import vertices
 
 SKELETON = ROOT / 'rl_exp/out/lizard2_round_feet/skeleton02/lizard2_round_feet.blend'
@@ -48,6 +33,86 @@ FORMAL_SHA = 'e8896feb8b0dbdbeaa35e74a01c2ffcb4ab38d89b52f221831b3f287943edd00'
 PARENTS = dict(zip(FEET, ('lf_elbow', 'rf_elbow', 'rl_knee', 'rr_knee')))
 TOL = 1e-5
 RADIUS = .08
+
+# The palm source's ball-foot rings, told apart from body shells by name (they are replaced by the
+# round feet this export builds). Frozen with the source it was written for.
+BALL_MESHES = {
+    "Roundcube.001", "Roundcube.017", "Roundcube.025", "Roundcube.018", "Roundcube.019",
+    "Roundcube.014", "Roundcube.007", "Roundcube.010", "Roundcube.002",
+    "Roundcube.013", "Roundcube.006", "Roundcube.005", "Roundcube",
+    "Roundcube.015", "Roundcube.008", "Roundcube.011", "Roundcube.003",
+}
+depsgraph = None
+
+
+def load_urdf(path):
+    """Links (with their collision mesh) and joints (origin/axis) as plain dicts."""
+    root = ET.parse(path).getroot()
+    links = {}
+    for link in root.findall('link'):
+        mesh = link.find('collision/geometry/mesh')
+        links[link.get('name')] = {
+            'collision': (path.parent / mesh.get('filename')).resolve() if mesh is not None else None}
+    joints = {}
+    for joint in root.findall('joint'):
+        axis = joint.find('axis')
+        joints[joint.get('name')] = {
+            'parent': joint.find('parent').get('link'),
+            'child': joint.find('child').get('link'),
+            'origin': np.array([float(v) for v in joint.find('origin').get('xyz').split()]),
+            'axis': np.array([float(v) for v in axis.get('xyz').split()]) if axis is not None else None,
+        }
+    return {'links': links, 'joints': joints}
+
+
+def read_obj(path):
+    """The vertices of an OBJ, in file order [m]."""
+    return np.array([list(map(float, ln.split()[1:4])) for ln in path.read_text().splitlines()
+                     if ln.startswith('v ')])
+
+
+def chain_up(joints, link):
+    """Joint names from the root down to ``link``, in tree order."""
+    parent_of = {spec['child']: (name, spec) for name, spec in joints.items()}
+    chain, current = [], link
+    while current in parent_of:
+        name, spec = parent_of[current]
+        chain.append(name)
+        current = spec['parent']
+    return list(reversed(chain))
+
+
+def fk(joints, link, q):
+    """4x4 pose of ``link`` with the named joints at ``q`` (unlisted joints at zero)."""
+    transform = np.eye(4)
+    for name in chain_up(joints, link):
+        spec = joints[name]
+        move = np.eye(4)
+        move[:3, 3] = spec['origin']
+        angle = float(q.get(name, 0.0))
+        axis = spec['axis']
+        if axis is not None and angle:
+            axis = axis / np.linalg.norm(axis)
+            cross = np.array([[0, -axis[2], axis[1]], [axis[2], 0, -axis[0]], [-axis[1], axis[0], 0]])
+            spin = np.eye(4)
+            spin[:3, :3] = np.eye(3) + np.sin(angle) * cross + (1 - np.cos(angle)) * (cross @ cross)
+            move = move @ spin
+        transform = transform @ move
+    return transform
+
+
+def build_bmesh(mesh_objects, offset, evaluated):
+    """One bmesh of the evaluated meshes, shifted so ``offset`` lands on the origin."""
+    bm = bmesh.new()
+    for obj in mesh_objects:
+        source = obj.evaluated_get(depsgraph) if evaluated else obj
+        me = source.to_mesh()
+        mat = obj.matrix_world.copy()
+        mat.translation -= offset
+        me.transform(mat)
+        bm.from_mesh(me)
+        source.to_mesh_clear()
+    return bm
 
 
 def require(condition, message):
@@ -130,10 +195,17 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--elbow_limit', type=float, help='symmetric elbow limit [rad]; no source expansion')
+    parser.add_argument('--source_urdf', type=Path, help='formal palm-spatial URDF; defaults to the archived copy')
+    parser.add_argument('--skeleton', type=Path, help='verified round skeleton .blend; defaults to skeleton02')
+    parser.add_argument('--two_axis_blend', type=Path, help="skeleton's recorded source .blend")
+    parser.add_argument('--original_blend', type=Path, help="two-axis candidate's recorded source .blend")
     args = parser.parse_args(sys.argv[sys.argv.index('--') + 1:])
     out = args.out.resolve()
-    require(out.is_relative_to((ROOT / 'rl_exp/out').resolve()) and not out.exists(),
-            'output must be fresh under rl_exp/out')
+    require(not out.exists(), 'output must be a fresh directory')
+    require(not out.is_relative_to(ROOT) or out.is_relative_to((ROOT / 'rl_exp/out').resolve()),
+            'an in-repo output must sit under rl_exp/out/<item>; use %TEMP% for one-off exports')
+    source_urdf = locate(args.source_urdf or SOURCE)
+    skeleton = locate(args.skeleton or SKELETON)
     bindings = {}
 
     def bind(path, expected=None):
@@ -143,30 +215,29 @@ def main():
         bindings[str(path)] = value
         return path
 
-    bind(SKELETON, SKELETON_SHA)
-    bind(SOURCE, FORMAL_SHA)
-    build_path = bind(SKELETON.parent / 'build.json')
+    bind(skeleton, SKELETON_SHA)
+    bind(source_urdf, FORMAL_SHA)
+    build_path = bind(skeleton.parent / 'build.json')
     build = json.loads(build_path.read_text(encoding='utf-8'))
-    require(Path(build['candidate']).resolve() == SKELETON.resolve()
+    require(Path(build['candidate']).resolve() == skeleton.resolve()
             and build['candidate_sha256'] == SKELETON_SHA
             and build['sphere_radius_m'] == RADIUS, 'skeleton build binding')
-    two_axis = bind(build['source'], build['source_sha256'])
+    two_axis = bind(locate(args.two_axis_blend or build['source']), build['source_sha256'])
     provenance = json.loads(bind(two_axis.with_suffix('.json')).read_text(encoding='utf-8'))
     require(Path(provenance['candidate']).resolve() == two_axis
             and provenance['candidate_sha256'] == bindings[str(two_axis)], 'two-axis binding')
-    original = bind(provenance['source'], provenance['source_sha256'])
+    original = bind(locate(args.original_blend or provenance['source']), provenance['source_sha256'])
     require(provenance['source_sha256'] ==
             'beeac4c09726260bf392a6ecc81a04ebcf9b54a210416493bbb2689c4909cdea',
             'unexpected original formal blend')
     for path in (__file__, Path(__file__).with_name('lizard2_round_feet_candidate.py'),
                  ROOT / 'rl_exp/tools/diagnose/lizard2_round_feet.py',
-                 GEOMETRY_PATH,
                  ROOT / 'rl_exp/tools/runrecord/binding.py'):
         bind(path)
-    require(bindings[str(Path(__file__).with_name('lizard2_round_feet_candidate.py'))]
+    require(bindings[str(Path(__file__).with_name('lizard2_round_feet_candidate.py').resolve())]
             == build['script_sha256'], 'skeleton builder hash mismatch')
-    model = geometry.load_urdf(SOURCE)
-    formal = ET.parse(SOURCE)
+    model = load_urdf(source_urdf)
+    formal = ET.parse(source_urdf)
     for joint in formal.getroot().findall('joint'):
         require(joint.get('type') == 'revolute'
                 and all(float(v) == 0 for v in joint.find('origin').get('rpy').split()),
@@ -180,26 +251,17 @@ def main():
         require(parent == (joints[name].find('parent').get('link') if name in joints else None),
                 'formal parent mismatch: ' + name)
         require(np.linalg.norm(frame[:3, 3] - root_offset
-                               - geometry.fk(model['joints'], name, {})[:3, 3]) < TOL,
+                               - fk(model['joints'], name, {})[:3, 3]) < TOL,
                 'formal pivot/FK mismatch: ' + name)
-    # Reuse only the existing generator's pure mesh helper and ball classification.
-    # Importing that script would execute its export CLI and mutate output trees.
-    generator = bind(Path(__file__).with_name('generate_urdf.py'))
-    parsed = ast.parse(generator.read_text(encoding='utf-8'))
-    selected = [n for n in parsed.body if
-                isinstance(n, ast.FunctionDef) and n.name == 'build_bmesh' or
-                isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == 'BALL_MESHES'
-                                                 for t in n.targets)]
-    require(len(selected) == 2, 'generator mesh helper contract changed')
-    namespace = {'bmesh': bmesh, 'depsgraph': bpy.context.evaluated_depsgraph_get()}
-    exec(compile(ast.Module(body=selected, type_ignores=[]), str(generator), 'exec'), namespace)
+    global depsgraph
+    depsgraph = bpy.context.evaluated_depsgraph_get()
     mesh_error = 0.
     mesh_count = 0
     for link in formal.getroot().findall('link'):
         name = link.get('name')
         objects = [o for o in bpy.context.scene.objects if o.type == 'MESH' and o.parent_bone == name]
         for kind in ('visual', 'collision'):
-            chosen = [o for o in objects if kind == 'visual' or o.name not in namespace['BALL_MESHES']]
+            chosen = [o for o in objects if kind == 'visual' or o.name not in BALL_MESHES]
             shapes = link.findall(kind)
             require(len(shapes) == bool(chosen), 'formal mesh coverage: ' + name)
             if not chosen:
@@ -208,12 +270,12 @@ def main():
             require(all(float(v) == 0 for k in ('xyz', 'rpy') for v in origin.get(k).split()),
                     'nonzero mesh origin')
             relative = Path(shapes[0].find('geometry/mesh').get('filename'))
-            path = (SOURCE.parent / relative).resolve()
-            require(not relative.is_absolute() and path.is_relative_to(SOURCE.parent.resolve()),
+            path = (source_urdf.parent / relative).resolve()
+            require(not relative.is_absolute() and path.is_relative_to(source_urdf.parent.resolve()),
                     'nonlocal formal mesh')
             bind(path)
-            expected = geometry.read_obj(path)
-            bm = namespace['build_bmesh'](chosen, Vector(reference['bones'][name][1][:3, 3]), kind == 'visual')
+            expected = read_obj(path)
+            bm = build_bmesh(chosen, Vector(reference['bones'][name][1][:3, 3]), kind == 'visual')
             try:
                 actual = np.array([tuple(v.co) for face in bm.faces
                                    for i in range(1, len(face.verts) - 1)
@@ -225,7 +287,7 @@ def main():
             require(gap < TOL, f'formal mesh vertices: {name} {kind} {gap}')
             mesh_error = max(mesh_error, gap)
             mesh_count += 1
-    arm = open_scene(SKELETON)
+    arm = open_scene(skeleton)
     current = capture(arm)
     upstream_error = compare_upstream(reference, current)
     require(len(current['bones']) == 27, 'expected 27 bones')
@@ -255,7 +317,7 @@ def main():
             require(foot + ':' + defect in rejected, 'negative check failed')
     check_spheres(arm, centers)
     # Complete source/bone correspondence above before applying candidate-only limits.
-    tree = build_tree(SOURCE, RADIUS, elbow_limit=args.elbow_limit)
+    tree = build_tree(source_urdf, RADIUS, elbow_limit=args.elbow_limit)
     movable = [j for j in tree.getroot().findall('joint') if j.get('type') != 'fixed']
     require(len(movable) == 26, 'expected 26 axes')
     # Exercise each inherited axis against shared URDF FK, all pivots and mesh vertices.
@@ -272,14 +334,14 @@ def main():
         q = {joint.get('name'): .07}
         maximum = 0.
         for name in current['bones']:
-            fk = geometry.fk(model['joints'], name, q)
+            pose = fk(model['joints'], name, q)
             actual = np.array(arm.matrix_world @ arm.pose.bones[name].head)
-            maximum = max(maximum, float(np.linalg.norm(actual - root_offset - fk[:3, 3])))
+            maximum = max(maximum, float(np.linalg.norm(actual - root_offset - pose[:3, 3])))
         for name, (owner, points, _) in current['meshes'].items():
-            neutral = geometry.fk(model['joints'], owner, {})
-            fk = geometry.fk(model['joints'], owner, q)
+            neutral = fk(model['joints'], owner, {})
+            pose = fk(model['joints'], owner, q)
             local = points - root_offset - neutral[:3, 3]
-            expected = local @ fk[:3, :3].T + fk[:3, 3] + root_offset
+            expected = local @ pose[:3, :3].T + pose[:3, 3] + root_offset
             actual = np.array(vertices(bpy.data.objects[name]))
             maximum = max(maximum, float(np.max(np.linalg.norm(actual - expected, axis=1))))
         bone.matrix_basis = Matrix.Identity(4)
@@ -295,8 +357,8 @@ def main():
         relative = Path(mesh.get('filename'))
         destination = out / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(SOURCE.parent / relative, destination)
-        require(sha256_file(destination) == bindings[str((SOURCE.parent / relative).resolve())],
+        shutil.copyfile(source_urdf.parent / relative, destination)
+        require(sha256_file(destination) == bindings[str((source_urdf.parent / relative).resolve())],
                 'exported mesh hash mismatch')
     target = out / 'lizard2_round_feet.urdf'
     tree.write(target, encoding='utf-8', xml_declaration=True)
@@ -320,7 +382,7 @@ def main():
                   scope='verified Blender-bound isolated candidate; inherited formal axes; no physics/USD/adoption')
     if args.elbow_limit is not None:
         report['design_change'] = dict(
-            source=str(SOURCE), source_sha256=bindings[str(SOURCE.resolve())],
+            source=str(source_urdf), source_sha256=bindings[str(source_urdf.resolve())],
             elbow_limit_rad=args.elbow_limit,
             joint_limits_rad={
                 name: {label: {k: float(root.find(f"joint[@name='{name}']/limit").get(k))

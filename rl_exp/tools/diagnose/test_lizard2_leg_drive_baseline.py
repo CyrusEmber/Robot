@@ -13,7 +13,6 @@ import xml.etree.ElementTree as ET
 import numpy as np
 
 import lizard2_leg_drive_baseline as baseline
-from palm_spatial_inertia import _rotation
 
 
 def rejects(fn, label):
@@ -28,14 +27,14 @@ def rejects(fn, label):
 def potential(model, bodies, q):
     total = 0.
     for name, body in bodies.items():
-        pose = baseline.csc.fk(model['joints'], name, q)
+        pose = baseline.fk(model['joints'], name, q)
         center = pose[:3, :3] @ body['com'] + pose[:3, 3]
         total += body['mass'] * 9.81 * center[2]
     return total
 
 
 def run():
-    assert np.allclose(_rotation([0, 0, math.sqrt(.5), math.sqrt(.5)]) @ [1, 0, 0], [0, 1, 0])
+    assert np.allclose(baseline._rotation([0, 0, math.sqrt(.5), math.sqrt(.5)]) @ [1, 0, 0], [0, 1, 0])
     # A 2 kg mass at x=.5 and 1 kg fixed foot at x=1: Iyy=.2+.5+.1+1=1.8.
     body = '<inertial><origin xyz="{xyz}" rpy="0 0 0"/><mass value="{mass}"/><inertia ixx=".1" iyy="{iyy}" izz=".1" ixy="0" ixz="0" iyz="0"/></inertial>'
     robot = ('<robot name="pendulum"><link name="base_link">' + body.format(xyz='0 0 0', mass=1, iyy='.1') +
@@ -135,7 +134,7 @@ def run():
         points = {foot: np.array(data['contact_world_m']) for foot, data in group['feet'].items()}
         local_points = {}
         for foot, point in points.items():
-            pose = baseline.csc.fk(model['joints'], foot, q)
+            pose = baseline.fk(model['joints'], foot, q)
             local_points[foot] = pose[:3, :3].T @ (point - root - pose[:3, 3])
         force_sum = sum(forces.values(), np.array([0., 0., -weight]))
         moment_sum = sum((np.cross(points[f] - group['com_world_m'], forces[f]) for f in points), np.zeros(3))
@@ -145,7 +144,7 @@ def run():
         for row in group['rows']:
             name = row['joint']
             assert np.isclose(row['fixed_root_inertia_kg_m2'], inertia[names.index(name), names.index(name)])
-            joint = root + baseline.csc.fk(model['joints'], model['joints'][name]['child'], q)[:3, 3]
+            joint = root + baseline.fk(model['joints'], model['joints'][name]['child'], q)[:3, 3]
             assert np.allclose(row['joint_world_m'], joint)
             assert np.isclose(np.linalg.norm(row['axis_world']), 1.)
             qp, qm = dict(q), dict(q)
@@ -154,7 +153,7 @@ def run():
             gravity_fd = -(potential(model, bodies, qp) - potential(model, bodies, qm)) / (2*h)
             assert abs(row['gravity_torque_nm'] - gravity_fd) < 2e-7, name
             for foot in points:
-                pp, pm = (baseline.csc.fk(model['joints'], foot, pose) for pose in (qp, qm))
+                pp, pm = (baseline.fk(model['joints'], foot, pose) for pose in (qp, qm))
                 jacobian_fd = (pp[:3, :3] @ local_points[foot] + pp[:3, 3]
                                - pm[:3, :3] @ local_points[foot] - pm[:3, 3]) / (2*h)
                 actual = row['contact_jacobian_m'][foot]
@@ -218,7 +217,7 @@ def run():
                 joint_pos_rad=np.zeros((1, 4, 26)), joint_velocity_rad_s=np.zeros((1, 4, 26)),
                 joint_target_rad=np.zeros((1, 4, 26)), root_pose_xyzw=np.tile([0., 0., 0., 0., 0., 0., 1.], (1, 4, 1)),
                 foot_pos_w_m=np.zeros((1, 4, 4, 3)))
-    fake['foot_pos_w_m'][:] = [baseline.csc.fk(model['joints'], foot, {})[:3, 3] for foot in baseline.FEET]
+    fake['foot_pos_w_m'][:] = [baseline.fk(model['joints'], foot, {})[:3, 3] for foot in baseline.FEET]
     fake['root_pose_xyzw'][..., 2] = -fake['foot_pos_w_m'][0, 0, 0, 2] + .08
     fake['foot_pos_w_m'] += fake['root_pose_xyzw'][..., None, :3]
     physical = dict(fake, contact_pos_w_m=fake['foot_pos_w_m'] + [0., 0., -.08])
@@ -267,6 +266,32 @@ def run():
                                     'mapping': []}), encoding='utf-8')
         rejects(lambda: baseline.swing_review(plan), 'recorded plan joint identity')
     print('OFFLINE_BASELINE_TEST_OK: inertia, gravity, collision and contact virtual-work checks')
+
+
+def test_baseline_offline_checks():
+    run()
+
+
+def test_a_reordered_measured_joint_order_is_refused():
+    """A permutation keeps the joint set, so only the recorded order digest can refuse it."""
+    original = baseline.robot.MEASURED_JOINT_ORDER
+    swapped = list(original)
+    swapped[0], swapped[1] = swapped[1], swapped[0]
+    try:
+        baseline.robot.MEASURED_JOINT_ORDER = tuple(swapped)
+        rejects(baseline.inputs, 'reordered_measured_joint_order')
+    finally:
+        baseline.robot.MEASURED_JOINT_ORDER = original
+
+
+def test_a_moved_formal_asset_is_refused():
+    """The recorded order belongs to one asset: different bytes must stop the baseline."""
+    original = baseline.robot.MEASURED_USD_SHA256
+    try:
+        baseline.robot.MEASURED_USD_SHA256 = '0' * 64
+        rejects(baseline.inputs, 'formal_usd_digest_drift')
+    finally:
+        baseline.robot.MEASURED_USD_SHA256 = original
 
 
 if __name__ == '__main__':

@@ -4,35 +4,178 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Offline v7 fixed-root nominal self-weight and per-axis drive estimates; JSON to stdout."""
 import argparse
+import hashlib
 import json
 import math
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
 import numpy as np
-import yaml
 
-from palm_spatial_inertia import _project, csc
-from palm_spatial_tracking import _gravity_design
+from rl_exp.robots import lizard2_round_feet as robot
 from rl_exp.tools.runrecord.binding import sha256_file as sha
 
 ROOT = Path(__file__).resolve().parents[3]
 RL = ROOT / 'rl_exp'
-VERSION = RL / 'versions/lizard2/main/v7'
-PARAMS = VERSION / 'main_params.yaml'
-LOCK = VERSION / 'asset_lock.json'
-ORDER = RL / 'versions/joint_order_runtime.json'
 USD_KEY = 'lizard2_round_feet/lizard2_round_feet.usda'
 URDF_KEY = 'lizard2_round_feet/lizard2_round_feet.urdf'
 FEET = ('lf_wrist', 'rf_wrist', 'rl_ankle', 'rr_ankle')
 SWING = ('lf_shoulder_swing_joint', 'rf_shoulder_swing_joint', 'rl_hip_swing_joint', 'rr_hip_swing_joint')
 
 
+def load_urdf(path):
+    """Links (with their collision mesh) and joints (origin/axis) as plain dicts."""
+    root = ET.parse(path).getroot()
+    links = {}
+    for link in root.findall('link'):
+        mesh = link.find('collision/geometry/mesh')
+        links[link.get('name')] = {
+            'collision': (path.parent / mesh.get('filename')).resolve() if mesh is not None else None}
+    joints = {}
+    for joint in root.findall('joint'):
+        axis = joint.find('axis')
+        joints[joint.get('name')] = {
+            'parent': joint.find('parent').get('link'),
+            'child': joint.find('child').get('link'),
+            'origin': np.array([float(v) for v in joint.find('origin').get('xyz').split()]),
+            'axis': np.array([float(v) for v in axis.get('xyz').split()]) if axis is not None else None,
+        }
+    return {'links': links, 'joints': joints}
+
+
+def chain_up(joints, link):
+    """Joint names from the root down to ``link``, in tree order."""
+    parent_of = {spec['child']: (name, spec) for name, spec in joints.items()}
+    chain, current = [], link
+    while current in parent_of:
+        name, spec = parent_of[current]
+        chain.append(name)
+        current = spec['parent']
+    return list(reversed(chain))
+
+
+def fk(joints, link, q):
+    """4x4 pose of ``link`` with the named joints at ``q`` (unlisted joints at zero)."""
+    transform = np.eye(4)
+    for name in chain_up(joints, link):
+        spec = joints[name]
+        move = np.eye(4)
+        move[:3, 3] = spec['origin']
+        angle = float(q.get(name, 0.0))
+        axis = spec['axis']
+        if axis is not None and angle:
+            axis = axis / np.linalg.norm(axis)
+            cross = np.array([[0, -axis[2], axis[1]], [axis[2], 0, -axis[0]], [-axis[1], axis[0], 0]])
+            spin = np.eye(4)
+            spin[:3, :3] = np.eye(3) + np.sin(angle) * cross + (1 - np.cos(angle)) * (cross @ cross)
+            move = move @ spin
+        transform = transform @ move
+    return transform
+
+
+def _rotation(quat):
+    x, y, z, w = np.asarray(quat, dtype=float)
+    assert np.isfinite(quat).all() and abs(x*x + y*y + z*z + w*w - 1) < 1e-5
+    return np.array([[1-2*(y*y+z*z), 2*(x*y-z*w), 2*(x*z+y*w)],
+                     [2*(x*y+z*w), 1-2*(x*x+z*z), 2*(y*z-x*w)],
+                     [2*(x*z-y*w), 2*(y*z+x*w), 1-2*(x*x+y*y)]])
+
+
+def _project(joints, poses, names, bodies):
+    """Project body tensors about their COM into fixed-base joint coordinates [kg*m^2]."""
+    result = np.zeros((len(names), len(names)))
+    for link, body in bodies.items():
+        pose = poses[link]
+        center = pose[:3, :3] @ body['com'] + pose[:3, 3]
+        linear, angular = np.zeros((3, len(names))), np.zeros((3, len(names)))
+        ancestry = chain_up(joints, link)
+        for k, name in enumerate(names):
+            if name not in ancestry:
+                continue
+            spec = joints[name]
+            frame = poses[spec['child']]
+            axis = frame[:3, :3] @ spec['axis']
+            angular[:, k] = axis
+            linear[:, k] = np.cross(axis, center - frame[:3, 3])
+        world_tensor = pose[:3, :3] @ body['inertia'] @ pose[:3, :3].T
+        result += angular.T @ world_tensor @ angular + body['mass'] * linear.T @ linear
+    return result
+
+
+def _gravity_design(reference, urdf):
+    """Per-joint gravity moment at neutral and single-axis +/-0.02 rad, and the kp/kd it implies."""
+    model = load_urdf(urdf)
+    names = reference['snapshots'][0]['joint_names']
+    links = ET.parse(urdf).getroot().findall('link')
+    masses = {l.get('name'): float(l.find('inertial/mass').get('value')) for l in links}
+    centers = {l.get('name'): np.fromstring(l.find('inertial/origin').get('xyz'), sep=' ') for l in links}
+    chains = {n: chain_up(model['joints'], n) for n in masses}
+    poses = [{}] + [{n: a} for n in names for a in (-.02, .02)]
+    moments = []
+    for q in poses:
+        frames = {n: fk(model['joints'], n, q) for n in masses}
+        com = {n: frames[n][:3, :3] @ centers[n] + frames[n][:3, 3] for n in masses}
+        row = []
+        for n in names:
+            spec = model['joints'][n]
+            frame = frames[spec['child']]
+            axis = frame[:3, :3] @ spec['axis']
+            axis /= np.linalg.norm(axis)
+            row.append(sum(float(axis @ np.cross(com[l]-frame[:3, 3], [0., 0., -9.81*masses[l]]))
+                           for l in masses if n in chains[l]))
+        moments.append(row)
+    moments = np.asarray(moments)
+    inertia = np.diag(next(s['mass_matrix'] for s in reference['snapshots'] if s['label'] == 'neutral'))
+    load = np.abs(moments).max(axis=0)
+    kp = np.maximum(inertia*(2*math.pi)**2, load/.03)
+    kd = 2*np.sqrt(inertia*kp)
+    chest = names.index('chest_pitch_joint')
+    assert load[chest] < 280. and moments[0, chest] != 0
+    return dict(joint_names=names, sampled_gravity_torque_nm=moments.tolist(),
+                max_gravity_torque_nm=load.tolist(), neutral_inertia_diagonal=inertia.tolist(),
+                kp=kp.tolist(), kd=kd.tolist(), gravity_m_s2=[0., 0., -9.81], static_error_scale_rad=.03,
+                subtree_mass_kg={n: sum(masses[l] for l in masses if n in chains[l]) for n in names},
+                chest_amplitude_rad=float(-np.sign(moments[0, chest])*.02),
+                scope='fixed-root downstream self-weight at neutral and single-axis +/-0.02 rad; not contact support')
+
+
+def _params():
+    """The live v7 configuration in the shape the report reads (the YAML it used to read is retired)."""
+    from rl_exp import lizard2_v7
+
+    env = lizard2_v7.make_env_cfg()
+    articulation = env.scene.robot
+    actions = {'joints': {}, 'clip': {}, 'use_default_offset': env.actions.joint_pos_legs.use_default_offset}
+    for group in ('legs', 'spine'):
+        action = getattr(env.actions, f'joint_pos_{group}')
+        actions['joints'][group] = list(action.joint_names)
+        actions[group + '_scale'] = {name: action.scale[name] for name in action.joint_names}
+        actions['clip'][group] = {name: list(action.clip[name]) for name in action.joint_names}
+    actuators = {}
+    for group, spec in articulation.actuators.items():
+        joints = list(spec.joint_names_expr)
+
+        def limit(field):
+            value = getattr(spec, field)
+            return {n: (value[n] if isinstance(value, dict) else value) for n in joints}
+
+        actuators[group] = {'joint_patterns': joints, 'armature': spec.armature,
+                            'stiffness': dict(spec.stiffness), 'damping': dict(spec.damping),
+                            'effort_limit': limit('effort_limit_sim'),
+                            'velocity_limit': limit('velocity_limit_sim')}
+    return {'robot': {'usd_path': USD_KEY, 'base_body_name': robot.BELLY_BODY,
+                      'base_init_rotation_xyzw': [0., 0., 0., 1.],
+                      'base_init_height': float(articulation.init_state.pos[2])},
+            'sim': {'dt': env.sim.dt, 'decimation': env.decimation},
+            'actuators': actuators, 'action': actions,
+            'default_joint_pos': dict(articulation.init_state.joint_pos)}
+
+
 def load_model(path, names):
     """Validate supported URDF tree and return its body tensors."""
     tree = ET.parse(path).getroot()
     links, joints = tree.findall('link'), tree.findall('joint')
-    model = csc.load_urdf(path)
+    model = load_urdf(path)
     assert len(links) == len(model['links']) and len(joints) == len(model['joints'])
     assert len(names) == len(set(names)) and set(names) == {j.get('name') for j in joints if j.get('type') == 'revolute'}
     assert all(j.get('type') in ('fixed', 'revolute') for j in joints)
@@ -75,7 +218,7 @@ def load_model(path, names):
 
 def project(model, bodies, names, q):
     assert set(q) == set(names) and np.isfinite(list(q.values())).all()
-    poses = {n: csc.fk(model['joints'], n, q) for n in bodies}
+    poses = {n: fk(model['joints'], n, q) for n in bodies}
     matrix = _project(model['joints'], poses, names, bodies)
     assert np.isfinite(matrix).all() and np.allclose(matrix, matrix.T, rtol=1e-12, atol=1e-12)
     assert np.linalg.eigvalsh(matrix).min() > 0
@@ -83,18 +226,25 @@ def project(model, bodies, names, q):
 
 
 def inputs():
-    lock = json.loads(LOCK.read_text(encoding='utf-8'))['files']
-    for key in (USD_KEY, URDF_KEY, 'versions/lizard2/main/v7/main_params.yaml'):
-        assert sha(RL / key) == lock[key], 'asset lock mismatch: ' + key
-    cfg = yaml.safe_load(PARAMS.read_text(encoding='utf-8'))
+    assert sha(RL / USD_KEY) == robot.MEASURED_USD_SHA256, 'formal USD bytes moved since the order was measured'
+    assert sha(RL / URDF_KEY) == robot.MEASURED_URDF_SHA256, 'formal URDF bytes moved since the order was measured'
+    tree = ET.parse(RL / URDF_KEY).getroot()
+    names = [j.get('name') for j in tree.findall('joint') if j.get('type') == 'revolute']
+    cfg = _params()
     assert cfg['robot']['usd_path'] == USD_KEY and cfg['robot']['base_body_name'] == 'base_link'
     assert cfg['robot']['base_init_rotation_xyzw'] == [0., 0., 0., 1.]
-    names = [n + '_joint' for n in cfg['joint_order']]
     q = cfg['default_joint_pos']
-    assert len(names) == 26 and set(names) == set(q) and all(v == 0. for v in q.values())
-    runtime_doc = json.loads(ORDER.read_text(encoding='utf-8'))['assets'][USD_KEY]
-    runtime = [n + '_joint' for n in runtime_doc['joint_order']]
+    assert len(names) == 26 and set(names) == set(q) == set(robot.ACTION_JOINTS)
+    assert all(v == 0. for v in q.values())
+    runtime = list(robot.MEASURED_JOINT_ORDER)
     assert len(runtime) == len(set(runtime)) == 26 and set(runtime) == set(names)
+    order = hashlib.sha256('|'.join(runtime).encode()).hexdigest()
+    assert order == robot.MEASURED_ORDER_SHA256, (
+        'the measured articulation order moved since it was recorded\n'
+        f'      recorded: {robot.MEASURED_ORDER_SHA256}\n'
+        f'      module:   {order}\n'
+        '      re-measure with lizard2_shank_use_probe.py --leg_drive_preflight, then approve the new'
+        ' order and digest together')
     groups = cfg['actuators']
     assert set(groups) == {'legs', 'spine'}
     assert set(groups['legs']['joint_patterns']).isdisjoint(groups['spine']['joint_patterns'])
@@ -110,7 +260,7 @@ def inputs():
     legs = groups['legs']['joint_patterns']
     assert len(legs) == 16
     for foot, prefix in zip(FEET, ('lf_', 'rf_', 'rl_', 'rr_')):
-        ancestry = csc.chain_up(model['joints'], foot)
+        ancestry = chain_up(model['joints'], foot)
         assert ancestry[-1].endswith('_fixed') and len([n for n in ancestry if n in legs and n.startswith(prefix)]) == 4
     return cfg, names, runtime, model, bodies
 
@@ -157,7 +307,7 @@ def report():
     feet = {}
     for foot, prefix in zip(FEET, ('lf_', 'rf_', 'rl_', 'rr_')):
         axes = [n for n in spec['joint_patterns'] if n.startswith(prefix)]
-        pose = {n: csc.fk(model['joints'], n, q) for n in bodies}
+        pose = {n: fk(model['joints'], n, q) for n in bodies}
         contribution = np.diag(_project(model['joints'], pose, axes, {foot: bodies[foot]}))
         assert np.all(contribution > 0) and all(gravity['subtree_mass_kg'][n] >= bodies[foot]['mass'] for n in axes)
         feet[foot] = dict(mass_kg=bodies[foot]['mass'], upstream_joint_names=axes,
@@ -182,9 +332,7 @@ def report():
                          kd_velocity_limit_percent_effort=100*kd*velocity/effort,
                          velocity_limit_rad_s=velocity, effort_limit_nm=effort,
                          subtree_mass_kg=gravity['subtree_mass_kg'][name]))
-    paths = [PARAMS, LOCK, RL / URDF_KEY, RL / USD_KEY, ORDER, Path(__file__),
-             Path(__file__).with_name('palm_spatial_inertia.py'),
-             Path(__file__).with_name('palm_spatial_tracking.py'), Path(csc.__file__)]
+    paths = [RL / URDF_KEY, RL / USD_KEY, Path(__file__), Path(robot.__file__)]
     return dict(inputs={str(p.resolve()): sha(p) for p in paths},
                 runtime_order_source=[n.removesuffix('_joint') for n in runtime], pose_joint_rad=q,
                 root_position_m=[0., 0., cfg['robot']['base_init_height']], root_quaternion_xyzw=[0., 0., 0., 1.],
@@ -226,7 +374,6 @@ def contact_moments(model, names, frames, points, normal, friction, counts):
 
 def propulsion_report(arrays, joint_names):
     """Summarize single-point foot contact moments for recorded rollout samples [N·m]."""
-    from palm_spatial_inertia import _rotation
 
     _, _, runtime, model, _ = inputs()
     if list(joint_names) != runtime:
@@ -281,10 +428,10 @@ def propulsion_report(arrays, joint_names):
             if count == 1 and np.linalg.norm(normal[sample, env, leg] + friction[sample, env, leg]) <= 1.:
                 weak_contacts += 1
                 continue
-            frame = root @ csc.fk(model['joints'], model['joints'][name]['child'], q)
+            frame = root @ fk(model['joints'], model['joints'][name]['child'], q)
             point = points[sample, env, leg]
             if count == 1:
-                foot_frame = root @ csc.fk(model['joints'], foot, q)
+                foot_frame = root @ fk(model['joints'], foot, q)
                 if np.linalg.norm(foot_frame[:3, 3] - centers[sample, env, leg]) > 1e-4:
                     raise ValueError('live foot center and URDF FK mismatch')
                 if (not np.isfinite(point).all() or abs(np.linalg.norm(point - centers[sample, env, leg]) - .08) > .01
@@ -357,7 +504,7 @@ def two_foot_trim(label: str) -> dict:
         q = dict(base)
         for name, value in zip(trims, values):
             q[name] += value * mirror[name]
-        poses = {n: csc.fk(model['joints'], n, q) for n in bodies}
+        poses = {n: fk(model['joints'], n, q) for n in bodies}
         com = sum(body['mass'] * (poses[n][:3, :3] @ body['com'] + poses[n][:3, 3])
                   for n, body in bodies.items()) / mass + root
         points = {foot: np.asarray(poses[foot][:3, 3]) + root - [0., 0., radius[foot]] for foot in feet}
@@ -535,7 +682,7 @@ def swing_review(plan_path: Path, propulsion_path: Path | None = None) -> dict:
             a, b = (row['measured'][f'{g}|{frequency:g}']['rms'] for g in 'AB')
             row['measured'][f'rms_reduction_percent|{frequency:g}'] = 100 * (a - b) / a
         rows.append(row)
-    paths = [plan_path, Path(__file__), Path(protocol.__file__), RL / URDF_KEY, PARAMS, LOCK]
+    paths = [plan_path, Path(__file__), Path(protocol.__file__), RL / URDF_KEY, Path(robot.__file__)]
     if propulsion_path is not None:
         paths.append(propulsion_path)
     return dict(plan=str(plan_path), mapping_scope='recorded run plan, not a live backend readback this run',
@@ -581,7 +728,7 @@ def support_report(foot_forces: dict[str, list[float]] | None = None) -> dict:
     for label, group in geometry['groups'].items():
         q = group['solver']['q_rad']
         root = np.asarray(geometry['root_position_world_m'])
-        poses = {n: csc.fk(model['joints'], n, q) for n in bodies}
+        poses = {n: fk(model['joints'], n, q) for n in bodies}
         com = np.asarray(group['validation']['com_world_m'])
         feet = {}
         for foot in group['support']:
@@ -602,8 +749,8 @@ def support_report(foot_forces: dict[str, list[float]] | None = None) -> dict:
             gravity = sum(float(axis @ np.cross(poses[link][:3, :3] @ body['com']
                                                 + poses[link][:3, 3] + root - joint,
                                                 [0., 0., -9.81 * body['mass']]))
-                          for link, body in bodies.items() if name in csc.chain_up(model['joints'], link))
-            jacobian = {foot: np.cross(axis, points[foot] - joint) if name in csc.chain_up(model['joints'], foot)
+                          for link, body in bodies.items() if name in chain_up(model['joints'], link))
+            jacobian = {foot: np.cross(axis, points[foot] - joint) if name in chain_up(model['joints'], foot)
                         else np.zeros(3) for foot in feet}
             contact = sum(float(jacobian[foot] @ forces[foot]) for foot in feet)
             holding = -(gravity + contact)
@@ -618,8 +765,7 @@ def support_report(foot_forces: dict[str, list[float]] | None = None) -> dict:
         groups[label] = dict(q_rad=q, root_position_world_m=root.tolist(), com_world_m=com.tolist(), feet=feet,
                              example_required_guide_force_n=required_force.tolist(),
                              example_required_guide_moment_at_com_nm=required_moment.tolist(), rows=rows)
-    paths = [PARAMS, LOCK, RL / USD_KEY, ORDER, Path(__file__), Path(csc.__file__),
-             Path(__file__).with_name('palm_spatial_inertia.py')]
+    paths = [RL / USD_KEY, Path(__file__), Path(robot.__file__)]
     hashes = dict(geometry['sha256'])
     hashes.update({str(p.resolve()): sha(p) for p in paths})
     return dict(geometry_passed=geometry['passed'], inputs_sha256=hashes, weight_n=weight,

@@ -4,7 +4,6 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Read-only round-feet USD audit [kg, m, kg*m^2]; explicit --repair saves a new sibling, no physics."""
 import argparse
-import ast
 import json
 from pathlib import Path
 import sys
@@ -18,24 +17,81 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
 from rl_exp.tools.runrecord.binding import sha256_file as sha256
 
-DEFAULT = ROOT / 'rl_exp/out/lizard2_round_feet/export03'
 FEET = ('lf_wrist', 'rf_wrist', 'rl_ankle', 'rr_ankle')
 REPAIR_LINKS = {'lf_elbow', 'rf_elbow', 'rl_knee', 'rr_knee', 'tail1_pitch'}
 
 
+def _rotation(quat):
+    x, y, z, w = np.asarray(quat, dtype=float)
+    assert np.isfinite(quat).all() and abs(x * x + y * y + z * z + w * w - 1) < 1e-5
+    return np.array([[1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+                     [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+                     [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)]])
+
+
+def _comparison(actual, expected):
+    """The same scale-relative budget as :func:`comparison`, in the shape the repair reads."""
+    return {'within_roundoff_budget': comparison(actual, expected)['pass']}
+
+
+def _principal_repair(diagonal, quat, expected):
+    """The conjugate quaternion that explains the tensor, or ``None`` when the axes already agree."""
+    rotation_matrix = _rotation(quat)
+    if _comparison(rotation_matrix @ diagonal @ rotation_matrix.T, expected)['within_roundoff_budget']:
+        return None
+    inverse = np.r_[-np.asarray(quat[:3]), quat[3]]
+    corrected = _rotation(inverse)
+    assert _comparison(corrected @ diagonal @ corrected.T, expected)['within_roundoff_budget'], \
+        'unexplained inertia mismatch'
+    return inverse
+
+
+def repair_fresh_stage(stage, urdf):
+    """Check fresh converted mass/COM/tensors; repair only explained principal axes."""
+    links = {link.get('name'): link for link in ET.parse(urdf).getroot().findall('link')}
+    bodies = [p for p in stage.Traverse() if p.HasAPI(UsdPhysics.RigidBodyAPI)]
+    assert len(bodies) == len(links) == 31 and {p.GetName() for p in bodies} == set(links)
+    original = stage.GetRootLayer().ExportToString()
+    changes, pending = [], []
+    for prim in bodies:
+        link = links[prim.GetName()]
+        origin = link.find('inertial/origin')
+        assert np.all(np.fromstring(origin.get('rpy', '0 0 0'), sep=' ') == 0)
+        api = UsdPhysics.MassAPI(prim)
+        assert _comparison(float(api.GetMassAttr().Get()),
+                           float(link.find('inertial/mass').get('value')))['within_roundoff_budget'], \
+            'mass mismatch'
+        assert _comparison(list(api.GetCenterOfMassAttr().Get()),
+                           np.fromstring(origin.get('xyz'), sep=' '))['within_roundoff_budget'], 'COM mismatch'
+        spec = link.find('inertial/inertia')
+        expected = np.array([[float(spec.get(k)) for k in row]
+                             for row in (('ixx', 'ixy', 'ixz'), ('ixy', 'iyy', 'iyz'), ('ixz', 'iyz', 'izz'))])
+        diagonal = np.diag(list(api.GetDiagonalInertiaAttr().Get()))
+        old = api.GetPrincipalAxesAttr().Get()
+        quat = [*old.GetImaginary(), old.GetReal()]
+        replacement = _principal_repair(diagonal, quat, expected)
+        if replacement is not None:
+            pending.append((api.GetPrincipalAxesAttr(), old, replacement, prim.GetName()))
+    # No stage writes until every tensor has an explanation.
+    for attr, old, replacement, name in pending:
+        attr.Set(Gf.Quatf(float(replacement[3]), Gf.Vec3f(*map(float, replacement[:3]))))
+        changes.append({'link': name, 'before_xyzw': [*old.GetImaginary(), old.GetReal()],
+                        'after_xyzw': replacement.tolist()})
+    corrected = stage.GetRootLayer().ExportToString()
+    for attr, old, _, _ in pending:
+        attr.Set(old)
+    assert stage.GetRootLayer().ExportToString() == original, 'fields beyond principal axes changed'
+    assert stage.GetRootLayer().ImportFromString(corrected)
+    return {'links_verified': len(bodies), 'changes': changes, 'only_principal_axes_delta_verified': True,
+            'scope': 'fresh authored mass/COM/tensors only; runtime mass matrix remains unverified'}
+
+
 def repair_clone(stage, urdf):
-    """Reuse proven conjugation repair offline; never edit source layer."""
-    helper = ROOT / 'rl_exp/tools/diagnose/palm_spatial_inertia.py'
-    names = {'_rotation', '_comparison', '_principal_repair', 'repair_fresh_stage'}
-    nodes = [n for n in ast.parse(helper.read_text(encoding='utf-8')).body
-             if isinstance(n, ast.FunctionDef) and n.name in names]
-    assert {n.name for n in nodes} == names, 'repair helper functions missing'
-    namespace = {'np': np, 'ET': ET}
-    exec(compile(ast.Module(body=nodes, type_ignores=[]), str(helper), 'exec'), namespace)
+    """Clone the stage and repair only the explained principal axes; never edit the source layer."""
     layer = Sdf.Layer.CreateAnonymous('principal_axes_repair.usda')
     assert layer.ImportFromString(stage.GetRootLayer().ExportToString())
     clone = Usd.Stage.Open(layer)
-    result = namespace['repair_fresh_stage'](clone, urdf)
+    result = repair_fresh_stage(clone, urdf)
     assert {c['link'] for c in result['changes']} == REPAIR_LINKS, 'unexpected repair scope'
     assert len(result['changes']) == 5, 'unexpected repair count'
     return clone, result
@@ -179,13 +235,57 @@ def audit(stage, tree):
                                                 for p in bodies}}
 
 
+def formal_report(directory, output, parser):
+    """Audit the formal asset directory read-only; nothing is written beside it."""
+    usd = directory / 'lizard2_round_feet.usda'
+    urdf = directory / 'lizard2_round_feet.urdf'
+    if not (usd.is_file() and urdf.is_file()):
+        parser.error('formal dir must hold lizard2_round_feet.usda and lizard2_round_feet.urdf')
+    if output.is_relative_to(directory) or output.exists() or output.suffix != '.json':
+        parser.error('output must be a new JSON outside the formal directory')
+    report = {'pass': False,
+              'scope': 'authored formal USD stage only; no runtime, contacts, material or loaded pose/FK verdict',
+              'inertia_convention': 'R diag(I) R.T; pxr active quaternion, imaginary xyz / real w; no repairs',
+              'bindings': {}, 'binding_failures': []}
+    before = {p: sha256(p) for p in sorted(directory.rglob('*')) if p.is_file()}
+    for path in (usd, urdf, Path(__file__), ROOT / 'rl_exp/robots/lizard2_round_feet.py'):
+        digest = sha256(path)
+        report['bindings'][str(path)] = {'sha256': digest}
+        if digest is None:
+            report['binding_failures'].append(str(path))
+    layers, assets, unresolved = UsdUtils.ComputeAllDependencies(str(usd))
+    report['dependencies'] = {'layers': [l.identifier for l in layers], 'assets': list(assets),
+                              'unresolved': list(unresolved)}
+    for path in [l.realPath for l in layers if not l.anonymous] + list(assets):
+        report['bindings'][str(Path(path).resolve())] = {'sha256': sha256(path)}
+    report['baseline'] = audit(Usd.Stage.Open(str(usd)), ET.parse(urdf).getroot())
+    report['disk_bindings_unchanged'] = all(
+        sha256(p) == r['sha256'] for p, r in report['bindings'].items() if 'sha256' in r)
+    after = {p: sha256(p) for p in sorted(directory.rglob('*')) if p.is_file()}
+    report['formal_directory_unchanged'] = before == after
+    report['pass'] = (report['baseline']['pass'] and not report['binding_failures'] and not unresolved
+                      and report['disk_bindings_unchanged'] and report['formal_directory_unchanged'])
+    with output.open('x', encoding='utf-8') as stream:
+        json.dump(report, stream, indent=2, allow_nan=False)
+    print(json.dumps({'pass': report['pass'], 'unresolved': report['dependencies']['unresolved']}), flush=True)
+    return report
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--export_dir', type=Path, default=DEFAULT)
-    parser.add_argument('--output', type=Path)
+    parser.add_argument('--export_dir', type=Path, help='isolated conversion candidate directory')
+    parser.add_argument('--formal_dir', type=Path, help='formal round-foot asset directory (read-only audit)')
+    parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--usd', type=Path, help='USD to audit, within export_dir (default: original)')
     parser.add_argument('--repair', type=Path, help='Opt in: save repaired USD to a new sibling of --usd')
     args = parser.parse_args()
+    if args.formal_dir:
+        if args.usd or args.repair:
+            parser.error('--formal_dir is read-only: no --usd or --repair')
+        formal_report(args.formal_dir.resolve(), args.output.resolve(), parser)
+        return
+    if args.export_dir is None:
+        parser.error('--export_dir or --formal_dir is required')
     directory = args.export_dir.resolve()
     usd = (args.usd or directory / 'lizard2_round_feet/lizard2_round_feet.usda').resolve()
     if not usd.is_relative_to(directory) or not usd.is_file():
@@ -195,10 +295,10 @@ def main():
     if target and (target.parent != usd.parent or target.exists() or target.suffix != '.usda'
                    or repair_record.exists()):
         parser.error('repair requires a new .usda sibling and a new repair record')
-    output = args.output or directory / 'usd_audit.json'
+    output = args.output.resolve()
     if (not output.parent.is_dir() or output.exists() or output.resolve().parent != directory
             or output.suffix != '.json' or output.resolve() == repair_record):
-        parser.error('output must be a new JSON in existing export directory, distinct from repair record')
+        parser.error('output must be a new JSON in the existing export directory, distinct from the repair record')
     report = {'pass': False, 'scope': 'authored USD stage only; no runtime, contacts, material or loaded pose/FK verdict',
               'inertia_convention': 'R diag(I) R.T; pxr active quaternion, imaginary xyz / real w; no repairs',
               'bindings': {}, 'binding_failures': []}
@@ -231,7 +331,7 @@ def main():
         urdf = directory / 'lizard2_round_feet.urdf'
         bind(urdf, doc['urdf_sha256'])
         for path in [Path(__file__), ROOT / 'rl_exp/tools/diagnose/lizard2_two_axis_convert.py',
-                     ROOT / 'rl_exp/tools/pipeline/flatten_usd.py', ROOT / 'rl_exp/tools/diagnose/palm_spatial_inertia.py',
+                     ROOT / 'rl_exp/tools/pipeline/flatten_usd.py',
                      directory / 'config.yaml', directory / 'conversion.log', directory / '.asset_hash']:
             bind(path)
         history = directory / 'usd_audit.json'

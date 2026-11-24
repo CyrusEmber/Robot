@@ -11,7 +11,6 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import numpy as np
-import yaml
 
 import lizard2_leg_drive_baseline as base
 import lizard2_leg_drive_protocol as p
@@ -307,9 +306,8 @@ def run():
             pass
         else:
             raise AssertionError('invalid native candidate accepted')
-    path = Path(__file__).resolve().parents[2] / 'versions/lizard2/main/v7/main_params.yaml'
-    cfg = yaml.safe_load(path.read_text(encoding='utf-8'))
-    names = [n + '_joint' for n in cfg['joint_order']]
+    cfg = base._params()
+    names = list(cfg['default_joint_pos'])
     legs = cfg['actuators']['legs']['joint_patterns']
     default = np.array([cfg['default_joint_pos'][n] for n in names])
     cases = p.cases(legs)
@@ -548,6 +546,10 @@ def run():
     assert p.compare(legs, broken)['cases'][combo.id] == 'fail'
     rejects(lambda: p.compare(legs, {'bad id': {}}), 'unknown result')
     print('PASS: 208 unique cases, 476800 physics steps, synthetic tracking and safety checks')
+
+
+def test_lizard2_leg_drive_protocol():
+    run()
 
 
 if __name__ == '__main__':

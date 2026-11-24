@@ -207,11 +207,47 @@ def leg_drive_preflight(live, out, checkpoint):
     return metadata
 
 
+def pair_binding(sensor_paths, filter_paths, source, owners, shape):
+    """Validate actual registered single-body rows and single-owner columns before naming forces."""
+    def singleton(paths):
+        assert isinstance(paths, (list, tuple)), 'contact pair path container mismatch'
+        return [p if isinstance(p, str) else p[0]
+                if isinstance(p, (list, tuple)) and len(p) == 1 and isinstance(p[0], str)
+                else None for p in paths]
+    assert singleton(sensor_paths) == [source], 'contact pair source binding mismatch'
+    assert isinstance(filter_paths, (list, tuple)), 'contact pair filter container mismatch'
+    # Actual backend layout: one sensor row containing its filter columns, not singleton columns.
+    if (len(filter_paths) == 1 and isinstance(filter_paths[0], (list, tuple))
+            and len(filter_paths[0]) == len(owners)
+            and all(isinstance(p, str) for p in filter_paths[0])):
+        columns = list(filter_paths[0])
+    else:
+        columns = singleton(filter_paths)
+    assert len(columns) == len(owners) and len(set(columns)) == len(columns) and set(columns) == set(owners), \
+        'contact pair filter binding mismatch'
+    assert tuple(shape) == (1, len(columns), 3), 'contact pair matrix shape mismatch'
+    return columns
+
+
+def tilt_cos(projected_gravity_b):
+    """Cosine of the base tilt angle, shape (N,); the same quantity the acceptance gate reads."""
+    return (-projected_gravity_b[:, 2]).clamp(-1.0, 1.0)
+
+
+def support_contact_window(forces_n, threshold, skip):
+    """First loaded support substep and the first loss after it, past the reset transient."""
+    loaded = np.asarray(forces_n, dtype=float)[skip:].min(axis=1) >= threshold
+    if not loaded.any():
+        return None, None
+    first = int(np.argmax(loaded))
+    lost = np.nonzero(~loaded[first:])[0]
+    return first + skip, None if not len(lost) else int(first + lost[0] + skip)
+
+
 def leg_drive_contact_views(live, robot, collision_names):
     """Bind each active body to its exact ground contact view in both environments."""
     from pxr import Usd, UsdPhysics
     from isaaclab_physx.physics import PhysxManager
-    from rl_exp.tools.diagnose.palm_spatial_runtime import pair_binding
 
     if live.num_envs != 2:
         raise ValueError('two environments required')
@@ -740,7 +776,6 @@ def two_foot_probe(live, out, checkpoint):
     import numpy as np
     import torch
     import warp as wp
-    from diag_metrics import support_contact_window, tilt_cos
     from lizard2_leg_drive_baseline import two_foot_trim
     from rl_exp.tools.runrecord.binding import sha256_file
 

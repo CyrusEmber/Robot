@@ -26,18 +26,20 @@ sys.path.insert(0, str(_REPO))
 
 import isaaclab.terrains as terrain_gen  # noqa: E402
 from isaaclab.terrains import TerrainGeneratorCfg  # noqa: E402
+from isaaclab.terrains.height_field import HfTerrainBaseCfg  # noqa: E402
+import trimesh  # noqa: E402
 
 from ablation_harness import suites  # noqa: E402
 from ablation_harness.terrain_geometry import evidence, foot_relief, seed_rngs  # noqa: E402
 from ablation_harness import terrain_split_probe
-from rl_exp.tools.verify import terrain_preflight  # noqa: E402
 
 _SEED = 7
 
-#: One real v3 run's archived ground: written by ``eval.py`` at the end of the rollout, committed
+#: One real v7 run's archived ground: written by ``eval.py`` at the end of the rollout, committed
 #: with the run's other records. Regenerating from it is what makes the archive checkable.
-_V3_EVIDENCE = (_REPO / "ablation_harness" / "results" / "locomotion_eval_v3" / "smoke"
-                / "Lizard-Rough-v14_zeroaction-evidence_nominal_seed123" / "terrain" / "geometry.json")
+_V3_EVIDENCE = (_REPO / "ablation_harness" / "results" / "locomotion_eval_v3"
+                / "provenance-v7-20261104-161257" / "Lizard2-Flat-v7_short_robust_seed123"
+                / "terrain" / "geometry.json")
 
 
 def _cfg() -> TerrainGeneratorCfg:
@@ -68,6 +70,25 @@ def _generate(seed: int | None) -> dict:
     if seed is not None:
         seed_rngs(seed)
     return terrain_split_probe.generate_record(_cfg())
+
+
+def _build_sub_terrain(gen_cfg, sub_cfg, difficulty, seed):
+    """Materialize one sub-terrain the way TerrainGenerator would, on a copy of its cfg.
+
+    The global RNGs are seeded per sub-terrain, which the real generator does not do: this trades
+    the run's stream order for a relief that depends on (difficulty, seed, name) alone.
+    """
+    sub = sub_cfg.copy()
+    sub.size = tuple(gen_cfg.size)
+    if isinstance(sub, HfTerrainBaseCfg):
+        sub.horizontal_scale = gen_cfg.horizontal_scale
+        sub.vertical_scale = gen_cfg.vertical_scale
+        sub.slope_threshold = gen_cfg.slope_threshold
+    sub.difficulty = float(difficulty)
+    sub.seed = int(seed)
+    seed_rngs(seed)
+    meshes, _ = sub.function(sub.difficulty, sub)
+    return trimesh.util.concatenate(meshes)
 
 
 def test_a_real_generation_hashes_every_cell() -> None:
@@ -111,7 +132,7 @@ def test_eval_suite_rough_columns_are_rough() -> None:
     assert suites.LIZARD_SUITE_V2_NAMES == suites.LIZARD_SUITE_V1_NAMES, "the columns must line up"
 
     def relief(generator, name: str) -> float:
-        _, _, mesh = terrain_preflight.build_sub_terrain(generator, generator.sub_terrains[name], 1.0, 123)
+        mesh = _build_sub_terrain(generator, generator.sub_terrains[name], 1.0, 123)
         measured = foot_relief(mesh)
         assert measured is not None, f"{name}: a height-field column is densely meshed and must measure"
         return measured

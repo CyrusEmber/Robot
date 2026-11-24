@@ -1194,19 +1194,16 @@ def capture(args):
     types = None
     control_raw = {}
     try:
-        import gymnasium as gym
         import torch
-        import isaaclab_tasks  # noqa: F401
-        import rl_exp.tasks  # noqa: F401
-        from isaaclab.utils.string import string_to_callable
+        from isaaclab.envs import ManagerBasedRLEnv
         from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper
         from ablation_harness import suites
         from ablation_harness.components.dr_controller import apply_eval_mode
         from ablation_harness.terrain_geometry import seed_rngs
         from ablation_harness import terrain_split_probe, cfg_snapshot
+        from rl_exp import lizard2_v7
 
-        spec = gym.spec('Lizard2-Flat-v3')
-        cfg = string_to_callable(spec.kwargs['env_cfg_entry_point'])()
+        cfg = lizard2_v7.make_env_cfg()
         cfg.scene.terrain = suites.lizard_suite_v2()
         sub = cfg.scene.terrain.terrain_generator.sub_terrains
         sub['rough_a'] = suites._LIZARD_SUITE_V1_GENERATOR.sub_terrains['rough_a'].copy()
@@ -1219,7 +1216,8 @@ def capture(args):
         cfg.episode_length_s = 30.0
         cfg.seed = 123
         cfg.sim.device = args.device
-        cfg.curriculum.terrain_levels = None
+        if cfg.curriculum is not None:
+            cfg.curriculum.terrain_levels = None
         apply_eval_mode(cfg, 'nominal')
         meta['config'] = cfg_snapshot.snapshot(cfg)
         meta['asset_path'] = str(Path(str(cfg.scene.robot.spawn.usd_path)).resolve())
@@ -1231,11 +1229,15 @@ def capture(args):
         isaac = isaac_root()
         meta['isaac_root'] = str(isaac)
         def source_hashes():
-            return {str(p.resolve()): sha(p) for root in (
-                REPO / 'rl_exp/tasks', REPO / 'ablation_harness', REPO / 'rl_exp/tools/verify',
-                isaac / 'source/isaaclab/isaaclab', isaac / 'source/isaaclab_rl/isaaclab_rl',
-                isaac / 'source/isaaclab_tasks/isaaclab_tasks', isaac / 'source/isaaclab_physx/isaaclab_physx')
-                for p in sorted(root.rglob('*.py')) if p.is_file()}
+            roots = (REPO / 'rl_exp/robots', REPO / 'rl_exp/locomotion', REPO / 'ablation_harness',
+                     REPO / 'rl_exp/tools/verify',
+                     isaac / 'source/isaaclab/isaaclab', isaac / 'source/isaaclab_rl/isaaclab_rl',
+                     isaac / 'source/isaaclab_tasks/isaaclab_tasks', isaac / 'source/isaaclab_physx/isaaclab_physx')
+            missing = [str(root) for root in roots if not root.is_dir()]
+            if missing:
+                raise ValueError(f'source hash roots missing: {missing}')
+            return {str(p.resolve()): sha(p) for root in roots
+                    for p in sorted(root.rglob('*.py')) if p.is_file()}
 
         meta['source_hashes'] = source_hashes()
         for label, command in (('repo_git', ['git', '-C', str(REPO), 'status', '--short', '--branch']),
@@ -1247,7 +1249,7 @@ def capture(args):
             meta[label] = {'exit': proc.returncode, 'stdout': proc.stdout, 'stderr': proc.stderr}
         seed_rngs(suites.SUITE_SEED)
         terrain_split_probe.install()
-        env = gym.make('Lizard2-Flat-v3', cfg=cfg)
+        env = ManagerBasedRLEnv(cfg=cfg)
         mbenv = env.unwrapped
         meta['terrain'] = terrain_split_probe.record_for(mbenv.scene.terrain)
         wrapper = RslRlVecEnvWrapper(env, clip_actions=None)
