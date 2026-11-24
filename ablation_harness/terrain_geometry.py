@@ -22,7 +22,7 @@ import numpy as np
 
 #: ~= the sole width (0.46 m): the cell one foot plate covers. Relief below this scale is what
 #: the robot feels as bumpiness, so a "rough" terrain has to show it *inside* a cell, not just
-#: across the map (work/active/verified-rebuild-rating.md ①).
+#: across the map.
 _FOOT_CELL = 0.5
 
 #: A cell is measured only when no face of the mesh is bigger than the cell. Inside one
@@ -165,7 +165,7 @@ def evidence(record: dict, *, identity: dict) -> dict:
             "relief": f"height range inside one {_FOOT_CELL} m cell [m], reported as relief_p95;"
                       f" null when the mesh's faces are larger than the cell"
                       f" ({_MAX_MEASURABLE_FACE:g} m), see terrain_geometry.foot_relief",
-            "module": "rl_exp.tasks.terrain_geometry",
+            "module": __name__,
         },
         "identity": dict(identity),
         "geometry_digest": record.get("geometry_digest"),

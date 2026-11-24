@@ -6,7 +6,7 @@
 # -*- coding: utf-8 -*-
 """Contact ownership: which body carries a collision, and does the penalty stack see it?
 
-Item 1 of the leg-axis ledger (``work/active/asset-leg-axis-capability-mismatch.md``) left one thing
+The leg-axis review (``work/closed/2026/asset-leg-axis-capability-mismatch.md``) left one thing
 unverified: the URDF side says the tibia's collision lives on the ``*_hfe`` body and the four
 ``*_kfe`` carry none, but nothing read the **USD** side or what actually contacts at runtime. A
 penalty computed over bodies that have no collider reads 0.0 forever and looks like a passing gate.

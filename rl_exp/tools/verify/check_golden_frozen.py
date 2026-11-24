@@ -29,9 +29,7 @@ import sys
 import tempfile
 
 _REPO = pathlib.Path(__file__).resolve().parents[3]
-# The file-digest primitive has one home (work/active/record-variant-and-snapshot-specs.md ①): this gate hashes the frozen goldens
-# *with* it rather than spelling its own ``sha256(read_bytes())``, so the scan that keeps that
-# home single (``check_record_bindings.py``) does not have to carry an exception for it.
+# Hash the frozen goldens with the shared file-digest primitive.
 if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 

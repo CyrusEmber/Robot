@@ -19,7 +19,7 @@ an epsilon next to a cumulative sum in the same file -- the second catches the l
 rename of either side. The detector is self-tested here, so a green run cannot mean "matcher
 broke".
 
-**Scope, honestly (work/active/record-variant-and-snapshot-specs.md ②):** this is a paste detector, not a semantics check. A rule
+The scanner detects copied code signatures. A rule
 rewritten so that no literal survives -- ``1e-3``, a tolerance derived from the grid, a
 ``searchsorted``/``floor`` boundary -- shares no token with the copy and is out of this scan's
 reach by construction. That direction is held where it can be decided: a record whose declared

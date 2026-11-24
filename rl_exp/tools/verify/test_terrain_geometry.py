@@ -4,16 +4,16 @@
 Three claims, each aimed at a failure that would otherwise show up as "two runs disagree":
 
 1. A real generation can be hashed, and two generations of the same ground hash alike when the
-   global streams are seeded first -- the property work/active/verified-rebuild-rating.md ②/⑤b rests on. Unseeded they
-   differ, which is what makes the seeding load-bearing rather than decorative.
-2. The eval suite's rough columns are actually rough (work/active/verified-rebuild-rating.md ①): v1's single-value
+   global streams are seeded first. Unseeded generations differ.
+2. The eval suite's rough columns are actually rough. V1's single-value
    ``noise_range`` collapsed the sampler to a constant plate, so a "rough" column measured
    nothing. v1 stays as it is -- results were taken on it -- and v2 is the fix.
 3. The column layout is unchanged between v1 and v2, so the two are readable side by side.
 4. The ground a real run archived is reproducible from what the archive names, and the relief of
    its rough columns is real -- the check that turns "the suite is rough" from a claim about code
-   into a claim about the ground a run stood on (work/active/verified-rebuild-rating.md ①/⑤b).
+   into a claim about the ground a run stood on.
 """
+from importlib import import_module
 import json
 import math
 import pathlib
@@ -28,7 +28,7 @@ import isaaclab.terrains as terrain_gen  # noqa: E402
 from isaaclab.terrains import TerrainGeneratorCfg  # noqa: E402
 
 from ablation_harness import suites  # noqa: E402
-from ablation_harness.terrain_geometry import foot_relief, seed_rngs  # noqa: E402
+from ablation_harness.terrain_geometry import evidence, foot_relief, seed_rngs  # noqa: E402
 from ablation_harness import terrain_split_probe
 from rl_exp.tools.verify import terrain_preflight  # noqa: E402
 
@@ -78,13 +78,15 @@ def test_a_real_generation_hashes_every_cell() -> None:
     for cell in record["cells"]:
         assert (cell.get("geometry") or "").startswith("sha256:"), f"unhashed cell: {cell}"
     assert record["geometry_digest"].startswith("sha256:"), record
+    archived = evidence(record, identity={"seed": _SEED})
+    assert import_module(archived["definition"]["module"]).evidence is evidence
 
 
 def test_the_seed_is_what_pins_the_ground() -> None:
     """Same seed, same ground -- and without the seed, the same cfg does not repeat.
 
-    The second half is the falsifier: neuter :func:`seed_rngs` and this check goes red, which is
-    the whole reason a real run's terrain is not reproducible today (work/active/verified-rebuild-rating.md ②).
+    Disabling :func:`seed_rngs` makes the equality assertion fail, demonstrating that a
+    reproducible seed must cover the global streams.
     """
     first, second = _generate(_SEED), _generate(_SEED)
     assert first["geometry_digest"] == second["geometry_digest"], \
@@ -104,7 +106,7 @@ def test_eval_suite_rough_columns_are_rough() -> None:
 
     ``relief_p95`` is the surface's height range inside one 0.5 m cell -- the sole-sized metric
     the preflight uses. It is exactly zero on v1's rough columns, because a single-value
-    ``noise_range`` leaves ``np.random.choice`` one height to choose from (work/active/verified-rebuild-rating.md ①).
+    ``noise_range`` leaves ``np.random.choice`` one height to choose from.
     """
     assert suites.LIZARD_SUITE_V2_NAMES == suites.LIZARD_SUITE_V1_NAMES, "the columns must line up"
 
@@ -129,7 +131,7 @@ def test_the_archived_ground_of_a_real_run_regenerates() -> None:
     This is the ⑤b half that does not need a simulator: the file a run wrote says what generated
     it (suite + seed), so regenerating from that and comparing cell by cell is a real check on
     the archived ground rather than a read-back of it. It also carries the relief inside one foot
-    cell, which is the claim ① of ``work/active/verified-rebuild-rating.md`` is about -- a column named "rough" has to show it.
+    cell. A column named "rough" has to show relief at that scale.
 
     Ceiling: this verifies the *evidence*, not the bytes. If the framework's terrain code changes,
     the regenerated digest moves and the comparison below fails against the archived file -- the
@@ -415,7 +417,8 @@ def test_eval_resolves_dynamic_sensor_presets() -> None:
         "apply_eval_mode": apply_eval_mode,
     }
     exec(compile(ast.Module(body=[fn], type_ignores=[]), "eval.py", "exec"), namespace)
-    protocol = yaml.safe_load((_REPO / "ablation_harness" / "protocols" / "locomotion_eval_v3.yaml").read_text())
+    protocol_path = _REPO / "ablation_harness" / "protocols" / "locomotion_eval_v3.yaml"
+    protocol = yaml.safe_load(protocol_path.read_text(encoding="utf-8"))
     with patch.object(
         experiment_eval, "configurations",
         return_value=(lizard2_v7.make_env_cfg(), lizard2_v7.make_runner_cfg(), {}, {"status": "unavailable"}, lizard2_v7),

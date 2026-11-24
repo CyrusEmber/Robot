@@ -234,7 +234,7 @@ def check_reset_rows(before, after, defaults, ids):
 
 
 def formal_probe(env, candidate, result):
-    """Measure registered v7 interface, nonzero observations and three control steps."""
+    """Measure the v7 interface, nonzero observations and three control steps."""
     import torch
     import warp as wp
     from isaaclab.utils.math import quat_apply_inverse, quat_from_euler_xyz
@@ -499,7 +499,8 @@ def formal_main():
     import time
     from isaaclab.app import AppLauncher
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--task', required=True, choices=('Lizard2-Flat-v7', 'Lizard2-Flat-Play-v7'))
+    parser.add_argument('--task', required=True, choices=('Lizard2-Flat-v7', 'Lizard2-Flat-Play-v7'),
+                        help='select the explicit v7 Train or Play configuration')
     parser.add_argument('--out', type=Path, required=True, help='exclusive new run directory')
     AppLauncher.add_app_launcher_args(parser)
     args = parser.parse_args()
@@ -520,10 +521,11 @@ def formal_main():
 
         cfg = lizard2_v7.make_env_cfg(play=args.task == 'Lizard2-Flat-Play-v7')
         cfg.sim.device = launcher.device
+        body = lizard2_v7.ROBOT
         usd = Path(cfg.scene.robot.spawn.usd_path).resolve()
-        urdf = lizard2_v7.URDF_PATH.resolve()
+        urdf = body.URDF_PATH.resolve()
         bindings = result['bindings'] = {}
-        for path in (usd, urdf, Path(__file__), Path(lizard2_v7.__file__)):
+        for path in (usd, urdf, Path(__file__), Path(lizard2_v7.__file__), Path(body.__file__)):
             digest = sha256_file(path)
             if digest is None:
                 raise ValueError(f'missing bound input: {path}')

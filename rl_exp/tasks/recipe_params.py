@@ -61,7 +61,7 @@ def path(line_key: str, version: str | None) -> pathlib.Path:
 
     Returns:
         The file to read. The basename mirrors the directory name
-        (``versions/lizard/main/main_params.yaml``) -- the convention ``recipe_lines`` discovers by.
+        (``versions/lizard/main/main_params.yaml``), named for its recipe line.
     """
     line_dir = _RL_EXP_DIR / "versions" / line_key
     dev = line_dir / f"{line_dir.name}_params.yaml"

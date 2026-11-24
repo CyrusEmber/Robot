@@ -138,10 +138,7 @@ _SUITE_REGISTRY = {
 def _git_rev(repo: pathlib.Path | None) -> str:
     """Commit id of the git repo at ``repo`` ('unknown' if not a repo).
 
-    One spelling for both records (work/active/record-variant-and-snapshot-specs.md ①): this used to ask git for ``--short`` (~7
-    characters) while the run manifest recorded 12, so one commit read as two different strings
-    in the two records of the same run. The primitive and the length live in ``binding`` now,
-    so ``runtime.git_rev_lizard`` and ``code.repository.rev`` are the same string.
+    Evaluation and training provenance use the same fixed-length revision from ``binding``.
     """
     if repo is None:
         return record.UNKNOWN
@@ -669,7 +666,7 @@ def main():
     # The suite's ground is pinned by the suite's own seed, not by --seed: every eval of every
     # run has to stand on the same terrain, which needs the global streams the terrain functions
     # draw from (the generator seeds only its own local rng). Without this the rough columns are
-    # a different terrain in every eval (work/active/verified-rebuild-rating.md ①).
+    # a different terrain in every eval.
     seed_rngs(suites.SUITE_SEED)
     terrain_split_probe.install()
     gym_env = ManagerBasedRLEnv(cfg=env_cfg)
@@ -700,8 +697,8 @@ def main():
     rec["experiment"] = source
 
     # what this run actually stood on: the per-cell geometry digests, captured where the
-    # generator handed the mesh over (work/active/verified-rebuild-rating.md ⑤b). A rebuild is a different claim -- this is
-    # the ground itself, so a later reader can tell two suites apart without re-running them.
+    # generator handed the mesh over. A reader can compare the ground from two runs without
+    # regenerating either suite.
     # The cells also carry their relief, which is the number that says whether a column the
     # protocol calls "rough" is rough for this robot's foot.
     terrain_record = terrain_split_probe.record_for(mbenv.scene.terrain)

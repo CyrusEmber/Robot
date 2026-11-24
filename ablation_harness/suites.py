@@ -19,10 +19,10 @@ column-per-type, fixed difficulty, pinned seed. Key determinism tricks
   global numpy stream (the height-field family) and the global torch stream (the random boxes),
   which the generator deliberately leaves alone (``terrain_generator.py:148``). A suite is only
   reproducible if the caller seeds those streams first -- :func:`eval.py` does it with
-  :func:`rl_exp.tasks.terrain_geometry.seed_rngs` right before ``gym.make``. v1 got away with it
+  :func:`ablation_harness.terrain_geometry.seed_rngs` right before environment construction. V1 got away with it
   by accident: its ``rough`` columns pinned their amplitude to a single value, which collapses
-  the internal ``np.random.choice`` to a constant. v2 gives them a range, so the seed is doing
-  real work (work/active/verified-rebuild-rating.md).
+  the internal ``np.random.choice`` to a constant. V2 gives them a range, so reproducing the
+  geometry requires seeding the global streams.
 
 Lizard scale: 3.6 m body, ~2.8 m foot span, 16 m tiles (matches the training
 terrain tile size so the policy sees familiar-sized features).

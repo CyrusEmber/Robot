@@ -6,24 +6,9 @@
 # -*- coding: utf-8 -*-
 """The binding primitives: how a record names the bytes and the commit it depended on.
 
-work/active/record-variant-and-snapshot-specs.md ①. The run manifest (``rl_exp/tools/runrecord/manifest.py``) and the eval
-record (``ablation_harness/record.py``) describe one run in two files, and they used to spell
-the shared half twice:
-
-* **a content digest** -- ``provenance.sha256_file`` streamed the file to bare hex, while
-  ``record.file_sha256`` streamed it again to ``sha256:`` + hex. The digest is the primitive
-  and lives here; the ``sha256:`` prefix belongs to the eval record's own format and stays at
-  the point where that record is written, so no emitted value moved.
-* **a commit id** -- ``provenance.rev`` truncated ``rev-parse HEAD`` to 12 characters while
-  ``eval._git_rev`` asked git for ``--short`` (about 7), so one commit read as two different
-  strings in the two records of one run and nothing could reconcile them. There is one
-  spelling now (:data:`REV_LENGTH`), and ``check_record_bindings.py`` keeps a second one from
-  being written.
-
-Stdlib only, deliberately: ``record.py``'s offline test asserts the eval record cannot import
-torch/numpy/random, and a record must be writable on a machine that cannot start the
-simulator. It imports nothing from this repo either -- it is the bottom of the stack, so
-``provenance`` may import it and so may the harness.
+Training provenance and evaluation share the revision abbreviation and the bare SHA-256
+digest. Formats that store a ``sha256:`` prefix add it when writing their record. Keep these
+primitives usable without starting the simulator.
 """
 
 from __future__ import annotations
@@ -35,9 +20,8 @@ import subprocess
 REV_LENGTH = 12
 """Characters a recorded revision carries.
 
-One number, one spelling: the manifest has always recorded this many, and the eval record now
-records the same string for the same commit (work/active/record-variant-and-snapshot-specs.md ①). It is *not* ``git --short`` -- that
-length belongs to git and moves as the object database grows.
+Training and evaluation use the same fixed length. Git's automatically selected
+abbreviation can grow with the object database.
 """
 
 
@@ -97,9 +81,7 @@ def git_rev(root: pathlib.Path | None, *, short: bool | int = False) -> str:
         short: ``False`` (the default) is the recorded spelling -- :data:`REV_LENGTH`
             characters. ``True`` asks git for its own abbreviation and an ``int`` for exactly
             that many characters; both are escape hatches, and a *record* must not reach for
-            either, because the point of ② in
-            ``work/active/record-variant-and-snapshot-specs.md`` is that one commit has one
-            string per run.
+            either, because a run should record the same string for a given commit.
     """
     if short is True:
         return git_run(root, "rev-parse", "--short", "HEAD")

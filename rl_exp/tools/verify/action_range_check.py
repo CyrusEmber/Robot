@@ -30,7 +30,7 @@ whether a fraction out of reach is a defect, which is the undeclared requirement
 ``Nm@stop`` and ``p_eff`` are read at each joint's NEARER stop, which is the side that binds: see
 :func:`stop_readings`. Every joint of the current asset has symmetric stops, so that choice does not
 show in today's table -- it starts to matter the moment the limits go asymmetric, which
-``work/active/joint-limit-shape-and-range-pass.md`` is about to do.
+``work/joint-limit-shape-and-range-pass.md`` tracks.
 
 Usage (from the repo root):
 
@@ -100,7 +100,7 @@ def stop_readings(lower: float, upper: float, kp: float | None, effort: float | 
     (``hip``/``haa`` ±0.60, ``hfe`` ±1.20, ``kfe`` ±1.60, spine ±0.50/±0.60), so which side is taken
     does not show in today's table -- but reading the FARTHER side would under-report both the demand
     and the tail probability the moment the limits go asymmetric, which is what
-    ``work/active/joint-limit-shape-and-range-pass.md`` is about to do. ``--self-check`` pins the
+    ``work/joint-limit-shape-and-range-pass.md`` tracks. ``--self-check`` pins the
     choice with a hand case.
     """
     near = min(abs(lower), abs(upper))

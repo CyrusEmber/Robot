@@ -1,5 +1,7 @@
 """UE editor script: assemble the lizard physics actor from ue/lizard_ue.json.
 
+The JSON records the legacy Lizard asset. Re-export it from archive/pre-refactor.
+
 Run inside UE editor (Python plugin enabled):
     import runpy; runpy.run_path(r"<path>/ue/build_lizard_ue.py")
 or: Python -> Execute Python Script.
