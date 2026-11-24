@@ -3,7 +3,7 @@ id: legacy-entrypoint-cleanup
 title: 清理旧配方退网后残留的代码、资产、本地产物与工单
 scope: AGENTS.md, README.md, .gitignore, .codemaker, ablation_harness, rl_exp, work
 status: in_progress
-next: 迁移与删除已完成（6648 条 manifest 反向核验通过、剩余候选 0）。待办：GPU 实跑 `pytest -m sim` 与 `lizard2_shank_use_probe --leg_drive_preflight`；用新导出产物做 URDF→USD 后实跑 `--repair`；改写两份 skill 与 10 份留存工单里指向退网目录的段落；全过后按 README 删除本单。
+next: 全部判据已实测通过（见“执行状态”）；收尾只剩两件：把结论写进 `acceptance/records/`，并按 `README.md` 删除本工单、在 `work/v7-workflow-hardening.md` 记一行完成。
 close_when: 仓内仅保留 v7 现役最小代码集、正式圆足资产、4 份锚定 YAML 协议、v7 产物与 10 份现役工单；rl_exp/out 仅保留在办目录、列耦合归档 ZIP 与 archive/pre-refactor，且明确禁止新增任何临时文件/临时目录；每一个被移除文件均经字节级 SHA-256 核验可从 git tag 或 local_archive 无损恢复；圆足 Blender 隔离导出、正式 USD 审计与 5 处惯量 --repair、协议全目录锚定扫描、列耦合四臂复读与 ZIP 恢复、腿驱实测关节序预检及 pytest -m sim 全部实跑通过；收尾后按 README 删除本单并同步 v7-workflow-hardening。
 ---
 
@@ -149,4 +149,5 @@ close_when: 仓内仅保留 v7 现役最小代码集、正式圆足资产、4 �
 - **迁移结果**：6002 个候选文件（约 5.3 GB）全部处理；复查剩余候选 0。366 + 156 个与 `archive/pre-refactor` 同字节的走 `recovery_source=git_tag`（记 `blob_oid`），其余 5592 + 534 个移入 `rl_exp/out/archive/pre-refactor/`；清单 `manifest.json` 与 `manifest-part2.json` 共 6648 条，删除前反向核验 100%（5958/5958、690/690）。
 - **白名单漏项与修正**：`rl_exp/tools/{diagnose,verify}` 曾被整目录放行，补做第二批 690 个候选；`two_foot_trim`/`support_report` 真依赖 `lizard2_round_support_geometry.py`、`pose_target_solver.py`、`check_self_collision.py`、`rl_exp/tasks/joint_names.py`，圆足导出真依赖 `rl_exp/lizard2_palm_spatial/`（12.5 MB）——五者按需保留。`check_leg_reachability.py` 只为 `check_self_collision` 的已退网 CLI 服务，随该 CLI 一并退网。
 - **已实测**：默认 `pytest` 9 passed；`pytest rl_exp/tools/verify rl_exp/tools/diagnose` 46 passed（13 subtests）；两个 `check_*.py` 退出 0；`column_coupling_probe.py selftest` 全 PASS；`lizard2_round_feet_usd.py --formal_dir` 得 `pass=true, unresolved=[]` 且目录零改动；`lizard2_round_feet_export.py` 在上游 .blend 只存在于归档时从 `%TEMP%` 实跑 `ROUND_FEET_EXPORT_OK`。
-- **未完成**：`pytest -m sim`、`lizard2_shank_use_probe.py --leg_drive_preflight`（需 GPU）；`--repair` 需先用新导出产物做一次 URDF→USD 转换（历史 `export03` 的自绑定已随脚本字节失效）；`isaaclab-asset-pipeline`、`isaaclab-pretrain-check` 两份 skill 与 10 份留存工单里指向 `rl_exp/versions`、`work/closed`、`generate_urdf.py` 的段落待改写。
+- **GPU 与修复链实测（2026-11-24）**：`pytest -m sim` 1 passed；`lizard2_shank_use_probe --leg_drive_preflight` 打印 `LEG_DRIVE_PREFLIGHT_OK`，其 `joint_names` 与 `MEASURED_JOINT_ORDER` 逐位一致。用新导出产物在 `%TEMP%` 做 URDF→USD 后，基础审计恰好报 `body/{lf_elbow,rf_elbow,tail1_pitch,rl_knee,rr_knee}` 五处主轴失败，`--repair` 后 `pass=true`、失败为空。归档 ZIP 逐文件摘要 20/20 通过，`compare` 从 ZIP 与从保留的 `runs/eval-column-coupling/probe-20261030-single-noise-min-c` 都复现 `stairs_20cm` 第 10 步与 `rough_b` 第 48 步分叉。
+- **未完成**：无技术项；只剩按 `README.md` 收尾删除本单并把结论写进 `acceptance/records/`。另注：历史候选目录绑定的是旧脚本字节，新的 `--repair` 需先按上面流程重新转换，不能直接拿 `export03` 复用。

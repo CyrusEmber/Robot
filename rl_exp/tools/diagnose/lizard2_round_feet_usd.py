@@ -332,7 +332,7 @@ def main():
         bind(urdf, doc['urdf_sha256'])
         for path in [Path(__file__), ROOT / 'rl_exp/tools/diagnose/lizard2_two_axis_convert.py',
                      ROOT / 'rl_exp/tools/pipeline/flatten_usd.py',
-                     directory / 'config.yaml', directory / 'conversion.log', directory / '.asset_hash']:
+                     directory / 'config.yaml', directory / '.asset_hash']:
             bind(path)
         history = directory / 'usd_audit.json'
         if history.exists():
