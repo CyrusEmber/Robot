@@ -17,7 +17,8 @@ _tmp_*
 
 # Training and diagnostic outputs stay machine-local. rl_exp/out/ holds the live
 # training root, the in-flight item directories, and archive/pre-refactor/ -- the
-# local archive of the tree retired by work/legacy-entrypoint-cleanup.md, with a
+# local archive of the tree retired by
+# acceptance/records/2026-11-24-legacy-entrypoint-cleanup.md, with a
 # manifest*.json recording each file's original path, sha256 and git blob. Nothing
 # one-off belongs here: use %TEMP% and delete it afterwards.
 rl_exp/out/

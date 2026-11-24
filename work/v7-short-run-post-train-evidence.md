@@ -17,7 +17,7 @@ evidence: acceptance/records/2026-11-04-training-provenance-dependency-scope.md
 
 1. 执行者核查画面与物理状态同步，保留首帧黑屏、抽帧和遮挡等局限；不能据图片推断不可见接触。
 2. 保留 robust 首局停车及恢复窗口零有效样本，按实际证据决定是否有可行补测；不得把提前扰动补片当正式协议结果。
-3. 明确逐足承载、摆动及非足支撑的数值口径和实际测量；接触口径由 `work/lizard2-contact-protocol.md` 承接，落地阶段应用由 `work/lizard2-thigh-drive-shank-landing.md` 承接，不把候选指标当正式判据。
+3. 明确逐足承载、摆动及非足支撑的数值口径和实际测量；接触口径由 `rl_exp/out/archive/pre-refactor/work/lizard2-contact-protocol.md` 承接，落地阶段应用由 `rl_exp/out/archive/pre-refactor/work/lizard2-thigh-drive-shank-landing.md` 承接，不把候选指标当正式判据。
 4. 完成后置 pending_review，交新上下文审核原始证据和仍无法判断的项目。
 
 ## 关闭条件

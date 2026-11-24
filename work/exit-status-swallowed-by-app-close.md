@@ -16,7 +16,7 @@ evidence: acceptance/records/2026-10-30-other-entry-exit-status-progress.md, acc
 
 ## 未覆盖边界
 
-不重开 `baseline_eval` 的裁定（见 `rl_exp/out/archive/pre-refactor/work/closed/2026/baseline-eval-persist-before-judge.md`）；
+不重开 `baseline_eval` 的裁定（见 `archive/pre-refactor:work/closed/2026/baseline-eval-persist-before-judge.md`）；
 不改成功路径的关停行为；不评价各入口自身是否该失败（只问失败能否被调用方看见）。
 
 ## 下一步

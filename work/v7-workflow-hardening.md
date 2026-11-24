@@ -3,7 +3,7 @@ id: v7-workflow-hardening
 title: v7 实验闭环止血、机体解耦与仓内清旧
 scope: rl_exp, ablation_harness, work, acceptance, .codemaker, AGENTS.md, README.md, pytest.ini
 status: in_progress
-next: 在最终源码提交上完成完整评测和 sim 接线验收，并回填正式验收记录。退网后的入口清理见 work/legacy-entrypoint-cleanup.md。
+next: 在最终源码提交上完成完整评测和 sim 接线验收，并回填正式验收记录。退网后的入口清理已完成并归档，见 `acceptance/records/2026-11-24-legacy-entrypoint-cleanup.md`。
 close_when: 三批全部提交且验收全绿；改奖励只动 exp.py，改机体只动 robots/<body.py>；三目录零收集错误，默认 pytest 快速离线全绿，按需专项与 sim 冒烟全绿；最终提交上的实跑评测写入验收记录。
 ---
 
@@ -24,7 +24,7 @@ close_when: 三批全部提交且验收全绿；改奖励只动 exp.py，改机�
 ## Batch 1：止血与安全阀（先修真缺陷，不改核心结构）
 
 ### 1.1 清零 `verify/` + `diagnose/` 18 个收集错误并统一测试入口
-- **修仍在用的诊断链**：把 `rl_exp/tools/verify/check_leg_reachability.py:103` 依赖的 `_actuator_groups` / `_joint_owners` 就地内联，断开已删的 `check_dr_parity`，一并恢复 `verify/`（10 个）与 `diagnose/`（2 个，含 `test_lizard2_leg_drive_protocol.py`）的收集。明确 `check_leg_reachability.gain_table` 读取退役 `main_params.yaml` 仅属历史诊断口径，不作现役 v7 PD 判据。
+- **修仍在用的诊断链**：把 `rl_exp/out/archive/pre-refactor/rl_exp/tools/verify/check_leg_reachability.py:103` 依赖的 `_actuator_groups` / `_joint_owners` 就地内联，断开已删的 `check_dr_parity`，一并恢复 `verify/`（10 个）与 `diagnose/`（2 个，含 `test_lizard2_leg_drive_protocol.py`）的收集。明确 `check_leg_reachability.gain_table` 读取退役 `main_params.yaml` 仅属历史诊断口径，不作现役 v7 PD 判据。
 - **裁剪 `ablation_harness/record.py` 与 `test_eval_record.py`**：删除已无生产者的 `record.json` 状态机（保留现役 5 个纯 stdlib 原语：`UNKNOWN`、`canonical`、`digest`、`file_sha256`、`checkpoint_digest`）；`test_eval_record.py` 删除旧 sweep 与 `record.json` 状态机测试，保留 4 条现役测试（`digest` 确定性、`checkpoint_digest`、无框架/RNG 导入、`eval.py` 退出码守卫）。
 - **删除已退网死代码**：删除已无现役消费者的退网配方与旧门控脚本（`rl_exp/tasks/` 废弃配方、`check_pxr_leak.py`、`check_suite_shape.py`、`check_configclass_fields.py`、`test_configclass_fields_gate.py`、`check_record_bindings.py`、`lifecycle_entry_run.py`、`launcher_source_probe.py`、`debug_pose.py`、`emit_diff_declaration.py`、`declare_family.py`、`test_pxr_leak_gate.py`、`test_rebuild_gate.py`、`test_run_manifest.py` 等）。其中 `test_resume_state.py` 因 v7 `curriculum=None` 且顶部依赖已删 `recipe_tasks` 随旧课程工具退役；`test_cfg_snapshot.py` 为 0 pytest 用例的旧 check 脚本（现役 `cfg_snapshot.py` 仅由 `eval.py` 消费）。历史统一由 `archive/pre-refactor` tag 兜底。
 - **精简 `rl_exp/tools/runrecord/`（不留两份家）**：全仓 50+ 诊断、blender 与 verify 脚本复用 `rl_exp/tools/runrecord/binding.py`（108 行纯 stdlib 原语），保留 `binding.py` 原地作为唯一家，删除同目录已退网的 `lifecycle.py`、`manifest.py`、`provenance.py`、`rebuild.py`。
@@ -82,7 +82,7 @@ close_when: 三批全部提交且验收全绿；改奖励只动 exp.py，改机�
 - 精简 `AGENTS.md` 与 `.codemaker/rules/isaaclab-development.mdc`：删不适用个人实验仓的上游公共库条款（如“破坏公开 API 须先弃用”、“`./isaaclab.sh -d`”）。
 
 ### 3.2 清理残余历史文档与死字段
-- `rl_exp/versions/` 已整体退网（`main_params.yaml`、`asset_lock.json`、`joint_order_runtime.json` 与 `FAMILY.md` 一并移除，实测关节序改由 `rl_exp/robots/lizard2_round_feet.py` 承载）；`check_leg_reachability` 随 `check_self_collision` 的旧 CLI 一起退网。恢复路径见 `work/legacy-entrypoint-cleanup.md` 的两份 manifest。`work/active/` 旧工单按 `README.md` 收口（已结删、未完扁平化到 `work/<id>.md`）。
+- `rl_exp/versions/` 已整体退网（`main_params.yaml`、`asset_lock.json`、`joint_order_runtime.json` 与 `FAMILY.md` 一并移除，实测关节序改由 `rl_exp/robots/lizard2_round_feet.py` 承载）；`check_leg_reachability` 随 `check_self_collision` 的旧 CLI 一起退网。恢复路径见 `acceptance/records/2026-11-24-legacy-entrypoint-cleanup.md` 与 `rl_exp/out/archive/pre-refactor/manifest*.json`。`work/active/` 旧工单按 `README.md` 收口（已结删、未完扁平化到 `work/<id>.md`）。
 - **执行结果**（2026-11-24）：30 份 → 删 6、扁平 24、归档 0。删除项均因主体随 cutover 消失：`asset-fail-path-live-check`（`runrecord.manifest` 已删且无 `record.json` 写入者）、`dr-widening-policy`（配方落点已删，现役 `lizard2_v7.py` 是 `curriculum=None`）、`lizard2-foot-plate-necessity`（踝关节已被圆足物理移除）、`obs-three-tables-merge`（三表随 `tasks/components.py` 删除）、`record-variant-and-snapshot-specs`（`record.py` 状态机已退役）、`verified-rebuild-rating`（`runrecord/rebuild.py` 与 `provenance.py` 已删）。其余 24 份移入 `work/`，并修正迁移带来的链接深度与 5 处指向已消失工单/模块的引用；`work/` 全树相对链接现全部可解析。需要换落点才能执行的部分未改语义，仅标注原工单已不存在。
 - 保留 `eval.json` 现有生效配置快照，仅删除 `ablation_harness/eval.py:573-575` 三个恒为 `None` 且无消费者的死字段。
 

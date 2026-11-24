@@ -11,7 +11,7 @@ evidence: acceptance/records/2026-11-03-lizard2-v7-interface.md, acceptance/reco
 
 ## 当前范围
 
-将四足脚板改为固定球形或半球形圆头足，不保留腕踝主动自由度；其余腿链先保持。用户已选择圆头而非平底圆盘。本项承接已归档的 `rl_exp/out/archive/pre-refactor/work/closed/2026/lizard2-foot-design-tradeoffs.md` 与 `work/closed/2026/lizard2-two-axis-feet.md`；F-convex、锁脚板必要性研究与双轴调参不是本项前置。
+将四足脚板改为固定球形或半球形圆头足，不保留腕踝主动自由度；其余腿链先保持。用户已选择圆头而非平底圆盘。本项承接已归档的 `archive/pre-refactor:work/closed/2026/lizard2-foot-design-tradeoffs.md` 与 `archive/pre-refactor:work/closed/2026/lizard2-two-axis-feet.md`；F-convex、锁脚板必要性研究与双轴调参不是本项前置。
 
 用户已要求将此前误生成的文件纳入方案，作为可复用的实现起点和诊断现场；这不追认当时的越界执行，也不代表正式采用。文件、读数和限制见 evidence。已授权从双轴候选改骨架与球足外形，并继续隔离 URDF/USD 导出：移除每足两条活动骨骼，球体刚性绑定肘/膝骨，不给圆足新增转动自由度；保留固定足端刚体用于接触采样。尺寸和保留原足质量的实心球惯量仅作诊断输入，不代表实物设计批准；原阶段不训练、不覆盖正式资产。用户后续单独授权了加载后活动轴、动作与显式 reset 检查，不含接触或受载测试；有效输出、检查证据及 reset 目标残留边界见记录。尺寸和质量惯量仍保留诊断假设边界。用户后续批准当前候选肘限位修订并正式接入 v7；现行资产及配置采用取本轮接入记录，原隔离检查不追认为新正式资产的运行时证据。动作/reset、接触及受载缺口仍分阶段维护，不因正式接入而通过；本轮不训练。
 

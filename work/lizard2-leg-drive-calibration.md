@@ -15,14 +15,14 @@ evidence: acceptance/records/2026-11-04-lizard2-leg-drive-baseline.md, acceptanc
 - **输入身份**：正式资产、v7 配方与 26 轴接口见 front matter；圆足尺寸、质量和实心球惯量仅为已授权诊断假设，不是实物设计核定。
 - **物理锚点**：用户已确认没有实物电机参数或扭矩/速度及持续能力预算；本项只做仿真内相对标定，不声称物理能力或硬件可行性，后续有物理参数须重核方案。
 - **旧证据边界**：旧掌足左膝标定只覆盖固定根、重力下悬空且无额外载荷工况；对称膝肘候选未物理复测新增三轴；旧自由根承地静站观察只属于其原姿态与结果。旧机体与圆足的质量、惯量和足端几何不同：只按原条件复用方法与测量口径，不把旧数值、精度或承重结论迁移为当前圆足实测，也不从冻结策略即时响应推断新配方重训效果。
-- **参数分工**：本项负责逐轴 Kp/Kd 及其配比；动作 scale、力矩/速度上限与 clip 单独核其影响和来源，调整须有证据并经用户确认，不将各项混称“驱动力”。用户方向“小腿驱动力不应高于大腿”来源见 `work/lizard2-thigh-drive-shank-landing.md`，不是已验证的量化判据。
+- **参数分工**：本项负责逐轴 Kp/Kd 及其配比；动作 scale、力矩/速度上限与 clip 单独核其影响和来源，调整须有证据并经用户确认，不将各项混称“驱动力”。用户方向“小腿驱动力不应高于大腿”来源见 `rl_exp/out/archive/pre-refactor/work/lizard2-thigh-drive-shank-landing.md`，不是已验证的量化判据。
 - **当前进度**：最小 swing 对照、推进采样、接触力矩近似与候选及其限制见 `acceptance/records/2026-11-04-lizard2-leg-drive-baseline.md`。2026-11-17 新增离线复核入口（`--swing_review`），结论是候选 B 在悬空口径被子 2 Hz 候选支配、权限与阻尼准则互斥待决；同日按用户方向把主测工况改为对角双足支撑 + 抬腿，swing trim 加稳态下沉补偿后首次成立（折叠腿足力 0 N、零下沉、支撑峰值 158–165 N·m、倾角 2.3–3.3°），但每条件仅 1 次、窗口 0.9 s，不构成对比结论。摩擦锚点和实际驱动力矩未核；不能以该候选称受载标定通过。未改正式配方、未确定最终参数、未启动训练。
 
 ## 责任边界
 
-- 本项承接 `work/lizard2-thigh-drive-shank-landing.md` 的驱动配比与标定动作；落地目标、奖励和步态结果仍归该项及 `work/lizard2-learned-gait.md`。
-- 历史默认驱动及几何交付归 `work/lizard2-restored-limits-pd-validation.md` 与 `work/lizard2-body-drive-candidate.md`；复用其方法与既有测量，不取代其未完动作。接触口径与测量缺口交 `work/lizard2-contact-protocol.md`。
-- `work/lizard2-round-feet.md` 持有接触、受载与未覆盖 reset 组合缺口；`work/lizard2-two-foot-body-lift.md` 负责导向辅助承重及运行态标定。负载工况优先取这两项已审且适用于当前身份的夹具与证据，缺口回交，不在本项另起夹具；受载夹具及其反力通道尚未审核，不能当承重证据。复用前核对适用工况、资源预算与停止线，与责任事项协调，不单方面覆盖其约束。
+- 本项承接 `rl_exp/out/archive/pre-refactor/work/lizard2-thigh-drive-shank-landing.md` 的驱动配比与标定动作；落地目标、奖励和步态结果仍归该项及 `rl_exp/out/archive/pre-refactor/work/lizard2-learned-gait.md`。
+- 历史默认驱动及几何交付归 `rl_exp/out/archive/pre-refactor/work/lizard2-restored-limits-pd-validation.md` 与 `rl_exp/out/archive/pre-refactor/work/lizard2-body-drive-candidate.md`；复用其方法与既有测量，不取代其未完动作。接触口径与测量缺口交 `rl_exp/out/archive/pre-refactor/work/lizard2-contact-protocol.md`。
+- `work/lizard2-round-feet.md` 持有接触、受载与未覆盖 reset 组合缺口；`rl_exp/out/archive/pre-refactor/work/lizard2-two-foot-body-lift.md` 负责导向辅助承重及运行态标定。负载工况优先取这两项已审且适用于当前身份的夹具与证据，缺口回交，不在本项另起夹具；受载夹具及其反力通道尚未审核，不能当承重证据。复用前核对适用工况、资源预算与停止线，与责任事项协调，不单方面覆盖其约束。
 
 ## 设计准则（生成候选的口径；括注范围为建议初值，经用户确认后才进判据表）
 
@@ -34,7 +34,7 @@ evidence: acceptance/records/2026-11-04-lizard2-leg-drive-baseline.md, acceptanc
 3. **Kd**：\(K_d=2\zeta\sqrt{K_p I}\)（建议 \(\zeta\) 0.7–1，承重轴偏 1）。接地约束与耦合会改变有效惯量，不保证单调变大；受载阻尼须在相应工况复核，同时核 `Kd × 最大关节速度` 不挤占力矩上限。改 Kp 时 Kd 须随之重算，不沿用旧值。
 4. **scale 耦合**：动作 scale 与 Kp 共同决定策略的力矩权限；改 Kp 不改 scale 即改变动作语义，须按新配方重训，不以旧 checkpoint 推断。
 5. **角色配比**：承重/支撑轴偏刚度，推进轴（尤其后腿 swing）须兼顾力矩与带宽，`twist` 以姿态微调为主。大腿/小腿比较用同工况下“能力 / 负载”（力矩余量、带宽、稳态误差），不以 Kp 绝对值比较。
-6. **局部口径的边界**：\(\omega_n\)、\(\zeta\) 为单自由度、固定根、单姿态近似（口径见 `rl_exp/tools/verify/check_leg_reachability.py` 的 `reflected_inertia`），不含耦合、接触和浮动基；只用于生成候选，行为结论以第 3 步实测为准。
+6. **局部口径的边界**：\(\omega_n\)、\(\zeta\) 为单自由度、固定根、单姿态近似（口径见 `rl_exp/out/archive/pre-refactor/rl_exp/tools/verify/check_leg_reachability.py` 的 `reflected_inertia`），不含耦合、接触和浮动基；只用于生成候选，行为结论以第 3 步实测为准。
 
 ## 待核疑点（v7 现值；读数与推算只进验收记录）
 

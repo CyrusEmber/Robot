@@ -52,4 +52,4 @@ description: >
 未验证项，不声称代码已无缺陷。
 
 本项目实例：证据与落点规则见 `AGENTS.md`（保留失败现场、禁止覆盖已有产物、验收记录唯一归属），
-事项与验收记录格式见 `.codemaker/rules/work-ledger.mdc`。
+事项与验收记录格式见 `README.md` 的「实验何时需要人写字」与 `acceptance/records/`。
