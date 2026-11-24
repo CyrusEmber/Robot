@@ -1,8 +1,6 @@
 # Blender 站姿管线（改站姿时读这里）
 
-> **实例参考（lizard）**：脚本名/关节数/轴映射是 lizard 的实现，新机器人复制
-> `<robot>_exp\blender\` 目录改造；方法论（WYSIWYG → fix_bones → generate → 验证链）
-> 通用。
+> 脚本、路径和关节映射来自旧 Lizard。完整复跑使用 `archive/pre-refactor`。当前机器人按仓根 README 的资产与接口检查执行。
 
 站姿 SSOT = Blender 文件（lizard: `<robot>_exp\blender\lizard_stance.blend`，WYSIWYG；
 脚本内输入输出路径全部相对脚本自身，可移植）。
@@ -28,15 +26,10 @@ Steam Blender 运行：
 4. 从 `lizard_urdf\` 拷 `lizard.urdf` + `meshes\` 到 `rl_exp\`，跑
    `tools\pipeline\convert_stl_to_obj.py`（STL→OBJ 双保险 + URDF 引用改写 .obj）
 5. 路径修正：URDF 里 `../meshes/` → `meshes/`（**必须**，mesh 路径坑见 SKILL.md）
-6. 删 `assets\lizard\` + `.asset_hash` + `config.yaml` →
-   `tools\pipeline\convert_urdf.py --headless`
-7. 验证链：`tools\diagnose\debug_pose`（四腿 pivot 对称）→
-   `tools\verify\baseline_probe`（受力/z 稳定）→ `tools\verify\view_terrain` 肉眼终验
+6. 在独立候选目录转换 USD，核对 mesh 和碰撞体的加载结果。
+7. 测量四腿 pivot 对称、站姿受力和基座高度，再在仿真中复核穿模与站姿。
 
-   （2026-10-09 前这一步写的是 `tools\verify\position_check`，随 `lizard/main` 退休删除；
-   上面的替换脚本在活跃任务上跑同一类读数。）
-
-## 站姿判定标准（baseline_probe / debug_pose）
+## 旧 Lizard 站姿判定标准
 
 - 四脚 force_z 合计 ≈ 总质量 × 9.8，单脚偏差 < 30%
 - base z 轨迹收敛无震荡

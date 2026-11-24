@@ -1,7 +1,7 @@
 ---
 name: isaaclab-asset-pipeline
 description: >
-  在 E:\IsaacLab 中做机器人训练资产管线：URDF→USD 转换（convert_urdf.py）、
+  处理 Isaac Lab 机器人训练资产：URDF→USD 转换、
   Blender 站姿骨架管线（build_rig/fix_bones/generate_urdf）、mesh/关节/碰撞排障。
   当用户提到"URDF 转 USD"、"转换资产"、"convert_urdf"、"重转/重新生成资产"、
   "改了 urdf/模型没更新"、"资产不生效"、"mesh 不见/丢几何/穿地坠落"、"关节对不上/关节名后缀"、
@@ -12,23 +12,17 @@ description: >
 
 # IsaacLab Asset Pipeline（资产管线）
 
-资产链路：Blender 站姿 SSOT → URDF（几何 SSOT）→ USD（训练用）。方法论通用；
-每机器人一个 `<robot>_exp\` 目录（转换脚本、`blender\`、`meshes\`、验证脚本都在其中；
-现役机体定义入口见该机器人仓根 `README.md`）。
+资产链路为 Blender 站姿 → URDF → USD → 实验机体绑定。当前项目的机体、候选转换和验证入口见仓根 `README.md`。
 
 ## 核心规则
 
 - **改了 URDF 后必须重跑 convert**，env 引用的 USD 才更新
   （`force_usd_conversion` 只管重转、不管触发）
-- **转换前删旧 assets 目录 + `.asset_hash` + `config.yaml`**
+- **在隔离候选目录转换**，为输出 USD 与导入产物使用新路径；资产验证后再采用。
 - **换代或更新资产后同步更新机体模块 `rl_exp/robots/<body.py>`**（资产路径、默认 PD、动作关节与身体部位）
 - `UrdfConverterCfg` 要点新机器人照抄，每条都有踩坑理由，别乱改
 
-## convert_urdf 运行
-
-```
-<venv python> <robot>_exp\tools\pipeline\convert_urdf.py --headless
-```
+## 转换配置
 
 `UrdfConverterCfg` 要点：
 
@@ -47,19 +41,17 @@ description: >
 PD 增益虽内嵌 USD，机体模块的 `make_robot_cfg()` actuator 配置会覆盖它 ⇒ **调 PD 直接改 `rl_exp/robots/<body.py>` 即生效，不用重转
 USD**。PD 初值随质量量级重估，抄旧机器人数值必炸。
 
-## 转换后验证链（从 IsaacLab 根目录，venv python）
+## 转换后验证链
 
 | 步骤 | 方法 |
 |---|---|
-| 关节数 | usda 内 Revolute/joint 计数 = yaml `joint_order` 长度（秒级） |
-| 几何量 | usda 应为 MB 级、`faceVertexIndices` / `PhysicsCollisionAPI` 计数 > 0 |
-| 位置/受力 | `tools\verify\baseline_probe.py`（z 轨迹 + 接触力 + NaN） |
-| 关节对表 | `tools\verify\check_joint_layout.py`（reset 后关节名/角度 vs `joint_order`） |
-| 站姿对称 | `tools\diagnose\debug_pose.py`（每腿 pivot 世界坐标） |
-| 肉眼终验 | GUI 观察脚本（开 Isaac Sim 窗口看站立 / 穿模 / 地形） |
+| 资产结构 | 核对活动关节、固定末端、USD 碰撞几何及可解析的依赖。 |
+| 配置绑定 | 对照机体模块与实验实际配置的关节、动作组和默认姿态。 |
+| 运行时接口 | 用正式探针实测 articulation、动作顺序、观测宽度、首步与 reset。 |
+| 训评接线 | 用仿真冒烟验证 checkpoint 加载和训评接口。 |
+| 物理复核 | 按资产变更选择接触受力、站姿对称或穿模工况，保留对应读数。 |
 
-标准顺序：convert → 关节数 → baseline_probe（数据）→ 肉眼终验。具体脚本名见仓根
-`README.md`。
+先检查候选资产和配置，再验证正式资产在仿真中的行为。历史受力和站姿流程按对应版本的源码及证据复跑。
 
 ## 核心坑（症状 → 根因）
 
@@ -68,7 +60,7 @@ USD**。PD 初值随质量量级重估，抄旧机器人数值必炸。
 | 穿地坠落、usda 仅 ~60KB、`faceVertexIndices`=0 | **mesh 相对路径坑（静默丢几何）**：importer 按 URDF 所在目录解析相对路径，路径错不报错只丢几何 ⇒ URDF 里写 `meshes/...`（不是 `../meshes/...`） |
 | 正则失配 `Not all regular expressions are matched!` | **3.0 importer 给关节名加 `_joint` 后缀**（body 名不加）⇒ 关节正则带后缀、body 正则不带 |
 | 接触抖振（脚力 ±kN 交替） | 关自碰撞：`enabled_self_collisions=False` + `solver_position_iteration_count=8` |
-| 资产改了没生效 | 忘重跑 convert，或没删旧 assets 目录（被挤到 `_1/`） |
+| 资产改了没生效 | 检查是否重新转换、USD 是否另存到 `_1/`，以及机体模块实际绑定的 USD。 |
 | 训练直接塌倒 | `run_asset_transformer` 被开了（单刚体），或 `merge_fixed_joints=True` |
 | 站姿左右不对称 / 腿折向天上 | 手算镜像 rpy 必翻车 ⇒ 走 Blender 管线 |
 

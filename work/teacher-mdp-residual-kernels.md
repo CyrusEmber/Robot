@@ -5,7 +5,7 @@ scope: rl_exp/tasks
 status: open
 landing: rl_exp/tasks/teacher_mdp.py, rl_exp/tasks/curriculum_state.py
 next: 用户裁决去向——① 抽出：把 `curriculum_state` 依赖的三个符号搬进独立模块，再整删 `teacher_mdp`；② 就地切：保留三个符号所在类、删旧线奖励与终止内核，代价是要先给出可切分边界并证明切完仍绿；③ 保留现状并改归属：把该文件重述为"续训状态层的现有实现"，不再自称旧线
-close_when: 三种之一落进实现且 `run_offline_checks.bat` 全绿，或用户明示"保留现状"并把归属写进该文件 docstring ⇒ done；观测 = `teacher_mdp.py` 的 docstring/切片 + 全套离线判词
+close_when: 选定的改法落地，或将保留理由记录在模块说明中；默认 pytest 和显式点名的 test_joint_sir.py、test_terrain_geometry.py 通过，并核对 curriculum_state 的续训导入路径。
 evidence: acceptance/records/2026-10-09-retired-family-prune-manifest, acceptance/records/2026-10-09-retired-family-prune-execution
 ---
 
@@ -15,10 +15,9 @@ evidence: acceptance/records/2026-10-09-retired-family-prune-manifest, acceptanc
 但裁决 A① 保留了 `rl_exp/tasks/teacher_mdp.py`：`curriculum_state.py:93-97` 从它取
 `JointSIRTerrainCurriculum` / `SpawnWeightSIRTerrainCurriculum` / `ck_value`，而续训状态层是 lizard2
 未来接 DR 时的依赖（`dr-widening-policy`（已删除：现役实验无 DR，接 DR 须对新实验另立事项））。保留的代价是本项存在的理由：旧线的奖励与
-终止内核仍留在主路径，每次 pre-commit 仍为它们付 import 与维护成本 —— 本次省下的是改动风险，不是长期成本。
+终止内核仍留在主路径，修改这部分时需验证仍在用的导入与离线专项。
 
-保留期内它是活的：套件里 `test_joint_sir` / `test_v5_terrain_sir` / `test_resume_state` 与
-`terrain_preflight`（经 `param_grid_terrain`）都还在跑它的 SIR 机制。
+`test_joint_sir.py` 检查 SIR 机制。`test_terrain_geometry.py` 覆盖保留的 `terrain_preflight` 和地形再生路径。旧课程和旧续训测试按归档版本复跑。
 
 ## 未覆盖边界
 
