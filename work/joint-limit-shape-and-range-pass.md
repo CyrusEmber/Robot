@@ -1,7 +1,7 @@
 ---
 id: joint-limit-shape-and-range-pass
 title: lizard2 陆地骨骼与默认关节驱动交付统筹
-scope: acceptance/records, work/active
+scope: acceptance/records
 status: open
 landing: acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work.md#验收条件, acceptance/records/2026-10-08-lizard2-joint-design-review-contract.md#验收条件
 next: 执行者优先接真实训练配置，D 核必要接口与安全；完整动态接触评测另行维护，趴姿仍 blocked。

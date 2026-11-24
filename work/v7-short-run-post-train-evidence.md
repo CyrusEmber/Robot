@@ -1,9 +1,9 @@
 ---
 id: v7-short-run-post-train-evidence
 title: v7短训训后证据与未完成项
-scope: ablation_harness, rl_exp/versions/lizard2/main/v7
+scope: ablation_harness, ablation_harness/results/locomotion_eval_v3/provenance-v7-20261104-161257
 status: open
-landing: README.md, rl_exp/versions/lizard2/main/v7
+landing: README.md, ablation_harness/results/locomotion_eval_v3/provenance-v7-20261104-161257
 next: 执行者核查短训训后缺口和画面同步，保留零有效样本事实并明确后续处置。
 close_when: 新上下文核验短训训后证据、未完成项及其承接后决定关闭。
 evidence: acceptance/records/2026-11-04-training-provenance-dependency-scope.md

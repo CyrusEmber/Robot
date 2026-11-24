@@ -1,7 +1,7 @@
 ---
 id: lizard2-leg-drive-calibration
 title: lizard2 四腿关节驱动重新标定
-scope: rl_exp/tools/diagnose, rl_exp/versions/lizard2
+scope: rl_exp/tools/diagnose, rl_exp/robots, ablation_harness/protocols
 status: in_progress
 landing: rl_exp/tools/diagnose/lizard2_leg_drive_baseline.py, rl_exp/tools/diagnose/lizard2_leg_drive_protocol.py, acceptance/records
 next: 对角两足工况已成立；待用户定窗口长度、重复次数与判据，再逐条件对比 v7 与候选。

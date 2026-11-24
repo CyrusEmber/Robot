@@ -1,9 +1,9 @@
 ---
 id: exit-status-swallowed-by-app-close
 title: 入口失败被 app.close() 吞成退出码 0
-scope: ablation_harness, rl_exp/tasks/obs_protocol.py, rl_exp/tools/diagnose, rl_exp/tools/verify
+scope: ablation_harness, rl_exp/tools/diagnose, rl_exp/tools/verify
 status: in_progress
-landing: ablation_harness/video_matrix.py, rl_exp/tools/diagnose/gait_probe.py, ablation_harness/eval.py, rl_exp/tasks/obs_protocol.py, rl_exp/tools/diagnose/diagnose_nan.py, rl_exp/tools/diagnose/palm_contact_sample.py, rl_exp/tools/diagnose/palm_training_interface.py, rl_exp/tools/diagnose/column_coupling_probe.py, rl_exp/tools/verify/obs_protocol_live.py
+landing: ablation_harness/video_matrix.py, ablation_harness/eval.py, rl_exp/tools/diagnose/column_coupling_probe.py
 next: 执行者清点剩余入口的异常与拒绝路径，逐个修复并实测，确定跨入口关停形态。
 close_when: 每个入口各有两条真跑读数：失败 ⇒ 栈可见且退出码非零；成功 ⇒ 0。工具不许把失败报成成功；形态（共享助手或逐处）在同一变更里定下并说明为何。
 evidence: acceptance/records/2026-10-30-other-entry-exit-status-progress.md, acceptance/records/2026-10-30-video-matrix-exit-status.md, acceptance/records/2026-10-19-lizard2-single-leg-lift.md, acceptance/records/2026-10-19-lizard2-loaded-standing.md, acceptance/records/2026-09-23-persist-before-judge-real-run.md, acceptance/records/2026-09-23-gait-probe-exit-status.md
@@ -16,7 +16,7 @@ evidence: acceptance/records/2026-10-30-other-entry-exit-status-progress.md, acc
 
 ## 未覆盖边界
 
-不重开 `baseline_eval` 的裁定（见 `work/closed/2026/baseline-eval-persist-before-judge.md`）；
+不重开 `baseline_eval` 的裁定（见 `rl_exp/out/archive/pre-refactor/work/closed/2026/baseline-eval-persist-before-judge.md`）；
 不改成功路径的关停行为；不评价各入口自身是否该失败（只问失败能否被调用方看见）。
 
 ## 下一步

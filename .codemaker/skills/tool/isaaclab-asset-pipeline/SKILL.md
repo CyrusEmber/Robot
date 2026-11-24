@@ -1,13 +1,12 @@
 ---
 name: isaaclab-asset-pipeline
 description: >
-  处理 Isaac Lab 机器人训练资产：URDF→USD 转换、
-  Blender 站姿骨架管线（build_rig/fix_bones/generate_urdf）、mesh/关节/碰撞排障。
+  处理 Isaac Lab 机器人训练资产：URDF→USD 转换、mesh/关节/碰撞排障。
   当用户提到"URDF 转 USD"、"转换资产"、"convert_urdf"、"重转/重新生成资产"、
   "改了 urdf/模型没更新"、"资产不生效"、"mesh 不见/丢几何/穿地坠落"、"关节对不上/关节名后缀"、
-  "站姿不对/摆姿态/默认姿态"、"Blender 骨架/骨骼/rig"、"fix_bones"、"generate_urdf"、
-  "STL/OBJ 转换"、"接触抖振/自碰撞"、"换机器人/新机器人资产"、"资产换代"等需求时，
-  务必使用此 skill。任务创建/课程/DR 用 isaaclab-task-creator，评测用 isaaclab-eval-harness。
+  "站姿不对/摆姿态/默认姿态"、"STL/OBJ 转换"、"接触抖振/自碰撞"、"换机器人/新机器人资产"、"资产换代"等需求时，
+  务必使用此 skill。旧的 Blender 站姿管线（`build_rig`/`fix_bones`/`generate_urdf`）已随旧机体退网，
+  只作存档指针。任务创建/课程/DR 用 isaaclab-task-creator，评测用 isaaclab-eval-harness。
 ---
 
 # IsaacLab Asset Pipeline（资产管线）
@@ -66,5 +65,7 @@ USD**。PD 初值随质量量级重估，抄旧机器人数值必炸。
 
 ## 改站姿
 
-Blender 流程（摆位 → fix_bones → generate_urdf → 转换 → 验证）见
-`references/blender_pipeline.md`；新机器人照它改写，不手算姿态。
+旧 Blender 站姿管线（`build_rig` / `fix_bones` / `generate_urdf`）随旧机体一起退网：脚本与
+`rl_exp/lizard_urdf/` 只在 `archive/pre-refactor` tag 与 `rl_exp/out/archive/pre-refactor/` 里。
+现役圆足的唯一导出入口是 `rl_exp/blender/scripts/lizard2_round_feet_export.py`（上游 .blend 与
+`skeleton02/build.json` 逐个 SHA 绑定，缺件直接报错）。要换机体就照它改写，不手算姿态。
