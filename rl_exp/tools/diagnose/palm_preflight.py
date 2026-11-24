@@ -10,6 +10,9 @@ The opt-in terrain suite adds a fixed-terrain and non-ground contact fixture.
 Use --viz kit --num_envs 4 --hold_seconds 60 for visual inspection; --viz none
 without --num_envs checks the registered training environment count. Outputs
 must be new directories under rl_exp/out. The report preserves failures too.
+
+Historical entry: this probe drives the retired `Lizard2-Flat-v4/v5/v6` registry and
+the source set of that era, so it only runs against a checkout of `archive/pre-refactor`.
 """
 from __future__ import annotations
 
@@ -48,6 +51,8 @@ def main() -> int:
     parser.add_argument('--hold_seconds', type=float, default=0.)
     add_launcher_args(parser)
     args, remaining = setup_preset_cli(parser)
+    if gym.registry.get(args.task) is None:
+        parser.error(f'{args.task} is not registered in this tree; replay this probe from archive/pre-refactor')
     if args.head_ground_check and args.task not in ('Lizard2-Flat-v5', 'Lizard2-Flat-v6'):
         parser.error('--head_ground_check requires the registered v5 or v6 task')
     if args.terrain_suite and not args.head_ground_check:
@@ -73,8 +78,12 @@ def main() -> int:
         if args.terrain_suite:
             sources.extend(('ablation_harness/suites.py', 'rl_exp/tasks/terrain_geometry.py'))
         for source in sources:
+            path = REPO/source
+            if not path.is_file():
+                report['head_ground_sources'][source] = None
+                continue
             saved = out/Path(source).name
-            saved.write_bytes((REPO/source).read_bytes())
+            saved.write_bytes(path.read_bytes())
             report['head_ground_sources'][source] = binding.sha256_file(saved)
     started = time.monotonic()
     env = None

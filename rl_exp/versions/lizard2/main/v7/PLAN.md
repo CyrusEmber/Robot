@@ -16,8 +16,8 @@
 
 | 可证伪假设 | 最小探测与入口 | 观察判据与停止条件 |
 |---|---|---|
-| 固定圆足模型与动作权限一致 | `python -B -m pytest -q rl_exp/tools/verify/test_lizard2_v7.py -p no:cacheprovider`；既有构建、资产和生命周期闸门 | 四足 fixed，活动轴与动作集合逐项一致，肘限位及其余母本差异受控；任一失败停在配置交付，不训练 |
-| 新 USD 实际关节序、动作索引与观测宽度一致 | 后续获准后运行 `python -B rl_exp/tools/verify/obs_protocol_live.py --tasks Lizard2-Flat-v7 Lizard2-Flat-Play-v7 --envs 2 --pin --reason "Measure v7 fixed round-foot asset order" --headless`；宽度锚点按既有观测协议流程审核 | 必须来自当前正式资产的实际加载，不能从 URDF 或 export03 推算；缺实测/审核时停在开训之前；pin 成功不替代观测宽度审核 |
+| 固定圆足模型与动作权限一致 | `python -B -m pytest -q rl_exp/tools/verify/test_lizard2_round_feet.py -p no:cacheprovider`（原 `test_lizard2_v7.py` 已随退网删除）；既有构建、资产和生命周期闸门 | 四足 fixed，活动轴与动作集合逐项一致，肘限位及其余母本差异受控；任一失败停在配置交付，不训练 |
+| 新 USD 实际关节序、动作索引与观测宽度一致 | 后续获准后运行 `python -B -m pytest -q -m sim rl_exp/locomotion/tests/test_v7_experiment.py`：`test_one_ppo_update_and_reload` 真实加载正式资产并核对动作/观测与接口签名；宽度锚点按既有观测协议流程审核。原 `obs_protocol_live.py --tasks Lizard2-Flat-v7 Lizard2-Flat-Play-v7 ...` 依赖已退网的 gym 任务注册，只在 `archive/pre-refactor` 检出里可复跑 | 必须来自当前正式资产的实际加载，不能从 URDF 或 export03 推算；缺实测/审核时停在开训之前；pin 成功不替代观测宽度审核 |
 | 首步动作与 reset 不受旧驱动目标污染，接触终止仍可用 | 在同一正式资产上复用原生动作、显式/自动 reset 与零动作短程入口，先给出具名工况和有界时长 | 状态、后端目标及首步结果可复读；位置 reset 不等于驱动目标清零。非有限状态、错轴或旧目标影响首步即停止并修根因；有限实测取接口记录，不在本轮扩展物理诊断。 |
 
 配置侧检查不是承重或可训练性证明。两足导向承重继续归原事项，不扩充为开训前置；新增奖励/终止测量仍须先验证。原生探测与训练的运行预算由执行者按已有授权及当前资源另行核定，未批准不代填。
@@ -34,7 +34,7 @@
 
 任务 `Lizard2-Flat-v7` / `Lizard2-Flat-Play-v7`；runner `Lizard2V7PPORunnerCfg`；日志身份 `lizard2_v7`。本轮冻结已审配置，标签 `lizard2-main-v7`；不将继承的runner迭代上限视为新训练授权，不自动启动PPO。接口与golden证据分别取 [接口记录](../../../../../acceptance/records/2026-11-03-lizard2-v7-interface.md) 和 [基线记录](../../../../../acceptance/records/2026-11-03-lizard2-v7-golden-rebaseline.md)，冻结实际执行取 [冻结记录](../../../../../acceptance/records/2026-11-03-lizard2-v7-freeze.md)。
 
-只核启动计划：`python -B rl_exp/tools/launch_recipe.py --task Lizard2-Flat-v7 --seed 42`。缺观测锚点、运行时验证、冻结标签或干净工作树时按既有闸门停止；不设脏树豁免。当前不加 `--launch`。新训练默认从头初始化，不将旧 checkpoint 强行接入新接口。
+只核启动计划：现役入口 `.\train.cmd --exp rl_exp/lizard2_v7.py --viz none`（`--num-envs` / `--max-iterations` 试跑即真训，无 dry-run 启动器）；原 `python -B rl_exp/tools/launch_recipe.py --task Lizard2-Flat-v7 --seed 42` 与任务名同属已退网的配方注册流程，只在 `archive/pre-refactor` 检出里可复跑。缺观测锚点、运行时验证、冻结标签或干净工作树时按既有闸门停止；不设脏树豁免。新训练默认从头初始化，不将旧 checkpoint 强行接入新接口。
 
 ## 修订记录
 
