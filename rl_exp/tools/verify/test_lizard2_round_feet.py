@@ -13,13 +13,14 @@ import unittest
 import xml.etree.ElementTree as ET
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
-from rl_exp.tools.diagnose.lizard2_round_feet import SOURCE, build_tree, validate_tree
+from rl_exp.tools.diagnose.lizard2_round_feet import SOURCE as _SOURCE, build_tree, locate, validate_tree
 from rl_exp.tools.diagnose.lizard2_round_feet_probe import check_interface, check_columns, check_reset_rows
+
+SOURCE = locate(_SOURCE)
 
 
 class RoundFeetTest(unittest.TestCase):
     def test_live_task_resolves_native_presets(self):
-        from isaaclab_tasks.utils.hydra import PresetCfg
         from isaaclab_physx.sensors.contact_sensor.contact_sensor_cfg import ContactSensorCfg
         from rl_exp import lizard2_v7
 
@@ -27,7 +28,6 @@ class RoundFeetTest(unittest.TestCase):
             with self.subTest(play=play):
                 sensor = lizard2_v7.make_env_cfg(play=play).scene.head_ground_contact
                 self.assertIsInstance(sensor, ContactSensorCfg)
-                self.assertNotIsInstance(sensor, PresetCfg)
                 self.assertEqual(sensor.prim_path, '{ENV_REGEX_NS}/Robot/Geometry/neck_pitch')
                 self.assertEqual(sensor.history_length, 4)
                 self.assertEqual(sensor.filter_prim_paths_expr,

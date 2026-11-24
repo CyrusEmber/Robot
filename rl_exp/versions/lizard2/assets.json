@@ -1,5 +1,0 @@
-{
-  "format": 1,
-  "meshes_dir": "lizard2_round_feet/meshes",
-  "why": "Adopt export04 fixed round feet for main/v7; retain repaired USD, URDF and referenced meshes byte-for-byte. Retire v4-v6 without relocking. See acceptance/records/2026-11-03-lizard2-v7-round-feet.md."
-}

@@ -224,7 +224,7 @@ def main():
             and build['sphere_radius_m'] == RADIUS, 'skeleton build binding')
     two_axis = bind(locate(args.two_axis_blend or build['source']), build['source_sha256'])
     provenance = json.loads(bind(two_axis.with_suffix('.json')).read_text(encoding='utf-8'))
-    require(Path(provenance['candidate']).resolve() == two_axis
+    require(locate(provenance['candidate']) == two_axis
             and provenance['candidate_sha256'] == bindings[str(two_axis)], 'two-axis binding')
     original = bind(locate(args.original_blend or provenance['source']), provenance['source_sha256'])
     require(provenance['source_sha256'] ==

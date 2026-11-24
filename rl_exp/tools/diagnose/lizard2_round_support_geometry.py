@@ -195,7 +195,7 @@ def run(urdf, clearance=0.10):
         raise ValueError("clearance must be finite and nonnegative")
     context = prepare(urdf)
     sources = [Path(__file__), Path(solver.__file__), Path(solver.geometry.__file__), Path(binding.__file__),
-               REPO / "rl_exp/tools/verify/check_leg_reachability.py", REPO / "rl_exp/tasks/joint_names.py"]
+               REPO / "rl_exp/tasks/joint_names.py"]
     files = sorted(set([Path(urdf).resolve(), *context["meshes"], *sources]))
     hashes = {str(p.resolve()): binding.sha256_file(p) for p in files}
     if any(v is None for v in hashes.values()):
