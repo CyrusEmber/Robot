@@ -32,8 +32,8 @@ Windows 上先按 [本机路径示例](paths.example.yaml) 填写 `paths.yaml`�
 
 ## 资产与接口检查
 
-- [隔离候选转换](rl_exp/tools/diagnose/lizard2_two_axis_convert.py)用 `--candidate` 指定 `rl_exp/out` 下的 URDF，将 USD 写到候选目录。[圆足 USD 检查](rl_exp/tools/diagnose/lizard2_round_feet_usd.py)核对碰撞、惯量和依赖。通过检查后再更新机体模块指向的正式资产。
+- [隔离候选转换](rl_exp/tools/diagnose/lizard2_two_axis_convert.py)用 `--candidate` 指定 `rl_exp/out/<事项>` 或 `%TEMP%` 下的 URDF，将 USD 写到同目录。[圆足 USD 检查](rl_exp/tools/diagnose/lizard2_round_feet_usd.py)核对碰撞、惯量和依赖：`--formal_dir rl_exp/lizard2_round_feet --output <仓外 JSON>` 只读核验正式资产；`--export_dir <候选目录> --repair <新 .usda>` 在隔离副本上修五处主轴惯量。
 - 从仓根用 `paths.yaml` 指定的 Python 执行 `python -m pytest -q rl_exp/tools/verify/test_lizard2_round_feet.py rl_exp/locomotion/tests/test_v7_experiment.py`，检查圆足结构和现役实验配置。
 - [圆足接口探针](rl_exp/tools/diagnose/lizard2_round_feet_probe.py)接受 `--task Lizard2-Flat-v7 --viz none --out <新目录>`，在已存在的父目录下保存关节、观测、首步和 reset 报告。`Lizard2-Flat-Play-v7` 选择 Play 配置。训评接线使用 `python -m pytest -m sim`。[腿部回放探针](rl_exp/tools/diagnose/lizard2_shank_use_probe.py)提供专项回放。
 
-旧配方、版本、掌足预检和旧 Lizard 的 UE 导出从 `archive/pre-refactor` 独立检出后复跑。现有 UE 构建器和导出 JSON 保留旧资产口径。
+旧配方、版本、掌足预检和旧 Lizard 的 UE 导出已退网：Git 历史从 `archive/pre-refactor` tag 检出，未入库与 tag 之后改动的文件在其本地归档 `rl_exp/out/archive/pre-refactor/`，恢复路径与逐文件摘要见同目录 `manifest*.json`。圆足导出的上游源件（`rl_exp/lizard2_palm_spatial/`、两份 .blend）按 `lizard2_round_feet_export.py` 的缺省路径解析，缺失时报错而不是猜。

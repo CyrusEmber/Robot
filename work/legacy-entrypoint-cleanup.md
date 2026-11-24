@@ -3,7 +3,7 @@ id: legacy-entrypoint-cleanup
 title: 清理旧配方退网后残留的代码、资产、本地产物与工单
 scope: AGENTS.md, README.md, .gitignore, .codemaker, ablation_harness, rl_exp, work
 status: in_progress
-next: 按二审修订后的步骤执行：先解耦留存入口并开放系统临时目录校验；再逐文件生成字节级 manifest、校验可恢复性后执行本地归档与工作树清理；最后用 %TEMP% 完成全部离线、Blender 导出、USD 修复、列耦合复读、腿驱预检与 sim 验收，收口删除本单。
+next: 迁移与删除已完成（6648 条 manifest 反向核验通过、剩余候选 0）。待办：GPU 实跑 `pytest -m sim` 与 `lizard2_shank_use_probe --leg_drive_preflight`；用新导出产物做 URDF→USD 后实跑 `--repair`；改写两份 skill 与 10 份留存工单里指向退网目录的段落；全过后按 README 删除本单。
 close_when: 仓内仅保留 v7 现役最小代码集、正式圆足资产、4 份锚定 YAML 协议、v7 产物与 10 份现役工单；rl_exp/out 仅保留在办目录、列耦合归档 ZIP 与 archive/pre-refactor，且明确禁止新增任何临时文件/临时目录；每一个被移除文件均经字节级 SHA-256 核验可从 git tag 或 local_archive 无损恢复；圆足 Blender 隔离导出、正式 USD 审计与 5 处惯量 --repair、协议全目录锚定扫描、列耦合四臂复读与 ZIP 恢复、腿驱实测关节序预检及 pytest -m sim 全部实跑通过；收尾后按 README 删除本单并同步 v7-workflow-hardening。
 ---
 
@@ -46,16 +46,18 @@ close_when: 仓内仅保留 v7 现役最小代码集、正式圆足资产、4 �
 
 - **机体与实验核心**：
   - `rl_exp/__init__.py`、`rl_exp/lizard2_v7.py`
-  - `rl_exp/robots/lizard2_round_feet.py`（含正式资产路径、动作序 `ACTION_JOINTS`、实测关节序 `MEASURED_JOINT_ORDER` 及绑定的 `MEASURED_USD_SHA256` / `MEASURED_URDF_SHA256`）
+  - `rl_exp/robots/lizard2_round_feet.py`（含正式资产路径、动作序 `ACTION_JOINTS`、实测关节序 `MEASURED_JOINT_ORDER` 及绑定的 `MEASURED_USD_SHA256` / `MEASURED_URDF_SHA256` / `MEASURED_ORDER_SHA256`）
   - `rl_exp/lizard2_round_feet/`（`lizard2_round_feet.urdf`、`lizard2_round_feet.usda`、`meshes/`）
+  - `rl_exp/lizard2_palm_spatial/`：圆足导出的上游源件（URDF + meshes），导出按 `FORMAL_SHA` 定住其字节，不可删
+  - `rl_exp/tasks/joint_names.py`：仅保留关节词汇表，供 `check_self_collision.py` 使用（`rl_exp/tasks` 其余部分已退网）
   - `rl_exp/locomotion/`（`find_python.cmd`、`rewards.py`、`terminations.py`、`train.py`、`train_record.py`、`tests/test_v7_experiment.py`）
 - **现役资产与诊断最小集**：
   - `rl_exp/blender/scripts/`：`lizard2_round_feet_candidate.py`（保持原字节不变以匹配 `skeleton02/build.json` 绑定摘要）、`lizard2_round_feet_export.py`
   - `rl_exp/tools/pipeline/`：`flatten_usd.py`
   - `rl_exp/tools/runrecord/`：`binding.py`
   - `rl_exp/tools/trainlog/`：`probe_run.py`
-  - `rl_exp/tools/diagnose/`（10 个文件）：`lizard2_two_axis_convert.py`、`lizard2_round_feet.py`、`lizard2_round_feet_usd.py`、`lizard2_round_feet_probe.py`、`lizard2_shank_use_probe.py`、`lizard2_leg_drive_baseline.py`、`lizard2_leg_drive_protocol.py`、`test_lizard2_leg_drive_baseline.py`、`test_lizard2_leg_drive_protocol.py`、`column_coupling_probe.py`
-  - `rl_exp/tools/verify/`（8 个文件）：`test_lizard2_round_feet.py`、`test_eval_record.py`、`test_eval_frame_v2.py`、`test_recovery_parity.py`、`test_terrain_map.py`、`test_terrain_geometry.py`、`check_terrain_split_source.py`、`check_split_probe_wait.py`
+  - `rl_exp/tools/diagnose/`（12 个文件）：`lizard2_two_axis_convert.py`、`lizard2_round_feet.py`、`lizard2_round_feet_usd.py`、`lizard2_round_feet_probe.py`、`lizard2_shank_use_probe.py`、`lizard2_leg_drive_baseline.py`、`lizard2_leg_drive_protocol.py`、`test_lizard2_leg_drive_baseline.py`、`test_lizard2_leg_drive_protocol.py`、`column_coupling_probe.py`，以及 `two_foot_trim`/`support_report` 真正依赖的 `lizard2_round_support_geometry.py`、`pose_target_solver.py`
+  - `rl_exp/tools/verify/`（9 个文件）：`test_lizard2_round_feet.py`、`test_eval_record.py`、`test_eval_frame_v2.py`、`test_recovery_parity.py`、`test_terrain_map.py`、`test_terrain_geometry.py`、`check_terrain_split_source.py`、`check_split_probe_wait.py`、`check_self_collision.py`（只留 FK/网格纯函数，扫描 CLI 已经退网）
 - **现役评测与 v7 产物**：
   - `ablation_harness/` 代码与锚表：`evaluate.py`、`experiment_eval.py`、`eval.py`、`video_matrix.py`、`cfg_snapshot.py`、`host_paths.py`、`loco_judge.py`、`judge_semantics.json`、`metrics.py`、`protocol_anchors.json`（仅保留 4 条 `locomotion_eval_v1..v4.yaml` 锚点）、`record.py`、`suite_lock.py`、`suites.py`、`terrain_geometry.py`、`terrain_map.py`、`terrain_split_probe.py`、`components/`（`__init__.py`、`command_player.py`、`dr_controller.py`、`recovery.py`）
   - 冻结协议：`ablation_harness/protocols/locomotion_eval_v1.yaml` 至 `v4.yaml`
@@ -139,3 +141,12 @@ close_when: 仓内仅保留 v7 现役最小代码集、正式圆足资产、4 �
    - 离线运行 `lizard2_leg_drive_baseline.py` 退出 0；破坏测试验证 26 维同维关节重排与 USD 摘要漂移均被拒绝；以 `%TEMP%` 输出实跑 `lizard2_shank_use_probe.py --leg_drive_preflight` 验证运行时 PhysX 关节序与 `MEASURED_JOINT_ORDER` 逐位一致。
    - 默认 `pytest` 全绿；显式 `pytest rl_exp/tools/verify rl_exp/tools/diagnose` 逐文件执行条数均 `>= 1` 且全绿；`check_terrain_split_source.py` 与 `check_split_probe_wait.py` 退出 0；`pytest -m sim` 全绿。
 7. **静态扫描与收尾闭环**：全仓现役代码/配置/文档/留存工单零断链与零已删模块引用（`acceptance/records/` 为历史记录，只读不改写，不计入本判据）；扫描须同时覆盖静态 import 与从记录中读出的模块名（如 `geometry.json` 的 `definition.module`），只跑静态 import 不算证据。`rl_exp/out/` 无任何新增临时文件，`git diff --check` 通过；完成后更新 `work/v7-workflow-hardening.md` 与验收记录，并按 `README.md` 删除本工单。
+
+---
+
+## 执行状态（2026-11-24）
+
+- **迁移结果**：6002 个候选文件（约 5.3 GB）全部处理；复查剩余候选 0。366 + 156 个与 `archive/pre-refactor` 同字节的走 `recovery_source=git_tag`（记 `blob_oid`），其余 5592 + 534 个移入 `rl_exp/out/archive/pre-refactor/`；清单 `manifest.json` 与 `manifest-part2.json` 共 6648 条，删除前反向核验 100%（5958/5958、690/690）。
+- **白名单漏项与修正**：`rl_exp/tools/{diagnose,verify}` 曾被整目录放行，补做第二批 690 个候选；`two_foot_trim`/`support_report` 真依赖 `lizard2_round_support_geometry.py`、`pose_target_solver.py`、`check_self_collision.py`、`rl_exp/tasks/joint_names.py`，圆足导出真依赖 `rl_exp/lizard2_palm_spatial/`（12.5 MB）——五者按需保留。`check_leg_reachability.py` 只为 `check_self_collision` 的已退网 CLI 服务，随该 CLI 一并退网。
+- **已实测**：默认 `pytest` 9 passed；`pytest rl_exp/tools/verify rl_exp/tools/diagnose` 46 passed（13 subtests）；两个 `check_*.py` 退出 0；`column_coupling_probe.py selftest` 全 PASS；`lizard2_round_feet_usd.py --formal_dir` 得 `pass=true, unresolved=[]` 且目录零改动；`lizard2_round_feet_export.py` 在上游 .blend 只存在于归档时从 `%TEMP%` 实跑 `ROUND_FEET_EXPORT_OK`。
+- **未完成**：`pytest -m sim`、`lizard2_shank_use_probe.py --leg_drive_preflight`（需 GPU）；`--repair` 需先用新导出产物做一次 URDF→USD 转换（历史 `export03` 的自绑定已随脚本字节失效）；`isaaclab-asset-pipeline`、`isaaclab-pretrain-check` 两份 skill 与 10 份留存工单里指向 `rl_exp/versions`、`work/closed`、`generate_urdf.py` 的段落待改写。
