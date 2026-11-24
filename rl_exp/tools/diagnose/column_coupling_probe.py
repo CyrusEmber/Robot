@@ -1205,6 +1205,7 @@ def capture(args):
 
         cfg = lizard2_v7.make_env_cfg()
         cfg.scene.terrain = suites.lizard_suite_v2()
+        suites.bind_head_ground_to_terrain(cfg)
         sub = cfg.scene.terrain.terrain_generator.sub_terrains
         sub['rough_a'] = suites._LIZARD_SUITE_V1_GENERATOR.sub_terrains['rough_a'].copy()
         if args.intervention == 'single_noise_min':

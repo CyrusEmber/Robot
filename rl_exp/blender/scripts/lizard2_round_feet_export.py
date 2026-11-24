@@ -219,13 +219,11 @@ def main():
     bind(source_urdf, FORMAL_SHA)
     build_path = bind(skeleton.parent / 'build.json')
     build = json.loads(build_path.read_text(encoding='utf-8'))
-    require(Path(build['candidate']).resolve() == skeleton.resolve()
-            and build['candidate_sha256'] == SKELETON_SHA
-            and build['sphere_radius_m'] == RADIUS, 'skeleton build binding')
+    require(build['candidate_sha256'] == SKELETON_SHA and build['sphere_radius_m'] == RADIUS,
+            'skeleton build binding')
     two_axis = bind(locate(args.two_axis_blend or build['source']), build['source_sha256'])
     provenance = json.loads(bind(two_axis.with_suffix('.json')).read_text(encoding='utf-8'))
-    require(locate(provenance['candidate']) == two_axis
-            and provenance['candidate_sha256'] == bindings[str(two_axis)], 'two-axis binding')
+    require(provenance['candidate_sha256'] == bindings[str(two_axis)], 'two-axis binding')
     original = bind(locate(args.original_blend or provenance['source']), provenance['source_sha256'])
     require(provenance['source_sha256'] ==
             'beeac4c09726260bf392a6ecc81a04ebcf9b54a210416493bbb2689c4909cdea',
@@ -364,7 +362,7 @@ def main():
     tree.write(target, encoding='utf-8', xml_declaration=True)
     validate_tree(formal, ET.parse(target), RADIUS, elbow_limit=args.elbow_limit)
     files = {p.relative_to(out).as_posix(): sha256_file(p) for p in sorted(out.rglob('*')) if p.is_file()}
-    report = dict(source=str(SKELETON), source_bindings_sha256=bindings,
+    report = dict(source=str(skeleton), source_bindings_sha256=bindings,
                   urdf=str(target), urdf_sha256=sha256_file(target), radius_m=RADIUS,
                   foot_body_names=list(FEET), fixed_mounts=[f'{n}_fixed' for n in FEET],
                   active_joint_count=26, link_count=31,

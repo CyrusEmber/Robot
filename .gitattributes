@@ -1,7 +1,6 @@
-# The fork patch archives are consumed verbatim: setup.bat applies them with `git apply`
-# (step 3) and framework_pin_check.py rebuilds the fork tree from them. A CRLF checkout
-# makes hunks fail to match a LF tree, which would show up as "neither applied nor
-# appliable" instead of the drift it is meant to be, so the archives stay LF everywhere.
+# The fork patch archives were consumed verbatim: setup.bat applied them with `git apply`
+# and framework_pin_check.py rebuilt the fork tree from them. They are retired, and their
+# patches stay LF in the archive tag for the same reason a CRLF checkout broke the hunks.
 *.patch text eol=lf
 
 # One canonical byte form for the whole repository, for the same reason, generalized: every
@@ -21,20 +20,15 @@
 *.blend -text
 *.pt -text
 
-# Preserve the protocol bytes already bound to its anchor and eval records.
-/ablation_harness/protocols/lizard2_flat_v4.json -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
 
 # Diagnostic evidence hashes bind original bytes, including historical CRLF reports.
 /rl_exp/out/** -text
-/rl_exp/tools/diagnose/out/** -text
 
 # Adopted palm body keeps the exact source bytes bound by its runtime evidence.
 /rl_exp/lizard2_palm_spatial/** -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
 # Original exporter formatting is part of these two audited source hashes.
 /rl_exp/lizard2_palm_spatial/lizard2_palm_spatial.urdf whitespace=-blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
-/rl_exp/lizard2_palm_spatial/lizard2_palm_spatial.usda whitespace=blank-at-eol,-blank-at-eof,space-before-tab,cr-at-eol
 
 /rl_exp/lizard2_round_feet/** -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
 /rl_exp/lizard2_round_feet/lizard2_round_feet.urdf whitespace=-blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
 /rl_exp/lizard2_round_feet/lizard2_round_feet.usda whitespace=blank-at-eol,-blank-at-eof,space-before-tab,cr-at-eol
-/rl_exp/versions/lizard2/main/v7/main_params.yaml -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol

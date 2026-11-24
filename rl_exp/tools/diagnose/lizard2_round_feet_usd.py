@@ -237,12 +237,15 @@ def audit(stage, tree):
 
 def formal_report(directory, output, parser):
     """Audit the formal asset directory read-only; nothing is written beside it."""
+    from rl_exp.robots import lizard2_round_feet as formal
     usd = directory / 'lizard2_round_feet.usda'
     urdf = directory / 'lizard2_round_feet.urdf'
     if not (usd.is_file() and urdf.is_file()):
         parser.error('formal dir must hold lizard2_round_feet.usda and lizard2_round_feet.urdf')
-    if output.is_relative_to(directory) or output.exists() or output.suffix != '.json':
-        parser.error('output must be a new JSON outside the formal directory')
+    if (output.is_relative_to(directory) or output.exists() or output.suffix != '.json'
+            or not output.parent.is_dir()):
+        parser.error('output must be a new JSON in an existing directory outside the formal one')
+    measured = {str(usd): formal.MEASURED_USD_SHA256, str(urdf): formal.MEASURED_URDF_SHA256}
     report = {'pass': False,
               'scope': 'authored formal USD stage only; no runtime, contacts, material or loaded pose/FK verdict',
               'inertia_convention': 'R diag(I) R.T; pxr active quaternion, imaginary xyz / real w; no repairs',
@@ -250,8 +253,10 @@ def formal_report(directory, output, parser):
     before = {p: sha256(p) for p in sorted(directory.rglob('*')) if p.is_file()}
     for path in (usd, urdf, Path(__file__), ROOT / 'rl_exp/robots/lizard2_round_feet.py'):
         digest = sha256(path)
-        report['bindings'][str(path)] = {'sha256': digest}
-        if digest is None:
+        expected = measured.get(str(path))
+        report['bindings'][str(path)] = {'sha256': digest, 'expected': expected,
+                                         'pass': expected is None or digest == expected}
+        if digest is None or (expected is not None and digest != expected):
             report['binding_failures'].append(str(path))
     layers, assets, unresolved = UsdUtils.ComputeAllDependencies(str(usd))
     report['dependencies'] = {'layers': [l.identifier for l in layers], 'assets': list(assets),
@@ -287,6 +292,9 @@ def main():
     if args.export_dir is None:
         parser.error('--export_dir or --formal_dir is required')
     directory = args.export_dir.resolve()
+    formal = ROOT / 'rl_exp/lizard2_round_feet'
+    if directory == formal.resolve() or directory.is_relative_to(formal.resolve()):
+        parser.error('--export_dir must be an isolated conversion candidate, not the formal asset directory')
     usd = (args.usd or directory / 'lizard2_round_feet/lizard2_round_feet.usda').resolve()
     if not usd.is_relative_to(directory) or not usd.is_file():
         parser.error('usd must be an existing file within export directory')
