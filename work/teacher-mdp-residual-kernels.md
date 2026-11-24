@@ -14,7 +14,7 @@ evidence: acceptance/records/2026-10-09-retired-family-prune-manifest, acceptanc
 三条退休线的代码已移出主路径（`work/closed/2026/retired-family-code-prune.md`，`ALL_OFFLINE_CHECKS_PASSED 37/37`），
 但裁决 A① 保留了 `rl_exp/tasks/teacher_mdp.py`：`curriculum_state.py:93-97` 从它取
 `JointSIRTerrainCurriculum` / `SpawnWeightSIRTerrainCurriculum` / `ck_value`，而续训状态层是 lizard2
-未来接 DR 时的依赖（`work/active/dr-widening-policy.md`）。保留的代价是本项存在的理由：旧线的奖励与
+未来接 DR 时的依赖（`dr-widening-policy`（已删除：现役实验无 DR，接 DR 须对新实验另立事项））。保留的代价是本项存在的理由：旧线的奖励与
 终止内核仍留在主路径，每次 pre-commit 仍为它们付 import 与维护成本 —— 本次省下的是改动风险，不是长期成本。
 
 保留期内它是活的：套件里 `test_joint_sir` / `test_v5_terrain_sir` / `test_resume_state` 与

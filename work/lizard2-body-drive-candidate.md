@@ -9,13 +9,13 @@ close_when: 新上下文按正文修订范围核验 R1–R5 与 D 记录，保�
 evidence: acceptance/records/2026-10-22-lizard2-body-drive-candidate.md, acceptance/records/2026-10-22-lizard2-low-cap-comparison.md, acceptance/records/2026-10-22-lizard2-drive-gaps-and-cap-plan.md, acceptance/records/2026-10-22-lizard2-current-lift.md, acceptance/records/2026-10-22-lizard2-velocity-limits.md, acceptance/records/2026-10-19-lizard2-pd-scope-correction.md, acceptance/records/2026-10-19-lizard2-load-transfer-lift.md, acceptance/records/2026-10-19-lizard2-single-leg-lift.md, acceptance/records/2026-10-22-lizard2-velocity-observation.md, acceptance/records/2026-10-19-lizard2-spatial-inertia-repair.md, acceptance/records/2026-10-19-lizard2-contact-path-correction.md, acceptance/records/2026-10-19-lizard2-a-geometry-replay.md, acceptance/records/2026-10-16-lizard2-support-schedule.md, acceptance/records/2026-10-16-lizard2-candidate-doc-organization.md, acceptance/records/2026-10-14-lizard2-palm-spatial-review-fixes.md, acceptance/records/2026-10-14-lizard2-palm-spatial-design-decision.md, acceptance/records/2026-10-14-lizard2-a-priority-review.md, acceptance/records/2026-10-13-lizard2-restored-limits-pd-open-issues.md, acceptance/records/2026-10-13-lizard2-a-implementation-plan-review.md, acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md, acceptance/records/2026-10-13-lizard2-natural-ground-tail.md, acceptance/records/2026-10-13-lizard2-lowered-body-vertical-shanks.md, acceptance/records/2026-10-12-lizard2-four-palms-lowered.md, acceptance/records/2026-10-12-lizard2-claw-palm-shape.md, acceptance/records/2026-10-12-lizard2-palm-p2-sample.md, acceptance/records/2026-10-12-lizard2-palm-chain-p1.md, acceptance/records/2026-10-08-lizard2-r1-numeric-reference-and-decision-drafts
 ---
 
-本项统筹隔离候选的机体、全部关节默认驱动、真实接线与训练前集成交付。用户定案及对前序动作前置的修订见[默认驱动与 RL 职责记录](../../acceptance/records/2026-10-19-lizard2-chest-standing-pd.md#用户定案默认关节驱动与强化学习职责)；整体结构需求及“审核输入绑定约定”见 [整体记录](../../acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work.md)，R1–R5 的轴系、几何禁区和驱动预算约束见 [设计审核契约](../../acceptance/records/2026-10-08-lizard2-joint-design-review-contract.md)。各节自检，D 集成后一次独立审核；专项分段交付不以其关闭为前提。移重、支撑分配、躯尾协调、抬腿与步态由 RL 学习，其性能验收转交训练后策略评测，不作为本项驱动交付前置。
+本项统筹隔离候选的机体、全部关节默认驱动、真实接线与训练前集成交付。用户定案及对前序动作前置的修订见[默认驱动与 RL 职责记录](../acceptance/records/2026-10-19-lizard2-chest-standing-pd.md#用户定案默认关节驱动与强化学习职责)；整体结构需求及“审核输入绑定约定”见 [整体记录](../acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work.md)，R1–R5 的轴系、几何禁区和驱动预算约束见 [设计审核契约](../acceptance/records/2026-10-08-lizard2-joint-design-review-contract.md)。各节自检，D 集成后一次独立审核；专项分段交付不以其关闭为前提。移重、支撑分配、躯尾协调、抬腿与步态由 RL 学习，其性能验收转交训练后策略评测，不作为本项驱动交付前置。
 
 ## 下一步
 
-1. **B/C 执行者**按[默认驱动与 RL 职责记录](../../acceptance/records/2026-10-19-lizard2-chest-standing-pd.md#用户定案默认关节驱动与强化学习职责)和限位 PD 专项步骤 6，按真实关节盘点默认 PD、限位、力矩/有效速度边界、逐轴/组合及已知载荷保持/跟踪证据；腿、胸颈和尾部均不得漏项。复用[小幅跟踪](../../acceptance/records/2026-10-19-lizard2-spatial-small-tracking.md)、[自重夹具](../../acceptance/records/2026-10-19-lizard2-level-leg-pd.md)与[静站](../../acceptance/records/2026-10-19-lizard2-loaded-standing.md)的原工况边界，只补真实变化或缺证。胸部允许自然倾角，不新增补偿控制器或增益扫描；手工抬落失败保留原义，不据此判单关节驱动不合格，也不再要求先手工走起来。A 的真实几何/碰撞缺口继续局部交付；正式 URDF 导出切片取 A4 的验收指针，USD/运行时交 E，动作周期样本不变为 RL 必须复现的轨迹。
-2. **E 执行者**按 [接线专项 E5](lizard2-candidate-wiring.md#e5-当前剩余工作与-a-并行交接) 补实际消费链；baseline reset/采集异常交限位 PD 专项 3/4，旧资产 cap/contact ownership 前提交 `work/active/floor-contact-attribution.md` ⑤/⑪。A 与 E 按输入变化交接并复验。
-3. **B/C/E 执行者**交默认驱动证据、躯尾通道和实际 action manager 权限，D 核同一候选的训练前集成与安全 reset；[训练接入](lizard2-family-landing.md#正式候选配置与训练接入)直接复用已核草案，完整动态接触标定不作开训前置；新判分使用前再固定口径，不要求手工运动先成功。移重、支撑分配、抬落、低速直行、完整步态、转向/恢复及躯尾协同性能明确交训练后策略评测，不记为已完成。
+1. **B/C 执行者**按[默认驱动与 RL 职责记录](../acceptance/records/2026-10-19-lizard2-chest-standing-pd.md#用户定案默认关节驱动与强化学习职责)和限位 PD 专项步骤 6，按真实关节盘点默认 PD、限位、力矩/有效速度边界、逐轴/组合及已知载荷保持/跟踪证据；腿、胸颈和尾部均不得漏项。复用[小幅跟踪](../acceptance/records/2026-10-19-lizard2-spatial-small-tracking.md)、[自重夹具](../acceptance/records/2026-10-19-lizard2-level-leg-pd.md)与[静站](../acceptance/records/2026-10-19-lizard2-loaded-standing.md)的原工况边界，只补真实变化或缺证。胸部允许自然倾角，不新增补偿控制器或增益扫描；手工抬落失败保留原义，不据此判单关节驱动不合格，也不再要求先手工走起来。A 的真实几何/碰撞缺口继续局部交付；正式 URDF 导出切片取 A4 的验收指针，USD/运行时交 E，动作周期样本不变为 RL 必须复现的轨迹。
+2. **E 执行者**按 [接线专项 E5](lizard2-candidate-wiring.md#e5-当前剩余工作与-a-并行交接) 补实际消费链；baseline reset/采集异常交限位 PD 专项 3/4，旧资产 cap/contact ownership 前提交 `work/floor-contact-attribution.md` ⑤/⑪。A 与 E 按输入变化交接并复验。
+3. **B/C/E 执行者**交默认驱动证据、躯尾通道和实际 action manager 权限，D 核同一候选的训练前集成与安全 reset；[训练接入（原 lizard2-family-landing 工单已不存在）直接复用已核草案，完整动态接触标定不作开训前置；新判分使用前再固定口径，不要求手工运动先成功。移重、支撑分配、抬落、低速直行、完整步态、转向/恢复及躯尾协同性能明确交训练后策略评测，不记为已完成。
 
 ## A–E 当前执行关系
 
@@ -37,7 +37,7 @@ evidence: acceptance/records/2026-10-22-lizard2-body-drive-candidate.md, accepta
 - **骨架与掌根**：肩/髋三个共中心串联轴接肘/膝、腕/踝；轴序、长轴方向、镜像及网格归属归重构专项。无指/趾骨、指/趾根活动关节或活动接触片；“人手式”仅限定远端连接，近端仍取蜥蜴朝向。腕/踝 pivot、下段骨尾、掌骨头与实体掌根共点，掌骨尾向远端延伸，掌体有长度与承重面；掌心/接触点不得替代关节中心。
 - **实体一致性**：同步调整 head/tail、关节标记、父子关系与网格归属，下段止于腕/踝、掌体归其子 link。不能只改显示骨、pose 或平移脚板；碰撞体、质心/惯量随网格复核。前后肢分别镜像，轴与范围消费 B 的线性能力，不沿用旧轴或承诺渐硬弹性。
 - **中立外形**：降低离地体高而不压薄机身，下段竖直，落掌 XY 可随可达性调整；前肢尺度保持，后肢骨长/后掌按恢复要求。四掌底共用固定水平地面，仅约束中立站姿；掌体接近腕/踝球底并核掌根过渡。体高、颈尾与近端前后朝向保持；尾根连接、逐段下落，远端自然贴地且有沿轴支持跨度，不做尾尖单点悬空休息。新候选外观仍待用户确认，尾部外形不授权 ROM/物理/导出或采用。
-- **依据与边界**：几何输入取 [后肢恢复记录](../../acceptance/records/2026-10-13-lizard2-hindlimb-restored.md)，体高/尾部及各次几何修订依据见 evidence；旧视觉认可不延伸到新姿态或物理。R1 草案 §15–§17 的旧组合拒绝不替代新构型验证，不重复无变化测试；资料访问和可读量边界见其 §7–§10，不重试被拒访问、不猜关节点拼曲线。机体读数前核整体记录“必须纠正的既有踝部分析”及 A3 自检，工具通过不当设计通过。
+- **依据与边界**：几何输入取 [后肢恢复记录](../acceptance/records/2026-10-13-lizard2-hindlimb-restored.md)，体高/尾部及各次几何修订依据见 evidence；旧视觉认可不延伸到新姿态或物理。R1 草案 §15–§17 的旧组合拒绝不替代新构型验证，不重复无变化测试；资料访问和可读量边界见其 §7–§10，不重试被拒访问、不猜关节点拼曲线。机体读数前核整体记录“必须纠正的既有踝部分析”及 A3 自检，工具通过不当设计通过。
 
 ## E. 接线与命名交付
 
@@ -77,25 +77,25 @@ C4 的 `local_path_check.py`、`local_path_view.py` 及既有路径/回放保留
 
 ### A4. 交接
 
-当前按[用户最新定案](../../acceptance/records/2026-10-19-lizard2-a-delivery-plan.md#用户定案撤销手工步态交付前置)只交真实机构几何候选及具名缺口，不要求手工步态回放、根前移或无滑移轨迹。已有回放与轨迹留作诊断证据，不再开发步长、相位或周期，不要求 RL 复现。用户回放确认的边界与阶段交付判定只取该记录，不推定另有外观或正式采用批准。
+当前按[用户最新定案](../acceptance/records/2026-10-19-lizard2-a-delivery-plan.md#用户定案撤销手工步态交付前置)只交真实机构几何候选及具名缺口，不要求手工步态回放、根前移或无滑移轨迹。已有回放与轨迹留作诊断证据，不再开发步长、相位或周期，不要求 RL 复现。用户回放确认的边界与阶段交付判定只取该记录，不推定另有外观或正式采用批准。
 
 1. **核真实几何**：复用 P1–P3 已绑定的树、轴、pivot、实体连接/随动、镜像及限位/碰撞证据，只补真实变更或缺证；不能只移动脚板显示或只看末端坐标代替整条腿和实体检查。保留错轴、脱节、翻掌、反曲、穿地和真实干涉判据；不将脚板能动解释为整机能走。
-2. **交具名候选给 E/B/C**：绑定源候选、URDF/网格/隔离 USD 身份、配置、真实几何检查与已生成回放的记录指针；轨迹/根偏移仅标历史诊断参考，不作为后续控制目标。正式 URDF 导出接口、写前拒错及独立切片审核取[导出验收](../../acceptance/records/2026-10-19-lizard2-a-delivery-plan.md#正式导出与写前拒错切片验收)。E/B 接[新输入验收](../../acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md#追加新正式导出身份接入隔离-usd-与真实消费者2026-10-20)的实测 manifest，新输入固定基惯量与独立在线布局取[前置验收](../../acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md#追加新输入运行时惯量与独立在线观测前置2026-10-20)，继续补后端实体响应及剩余消费者，不混用原检查点身份；B 接全部关节默认 PD/有效力矩速度边界，C 接胸颈尾驱动与通道，各自前提按对应输入核验，不等手工运动成功。
+2. **交具名候选给 E/B/C**：绑定源候选、URDF/网格/隔离 USD 身份、配置、真实几何检查与已生成回放的记录指针；轨迹/根偏移仅标历史诊断参考，不作为后续控制目标。正式 URDF 导出接口、写前拒错及独立切片审核取[导出验收](../acceptance/records/2026-10-19-lizard2-a-delivery-plan.md#正式导出与写前拒错切片验收)。E/B 接[新输入验收](../acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md#追加新正式导出身份接入隔离-usd-与真实消费者2026-10-20)的实测 manifest，新输入固定基惯量与独立在线布局取[前置验收](../acceptance/records/2026-10-15-lizard2-e-spatial-runtime-wiring.md#追加新输入运行时惯量与独立在线观测前置2026-10-20)，继续补后端实体响应及剩余消费者，不混用原检查点身份；B 接全部关节默认 PD/有效力矩速度边界，C 接胸颈尾驱动与通道，各自前提按对应输入核验，不等手工运动成功。
 3. **区分阶段交接与事项关闭**：正式 URDF 导出切片依上述验收交 E；全部机械范围、动力学、完整 E/USD runtime 和总项 D 独立审核不据此完成。真实几何缺口仍回 A，受新导出影响的消费复验交 E；不因局部交付或撤销动作要求自动关闭任何事项。
 
 **检查边界**：保留错轴/错 pivot、连接错误、限位、翻掌、穿地和自碰撞的既有判据；已绑定证据按输入与行为变化判断是否重验，无变化则引用。不得为交付扩大采样范围、另加全区间数学证明、全 ROM 扫描或新闸门；新缺陷先定位，再做能复现该缺陷的最小检查，仓库提交闸门照常执行。
 
-机械限位及几何禁区仍由限位 PD 专项 5b 维护，默认驱动由其步骤 6 维护；惯量和运行时缺口由该专项 3/4 及 E 维护，P4 默认驱动与安全集成归 B/C/D。原时间映射、承重直行、转向/恢复与躯尾比较交 [策略评测](lizard2-family-landing.md#训练后策略评测) 的策略性能验收，不记为完成。A4 是阶段交付，A、专项及总项的其余未完动作继续在办；关闭按修订范围独立审核，依据见默认驱动与 RL 职责记录。证据手续按接线专项 E4 第 5 条办理。
+机械限位及几何禁区仍由限位 PD 专项 5b 维护，默认驱动由其步骤 6 维护；惯量和运行时缺口由该专项 3/4 及 E 维护，P4 默认驱动与安全集成归 B/C/D。原时间映射、承重直行、转向/恢复与躯尾比较交 [策略评测（原 lizard2-family-landing 工单已不存在） 的策略性能验收，不记为完成。A4 是阶段交付，A、专项及总项的其余未完动作继续在办；关闭按修订范围独立审核，依据见默认驱动与 RL 职责记录。证据手续按接线专项 E4 第 5 条办理。
 
 ## B. 驱动（能力表先出，可与 A 同时）
 
-本轮 B/C 交付范围与证据取[交付清单](../../acceptance/records/2026-10-23-lizard2-bc-handoff.md)，独立判定取[有限输入审核](../../acceptance/records/2026-10-23-lizard2-bc-independent-review.md)；后续 D/训练接入按其范围复用，不重开已取消/不追加试验，不以局部交付关闭总项。
+本轮 B/C 交付范围与证据取[交付清单](../acceptance/records/2026-10-23-lizard2-bc-handoff.md)，独立判定取[有限输入审核](../acceptance/records/2026-10-23-lizard2-bc-independent-review.md)；后续 D/训练接入按其范围复用，不重开已取消/不追加试验，不以局部交付关闭总项。
 
 **标定前置（B/C 共用）**：候选的 A/P3 几何与实际隔离运行接线成立后，执行者提出目标、载荷、驱动能力、幅度、窗口、步数/资源预算及停止条件，用户确认工程取值；先按 R5 静力筛查，再做受控动力学标定。设计不变量及已批准几何容差仍约束标定，缺默认驱动所需测量通道先交责任层处理；完整动态分类不作本项前置。标定只交付测量及工况边界，不先判最终性能通过；它不依赖训练接入完整交付或本项关闭。C 可先用现有机体核通道，受机体变化影响的标定须用实际候选重做后交训练接入。
 
 1. 能力表已归 `acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory.md` A 节（判词、源码坐标与未知项），本项只留它给的**约束**：位置→力矩通路按构造就是线性 PD，**渐硬/渐变的趾端恢复力今天不可表达**（要么新增 Python 执行器子类、但丢掉本线特意选的物理步长 implicit PD；要么走每子步外力、可达性未验证）⇒ A 选 pivot/轴时**按线性对照**进行，或先回来重划弹性这一节的范围。不新建驱动机制、不改配方。
-2. 标定前置成立后，按专项步骤 6 的唯一方法，以已核惯量生成稳定的默认 PD，覆盖全部实际关节而不只腿部。先验目标与实体运动，再做小幅跟踪/组合及明确基座、重力、载荷下的保持/跟踪检查，允许已声明的有限自重静差；四足静站只作集成安全样本，不要求胸部水平、手工单腿抬落或承重直行通过。PD 不是无动力的被动关节，固定零目标也会产生保持力矩，但不能代替策略协调目标。新输入全部关节小幅后端目标与 actor 行为取[当前切片](../../acceptance/records/2026-10-19-lizard2-spatial-small-tracking.md#新导出输入全部关节小幅驱动复验2026-10-20)，[胸俯仰自重试验](../../acceptance/records/2026-10-19-lizard2-spatial-small-tracking.md#胸俯仰自重280复验)只按其实际预算/静差复用，不据此正式采用力矩值；逐轴受载按 evidence 复用；组合和有效边界仍缺证。初值、配置、读回与行为证据分开交 D/训练接入，不恢复指/趾根驱动、不盲扫增益、不添加步态或补偿控制器。
-3. 速度上限按[取消决定与全计划盘点](../../acceptance/records/2026-10-23-lizard2-plan-inventory.md)处理：剩余触边、其它关节、有/无限速对照及速度—载荷—稳定包线试验全部取消，不再作 D/训练接入开训前置，不自动恢复。保留原配置、实际写入读回及已测响应；未验范围不称通过，取消试验不等于关闭限速功能。训练接入仍核所用设置确已写入，不照抄旧冻结配方被忽略的字段。训练一致 false 保持。
+2. 标定前置成立后，按专项步骤 6 的唯一方法，以已核惯量生成稳定的默认 PD，覆盖全部实际关节而不只腿部。先验目标与实体运动，再做小幅跟踪/组合及明确基座、重力、载荷下的保持/跟踪检查，允许已声明的有限自重静差；四足静站只作集成安全样本，不要求胸部水平、手工单腿抬落或承重直行通过。PD 不是无动力的被动关节，固定零目标也会产生保持力矩，但不能代替策略协调目标。新输入全部关节小幅后端目标与 actor 行为取[当前切片](../acceptance/records/2026-10-19-lizard2-spatial-small-tracking.md#新导出输入全部关节小幅驱动复验2026-10-20)，[胸俯仰自重试验](../acceptance/records/2026-10-19-lizard2-spatial-small-tracking.md#胸俯仰自重280复验)只按其实际预算/静差复用，不据此正式采用力矩值；逐轴受载按 evidence 复用；组合和有效边界仍缺证。初值、配置、读回与行为证据分开交 D/训练接入，不恢复指/趾根驱动、不盲扫增益、不添加步态或补偿控制器。
+3. 速度上限按[取消决定与全计划盘点](../acceptance/records/2026-10-23-lizard2-plan-inventory.md)处理：剩余触边、其它关节、有/无限速对照及速度—载荷—稳定包线试验全部取消，不再作 D/训练接入开训前置，不自动恢复。保留原配置、实际写入读回及已测响应；未验范围不称通过，取消试验不等于关闭限速功能。训练接入仍核所用设置确已写入，不照抄旧冻结配方被忽略的字段。训练一致 false 保持。
 
 4. **五角色驱动与近端耦合**：swing、abduct、twist、elbow/knee、wrist/ankle 分别绑定真实关节，核零位、符号、硬限位、驱动目标、力矩与速度设置；不复制旧 foot 或 abduct 的 PD 给 twist。中间承载 link 的质量/惯量近似及整条链守恒由重构与专项步骤 3 核验。按专项步骤 6 由各姿态有效惯量取初值，逐轴跟踪再组合激励，检查其它轴被带动、奇异邻域、限位/饱和和接触下的稳定性；三个标量目标可独立设置不意味着动力学解耦。全部五角色先在隔离诊断中可控可读，胸颈尾全部实际关节按 C 补齐同口径覆盖；策略动作集合与冻结版本迁移仍归训练接入与策略评测。
 
@@ -103,7 +103,7 @@ C4 的 `local_path_check.py`、`local_path_view.py` 及既有路径/回放保留
 
 1. 区分根机身 heading、胸部侧弯、颈方向、尾 yaw/pitch 与肩髋 twist；躯干转向不能被记成腿的长轴旋转。以实际 URDF 树与运行时关节集合为准，在交付记录逐项对表胸颈尾关节的默认目标、坐标、真实驱动及动作/观测列，不默认新增脊柱轴；旧机体只作具名通道对照。
 2. 按 B/C 交付清单复用胸颈尾受控单轴、颈/尾组合和载荷证据，保留自身增益相同与全机背景改变的差别；不称胸颈尾整体组合已测。胸部世界姿态只作观测，不要求水平，不加手工协调/补偿；真实通道与驱动条件交 D/训练接入，协同性能留已训策略，试验取消范围按 B3。
-3. 行走允许自然拖尾，异常主承重、头腹推进和真实滑移仍由接触协议与训练后策略评测的策略验收检查。原躯干侧弯、尾部运动及组合协同的性能对照转交 [策略评测](lizard2-family-landing.md#训练后策略评测)，不取消、不记为完成，不作为本项关闭前置。
+3. 行走允许自然拖尾，异常主承重、头腹推进和真实滑移仍由接触协议与训练后策略评测的策略验收检查。原躯干侧弯、尾部运动及组合协同的性能对照转交 [策略评测（原 lizard2-family-landing 工单已不存在），不取消、不记为完成，不作为本项关闭前置。
 
 ## D. 训练前集成与审核（A/E 输入、B/C 默认驱动证据齐备后）
 
@@ -114,7 +114,7 @@ C4 的 `local_path_check.py`、`local_path_view.py` 及既有路径/回放保留
 
 ## 关闭条件
 
-- **审核者与输入**：新上下文按[默认驱动与 RL 职责记录](../../acceptance/records/2026-10-19-lizard2-chest-standing-pd.md#用户定案默认关节驱动与强化学习职责)核验 R1–R5、本项 D 节及其真实记录；原轴系、几何禁区、容差与驱动/资源预算保留，用户确认候选外观与几何样本。原手工动作及躯尾性能对照前置修订为训练后策略验收，不据此宣告 R1–R5 全部通过。
+- **审核者与输入**：新上下文按[默认驱动与 RL 职责记录](../acceptance/records/2026-10-19-lizard2-chest-standing-pd.md#用户定案默认关节驱动与强化学习职责)核验 R1–R5、本项 D 节及其真实记录；原轴系、几何禁区、容差与驱动/资源预算保留，用户确认候选外观与几何样本。原手工动作及躯尾性能对照前置修订为训练后策略验收，不据此宣告 R1–R5 全部通过。
 - **几何与命名**：蜥蜴骨段朝向正反例、前后肢映射与改名落地一致；按 A 核验肩髋三轴共中心、长轴旋转及实体随动，并核验腕/踝位于前臂/小腿末端、掌段从掌根延伸、骨架与模型连接一致及转动不脱节；同一候选按已确认有限采样覆盖有向掌面、机械限位与实际网格碰撞。固定机身周期证据保留原几何用途，不新增全 ROM 或连续域证明作为驱动前置。
 - **动力学与驱动**：腿部五角色及胸颈尾全部实际关节的默认驱动读回、小幅/适度组合与明确基座、自重或已知载荷的保持/跟踪可复读，允许已声明有限静差，无失控或持续振荡；安全 reset/站姿样本不要求胸部水平或手工抬落成功。缺预算/误差/窗口依据先提请用户确认，缺实际力矩通道不称真实饱和已验证；预算依据与最小受载行为证据不能被静力、声明、源码或无重力跟踪替代，也不要求穷尽传感工程。E/训练接入核逐角色真实动作权限与固定/门控说明，需协调关节可达；运动及躯尾同条件性能比较交训练后策略评测，仅经授权新配方训练。
 - **结果处理**：通过后交 `lizard2-family-landing`；失败退 in_progress 并指明节，仅用户能给的缺口置 blocked。未判定不关闭。

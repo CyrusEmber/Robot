@@ -21,7 +21,7 @@ evidence: acceptance/records/2026-10-28-loaded-axes-compression.md, acceptance/r
 
 ## 分类与保留原则
 
-重构顺序见[面向机器人实验的架构精简与单向解耦重构](robot-experiment-architecture-refactor.md)（原分批总纲已取消并归档至 `work/closed/2026/project-simplification.md`）。按[版本文档与原始产物](../../rl_exp/docs/diagnostic_artifacts.md#版本文档与原始产物)核定在用和退役范围。存量先从验收记录定位版本结论，从当前消费者核定仍需原件的范围。
+重构顺序见[面向机器人实验的架构精简与单向解耦重构](closed/2026/project-simplification.md)（原分批总纲已取消并归档至 `work/closed/2026/project-simplification.md`）。按[版本文档与原始产物](../rl_exp/docs/diagnostic_artifacts.md#版本文档与原始产物)核定在用和退役范围。存量先从验收记录定位版本结论，从当前消费者核定仍需原件的范围。
 
 ## 目标落点与复用
 
@@ -76,7 +76,7 @@ Codex 诊断维护者先核 `dump_all_parts.py`、`inspect_blend.py`、`inspect_
 先核明确可再生的子集，和回放代码修复独立验收。两个诊断输出根仍按下节保留集合处理。
 
 - `ablation_harness/results/**/eval.frames.pt`。核对同目录 `eval.json`、真实消费者和冻结协议。旧版及 `_superseded` 帧逐项检查，[旧帧事项](legacy-frames-rejudged-invalid.md)所需样本留到裁决及回归结束。
-- `ablation_harness/videos/`。先确认训练验收已完成和原片用途，优先核可重建的合成片和重复输出。原片和索引说明见 [README 的评测产物](../../README.md#评测产物)。
+- `ablation_harness/videos/`。先确认训练验收已完成和原片用途，优先核可重建的合成片和重复输出。原片和索引说明见 [README 的评测产物](../README.md#评测产物)。
 - `rl_exp/versions/**/tb_scalars.full.csv`。核已有抽样 CSV 和写者状态，完整曲线仍用于回归时暂留。依赖再生的条目先核原始事件文件和抽样命令，按摘要退役的条目先核版本文档足够。
 - `rl_exp/blender/` 的临时导出与备份、本机 `*_urdf/` 及 `rl_exp/assets/` 的未跟踪生成物。先查写者、源件和 USD/URDF 相对引用。跟踪的 `lizard.blend`、旧基准包与 checkpoint 走总纲资产支路。
 

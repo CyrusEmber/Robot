@@ -9,13 +9,13 @@ close_when: 新上下文按正文“关闭条件”审核协议与标定样本�
 evidence: acceptance/records/2026-10-19-lizard2-chest-standing-pd.md, acceptance/records/2026-10-13-lizard2-body-drive-plan-review.md, acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory, acceptance/records/2026-10-10-lizard2-land-body-drive-overall-work, acceptance/records/2026-10-10-lizard2-v3-first-eval, acceptance/records/2026-10-10-lizard2-v3-band-buckets, acceptance/records/2026-10-10-lizard2-carrier-dwell-calibration, acceptance/records/2026-10-09-lizard2-v3-eval-entry-and-inert-velocity-field
 ---
 
-产品协议与报告清单归本项；采集机制取已关闭的 `work/closed/2026/baseline-eval-pipeline-restructure.md`。按[训练优先修订](../../acceptance/records/2026-10-23-lizard2-training-priority-plan.md)，本项完整发布、三类动态标定与异常主承重分类不作为当前首轮开训前置。训练必需的实际动作、观测、接触力采样与 reset 由候选 D/E 及训练接入核验；本项继续维护未完成评测工具，不取消或视为通过。冻结旧协议保持原语义，新增或收窄走新协议文件。
+产品协议与报告清单归本项；采集机制取已关闭的 `work/closed/2026/baseline-eval-pipeline-restructure.md`。按[训练优先修订](../acceptance/records/2026-10-23-lizard2-training-priority-plan.md)，本项完整发布、三类动态标定与异常主承重分类不作为当前首轮开训前置。训练必需的实际动作、观测、接触力采样与 reset 由候选 D/E 及训练接入核验；本项继续维护未完成评测工具，不取消或视为通过。冻结旧协议保持原语义，新增或收窄走新协议文件。
 
 样本只验证测量，不要求手工卸载、移重、平衡、抬腿、躯尾协调或步态成功；学习性能交 `lizard2-family-landing` 的训练后策略评测。若新滑移/滚动或承重分类进入奖励、终止或合格判定，使用前必须完成对应标定与审核。
 
 ## 动作
 
-采样与测量见[记录](../../acceptance/records/2026-10-23-lizard2-contact-native.md)；其余按下文交付。
+采样与测量见[记录](../acceptance/records/2026-10-23-lizard2-contact-native.md)；其余按下文交付。
 
 1. 通道存在性已核（可用的通道、具名缺口、滚动/有效阶段为何分不开、报告项被静默不检查的那两项，全归 `acceptance/records/2026-10-12-lizard2-drive-capability-and-name-inventory.md` C 节，本项不复述）：动作从那份缺口表开始定口径；缺口仍在时写具名缺口，不用最低顶点跳变冒称材料点速度。
 2. 新协议覆盖足底净空、足端相对机身摆幅、承重接触材料点相对地面的切向运动，并逐项绑定实现。柔顺偏转/滚动/真实滑动按整体记录“联动设计修订”第 2 条区分：关节偏转与原点移动不自动扣分，真实承重接触点滑动仍计滑移，回位不抹去已发生的滑动；近似点切换、滚动与有效阶段须声明。

@@ -11,7 +11,7 @@ outcome: 独立复审通过训练来源范围；评测、短训缺口及重建�
 
 ## 当前范围
 
-文件级分类与回归已落地，结果和历史散文口径纠正在 [验收记录](../../acceptance/records/2026-11-04-training-provenance-dependency-scope.md)。本项先审核文件级豁免及 T0 记录；`work/active/verified-rebuild-rating.md` 再据此验收归档内容与评级，本项不接管历史材料补全。
+文件级分类与回归已落地，结果和历史散文口径纠正在 [验收记录](../../../acceptance/records/2026-11-04-training-provenance-dependency-scope.md)。本项先审核文件级豁免及 T0 记录；`work/active/verified-rebuild-rating.md` 再据此验收归档内容与评级，本项不接管历史材料补全。
 
 ## 承接
 

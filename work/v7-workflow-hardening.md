@@ -3,7 +3,7 @@ id: v7-workflow-hardening
 title: v7 实验闭环止血、机体解耦与仓内清旧
 scope: rl_exp, ablation_harness, work, acceptance, .codemaker, AGENTS.md, README.md, pytest.ini
 status: in_progress
-next: 确认 work/active/ 旧工单去留，随后收口提交。
+next: work/active/ 已收口（删 6、扁平 24）。剩 ablation_harness/record.py 记录状态机何去何从（已无生产者，只有 test_eval_record.py 在守），以及被扁平工单里 6 处失效落点是否改指现役入口。
 close_when: 三批全部提交且验收全绿；改奖励只动 exp.py，改机体只动 robots/<body.py>；三目录零收集错误，默认 pytest 快速离线全绿，按需专项与 sim 冒烟全绿；最终提交上的实跑评测写入验收记录。
 ---
 
@@ -82,7 +82,8 @@ close_when: 三批全部提交且验收全绿；改奖励只动 exp.py，改机�
 - 精简 `AGENTS.md` 与 `.codemaker/rules/isaaclab-development.mdc`：删不适用个人实验仓的上游公共库条款（如“破坏公开 API 须先弃用”、“`./isaaclab.sh -d`”）。
 
 ### 3.2 清理残余历史文档与死字段
-- `rl_exp/versions/` 废元数据与旧 `FAMILY.md` 清理或标只读归档（若保留 `check_leg_reachability` 历史诊断，同步确认其依赖的 `main_params.yaml` 去留）；`work/active/` 29 份旧工单按 `README.md` 收口（已结删、未完扁平化到 `work/<id>.md`）。
+- `rl_exp/versions/` 废元数据与旧 `FAMILY.md` 清理或标只读归档（若保留 `check_leg_reachability` 历史诊断，同步确认其依赖的 `main_params.yaml` 去留）；`work/active/` 旧工单按 `README.md` 收口（已结删、未完扁平化到 `work/<id>.md`）。
+- **执行结果**（2026-11-24）：30 份 → 删 6、扁平 24、归档 0。删除项均因主体随 cutover 消失：`asset-fail-path-live-check`（`runrecord.manifest` 已删且无 `record.json` 写入者）、`dr-widening-policy`（配方落点已删，现役 `lizard2_v7.py` 是 `curriculum=None`）、`lizard2-foot-plate-necessity`（踝关节已被圆足物理移除）、`obs-three-tables-merge`（三表随 `tasks/components.py` 删除）、`record-variant-and-snapshot-specs`（`record.py` 状态机已退役）、`verified-rebuild-rating`（`runrecord/rebuild.py` 与 `provenance.py` 已删）。其余 24 份移入 `work/`，并修正迁移带来的链接深度与 5 处指向已消失工单/模块的引用；`work/` 全树相对链接现全部可解析。需要换落点才能执行的部分未改语义，仅标注原工单已不存在。
 - 保留 `eval.json` 现有生效配置快照，仅删除 `ablation_harness/eval.py:573-575` 三个恒为 `None` 且无消费者的死字段。
 
 ### 3.3 最终实跑与验收收尾（三批全部提交后执行）

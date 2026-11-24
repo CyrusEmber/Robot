@@ -11,7 +11,7 @@ evidence: acceptance/records/2026-11-04-training-provenance-dependency-scope.md
 
 ## 当前范围
 
-独立审核发现评测命令和策略观测可能错位，历史结果限制见[来源事项验收记录](../../acceptance/records/2026-11-04-training-provenance-dependency-scope.md)。本项只处理评测时序，不重新训练或改写历史记录。
+独立审核发现评测命令和策略观测可能错位，历史结果限制见[来源事项验收记录](../acceptance/records/2026-11-04-training-provenance-dependency-scope.md)。本项只处理评测时序，不重新训练或改写历史记录。
 
 ## 下一步
 
