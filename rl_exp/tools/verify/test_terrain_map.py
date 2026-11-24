@@ -20,9 +20,8 @@ import pathlib
 import sys
 
 _REPO = pathlib.Path(__file__).resolve().parents[3]
-# imported as a module, not as `rl_exp.tasks.terrain_map`: the package __init__ registers the
-# gym tasks and would make this stdlib-only gate pay a framework import to test arithmetic
-sys.path.insert(0, str(_REPO / "rl_exp" / "tasks"))
+# imported directly so this stdlib-only gate avoids pulling in framework imports
+sys.path.insert(0, str(_REPO / "ablation_harness"))
 
 import terrain_map  # noqa: E402
 

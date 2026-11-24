@@ -121,6 +121,7 @@ def test_asset_fingerprints_follow_meshes(tmp_path, monkeypatch):
         asset_fingerprints(str(usd), urdf)
 
 
+@pytest.mark.sim
 @pytest.mark.skipif(find_spec("isaacsim") is None, reason="This smoke test needs Isaac Sim")
 def test_one_ppo_update_and_reload(tmp_path):
     run = tmp_path / "run"
