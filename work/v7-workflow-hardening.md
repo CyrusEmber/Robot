@@ -3,7 +3,7 @@ id: v7-workflow-hardening
 title: v7 实验闭环止血、机体解耦与仓内清旧
 scope: rl_exp, ablation_harness, work, acceptance, .codemaker, AGENTS.md, README.md, pytest.ini
 status: in_progress
-next: 在最终源码提交上完成完整评测和 sim 接线验收，并回填正式验收记录。退网后的入口清理已完成并归档，见 `acceptance/records/2026-11-24-legacy-entrypoint-cleanup.md`。
+next: 在最终源码提交上完成完整评测和 sim 接线验收，并回填正式验收记录。退网后的入口清理已完成并归档，见 `acceptance/records/2026-11-24-legacy-entrypoint-cleanup.md`。后续依赖方向与目录整理见 `work/robot-experiment-architecture-refactor.md`，不并入本项。
 close_when: 三批全部提交且验收全绿；改奖励只动 exp.py，改机体只动 robots/<body.py>；三目录零收集错误，默认 pytest 快速离线全绿，按需专项与 sim 冒烟全绿；最终提交上的实跑评测写入验收记录。
 ---
 
