@@ -91,6 +91,7 @@ close_when: 三批全部提交且验收全绿；改奖励只动 exp.py，改机�
   1. 对照已有 robust 基线的指标、射线有效帧与九段录像，确认无行为回归；
   2. 更新 `acceptance/records/2026-11-23-v7-standalone-cutover.md` 指向最终验证的提交与输出目录。
 - **执行结果**：源码 `5b9bf541d27f`，产物 `evaluation/2026-11-23_18-57-14_edd6c7dc/`，退出码 0。六项全局指标与 `segments`/`terrains`/`recovery`/`terrain_evidence` 与 `89178065fdec` 那次逐位相等；`conditions.interface_signature` 与 sidecar 完全相等（含关节序）。`config_check` 记 `unavailable`（该 Run 无 `resolved_cfg.yaml`）。录像仅核文件齐全，未逐帧复核。
+- **HEAD 复跑**（2026-11-25）：源码 `a7bab8990fc0`，同权重、协议与 seed，产物 `evaluation/2026-11-25_12-28-43_1ecba8f6/`，退出码 0，九段录像齐全（未逐帧复核）。与 `2026-11-23_18-57-14_edd6c7dc` 的 `eval.json` 结构化对比仅 4 处差异：两处 `git_rev_lizard`、`timestamp`、`terrain_evidence.definition.module`（`rl_exp.tasks.terrain_geometry` → `ablation_harness.terrain_geometry`）；六项全局指标及其余字段逐位相等。此为 `robot-experiment-architecture-refactor` 的重构前基线。
 - **顺带清理**：`ablation_harness/record.py` 已裁剪掉无生产者的 `record.json` 状态机，保留 `UNKNOWN`/`canonical`/`digest`/`file_sha256`/`checkpoint_digest` 给现役 `eval.py`、`baseline_metrics.py` 和诊断探针；`test_eval_record.py` 同步精简为 4 条现役测试。
 
 ### Batch 3 验收

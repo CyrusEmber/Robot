@@ -3,7 +3,7 @@ id: robot-experiment-architecture-refactor
 title: 运行与评测依赖方向整理
 scope: rl_exp/locomotion, rl_exp/tools/runrecord, ablation_harness, train.cmd, README.md, .codemaker/skills/tool/isaaclab-task-creator
 status: open
-next: 在 HEAD 上重跑 `model_5999.pt` 的 `locomotion_eval_v3` robust 评测（seed 123）并回填 `v7-workflow-hardening` 后，做步骤 1：先写依赖方向 AST 测试并确认当前代码上失败。
+next: 重构前基线已回填（HEAD `a7bab8990fc0`，`evaluation/2026-11-25_12-28-43_1ecba8f6/`）。做步骤 1：先写依赖方向 AST 测试并确认当前代码上失败。
 close_when: `rl_exp/locomotion` 不导入评测与 `tools`；v7 `make_env_cfg()` / `make_runner_cfg()` 导出配置与重构前逐字段等价；`model_5999.pt` 在 `locomotion_eval_v3`、seed 123 下的 robust 评测与回填后的基线逐位一致；默认 pytest 全绿；`-m sim` 冒烟全绿。
 evidence: work/v7-workflow-hardening.md, acceptance/records/2026-11-23-v7-standalone-cutover.md
 ---
@@ -35,7 +35,7 @@ evidence: work/v7-workflow-hardening.md, acceptance/records/2026-11-23-v7-standa
 ## 验证
 
 - 每步只跑离线闸门：依赖方向 AST 测试、`make_env_cfg()` / `make_runner_cfg()` 导出配置重构前后逐字段比对（`test_v7_experiment.py` 已有相关断言）、默认 pytest。
-- 全部完成后跑一次逐位评测：`model_5999.pt` + `locomotion_eval_v3` + seed 123 robust，与回填后的基线逐位对比。基线 `5b9bf541d27f` 之后 `eval.py`、`record.py`、`suites.py`、`terrain_*`、机体模块已变，所以动手前要先在 HEAD 重跑一次并回填。
+- 全部完成后跑一次逐位评测：`model_5999.pt` + `locomotion_eval_v3` + seed 123 robust，与回填后的基线逐位对比。基线已在 HEAD `a7bab8990fc0` 重跑并回填（见 `v7-workflow-hardening` Batch 3.3）；对比时 `git_rev_lizard`、`timestamp` 预期不同，其余字段须相等。`eval.json` 的 `terrain_evidence.definition.module` 写着包路径，任何包改名都会改它，这是不改名的又一依据。
 - 旧 Run 回读：`provenance.json` 的 `repo_path` 与 `experiment_files` 回读路径不因本项变化失效，改动前后各验一次。
 
 ## 风险
