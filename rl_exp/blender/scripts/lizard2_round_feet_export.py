@@ -25,6 +25,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from rl_exp.tools.diagnose.lizard2_round_feet import SOURCE, FEET, build_tree, locate, validate_tree
 from rl_exp.tools.runrecord.binding import sha256_file
+from rl_exp.tools.verify.check_self_collision import fk, load_urdf, read_obj
 from lizard2_round_feet_candidate import vertices
 
 SKELETON = ROOT / 'rl_exp/out/lizard2_round_feet/skeleton02/lizard2_round_feet.blend'
@@ -43,62 +44,6 @@ BALL_MESHES = {
     "Roundcube.015", "Roundcube.008", "Roundcube.011", "Roundcube.003",
 }
 depsgraph = None
-
-
-def load_urdf(path):
-    """Links (with their collision mesh) and joints (origin/axis) as plain dicts."""
-    root = ET.parse(path).getroot()
-    links = {}
-    for link in root.findall('link'):
-        mesh = link.find('collision/geometry/mesh')
-        links[link.get('name')] = {
-            'collision': (path.parent / mesh.get('filename')).resolve() if mesh is not None else None}
-    joints = {}
-    for joint in root.findall('joint'):
-        axis = joint.find('axis')
-        joints[joint.get('name')] = {
-            'parent': joint.find('parent').get('link'),
-            'child': joint.find('child').get('link'),
-            'origin': np.array([float(v) for v in joint.find('origin').get('xyz').split()]),
-            'axis': np.array([float(v) for v in axis.get('xyz').split()]) if axis is not None else None,
-        }
-    return {'links': links, 'joints': joints}
-
-
-def read_obj(path):
-    """The vertices of an OBJ, in file order [m]."""
-    return np.array([list(map(float, ln.split()[1:4])) for ln in path.read_text().splitlines()
-                     if ln.startswith('v ')])
-
-
-def chain_up(joints, link):
-    """Joint names from the root down to ``link``, in tree order."""
-    parent_of = {spec['child']: (name, spec) for name, spec in joints.items()}
-    chain, current = [], link
-    while current in parent_of:
-        name, spec = parent_of[current]
-        chain.append(name)
-        current = spec['parent']
-    return list(reversed(chain))
-
-
-def fk(joints, link, q):
-    """4x4 pose of ``link`` with the named joints at ``q`` (unlisted joints at zero)."""
-    transform = np.eye(4)
-    for name in chain_up(joints, link):
-        spec = joints[name]
-        move = np.eye(4)
-        move[:3, 3] = spec['origin']
-        angle = float(q.get(name, 0.0))
-        axis = spec['axis']
-        if axis is not None and angle:
-            axis = axis / np.linalg.norm(axis)
-            cross = np.array([[0, -axis[2], axis[1]], [axis[2], 0, -axis[0]], [-axis[1], axis[0], 0]])
-            spin = np.eye(4)
-            spin[:3, :3] = np.eye(3) + np.sin(angle) * cross + (1 - np.cos(angle)) * (cross @ cross)
-            move = move @ spin
-        transform = transform @ move
-    return transform
 
 
 def build_bmesh(mesh_objects, offset, evaluated):
@@ -230,6 +175,7 @@ def main():
             'unexpected original formal blend')
     for path in (__file__, Path(__file__).with_name('lizard2_round_feet_candidate.py'),
                  ROOT / 'rl_exp/tools/diagnose/lizard2_round_feet.py',
+                 ROOT / 'rl_exp/tools/verify/check_self_collision.py',
                  ROOT / 'rl_exp/tools/runrecord/binding.py'):
         bind(path)
     require(bindings[str(Path(__file__).with_name('lizard2_round_feet_candidate.py').resolve())]

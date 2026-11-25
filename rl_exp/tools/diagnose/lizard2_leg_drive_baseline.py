@@ -14,6 +14,7 @@ import numpy as np
 
 from rl_exp.robots import lizard2_round_feet as robot
 from rl_exp.tools.runrecord.binding import sha256_file as sha
+from rl_exp.tools.verify.check_self_collision import chain_up, fk, load_urdf
 
 ROOT = Path(__file__).resolve().parents[3]
 RL = ROOT / 'rl_exp'
@@ -21,56 +22,6 @@ USD_KEY = 'lizard2_round_feet/lizard2_round_feet.usda'
 URDF_KEY = 'lizard2_round_feet/lizard2_round_feet.urdf'
 FEET = ('lf_wrist', 'rf_wrist', 'rl_ankle', 'rr_ankle')
 SWING = ('lf_shoulder_swing_joint', 'rf_shoulder_swing_joint', 'rl_hip_swing_joint', 'rr_hip_swing_joint')
-
-
-def load_urdf(path):
-    """Links (with their collision mesh) and joints (origin/axis) as plain dicts."""
-    root = ET.parse(path).getroot()
-    links = {}
-    for link in root.findall('link'):
-        mesh = link.find('collision/geometry/mesh')
-        links[link.get('name')] = {
-            'collision': (path.parent / mesh.get('filename')).resolve() if mesh is not None else None}
-    joints = {}
-    for joint in root.findall('joint'):
-        axis = joint.find('axis')
-        joints[joint.get('name')] = {
-            'parent': joint.find('parent').get('link'),
-            'child': joint.find('child').get('link'),
-            'origin': np.array([float(v) for v in joint.find('origin').get('xyz').split()]),
-            'axis': np.array([float(v) for v in axis.get('xyz').split()]) if axis is not None else None,
-        }
-    return {'links': links, 'joints': joints}
-
-
-def chain_up(joints, link):
-    """Joint names from the root down to ``link``, in tree order."""
-    parent_of = {spec['child']: (name, spec) for name, spec in joints.items()}
-    chain, current = [], link
-    while current in parent_of:
-        name, spec = parent_of[current]
-        chain.append(name)
-        current = spec['parent']
-    return list(reversed(chain))
-
-
-def fk(joints, link, q):
-    """4x4 pose of ``link`` with the named joints at ``q`` (unlisted joints at zero)."""
-    transform = np.eye(4)
-    for name in chain_up(joints, link):
-        spec = joints[name]
-        move = np.eye(4)
-        move[:3, 3] = spec['origin']
-        angle = float(q.get(name, 0.0))
-        axis = spec['axis']
-        if axis is not None and angle:
-            axis = axis / np.linalg.norm(axis)
-            cross = np.array([[0, -axis[2], axis[1]], [axis[2], 0, -axis[0]], [-axis[1], axis[0], 0]])
-            spin = np.eye(4)
-            spin[:3, :3] = np.eye(3) + np.sin(angle) * cross + (1 - np.cos(angle)) * (cross @ cross)
-            move = move @ spin
-        transform = transform @ move
-    return transform
 
 
 def _rotation(quat):
