@@ -12,15 +12,15 @@ import xml.etree.ElementTree as ET
 
 import numpy as np
 
-from rl_exp.robots import lizard2_round_feet as robot
+from rl_exp.robots.lizard2.round_feet import robot
 from rl_exp.tools.runrecord.binding import sha256_file as sha
 from rl_exp.tools.verify import check_self_collision
 from rl_exp.tools.verify.check_self_collision import chain_up, fk, load_urdf
 
 ROOT = Path(__file__).resolve().parents[3]
-RL = ROOT / 'rl_exp'
-USD_KEY = 'lizard2_round_feet/lizard2_round_feet.usda'
-URDF_KEY = 'lizard2_round_feet/lizard2_round_feet.urdf'
+RL = ROOT / 'rl_exp/robots/lizard2/round_feet/assets'
+USD_KEY = 'lizard2_round_feet.usda'
+URDF_KEY = 'lizard2_round_feet.urdf'
 FEET = ('lf_wrist', 'rf_wrist', 'rl_ankle', 'rr_ankle')
 SWING = ('lf_shoulder_swing_joint', 'rf_shoulder_swing_joint', 'rl_hip_swing_joint', 'rr_hip_swing_joint')
 

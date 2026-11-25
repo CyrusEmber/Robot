@@ -27,7 +27,7 @@ from isaaclab_rl.rsl_rl import RslRlMLPModelCfg, RslRlOnPolicyRunnerCfg, RslRlPp
 
 from rl_exp.locomotion.rewards import belly_contact_force, track_lin_vel_xy_miki
 from rl_exp.locomotion.terminations import HeadGroundContactDwell
-from rl_exp.robots import lizard2_round_feet
+from rl_exp.robots.lizard2.round_feet import robot as lizard2_round_feet
 
 ROBOT = lizard2_round_feet
 

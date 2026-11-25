@@ -237,7 +237,7 @@ def audit(stage, tree):
 
 def formal_report(directory, output, parser):
     """Audit the formal asset directory read-only; nothing is written beside it."""
-    from rl_exp.robots import lizard2_round_feet as formal
+    from rl_exp.robots.lizard2.round_feet import robot as formal
     usd = directory / 'lizard2_round_feet.usda'
     urdf = directory / 'lizard2_round_feet.urdf'
     if not (usd.is_file() and urdf.is_file()):
@@ -251,7 +251,7 @@ def formal_report(directory, output, parser):
               'inertia_convention': 'R diag(I) R.T; pxr active quaternion, imaginary xyz / real w; no repairs',
               'bindings': {}, 'binding_failures': []}
     before = {p: sha256(p) for p in sorted(directory.rglob('*')) if p.is_file()}
-    for path in (usd, urdf, Path(__file__), ROOT / 'rl_exp/robots/lizard2_round_feet.py'):
+    for path in (usd, urdf, Path(__file__), ROOT / 'rl_exp/robots/lizard2/round_feet/robot.py'):
         digest = sha256(path)
         expected = measured.get(str(path))
         report['bindings'][str(path)] = {'sha256': digest, 'expected': expected,
@@ -292,7 +292,7 @@ def main():
     if args.export_dir is None:
         parser.error('--export_dir or --formal_dir is required')
     directory = args.export_dir.resolve()
-    formal = ROOT / 'rl_exp/lizard2_round_feet'
+    formal = ROOT / 'rl_exp/robots/lizard2/round_feet/assets'
     if directory == formal.resolve() or directory.is_relative_to(formal.resolve()):
         parser.error('--export_dir must be an isolated conversion candidate, not the formal asset directory')
     usd = (args.usd or directory / 'lizard2_round_feet/lizard2_round_feet.usda').resolve()

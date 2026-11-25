@@ -2,7 +2,7 @@
 
 Windows 上先按 [本机路径示例](paths.example.yaml) 填写 `paths.yaml`。其中 `python` 指向已安装 Isaac Lab、Isaac Sim 和 RSL-RL 的解释器。也可以用 `RL_PYTHON` 指定同一个解释器。
 
-1. **定义机体**。在 [圆足机体](rl_exp/robots/lizard2_round_feet.py) 定义资产、身体部位、动作关节顺序、默认缩放/限幅和 PD。
+1. **定义机体**。在 [圆足机体](rl_exp/robots/lizard2/round_feet/robot.py) 定义资产、身体部位、动作关节顺序、默认缩放/限幅和 PD。
 2. **定义实验**。在 [v7 实验](rl_exp/lizard2_v7.py) 绑定 `ROBOT = lizard2_round_feet`，配置观测、动作、奖励、终止、随机化和 PPO。试新想法直接复制实验文件改参数即可；改机体只改机体模块。
 3. **训练**。运行 `.\train.cmd --exp rl_exp/lizard2_v7.py --viz none`。只训练，不串接评测，训完按下一步手动评测。训练接受工作区改动，每个 Run 在 `rl_exp/out/train/`（首次训练自动创建）下独立保存生效配置、Git 差异、接口签名、权重和 TensorBoard。
 4. **评测和看片**。运行 `.\eval.cmd --ckpt <Run/model_5999.pt> --protocol locomotion_eval_v3`。打开输出目录中的 `metrics/eval.json` 和 `video/plane_overview.mp4`。历史 v7 权重旁需要保留 `model_5999.pt.interface.json`，命令再加 `--exp rl_exp/lizard2_v7.py`。手动评测可选 `--mode nominal`。
@@ -32,7 +32,7 @@ Windows 上先按 [本机路径示例](paths.example.yaml) 填写 `paths.yaml`�
 
 ## 资产与接口检查
 
-- [隔离候选转换](rl_exp/tools/diagnose/lizard2_two_axis_convert.py)用 `--candidate` 指定 `rl_exp/out/<事项>` 或 `%TEMP%` 下的 URDF，将 USD 写到同目录。[圆足 USD 检查](rl_exp/tools/diagnose/lizard2_round_feet_usd.py)核对碰撞、惯量和依赖：`--formal_dir rl_exp/lizard2_round_feet --output <仓外 JSON>` 只读核验正式资产；`--export_dir <候选目录> --repair <新 .usda>` 在隔离副本上修五处主轴惯量。
+- [隔离候选转换](rl_exp/tools/diagnose/lizard2_two_axis_convert.py)用 `--candidate` 指定 `rl_exp/out/<事项>` 或 `%TEMP%` 下的 URDF，将 USD 写到同目录。[圆足 USD 检查](rl_exp/tools/diagnose/lizard2_round_feet_usd.py)核对碰撞、惯量和依赖：`--formal_dir rl_exp/robots/lizard2/round_feet/assets --output <仓外 JSON>` 只读核验正式资产；`--export_dir <候选目录> --repair <新 .usda>` 在隔离副本上修五处主轴惯量。
 - 从仓根用 `paths.yaml` 指定的 Python 执行 `python -m pytest -q rl_exp/tools/verify/test_lizard2_round_feet.py rl_exp/locomotion/tests/test_v7_experiment.py`，检查圆足结构和现役实验配置。
 - [圆足接口探针](rl_exp/tools/diagnose/lizard2_round_feet_probe.py)接受 `--task Lizard2-Flat-v7 --viz none --out <新目录>`，在已存在的父目录下保存关节、观测、首步和 reset 报告。`Lizard2-Flat-Play-v7` 选择 Play 配置。训评接线使用 `python -m pytest -m sim`。[腿部回放探针](rl_exp/tools/diagnose/lizard2_shank_use_probe.py)提供专项回放。
 

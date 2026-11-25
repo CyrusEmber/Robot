@@ -11,7 +11,7 @@ import isaaclab.sim as sim_utils
 from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets import ArticulationCfg
 
-_ASSET_DIR = Path(__file__).resolve().parents[1] / "lizard2_round_feet"
+_ASSET_DIR = Path(__file__).resolve().parent / "assets"
 USD_PATH = _ASSET_DIR / "lizard2_round_feet.usda"
 URDF_PATH = _ASSET_DIR / "lizard2_round_feet.urdf"
 

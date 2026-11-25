@@ -28,7 +28,7 @@ class RoundFeetTest(unittest.TestCase):
         root = Path(__file__).resolve().parents[3]
         with TemporaryDirectory() as temp:
             formal = Path(temp) / 'formal'
-            shutil.copytree(root / 'rl_exp/lizard2_round_feet', formal)
+            shutil.copytree(root / 'rl_exp/robots/lizard2/round_feet/assets', formal)
             urdf = formal / 'lizard2_round_feet.urdf'
             with urdf.open('ab') as stream:
                 stream.write(b'\n')
