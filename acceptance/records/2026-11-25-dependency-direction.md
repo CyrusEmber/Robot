@@ -38,7 +38,7 @@
 | 重构前基线 | `a7bab8990fc0` | `2026-11-25_12-28-43_1ecba8f6/` |
 | 重构后 | `85deecd7bac5` | `2026-11-25_12-48-23_4b780c57/` |
 
-- 两次 `eval.json` 结构化对比仅 `git_rev_lizard`（两处）与 `timestamp` 不同，六项全局指标及其余字段逐位相等。基线与 11-23 的 `5b9bf541d27f` 那次相比，另有 `terrain_evidence.definition.module`（`rl_exp.tasks.terrain_geometry` → `ablation_harness.terrain_geometry`）不同，已记入 `work/v7-workflow-hardening.md`。
+- 两次 `eval.json` 结构化对比仅 `git_rev_lizard`（两处）与 `timestamp` 不同，六项全局指标及其余字段逐位相等。基线与 11-23 的 `5b9bf541d27f` 那次相比，另有 `terrain_evidence.definition.module`（`rl_exp.tasks.terrain_geometry` → `ablation_harness.terrain_geometry`）不同，已记入 [v7 显式入口切换](2026-11-23-v7-standalone-cutover.md)。
 - 九段录像只核文件齐全，未逐帧复核。
 - 默认 `pytest` 通过；`pytest -m sim` 1 通过（真实一步 PPO、重载、评测 rollout，约 137 s）；`test_eval_frame_v2.py` 加 `test_terrain_geometry.py` 17 项通过；verify 专项 43 项通过。
 

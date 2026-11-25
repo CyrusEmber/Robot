@@ -21,3 +21,13 @@ PLAY 以 0.5 m/s、seed 123 对比，首帧 90 维观测和首步 26 维动作�
 相对旧产物只有两处差异，均不影响指标：删除 `report_only` 三个恒为 `null` 的死字段（`body_tail_coordination`、`foot_support_and_swing`、`non_foot_support`），以及 `conditions.runtime` 不再写 `device_declared` / `num_envs_declared`。这两个声明字段随 `record.json` 一起退网——评测只写 `eval.json`，`ablation_harness/record.py` 的状态机已无生产者，仅 `checkpoint_digest` 仍被三个诊断探针使用。
 
 录像只核到九段与一格 grid 文件齐全，逐帧姿态与瞬时接触未复核。
+
+## 最终提交复核（2026-11-25）
+
+最终源码提交 `85deecd7bac5`：同一权重、`locomotion_eval_v3`、seed 123、`robust`、`--exp rl_exp/lizard2_v7.py`，退出码 0，产物在该 Run 下 `evaluation/2026-11-25_12-48-23_4b780c57/`（`metrics/eval.json`、九段录像 `video/matrix.json`）。`85deecd` 之后到 HEAD `57cc939` 仅改 `work/`、`acceptance/` 和 `ablation_harness/protocol_anchors.json` 的 `reason` 文字，v3 协议字节与代码均未动。
+
+与 11-23 的 `5b9bf541d27f` 那次（`2026-11-23_18-57-14_edd6c7dc/`）比较，`eval.json` 仅 4 处不同：两处 `git_rev_lizard`、`timestamp`、`terrain_evidence.definition.module`（`rl_exp.tasks.terrain_geometry` → `ablation_harness.terrain_geometry`，模块路径随退网搬迁）；六项全局指标及 `segments`、`terrains`、`recovery` 与其余字段逐位相等。中间的重构前基线 `a7bab8990fc0`（`2026-11-25_12-28-43_1ecba8f6/`）与 `85deecd` 仅 `git_rev_lizard`、`timestamp` 不同，见 [依赖方向整理](2026-11-25-dependency-direction.md)。
+
+接线与离线检查：`pytest -m sim` 1 通过（真实一步 PPO、重载、评测 rollout）；默认 `pytest` 10 通过；`rl_exp/locomotion/tests`、`rl_exp/tools/verify`、`rl_exp/tools/diagnose` 三目录 `--collect-only` 收集 58 项零错误；`verify` 专项 43 项通过。`.codemaker/`、`README.md`、`AGENTS.md` 对已退网配方入口（`recipes.json`、`lizard2_recipe`、`recipe_tasks`、`versions/<family>`）零引用，剩余命中仅在历史验收记录、已归档证据和本工单的退网说明中。
+
+录像仍只核九段与一格 grid 文件齐全，未逐帧复核。
