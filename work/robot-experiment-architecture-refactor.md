@@ -3,7 +3,7 @@ id: robot-experiment-architecture-refactor
 title: 运行与评测依赖方向整理
 scope: rl_exp/locomotion, rl_exp/tools/runrecord, ablation_harness, train.cmd, README.md, .codemaker/skills/tool/isaaclab-task-creator
 status: open
-next: 步骤 1、2、5 已做并验收，步骤 3 取消，步骤 4 仅剩人工裁定：`protocol_anchors.json` 的“v4 现行”口径与旧协议 v1/v2/v4 去留。裁定并处理后删除本项，结论转验收记录。
+next: 步骤 1、2、4、5 已做并验收，步骤 3 取消；只剩把本项结论转成验收记录并删除工单。
 close_when: `rl_exp/locomotion` 不导入评测，也不导入 `tools`（共享原语 `binding` 除外）；v7 `make_env_cfg()` / `make_runner_cfg()` 导出配置与重构前逐字段等价；`model_5999.pt` 在 `locomotion_eval_v3`、seed 123 下的 robust 评测与基线逐位一致；默认 pytest 全绿；`-m sim` 冒烟全绿；协议锚口径与旧协议已裁定。
 evidence: work/v7-workflow-hardening.md, acceptance/records/2026-11-23-v7-standalone-cutover.md
 ---
@@ -25,7 +25,7 @@ evidence: work/v7-workflow-hardening.md, acceptance/records/2026-11-23-v7-standa
 3. 【取消】不移动 `rl_exp/tools/runrecord/binding.py`。它是纯 stdlib、不导入核心与评测，不构成环；`v7-workflow-hardening` 已裁定它原地作为唯一家（50+ 诊断、blender、verify 脚本复用）；`lizard2_round_feet_export.py:181` 把它的路径纳入导出绑定的源件哈希，移动会改变已记录的绑定身份。收益只是目录观感，代价是约 25 处导入加绑定漂移。AST 测试对它开唯一豁免。
 4. 退网残留：
    - 【已做】删除 `ablation_harness/judge_semantics.json`：全仓代码零读者，其注记指向的 `check_judge_semantics.py` 与 `test_baseline_contract.py` 均已不存在，且含 6 处指向已不存在模块 `baseline_metrics` 的 `module` 值。恢复来源：删除前提交。
-   - 【待人工裁定】`protocol_anchors.json` 的“v4 现行”口径与协议 v1/v2/v4：`test_eval_frame_v2.py:184`、`:299-301` 读 v4，`test_terrain_geometry.py:191` 读 v2，锚表自述“改表是人工批准动作”，协议头声明冻结。改口径或删协议属批准动作，且要同步改上述测试，不在本项自动执行。
+   - 【已裁定】`protocol_anchors.json` 口径与协议去留：现行是 **v3**，证据为 `eval.py:52`、`evaluate.py:96` 默认值、README 的评测命令、`metrics.py:110` 的现役声明，以及 `results/` 仅存 v3 记录。v4 冻结未采用：无任何 Run 或结果命名它，但它携带 v3 没有的 `suite_expected`，`test_eval_frame_v2.py:176-205` 以真实文件而非夹具钉该指纹，删除会同时删掉这条闸门的被测对象。v1/v2 供旧记录复读，v2 还承担 `test_terrain_geometry.py:184` 的 v3-vs-v2 差分证明。**四份全部保留**，只改正锚表 `reason` 把 v4 说成现行的错误（v3 标为现行，v4 标为冻结未采用，v2/v1 分别标明被 v3/v2 取代的原因）。协议字节零改动，无需触发锚表批准。`test_eval_frame_v2.py`、`test_terrain_geometry.py` 未改，17 项通过。
 5. 【已做】HEAD `85deecd` 逐位评测：产物 `evaluation/2026-11-25_12-48-23_4b780c57/`，退出码 0，与基线 `2026-11-25_12-28-43_1ecba8f6` 的 `eval.json` 仅 `git_rev_lizard`（两处）与 `timestamp` 不同，其余字段逐位相等；九段录像仅核文件齐全。`pytest -m sim` 1 通过（真实一步 PPO、重载、评测 rollout）；默认 pytest 与 verify 专项 43 项通过。
 
 
