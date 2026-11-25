@@ -21,8 +21,7 @@ import sys
 
 import yaml
 
-_REPO = pathlib.Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(_REPO))
+_REPO = pathlib.Path(__file__).resolve().parents[1]
 
 import isaaclab.terrains as terrain_gen  # noqa: E402
 from isaaclab.terrains import TerrainGeneratorCfg  # noqa: E402

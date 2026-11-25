@@ -12,14 +12,12 @@ target definitions, limits, initial state, tolerances, and subsequent prechecks.
 """
 
 from pathlib import Path
-import sys
 import xml.etree.ElementTree as ET
 
 import numpy as np
 from scipy.optimize import least_squares
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "verify"))
-import check_self_collision as geometry  # noqa: E402
+from rl_exp.tools.verify import check_self_collision as geometry
 
 
 def load_model(path):

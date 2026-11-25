@@ -12,9 +12,11 @@ from tempfile import TemporaryDirectory
 
 import numpy as np
 
-import lizard2_leg_drive_baseline as base
-import lizard2_leg_drive_protocol as p
-from lizard2_round_feet_probe import check_interface
+from rl_exp.tools.diagnose import lizard2_leg_drive_baseline as base
+from rl_exp.tools.diagnose import lizard2_leg_drive_protocol as p
+from rl_exp.tools.diagnose.lizard2_round_feet_probe import check_interface
+
+PROBE = Path(__file__).resolve().parents[1] / 'rl_exp/tools/diagnose/lizard2_shank_use_probe.py'
 
 
 def rejects(fn, label):
@@ -27,7 +29,7 @@ def rejects(fn, label):
 
 
 def probe_adapter():
-    path = Path(__file__).with_name('lizard2_shank_use_probe.py')
+    path = PROBE
     nodes = [node for node in ast.parse(path.read_text(encoding='utf-8')).body
              if isinstance(node, ast.FunctionDef) and node.name == 'leg_drive_candidate']
     assert len(nodes) == 1, 'native probe must expose candidate adapter'
@@ -37,7 +39,7 @@ def probe_adapter():
 
 
 def native_step_adapter():
-    path = Path(__file__).with_name('lizard2_shank_use_probe.py')
+    path = PROBE
     node = next(n for n in ast.parse(path.read_text(encoding='utf-8')).body
                 if isinstance(n, ast.FunctionDef) and n.name == 'leg_drive_step')
     namespace = {}
@@ -46,7 +48,7 @@ def native_step_adapter():
 
 
 def run():
-    path = Path(__file__).with_name('lizard2_shank_use_probe.py')
+    path = PROBE
     tree = ast.parse(path.read_text(encoding='utf-8'))
     with TemporaryDirectory() as temporary:
         parent = Path(temporary)

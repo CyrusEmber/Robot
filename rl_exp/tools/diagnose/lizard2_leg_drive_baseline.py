@@ -429,7 +429,7 @@ def two_foot_trim(label: str) -> dict:
         and the stance keeps its height, plus the residuals. Kinematic only: no contact compliance,
         and a centre of mass on the line leaves no restoring margin.
     """
-    import lizard2_round_support_geometry as support
+    from rl_exp.tools.diagnose import lizard2_round_support_geometry as support
 
     _, names, _, model, bodies = inputs()
     geometry = support.run(RL / URDF_KEY)
@@ -555,7 +555,7 @@ def swing_review(plan_path: Path, propulsion_path: Path | None = None) -> dict:
         Per swing axis: recorded gains, limits and inertia, local terms for both gain sets,
         and measured suspended RMS, amplitude ratio and phase for both gains.
     """
-    import lizard2_leg_drive_protocol as protocol
+    from rl_exp.tools.diagnose import lizard2_leg_drive_protocol as protocol
 
     plan = json.loads(plan_path.read_text(encoding='utf-8'))
     pre, mapping = plan['preflight'], plan['mapping']
@@ -662,7 +662,7 @@ def support_report(foot_forces: dict[str, list[float]] | None = None) -> dict:
         Per-axis fixed-root inertia [kg·m²], Jacobians [m], external and holding
         torques [N·m], and overall force [N] and moment [N·m] balance.
     """
-    import lizard2_round_support_geometry as support
+    from rl_exp.tools.diagnose import lizard2_round_support_geometry as support
 
     cfg, names, _, model, bodies = inputs()
     weight = sum(body['mass'] for body in bodies.values()) * 9.81
@@ -751,7 +751,7 @@ if __name__ == '__main__':
     if args.two_foot_trim:
         result = two_foot_trim(args.two_foot_trim)
         paths = (RL / URDF_KEY, Path(__file__), Path(check_self_collision.__file__),
-                 Path(__import__('lizard2_round_support_geometry').__file__))
+                 Path(__import__('rl_exp.tools.diagnose.lizard2_round_support_geometry', fromlist=['x']).__file__))
         result['input_sha256'] = {str(p): sha(p) for p in paths}
     elif args.swing_review:
         result = swing_review(args.swing_review, args.propulsion_report)

@@ -143,8 +143,7 @@ def preview(urdf: Path, target: Path, radius: float) -> dict:
     from matplotlib.patches import Circle
     import numpy as np
     from scipy.spatial import ConvexHull
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from pose_target_solver import geometry, load_model
+    from rl_exp.tools.diagnose.pose_target_solver import geometry, load_model
 
     model = load_model(urdf)
     q = {n: 0. for n, j in model['joints'].items() if j['axis'] is not None}

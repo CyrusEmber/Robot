@@ -12,7 +12,7 @@ import xml.etree.ElementTree as ET
 
 import numpy as np
 
-import lizard2_leg_drive_baseline as baseline
+from rl_exp.tools.diagnose import lizard2_leg_drive_baseline as baseline
 from rl_exp.tools.verify import check_self_collision
 
 

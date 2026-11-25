@@ -7,11 +7,9 @@ import subprocess
 import sys
 import tempfile
 
-_REPO = pathlib.Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(_REPO))
-sys.path.insert(0, str(_REPO / "ablation_harness"))
+_REPO = pathlib.Path(__file__).resolve().parents[1]
 
-import record  # noqa: E402
+from ablation_harness import record  # noqa: E402
 
 
 def test_digest_canonical_deterministic() -> None:
@@ -51,8 +49,8 @@ def test_record_module_cannot_consume_the_random_stream() -> None:
         assert not hasattr(record, name), f"the record module exposes {name}"
     probe = subprocess.run(
         [sys.executable, "-c",
-         f"import sys; sys.path[:0] = [{str(_REPO)!r}, {str(_REPO / 'ablation_harness')!r}]; "
-         "import record; assert 'torch' not in sys.modules and 'numpy' not in sys.modules"],
+         f"import sys; sys.path[:0] = [{str(_REPO)!r}]; "
+         "from ablation_harness import record; assert 'torch' not in sys.modules and 'numpy' not in sys.modules"],
         capture_output=True, text=True, errors="replace",
     )
     assert probe.returncode == 0, f"importing the record module pulled in torch/numpy: {probe.stderr}"

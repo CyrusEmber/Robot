@@ -13,21 +13,18 @@ This gate encodes both readings on the pure metric layer (``metrics.fall_flags``
 ``terminal frames captured=`` line every eval run prints: it must equal the
 number of early-ended episodes, else the private hook went stale.
 
-Usage: python rl_exp\\tools\\verify\\test_eval_frame_v2.py
+Usage: python tests\\test_eval_frame_v2.py
 """
 import json
 import pathlib
-import sys
 import tempfile
 
 import torch
 import yaml
 
-_REPO = pathlib.Path(__file__).absolute().parents[3]
-sys.path.insert(0, str(_REPO / "ablation_harness"))
-sys.path.insert(0, str(_REPO))
-from metrics import fall_flags  # noqa: E402
-import suite_lock  # noqa: E402
+_REPO = pathlib.Path(__file__).absolute().parents[1]
+from ablation_harness import suite_lock  # noqa: E402
+from ablation_harness.metrics import fall_flags  # noqa: E402
 from rl_exp.tools.runrecord import binding  # noqa: E402
 
 STEPS, SUSTAIN = 120, 25

@@ -16,14 +16,10 @@ The negative direction is built in: every refusal is exercised on a record that 
 valid, so a green run cannot come from a check that never fires.
 """
 
-import pathlib
 import sys
 
-_REPO = pathlib.Path(__file__).resolve().parents[3]
-# imported directly so this stdlib-only gate avoids pulling in framework imports
-sys.path.insert(0, str(_REPO / "ablation_harness"))
-
-import terrain_map  # noqa: E402
+# stdlib-only gate: importing the harness module must not pull in framework imports
+from ablation_harness import terrain_map  # noqa: E402
 
 
 class _Sub:

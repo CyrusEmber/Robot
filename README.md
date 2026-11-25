@@ -33,7 +33,7 @@ Windows 上先按 [本机路径示例](paths.example.yaml) 填写 `paths.yaml`�
 ## 资产与接口检查
 
 - [隔离候选转换](rl_exp/tools/diagnose/lizard2_two_axis_convert.py)用 `--candidate` 指定 `rl_exp/out/<事项>` 或 `%TEMP%` 下的 URDF，将 USD 写到同目录。[圆足 USD 检查](rl_exp/tools/diagnose/lizard2_round_feet_usd.py)核对碰撞、惯量和依赖：`--formal_dir rl_exp/robots/lizard2/round_feet/assets --output <仓外 JSON>` 只读核验正式资产；`--export_dir <候选目录> --repair <新 .usda>` 在隔离副本上修五处主轴惯量。
-- 从仓根用 `paths.yaml` 指定的 Python 执行 `python -m pytest -q rl_exp/tools/verify/test_lizard2_round_feet.py rl_exp/locomotion/tests/test_v7_experiment.py`，检查圆足结构和现役实验配置。
+- 从仓根用 `paths.yaml` 指定的 Python 执行 `python -m pytest -q tests/test_lizard2_round_feet.py tests/test_v7_experiment.py`，检查圆足结构和现役实验配置。
 - [圆足接口探针](rl_exp/tools/diagnose/lizard2_round_feet_probe.py)接受 `--task Lizard2-Flat-v7 --viz none --out <新目录>`，在已存在的父目录下保存关节、观测、首步和 reset 报告。`Lizard2-Flat-Play-v7` 选择 Play 配置。训评接线使用 `python -m pytest -m sim`。[腿部回放探针](rl_exp/tools/diagnose/lizard2_shank_use_probe.py)提供专项回放。
 
 旧配方、版本、掌足预检和旧 Lizard 的 UE 导出已退网。按[退网清理记录](acceptance/records/2026-11-24-legacy-entrypoint-cleanup.md#恢复口径)核对逐文件的恢复来源和 SHA-256，来源包括 `archive/pre-refactor` tag、本机归档 `rl_exp/out/archive/pre-refactor/` 和删除前提交。圆足导出按当前仓根定位掌足 URDF 与网格、圆足骨架 `.blend` 与 `build.json`、两份上游 `.blend` 及双轴 JSON。源件迁入本机归档时沿用仓库相对路径，导出仍校验原始摘要。

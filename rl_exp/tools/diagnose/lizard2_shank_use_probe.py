@@ -776,7 +776,7 @@ def two_foot_probe(live, out, checkpoint):
     import numpy as np
     import torch
     import warp as wp
-    from lizard2_leg_drive_baseline import two_foot_trim
+    from rl_exp.tools.diagnose.lizard2_leg_drive_baseline import two_foot_trim
     from rl_exp.tools.runrecord.binding import sha256_file
 
     settings = {'settle_s': .6, 'hold_s': .3, 'trim_scales': (1., 1.4), 'trim_bounds': (.4, 2.5),

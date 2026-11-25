@@ -24,7 +24,7 @@ REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO))
 from rl_exp.tools.runrecord import binding  # noqa: E402
 
-import pose_target_solver as solver  # noqa: E402
+from rl_exp.tools.diagnose import pose_target_solver as solver  # noqa: E402
 
 FEET = ("lf_wrist", "rf_wrist", "rl_ankle", "rr_ankle")
 GROUPS = {"lf+rr": ("lf_wrist", "rr_ankle"), "rf+rl": ("rf_wrist", "rl_ankle")}

@@ -23,7 +23,7 @@ from ablation_harness.experiment_eval import check_signature, resolved_config
 from rl_exp import lizard2_v7
 from rl_exp.locomotion.train_record import asset_fingerprints, interface_signature
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_eval_uses_workspace_experiment_and_checks_run_assets(tmp_path, monkeypatch):

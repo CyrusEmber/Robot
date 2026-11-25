@@ -7,16 +7,11 @@ loop on random series and on edge cases. The cleanup commit that vectorized
 it claimed a parity pass but never committed the test -- this is that missing
 artifact.
 
-Usage: python rl_exp\\tools\\verify\\test_recovery_parity.py
+Usage: python -m pytest tests/test_recovery_parity.py
 """
-import pathlib
-import sys
-
 import torch
 
-_REPO = pathlib.Path(__file__).absolute().parents[3]
-sys.path.insert(0, str(_REPO / "ablation_harness"))
-from components.recovery import recovery_times  # noqa: E402
+from ablation_harness.components.recovery import recovery_times
 
 
 def reference(lin_error, push_step, threshold, sustain, step_dt, valid_mask):

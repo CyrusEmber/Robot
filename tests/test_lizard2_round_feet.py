@@ -16,7 +16,6 @@ from tempfile import TemporaryDirectory
 import unittest
 import xml.etree.ElementTree as ET
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from rl_exp.tools.diagnose.lizard2_round_feet import SOURCE as _SOURCE, build_tree, locate, validate_tree
 from rl_exp.tools.diagnose.lizard2_round_feet_probe import check_interface, check_columns, check_reset_rows
 
@@ -25,7 +24,7 @@ SOURCE = locate(_SOURCE)
 
 class RoundFeetTest(unittest.TestCase):
     def test_formal_usd_digest_mismatch_exits_nonzero(self):
-        root = Path(__file__).resolve().parents[3]
+        root = Path(__file__).resolve().parents[1]
         with TemporaryDirectory() as temp:
             formal = Path(temp) / 'formal'
             shutil.copytree(root / 'rl_exp/robots/lizard2/round_feet/assets', formal)
