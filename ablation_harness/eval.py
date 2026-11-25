@@ -79,15 +79,15 @@ import yaml  # noqa: E402
 
 from rl_exp.locomotion.env import load_policy, make_env, wrap_env  # noqa: E402
 
-import host_paths  # noqa: E402  (machine-local IsaacLab root, see paths.example.yaml)
-import loco_judge  # noqa: E402  (sibling module: the criterion's identity and derivation half)
-import metrics  # noqa: E402
-import record  # noqa: E402  (sibling module: the eval record format, ARCH_PLAN Step 3.2a)
-import suites  # noqa: E402
-import suite_lock  # noqa: E402  (sibling module: the suite fingerprint lock, ARCH_PLAN Step 3.3)
-from components.command_player import CommandPlayer  # noqa: E402
-from components.dr_controller import apply_eval_mode  # noqa: E402
-from components import recovery as recovery_mod  # noqa: E402
+from ablation_harness import host_paths  # noqa: E402  (machine-local IsaacLab root, see paths.example.yaml)
+from ablation_harness import loco_judge  # noqa: E402  (the criterion's identity and derivation half)
+from ablation_harness import metrics  # noqa: E402
+from ablation_harness import record  # noqa: E402  (the eval record format, ARCH_PLAN Step 3.2a)
+from ablation_harness import suites  # noqa: E402
+from ablation_harness import suite_lock  # noqa: E402  (the suite fingerprint lock, ARCH_PLAN Step 3.3)
+from ablation_harness.components.command_player import CommandPlayer  # noqa: E402
+from ablation_harness.components.dr_controller import apply_eval_mode  # noqa: E402
+from ablation_harness.components import recovery as recovery_mod  # noqa: E402
 
 _HARNESS_DIR = pathlib.Path(__file__).resolve().parent
 
@@ -121,12 +121,6 @@ def _find_isaac_root() -> pathlib.Path | None:
 _LIZARD_ROOT = _git_root(_HARNESS_DIR)
 _ISAAC_ROOT = _find_isaac_root()
 _ISAAC_GIT_ROOT = _git_root(_ISAAC_ROOT)
-# The record asks two in-repo readers (the frozen asset lock and the declared obs protocol).
-# Both are stdlib-only, but they live under rl_exp, which is reached by absolute path rather
-# than as an installed package -- so the repo root joins sys.path here, next to the
-# provenance roots it was just derived from, instead of each reader guessing its own.
-if _LIZARD_ROOT is not None and str(_LIZARD_ROOT) not in sys.path:
-    sys.path.insert(0, str(_LIZARD_ROOT))
 _SUITE_REGISTRY = {
     "lizard_suite_v1": (suites.LIZARD_SUITE_V1_NAMES, suites.lizard_suite_v1),
     "lizard_suite_v2": (suites.LIZARD_SUITE_V2_NAMES, suites.lizard_suite_v2),

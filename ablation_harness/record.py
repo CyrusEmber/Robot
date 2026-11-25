@@ -15,13 +15,8 @@ import hashlib
 import json
 import os
 import pathlib
-import sys
 
-_REPO = pathlib.Path(__file__).resolve().parents[1]
-if str(_REPO) not in sys.path:
-    sys.path.insert(0, str(_REPO))
-
-from rl_exp.tools.runrecord import binding  # noqa: E402
+from rl_exp.tools.runrecord import binding
 
 #: Sentinel written for provenance fields that could not be established.
 UNKNOWN = "unknown"

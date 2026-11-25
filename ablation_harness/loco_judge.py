@@ -19,10 +19,7 @@ from __future__ import annotations
 
 import math
 
-try:  # importable as a package (tests, record readers) or from inside the harness directory (eval.py)
-    from ablation_harness.metrics import METRIC_KERNELS, METRICS_ID
-except ImportError:  # pragma: no cover - the script-relative path
-    from metrics import METRIC_KERNELS, METRICS_ID
+from ablation_harness.metrics import METRIC_KERNELS, METRICS_ID
 
 #: The identity of the derivation these functions perform. Bump it when the arithmetic changes.
 DERIVATION_ID = "loco-derivation-1"

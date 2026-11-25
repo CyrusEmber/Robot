@@ -27,15 +27,10 @@ from __future__ import annotations
 
 import builtins
 import hashlib
-import pathlib
 import sys
 
-_REPO = pathlib.Path(__file__).resolve().parents[1]
-if str(_REPO) not in sys.path:
-    sys.path.insert(0, str(_REPO))
-
-from ablation_harness import terrain_map  # noqa: E402
-from ablation_harness.terrain_geometry import foot_relief, geometry_digest  # noqa: E402
+from ablation_harness import terrain_map
+from ablation_harness.terrain_geometry import foot_relief, geometry_digest
 
 #: cfg identity -> record. Keyed by the object the generator was built with, which is the
 #: same object the curriculum can reach at ``env.scene.terrain.cfg.terrain_generator``.
