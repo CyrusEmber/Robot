@@ -211,15 +211,13 @@ def record_cell(cell: dict, args) -> dict:
     """Shoot one clip and return its conditions. Kit must already be up."""
     import imageio
     import torch
-    from isaaclab.envs import ManagerBasedRLEnv
-    from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper
-    from rsl_rl.runners import OnPolicyRunner
 
     from ablation_harness import suites
     from ablation_harness.components.command_player import CommandPlayer
     from ablation_harness.components.dr_controller import apply_eval_mode
 
     from ablation_harness.experiment_eval import check_signature
+    from rl_exp.locomotion.env import load_policy, make_env, wrap_env
     from rl_exp.locomotion.train_record import interface_signature
 
     cfg = args.base_env_cfg.copy()
@@ -241,11 +239,11 @@ def record_cell(cell: dict, args) -> dict:
         cfg.viewer.eye = tuple(args.eye)
         cfg.viewer.lookat = tuple(args.lookat)
 
-    env = ManagerBasedRLEnv(cfg=cfg, render_mode="rgb_array")
+    env = make_env(cfg, render_mode="rgb_array")
     wrapper = None
     clip = pathlib.Path(args.out_dir) / f"{speed:g}mps_{cell['terrain']}.mp4"
     try:
-        wrapper = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
+        wrapper = wrap_env(env, agent_cfg)
         live = env.unwrapped
         check_signature(args.expected_signature, interface_signature(live))
         steps = round(args.seconds / live.step_dt)
@@ -254,11 +252,8 @@ def record_cell(cell: dict, args) -> dict:
         robot = live.scene["robot"]
         start = robot.data.root_pos_w.torch.clone()
 
-        runner = OnPolicyRunner(wrapper, agent_cfg.to_dict(), log_dir=None, device=live.device)
-        args.checkpoint_stream.seek(0)
-        runner.load(args.checkpoint_stream, map_location=live.device)
+        policy = load_policy(wrapper, agent_cfg, args.checkpoint_stream, live.device)
         checkpoint = args.checkpoint_binding
-        policy = runner.get_inference_policy(device=live.device)
 
         obs = wrapper.get_observations()
         written = 0

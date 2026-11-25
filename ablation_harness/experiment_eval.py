@@ -5,14 +5,13 @@
 
 """Load a standalone experiment and check policy input and output order."""
 
-from importlib.metadata import version
-from importlib.util import module_from_spec, spec_from_file_location
 from io import BytesIO
 import json
 import os
 from pathlib import Path
 import sys
 
+from rl_exp.locomotion.env import load_experiment, make_runner_cfg
 from rl_exp.locomotion.train_record import asset_fingerprints
 from rl_exp.tools.runrecord.binding import sha256_bytes, sha256_file
 
@@ -134,15 +133,10 @@ def height_scanner_prim_path(env_cfg, experiment) -> str:
 def configurations(files: tuple[Path, dict], *, play: bool = False,
                    checkpoint: Path | None = None, allow_drift: bool = False):
     """Construct fresh environment and runner configs for a checkpoint."""
-    from isaaclab_rl.rsl_rl import handle_deprecated_rsl_rl_cfg
-
     path, provenance = files
-    spec = spec_from_file_location("_robot_training_experiment", path)
-    experiment = module_from_spec(spec)
-    sys.modules[spec.name] = experiment
-    spec.loader.exec_module(experiment)
+    experiment = load_experiment(path)
     train_env_cfg = experiment.make_env_cfg()
-    runner_cfg = handle_deprecated_rsl_rl_cfg(experiment.make_runner_cfg(), version("rsl-rl-lib"))
+    runner_cfg = make_runner_cfg(experiment)
     config_check = (
         check_inference_config(checkpoint, train_env_cfg, runner_cfg,
                                provenance=provenance, allow_drift=allow_drift)

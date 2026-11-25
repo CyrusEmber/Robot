@@ -8,8 +8,7 @@
 import argparse
 from contextlib import ExitStack
 from datetime import datetime
-from importlib.metadata import version
-from importlib.util import find_spec, module_from_spec, spec_from_file_location
+from importlib.util import find_spec
 from pathlib import Path
 from random import SystemRandom
 import sys
@@ -18,6 +17,7 @@ from uuid import uuid4
 
 from isaaclab.app import AppLauncher
 
+from rl_exp.locomotion.env import load_experiment, make_env, make_runner_cfg, wrap_env
 from rl_exp.locomotion.train_record import interface_signature, write_json, write_provenance
 
 _DEFAULT_OUTPUT = Path(__file__).resolve().parents[1] / "out" / "train"
@@ -51,16 +51,12 @@ def main() -> None:
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     run = args.run_dir or args.output_root.resolve() / f"{timestamp}_{uuid4().hex[:8]}"
 
-    spec = spec_from_file_location("_robot_training_experiment", experiment_path)
-    experiment = module_from_spec(spec)
-    sys.modules[spec.name] = experiment
-    spec.loader.exec_module(experiment)
+    experiment = load_experiment(experiment_path)
 
     from isaaclab.utils.io import dump_yaml
-    from isaaclab_rl.rsl_rl import handle_deprecated_rsl_rl_cfg
 
     env_cfg = experiment.make_env_cfg()
-    runner_cfg = handle_deprecated_rsl_rl_cfg(experiment.make_runner_cfg(), version("rsl-rl-lib"))
+    runner_cfg = make_runner_cfg(experiment)
     if args.num_envs is not None:
         env_cfg.scene.num_envs = args.num_envs
     if args.max_iterations is not None:
@@ -80,14 +76,12 @@ def main() -> None:
     try:
         print(f"Run directory: {run}", flush=True)
         with ExitStack() as cleanup:
-            from isaaclab.envs import ManagerBasedRLEnv
-            from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper
             from rsl_rl.runners import OnPolicyRunner
 
             env_cfg.sim.device = launcher.device
             runner_cfg.device = launcher.device
             dump_yaml(str(run / "resolved_cfg.yaml"), {"env": env_cfg.to_dict(), "runner": runner_cfg.to_dict()})
-            env = ManagerBasedRLEnv(cfg=env_cfg)
+            env = make_env(env_cfg)
             cleanup.callback(env.close)
             robot_mod = getattr(experiment, "ROBOT", None)
             urdf_path = getattr(robot_mod, "URDF_PATH", None) or getattr(experiment, "URDF_PATH", None)
@@ -100,7 +94,7 @@ def main() -> None:
                 def save(self, path: str, infos: dict | None = None) -> None:
                     super().save(path, {**(infos or {}), "interface_signature": signature})
 
-            wrapped_env = RslRlVecEnvWrapper(env, clip_actions=runner_cfg.clip_actions)
+            wrapped_env = wrap_env(env, runner_cfg)
             runner = TrainingRunner(wrapped_env, runner_cfg.to_dict(), log_dir=str(run), device=runner_cfg.device)
             # This entry point records source state itself without requiring a clean Git worktree.
             runner.logger.git_status_repos.clear()

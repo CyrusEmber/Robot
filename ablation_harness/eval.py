@@ -76,10 +76,8 @@ args_cli.device = launcher.device
 
 import torch  # noqa: E402
 import yaml  # noqa: E402
-from rsl_rl.runners import OnPolicyRunner  # noqa: E402
 
-from isaaclab.envs import ManagerBasedRLEnv  # noqa: E402
-from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper  # noqa: E402
+from rl_exp.locomotion.env import load_policy, make_env, wrap_env  # noqa: E402
 
 import host_paths  # noqa: E402  (machine-local IsaacLab root, see paths.example.yaml)
 import loco_judge  # noqa: E402  (sibling module: the criterion's identity and derivation half)
@@ -346,10 +344,7 @@ def _make_policy(wrapper, env, agent_cfg, rec: dict, pinned_checkpoint):
     rec["interface_signature"] = actual
     rec["checkpoint"] = binding
     agent_cfg.seed = args_cli.seed
-    runner = OnPolicyRunner(wrapper, agent_cfg.to_dict(), log_dir=None, device=env.device)
-    stream.seek(0)
-    runner.load(stream, map_location=env.device)
-    return runner.get_inference_policy(device=env.device)
+    return load_policy(wrapper, agent_cfg, stream, env.device)
 
 def _snapshot(robot, scanner, center_ray) -> dict:
     """One frame of per-env state read from the live buffers [m/s, m/s, cos, m, W]."""
@@ -669,9 +664,9 @@ def main():
     # a different terrain in every eval.
     seed_rngs(suites.SUITE_SEED)
     terrain_split_probe.install()
-    gym_env = ManagerBasedRLEnv(cfg=env_cfg)
+    gym_env = make_env(env_cfg)
     mbenv = gym_env.unwrapped
-    wrapper = RslRlVecEnvWrapper(gym_env, clip_actions=agent_cfg.clip_actions)
+    wrapper = wrap_env(gym_env, agent_cfg)
     robot = mbenv.scene["robot"]
     device = mbenv.device
     step_dt = mbenv.step_dt
