@@ -13,7 +13,7 @@ import subprocess
 import sys
 from uuid import uuid4
 
-from ablation_harness.experiment_eval import experiment_files, experiment_source
+from evaluation.experiment_eval import experiment_files, experiment_source
 from rl_exp.tools.runrecord.binding import sha256_file
 
 _REPO = Path(__file__).resolve().parents[1]
@@ -59,7 +59,7 @@ def evaluate(checkpoint: Path, protocol: str, mode: str = "robust", *, exp: Path
         common += ["--allow-drift"]
     experiment = ["--exp", str(exp.resolve())] if exp is not None else []
 
-    metrics_code = _run([sys.executable, str(_REPO / "ablation_harness/eval.py"), *common, *experiment,
+    metrics_code = _run([sys.executable, str(_REPO / "evaluation/eval.py"), *common, *experiment,
                          "--protocol", protocol, "--mode", mode, "--output-dir", str(metrics_dir)],
                         metrics_dir, "eval.log")
     if metrics_code == 0 and (metrics_dir / "eval.json").is_file():
@@ -72,7 +72,7 @@ def evaluate(checkpoint: Path, protocol: str, mode: str = "robust", *, exp: Path
         metrics_code = metrics_code or 1
         print(f"Evaluation failed or produced no report. See {metrics_dir / 'eval.log'}", file=sys.stderr)
 
-    video_code = _run([sys.executable, str(_REPO / "ablation_harness/video_matrix.py"), *common,
+    video_code = _run([sys.executable, str(_REPO / "evaluation/video_matrix.py"), *common,
                        *experiment, "--out_dir", str(video_dir)], video_dir, "video.log")
     matrix_path = video_dir / "matrix.json"
     if video_code == 0 and matrix_path.is_file():

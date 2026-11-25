@@ -58,7 +58,7 @@ parser.add_argument("--allow-drift", action="store_true",
 parser.add_argument("--print-suite-fingerprint", action="store_true")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
-from ablation_harness.experiment_eval import experiment_files, experiment_source
+from evaluation.experiment_eval import experiment_files, experiment_source
 
 args_cli.checkpoint = args_cli.checkpoint.resolve()
 try:
@@ -79,15 +79,15 @@ import yaml  # noqa: E402
 
 from rl_exp.locomotion.env import load_policy, make_env, wrap_env  # noqa: E402
 
-from ablation_harness import host_paths  # noqa: E402  (machine-local IsaacLab root, see paths.example.yaml)
-from ablation_harness import loco_judge  # noqa: E402  (the criterion's identity and derivation half)
-from ablation_harness import metrics  # noqa: E402
-from ablation_harness import record  # noqa: E402  (the eval record format, ARCH_PLAN Step 3.2a)
-from ablation_harness import suites  # noqa: E402
-from ablation_harness import suite_lock  # noqa: E402  (the suite fingerprint lock, ARCH_PLAN Step 3.3)
-from ablation_harness.components.command_player import CommandPlayer  # noqa: E402
-from ablation_harness.components.dr_controller import apply_eval_mode  # noqa: E402
-from ablation_harness.components import recovery as recovery_mod  # noqa: E402
+from evaluation import host_paths  # noqa: E402  (machine-local IsaacLab root, see paths.example.yaml)
+from evaluation import loco_judge  # noqa: E402  (the criterion's identity and derivation half)
+from evaluation import metrics  # noqa: E402
+from evaluation import record  # noqa: E402  (the eval record format, ARCH_PLAN Step 3.2a)
+from evaluation import suites  # noqa: E402
+from evaluation import suite_lock  # noqa: E402  (the suite fingerprint lock, ARCH_PLAN Step 3.3)
+from evaluation.components.command_player import CommandPlayer  # noqa: E402
+from evaluation.components.dr_controller import apply_eval_mode  # noqa: E402
+from evaluation.components import recovery as recovery_mod  # noqa: E402
 
 _HARNESS_DIR = pathlib.Path(__file__).resolve().parent
 
@@ -176,7 +176,7 @@ def _suite_reference(protocol: dict, env_cfg) -> dict:
     The digest is over the *instantiated* importer cfg, so a suite edit is visible even when
     the run's env cfg digest is compared against another run's.
     """
-    from ablation_harness import cfg_snapshot
+    from evaluation import cfg_snapshot
 
     layout = protocol.get("suite_layout") or {}
     return {
@@ -280,7 +280,7 @@ def _perturbation_reference(protocol: dict, push) -> dict | None:
 
 def _prepare_env(protocol: dict) -> tuple[object, object, str, tuple[BytesIO, dict, dict], dict, dict]:
     """Load the experiment and apply the evaluation protocol."""
-    from ablation_harness.experiment_eval import (
+    from evaluation.experiment_eval import (
         checkpoint_signature,
         checkpoint_snapshot,
         configurations,
@@ -321,7 +321,7 @@ def _prepare_env(protocol: dict) -> tuple[object, object, str, tuple[BytesIO, di
     )
     # The suite as the harness built it, digestible before the simulator starts: the check that can
     # refuse a wrong ground without paying for an app launch.
-    from ablation_harness import cfg_snapshot
+    from evaluation import cfg_snapshot
 
     suite_cfg_digest = cfg_snapshot.digest(cfg_snapshot.snapshot(env_cfg.scene.terrain))
     return env_cfg, agent_cfg, suite_cfg_digest, pinned_checkpoint, assets, config_check
@@ -329,7 +329,7 @@ def _prepare_env(protocol: dict) -> tuple[object, object, str, tuple[BytesIO, di
 
 def _make_policy(wrapper, env, agent_cfg, rec: dict, pinned_checkpoint):
     """Check the runtime interface before loading the same verified checkpoint bytes."""
-    from ablation_harness.experiment_eval import check_signature
+    from evaluation.experiment_eval import check_signature
     from rl_exp.locomotion.run import interface_signature
 
     stream, binding, expected = pinned_checkpoint
@@ -637,8 +637,8 @@ def _null_nonfinite(value):
 
 
 def main():
-    from ablation_harness.terrain_geometry import evidence, seed_rngs
-    from ablation_harness import cfg_snapshot, terrain_split_probe
+    from evaluation.terrain_geometry import evidence, seed_rngs
+    from evaluation import cfg_snapshot, terrain_split_probe
 
     protocol = _load_protocol(args_cli.protocol)
     terrain_names = _SUITE_REGISTRY[protocol["suite"]][0]

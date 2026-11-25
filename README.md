@@ -13,7 +13,7 @@ Windows 上先按 [本机路径示例](paths.example.yaml) 填写 `paths.yaml`�
 
 ## 评测产物
 
-- `metrics/eval.json` 保存实际工况、指标、有效样本和缺测。robust 另有扰动和恢复数据。[评测协议](ablation_harness/protocols/)定义采样和阈值，协议没有总通过阈值时，报告保留未定义。
+- `metrics/eval.json` 保存实际工况、指标、有效样本和缺测。robust 另有扰动和恢复数据。[评测协议](evaluation/protocols/)定义采样和阈值，协议没有总通过阈值时，报告保留未定义。
 - `video/matrix.json` 索引三档速度 × 三个视角的九段原片，`video/plane_overview.mp4` 是带标签的合成片。录像采用平地 nominal 工况，扰动与恢复在定量评测中测量。
 - `metrics/` 和 `video/` 各有 `execution.json` 及日志，记录命令、时间和退出状态。看完指标和录像再决定下一步。
 

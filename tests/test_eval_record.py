@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Offline checks for ``ablation_harness/record.py`` helpers and ``eval.py`` exit status."""
+"""Offline checks for ``evaluation/record.py`` helpers and ``eval.py`` exit status."""
 
 import ast
 import pathlib
@@ -9,7 +9,7 @@ import tempfile
 
 _REPO = pathlib.Path(__file__).resolve().parents[1]
 
-from ablation_harness import record  # noqa: E402
+from evaluation import record  # noqa: E402
 
 
 def test_digest_canonical_deterministic() -> None:
@@ -36,7 +36,7 @@ def test_checkpoint_digest_follows_the_file() -> None:
 
 def test_record_module_cannot_consume_the_random_stream() -> None:
     """The record helper module imports no framework and no RNG."""
-    source = (_REPO / "ablation_harness" / "record.py").read_text(encoding="utf-8")
+    source = (_REPO / "evaluation" / "record.py").read_text(encoding="utf-8")
     imported: set[str] = set()
     for node in ast.walk(ast.parse(source)):
         if isinstance(node, ast.Import):
@@ -50,7 +50,7 @@ def test_record_module_cannot_consume_the_random_stream() -> None:
     probe = subprocess.run(
         [sys.executable, "-c",
          f"import sys; sys.path[:0] = [{str(_REPO)!r}]; "
-         "from ablation_harness import record; assert 'torch' not in sys.modules and 'numpy' not in sys.modules"],
+         "from evaluation import record; assert 'torch' not in sys.modules and 'numpy' not in sys.modules"],
         capture_output=True, text=True, errors="replace",
     )
     assert probe.returncode == 0, f"importing the record module pulled in torch/numpy: {probe.stderr}"
@@ -122,7 +122,7 @@ original_run_path(entry, run_name='__main__')
 
 
 def test_eval_failure_exit_status() -> None:
-    _eval_exit_probe(_REPO / 'ablation_harness' / 'eval.py')
+    _eval_exit_probe(_REPO / 'evaluation' / 'eval.py')
 
 
 def _main() -> None:

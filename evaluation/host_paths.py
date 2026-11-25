@@ -16,9 +16,9 @@ interpreter precisely to be told where the venv is, so the answer must not
 require the venv.
 
 Usage:
-    python ablation_harness/host_paths.py --root      # IsaacLab tree only
-    python ablation_harness/host_paths.py --python    # venv interpreter only
-    python ablation_harness/host_paths.py --check     # both, plus the config state
+    python evaluation/host_paths.py --root      # IsaacLab tree only
+    python evaluation/host_paths.py --python    # venv interpreter only
+    python evaluation/host_paths.py --check     # both, plus the config state
 
 Exit code is 1 when a requested value is missing, so shell callers can branch.
 """

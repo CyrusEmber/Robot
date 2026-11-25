@@ -151,7 +151,7 @@ def parse_speeds(text: str) -> list[float]:
 
 def parse_terrains(text: str) -> list[str]:
     """``"plane,rough_b"`` -> validated names, unknown gear refused with the whole menu."""
-    from ablation_harness import suites
+    from evaluation import suites
 
     allowed = [PLANE, *suites.LIZARD_SUITE_V2_NAMES]
     gears = []
@@ -171,7 +171,7 @@ def gear_terrain(gear: str, recipe_terrain):
     """The ``TerrainImporterCfg`` for one gear: the recipe's own ground, or one suite column."""
     if gear == PLANE:
         return recipe_terrain
-    from ablation_harness import suites
+    from evaluation import suites
 
     board = suites.lizard_suite_v2()
     generator = board.terrain_generator
@@ -212,11 +212,11 @@ def record_cell(cell: dict, args) -> dict:
     import imageio
     import torch
 
-    from ablation_harness import suites
-    from ablation_harness.components.command_player import CommandPlayer
-    from ablation_harness.components.dr_controller import apply_eval_mode
+    from evaluation import suites
+    from evaluation.components.command_player import CommandPlayer
+    from evaluation.components.dr_controller import apply_eval_mode
 
-    from ablation_harness.experiment_eval import check_signature
+    from evaluation.experiment_eval import check_signature
     from rl_exp.locomotion.env import load_policy, make_env, wrap_env
     from rl_exp.locomotion.run import interface_signature
 
@@ -399,7 +399,7 @@ def main() -> None:
     if args.dry_run:
         print(json.dumps(run(args), indent=2))
         return
-    from ablation_harness.experiment_eval import experiment_files, experiment_source
+    from evaluation.experiment_eval import experiment_files, experiment_source
 
     checkpoint = pathlib.Path(args.checkpoint).resolve()
     try:
@@ -415,7 +415,7 @@ def main() -> None:
     launcher = AppLauncher(args)
     app = launcher.app
     try:
-        from ablation_harness.experiment_eval import checkpoint_signature, checkpoint_snapshot, configurations
+        from evaluation.experiment_eval import checkpoint_signature, checkpoint_snapshot, configurations
 
         args.base_env_cfg, args.base_runner_cfg, _, config_check, _ = configurations(
             files, play=True, checkpoint=checkpoint, allow_drift=args.allow_drift

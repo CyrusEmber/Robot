@@ -28,15 +28,15 @@ from isaaclab.terrains import TerrainGeneratorCfg  # noqa: E402
 from isaaclab.terrains.height_field import HfTerrainBaseCfg  # noqa: E402
 import trimesh  # noqa: E402
 
-from ablation_harness import suites  # noqa: E402
-from ablation_harness.terrain_geometry import evidence, foot_relief, seed_rngs  # noqa: E402
-from ablation_harness import terrain_split_probe
+from evaluation import suites  # noqa: E402
+from evaluation.terrain_geometry import evidence, foot_relief, seed_rngs  # noqa: E402
+from evaluation import terrain_split_probe
 
 _SEED = 7
 
 #: One real v7 run's archived ground: written by ``eval.py`` at the end of the rollout, committed
 #: with the run's other records. Regenerating from it is what makes the archive checkable.
-_V3_EVIDENCE = (_REPO / "ablation_harness" / "results" / "locomotion_eval_v3"
+_V3_EVIDENCE = (_REPO / "evaluation" / "results" / "locomotion_eval_v3"
                 / "provenance-v7-20261104-161257" / "Lizard2-Flat-v7_short_robust_seed123"
                 / "terrain" / "geometry.json")
 
@@ -186,7 +186,7 @@ def test_protocol_v3_differs_from_v2_only_where_it_says() -> None:
     v3's reason to exist is the suite, so name / version / suite are the only fields allowed to
     move. Anything else that moves is an undocumented semantic change hiding in a version bump.
     """
-    root = _REPO / "ablation_harness" / "protocols"
+    root = _REPO / "evaluation" / "protocols"
     v2 = yaml.safe_load((root / "locomotion_eval_v2.yaml").read_text(encoding="utf-8"))
     v3 = yaml.safe_load((root / "locomotion_eval_v3.yaml").read_text(encoding="utf-8"))
     assert v3["version"] == v2["version"] + 1 and v3["name"] != v2["name"], "version discipline"
@@ -198,7 +198,7 @@ def test_protocol_v3_differs_from_v2_only_where_it_says() -> None:
 def test_video_matrix_gears_resolve_against_the_suite() -> None:
     """The video matrix picks its ground off this same suite, so its gears are pinned here.
 
-    ``ablation_harness/video_matrix.py`` shoots a clip per speed x terrain cell. Its terrain gears
+    ``evaluation/video_matrix.py`` shoots a clip per speed x terrain cell. Its terrain gears
     are the suite's column names, and one gear must narrow the frozen generator to *that one*
     column without editing the frozen definition in place -- a mutation would silently leave the
     next gear with fewer columns, and every later clip would face the wrong ground.
@@ -209,7 +209,7 @@ def test_video_matrix_gears_resolve_against_the_suite() -> None:
     import before ``AppLauncher`` poisons Kit's USD stack for the whole run -- importing this
     module through ``suites`` is what that rule is about).
     """
-    from ablation_harness import video_matrix
+    from evaluation import video_matrix
     from unittest.mock import patch
     import tempfile
 
@@ -308,7 +308,7 @@ def test_video_matrix_failure_exit_status() -> None:
 
     script = """
 import importlib.util, io, os, pathlib, sys, types
-from ablation_harness import experiment_eval, video_matrix
+from evaluation import experiment_eval, video_matrix
 app_module = types.ModuleType('isaaclab.app')
 class AppLauncher:
     @staticmethod
@@ -380,7 +380,7 @@ def test_video_matrix_resolves_dynamic_sensor_presets() -> None:
     from unittest.mock import patch
 
     import isaaclab.envs as isaac_envs
-    from ablation_harness import video_matrix
+    from evaluation import video_matrix
     from rl_exp.experiments.lizard2 import flat_v7
 
     class CheckedBeforeSimulation(Exception):
@@ -417,11 +417,11 @@ def test_eval_resolves_dynamic_sensor_presets() -> None:
     from isaaclab.sensors import SensorBaseCfg
     import yaml
 
-    from ablation_harness import experiment_eval, suites
-    from ablation_harness.components.dr_controller import apply_eval_mode
+    from evaluation import experiment_eval, suites
+    from evaluation.components.dr_controller import apply_eval_mode
     from rl_exp.experiments.lizard2 import flat_v7
 
-    source = (_REPO / "ablation_harness" / "eval.py").read_text(encoding="utf-8")
+    source = (_REPO / "evaluation" / "eval.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
     fn = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "_prepare_env")
     exp_path = _REPO / "rl_exp" / "experiments" / "lizard2" / "flat_v7.py"
@@ -437,7 +437,7 @@ def test_eval_resolves_dynamic_sensor_presets() -> None:
         "apply_eval_mode": apply_eval_mode,
     }
     exec(compile(ast.Module(body=[fn], type_ignores=[]), "eval.py", "exec"), namespace)
-    protocol_path = _REPO / "ablation_harness" / "protocols" / "locomotion_eval_v3.yaml"
+    protocol_path = _REPO / "evaluation" / "protocols" / "locomotion_eval_v3.yaml"
     protocol = yaml.safe_load(protocol_path.read_text(encoding="utf-8"))
     with patch.object(
         experiment_eval, "configurations",

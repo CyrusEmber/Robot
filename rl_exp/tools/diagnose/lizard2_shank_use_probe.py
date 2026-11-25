@@ -1034,8 +1034,8 @@ try:
     from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper, handle_deprecated_rsl_rl_cfg
     from rsl_rl.runners import OnPolicyRunner
     from rl_exp.experiments.lizard2 import flat_v7
-    from ablation_harness.components.dr_controller import apply_eval_mode
-    from ablation_harness.record import checkpoint_digest
+    from evaluation.components.dr_controller import apply_eval_mode
+    from evaluation.record import checkpoint_digest
 
     task = 'Lizard2-Flat-Play-v7'
     if args.propulsion_samples:

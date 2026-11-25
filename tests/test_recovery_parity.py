@@ -11,7 +11,7 @@ Usage: python -m pytest tests/test_recovery_parity.py
 """
 import torch
 
-from ablation_harness.components.recovery import recovery_times
+from evaluation.components.recovery import recovery_times
 
 
 def reference(lin_error, push_step, threshold, sustain, step_dt, valid_mask):

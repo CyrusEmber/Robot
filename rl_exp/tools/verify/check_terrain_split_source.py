@@ -12,7 +12,7 @@ nothing about it looks wrong until the generator's rule moves and the copies do 
 
 The scan looks for the rule's signature in **code**, not in prose: comments and strings are
 dropped before matching, so a comment or docstring may quote the old line (this file does) and
-a real copy cannot hide behind a `# noqa`. ``ablation_harness/terrain_map.py`` is the one home.
+a real copy cannot hide behind a `# noqa`. ``evaluation/terrain_map.py`` is the one home.
 
 Signature: the boundary epsilon applied to a column fraction (``col / num_cols + 0.001``), or
 an epsilon next to a cumulative sum in the same file -- the second catches the line after a
@@ -36,8 +36,8 @@ import sys
 import tokenize
 
 _REPO = pathlib.Path(__file__).resolve().parents[3]
-_HOME = _REPO / "ablation_harness" / "terrain_map.py"
-_ROOTS = ("rl_exp", "ablation_harness")
+_HOME = _REPO / "evaluation" / "terrain_map.py"
+_ROOTS = ("rl_exp", "evaluation")
 
 #: ``<name> / <name> + 0.001`` -- the epsilon welded to a column fraction.
 _FRACTION_EPSILON = re.compile(r"/\s*[A-Za-z_][\w.]*\s*\+\s*0\.001")

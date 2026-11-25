@@ -17,9 +17,9 @@ from xml.etree import ElementTree
 
 import pytest
 
-from ablation_harness.components.dr_controller import apply_eval_mode
-from ablation_harness import experiment_eval
-from ablation_harness.experiment_eval import check_signature, resolved_config
+from evaluation.components.dr_controller import apply_eval_mode
+from evaluation import experiment_eval
+from evaluation.experiment_eval import check_signature, resolved_config
 from rl_exp.experiments.lizard2 import flat_v7
 from rl_exp.locomotion.run import asset_fingerprints, interface_signature
 
@@ -139,7 +139,7 @@ def test_one_ppo_update_and_reload(tmp_path):
 
     metrics = tmp_path / "metrics"
     rollout = subprocess.run(
-        [sys.executable, "ablation_harness/eval.py", "--ckpt", str(run / "model_0.pt"), "--mode", "robust",
+        [sys.executable, "evaluation/eval.py", "--ckpt", str(run / "model_0.pt"), "--mode", "robust",
          "--envs_per_terrain", "1", "--viz", "none", "--output-dir", str(metrics)],
         cwd=ROOT, env=env, capture_output=True, text=True, errors="replace", timeout=300,
     )

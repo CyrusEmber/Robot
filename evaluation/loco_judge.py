@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import math
 
-from ablation_harness.metrics import METRIC_KERNELS, METRICS_ID
+from evaluation.metrics import METRIC_KERNELS, METRICS_ID
 
 #: The identity of the derivation these functions perform. Bump it when the arithmetic changes.
 DERIVATION_ID = "loco-derivation-1"

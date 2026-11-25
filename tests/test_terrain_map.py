@@ -19,7 +19,7 @@ valid, so a green run cannot come from a check that never fires.
 import sys
 
 # stdlib-only gate: importing the harness module must not pull in framework imports
-from ablation_harness import terrain_map  # noqa: E402
+from evaluation import terrain_map  # noqa: E402
 
 
 class _Sub:

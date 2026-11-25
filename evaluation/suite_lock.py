@@ -57,7 +57,7 @@ ENV_FIELDS = (
 def _bare(digest) -> str:
     """A digest without its algorithm prefix, for comparison.
 
-    Two spellings of the same fact are in circulation: :func:`ablation_harness.record.digest` and
+    Two spellings of the same fact are in circulation: :func:`evaluation.record.digest` and
     the terrain probe return ``sha256:<hex>``, while ``cfg_snapshot.digest`` returns bare hex.
     Comparing the spelling instead of the digest makes a *correct* declaration read as a mismatch --
     which is exactly what this lock's first real run reported. The reported values stay as written,

@@ -23,8 +23,8 @@ import torch
 import yaml
 
 _REPO = pathlib.Path(__file__).absolute().parents[1]
-from ablation_harness import suite_lock  # noqa: E402
-from ablation_harness.metrics import fall_flags  # noqa: E402
+from evaluation import suite_lock  # noqa: E402
+from evaluation.metrics import fall_flags  # noqa: E402
 from rl_exp.tools.runrecord import binding  # noqa: E402
 
 STEPS, SUSTAIN = 120, 25
@@ -177,7 +177,7 @@ def test_the_shipped_v4_protocol_is_fingerprinted_and_matches():
     unfilled the assertion was "refused"; once a real run pasted it, the assertion is "declared,
     complete, and no longer refused". A v4 left half-declared cannot pass either way.
     """
-    protocol = yaml.safe_load((_REPO / "ablation_harness" / "protocols" /
+    protocol = yaml.safe_load((_REPO / "evaluation" / "protocols" /
                                "locomotion_eval_v4.yaml").read_text(encoding="utf-8"))
     expected = protocol["suite_expected"]
     assert expected["name"] == protocol["suite"], expected
@@ -196,7 +196,7 @@ def test_the_shipped_v4_protocol_is_fingerprinted_and_matches():
     assert lock["geometry"]["verdict"] == suite_lock.MATCH, lock["geometry"]
     assert suite_lock.start_refusal(protocol, lock, stage="cfg") is None
     assert suite_lock.start_refusal(protocol, lock, stage="geometry") is None
-    v3 = yaml.safe_load((_REPO / "ablation_harness" / "protocols" /
+    v3 = yaml.safe_load((_REPO / "evaluation" / "protocols" /
                          "locomotion_eval_v3.yaml").read_text(encoding="utf-8"))
     assert "suite_expected" not in v3, "the frozen v3 protocol is not edited in place"
     print("  ok v4 is fingerprinted, complete, and no longer refused; v3 is untouched")
@@ -237,8 +237,8 @@ def test_protocol_anchors_match_the_files_they_pin():
     Pasting a digest into ``protocol_anchors.json`` is the deliberate act, and a green run afterwards
     says the file and the table agree -- not that anyone reviewed the number that moved.
     """
-    table = json.loads((_REPO / "ablation_harness" / "protocol_anchors.json").read_text(encoding="utf-8"))
-    harness = _REPO / "ablation_harness"
+    table = json.loads((_REPO / "evaluation" / "protocol_anchors.json").read_text(encoding="utf-8"))
+    harness = _REPO / "evaluation"
     problems = []
     for rel, entry in sorted(table["anchors"].items()):
         assert entry.get("reason"), f"{rel}: an anchor without a reason records no review"
@@ -282,7 +282,7 @@ def test_every_protocol_is_anchored():
     ``protocols/`` is what makes a new protocol covered the moment it arrives. There is no
     exemption list: the protocols published before the anchor existed have been retired.
     """
-    harness = _REPO / "ablation_harness"
+    harness = _REPO / "evaluation"
     table = json.loads((harness / "protocol_anchors.json").read_text(encoding="utf-8"))
     problems = _uncovered(harness / "protocols", set(table["anchors"]))
     assert not problems, "\n".join(problems)

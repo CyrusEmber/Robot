@@ -12,7 +12,7 @@ _tmp_*
 /ponytail/
 
 # machine-local host paths (isaac_root + venv python); paths.example.yaml is the
-# committed template, read by ablation_harness/host_paths.py
+# committed template, read by evaluation/host_paths.py
 /paths.yaml
 
 # Training and diagnostic outputs stay machine-local. rl_exp/out/ holds the live
@@ -23,10 +23,10 @@ _tmp_*
 # one-off belongs here: use %TEMP% and delete it afterwards.
 rl_exp/out/
 
-# video-matrix clips (ablation_harness/video_matrix.py): mp4 + matrix.json, same treatment as
+# video-matrix clips (evaluation/video_matrix.py): mp4 + matrix.json, same treatment as
 # the diagnostic dumps above -- regenerable in one command from a checkpoint plus a gear list,
 # and the durable evidence is the numbers written into the record, never the clip itself
-ablation_harness/videos/
+evaluation/videos/
 
 # model checkpoints and raw frame tensors (*.pt): a checkpoint's identity is its entry in the
 # run's checkpoints.json (file sha256 + the run's T1 digest + the payload digest written into

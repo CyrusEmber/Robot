@@ -19,7 +19,7 @@ column-per-type, fixed difficulty, pinned seed. Key determinism tricks
   global numpy stream (the height-field family) and the global torch stream (the random boxes),
   which the generator deliberately leaves alone (``terrain_generator.py:148``). A suite is only
   reproducible if the caller seeds those streams first -- :func:`eval.py` does it with
-  :func:`ablation_harness.terrain_geometry.seed_rngs` right before environment construction. V1 got away with it
+  :func:`evaluation.terrain_geometry.seed_rngs` right before environment construction. V1 got away with it
   by accident: its ``rough`` columns pinned their amplitude to a single value, which collapses
   the internal ``np.random.choice`` to a constant. V2 gives them a range, so reproducing the
   geometry requires seeding the global streams.

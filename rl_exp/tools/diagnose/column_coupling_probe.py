@@ -49,7 +49,7 @@ import numpy as np
 REPO = Path(__file__).resolve().parents[3]
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
-from ablation_harness.host_paths import isaac_root  # noqa: E402
+from evaluation.host_paths import isaac_root  # noqa: E402
 from rl_exp.tools.runrecord.binding import sha256_bytes, sha256_file  # noqa: E402
 
 FIELDS = ('pos', 'quat', 'lin', 'ang', 'qpos', 'qvel')
@@ -1197,10 +1197,10 @@ def capture(args):
         import torch
         from isaaclab.envs import ManagerBasedRLEnv
         from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper
-        from ablation_harness import suites
-        from ablation_harness.components.dr_controller import apply_eval_mode
-        from ablation_harness.terrain_geometry import seed_rngs
-        from ablation_harness import terrain_split_probe, cfg_snapshot
+        from evaluation import suites
+        from evaluation.components.dr_controller import apply_eval_mode
+        from evaluation.terrain_geometry import seed_rngs
+        from evaluation import terrain_split_probe, cfg_snapshot
         from rl_exp.experiments.lizard2 import flat_v7
 
         cfg = flat_v7.make_env_cfg()
@@ -1230,7 +1230,7 @@ def capture(args):
         isaac = isaac_root()
         meta['isaac_root'] = str(isaac)
         def source_hashes():
-            roots = (REPO / 'rl_exp/robots', REPO / 'rl_exp/locomotion', REPO / 'ablation_harness',
+            roots = (REPO / 'rl_exp/robots', REPO / 'rl_exp/locomotion', REPO / 'evaluation',
                      REPO / 'rl_exp/tools/verify',
                      isaac / 'source/isaaclab/isaaclab', isaac / 'source/isaaclab_rl/isaaclab_rl',
                      isaac / 'source/isaaclab_tasks/isaaclab_tasks', isaac / 'source/isaaclab_physx/isaaclab_physx')

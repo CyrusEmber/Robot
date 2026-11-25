@@ -75,7 +75,7 @@ ADDRESS_RE = re.compile(r"0x[0-9a-fA-F]+")
 """Address pattern: any snapshot text containing one is not reproducible."""
 
 try:  # single source of truth for the host Isaac root (paths.yaml + marker)
-    from ablation_harness.host_paths import isaac_root as _isaac_root
+    from evaluation.host_paths import isaac_root as _isaac_root
 
     ISAAC_ROOT = _isaac_root()
 except Exception:  # noqa: BLE001 - unresolved host path must not crash the offline tools
