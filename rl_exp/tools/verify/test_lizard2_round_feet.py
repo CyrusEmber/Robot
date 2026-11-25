@@ -6,9 +6,13 @@
 
 import ast
 import copy
+import json
+import shutil
 import struct
 from pathlib import Path
+import subprocess
 import sys
+from tempfile import TemporaryDirectory
 import unittest
 import xml.etree.ElementTree as ET
 
@@ -20,6 +24,27 @@ SOURCE = locate(_SOURCE)
 
 
 class RoundFeetTest(unittest.TestCase):
+    def test_formal_usd_digest_mismatch_exits_nonzero(self):
+        root = Path(__file__).resolve().parents[3]
+        with TemporaryDirectory() as temp:
+            formal = Path(temp) / 'formal'
+            shutil.copytree(root / 'rl_exp/lizard2_round_feet', formal)
+            urdf = formal / 'lizard2_round_feet.urdf'
+            with urdf.open('ab') as stream:
+                stream.write(b'\n')
+            output = Path(temp) / 'audit.json'
+            result = subprocess.run(
+                [sys.executable, '-B', str(root / 'rl_exp/tools/diagnose/lizard2_round_feet_usd.py'),
+                 '--formal_dir', str(formal), '--output', str(output)],
+                cwd=root, capture_output=True, text=True,
+            )
+            self.assertTrue(output.is_file(), result.stderr)
+            report = json.loads(output.read_bytes())
+            self.assertTrue(report['baseline']['pass'])
+            self.assertFalse(report['pass'])
+            self.assertIn(str(urdf.resolve()), report['binding_failures'])
+            self.assertEqual(result.returncode, 1, result.stdout)
+
     def test_live_task_resolves_native_presets(self):
         from isaaclab_physx.sensors.contact_sensor.contact_sensor_cfg import ContactSensorCfg
         from rl_exp import lizard2_v7

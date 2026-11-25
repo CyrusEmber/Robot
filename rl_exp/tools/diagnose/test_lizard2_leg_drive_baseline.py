@@ -13,6 +13,7 @@ import xml.etree.ElementTree as ET
 import numpy as np
 
 import lizard2_leg_drive_baseline as baseline
+from rl_exp.tools.verify import check_self_collision
 
 
 def rejects(fn, label):
@@ -270,6 +271,21 @@ def run():
 
 def test_baseline_offline_checks():
     run()
+
+
+def test_baseline_binds_the_shared_fk_source(monkeypatch):
+    source = Path(check_self_collision.__file__).resolve()
+    original = baseline.report()['inputs']
+    assert original[str(source)] == baseline.sha(source)
+    with TemporaryDirectory() as temp:
+        changed = Path(temp).resolve() / source.name
+        changed.write_bytes(source.read_bytes() + b'\n# Regression fixture\n')
+        monkeypatch.setattr(check_self_collision, '__file__', str(changed))
+        actual = baseline.report()['inputs']
+        assert actual[str(changed)] == baseline.sha(changed) != original[str(source)]
+        assert {k: v for k, v in actual.items() if k != str(changed)} == {
+            k: v for k, v in original.items() if k != str(source)
+        }
 
 
 def test_a_reordered_measured_joint_order_is_refused():

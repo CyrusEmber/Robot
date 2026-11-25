@@ -14,6 +14,7 @@ import numpy as np
 
 from rl_exp.robots import lizard2_round_feet as robot
 from rl_exp.tools.runrecord.binding import sha256_file as sha
+from rl_exp.tools.verify import check_self_collision
 from rl_exp.tools.verify.check_self_collision import chain_up, fk, load_urdf
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -283,7 +284,8 @@ def report():
                          kd_velocity_limit_percent_effort=100*kd*velocity/effort,
                          velocity_limit_rad_s=velocity, effort_limit_nm=effort,
                          subtree_mass_kg=gravity['subtree_mass_kg'][name]))
-    paths = [RL / URDF_KEY, RL / USD_KEY, Path(__file__), Path(robot.__file__)]
+    paths = [RL / URDF_KEY, RL / USD_KEY, Path(__file__), Path(robot.__file__),
+             Path(check_self_collision.__file__)]
     return dict(inputs={str(p.resolve()): sha(p) for p in paths},
                 runtime_order_source=[n.removesuffix('_joint') for n in runtime], pose_joint_rad=q,
                 root_position_m=[0., 0., cfg['robot']['base_init_height']], root_quaternion_xyzw=[0., 0., 0., 1.],
@@ -633,7 +635,8 @@ def swing_review(plan_path: Path, propulsion_path: Path | None = None) -> dict:
             a, b = (row['measured'][f'{g}|{frequency:g}']['rms'] for g in 'AB')
             row['measured'][f'rms_reduction_percent|{frequency:g}'] = 100 * (a - b) / a
         rows.append(row)
-    paths = [plan_path, Path(__file__), Path(protocol.__file__), RL / URDF_KEY, Path(robot.__file__)]
+    paths = [plan_path, Path(__file__), Path(protocol.__file__), RL / URDF_KEY, Path(robot.__file__),
+             Path(check_self_collision.__file__)]
     if propulsion_path is not None:
         paths.append(propulsion_path)
     return dict(plan=str(plan_path), mapping_scope='recorded run plan, not a live backend readback this run',
@@ -716,7 +719,7 @@ def support_report(foot_forces: dict[str, list[float]] | None = None) -> dict:
         groups[label] = dict(q_rad=q, root_position_world_m=root.tolist(), com_world_m=com.tolist(), feet=feet,
                              example_required_guide_force_n=required_force.tolist(),
                              example_required_guide_moment_at_com_nm=required_moment.tolist(), rows=rows)
-    paths = [RL / USD_KEY, Path(__file__), Path(robot.__file__)]
+    paths = [RL / USD_KEY, Path(__file__), Path(robot.__file__), Path(check_self_collision.__file__)]
     hashes = dict(geometry['sha256'])
     hashes.update({str(p.resolve()): sha(p) for p in paths})
     return dict(geometry_passed=geometry['passed'], inputs_sha256=hashes, weight_n=weight,
@@ -747,8 +750,9 @@ if __name__ == '__main__':
     forces = json.loads(args.foot_forces.read_text(encoding='utf-8')) if args.foot_forces else None
     if args.two_foot_trim:
         result = two_foot_trim(args.two_foot_trim)
-        result['input_sha256'] = {str(p): sha(p) for p in (RL / URDF_KEY, Path(__file__),
-                                                          Path(__import__('lizard2_round_support_geometry').__file__))}
+        paths = (RL / URDF_KEY, Path(__file__), Path(check_self_collision.__file__),
+                 Path(__import__('lizard2_round_support_geometry').__file__))
+        result['input_sha256'] = {str(p): sha(p) for p in paths}
     elif args.swing_review:
         result = swing_review(args.swing_review, args.propulsion_report)
     elif args.propulsion_report:
@@ -756,7 +760,9 @@ if __name__ == '__main__':
         sample_path = args.propulsion_report.parent / recorded['propulsion_diagnostic']['samples']
         with np.load(sample_path, allow_pickle=False) as samples:
             result = propulsion_report(samples, recorded['runtime_joint_names'])
-        result['input_sha256'] = {str(p): sha(p) for p in (args.propulsion_report, sample_path, RL / URDF_KEY, Path(__file__))}
+        paths = (args.propulsion_report, sample_path, RL / URDF_KEY, Path(__file__),
+                 Path(check_self_collision.__file__))
+        result['input_sha256'] = {str(p): sha(p) for p in paths}
     else:
         result = support_report(forces) if args.two_foot else report()
     print(json.dumps(result, indent=2, allow_nan=False))

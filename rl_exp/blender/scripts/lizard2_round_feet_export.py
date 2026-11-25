@@ -29,6 +29,8 @@ from rl_exp.tools.verify.check_self_collision import fk, load_urdf, read_obj
 from lizard2_round_feet_candidate import vertices
 
 SKELETON = ROOT / 'rl_exp/out/lizard2_round_feet/skeleton02/lizard2_round_feet.blend'
+TWO_AXIS_BLEND = ROOT / 'rl_exp/out/lizard2_two_axis_20261029/candidate01/lizard2_two_axis.blend'
+ORIGINAL_BLEND = ROOT / 'rl_exp/out/lizard2_e_spatial_20261015/palm_spatial.blend'
 SKELETON_SHA = '4e3073d1389db9875a0dd4db4e7ec4ef7a56b5231d7df6fc12edc4c57660cf07'
 FORMAL_SHA = 'e8896feb8b0dbdbeaa35e74a01c2ffcb4ab38d89b52f221831b3f287943edd00'
 PARENTS = dict(zip(FEET, ('lf_elbow', 'rf_elbow', 'rl_knee', 'rr_knee')))
@@ -140,7 +142,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--elbow_limit', type=float, help='symmetric elbow limit [rad]; no source expansion')
-    parser.add_argument('--source_urdf', type=Path, help='formal palm-spatial URDF; defaults to the archived copy')
+    parser.add_argument('--source_urdf', type=Path, help='formal palm-spatial URDF; defaults to the repository copy')
     parser.add_argument('--skeleton', type=Path, help='verified round skeleton .blend; defaults to skeleton02')
     parser.add_argument('--two_axis_blend', type=Path, help="skeleton's recorded source .blend")
     parser.add_argument('--original_blend', type=Path, help="two-axis candidate's recorded source .blend")
@@ -166,10 +168,10 @@ def main():
     build = json.loads(build_path.read_text(encoding='utf-8'))
     require(build['candidate_sha256'] == SKELETON_SHA and build['sphere_radius_m'] == RADIUS,
             'skeleton build binding')
-    two_axis = bind(locate(args.two_axis_blend or build['source']), build['source_sha256'])
+    two_axis = bind(locate(args.two_axis_blend or TWO_AXIS_BLEND), build['source_sha256'])
     provenance = json.loads(bind(two_axis.with_suffix('.json')).read_text(encoding='utf-8'))
     require(provenance['candidate_sha256'] == bindings[str(two_axis)], 'two-axis binding')
-    original = bind(locate(args.original_blend or provenance['source']), provenance['source_sha256'])
+    original = bind(locate(args.original_blend or ORIGINAL_BLEND), provenance['source_sha256'])
     require(provenance['source_sha256'] ==
             'beeac4c09726260bf392a6ecc81a04ebcf9b54a210416493bbb2689c4909cdea',
             'unexpected original formal blend')

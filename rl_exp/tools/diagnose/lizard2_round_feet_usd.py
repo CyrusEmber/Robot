@@ -287,8 +287,8 @@ def main():
     if args.formal_dir:
         if args.usd or args.repair:
             parser.error('--formal_dir is read-only: no --usd or --repair')
-        formal_report(args.formal_dir.resolve(), args.output.resolve(), parser)
-        return
+        report = formal_report(args.formal_dir.resolve(), args.output.resolve(), parser)
+        return 0 if report['pass'] else 1
     if args.export_dir is None:
         parser.error('--export_dir or --formal_dir is required')
     directory = args.export_dir.resolve()
