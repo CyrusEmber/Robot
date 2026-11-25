@@ -336,7 +336,7 @@ def _prepare_env(protocol: dict) -> tuple[object, object, str, tuple[BytesIO, di
 def _make_policy(wrapper, env, agent_cfg, rec: dict, pinned_checkpoint):
     """Check the runtime interface before loading the same verified checkpoint bytes."""
     from ablation_harness.experiment_eval import check_signature
-    from rl_exp.locomotion.train_record import interface_signature
+    from rl_exp.locomotion.run import interface_signature
 
     stream, binding, expected = pinned_checkpoint
     actual = interface_signature(env)

@@ -21,7 +21,7 @@ from ablation_harness.components.dr_controller import apply_eval_mode
 from ablation_harness import experiment_eval
 from ablation_harness.experiment_eval import check_signature, resolved_config
 from rl_exp import lizard2_v7
-from rl_exp.locomotion.train_record import asset_fingerprints, interface_signature
+from rl_exp.locomotion.run import asset_fingerprints, interface_signature
 
 ROOT = Path(__file__).resolve().parents[1]
 
