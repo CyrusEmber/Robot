@@ -127,7 +127,7 @@ def test_one_ppo_update_and_reload(tmp_path):
     run = tmp_path / "run"
     env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
     train = subprocess.run(
-        [sys.executable, "-m", "rl_exp.locomotion.train", "--exp", "rl_exp/lizard2_v7.py", "--train-only",
+        [sys.executable, "-m", "rl_exp.locomotion.train", "--exp", "rl_exp/lizard2_v7.py",
          "--num-envs", "4", "--max-iterations", "1", "--seed", "123", "--viz", "none", "--run-dir", str(run)],
         cwd=ROOT, env=env, capture_output=True, text=True, errors="replace", timeout=180,
     )
@@ -284,21 +284,8 @@ def test_inference_config_drift_check(tmp_path):
     assert allowed_act["status"] == "drifted" and allowed_act["allow_drift"] is True
 
 
-def test_train_cli_helpers_and_failure_exit(tmp_path):
-    from rl_exp.locomotion.train import _latest_checkpoint, _strip_eval_flag
-
-    assert _strip_eval_flag(["--exp", "a.py", "--eval", "--seed", "1"]) == ["--exp", "a.py", "--seed", "1"]
-
-    run = tmp_path / "run"
-    run.mkdir()
-    with pytest.raises(FileNotFoundError):
-        _latest_checkpoint(run)
-    for name in ("model_2.pt", "model_10.pt", "model_9.pt", "model_best.pt"):
-        (run / name).write_bytes(b"pt")
-    assert _latest_checkpoint(run).name == "model_10.pt"
-
-    # Real subprocess probe: training error returns nonzero, existing --run-dir fails before AppLauncher,
-    # and --train-only works with a deprecation warning while --eval + --train-only is refused.
+def test_train_failure_exit_and_existing_run_dir(tmp_path):
+    # Real subprocess probe: training error returns nonzero and an existing --run-dir fails before AppLauncher.
     stub_exp = tmp_path / "stub_exp.py"
     stub_exp.write_text(
         "from types import SimpleNamespace\n"
@@ -349,10 +336,6 @@ if mode == "failure":
     sys.argv = ["train", "--exp", exp_path, "--run-dir", run_dir]
 elif mode == "existing_dir":
     sys.argv = ["train", "--exp", exp_path, "--run-dir", run_dir]
-elif mode == "train_only_alias":
-    sys.argv = ["train", "--exp", exp_path, "--train-only", "--run-dir", run_dir]
-elif mode == "conflict":
-    sys.argv = ["train", "--exp", exp_path, "--eval", "--train-only"]
 train_mod.main()
 '''
     env = {**os.environ, "PYTHONPATH": str(ROOT)}
@@ -367,15 +350,6 @@ train_mod.main()
                          cwd=ROOT, env=env, capture_output=True, text=True, errors="replace")
     assert res.returncode != 0 and "FileExistsError" in res.stderr
     assert "AppLauncher must not start" not in res.stderr
-
-    alias_run = tmp_path / "alias_run"
-    res = subprocess.run([sys.executable, "-c", probe, "train_only_alias", str(stub_exp), str(alias_run)],
-                         cwd=ROOT, env=env, capture_output=True, text=True, errors="replace")
-    assert "--train-only is deprecated" in res.stderr and res.returncode == 1
-
-    res = subprocess.run([sys.executable, "-c", probe, "conflict", str(stub_exp), str(tmp_path / "unused")],
-                         cwd=ROOT, env=env, capture_output=True, text=True, errors="replace")
-    assert res.returncode == 2 and "cannot be combined" in res.stderr
 
 
 @pytest.mark.skipif(os.name != "nt", reason="find_python.cmd is Windows-only")

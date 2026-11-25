@@ -24,7 +24,7 @@ description: >
 
 1. **试新奖励/超参**：直接复制 `rl_exp/lizard2_v7.py` 改参数，运行：
    `.\train.cmd --exp rl_exp/<your_exp>.py --viz none`
-   - 默认只训练；加 `--eval` 在训完自动串接 `eval.cmd`。
+   - 只训练，不串接评测；训完手动跑 `eval.cmd`。
    - 无需注册任务、无需清理工作区、无需手写版本文档。
    - Run 自动在 `rl_exp/out/train/`（首次训练自动创建）下记录 `resolved_cfg.yaml`、`provenance.json`、`git.diff`、`interface_signature.json`、权重和 TensorBoard。
 2. **改机体**：只改 `rl_exp/robots/<body.py>`，实验里保持 `ROBOT = <body_module>` 并在 `make_env_cfg()` 调用期读取 `ROBOT` 属性，不在模块导入期静态绑定。
