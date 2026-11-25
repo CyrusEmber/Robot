@@ -39,4 +39,4 @@ evidence: acceptance/records/2026-10-30-eval-column-coupling-summary-repair-revi
   探针用的是内存注入，没有改 `suites.py` 正文 —— 那次改会静默换掉此后所有 v3 run 的地面。
 - 本次审核不授权新增诊断入口或改变正式测量语义；后续诊断须先明确控制变量，正式协议变更仍走升版。
 - 不评策略强弱；探针读数只作耦合证据。
-- 探针行只存在于 `results/locomotion_eval_v3/coupling-probe/`（自带 group），是诊断读数、不进 campaign 表。
+- 探针行只存在于 `ablation_harness/results/locomotion_eval_v3/coupling-probe/`（自带 group），是诊断读数、不进 campaign 表；该目录已随退网迁入 `rl_exp/out/archive/pre-refactor/`（本机归档，逐文件摘要见同目录 `manifest*.json`）。

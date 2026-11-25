@@ -42,7 +42,7 @@ if not exist "%ROOT%\source\isaaclab" (
     exit /b 1
 )
 if not exist "%ROOT%\.git" (
-    echo [FAIL] !ROOT!\.git not found -- the fork patches need a git checkout of the tree.
+    echo [FAIL] !ROOT!\.git not found -- training and eval records need a git checkout to name its revision.
     exit /b 1
 )
 if not exist "%VENV%\Scripts\python.exe" (
