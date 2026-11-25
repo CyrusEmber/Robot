@@ -1201,9 +1201,9 @@ def capture(args):
         from ablation_harness.components.dr_controller import apply_eval_mode
         from ablation_harness.terrain_geometry import seed_rngs
         from ablation_harness import terrain_split_probe, cfg_snapshot
-        from rl_exp import lizard2_v7
+        from rl_exp.experiments.lizard2 import flat_v7
 
-        cfg = lizard2_v7.make_env_cfg()
+        cfg = flat_v7.make_env_cfg()
         cfg.scene.terrain = suites.lizard_suite_v2()
         suites.bind_head_ground_to_terrain(cfg)
         sub = cfg.scene.terrain.terrain_generator.sub_terrains

@@ -46,11 +46,11 @@ class RoundFeetTest(unittest.TestCase):
 
     def test_live_task_resolves_native_presets(self):
         from isaaclab_physx.sensors.contact_sensor.contact_sensor_cfg import ContactSensorCfg
-        from rl_exp import lizard2_v7
+        from rl_exp.experiments.lizard2 import flat_v7
 
         for play in (False, True):
             with self.subTest(play=play):
-                sensor = lizard2_v7.make_env_cfg(play=play).scene.head_ground_contact
+                sensor = flat_v7.make_env_cfg(play=play).scene.head_ground_contact
                 self.assertIsInstance(sensor, ContactSensorCfg)
                 self.assertEqual(sensor.prim_path, '{ENV_REGEX_NS}/Robot/Geometry/neck_pitch')
                 self.assertEqual(sensor.history_length, 4)

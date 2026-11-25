@@ -20,7 +20,7 @@ import pytest
 from ablation_harness.components.dr_controller import apply_eval_mode
 from ablation_harness import experiment_eval
 from ablation_harness.experiment_eval import check_signature, resolved_config
-from rl_exp import lizard2_v7
+from rl_exp.experiments.lizard2 import flat_v7
 from rl_exp.locomotion.run import asset_fingerprints, interface_signature
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,10 +29,10 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_eval_uses_workspace_experiment_and_checks_run_assets(tmp_path, monkeypatch):
     checkpoint = tmp_path / "model_0.pt"
     checkpoint.touch()
-    experiment = ROOT / "rl_exp/lizard2_v7.py"
+    experiment = ROOT / "rl_exp/experiments/lizard2/flat_v7.py"
     copy = tmp_path / "v7_at_training.py"
     copy.write_text("# experiment at training time\n", encoding="utf-8")
-    provenance = {"experiment": {"repo_path": "rl_exp/lizard2_v7.py", "copy": copy.name},
+    provenance = {"experiment": {"repo_path": "rl_exp/experiments/lizard2/flat_v7.py", "copy": copy.name},
                   "assets": {"usd": {"sha256": "recorded"}}}
     (tmp_path / "provenance.json").write_text(json.dumps(provenance), encoding="utf-8")
 
@@ -49,12 +49,12 @@ def test_eval_uses_workspace_experiment_and_checks_run_assets(tmp_path, monkeypa
 
 
 def test_v7_modes():
-    train = lizard2_v7.make_env_cfg()
-    play = lizard2_v7.make_env_cfg(play=True)
+    train = flat_v7.make_env_cfg()
+    play = flat_v7.make_env_cfg(play=True)
     assert train.scene.num_envs == 4096
     assert play.scene.num_envs == 50
-    assert train.scene.robot.spawn.usd_path == str(lizard2_v7.ROBOT.USD_PATH)
-    body = ElementTree.parse(lizard2_v7.ROBOT.URDF_PATH)
+    assert train.scene.robot.spawn.usd_path == str(flat_v7.ROBOT.USD_PATH)
+    body = ElementTree.parse(flat_v7.ROBOT.URDF_PATH)
     movable = {joint.get("name") for joint in body.findall("joint") if joint.get("type") != "fixed"}
     leg_joints = train.actions.joint_pos_legs.joint_names
     spine_joints = train.actions.joint_pos_spine.joint_names
@@ -127,7 +127,7 @@ def test_one_ppo_update_and_reload(tmp_path):
     run = tmp_path / "run"
     env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
     train = subprocess.run(
-        [sys.executable, "-m", "rl_exp.locomotion.train", "--exp", "rl_exp/lizard2_v7.py",
+        [sys.executable, "-m", "rl_exp.locomotion.train", "--exp", "rl_exp/experiments/lizard2/flat_v7.py",
          "--num-envs", "4", "--max-iterations", "1", "--seed", "123", "--viz", "none", "--run-dir", str(run)],
         cwd=ROOT, env=env, capture_output=True, text=True, errors="replace", timeout=180,
     )
@@ -155,7 +155,7 @@ def test_one_ppo_update_and_reload(tmp_path):
 
 
 def test_signature_matches_legacy_v7_sidecar_and_rejects_renamed_joint_obs():
-    cfg = lizard2_v7.make_env_cfg()
+    cfg = flat_v7.make_env_cfg()
     # Exact PhysX runtime 26-joint order from the adopted model_5999.pt.interface.json sidecar.
     sidecar_joints = [
         "chest_yaw_joint", "tail1_yaw_joint", "rl_hip_swing_joint", "rr_hip_swing_joint",
@@ -171,8 +171,8 @@ def test_signature_matches_legacy_v7_sidecar_and_rejects_renamed_joint_obs():
     dims = [(3,), (3,), (3,), (3,), (26,), (26,), (26,)]
     obs = SimpleNamespace(cfg=cfg.observations, active_terms={"policy": term_names},
                           group_obs_term_dim={"policy": dims})
-    leg = list(lizard2_v7.ROBOT.LEG_ACTION_JOINTS)
-    spine = list(lizard2_v7.ROBOT.SPINE_ACTION_JOINTS)
+    leg = list(flat_v7.ROBOT.LEG_ACTION_JOINTS)
+    spine = list(flat_v7.ROBOT.SPINE_ACTION_JOINTS)
     action_terms = {
         "joint_pos_legs": SimpleNamespace(action_dim=len(leg), IO_descriptor=SimpleNamespace(joint_names=leg)),
         "joint_pos_spine": SimpleNamespace(action_dim=len(spine), IO_descriptor=SimpleNamespace(joint_names=spine)),
@@ -238,14 +238,14 @@ def test_inference_config_drift_check(tmp_path):
 
     checkpoint = tmp_path / "model_0.pt"
     checkpoint.touch()
-    env_cfg = lizard2_v7.make_env_cfg()
-    runner_cfg = lizard2_v7.make_runner_cfg()
+    env_cfg = flat_v7.make_env_cfg()
+    runner_cfg = flat_v7.make_runner_cfg()
 
     # Legacy checkpoint without provenance.json or resolved_cfg.yaml reports unavailable.
     assert experiment_eval.check_inference_config(checkpoint, env_cfg, runner_cfg)["status"] == "unavailable"
 
     # A new training Run (provenance with experiment) missing resolved_cfg.yaml is refused by default.
-    run_prov = {"experiment": {"repo_path": "rl_exp/lizard2_v7.py"}}
+    run_prov = {"experiment": {"repo_path": "rl_exp/experiments/lizard2/flat_v7.py"}}
     (tmp_path / "provenance.json").write_text(json.dumps(run_prov), encoding="utf-8")
     with pytest.raises(ValueError, match="missing resolved_cfg.yaml"):
         experiment_eval.check_inference_config(checkpoint, env_cfg, runner_cfg)
@@ -255,12 +255,12 @@ def test_inference_config_drift_check(tmp_path):
     dump_yaml(str(tmp_path / "resolved_cfg.yaml"), {"env": env_cfg.to_dict(), "runner": runner_cfg.to_dict()})
 
     # Changing only reward weight passes cleanly.
-    reward_only = lizard2_v7.make_env_cfg()
+    reward_only = flat_v7.make_env_cfg()
     reward_only.rewards.track_lin_vel_xy_miki.weight = 9.9
     assert experiment_eval.check_inference_config(checkpoint, reward_only, runner_cfg)["status"] == "matched"
 
     # Changing one joint PD stiffness is refused by default, allowed with --allow-drift.
-    pd_drifted = lizard2_v7.make_env_cfg()
+    pd_drifted = flat_v7.make_env_cfg()
     pd_drifted.scene.robot.actuators["legs"].stiffness["lf_elbow_joint"] += 1.0
     with pytest.raises(ValueError, match=r"Training inference config\.robot\.actuators\.legs\.stiffness"):
         experiment_eval.check_inference_config(checkpoint, pd_drifted, runner_cfg)
@@ -268,7 +268,7 @@ def test_inference_config_drift_check(tmp_path):
     assert allowed_pd["status"] == "drifted" and allowed_pd["allow_drift"] is True
 
     # Changing runner.clip_actions is refused by default, allowed with --allow-drift.
-    clip_drifted = lizard2_v7.make_runner_cfg()
+    clip_drifted = flat_v7.make_runner_cfg()
     clip_drifted.clip_actions = 1.5
     with pytest.raises(ValueError, match=r"Training inference config\.clip_actions"):
         experiment_eval.check_inference_config(checkpoint, env_cfg, clip_drifted)
@@ -276,7 +276,7 @@ def test_inference_config_drift_check(tmp_path):
     assert allowed_clip["status"] == "drifted" and allowed_clip["allow_drift"] is True
 
     # Changing runner.actor.activation (same weight shapes, different inference outputs) is refused by default.
-    act_drifted = lizard2_v7.make_runner_cfg()
+    act_drifted = flat_v7.make_runner_cfg()
     act_drifted.actor.activation = "relu"
     with pytest.raises(ValueError, match=r"Training inference config\.actor\.activation"):
         experiment_eval.check_inference_config(checkpoint, env_cfg, act_drifted)
@@ -438,9 +438,9 @@ def test_swapping_robot_module_rebinds_env_and_scanner(tmp_path, monkeypatch):
         ACTION_CLIP={"alt_leg_a": 1.1, "alt_leg_b": 1.2, "alt_spine_a": 0.3},
         make_robot_cfg=fake_make_robot_cfg,
     )
-    monkeypatch.setattr(lizard2_v7, "ROBOT", fake_robot)
+    monkeypatch.setattr(flat_v7, "ROBOT", fake_robot)
 
-    cfg = lizard2_v7.make_env_cfg()
+    cfg = flat_v7.make_env_cfg()
     assert cfg.scene.robot.spawn.usd_path == str(fake_usd)
     assert cfg.scene.head_ground_contact.prim_path == "{ENV_REGEX_NS}/Robot/Links/alt_skull"
     assert cfg.actions.joint_pos_legs.joint_names == ["alt_leg_a", "alt_leg_b"]
@@ -451,5 +451,5 @@ def test_swapping_robot_module_rebinds_env_and_scanner(tmp_path, monkeypatch):
     assert cfg.rewards.belly_contact_force.params["force_scale"] == 321.5
     assert cfg.terminations.base_contact.params["sensor_cfg"].body_names == ["alt_belly", "alt_thorax"]
     assert cfg.terminations.head_ground_contact.params["head_body_name"] == "alt_skull"
-    assert experiment_eval.experiment_urdf(lizard2_v7) == fake_urdf
-    assert experiment_eval.height_scanner_prim_path(cfg, lizard2_v7) == "{ENV_REGEX_NS}/Robot/Links/alt_pelvis"
+    assert experiment_eval.experiment_urdf(flat_v7) == fake_urdf
+    assert experiment_eval.height_scanner_prim_path(cfg, flat_v7) == "{ENV_REGEX_NS}/Robot/Links/alt_pelvis"

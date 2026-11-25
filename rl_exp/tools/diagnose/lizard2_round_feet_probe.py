@@ -517,15 +517,15 @@ def formal_main():
         launcher = AppLauncher(args)
         app = launcher.app
         from isaaclab.envs import ManagerBasedRLEnv
-        from rl_exp import lizard2_v7
+        from rl_exp.experiments.lizard2 import flat_v7
 
-        cfg = lizard2_v7.make_env_cfg(play=args.task == 'Lizard2-Flat-Play-v7')
+        cfg = flat_v7.make_env_cfg(play=args.task == 'Lizard2-Flat-Play-v7')
         cfg.sim.device = launcher.device
-        body = lizard2_v7.ROBOT
+        body = flat_v7.ROBOT
         usd = Path(cfg.scene.robot.spawn.usd_path).resolve()
         urdf = body.URDF_PATH.resolve()
         bindings = result['bindings'] = {}
-        for path in (usd, urdf, Path(__file__), Path(lizard2_v7.__file__), Path(body.__file__)):
+        for path in (usd, urdf, Path(__file__), Path(flat_v7.__file__), Path(body.__file__)):
             digest = sha256_file(path)
             if digest is None:
                 raise ValueError(f'missing bound input: {path}')

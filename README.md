@@ -3,9 +3,9 @@
 Windows 上先按 [本机路径示例](paths.example.yaml) 填写 `paths.yaml`。其中 `python` 指向已安装 Isaac Lab、Isaac Sim 和 RSL-RL 的解释器。也可以用 `RL_PYTHON` 指定同一个解释器。
 
 1. **定义机体**。在 [圆足机体](rl_exp/robots/lizard2/round_feet/robot.py) 定义资产、身体部位、动作关节顺序、默认缩放/限幅和 PD。
-2. **定义实验**。在 [v7 实验](rl_exp/lizard2_v7.py) 绑定 `ROBOT = lizard2_round_feet`，配置观测、动作、奖励、终止、随机化和 PPO。试新想法直接复制实验文件改参数即可；改机体只改机体模块。
-3. **训练**。运行 `.\train.cmd --exp rl_exp/lizard2_v7.py --viz none`。只训练，不串接评测，训完按下一步手动评测。训练接受工作区改动，每个 Run 在 `rl_exp/out/train/`（首次训练自动创建）下独立保存生效配置、Git 差异、接口签名、权重和 TensorBoard。
-4. **评测和看片**。运行 `.\eval.cmd --ckpt <Run/model_5999.pt> --protocol locomotion_eval_v3`。打开输出目录中的 `metrics/eval.json` 和 `video/plane_overview.mp4`。历史 v7 权重旁需要保留 `model_5999.pt.interface.json`，命令再加 `--exp rl_exp/lizard2_v7.py`。手动评测可选 `--mode nominal`。
+2. **定义实验**。在 [v7 实验](rl_exp/experiments/lizard2/flat_v7.py) 绑定 `ROBOT = lizard2_round_feet`，配置观测、动作、奖励、终止、随机化和 PPO。试新想法直接复制实验文件改参数即可；改机体只改机体模块。
+3. **训练**。运行 `.\train.cmd --exp rl_exp/experiments/lizard2/flat_v7.py --viz none`。只训练，不串接评测，训完按下一步手动评测。训练接受工作区改动，每个 Run 在 `rl_exp/out/train/`（首次训练自动创建）下独立保存生效配置、Git 差异、接口签名、权重和 TensorBoard。
+4. **评测和看片**。运行 `.\eval.cmd --ckpt <Run/model_5999.pt> --protocol locomotion_eval_v3`。打开输出目录中的 `metrics/eval.json` 和 `video/plane_overview.mp4`。历史 v7 权重旁需要保留 `model_5999.pt.interface.json`，命令再加 `--exp rl_exp/experiments/lizard2/flat_v7.py`。2026-11-25 前训练的 Run 的 `provenance.json` 记的是旧路径 `rl_exp/lizard2_v7.py`，回读必须显式传 `--exp`。手动评测可选 `--mode nominal`。
 
 评测执行工作区的实验文件，并在造环境前把训练口径下的推理关键配置（`scene.robot`、`actions`、`observations`、`sim.dt`、`decimation`、`runner.clip_actions`、`runner.obs_groups`、`runner.actor`）与 Run 的 `resolved_cfg.yaml` 比对；有差异或新 Run 缺失 `resolved_cfg.yaml` 时默认拒绝，仅在显式传 `--allow-drift` 时放行并在 `eval.json` / `matrix.json` 记录实际来源（`--exp` 仅指定实验文件，不豁免漂移校验）。有 Run 资产摘要时，指定 `--exp` 仍会校验资产。历史权重无 `provenance.json` / `resolved_cfg.yaml` 时记录配置比对不可用。
 

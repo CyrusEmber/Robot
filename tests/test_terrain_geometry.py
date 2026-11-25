@@ -381,7 +381,7 @@ def test_video_matrix_resolves_dynamic_sensor_presets() -> None:
 
     import isaaclab.envs as isaac_envs
     from ablation_harness import video_matrix
-    from rl_exp import lizard2_v7
+    from rl_exp.experiments.lizard2 import flat_v7
 
     class CheckedBeforeSimulation(Exception):
         pass
@@ -397,8 +397,8 @@ def test_video_matrix_resolves_dynamic_sensor_presets() -> None:
             raise CheckedBeforeSimulation
 
         args = video_matrix.build_parser().parse_args([])
-        args.base_env_cfg = lizard2_v7.make_env_cfg(play=True)
-        args.base_runner_cfg = lizard2_v7.make_runner_cfg()
+        args.base_env_cfg = flat_v7.make_env_cfg(play=True)
+        args.base_runner_cfg = flat_v7.make_runner_cfg()
         with patch.object(isaac_envs, "ManagerBasedRLEnv", side_effect=check_config):
             try:
                 video_matrix.record_cell({"speed": 1.5, "terrain": gear}, args)
@@ -419,12 +419,12 @@ def test_eval_resolves_dynamic_sensor_presets() -> None:
 
     from ablation_harness import experiment_eval, suites
     from ablation_harness.components.dr_controller import apply_eval_mode
-    from rl_exp import lizard2_v7
+    from rl_exp.experiments.lizard2 import flat_v7
 
     source = (_REPO / "ablation_harness" / "eval.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
     fn = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "_prepare_env")
-    exp_path = _REPO / "rl_exp" / "lizard2_v7.py"
+    exp_path = _REPO / "rl_exp" / "experiments" / "lizard2" / "flat_v7.py"
     namespace = {
         "BytesIO": BytesIO,
         "args_cli": argparse.Namespace(
@@ -441,7 +441,7 @@ def test_eval_resolves_dynamic_sensor_presets() -> None:
     protocol = yaml.safe_load(protocol_path.read_text(encoding="utf-8"))
     with patch.object(
         experiment_eval, "configurations",
-        return_value=(lizard2_v7.make_env_cfg(), lizard2_v7.make_runner_cfg(), {}, {"status": "unavailable"}, lizard2_v7),
+        return_value=(flat_v7.make_env_cfg(), flat_v7.make_runner_cfg(), {}, {"status": "unavailable"}, flat_v7),
     ), patch.object(
         experiment_eval, "checkpoint_snapshot", return_value=(BytesIO(b"ckpt"), {"path": "unused.pt", "sha256": "0"}),
     ), patch.object(

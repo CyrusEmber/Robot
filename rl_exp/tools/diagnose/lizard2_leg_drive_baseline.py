@@ -93,9 +93,9 @@ def _gravity_design(reference, urdf):
 
 def _params():
     """The live v7 configuration in the shape the report reads (the YAML it used to read is retired)."""
-    from rl_exp import lizard2_v7
+    from rl_exp.experiments.lizard2 import flat_v7
 
-    env = lizard2_v7.make_env_cfg()
+    env = flat_v7.make_env_cfg()
     articulation = env.scene.robot
     actions = {'joints': {}, 'clip': {}, 'use_default_offset': env.actions.joint_pos_legs.use_default_offset}
     for group in ('legs', 'spine'):

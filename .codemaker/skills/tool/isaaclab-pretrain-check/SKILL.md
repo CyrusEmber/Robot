@@ -6,7 +6,7 @@ description: >
 
 # 开训前检查
 
-现役独立实验（如 `rl_exp/lizard2_v7.py`）使用显式 `ROBOT` 模块和 `make_env_cfg()`，入口见仓库 [README](../../../../README.md)。
+现役独立实验（如 `rl_exp/experiments/lizard2/flat_v7.py`）使用显式 `ROBOT` 模块和 `make_env_cfg()`，入口见仓库 [README](../../../../README.md)。
 
 1. **配置与绑定离线检查**：
    - 在仓库根目录运行 `pytest`（默认只跑 `tests/` 下的快速离线用例，覆盖 `exp.ROBOT` 绑定、观测/动作接口签名、推理漂移校验和资产摘要检查）。

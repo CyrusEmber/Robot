@@ -1033,7 +1033,7 @@ try:
     from isaaclab.envs import ManagerBasedRLEnv
     from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper, handle_deprecated_rsl_rl_cfg
     from rsl_rl.runners import OnPolicyRunner
-    from rl_exp import lizard2_v7
+    from rl_exp.experiments.lizard2 import flat_v7
     from ablation_harness.components.dr_controller import apply_eval_mode
     from ablation_harness.record import checkpoint_digest
 
@@ -1051,7 +1051,7 @@ try:
                        'code_sha256': sha256_file(Path(__file__)), 'speed_mps': args.speed,
                        'seed': args.seed, 'steps': args.steps}, stream, indent=2, allow_nan=False)
         propulsion_started = True
-    cfg = lizard2_v7.make_env_cfg(play=True)
+    cfg = flat_v7.make_env_cfg(play=True)
     cfg.sim.device = launcher.device
     cfg.scene.num_envs, cfg.seed = 4, args.seed
     cfg.episode_length_s = 20.0
@@ -1111,7 +1111,7 @@ try:
         for name, event in vars(cfg.events).items():
             if event is not None:
                 setattr(cfg.events, name, None)
-    agent = handle_deprecated_rsl_rl_cfg(lizard2_v7.make_runner_cfg(),
+    agent = handle_deprecated_rsl_rl_cfg(flat_v7.make_runner_cfg(),
                                          importlib.metadata.version('rsl-rl-lib'))
     if args.leg_drive_calibration:
         paths = leg_drive_reserve_outputs(args.out)

@@ -22,7 +22,7 @@ description: >
 
 ## 日常操作
 
-1. **试新奖励/超参**：直接复制 `rl_exp/lizard2_v7.py` 改参数，运行：
+1. **试新奖励/超参**：直接复制 `rl_exp/experiments/lizard2/flat_v7.py` 改参数，运行：
    `.\train.cmd --exp rl_exp/<your_exp>.py --viz none`
    - 只训练，不串接评测；训完手动跑 `eval.cmd`。
    - 无需注册任务、无需清理工作区、无需手写版本文档。
