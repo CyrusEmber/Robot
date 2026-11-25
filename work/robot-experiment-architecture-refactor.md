@@ -3,7 +3,7 @@ id: robot-experiment-architecture-refactor
 title: 运行与评测依赖方向整理
 scope: rl_exp/locomotion, rl_exp/tools/runrecord, ablation_harness, train.cmd, README.md, .codemaker/skills/tool/isaaclab-task-creator
 status: open
-next: 步骤 1、2、4（`judge_semantics.json`）已做；步骤 3 取消。待办：跑 `eval.cmd` 逐位对比基线（步骤 5）；协议锚口径与旧协议由人裁定（步骤 4）。基线见 HEAD `a7bab8990fc0`，`evaluation/2026-11-25_12-28-43_1ecba8f6/`。
+next: 步骤 1、2、5 已做并验收，步骤 3 取消，步骤 4 仅剩人工裁定：`protocol_anchors.json` 的“v4 现行”口径与旧协议 v1/v2/v4 去留。裁定并处理后删除本项，结论转验收记录。
 close_when: `rl_exp/locomotion` 不导入评测，也不导入 `tools`（共享原语 `binding` 除外）；v7 `make_env_cfg()` / `make_runner_cfg()` 导出配置与重构前逐字段等价；`model_5999.pt` 在 `locomotion_eval_v3`、seed 123 下的 robust 评测与基线逐位一致；默认 pytest 全绿；`-m sim` 冒烟全绿；协议锚口径与旧协议已裁定。
 evidence: work/v7-workflow-hardening.md, acceptance/records/2026-11-23-v7-standalone-cutover.md
 ---
@@ -26,7 +26,7 @@ evidence: work/v7-workflow-hardening.md, acceptance/records/2026-11-23-v7-standa
 4. 退网残留：
    - 【已做】删除 `ablation_harness/judge_semantics.json`：全仓代码零读者，其注记指向的 `check_judge_semantics.py` 与 `test_baseline_contract.py` 均已不存在，且含 6 处指向已不存在模块 `baseline_metrics` 的 `module` 值。恢复来源：删除前提交。
    - 【待人工裁定】`protocol_anchors.json` 的“v4 现行”口径与协议 v1/v2/v4：`test_eval_frame_v2.py:184`、`:299-301` 读 v4，`test_terrain_geometry.py:191` 读 v2，锚表自述“改表是人工批准动作”，协议头声明冻结。改口径或删协议属批准动作，且要同步改上述测试，不在本项自动执行。
-5. 全部完成后跑一次逐位评测对比。
+5. 【已做】HEAD `85deecd` 逐位评测：产物 `evaluation/2026-11-25_12-48-23_4b780c57/`，退出码 0，与基线 `2026-11-25_12-28-43_1ecba8f6` 的 `eval.json` 仅 `git_rev_lizard`（两处）与 `timestamp` 不同，其余字段逐位相等；九段录像仅核文件齐全。`pytest -m sim` 1 通过（真实一步 PPO、重载、评测 rollout）；默认 pytest 与 verify 专项 43 项通过。
 
 
 ## 非目标
