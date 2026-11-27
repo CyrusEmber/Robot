@@ -101,6 +101,9 @@ def main() -> int:
     scanned = 0
     findings: list[tuple[str, list[str]]] = []
     for root in _ROOTS:
+        if not (_REPO / root).is_dir():
+            print(f"  scan root missing: {root}")
+            return 1
         for path in sorted((_REPO / root).rglob("*.py")):
             if path == _HOME:
                 continue
