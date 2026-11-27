@@ -33,6 +33,12 @@ TWO_AXIS_BLEND = ROOT / 'rl_exp/out/lizard2_two_axis_20261029/candidate01/lizard
 ORIGINAL_BLEND = ROOT / 'rl_exp/out/lizard2_e_spatial_20261015/palm_spatial.blend'
 SKELETON_SHA = '4e3073d1389db9875a0dd4db4e7ec4ef7a56b5231d7df6fc12edc4c57660cf07'
 FORMAL_SHA = 'e8896feb8b0dbdbeaa35e74a01c2ffcb4ab38d89b52f221831b3f287943edd00'
+# skeleton02/build.json records the builder before 4c4d9bc moved it out of rl_exp/; that commit
+# changed only its ROOT depth and one import path. Recorded builder hash -> its moved bytes.
+MOVED_BUILDER_SHA = {
+    'a689c4566d0b0c4b698724a764b9d4a97bd8f5f20ad42754ef031807e687b850':
+        '8cfab1e7e6ee816fc2f81ecd2f73fdeb2d42fff6f43febcab5e6c6dd773fbe52',
+}
 PARENTS = dict(zip(FEET, ('lf_elbow', 'rf_elbow', 'rl_knee', 'rr_knee')))
 TOL = 1e-5
 RADIUS = .08
@@ -181,7 +187,8 @@ def main():
                  ROOT / 'tools/runrecord/binding.py'):
         bind(path)
     require(bindings[str(Path(__file__).with_name('lizard2_round_feet_candidate.py').resolve())]
-            == build['script_sha256'], 'skeleton builder hash mismatch')
+            == MOVED_BUILDER_SHA.get(build['script_sha256'], build['script_sha256']),
+            'skeleton builder hash mismatch')
     model = load_urdf(source_urdf)
     formal = ET.parse(source_urdf)
     for joint in formal.getroot().findall('joint'):

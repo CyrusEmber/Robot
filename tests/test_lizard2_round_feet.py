@@ -23,6 +23,16 @@ SOURCE = locate(_SOURCE)
 
 
 class RoundFeetTest(unittest.TestCase):
+    def test_export_accepts_the_skeleton_builder_it_ships_with(self):
+        # The export checks the builder's bytes against skeleton02/build.json; a builder edit
+        # without a rebuilt skeleton or a MOVED_BUILDER_SHA entry only fails inside Blender.
+        from tools.runrecord.binding import sha256_file
+        scripts = Path(__file__).resolve().parents[1] / 'blender/scripts'
+        tree = ast.parse((scripts / 'lizard2_round_feet_export.py').read_text(encoding='utf-8'))
+        moved = next(ast.literal_eval(node.value) for node in tree.body if isinstance(node, ast.Assign)
+                     and getattr(node.targets[0], 'id', None) == 'MOVED_BUILDER_SHA')
+        self.assertIn(sha256_file(scripts / 'lizard2_round_feet_candidate.py'), moved.values())
+
     def test_formal_usd_digest_mismatch_exits_nonzero(self):
         root = Path(__file__).resolve().parents[1]
         with TemporaryDirectory() as temp:
