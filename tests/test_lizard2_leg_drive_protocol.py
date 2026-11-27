@@ -64,6 +64,7 @@ def run():
         assert paths['result'] == out
         assert all(p.parent == parent and p.name.startswith('retry02_') for k, p in paths.items() if k != 'result')
         assert len(set(paths.values())) == len(paths)
+        assert 'case_51' in paths and 'case_52' not in paths, 'paths must cover the 52 self-weight protocol cases'
         nodes = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'leg_drive_reserve_outputs']
         assert len(nodes) == 1, 'exclusive reservation must reject collisions before execution'
         exec(compile(ast.Module(body=nodes, type_ignores=[]), str(path), 'exec'), namespace)

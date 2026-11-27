@@ -40,6 +40,15 @@ parser.add_argument('--leg_drive_preflight', action='store_true',
                     help='prepare swing-only baseline/candidate readbacks without stepping physics')
 parser.add_argument('--leg_drive_calibration', action='store_true',
                     help='run approved fixed-root paired leg PD comparison')
+parser.add_argument('--leg_drive_matrix', metavar='START:STOP',
+                    help='with --leg_drive_calibration: run this slice of the 52 self-weight A/B protocol cases '
+                         'instead of the 8 swing sines')
+parser.add_argument('--two_foot_hold_s', type=float, default=.3,
+                    help='with --drive_probe two_foot: recorded hold after the 0.6 s settle [s]')
+parser.add_argument('--two_foot_candidate', choices=('swing', 'abduct'), default='swing',
+                    help='with --drive_probe two_foot: joint group carrying the second env pair candidate')
+parser.add_argument('--two_foot_abduct_scale', type=float, default=2.,
+                    help='with --two_foot_candidate abduct: support-agnostic abduct Kp multiplier')
 parser.add_argument('--pose_samples', action='store_true', help='save env 0 poses and USD world axes every 0.5 s')
 parser.add_argument('--swing-clip', type=float, default=None,
                     help='probe-only: replace every *_swing_joint action clip with (-v, v); URDF limit still applies')
@@ -56,6 +65,15 @@ if args.leg_drive_preflight and not args.out.parent.parent.is_dir():
     parser.error('leg drive output parent must have an existing parent')
 if args.leg_drive_calibration and not args.out.parent.is_dir():
     parser.error('calibration output directory must already exist')
+if args.leg_drive_matrix and not args.leg_drive_calibration:
+    parser.error('--leg_drive_matrix requires --leg_drive_calibration')
+if args.two_foot_hold_s != .3 and args.drive_probe != 'two_foot':
+    parser.error('--two_foot_hold_s requires --drive_probe two_foot')
+if args.two_foot_candidate != 'swing' and args.drive_probe != 'two_foot':
+    parser.error('--two_foot_candidate requires --drive_probe two_foot')
+if args.two_foot_abduct_scale <= 1. and (args.two_foot_candidate == 'abduct'
+                                         or args.two_foot_abduct_scale != 2.):
+    parser.error('--two_foot_abduct_scale must exceed 1 and only applies to --two_foot_candidate abduct')
 if ((args.leg_drive_preflight and args.leg_drive_calibration)
         or (args.leg_drive_preflight or args.leg_drive_calibration)
         and (args.drive_probe or args.policy_drive_case or args.landing_samples
@@ -418,7 +436,7 @@ def leg_drive_output_paths(out):
     paths = {name: out.with_name(prefix + name + suffix) for name, suffix in
              (('startup', '.json'), ('plan', '.json'), ('failure', '.json'),
               ('interrupted_case', '.npz'), ('failure_frame', '.npz'))}
-    paths.update({f'case_{i:02d}': out.with_name(f'{prefix}case_{i:02d}.npz') for i in range(8)})
+    paths.update({f'case_{i:02d}': out.with_name(f'{prefix}case_{i:02d}.npz') for i in range(52)})
     paths['result'] = out
     return paths
 
@@ -447,8 +465,11 @@ def leg_drive_swing_compare(plans, results):
     return comparison
 
 
-def leg_drive_calibration(live, out, checkpoint):
-    """Capture paired fixed-root v7 A/B tracking with per-substep stops."""
+def leg_drive_calibration(live, out, checkpoint, matrix=None):
+    """Capture paired fixed-root v7 A/B tracking with per-substep stops.
+
+    ``matrix`` is an optional (start, stop) slice of the 52 self-weight protocol cases; None runs the swing sines.
+    """
     import numpy as np
     import torch
     import warp as wp
@@ -530,7 +551,10 @@ def leg_drive_calibration(live, out, checkpoint):
                     raise ValueError('backend gain or limit mismatch')
 
         read_settings()
-        plans = protocol.swing_cases(legs)
+        plans = protocol.swing_cases(legs) if matrix is None else \
+            protocol.cases(legs, gain='A', gravity='on')[slice(*matrix)]
+        if not plans:
+            raise ValueError('empty calibration slice')
         binding.update(views=views, collision_names=list(views[0]), joint_names=names, body_names=bodies)
         root = robot.data.default_root_state.torch.clone()
         root[:, :3] += live.scene.env_origins
@@ -615,7 +639,7 @@ def leg_drive_calibration(live, out, checkpoint):
                                            target_readback=arrays['readback'][:, env], q=arrays['q'][:, env])
                 results[actual_case.id] = dict(metrics, safety='pass')
             print('LEG_DRIVE_CASE', case.id, flush=True)
-        comparison = leg_drive_swing_compare(plans, results)
+        comparison = leg_drive_swing_compare(plans, results) if matrix is None else None
         report = dict(status='completed', metadata=metadata, results=results, comparison=comparison,
                       sampled_physics_steps=start_count-initial_count,
                       overall='unjudged: illustrative screening thresholds not approved; no support or actual torque')
@@ -779,9 +803,13 @@ def two_foot_probe(live, out, checkpoint):
     from tools.diagnose.lizard2_leg_drive_baseline import two_foot_trim
     from tools.runrecord.binding import sha256_file
 
-    settings = {'settle_s': .6, 'hold_s': .3, 'trim_scales': (1., 1.4), 'trim_bounds': (.4, 2.5),
+    candidate = ('swing_kp2_kd_sqrt2' if args.two_foot_candidate == 'swing'
+                 else f'abduct_kp{args.two_foot_abduct_scale:g}_kd_sqrt{args.two_foot_abduct_scale:g}')
+    settings = {'settle_s': .6, 'hold_s': args.two_foot_hold_s, 'trim_scales': (1., 1.4), 'trim_bounds': (.4, 2.5),
                 'belly_stop_n': 5., 'contact_loss_n': 1., 'wall_limit_s': 1800.,
-                'groups': ('lf+rr', 'rf+rl'), 'gains': ('v7', 'swing_kp2_kd_sqrt2'),
+                'groups': ('lf+rr', 'rf+rl'), 'gains': ('v7', candidate),
+                'candidate_group': args.two_foot_candidate,
+                'abduct_scale': args.two_foot_abduct_scale,
                 'scope': 'two-point stance with the opposite pair folded, centre of mass trimmed onto the '
                          'support line; that trim is neutral, not stable, so drift is the measured result. '
                          'Torque is a PD estimate, not a measured actuator output.'}
@@ -794,14 +822,19 @@ def two_foot_probe(live, out, checkpoint):
     trims = {group: two_foot_trim(group) for group in settings['groups']}
     assert all(set(info['trims_rad']) <= set(names) for info in trims.values())
     kp, kd = robot.data.joint_stiffness.torch.clone(), robot.data.joint_damping.torch.clone()
-    columns = [ids[i] for i, name in enumerate(names) if name.endswith('_swing_joint')]
+    columns = [ids[i] for i, name in enumerate(names) if name.endswith(f'_{args.two_foot_candidate}_joint')]
     assert len(columns) == 4
-    kp[2:, columns] *= 2.
-    kd[2:, columns] *= math.sqrt(2.)
+    scale = 2. if args.two_foot_candidate == 'swing' else args.two_foot_abduct_scale
+    kp[2:, columns] *= scale
+    kd[2:, columns] *= math.sqrt(scale)
     robot.write_joint_stiffness_to_sim_index(stiffness=kp)
     robot.write_joint_damping_to_sim_index(damping=kd)
     assert torch.allclose(wp.to_torch(robot.root_view.get_dof_stiffnesses()).to(kp.device), kp)
     assert torch.allclose(wp.to_torch(robot.root_view.get_dof_dampings()).to(kd.device), kd)
+    if args.swing_clip is not None:
+        for local, name in enumerate(names):
+            if name.endswith('_swing_joint'):
+                term._clip[:, local] = torch.tensor([-args.swing_clip, args.swing_clip], device=live.device)
     limits, vel_limits = robot.data.joint_pos_limits.torch, robot.data.joint_vel_limits.torch
     effort_limits, body_mass = robot.data.joint_effort_limits.torch, robot.data.body_mass.torch
     feet_sensors = [live.scene[f'landing_{leg}'] for leg in legs]
@@ -831,8 +864,12 @@ def two_foot_probe(live, out, checkpoint):
         raw = torch.zeros((4, live.action_manager.total_action_dim), device=live.device)
         raw[:, :16] = (target - term._offset[:, :16]) / term._scale[:, :16]
         applied = raw[:, :16] * term._scale + term._offset
-        assert torch.allclose(torch.maximum(torch.minimum(applied, term._clip[:, :, 1]), term._clip[:, :, 0]),
-                              target, atol=1e-6), 'trim target exceeds the action clip'
+        clipped = torch.maximum(torch.minimum(applied, term._clip[:, :, 1]), term._clip[:, :, 0])
+        bad = (clipped - target).abs() > 1e-6
+        assert not bad.any(), 'trim target exceeds the action clip: ' + '; '.join(
+            f'env {e} {names[j]} target {float(target[e, j]):.4f} clip '
+            f'[{float(term._clip[e, j, 0]):.3f}, {float(term._clip[e, j, 1]):.3f}]'
+            for e, j in bad.nonzero().tolist())
         return raw
 
     def centre_offset():
@@ -906,6 +943,7 @@ def two_foot_probe(live, out, checkpoint):
         return stop
 
     bias = torch.zeros((4, 16), device=live.device)
+    droops = []
 
     def run_stance(scales, seconds, samples=None, compensate=False):
         """Hold the trimmed stance, optionally folding the measured steady error back into the target.
@@ -925,7 +963,9 @@ def two_foot_probe(live, out, checkpoint):
             if stop or bool(fallen.all()):
                 break
         if compensate:
-            bias += target - robot.data.joint_pos.torch[:, ids]
+            droop = target - robot.data.joint_pos.torch[:, ids]
+            bias += droop
+            droops.append(droop.cpu().numpy().copy())
         return np.stack(offsets), stop
 
     seat = round(.2 / live.physics_dt)
@@ -939,6 +979,17 @@ def two_foot_probe(live, out, checkpoint):
     sensitivity = (fits[1][1] - fits[0][1]) / (refit - first)
     scales = np.where(np.abs(sensitivity) < 1e-4, refit, fits[1][1] / sensitivity * -1 + refit)
     scales = np.clip(scales, *settings['trim_bounds'])
+    support_local = [i for i, name in enumerate(names) if name.endswith('_swing_joint')]
+    print('TWO_FOOT_TRIM scales', [round(float(s), 4) for s in scales],
+          'per_env_offsets', [[round(float(x), 4) for x in f[1]] for f in fits],
+          'sensitivity', [round(float(s), 4) for s in sensitivity],
+          'bias_max', round(float(bias.abs().max()), 4),
+          'droop_runs', [[round(float(d[0, i]), 4) for i in support_local] for d in droops],
+          'bias_swing', [[round(float(bias[e, i]), 4) for i in support_local] for e in range(4)],
+          'scale_x_trim_swing', [round(float(scales[e] * trims[env_groups[e]]['trims_rad'][names[i]]), 4)
+                                 for e in range(4) for i in support_local
+                                 if names[i][:2] in env_groups[e].split('+')][:4],
+          'swing_clip', args.swing_clip, flush=True)
     samples = {key: [] for key in ('q', 'dq', 'target', 'estimated_effort', 'root_pos', 'root_quat',
                                    'tilt_cos', 'feet_normal', 'belly')}
     try:
@@ -1058,7 +1109,9 @@ try:
     apply_eval_mode(cfg, 'nominal')
     if args.landing_samples or args.drive_probe == 'two_foot':
         assert (args.drive_probe == 'two_foot') != args.landing_samples
-        assert not args.policy_drive_case and args.swing_clip is None
+        assert not args.policy_drive_case
+        assert args.swing_clip is None or args.drive_probe == 'two_foot', \
+            'swing clip is only wired into the two-foot probe here'
         cfg.scene.lazy_sensor_update = False
         floor = cfg.terminations.head_ground_contact.params['floor_prim_path']
         for leg, tip in FOOT.items():
@@ -1124,7 +1177,9 @@ try:
         app.close(exit_code=0)
         sys.exit(0)
     if args.leg_drive_calibration:
-        leg_drive_calibration(live, args.out, checkpoint_digest(args.checkpoint))
+        leg_drive_calibration(live, args.out, checkpoint_digest(args.checkpoint),
+                              matrix=tuple(int(v) for v in args.leg_drive_matrix.split(':'))
+                              if args.leg_drive_matrix else None)
         env.close()
         app.close(exit_code=0)
         sys.exit(0)
