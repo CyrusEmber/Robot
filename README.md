@@ -7,7 +7,7 @@ Windows 上先按 [本机路径示例](paths.example.yaml) 填写 `paths.yaml`�
 3. **训练**。运行 `.\train.cmd --exp experiments/lizard2/flat_v7.py --viz none`。只训练，不串接评测，训完按下一步手动评测。训练接受工作区改动，每个 Run 在 `rl_exp/out/train/`（首次训练自动创建）下独立保存生效配置、Git 差异、接口签名、权重和 TensorBoard。
 4. **评测和看片**。运行 `.\eval.cmd --ckpt <Run/model_5999.pt> --protocol locomotion_eval_v3`。打开输出目录中的 `metrics/eval.json` 和 `video/plane_overview.mp4`。历史 v7 权重旁需要保留 `model_5999.pt.interface.json`，命令再加 `--exp experiments/lizard2/flat_v7.py`。2026-11-25 前训练的 Run 的 `provenance.json` 记的是旧路径 `rl_exp/lizard2_v7.py`，回读必须显式传 `--exp`。手动评测可选 `--mode nominal`。
 
-代码目录（`robots/`、`experiments/`、`locomotion/`、`evaluation/`、`tools/`、`blender/`、`tests/`）在仓根。`rl_exp/` 现在只放两份本机数据：训练输出根 `rl_exp/out/` 和掌足导出源件 `rl_exp/lizard2_palm_spatial/`，路径被已记录的 Run 与哈希引用，故不随代码上移；它不可导入，残留不代表迁移未完成。
+代码目录（`robots/`、`experiments/`、`locomotion/`、`evaluation/`、`tools/`、`blender/`、`tests/`）在仓根。`rl_exp/` 现在只放两份数据：训练输出根 `rl_exp/out/`（本机，不入库）和掌足导出源件 `rl_exp/lizard2_palm_spatial/`（入库），路径被已记录的 Run 与哈希引用，故不随代码上移；它不可导入，残留不代表迁移未完成。
 
 评测执行工作区的实验文件，并在造环境前把训练口径下的推理关键配置（`scene.robot`、`actions`、`observations`、`sim.dt`、`decimation`、`runner.clip_actions`、`runner.obs_groups`、`runner.actor`）与 Run 的 `resolved_cfg.yaml` 比对；有差异或新 Run 缺失 `resolved_cfg.yaml` 时默认拒绝，仅在显式传 `--allow-drift` 时放行并在 `eval.json` / `matrix.json` 记录实际来源（`--exp` 仅指定实验文件，不豁免漂移校验）。有 Run 资产摘要时，指定 `--exp` 仍会校验资产。历史权重无 `provenance.json` / `resolved_cfg.yaml` 时记录配置比对不可用。
 
