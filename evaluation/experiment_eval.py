@@ -37,6 +37,17 @@ def experiment_files(checkpoint: Path, explicit: Path | None) -> tuple[Path, dic
     return experiment, provenance
 
 
+def experiment_task(path: Path) -> str:
+    """Name the task by its path under ``experiments/``, so same-named files of two robots differ.
+
+    A file outside ``experiments/`` (an ``--exp`` copy elsewhere) falls back to its stem.
+    """
+    try:
+        return path.resolve().relative_to(_REPO / "experiments").with_suffix("").as_posix()
+    except ValueError:
+        return path.stem
+
+
 def experiment_source(checkpoint: Path, files: tuple[Path, dict]) -> dict:
     """Identify the workspace experiment and compare its bytes with the Run copy."""
     path, provenance = files

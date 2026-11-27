@@ -399,7 +399,7 @@ def main() -> None:
     if args.dry_run:
         print(json.dumps(run(args), indent=2))
         return
-    from evaluation.experiment_eval import experiment_files, experiment_source
+    from evaluation.experiment_eval import experiment_files, experiment_source, experiment_task
 
     checkpoint = pathlib.Path(args.checkpoint).resolve()
     try:
@@ -407,7 +407,7 @@ def main() -> None:
         args.experiment_source = experiment_source(checkpoint, files)
     except (OSError, ValueError, KeyError) as exc:
         parser.error(str(exc))
-    args.task = files[0].stem
+    args.task = experiment_task(files[0])
     # rgb_array frames come from the recorder, which needs cameras regardless of --headless.
     args.enable_cameras = True
     if find_spec("isaacsim") is None:

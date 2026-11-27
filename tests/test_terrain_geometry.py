@@ -218,7 +218,7 @@ def test_video_matrix_gears_resolve_against_the_suite() -> None:
     args = video_matrix.build_parser().parse_args(["--checkpoint", "policy.pt"])
     assert args.speeds == "0.5,1.5,3" and args.seconds == 10.0
     args.dry_run = False
-    args.task = "lizard2_v7"
+    args.task = "lizard2/flat_v7"
     args.experiment_source = {}
     recorded = []
 
@@ -242,7 +242,7 @@ def test_video_matrix_gears_resolve_against_the_suite() -> None:
     # Explicit legacy camera coordinates remain a single custom view, at the old clip paths.
     custom = video_matrix.build_parser().parse_args(["--eye", "1", "2", "3", "--speeds", "2"])
     custom.dry_run = True
-    custom.task = "lizard2_v7"
+    custom.task = "lizard2/flat_v7"
     custom.experiment_source = {}
     assert video_matrix.run(custom)["cells"] == [{"speed": 2.0, "terrain": "plane", "view": "custom"}]
 

@@ -58,14 +58,14 @@ parser.add_argument("--allow-drift", action="store_true",
 parser.add_argument("--print-suite-fingerprint", action="store_true")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
-from evaluation.experiment_eval import experiment_files, experiment_source
+from evaluation.experiment_eval import experiment_files, experiment_source, experiment_task
 
 args_cli.checkpoint = args_cli.checkpoint.resolve()
 try:
     args_cli.experiment_files = experiment_files(args_cli.checkpoint, args_cli.exp)
 except (OSError, ValueError, KeyError) as exc:
     parser.error(str(exc))
-args_cli.task = args_cli.experiment_files[0].stem
+args_cli.task = experiment_task(args_cli.experiment_files[0])
 args_cli.output_dir = args_cli.output_dir or args_cli.checkpoint.parent / "evaluation" / uuid.uuid4().hex[:8] / "metrics"
 
 if find_spec("isaacsim") is None:

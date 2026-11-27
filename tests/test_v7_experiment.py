@@ -48,6 +48,16 @@ def test_eval_uses_workspace_experiment_and_checks_run_assets(tmp_path, monkeypa
             experiment_eval.configurations(experiment_eval.experiment_files(checkpoint, explicit))
 
 
+def test_task_names_keep_the_robot_directory(tmp_path):
+    assert experiment_eval.experiment_task(ROOT / "experiments/lizard2/flat_v7.py") == "lizard2/flat_v7"
+    other = ROOT / "experiments/other_robot/flat_v7.py"
+    assert experiment_eval.experiment_task(other) == "other_robot/flat_v7"
+    assert experiment_eval.experiment_task(tmp_path / "flat_v7.py") == "flat_v7"
+    for caller in ("evaluation/eval.py", "evaluation/video_matrix.py"):
+        source = (ROOT / caller).read_text(encoding="utf-8")
+        assert "experiment_task(" in source and "].stem" not in source, caller
+
+
 def test_v7_modes():
     train = flat_v7.make_env_cfg()
     play = flat_v7.make_env_cfg(play=True)
