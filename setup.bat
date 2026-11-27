@@ -50,7 +50,9 @@ if not exist "%VENV%\Scripts\python.exe" (
     exit /b 1
 )
 
-rem --- 1. venv .pth: makes the rl_exp package importable from anywhere --------
+rem --- 1. venv .pth: puts the repo root on sys.path so robots/, experiments/, -----
+rem        locomotion/, evaluation/ and tools/ import from anywhere. The file keeps
+rem        its old rl_exp.pth name so re-running setup overwrites, not duplicates.
 set "PTH=%VENV%\Lib\site-packages\rl_exp.pth"
 > "%PTH%" echo !REPO!
 if exist "%PTH%" (echo [ok]   1. rl_exp.pth written: !PTH!) else (echo [FAIL] 1. could not write !PTH! & set "RC=1")

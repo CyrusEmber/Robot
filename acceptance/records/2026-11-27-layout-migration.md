@@ -37,6 +37,19 @@
 
 计划的"仅三项不同"低估了范围：`eval.json` 把路径、任务名和可调用对象的完整名写进了证据，凡搬迁必改。历史产物与新产物这些字段不可比，属已接受代价；指标不受影响。
 
+计划第 5 步"任务 id 与 `register` 名、ckpt 目录绑定"的前提不成立：仓内已无 `gym.register`，ckpt 目录绑的是 `experiment_name="lizard2_v7"`（`experiments/lizard2/flat_v7.py`），`eval.json` 的 `task` 取实验文件名。
+
+## 复审修正（同日）
+
+- 任务名改取 `experiments/` 下的相对路径（`evaluation/experiment_eval.py` 的 `experiment_task`，`eval.py`、`video_matrix.py` 共用）：只取文件名时，`experiments/<机体>/flat_v7.py` 两个机体会得到同一个 `task`。现役值由上表的 `flat_v7` 再变为 `lizard2/flat_v7`；`--exp` 指向 `experiments/` 外的副本时退回文件名。回归 `test_task_names_keep_the_robot_directory` 在修复前失败（`AttributeError: ... no attribute 'experiment_task'`）、修复后通过。
+- `tests/test_terrain_geometry.py` 的录像矩阵用例改用新任务名。
+- `setup.bat` 的 `.pth` 注释改为"把仓根放进 `sys.path`"；文件名仍为 `rl_exp.pth`，重跑 setup 覆盖而非新增。
+- `check_terrain_split_source.py` 扫描根缺失即报红（`db1db25`）。破坏测试：`625ee0d` 版本把 `_ROOTS` 换成 `rl_exp/robots`、`rl_exp/locomotion`，输出 `0 file(s) clean` 与 `TERRAIN_SPLIT_SINGLE_SOURCE_OK`、返回 0；修复后报 `scan root missing: rl_exp/robots`、返回 1。
+- 圆足导出断链：`lizard2_round_feet_export.py` 要求骨架构建脚本的 sha256 等于 `rl_exp/out/lizard2_round_feet/skeleton02/build.json` 的 `script_sha256`（`a689c456…`），而第 7 步改了构建脚本的 `parents[N]` 与一行导入（现为 `8cfab1e7…`），导出会在 Blender 内报 `skeleton builder hash mismatch`。计划约束 2"只改路径常量、内容不变则哈希不变"对自定位脚本不成立。修法：导出加 `MOVED_BUILDER_SHA` 一条映射（记录值 → 搬后字节），不重建骨架、不改 `build.json`。回归 `test_export_accepts_the_skeleton_builder_it_ships_with` 离线核对现役构建脚本的哈希在映射里，修复前失败（`StopIteration`）、修复后通过；以后再改构建脚本而不重建骨架会在默认 pytest 红。
+- `.gitattributes` 对圆足资产的 `-text` 与 whitespace 钉还写在旧路径 `/rl_exp/lizard2_round_feet/**`，第 1 步后资产落入 `* text=auto eol=lf`。索引本是 CRLF，当时未改字节，但重新 `git add` 时会面临规范化。规则已改到 `/robots/lizard2/round_feet/assets/**`，`git check-attr text` 为 `unset`，工作树无新增改动。
+
+复审后检查：默认 `pytest` 60 通过、13 subtests；`pytest -m sim` 1 通过；`check_terrain_split_source.py` 43 个文件通过。
+
 ## 检查
 
 - 默认 `pytest`：58 通过，13 subtests。
@@ -48,6 +61,7 @@
 
 - `rl_exp/out/` 与 `rl_exp/lizard2_palm_spatial/` 原地不动。后者已入库（掌足 URDF 与网格），前者被 `.gitignore`。已记录的 Run 与导出哈希引用这些路径。
 - 旧 Run 的 `provenance.json`、`params/env.yaml` 与历史 `eval.json` 保留旧绝对路径，不改写；回读必须显式传 `--exp`。
-- `_ROOTS` 的改动（`check_terrain_split_source.py`）没有做破坏测试：改回旧值后扫描是否报"0 files"未验证。
+- `_ROOTS` 的破坏测试已补，见"复审修正"。
 - 未做 `mdp/`：观测与动作仍内嵌在 `flat_v7.py`，按计划不建。
-- `blender/scripts/*` 只改了 `parents[N]` 与导入，未实际运行。
+- `blender/scripts/*` 本机无 Blender，未实际运行。已离线核对：`parents[2]` 解析到仓根，三个 `tools.*` 导入与被绑定的四个源件可解析；构建脚本哈希断链已修（见"复审修正"）。导出所需的三份 `.blend` 在 `rl_exp/out/`，首次真跑仍是未验证项。
+- 计划文档 `work/robot-experiment-layout-migration.md` 未入库，随本次复审删除；其约束与偏差已并入本记录。
