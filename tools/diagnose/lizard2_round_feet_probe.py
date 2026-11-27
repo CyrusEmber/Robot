@@ -16,10 +16,10 @@ from pathlib import Path
 import sys
 import traceback
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-from rl_exp.tools.diagnose.lizard2_round_feet import FEET
-from rl_exp.tools.runrecord.binding import sha256_file
+from tools.diagnose.lizard2_round_feet import FEET
+from tools.runrecord.binding import sha256_file
 
 
 def check_interface(expected, names, mapping, raw=None, processed=None, targets=None, backend=None):
@@ -517,7 +517,7 @@ def formal_main():
         launcher = AppLauncher(args)
         app = launcher.app
         from isaaclab.envs import ManagerBasedRLEnv
-        from rl_exp.experiments.lizard2 import flat_v7
+        from experiments.lizard2 import flat_v7
 
         cfg = flat_v7.make_env_cfg(play=args.task == 'Lizard2-Flat-Play-v7')
         cfg.sim.device = launcher.device

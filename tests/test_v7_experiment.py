@@ -20,8 +20,8 @@ import pytest
 from evaluation.components.dr_controller import apply_eval_mode
 from evaluation import experiment_eval
 from evaluation.experiment_eval import check_signature, resolved_config
-from rl_exp.experiments.lizard2 import flat_v7
-from rl_exp.locomotion.run import asset_fingerprints, interface_signature
+from experiments.lizard2 import flat_v7
+from locomotion.run import asset_fingerprints, interface_signature
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -29,10 +29,10 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_eval_uses_workspace_experiment_and_checks_run_assets(tmp_path, monkeypatch):
     checkpoint = tmp_path / "model_0.pt"
     checkpoint.touch()
-    experiment = ROOT / "rl_exp/experiments/lizard2/flat_v7.py"
+    experiment = ROOT / "experiments/lizard2/flat_v7.py"
     copy = tmp_path / "v7_at_training.py"
     copy.write_text("# experiment at training time\n", encoding="utf-8")
-    provenance = {"experiment": {"repo_path": "rl_exp/experiments/lizard2/flat_v7.py", "copy": copy.name},
+    provenance = {"experiment": {"repo_path": "experiments/lizard2/flat_v7.py", "copy": copy.name},
                   "assets": {"usd": {"sha256": "recorded"}}}
     (tmp_path / "provenance.json").write_text(json.dumps(provenance), encoding="utf-8")
 
@@ -127,7 +127,7 @@ def test_one_ppo_update_and_reload(tmp_path):
     run = tmp_path / "run"
     env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
     train = subprocess.run(
-        [sys.executable, "-m", "rl_exp.locomotion.train", "--exp", "rl_exp/experiments/lizard2/flat_v7.py",
+        [sys.executable, "-m", "locomotion.train", "--exp", "experiments/lizard2/flat_v7.py",
          "--num-envs", "4", "--max-iterations", "1", "--seed", "123", "--viz", "none", "--run-dir", str(run)],
         cwd=ROOT, env=env, capture_output=True, text=True, errors="replace", timeout=180,
     )
@@ -245,7 +245,7 @@ def test_inference_config_drift_check(tmp_path):
     assert experiment_eval.check_inference_config(checkpoint, env_cfg, runner_cfg)["status"] == "unavailable"
 
     # A new training Run (provenance with experiment) missing resolved_cfg.yaml is refused by default.
-    run_prov = {"experiment": {"repo_path": "rl_exp/experiments/lizard2/flat_v7.py"}}
+    run_prov = {"experiment": {"repo_path": "experiments/lizard2/flat_v7.py"}}
     (tmp_path / "provenance.json").write_text(json.dumps(run_prov), encoding="utf-8")
     with pytest.raises(ValueError, match="missing resolved_cfg.yaml"):
         experiment_eval.check_inference_config(checkpoint, env_cfg, runner_cfg)
@@ -331,7 +331,7 @@ sys.modules["rsl_rl"] = types.ModuleType("rsl_rl")
 sys.modules["rsl_rl.runners"] = runners_mod
 orig_find = importlib.util.find_spec
 importlib.util.find_spec = lambda name, pkg=None: object() if name == "isaacsim" else orig_find(name, pkg)
-import rl_exp.locomotion.train as train_mod
+import locomotion.train as train_mod
 if mode == "failure":
     sys.argv = ["train", "--exp", exp_path, "--run-dir", run_dir]
 elif mode == "existing_dir":
@@ -354,10 +354,10 @@ train_mod.main()
 
 @pytest.mark.skipif(os.name != "nt", reason="find_python.cmd is Windows-only")
 def test_find_python_cmd_priority_and_yaml_parsing(tmp_path):
-    script_dir = tmp_path / "rl_exp" / "locomotion"
+    script_dir = tmp_path / "locomotion"
     script_dir.mkdir(parents=True)
     script = script_dir / "find_python.cmd"
-    script.write_text((ROOT / "rl_exp/locomotion/find_python.cmd").read_text(encoding="utf-8"), encoding="utf-8")
+    script.write_text((ROOT / "locomotion/find_python.cmd").read_text(encoding="utf-8"), encoding="utf-8")
 
     yaml_py = tmp_path / "yaml_py" / "python.exe"
     rl_py = tmp_path / "rl_py" / "python.exe"

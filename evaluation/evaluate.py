@@ -14,7 +14,7 @@ import sys
 from uuid import uuid4
 
 from evaluation.experiment_eval import experiment_files, experiment_source
-from rl_exp.tools.runrecord.binding import sha256_file
+from tools.runrecord.binding import sha256_file
 
 _REPO = Path(__file__).resolve().parents[1]
 PROTOCOLS = tuple(sorted(path.stem for path in Path(__file__).with_name("protocols").glob("*.yaml")))

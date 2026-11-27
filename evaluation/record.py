@@ -16,7 +16,7 @@ import json
 import os
 import pathlib
 
-from rl_exp.tools.runrecord import binding
+from tools.runrecord import binding
 
 #: Sentinel written for provenance fields that could not be established.
 UNKNOWN = "unknown"

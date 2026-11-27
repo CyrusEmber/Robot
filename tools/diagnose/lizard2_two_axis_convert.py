@@ -7,7 +7,7 @@ import argparse
 from pathlib import Path
 import sys
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--candidate', type=Path, required=True)
 from isaaclab.app import AppLauncher
@@ -24,7 +24,7 @@ if target.exists() or (source.parent / source.stem).exists():
 app = AppLauncher(args).app
 try:
     from isaaclab.sim.converters import UrdfConverter, UrdfConverterCfg
-    sys.path.insert(0, str(ROOT / 'rl_exp/tools/pipeline'))
+    sys.path.insert(0, str(ROOT / 'tools/pipeline'))
     from flatten_usd import flatten_usd
     converter = UrdfConverter(UrdfConverterCfg(
         asset_path=str(source), usd_dir=str(source.parent), usd_file_name=target.name,

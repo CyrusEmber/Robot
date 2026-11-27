@@ -18,7 +18,7 @@ import sys
 import time
 import traceback
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from isaaclab.app import AppLauncher
 
@@ -121,7 +121,7 @@ def sine_response(time, position, target, frequency):
 def leg_drive_candidate(names, stiffness, damping, inertia):
     """Make paired v7 and twice-stiffness swing gains [N*m/rad, N*m*s/rad]."""
     import numpy as np
-    from rl_exp.tools.diagnose.lizard2_leg_drive_protocol import candidate_gains
+    from tools.diagnose.lizard2_leg_drive_protocol import candidate_gains
 
     kp, kd = np.asarray(stiffness, dtype=float).copy(), np.asarray(damping, dtype=float).copy()
     if (kp.shape != (2, 26) or kd.shape != (2, 26)
@@ -139,8 +139,8 @@ def leg_drive_preflight(live, out, checkpoint):
     import numpy as np
     import torch
     import warp as wp
-    from rl_exp.tools.diagnose import lizard2_leg_drive_baseline as baseline
-    from rl_exp.tools.runrecord.binding import sha256_file
+    from tools.diagnose import lizard2_leg_drive_baseline as baseline
+    from tools.runrecord.binding import sha256_file
 
     cfg, _, expected_names, _, bodies = baseline.inputs()
     robot = live.scene['robot']
@@ -332,7 +332,7 @@ def leg_drive_step(live, robot, plan, limits, velocity_caps, binding, constant_w
     import numpy as np
     import torch
     import warp as wp
-    from rl_exp.tools.diagnose import lizard2_leg_drive_protocol as protocol
+    from tools.diagnose import lizard2_leg_drive_protocol as protocol
 
     names = list(robot.joint_names)
     body_names = list(robot.body_names)
@@ -436,7 +436,7 @@ def leg_drive_reserve_outputs(out):
 
 def leg_drive_swing_compare(plans, results):
     """Compare A/B RMS tracking errors from completed swing cases [rad]."""
-    from rl_exp.tools.diagnose import lizard2_leg_drive_protocol as protocol
+    from tools.diagnose import lizard2_leg_drive_protocol as protocol
 
     comparison = {}
     for case in plans:
@@ -452,10 +452,10 @@ def leg_drive_calibration(live, out, checkpoint):
     import numpy as np
     import torch
     import warp as wp
-    from rl_exp.tools.diagnose import lizard2_leg_drive_baseline as baseline
-    from rl_exp.tools.diagnose import lizard2_leg_drive_protocol as protocol
-    from rl_exp.tools.diagnose.lizard2_round_feet_probe import check_interface
-    from rl_exp.tools.runrecord.binding import sha256_file
+    from tools.diagnose import lizard2_leg_drive_baseline as baseline
+    from tools.diagnose import lizard2_leg_drive_protocol as protocol
+    from tools.diagnose.lizard2_round_feet_probe import check_interface
+    from tools.runrecord.binding import sha256_file
 
     paths = leg_drive_output_paths(out)
     if not paths['startup'].is_file():
@@ -643,7 +643,7 @@ def drive_probe(live, out, mode, checkpoint):
     import numpy as np
     import torch
     import warp as wp
-    from rl_exp.tools.runrecord.binding import sha256_file
+    from tools.runrecord.binding import sha256_file
 
     check_time = np.arange(0., 8., 0.02)
     check_target = 0.1 * np.sin(2*math.pi*check_time)
@@ -776,8 +776,8 @@ def two_foot_probe(live, out, checkpoint):
     import numpy as np
     import torch
     import warp as wp
-    from rl_exp.tools.diagnose.lizard2_leg_drive_baseline import two_foot_trim
-    from rl_exp.tools.runrecord.binding import sha256_file
+    from tools.diagnose.lizard2_leg_drive_baseline import two_foot_trim
+    from tools.runrecord.binding import sha256_file
 
     settings = {'settle_s': .6, 'hold_s': .3, 'trim_scales': (1., 1.4), 'trim_bounds': (.4, 2.5),
                 'belly_stop_n': 5., 'contact_loss_n': 1., 'wall_limit_s': 1800.,
@@ -1033,13 +1033,13 @@ try:
     from isaaclab.envs import ManagerBasedRLEnv
     from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper, handle_deprecated_rsl_rl_cfg
     from rsl_rl.runners import OnPolicyRunner
-    from rl_exp.experiments.lizard2 import flat_v7
+    from experiments.lizard2 import flat_v7
     from evaluation.components.dr_controller import apply_eval_mode
     from evaluation.record import checkpoint_digest
 
     task = 'Lizard2-Flat-Play-v7'
     if args.propulsion_samples:
-        from rl_exp.tools.runrecord.binding import sha256_file
+        from tools.runrecord.binding import sha256_file
 
         propulsion_paths = {name: args.out.with_name(args.out.stem + suffix) for name, suffix in
                             (('startup', '_startup.json'), ('failure', '_failure.json'),
@@ -1171,7 +1171,7 @@ try:
     samples, sample_frames = [], {}
     if args.pose_samples:
         from pxr import UsdPhysics
-        from rl_exp.tools.diagnose.lizard2_round_feet_usd import rotation
+        from tools.diagnose.lizard2_round_feet_usd import rotation
         from isaaclab.utils.math import matrix_from_quat
 
         for prim in live.sim.stage.Traverse():
@@ -1188,7 +1188,7 @@ try:
                     (joint.GetBody1Rel(), joint.GetLocalPos1Attr(), joint.GetLocalRot1Attr()))]
         assert set(sample_frames) == set(leg_names), 'loaded USD leg-joint set mismatch'
     if args.policy_drive_case:
-        from rl_exp.tools.runrecord.binding import sha256_file
+        from tools.runrecord.binding import sha256_file
 
         args.out.parent.mkdir(parents=True, exist_ok=True)
         (args.out.parent / 'plan.json').write_text(json.dumps({
@@ -1421,7 +1421,7 @@ try:
                                         'sensor_bodies': [sensor.body_names for sensor in landing_sensors],
                                         'scope': 'filtered-force onset after brief flight, not calibrated material contact or slip'}
         if args.propulsion_samples:
-            from rl_exp.tools.runrecord.binding import sha256_file
+            from tools.runrecord.binding import sha256_file
 
             report['propulsion_diagnostic'] = {
                 'samples': args.out.stem + '_landing_samples.npz', 'code_sha256': sha256_file(Path(__file__)),

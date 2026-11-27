@@ -17,10 +17,10 @@ from uuid import uuid4
 
 from isaaclab.app import AppLauncher
 
-from rl_exp.locomotion.env import load_experiment, make_env, make_runner_cfg, wrap_env
-from rl_exp.locomotion.run import interface_signature, write_json, write_provenance
+from locomotion.env import load_experiment, make_env, make_runner_cfg, wrap_env
+from locomotion.run import interface_signature, write_json, write_provenance
 
-_DEFAULT_OUTPUT = Path(__file__).resolve().parents[1] / "out" / "train"
+_DEFAULT_OUTPUT = Path(__file__).resolve().parents[1] / "rl_exp" / "out" / "train"
 
 
 def _positive_int(value: str) -> int:

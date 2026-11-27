@@ -20,12 +20,12 @@ import bpy
 import numpy as np
 from mathutils import Matrix, Quaternion, Vector
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from rl_exp.tools.diagnose.lizard2_round_feet import SOURCE, FEET, build_tree, locate, validate_tree
-from rl_exp.tools.runrecord.binding import sha256_file
-from rl_exp.tools.verify.check_self_collision import fk, load_urdf, read_obj
+from tools.diagnose.lizard2_round_feet import SOURCE, FEET, build_tree, locate, validate_tree
+from tools.runrecord.binding import sha256_file
+from tools.verify.check_self_collision import fk, load_urdf, read_obj
 from lizard2_round_feet_candidate import vertices
 
 SKELETON = ROOT / 'rl_exp/out/lizard2_round_feet/skeleton02/lizard2_round_feet.blend'
@@ -176,9 +176,9 @@ def main():
             'beeac4c09726260bf392a6ecc81a04ebcf9b54a210416493bbb2689c4909cdea',
             'unexpected original formal blend')
     for path in (__file__, Path(__file__).with_name('lizard2_round_feet_candidate.py'),
-                 ROOT / 'rl_exp/tools/diagnose/lizard2_round_feet.py',
-                 ROOT / 'rl_exp/tools/verify/check_self_collision.py',
-                 ROOT / 'rl_exp/tools/runrecord/binding.py'):
+                 ROOT / 'tools/diagnose/lizard2_round_feet.py',
+                 ROOT / 'tools/verify/check_self_collision.py',
+                 ROOT / 'tools/runrecord/binding.py'):
         bind(path)
     require(bindings[str(Path(__file__).with_name('lizard2_round_feet_candidate.py').resolve())]
             == build['script_sha256'], 'skeleton builder hash mismatch')

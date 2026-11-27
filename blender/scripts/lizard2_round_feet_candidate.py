@@ -15,9 +15,9 @@ import sys
 import bpy
 from mathutils import Matrix, Vector
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-from rl_exp.tools.runrecord.binding import sha256_file
+from tools.runrecord.binding import sha256_file
 
 FEET = {'lf_wrist': 'lf_elbow', 'rf_wrist': 'rf_elbow',
         'rl_ankle': 'rl_knee', 'rr_ankle': 'rr_knee'}

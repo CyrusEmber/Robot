@@ -35,9 +35,9 @@ import re
 import sys
 import tokenize
 
-_REPO = pathlib.Path(__file__).resolve().parents[3]
+_REPO = pathlib.Path(__file__).resolve().parents[2]
 _HOME = _REPO / "evaluation" / "terrain_map.py"
-_ROOTS = ("rl_exp", "evaluation")
+_ROOTS = ("robots", "experiments", "locomotion", "tools", "blender", "evaluation")
 
 #: ``<name> / <name> + 0.001`` -- the epsilon welded to a column fraction.
 _FRACTION_EPSILON = re.compile(r"/\s*[A-Za-z_][\w.]*\s*\+\s*0\.001")

@@ -25,7 +25,7 @@ import yaml
 _REPO = pathlib.Path(__file__).absolute().parents[1]
 from evaluation import suite_lock  # noqa: E402
 from evaluation.metrics import fall_flags  # noqa: E402
-from rl_exp.tools.runrecord import binding  # noqa: E402
+from tools.runrecord import binding  # noqa: E402
 
 STEPS, SUSTAIN = 120, 25
 TILT_COS_MIN = 0.766044443118978  # cos(40 deg) = the protocol's tilt threshold

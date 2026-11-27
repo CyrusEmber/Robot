@@ -12,8 +12,8 @@ import xml.etree.ElementTree as ET
 
 import numpy as np
 
-from rl_exp.tools.diagnose import lizard2_leg_drive_baseline as baseline
-from rl_exp.tools.verify import check_self_collision
+from tools.diagnose import lizard2_leg_drive_baseline as baseline
+from tools.verify import check_self_collision
 
 
 def rejects(fn, label):

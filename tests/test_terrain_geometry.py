@@ -381,7 +381,7 @@ def test_video_matrix_resolves_dynamic_sensor_presets() -> None:
 
     import isaaclab.envs as isaac_envs
     from evaluation import video_matrix
-    from rl_exp.experiments.lizard2 import flat_v7
+    from experiments.lizard2 import flat_v7
 
     class CheckedBeforeSimulation(Exception):
         pass
@@ -419,12 +419,12 @@ def test_eval_resolves_dynamic_sensor_presets() -> None:
 
     from evaluation import experiment_eval, suites
     from evaluation.components.dr_controller import apply_eval_mode
-    from rl_exp.experiments.lizard2 import flat_v7
+    from experiments.lizard2 import flat_v7
 
     source = (_REPO / "evaluation" / "eval.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
     fn = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "_prepare_env")
-    exp_path = _REPO / "rl_exp" / "experiments" / "lizard2" / "flat_v7.py"
+    exp_path = _REPO / "experiments" / "lizard2" / "flat_v7.py"
     namespace = {
         "BytesIO": BytesIO,
         "args_cli": argparse.Namespace(

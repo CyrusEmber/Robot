@@ -2,7 +2,7 @@
 __pycache__/
 *.pyc
 
-# Local scratch and operating system files. Put reusable diagnostics under rl_exp/tools/diagnose/.
+# Local scratch and operating system files. Put reusable diagnostics under tools/diagnose/.
 Thumbs.db
 .DS_Store
 .pytest_cache/

@@ -17,7 +17,7 @@ description: >
 - 现役新训练的 Run 默认位于 `rl_exp/out/train/<timestamp>_<id>/`（首次训练自动创建；历史旧权重位于 Isaac Lab 根下 `logs/rsl_rl/`）。
 - 运行探针：
   ```
-  <python> rl_exp/tools/trainlog/probe_run.py --run <run_dir> [--window 100] [--tags Loss,Policy]
+  <python> tools/trainlog/probe_run.py --run <run_dir> [--window 100] [--tags Loss,Policy]
   ```
 - `<python>` 取 `paths.yaml` 中的 Isaac Lab 解释器（见 [README](../../../../README.md)）。
 - 关注：无 NaN、reward 趋势、`Episode_Termination/*` 比例、`Policy/mean_std` 与 `Loss/entropy` 是否塌缩、iters/h 是否异常下降。

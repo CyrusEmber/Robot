@@ -5,9 +5,9 @@
 """Repeatable zero-action column-coupling diagnostic, not an eval protocol.
 
 Run from the repository root with the IsaacLab Python:
-    python rl_exp/tools/diagnose/column_coupling_probe.py run --output <new-directory> --steps 100
-    python rl_exp/tools/diagnose/column_coupling_probe.py compare <run-directory>
-    python rl_exp/tools/diagnose/column_coupling_probe.py selftest
+    python tools/diagnose/column_coupling_probe.py run --output <new-directory> --steps 100
+    python tools/diagnose/column_coupling_probe.py compare <run-directory>
+    python tools/diagnose/column_coupling_probe.py selftest
 
 With --intervention single_noise_min, the only modified config scalar is the
 rough_b noise_range lower bound. The default preserves the earlier bundled probe.
@@ -46,11 +46,11 @@ import traceback
 
 import numpy as np
 
-REPO = Path(__file__).resolve().parents[3]
+REPO = Path(__file__).resolve().parents[2]
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 from evaluation.host_paths import isaac_root  # noqa: E402
-from rl_exp.tools.runrecord.binding import sha256_bytes, sha256_file  # noqa: E402
+from tools.runrecord.binding import sha256_bytes, sha256_file  # noqa: E402
 
 FIELDS = ('pos', 'quat', 'lin', 'ang', 'qpos', 'qvel')
 RUNS = ('ctrl1', 'ctrl2', 'rougha1', 'rougha2')
@@ -1201,7 +1201,7 @@ def capture(args):
         from evaluation.components.dr_controller import apply_eval_mode
         from evaluation.terrain_geometry import seed_rngs
         from evaluation import terrain_split_probe, cfg_snapshot
-        from rl_exp.experiments.lizard2 import flat_v7
+        from experiments.lizard2 import flat_v7
 
         cfg = flat_v7.make_env_cfg()
         cfg.scene.terrain = suites.lizard_suite_v2()
@@ -1230,8 +1230,8 @@ def capture(args):
         isaac = isaac_root()
         meta['isaac_root'] = str(isaac)
         def source_hashes():
-            roots = (REPO / 'rl_exp/robots', REPO / 'rl_exp/locomotion', REPO / 'evaluation',
-                     REPO / 'rl_exp/tools/verify',
+            roots = (REPO / 'robots', REPO / 'locomotion', REPO / 'evaluation',
+                     REPO / 'tools/verify',
                      isaac / 'source/isaaclab/isaaclab', isaac / 'source/isaaclab_rl/isaaclab_rl',
                      isaac / 'source/isaaclab_tasks/isaaclab_tasks', isaac / 'source/isaaclab_physx/isaaclab_physx')
             missing = [str(root) for root in roots if not root.is_dir()]

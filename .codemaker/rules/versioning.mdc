@@ -1,6 +1,6 @@
 ---
 description: 现役实验的 Git 留痕与基线采纳。
-globs: rl_exp/lizard2_v*.py
+globs: experiments/lizard2/*.py
 alwaysApply: false
 ---
 

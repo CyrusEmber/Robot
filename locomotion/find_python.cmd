@@ -1,7 +1,7 @@
 @echo off
 set "EXP_PYTHON=%RL_PYTHON%"
-if not defined EXP_PYTHON if exist "%~dp0..\..\paths.yaml" (
-    for /f "usebackq tokens=1,* delims=:" %%K in ("%~dp0..\..\paths.yaml") do (
+if not defined EXP_PYTHON if exist "%~dp0..\paths.yaml" (
+    for /f "usebackq tokens=1,* delims=:" %%K in ("%~dp0..\paths.yaml") do (
         for /f "tokens=1" %%N in ("%%K") do (
             if /i "%%N"=="python" (
                 for /f "tokens=1 delims=#" %%V in ("%%L") do (

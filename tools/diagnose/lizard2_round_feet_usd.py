@@ -13,9 +13,9 @@ import xml.etree.ElementTree as ET
 import numpy as np
 from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics, UsdUtils
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-from rl_exp.tools.runrecord.binding import sha256_file as sha256
+from tools.runrecord.binding import sha256_file as sha256
 
 FEET = ('lf_wrist', 'rf_wrist', 'rl_ankle', 'rr_ankle')
 REPAIR_LINKS = {'lf_elbow', 'rf_elbow', 'rl_knee', 'rr_knee', 'tail1_pitch'}
@@ -237,7 +237,7 @@ def audit(stage, tree):
 
 def formal_report(directory, output, parser):
     """Audit the formal asset directory read-only; nothing is written beside it."""
-    from rl_exp.robots.lizard2.round_feet import robot as formal
+    from robots.lizard2.round_feet import robot as formal
     usd = directory / 'lizard2_round_feet.usda'
     urdf = directory / 'lizard2_round_feet.urdf'
     if not (usd.is_file() and urdf.is_file()):
@@ -251,7 +251,7 @@ def formal_report(directory, output, parser):
               'inertia_convention': 'R diag(I) R.T; pxr active quaternion, imaginary xyz / real w; no repairs',
               'bindings': {}, 'binding_failures': []}
     before = {p: sha256(p) for p in sorted(directory.rglob('*')) if p.is_file()}
-    for path in (usd, urdf, Path(__file__), ROOT / 'rl_exp/robots/lizard2/round_feet/robot.py'):
+    for path in (usd, urdf, Path(__file__), ROOT / 'robots/lizard2/round_feet/robot.py'):
         digest = sha256(path)
         expected = measured.get(str(path))
         report['bindings'][str(path)] = {'sha256': digest, 'expected': expected,
@@ -292,7 +292,7 @@ def main():
     if args.export_dir is None:
         parser.error('--export_dir or --formal_dir is required')
     directory = args.export_dir.resolve()
-    formal = ROOT / 'rl_exp/robots/lizard2/round_feet/assets'
+    formal = ROOT / 'robots/lizard2/round_feet/assets'
     if directory == formal.resolve() or directory.is_relative_to(formal.resolve()):
         parser.error('--export_dir must be an isolated conversion candidate, not the formal asset directory')
     usd = (args.usd or directory / 'lizard2_round_feet/lizard2_round_feet.usda').resolve()
@@ -338,8 +338,8 @@ def main():
             bind(resolved, expected)
         urdf = directory / 'lizard2_round_feet.urdf'
         bind(urdf, doc['urdf_sha256'])
-        for path in [Path(__file__), ROOT / 'rl_exp/tools/diagnose/lizard2_two_axis_convert.py',
-                     ROOT / 'rl_exp/tools/pipeline/flatten_usd.py',
+        for path in [Path(__file__), ROOT / 'tools/diagnose/lizard2_two_axis_convert.py',
+                     ROOT / 'tools/pipeline/flatten_usd.py',
                      directory / 'config.yaml', directory / '.asset_hash']:
             bind(path)
         history = directory / 'usd_audit.json'

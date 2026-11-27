@@ -15,9 +15,9 @@ from subprocess import CalledProcessError
 import sys
 from xml.etree import ElementTree
 
-from rl_exp.tools.runrecord.binding import git_run, sha256_file
+from tools.runrecord.binding import git_run, sha256_file
 
-_REPO = Path(__file__).resolve().parents[2]
+_REPO = Path(__file__).resolve().parents[1]
 _DIFF_EXCLUDES = tuple(f":(exclude,icase,glob)**/*.{ext}" for ext in ("pt", "usda", "blend", "obj", "stl"))
 
 

@@ -77,7 +77,7 @@ args_cli.device = launcher.device
 import torch  # noqa: E402
 import yaml  # noqa: E402
 
-from rl_exp.locomotion.env import load_policy, make_env, wrap_env  # noqa: E402
+from locomotion.env import load_policy, make_env, wrap_env  # noqa: E402
 
 from evaluation import host_paths  # noqa: E402  (machine-local IsaacLab root, see paths.example.yaml)
 from evaluation import loco_judge  # noqa: E402  (the criterion's identity and derivation half)
@@ -135,7 +135,7 @@ def _git_rev(repo: pathlib.Path | None) -> str:
     if repo is None:
         return record.UNKNOWN
     try:
-        from rl_exp.tools.runrecord import binding
+        from tools.runrecord import binding
 
         return binding.git_rev(repo) or record.UNKNOWN
     except Exception:  # a broken tree must degrade to 'unknown', never to no record
@@ -330,7 +330,7 @@ def _prepare_env(protocol: dict) -> tuple[object, object, str, tuple[BytesIO, di
 def _make_policy(wrapper, env, agent_cfg, rec: dict, pinned_checkpoint):
     """Check the runtime interface before loading the same verified checkpoint bytes."""
     from evaluation.experiment_eval import check_signature
-    from rl_exp.locomotion.run import interface_signature
+    from locomotion.run import interface_signature
 
     stream, binding, expected = pinned_checkpoint
     actual = interface_signature(env)

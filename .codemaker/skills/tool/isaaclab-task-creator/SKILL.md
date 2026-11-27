@@ -15,19 +15,19 @@ description: >
 
 | 文件 | 职责 | 何时修改 |
 |---|---|---|
-| `rl_exp/robots/<body.py>` | 机体物理定义：`USD_PATH`、`URDF_PATH`、`ROOT_BODY_PRIM`、`BELLY_BODY`、`CHEST_BODY`、`HEAD_BODY`、`HEAD_BODY_PRIM`、`NOMINAL_WEIGHT_N`、`LEG_ACTION_JOINTS`、`SPINE_ACTION_JOINTS`、`ACTION_JOINTS`、`ACTION_SCALE`、`ACTION_CLIP`、`make_robot_cfg()` | 换资产、改关节布局、改默认 PD/摩擦/动作缩放、改部位 link 名 |
+| `robots/<body.py>` | 机体物理定义：`USD_PATH`、`URDF_PATH`、`ROOT_BODY_PRIM`、`BELLY_BODY`、`CHEST_BODY`、`HEAD_BODY`、`HEAD_BODY_PRIM`、`NOMINAL_WEIGHT_N`、`LEG_ACTION_JOINTS`、`SPINE_ACTION_JOINTS`、`ACTION_JOINTS`、`ACTION_SCALE`、`ACTION_CLIP`、`make_robot_cfg()` | 换资产、改关节布局、改默认 PD/摩擦/动作缩放、改部位 link 名 |
 | `rl_exp/<exp>.py` | 实验定义：绑定 `ROBOT = <body_module>`，提供 `make_env_cfg(play=False)`（调用时从 `ROBOT` 绑定场景/动作/传感器/奖励/终止）与 `make_runner_cfg()` | 改奖励权重、观测、命令范围、终止策略、随机化、PPO 超参 |
 
-可复用的奖励与终止项放 `rl_exp/locomotion/rewards.py` 与 `rl_exp/locomotion/terminations.py`。
+可复用的奖励与终止项放 `locomotion/rewards.py` 与 `locomotion/terminations.py`。
 
 ## 日常操作
 
-1. **试新奖励/超参**：直接复制 `rl_exp/experiments/lizard2/flat_v7.py` 改参数，运行：
+1. **试新奖励/超参**：直接复制 `experiments/lizard2/flat_v7.py` 改参数，运行：
    `.\train.cmd --exp rl_exp/<your_exp>.py --viz none`
    - 只训练，不串接评测；训完手动跑 `eval.cmd`。
    - 无需注册任务、无需清理工作区、无需手写版本文档。
    - Run 自动在 `rl_exp/out/train/`（首次训练自动创建）下记录 `resolved_cfg.yaml`、`provenance.json`、`git.diff`、`interface_signature.json`、权重和 TensorBoard。
-2. **改机体**：只改 `rl_exp/robots/<body.py>`，实验里保持 `ROBOT = <body_module>` 并在 `make_env_cfg()` 调用期读取 `ROBOT` 属性，不在模块导入期静态绑定。
+2. **改机体**：只改 `robots/<body.py>`，实验里保持 `ROBOT = <body_module>` 并在 `make_env_cfg()` 调用期读取 `ROBOT` 属性，不在模块导入期静态绑定。
 3. **评测与防漂移**：运行 `.\eval.cmd --ckpt <Run/model_N.pt> --protocol locomotion_eval_v3`。
    - 造环境前会用训练口径比对 `resolved_cfg.yaml` 中的 `scene.robot`、`actions`、`observations`、`sim.dt`、`decimation` 与 `runner.clip_actions`；不一致默认拒绝，仅显式传 `--allow-drift` 才放行（`--exp` 不豁免漂移）。
 

@@ -8,10 +8,10 @@
 import ast
 from pathlib import Path
 
-_CORE = Path(__file__).resolve().parents[1] / "rl_exp" / "locomotion"
-_FORBIDDEN = ("evaluation", "rl_exp.tools")
+_CORE = Path(__file__).resolve().parents[1] / "locomotion"
+_FORBIDDEN = ("evaluation", "tools")
 # Pure-stdlib hashing/git primitives shared with evaluation; it imports nothing from either side.
-_ALLOWED = ("rl_exp.tools.runrecord.binding",)
+_ALLOWED = ("tools.runrecord.binding",)
 
 
 def _imports(path: Path):

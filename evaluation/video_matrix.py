@@ -217,8 +217,8 @@ def record_cell(cell: dict, args) -> dict:
     from evaluation.components.dr_controller import apply_eval_mode
 
     from evaluation.experiment_eval import check_signature
-    from rl_exp.locomotion.env import load_policy, make_env, wrap_env
-    from rl_exp.locomotion.run import interface_signature
+    from locomotion.env import load_policy, make_env, wrap_env
+    from locomotion.run import interface_signature
 
     cfg = args.base_env_cfg.copy()
     agent_cfg = args.base_runner_cfg.copy()

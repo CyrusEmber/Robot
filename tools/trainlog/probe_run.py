@@ -12,10 +12,10 @@ reward collapse, stale events, checkpoint lag). Replaces the ad-hoc
 read_curriculum probe.
 
 Usage (from the IsaacLab root):
-    python rl_exp\\tools\\trainlog\\probe_run.py                  # most recently active run
-    python rl_exp\\tools\\trainlog\\probe_run.py --exp v4         # latest run of exp matching "v4"
-    python rl_exp\\tools\\trainlog\\probe_run.py --run logs/rsl_rl/lizard_rough_teacher_v3/2026-09-02_11-33-11
-    python rl_exp\\tools\\trainlog\\probe_run.py --exp v3 --window 200 --tags Loss,Policy
+    python tools\\trainlog\\probe_run.py                  # most recently active run
+    python tools\\trainlog\\probe_run.py --exp v4         # latest run of exp matching "v4"
+    python tools\\trainlog\\probe_run.py --run logs/rsl_rl/lizard_rough_teacher_v3/2026-09-02_11-33-11
+    python tools\\trainlog\\probe_run.py --exp v3 --window 200 --tags Loss,Policy
 """
 
 from __future__ import annotations

@@ -12,11 +12,11 @@ from tempfile import TemporaryDirectory
 
 import numpy as np
 
-from rl_exp.tools.diagnose import lizard2_leg_drive_baseline as base
-from rl_exp.tools.diagnose import lizard2_leg_drive_protocol as p
-from rl_exp.tools.diagnose.lizard2_round_feet_probe import check_interface
+from tools.diagnose import lizard2_leg_drive_baseline as base
+from tools.diagnose import lizard2_leg_drive_protocol as p
+from tools.diagnose.lizard2_round_feet_probe import check_interface
 
-PROBE = Path(__file__).resolve().parents[1] / 'rl_exp/tools/diagnose/lizard2_shank_use_probe.py'
+PROBE = Path(__file__).resolve().parents[1] / 'tools/diagnose/lizard2_shank_use_probe.py'
 
 
 def rejects(fn, label):

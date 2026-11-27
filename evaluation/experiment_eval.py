@@ -11,9 +11,9 @@ import os
 from pathlib import Path
 import sys
 
-from rl_exp.locomotion.env import load_experiment, make_runner_cfg
-from rl_exp.locomotion.run import asset_fingerprints
-from rl_exp.tools.runrecord.binding import sha256_bytes, sha256_file
+from locomotion.env import load_experiment, make_runner_cfg
+from locomotion.run import asset_fingerprints
+from tools.runrecord.binding import sha256_bytes, sha256_file
 
 _REPO = Path(__file__).resolve().parents[1]
 

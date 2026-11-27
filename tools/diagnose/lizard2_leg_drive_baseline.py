@@ -12,13 +12,13 @@ import xml.etree.ElementTree as ET
 
 import numpy as np
 
-from rl_exp.robots.lizard2.round_feet import robot
-from rl_exp.tools.runrecord.binding import sha256_file as sha
-from rl_exp.tools.verify import check_self_collision
-from rl_exp.tools.verify.check_self_collision import chain_up, fk, load_urdf
+from robots.lizard2.round_feet import robot
+from tools.runrecord.binding import sha256_file as sha
+from tools.verify import check_self_collision
+from tools.verify.check_self_collision import chain_up, fk, load_urdf
 
-ROOT = Path(__file__).resolve().parents[3]
-RL = ROOT / 'rl_exp/robots/lizard2/round_feet/assets'
+ROOT = Path(__file__).resolve().parents[2]
+RL = ROOT / 'robots/lizard2/round_feet/assets'
 USD_KEY = 'lizard2_round_feet.usda'
 URDF_KEY = 'lizard2_round_feet.urdf'
 FEET = ('lf_wrist', 'rf_wrist', 'rl_ankle', 'rr_ankle')
@@ -93,7 +93,7 @@ def _gravity_design(reference, urdf):
 
 def _params():
     """The live v7 configuration in the shape the report reads (the YAML it used to read is retired)."""
-    from rl_exp.experiments.lizard2 import flat_v7
+    from experiments.lizard2 import flat_v7
 
     env = flat_v7.make_env_cfg()
     articulation = env.scene.robot
@@ -429,7 +429,7 @@ def two_foot_trim(label: str) -> dict:
         and the stance keeps its height, plus the residuals. Kinematic only: no contact compliance,
         and a centre of mass on the line leaves no restoring margin.
     """
-    from rl_exp.tools.diagnose import lizard2_round_support_geometry as support
+    from tools.diagnose import lizard2_round_support_geometry as support
 
     _, names, _, model, bodies = inputs()
     geometry = support.run(RL / URDF_KEY)
@@ -555,7 +555,7 @@ def swing_review(plan_path: Path, propulsion_path: Path | None = None) -> dict:
         Per swing axis: recorded gains, limits and inertia, local terms for both gain sets,
         and measured suspended RMS, amplitude ratio and phase for both gains.
     """
-    from rl_exp.tools.diagnose import lizard2_leg_drive_protocol as protocol
+    from tools.diagnose import lizard2_leg_drive_protocol as protocol
 
     plan = json.loads(plan_path.read_text(encoding='utf-8'))
     pre, mapping = plan['preflight'], plan['mapping']
@@ -662,7 +662,7 @@ def support_report(foot_forces: dict[str, list[float]] | None = None) -> dict:
         Per-axis fixed-root inertia [kg·m²], Jacobians [m], external and holding
         torques [N·m], and overall force [N] and moment [N·m] balance.
     """
-    from rl_exp.tools.diagnose import lizard2_round_support_geometry as support
+    from tools.diagnose import lizard2_round_support_geometry as support
 
     cfg, names, _, model, bodies = inputs()
     weight = sum(body['mass'] for body in bodies.values()) * 9.81
@@ -751,7 +751,7 @@ if __name__ == '__main__':
     if args.two_foot_trim:
         result = two_foot_trim(args.two_foot_trim)
         paths = (RL / URDF_KEY, Path(__file__), Path(check_self_collision.__file__),
-                 Path(__import__('rl_exp.tools.diagnose.lizard2_round_support_geometry', fromlist=['x']).__file__))
+                 Path(__import__('tools.diagnose.lizard2_round_support_geometry', fromlist=['x']).__file__))
         result['input_sha256'] = {str(p): sha(p) for p in paths}
     elif args.swing_review:
         result = swing_review(args.swing_review, args.propulsion_report)

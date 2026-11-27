@@ -16,8 +16,8 @@ from tempfile import TemporaryDirectory
 import unittest
 import xml.etree.ElementTree as ET
 
-from rl_exp.tools.diagnose.lizard2_round_feet import SOURCE as _SOURCE, build_tree, locate, validate_tree
-from rl_exp.tools.diagnose.lizard2_round_feet_probe import check_interface, check_columns, check_reset_rows
+from tools.diagnose.lizard2_round_feet import SOURCE as _SOURCE, build_tree, locate, validate_tree
+from tools.diagnose.lizard2_round_feet_probe import check_interface, check_columns, check_reset_rows
 
 SOURCE = locate(_SOURCE)
 
@@ -27,13 +27,13 @@ class RoundFeetTest(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         with TemporaryDirectory() as temp:
             formal = Path(temp) / 'formal'
-            shutil.copytree(root / 'rl_exp/robots/lizard2/round_feet/assets', formal)
+            shutil.copytree(root / 'robots/lizard2/round_feet/assets', formal)
             urdf = formal / 'lizard2_round_feet.urdf'
             with urdf.open('ab') as stream:
                 stream.write(b'\n')
             output = Path(temp) / 'audit.json'
             result = subprocess.run(
-                [sys.executable, '-B', str(root / 'rl_exp/tools/diagnose/lizard2_round_feet_usd.py'),
+                [sys.executable, '-B', str(root / 'tools/diagnose/lizard2_round_feet_usd.py'),
                  '--formal_dir', str(formal), '--output', str(output)],
                 cwd=root, capture_output=True, text=True,
             )
@@ -46,7 +46,7 @@ class RoundFeetTest(unittest.TestCase):
 
     def test_live_task_resolves_native_presets(self):
         from isaaclab_physx.sensors.contact_sensor.contact_sensor_cfg import ContactSensorCfg
-        from rl_exp.experiments.lizard2 import flat_v7
+        from experiments.lizard2 import flat_v7
 
         for play in (False, True):
             with self.subTest(play=play):
@@ -61,7 +61,7 @@ class RoundFeetTest(unittest.TestCase):
         import types
         import torch
         from isaaclab.utils.math import quat_from_euler_xyz
-        from rl_exp.tools.diagnose import lizard2_round_feet_probe as probe
+        from tools.diagnose import lizard2_round_feet_probe as probe
         tree = ast.parse(Path(probe.__file__).read_text(encoding='utf-8'))
         formal = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'formal_probe')
         start = next(i for i, n in enumerate(formal.body) if isinstance(n, ast.Assign)

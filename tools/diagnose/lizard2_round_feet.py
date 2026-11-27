@@ -21,9 +21,9 @@ import shutil
 import sys
 import xml.etree.ElementTree as ET
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-from rl_exp.tools.runrecord.binding import sha256_file  # noqa: E402
+from tools.runrecord.binding import sha256_file  # noqa: E402
 
 SOURCE = ROOT / 'rl_exp/lizard2_palm_spatial/lizard2_palm_spatial.urdf'
 #: Local archive that keeps the retired source tree at its old repo-relative path.
@@ -143,7 +143,7 @@ def preview(urdf: Path, target: Path, radius: float) -> dict:
     from matplotlib.patches import Circle
     import numpy as np
     from scipy.spatial import ConvexHull
-    from rl_exp.tools.diagnose.pose_target_solver import geometry, load_model
+    from tools.diagnose.pose_target_solver import geometry, load_model
 
     model = load_model(urdf)
     q = {n: 0. for n, j in model['joints'].items() if j['axis'] is not None}

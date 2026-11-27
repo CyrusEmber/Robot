@@ -17,7 +17,7 @@ import xml.etree.ElementTree as ET
 import numpy as np
 from scipy.optimize import least_squares
 
-from rl_exp.tools.verify import check_self_collision as geometry
+from tools.verify import check_self_collision as geometry
 
 
 def load_model(path):

@@ -18,14 +18,14 @@ description: >
 - **改了 URDF 后必须重跑 convert**，env 引用的 USD 才更新
   （`force_usd_conversion` 只管重转、不管触发）
 - **在隔离候选目录转换**，为输出 USD 与导入产物使用新路径；资产验证后再采用。
-- **换代或更新资产后同步更新机体模块 `rl_exp/robots/<body.py>`**（资产路径、默认 PD、动作关节与身体部位）
+- **换代或更新资产后同步更新机体模块 `robots/<body.py>`**（资产路径、默认 PD、动作关节与身体部位）
 - `UrdfConverterCfg` 要点新机器人照抄，每条都有踩坑理由，别乱改
 
 ## 转换配置
 
 `UrdfConverterCfg` 要点：
 
-- PD 增益与动作映射在现役机体模块 `rl_exp/robots/<body.py>` 统一定义
+- PD 增益与动作映射在现役机体模块 `robots/<body.py>` 统一定义
 - `merge_fixed_joints=False`：保留脚部独立 body，接触奖励依赖它们
 - `fix_base=False`；`self_collision=True`
 - `run_asset_transformer=False` / `run_multi_physics_conversion=False`：分层资产把物理放
@@ -37,7 +37,7 @@ description: >
 
 ## 资产层 vs 环境层
 
-PD 增益虽内嵌 USD，机体模块的 `make_robot_cfg()` actuator 配置会覆盖它 ⇒ **调 PD 直接改 `rl_exp/robots/<body.py>` 即生效，不用重转
+PD 增益虽内嵌 USD，机体模块的 `make_robot_cfg()` actuator 配置会覆盖它 ⇒ **调 PD 直接改 `robots/<body.py>` 即生效，不用重转
 USD**。PD 初值随质量量级重估，抄旧机器人数值必炸。
 
 ## 转换后验证链
@@ -67,5 +67,5 @@ USD**。PD 初值随质量量级重估，抄旧机器人数值必炸。
 
 旧 Blender 站姿管线（`build_rig` / `fix_bones` / `generate_urdf`）随旧机体一起退网：脚本与
 `rl_exp/lizard_urdf/` 只在 `archive/pre-refactor` tag 与 `rl_exp/out/archive/pre-refactor/` 里。
-现役圆足的唯一导出入口是 `rl_exp/blender/scripts/lizard2_round_feet_export.py`（上游 .blend 与
+现役圆足的唯一导出入口是 `blender/scripts/lizard2_round_feet_export.py`（上游 .blend 与
 `skeleton02/build.json` 逐个 SHA 绑定，缺件直接报错）。要换机体就照它改写，不手算姿态。
